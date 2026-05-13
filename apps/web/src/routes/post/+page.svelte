@@ -50,7 +50,7 @@
 	import { broadcastNewOrder, BroadcastError } from '$blurt/ops/order';
 	import { computeFee, BASE_FEE_BLURT, type FeeQuote } from '$lib/orders/fee';
 	import { getOrdersByAccount } from '$lib/indexer/client';
-	import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+	import { ASSET_TICKERS, isAssetTicker, type AssetTicker } from '@morphit/asset-registry';
 	import {
 		checkWaiverEligibility,
 		fetchListingFee,
@@ -664,7 +664,7 @@
 					reason: string;
 				}>;
 				if (p.side === 'buy' || p.side === 'sell') side = p.side;
-				if (p.asset === 'BLURT' || p.asset === 'BTC' || p.asset === 'XMR') {
+				if (isAssetTicker(p.asset)) {
 					asset = p.asset;
 				}
 				if (typeof p.amountMin === 'string') amountMin = p.amountMin;

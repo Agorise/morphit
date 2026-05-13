@@ -358,3 +358,114 @@ Coin communities reach us via Matrix today.  We're planning a
 Matrix↔Morphit-chat bridge bot so coin-community discussions
 about Morphit features can flow naturally between protocols.
 Out of scope for the current iteration; tracked separately.
+
+---
+
+## 2026-05-13 architectural update (Part 121) — trade-only assets + multi-network coins
+
+Memory #23 established a hard architectural invariant that
+clarifies what kinds of assets can be added in each role:
+
+**Listing fees can ONLY be paid in BLURT, XMR, or BTC.**  This is
+not a configuration knob; it's a wire-format-frozen decision.
+The indexer's `fee_method` enum at
+`apps/indexer/src/indexer/handlers/order.ts` is exactly the
+4-member set `'blurt' | 'waived_first_buy' | 'btc' | 'xmr'`.  Two
+sentinel-grep smokes enforce this (see "Smoke coverage" below).
+
+This split breaks coin additions into two categories:
+
+### Category A — full-citizen coin (rare, requires deep operator
+trust)
+
+Used **both** as a tradable asset AND as a fee-payment method.
+Adding one is a HARD breaking change because the wire-format
+fee_method enum expands.  Every operator must agree to verify
+this coin's payments before federation can continue without
+divergence.  In practice we expect this category to be closed
+at BLURT/XMR/BTC and not reopen.  If a future case arises,
+treat it as a charter-level decision, not a routine PR.
+
+### Category B — trade-only coin (the common case for new
+additions)
+
+Used **only** for peer-to-peer trading between users.  Cannot
+be used for listing fees, cold-message fees, or featured-slot
+bids.  Adding one is a much smaller change:
+
+1. Single entry in `packages/asset-registry/src/index.ts` with
+   `canPayListingFee: false` AND `canBeTraded: true`.  The
+   asset-registry-smoke validates the invariant that
+   `canPayListingFee: true → ticker ∈ {BLURT, BTC, XMR}`, so a
+   miswired entry fails CI loudly.
+2. Mirror in `apps/web/src/lib/assets/registry.ts` with
+   `canBeUsedForListingFee: false`.
+3. No fee-verifier needed (the asset can't pay fees).
+4. Standard logo + i18n + address validator + ADDING-A-COIN
+   Part 1 inputs.
+
+The two new sentinel-grep smokes guarantee a Category B coin
+cannot accidentally leak into the fee path:
+
+- `packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts`
+  — asserts the indexer's `fee_method` field type union stays
+  exactly the 4-member frozen set.  Belt + suspenders against
+  someone adding `'usdt'` to the enum out of habit.
+- `packages/asset-registry/scripts/first-buy-waiver-payment-agnostic-smoke.ts`
+  — asserts the first-buy waiver gate fires on (side=buy,
+  asset=BLURT) regardless of `payment_methods`, so a new
+  user's first BLURT buy still gets the waiver even if they
+  pay their counterparty in USDT.
+
+### Multi-network coins (USDT on ERC-20 / TRC-20 / SPL / etc.)
+
+A new asset-registry field `supportedNetworks: readonly string[]`
+declares which networks an asset exists on.  Single-network
+coins (BTC, XMR, BLURT) declare `['mainnet']`.  Multi-network
+coins (USDT) list each network explicitly:
+
+```ts
+{
+  ticker: 'USDT',
+  decimals: 6,
+  isCoordinationChain: false,
+  canBeTraded: true,
+  canPayListingFee: false,                 // Category B
+  supportedNetworks: ['erc20', 'trc20', 'sol'],
+  defaultNetwork: null,                     // force explicit user choice
+  privacyWarningKey: 'usdt_centralized',
+  addressShape: /^(0x[a-fA-F0-9]{40}|T[A-Za-z0-9]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+}
+```
+
+Setting `defaultNetwork: null` forces the post-order form to
+require an explicit network pick on every trade — the safest
+stance for cross-chain-mis-send-prone assets.
+
+The frontend address-share modal MUST validate the address
+against the chosen network's regex (not just the registry's
+combined regex), and SHOULD render a strong per-network warning
+in chat: "USDT on Tron (TRC-20) only.  Sending USDT-ERC20 to
+this address loses your funds."
+
+### Privacy warning chip
+
+A new field `privacyWarningKey: string | null` opts an asset
+into rendering a localized privacy/decentralization warning in
+the post-order form and address-share modal.  `null` means no
+warning (BTC, XMR, BLURT all have null — they're either
+private or decentralized enough that no warning is needed).
+Non-null is an i18n key looked up under
+`assets.privacy_warnings.<key>` in the locale JSON.
+
+When USDT lands, its warning text should explain:
+- Tether can freeze any USDT address (centralization risk).
+- USDT transactions are public on the network the user chose
+  (no on-chain privacy).
+- Morphit can't make USDT private — only XMR has meaningful
+  on-chain privacy.
+
+This warning is required by Memory #19 (privacy is priority
+#1): users must be told when an asset they're considering
+fails the privacy bar.
+

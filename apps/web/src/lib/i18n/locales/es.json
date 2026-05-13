@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "¿Crees que alguien tiene tu semilla?",
       "suspect_compromise_body": "Mueve los fondos a una cuenta nueva de inmediato. Quien tenga la semilla tiene control total. No hay botón de \"congelar\" en una blockchain."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

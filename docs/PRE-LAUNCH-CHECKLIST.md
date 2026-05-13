@@ -304,6 +304,25 @@ file in the same turn.
       audit corrected the nonexistent `--dry-run` flag
       reference.)*
 
+- [ ] **[blocking]** Run the static smoke suite and
+      confirm it returns clean.  From the repo root:
+      `bash scripts/run-smokes.sh`.  Expected output:
+      `Total: 2370+ scenarios passed, 0 runners failed`.
+
+      If you see 13 runners fail with
+      `ERR_MODULE_NOT_FOUND` errors all referencing
+      `@morphit/asset-registry`, you skipped the
+      `npm install` step (or did it from inside one of
+      the workspace sub-directories instead of the
+      repo root).  Workspace symlinks live under
+      `node_modules/@morphit/*` and are only created
+      by an install run from the root.  Fix:
+      `cd ~/morphit && npm install --no-audit --no-fund`,
+      then re-run the smoke suite.  This is NOT a code
+      regression — pure environment setup.  *(Origin:
+      Part 121 audit found this drift while extending
+      smoke coverage to the asset-registry expansion.)*
+
 - [ ] **[recommended]** If you want priority-#2 maximum
       independence, self-host a `monero-block-explorer`
       + `monerod` Docker stack and point

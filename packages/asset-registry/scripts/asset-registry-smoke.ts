@@ -84,6 +84,35 @@ for (const a of ASSETS) {
 		`asset '${a.ticker}' isCoordinationChain must be boolean`
 	);
 	assert(
+		Array.isArray(a.supportedNetworks) && a.supportedNetworks.length > 0,
+		`asset '${a.ticker}' supportedNetworks must be a non-empty array`
+	);
+	for (const net of a.supportedNetworks) {
+		assert(
+			typeof net === 'string' && net.length > 0,
+			`asset '${a.ticker}' supportedNetworks contains a non-string or empty value`
+		);
+	}
+	assert(
+		a.defaultNetwork === null || a.supportedNetworks.includes(a.defaultNetwork),
+		`asset '${a.ticker}' defaultNetwork '${a.defaultNetwork}' is not in supportedNetworks ${JSON.stringify(a.supportedNetworks)}`
+	);
+	assert(
+		a.privacyWarningKey === null ||
+			(typeof a.privacyWarningKey === 'string' && a.privacyWarningKey.length > 0),
+		`asset '${a.ticker}' privacyWarningKey must be null or non-empty string`
+	);
+	// Memory #23 invariant: only BLURT/BTC/XMR may have canPayListingFee=true.
+	// The fee-method enum in apps/indexer/src/indexer/handlers/order.ts is frozen
+	// at 'blurt' | 'waived_first_buy' | 'btc' | 'xmr'; any asset with
+	// canPayListingFee=true must map to one of those tickers.
+	if (a.canPayListingFee) {
+		assert(
+			a.ticker === 'BLURT' || a.ticker === 'BTC' || a.ticker === 'XMR',
+			`asset '${a.ticker}' has canPayListingFee=true but only BLURT/BTC/XMR may pay listing fees (memory #23, fee_method enum is frozen)`
+		);
+	}
+	assert(
 		a.addressShape instanceof RegExp,
 		`asset '${a.ticker}' addressShape must be a RegExp`
 	);
@@ -193,6 +222,9 @@ for (const a of ASSETS) {
 			isCoordinationChain: false,
 			canBeTraded: false,
 			canPayListingFee: false,
+			supportedNetworks: ['mainnet'],
+			defaultNetwork: null,
+			privacyWarningKey: null,
 			addressShape: /./
 		});
 		mutated = ASSETS.length !== 3;

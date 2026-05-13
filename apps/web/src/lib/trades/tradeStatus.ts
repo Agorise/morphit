@@ -9,7 +9,7 @@
 
 import { writable, get, type Readable } from 'svelte/store';
 import type { VerifyResult } from '$lib/chat/blurtVerify';
-import type { PaymentMethod } from '$lib/chat/payload';
+import type { ChatAssetTicker } from '$lib/chat/payload';
 import {
 	recordAddressSharedPure,
 	recordFundsSentPure,
@@ -41,7 +41,7 @@ export function getTradeState(orderPermlink: string): TradeState | null {
 export function recordAddressShared(args: {
 	orderPermlink: string;
 	peer: string;
-	method: PaymentMethod;
+	method: ChatAssetTicker;
 	address: string;
 	expectedAmount?: number;
 	expectedMemo?: string;
@@ -53,7 +53,7 @@ export function recordAddressShared(args: {
 export function recordFundsSent(args: {
 	orderPermlink: string;
 	peer: string;
-	method: PaymentMethod;
+	method: ChatAssetTicker;
 	txid: string;
 	claimedMemo?: string;
 	amount?: number;

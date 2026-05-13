@@ -79,15 +79,58 @@ export interface AssetEntry {
 	 *  "stable-only" tickers. */
 	readonly canBeTraded: boolean;
 	/** True if the asset can be used to PAY the listing fee.
-	 *  BLURT always; BTC/XMR depend on the operator's external-tx-id
-	 *  verifier setup at runtime, but the registry says "the protocol
+	 *
+	 *  ARCHITECTURAL INVARIANT (memory #23, 2026-05-13): listing
+	 *  fees can ONLY be paid in BLURT, XMR, or BTC.  New tradable
+	 *  assets (USDT, ARRR, etc.) are peer-to-peer TRADING ONLY —
+	 *  never used to pay listing fees, cold-message fees, or
+	 *  featured-slot bids.  Trade-only assets MUST set this to
+	 *  `false`.  The `fee-method-enum-frozen-smoke.ts` smoke
+	 *  enforces the indexer's `fee_method` union stays at exactly
+	 *  `'blurt' | 'waived_first_buy' | 'btc' | 'xmr'` to lock the
+	 *  invariant in the wire format.
+	 *
+	 *  BTC/XMR depend on the operator's external-tx-id verifier
+	 *  setup at runtime, but the registry says "the protocol
 	 *  permits it." */
 	readonly canPayListingFee: boolean;
+	/** Networks this asset is supported on.  Single-network assets
+	 *  (BTC, XMR, BLURT) use `['mainnet']`.  Multi-network assets
+	 *  (USDT exists on Ethereum/ERC-20, Tron/TRC-20, Solana/SPL,
+	 *  etc.) list each network as a separate string.  The buyer
+	 *  and seller MUST agree on which network at trade time —
+	 *  cross-network sends (USDT-ERC20 to a TRC-20 address) lose
+	 *  funds permanently.  The address-share modal renders a
+	 *  network picker only when `supportedNetworks.length > 1`,
+	 *  and emits a per-network warning in chat. */
+	readonly supportedNetworks: readonly string[];
+	/** Default network if the asset is multi-network.  `null`
+	 *  forces explicit user choice every trade (the safest stance
+	 *  for cross-chain-mis-send-prone assets like USDT).  Single-
+	 *  network assets set this to their only network for
+	 *  convenience. */
+	readonly defaultNetwork: string | null;
+	/** Optional i18n key for a privacy / decentralization warning
+	 *  chip shown in the post-order form and address-share modal.
+	 *  `null` for assets with meaningful on-chain privacy (XMR) or
+	 *  fully-decentralized chains (BTC, BLURT).  Non-null for
+	 *  transparent / centrally-controllable assets (Tether can
+	 *  freeze any USDT address; USDT-ERC20 is blockchain-analytics
+	 *  -tagged).  The locale value behind the key is the warning
+	 *  text the user sees.  Per memory #19 (privacy #1), users
+	 *  must be told when an asset they're considering is not
+	 *  private. */
+	readonly privacyWarningKey: string | null;
 	/** Address shape — a permissive regex that matches well-formed
 	 *  addresses for this asset.  Used by frontend forms for inline
 	 *  typo detection.  Indexer-side and explorer-side verification
 	 *  always happens independently — never trust the regex alone
 	 *  for a security-relevant decision.
+	 *
+	 *  For multi-network assets, this regex must match a VALID
+	 *  address on ANY of the supported networks; per-network
+	 *  validation happens in the frontend address-share modal
+	 *  via per-network regexes (see lib/assets/networks.ts).
 	 *
 	 *  For BLURT, this matches the account-name format because
 	 *  BLURT transfers route by account name, not a hex address.
@@ -123,6 +166,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		isCoordinationChain: false,
 		canBeTraded: true,
 		canPayListingFee: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// XMR provides meaningful on-chain privacy by design;
+		// no warning chip needed.
+		privacyWarningKey: null,
 		// Standard primary (4...), subaddress (8...), or integrated
 		// (4... longer).  Source: Monero address spec.  Not a
 		// checksum — wallet does that.
@@ -135,6 +183,13 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		isCoordinationChain: false,
 		canBeTraded: true,
 		canPayListingFee: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// BTC is transparent but the chain is fully decentralized
+		// and Bitcoin addresses cannot be frozen by an issuer.  No
+		// warning chip — users opt into Bitcoin knowing its trace-
+		// ability properties.
+		privacyWarningKey: null,
 		// P2PKH (1...), P2SH (3...), or Bech32 (bc1...).
 		// Excludes P2TR for now — receiver wallets that support
 		// taproot will accept Bech32 too.
@@ -148,6 +203,12 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		isCoordinationChain: true,
 		canBeTraded: true,
 		canPayListingFee: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// BLURT is Morphit's own coordination chain; transparent
+		// by design but no issuer can freeze accounts.  No warning
+		// chip.
+		privacyWarningKey: null,
 		// Blurt account name: 3-16 chars, must start/end with
 		// alphanumeric, lowercase + dashes only.
 		addressShape: /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/

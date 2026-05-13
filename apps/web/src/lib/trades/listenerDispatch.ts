@@ -18,7 +18,7 @@
  * effects via the real I/O functions.
  */
 
-import type { DecodeResult, PaymentMethod } from '$lib/chat/payload';
+import type { DecodeResult, ChatAssetTicker } from '$lib/chat/payload';
 
 /** Inputs the dispatcher needs to make routing decisions. */
 export interface ListenerDispatchContext {
@@ -41,7 +41,7 @@ export type StoreEffect =
 			readonly args: {
 				readonly orderPermlink: string;
 				readonly peer: string;
-				readonly method: PaymentMethod;
+				readonly method: ChatAssetTicker;
 				readonly address: string;
 				readonly expectedAmount: number | undefined;
 				readonly expectedMemo: string | undefined;
@@ -53,7 +53,7 @@ export type StoreEffect =
 			readonly args: {
 				readonly orderPermlink: string;
 				readonly peer: string;
-				readonly method: PaymentMethod;
+				readonly method: ChatAssetTicker;
 				readonly txid: string;
 				readonly claimedMemo: string | undefined;
 				readonly amount: number | undefined;

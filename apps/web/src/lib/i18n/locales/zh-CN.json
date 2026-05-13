@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "怀疑有人拿到了您的助记词?",
       "suspect_compromise_body": "立即将资金转移到新账户。任何拥有助记词的人都有完全控制权。区块链上没有「冻结」按钮。"
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

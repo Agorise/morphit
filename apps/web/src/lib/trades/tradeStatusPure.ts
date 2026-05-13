@@ -15,7 +15,7 @@
  */
 
 import type { VerifyResult } from '../chat/blurtVerify';
-import type { PaymentMethod } from '../chat/payload';
+import type { ChatAssetTicker } from '../chat/payload';
 
 export type TradePhase =
 	| 'address_shared'
@@ -32,7 +32,7 @@ export type MismatchField = 'to' | 'from' | 'amount' | 'memo';
 export interface TradeState {
 	readonly orderPermlink: string;
 	readonly peer: string;
-	readonly method: PaymentMethod;
+	readonly method: ChatAssetTicker;
 	readonly phase: TradePhase;
 
 	/** Phase F.5 audit fix (F-40) — peer the local user has
@@ -137,7 +137,7 @@ export function recordAddressSharedPure(
 	args: {
 		orderPermlink: string;
 		peer: string;
-		method: PaymentMethod;
+		method: ChatAssetTicker;
 		address: string;
 		expectedAmount?: number;
 		expectedMemo?: string;
@@ -189,7 +189,7 @@ export function recordFundsSentPure(
 	args: {
 		orderPermlink: string;
 		peer: string;
-		method: PaymentMethod;
+		method: ChatAssetTicker;
 		txid: string;
 		claimedMemo?: string;
 		amount?: number;

@@ -26,7 +26,7 @@
 		isValidTxid,
 		PAYLOAD_CONSTANTS,
 		type FundsSentPayload,
-		type PaymentMethod
+		type ChatAssetTicker
 	} from '$lib/chat/payload';
 
 	interface Props {
@@ -34,7 +34,7 @@
 		 *  triggered from a received address pill (we know the
 		 *  method); free-choice when launched from the composer
 		 *  without context. */
-		initialMethod?: PaymentMethod;
+		initialMethod?: ChatAssetTicker;
 		/** Q5 — Initial amount, pre-filled when the modal was
 		 *  triggered from an incoming BTC/XMR address pill that
 		 *  carried an amount. The buyer types the txid; the
@@ -66,7 +66,7 @@
 	// and dismisses after submit/cancel — there is no flow where
 	// the parent updates these props while the modal is open.
 	// svelte-ignore state_referenced_locally
-	let method = $state<PaymentMethod>(initialMethod);
+	let method = $state<ChatAssetTicker>(initialMethod);
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally
 	let amount = $state(initialAmount);
@@ -96,7 +96,7 @@
 		return 'chat.funds_sent.txid_invalid';
 	});
 
-	function selectMethod(m: PaymentMethod): void {
+	function selectMethod(m: ChatAssetTicker): void {
 		method = m;
 	}
 

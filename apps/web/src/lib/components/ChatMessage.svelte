@@ -25,7 +25,7 @@
 	import { _ } from 'svelte-i18n';
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
-	import { decodePayload, type PaymentMethod } from '$lib/chat/payload';
+	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
 	import { externalExplorerUrl, morphitExplorerTxUrl } from '$lib/explorer/urls';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
@@ -135,7 +135,7 @@
 	 *  /explorer/tx route (same-tab navigation).  Returns null
 	 *  for unknown methods or malformed txids — caller hides the
 	 *  link in that case. */
-	function explorerLinkForTxid(method: PaymentMethod, txid: string): string | null {
+	function explorerLinkForTxid(method: ChatAssetTicker, txid: string): string | null {
 		if (method === 'btc') return externalExplorerUrl('BTC', txid);
 		if (method === 'xmr') return externalExplorerUrl('XMR', txid);
 		if (method === 'blurt') return morphitExplorerTxUrl(txid);

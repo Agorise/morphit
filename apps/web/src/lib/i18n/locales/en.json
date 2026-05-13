@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "Think someone has your seed?",
       "suspect_compromise_body": "Move funds to a new account immediately. Anyone with the seed has full control. There's no \"freeze\" button on a blockchain."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }
