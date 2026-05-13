@@ -6,6 +6,14 @@
 **Supersedes:** none
 **Superseded by:** none
 
+> **2026-05-12 forward note (Part 120 audit):** the
+> "3 minutes" replace-window references throughout this
+> ADR describe the value as originally specified.  Updated
+> to **15 minutes** in Part 70 per ADR-0001's 2026-05-07
+> Amendment.  This ADR is preserved with the original
+> 3-minute references for historical accuracy; ADR-0001
+> is authoritative for the current window.
+
 ## Context
 
 Phase 3b delivered the indexer's **read** path: users can browse

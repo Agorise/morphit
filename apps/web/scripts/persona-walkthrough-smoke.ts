@@ -47,6 +47,12 @@
  *   D-12  Indexer nginx path /api/indexer/ in §12 troubleshooting
  *   D-13  /v1/health field name "lag_blocks" not "head_lag_blocks"
  *
+ * Part 120 additions:
+ *
+ *   P120-FAQ  public_api + qr_login FAQ entries wired in FAQ_KEYS
+ *             (orphan-entry catch: translated in 10 locales but
+ *              never rendered because not in the FAQ_KEYS array).
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -336,6 +342,33 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['"lag_blocks":'],
 		// "head_lag_blocks" is not a field name in the actual response.
 		mustNotHave: ['"head_lag_blocks":']
+	},
+
+	// ─── Part 120 — FAQ orphan catch ─────────────────────────────────────
+	// Two FAQ entries (public_api, qr_login) had been translated into
+	// all 10 locales but never rendered because they weren't listed in
+	// FAQ_KEYS.  Both are flagship-feature entries.  These sentinels
+	// fail if a future refactor removes them from FAQ_KEYS, OR if a
+	// translator deletes the locale entries without removing the keys.
+	{
+		name: 'P120-FAQ-1 — public_api FAQ key wired in FAQ_KEYS',
+		file: 'src/lib/utils/faqIndex.ts',
+		mustHave: ["'public_api'"]
+	},
+	{
+		name: 'P120-FAQ-2 — qr_login FAQ key wired in FAQ_KEYS',
+		file: 'src/lib/utils/faqIndex.ts',
+		mustHave: ["'qr_login'"]
+	},
+	{
+		name: 'P120-FAQ-3 — public_api FAQ entry present in en.json',
+		file: 'src/lib/i18n/locales/en.json',
+		mustHave: ['"public_api":']
+	},
+	{
+		name: 'P120-FAQ-4 — qr_login FAQ entry present in en.json',
+		file: 'src/lib/i18n/locales/en.json',
+		mustHave: ['"qr_login":']
 	}
 ];
 

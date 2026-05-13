@@ -6,6 +6,18 @@
 > enforcement" line items below describe the value as
 > originally implemented. Updated to **15 minutes** in Part
 > 70; see ADR-0001 Amendment 2026-05-07 for the rationale.
+
+> **2026-05-12 forward note (Part 120 audit):** the
+> "Go service" / "Go relay" / "Go indexer" framing below
+> describes the original Phase 3a/3b implementation plan.
+> Both shipped as **Node.js/TypeScript** services (`tsx` as
+> the runtime).  The rationale for choosing TypeScript over
+> Go is captured in ADR-0008 §"Writing the indexer in Go
+> instead of Node.js/TypeScript" (no actively-maintained Go
+> library for Blurt signature verification means we'd
+> re-implement; `@beblurt/dblurt` gives us the full verify
+> path in TS).  This ADR is preserved with the original Go
+> framing intact for historical accuracy.
 **Date:** 2026-04-18
 **Deciders:** project maintainer
 **Supersedes:** Plan v1.3 §348 description of Phase 3 as a single phase

@@ -218,7 +218,7 @@ throughput, low memory, easy static binary. **Rejected:** same
 reason as Phase 3a — no actively-maintained Go library for Blurt
 means we'd re-implement the signature-verification logic.
 `@beblurt/dblurt` gives us the full verify path in TypeScript, and
-Node 24 is fast enough for our op-rate ceiling (we won't exceed
+Node 22 is fast enough for our op-rate ceiling (we won't exceed
 a few hundred morphit ops per hour in the foreseeable future).
 
 ## Consequences
