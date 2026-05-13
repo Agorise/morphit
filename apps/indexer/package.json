@@ -1,0 +1,40 @@
+{
+  "name": "morphit-indexer",
+  "version": "0.1.0-phase3b",
+  "private": true,
+  "type": "module",
+  "description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "format": "prettier --write .",
+    "lint": "prettier --check .",
+    "migrate": "tsx src/db/migrations.ts",
+    "migrate:rebuild": "tsx src/db/migrations.ts --rebuild-materialized",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@beblurt/dblurt": "^0.10.9",
+    "@morphit/asset-registry": "*",
+    "@morphit/operator-config": "*",
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0",
+    "pg": "^8.13.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "prettier": "~3.6.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

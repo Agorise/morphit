@@ -1,0 +1,35 @@
+{
+  "name": "morphit-relay",
+  "version": "0.3.0-phase3a",
+  "description": "Morphit posting relay — pays Blurt account-creation fees on behalf of new users. Never holds user private keys.",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "format": "prettier --write .",
+    "lint": "prettier --check .",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@beblurt/dblurt": "^0.10.9",
+    "@hono/node-server": "^1.13.0",
+    "@morphit/asset-registry": "*",
+    "@morphit/operator-config": "*",
+    "hono": "^4.6.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "prettier": "~3.6.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

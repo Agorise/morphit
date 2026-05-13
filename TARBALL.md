@@ -1,0 +1,501 @@
+# TARBALL — Morphit pre-launch hardening, Part 120 (in progress, checkpoint 10)
+
+**Snapshot date:** 2026-05-11
+
+**Tarball:** `morphit-audit-2026-05-120-cp10.tar.gz`
+
+**Previous tarball:** `morphit-audit-2026-05-120-cp9.tar.gz`.  This cp10 adds 2 more docs audited.  **All 40 top-level docs in `docs/*.md` are now done.**  Next up: the 22 ADRs in `docs/adr/`.
+
+**Part 120 — what's done in checkpoint 10 (everything from cp9 plus):**
+
+40. **SYNDICATION-CHECKPOINT.md** — read fully.  Doc is well-maintained and internally consistent.  Verified file refs (`apps/web/src/lib/syndication/publish.ts`, `apps/web/src/lib/blurt/ops/feedback.ts`, `apps/web/src/lib/components/LeaveFeedbackForm.svelte` — all exist).  Verified `MORPHIT_COMMUNITY = 'blurt-176570'` constant matches code.  Verified canonical permlinks (`morphit-first-trade-<account>`, `morphit-announce-<order_permlink>`) match the publish.ts shape.  No drift; no fixes.
+
+41. **UX-STANDARD.md** — `Known gaps we're going to fix` section was a Phase 3a/3b-era list of TODOs.  Verified all three referenced components (`BusyButton`, `StatusLine`, `FocusedField`) exist + are adopted in onboarding + register-name + Settings.  Marked the gap-list as ✅ all closed with a Part 120 forward-note, with each individual gap struck through to preserve historical traceability.
+
+Total Part 120 fix-groups so far: **41 fix-groups across 40 docs** (29 with fixes; 10 read-and-clean — AUDIT-FINDINGS, CONTRIBUTING-TRANSLATIONS, GRANDMA-FRIENDLY-INVESTIGATION, METADATA-LEAK-CATALOG, PER-LOCALE-PRERENDERING-DESIGN, PHASE-F-AUDIT, PHASE-G-PREP-AUDIT, PRICE-SOURCES-RESEARCH, SERVICE-WORKER-CACHING-DESIGN, SYNDICATION-CHECKPOINT; plus PHASE-3b-DESIGN had its own disclaimer).
+
+**Next up:** 22 ADRs in `docs/adr/`.  ADR-0016 is a known phantom slot (work shipped as ADR-0022); other ADRs are mostly Accepted-status and likely accurate but warrant a line-by-line pass for line citations, env-var names, file paths, schema versions, etc.
+
+**For the fresh session reading this:** every fix in this checkpoint is verifiable; smokes green; locale parity 2,458 × 10 unchanged; persona-walkthrough smoke 29/29 unchanged.
+
+---
+
+## Headline
+
+**Three persona walk-throughs end-to-end + a follow-up
+line-by-line audit of the four primary operator-facing docs
+that caught twelve additional doc-vs-code drift bugs +
+docs/API.md expansion + a sentinel-grep smoke that pins all
+19 fixes against future regression.  Locale parity 2,458 ×
+10.  Zero stale docs trailing live code.**
+
+Ken's instructions across this Part:
+
+1. **Initial:** walk Bob (existing Blurt user, multi-login
+   soup-to-nuts), Sally (never owned crypto, full flow),
+   and Sally-as-operator (sets up her own node from any
+   .md she picks, every CLI/screen/button, launch through
+   post-launch week one) end-to-end as three distinct
+   personas; fix where necessary; finish `docs/API.md`.
+
+2. **Follow-up:** "please read the operations md file and
+   the RUN-A-MORPHIT-NODE.md file, every single line.  I
+   think there might be some things in those files that
+   is not perfectly accurate.  check over every cli
+   command too, and even check the md syntax itself.
+   oh yeah, check the prelaunch and week 1 files too
+   please.  same scrutiny."
+
+3. **Discretion call from Ken:** "numbers 1 and 2 might
+   be a good idea.  use your discretion on those though,
+   I don't want to break anything or drag this project
+   out any longer."  I shipped the persona-walkthrough
+   smoke (low-risk sentinel-grep, ~150 ms runtime,
+   immediate value) and deferred B-3 chat encrypted-
+   placeholder localization to Part 120 (architectural
+   refactor, three-option fix plan filed in REVISIT §A).
+
+Memory edit #22 (added this Part, 2026-05-11) formalizes
+the three personas as STANDING discipline — every major
+session runs them proactively, not only when Ken reminds.
+
+### Fixes shipped this Part
+
+**Bob walkthrough — 1 shipped, 1 deferred:**
+- **B-2 SHIPPED** — `/backup-keys` paired-readonly
+  explanation card with `web+morphit://backup-keys` phone
+  deep-link.  4 locale keys × 10 = 40 new strings.
+- **B-3 DEFERRED to Part 120** — paired Bob in
+  `/chat/[peer]` sees hardcoded English `(encrypted)`
+  for every past message.  Needs i18n threading into
+  chatService.ts; three-option fix plan filed in
+  REVISIT §A.
+- **B-1 + B-4 through B-15 verified clean.**
+
+**Sally (user) walkthrough — 2 shipped:**
+- **S-11 SHIPPED** — `FundsSentModal.svelte` inline
+  txid help line (Memory #21 teach-jargon-inline).
+- **S-12 SHIPPED** — `Tooltip.svelte` default ariaLabel
+  was hardcoded English `'More info'`; now reads
+  `a11y.tooltip_more_info`; 3 hardcoded ariaLabel
+  overrides on `/post` removed.
+- **S-1 through S-10 verified clean.**
+
+**Sally-operator walkthrough — 5 shipped:**
+- **So-1 SHIPPED** — vps-bootstrap.sh callout in
+  `RUN-A-MORPHIT-NODE.md` §5 + mirror in `OPERATIONS.md`
+  preamble (Memory #14).
+- **So-2 SHIPPED** — `apps/ops-cli/src/main.ts` JSDoc
+  brought to parity with `printHelp()` (8 → 14 listed).
+- **So-3 SHIPPED** — `/v1/health?verbose=1` env-opt-in
+  callouts in OPERATIONS §0a, LAUNCH-DAY polling-loop,
+  POST-LAUNCH-WEEK-ONE top of monitoring.
+- **So-4 SHIPPED** — init.ts JSDoc step count 9 → ~17
+  with disclaimer pointing at `steps.ts`.
+- **So-6 SHIPPED** — RUN-A-MORPHIT-NODE.md §8 systemd
+  drop-in callout (override `WorkingDirectory` + create
+  `morphit-relay` system user) — this was the most
+  consequential operator-facing fix in the Part.
+- **So-5 acknowledged out-of-band** — Klingex URL
+  verification is operator-action.
+
+**Doc-vs-code drift catches (D-1 through D-15):**
+
+| ID | What was wrong | What it's now |
+|---|---|---|
+| D-1 | `morphit ops` (with space) — 5 doc locations | `morphit-ops` |
+| D-1 | `morphit ops mint-acts` non-existent subcommand | `apps/relay/scripts/mint-acts.ts` script path |
+| D-2 | `MORPHIT_INDEXER_FEES_ACCOUNT` ghost env var | `MORPHIT_INDEXER_FEE_RECIPIENT` |
+| D-3 | OPERATIONS §32 said Caddy was recommended | Reworded — nginx is recommended |
+| D-4 | OPERATIONS.md TOC missing §0a + §41, 4 title mismatches | TOC byte-exact match section headers |
+| D-5 | Monorepo install paths inconsistent in OPERATIONS.md | All 5 separate-dir refs → `/opt/morphit/apps/{relay,indexer}` |
+| D-6 | PRE-LAUNCH wizard step count said 14 | ~17 with `steps.ts` disclaimer |
+| D-7 | Fictitious `npm run start -- --dry-run` flag | `timeout 5 npm run start \|\| true` (exercises Zod) |
+| D-8 | Stale schema v29 in PRE-LAUNCH | v31 (Part 113 added Signal C) |
+| D-9 | Klingex URL `public-api.klingex.com/ticker/blurt` | `klingex.io/api/v1/ticker/BLURT_USDT` |
+| D-10 | Fictitious backup cron `/opt/morphit-indexer/scripts/backup.sh` | systemd timer + `/usr/local/lib/morphit/morphit-backup.sh` |
+| D-11 | 4 fictitious `/v1/health` diagnostics field paths | Real fields: `lag_blocks`, `diagnostics.operator_balances`, `/v1/release` for treasury, `status` |
+| D-12 | RUN-A-NODE rejected PG 17 ("15.x or 16.x") | "15.x or higher" + PGDG-repo pointer |
+| D-13 | Fictitious operator-register CLI invocation | `npx morphit-ops register` |
+| D-14 | `/indexer/v1/health` (wrong nginx path) | `/api/indexer/v1/health` |
+| D-15 | Health field `head_lag_blocks` | `lag_blocks` |
+
+**docs/API.md expansion:**
+- 6 missing public endpoints documented:
+  `/v1/profiles/:account`, `/v1/profiles?accounts=`,
+  `/v1/operators`, `/v1/instance/payment-methods`,
+  `/v1/activity/volume`, `/v1/attestor-eligibility/:account`,
+  `/v1/stranger-fee-quote`.
+- New "Intentionally undocumented endpoints" section
+  explains why 5 routes are deliberately omitted (need
+  client-side crypto context to be useful).
+
+**Persona-walkthrough smoke (path 2 from Ken's discretion
+call):**
+- `apps/web/scripts/persona-walkthrough-smoke.ts` — 29
+  scenarios sentinel-pinning all 19 fixes.  Sentinel-grep
+  pattern; ~150 ms runtime.
+- Registered in `scripts/run-smokes.sh` after
+  `sally-walkthrough-smoke`.
+- **Caught one real residual on its first run** that I'd
+  missed during the manual doc-audit sweep: a second
+  `MORPHIT_INDEXER_FEES_ACCOUNT` occurrence in
+  LAUNCH-DAY.md line 200 beyond the one fixed at line 64.
+  Exactly the value the sentinel provides.
+
+---
+
+## Where things stand
+
+### Numbers
+
+| Metric | Part 118 | Part 119 final | Δ |
+|---|---|---|---|
+| Smoke scenarios | 2,322 | **2,351** | +29 (persona-walkthrough smoke) |
+| Frontend tests | 591 | 591 | unchanged |
+| Indexer tests default | 452 | 452 | unchanged |
+| Indexer integration | 81 | 81 | unchanged |
+| Relay tests | 244 | 244 | unchanged |
+| TypeScript errors | 0 / 8 projects | 0 / 8 projects expected | additive only |
+| svelte-check errors | 0 / 0 | 0 / 0 expected | additive only |
+| Locale parity (keys × locales) | 2,452 × 10 | **2,458 × 10** | +6 keys, +60 strings |
+| Schema version | v31 | v31 | unchanged |
+| Sandbox-runnable smokes | 29/32, 335 | **30/33, 364** | +1 runner / +29 scenarios |
+| Brag list entries | 270 | **272** | +2 (#271 + #272) |
+| Real fix count this Part | n/a | **19** | 7 persona + 12 doc-audit drift |
+
+### Locale parity
+
+Three new key groups added across all 10 locales (en, es,
+fr, de, it, pl, ru, fa, zh-CN, zh-HK):
+
+- `backup_keys.paired.{heading,body,deeplink_hint,deeplink_cta}` — B-2 (4 keys)
+- `chat.funds_sent.txid_help` — S-11 (1 key)
+- `a11y.tooltip_more_info` — S-12 (1 key)
+
+All 6 keys × 10 locales = 60 translated strings, each
+translated by hand in the target language.
+
+### Triple-pulse stability
+
+9/9 critical-path smokes pass × 3 pulses:
+`i18n-locale-parity`, `i18n-key-coverage`,
+`i18n-hardcoded-english`, `paired-readonly-affordance-surfaces`,
+`price-model-picker-parity`, `sally-walkthrough`,
+`forgejo-not-gitea`, `href-xss`,
+**`persona-walkthrough`** (added this Part).
+
+### Sandbox-runnable smokes
+
+30/33 runners pass, 364 scenarios.  Same 3 smokes
+require `node_modules` and fail in this sandbox
+deterministically (same exclusion as Part 118 — not
+regressions):
+
+- `chain-op-verify-smoke`
+- `desktop-pairing-crypto-smoke`
+- `i18n-formatters-smoke`
+
+These pass in CI where `npm ci` ran.
+
+### Files modified
+
+| Path | Change |
+|------|--------|
+| `apps/web/src/routes/backup-keys/+page.svelte` | B-2: paired-readonly explanation card + isPairedReadOnly import |
+| `apps/web/src/lib/components/FundsSentModal.svelte` | S-11: txid help line under input |
+| `apps/web/src/lib/components/Tooltip.svelte` | S-12: i18n-aware default ariaLabel |
+| `apps/web/src/routes/post/+page.svelte` | S-12: removed 3 hardcoded ariaLabel props |
+| `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` | 60 new translated strings |
+| `apps/web/scripts/persona-walkthrough-smoke.ts` | NEW: 29-scenario sentinel-grep smoke pinning all 19 fixes |
+| `scripts/run-smokes.sh` | Registered persona-walkthrough-smoke after sally-walkthrough |
+| `docs/RUN-A-MORPHIT-NODE.md` | So-1 (vps-bootstrap), So-6 (systemd drop-ins), D-1, D-10, D-11, D-12, D-13, D-14, D-15 |
+| `docs/OPERATIONS.md` | So-1 mirror, So-3 verbose-health, D-1, D-2, D-3, D-4 (TOC), D-5 (paths), D-11 (health fields) |
+| `docs/LAUNCH-DAY.md` | So-3, D-2, D-11 |
+| `docs/POST-LAUNCH-WEEK-ONE.md` | So-3, D-6 (Klingex URL), D-7 (backup recipe), D-8 (health fields) |
+| `docs/PRE-LAUNCH-CHECKLIST.md` | D-6 (step count), D-7 (--dry-run), D-8 (schema v31) |
+| `apps/ops-cli/src/main.ts` | So-2: JSDoc 8 → 14 subcommands |
+| `apps/ops-cli/src/commands/init.ts` | So-4: step count 9 → ~17 |
+| `docs/API.md` | 6 new public endpoints + intentionally-undocumented section |
+| `docs/AUDIT-2026-05.md` | Part 119 entry + follow-up extension COMPLETE |
+| `docs/REVISIT-LIST.md` | Part 119 + follow-up maintained line; §A public-API CLOSED; new §A entry for B-3 |
+| `MORPHIT-BRAG-LIST.md` | Entries #271 (persona walk-throughs) + #272 (doc audit); trailer 270 → 272 |
+| `TARBALL.md` | This file |
+
+### Files NOT modified
+
+- `apps/web/src/lib/chat/chatService.ts` — B-3 deferred to focused Part 120 (architectural refactor)
+- Shipped systemd unit files at `ops/systemd/*.service` — kept as-is; operator drop-in pattern documented in RUN-A-MORPHIT-NODE.md §8 per Memory #14 (decided NOT to change them because canonical morphit.io operator may install at `/opt/morphit-relay` with dedicated user — the unit file is right for them)
+- No schema migration
+- No ADR changes
+- No relay/indexer code changes
+- No CI config (smoke registered in `run-smokes.sh` which CI already executes)
+
+---
+
+## How to verify the work in this tarball
+
+After extracting:
+
+```bash
+# 1. Persona-walkthrough smoke pins all 19 fixes
+cd apps/web && tsx scripts/persona-walkthrough-smoke.ts
+# Expected: ✓ all 29 persona-walkthrough scenarios passed
+
+# 2. Triple-pulse critical paths
+cd apps/web && for i in 1 2 3; do
+  ok=0; bad=0
+  for s in scripts/i18n-locale-parity-smoke.ts scripts/i18n-key-coverage-smoke.ts scripts/i18n-hardcoded-english-smoke.ts scripts/paired-readonly-affordance-surfaces-smoke.ts scripts/price-model-picker-parity-smoke.ts scripts/sally-walkthrough-smoke.ts scripts/forgejo-not-gitea-smoke.ts scripts/href-xss-smoke.ts scripts/persona-walkthrough-smoke.ts; do
+    if tsx "$s" 2>/dev/null | grep -q "^✓ all"; then ok=$((ok+1)); else bad=$((bad+1)); fi
+  done
+  echo "pulse $i: $ok ok, $bad bad"
+done
+# Expected: pulse 1-3 all "9 ok, 0 bad"
+
+# 3. Locale parity 2,458 × 10
+cd apps/web && tsx scripts/i18n-locale-parity-smoke.ts
+# Expected: ✓ all 10 scenarios passed
+
+# 4. Verify Part 119 content in meta-docs
+grep "Last maintained" docs/REVISIT-LIST.md | head -1   # → Part 119 + follow-up
+head -3 TARBALL.md                                       # → Part 119 (final)
+grep -c "^272\\." MORPHIT-BRAG-LIST.md                   # → 1
+tail -1 MORPHIT-BRAG-LIST.md | head -c 40                # → *272 specific
+
+# 5. Verify AUDIT-2026-05.md has Part 119 entry + follow-up
+grep -c "^## Part 119" docs/AUDIT-2026-05.md             # → 1
+grep -c "Part 119 follow-up" docs/AUDIT-2026-05.md       # ≥ 1
+
+# 6. Naming-policy regression check (Memory #16)
+cd apps/web && tsx scripts/forgejo-not-gitea-smoke.ts
+# Expected: ✓ all 3 scenarios passed
+```
+
+If any check fails, the tarball is bad — don't proceed.
+
+---
+
+## For the next session — Part 120
+
+### Required pickup (B-3 chat encrypted-placeholder, blocked by this session)
+
+Paired Bob in `/chat/[peer]` currently sees the hardcoded
+English string `(encrypted)` for every message in history,
+defined as `const ENCRYPTED_PLACEHOLDER = '(encrypted)'`
+at `apps/web/src/lib/chat/chatService.ts:297`.  Two
+violations simultaneously:
+
+- Locale-parity: hardcoded English leaks to 9 other
+  locales for paired AND locked sessions.
+- Grandma-friendliness (Memory #21): no inline teaching
+  about why decryption isn't happening here.
+
+**Three fix options (full detail in REVISIT-LIST.md §A):**
+
+- **(a)** Thread an i18n callback through
+  `ChatControllerDeps` — architectural change.
+- **(b)** Return a structured discriminated union
+  `{ text } | { decryptedKind: 'paired' | 'locked' | 'failed' }`
+  and localize in ConversationView — preferred, keeps
+  service layer pure.
+- **(c)** Smallest fix: keep service-layer contract
+  intact, localize the placeholder upstream in
+  ConversationView using `$_('chat.message.encrypted_placeholder_paired')`
+  / `_locked` / `_failed`.  Risk: two sources of truth.
+
+Suggested i18n keys (3 × 10 = 30 new strings):
+
+- `chat.message.encrypted_placeholder_paired`
+- `chat.message.encrypted_placeholder_locked`
+- `chat.message.encrypted_placeholder_failed`
+
+### Standing discipline reminders for fresh session
+
+Every major session:
+
+1. **Three persona walk-throughs** (Memory edit #22) —
+   Bob, Sally, Sally-operator end-to-end, proactively,
+   at the top of the session.  Even if REVISIT-LIST
+   looks clean, the personas surface UX gaps it doesn't
+   catch.
+
+2. **Three priorities** (Memory #19/#20/#21) hold
+   throughout — privacy #1, decentralization #2,
+   grandma-friendliness #3.
+
+3. **Locale parity × 10** (Memory #8) — every user-
+   facing text edit translated into all 10 locales in
+   the same turn, no exceptions.
+
+4. **Same-turn ALL-files-update** (Memory #14) — code
+   change ⇒ doc update ⇒ ADR/FAQ/brag/REVISIT/locale
+   JSON/CI config all in one work unit.
+
+5. **Verify, don't assume** (Memory #11) — check git
+   log, check live code state, check what the smoke
+   actually asserts; never claim "shipped" without
+   the call-site + runner-config + end-to-end-test
+   triplet (Memory #10 WIRE EVERYTHING).
+
+6. **Tarball every turn** (Memory #9) — TARBALL.md
+   updated every turn, not just at checkpoints.  This
+   file is the source-of-truth handoff so a fresh
+   session can resume EXACTLY.
+
+7. **Doc-vs-code drift** is the most common silent
+   failure mode.  Part 119 caught 12 drift bugs in
+   operator docs.  The persona-walkthrough smoke and
+   periodic line-by-line audits are how we keep this
+   class of bug rare.
+
+---
+
+## Memory facts re-confirmed at top of session
+
+(Per Memory #7 / Memory #11 — these are easy to forget
+mid-session and the wrong assumption costs hours of
+rework.)
+
+- **Treasury account** is `@morphit-fees`, NOT
+  `@morphit`.  The latter is the project's chain-ops
+  posting account; the former receives listing fees.
+- **The env var that names the fees account** is
+  `MORPHIT_INDEXER_FEE_RECIPIENT` (singular FEE,
+  RECIPIENT suffix).  `MORPHIT_INDEXER_FEES_ACCOUNT` is
+  a ghost — operators setting it have their value
+  silently ignored.  Part 119 drift catch D-2.
+- **BLURT-paid fees** split 90/10 operator/treasury.
+  **BTC/XMR-paid fees** split 100/0 treasury/operator.
+  NOT 50/50.
+- **BLURT inflation rate** is 7.6% annually as of
+  2026-05-03.  Do NOT hardcode an APR in docs/brag-
+  list — the live helper is at
+  `apps/web/src/lib/blurt/apr.ts`.
+- **Matrix notation**: `@user:server` is a user MXID
+  (private DM, E2E-encrypted, used for security
+  disclosure).  `#room:server` is a public room
+  alias.  A blanket `@` → `#` replacement would route
+  security disclosures to a public room — push back
+  if asked again.
+- **`git.agorise.net/agorise/morphit`** is LIVE.
+  Matrix DM `@agorise:matrix.org` AND public room
+  `#agorise:matrix.org` are BOTH monitored.
+- **Forgejo, NEVER the predecessor product** (Memory #16).
+- **Monero private view key** is NEVER published
+  anywhere — not on chain, not in APIs, not in logs,
+  not in release ops.  View keys stay env-only on the
+  operator's box.
+- **Three CLOSED items** that are NOT TODOs anymore
+  (don't re-list them in future tarballs):
+  - `CHANGE_ME_BEFORE_PRODUCTION` is a denylist by
+    design.
+  - `package-lock.json` IS committed at workspace
+    root.
+  - CI already runs svelte-check via `npm run check`.
+- **Schema version** is v31 (Part 113 added Signal C
+  one-way pile-on detection).  Part 119 drift catch D-8
+  surfaced PRE-LAUNCH-CHECKLIST.md was stale at v29.
+- **ops-cli binary** is `morphit-ops` (single
+  hyphenated token).  `morphit ops` (with space) is a
+  typo — Part 119 drift catch D-1 fixed 5 occurrences.
+- **`/v1/health` real fields** are `status` ("ok" |
+  "degraded"), `lag_blocks` (top-level), `stale`, plus
+  the verbose-mode `diagnostics.{operator_balances,
+  price, explorers, sse_subscribers, last_error,
+  started_at}`.  Field paths in operator docs
+  pre-Part-119 referenced 4 nonexistent paths; D-11
+  fixed them.
+
+---
+
+## Cross-session handoff confirmation
+
+This tarball represents the complete Part 119 final
+state.
+
+- ✓ Every fix on disk has been verified by re-grep.
+- ✓ persona-walkthrough smoke green (29/29).
+- ✓ Locale parity holds at 2,458 × 10 keys.
+- ✓ Triple-pulse stable: 9/9 critical-path smokes × 3
+  pulses.
+- ✓ Sandbox-runnable smokes 30/33, 364 scenarios.
+- ✓ AUDIT-2026-05.md Part 119 entry + follow-up
+  extension written with full drift catalog + pattern
+  lessons.
+- ✓ REVISIT-LIST.md maintained line covers initial 7
+  persona fixes + 12 doc-audit drift catches; §A
+  public-API decision CLOSED; new §A entry for B-3
+  follow-up to Part 120.
+- ✓ MORPHIT-BRAG-LIST.md entries #271 (persona walks)
+  + #272 (doc audit) added; trailer 270 → 272.
+- ✓ TARBALL.md (this file) rewritten for Part 119
+  final with verification commands and Part 120
+  pickup pointer.
+- ✓ Memory facts re-confirmed at top.
+- ✓ No stale references anywhere — naming-policy
+  smoke clean, persona-walkthrough smoke clean,
+  locale-parity smoke clean.
+
+**Safe to leave this chat.  Fresh chat extracts
+`morphit-audit-2026-05-119.tar.gz`, reads this file, and
+resumes EXACTLY where Part 119 final left off.**
+
+The first thing the fresh session should do, per Memory
+edit #22, is plan the three persona walk-throughs for
+Part 120 — Bob first (his deferred B-3 chat encrypted-
+placeholder is the leading concrete fix), then Sally,
+then Sally-as-operator.
+
+---
+
+## What's not done yet (Part 120 continued)
+
+Still ahead in this Part:
+
+- **39 docs/*.md files line-by-line read** still pending (read so far: ADDING-A-COIN, ARCHITECTURE).  Remaining: AUDIT-FINDINGS, AUDIT-2026-05-FINAL-REPORT, AUTOMATION-AUDIT, BATCH-PROFILES-DESIGN, BETA-INCIDENT-RUNBOOK, CHAT-CRYPTO, CHAT-UI-DESIGN, CONTRIBUTING-TRANSLATIONS, FEES-AND-REWARDS, GRANDMA-FRIENDLY-INVESTIGATION, INTEGRATION-TEST-HARNESS-DESIGN, LOCK-SESSION-DESIGN, METADATA-LEAK-CATALOG, NEW-ISSUE-FOUND, NOTIFICATIONS-DESIGN, OPERATOR-TRUST-DESIGN, PER-LOCALE-PRERENDERING-DESIGN, PHASE-3a-DESIGN, PHASE-3b-DESIGN, PHASE-3b-STATUS, PHASE-3c-STATUS, PHASE-4-BACKLOG, PHASE-5-BACKLOG, PHASE-5-PLAN, PHASE-F-AUDIT, PHASE-G-PREP-AUDIT, PLAN, PRICE-SOURCES-RESEARCH, REVIEW-PHASE1, REVIEW-PHASE2, SECURITY (1192 lines), SERVICE-WORKER-CACHING-DESIGN, SWITCHING-NETWORKS, SYNDICATION-CHECKPOINT, UX-STANDARD.
+- **22 ADRs** in docs/adr/ not yet read.
+- **Persona-walkthrough-smoke extension** for the Part 120 catches (D-16 LAUNCH-DAY verbose warning, D-17 ARCHITECTURE Go→TypeScript drift, D-18 ADDING-A-COIN schema-file location, D-19 ARCHITECTURE no payment-watcher, etc.).
+- **AUDIT-2026-05.md Part 120 entry** + **REVISIT-LIST.md Part 120 maintained line** + **MORPHIT-BRAG-LIST.md entry #273** pending until Part 120 is fully closed.
+
+The fresh session that picks this up should:
+1. Extract this tarball.
+2. Continue reading remaining docs starting at AUDIT-FINDINGS.md (alphabetical pick-up).
+3. Fix as they go (same pattern as Parts 119 + this checkpoint).
+4. Tarball at the end of each turn per Ken's preference.
+5. When all 39 + 22 ADRs are done, write the consolidated Part 120 entry across all four meta-docs in one work unit per Memory #14.
+
+## How to verify this checkpoint
+
+```bash
+# Persona-walkthrough smoke green
+cd apps/web && tsx scripts/persona-walkthrough-smoke.ts
+# Expected: ✓ all 29 persona-walkthrough scenarios passed
+
+# Naming-policy smoke green
+cd apps/web && tsx scripts/forgejo-not-gitea-smoke.ts
+# Expected: ✓ all 3 scenarios passed
+
+# Verify the 6 fix-groups landed
+grep -L "diagnostics.indexer\|diagnostics.relay\|diagnostics.treasury" docs/LAUNCH-DAY.md
+# (Expected: no output — those substrings no longer appear in the non-historical sections of LAUNCH-DAY)
+# Wait — the explanatory note at lines 318-328 still names them in the disclaimer context.
+# The right check is that the verbose-mode WARNING at top doesn't use them:
+grep -A1 "Sally-operator finding So-3 (Part 119)" docs/LAUNCH-DAY.md | head -5
+# Expected: should now say "diagnostics block (containing operator_balances, price, explorers...)"
+
+grep -c "Node.js / TypeScript (tsx)" docs/ARCHITECTURE.md
+# Expected: ≥ 2 (relay + indexer service specs)
+
+grep -c "payment-watcher" docs/ARCHITECTURE.md
+# Expected: 1 (the explicit "There is NO separate payment-watcher service" line)
+
+grep -c "moneroProofVerifier.ts" docs/ADDING-A-COIN.md
+# Expected: 1
+
+# SYNDICATION-DESIGN.md should be gone:
+test ! -f docs/SYNDICATION-DESIGN.md && echo "deletion confirmed"
+
+# REVISIT-LIST.md pointer updated:
+grep -B0 -A2 "Syndicate-to-community" docs/REVISIT-LIST.md | head -5
+# Expected: now points at SYNDICATION-CHECKPOINT.md, not SYNDICATION-DESIGN.md
+```

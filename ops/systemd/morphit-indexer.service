@@ -1,0 +1,90 @@
+[Unit]
+Description=Morphit indexer — Blurt chain → Postgres materialisation + HTTP API
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=postgresql.service
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=morphit
+Group=morphit
+WorkingDirectory=/opt/morphit/apps/indexer
+
+# Environment file — NEVER commit a populated version. Copy from
+# ops/env/indexer.env.example and fill in at deploy time.
+EnvironmentFile=/etc/morphit/indexer.env
+
+# Use tsx directly so we don't need a build step. Node 24+ required
+# per apps/indexer/package.json engines.
+ExecStart=/usr/bin/env node --enable-source-maps \
+    node_modules/tsx/dist/cli.mjs src/main.ts
+
+# Give the poller a chance to finish its current block tx when
+# stopping, before SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+Restart=always
+RestartSec=5
+
+# Logs go to the journal. View with:
+#   journalctl -u morphit-indexer -f
+StandardOutput=journal
+StandardError=journal
+
+# ─── Hardening ──────────────────────────────────────────────────
+# Filesystem
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/morphit
+PrivateTmp=true
+
+# Process capabilities
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false  # Node's V8 JIT needs W+X
+
+# Part 107 — disable core dumps and restrict /proc visibility.
+# A core dump of the indexer process would contain the in-memory
+# XMR_FEE_VIEWKEY and any other secrets read from env at boot.
+# ProtectProc=invisible hides other processes' /proc data from
+# the indexer (the indexer doesn't need to read other processes,
+# and an attacker who somehow gets code-exec inside the indexer
+# can't snoop on relay/postgres/etc. either).
+LimitCORE=0
+ProtectProc=invisible
+ProcSubset=pid
+
+# Network — bind on loopback per the listen config; nginx fronts the public surface
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Note on IP-level network policy:
+#   The indexer needs egress to multiple external services that
+#   change IPs over time:
+#     - Blurt RPC endpoints (rotating CDN-fronted hosts)
+#     - Bitcoin block explorers (blockstream.info, mempool.space)
+#     - Monero block explorers (xmrchain.net)
+#     - Optional price-feed APIs (CoinGecko, Klingex)
+#   Hardcoding an allowlist via IPAddressAllow= is fragile because
+#   these IPs rotate without notice. Network policy is enforced at
+#   the host firewall level (ufw/nftables) instead — see
+#   docs/OPERATIONS.md §14 (deployment topology) and §34 (firewall).
+
+# Syscalls
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @reboot @swap @module @raw-io
+
+# Namespaces
+PrivateDevices=true
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target

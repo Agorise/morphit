@@ -1,0 +1,117 @@
+<script lang="ts">
+	/**
+	 * BusyButton — a button grandma can trust.
+	 *
+	 * Every button that triggers an async action should use this
+	 * component instead of a raw <button>. It guarantees:
+	 *
+	 *   - Press-depress micro-animation (scale 0.97 on :active)
+	 *     so the click registers visually within a single frame
+	 *   - Inline spinner when `busy` is true, replacing nothing
+	 *     but joining the label so the button's width is stable
+	 *   - aria-busy attribute for screen-readers
+	 *   - Automatic disable while busy (can't double-submit)
+	 *   - Consistent variant styling (primary/secondary/ghost)
+	 *
+	 * See docs/UX-STANDARD.md for the rules this component enforces.
+	 */
+
+	import type { Snippet } from 'svelte';
+
+	interface Props {
+		/** Primary CTA, secondary, or ghost. Only one primary per screen. */
+		variant?: 'primary' | 'secondary' | 'ghost';
+		/** True while the action is in flight. Shows spinner, disables button. */
+		busy?: boolean;
+		/** True briefly after a just-completed success. Shows a
+		 *  checkmark next to the label. Caller should flip this off
+		 *  after 1-2 seconds. Mutually exclusive with busy. */
+		done?: boolean;
+		/** External disable (e.g. form not valid). Overridden by busy=true. */
+		disabled?: boolean;
+		/** Label shown while busy=true. Falls back to the main label. */
+		busyLabel?: string;
+		/** Button type; defaults to 'button' (not 'submit'). */
+		type?: 'button' | 'submit' | 'reset';
+		/** Full-width layout inside a container. */
+		fullWidth?: boolean;
+		/** Click handler. Can be async — busy state handled by caller. */
+		onclick?: (e: MouseEvent) => void;
+		/** Main button label (children). */
+		children: Snippet;
+		/** Optional ARIA label override. */
+		'aria-label'?: string;
+	}
+
+	let {
+		variant = 'primary',
+		busy = false,
+		done = false,
+		disabled = false,
+		busyLabel,
+		type = 'button',
+		fullWidth = false,
+		onclick,
+		children,
+		'aria-label': ariaLabel
+	}: Props = $props();
+
+	const effectivelyDisabled = $derived(busy || disabled);
+
+	// Variant classes. Tailwind utility combos rather than CSS
+	// component classes, so Tailwind tree-shakes unused variants.
+	const variantClass = $derived.by(() => {
+		switch (variant) {
+			case 'primary':
+				return 'bg-morphit-emerald text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
+			case 'secondary':
+				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
+			case 'ghost':
+				return 'bg-transparent text-ink-700 dark:text-ink-200 font-medium hover:bg-ink-100 dark:hover:bg-ink-800 disabled:text-ink-400';
+		}
+	});
+</script>
+
+<button
+	{type}
+	disabled={effectivelyDisabled}
+	aria-busy={busy}
+	aria-label={ariaLabel}
+	{onclick}
+	class="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-base transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100 {variantClass} {fullWidth
+		? 'w-full'
+		: ''}"
+>
+	{#if busy}
+		<!-- Inline spinner. Uses currentColor so it matches the button
+		     variant automatically. Sized to match typography line-height. -->
+		<svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+			<path
+				d="M21 12a9 9 0 0 0-9-9"
+				stroke="currentColor"
+				stroke-width="3"
+				stroke-linecap="round"
+			/>
+		</svg>
+		{busyLabel ?? ''}
+		{#if !busyLabel}
+			{@render children()}
+		{/if}
+	{:else if done}
+		<!-- Checkmark celebrating a just-completed action. Tuned to be
+		     visible without being cartoonish; the label stays primary. -->
+		<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+			<path
+				d="M5 12l4 4L19 7"
+				stroke="currentColor"
+				stroke-width="3"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+		{@render children()}
+	{:else}
+		{@render children()}
+	{/if}
+</button>

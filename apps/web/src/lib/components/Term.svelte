@@ -1,0 +1,197 @@
+<script lang="ts">
+	/**
+	 * Term — inline glossary-link with hover/tap tooltip.
+	 *
+	 * Renders the wrapped word with a dotted underline as a
+	 * cue that hovering will reveal a definition; on hover
+	 * (desktop) or tap (mobile), a small popover surfaces the
+	 * `glossary.<key>.body` translation along with a deep
+	 * link to `/glossary#<key>` for the full entry.
+	 *
+	 * After the FIRST appearance on a given route, subsequent
+	 * `<Term key="fiat">…</Term>` instances on the same route
+	 * render as plain text — the underline cue is only useful
+	 * the first time per page; a long page peppered with
+	 * dotted underlines on every "fiat" is visually noisy and
+	 * trains the user to ignore them.
+	 *
+	 * Tracking lives in `$lib/stores/glossarySeen` (a writable
+	 * store keyed by current route pathname), reset on
+	 * navigation by the top-level layout's `$effect`.
+	 *
+	 * Accessibility notes:
+	 *
+	 *   - The trigger is a `<button>` so keyboard focus
+	 *     reveals the tooltip the same way hover does (focus
+	 *     event), and Enter/Space activate the
+	 *     "open glossary" link via the popover's anchor.
+	 *   - The visible cue is the dotted-underline trigger
+	 *     itself, not a separate icon — adding a help-circle
+	 *     icon next to every glossary word would be a much
+	 *     louder visual change than the design wants.  The
+	 *     dotted underline is a long-established convention
+	 *     for "this word has a definition."
+	 *   - `aria-describedby` points at the popover when open
+	 *     so screen readers announce the description as part
+	 *     of the focused word.
+	 *   - Escape closes the popover and returns focus to the
+	 *     button.
+	 *
+	 * Design decisions:
+	 *
+	 *   - The popover is small (~256px wide) and positioned
+	 *     above the word.  On narrow viewports it shifts
+	 *     horizontally to stay on-screen via the `max-w` +
+	 *     CSS clamp pattern.
+	 *   - The popover's deep link goes to `/glossary#<key>`,
+	 *     not to a `/faq#…` entry, because the glossary
+	 *     definitions are intentionally shorter and more
+	 *     focused than the FAQ.  Users wanting FAQ depth can
+	 *     navigate from the glossary page itself.
+	 *   - This is NOT auto-applied — call sites have to
+	 *     explicitly wrap the word.  Auto-detection over rendered
+	 *     text would be brittle (false positives on user content,
+	 *     hard to localize, hard to test).  Explicit wrapping
+	 *     gives the writer full control over which appearance
+	 *     gets the cue.
+	 */
+	import { onDestroy, untrack } from 'svelte';
+	import { _ } from 'svelte-i18n';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
+	import { markSeen } from '$stores/glossarySeen';
+
+	interface Props {
+		/** Glossary key — must match a `glossary.<key>.{title,body}`
+		 *  entry in the locale JSONs.  Examples: `'fiat'`,
+		 *  `'permlink'`, `'listing_fee'`. */
+		key: string;
+		/** The word(s) to render.  Use the {@render children}
+		 *  snippet rather than text-via-prop so callers can
+		 *  inflect ("fiat" / "fiat currencies" / "fiats" all
+		 *  point at the same glossary entry). */
+		children?: import('svelte').Snippet;
+	}
+
+	let { key, children }: Props = $props();
+
+	// One-time decision per instance: do we render with the
+	// tooltip cue, or plain text?  Decided at mount time
+	// against the seen-tracker store; subsequent reactive
+	// reads of $page.url.pathname don't re-evaluate this —
+	// the user shouldn't see the underline disappear mid-
+	// route as scroll-induced re-renders happen.  `key` is
+	// captured non-reactively via `untrack` because props
+	// don't change for a given <Term> instance — each call
+	// site like `<Term key="fiat">` makes a stable
+	// instance — and re-evaluating on key changes would be
+	// nonsensical (different glossary term entirely).
+	const isFirstAppearance = untrack(() =>
+		markSeen(get(page).url.pathname, key)
+	);
+
+	let open = $state(false);
+	let triggerEl: HTMLButtonElement | undefined = $state(undefined);
+
+	function openTooltip(): void {
+		open = true;
+	}
+	function closeTooltip(): void {
+		open = false;
+	}
+	function onKeyDown(e: KeyboardEvent): void {
+		if (e.key === 'Escape' && open) {
+			e.preventDefault();
+			closeTooltip();
+			triggerEl?.focus();
+		}
+	}
+
+	// Close on click-outside (mobile-friendly).  Listener is
+	// attached only while the popover is open to avoid
+	// always-on document listeners.
+	let docClickHandler: ((_e: MouseEvent) => void) | null = null;
+	$effect(() => {
+		if (open) {
+			docClickHandler = (e: MouseEvent) => {
+				const target = e.target;
+				if (
+					triggerEl &&
+					target instanceof Node &&
+					!triggerEl.contains(target)
+				) {
+					// Also tolerate clicks inside the popover itself
+					// (the deep-link anchor); browsers fire click on
+					// document AFTER click on the anchor, so the
+					// anchor's navigation has already been triggered.
+					closeTooltip();
+				}
+			};
+			document.addEventListener('click', docClickHandler);
+		} else if (docClickHandler) {
+			document.removeEventListener('click', docClickHandler);
+			docClickHandler = null;
+		}
+	});
+
+	onDestroy(() => {
+		if (docClickHandler) {
+			document.removeEventListener('click', docClickHandler);
+			docClickHandler = null;
+		}
+	});
+
+	const popoverId = $derived(`term-tip-${key}`);
+</script>
+
+{#if isFirstAppearance}
+	<span class="relative inline-block">
+		<button
+			bind:this={triggerEl}
+			type="button"
+			class="cursor-help border-b border-dotted border-ink-400 text-ink-900 hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-500 dark:text-ink-50 dark:hover:text-morphit-emerald-light"
+			aria-describedby={open ? popoverId : undefined}
+			aria-expanded={open}
+			onmouseenter={openTooltip}
+			onmouseleave={closeTooltip}
+			onfocus={openTooltip}
+			onblur={closeTooltip}
+			onclick={(e) => {
+				// On click (mobile / keyboard activation), toggle.
+				// Don't navigate — the popover's deep-link is the
+				// navigation target.
+				e.preventDefault();
+				open = !open;
+			}}
+			onkeydown={onKeyDown}
+		>
+			{#if children}{@render children()}{:else}{$_(`glossary.${key}.title`)}{/if}
+		</button>
+
+		{#if open}
+			<span
+				id={popoverId}
+				role="tooltip"
+				class="absolute bottom-full left-1/2 z-40 mb-2 w-64 max-w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-ink-200 bg-white p-3 text-sm shadow-morphit-card dark:border-ink-700 dark:bg-ink-900"
+			>
+				<span class="block font-display text-base font-bold text-ink-900 dark:text-ink-50">
+					{$_(`glossary.${key}.title`)}
+				</span>
+				<span class="mt-1 block text-ink-700 dark:text-ink-200">
+					{$_(`glossary.${key}.body`)}
+				</span>
+				<a
+					href="/glossary#{key}"
+					class="mt-2 inline-block text-sm font-semibold text-morphit-emerald hover:underline"
+				>
+					{$_('glossary.tooltip.open_full')} →
+				</a>
+			</span>
+		{/if}
+	</span>
+{:else}
+	<!-- Subsequent appearance on this route — render plain text
+	     with no cue.  The user has already seen the underline
+	     once; further dotted-underlines would just add noise. -->
+	{#if children}{@render children()}{:else}{$_(`glossary.${key}.title`)}{/if}
+{/if}

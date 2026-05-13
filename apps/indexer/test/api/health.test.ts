@@ -1,0 +1,422 @@
+/**
+ * Tests for /v1/health.
+ *
+ * Exercises the endpoint's HTTP response shape without standing
+ * up Postgres, the chain RPC, or the full Poller. The test builds
+ * a minimal in-process Hono app around `healthRoute()` and pokes
+ * it with fetch-style requests.
+ *
+ * Coverage:
+ *   - Baseline shape (status/version/blocks/lag/stale fields)
+ *   - `degraded` status when lag exceeds the configured threshold
+ *   - Verbose diagnostics included when config.verboseHealth=true
+ *   - Verbose diagnostics included when ?verbose=1 is on the URL
+ *   - Verbose diagnostics NOT included by default
+ *   - Explorer diagnostics reflect CircuitBreaker state
+ *   - Response has cache-control: no-store
+ */
+
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { healthRoute } from '$api/health';
+import { CircuitBreaker } from '$indexer/fee/circuitBreaker';
+import type { Config } from '$config';
+import type { Poller } from '$indexer/poller';
+import type { BlurtPriceSource } from '$indexer/price/source';
+
+// ─── Fakes ──────────────────────────────────────────────────────
+
+/**
+ * Build a Config sufficient for the health endpoint. Only fields
+ * used by `healthRoute()` matter; everything else is a best-effort
+ * type fill that the endpoint never reads.
+ */
+function fakeConfig(overrides: Partial<Config> = {}): Config {
+	// The full Config type is large; most fields are ignored by
+	// healthRoute. Start from a minimal object and let `as Config`
+	// paper over the fields we don't touch.
+	return {
+		staleLagThreshold: 10,
+		verboseHealth: false,
+		...overrides
+	} as unknown as Config;
+}
+
+/**
+ * Build a Poller stand-in with the minimal surface healthRoute
+ * uses: getStatus() + explorerBreaker. The breaker is a real
+ * instance so we exercise the real state-transition logic.
+ */
+function fakePoller(
+	opts: {
+		chainHeadBlock?: number;
+		indexedBlock?: number;
+		lastError?: string | null;
+		lastErrorAt?: Date | null;
+		startedAt?: Date;
+		breaker?: CircuitBreaker;
+	} = {}
+): Poller {
+	const breaker = opts.breaker ?? new CircuitBreaker();
+	return {
+		getStatus() {
+			return {
+				running: true,
+				chainHeadBlock: opts.chainHeadBlock ?? 1_000_000,
+				indexedBlock: opts.indexedBlock ?? 1_000_000,
+				startedAt: opts.startedAt ?? new Date('2026-04-20T12:00:00Z'),
+				lastError: opts.lastError ?? null,
+				lastErrorAt: opts.lastErrorAt ?? null
+			};
+		},
+		explorerBreaker: breaker,
+		getOperatorBalanceState() {
+			// Empty map = no monitored accounts configured. Tests that
+			// exercise operator_balances rendering should pass a custom
+			// poller; the default fake returns empty so the
+			// operator_balances array is [] in the health response.
+			return new Map();
+		}
+	} as unknown as Poller;
+}
+
+/**
+ * Minimal BlurtPriceSource stand-in. Lets tests control exactly
+ * what the `diagnostics.price` surface reports.
+ */
+function fakePriceSource(
+	opts: {
+		price?: number;
+		source?: string;
+		updatedAt?: Date;
+		stale?: boolean;
+	} = {}
+): BlurtPriceSource {
+	const price = opts.price ?? 0.002;
+	const source = opts.source ?? 'test_static';
+	const updatedAt = opts.updatedAt ?? new Date('2026-04-20T11:55:00Z');
+	const stale = opts.stale ?? false;
+	return {
+		current: () => price,
+		currentDetailed: () => ({
+			price,
+			source,
+			updated_at: updatedAt,
+			stale
+		}),
+		start: () => undefined,
+		stop: () => undefined
+	};
+}
+
+// ─── Helpers ────────────────────────────────────────────────────
+
+async function getHealth(
+	cfg: Config,
+	poller: Poller,
+	query = '',
+	priceSource: BlurtPriceSource = fakePriceSource()
+): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
+	const app = healthRoute(cfg, poller, priceSource);
+	const url = `http://localhost/${query ? '?' + query : ''}`;
+	const res = await app.request(url);
+	const body = (await res.json()) as Record<string, unknown>;
+	return { status: res.status, body, headers: res.headers };
+}
+
+// ─── Tests ──────────────────────────────────────────────────────
+
+describe('healthRoute — baseline shape', () => {
+	it('returns the expected top-level fields', async () => {
+		const { status, body } = await getHealth(fakeConfig(), fakePoller());
+		expect(status).toBe(200);
+		expect(body).toMatchObject({
+			status: 'ok',
+			uptime_sec: expect.any(Number),
+			chain_head_block: expect.any(Number),
+			indexed_block: expect.any(Number),
+			lag_blocks: expect.any(Number),
+			stale: expect.any(Boolean),
+			version: expect.any(String)
+		});
+	});
+
+	it('reports ok status when lag is within threshold', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ staleLagThreshold: 10 }),
+			fakePoller({ chainHeadBlock: 1000, indexedBlock: 995 })
+		);
+		expect(body.status).toBe('ok');
+		expect(body.stale).toBe(false);
+		expect(body.lag_blocks).toBe(5);
+	});
+
+	it('reports degraded status when lag exceeds threshold', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ staleLagThreshold: 5 }),
+			fakePoller({ chainHeadBlock: 1000, indexedBlock: 900 })
+		);
+		expect(body.status).toBe('degraded');
+		expect(body.stale).toBe(true);
+		expect(body.lag_blocks).toBe(100);
+	});
+
+	it('clamps negative lag to zero when indexed is ahead of head', async () => {
+		// Rare but possible mid-poll: the indexer already applied a
+		// block that the cached chain-head value hasn't yet caught up
+		// to. Shouldn't produce a nonsense negative lag.
+		const { body } = await getHealth(
+			fakeConfig(),
+			fakePoller({ chainHeadBlock: 900, indexedBlock: 1000 })
+		);
+		expect(body.lag_blocks).toBe(0);
+	});
+
+	it('sets cache-control: no-store', async () => {
+		const { headers } = await getHealth(fakeConfig(), fakePoller());
+		expect(headers.get('cache-control')).toBe('no-store');
+	});
+});
+
+describe('healthRoute — verbose diagnostics', () => {
+	it('omits diagnostics by default', async () => {
+		const { body } = await getHealth(fakeConfig(), fakePoller());
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	// Audit 2026-05 finding NEW-9-8: verbose mode now requires
+	// BOTH config.verboseHealth=true AND ?verbose=1.  Pre-fix,
+	// any caller passing ?verbose=1 got the full diagnostics
+	// block — which leaks below-threshold balance signal to a
+	// public attacker timing a drain attempt.
+
+	it('config.verboseHealth=true alone is not enough — requires ?verbose=1 too', async () => {
+		const { body } = await getHealth(fakeConfig({ verboseHealth: true }), fakePoller());
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	it('?verbose=1 alone is not enough — requires config.verboseHealth=true too', async () => {
+		const { body } = await getHealth(fakeConfig(), fakePoller(), 'verbose=1');
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	it('includes diagnostics when BOTH config.verboseHealth=true AND ?verbose=1', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller(),
+			'verbose=1'
+		);
+		expect(body.diagnostics).toBeDefined();
+	});
+
+	it('ignores ?verbose values other than "1"', async () => {
+		// Defense-in-depth: we want a truthy check, not "any non-empty
+		// string". Right now the code checks `=== '1'`, this test pins
+		// that behavior.
+		for (const bad of ['true', 'yes', '0', '']) {
+			const { body } = await getHealth(
+				fakeConfig({ verboseHealth: true }),
+				fakePoller(),
+				`verbose=${encodeURIComponent(bad)}`
+			);
+			expect(body.diagnostics).toBeUndefined();
+		}
+	});
+
+	it('diagnostics object has the expected shape', async () => {
+		const at = new Date('2026-04-20T13:00:00Z');
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({
+				lastError: 'RPC timeout',
+				lastErrorAt: at,
+				startedAt: new Date('2026-04-20T12:00:00Z')
+			}),
+			'verbose=1'
+		);
+		const d = body.diagnostics as Record<string, unknown>;
+		expect(d).toMatchObject({
+			last_error: 'RPC timeout',
+			last_error_at: at.toISOString(),
+			started_at: '2026-04-20T12:00:00.000Z',
+			explorers: expect.any(Array)
+		});
+	});
+
+	it('diagnostics.last_error_at is null when there has been no error', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ lastError: null, lastErrorAt: null }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as Record<string, unknown>;
+		expect(d.last_error).toBeNull();
+		expect(d.last_error_at).toBeNull();
+	});
+});
+
+describe('healthRoute — explorer diagnostics reflect CircuitBreaker state', () => {
+	let breaker: CircuitBreaker;
+
+	beforeEach(() => {
+		breaker = new CircuitBreaker();
+	});
+
+	it('reports an empty explorers list when no keys have been tracked', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ breaker }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as { explorers: unknown[] };
+		expect(d.explorers).toEqual([]);
+	});
+
+	it('reports tracked explorers with their closed state', async () => {
+		// One failure — below the default threshold (3 by default), so
+		// state is still closed.
+		breaker.recordFailure('https://btc.example.com');
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ breaker }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			explorers: Array<{
+				url: string;
+				state: string;
+				consecutive_failures: number;
+				cooldown_remaining_ms: number;
+			}>;
+		};
+		expect(d.explorers).toHaveLength(1);
+		expect(d.explorers[0]!.url).toBe('https://btc.example.com');
+		expect(d.explorers[0]!.state).toBe('closed');
+		expect(d.explorers[0]!.consecutive_failures).toBe(1);
+	});
+
+	it('reports open state after enough consecutive failures', async () => {
+		for (let i = 0; i < 5; i++) {
+			breaker.recordFailure('https://xmr.example.com');
+		}
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ breaker }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			explorers: Array<{ url: string; state: string; consecutive_failures: number }>;
+		};
+		expect(d.explorers[0]!.state).toBe('open');
+		expect(d.explorers[0]!.consecutive_failures).toBe(5);
+	});
+
+	it('exposes cooldown_remaining_ms as a non-negative number', async () => {
+		for (let i = 0; i < 5; i++) {
+			breaker.recordFailure('https://xmr.example.com');
+		}
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ breaker }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			explorers: Array<{ cooldown_remaining_ms: number }>;
+		};
+		expect(d.explorers[0]!.cooldown_remaining_ms).toBeGreaterThanOrEqual(0);
+	});
+
+	it('tracks multiple explorers independently', async () => {
+		// Per the CircuitBreaker contract, recordSuccess on a key
+		// with no prior failures is a no-op (no state to clear).
+		// To get 'a' into the map, record one failure then success
+		// — landing back at closed/healthy state.
+		breaker.recordFailure('https://a.example.com');
+		breaker.recordSuccess('https://a.example.com');
+		for (let i = 0; i < 5; i++) breaker.recordFailure('https://b.example.com');
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({ breaker }),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			explorers: Array<{ url: string; state: string }>;
+		};
+		const byUrl = Object.fromEntries(d.explorers.map((e) => [e.url, e.state]));
+		expect(byUrl['https://a.example.com']).toBe('closed');
+		expect(byUrl['https://b.example.com']).toBe('open');
+	});
+});
+
+describe('healthRoute — price source diagnostics', () => {
+	it('is omitted from the non-verbose body', async () => {
+		const { body } = await getHealth(
+			fakeConfig(),
+			fakePoller(),
+			'',
+			fakePriceSource({ price: 0.005 })
+		);
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	it('reports live upstream source name, price, and updated_at', async () => {
+		const updatedAt = new Date('2026-04-20T11:55:00Z');
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller(),
+			'verbose=1',
+			fakePriceSource({
+				price: 0.00423,
+				source: 'klingex',
+				updatedAt,
+				stale: false
+			})
+		);
+		const d = body.diagnostics as { price: Record<string, unknown> };
+		// Use toMatchObject so the test tolerates additional fields
+		// the code may add (e.g. `enabled: true` was added when
+		// the price feed gained an opt-in flag).
+		expect(d.price).toMatchObject({
+			blurt_usd: 0.00423,
+			source: 'klingex',
+			updated_at: updatedAt.toISOString(),
+			stale: false
+		});
+	});
+
+	it('reports stale=true when the price source says so', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller(),
+			'verbose=1',
+			fakePriceSource({ stale: true })
+		);
+		const d = body.diagnostics as { price: { stale: boolean } };
+		expect(d.price.stale).toBe(true);
+	});
+
+	it('reports the static_floor source name when no feed has served', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller(),
+			'verbose=1',
+			fakePriceSource({ source: 'static_floor', stale: true })
+		);
+		const d = body.diagnostics as { price: { source: string } };
+		expect(d.price.source).toBe('static_floor');
+	});
+
+	it('ignores verbose query param value other than "1" for price too', async () => {
+		// Regression check: the existing "ignore verbose=true/yes/0"
+		// test covered the whole diagnostics object. This pins the
+		// expectation that the price sub-field follows the same rule
+		// as explorers + last_error — no sneak-leak.
+		const { body } = await getHealth(
+			fakeConfig(),
+			fakePoller(),
+			'verbose=true',
+			fakePriceSource({ price: 0.005 })
+		);
+		expect(body.diagnostics).toBeUndefined();
+	});
+});
