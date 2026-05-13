@@ -1,0 +1,127 @@
+# Morphit — robots policy
+#
+# Per ADR-0003: permissive. Public marketplace; public FAQ; public docs.
+# Morphit's content is AGPL-3 and anyone is welcome to quote, archive,
+# or index it.
+#
+# The only paths we ask crawlers to skip are the recovery flow and the
+# per-user settings page — both produce no value as indexed results and
+# the recovery form's UI copy could look like phishing bait if a user
+# lands on it from a SERP.
+
+User-agent: *
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+# Explicit allowlist for major search and retrieval bots.  The
+# wildcard above already grants access; these named entries make
+# the opt-in unambiguous for crawlers that prefer (or require)
+# specifically-named directives.
+
+User-agent: Googlebot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Bingbot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Slurp
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: YandexBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Baiduspider
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Applebot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Twitterbot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: facebookexternalhit
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: LinkedInBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: GPTBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: Bytespider
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: CCBot
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+User-agent: ia_archiver
+Allow: /
+Disallow: /onboarding/import
+Disallow: /settings
+
+Sitemap: https://morphit.io/sitemap.xml

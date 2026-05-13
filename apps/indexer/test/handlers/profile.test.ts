@@ -1,0 +1,200 @@
+import { describe, expect, it } from 'vitest';
+
+import handler from '$indexer/handlers/profile';
+import { makeCtx } from '../testutils/context';
+import { makeMockClient } from '../testutils/mockClient';
+
+describe('profile handler', () => {
+	it('upserts a valid payload', async () => {
+		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				payload: { display_name: 'Alice the Great' }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries).toHaveLength(1);
+		expect(mock.queries[0]!.params[0]).toBe('alice');
+		expect(mock.queries[0]!.params[1]).toBe('Alice the Great');
+	});
+
+	it('accepts optional json_metadata as a plain object', async () => {
+		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const r = await handler(
+			makeCtx({
+				payload: {
+					display_name: 'Bob',
+					json_metadata: { avatar: 'https://example.com/b.png' }
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('rejects non-object payloads', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: 'not an object' as unknown }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'payload_not_object' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects missing display_name', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: {} }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_not_string' });
+	});
+
+	it('rejects empty display_name after trim', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: '   ' } }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_too_short' });
+	});
+
+	it('rejects display_name exceeding 64 code points', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				payload: { display_name: 'a'.repeat(65) }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'display_name_too_long' });
+	});
+
+	it('counts code points, not UTF-16 units, for length', async () => {
+		// "👋 Hello" has 7 code points but 8 UTF-16 units.
+		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		// 64 emoji (each 2 UTF-16 units, 1 code point) — exactly at the limit.
+		const name = '👋'.repeat(64);
+		const r = await handler(makeCtx({ payload: { display_name: name } }), mock.client);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('rejects non-object json_metadata', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				payload: { display_name: 'Carol', json_metadata: 'foo' }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'json_metadata_not_object' });
+	});
+
+	// Profile uses MAX_JSONB_BYTES_PROFILE = 8192 (larger than the
+	// default 4KB to make room for inline avatars).  The earlier
+	// version of this test claimed "4KB cap" with a 4100-char
+	// payload — that would NOT trip the 8KB cap, so the test was
+	// rotted.  Fixed: use a payload that genuinely exceeds 8KB.
+	it('rejects json_metadata exceeding 8KB serialized', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({
+				payload: {
+					display_name: 'Carol',
+					json_metadata: { padding: 'x'.repeat(8200) }
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'json_metadata_too_large' });
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	// ─── O3.1 — NFC normalization + homograph defense ────────────
+
+	it('O3.1: NFC-normalizes display_name before length check', async () => {
+		// Decomposed é (e + U+0301 combining acute) — pre-NFC this
+		// is 2 codepoints, post-NFC it's 1.  64 NFC-form chars
+		// should pass even when input is 128 codepoints decomposed.
+		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const decomposed = 'e\u0301'.repeat(64);
+		const r = await handler(makeCtx({ payload: { display_name: decomposed } }), mock.client);
+		expect(r).toEqual({ ok: true });
+		// The stored value should be NFC-normalized (single param[1]).
+		const stored = mock.queries[0]!.params[1] as string;
+		expect([...stored].length).toBe(64);
+		// And byte-equal to the precomposed é × 64.
+		expect(stored).toBe('é'.repeat(64));
+	});
+
+	it('O3.1: rejects NFD-decomposed homograph of reserved name', async () => {
+		// "morphit-fées" with é written as e + combining acute.
+		// Pre-O3.1, the indexer didn't NFC-normalize before running
+		// impersonatesReservedName, and the regex character classes
+		// contain precomposed \u00e9 but not the bare 2-codepoint
+		// sequence — so this would slip through as an accepted name
+		// that VISUALLY impersonates "morphit-fees".
+		const mock = makeMockClient();
+		const decomposed = 'morphit-fe\u0301e\u0301s';
+		const r = await handler(makeCtx({ payload: { display_name: decomposed } }), mock.client);
+		expect(r).toEqual({
+			ok: false,
+			reason: 'display_name_impersonates_reserved'
+		});
+		expect(mock.queries).toHaveLength(0);
+	});
+
+	it('rejects display_name with leading @ (ASCII)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: '@morphit-fees' } }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_leading_at' });
+	});
+
+	it('rejects display_name with leading ＠ (fullwidth)', async () => {
+		const mock = makeMockClient();
+		const r = await handler(
+			makeCtx({ payload: { display_name: '\uFF20morphit-fees' } }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'display_name_leading_at' });
+	});
+
+	it('rejects direct Cyrillic homograph of reserved name', async () => {
+		const mock = makeMockClient();
+		// Cyrillic 'е' (U+0435) for Latin 'e' in "morphit-fees".
+		const homograph = 'morphit-f\u0435\u0435s';
+		const r = await handler(makeCtx({ payload: { display_name: homograph } }), mock.client);
+		expect(r).toEqual({
+			ok: false,
+			reason: 'display_name_impersonates_reserved'
+		});
+	});
+
+	it('rejects display_name with control character', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: 'Alice\u0007Bob' } }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
+	});
+
+	it('rejects display_name with bidi override', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: 'Al\u202Eice' } }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
+	});
+
+	it('rejects display_name with zero-width joiner', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: 'Al\u200Dice' } }), mock.client);
+		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
+	});
+
+	it('legitimate exact-match reserved name from the operator does NOT impersonate (byte-equal)', async () => {
+		// The byte-equality escape: an operator who LEGITIMATELY
+		// owns the reserved name should be able to use it as their
+		// display_name.  impersonatesReservedName returns false on
+		// byte-equal match.
+		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit-fees',
+				payload: { display_name: 'morphit-fees' }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+});

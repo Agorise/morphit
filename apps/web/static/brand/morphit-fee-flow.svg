@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1050" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <!--
+    Morphit fees and rewards flow — eli5 diagram.
+    All amounts shown are operator-tunable; the values shown are
+    the project defaults documented in:
+      apps/indexer/src/config/index.ts (feeBaseBlurt = 60)
+      apps/indexer/src/indexer/strangerFeePricing.ts (STRANGER_FEE_BASE_BLURT = 5)
+      apps/indexer/src/indexer/handlers/feedback.ts (welcome bonus 10 liquid + 10 vesting)
+    BLURT/USD conversion uses ~$0.002/BLURT for human-readable USD values.
+  -->
+
+  <defs>
+    <!-- Arrow marker -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrow-bypass" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="1050" fill="#fafafa"/>
+
+  <!-- Title -->
+  <text x="700" y="42" text-anchor="middle" font-size="26" font-weight="600" fill="#111827">Morphit fees &amp; rewards — where the money flows</text>
+  <text x="700" y="68" text-anchor="middle" font-size="14" fill="#6b7280">All amounts are operator-tunable; defaults shown.  BLURT prices use ~$0.002/BLURT for USD reference.</text>
+
+  <!-- ───────────── Column 1: USERS (left) ───────────── -->
+  <text x="120" y="110" text-anchor="middle" font-size="18" font-weight="600" fill="#dc2626">Users (pay)</text>
+  <line x1="40" y1="120" x2="200" y2="120" stroke="#dc2626" stroke-width="2"/>
+
+  <!-- Buyer -->
+  <g>
+    <rect x="40" y="140" width="180" height="70" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+    <text x="130" y="168" text-anchor="middle" font-size="15" font-weight="600" fill="#7f1d1d">Buyer</text>
+    <text x="130" y="190" text-anchor="middle" font-size="12" fill="#7f1d1d">posts a buy order</text>
+  </g>
+
+  <!-- Seller -->
+  <g>
+    <rect x="40" y="240" width="180" height="70" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+    <text x="130" y="268" text-anchor="middle" font-size="15" font-weight="600" fill="#7f1d1d">Seller</text>
+    <text x="130" y="290" text-anchor="middle" font-size="12" fill="#7f1d1d">posts a sell order</text>
+  </g>
+
+  <!-- Stranger-messager -->
+  <g>
+    <rect x="40" y="340" width="180" height="70" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+    <text x="130" y="368" text-anchor="middle" font-size="14" font-weight="600" fill="#7f1d1d">Cold-message sender</text>
+    <text x="130" y="390" text-anchor="middle" font-size="12" fill="#7f1d1d">first-time DM, no trade</text>
+  </g>
+
+  <!-- Featured bidder -->
+  <g>
+    <rect x="40" y="440" width="180" height="70" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+    <text x="130" y="468" text-anchor="middle" font-size="14" font-weight="600" fill="#7f1d1d">Featured-slot bidder</text>
+    <text x="130" y="490" text-anchor="middle" font-size="12" fill="#7f1d1d">wants top-of-orderbook</text>
+  </g>
+
+  <!-- New signup -->
+  <g>
+    <rect x="40" y="540" width="180" height="70" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+    <text x="130" y="568" text-anchor="middle" font-size="15" font-weight="600" fill="#7f1d1d">New signup</text>
+    <text x="130" y="590" text-anchor="middle" font-size="12" fill="#7f1d1d">creates a Blurt account</text>
+  </g>
+
+  <!-- ───────────── Column 2: FEE TYPES (middle-left) ───────────── -->
+  <text x="500" y="110" text-anchor="middle" font-size="18" font-weight="600" fill="#d97706">Fee they pay</text>
+  <line x1="380" y1="120" x2="620" y2="120" stroke="#d97706" stroke-width="2"/>
+
+  <!-- Listing fee (buyer + seller) -->
+  <g>
+    <rect x="380" y="140" width="240" height="170" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+    <text x="500" y="170" text-anchor="middle" font-size="15" font-weight="600" fill="#78350f">Listing fee (per order)</text>
+    <text x="500" y="195" text-anchor="middle" font-size="13" font-weight="600" fill="#78350f">60 BLURT (≈ $0.12)</text>
+    <text x="500" y="218" text-anchor="middle" font-size="11" fill="#78350f">Sybil tier rises after 4+ orders/24h:</text>
+    <text x="500" y="234" text-anchor="middle" font-size="11" fill="#78350f">5th=2× • 6th=4× • 7th+=8×</text>
+    <text x="500" y="258" text-anchor="middle" font-size="11" fill="#78350f">Can pay in BTC/XMR instead</text>
+    <text x="500" y="274" text-anchor="middle" font-size="11" fill="#78350f">First-time waiver: free, buy-side only</text>
+    <text x="500" y="298" text-anchor="middle" font-size="10" fill="#92400e" font-style="italic">memo: morphit-fee:&lt;order-permlink&gt;</text>
+  </g>
+
+  <!-- Stranger fee -->
+  <g>
+    <rect x="380" y="340" width="240" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+    <text x="500" y="370" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">Cold-message fee</text>
+    <text x="500" y="392" text-anchor="middle" font-size="12" fill="#78350f">5 BLURT (≈ $0.01) — escalates if abused</text>
+  </g>
+
+  <!-- Featured bid -->
+  <g>
+    <rect x="380" y="440" width="240" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+    <text x="500" y="470" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">Featured-slot bid</text>
+    <text x="500" y="492" text-anchor="middle" font-size="12" fill="#78350f">50 BLURT/hour minimum, ≥6h, auctioned</text>
+  </g>
+
+  <!-- Signup fee -->
+  <g>
+    <rect x="380" y="540" width="240" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+    <text x="500" y="570" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">Signup fee</text>
+    <text x="500" y="592" text-anchor="middle" font-size="12" fill="#78350f">100 BLURT (≈ $0.20) — covers chain create</text>
+  </g>
+
+  <!-- Arrows: users → fees -->
+  <line x1="220" y1="175" x2="378" y2="175" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <line x1="220" y1="275" x2="378" y2="225" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <line x1="220" y1="375" x2="378" y2="375" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <line x1="220" y1="475" x2="378" y2="475" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <line x1="220" y1="575" x2="378" y2="575" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+  <!-- ───────────── Column 3: WHERE FEES GO (middle-right) ───────────── -->
+  <text x="900" y="110" text-anchor="middle" font-size="18" font-weight="600" fill="#1d4ed8">Where the fee lands</text>
+  <line x1="780" y1="120" x2="1020" y2="120" stroke="#1d4ed8" stroke-width="2"/>
+
+  <!-- Operator (fee recipient) -->
+  <g>
+    <rect x="780" y="140" width="240" height="220" rx="8" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2"/>
+    <text x="900" y="170" text-anchor="middle" font-size="15" font-weight="600" fill="#1e3a8a">Fee recipient account</text>
+    <text x="900" y="188" text-anchor="middle" font-size="12" font-weight="600" fill="#1e3a8a">@morphit-fees (default)</text>
+    <line x1="800" y1="200" x2="1000" y2="200" stroke="#1d4ed8" stroke-dasharray="4 2"/>
+    <text x="900" y="222" text-anchor="middle" font-size="12" fill="#1e3a8a">Receives 100% of:</text>
+    <text x="900" y="244" text-anchor="middle" font-size="11" fill="#1e3a8a">• Listing fees</text>
+    <text x="900" y="262" text-anchor="middle" font-size="11" fill="#1e3a8a">• Cold-message fees</text>
+    <text x="900" y="280" text-anchor="middle" font-size="11" fill="#1e3a8a">• Featured-slot bids</text>
+    <text x="900" y="306" text-anchor="middle" font-size="10" fill="#1e40af" font-style="italic">Operators run their own instance with</text>
+    <text x="900" y="320" text-anchor="middle" font-size="10" fill="#1e40af" font-style="italic">their own fee-recipient account.  100%</text>
+    <text x="900" y="334" text-anchor="middle" font-size="10" fill="#1e40af" font-style="italic">of fees on that instance go to them.</text>
+    <text x="900" y="350" text-anchor="middle" font-size="10" fill="#1e40af" font-style="italic">No central cut.</text>
+  </g>
+
+  <!-- Relay account (signup fee) -->
+  <g>
+    <rect x="780" y="540" width="240" height="100" rx="8" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2"/>
+    <text x="900" y="568" text-anchor="middle" font-size="14" font-weight="600" fill="#1e3a8a">Relay account</text>
+    <text x="900" y="588" text-anchor="middle" font-size="12" font-weight="600" fill="#1e3a8a">@morphit-relay (default)</text>
+    <text x="900" y="610" text-anchor="middle" font-size="11" fill="#1e3a8a">Pays Blurt chain to create</text>
+    <text x="900" y="624" text-anchor="middle" font-size="11" fill="#1e3a8a">the new account.  Net: ~0 to operator.</text>
+  </g>
+
+  <!-- Arrows from fees → recipients -->
+  <line x1="620" y1="225" x2="778" y2="200" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="620" y1="375" x2="778" y2="260" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="620" y1="475" x2="778" y2="290" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="620" y1="575" x2="778" y2="575" stroke="#1d4ed8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ───────────── Column 4: REWARDS OUT (right) ───────────── -->
+  <text x="1280" y="110" text-anchor="middle" font-size="18" font-weight="600" fill="#059669">Rewards paid out</text>
+  <line x1="1180" y1="120" x2="1380" y2="120" stroke="#059669" stroke-width="2"/>
+
+  <!-- Welcome bonus -->
+  <g>
+    <rect x="1180" y="140" width="200" height="120" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="2"/>
+    <text x="1280" y="168" text-anchor="middle" font-size="14" font-weight="600" fill="#064e3b">Welcome bonus</text>
+    <text x="1280" y="188" text-anchor="middle" font-size="12" font-weight="600" fill="#064e3b">20 BLURT total</text>
+    <text x="1280" y="208" text-anchor="middle" font-size="11" fill="#064e3b">10 liquid + 10 vesting</text>
+    <text x="1280" y="228" text-anchor="middle" font-size="11" fill="#064e3b">on first-trade feedback</text>
+    <text x="1280" y="248" text-anchor="middle" font-size="10" fill="#065f46" font-style="italic">paid by relay account</text>
+  </g>
+
+  <!-- Loyalty BP -->
+  <g>
+    <rect x="1180" y="290" width="200" height="170" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="2"/>
+    <text x="1280" y="318" text-anchor="middle" font-size="14" font-weight="600" fill="#064e3b">Loyalty milestones</text>
+    <text x="1280" y="340" text-anchor="middle" font-size="11" fill="#064e3b">10 trades → 60 BP</text>
+    <text x="1280" y="358" text-anchor="middle" font-size="11" fill="#064e3b">50 trades → 200 BP</text>
+    <text x="1280" y="376" text-anchor="middle" font-size="11" fill="#064e3b">100 trades → 1000 BP</text>
+    <text x="1280" y="396" text-anchor="middle" font-size="11" font-weight="600" fill="#064e3b">total: 1260 BP</text>
+    <text x="1280" y="420" text-anchor="middle" font-size="10" fill="#065f46" font-style="italic">paid by relay account,</text>
+    <text x="1280" y="434" text-anchor="middle" font-size="10" fill="#065f46" font-style="italic">drawn from accumulated</text>
+    <text x="1280" y="448" text-anchor="middle" font-size="10" fill="#065f46" font-style="italic">listing-fee revenue</text>
+  </g>
+
+  <!-- Arrows: operator pool → rewards -->
+  <line x1="1020" y1="200" x2="1178" y2="200" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <line x1="1020" y1="280" x2="1178" y2="370" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <!-- ───────────── BOTTOM SECTION: Trade flow (peer-to-peer, NEVER touches Morphit) ───────────── -->
+  <line x1="40" y1="680" x2="1360" y2="680" stroke="#d1d5db" stroke-width="1" stroke-dasharray="6 4"/>
+
+  <text x="700" y="715" text-anchor="middle" font-size="20" font-weight="600" fill="#7c3aed">The actual trade — money that NEVER touches Morphit</text>
+  <text x="700" y="740" text-anchor="middle" font-size="13" fill="#6b7280">This is what makes Morphit non-custodial.  We are a bulletin board, not a bank.</text>
+
+  <!-- Buyer pays cash -->
+  <g>
+    <rect x="80" y="770" width="220" height="120" rx="8" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="190" y="800" text-anchor="middle" font-size="14" font-weight="600" fill="#4c1d95">Buyer's bank / wallet</text>
+    <text x="190" y="830" text-anchor="middle" font-size="12" fill="#4c1d95">$ cash, bank transfer,</text>
+    <text x="190" y="846" text-anchor="middle" font-size="12" fill="#4c1d95">PayPal, Wise, etc.</text>
+    <text x="190" y="876" text-anchor="middle" font-size="11" fill="#5b21b6" font-style="italic">Morphit cannot see this</text>
+  </g>
+
+  <!-- Seller's wallet -->
+  <g>
+    <rect x="1100" y="770" width="220" height="120" rx="8" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="1210" y="800" text-anchor="middle" font-size="14" font-weight="600" fill="#4c1d95">Seller's bank / wallet</text>
+    <text x="1210" y="830" text-anchor="middle" font-size="12" fill="#4c1d95">cash IN, BTC/XMR</text>
+    <text x="1210" y="846" text-anchor="middle" font-size="12" fill="#4c1d95">OUT to buyer</text>
+    <text x="1210" y="876" text-anchor="middle" font-size="11" fill="#5b21b6" font-style="italic">Morphit cannot see this</text>
+  </g>
+
+  <!-- Trade flow arrow + label -->
+  <g>
+    <line x1="300" y1="830" x2="1100" y2="830" stroke="#7c3aed" stroke-width="3" marker-end="url(#arrow-bypass)" marker-start="url(#arrow-bypass)"/>
+    <rect x="500" y="800" width="400" height="60" rx="4" fill="#faf5ff" stroke="#7c3aed" stroke-dasharray="4 2"/>
+    <text x="700" y="825" text-anchor="middle" font-size="14" font-weight="600" fill="#4c1d95">Direct peer-to-peer settlement</text>
+    <text x="700" y="848" text-anchor="middle" font-size="11" fill="#5b21b6">Buyer pays seller fiat → seller releases BTC/XMR/BLURT to buyer</text>
+  </g>
+
+  <!-- Bottom legend -->
+  <g>
+    <rect x="40" y="940" width="1320" height="90" rx="8" fill="#ffffff" stroke="#e5e7eb" stroke-width="1"/>
+
+    <text x="60" y="965" font-size="13" font-weight="600" fill="#111827">Read the colors:</text>
+
+    <circle cx="180" cy="985" r="6" fill="#dc2626"/>
+    <text x="195" y="990" font-size="12" fill="#374151">Money users PAY</text>
+
+    <circle cx="350" cy="985" r="6" fill="#d97706"/>
+    <text x="365" y="990" font-size="12" fill="#374151">Fee categories</text>
+
+    <circle cx="510" cy="985" r="6" fill="#1d4ed8"/>
+    <text x="525" y="990" font-size="12" fill="#374151">Where fees land (operator)</text>
+
+    <circle cx="730" cy="985" r="6" fill="#059669"/>
+    <text x="745" y="990" font-size="12" fill="#374151">Rewards paid OUT</text>
+
+    <circle cx="900" cy="985" r="6" fill="#7c3aed"/>
+    <text x="915" y="990" font-size="12" fill="#374151">Peer-to-peer (never touches Morphit)</text>
+
+    <text x="60" y="1015" font-size="11" font-style="italic" fill="#6b7280">All amounts are operator-tunable defaults.  Your instance's actual values may differ — see your morphit.config.env or the operator's About page.  USD figures use BLURT ≈ $0.002 as a rough peg.</text>
+  </g>
+</svg>

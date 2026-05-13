@@ -1,0 +1,17 @@
+{
+	"name": "@morphit/asset-registry",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Single source-of-truth for the set of assets Morphit supports (BTC, XMR, BLURT, …) — ticker enum, decimals, basic shape validators, capability flags. The indexer, relay, and frontend all import from here so adding a new traded asset is a one-file edit.",
+	"license": "AGPL-3.0-only",
+	"main": "src/index.ts",
+	"types": "src/index.ts",
+	"files": ["src"],
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"typescript": "^5.6.3"
+	}
+}

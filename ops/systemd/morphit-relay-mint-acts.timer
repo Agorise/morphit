@@ -1,0 +1,31 @@
+[Unit]
+Description=Morphit relay — weekly ACT minting timer
+Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
+Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/AUTOMATION-AUDIT.md
+
+[Timer]
+# Fires every Sunday at 04:00 UTC.  Sunday-early-morning is
+# typically a low-activity window for any timezone an operator
+# might be in.  Adjust OnCalendar in a drop-in if your operator
+# schedule wants something else.
+OnCalendar=Sun *-*-* 04:00:00 UTC
+
+# If the system was off when the timer fired, run as soon as it
+# comes back up.  This guarantees the weekly mint happens even on
+# operators with intermittent uptime (laptop hosts, cheap VPSes
+# that occasionally reboot for maintenance).
+Persistent=true
+
+# Add up to 30 minutes of randomized delay so a fleet of operators
+# all running this unit don't hit Klingex's RPC + the chain at the
+# exact same moment.  Per-instance, predictable from the host name
+# (RandomizedDelaySec is deterministic per machine boot ID).
+RandomizedDelaySec=1800
+
+# Set the unit explicitly even though the default would derive it
+# from the timer name — explicit avoids surprises if the file is
+# renamed.
+Unit=morphit-relay-mint-acts.service
+
+[Install]
+WantedBy=timers.target

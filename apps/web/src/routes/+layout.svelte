@@ -1,0 +1,629 @@
+<script lang="ts">
+	import '../app.css';
+	import { onMount } from 'svelte';
+	import { _ } from 'svelte-i18n';
+	import { page } from '$app/stores';
+	import { afterNavigate } from '$app/navigation';
+	import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
+	import UpdateBanner from '$components/UpdateBanner.svelte';
+	import StaleBuildBanner from '$components/StaleBuildBanner.svelte';
+	import TamperAlertBanner from '$components/TamperAlertBanner.svelte';
+	import OperatorBlockBanner from '$components/OperatorBlockBanner.svelte';
+	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
+	import AvatarMenu from '$components/AvatarMenu.svelte';
+	import PermissionBanner from '$components/PermissionBanner.svelte';
+	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
+	import PairedReadOnlyBanner from '$components/PairedReadOnlyBanner.svelte';
+	import ToastRegion from '$components/ToastRegion.svelte';
+	import { startAmbientChannels } from '$lib/notifications/ambient';
+	import { bannerTriggered, clearBannerTrigger } from '$lib/notifications/native';
+	import { isUnlocked, hasAnySession, lockSession } from '$stores/identity';
+	import { startAutoLockTimer } from '$stores/autoLock';
+	import { instance, initInstance } from '$stores/instance';
+	import { resetForRoute as resetGlossarySeen } from '$stores/glossarySeen';
+	import { safeContactUrl } from '$lib/utils/safeContactUrl';
+	import { initChainFee } from '$stores/chainFee';
+	import { initRelease } from '$stores/release';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import {
+		startTradeEventListener,
+		stopTradeEventListener,
+		refreshTradeEventListener
+	} from '$lib/trades/tradeEventListener';
+	import { crossPageTradeEventsEnabled } from '$lib/notifications/crossPageTradeEvents';
+
+	interface Props {
+		children: import('svelte').Snippet;
+	}
+	let { children }: Props = $props();
+
+	// Tier-N a11y deferred from Part 100 — route-transition focus
+	// management.  SvelteKit's default doesn't move focus on
+	// client-side navigation, which is a documented SPA a11y
+	// issue: a screen-reader user who navigates from /faq to
+	// /orderbook hears nothing about the page change because
+	// focus stayed on whatever they activated.  After every
+	// successful navigation, move focus to the <main> region.
+	// Screen readers announce "main, region" on focus, giving
+	// the user an audible breadcrumb that the page changed.
+	//
+	// Why <main> and not the page's <h1>: focusing a heading is
+	// the textbook ideal but requires every route to expose a
+	// stable id on its h1, which is invasive across 30+ routes.
+	// The <main> approach gives 90% of the value at near-zero
+	// cost — the user hears the landmark, then arrow-keys or
+	// Tab from there.  An afterNavigate hook running on EVERY
+	// nav (including hash changes within a page) would be
+	// noisy; we restrict to actual route changes by checking
+	// `from?.url.pathname !== to?.url.pathname`.
+	//
+	// `tabindex="-1"` on <main> below makes it programmatically
+	// focusable without putting it in the Tab order — keyboard
+	// users still tab through the skip-link → header → page
+	// content sequence as they did before.
+	let mainEl = $state<HTMLElement | null>(null);
+
+	afterNavigate((nav) => {
+		if (!mainEl) return;
+		// Skip the first page load (no `from`) and same-page
+		// hash changes — those don't represent a route change.
+		if (!nav.from) return;
+		if (nav.from.url.pathname === nav.to?.url.pathname) return;
+		// Ensure focus actually lands.  queueMicrotask so the
+		// DOM has settled after the route swap.
+		queueMicrotask(() => mainEl?.focus());
+	});
+
+	// Start the ambient notification channels (title-bar prefix,
+	// favicon canvas badge, App Badging API) on mount. These are
+	// zero-permission channels that update in the user's peripheral
+	// vision whenever unreadCount changes. See
+	// docs/NOTIFICATIONS-DESIGN.md and apps/web/src/lib/notifications/.
+	onMount(() => {
+		startAmbientChannels();
+		// Fetch this instance's branding once.  The store will
+		// re-render any subscribed component when the response
+		// arrives (or stays at fallback if the fetch fails).
+		void initInstance();
+		// Phase G prep / task #10 — fetch the chain's current
+		// account_creation_fee.  Renders in FAQ entries, signup
+		// helpers, and anywhere else we'd otherwise hardcode
+		// "100 BLURT".  Indexer caches 24h; we cache for the
+		// session.
+		void initChainFee();
+		// Batch J — release-trust-anchor verification.  Fetches
+		// the latest signed release op from chain (NOT via
+		// indexer; indexer trust would be circular here),
+		// verifies @morphit's posting pubkey on chain matches our
+		// pinned constant, validates the payload, and runs a
+		// SHA-256 check on the running bundle's assets against
+		// the signed manifest.  Surfaces stale-build banner +
+		// tamper-alert banner if either check fails.  Silent on
+		// chain-RPC unreachable (no positive evidence).
+		void initRelease();
+	});
+
+	// Auto-lock idle timer. Starts when the user becomes unlocked;
+	// Reset the per-route glossary-tooltip seen-set whenever
+	// the route changes, so the "first appearance per page"
+	// rule for `<Term>` underlines applies fresh per page.
+	// Cheap effect — Set construction + one comparison; runs
+	// only on actual pathname change (resetForRoute is a no-op
+	// when the pathname matches).
+	$effect(() => {
+		resetGlossarySeen($page.url.pathname);
+	});
+
+	// Auto-lock: starts when the user becomes unlocked,
+	// stops when they lock or sign out. On timeout (default 9 hours
+	// of idle, configurable), fires lockSession() which clears
+	// in-memory keys but preserves the persisted keystore. Uses
+	// $effect so the teardown runs when isUnlocked flips to false
+	// OR when the component unmounts.
+	$effect(() => {
+		if (!$isUnlocked) return;
+		const stop = startAutoLockTimer(() => {
+			lockSession();
+		});
+		return stop;
+	});
+
+	// Phase F.5 — Global trade-event listener.  Opens chat SSE
+	// streams for all recent peers when the user is unlocked, so
+	// trade-status updates flow into the tradeStatus store
+	// regardless of which page the user is on.  Cross-page toasts
+	// fire from this listener; /my/orders badges read from the
+	// store reactively.
+	//
+	// Same lifecycle as auto-lock: start on unlock, teardown on
+	// lock.  Self-suppressing if no blurt account on file.
+	//
+	// Phase F.5 audit fix (F-23) — also gated by user opt-in
+	// preference.  Privacy-conscious users can disable the
+	// listener entirely (no ambient decryption); chat-page service
+	// still handles trade events when the user is on /chat/<peer>.
+	$effect(() => {
+		if (!$isUnlocked) {
+			stopTradeEventListener();
+			return;
+		}
+		if (!$crossPageTradeEventsEnabled) {
+			stopTradeEventListener();
+			return;
+		}
+		const account = getUserBlurtAccount();
+		if (account === null) return;
+		startTradeEventListener(account);
+
+		// Phase F.5 audit fix (F-29) — pick up new peers as the
+		// user starts new conversations.  Without this hook, the
+		// listener's stream set is frozen at startup and only
+		// updated by the next lock/unlock cycle.
+		const onRecentPeersChanged = (): void => refreshTradeEventListener();
+		if (typeof window !== 'undefined') {
+			window.addEventListener('morphit:recent-peers-changed', onRecentPeersChanged);
+		}
+
+		return () => {
+			if (typeof window !== 'undefined') {
+				window.removeEventListener('morphit:recent-peers-changed', onRecentPeersChanged);
+			}
+			stopTradeEventListener();
+		};
+	});
+
+	const navLinks = $derived([
+		{ href: '/orderbook', key: 'nav.orderbook' },
+		{ href: '/faq', key: 'nav.faq' },
+		{ href: '/chat', key: 'nav.messages' },
+		{ href: '/post', key: 'nav.post_now' }
+	]);
+
+	function isActive(href: string): boolean {
+		const path = $page.url.pathname;
+		return path.startsWith(href);
+	}
+</script>
+
+<div class="flex min-h-[100dvh] flex-col">
+	<!-- Skip link for keyboard users -->
+	<a
+		href="#main"
+		class="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-morphit-emerald focus:px-4 focus:py-2 focus:text-white"
+	>
+		{$_('a11y.skip_to_content')}
+	</a>
+
+	<header
+		class="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md dark:border-ink-800 dark:bg-ink-950/80"
+	>
+		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
+			<!-- Wide wordmark logo, hyperlinked to home. Subtle hue-rotate animation.
+				 Site is dark-mode-only, so the white-text wordmark works everywhere. -->
+			<a
+				href="/"
+				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				aria-label="Morphit — home"
+			>
+				<img
+					src="/brand/morphit-wordmark.svg"
+					alt="Morphit"
+					class="animate-morphit-hue-shift h-7 w-auto md:h-8"
+				/>
+			</a>
+
+			<nav aria-label="Primary" class="hidden gap-1 md:flex">
+				{#each navLinks as link (link.href)}
+					<a
+						href={link.href}
+						class="rounded-xl px-4 py-2 font-medium transition hover:bg-ink-100 dark:hover:bg-ink-800 {isActive(
+							link.href
+						)
+							? 'text-morphit-emerald'
+							: 'text-ink-700 dark:text-ink-200'}"
+						aria-current={isActive(link.href) ? 'page' : undefined}
+					>
+						{$_(link.key)}
+					</a>
+				{/each}
+			</nav>
+
+			<div class="flex items-center gap-2">
+				<LanguageSwitcher />
+				<!--
+					AvatarMenu renders either:
+					- Signed in: avatar identicon with unread-count badge
+					  overlay + dropdown containing the notifications
+					  fly-out, My orders, Settings, and Sign out.
+					- Signed out: the "Sign in / Register" CTA button.
+				-->
+				<AvatarMenu />
+			</div>
+		</div>
+
+		<!-- Mobile nav -->
+		<nav aria-label="Mobile" class="border-t border-ink-100 dark:border-ink-800 md:hidden">
+			<div class="mx-auto flex max-w-7xl items-center justify-around px-2 py-1">
+				{#each navLinks as link (link.href)}
+					<a
+						href={link.href}
+						class="flex-1 rounded-lg px-3 py-2 text-center text-sm font-medium {isActive(link.href)
+							? 'text-morphit-emerald'
+							: 'text-ink-600 dark:text-ink-300'}"
+						aria-current={isActive(link.href) ? 'page' : undefined}
+					>
+						{$_(link.key)}
+					</a>
+				{/each}
+				<!-- Sign-in CTA for signed-out mobile users.  When the
+				     user has ANY active session (unlocked OR paired-
+				     readonly) this is hidden — the AvatarMenu in the
+				     header (visible on mobile too; no md:hidden on it)
+				     carries the post-signin actions: notifications
+				     fly-out, View profile, My orders, Settings, Lock
+				     session, Sign out.  The primary navLinks above
+				     (Orderbook, FAQ, Messages, Post now) stay the same
+				     signed-in or signed-out.  Part 116: gate widened
+				     from !$isUnlocked to !$hasAnySession so paired-
+				     readonly users don't see a redundant "Log in /
+				     register" link beneath their already-rendered
+				     AvatarMenu pill. -->
+				{#if !$hasAnySession}
+					<a
+						href="/login"
+						class="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-morphit-emerald"
+					>
+						{$_('nav.login_register')}
+					</a>
+				{/if}
+			</div>
+		</nav>
+	</header>
+
+	<!-- Paired-readonly persistent banner.  Visible only when the
+	     current session was established via QR-pair from a phone
+	     (ADR-0022) — keeps the user aware that this device can
+	     READ everything but can't BROADCAST anything; signing
+	     happens on the phone. -->
+	<PairedReadOnlyBanner />
+
+	{#if $bannerTriggered}
+		<PermissionBanner category={$bannerTriggered.category} onClose={clearBannerTrigger} />
+	{/if}
+
+	<!-- Seed-backup nudge.  Self-rendering: appears only when the
+	     user has had a persisted keystore for 7+ days without
+	     dismissing.  See $lib/crypto/persistentKeystore for the
+	     localStorage anchors. -->
+	<SeedBackupNudge />
+
+	<main bind:this={mainEl} id="main" tabindex="-1" class="flex-1 focus:outline-none">
+		{@render children()}
+	</main>
+
+	<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
+		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
+			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed. -->
+			<img
+				src="/brand/morphit-wordmark.svg"
+				alt="Morphit"
+				class="animate-morphit-hue-shift h-10 w-auto"
+			/>
+
+			<p class="text-sm text-ink-600 dark:text-ink-400">{$_('footer.tagline')}</p>
+
+			{#if $instance.name}
+				{@const safeContact = safeContactUrl($instance.contact_url)}
+				<p class="text-sm text-ink-500 dark:text-ink-400">
+					{$_('footer.operated_by')}
+					{#if safeContact}
+						<a
+							href={safeContact}
+							class="font-medium text-morphit-emerald hover:underline"
+							title={$_('footer.contact_operator')}
+							rel="noopener"
+						>
+							{$instance.name}
+						</a>
+					{:else}
+						<span class="font-medium text-ink-700 dark:text-ink-200">{$instance.name}</span>
+					{/if}
+				</p>
+			{/if}
+
+			<div class="flex flex-col items-center gap-3">
+				<p class="text-xs uppercase tracking-widest text-ink-500">{$_('footer.reachable_via')}</p>
+				<ul class="flex flex-wrap justify-center gap-2">
+					<li>
+						{#if $instance.alt_networks.tor}
+							<a
+								href="http://{$instance.alt_networks.tor}"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.tor }
+								})}
+								rel="noopener"
+							>
+								<AltNetworkIcon
+									network="tor"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.tor')}
+							</a>
+						{:else}
+							<span
+								class="chip cursor-not-allowed opacity-50"
+								title={$_('footer.alt_network_disabled')}
+								aria-disabled="true"
+							>
+								<AltNetworkIcon
+									network="tor"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.tor')}
+							</span>
+						{/if}
+					</li>
+					<li>
+						{#if $instance.alt_networks.lokinet}
+							<a
+								href="http://{$instance.alt_networks.lokinet}"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.lokinet }
+								})}
+								rel="noopener"
+							>
+								<AltNetworkIcon
+									network="lokinet"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.lokinet')}
+							</a>
+						{:else}
+							<span
+								class="chip cursor-not-allowed opacity-50"
+								title={$_('footer.alt_network_disabled')}
+								aria-disabled="true"
+							>
+								<AltNetworkIcon
+									network="lokinet"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.lokinet')}
+							</span>
+						{/if}
+					</li>
+					<li>
+						{#if $instance.alt_networks.i2p_b32}
+							<a
+								href="http://{$instance.alt_networks.i2p_b32}"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.i2p_b32 }
+								})}
+								rel="noopener"
+							>
+								<AltNetworkIcon
+									network="i2p"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.i2p_b32')}
+							</a>
+						{:else}
+							<span
+								class="chip cursor-not-allowed opacity-50"
+								title={$_('footer.alt_network_disabled')}
+								aria-disabled="true"
+							>
+								<AltNetworkIcon
+									network="i2p"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.i2p_b32')}
+							</span>
+						{/if}
+					</li>
+					{#if $instance.alt_networks.i2p_name}
+						<li>
+							<a
+								href="http://{$instance.alt_networks.i2p_name}"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.i2p_name }
+								})}
+								rel="noopener"
+							>
+								<AltNetworkIcon
+									network="i2p"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.i2p_name')}
+							</a>
+						</li>
+					{/if}
+					<li>
+						{#if $instance.alt_networks.nostr}
+							<a
+								href="nostr:{$instance.alt_networks.nostr}"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.nostr }
+								})}
+								rel="noopener"
+							>
+								<AltNetworkIcon
+									network="nostr"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.nostr')}
+							</a>
+						{:else}
+							<span
+								class="chip cursor-not-allowed opacity-50"
+								title={$_('footer.alt_network_disabled')}
+								aria-disabled="true"
+							>
+								<AltNetworkIcon
+									network="nostr"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.nostr')}
+							</span>
+						{/if}
+					</li>
+					<!--
+						No-JS pill. Previously intended as `?nojs=1` — a server-side
+						hydration-suppression switch. The site is prerendered + hydrated
+						today, which means disabling JS in the browser already yields the
+						same outcome (the static HTML is emitted regardless); a per-request
+						switch needs a Phase 5 architectural change (per-request SSR). The
+						pill links to the FAQ entry that explains this so the link is
+						informative rather than broken.
+					-->
+					<li>
+						<a href="/faq#no_js_limits" title={$_('footer.no_js_title')} class="chip">
+							<svg
+								class="h-4 w-4"
+								viewBox="0 0 24 24"
+								xmlns="http://www.w3.org/2000/svg"
+								aria-hidden="true"
+							>
+								<rect x="1.5" y="1.5" width="21" height="21" rx="3" fill="#F7DF1E" />
+								<text
+									x="12"
+									y="17"
+									text-anchor="middle"
+									font-family="system-ui,sans-serif"
+									font-size="10"
+									font-weight="900"
+									fill="#000">JS</text
+								>
+								<circle cx="12" cy="12" r="10" fill="none" stroke="#DC2626" stroke-width="2.2" />
+								<line
+									x1="5"
+									y1="19"
+									x2="19"
+									y2="5"
+									stroke="#DC2626"
+									stroke-width="2.2"
+									stroke-linecap="round"
+								/>
+							</svg>
+							{$_('footer.no_js')}
+						</a>
+					</li>
+					<!--
+						RSS pill: full orderbook feed. The indexer serves
+						/rss/orderbook.xml (and the per-asset / per-account
+						feeds under /rss/orderbook/*). Operators following the
+						canonical loopback-proxy topology must add an nginx
+						`location /rss/` block proxying to the indexer — see
+						OPERATIONS.md §14 for the proxy template and §24 for
+						the RSS-specific routing. Without that block, this
+						link 404s.
+						Privacy tradeoff documented in FAQ entry `rss_feeds`.
+					-->
+					<li>
+						<a href="/rss/orderbook.xml" title={$_('footer.rss_title')} class="chip">
+							<svg
+								class="h-4 w-4"
+								viewBox="0 0 24 24"
+								xmlns="http://www.w3.org/2000/svg"
+								aria-hidden="true"
+							>
+								<rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#F26522" />
+								<circle cx="6.5" cy="17.5" r="2" fill="#fff" />
+								<path
+									d="M5 8.5 A 10.5 10.5 0 0 1 15.5 19"
+									stroke="#fff"
+									stroke-width="2.4"
+									fill="none"
+									stroke-linecap="round"
+								/>
+								<path
+									d="M5 4.5 A 14.5 14.5 0 0 1 19.5 19"
+									stroke="#fff"
+									stroke-width="2.4"
+									fill="none"
+									stroke-linecap="round"
+								/>
+							</svg>
+							{$_('footer.rss')}
+						</a>
+					</li>
+				</ul>
+			</div>
+
+			<nav aria-label="Footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+				<a href="/faq" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('nav.faq')}</a
+				>
+				<a href="/glossary" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('nav.glossary')}</a
+				>
+				<a href="/cheat-sheet" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('nav.cheat_sheet')}</a
+				>
+				<a href="/explorer" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.explorer')}</a
+				>
+				<a href="/download" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.download')}</a
+				>
+				<a
+					href="https://git.agorise.net/agorise/morphit"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					rel="noopener">{$_('footer.source')}</a
+				>
+				<a href="/operators" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.operators')}</a
+				>
+				<a href="/instances" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.instances')}</a
+				>
+				<a href="/security" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.security')}</a
+				>
+				<a href="/plan" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.plan')}</a
+				>
+				<a href="/privacy-terms" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('nav.privacy_terms')}</a
+				>
+				<a
+					href="/canary.txt"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					title={$_('footer.canary_title')}
+					rel="noopener">{$_('footer.canary')}</a
+				>
+				<a
+					href="/pgp_keys.asc"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					title={$_('footer.pgp_keys_title')}
+					rel="noopener">{$_('footer.pgp_keys')}</a
+				>
+				<a href="/security#bounty" class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('footer.bounty')}</a
+				>
+			</nav>
+
+			<p class="text-xs text-ink-500">AGPL-3.0 · No cookies · No analytics · No logs</p>
+		</div>
+	</footer>
+
+	<UpdateBanner />
+	<StaleBuildBanner />
+	<TamperAlertBanner />
+	<OperatorBlockBanner />
+	<ToastRegion />
+</div>

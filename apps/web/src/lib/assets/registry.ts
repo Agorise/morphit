@@ -1,0 +1,189 @@
+/**
+ * Morphit — frontend asset registry.
+ *
+ * Single source of truth for per-coin UI metadata.  Every
+ * component that displays a ticker, renders a themed accent
+ * color, validates an address, or picks decimal precision
+ * looks up its data here.
+ *
+ * Adding a new coin to the frontend UI is a single-file change
+ * (this file) plus an SVG logo bundled at static/coins/<lower
+ * ticker>.svg.
+ *
+ * IMPORTANT: this registry exists for UI rendering.  The
+ * on-chain payload schema (see lib/chat/payload.ts and
+ * lib/orders/payload.ts) constrains which methods a chain op
+ * may carry.  Extending that schema is a separate, more
+ * involved process — see docs/ADDING-A-COIN.md.  This registry
+ * lets you wire UI for an already-supported coin or stage UI
+ * for an upcoming chain-payload extension.
+ */
+
+import type { PaymentMethod } from '$lib/chat/payload';
+
+/** Address-shape validator.  Returns true if the string LOOKS
+ *  like a valid address for this asset.  Must NOT require a
+ *  network round-trip; this is for inline form-validation UX.
+ *  Indexer-side and explorer-side verification still happens
+ *  independently. */
+export type AddressValidator = (s: string) => boolean;
+
+/** Per-asset metadata.  All fields required so the registry is
+ *  self-describing — components don't need to check for
+ *  missing fields, and the next person adding a coin sees the
+ *  full required shape at a glance. */
+export interface AssetMetadata {
+	/** Lower-case identifier matching the chain payload's
+	 *  PaymentMethod string union. */
+	readonly ticker: PaymentMethod;
+	/** Display ticker (uppercase, e.g. "BTC"). */
+	readonly displayTicker: string;
+	/** Full name (e.g. "Bitcoin"). */
+	readonly displayName: string;
+	/** One-line description shown in pickers and tooltips. */
+	readonly oneLineDescription: string;
+	/** SVG logo path relative to the static root.  Components
+	 *  prefix with the served origin or use as-is for inline
+	 *  <img src=...>.  Always 1:1 aspect ratio. */
+	readonly logoSvgPath: string;
+	/** Tailwind utility class for the brand accent color.  Used
+	 *  for borders, dot indicators, hover rings.  Keep these
+	 *  contained to one or two utilities; full styling is the
+	 *  consumer's call. */
+	readonly accentClass: string;
+	/** How many decimal places this asset's smallest unit
+	 *  represents.  BTC: 8 (sat).  XMR: 12 (piconero).  BLURT: 3
+	 *  (millibBLURT — Graphene's serialized format). */
+	readonly decimals: number;
+	/** True if the asset supports a memo/payment-id field on its
+	 *  base-layer transaction.  Drives whether the address-share
+	 *  modal exposes a memo input. */
+	readonly supportsMemo: boolean;
+	/** Address validator — synchronous, no I/O.  Should be
+	 *  permissive (cheap shape check) rather than strict
+	 *  (checksum-verify): we want to catch typos in the form,
+	 *  not duplicate the wallet's own validation. */
+	readonly addressValidator: AddressValidator;
+	/** Whether the asset can be used for the LISTING-FEE payment
+	 *  on this instance.  BLURT always; BTC and XMR depend on
+	 *  the operator's external-tx-id verifier setup.  Affects
+	 *  the post-order fee picker only. */
+	readonly canBeUsedForListingFee: boolean;
+	/** Whether the asset can be the TRADED asset (the side: 'buy
+	 *  X' / 'sell X' driver of the orderbook).  All current
+	 *  assets can; reserved for future "fee-only" or "stable-
+	 *  only" tickers. */
+	readonly canBeTraded: boolean;
+}
+
+// ─── Address validators ──────────────────────────────────────────
+
+// BTC — re-export the cheap shape checks from chat/payload.ts so
+// we don't duplicate.  Centralizing here would mean chat/payload
+// imports from registry, but registry imports from chat/payload
+// for the PaymentMethod type — circular.  Inline copies stay.
+const BTC_P2PKH_RE = /^1[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const BTC_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const BTC_BECH32_RE = /^bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87}$/;
+
+const XMR_STANDARD_RE = /^4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}$/;
+const XMR_SUBADDRESS_RE = /^8[0-9A-B][1-9A-HJ-NP-Za-km-z]{93}$/;
+const XMR_INTEGRATED_RE = /^4[1-9A-HJ-NP-Za-km-z]{105}$/;
+
+// Blurt account name — validates as the recipient identifier
+// since BLURT transfers are routed by account name, not a hex
+// address.
+const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/;
+
+const validateBtc: AddressValidator = (s) =>
+	BTC_P2PKH_RE.test(s) || BTC_P2SH_RE.test(s) || BTC_BECH32_RE.test(s);
+
+const validateXmr: AddressValidator = (s) =>
+	XMR_STANDARD_RE.test(s) || XMR_SUBADDRESS_RE.test(s) || XMR_INTEGRATED_RE.test(s);
+
+const validateBlurt: AddressValidator = (s) => BLURT_ACCOUNT_RE.test(s);
+
+// ─── Registry ────────────────────────────────────────────────────
+
+/** The full registry, ordered for display purposes (Monero
+ *  first per the project's audience-priority statement;
+ *  Bitcoin second; BLURT last because it's the chain-of-record,
+ *  not the typical traded asset). */
+export const ASSETS: ReadonlyArray<AssetMetadata> = [
+	{
+		ticker: 'xmr',
+		displayTicker: 'XMR',
+		displayName: 'Monero',
+		oneLineDescription: 'Privacy-focused cryptocurrency.  Default and recommended on Morphit.',
+		logoSvgPath: '/coins/xmr.svg',
+		accentClass: 'text-orange-500',
+		decimals: 12,
+		supportsMemo: false, // Subaddresses replace payment-IDs in modern XMR
+		addressValidator: validateXmr,
+		canBeUsedForListingFee: true,
+		canBeTraded: true
+	},
+	{
+		ticker: 'btc',
+		displayTicker: 'BTC',
+		displayName: 'Bitcoin',
+		oneLineDescription: 'The original cryptocurrency.  Recommend SegWit (bc1...) addresses.',
+		logoSvgPath: '/coins/btc.svg',
+		accentClass: 'text-amber-500',
+		decimals: 8,
+		supportsMemo: false, // BTC doesn't carry transaction memos
+		addressValidator: validateBtc,
+		canBeUsedForListingFee: true,
+		canBeTraded: true
+	},
+	{
+		ticker: 'blurt',
+		displayTicker: 'BLURT',
+		displayName: 'Blurt',
+		oneLineDescription: 'The chain Morphit coordinates on.  Used for network fees by default.',
+		logoSvgPath: '/coins/blurt.svg',
+		accentClass: 'text-morphit-emerald',
+		decimals: 3,
+		supportsMemo: true, // BLURT transfers carry a plaintext memo field
+		addressValidator: validateBlurt,
+		canBeUsedForListingFee: true,
+		canBeTraded: true
+	}
+] as const;
+
+const BY_TICKER: Readonly<Record<PaymentMethod, AssetMetadata>> = Object.freeze(
+	ASSETS.reduce(
+		(acc, a) => {
+			acc[a.ticker] = a;
+			return acc;
+		},
+		{} as Record<PaymentMethod, AssetMetadata>
+	)
+);
+
+/** Look up a registered asset by its lower-case ticker.  Throws
+ *  if the ticker isn't registered — caller should pass values
+ *  from the PaymentMethod type union, which is constrained by
+ *  the chain-payload schema. */
+export function getAsset(ticker: PaymentMethod): AssetMetadata {
+	const a = BY_TICKER[ticker];
+	if (a === undefined) {
+		throw new Error(
+			`getAsset: ticker '${ticker}' not in registry — register it in lib/assets/registry.ts`
+		);
+	}
+	return a;
+}
+
+/** Filter helpers for common UI-side queries. */
+export function tradeableAssets(): readonly AssetMetadata[] {
+	return ASSETS.filter((a) => a.canBeTraded);
+}
+
+export function feePayableAssets(): readonly AssetMetadata[] {
+	return ASSETS.filter((a) => a.canBeUsedForListingFee);
+}
+
+export function memoCapableAssets(): readonly AssetMetadata[] {
+	return ASSETS.filter((a) => a.supportsMemo);
+}

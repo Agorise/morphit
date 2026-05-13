@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "$config": ["src/config/index.ts"],
+      "$config/*": ["src/config/*.ts"],
+      "$api/*": ["src/api/*.ts"],
+      "$blurt/*": ["src/blurt/*.ts"],
+      "$crypto/*": ["src/crypto/*.ts"],
+      "$db/*": ["src/db/*.ts"],
+      "$queue/*": ["src/queue/*.ts"],
+      "$policy/*": ["src/policy/*.ts"],
+      "$middleware/*": ["src/middleware/*.ts"],
+      "$log": ["src/log/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
