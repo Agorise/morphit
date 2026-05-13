@@ -1,20 +1,50 @@
-# TARBALL — Morphit pre-launch hardening, Part 120 (in progress, checkpoint 10)
+# TARBALL — Morphit pre-launch hardening, Part 120 (in progress, checkpoint 11)
 
-**Snapshot date:** 2026-05-11
+**Snapshot date:** 2026-05-12
 
-**Tarball:** `morphit-audit-2026-05-120-cp10.tar.gz`
+**Tarball:** `morphit-audit-2026-05-120-cp11.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-120-cp9.tar.gz`.  This cp10 adds 2 more docs audited.  **All 40 top-level docs in `docs/*.md` are now done.**  Next up: the 22 ADRs in `docs/adr/`.
+**Previous tarball:** `morphit-audit-2026-05-120-cp10.tar.gz`.  This cp11 builds on cp10 with three substantive deliverables: brag-list slim + FAQ wiring fix + fee-flow SVG regeneration.
 
-**Part 120 — what's done in checkpoint 10 (everything from cp9 plus):**
+**Part 120 — what's done in checkpoint 11 (everything from cp10 plus):**
 
-40. **SYNDICATION-CHECKPOINT.md** — read fully.  Doc is well-maintained and internally consistent.  Verified file refs (`apps/web/src/lib/syndication/publish.ts`, `apps/web/src/lib/blurt/ops/feedback.ts`, `apps/web/src/lib/components/LeaveFeedbackForm.svelte` — all exist).  Verified `MORPHIT_COMMUNITY = 'blurt-176570'` constant matches code.  Verified canonical permlinks (`morphit-first-trade-<account>`, `morphit-announce-<order_permlink>`) match the publish.ts shape.  No drift; no fixes.
+42. **FAQ orphan-entry fix.**  Caught a real production-bound bug: `apps/web/src/lib/utils/faqIndex.ts` `FAQ_KEYS` array had 102 entries, but `apps/web/src/lib/i18n/locales/en.json` had 104 entries — two orphans (`public_api`, `qr_login`) translated in all 10 locales but not rendering because `FAQ_KEYS` didn't list them.  Both are flagship-feature FAQs (public-API for aggregators/explorers/etc, QR-login via phone) that translators had localized but the surface didn't expose.  Added both keys to `FAQ_KEYS` (lines 127-128) and added `FAQ_RELATED` cross-nav entries: `public_api → ['run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer']` and `qr_login → ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me']`.  FAQ now at 104 keys = 104 entries, zero orphans, zero missing.
 
-41. **UX-STANDARD.md** — `Known gaps we're going to fix` section was a Phase 3a/3b-era list of TODOs.  Verified all three referenced components (`BusyButton`, `StatusLine`, `FocusedField`) exist + are adopted in onboarding + register-name + Settings.  Marked the gap-list as ✅ all closed with a Part 120 forward-note, with each individual gap struck through to preserve historical traceability.
+43. **Brag-list stale-numbers sweep.**  Three counts had drifted:
+    - Line 71: "1,960 self-checking smoke scenarios" → "2,320+" (actual smoke total via prior brag list claim 2,322; rounded down + plural for resilience to future drift).
+    - Line 188: "21 ADRs" → "22 ADRs" (actual count of `docs/adr/*.md` is 22; added ADR-0022 to the examples list).
+    - Line 189: "42 design and operations documents" → "46 design and operations documents" (actual count of `docs/*.md` is 46).
+    - Verification footer: "2,322 self-checks across 107 runners" → "2,320+ self-checks across 100+ runners" (rounded down for the same drift-resilience reason).
 
-Total Part 120 fix-groups so far: **41 fix-groups across 40 docs** (29 with fixes; 10 read-and-clean — AUDIT-FINDINGS, CONTRIBUTING-TRANSLATIONS, GRANDMA-FRIENDLY-INVESTIGATION, METADATA-LEAK-CATALOG, PER-LOCALE-PRERENDERING-DESIGN, PHASE-F-AUDIT, PHASE-G-PREP-AUDIT, PRICE-SOURCES-RESEARCH, SERVICE-WORKER-CACHING-DESIGN, SYNDICATION-CHECKPOINT; plus PHASE-3b-DESIGN had its own disclaimer).
+44. **Brag-list §18 slim — items 203-272 → 203-252.**  Per the user's instruction "stick to the selling points, slim them WAY down, if some give away too much take them out completely."  Reduced 70 items averaging 200-800 words each to 50 items averaging 1-3 sentences each.  File size dropped 227 KB → 63 KB (72% reduction).  What was removed:
+    - Internal Part numbers (`Part 119`, `Part 70`, etc.) — these are project-internal artifacts that mean nothing to a blog reader.
+    - Memory-fact references (`Memory #11`, `Memory #14`) — internal disciplines.
+    - Smoke-coverage counts and scenario numbers — attacker-relevant detail about what is and isn't tested.
+    - Exact env-var names (`MORPHIT_RELAY_HIGHVALUE_SHORT_NAME_THRESHOLD`, etc.) — attacker-relevant defense-tuning knobs.
+    - Exact defense-detector thresholds and parameter names — attacker recipe for evasion.
+    - File-line citations (`apps/relay/src/...:line`) — attack surface mapping.
+    - Internal lineage references (Findings F-7, H1, M1, B-2, So-3, D-11, etc.) — meaningless to outsiders.
+    
+    What was kept: the *selling point* of each entry, in voice a stranger would find compelling.  E.g. "Operator playbook for squatter defense — five attacker patterns to recognize, weekly periodic-audit procedure, active-attack incident response, and a 'diamond-hardened' preset" stayed; the exact env vars, the structured-log event names, and the §38.X subsection map all went.  Items that were ENTIRELY internal (e.g. detailed audit-of-an-audit narratives) were dropped; items that were both selling-point AND attack-surface-revealing were rewritten to keep just the selling point.
+    
+    Footer summary updated: "272 specific selling points" → "252 specific selling points"; intro updated: "200+ specific things" → "250+ specific things"; date updated to 2026-05-12.
 
-**Next up:** 22 ADRs in `docs/adr/`.  ADR-0016 is a known phantom slot (work shipped as ADR-0022); other ADRs are mostly Accepted-status and likely accurate but warrant a line-by-line pass for line citations, env-var names, file paths, schema versions, etc.
+45. **Fee-flow SVG regenerated — dark mode, Morphit brand colors, accurate fee splits.**  Old SVG: light-mode `#fafafa` background, amber/blue/purple palette, AND it stated "100% of fees" went to the operator-fees-recipient account which contradicts the actual code (per `apps/indexer/src/indexer/operatorEarnings.ts:154` and FEES-AND-REWARDS.md: BLURT-paid listing fees split 90/10 operator/treasury; BTC/XMR-paid listing fees go 100% to treasury).  New SVG at `apps/web/static/brand/morphit-fee-flow.svg`:
+    - **Dark navy `#0B1220` background** (the morphit.io dark-mode surface from `tailwind.config.js`).
+    - **Morphit emerald `#00DA69` for "Money in"** (welcome bonus, loyalty milestones, staking) — visually obvious which boxes represent money the user *receives*.
+    - **Red `#DC2626` for "Money out"** (listing fee, cold-message, featured-slot) — visually obvious which represent money the user *pays*.
+    - **Neutral `#8A96A8` for "Where fees land"** (operator + treasury) — middle column, money in transit.
+    - **Soft purple `#A78BFA` for peer-to-peer** (the actual trade settlement that never touches Morphit) — preserved the original purple framing.
+    - **Title bumped to 34pt + tagline + sub-tagline** for blog readability at full-page width.
+    - **Accurate facts** verified against code: 60 BLURT base listing fee (≈ $0.12); 4th/5th/6th/7th+ Sybil tier multipliers labeled `1× · 2× · 4× · 8×`; 5 BLURT cold-message fee (≈ $0.01); 50 BLURT/hour featured slot, 6h minimum (= 300 BLURT floor); ~100 BLURT signup cost (paid by operator's relay via pre-minted ACTs, NOT by the user — explicitly framed as "operator's cost, not a fee"); 90% BLURT-listing-fee → operator's own account, 10% → @morphit-fees treasury; 100% BTC/XMR listing fees → treasury; 20 BLURT welcome bonus = 10 liquid + 10 BP; loyalty milestones 10/50/200/1000 BLURT-in-fees → 10/50/200/1000 BP (total 1,260 BP); ~7% APR staking from chain inflation.
+    - **ELI5 voice** with proper grammar: "Buyer", "Seller", "First-time messager", "When paid in BLURT", "When paid in BTC or XMR", "Direct peer-to-peer settlement", "No escrow. No custody. No middleman.", "Morphit cannot see this."
+    - **Rendered to PNG at 2400px wide** via `rsvg-convert` and placed at `/mnt/user-data/outputs/morphit-fee-flow.png` (487 KB) for the user's blog upload convenience.
+
+Smokes green: persona-walkthrough 29/29, forgejo-not-gitea 3/3.
+
+Total Part 120 fix-groups so far: **45 fix-groups across 41 docs/components** (29 doc fixes + 1 doc-deletion + 10 doc verified-clean + 1 FAQ wiring + 1 brag-list slim + 1 brag-list stale-numbers + 1 SVG regen + 1 historical-disclaimer cluster).
+
+**Next up:** 22 ADRs line-by-line audit; AUDIT-2026-05.md Part 120 entry; REVISIT-LIST.md Part 120 maintained line; persona-walkthrough-smoke extension for the FAQ orphan catch.
 
 **For the fresh session reading this:** every fix in this checkpoint is verifiable; smokes green; locale parity 2,458 × 10 unchanged; persona-walkthrough smoke 29/29 unchanged.
 
