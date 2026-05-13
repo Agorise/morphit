@@ -305,6 +305,52 @@ is needed for your operator setup.
 
 ---
 
+## What is FROZEN — fees cannot be paid in new assets
+
+The set of assets that may pay listing fees is permanently
+fixed at **BLURT, BTC, XMR**.  This is a wire-format-frozen
+invariant, NOT a configuration knob.  The indexer's
+`fee_method` enum at
+`apps/indexer/src/indexer/handlers/order.ts:94` is exactly the
+4-member set `'blurt' | 'waived_first_buy' | 'btc' | 'xmr'`,
+and the asset registry enforces the rule that
+`canPayListingFee: true → ticker ∈ {BLURT, BTC, XMR}`.
+
+This applies to all fee surfaces, not just listing fees:
+
+| Fee surface              | Allowed payment assets         |
+| ------------------------ | ------------------------------ |
+| Listing fee              | BLURT, BTC, XMR                |
+| Stranger / cold-message  | BLURT only                     |
+| Featured-slot bid        | BLURT only                     |
+| Account creation cost    | BLURT (operator's relay pays)  |
+
+**New tradable assets added to Morphit (USDT, ARRR, future
+additions) are peer-to-peer TRADING ONLY.**  Users can post
+"buy BLURT for USDT" or "sell USDT for cash" orders; the
+listing fee for those orders is still paid in BLURT (or BTC or
+XMR), not in USDT.
+
+The first-buy waiver (free first BLURT-buy) fires on
+`(side='buy', asset='BLURT')` regardless of what the buyer
+pays the seller with.  A new user buying their first BLURT and
+paying their counterparty in USDT or fiat still gets the
+waiver — the waiver covers the LISTING FEE (which is paid in
+BLURT or waived entirely), not the trade settlement currency.
+
+Two sentinel-grep smokes guard this invariant in CI:
+- `packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts`
+- `packages/asset-registry/scripts/first-buy-waiver-payment-agnostic-smoke.ts`
+
+If either smoke fails, the wire-format enum or the waiver gate
+has drifted and the project's fee-payment model is no longer
+what this document describes.  Treat such failures as
+charter-level decisions, not routine PR adjustments.
+
+---
+
 *Document created 2026-05-02 in response to user-flagged factual
-errors in an earlier flowchart.  Authority: this document supersedes
-any conflicting figure in chat history, prompts, or older docs.*
+errors in an earlier flowchart.  Updated 2026-05-13 (Part 121)
+with the trade-only-assets invariant.  Authority: this document
+supersedes any conflicting figure in chat history, prompts, or
+older docs.*

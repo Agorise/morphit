@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "Vous pensez que quelqu'un a votre phrase ?",
       "suspect_compromise_body": "Déplacez les fonds vers un nouveau compte immédiatement. Quiconque a la phrase a le contrôle total. Il n'y a pas de bouton \"geler\" sur une blockchain."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

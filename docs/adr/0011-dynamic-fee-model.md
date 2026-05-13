@@ -7,6 +7,26 @@
 **Superseded by:** none
 **Related:** ADR-0010 (key custody), ADR-0009 (order posting)
 
+> **2026-05-13 forward note (Part 121 — fee_method enum
+> frozen):** the `fee_method` field type union described
+> throughout this ADR — `'blurt' | 'waived_first_buy' | 'btc' |
+> 'xmr'` — is now a **wire-format-frozen invariant**, not a
+> configuration knob.  Per memory #23 (2026-05-13): listing fees
+> can ONLY be paid in BLURT, XMR, or BTC.  New tradable assets
+> added to Morphit (USDT, ARRR, etc.) are peer-to-peer TRADING
+> ONLY — they get `canPayListingFee: false` in the asset registry
+> and never appear in the `fee_method` enum.  Two sentinel-grep
+> smokes guard the invariant in CI:
+> `packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts`
+> and
+> `packages/asset-registry/scripts/first-buy-waiver-payment-agnostic-smoke.ts`.
+> If either fails, the wire format or waiver gate has drifted and
+> this ADR's fee-method assumptions no longer hold — treat such
+> failures as charter-level decisions, not routine PR
+> adjustments.  See `docs/FEES-AND-REWARDS.md` §"What is FROZEN"
+> and `docs/ADDING-A-COIN.md` §"2026-05-13 architectural update"
+> for the full rationale.
+
 ## Context
 
 ADR-0009 established Morphit's order-posting fee model:

@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "Myślisz, że ktoś ma twoją frazę?",
       "suspect_compromise_body": "Przenieś środki na nowe konto natychmiast. Kto ma frazę, ma pełną kontrolę. Na blockchainie nie ma przycisku \"zamroź\"."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

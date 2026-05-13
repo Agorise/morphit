@@ -5753,6 +5753,9 @@ Morphit's services initiate outbound connections to:
 - Monero block explorers (XMR explorer-fee verifier)
 - The relay's chain-broadcast endpoint (Blurt p2p / RPC)
 - An RSS feed for canary news entropy
+- Optionally, Anthropic / Claude API for any operator-specific
+  alerting tooling you've built (out of scope for the canonical
+  install)
 
 UFW's default-allow-outbound is fine for normal operation, but
 "egress-deny by default with explicit allowlist" is the
@@ -7007,6 +7010,33 @@ These ARE gated:
   `orders.operator_tag = MY tag` instead of the
   pre-Part-111 `EXISTS ops` (which matched
   federation-wide activity).
+
+**Smoke-suite troubleshooting — `ERR_MODULE_NOT_FOUND` on
+`@morphit/asset-registry`.**  If `bash scripts/run-smokes.sh`
+fails 13 runners (order-handler, rss-orderbook,
+rss-orderbook-xml-validate, apr, balance-math, pnl,
+clearing-price-history, login-pairing-registry,
+fee-divergence, chain-op-verify, desktop-pairing-crypto,
+i18n-formatters, plus one or two others depending on the
+working snapshot) all with the same `ERR_MODULE_NOT_FOUND`
+error referencing `@morphit/asset-registry`, the cause is
+that `npm install` hasn't been run at the workspace root
+yet, so the symlinks under `node_modules/@morphit/*` that
+the workspace setup creates don't exist.  Fix:
+
+```bash
+cd ~/morphit      # repo root, where the root package.json lives
+npm install --no-audit --no-fund
+```
+
+Then re-run the smoke suite; all 13 should pass.  This is
+NOT a code regression — `@morphit/asset-registry` is an
+internal package whose source lives at
+`packages/asset-registry/`, and the workspace symlink under
+`node_modules/@morphit/asset-registry` is what lets
+`apps/indexer/src/...` resolve `import { ASSETS } from
+'@morphit/asset-registry'`.  Pure environment setup.
+
 
 ### Migration
 

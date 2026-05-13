@@ -19,7 +19,7 @@
  * for an upcoming chain-payload extension.
  */
 
-import type { PaymentMethod } from '$lib/chat/payload';
+import type { ChatAssetTicker } from '$lib/chat/payload';
 
 /** Address-shape validator.  Returns true if the string LOOKS
  *  like a valid address for this asset.  Must NOT require a
@@ -34,8 +34,8 @@ export type AddressValidator = (s: string) => boolean;
  *  full required shape at a glance. */
 export interface AssetMetadata {
 	/** Lower-case identifier matching the chain payload's
-	 *  PaymentMethod string union. */
-	readonly ticker: PaymentMethod;
+	 *  ChatAssetTicker string union. */
+	readonly ticker: ChatAssetTicker;
 	/** Display ticker (uppercase, e.g. "BTC"). */
 	readonly displayTicker: string;
 	/** Full name (e.g. "Bitcoin"). */
@@ -65,15 +65,25 @@ export interface AssetMetadata {
 	 *  not duplicate the wallet's own validation. */
 	readonly addressValidator: AddressValidator;
 	/** Whether the asset can be used for the LISTING-FEE payment
-	 *  on this instance.  BLURT always; BTC and XMR depend on
-	 *  the operator's external-tx-id verifier setup.  Affects
-	 *  the post-order fee picker only. */
+	 *  on this instance.  Memory #23 (2026-05-13): only BLURT/
+	 *  BTC/XMR may have this true.  Trade-only assets (USDT,
+	 *  ARRR, etc.) MUST set this false. */
 	readonly canBeUsedForListingFee: boolean;
 	/** Whether the asset can be the TRADED asset (the side: 'buy
 	 *  X' / 'sell X' driver of the orderbook).  All current
 	 *  assets can; reserved for future "fee-only" or "stable-
 	 *  only" tickers. */
 	readonly canBeTraded: boolean;
+	/** Networks this asset is supported on.  Single-network assets
+	 *  use `['mainnet']`.  Multi-network assets (future USDT, etc.)
+	 *  list each.  Mirrors the canonical registry's
+	 *  `supportedNetworks`. */
+	readonly supportedNetworks: readonly string[];
+	/** Default network or `null` to force explicit user choice. */
+	readonly defaultNetwork: string | null;
+	/** i18n key for the privacy/decentralization warning chip,
+	 *  or null if no warning is needed (BTC/XMR/BLURT). */
+	readonly privacyWarningKey: string | null;
 }
 
 // ─── Address validators ──────────────────────────────────────────
@@ -81,7 +91,7 @@ export interface AssetMetadata {
 // BTC — re-export the cheap shape checks from chat/payload.ts so
 // we don't duplicate.  Centralizing here would mean chat/payload
 // imports from registry, but registry imports from chat/payload
-// for the PaymentMethod type — circular.  Inline copies stay.
+// for the ChatAssetTicker type — circular.  Inline copies stay.
 const BTC_P2PKH_RE = /^1[1-9A-HJ-NP-Za-km-z]{25,34}$/;
 const BTC_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
 const BTC_BECH32_RE = /^bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87}$/;
@@ -121,7 +131,10 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false, // Subaddresses replace payment-IDs in modern XMR
 		addressValidator: validateXmr,
 		canBeUsedForListingFee: true,
-		canBeTraded: true
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		privacyWarningKey: null
 	},
 	{
 		ticker: 'btc',
@@ -134,7 +147,10 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false, // BTC doesn't carry transaction memos
 		addressValidator: validateBtc,
 		canBeUsedForListingFee: true,
-		canBeTraded: true
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		privacyWarningKey: null
 	},
 	{
 		ticker: 'blurt',
@@ -147,25 +163,28 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: true, // BLURT transfers carry a plaintext memo field
 		addressValidator: validateBlurt,
 		canBeUsedForListingFee: true,
-		canBeTraded: true
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		privacyWarningKey: null
 	}
 ] as const;
 
-const BY_TICKER: Readonly<Record<PaymentMethod, AssetMetadata>> = Object.freeze(
+const BY_TICKER: Readonly<Record<ChatAssetTicker, AssetMetadata>> = Object.freeze(
 	ASSETS.reduce(
 		(acc, a) => {
 			acc[a.ticker] = a;
 			return acc;
 		},
-		{} as Record<PaymentMethod, AssetMetadata>
+		{} as Record<ChatAssetTicker, AssetMetadata>
 	)
 );
 
 /** Look up a registered asset by its lower-case ticker.  Throws
  *  if the ticker isn't registered — caller should pass values
- *  from the PaymentMethod type union, which is constrained by
+ *  from the ChatAssetTicker type union, which is constrained by
  *  the chain-payload schema. */
-export function getAsset(ticker: PaymentMethod): AssetMetadata {
+export function getAsset(ticker: ChatAssetTicker): AssetMetadata {
 	const a = BY_TICKER[ticker];
 	if (a === undefined) {
 		throw new Error(

@@ -733,7 +733,9 @@ npm install
 npm run build
 ```
 
-`npm install` downloads all the libraries Morphit uses (about 800 MB of node_modules — most modern projects are like this). `npm run build` compiles the web app into static HTML/CSS/JavaScript that nginx will serve.
+`npm install` downloads all the libraries Morphit uses (about 800 MB of node_modules — most modern projects are like this). It also creates **workspace symlinks** under `node_modules/@morphit/asset-registry`, `node_modules/@morphit/indexer-client`, and a few others — these are Morphit's own internal packages (the source lives under `packages/`) wired up so the indexer, relay, and frontend can `import` from them by name. Without this step the smoke suite at `bash scripts/run-smokes.sh` will fail 13 runners with `ERR_MODULE_NOT_FOUND` errors complaining about `@morphit/asset-registry` — that's the symptom that you ran the smoke suite before `npm install`, not a real code problem. Run `npm install` once and they pass.
+
+`npm run build` compiles the web app into static HTML/CSS/JavaScript that nginx will serve.
 
 This takes 5–10 minutes. Make tea.
 

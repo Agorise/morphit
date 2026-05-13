@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "Glauben Sie, jemand hat Ihre Seed-Phrase?",
       "suspect_compromise_body": "Übertragen Sie die Mittel sofort auf ein neues Konto. Wer die Seed-Phrase hat, hat volle Kontrolle. Es gibt keinen \"Einfrieren\"-Knopf auf einer Blockchain."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

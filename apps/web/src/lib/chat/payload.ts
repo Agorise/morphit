@@ -267,12 +267,23 @@ function noteHasForbiddenChars(s: string): boolean {
 	return false;
 }
 
-export type PaymentMethod = 'btc' | 'xmr' | 'blurt';
+/** Asset ticker as used in CHAT PAYLOADS (lowercase wire
+ *  format).  Parallels the uppercase `AssetTicker` in the
+ *  canonical asset registry (`@morphit/asset-registry`), but
+ *  this is the spelling that appears on chat custom_json ops
+ *  (`{kind: 'morphit_addr', method: 'btc', ...}`).  Renamed
+ *  from `PaymentMethod` in Part 121 because the old name was
+ *  misleading — it suggested a fiat payment rail (PayPal,
+ *  Zelle, etc.) when it's actually the crypto asset for an
+ *  address-share or funds-sent chat message.  The fiat
+ *  payment-method registry lives in `lib/payments/registry.ts`
+ *  and uses `PaymentMethodEntry`. */
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt';
 
 export interface AddressPayload {
 	readonly v: 1;
 	readonly kind: 'morphit_addr';
-	readonly method: PaymentMethod;
+	readonly method: ChatAssetTicker;
 	readonly address: string;
 	readonly amount?: string;
 	readonly orderPermlink?: string;
@@ -289,7 +300,7 @@ export interface AddressPayload {
 export interface FundsSentPayload {
 	readonly v: 1;
 	readonly kind: 'morphit_funds_sent';
-	readonly method: PaymentMethod;
+	readonly method: ChatAssetTicker;
 	readonly txid: string;
 	readonly amount?: string;
 	readonly orderPermlink?: string;
@@ -338,7 +349,7 @@ export function isValidBlurtAccount(s: string): boolean {
 }
 
 /** Dispatch by method. */
-export function isValidAddress(method: PaymentMethod, addr: string): boolean {
+export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
 	if (method === 'xmr') return isValidXmrAddress(addr);
 	if (method === 'blurt') return isValidBlurtAccount(addr);
@@ -346,7 +357,7 @@ export function isValidAddress(method: PaymentMethod, addr: string): boolean {
 }
 
 /** Validate a txid. */
-export function isValidTxid(method: PaymentMethod, txid: string): boolean {
+export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (typeof txid !== 'string') return false;
 	if (method === 'btc') return BTC_TXID_RE.test(txid);
 	if (method === 'xmr') return XMR_TXID_RE.test(txid);

@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "懷疑有人拿到了您的助記詞?",
       "suspect_compromise_body": "立即將資金轉移到新帳戶。任何擁有助記詞的人都有完全控制權。區塊鏈上沒有「凍結」按鈕。"
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

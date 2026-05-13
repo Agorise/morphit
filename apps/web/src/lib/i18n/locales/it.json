@@ -3344,5 +3344,8 @@
       "suspect_compromise_label": "Pensi che qualcuno abbia la tua frase seme?",
       "suspect_compromise_body": "Sposta i fondi su un nuovo account immediatamente. Chi ha la frase seme ha controllo totale. Non c'è un pulsante \"congela\" su una blockchain."
     }
+  },
+  "assets": {
+    "privacy_warnings": {}
   }
 }

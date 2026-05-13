@@ -34,7 +34,7 @@
 		jitterMoneroAmount,
 		PAYLOAD_CONSTANTS,
 		type AddressPayload,
-		type PaymentMethod
+		type ChatAssetTicker
 	} from '$lib/chat/payload';
 
 	interface Props {
@@ -56,7 +56,7 @@
 
 	/** Selected payment method.  Tab UI; default BTC because
 	 *  Morphit's expected most-common pair is BLURT↔BTC. */
-	let method = $state<PaymentMethod>('btc');
+	let method = $state<ChatAssetTicker>('btc');
 	let address = $state('');
 	let amount = $state('');
 	let note = $state('');
@@ -167,7 +167,7 @@
 		method === 'xmr' && addressLooksValid && trimmedAddress.startsWith('4')
 	);
 
-	function selectMethod(m: PaymentMethod): void {
+	function selectMethod(m: ChatAssetTicker): void {
 		method = m;
 		// Don't clear address — user may have pasted XMR while BTC
 		// was selected, the validator will catch the mismatch.

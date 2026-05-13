@@ -39,7 +39,43 @@ export {
 	BUNDLED_XMR_CHAT_LINK_URL
 } from './urlsCore';
 
+/** External (non-BLURT) asset tickers Morphit knows how to build
+ *  explorer URLs for.  Uppercase to match the canonical asset
+ *  registry's `AssetTicker` spelling. */
 export type ExternalAsset = 'BTC' | 'XMR';
+
+/** Registry-driven dispatch for external-explorer URL building.
+ *  Each entry pairs an asset's txid validator with the keys used
+ *  to look up the operator's chosen template (with bundled
+ *  fallback).
+ *
+ *  Adding a future trade-only asset's explorer link is a
+ *  single-entry addition here PLUS adding the matching
+ *  `chat_link_urls.<lowerTicker>` field to the instance store
+ *  shape — no hardcoded `if (asset === '<TICKER>')` branches.
+ *
+ *  Per memory #23: trade-only assets (like a future USDT)
+ *  cannot pay listing fees, but their txids may still appear
+ *  in chat (buyer-to-seller payment evidence), and the chat
+ *  ChatMessage component auto-links txids it recognizes.  The
+ *  explorer-URL builder serves that path. */
+interface ExplorerEntry {
+	readonly txidRe: RegExp;
+	readonly instanceTplKey: 'btc' | 'xmr';
+	readonly bundledDefault: string;
+}
+const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object.freeze({
+	BTC: Object.freeze({
+		txidRe: BTC_TXID_RE,
+		instanceTplKey: 'btc',
+		bundledDefault: BUNDLED_BTC_CHAT_LINK_URL
+	}),
+	XMR: Object.freeze({
+		txidRe: XMR_TXID_RE,
+		instanceTplKey: 'xmr',
+		bundledDefault: BUNDLED_XMR_CHAT_LINK_URL
+	})
+});
 
 /** Builds an external-explorer URL for a non-Blurt asset's
  *  transaction.  Returns null on validation failure.
@@ -50,18 +86,12 @@ export type ExternalAsset = 'BTC' | 'XMR';
  *  template, falls back to the bundled default. */
 export function externalExplorerUrl(asset: ExternalAsset, txid: string): string | null {
 	if (typeof txid !== 'string') return null;
+	const entry = EXPLORER_REGISTRY[asset];
+	if (entry === undefined) return null;
+	if (!entry.txidRe.test(txid)) return null;
 	const lower = txid.toLowerCase();
-	if (asset === 'BTC') {
-		if (!BTC_TXID_RE.test(txid)) return null;
-		const tpl = getInstanceSnapshot().chat_link_urls.btc ?? BUNDLED_BTC_CHAT_LINK_URL;
-		return substituteTxidIntoTemplate(tpl, lower);
-	}
-	if (asset === 'XMR') {
-		if (!XMR_TXID_RE.test(txid)) return null;
-		const tpl = getInstanceSnapshot().chat_link_urls.xmr ?? BUNDLED_XMR_CHAT_LINK_URL;
-		return substituteTxidIntoTemplate(tpl, lower);
-	}
-	return null;
+	const tpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey] ?? entry.bundledDefault;
+	return substituteTxidIntoTemplate(tpl, lower);
 }
 
 /** Builds the Morphit explorer URL for a Blurt transaction.

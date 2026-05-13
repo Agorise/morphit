@@ -113,6 +113,8 @@ SMOKES=(
 	"apps/web:i18n-translation-completeness-smoke"
 	"apps/web:sally-walkthrough-smoke"
 	"apps/web:persona-walkthrough-smoke"
+	"packages/asset-registry:fee-method-enum-frozen-smoke"
+	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 )
 
 total=0

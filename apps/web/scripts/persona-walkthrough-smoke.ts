@@ -53,6 +53,20 @@
  *             (orphan-entry catch: translated in 10 locales but
  *              never rendered because not in the FAQ_KEYS array).
  *
+ * Part 121 additions:
+ *
+ *   P121-DOC  Four operator/launch-doc sentinels pinning the
+ *             `npm install` workspace-symlinks + smoke-suite
+ *             ERR_MODULE_NOT_FOUND troubleshooting in RUN-A-NODE,
+ *             OPERATIONS, and PRE-LAUNCH-CHECKLIST (P121-DOC 1-3),
+ *             plus the Part 121 fee_method enum-freeze forward-
+ *             note on ADR-0011 (P121-DOC-4).  The ADR-0011
+ *             sentinel was added as a Part 121 cp2 catch-up after
+ *             the discipline-correction memory edit (#24): when
+ *             shipping a code-level invariant, the ADR that
+ *             established the original wire format MUST gain a
+ *             forward-note pointing at the freeze.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -369,6 +383,54 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'P120-FAQ-4 — qr_login FAQ entry present in en.json',
 		file: 'src/lib/i18n/locales/en.json',
 		mustHave: ['"qr_login":']
+	},
+
+	// ─── Part 121 — workspace symlink / smoke-failure note ──────────
+	// New operators following RUN-A-MORPHIT-NODE.md need to know that
+	// `npm install` creates the workspace symlinks under
+	// `node_modules/@morphit/*` that the smoke suite depends on, and
+	// that a fresh-clone snapshot without `npm install` yet will see
+	// 13 smoke runners fail with `ERR_MODULE_NOT_FOUND` referencing
+	// `@morphit/asset-registry`.  These sentinels pin the doc claim
+	// against future drift so an operator hitting the symptom finds
+	// the right troubleshooting in three places.
+	{
+		name: 'P121-DOC-1 — RUN-A-NODE mentions workspace symlinks + ERR_MODULE_NOT_FOUND',
+		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		rootRelative: true,
+		mustHave: ['workspace symlinks', 'ERR_MODULE_NOT_FOUND', '@morphit/asset-registry']
+	},
+	{
+		name: 'P121-DOC-2 — OPERATIONS.md has Smoke-suite troubleshooting block',
+		file: 'docs/OPERATIONS.md',
+		rootRelative: true,
+		mustHave: [
+			'Smoke-suite troubleshooting',
+			'ERR_MODULE_NOT_FOUND',
+			'npm install --no-audit --no-fund'
+		]
+	},
+	{
+		name: 'P121-DOC-3 — PRE-LAUNCH-CHECKLIST §C has smoke-suite verification step',
+		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
+		rootRelative: true,
+		mustHave: [
+			'bash scripts/run-smokes.sh',
+			'ERR_MODULE_NOT_FOUND',
+			'Part 121 audit'
+		]
+	},
+	{
+		name: 'P121-DOC-4 — ADR-0011 carries Part 121 fee_method enum-freeze forward-note',
+		file: 'docs/adr/0011-dynamic-fee-model.md',
+		rootRelative: true,
+		mustHave: [
+			'2026-05-13 forward note',
+			'wire-format-frozen invariant',
+			'memory #23',
+			'fee-method-enum-frozen-smoke',
+			'first-buy-waiver-payment-agnostic-smoke'
+		]
 	}
 ];
 

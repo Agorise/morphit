@@ -1,10 +1,117 @@
-# TARBALL — Morphit pre-launch hardening, Part 120 (CLOSED, checkpoint 12)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 2)
 
-**Snapshot date:** 2026-05-12
+**Snapshot date:** 2026-05-13
 
-**Tarball:** `morphit-audit-2026-05-120-cp12-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp2-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-120-cp11-delta.tar.gz`.  This cp12 closes Part 120 with the remaining four pieces from the original closure plan: 22 ADRs line-by-line audit, AUDIT-2026-05.md Part 120 entry, REVISIT-LIST.md Part 120 maintained-line, and persona-walkthrough-smoke extension for the FAQ orphan catch.
+**Previous tarball:** `morphit-audit-2026-05-121-cp1-delta.tar.gz`.  This cp2 closes a follow-up gap from cp1: the workspace-symlink + `npm install` + smoke-suite ERR_MODULE_NOT_FOUND troubleshooting was in `CHANGES-cp1.md` (which Ken sees) but NOT in the operator-facing docs (which node admins see).  Memory #14 violation — operator-facing claims belong in the operator docs.
+
+## cp2 — what's shipped
+
+1. **`docs/RUN-A-MORPHIT-NODE.md` line 736** — extended the `npm install` explanation: "It also creates **workspace symlinks** under `node_modules/@morphit/*` — these are Morphit's own internal packages wired up so the indexer, relay, and frontend can `import` from them by name. Without this step the smoke suite at `bash scripts/run-smokes.sh` will fail 13 runners with `ERR_MODULE_NOT_FOUND` errors complaining about `@morphit/asset-registry` — that's the symptom that you ran the smoke suite before `npm install`, not a real code problem."
+
+2. **`docs/OPERATIONS.md` §Tests + smoke** — appended a "Smoke-suite troubleshooting" block enumerating the 13 affected runners and the fix (`cd ~/morphit && npm install --no-audit --no-fund`), framed as pure environment setup not a code regression.
+
+3. **`docs/PRE-LAUNCH-CHECKLIST.md` §C** — added a new `[blocking]` checkbox: "Run the static smoke suite and confirm it returns clean.  From the repo root: `bash scripts/run-smokes.sh`.  Expected output: `Total: 2370+ scenarios passed, 0 runners failed`."  Includes the ERR_MODULE_NOT_FOUND symptom + fix inline so an operator hitting it during pre-launch finds the answer without leaving the checklist.
+
+4. **`apps/web/scripts/persona-walkthrough-smoke.ts`** — four new P121-DOC sentinel scenarios pinning the doc claims against future drift:
+   - P121-DOC-1: RUN-A-NODE mentions workspace symlinks + ERR_MODULE_NOT_FOUND + @morphit/asset-registry
+   - P121-DOC-2: OPERATIONS.md has the Smoke-suite troubleshooting block with the fix command
+   - P121-DOC-3: PRE-LAUNCH-CHECKLIST §C has the smoke-suite verification step
+   - **P121-DOC-4 (added in catch-up after memory #24):** ADR-0011 carries the Part 121 fee_method enum-freeze forward-note pointing at memory #23 and both sentinel-grep smokes.
+   
+   Header comment updated with the Part 121 additions block.
+
+5. **`docs/adr/0011-dynamic-fee-model.md` (added in catch-up after memory #24)** — 2026-05-13 forward-note at the head of the ADR explaining that the `fee_method` field type union throughout this ADR is now a wire-format-frozen invariant per memory #23; points at the two sentinel-grep smokes that guard it (`fee-method-enum-frozen-smoke.ts`, `first-buy-waiver-payment-agnostic-smoke.ts`) and the user-facing rationale sections in FEES-AND-REWARDS §"What is FROZEN" and ADDING-A-COIN §"2026-05-13 architectural update."  Pattern lesson: when shipping a code-level invariant, the ADR that established the original wire format MUST gain a forward-note pointing at the freeze.  Self-audit triggered by memory #24 found this gap — exactly the failure mode #24 was committed to prevent.
+
+Pattern lesson distilled: the cp1 `CHANGES-cp1.md` "Setup note for you (one-time)" was talking to Ken, but the operators who set up nodes will hit the same symptom and need to find the answer in the docs they're already reading — not in a tarball CHANGES file from a Part they weren't following.  Memory #14 says operator-facing claims belong in operator docs in the same work unit as the code.  cp2 closes that gap.
+
+## Verification
+
+- Triple-pulse `bash scripts/run-smokes.sh`: **2,374 scenarios green × 3, zero failures** (up from 2,370 in cp1; +4 P121-DOC scenarios).
+- Persona-walkthrough-smoke: 37/37 (was 33/33).
+- ADR-0011 line count grew from 1,561 → 1,582 (+21 forward-note lines).
+- AUDIT-2026-05.md grew ~40 lines (Part 121 entry + cp1 catch-up section).
+- REVISIT-LIST.md Part 121 maintained-line extended with the cp1 catch-up narrative.
+- All other smokes unchanged.
+
+## Combined cp1 + cp2 state
+
+Everything from cp1 (asset-registry expansion, rename, two new sentinel smokes, locale shape, docs) PLUS three operator-doc edits + three smoke sentinels pinning them.
+
+
+
+## Part 121 cp1 — what's shipped
+
+Pretext: Ken's two forward-looking architecture questions after Part 120 closure — "Will it be easy to add new languages (7 more, total 17)?" + "Will it be easy to add more coins like USDT?" — plus the new architectural constraint that **listing fees can ONLY be paid in BLURT, XMR, or BTC** (memory edit #23).
+
+### Investigation findings
+
+- **Languages: already easy.**  `apps/web/src/lib/i18n/index.ts` carries `SUPPORTED_LOCALES` (10 today) AND `PLANNED_LOCALES` (the exact 7 Ken referenced: hi, ar, bn, pt, id, ja, vi).  Graduating is a one-line move + dropping a JSON.  No structural work needed.
+- **Coins: mostly ready, three real gaps.**  Asset registries at both `packages/asset-registry/src/index.ts` and `apps/web/src/lib/assets/registry.ts` already had the right discriminators.  The indexer's `fee_method` enum is correctly hardcoded as wire-format-frozen `'blurt' | 'waived_first_buy' | 'btc' | 'xmr'`.  Three gaps closed:
+  1. `apps/web/src/lib/explorer/urls.ts` hardcoded BTC/XMR branches → registry-driven dispatch
+  2. No `network` sub-field for multi-network coins (USDT on ERC-20/TRC-20/SPL) → added
+  3. No `privacyWarning` field for transparent/centrally-controllable assets → added
+
+### Ken's design decisions (confirmed before code landed)
+
+1. Multi-network coins: option B — single USDT entry with `supportedNetworks: ['erc20', 'trc20', 'sol']` and `defaultNetwork: null` to force explicit user choice every trade.
+2. Privacy-warning chip: yes, added as `privacyWarningKey: string | null`.
+3. First-buy waiver applies regardless of payment-method (waiver covers listing fee, not trade settlement).
+4. Commit "listing fees BLURT/XMR/BTC only" rule to memory — done as memory edit #23.
+
+### Code changes shipped this cp1
+
+1. **`packages/asset-registry/src/index.ts`** — `AssetEntry` gains 3 new required fields: `supportedNetworks`, `defaultNetwork`, `privacyWarningKey`.  All 3 existing entries (XMR, BTC, BLURT) backfilled with `['mainnet']` / `'mainnet'` / `null`.
+
+2. **`packages/asset-registry/scripts/asset-registry-smoke.ts`** — 5 new invariants including the hard rule `canPayListingFee: true → ticker ∈ {BLURT, BTC, XMR}` enforcing memory #23 at the registry level.
+
+3. **`apps/web/src/lib/assets/registry.ts`** — frontend extension mirrors all 3 new fields.
+
+4. **`apps/web/src/lib/chat/payload.ts`** — `PaymentMethod` type renamed to `ChatAssetTicker` with JSDoc explaining the lowercase-wire-format distinction.  Old name was misleading (sounded like fiat payment rail; was actually the asset/coin ticker for chat-side address-share payloads).
+
+5. **6 importing files renamed** to match: `components/ChatMessage.svelte`, `components/AddressShareModal.svelte`, `components/FundsSentModal.svelte`, `trades/tradeStatusPure.ts`, `trades/tradeStatus.ts`, `trades/listenerDispatch.ts`.
+
+6. **`apps/web/src/lib/explorer/urls.ts`** — refactored to registry-driven `EXPLORER_REGISTRY` map dispatch.  Adding a future trade-only asset's explorer link is now a single-entry addition, not a hardcoded branch.
+
+7. **`apps/web/src/routes/post/+page.svelte`** — line 667 hardcoded triple-asset check replaced with `isAssetTicker(p.asset)` from the canonical registry; import added at line 53.
+
+8. **NEW smoke `fee-method-enum-frozen-smoke.ts`** — 7 sentinel scenarios pinning the indexer's `fee_method` enum at the frozen 4-member set; checks against expansion tickers (usdt, ltc, doge, arrr, eth, sol, bch, xlm, dash).
+
+9. **NEW smoke `first-buy-waiver-payment-agnostic-smoke.ts`** — 6 sentinel scenarios brace-balanced-extracting the waiver branch from `order.ts`, validating the gate checks (side, asset) and asserting the gate portion (pre-INSERT) does NOT reference `payment_methods` or any fiat payment rail.  **Bonus catch during development:** first draft flagged the INSERT statement's `payment_methods` column — false positive.  Refined to scope the check to the gate portion only.
+
+10. **`scripts/run-smokes.sh`** — both new smokes registered.
+
+11. **All 10 locale JSON files** — added `assets.privacy_warnings` object (empty for now; shape ready for when USDT lands).  Locale parity 10/10 green at 2,459 keys × 10.
+
+### Doc changes
+
+- **`docs/ADDING-A-COIN.md`** — appended Part 121 architectural section explaining Category A (full-citizen coin, requires deep operator trust) vs Category B (trade-only coin, common case for new additions), with worked USDT multi-network example.
+- **`docs/FEES-AND-REWARDS.md`** — appended "What is FROZEN" section with the fee-surface invariant table and pointers to the two new sentinel-grep smokes.
+- **`docs/AUDIT-2026-05.md`** — Part 121 entry appended.
+- **`docs/REVISIT-LIST.md`** — Part 121 maintained-line added at top.
+
+### Verification
+
+- Triple-pulse `bash scripts/run-smokes.sh`: **2,370 scenarios green × 3, zero failures** (baseline grew 2,322 → 2,370 from +13 new smoke scenarios + ~35 new asset-registry invariants).
+- Web TypeScript: 0 errors (`npx tsc --noEmit`).
+- Web Svelte: 0 errors, 0 warnings (`npm run check`).
+- Indexer TypeScript: 0 errors.
+- Relay TypeScript: 0 errors.
+- Asset-registry package TypeScript: 0 errors.
+- Locale parity: 10/10 green, 2,459 keys × 10.
+
+### Environmental note
+
+Fresh clones with no `node_modules` see 13 smokes fail with `ERR_MODULE_NOT_FOUND` on `@morphit/asset-registry` imports.  This is NOT a code regression — it's that workspace symlinks under `node_modules/@morphit/asset-registry → packages/asset-registry` only exist after `npm install` at the workspace root.  Running `npm install --no-audit --no-fund` once fixes all 13 (verified in sandbox).  Tarball doesn't ship `node_modules` per project convention.
+
+### What's deliberately NOT in this cp1
+
+- **USDT itself is NOT added.**  The structural work shipped this cp1 alone with smoke coverage.  Adding USDT becomes a single-file follow-up (one entry in `packages/asset-registry/src/index.ts` + a logo SVG + translations of its specific privacy-warning text + frontend payment-method-registry plumbing for USDT-as-payment).
+- **FAQ copy rewrites** (the many "BTC, XMR, or BLURT" mentions in `apps/web/src/lib/i18n/locales/en.json`).  Those rewrites happen the turn USDT actually lands, not in advance, so we don't accidentally promise something we haven't shipped.
+- **Payment-method-registry expansion** for USDT-as-payment-rail — separate ADR-0021 follow-up if needed.
+
+
 
 **Part 120 — what's done in checkpoint 11 (everything from cp10 plus):**
 
