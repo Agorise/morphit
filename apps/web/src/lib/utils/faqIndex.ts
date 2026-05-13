@@ -123,7 +123,9 @@ export const FAQ_KEYS = [
 	'user_hide_accounts',
 	'what_is_featured_slot',
 	'featured_slot_displaced',
-	'verify_peer_fingerprint'
+	'verify_peer_fingerprint',
+	'public_api',
+	'qr_login'
 ] as const;
 
 export type FaqKey = (typeof FAQ_KEYS)[number];
@@ -460,7 +462,9 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'chat_key_changed',
 		'forward_secrecy',
 		'how_morphit_protects_me'
-	]
+	],
+	public_api: ['run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer'],
+	qr_login: ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me']
 };
 
 export interface FaqEntry {
