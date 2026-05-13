@@ -1,10 +1,10 @@
-# TARBALL — Morphit pre-launch hardening, Part 120 (in progress, checkpoint 11)
+# TARBALL — Morphit pre-launch hardening, Part 120 (CLOSED, checkpoint 12)
 
 **Snapshot date:** 2026-05-12
 
-**Tarball:** `morphit-audit-2026-05-120-cp11.tar.gz`
+**Tarball:** `morphit-audit-2026-05-120-cp12-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-120-cp10.tar.gz`.  This cp11 builds on cp10 with three substantive deliverables: brag-list slim + FAQ wiring fix + fee-flow SVG regeneration.
+**Previous tarball:** `morphit-audit-2026-05-120-cp11-delta.tar.gz`.  This cp12 closes Part 120 with the remaining four pieces from the original closure plan: 22 ADRs line-by-line audit, AUDIT-2026-05.md Part 120 entry, REVISIT-LIST.md Part 120 maintained-line, and persona-walkthrough-smoke extension for the FAQ orphan catch.
 
 **Part 120 — what's done in checkpoint 11 (everything from cp10 plus):**
 
@@ -44,7 +44,39 @@ Smokes green: persona-walkthrough 29/29, forgejo-not-gitea 3/3.
 
 Total Part 120 fix-groups so far: **45 fix-groups across 41 docs/components** (29 doc fixes + 1 doc-deletion + 10 doc verified-clean + 1 FAQ wiring + 1 brag-list slim + 1 brag-list stale-numbers + 1 SVG regen + 1 historical-disclaimer cluster).
 
-**Next up:** 22 ADRs line-by-line audit; AUDIT-2026-05.md Part 120 entry; REVISIT-LIST.md Part 120 maintained line; persona-walkthrough-smoke extension for the FAQ orphan catch.
+**Part 120 — what's done in checkpoint 12 (everything from cp11 plus the four closure pieces):**
+
+46. **22 ADRs line-by-line audit.**  All ADRs in `docs/adr/` audited.  Three needed Part 120 forward-notes:
+    - **ADR-0005** (Phase 3 subphase split) — added supplement to the existing 2026-05-07 forward-note explaining the "Go service" / "Go relay" / "Go indexer" framing in the original plan describes the pre-implementation design; the shipped reality is Node.js/TypeScript services with `tsx` as the runtime.  Rationale lives in ADR-0008's "Writing the indexer in Go instead of Node.js/TypeScript" section (no actively-maintained Go library for Blurt signature verification means we'd re-implement; `@beblurt/dblurt` gives us the full verify path in TS).  Preserved Go framing intact for historical accuracy.
+    - **ADR-0008** (Phase 3b indexer architecture) — fixed inline drift at line 221: "Node 24 is fast enough" → "Node 22 is fast enough", matching the `package.json` `engines.node` declaration of `>=22.0.0` (lowered in Part 86's deps audit when CI was confirmed to run Node 22).
+    - **ADR-0009** (Phase 3c order posting) — added Part 120 forward-note at the header explaining the "3 minutes" replace-window references throughout describe the originally-specified value; updated to 15 minutes in Part 70 per ADR-0001's 2026-05-07 Amendment.  Preserved the 3-minute references inline for historical accuracy; ADR-0001 is authoritative for the current window.
+    
+    Other ADRs verified self-maintaining or no drift to surface: ADR-0001 already has its 2026-05-07 Amendment for the 15-minute window; ADR-0010 correctly says use `create_claimed_account` not `account_create`; ADR-0011 maintains its own detailed Part-by-Part change log; ADR-0003 already corrected 8→10 languages; ADR-0007 cross-references ADR-0002 for the secp256k1 correction; ADR-0014 cleanly documents its supersession by ADR-0015 for the cipher/key-exchange component; ADR-0022 self-consistent.  No ADR-0016 cross-refs anywhere (that slot was the planned QR-pair ADR that landed as ADR-0022).
+
+47. **AUDIT-2026-05.md Part 120 entry shipped.**  Appended a comprehensive Part 120 narrative covering: doc sweep summary (40 docs, 1 deleted, 29 fixed, 10 clean, 1 with own disclaimer); ADR sweep summary (3 with forward-notes, rest self-maintaining); top-5 consequential single-doc catches (BETA-INCIDENT-RUNBOOK port + env-var ghosts; ARCHITECTURE Go-vs-Node drift + fictional services; SECURITY §1a account-creation mechanism; PLAN.md drift forward-note; FAQ orphan-entry fix); brag list slim summary; FAQ orphan fix details; fee-flow SVG regeneration details; standing pattern lessons distilled this Part; verification status; full tarball trail.  AUDIT-2026-05.md grew from 16,704 lines to 16,795 (+91 lines).
+
+48. **REVISIT-LIST.md Part 120 maintained-line added.**  New "Last maintained: 2026-05-12 (Part 120: ...)" entry at the top covering the full Part 120 scope.  Previous Part 119 + follow-up entry preserved as "Previous maintained:" per the standing convention so future sessions reading the doc see the lineage.
+
+49. **Persona-walkthrough-smoke extended with 4 P120-FAQ scenarios.**  `apps/web/scripts/persona-walkthrough-smoke.ts` grew from 29 → 33 scenarios.  The new scenarios sentinel-pin the FAQ orphan catch:
+    - **P120-FAQ-1:** `public_api` listed in `FAQ_KEYS` array in `apps/web/src/lib/utils/faqIndex.ts`
+    - **P120-FAQ-2:** `qr_login` listed in `FAQ_KEYS` array
+    - **P120-FAQ-3:** `public_api` FAQ entry present in `en.json`
+    - **P120-FAQ-4:** `qr_login` FAQ entry present in `en.json`
+    
+    If a future refactor removes either key from `FAQ_KEYS`, OR if a translator deletes the locale entries without removing the keys, the smoke fails loudly in CI.  Smoke header comment updated with Part 120 additions block.  Triple-pulse result: 33 passed, 0 failed across all three pulses — fully stable.
+
+**Total Part 120 fix-groups closed: 49 fix-groups across 47 docs/components.**
+
+**Part 120 verification summary:**
+- Persona-walkthrough-smoke: 33/33 green (was 29/29; +4 P120-FAQ scenarios)
+- Forgejo-not-gitea smoke: 3/3 green
+- FAQ parity: 104 keys = 104 entries, zero orphans, zero missing
+- Brag list zero internal-detail leaks (grep verified)
+- Fee-flow SVG well-formed and renders cleanly to PNG
+- AUDIT-2026-05.md grew by 91 lines with the Part 120 entry
+- REVISIT-LIST.md has Part 120 maintained-line at top
+
+**Part 120 is CLOSED.**  Twelve incremental delta tarballs delivered (cp1 through cp11 full snapshots, cp12 first true delta).  Ready for next task.
 
 **For the fresh session reading this:** every fix in this checkpoint is verifiable; smokes green; locale parity 2,458 × 10 unchanged; persona-walkthrough smoke 29/29 unchanged.
 
