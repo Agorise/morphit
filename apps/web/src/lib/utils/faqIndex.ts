@@ -128,7 +128,8 @@ export const FAQ_KEYS = [
 	'qr_login',
 	'what_is_usdt',
 	'why_usdt_warning',
-	'which_usdt_network'
+	'which_usdt_network',
+	'arbitrage_morphit_vs_exchanges'
 ] as const;
 
 export type FaqKey = (typeof FAQ_KEYS)[number];
@@ -470,7 +471,8 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	qr_login: ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me'],
 	what_is_usdt: ['why_usdt_warning', 'which_usdt_network', 'fees', 'how_to_buy'],
 	why_usdt_warning: ['what_is_usdt', 'which_usdt_network', 'how_morphit_protects_me', 'privacy_practices'],
-	which_usdt_network: ['what_is_usdt', 'why_usdt_warning', 'fees', 'how_to_buy']
+	which_usdt_network: ['what_is_usdt', 'why_usdt_warning', 'fees', 'how_to_buy'],
+	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
 };
 
 export interface FaqEntry {

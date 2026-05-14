@@ -8,7 +8,7 @@
 	 *
 	 *   - account name vs seed phrase vs password
 	 *   - network fee vs listing fee vs trade payment
-	 *   - BTC vs XMR vs BLURT
+	 *   - the supported tradable assets at a glance
 	 *   - what to do if you lose your seed
 	 *
 	 * Designed for paper.  The on-screen view shows the same
@@ -119,6 +119,10 @@
 			<div class="cheat-row">
 				<dt>BLURT</dt>
 				<dd>{$_('cheat_sheet.section_assets.blurt')}</dd>
+			</div>
+			<div class="cheat-row">
+				<dt>USDT</dt>
+				<dd>{$_('cheat_sheet.section_assets.usdt')}</dd>
 			</div>
 		</dl>
 	</section>

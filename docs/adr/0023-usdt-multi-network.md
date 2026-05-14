@@ -116,25 +116,38 @@ Tether themselves deprecated Omni-Layer USDT.  Adding it to
 our supported networks list would endorse a path Tether is
 actively winding down.  Omitted at launch.
 
-### 6. **Privacy warning chip** required on every USDT surface
+### 6. **Information chip** on every USDT surface
 
-Per Memory #19 (privacy is priority #1), users considering an
-asset that fails the privacy bar must be told clearly.  USDT
-fails on two dimensions:
+Per Memory #19 (privacy is priority #1) and Memory #27 (respectful
+copy about every listed asset), users considering an asset whose
+technical properties differ from Morphit's defaults should be told
+about those properties so they can make an informed choice.  For
+USDT, two facts are worth surfacing:
 
-- **Centralization risk**: Tether Inc. can freeze any USDT
-  address.  They have done so for thousands of addresses,
-  including ones not connected to crime.
-- **No on-chain privacy**: every USDT transaction is
-  permanently visible on its host chain.  Blockchain
-  analytics firms tag wallets routinely.
+- **Issuance and administration**: USDT is issued and administered
+  by Tether Inc., who have the technical ability to freeze addresses
+  on the host chain and have used that ability in the past (mostly
+  in response to law-enforcement requests).
+- **On-chain visibility**: USDT transactions on each supported host
+  chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly
+  visible on those chains.  This is a property of the chain, not
+  unique to USDT.
 
-The warning chip (`<PrivacyWarningChip
+The information chip (`<PrivacyWarningChip
 privacyWarningKey="usdt_centralized" />`) renders in the
 `/post` form, in `AddressShareModal` (when sharing a USDT
 address), and as a permanent per-message banner in
 `ChatMessage` (so a buyer re-checking an old chat message
-still sees the warning before sending).
+still sees the context before sending).  The copy is
+factual, not judgmental — millions of traders use USDT
+every day for its stability and liquidity, and the chip is
+information for an informed choice, not a warning to avoid
+the asset.
+
+The component is named `PrivacyWarningChip` for historical
+reasons (the first asset to use it was USDT and the
+shorthand stuck); the i18n key is the source of truth and
+the body copy is neutral.
 
 ### 7. **Operator opt-out** — default-ON with `MORPHIT_INDEXER_DISABLED_ASSETS`
 
@@ -205,20 +218,23 @@ unavailable — last seen 12m ago.` when stale (5+ minutes old).
 
 ### Negative / accepted costs
 
-- USDT users on Morphit see the privacy-warning chip every
-  time they post or share an address.  This is friction by
-  design — Memory #19 makes it non-negotiable.
+- USDT traders on Morphit see the information chip every
+  time they post or share an address.  This is a small
+  friction in service of an informed-choice user model —
+  Memory #19 keeps the chip in place, Memory #27 keeps
+  its tone factual.
 - The network picker is required on every USDT trade with no
   default.  Slightly more friction than a default-and-edit
-  flow, accepted for cross-network-mis-send protection.
+  flow, accepted because cross-network-mis-send is
+  unrecoverable.
 - We carry per-network metadata (regexes, explorers) for
   four networks.  Adding a fifth is one entry in
   `apps/web/src/lib/assets/networks.ts` plus four i18n
   translations per locale (displayName + feeHint per locale
   × 10 locales = 40 strings).
-- Operators with `MORPHIT_INDEXER_DISABLED_ASSETS=USDT` see
-  USDT orders from peer instances in their read-only feeds
-  but cannot accept new USDT orders from their own users.
+- Operators with `MORPHIT_INDEXER_DISABLED_ASSETS` listing
+  USDT see USDT orders from peer instances in their read-only
+  feeds but cannot accept new USDT orders from their own users.
   Cross-instance discoverability is preserved; local
   posting authority is the operator's call.
 

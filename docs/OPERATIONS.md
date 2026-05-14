@@ -7086,14 +7086,31 @@ posted with a disabled asset are rejected at handler time with
 `reason: 'asset_disabled_on_instance'`.  Default empty (every
 canonical-registry asset is enabled).
 
-Examples:
+**Parser is tolerant** of whitespace, mixed case, and trailing
+commas — write it however you like, the indexer normalizes
+internally.  All of these produce the same `['USDT']` value:
 
 ```bash
-# Refuse all USDT orders
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
+MORPHIT_INDEXER_DISABLED_ASSETS="usdt"
+MORPHIT_INDEXER_DISABLED_ASSETS=" USDT "
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,"
+```
+
+Multi-coin examples:
+
+```bash
+# Refuse one specific asset
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
 
-# Refuse USDT AND a hypothetical future stablecoin
+# Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
+
+# Refuse three or more
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
+
+# Whitespace-tolerant — same result as above
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
 
 # Accept everything (default — same as omitting the var)
 MORPHIT_INDEXER_DISABLED_ASSETS=""
@@ -7104,13 +7121,22 @@ not user-level.  Orders for a disabled asset still appear in
 your instance's read-only orderbook feeds (the chain history
 is shared across the federation), but your indexer refuses to
 accept NEW orders for that asset from your own users.  Users
-who object to a specific asset on philosophical grounds pick a
-different Morphit instance.
+who prefer an instance that supports the asset switch to a
+different Morphit operator — federation is the point.
 
-**Why the canonical morphit.io ships with USDT enabled:** the
-canonical operator's stance is that active traders use USDT to
-park value temporarily.  Operators with different stances
-(privacy-pure, XMR-only, etc.) override.
+**Why the canonical morphit.io ships with USDT enabled:** active
+traders find dollar-stable assets useful for parking value
+between trades, and the canonical operator's stance is to
+support that use case.  Operators with different focuses
+(privacy-pure, XMR-only, BTC-and-BLURT-only, etc.) override.
+The federated marketplace keeps trading; users self-route to
+the instance whose asset list matches their preferences.
+
+The parser tolerance is pinned in CI by
+`apps/indexer/scripts/disabled-assets-parse-smoke.ts` (12
+scenarios covering empty, one coin, multi-coin, whitespace,
+case, leading/trailing commas, double commas, etc.) so future
+refactors can't accidentally break the multi-coin form.
 
 Memory #23 (BLURT/BTC/XMR-only for listing fees) and Memory #25
 (default-on + operator override for new assets) together define
