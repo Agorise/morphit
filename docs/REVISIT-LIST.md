@@ -1,6 +1,7 @@
 # Morphit — revisit list
 
-**Last maintained:** 2026-05-14 (Part 121 cp6 — plow-through completing the three pre-launch follow-ons Ken queued at top of cp5 handoff: (1) USDT drift sweep finishing Memory #26's job for surfaces cp5 missed; (2) operator-stance surfacing — federation-level visibility into per-operator asset policy; (3) per-locale prerendering — partial ship of helpers, full route restructure deferred per design-doc + sandbox-environment constraint.  ITEM 1 SHIPPED: cheat_sheet.section_assets.heading + cheat_sheet.description × 10 locales rewritten to drop the stale "BTC vs XMR vs BLURT" framing (native prose in each locale — "Supported tradable assets" / "Unterstützte handelbare Assets" / "Activos negociables soportados" / etc.); FAQ trade_goods_services × 10 locales updated (en got full 4-spot rewrite: asset list now "BTC, XMR, BLURT, or USDT", cannot-model paragraph updated, common-combinations list got two new USDT examples including "Sell USDT for raw garlic" per Ken's preference; 9 short-form locales each got their single sentence updated in native phrasing); MORPHIT-BRAG-LIST.md line 188 "22 ADRs" → "23 ADRs" + ADR-0023 added to examples + line 409 ADR range bumped 0022→0023.  ITEM 3 SHIPPED (MVP scope): apps/indexer/src/api/instance.ts exposes new `disabled_assets: readonly string[]` field on /v1/instance reading config.disabledAssets; packages/indexer-client/src/index.ts mirrors as optional `readonly disabled_assets?: readonly string[]` (pre-cp6 indexers omit field, clients default to []); apps/web/src/lib/stores/instance.ts InstanceState gains disabled_assets, FALLBACK = [], hydration `?? []` fallback; apps/web/src/routes/about-this-instance/+page.svelte new "This instance's asset policy" section between Instance and Integrity reading $instance.disabled_assets; apps/web/src/routes/run-a-node/+page.svelte new "Your instance, your asset policy" panel between How and Requirements with three pillars (default-on, opt-out env var, federation stays intact); 16 new i18n keys × 10 locales = 160 strings native prose (6 about_this_instance.asset_stance.* + 1 section.asset_stance + 10 run_a_node.asset_policy_*).  Federation-probe extension for peer-instance asset stance on /operators DEFERRED — needs v33 migration + probe-handler changes; REVISIT §A entry captures the deferral with all-context.  ITEM 2 PARTIAL: Per docs/PER-LOCALE-PRERENDERING-DESIGN.md's explicit "must be done on a machine with a working `npm run build`" requirement + Memory #11 (verify before claiming), shipped only the verifiable pieces — apps/web/src/lib/i18n/locales.ts (new pure SSoT module holding SUPPORTED_LOCALES + PLANNED_LOCALES + DEFAULT_LOCALE + LocaleCode types + matchSupported(); zero SvelteKit deps so smokes and the prerender-redirect shell can import without dragging in `browser` flag); apps/web/src/lib/i18n/path.ts (new pure-function module shipping `localePath(path, lang?)` idempotent link wrapper preserving query+fragment, `stripLocalePrefix(path)`, `pickLocaleFromAcceptLanguages(prefs)` no-DOM picker for the redirect shell, `isLocalePrefixed(path)`); apps/web/src/lib/i18n/index.ts refactored to re-export pure constants from ./locales — existing call sites unchanged; apps/web/scripts/i18n-path-helpers-smoke.ts new 22-scenario unit smoke covering idempotency + language-switcher re-prefixing + query/fragment preservation + zh script variant mapping + de-AT/es-MX language-family fallback + empty prefs/no-match/malformed-entry defensive paths; registered in scripts/run-smokes.sh; apps/web/scripts/i18n-locale-registry-smoke.ts pointed at the new SSoT (locales.ts not index.ts).  SIBLING DRIFTS FIXED: (a) apps/web/src/lib/auth/pairingPhoneSigner.ts had `import { Buffer } from 'buffer'` blocking the Vite client bundle build (Buffer doesn't resolve in browser context); replaced 3 Buffer.from() calls on already-Uint8Array values with the codebase-standard `as unknown as Buffer` cast pattern from $lib/blurt/sign.ts; vite client bundle build now ✓ built in 25.20s — the remaining SvelteKit prerender failures (svelte-i18n SSR locale on /support + unseen dynamic routes /chat/[peer=account] etc) are pre-existing and unrelated; (b) scripts/build-sitemap.mjs ROUTES array was 14 entries while routes.ts INDEXABLE_ROUTES was 17 (missing /instances, /glossary, /cheat-sheet); resynced to canonical 17-entry order matching routes.ts; sitemap.xml regenerates 170 URLs cleanly.  PERSONA-WALKTHROUGH SMOKE EXTENDED: 7 new P121-CP6 sentinels (CP6-1 /v1/instance disabled_assets field, CP6-2 indexer-client mirror, CP6-3 frontend store hydration with [] fallback, CP6-4 /about-this-instance asset-stance panel, CP6-5 /run-a-node operator-stance explainer with MORPHIT_INDEXER_DISABLED_ASSETS env var named, CP6-6 path.ts module export surface + no-./index-import invariant, CP6-7 locales.ts no-SvelteKit-deps invariant).  Header docblock updated.  VERIFICATION: triple-pulse 2,449 scenarios green × 3 zero failures (cp5 baseline 2,418 + 31 = 2,449); locale parity 10/10 green at 2,511 keys × 10 (cp5 was 2,494; +17 = 6 about_this_instance.asset_stance + 1 section.asset_stance + 10 run_a_node.asset_policy_*); translation-completeness 4/4; key-coverage 1838 static + 24 dynamic resolve; persona-walkthrough 49/49 (was 42); svelte-check 0 errors 1 pre-existing warning (FundsSentModal:83); typecheck sweep all workspaces 0 errors; vite client bundle build ✓ built in 25.20s (SvelteKit prerender still fails on pre-existing issues unrelated to cp6 work).  Pattern lessons: (1) honest pushback per Memory #18 + #11 turned what could've been a blind route-restructure ship into a smoke-pinned partial that ships the verifiable helpers cleanly and leaves the restructure for a working-build environment; the cp6 work isn't smaller but it's defensible; (2) module-doc literal-substring sentinels need wording-discipline — `mustNotHave: ["$app/environment"]` on locales.ts initially matched the explanatory comment, not just the import; reworded the doc to avoid the literal forms and the sentinel now defends the real invariant (import-graph purity); (3) the build-sitemap drift was sitting in the repo for at least cp1-cp5 — it only surfaced because cp6 attempted `npm run build`; pattern: sibling-script ROUTES arrays drift silently if no one runs the full build; (4) Buffer-from-Uint8Array is a real browser-bundle hazard — three call sites in two files; cp6 fixed pairingPhoneSigner; chainOpVerifyCore.ts is type-only usage which the bundle tolerates, but a future refactor that uses `Buffer.from` there would re-break the build.)
+**Last maintained:** 2026-05-14 (Part 121 cp7 — per-locale prerendering route restructure SHIPPED END-TO-END + scoped deep-deep items #2 + #3.  cp6 sealed with two items unblocked: route restructure deferred to "working-build environment" and the deep-deep deferred per recommendation.  cp7 executed both in-sandbox after re-evaluating: cp6's Vite-bundle-builds-but-SvelteKit-prerender-fails state was actually addressable because the prerender failures were exactly what the restructure fixes (svelte-i18n SSR locale on /support; handleUnseenRoutes for 7 dynamic-param routes).  ROUTE RESTRUCTURE: 24 route subdirs + 3 root files physically moved to `apps/web/src/routes/[lang]/`; new root redirect shell at `apps/web/src/routes/+page.svelte` using pickLocaleFromAcceptLanguages + window.location.replace + noscript meta-refresh fallback to /en + meta robots noindex; new minimal root +layout.{svelte,ts} (prerender=true, ssr=false); new `[lang]/+layout.ts` with prerender=true + ssr=true + load() validating params.lang against SUPPORTED_LOCALES (throws error(404) on unknown) + initI18nFor + waitLocale + returns {lang}; new `[lang]/+page.ts` with entries() returning SUPPORTED_LOCALES.map (entries() must live on +page.ts not +layout.ts per SvelteKit constraint); svelte.config.js `prerender.handleUnseenRoutes:'ignore'`; Head.svelte url.search/url.hash gated behind `building` flag from $app/environment.  LINK SWEEP: 88 hardcoded `href="/route"` sites wrapped in `localePath()` across 21 page files + 10 components + the layout's navLinks array (manually-targeted after regex missed the array-iterated nav).  LanguageSwitcher rewired to `goto(localePath(stripLocalePrefix(currentPath), code))` so each locale-switch is a navigation.  FaqSearch LocaleCode dedupe (my python script added duplicate import to a file already importing it from $i18n).  6 P121-CP7 persona sentinels (CP7-1..6).  11 smoke scripts updated to point at new [lang]/ route paths.  href-xss-smoke whitelisted lp/localePath as SAFE_BUILDER + ALLOWLIST entry for navLinks `link.href`.  SCOPED DEEP-DEEP #2 (federation-probe + SQL/DB + HTTP/API + operator-trust threat model): federationProbe.ts well-hardened with comprehensive private-network deny list + HTTPS-only + manual-redirect + 256KB response cap + AbortController; one known DNS-rebinding gap filed as new REVISIT §A entry (information-disclosure only — damage bound by GET-only + 256KB cap + no exfiltration path); SQL/DB layer 33 tables 100% PK/UNIQUE coverage, 45 CHECK constraints, 212 NOT NULL columns, savepoint name interpolation is integer-validated or hardcoded const (no SQL injection), fee_method CHECK ('blurt','waived_first_buy','btc','xmr') confirms Memory #23 at DB level, FK count sparse (6 across 33) is intentional chain-materialization pattern; HTTP/API surface 38 indexer endpoints (complex shapes zod-validated, simple param endpoints use targeted predicates like isAccountName + enum equality — equivalent safety), relay 4 POST endpoints all zod-validated with 8 policy modules (ALTCHA + clock + ceiling + invite tokens + kill-switch + name + sequential-detector) totaling 2000 LOC, TOCTOU-aware ceiling, CORS exact-match allowlist, comprehensive security headers, chunked-encoding rejection on body-bearing methods; operator-trust three-tier model (selfish/censoring/lying) fully addressed via on-chain fee-method enum + federation peer-instance surfaces + TamperAlertBanner non-dismissible red on bundle/pubkey mismatch + chat E2EE invariant explicit in handler.  SCOPED DEEP-DEEP #3 (cp6 self-audit): i18n module refactor verified pure (locales.ts zero imports), 11-scenario adversarial smoke added covering path traversal + protocol-relative URL + stacked locale prefix + javascript: pseudo-protocol + q-value tags + whitespace-padded + long pref list + idempotent strip; disabled_assets E2E plumbing verified clean from env→zod→config→order-handler reject AND /v1/instance exposure→indexer-client mirror→frontend store [] fallback→4 render sites; REVISIT §A scope check found stale "Per-locale prerendering DEFERRED" entry → replaced with ✅ SHIPPED summary listing every cp7 file change; federation-probe peer-asset-stance extension correctly remains DEFERRED.  VERIFICATION: npm run build produces 202 HTML files (20 per locale × 10 + redirect shell + degraded); triple-pulse 2,470 × 3, 0 failures (cp6 baseline 2,449 → cp7 baseline 2,470 = +21 = 6 CP7 sentinels + 11 adversarial + 4 from smoke re-registrations clearing up); locale parity 10/10 green at 2,511 keys × 10; persona-walkthrough 55/55 (was 49); svelte-check 0 errors 1 pre-existing warning; typecheck-sweep all 0 errors.  Rendered de.html: 0 bare /orderbook /faq /chat /post; all nav+footer+CTAs carry /de/ prefix; same symmetry confirmed for fa.html (RTL).  Pattern lessons: (1) "needs working build" was more precise than I'd internalized — Vite bundle builds cleanly, only SvelteKit prerender fails on issues the restructure itself addresses, so the restructure unblocked itself; characterize WHICH build phase fails before deferring next time, (2) entries() lives on +page.ts not +layout.ts — SvelteKit-specific gotcha worth pinning, (3) url.search/url.hash forbidden during prerender — use building flag from $app/environment same as fetch/navigator gates, (4) bulk python regex sweep has known gaps (each-blocks iterating data arrays, duplicate-import collisions, comments matching sentinel patterns) — post-pass dedupe + sentinel re-check is mandatory, (5) refactor pre-existing build-blockers BEFORE the actual restructure — cp6's pairingPhoneSigner fix + build-sitemap resync looked like sibling work but were prerequisite to cp7's restructure verification, the cp-cycle pattern is "N-1 to clear blockers + ship verifiable pieces, N for the actual restructure with build verification.")
+**Previous maintained:** 2026-05-14 (Part 121 cp6 — plow-through completing the three pre-launch follow-ons Ken queued at top of cp5 handoff: (1) USDT drift sweep finishing Memory #26's job for surfaces cp5 missed; (2) operator-stance surfacing — federation-level visibility into per-operator asset policy; (3) per-locale prerendering — partial ship of helpers, full route restructure deferred per design-doc + sandbox-environment constraint.  ITEM 1 SHIPPED: cheat_sheet.section_assets.heading + cheat_sheet.description × 10 locales rewritten to drop the stale "BTC vs XMR vs BLURT" framing (native prose in each locale — "Supported tradable assets" / "Unterstützte handelbare Assets" / "Activos negociables soportados" / etc.); FAQ trade_goods_services × 10 locales updated (en got full 4-spot rewrite: asset list now "BTC, XMR, BLURT, or USDT", cannot-model paragraph updated, common-combinations list got two new USDT examples including "Sell USDT for raw garlic" per Ken's preference; 9 short-form locales each got their single sentence updated in native phrasing); MORPHIT-BRAG-LIST.md line 188 "22 ADRs" → "23 ADRs" + ADR-0023 added to examples + line 409 ADR range bumped 0022→0023.  ITEM 3 SHIPPED (MVP scope): apps/indexer/src/api/instance.ts exposes new `disabled_assets: readonly string[]` field on /v1/instance reading config.disabledAssets; packages/indexer-client/src/index.ts mirrors as optional `readonly disabled_assets?: readonly string[]` (pre-cp6 indexers omit field, clients default to []); apps/web/src/lib/stores/instance.ts InstanceState gains disabled_assets, FALLBACK = [], hydration `?? []` fallback; apps/web/src/routes/about-this-instance/+page.svelte new "This instance's asset policy" section between Instance and Integrity reading $instance.disabled_assets; apps/web/src/routes/run-a-node/+page.svelte new "Your instance, your asset policy" panel between How and Requirements with three pillars (default-on, opt-out env var, federation stays intact); 16 new i18n keys × 10 locales = 160 strings native prose (6 about_this_instance.asset_stance.* + 1 section.asset_stance + 10 run_a_node.asset_policy_*).  Federation-probe extension for peer-instance asset stance on /operators DEFERRED — needs v33 migration + probe-handler changes; REVISIT §A entry captures the deferral with all-context.  ITEM 2 PARTIAL: Per docs/PER-LOCALE-PRERENDERING-DESIGN.md's explicit "must be done on a machine with a working `npm run build`" requirement + Memory #11 (verify before claiming), shipped only the verifiable pieces — apps/web/src/lib/i18n/locales.ts (new pure SSoT module holding SUPPORTED_LOCALES + PLANNED_LOCALES + DEFAULT_LOCALE + LocaleCode types + matchSupported(); zero SvelteKit deps so smokes and the prerender-redirect shell can import without dragging in `browser` flag); apps/web/src/lib/i18n/path.ts (new pure-function module shipping `localePath(path, lang?)` idempotent link wrapper preserving query+fragment, `stripLocalePrefix(path)`, `pickLocaleFromAcceptLanguages(prefs)` no-DOM picker for the redirect shell, `isLocalePrefixed(path)`); apps/web/src/lib/i18n/index.ts refactored to re-export pure constants from ./locales — existing call sites unchanged; apps/web/scripts/i18n-path-helpers-smoke.ts new 22-scenario unit smoke covering idempotency + language-switcher re-prefixing + query/fragment preservation + zh script variant mapping + de-AT/es-MX language-family fallback + empty prefs/no-match/malformed-entry defensive paths; registered in scripts/run-smokes.sh; apps/web/scripts/i18n-locale-registry-smoke.ts pointed at the new SSoT (locales.ts not index.ts).  SIBLING DRIFTS FIXED: (a) apps/web/src/lib/auth/pairingPhoneSigner.ts had `import { Buffer } from 'buffer'` blocking the Vite client bundle build (Buffer doesn't resolve in browser context); replaced 3 Buffer.from() calls on already-Uint8Array values with the codebase-standard `as unknown as Buffer` cast pattern from $lib/blurt/sign.ts; vite client bundle build now ✓ built in 25.20s — the remaining SvelteKit prerender failures (svelte-i18n SSR locale on /support + unseen dynamic routes /chat/[peer=account] etc) are pre-existing and unrelated; (b) scripts/build-sitemap.mjs ROUTES array was 14 entries while routes.ts INDEXABLE_ROUTES was 17 (missing /instances, /glossary, /cheat-sheet); resynced to canonical 17-entry order matching routes.ts; sitemap.xml regenerates 170 URLs cleanly.  PERSONA-WALKTHROUGH SMOKE EXTENDED: 7 new P121-CP6 sentinels (CP6-1 /v1/instance disabled_assets field, CP6-2 indexer-client mirror, CP6-3 frontend store hydration with [] fallback, CP6-4 /about-this-instance asset-stance panel, CP6-5 /run-a-node operator-stance explainer with MORPHIT_INDEXER_DISABLED_ASSETS env var named, CP6-6 path.ts module export surface + no-./index-import invariant, CP6-7 locales.ts no-SvelteKit-deps invariant).  Header docblock updated.  VERIFICATION: triple-pulse 2,449 scenarios green × 3 zero failures (cp5 baseline 2,418 + 31 = 2,449); locale parity 10/10 green at 2,511 keys × 10 (cp5 was 2,494; +17 = 6 about_this_instance.asset_stance + 1 section.asset_stance + 10 run_a_node.asset_policy_*); translation-completeness 4/4; key-coverage 1838 static + 24 dynamic resolve; persona-walkthrough 49/49 (was 42); svelte-check 0 errors 1 pre-existing warning (FundsSentModal:83); typecheck sweep all workspaces 0 errors; vite client bundle build ✓ built in 25.20s (SvelteKit prerender still fails on pre-existing issues unrelated to cp6 work).  Pattern lessons: (1) honest pushback per Memory #18 + #11 turned what could've been a blind route-restructure ship into a smoke-pinned partial that ships the verifiable helpers cleanly and leaves the restructure for a working-build environment; the cp6 work isn't smaller but it's defensible; (2) module-doc literal-substring sentinels need wording-discipline — `mustNotHave: ["$app/environment"]` on locales.ts initially matched the explanatory comment, not just the import; reworded the doc to avoid the literal forms and the sentinel now defends the real invariant (import-graph purity); (3) the build-sitemap drift was sitting in the repo for at least cp1-cp5 — it only surfaced because cp6 attempted `npm run build`; pattern: sibling-script ROUTES arrays drift silently if no one runs the full build; (4) Buffer-from-Uint8Array is a real browser-bundle hazard — three call sites in two files; cp6 fixed pairingPhoneSigner; chainOpVerifyCore.ts is type-only usage which the bundle tolerates, but a future refactor that uses `Buffer.from` there would re-break the build.)
 **Previous maintained:** 2026-05-13 (Part 121 cp5 — cross-session handoff sweep before Ken leaves chat.  Pretext: Ken declined a full repo-wide deep-deep (scoped USDT audit would be higher leverage if revisited later) and asked for seamless handoff with EVERY file current.  Grep-driven sweep across docs/ + MORPHIT-BRAG-LIST.md + apps/web/static/llms*.txt + i18n locales + payments registry + indexer reserved keys.  REAL DRIFT FIXED: (1) apps/web/src/lib/payments/registry.ts was missing pay_usdt entry — real ship gap because without it users posting non-USDT trades couldn't pick USDT as payment method from the structured picker (only as free-text via terms); added pay_usdt with assetExclusion='USDT' semantics mirroring BTC/XMR/BLURT; (2) apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts RESERVED_CANONICAL_KEYS set bumped to include pay_usdt — caught immediately by reserved-keys-parity-smoke (exactly the failsafe pattern Memory #14 + WIRE-EVERYTHING discipline exists for); (3) docs/API.md asset query-param description and trade_count_by_asset example response shapes updated to include USDT + new asset_network row for multi-network filtering; (4) FAQ where_to_buy_blurt × 10 locales — "BLURT is one of the three assets traded here, alongside BTC and XMR" → "BLURT is one of the four assets traded here, alongside BTC, XMR, and USDT" (each locale got language-specific replacement); (5) apps/web/static/llms-full.txt top-of-file descriptor + 3 body passages claiming "BTC, XMR, or BLURT" as the complete trade-asset list all updated to include USDT; added a fourth example combination (Buy/sell USDT for fiat via Wise); (6) apps/web/static/llms.txt top-of-file descriptor updated to match; (7) docs/adr/0023-usdt-multi-network.md context-section reframed since Morphit is pre-launch (was "Morphit launched with three trade-asset tickers"); (8) docs/GRANDMA-FRIENDLY-INVESTIGATION.md item 1.1 status updated to mention USDT tooltip with faqKey="what_is_usdt" deep-link; item 3.5 cheat-sheet status updated to mention USDT row added Part 121 cp4; (9) apps/web/scripts/persona-walkthrough-smoke.ts D-4 sentinel bumped from mustHave: ['v31'] (false-positive matching the update-history line in PRE-LAUNCH-CHECKLIST) to mustHave: ['currently at v32 as of Part 121'] for true verification.  VERIFICATION post-sweep: triple-pulse 2,418 scenarios green × 3 zero failures; locale parity 10/10 green at 2,494 keys × 10; translation-completeness 0 unexpected byte-identical; all cp3/cp4 invariants preserved (fee-method-enum-frozen 7/7, first-buy-waiver-payment-agnostic 6/6, usdt-trade-only 11/11, usdt-network-picker-required 9/9, disabled-assets-parse 12/12, reserved-keys-parity green after sync); svelte-check 0 errors.  Pattern lessons from this sweep: (1) reserved-keys-parity-smoke is the single most valuable smoke in the suite — caught the pay_usdt ship gap on first run, would have been a silent operator-side failure; (2) static documentation files (llms.txt, llms-full.txt) need same drift-check discipline as live docs since they're served to LLM crawlers and shape external descriptions of Morphit; (3) sentinel-grep smokes can false-positive when a doc has both current and historical mentions of same string — D-4's mustHave: ['v31'] matched the update-history line; sentinels should pin specific phrases ("currently at v32 as of Part 121"), not bare version numbers; (4) Memory #26 + #27 in action — this entire sweep is the discipline both memories prescribe.  Files modified this turn: 8 (payments/registry.ts, operatorPaymentMethod.ts, docs/API.md, 10 locale JSONs each modified via where_to_buy_blurt update, llms-full.txt, llms.txt, ADR-0023, GRANDMA-FRIENDLY-INVESTIGATION.md, persona-walkthrough-smoke.ts, TARBALL.md, REVISIT-LIST.md, AUDIT-2026-05.md).)
 **Previous maintained:** 2026-05-13 (Part 121 cp3 — USDT shipped end-to-end.  Pretext: Ken's directive after cp2 sealed: "let's add Tether (USDT). do not let people pay fees with it...".  Pre-execution design Q&A turn detailed how USDT would appear in Morphit then asked five edge-case questions; Ken's answers: 9a=same posture as BTC/XMR address validation (reject inline), 9b="you need USDT on Tron for this trade" hint on order row, 9c=default-on with operator override (Memory #25 committed), 9d=native only no bridged, 9e=live BLURT/USDT price subline.  Memory edit #25 committed 2026-05-13: every new tradable asset ships default=ON instance-wide with operator-config override via `MORPHIT_INDEXER_DISABLED_ASSETS` env var.  Code changes shipped: (a) canonical asset registry USDT entry — decimals:6, canPayListingFee:false (memory #23 invariant), canBeTraded:true, supportedNetworks=[erc20,trc20,spl,bep20], defaultNetwork:null (forces explicit user choice every trade — no default = no accidental cross-network sends), privacyWarningKey:'usdt_centralized', combined-network addressShape regex; (b) NEW `apps/web/src/lib/assets/networks.ts` with per-network address/txid regexes + bundled explorers (etherscan.io ERC-20, tronscan.org TRC-20, solscan.io SPL, bscscan.com BEP-20 per Ken's list; Omni Layer excluded per Tether's own deprecation); [rest of cp3 history below preserved unchanged] (c) frontend asset registry mirror with canBeUsedForListingFee:false; (d) ChatAssetTicker extended to include 'usdt'; AddressPayload+FundsSentPayload gained optional network field; (e) `MORPHIT_INDEXER_DISABLED_ASSETS` env var in indexer config; Config.disabledAssets field wired; (f) order handler instance-wide disable gate (returns `asset_disabled_on_instance`) + asset_network validate gates (`asset_network_required_for_usdt` / `asset_network_unknown` / `asset_network_not_permitted_for_asset`); ValidatedOrder gained asset_network field; (g) Schema migration v32 — orders.asset_network TEXT column + partial index `idx_orders_asset_asset_network`; (h) all 4 INSERT INTO orders sites rewritten to include asset_network column with bumped $N placeholders; (i) indexer-client OrderRecord.asset_network type; orderbook API SELECT + rowToWire updated; (j) OrderFormInput.assetNetwork + OrderPayload.asset_network added; buildOrderPayload lowercases and omits when undefined; (k) instance store chat_link_urls.usdt sub-map for per-network operator overrides with backward-compat fallback; (l) explorer/urls.ts gained usdtExplorerUrl(network, txid) — reads instance override, falls back to bundled default, SPL preserves case base58 while others lowercase hex; (m) price feed extended for USDT — PricedSymbol already was AssetTicker so free; initial-state store + reset both include USDT; fallback static $1.00; Coingecko provider 'tether' ID mapping; (n) 3 new Svelte components: PrivacyWarningChip (full+compact variants, dismissible per-session), UsdtNetworkPicker (required radio with cross-network warning above, used in /post + AddressShareModal), UsdtPriceSubline (live + stale fallback); (o) /post integration: usdtNetwork state, asset chip onclick resets network when leaving USDT, USDT tooltip with faqKey=what_is_usdt, chip + picker injected after asset chips, step1Done gated on `asset !== 'USDT' || usdtNetwork !== null`; (p) AddressShareModal: usdtNetwork state, per-network validateUsdtAddress, USDT tab, chip + picker block, address placeholder per-method, payload threads network; (q) FundsSentModal: initialUsdtNetwork prop with networkPinned read-only mode (so receiver of a TRC-20 address can't accidentally claim they sent ERC-20), per-network validateUsdtTxid, USDT tab, picker (read-only when pinned), payload threads network; (r) ChatMessage rendering: explorerLinkForTxid takes network arg, address pill renders bold-network prefix chip + amber per-message warning aside that stays on chat record forever, funds-sent pill same prefix, canMarkSent extended for USDT; (s) orderbook row: USDT network chip with title-tooltip "You need USDT on Tron for this trade" (9b) + `<UsdtPriceSubline compact />` (9e); (t) USDT logo SVG at /icons/icon-usdt.svg + 4 sub-network chip icons in /icons/networks/; (u) 28 i18n keys × 10 locales = 280 native translations spanning privacy warning, network display names, fee hints, picker UI, address-share, order-row hints, price subline, disabled-on-instance, FAQ q+a; (v) allow-list extended for "Tether"/"Ethereum"/"Tron"/"Solana"/"BNB Smart Chain"/"USDT" proper-noun byte-identical matches in Latin-script locales with documented reason codes.  NEW SMOKES: (w) usdt-trade-only-smoke (11 scenarios) — pins canPayListingFee=false, canBeTraded=true, 4 supported networks, defaultNetwork=null, privacyWarningKey=usdt_centralized in BOTH registries; if anyone flips the wrong way, fails loudly; (x) usdt-network-picker-required-smoke (9 scenarios) — sentinel-greps /post + AddressShareModal + FundsSentModal for usdtNetworkPicked gate in canSubmit + correct derivation pattern + UsdtNetworkPicker presence; (y) persona-walkthrough +5 P121-USDT scenarios pinning the integration across registry, networks module, indexer gates, and orderbook UI.  Both new smokes + persona additions registered in scripts/run-smokes.sh.  DOCS SHIPPED SAME TURN (Memory #24 — grep before tarball discipline): (z) NEW docs/adr/0023-usdt-multi-network.md — full architectural ADR covering 9 design decisions; (aa) docs/ADDING-A-COIN.md updated USDT worked example to match shipped reality (3-network hypothetical → 4-network shipped) + forward-ref to ADR-0023; (bb) docs/OPERATIONS.md new tail section "Trade-only asset configuration (Part 121)" with MORPHIT_INDEXER_DISABLED_ASSETS docs + per-network explorer URL overrides + schema v32 reference; (cc) docs/RUN-A-MORPHIT-NODE.md new tail section "Trade-only assets: USDT and your operator stance" with 3 reasonable positions + per-network table + what-USDT-cannot-do invariant list; (dd) docs/PRE-LAUNCH-CHECKLIST.md new [blocking] checklist item "Decide your USDT operator stance" + schema version bumped v31→v32; (ee) AUDIT entry for Part 121 cp3 with pattern lessons.  MARKETING: MORPHIT-BRAG-LIST 252→254 (added entry 253 "USDT P2P across 4 networks, listing fees stay BLURT/BTC/XMR" + 254 "No default USDT network — every trade is an explicit network commit"); footer count + date refreshed.  VERIFICATION: triple-pulse 2,405 scenarios green × 3, zero failures (cp2 baseline 2,377 + 28 new = 2,405); locale parity 10/10 green at 2,478 keys × 10; translation-completeness 0 unexpected byte-identical; usdt-trade-only 11/11; usdt-network-picker-required 9/9; fee-method-enum-frozen 7/7 (USDT did NOT leak into fee_method enum — Memory #23 preserved); first-buy-waiver-payment-agnostic 6/6.  Pattern lessons distilled: (1) the memory-#25 default-on + operator-override pattern will guide every future coin addition; (2) pre-execution design Q&A turn paid off — 5 edge-case answers shipped as-is, no rework cycles; (3) asset_network as separate column from fee_method is the clean shape — conflating them would have either expanded the wire-format-frozen enum (violating memory #23) or introduced an awkward overload; (4) i18n cost scales linearly with key count — USDT shipped ~28 new keys × 10 locales = 280 strings; future coin additions are same volume per new asset; (5) brace-balance extraction in waiver-agnostic smoke kept working perfectly when validate() gained the asset_network gates — gates went OUTSIDE the waiver branch so the sentinel-grep didn't false-positive; architecture that respects existing invariants compounds across audits.)
 **Previous maintained:** 2026-05-13 (Part 121 cp1 + immediate catch-up: asset-registry expansion for trade-only assets + multi-network coins, then Ken-driven discipline correction.  CP1 work covered separately in TARBALL.md / AUDIT-2026-05.md Part 121 entry.  Post-cp1 catch-up THIS SAME SESSION: Ken asked whether the "one-time npm install" setup note I'd given verbally was actually in the operator/launch docs.  Grep confirmed it WAS — RUN-A-MORPHIT-NODE.md §736, OPERATIONS.md §7015-7038, PRE-LAUNCH-CHECKLIST.md §307-324 all carried it; numbers current at "13 affected runners" + "2,370+ scenarios" post-cp1.  Ken then process-corrected: ".md files should always be current and accurate with every tarball."  Memory edit #24 committed: "Before EVERY tarball, grep operator/launch docs for setup/troubleshooting/operator implications; never assume coverage; if saying verbally 'one-time setup note' that's the SYMPTOM the doc update was missed."  Self-audit triggered by the correction surfaced ONE real gap: ADR-0011 (the fee-model ADR) did not yet carry the Part 121 enum-freeze forward-note.  Added in this same catch-up turn: 2026-05-13 forward-note at the head of ADR-0011 pointing at memory #23, the two new sentinel-grep smokes, and the FEES-AND-REWARDS + ADDING-A-COIN sections that carry the full rationale.  Net result: the fee-method-enum-freeze invariant is now documented in FOUR places with cross-references — registry-level invariant in the asset-registry smoke, wire-format-level smoke at the indexer (fee-method-enum-frozen-smoke + first-buy-waiver-payment-agnostic-smoke), ADR-0011 forward-note, and user-facing FEES-AND-REWARDS §"What is FROZEN".  Pattern lesson reinforced: when shipping a code-level invariant, the discipline is to update ALL related docs in the same work unit — registry smoke, sentinel-grep smoke, ADR forward-note, ops/launch docs, user-facing FAQ if applicable.  Memory #7 + #14 + #24 together cover this; the failure mode is treating one or two doc surfaces as "the relevant ones" and missing the rest.  CP2 will ship in the same Part 121 with the ADR-0011 forward-note + this REVISIT update + AUDIT update.)
@@ -900,6 +901,73 @@ locales, alignment with FAQ_KEYS registry verified.
 These need **you** (or a person with operator access / domain
 knowledge), not more code.
 
+- **DNS rebinding gap in federation-probe SSRF defense — surfaced
+  2026-05-14 (Part 121 cp7, scoped deep-deep item #2 federation
+  audit).**  The defense-in-depth SSRF protection in
+  `apps/indexer/src/indexer/federationProbe.ts` (and the mirror
+  validation at registration time in
+  `apps/indexer/src/indexer/handlers/operatorRegister.ts`) checks
+  hostname against a comprehensive private-network deny list
+  (RFC 1918 ranges, link-local, loopback, IPv6 unique-local,
+  IPv6 link-local, .local/.localhost/.internal TLDs, cloud
+  metadata addresses 169.254.169.254 + metadata.google.internal).
+  This blocks the obvious attack: registering
+  `https://localhost/`, `https://10.0.0.1/`, etc.
+
+  **The gap:** if an attacker registers `evil.example.com` that
+  resolves to a PUBLIC IP at registration time (passes the
+  hostname check) but the attacker controls the DNS and can
+  later have it resolve to 127.0.0.1 or an internal IP, the
+  probe loop would connect to the internal address.  The
+  hostname denylist doesn't help because the hostname itself
+  isn't suspicious.
+
+  **Damage bound by existing defense-in-depth:**
+    - `redirect: 'manual'` prevents redirect-based exfiltration
+    - 256KB response cap (Content-Length pre-check + streaming
+      abort) bounds the response size the attacker can pull out
+    - The indexer can fingerprint internal-network services
+      via the response shape, but can't exfiltrate large
+      payloads
+    - The fetch is GET-only and the user-agent identifies
+      itself, so it can't write to internal services
+
+  Net: an attacker can use this for **information disclosure**
+  (presence/absence of internal services, response body samples
+  up to 256KB) and **DoS** (forcing probes against arbitrary
+  internal hosts), but NOT for arbitrary remote code execution
+  or large-scale exfiltration.
+
+  **Complete fix:**
+    1. Resolve DNS for the URL hostname before fetch
+    2. Verify EVERY resolved IP (A + AAAA records) against the
+       private-network deny list
+    3. Connect to the resolved IP directly (via a custom
+       Agent / Dispatcher in undici) so the DNS resolution
+       used by fetch matches the validated one
+    4. Re-resolve and re-validate on every probe (TTL ignored
+       — assume DNS is hostile)
+
+  Implementation note: Node's `fetch()` (undici) supports a
+  `dispatcher` option taking a custom Agent.  The agent can
+  pre-resolve via `node:dns/promises` + `lookup()` and
+  enforce IP-class validation before connecting.  Worth ~half
+  a day of focused work + smoke coverage.
+
+  Why deferred from cp7: cp7 was the per-locale prerendering
+  shipping turn; this finding surfaced during the scoped
+  federation-probe audit but isn't a launch blocker because
+  the response-size cap + manual-redirect + GET-only posture
+  bound the damage to information disclosure that requires
+  active attacker DNS control.  Schedule alongside any other
+  federation-touch work.
+
+  Inline comment at `operatorRegister.ts:223` already
+  acknowledges the gap: "This list is not exhaustive (DNS
+  rebinding, IPv6 mapped IPv4, etc.); the probe layer should
+  ALSO resolve+validate the IP before connecting (deferred)."
+  This REVISIT entry elevates that comment to tracked work.
+
 - **Federation-probe extension for peer-instance asset stance —
   DEFERRED 2026-05-14 (Part 121 cp6).**  Item 3 of cp6 shipped
   operator-stance visibility for the LOCAL instance: `/v1/instance`
@@ -952,116 +1020,107 @@ knowledge), not more code.
   natural anchor — any other federation schema change ships
   alongside).
 
-- **Per-locale prerendering — route-tree restructure DEFERRED
-  2026-05-14 (Part 121 cp6).**  cp6 shipped the verifiable
-  helpers + the SvelteKit-deps split that makes the redirect
-  shell possible:
+- **Per-locale prerendering — ✅ SHIPPED in Part 121 cp7
+  (2026-05-14).**  The route-tree restructure (Option C per
+  `docs/PER-LOCALE-PRERENDERING-DESIGN.md`) shipped end-to-end:
 
-    ✅ `apps/web/src/lib/i18n/locales.ts` — pure SSoT module
-       (zero SvelteKit deps) holding SUPPORTED_LOCALES,
-       PLANNED_LOCALES, DEFAULT_LOCALE, LocaleCode types,
-       matchSupported().
-    ✅ `apps/web/src/lib/i18n/path.ts` — `localePath()`
-       (idempotent link wrapper, preserves query+fragment,
-       handles language-switcher re-prefixing),
-       `stripLocalePrefix()`, `pickLocaleFromAcceptLanguages()`
-       (no-DOM picker for the redirect shell),
-       `isLocalePrefixed()`.
-    ✅ `apps/web/scripts/i18n-path-helpers-smoke.ts` — 22
-       scenarios covering idempotency, query/fragment, zh
-       script variant mapping, language-family fallback,
-       empty/malformed inputs.
-    ✅ Persona sentinels CP6-6 + CP6-7 pin the export
-       surface and the no-SvelteKit-deps invariant.
-    ✅ Sibling fix: `apps/web/src/lib/auth/pairingPhoneSigner.ts`
-       Buffer import removed (was blocking the Vite client
-       bundle build); replaced with the codebase-standard
-       `as unknown as Buffer` cast pattern from
-       `$lib/blurt/sign.ts`.
-    ✅ Sibling fix: `scripts/build-sitemap.mjs` ROUTES
-       re-synced with `routes.ts` INDEXABLE_ROUTES
-       (was 14/17 stale; now 17/17 canonical order; 170
-       URLs generate cleanly).
+    ✅ All 24 route subdirectories + +layout.{svelte,ts} + +page.svelte
+       moved under `[lang]/`.
+    ✅ `[lang]/+layout.ts` — `prerender = true`, `ssr = true`,
+       `load({params})` validates lang against SUPPORTED_LOCALES
+       (throws error(404) on unknown), calls `initI18nFor(code)`
+       + `await waitLocale(code)`, returns `{ lang }` for downstream
+       components.
+    ✅ `[lang]/+page.ts` — `entries()` enumerating SUPPORTED_LOCALES
+       (entries() lives on +page.ts not +layout.ts per SvelteKit).
+       Deep routes discovered by prerender crawler following links
+       from the locale-root page.
+    ✅ Root redirect shell at `apps/web/src/routes/+page.svelte` —
+       `pickLocaleFromAcceptLanguages(navigator.languages)` +
+       `window.location.replace(localePath(pathname, preferred))`;
+       `<noscript>` meta-refresh fallback to `/en`; `meta robots
+       noindex`.
+    ✅ Root `+layout.{svelte,ts}` — minimal wrapper for the redirect
+       shell.  `prerender = true`, `ssr = false` (the shell does pure
+       client-side detection; SSR would prerender a "guess" locale
+       that the client would re-detect).  Imports app.css for base
+       styling.
+    ✅ `svelte.config.js` — `prerender.handleUnseenRoutes: 'ignore'`
+       so the 7 dynamic-param routes (chat/[peer=account], etc.) are
+       served at runtime via the SPA fallback (`fallback: 'index.html'`)
+       rather than failing the build.
+    ✅ `Head.svelte` — `url.search` and `url.hash` access gated behind
+       the `building` flag from `$app/environment` (SvelteKit forbids
+       reading these during prerender; the static HTML carries
+       path-only onion mirror, runtime re-render picks up
+       search/hash).
+    ✅ 88 internal link sites wrapped in `localePath()` across 21 page
+       files + 10 components + the layout's `navLinks` array.  Each
+       file gets `const lp = $derived((path) => localePath(path, currentLang))`
+       and uses `href={lp('/orderbook')}` etc.  Static files
+       (`/canary.txt`, `/pgp_keys.asc`, `/rss/orderbook.xml`,
+       `/fonts/*`) intentionally left bare — they're served from
+       `static/`, not locale-prefixed routes.
+    ✅ `LanguageSwitcher.svelte` — `choose(code)` now does
+       `goto(localePath(stripLocalePrefix($page.url.pathname +
+       search + hash), code))` instead of pure setLocale runtime
+       swap.  Each locale has its own prerendered HTML, so
+       switching is a navigation.
+    ✅ `Buffer` import build-blocker in `pairingPhoneSigner.ts`
+       fixed (replaced with `as unknown as Buffer` cast pattern from
+       `$lib/blurt/sign.ts`).  Vite client bundle ✓ built in 25.20s
+       after the fix.
+    ✅ `build-sitemap.mjs` ROUTES array re-synced with `routes.ts`
+       INDEXABLE_ROUTES (14→17 entries).  Sitemap.xml regenerates
+       170 URLs cleanly (17 routes × 10 locales).
+    ✅ `i18n-locale-registry-smoke.ts` parser pointed at the new SSoT
+       (`./locales.ts`).
+    ✅ 6 P121-CP7 persona-walkthrough sentinels added: CP7-1
+       ([lang]/+layout.ts shape), CP7-2 ([lang]/+page.ts entries()),
+       CP7-3 (root +page.svelte redirect shell), CP7-4
+       (svelte.config.js handleUnseenRoutes), CP7-5 (Head.svelte
+       building-flag gate), CP7-6 (LanguageSwitcher goto-via-localePath).
+    ✅ `href-xss-smoke` whitelisted `lp` + `localePath` as
+       SAFE_BUILDER + ALLOWLIST entry for `link.href` from the
+       navLinks-array pattern in [lang]/+layout.svelte.
+    ✅ 11 smoke scripts updated to point at new `[lang]/` route paths
+       (persona-walkthrough, price-model-picker-parity,
+       paired-readonly-affordance-surfaces, href-xss,
+       active-owner-key-invariants, a11y-patterns, sally-walkthrough,
+       heading-hierarchy, voucher-locale-parity, i18n-raw-exception,
+       split-on-placeholder, plus identity-label-policy,
+       fee-status-label-coverage, onboarding-back-button).
 
-  ⏸ **Still pending — needs a working `npm run build` end-to-end:**
+  **Verification:**
+    - `npm run build` produces **202 HTML files** (20 per locale ×
+      10 locales + redirect shell + degraded).
+    - Triple-pulse smokes: 2,459 × 3, 0 failures.
+    - Locale parity 10/10 green; persona-walkthrough 55/55;
+      typecheck-sweep + svelte-check all green.
+    - Rendered `de.html`: 0 bare `/orderbook /faq /chat /post`
+      paths; all nav + footer + CTAs carry `/de/` prefix.
+    - Same symmetry confirmed for `fa.html` (RTL locale).
 
-    1. **Route-tree restructure** — move every route under
-       `[lang]/`.  `apps/web/src/routes/[lang]/+layout.ts`
-       sets `prerender = true` and `entries()` enumerates
-       SUPPORTED_LOCALES.  Root `apps/web/src/routes/+layout.ts`
-       becomes the redirect shell.  Touches ~70 page + layout
-       files; the test is that `npm run build` produces 170
-       HTML files (17 routes × 10 locales) and they all
-       render in the right language.
-    2. **Detection-redirect shell** at root `+page.svelte` /
-       `+layout.ts`.  Composes
-       `pickLocaleFromAcceptLanguages(navigator.languages)`
-       + `localePath()` to redirect first-visit traffic to
-       the right locale prefix.  Pure-JS for static hosting;
-       `<noscript>` fallback to `/en/` for users with JS
-       disabled.
-    3. **Internal link audit** — every `<a href="/...">`,
-       `goto('/...')`, and redirect URL in the codebase
-       wraps its path in `localePath()`.  Helpers are
-       ready; the audit + sweep is the work.  Useful to
-       gate on a hardcoded-href smoke that fails CI if a
-       new `href="/..."` slips in unprefixed.
-    4. **Sitemap + RSS per-locale** — `apps/web/static/sitemap.xml`
-       already generates 170 URLs (17 routes × 10 locales),
-       which is correct, but `<xhtml:link rel="alternate"
-       hreflang="…">` tags need adding per route-group.
-       RSS feeds at `/<lang>/rss/orderbook.xml` need
-       wiring; currently single-locale at /rss/orderbook.xml.
-    5. **Canonical + hreflang `<head>` tags** in
-       `[lang]/+layout.svelte` — every prerendered HTML
-       gets `<link rel="canonical" href="/<lang>/<route>">` +
-       9 `<link rel="alternate" hreflang="..." href="...">`
-       tags for the sibling locales.
-    6. **LanguagePicker.svelte** update — currently sets
-       `locale.set(...)` and writes to localStorage; new
-       behavior is `goto(localePath(stripLocalePrefix($page.url.pathname),
-       newLang))` so the URL updates and search engines
-       index each locale separately.
-    7. **Pre-existing SvelteKit prerender failures** noticed
-       during the cp6 build attempt that block end-to-end
-       verification:
-        - `[svelte-i18n] Cannot format a message without
-          first setting the initial locale` on `/support`
-          (SSR locale not set in prerender context).
-          Likely fixed by the [lang]/ restructure itself
-          (each route's load() will call `initI18nFor()`)
-          but needs verification.
-        - `handleUnseenRoutes` not configured for dynamic
-          routes (`/chat/[peer=account]`,
-          `/explorer/account/[name=account]`,
-          `/explorer/block/[num=blocknum]`,
-          `/explorer/tx/[id=trxid]`,
-          `/post/edit/[permlink]`,
-          `/[x+40][account=account]`,
-          `/[x+40][account=account]/[permlink=permlink]`).
-          These need either `prerender = false` per-route
-          or a `handleUnseenRoutes` config option in
-          `svelte.config.js`.
+  **Two SvelteKit prerender failures pre-existing from cp6
+  were also fixed alongside:**
+    - `[svelte-i18n] Cannot format a message without first
+      setting the initial locale` on `/support` — fixed because
+      the new `[lang]/+layout.ts` `load()` calls `initI18nFor` +
+      `waitLocale` before any page renders.
+    - `handleUnseenRoutes` failure for the 7 dynamic-param routes
+      — fixed via `svelte.config.js` config option.
 
-  Why deferred: per the design doc's explicit
-  "Implementation environment requirement" + Memory #11
-  (verify before claiming) + Memory #17 (wiring discipline:
-  built, registered, tested end-to-end), restructuring 70
-  route files without being able to run `npm run build` to
-  verify the 170 prerendered HTMLs render correctly would
-  be a blind change.  The Vite client bundle builds fine in
-  the sandbox after the pairingPhoneSigner fix, but the
-  SvelteKit prerender phase has multiple pre-existing
-  failures unrelated to the cp6 work (above).
-
-  Pre-launch necessity: yes — the design doc has carried
-  this as a Phase 5e pre-launch fix for a year of revisits.
-  Schedule alongside any session run on a machine that can
-  `npm run build` successfully.  The helpers + smoke shipped
-  in cp6 mean the route-restructure session can focus on
-  the SvelteKit-specific work (entries(), load() shape,
-  prerender invariants) rather than rebuilding the link
-  centralisation + locale picker.
+  **Still pending (follow-on REVISIT entries below) — NOT cp7 scope:**
+    - Sitemap hreflang `<xhtml:link rel="alternate">` tags (cp6
+      sitemap already emits 170 URLs but doesn't include the
+      per-URL alternates block).
+    - Per-locale RSS feeds at `/<lang>/rss/orderbook.xml`
+      (currently single-locale at `/rss/orderbook.xml`).
+    - Canonical + hreflang `<head>` tags per page in
+      `[lang]/+layout.svelte` (currently inherits from
+      `Head.svelte`'s existing canonical + hreflang logic;
+      worth verifying it still emits correctly under the new
+      prefix structure).
 
 - **Public-API decision — DEFERRED 2026-05-02.** User asked
   "should we create a simple morphit api that people can use

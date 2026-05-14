@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * LoginQrInitiator (ADR-0022).
 	 *
@@ -194,11 +197,15 @@
 			// to render.  Cleared on unmount so a fast page-leave
 			// doesn't fire a navigation after we've gone.
 			const t = setTimeout(() => {
-				void goto('/orderbook');
+				void goto(lp('/orderbook'));
 			}, 1200);
 			return () => clearTimeout(t);
 		}
 	});
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 <section class="card mx-auto max-w-md">
@@ -265,7 +272,7 @@
 
 		<div class="mt-4 text-center">
 			<a
-				href="/login"
+				href={lp('/login')}
 				class="text-sm text-ink-500 underline hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
 			>
 				{$_('login_qr.cancel')}

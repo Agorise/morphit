@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -166,6 +168,10 @@
 		void query;
 		activeIndex = 0;
 	});
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 <section class="mx-auto w-full max-w-prose">
@@ -466,7 +472,7 @@
 
 	<footer class="mt-10 text-center text-sm text-ink-500 dark:text-ink-400">
 		<p>{$_('faq.still_need_help')}</p>
-		<button type="button" class="btn-secondary mt-3" onclick={() => goto('/support')}>
+		<button type="button" class="btn-secondary mt-3" onclick={() => goto(lp('/support'))}>
 			{$_('faq.contact_support')}
 		</button>
 	</footer>

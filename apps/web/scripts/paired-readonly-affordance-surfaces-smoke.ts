@@ -65,7 +65,7 @@ interface Scenario {
 const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '1 — /my/orders page-shell three-way branch (paired falls through, locked still blocks)',
-		file: 'src/routes/my/orders/+page.svelte',
+		file: 'src/routes/[lang]/my/orders/+page.svelte',
 		mustHave: [
 			"import { identity, isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity'",
 			"import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte'",
@@ -74,7 +74,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '2 — /my/orders inline feature_order affordance for paired users',
-		file: 'src/routes/my/orders/+page.svelte',
+		file: 'src/routes/[lang]/my/orders/+page.svelte',
 		mustHave: [
 			'{#if $isPairedReadOnly}',
 			'variant="feature_order"',
@@ -83,17 +83,17 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '3 — /my/orders inline feedback affordance for paired users (preserves permlink hash deep link)',
-		file: 'src/routes/my/orders/+page.svelte',
+		file: 'src/routes/[lang]/my/orders/+page.svelte',
 		mustHave: ['variant="feedback"', 'peer={blurtAccount}', 'orderPermlink={o.permlink}']
 	},
 	{
 		name: '4 — /my/orders inline cancel_order affordance for paired users',
-		file: 'src/routes/my/orders/+page.svelte',
+		file: 'src/routes/[lang]/my/orders/+page.svelte',
 		mustHave: ['variant="cancel_order"']
 	},
 	{
 		name: '5 — /post/edit/[permlink] paired-readonly affordance with permlink-preserving deep link',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			"import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte'",
 			"import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity'",
@@ -103,7 +103,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '6 — profile feedback_response affordance for paired users on own profile',
-		file: 'src/routes/[x+40][account=account]/+page.svelte',
+		file: 'src/routes/[lang]/[x+40][account=account]/+page.svelte',
 		mustHave: [
 			"import { isUnlocked, isPairedReadOnly } from '$stores/identity'",
 			'{#if isOwnProfile && fb.responses.length === 0}',
@@ -120,7 +120,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '7 — order-detail owner-actions affordance for paired users (edit + cancel, permlink preserved)',
-		file: 'src/routes/[x+40][account=account]/[permlink=permlink]/+page.svelte',
+		file: 'src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte',
 		mustHave: [
 			"import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte'",
 			"import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity'",
@@ -132,7 +132,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '8 — /orderbook fee-rejected recovery link widened to $hasAnySession',
-		file: 'src/routes/orderbook/+page.svelte',
+		file: 'src/routes/[lang]/orderbook/+page.svelte',
 		mustHave: [
 			"import { isUnlocked, hasAnySession } from '$stores/identity'",
 			'{#if $hasAnySession && viewerAccount !== null}'
@@ -147,7 +147,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '9 — /run-a-node operator_register three-way branch (signed-out / paired / unlocked)',
-		file: 'src/routes/run-a-node/+page.svelte',
+		file: 'src/routes/[lang]/run-a-node/+page.svelte',
 		mustHave: [
 			"import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte'",
 			"import { liveIdentity, isPairedReadOnly, hasAnySession } from '$stores/identity'",
@@ -165,7 +165,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '10 — +layout mobile-nav sign-in link widened to $hasAnySession',
-		file: 'src/routes/+layout.svelte',
+		file: 'src/routes/[lang]/+layout.svelte',
 		mustHave: [
 			"import { isUnlocked, hasAnySession, lockSession } from '$stores/identity'",
 			'{#if !$hasAnySession}'

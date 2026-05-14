@@ -1,10 +1,148 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 6)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 7)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp6-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp7-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp5-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp6-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp7 — what's shipped (per-locale prerendering route restructure END-TO-END + scoped deep-deep)
+
+### Pretext
+
+cp6 sealed with two items unblocked: (1) the per-locale prerendering route restructure was deferred to a working-build environment, (2) Ken asked whether to do a repo-wide deep-deep audit and accepted the recommendation to do the route restructure first + a scoped audit instead.  cp7 executed both.  Sandbox-bound for the duration; the cp6 Vite-bundle-builds-but-SvelteKit-prerender-fails state was actually addressable in-sandbox because the prerender failures were exactly what the restructure fixes (svelte-i18n SSR locale on /support; handleUnseenRoutes for 7 dynamic-param routes).
+
+### Per-locale prerendering route restructure — SHIPPED END-TO-END
+
+**File moves (24 route subdirs):** all of `[x+40][account=account]`, about-this-instance, backup-keys, chat, cheat-sheet, compare, dev, download, explorer, faq, glossary, instances, login, my, onboarding, operators, orderbook, plan, post, privacy-terms, run-a-node, scan-login, security, settings, support — moved from `apps/web/src/routes/` to `apps/web/src/routes/[lang]/`.  Plus the existing `+layout.{svelte,ts}` and `+page.svelte`.
+
+**New files:**
+- `apps/web/src/routes/+page.svelte` — detection-redirect shell using `pickLocaleFromAcceptLanguages(navigator.languages)` from cp6's path.ts + `window.location.replace(localePath(...))`.  Minimal "Loading…" placeholder content (svelte-i18n NOT loaded — keeps the shell tiny).  `<noscript>` meta-refresh fallback to /en for JS-disabled clients.  `meta robots noindex` so the bare / doesn't compete with `/en/`, `/de/`, etc. in search rankings.
+- `apps/web/src/routes/+layout.ts` — `prerender = true`, `ssr = false`, `trailingSlash = 'never'`.  Redirect shell is pure client-side JS, no SSR locale guess.
+- `apps/web/src/routes/+layout.svelte` — minimal wrapper (snippet pattern: `let { children }: Props = $props(); {@render children()}`).  Imports `../app.css` for base typography.  NO nav, NO banners, NO i18n — those live under [lang]/.
+- `apps/web/src/routes/[lang]/+layout.ts` — `prerender = true`, `ssr = true`, `trailingSlash = 'never'`, `load({params})` validates `params.lang` against SUPPORTED_LOCALES (throws error(404) on unknown), calls `initI18nFor(code)` + `await waitLocale(code)`, returns `{ lang: code }`.
+- `apps/web/src/routes/[lang]/+page.ts` — `entries()` returning `SUPPORTED_LOCALES.map((l) => ({ lang: l.code }))`.  Lives on +page.ts not +layout.ts per SvelteKit constraint ("Invalid export 'entries' in src/routes/[lang]/+layout.ts ('entries' is a valid export in +page.ts, +page.server.ts or +server.ts)").  10 locale-root entries; deep pages discovered by crawler.
+
+**Configuration:**
+- `apps/web/svelte.config.js` — added `prerender.handleUnseenRoutes: 'ignore'` so the 7 dynamic-param routes (chat/[peer=account], explorer/account/[name=account], explorer/block/[num=blocknum], explorer/tx/[id=trxid], post/edit/[permlink], [x+40][account=account], [x+40][account=account]/[permlink=permlink]) are served at runtime via the SPA fallback (`fallback: 'index.html'`) rather than failing the build.
+
+**Build-blocker fix in Head.svelte:** added `import { building } from '$app/environment'`; gated `$page.url.search` + `$page.url.hash` reads in the onionLocation $derived behind `building ? '' : $page.url.search` (SvelteKit forbids reading url.search/hash during prerender; an empty string is the right default for static HTML since query/hash are runtime values).  Static prerendered HTML correctly carries path-only onion mirror; client-side re-render after hydration picks up real search/hash.
+
+**Link sweep — 88 sites wrapped in `localePath()`:** bulk python-regex sweep across (a) [lang]/+layout.svelte primary nav + mobile nav (manually-targeted after the regex missed them because they're in a navLinks data array, not literal href= attributes) — fixed via wrapping `lp('/orderbook')` etc. in the array itself; (b) 55 link sites across 21 page files (orderbook, faq, post, my/orders, operators, chat, settings, about-this-instance, run-a-node, support, login, onboarding, [x+40][account=account], download, backup-keys, explorer/{,activity,account,block,tx}); (c) 20 link sites across 10 components (FaqSearch, AvatarMenu, ChatMessage, FirstPostStarterPack, FirstTradeHelper, LoginQrInitiator, MyBalanceCard, SeedBackupNudge, Term, WelcomeFirstBuyHero).  Static files (`/canary.txt`, `/pgp_keys.asc`, `/rss/orderbook.xml`, `/fonts/*`) intentionally left bare — they're served from `static/`, not locale-prefixed routes.  Each touched file got: `import { localePath } from '$i18n/path'` + `import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales'` + `const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode); const lp = $derived((path: string) => localePath(path, currentLang));`.
+
+**LanguageSwitcher rewired:** `choose(code)` now does `goto(localePath(stripLocalePrefix($page.url.pathname + search + hash), code))` instead of pure setLocale runtime swap.  Each locale has its own prerendered HTML so switching is a navigation; setLocale() is still called so the localStorage preference updates for next visit's redirect-shell detection on the bare /.
+
+**FaqSearch LocaleCode dedupe:** my python script blindly added `import { ..., type LocaleCode } from '$i18n/locales'` to a file that already imported LocaleCode from `$i18n`.  Resolved by removing LocaleCode from the new `$i18n/locales` import line, keeping it from `$i18n` (which re-exports from `./locales` anyway since cp6).
+
+**P121-CP7 persona-walkthrough sentinels (6 new):**
+- CP7-1: [lang]/+layout.ts has prerender=true, ssr=true, initI18nFor, waitLocale, error(404)
+- CP7-2: [lang]/+page.ts has entries() returning SUPPORTED_LOCALES.map (the SvelteKit "entries must live on +page" invariant)
+- CP7-3: root +page.svelte has pickLocaleFromAcceptLanguages + navigator.languages + window.location.replace + noscript meta-refresh
+- CP7-4: svelte.config.js has handleUnseenRoutes:'ignore'
+- CP7-5: Head.svelte imports building flag and gates url.search/url.hash behind it
+- CP7-6: LanguageSwitcher uses localePath + stripLocalePrefix + goto(target)
+
+**Smoke script updates (11 files):** All hardcoded `apps/web/src/routes/<route>/+page.svelte` references updated to `apps/web/src/routes/[lang]/<route>/+page.svelte` via bulk python sweep.  Plus the relative-form `'src/routes/<route>/...'` and `'routes/<route>/...'` (path.join form) variants.  Plus the root-layout reference (`'apps/web/src/routes/+layout.svelte'` is now the redirect shell; the cp6-functionality layout is at `[lang]/+layout.svelte`).  Files updated: persona-walkthrough, price-model-picker-parity, paired-readonly-affordance-surfaces, href-xss, active-owner-key-invariants, a11y-patterns, sally-walkthrough, identity-label-policy, fee-status-label-coverage, onboarding-back-button, heading-hierarchy, voucher-locale-parity, i18n-raw-exception, split-on-placeholder + usdt-network-picker-required (in packages/asset-registry/scripts/).
+
+**href-xss-smoke updated:** added `lp` and `localePath` to SAFE_BUILDER_NAMES (path arguments are literals authored at call sites; localePath itself returns `/lang/...` form, never reflecting attacker-controlled values).  ALLOWLIST_HREF_EXPR entry for [lang]/+layout.svelte → `link.href` (the navLinks array's href field is constructed via lp() at array-build time; the template reading `link.href` can't be traced back to lp() by the smoke's call-detection regex).
+
+### Scoped deep-deep — Items #2 + #3 (audit findings)
+
+**#2 federation-probe surface (apps/indexer/src/indexer/federationProbe.ts, 616 LOC):** Well-hardened.  Defense-in-depth at registration time (operatorRegister.ts) + at fetch time (federationProbe.ts).  HTTPS-only, comprehensive private-network deny list (RFC 1918, link-local 169.254/16, loopback, IPv6 unique-local fc00::/7, IPv6 link-local fe80::/10, cloud metadata 169.254.169.254 + metadata.google.internal, .local/.localhost/.internal TLDs).  `redirect: 'manual'` prevents redirect-based bypass.  256KB response cap with Content-Length pre-check AND streaming-with-abort fallback.  AbortController timeout.  Identifying user-agent.  **One known gap:** DNS rebinding — attacker registers `evil.example.com` resolving to public IP at registration, controls DNS to flip to internal IP at probe time.  Damage bound by existing defense-in-depth (information disclosure / DoS only — no exfiltration, no RCE, GET-only, 256KB cap).  Inline comment at operatorRegister.ts:223 already acknowledges the gap.  **New REVISIT §A entry filed** elevating that comment to tracked work (complete fix: DNS resolve + per-A/AAAA IP-class validation + connect to resolved IP via custom undici Dispatcher; ~half-day work + smoke coverage).
+
+**#2 SQL/DB layer (apps/indexer/src/db/schema.sql, 2,135 LOC, 33 tables):** All 33 tables have PK or UNIQUE constraint coverage (verified by python regex over the CREATE TABLE blocks).  45 CHECK constraints (state-enum enforcement: orders.status, orders.side, feedback.rating, fee_method, fee_status, accounts.kind, suspicious_reciprocity.account_a/b ordering, etc.).  212 NOT NULL columns.  36 DEFAULT clauses.  Identifier interpolation in template-literal queries (SAVEPOINT ${name}, ROLLBACK TO SAVEPOINT ${name}) is either hardcoded const strings (feedback.ts: 'welcome_bonus_sp', loyalty.ts: 'first_fee_welcome_sp') or integer-validated values (dispatcher.ts: Number.isInteger check before constructing 'op_${trxInBlock}_${opInTrx}').  No SQL injection vectors via string concat.  fee_method CHECK constraint = ('blurt', 'waived_first_buy', 'btc', 'xmr') — correctly excludes USDT per Memory #23 (DB-level enforcement of trade-only USDT confirmed).  FK count is sparse (6 references across 33 tables) — intentional pattern: rows are chain-derived materializations, FK against chain-derived state would risk rejecting valid chain history if rows arrive out of order or an indexer skipped a block.  Validation happens at handler time, not via FK.
+
+**#2 HTTP/API surface (apps/indexer/src/api/*.ts, 38 endpoints, 6,188 LOC + apps/relay/src/api/*.ts, 4 POST endpoints):**  Indexer: complex multi-param shapes (orderbook with 8 params + cursor; conversations; chatStream) use zod `safeParse`.  Simple single-param endpoints use targeted predicates (`isAccountName(account)` + explicit enum equality for `phase`).  Equivalent safety, idiomatic Hono pattern.  Relay: all 4 POST endpoints use `requestSchema.safeParse(body)` (availability.ts, create.ts, invite.ts) — zod-validated.  Health.ts has no body.  8 policy modules totaling ~2,000 LOC for layered defenses: ALTCHA proof-of-work, clock skew check, global daily ceiling (TOCTOU-aware: reservedCount + count to bound concurrent overshoot to N-1), high-value-name reservation, invite tokens, kill-switch (shipped in earlier part per memory), name validation, sequential-account detector.  CORS exact-match origin allowlist (no wildcards).  Security middleware: X-Content-Type-Options nosniff, Referrer-Policy no-referrer, X-Frame-Options DENY, Permissions-Policy interest-cohort=().  Body size cap with Transfer-Encoding chunked rejection on POST/PUT/PATCH (411).  No findings.
+
+**#2 Operator-trust threat model (docs/OPERATOR-TRUST-DESIGN.md + frontend banners):** Three-tier model (selfish / censoring / lying) fully addressed.  Tier 1 (selfish operator using BLURT fees instead of treasury split): on-chain fee-method enum is observable.  Tier 2 (censoring operator hiding orders): federation surfaces peer-instance orders read-only; users can self-route via /about-this-instance (cp6 work).  Tier 3 (lying operator serving tampered HTML/JS): TamperAlertBanner verifies bundle bytes against chain-signed manifest with non-dismissible red banner on mismatch; pubkey_mismatch and invalid_payload cases also covered.  StaleBuildBanner warns on stale bundles.  UpdateBanner surfaces voluntary updates.  Operator registration (ADR-0013, shipped 2026-05-02) puts operator account/origin on-chain.  Chat E2EE invariant explicit in handler (chat.ts:23-24): "decrypting would be both useless (it's encrypted) and a privacy violation of the E2EE guarantee" — pattern is intentional and enforced.  No findings.
+
+**#3 cp6 self-audit:** (a) i18n module refactor — `locales.ts` zero imports verified (pure SSoT, no SvelteKit deps); 11-scenario adversarial smoke added (`apps/web/scripts/path-adversarial-smoke.ts`) covering path traversal, protocol-relative URLs, stacked locale prefix, javascript: pseudo-protocol in Accept-Language, q-value tags, whitespace-padded tags, long pref list, idempotent strip — all 11 pass.  Path traversal (`/orderbook/../faq`) produces `/es/orderbook/../faq` which SvelteKit's router normalizes at routing time (locale prefix preserved).  Protocol-relative URL (`//evil.com/path`) produces `/es//evil.com/path` — leading `/es/` prevents browser protocol-relative interpretation.  (b) disabled_assets end-to-end plumbing — env `MORPHIT_INDEXER_DISABLED_ASSETS` → zod parser → `config.disabledAssets` → order-handler reject with `'asset_disabled_on_instance'` AND /v1/instance exposure → indexer-client mirror (optional, back-compat) → frontend instance store with [] fallback → 4 render sites consume `$instance.disabled_assets`.  No type mismatches.  (c) REVISIT-LIST §A scope check — found one stale entry: "Per-locale prerendering — route-tree restructure DEFERRED 2026-05-14" replaced with ✅ SHIPPED summary listing every cp7 file change.  Federation-probe extension entry remains correctly DEFERRED (peer-instance disabled_assets badge on /operators still requires v33 migration + probe-handler extension).
+
+**New adversarial smoke registered + sentinel coverage extended:** path-adversarial-smoke registered in scripts/run-smokes.sh.  Triple-pulse stable.
+
+### Verification
+
+- **`npm run build` produces 202 HTML files** (20 per locale × 10 locales = 200, plus index.html redirect shell + degraded.html fallback).  Perfect symmetry across all 10 locales including RTL (fa).
+- Rendered `de.html`: 0 bare `/orderbook`, `/faq`, `/chat`, `/post` paths; all nav + footer + CTAs carry `/de/` prefix.
+- Same verification for `fa.html` (RTL): all 10 expected `/fa/<route>` link prefixes present.
+- **Triple-pulse `bash scripts/run-smokes.sh`: 2,470 scenarios green × 3, 0 failures.**  cp6 baseline 2,449 → cp7 baseline 2,470 (+21 = 6 CP7-1..6 persona sentinels + 11 adversarial smoke + 4 from other registrations clearing up after the route-restructure path updates).
+- Locale parity: 10/10 green at 2,511 keys × 10 (unchanged from cp6).
+- Translation-completeness: 4/4 green.
+- Key-coverage: 1,838 static + 24 dynamic resolve.
+- Persona-walkthrough: 55/55 green (was 49; +6 P121-CP7 sentinels).
+- svelte-check: 0 errors, 1 pre-existing warning (FundsSentModal:83, unrelated).
+- Typecheck sweep: indexer (src + test), relay (src + test), ops-cli, indexer-client, operator-config, asset-registry all 0 errors.
+- All cp3/cp4/cp5/cp6 invariants preserved: fee-method-enum-frozen 7/7, first-buy-waiver-payment-agnostic 6/6, usdt-trade-only 11/11, usdt-network-picker-required 9/9, disabled-assets-parse 12/12, reserved-keys-parity green, i18n-locale-parity 10/10 (svelte-check-aware), i18n-path-helpers 22/22, persona-walkthrough 55/55.
+
+### Files modified this turn (cp7)
+
+```
+# Route restructure — file moves
+apps/web/src/routes/  →  apps/web/src/routes/[lang]/  (24 subdirs + 3 files)
+
+# Root redirect shell (NEW)
+apps/web/src/routes/+page.svelte (NEW — detection redirect)
+apps/web/src/routes/+layout.ts (NEW — prerender=true ssr=false)
+apps/web/src/routes/+layout.svelte (NEW — minimal wrapper)
+
+# [lang]/ subtree config (NEW)
+apps/web/src/routes/[lang]/+layout.ts (NEW — prerender + ssr + load with initI18nFor)
+apps/web/src/routes/[lang]/+page.ts (NEW — entries())
+
+# Configuration
+apps/web/svelte.config.js (handleUnseenRoutes:'ignore')
+
+# Build-blocker fixes
+apps/web/src/lib/components/Head.svelte (building-flag gate on url.search/hash)
+
+# Link sweep (88 sites across 31 files)
+apps/web/src/routes/[lang]/+layout.svelte (navLinks array + 13 footer/CTA sites + lp helper + imports)
+apps/web/src/routes/[lang]/+page.svelte (3 sites + lp helper + imports)
+apps/web/src/routes/[lang]/post/+page.svelte (1 site)
+apps/web/src/routes/[lang]/explorer/{,activity,account,block,tx}/+page.svelte (5 sites)
+apps/web/src/routes/[lang]/my/orders/+page.svelte (6 sites)
+apps/web/src/routes/[lang]/operators/+page.svelte (3 sites)
+apps/web/src/routes/[lang]/chat/+page.svelte (2 sites)
+apps/web/src/routes/[lang]/settings/+page.svelte (1 site)
+apps/web/src/routes/[lang]/about-this-instance/+page.svelte (2 sites)
+apps/web/src/routes/[lang]/orderbook/+page.svelte (3 sites)
+apps/web/src/routes/[lang]/run-a-node/+page.svelte (3 sites)
+apps/web/src/routes/[lang]/support/+page.svelte (4 sites)
+apps/web/src/routes/[lang]/login/+page.svelte (4 sites)
+apps/web/src/routes/[lang]/onboarding/+page.svelte (1 site)
+apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte (1 site)
+apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte (4 sites)
+apps/web/src/routes/[lang]/download/+page.svelte (8 sites)
+apps/web/src/routes/[lang]/backup-keys/+page.svelte (3 sites)
+apps/web/src/lib/components/{FaqSearch,AvatarMenu,ChatMessage,FirstPostStarterPack,FirstTradeHelper,LoginQrInitiator,MyBalanceCard,SeedBackupNudge,Term,WelcomeFirstBuyHero}.svelte (20 sites)
+apps/web/src/lib/components/LanguageSwitcher.svelte (rewired to goto-via-localePath)
+
+# Audit + smoke coverage
+apps/web/scripts/path-adversarial-smoke.ts (NEW — 11 adversarial scenarios)
+apps/web/scripts/persona-walkthrough-smoke.ts (+6 CP7 sentinels + docblock)
+apps/web/scripts/href-xss-smoke.ts (lp/localePath whitelist + link.href allowlist)
+apps/web/scripts/{a11y-patterns,active-owner-key-invariants,fee-status-label-coverage,heading-hierarchy,i18n-raw-exception,identity-label-policy,onboarding-back-button,paired-readonly-affordance-surfaces,price-model-picker-parity,sally-walkthrough,split-on-placeholder,voucher-locale-parity}-smoke.ts (paths updated to [lang]/)
+packages/asset-registry/scripts/usdt-network-picker-required-smoke.ts (path updated)
+scripts/run-smokes.sh (registered path-adversarial-smoke)
+
+# Docs
+docs/REVISIT-LIST.md (cp7 maintained-line + stale Per-locale-prerendering DEFERRED → SHIPPED summary + new DNS-rebinding §A entry)
+docs/AUDIT-2026-05.md (Part 121 cp7 entry)
+TARBALL.md (this entry)
+MORPHIT-BRAG-LIST.md (no-FOUC entry + footer bump)
+```
+
+49 files modified (excluding the 24 route-subdir moves which are physical relocations not content edits).
+
+### Pattern lessons from cp7
+
+1. **"Can't run npm run build" was actually a more precise constraint than I'd internalized.** The Vite client bundle DOES build cleanly after cp6's pairingPhoneSigner Buffer fix; only the SvelteKit prerender phase fails, and the failures are EXACTLY what the route restructure addresses (svelte-i18n SSR locale needs initI18nFor before render; handleUnseenRoutes config for dynamic routes).  cp7 attempted the build with that precise understanding and the route restructure unblocked itself.  Lesson: when a doc says "needs a working build," characterize WHICH build phase actually fails and WHY before deferring.
+2. **entries() lives on +page.ts not +layout.ts.**  SvelteKit-specific gotcha that the design doc didn't capture.  The error message is explicit ("Invalid export 'entries' in src/routes/[lang]/+layout.ts ('entries' is a valid export in +page.ts, +page.server.ts or +server.ts)") so the fix was 5 minutes once it surfaced.  Documented in [lang]/+layout.ts's docblock + the CP7-2 persona sentinel.
+3. **url.search / url.hash forbidden during prerender — use building flag.**  Same class of "can't be known at build time" as SvelteKit's existing forbidden APIs (fetch, navigator, document).  The fix is the same pattern as fetch's `if (browser)` gate: import `building` from `$app/environment`, ternary it.  Once internalized this is mechanical, but it's a real footgun for components that work fine in CSR but fail at prerender time.
+4. **Bulk python regex sweep works but has known gaps:** (a) inside `{#each}` blocks iterating over a data array, my regex looked for `href="/orderbook"` literal but the actual template was `href={item.path}` with the literal in the array constructor — fixed by patching the array constructor directly; (b) duplicate-import collision when a target file already imports the same symbol from a different path (FaqSearch had LocaleCode from `$i18n`; my script added it again from `$i18n/locales`) — fixed by deduping after the sweep; (c) comments containing the matched pattern can false-positive sentinels (CP6-7's `mustNotHave: ["$app/environment"]` matched my own module-doc; the lp-href comment in [lang]/+layout.svelte matched href-xss-smoke's pattern).  Future bulk sweeps should run a post-pass to verify no collisions or comment matches.
+5. **Refactor pre-existing build-blockers BEFORE attempting the actual restructure.**  pairingPhoneSigner's Buffer fix was cp6 work; without it cp7's build would have failed at the Vite stage and the SvelteKit prerender failures would never have surfaced.  cp6's "ship the helpers + fix the blocker" partial was prerequisite work even though it looked like a smaller scope at the time.  Pattern: the right cp-cycle for a complex feature is N-1 to clear blockers + ship verifiable pieces, then N to do the actual restructure with build verification.
+
+---
 
 ## Part 121 cp6 — what's shipped (three-item plow-through)
 

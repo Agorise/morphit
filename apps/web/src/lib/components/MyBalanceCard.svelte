@@ -28,6 +28,9 @@
 	already on chain.
 -->
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
@@ -157,7 +160,7 @@
 				reason: 'topup'
 			})
 		);
-		void goto('/post');
+		void goto(lp('/post'));
 	}
 
 	// ─── P&L export ───────────────────────────────────────────────
@@ -348,6 +351,10 @@
 		Number.isFinite(blurtBalance) && blurtBalance < LOW_BLURT_THRESHOLD
 	);
 	const showLowManaHint = $derived(Number.isFinite(manaPct) && manaPct < LOW_MANA_THRESHOLD);
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 <section

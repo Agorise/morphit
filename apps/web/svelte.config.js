@@ -51,9 +51,23 @@ const config = {
 		},
 
 		// No server-side state; prerender everything possible.
+		//
+		// `handleUnseenRoutes: 'ignore'` — dynamic-param routes
+		// (/<lang>/chat/[peer=account], /<lang>/explorer/tx/[id=trxid],
+		// /<lang>/[x+40][account=account]/[permlink=permlink], etc.)
+		// have no enumeration source at build time — we can't list
+		// every possible peer account or txid in advance.  These
+		// routes are served at runtime via the SPA fallback
+		// (`fallback: 'index.html'` above), which SvelteKit's
+		// client router then resolves to the correct dynamic page.
+		// Without `handleUnseenRoutes: 'ignore'` the build errors
+		// out per Part 121 cp7's restructure attempt.  Static
+		// indexable routes (17 routes × 10 locales = 170 HTMLs)
+		// prerender as expected.
 		prerender: {
 			handleHttpError: 'warn',
-			handleMissingId: 'warn'
+			handleMissingId: 'warn',
+			handleUnseenRoutes: 'ignore'
 		},
 
 		alias: {

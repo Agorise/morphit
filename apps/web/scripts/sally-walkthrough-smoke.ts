@@ -56,7 +56,7 @@ interface Scenario {
 const SCENARIOS: readonly Scenario[] = [
 	{
 		name: 'H1 — onboarding/import retains password on user-input errors',
-		file: 'src/routes/onboarding/import/+page.svelte',
+		file: 'src/routes/[lang]/onboarding/import/+page.svelte',
 		mustHave: ['Sally finding H1', "verdict.kind === 'wrong-role'"],
 		// Pre-fix the wrong-role / account-not-found branches each
 		// reset both password fields.  Verify those resets are gone.
@@ -66,12 +66,12 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'H2 — import flow writes session flag for settings banner',
-		file: 'src/routes/onboarding/import/+page.svelte',
+		file: 'src/routes/[lang]/onboarding/import/+page.svelte',
 		mustHave: ['Sally finding H2', 'morphit.import.needs_account_name']
 	},
 	{
 		name: 'H2 — settings reads-and-clears the import banner flag',
-		file: 'src/routes/settings/+page.svelte',
+		file: 'src/routes/[lang]/settings/+page.svelte',
 		mustHave: [
 			'morphit.import.needs_account_name',
 			'needsAccountNameBanner',
@@ -80,7 +80,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'H4 — orderbook shows needs-account banner when unlocked but unregistered',
-		file: 'src/routes/orderbook/+page.svelte',
+		file: 'src/routes/[lang]/orderbook/+page.svelte',
 		mustHave: [
 			'Sally finding H4',
 			'orderbook.needs_account.title',
@@ -89,13 +89,13 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'H4 — orderbook viewerAccount is reactive ($derived), not const',
-		file: 'src/routes/orderbook/+page.svelte',
+		file: 'src/routes/[lang]/orderbook/+page.svelte',
 		mustHave: ['const viewerAccount = $derived.by'],
 		mustNotHave: ['const viewerAccount: string | null = getUserBlurtAccount();']
 	},
 	{
 		name: 'H6 — backup-keys has show-seed flow with password gate',
-		file: 'src/routes/backup-keys/+page.svelte',
+		file: 'src/routes/[lang]/backup-keys/+page.svelte',
 		mustHave: [
 			'Sally finding H6',
 			'backup_keys.show_seed.heading',
@@ -109,7 +109,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'H7 — /support is a real page, not a one-card bounce to /faq',
-		file: 'src/routes/support/+page.svelte',
+		file: 'src/routes/[lang]/support/+page.svelte',
 		mustHave: [
 			'support.heading',
 			'support.faq.heading',
@@ -138,12 +138,12 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'H9 — per-order syndicate checkbox has selling-point pitch',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: ['syndicate.opt_in_pitch']
 	},
 	{
 		name: 'L8 — /post redacts private keys from region + payment-method entries',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			'Sally finding L8',
 			'redactPrivateKeys(region.trim())',
@@ -152,12 +152,12 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'M3 — waiver asset-locked hint renders ABOVE the chip row',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: ['Sally finding M3', 'post_order.form.waiver_asset_hint']
 	},
 	{
 		name: 'M9 — /explorer/account uses backoff, not naive setInterval',
-		file: 'src/routes/explorer/account/[name=account]/+page.svelte',
+		file: 'src/routes/[lang]/explorer/account/[name=account]/+page.svelte',
 		mustHave: ['Sally finding M9', 'POLL_MS_BASE', 'POLL_MS_MAX', 'currentPollMs'],
 		mustNotHave: [
 			"setInterval(() => {\n\t\t\tif (typeof document !== 'undefined' && document.hidden) return;"
@@ -165,7 +165,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'M12 — /instances pins current instance to top of list',
-		file: 'src/routes/instances/+page.svelte',
+		file: 'src/routes/[lang]/instances/+page.svelte',
 		mustHave: ['Sally finding M12', 'if (aIsCurrent && !bIsCurrent) return -1']
 	},
 	{
@@ -181,7 +181,7 @@ const SCENARIOS: readonly Scenario[] = [
 	// ─── Part 69 second-pass scenarios ─────────────────────────────
 	{
 		name: 'DL1 — /download direct-APK link no longer points at /morphit.apk',
-		file: 'src/routes/download/+page.svelte',
+		file: 'src/routes/[lang]/download/+page.svelte',
 		mustHave: ['Sally finding DL1', 'https://git.agorise.net/agorise/morphit/releases'],
 		// Pre-Part-69 the direct-download went to /morphit.apk on
 		// the local origin — 404 on every instance that didn't
@@ -190,7 +190,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'RAN2 — /run-a-node uses Forgejo URL syntax (not GitLab /-/blob/)',
-		file: 'src/routes/run-a-node/+page.svelte',
+		file: 'src/routes/[lang]/run-a-node/+page.svelte',
 		mustHave: [
 			'Sally finding RAN2',
 			'git.agorise.net/agorise/morphit/src/branch/main/docs/RUN-A-MORPHIT-NODE.md',
@@ -200,7 +200,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'ATI1 — /about-this-instance warns "type don\'t click" for known-good URLs',
-		file: 'src/routes/about-this-instance/+page.svelte',
+		file: 'src/routes/[lang]/about-this-instance/+page.svelte',
 		mustHave: [
 			'Sally finding ATI1',
 			'about_this_instance.worried.type_warning_heading',
@@ -211,12 +211,12 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'CMP1 — /compare offers re-run without retyping URL',
-		file: 'src/routes/compare/+page.svelte',
+		file: 'src/routes/[lang]/compare/+page.svelte',
 		mustHave: ['Sally finding CMP1', 'compare.button.rerun']
 	},
 	{
 		name: 'CMP2 — /compare order references are clickable links',
-		file: 'src/routes/compare/+page.svelte',
+		file: 'src/routes/[lang]/compare/+page.svelte',
 		mustHave: [
 			'Sally finding CMP2',
 			'`/@${o.account}/${o.permlink}`',
@@ -230,12 +230,12 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: "H3 — voucher path warns user they're leaving Morphit + plain-text fallback",
-		file: 'src/routes/onboarding/register-name/+page.svelte',
+		file: 'src/routes/[lang]/onboarding/register-name/+page.svelte',
 		mustHave: ['Sally finding H3 follow-up', 'daily_ceiling_voucher_external_warning']
 	},
 	{
 		name: 'OPS2 — /operators inline validateContactUrl documented as intentional',
-		file: 'src/routes/operators/+page.svelte',
+		file: 'src/routes/[lang]/operators/+page.svelte',
 		mustHave: [
 			'Sally finding OPS2',
 			// Confirm the inline helper still https-only (stricter

@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { SUPPORTED_LOCALES, currentLocale, setLocale, type LocaleCode } from '$i18n';
+	import { localePath, stripLocalePrefix } from '$i18n/path';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	let open = $state(false);
 	let buttonEl: HTMLButtonElement;
@@ -11,9 +14,30 @@
 	);
 
 	async function choose(code: LocaleCode): Promise<void> {
+		// Part 121 cp7 — language switch is now a navigation, not
+		// a runtime locale swap.  Each locale has its own
+		// prerendered HTML at `/<lang>/<route>`, so switching
+		// requires navigating to the equivalent path under the
+		// new prefix.
+		//
+		// stripLocalePrefix + localePath together compose the
+		// "same page, different locale" URL:
+		//   /es/orderbook?asset=BTC#row-3
+		//     → stripLocalePrefix → /orderbook?asset=BTC#row-3
+		//     → localePath(_, 'pl') → /pl/orderbook?asset=BTC#row-3
+		// Query strings and fragments are preserved.
+		//
+		// We still call setLocale() so the localStorage preference
+		// updates immediately (for next visit's redirect-shell
+		// detection on the bare /).  The navigation itself triggers
+		// the [lang]/+layout.ts load() which re-runs initI18nFor
+		// for the destination locale.
+		const currentPath = $page.url.pathname + $page.url.search + $page.url.hash;
+		const target = localePath(stripLocalePrefix(currentPath), code);
 		await setLocale(code);
 		open = false;
 		buttonEl?.focus();
+		await goto(target);
 	}
 
 	function handleKeydown(e: KeyboardEvent): void {

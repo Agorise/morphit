@@ -2,7 +2,7 @@
  * Voucher-path placeholder-integrity smoke.
  *
  * The daily-ceiling voucher UI in
- * apps/web/src/routes/onboarding/register-name/+page.svelte
+ * apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte
  * relies on {matrix_open}…{matrix_close} and
  * {plugin_open}…{plugin_close} placeholder pairs in two
  * specific i18n keys:

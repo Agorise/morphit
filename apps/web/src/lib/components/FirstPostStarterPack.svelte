@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * FirstPostStarterPack — surfaces a green-tinted explainer
 	 * card at the top of /post the first time a user is about
@@ -131,6 +134,10 @@
 			}
 		})();
 	});
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 {#if loaded && visible}
@@ -179,7 +186,7 @@
 		</ul>
 		<p class="mt-3 text-xs text-ink-500 dark:text-ink-500">
 			<a
-				href="/faq#how_to_trade_walkthrough"
+				href={lp('/faq#how_to_trade_walkthrough')}
 				class="underline hover:text-morphit-emerald"
 			>
 				{$_('first_post_starter.faq_link')}

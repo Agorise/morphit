@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * AvatarMenu — the top-right avatar-with-badge + dropdown.
 	 *
@@ -115,12 +118,12 @@
 
 	function goToPostOrder(): void {
 		close();
-		void goto('/post');
+		void goto(lp('/post'));
 	}
 
 	function goToOrders(): void {
 		close();
-		void goto('/my/orders');
+		void goto(lp('/my/orders'));
 	}
 
 	function goToMyProfile(): void {
@@ -141,22 +144,22 @@
 		// all profile fields (display name, Blurt.media URL, Nostr URL)
 		// live. If/when a dedicated /profile/edit route ships, this
 		// changes to point at it directly.
-		void goto('/settings#display-name-heading');
+		void goto(lp('/settings#display-name-heading'));
 	}
 
 	function goToBackupKeys(): void {
 		close();
-		void goto('/backup-keys');
+		void goto(lp('/backup-keys'));
 	}
 
 	function goToSettings(): void {
 		close();
-		void goto('/settings');
+		void goto(lp('/settings'));
 	}
 
 	function goToSupport(): void {
 		close();
-		void goto('/support');
+		void goto(lp('/support'));
 	}
 
 	/** User clicked Sign Out — close the menu and raise the
@@ -205,7 +208,7 @@
 		showLockConfirm = false;
 		runExplicitLockExtras();
 		lockSession();
-		await goto('/login');
+		await goto(lp('/login'));
 	}
 
 	function cancelLock(): void {
@@ -236,6 +239,10 @@
 			document.removeEventListener('keydown', onKey);
 		};
 	});
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 {#if $hasAnySession}
@@ -411,7 +418,7 @@
 
 					<div class="border-t border-ink-100 p-3 text-center dark:border-ink-800">
 						<a
-							href="/settings#notifications"
+							href={lp('/settings#notifications')}
 							onclick={close}
 							class="text-xs font-semibold text-morphit-emerald hover:underline"
 						>
@@ -816,7 +823,7 @@
 	     larger CTA below as the canonical mobile entry point, but
 	     having the header CTA visible too means users tapping the
 	     avatar slot get a deterministic "do this to sign in" target. -->
-	<a href="/login" class="btn-primary btn-shine inline-flex text-sm">
+	<a href={lp('/login')} class="btn-primary btn-shine inline-flex text-sm">
 		{$_('nav.login_register')}
 	</a>
 {/if}

@@ -197,7 +197,7 @@ function checkPasswordClearAtCallSites(): void {
 		path.join(APP_WEB_SRC, 'lib/components/FeatureBidForm.svelte'),
 		path.join(APP_WEB_SRC, 'lib/components/PayBlurtModal.svelte'),
 		path.join(APP_WEB_SRC, 'lib/components/StrangerFeeModal.svelte'),
-		path.join(APP_WEB_SRC, 'routes/post/+page.svelte')
+		path.join(APP_WEB_SRC, 'routes/[lang]/post/+page.svelte')
 	];
 	for (const file of callSites) {
 		const src = readFileSync(file, 'utf8');
@@ -233,9 +233,9 @@ function checkPasswordClearAtCallSites(): void {
 // window).
 function checkBootRoutesPasswordClear(): void {
 	const bootSites = [
-		path.join(APP_WEB_SRC, 'routes/login/+page.svelte'),
-		path.join(APP_WEB_SRC, 'routes/onboarding/+page.svelte'),
-		path.join(APP_WEB_SRC, 'routes/onboarding/import/+page.svelte')
+		path.join(APP_WEB_SRC, 'routes/[lang]/login/+page.svelte'),
+		path.join(APP_WEB_SRC, 'routes/[lang]/onboarding/+page.svelte'),
+		path.join(APP_WEB_SRC, 'routes/[lang]/onboarding/import/+page.svelte')
 	];
 	for (const file of bootSites) {
 		const src = readFileSync(file, 'utf8');

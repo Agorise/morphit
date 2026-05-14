@@ -62,9 +62,9 @@ const ALLOW_LIST: ReadonlySet<string> = new Set([
 	// owns the funnel title.  Multi-step flow inherits
 	// the top-level heading from the layout-card pattern,
 	// not from a per-step <h1>.
-	'apps/web/src/routes/onboarding/import/+page.svelte',
+	'apps/web/src/routes/[lang]/onboarding/import/+page.svelte',
 	// /onboarding/register-name — same pattern.
-	'apps/web/src/routes/onboarding/register-name/+page.svelte',
+	'apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte',
 	// /cheat-sheet uses the visibility-isolation pattern
 	// from Memory #29 — a `screen-only` div renders one
 	// <h1> for the on-screen UI and a sibling
@@ -76,7 +76,7 @@ const ALLOW_LIST: ReadonlySet<string> = new Set([
 	// can't see CSS so it counts both.  Same pattern
 	// applies to SeedBackupPrint but that's a component,
 	// not a route, so it doesn't appear here.
-	'apps/web/src/routes/cheat-sheet/+page.svelte'
+	'apps/web/src/routes/[lang]/cheat-sheet/+page.svelte'
 ]);
 
 interface PageHeadings {

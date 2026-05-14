@@ -34,7 +34,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
-const POST_PAGE = join(REPO_ROOT, 'apps/web/src/routes/post/+page.svelte');
+const POST_PAGE = join(REPO_ROOT, 'apps/web/src/routes/[lang]/post/+page.svelte');
 const ADDRESS_MODAL = join(REPO_ROOT, 'apps/web/src/lib/components/AddressShareModal.svelte');
 const FUNDS_MODAL = join(REPO_ROOT, 'apps/web/src/lib/components/FundsSentModal.svelte');
 

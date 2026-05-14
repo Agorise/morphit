@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * ChatMessage — a single message bubble in a conversation.
 	 *
@@ -297,6 +300,10 @@
 			return msgDate.toISOString();
 		}
 	});
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 <li class="chat-message flex" class:justify-end={isOutgoing} class:justify-start={!isOutgoing}>
@@ -731,7 +738,7 @@
 			     them. -->
 			{#if typeof message.error === 'string' && message.error.startsWith('pub_pin_')}
 				<a
-					href="/faq#chat_key_changed"
+					href={lp('/faq#chat_key_changed')}
 					class="text-xs text-red-700 underline hover:no-underline dark:text-red-300"
 				>
 					{$_('chat.security.learn_more')}

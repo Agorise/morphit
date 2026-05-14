@@ -58,11 +58,11 @@ const FEE_ATTEST_HANDLER = join(
 );
 const MY_ORDERS_PAGE = join(
 	REPO_ROOT,
-	'apps/web/src/routes/my/orders/+page.svelte'
+	'apps/web/src/routes/[lang]/my/orders/+page.svelte'
 );
 const ORDER_DETAIL_PAGE = join(
 	REPO_ROOT,
-	'apps/web/src/routes/[x+40][account=account]/[permlink=permlink]/+page.svelte'
+	'apps/web/src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte'
 );
 const EN_LOCALE = join(
 	REPO_ROOT,

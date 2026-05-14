@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * WelcomeFirstBuyHero — celebratory + explanatory banner for new
 	 * users with the free-first-buy waiver still available.
@@ -89,6 +92,10 @@
 		}
 		phase = 'hide';
 	}
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 {#if phase === 'show'}
@@ -172,12 +179,12 @@
 		</p>
 
 		<div class="mt-5 flex flex-wrap items-center gap-3">
-			<a href="/post?welcome=1" class="btn-primary inline-flex items-center gap-2">
+			<a href={lp('/post?welcome=1')} class="btn-primary inline-flex items-center gap-2">
 				<span aria-hidden="true">🌱</span>
 				<span>{$_('welcome_first_buy.cta_compose')}</span>
 			</a>
 			<a
-				href="/faq#first_order_free"
+				href={lp('/faq#first_order_free')}
 				class="text-sm font-semibold text-morphit-emerald hover:underline"
 			>
 				{$_('welcome_first_buy.learn_more')}
