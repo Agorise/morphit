@@ -101,6 +101,26 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INDEXER_OPERATOR_BALANCE_RELAY_THRESHOLD_BLURT',
 	'MORPHIT_INDEXER_OPERATOR_BALANCE_FEES_THRESHOLD_BLURT',
 
+	// ─── Matrix surfaces (Part 121 cp9) ───────────────────────
+	// Two distinct, never-interchangeable Matrix addresses:
+	//
+	//   alertMxid (@user:server)  — PRIVATE E2E DM destination
+	//     for operator alerts emitted by the matrix-bot sidecar
+	//     reading journalctl.  Never exposed via /v1/instance.
+	//
+	//   operator_matrix_room (#room:server) — PUBLIC room alias
+	//     for user→operator contact.  Exposed via
+	//     /v1/instance.operator_matrix_room and rendered on
+	//     /support, /about-this-instance, footer link.
+	//
+	// Validated at config load time by parseMxid() /
+	// parseRoomAlias() in @morphit/operator-config — the bot
+	// refuses to start if alertMxid is set but doesn't parse
+	// as @-prefixed; the indexer refuses to expose the room
+	// alias if it's set but doesn't parse as #-prefixed.
+	'MORPHIT_MATRIX_BOT_ALERT_MXID',
+	'MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM',
+
 	// ─── Blurt account creation fee ───────────────────────────
 	// The chain fee, in BLURT, that the relay includes with each
 	// account-creation broadcast.  Set by Blurt witness consensus;
@@ -326,3 +346,23 @@ export function loadOperatorConfig(
 export function getAllowlist(): ReadonlySet<string> {
 	return ALLOWLIST;
 }
+
+// ─── Part 121 cp9 — Matrix address validators (re-export) ─────
+//
+// Single source of truth for parsing @user:server (MXID) and
+// #room:server (room alias).  Used by the ops-cli wizard step
+// at prompt time, by the indexer at /v1/instance load time, by
+// the matrix-bot at startup, and by persona sentinels +
+// adversarial smokes that enforce the @↔# invariant.
+//
+// See ./matrixAddress.ts for the rationale + spec references.
+export {
+	parseMxid,
+	parseRoomAlias,
+	isMxid,
+	isRoomAlias,
+	MATRIX_EXAMPLE_MXID,
+	MATRIX_EXAMPLE_ROOM_ALIAS,
+	type MatrixMxid,
+	type MatrixRoomAlias
+} from './matrixAddress.js';

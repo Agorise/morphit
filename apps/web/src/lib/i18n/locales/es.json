@@ -1211,7 +1211,9 @@
     "canary_title": "Canario semanal del operador — verifica que la fecha sea reciente",
     "pgp_keys": "Claves PGP",
     "pgp_keys_title": "Claves públicas PGP del operador para releases firmadas y verificación del canario",
-    "bounty": "Recompensa por errores"
+    "bounty": "Recompensa por errores",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "Abrir la sala Matrix pública del operador ({room})"
   },
   "identity": {
     "copy_full_key_aria": "Copiar clave pública completa",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "sin registrar",
       "file_count": "Archivos en el paquete",
       "aggregate_hash": "SHA-256 agregado",
-      "aggregate_hash_computing": "calculando…"
+      "aggregate_hash_computing": "calculando…",
+      "operator_matrix": "Chat de grupo Matrix"
     },
     "integrity": {
       "explain": "Esta instancia sirve {count} archivos. Cada uno está hasheado y listado en el manifiesto completo abajo. Compara el hash agregado de arriba con el publicado en la última release firmada en la cadena de Blurt (@morphit publica una op morphit_release_v1 después de cada build). Si coinciden, el paquete es idéntico byte por byte a la release oficial.",
@@ -3196,6 +3199,11 @@
       "body_generic": "Un operador opera esta instancia. Para problemas del sitio, creación de cuentas o preguntas del operador, usa el enlace de contacto abajo.",
       "cta": "Contactar operador",
       "no_contact_hint": "Este operador no ha publicado un enlace de contacto. Prueba la divulgación de seguridad o auto-hospedaje abajo."
+    },
+    "operator_matrix": {
+      "heading": "Habla con el operador en Matrix",
+      "body": "Esta instancia tiene un chat de grupo público en Matrix: {room}. Haz preguntas, pide un código de voucher u obtén ayuda del operador y la comunidad en tiempo real.",
+      "cta": "Abrir sala de Matrix"
     },
     "security": {
       "heading": "¿Encontraste un problema de seguridad?",

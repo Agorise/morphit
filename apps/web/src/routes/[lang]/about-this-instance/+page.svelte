@@ -207,6 +207,25 @@
 						{/if}
 					</dd>
 				</div>
+				{#if $instance.operator_matrix_room}
+					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
+						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+							{$_('about_this_instance.field.operator_matrix')}
+						</dt>
+						<dd>
+							<a
+								class="font-mono text-morphit-emerald hover:underline"
+								href="https://matrix.to/#/{encodeURIComponent(
+									$instance.operator_matrix_room
+								)}"
+								rel="noopener noreferrer"
+								target="_blank"
+							>
+								{$instance.operator_matrix_room}
+							</a>
+						</dd>
+					</div>
+				{/if}
 			</dl>
 		</section>
 

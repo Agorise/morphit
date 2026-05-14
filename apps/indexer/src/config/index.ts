@@ -139,6 +139,12 @@ export interface Config {
 	 *  preserved; the operator just refuses to accept NEW orders
 	 *  from their own users for the disabled assets. */
 	readonly disabledAssets: readonly string[];
+	/** Part 121 cp9 — public Matrix room alias for user→operator
+	 *  contact, exposed via /v1/instance.operator_matrix_room.
+	 *  Parsed and validated as `#room:server` at config load
+	 *  time by parseRoomAlias from @morphit/operator-config.
+	 *  null when not configured (frontend hides the link). */
+	readonly operatorMatrixRoom: string | null;
 	/** Tolerance band for fee-amount verification — fee transfers
 	 *  within ±feeTolerance of the expected amount are accepted.
 	 *  Default: 0.001 (0.1%). After the BLURT-native refactor this
@@ -440,6 +446,60 @@ const envSchema = z.object({
 				.map((t) => t.trim().toUpperCase())
 				.filter((t) => t.length > 0)
 		),
+
+	/** Part 121 cp9 — public Matrix room alias for user→operator
+	 *  contact.  EXPOSED via /v1/instance.operator_matrix_room.
+	 *  Rendered on /support, /about-this-instance, and footer.
+	 *
+	 *  Must be a well-formed Matrix room alias (`#room:server`).
+	 *  Validation via parseRoomAlias() from
+	 *  @morphit/operator-config — single source of truth shared
+	 *  with the ops-cli wizard, matrix-bot, and persona
+	 *  sentinels.
+	 *
+	 *  Empty string (default) = no Matrix contact surface; the
+	 *  frontend hides the "Contact via Matrix" link entirely.
+	 *
+	 *  This is INTENTIONALLY a separate variable from
+	 *  MORPHIT_MATRIX_BOT_ALERT_MXID (the bot's private alert
+	 *  destination).  The two NEVER cross-pollinate:
+	 *    - alert MXID:  PRIVATE, @user:server, bot-only,
+	 *                   NEVER exposed via /v1/instance.
+	 *    - matrix_room: PUBLIC,  #room:server, API-exposed,
+	 *                   rendered by frontend.
+	 *
+	 *  Memory's @user:server vs #room:server rule: blanket
+	 *  @→# replacement would route security alerts to a public
+	 *  room.  The validator below refuses to load an @-prefixed
+	 *  value into this slot; persona sentinels independently
+	 *  verify the rule. */
+	MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM: z
+		.string()
+		.default('')
+		.transform((s, ctx) => {
+			const trimmed = s.trim();
+			if (trimmed === '') return null;
+			// Lazy import to avoid circular-dep risk at module load
+			// time.  Reuses the same parser as the wizard + bot.
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const { parseRoomAlias } = require('@morphit/operator-config');
+			const parsed = parseRoomAlias(trimmed);
+			if (parsed === null) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message:
+						`MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM must be a valid Matrix room ` +
+						`alias (#room:server).  Got: ${JSON.stringify(trimmed)}.  ` +
+						`If you meant a private MXID (@user:server) — that goes in ` +
+						`MORPHIT_MATRIX_BOT_ALERT_MXID, NOT here.  /v1/instance is a ` +
+						`public API; an MXID exposed here would leak the operator's ` +
+						`private Matrix identity to every visitor.`
+				});
+				return z.NEVER;
+			}
+			return parsed;
+		}),
+
 	// Account-creation fee fallback — used by /v1/chain-fee
 	// when condenser_api.get_chain_properties is unreachable.
 	// Set to the current witness-consensus value (default 100).
@@ -740,6 +800,7 @@ export function loadConfig(): Config {
 		feeRecipient: e.MORPHIT_INDEXER_FEE_RECIPIENT,
 		feeBaseBlurt: e.MORPHIT_INDEXER_FEE_BASE_BLURT,
 		disabledAssets: e.MORPHIT_INDEXER_DISABLED_ASSETS,
+		operatorMatrixRoom: e.MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM,
 		feeTolerance: e.MORPHIT_INDEXER_FEE_TOLERANCE,
 		accountCreationFeeBlurtFallback: e.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT,
 		attestationPhase: e.MORPHIT_INDEXER_ATTESTATION_PHASE,

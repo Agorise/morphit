@@ -63,6 +63,39 @@ export interface WizardAnswers {
 	readonly backup: BackupResult;
 	/** Part 111 — operator tag for federation-scoped payouts. */
 	readonly operatorTag: OperatorTagResult;
+	/** Part 121 cp9 — Matrix surfaces.
+	 *
+	 *  Two distinct addresses kept separate by design:
+	 *    - alertMxid (@user:server)  — PRIVATE E2E DM for operator
+	 *      alerts.  Bot-only; never exposed via /v1/instance.
+	 *    - groupRoomAlias (#room:server)  — PUBLIC room alias for
+	 *      user→operator contact, exposed via /v1/instance.
+	 *
+	 *  Either or both may be null (operator opted out at the
+	 *  wizard step).  Validation of the @user:server vs
+	 *  #room:server prefix happens at prompt time + at indexer
+	 *  config load time + via persona sentinels.
+	 */
+	readonly matrix: MatrixSurfacesResult;
+}
+
+/** Matrix-surfaces wizard result.  Both fields are optional
+ *  (operator can opt out of either or both).  Strict shape
+ *  rules enforced at the prompt step:
+ *    - alertMxid: starts with @, contains exactly one colon,
+ *                 the part before : is 1..255 chars matching
+ *                 [a-z0-9._=/+-], the part after : is a valid
+ *                 DNS hostname.  Spec: Matrix MXID format.
+ *    - groupRoomAlias: starts with #, same shape afterwards.
+ *
+ *  The starting-character distinction (@ vs #) is what the
+ *  persona sentinels + adversarial smoke enforce.  Blanket
+ *  @→# replacement would route security alerts to a public
+ *  room.
+ */
+export interface MatrixSurfacesResult {
+	readonly alertMxid: string | null;
+	readonly groupRoomAlias: string | null;
 }
 
 /** Part 110 — operator-configurable listing fee + fallback
@@ -274,6 +307,46 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('# Update this value if witnesses durably change the chain fee.');
 	lines.push('MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT=100');
 	lines.push('');
+
+	// ─── Matrix surfaces (Part 121 cp9) ──────────────────────
+	// Two distinct Matrix addresses, kept separate by design:
+	//   - alert MXID (@user:server)  — PRIVATE E2E DM destination
+	//     for operator alerts.  Bot-only; never exposed via the
+	//     /v1/instance API.
+	//   - group room (#room:server)  — PUBLIC room alias for
+	//     user→operator contact.  Exposed via /v1/instance and
+	//     rendered on /support, /about-this-instance, footer.
+	// Memory's @user:server vs #room:server rule: blanket
+	// @→# replacement is actively harmful (security disclosures
+	// would leak to a public room).  Validate shape at config
+	// load time and via persona sentinels.
+	if (
+		answers.matrix.alertMxid !== null ||
+		answers.matrix.groupRoomAlias !== null
+	) {
+		lines.push('# ──────────────────────────────────────────────────────');
+		lines.push('# Matrix surfaces');
+		lines.push('# ──────────────────────────────────────────────────────');
+		lines.push('# Operator alert routing + user→operator contact.');
+		lines.push('#');
+		lines.push('# alertMxid is PRIVATE — bot DMs operator alerts to it.');
+		lines.push('# Never exposed via the /v1/instance API.');
+		lines.push('#');
+		lines.push('# groupRoomAlias is PUBLIC — rendered on /support,');
+		lines.push('# /about-this-instance, and footer for user→operator');
+		lines.push('# contact.  Exposed via /v1/instance.operator_matrix_room.');
+		if (answers.matrix.alertMxid !== null) {
+			lines.push(
+				`MORPHIT_MATRIX_BOT_ALERT_MXID=${quote(answers.matrix.alertMxid)}`
+			);
+		}
+		if (answers.matrix.groupRoomAlias !== null) {
+			lines.push(
+				`MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=${quote(answers.matrix.groupRoomAlias)}`
+			);
+		}
+		lines.push('');
+	}
 
 	return lines.join('\n') + '\n';
 }

@@ -1211,7 +1211,9 @@
     "canary_title": "运营者的每周搜查令金丝雀 — 验证日期是否近期",
     "pgp_keys": "PGP 密钥",
     "pgp_keys_title": "运营者用于已签名发行版和金丝雀验证的 PGP 公钥",
-    "bounty": "漏洞赏金"
+    "bounty": "漏洞赏金",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "打开运营方的公开 Matrix 群聊 ({room})"
   },
   "identity": {
     "copy_full_key_aria": "复制完整的公钥",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "未注册",
       "file_count": "包中的文件",
       "aggregate_hash": "聚合 SHA-256",
-      "aggregate_hash_computing": "计算中…"
+      "aggregate_hash_computing": "计算中…",
+      "operator_matrix": "Matrix 群聊"
     },
     "integrity": {
       "explain": "此实例提供 {count} 个文件。每个都已被哈希,并在下面的完整清单中列出。将上面的聚合哈希与 Blurt 链上最新签名发布中公布的哈希进行比较(@morphit 在每次构建后发布一个 morphit_release_v1 op)。如果匹配,则包与官方发布逐字节相同。",
@@ -3196,6 +3199,11 @@
       "body_generic": "本实例由运营者运行。如遇网站使用、账户创建或运营者相关问题,请使用下方联系链接。",
       "cta": "联系运营者",
       "no_contact_hint": "此运营者未发布联系方式。请尝试下方的安全披露或自托管选项。"
+    },
+    "operator_matrix": {
+      "heading": "在 Matrix 上联系运营方",
+      "body": "此实例在 Matrix 上设有一个公开群聊：{room}。可以提问、申请凭证码,或实时获取运营方和社区的帮助。",
+      "cta": "打开 Matrix 群聊"
     },
     "security": {
       "heading": "发现安全问题?",

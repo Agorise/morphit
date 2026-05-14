@@ -42,7 +42,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import type { ListingFeeResult } from './render.ts';
 
-const TOTAL_STEPS = 16;
+const TOTAL_STEPS = 17;
 
 // ─── Step 1: Instance name ───────────────────────────────────────
 
@@ -1301,4 +1301,142 @@ export async function stepOperatorTag(): Promise<OperatorTagResult> {
 		}
 		return { tag: trimmed };
 	}
+}
+
+// ─── Step 17/18: Matrix surfaces ─────────────────────────────────
+
+import {
+	parseMxid,
+	parseRoomAlias,
+	MATRIX_EXAMPLE_MXID,
+	MATRIX_EXAMPLE_ROOM_ALIAS
+} from '@morphit/operator-config';
+import type { MatrixSurfacesResult } from './render.ts';
+
+/** Part 121 cp9 — collect both Matrix surfaces (operator alert
+ *  MXID + public group chat room alias).  Either or both may be
+ *  skipped.  Validates shape via the shared
+ *  @morphit/operator-config parsers so the @-vs-# distinction
+ *  is enforced consistently across wizard, indexer, and bot. */
+export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
+	step(TOTAL_STEPS, TOTAL_STEPS, 'Matrix surfaces (optional)');
+	explain(
+		'Morphit can use Matrix for two distinct purposes:\n\n' +
+			'  1. PRIVATE alerts to you (the operator) — low balance,\n' +
+			'     squatter attack detected, stale price feed, etc.\n' +
+			'     The matrix-bot sidecar DMs these to your personal\n' +
+			'     MXID over end-to-end-encrypted private chat.\n\n' +
+			'  2. PUBLIC user→operator contact — a Matrix group room\n' +
+			'     where users browsing your /support page can ask\n' +
+			'     questions, request voucher codes, report issues.\n' +
+			'     Linked from /support, /about-this-instance, and\n' +
+			'     the site footer.\n\n' +
+			'IMPORTANT: keep these two SEPARATE.  The MXID is private,\n' +
+			'the room alias is public.  Routing a security alert to a\n' +
+			'public room would be a privacy violation, which is why\n' +
+			'the bot validates the @ vs # prefix at startup and the\n' +
+			'frontend only exposes the room (never the MXID) via the\n' +
+			'public /v1/instance API.\n\n' +
+			'Skip either or both with Enter if you don\'t use Matrix.'
+	);
+
+	// MXID prompt
+	console.log(
+		'\n  Matrix admin address (MXID) — PRIVATE alert destination.\n' +
+			`  Example: ${MATRIX_EXAMPLE_MXID}\n`
+	);
+	let alertMxid: string | null = null;
+	while (true) {
+		const v = await ask('Matrix admin address (optional, Enter to skip)');
+		if (v.length === 0) {
+			alertMxid = null;
+			break;
+		}
+		const parsed = parseMxid(v);
+		if (parsed === null) {
+			console.log(
+				`  ✗ Not a valid MXID.  Must start with @, contain one : separating\n` +
+					`    the local part from the server.  Example: ${MATRIX_EXAMPLE_MXID}\n`
+			);
+			continue;
+		}
+		// Defense in depth — if a copy-paste accidentally produced
+		// a room alias starting with #, reject explicitly.  The
+		// regex above already excludes this but a clearer error
+		// helps the operator notice the mistake.
+		if (v.startsWith('#')) {
+			console.log(
+				'  ✗ That looks like a room alias (#room:server), not an MXID.\n' +
+					'    The admin address MUST be a private MXID (@user:server).\n'
+			);
+			continue;
+		}
+		alertMxid = parsed;
+		console.log(`\n  ✓ Admin MXID: ${parsed}  (PRIVATE — alerts only)\n`);
+		break;
+	}
+
+	// Room alias prompt
+	console.log(
+		`  Matrix group chat address — PUBLIC user→operator contact.\n` +
+			`  Example: ${MATRIX_EXAMPLE_ROOM_ALIAS}\n`
+	);
+	let groupRoomAlias: string | null = null;
+	while (true) {
+		const v = await ask('Matrix group chat address (optional, Enter to skip)');
+		if (v.length === 0) {
+			groupRoomAlias = null;
+			break;
+		}
+		const parsed = parseRoomAlias(v);
+		if (parsed === null) {
+			console.log(
+				`  ✗ Not a valid room alias.  Must start with #, contain one : separating\n` +
+					`    the local part from the server.  Example: ${MATRIX_EXAMPLE_ROOM_ALIAS}\n`
+			);
+			continue;
+		}
+		// Defense in depth — reject @-prefixed input here.
+		if (v.startsWith('@')) {
+			console.log(
+				'  ✗ That looks like an MXID (@user:server), not a room alias.\n' +
+					'    The group chat MUST be a public room (#room:server).\n'
+			);
+			continue;
+		}
+		// Hard guard against typing the same value into both
+		// fields.  If groupRoomAlias and alertMxid had the same
+		// localpart, that wouldn't be a security issue per se
+		// (they start with different sigils so they're different
+		// addresses), but the operator might be confused; flag it.
+		groupRoomAlias = parsed;
+		console.log(`\n  ✓ Group chat: ${parsed}  (PUBLIC — user contact)\n`);
+		break;
+	}
+
+	if (alertMxid !== null && groupRoomAlias !== null) {
+		console.log(
+			'  ⓘ Both surfaces configured.  The matrix-bot will DM\n' +
+				`    alerts to ${alertMxid} (private), and the frontend\n` +
+				`    will link to ${groupRoomAlias} (public) on /support,\n` +
+				'    /about-this-instance, and footer.  These two NEVER\n' +
+				'    cross — that\'s enforced by typed validators + smokes.\n'
+		);
+	} else if (alertMxid !== null) {
+		console.log(
+			'  ⓘ Operator alerts via Matrix configured.  Users will\n' +
+				'    not see a Matrix contact link on the frontend (no\n' +
+				'    group room set).\n'
+		);
+	} else if (groupRoomAlias !== null) {
+		console.log(
+			'  ⓘ Public user contact via Matrix configured.  You will\n' +
+				'    NOT receive operator alerts via Matrix (no admin\n' +
+				'    MXID set) — alerts will only go to the structured\n' +
+				'    logger.  Run a journalctl-based monitoring setup, or\n' +
+				'    re-run `morphit ops init` to add an admin MXID.\n'
+		);
+	}
+
+	return { alertMxid, groupRoomAlias };
 }

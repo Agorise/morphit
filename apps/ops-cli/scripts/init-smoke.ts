@@ -183,7 +183,11 @@ const sampleAnswers: WizardAnswers = {
 	},
 	seo: { title: null, description: null, keywords: null },
 	backup: { enabled: false, backupDir: null, retainDays: null },
-	operatorTag: { tag: 'morphit' }
+	operatorTag: { tag: 'morphit' },
+	// Part 121 cp9 — both Matrix surfaces opted-out in the
+	// baseline fixture.  Per-scenario overrides exercise the
+	// populated paths.
+	matrix: { alertMxid: null, groupRoomAlias: null }
 };
 
 scenario('writeWizardOutput: writes config + env + keystore at expected paths', () => {
@@ -441,6 +445,115 @@ scenario('writeWizardOutput: backup.env has 0600 permissions', () => {
 		const stats = statSync(result.backupEnvPath!);
 		const mode = stats.mode & 0o777;
 		assertEqual(mode, 0o600, 'backup.env is 0600');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+// ─── Part 121 cp9 — Matrix surface emission ───────────────────────
+
+scenario('writeWizardOutput: both Matrix surfaces opted-out → no Matrix block in env', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		writeWizardOutput(sampleAnswers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		assertTrue(!env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID'), 'no MXID line when opted out');
+		assertTrue(
+			!env.includes('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM'),
+			'no room line when opted out'
+		);
+		assertTrue(!env.includes('# Matrix surfaces'), 'no Matrix block heading when opted out');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: only MXID populated → only MORPHIT_MATRIX_BOT_ALERT_MXID emitted', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			matrix: { alertMxid: '@alice:matrix.org', groupRoomAlias: null }
+		};
+		writeWizardOutput(answers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		assertTrue(
+			env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID=@alice:matrix.org'),
+			'MXID line present'
+		);
+		assertTrue(
+			!env.includes('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM='),
+			'no room line when room is null'
+		);
+		assertTrue(env.includes('# Matrix surfaces'), 'Matrix block heading present');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: only room populated → only MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM emitted', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			matrix: { alertMxid: null, groupRoomAlias: '#agorise:matrix.org' }
+		};
+		writeWizardOutput(answers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		// # is NOT in quote()'s safe-char set (shell-comment hazard) so
+		// the value gets wrapped in double-quotes — both renderings are
+		// valid env-file syntax.  Match the start-of-line pattern.
+		assertTrue(
+			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=("?)#agorise:matrix\.org\1$/m.test(env),
+			'room line present (quoted or unquoted)'
+		);
+		assertTrue(
+			!env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID='),
+			'no MXID line when MXID is null'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: both Matrix surfaces populated → both env lines emitted', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			matrix: {
+				alertMxid: '@alice:matrix.org',
+				groupRoomAlias: '#agorise:matrix.org'
+			}
+		};
+		writeWizardOutput(answers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		assertTrue(
+			env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID=@alice:matrix.org'),
+			'MXID line present (unquoted: @ is in safe-char set)'
+		);
+		assertTrue(
+			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=("?)#agorise:matrix\.org\1$/m.test(env),
+			'room line present (quoted: # is shell-comment hazard so quote() wraps it)'
+		);
+		// Critical: the room line must carry #-prefixed value, the
+		// MXID line @-prefixed value.  If they got swapped, that's
+		// the @↔# replacement footgun made manifest.
+		const lines = env.split('\n');
+		const mxidLine = lines.find((l) => l.startsWith('MORPHIT_MATRIX_BOT_ALERT_MXID='));
+		const roomLine = lines.find((l) =>
+			l.startsWith('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=')
+		);
+		assertTrue(mxidLine !== undefined && /=("?)@/.test(mxidLine), 'MXID line carries @');
+		assertTrue(roomLine !== undefined && /=("?)#/.test(roomLine), 'room line carries #');
+		assertTrue(
+			mxidLine !== undefined && !/=("?)#/.test(mxidLine),
+			'MXID line must NOT carry a # value (the @↔# footgun)'
+		);
+		assertTrue(
+			roomLine !== undefined && !/=("?)@/.test(roomLine),
+			'room line must NOT carry an @ value (the @↔# footgun)'
+		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}

@@ -108,6 +108,24 @@ export interface InstanceResponse {
 	 *  read-only visibility is preserved regardless of operator
 	 *  stance. */
 	disabled_assets: readonly string[];
+	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
+	 *  contact.  Rendered on /support, /about-this-instance, and
+	 *  the site footer as a "Contact via Matrix" link.  Format:
+	 *  `#room:server`, validated at config load by parseRoomAlias
+	 *  from @morphit/operator-config.  null when the operator
+	 *  didn't configure a contact room.
+	 *
+	 *  CRITICAL invariant: this field NEVER carries an MXID
+	 *  (@user:server).  The operator's private alert MXID lives
+	 *  in MORPHIT_MATRIX_BOT_ALERT_MXID and is NEVER exposed via
+	 *  /v1/instance — leaking it would publish the operator's
+	 *  private Matrix identity to every API consumer.  The
+	 *  indexer's config loader refuses to accept an @-prefixed
+	 *  value here and refuses to start; this field's type
+	 *  signature `string | null` is enforced by parseRoomAlias's
+	 *  return-type which only constructs valid #-prefixed
+	 *  values. */
+	operator_matrix_room: string | null;
 }
 
 export function instanceRoute(config: Config): Hono {
@@ -146,7 +164,8 @@ export function instanceRoute(config: Config): Hono {
 				btc: config.frontendBtcChatLinkUrl ?? null,
 				xmr: config.frontendXmrChatLinkUrl ?? null
 			},
-			disabled_assets: config.disabledAssets
+			disabled_assets: config.disabledAssets,
+			operator_matrix_room: config.operatorMatrixRoom
 		};
 		c.header('Cache-Control', 'public, max-age=300');
 		return c.json(body);

@@ -348,6 +348,20 @@
 					{:else}
 						<span class="font-medium text-ink-700 dark:text-ink-200">{$instance.name}</span>
 					{/if}
+					{#if $instance.operator_matrix_room}
+						·
+						<a
+							href="https://matrix.to/#/{encodeURIComponent($instance.operator_matrix_room)}"
+							class="text-morphit-emerald hover:underline"
+							title={$_('footer.contact_operator_matrix', {
+								values: { room: $instance.operator_matrix_room }
+							})}
+							rel="noopener noreferrer"
+							target="_blank"
+						>
+							{$_('footer.contact_operator_matrix_label')}
+						</a>
+					{/if}
 				</p>
 			{/if}
 

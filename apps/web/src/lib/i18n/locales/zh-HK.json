@@ -1211,7 +1211,9 @@
     "canary_title": "營運者的每週搜查令金絲雀 — 確認日期是否為近期",
     "pgp_keys": "PGP 密鑰",
     "pgp_keys_title": "營運者用於已簽名發行版和金絲雀驗證的 PGP 公鑰",
-    "bounty": "漏洞賞金"
+    "bounty": "漏洞賞金",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "開啟營運方公開 Matrix 群組 ({room})"
   },
   "identity": {
     "copy_full_key_aria": "複製完整嘅公鑰",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "未註冊",
       "file_count": "套件中的檔案",
       "aggregate_hash": "聚合 SHA-256",
-      "aggregate_hash_computing": "計算中…"
+      "aggregate_hash_computing": "計算中…",
+      "operator_matrix": "Matrix 群組"
     },
     "integrity": {
       "explain": "此實例提供 {count} 個檔案。每個都已被雜湊,並在下面的完整清單中列出。將上面的聚合雜湊與 Blurt 鏈上最新簽名發布中公布的雜湊進行比較(@morphit 在每次建置後發布一個 morphit_release_v1 op)。如果匹配,則套件與官方發布逐位元組相同。",
@@ -3196,6 +3199,11 @@
       "body_generic": "本實例由營運者運行。如遇網站使用、帳戶建立或營運者相關問題,請使用下方聯絡連結。",
       "cta": "聯絡營運者",
       "no_contact_hint": "此營運者未發布聯絡方式。請嘗試下方的安全揭露或自架選項。"
+    },
+    "operator_matrix": {
+      "heading": "在 Matrix 上聯絡營運方",
+      "body": "此例項在 Matrix 上設有公開群組：{room}。可發問、索取憑證碼,或即時獲得營運方與社群的協助。",
+      "cta": "開啟 Matrix 群組"
     },
     "security": {
       "heading": "發現安全問題?",

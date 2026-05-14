@@ -86,6 +86,16 @@ export interface InstanceState {
 	 *  by `/run-a-node` to render this instance's stance and
 	 *  by `/operators` to label federated instances. */
 	readonly disabled_assets: readonly string[];
+	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
+	 *  contact (format: `#room:server`).  Rendered on /support,
+	 *  /about-this-instance, and footer as a "Contact via Matrix"
+	 *  link.  null = operator didn't configure a Matrix contact
+	 *  surface, frontend hides the link.
+	 *
+	 *  This field NEVER carries an MXID (@-prefixed).  Operator's
+	 *  private alert MXID lives in the matrix-bot's env and is
+	 *  not API-exposed; surface-invariant smoke enforces. */
+	readonly operator_matrix_room: string | null;
 	readonly loaded: boolean;
 }
 
@@ -117,6 +127,7 @@ const FALLBACK: InstanceState = {
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 	},
 	disabled_assets: [],
+	operator_matrix_room: null,
 	loaded: false
 };
 
@@ -204,6 +215,7 @@ export function initInstance(): Promise<void> {
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],
+				operator_matrix_room: result.data.operator_matrix_room ?? null,
 					loaded: true
 				});
 			} else {

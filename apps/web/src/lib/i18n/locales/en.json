@@ -1211,7 +1211,9 @@
     "canary_title": "Operator's weekly warrant canary — verify the date is recent",
     "pgp_keys": "PGP keys",
     "pgp_keys_title": "Operator's PGP public keys for signed releases and canary verification",
-    "bounty": "Bug bounty"
+    "bounty": "Bug bounty",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "Open the operator's public Matrix room ({room})"
   },
   "identity": {
     "copy_full_key_aria": "Copy full public key",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "unregistered",
       "file_count": "Files in bundle",
       "aggregate_hash": "Aggregate SHA-256",
-      "aggregate_hash_computing": "computing…"
+      "aggregate_hash_computing": "computing…",
+      "operator_matrix": "Matrix group chat"
     },
     "integrity": {
       "explain": "This instance serves {count} files. Each one is hashed and listed in the full manifest below. Compare the aggregate hash above to the one published in the latest signed release on the Blurt chain (@morphit posts a morphit_release_v1 op after every build). If they match, the bundle is byte-identical to the official release.",
@@ -3196,6 +3199,11 @@
       "body_generic": "An operator runs this instance. For trouble using the site, account-creation issues, or operator-specific questions, reach out via the contact link below.",
       "cta": "Contact operator",
       "no_contact_hint": "This operator hasn't published a contact link. Try the security disclosure or self-host options below."
+    },
+    "operator_matrix": {
+      "heading": "Chat with the operator on Matrix",
+      "body": "This instance has a public Matrix group chat at {room}. Ask questions, request a voucher code, or get help from the operator and community in real time.",
+      "cta": "Open Matrix room"
     },
     "security": {
       "heading": "Found a security issue?",

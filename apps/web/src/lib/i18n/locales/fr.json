@@ -1211,7 +1211,9 @@
     "canary_title": "Canari hebdomadaire de l'opérateur — vérifiez que la date est récente",
     "pgp_keys": "Clés PGP",
     "pgp_keys_title": "Clés publiques PGP de l'opérateur pour les versions signées et la vérification du canari",
-    "bounty": "Prime aux bugs"
+    "bounty": "Prime aux bugs",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "Ouvrir le salon Matrix public de l'opérateur ({room})"
   },
   "identity": {
     "copy_full_key_aria": "Copier la clé publique complète",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "non enregistré",
       "file_count": "Fichiers dans le bundle",
       "aggregate_hash": "SHA-256 agrégé",
-      "aggregate_hash_computing": "calcul…"
+      "aggregate_hash_computing": "calcul…",
+      "operator_matrix": "Salon Matrix"
     },
     "integrity": {
       "explain": "Cette instance sert {count} fichiers. Chacun est haché et listé dans le manifeste complet ci-dessous. Comparez le hash agrégé ci-dessus à celui publié dans la dernière release signée sur la chaîne Blurt (@morphit publie une op morphit_release_v1 après chaque build). S'ils correspondent, le bundle est octet par octet identique à la release officielle.",
@@ -3196,6 +3199,11 @@
       "body_generic": "Un opérateur gère cette instance. Pour tout souci d'usage, de création de compte ou question opérateur, utilise le lien de contact ci-dessous.",
       "cta": "Contacter l'opérateur",
       "no_contact_hint": "Cet opérateur n'a pas publié de lien de contact. Essaie la divulgation de sécurité ou l'auto-hébergement ci-dessous."
+    },
+    "operator_matrix": {
+      "heading": "Discuter avec l'opérateur sur Matrix",
+      "body": "Cette instance dispose d'un salon de discussion public sur Matrix : {room}. Posez vos questions, demandez un code de voucher ou obtenez de l'aide de l'opérateur et de la communauté en temps réel.",
+      "cta": "Ouvrir le salon Matrix"
     },
     "security": {
       "heading": "Tu as trouvé un problème de sécurité ?",

@@ -1485,6 +1485,23 @@ Skip BunkerWeb only if:
 
 Full configuration reference, architecture options (BunkerWeb instead of nginx vs. in front of nginx), and Morphit-specific tuning (the `/v1/relay/*` and SSE endpoints) in `OPERATIONS.md` §32.
 
+#### Matrix alerting — recommended bot sidecar
+
+`apps/matrix-bot/` is a turnkey sidecar that tails journalctl, classifies indexer + relay alerts into three tiers (CRITICAL / WARN / INFO), and DMs them to the operator's private Matrix MXID over E2E-encrypted private chat.  Strongly recommended for any operator running a public-facing instance — silent operator-account drain or a stuck signup queue is exactly the kind of thing email alerts get filtered into oblivion.
+
+Three tiers, designed to never spam:
+
+- **CRITICAL** — immediate, no rate limit: tamper detection, kill-switch fired, sustained RPC failure, daily ceiling hit, fee_method violation attempt, backup failure, AIDE integrity violation, operator account at 0 BLURT.
+- **WARN** — 1/hour per category: balance crossings above zero, witness fee change, stale price feed, single-IP signup spike, federation peer down >24h, sequential pattern detected.
+- **INFO** — daily 09:00 UTC digest, skipped on quiet days: RECOVERED events, normal backups, federation discovery.
+
+Two operator-config knobs set at `morphit-ops init` time and editable in `morphit.config.env`:
+
+- `MORPHIT_MATRIX_BOT_ALERT_MXID` — your private MXID for operator alerts (`@user:server`).  Comma-separate multiple for vacation coverage.  PRIVATE — never exposed via the public API.
+- `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` — a PUBLIC group room alias (`#room:server`).  Surfaced on `/support`, `/about-this-instance`, and the site footer so users can contact the operator publicly.  Distinct from the MXID; the codebase enforces the split at compile time + at every boundary via adversarial smoke.
+
+Setup + the full alert-tier policy + vacation coverage advice in `OPERATIONS.md` §16 "Canonical Matrix routing — apps/matrix-bot".
+
 #### Docker
 
 If you already use Docker for everything else, you can run Morphit's indexer + relay + web + Postgres in containers. Same monorepo, just a `docker-compose.yml` you write once. Trade-offs (consistency vs. backup complexity) and a tested compose shape in `OPERATIONS.md` §33.

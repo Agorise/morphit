@@ -2214,6 +2214,120 @@ management system, you have two options:
 
 Option 1 is what most instances should pick.
 
+### Canonical Matrix routing — apps/matrix-bot
+
+For operators picking Matrix as their alert channel, the morphit
+repo ships a turnkey sidecar at `apps/matrix-bot/` that implements
+Option 1 above with a tier-aware classifier.  Same shipping pattern
+as `ops/bunkerweb/`, `ops/nginx/`, `ops/systemd/`, etc. — copy + edit
++ `systemctl enable --now morphit-matrix-bot`.
+
+**What it does:**
+
+The bot tails `journalctl -u morphit-indexer -u morphit-relay -o
+json --follow`, parses each line, classifies the alert into one of
+three tiers (CRITICAL, WARN, INFO), and DMs the operator's MXID
+over end-to-end-encrypted private Matrix chat.  Three tiers,
+deliberately tuned to prevent alert fatigue without losing
+urgency:
+
+- **CRITICAL** — delivered immediately, NO rate limit, NO
+  aggregation.  Tamper-detection events (bundle hash mismatch,
+  pubkey mismatch), kill-switch fired, sustained RPC failure (the
+  alerting itself is blind), daily signup ceiling hit (active
+  attack signal), `INVALID_FEE_METHOD` attempts (a Memory #23 USDT-
+  as-listing-fee try), backup failures, AIDE integrity violations,
+  operator account drained to 0 BLURT (relay halted).
+- **WARN** — rate-limited to one per category per hour, DM'd
+  individually.  Low-balance crossings (above zero), witness fee
+  changes, stale BLURT/USD price feed, single-IP signup spikes
+  below the daily ceiling, federation peer down >24h, sequential-
+  signup pattern detected.
+- **INFO** — aggregated into a single daily digest sent at 09:00
+  UTC.  Skipped entirely on quiet days.  `RECOVERED` events,
+  normal backup successes, federation discovery summaries.
+
+**Two distinct Matrix addresses kept separate by design:**
+
+- `MORPHIT_MATRIX_BOT_ALERT_MXID` — **PRIVATE** MXID for alert
+  DMs (`@user:server`).  Bot-only; never exposed via
+  `/v1/instance` or any other public API.  Comma-separate
+  multiple MXIDs for vacation coverage — the bot DMs each
+  recipient on every alert.
+- `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` — **PUBLIC** room alias
+  for user→operator contact (`#room:server`).  Exposed via
+  `/v1/instance.operator_matrix_room`; rendered on /support,
+  /about-this-instance, and the site footer as a matrix.to link.
+
+These NEVER cross-pollinate.  A security alert routed to a public
+room would be a privacy violation; an operator MXID exposed via
+public API would leak the operator's private Matrix identity to
+every API consumer.  The codebase enforces this at multiple
+layers: branded TypeScript types (`MatrixMxid` vs
+`MatrixRoomAlias`) make compile-time confusion impossible without
+an explicit cast; the bot's config refuses to start if
+`MORPHIT_MATRIX_BOT_ALERT_MXID` carries a `#`-prefixed value; the
+indexer's config refuses to start if
+`MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` carries an `@`-prefixed
+value; and adversarial smoke tests (`apps/matrix-bot/scripts/
+surface-invariant-smoke.ts`) independently verify every boundary
+on every CI run.
+
+**Setup:**
+
+```sh
+# 1. Create a dedicated Matrix account for the bot (NOT your
+#    personal account — the bot stores a long-lived access token).
+#    Most Matrix clients support "Settings → Help & About →
+#    Access Token" or equivalent.
+
+# 2. Create the system user.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin \
+             --groups systemd-journal morphit-matrix-bot
+sudo mkdir -p /var/lib/morphit-matrix-bot
+sudo chown morphit-matrix-bot:morphit-matrix-bot \
+           /var/lib/morphit-matrix-bot
+sudo chmod 0750 /var/lib/morphit-matrix-bot
+
+# 3. Write /etc/morphit/matrix-bot.env (0600, root:morphit-matrix-bot):
+sudo install -m 0640 -o root -g morphit-matrix-bot /dev/stdin \
+     /etc/morphit/matrix-bot.env <<'ENV'
+MORPHIT_MATRIX_BOT_HOMESERVER=https://matrix.org
+MORPHIT_MATRIX_BOT_ACCESS_TOKEN=<bot-account-access-token>
+MORPHIT_MATRIX_BOT_ALERT_MXID=@you:matrix.org,@your-backup:matrix.org
+# Optional:
+# MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS=morphit-indexer.service,morphit-relay.service
+# MORPHIT_MATRIX_BOT_DIGEST_SEND_TIME_UTC=09:00
+# MORPHIT_MATRIX_BOT_DRY_RUN=false
+ENV
+
+# 4. Install + enable the systemd unit.
+sudo cp /opt/morphit/ops/systemd/morphit-matrix-bot.service \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-matrix-bot
+
+# 5. Verify.
+sudo systemctl status morphit-matrix-bot
+sudo journalctl -u morphit-matrix-bot --since '5 minutes ago'
+# Expect: "morphit-matrix-bot ready." in the logs.
+```
+
+**Vacation coverage:** put a comma-separated list of MXIDs in
+`MORPHIT_MATRIX_BOT_ALERT_MXID`.  The bot DMs every recipient on
+every alert.  Your backup operator gets the same CRITICALs you do
+without any extra plumbing.
+
+**Testing the wiring:** set `MORPHIT_MATRIX_BOT_DRY_RUN=true`,
+restart the unit, and the bot logs what it WOULD have sent
+without actually posting to Matrix.  Useful for verifying the
+classifier sees your indexer/relay log lines correctly before
+going live.
+
+**For operators who prefer email/Discord/PagerDuty instead:** the
+generic Option 1 advice above still applies.  matrix-bot is the
+canonical sidecar but not the only one supported.
+
 ## 17. Relay origin allowlist — protecting your instance from billing drift
 
 The relay consumes one of your pre-minted ACTs on every
