@@ -225,7 +225,8 @@ Query parameters (all optional):
 
 | Param            | Type    | Description |
 |---|---|---|
-| `asset`          | string  | Filter to `BTC`, `XMR`, or `BLURT` |
+| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, or `USDT` |
+| `asset_network`  | string  | For multi-network assets (USDT today): `erc20`, `trc20`, `spl`, or `bep20` |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217 e.g. `USD`, `EUR` |
 | `payment_method` | string  | e.g. `bank_transfer`, `paypal`; case-insensitive |
@@ -561,16 +562,23 @@ Aggregate trading-activity stats for the Morphit instance.
 
 ```json
 {
-  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4 },
-  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19 },
-  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53 },
+  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6 },
+  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24 },
+  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72 },
   "volume_estimate_by_asset_30d": {
     "BTC": "0.42",
     "XMR": "23.0",
-    "BLURT": "12500"
+    "BLURT": "12500",
+    "USDT": "4200"
   }
 }
 ```
+
+Notes: the asset list is dynamic — new tradable assets added to the
+canonical registry appear here automatically. USDT is reported as a
+single rollup; per-network breakdown is not exposed in this endpoint
+(see `/v1/orderbook?asset=USDT&asset_network=trc20` for per-network
+filtering on the live orderbook).
 
 **Trade count semantics:** unique completed orders that received
 feedback from at least one party. An order with feedback from

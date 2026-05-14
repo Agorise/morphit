@@ -264,10 +264,13 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['cd /opt/morphit-relay', 'cd /opt/morphit-indexer']
 	},
 	{
-		name: 'D-4 — PRE-LAUNCH reflects schema v31, not v29',
+		name: 'D-4 — PRE-LAUNCH reflects schema v32, not v31',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
-		mustHave: ['v31'],
+		// Originally pinned v31 (Part 119); bumped to v32 in Part 121
+		// cp3 when orders.asset_network landed.  If a future part adds
+		// another migration, bump this sentinel + the doc together.
+		mustHave: ['currently at v32 as of Part 121'],
 		mustNotHave: ['currently at v29 as of Part 108++']
 	},
 	{
