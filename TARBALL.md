@@ -1,10 +1,84 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 7)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 8)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp7-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp8-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp6-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp7-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp8 — what's shipped (§37 hardening doc patch + BunkerWeb bundled into ops/)
+
+### Pretext
+
+cp7 sealed the per-locale prerendering route restructure end-to-end.  cp8 is the doc-and-config follow-on after a brief detour through a sysadmin handoff document + Ansible playbook (both delivered as separate tarballs outside the cp delta stream): `morphit-sysadmin-handoff.txt` (407 lines, standalone briefing) and `morphit-ansible.tar.gz` (37 files, 24 KB, complete role-based playbook automating §37 + §34 + §35 + §31 + §32 + §38.7 + morphit services).  Ken then asked the publication-safety question about the sysadmin handoff doc; I assessed most of its content duplicated §37.18 (the already-published attack-vs-defense table) so we folded the genuinely-new content (Before-You-Start gotchas + Suggested apply order + Verification checklist) into OPERATIONS.md §37 itself instead.  Then he asked "is it possible to bundle the free version of bunkerweb with morphit?"; I recommended shipping a tested CONFIG at `ops/bunkerweb/` paralleling existing `ops/nginx/` etc., plus reframing BunkerWeb from "optional" to "recommended" in the operator-facing docs.  Both shipped in this checkpoint.
+
+### The cp8 discipline callout
+
+cp8's value isn't just what shipped — it's the process correction Ken forced.  When I executed the §37 patch I treated it as a localized OPERATIONS.md edit and didn't run the cross-doc grep.  Memory explicitly says "OPERATIONS.md and RUN-A-MORPHIT-NODE.md always updated together for operator-facing changes."  I had the memory in context.  I edited OPERATIONS.md without checking RUN-A-MORPHIT-NODE.md, producing a stale "17-subsection" claim that Ken caught with a pointed callout.  The corrective committed to going forward: BEFORE editing any operator-facing doc, grep across `docs/*.md` + `MORPHIT-BRAG-LIST.md` + ADRs to identify ALL sync targets, then make edits in one pass.  The BunkerWeb bundling work that followed in this checkpoint executed that pattern from the start — three sync targets identified up front (OPERATIONS.md, RUN-A-MORPHIT-NODE.md, MORPHIT-BRAG-LIST.md), one ToC anchor drift caught and fixed, all in one pass.
+
+### What shipped
+
+**§37 patch in OPERATIONS.md:**
+
+- New "Before you start — the three highest-stakes gotchas" subsection between the existing §37 intro and §37.1: SSH lockout warning (second-session rule), BunkerWeb trusted-proxy CIDR width-asymmetry (too narrow / too wide both bad), Postgres listen_addresses check (verify not changed by Docker).
+- New "Suggested apply order" sentence pointing through §37.1 → §37.17 → §34 → §35 → §32 → §38 → §37.18, plus triage advice for partially-hardened existing deployments.
+- New §37.19 "Verification checklist — prove each defense actually fires" with concrete commands grouped by area: SSH posture, network surface (`nmap`, `psql -h <public-ip>`), the X-Forwarded-For spoof test for the trusted-proxy CIDR gotcha, secrets file perms, service state (auditd/fail2ban/morphit-*/certbot/aide/ufw), squatter defense env loaded check (10 specific MORPHIT_RELAY_* lines), backup off-host + age decryption spot-test, application surface (`/v1/instance` + `/v1/relay/health`).
+
+**RUN-A-MORPHIT-NODE.md §11 sync:**
+
+- Line 1500 paragraph: "17-subsection hardening checklist" → "19-subsection hardening checklist" with appended one-sentence summaries of §37.18 (attack-vs-defense map) and §37.19 (verification commands).
+- §11 BunkerWeb subsection rewritten as "BunkerWeb — recommended WAF (canonical config shipped)" pointing at `ops/bunkerweb/README.md` Quick Start.
+
+**ops/bunkerweb/ NEW directory** paralleling existing `ops/nginx/`, `ops/systemd/`, `ops/postgres/`, `ops/backup/`:
+
+- `ops/bunkerweb/README.md` (~150 lines): turnkey deployment instructions, license note (BunkerWeb is AGPL-3.0 same as Morphit; we ship config not code), Quick Start, why morphit-services aren't in the same compose (canonical bare-metal systemd per §33), trusted-proxy CIDR explanation with asymmetric-footgun framing, version-pinning + drift warning (BunkerWeb env-vars change between major versions), customization expected per-deployment, note about Ansible playbook deploying this verbatim.
+- `ops/bunkerweb/docker-compose.yml`: pinned `bunkerity/bunkerweb:1.5.10` + `bunkerity/bunkerweb-scheduler:1.5.10`, host-resident relay/indexer via `host.docker.internal:host-gateway`, Let's Encrypt mount, fixed `172.20.0.0/16` Docker network CIDR so MORPHIT_RELAY_TRUSTED_PROXY_IPS can be hard-coded.
+- `ops/bunkerweb/bunkerweb.env.example`: OWASP CRS paranoia 3, anti-`Referer: none` rule on `/v1/relay/account/invite`, ASN block stubs for DigitalOcean/Hetzner/OVH (commented in ready to activate), country block empty by default, real-IP forwarding wired, CAPTCHA antibot on invite endpoint, rate limit 60r/m on /v1/.
+
+**OPERATIONS.md §32 promoted from optional to recommended:**
+
+- §32 heading renamed: "BunkerWeb — optional WAF..." → "BunkerWeb — recommended WAF..."
+- Opening paragraph rewritten to lead with the recommendation + point at `ops/bunkerweb/` shipping pattern.
+- New "Skip BunkerWeb only if:" subsection (small private instance, Tor-only, resource-constrained).
+- ToC anchor at line 74 updated to match the renamed heading (catches the silent breakage).
+
+**MORPHIT-BRAG-LIST.md entry #221 rewritten:**
+
+- Old: "BunkerWeb compatibility audit and WAF tuning advice."
+- New: "Turnkey BunkerWeb deployment in the box." (Morphit-shipped artifact, not third-party-Morphit-integrates-with framing).
+
+### Files modified (8)
+
+```
+NEW:
+  ops/bunkerweb/README.md
+  ops/bunkerweb/docker-compose.yml
+  ops/bunkerweb/bunkerweb.env.example
+
+EDITED:
+  docs/OPERATIONS.md            (§37 + §37.19 NEW + §32 reframe + ToC anchor)
+  docs/RUN-A-MORPHIT-NODE.md    (§11 line 1500 + §11 BunkerWeb subsection)
+  MORPHIT-BRAG-LIST.md          (entry #221)
+  docs/REVISIT-LIST.md          (cp8 maintained-line)
+  docs/AUDIT-2026-05.md         (cp8 entry)
+  TARBALL.md                    (this entry)
+```
+
+### Verification
+
+- Triple-pulse `bash scripts/run-smokes.sh`: 2,470 × 3, 0 failures (no smoke count change — doc-only + new ops/bunkerweb/ don't add code paths).
+- Cross-doc grep after edits: zero stale "optional WAF" hits for BunkerWeb in OPERATIONS.md or RUN-A-MORPHIT-NODE.md.  The remaining "optional but encouraged" hit is the RUN-A-MORPHIT-NODE.md §11 chapter heading — intentionally preserved because §11 is the broader hardening menu, not BunkerWeb-specific.
+- All cp7 invariants preserved.
+
+### Ansible-playbook cleanup note (for future regeneration)
+
+The Ansible playbook (`morphit-ansible.tar.gz`, separate deliverable) currently has BunkerWeb templates inline in `roles/bunkerweb/templates/`.  Now that `ops/bunkerweb/` exists in the morphit repo, the playbook's bunkerweb role should be updated to copy from `{{ morphit_repo_path }}/ops/bunkerweb/` rather than maintain duplicate templates — the same DRY pattern the playbook already uses for `ops/systemd/*.service`.  Logged here + in AUDIT cp8 entry + REVISIT maintained-line so it's not lost.
+
+### Pending — explicitly NOT cp8 scope, designed in this turn for cp9
+
+Matrix bot + operator alerts via Matrix DM (Surface B / @user:server private E2E) + user→operator contact via Matrix public room (Surface A / #room:server) with frontend surfaces on /support + /about-this-instance + footer link.  Alert tiering (CRITICAL no-rate-limit, WARN 1/hour per category, INFO daily-digest 09:00 UTC).  Persona sentinels protecting against `@↔#` replacement footgun.  10-locale parity for ~6 new strings.  New Ansible role.  Detailed design in the conversation; ~5-8 turns of work.
+
+---
 
 ## Part 121 cp7 — what's shipped (per-locale prerendering route restructure END-TO-END + scoped deep-deep)
 

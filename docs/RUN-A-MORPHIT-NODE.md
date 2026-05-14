@@ -1469,15 +1469,21 @@ Everything in §1–§10 gets you to a running, public Morphit instance with TLS
 
 ### Recommended additions
 
-#### BunkerWeb — open-source WAF
+#### BunkerWeb — recommended WAF (canonical config shipped)
 
-[BunkerWeb](https://www.bunkerweb.io) is an AGPLv3 reverse-proxy WAF. It adds OWASP Top-10 protection, bot detection, GeoIP filtering, and behavioral DDoS mitigation in front of your Morphit stack. You'd use it INSTEAD of nginx (simpler) or in front of nginx (more layers). Worth setting up if:
+[BunkerWeb](https://www.bunkerweb.io) is an AGPLv3 reverse-proxy WAF.  Adds OWASP Top-10 protection, bot detection, GeoIP filtering, per-AS rate limiting, and behavioral DDoS mitigation in front of your Morphit stack.  Recommended for **any public-facing instance**.
 
-- You're seeing bot traffic that nginx's basic rate limiting isn't catching.
-- You want a single web UI for HTTPS, rate limits, and security rules.
-- You're running a high-profile public instance.
+The morphit repo ships a turnkey BunkerWeb deployment at `ops/bunkerweb/` — paralleling `ops/nginx/` and `ops/systemd/`.  Copy to `/etc/bunkerweb/`, edit the operator-tunable values (your domain, ASN block list if any), `docker compose up -d`.  The compose pins a `172.20.0.0/16` Docker network so the relay's `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without re-inspecting after rebuilds.  See `ops/bunkerweb/README.md` for the Quick Start.
 
-Full install + Morphit-specific tuning (the `/relay/v1/*` and SSE endpoints need carve-outs) in `OPERATIONS.md` §32.
+Operators using the Ansible playbook get this deployment automatically.
+
+Skip BunkerWeb only if:
+
+- You're running a small private instance with a single-operator audience.
+- Tor-only or Lokinet-only deployment (squatters don't route through anonymity networks; .onion has natural friction).
+- Resource-constrained VPS (<1 GB RAM) — BunkerWeb + scheduler add ~150–250 MB resident.
+
+Full configuration reference, architecture options (BunkerWeb instead of nginx vs. in front of nginx), and Morphit-specific tuning (the `/v1/relay/*` and SSE endpoints) in `OPERATIONS.md` §32.
 
 #### Docker
 
@@ -1497,7 +1503,7 @@ The defaults from §5 are fine. If you want:
 
 #### Comprehensive server hardening (defense-in-depth)
 
-`OPERATIONS.md` §37 is a copy-pasteable, 17-subsection hardening checklist for everything BELOW the application layer: SSH, kernel sysctls, /tmp mount options, systemd unit isolation (ProtectSystem, NoNewPrivileges, capability dropping), auditd, AppArmor, Postgres SCRAM + pg_hba, AIDE filesystem integrity, secrets file 0600 + age encryption, LUKS full-disk encryption, encrypted backups, outbound egress allowlist, alerting, rootkit scanners, GRUB password, password discipline. The threat model assumed: a determined attacker who has read every line of Morphit's public source and is now probing the host itself. Each subsection independently improves posture; apply in order, test, stop when you hit your operational risk tolerance.
+`OPERATIONS.md` §37 is a copy-pasteable, 19-subsection hardening checklist for everything BELOW the application layer: SSH, kernel sysctls, /tmp mount options, systemd unit isolation (ProtectSystem, NoNewPrivileges, capability dropping), auditd, AppArmor, Postgres SCRAM + pg_hba, AIDE filesystem integrity, secrets file 0600 + age encryption, LUKS full-disk encryption, encrypted backups, outbound egress allowlist, alerting, rootkit scanners, GRUB password, password discipline.  Finishes with §37.18 (final attack-vs-defense map showing which subsection blocks each attack class) and §37.19 (concrete copy-pasteable verification commands that prove each defense actually fires — `nmap` for network surface, the X-Forwarded-For spoof test for the trusted-proxy CIDR gotcha, `aide --check`, etc.).  The threat model assumed: a determined attacker who has read every line of Morphit's public source and is now probing the host itself. Each subsection independently improves posture; apply in order, test with §37.19, stop when you hit your operational risk tolerance.
 
 The README of §37 spells out which attack each defense blocks, with severity notes about which subsections are aspirational vs. baseline. Recommended baseline for any public Morphit instance: §37.1 (SSH hardening), §37.2 (unattended security upgrades), §37.3 (kernel sysctl), §37.6 (auditd), §37.8 (Postgres SCRAM), §37.10 (secrets file perms), §37.14 (msmtp for alerting). Everything else is operator's-call.
 
