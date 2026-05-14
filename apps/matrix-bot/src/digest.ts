@@ -99,7 +99,7 @@ export function buildDigestBody(
 	// Group by category for readability.
 	const byCategory = new Map<string, StructuredAlert[]>();
 	for (const e of events) {
-		const cat = `${e.module}:${e.kind}`;
+		const cat = `${e.module}:${e.event}`;
 		const arr = byCategory.get(cat) ?? [];
 		arr.push(e);
 		byCategory.set(cat, arr);

@@ -1502,6 +1502,24 @@ Two operator-config knobs set at `morphit-ops init` time and editable in `morphi
 
 Setup + the full alert-tier policy + vacation coverage advice in `OPERATIONS.md` §16 "Canonical Matrix routing — apps/matrix-bot".
 
+#### Host-resource monitoring — disk / memory / swap / CPU
+
+A companion to the matrix-bot.  `ops/scripts/morphit-host-monitor.sh` is a POSIX-sh sidecar that runs every 5 minutes via a systemd timer, polls `/proc/meminfo` + `df` + `/proc/loadavg` + `/proc/vmstat`, and emits structured JSON to journalctl when host-level thresholds are crossed.  The matrix-bot picks them up automatically because `morphit-host-monitor.service` is in the default `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS` list — no extra wiring required.
+
+What gets alerted (all thresholds env-tunable in `/etc/morphit/host-monitor.env`):
+
+- **Disk** — INFO >70%, WARN >85%, CRITICAL >95% (per mount; default `/` only)
+- **Memory** — INFO >70%, WARN >85%, CRITICAL >95% used
+- **Swap usage** — INFO >25%, WARN >50%, CRITICAL >75% used
+- **Swap thrashing** — WARN >100 pages/sec, CRITICAL >1000 pages/sec (delta tracked across runs)
+- **CPU saturation** — INFO >1.5x cores, WARN >3x cores, CRITICAL >5x cores (1-min load average)
+
+Each alert ships with ELI5 advice in the DM (e.g. mem_critical says "the OOM killer will start killing processes soon — check `ps aux --sort=-%mem | head -10`").
+
+Opt-in default — if you don't `systemctl enable --now morphit-host-monitor.timer`, the sidecar doesn't run and no host-resource alerts fire.  Same opt-in promise as matrix-bot.
+
+Full setup procedure + threshold tuning + adding extra mount points in `OPERATIONS.md` §16 "Host-resource monitoring sidecar".
+
 #### Docker
 
 If you already use Docker for everything else, you can run Morphit's indexer + relay + web + Postgres in containers. Same monorepo, just a `docker-compose.yml` you write once. Trade-offs (consistency vs. backup complexity) and a tested compose shape in `OPERATIONS.md` §33.

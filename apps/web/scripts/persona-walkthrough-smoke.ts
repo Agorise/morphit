@@ -93,6 +93,36 @@
  *             defending — losing the surface would silently
  *             erase the federation-stance feature.
  *
+ *   P121-CP9  Eight sentinels pinning the matrix-bot operator-
+ *             alert sidecar + user→operator contact surfaces.
+ *             SSoT parseMxid + parseRoomAlias with branded
+ *             types prevent the privacy-violating @↔#
+ *             confusion at compile time; indexer config refuses
+ *             @-prefixed input in the room slot with privacy
+ *             framing; /v1/instance exposes only operator_matrix_room
+ *             (never an MXID); bot config refuses #-prefixed input
+ *             in the MXID slot; sendDm() signature is typed against
+ *             MatrixMxid (branded); main loop wires CRITICAL bypass
+ *             + WARN gate + INFO accumulator; indexer-client mirror
+ *             preserves the split; wizard step validates both
+ *             prefixes with examples shown.
+ *
+ *   P121-CP10 Five sentinels pinning the host-resource monitor
+ *             sidecar.  The POSIX-sh script at
+ *             ops/scripts/morphit-host-monitor.sh polls
+ *             /proc/meminfo + df + /proc/loadavg + /proc/vmstat
+ *             and emits structured JSON to journalctl matching
+ *             the LogRecord envelope; the systemd unit + timer
+ *             mirror the hardening posture used for indexer/
+ *             relay and are opt-in via timer enable; the
+ *             classifier knows about every host-resource event
+ *             at every tier (5 CRITICAL, 5 WARN, 4 INFO); the
+ *             ALERT_COPY ships friendly ELI5 advice for all 14
+ *             host-resource events; and the bot's default
+ *             JOURNALCTL_UNITS list includes
+ *             morphit-host-monitor.service so alerts route
+ *             without any operator-side wiring.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -742,6 +772,103 @@ const SCENARIOS: readonly Scenario[] = [
 			"startsWith('@')",
 			'MATRIX_EXAMPLE_MXID',
 			'MATRIX_EXAMPLE_ROOM_ALIAS'
+		]
+	},
+
+	// ─── P121-CP10 — host-resource monitor sidecar ──────────────
+	//
+	// Five sentinels pinning the cp10 invariants: the sidecar
+	// script exists + is executable, the systemd unit + timer
+	// exist, the classifier knows about host-resource events at
+	// every tier, the ALERT_COPY has friendly ELI5 advice for
+	// every host-resource event, and the bot's default
+	// JOURNALCTL_UNITS list includes morphit-host-monitor.service
+	// so alerts route automatically.
+
+	{
+		name: 'P121-CP10-1 — host-resource sidecar script exists, is POSIX-sh, emits structured JSON in LogRecord envelope shape',
+		file: 'ops/scripts/morphit-host-monitor.sh',
+		rootRelative: true,
+		mustHave: [
+			'#!/bin/sh',
+			'module":"host-resource"',
+			'systemd-cat -t morphit-host-monitor',
+			'/proc/meminfo',
+			'/proc/loadavg',
+			'/proc/vmstat',
+			'pswpin',
+			'pswpout',
+			'MORPHIT_HOST_DISK_CRITICAL',
+			'MORPHIT_HOST_MEM_CRITICAL',
+			'MORPHIT_HOST_SWAP_THRASH_CRITICAL',
+			'MORPHIT_HOST_CPU_CRITICAL'
+		]
+	},
+	{
+		name: 'P121-CP10-2 — systemd service + timer for host-monitor exist, mirror hardening posture, opt-in via timer enable',
+		file: 'ops/systemd/morphit-host-monitor.service',
+		rootRelative: true,
+		mustHave: [
+			'Type=oneshot',
+			'User=morphit-host-monitor',
+			'ProtectSystem=strict',
+			'NoNewPrivileges=true',
+			'PrivateNetwork=true',
+			'ReadWritePaths=/var/lib/morphit-host-monitor',
+			'EnvironmentFile=-/etc/morphit/host-monitor.env',
+			'/opt/morphit/ops/scripts/morphit-host-monitor.sh'
+		]
+	},
+	{
+		name: 'P121-CP10-3 — classifier knows about host-resource events at every tier (5 CRITICAL, 5 WARN, 4 INFO)',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'host-resource' && a.event === 'disk_critical'",
+			"'host-resource' && a.event === 'mem_critical'",
+			"'host-resource' && a.event === 'swap_critical'",
+			"'host-resource' && a.event === 'swap_thrashing_critical'",
+			"'host-resource' && a.event === 'cpu_saturated_critical'",
+			"'host-resource' && a.event === 'disk_warn'",
+			"'host-resource' && a.event === 'mem_warn'",
+			"'host-resource' && a.event === 'swap_warn'",
+			"'host-resource' && a.event === 'swap_thrashing_warn'",
+			"'host-resource' && a.event === 'cpu_saturated_warn'"
+		]
+	},
+	{
+		name: 'P121-CP10-4 — ALERT_COPY has friendly ELI5 advice for every host-resource event (14 entries)',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'host-resource:disk_critical'",
+			"'host-resource:disk_warn'",
+			"'host-resource:disk_info'",
+			"'host-resource:mem_critical'",
+			"'host-resource:mem_warn'",
+			"'host-resource:mem_info'",
+			"'host-resource:swap_critical'",
+			"'host-resource:swap_warn'",
+			"'host-resource:swap_info'",
+			"'host-resource:swap_thrashing_critical'",
+			"'host-resource:swap_thrashing_warn'",
+			"'host-resource:cpu_saturated_critical'",
+			"'host-resource:cpu_saturated_warn'",
+			"'host-resource:cpu_saturated_info'",
+			'OOM ',
+			'sudo journalctl --vacuum-time=7d',
+			'ps aux --sort=-%mem'
+		]
+	},
+	{
+		name: 'P121-CP10-5 — matrix-bot default JOURNALCTL_UNITS includes morphit-host-monitor.service for automatic routing',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			'MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS',
+			'morphit-indexer.service',
+			'morphit-relay.service',
+			'morphit-host-monitor.service'
 		]
 	}
 ];

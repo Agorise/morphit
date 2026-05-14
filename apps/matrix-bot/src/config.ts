@@ -56,7 +56,9 @@ const SCHEMA = z.object({
 
 	MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS: z
 		.string()
-		.default('morphit-indexer.service,morphit-relay.service'),
+		.default(
+			'morphit-indexer.service,morphit-relay.service,morphit-host-monitor.service'
+		),
 
 	MORPHIT_MATRIX_BOT_STATE_DB: z
 		.string()
