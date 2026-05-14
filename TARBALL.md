@@ -1,10 +1,80 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 9)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 10)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp9-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp10-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp8-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp9-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp10 — what's shipped (host-resource monitor sidecar + classifier real-event-name rewrite)
+
+### Pretext
+
+cp9 sealed the matrix-bot work.  Ken caught three corrections in the same session: placeholder confusion (`@agorise-relay` is a fake account), number accuracy (cp9's `{count}/{ceiling}` template referenced a field the emitter doesn't actually carry), and a request to build host-resource alerts (disk/CPU/memory/swap thrashing) immediately as cp10.
+
+While verifying #2 I discovered cp9's classifier was using fabricated event names + payload keys throughout — the actual logger emit shape (apps/{indexer,relay}/src/log/index.ts) is `{ts, level, module, event, context, error?}` with payload nested in `context`, and event names are lowercase_with_underscores not uppercase.  cp10 ships the full correction plus the requested host-resource sidecar.
+
+### What shipped
+
+**Host-resource sidecar (3 new files):**
+
+- `ops/scripts/morphit-host-monitor.sh` — POSIX-sh, polls /proc/meminfo + df + /proc/loadavg + /proc/vmstat, emits structured JSON via `systemd-cat -t morphit-host-monitor` in the exact LogRecord envelope the bot expects.  15 distinct event names across 5 resource categories.  Three tiers per category (INFO/WARN/CRITICAL), all env-tunable.  Swap-thrashing detected via delta tracking of /proc/vmstat pswpin/pswpout between runs (state file at /var/lib/morphit-host-monitor/last-vmstat).  Live-tested with mocked systemd-cat — output passes `python3 -m json.tool` cleanly.
+- `ops/systemd/morphit-host-monitor.service` — Type=oneshot, runs as `morphit-host-monitor` system user, hardened (ProtectSystem=strict, NoNewPrivileges, PrivateNetwork=true since /proc-only, SystemCallFilter=@system-service ~@privileged @resources).  EnvironmentFile=- (optional).
+- `ops/systemd/morphit-host-monitor.timer` — OnBootSec=30s, OnUnitActiveSec=5min.  Opt-in: operator must `systemctl enable --now morphit-host-monitor.timer`.
+
+**Thresholds (defaults):**
+
+| Resource | INFO | WARN | CRITICAL |
+|---|---|---|---|
+| Disk usage % | >70 | >85 | >95 |
+| Memory used % | >70 | >85 | >95 |
+| Swap used % | >25 | >50 | >75 |
+| Swap thrashing pages/sec | — | >100 | >1000 |
+| CPU loadavg/cores | >1.5x | >3x | >5x |
+
+**Bot integration (1 line):**
+
+apps/matrix-bot/src/config.ts default `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS` now includes `morphit-host-monitor.service`.  Alerts route automatically — zero further bot changes needed for the host-monitor or any future sidecar that follows the same envelope.
+
+**Classifier rewrite (the bigger fix):**
+
+- `StructuredAlert.kind` renamed to `.event` throughout to match real LogRecord shape.
+- `parseJournalLine` updated to pull `event` from inner JSON + payload from `inner.context` (cp9 was reading top-level fields — would have returned `undefined` payload in production).
+- All `CRITICAL_MATCHERS` + `WARN_MATCHERS` use real event names verified by grep across emit sites: `operator-balance:{low_balance, balance_recovered, rpc_sustained_failure, shape_error}`, `signup-ceiling:{ceiling_reached}`, `kill-switch:{kill_switch_activated, kill_switch_active_at_startup, kill_switch_deactivated}`.  Aspirational events kept for tier-routing-when-emit-lands.
+- All `ALERT_COPY` templates updated to use real placeholder names (snake_case: `balance_blurt`, `threshold_blurt`, `account`, `role`, `consecutive_failures`, `last_error`, `ceiling`, `reached_at`, `resets_at`, `path`).
+- `substitute()` now returns `<unknown>` for missing keys (was returning literal `{key}` text).
+- `digest.ts` uses `e.event` (was `e.kind`).
+- classifier-smoke fully rewritten with REAL event names + 14 host-resource scenarios.
+
+**14 new ALERT_COPY entries** for `host-resource:*` events with ELI5 advice:
+
+- `disk_critical` → "free space NOW: `sudo journalctl --vacuum-time=7d`, `sudo apt clean`, prune old releases"
+- `mem_critical` → "the OOM killer will start killing processes soon — check `ps aux --sort=-%mem | head -10`"
+- `swap_thrashing_critical` → "the system is spending most of its time moving memory between RAM and swap — kill the largest memory consumer"
+- (11 more covering disk/mem/swap/cpu at WARN+INFO and swap_thrashing at WARN)
+
+**5 P121-CP10 persona sentinels** pinning every cp10 invariant.
+
+**Docs (cross-doc grep up front per cp8 discipline):**
+
+- OPERATIONS.md §16 "Host-resource monitoring sidecar" — full threshold table + setup procedure + env-tuning ini + extension pattern.
+- RUN-A-MORPHIT-NODE.md §11 "Host-resource monitoring" subsection between Matrix alerting and Docker.
+- MORPHIT-BRAG-LIST entry #259; closing count 258 → 259.
+
+### Verification
+
+- Triple-pulse: 2,551 × 3, 0 failures.  cp9 baseline 2,527 → cp10 baseline 2,551 (+24).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- Bash script live-tested with mocked systemd-cat: valid parseable JSON in correct envelope shape.
+
+### Pending — NOT cp10 SCOPE
+
+- Ansible playbook update with roles/host_monitor/ (still pending from cp8/cp9).
+- Extended monitoring targets (smartctl, fail2ban metrics, mdadm RAID) — same sidecar pattern, separate scripts.
+- Optional tighter-cadence timer (1min instead of 5min) for heavy-hardware operators.
+- npm install in matrix-bot workspace still pending for matrix-bot-sdk + better-sqlite3.
+
+---
 
 ## Part 121 cp9 — what's shipped (Matrix-bot sidecar + operator alerts + user→operator contact surfaces END-TO-END)
 

@@ -2328,6 +2328,110 @@ going live.
 generic Option 1 advice above still applies.  matrix-bot is the
 canonical sidecar but not the only one supported.
 
+### Host-resource monitoring sidecar — disk / memory / swap / CPU
+
+The matrix-bot tails `morphit-indexer` + `morphit-relay` journals
+by default, which surfaces application-level events.  Host-level
+resource exhaustion (disk full, memory critical, swap thrashing,
+CPU saturated) is monitored by a separate **bash-script sidecar**
+shipped at `ops/scripts/morphit-host-monitor.sh` with an
+accompanying systemd timer at `ops/systemd/morphit-host-monitor.timer`.
+
+The sidecar:
+
+1. Runs every 5 minutes (configurable via the `.timer` file).
+2. Reads `/proc/meminfo`, `df -P`, `/proc/loadavg`, `/proc/vmstat`.
+3. Compares against configurable thresholds (env-tunable).
+4. Emits structured JSON to journalctl via `systemd-cat -t
+   morphit-host-monitor`.
+5. The bot picks these up automatically because
+   `morphit-host-monitor.service` is in the default
+   `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS` list.
+
+Three tiers per resource:
+
+| Resource | INFO threshold | WARN threshold | CRITICAL threshold |
+|---|---|---|---|
+| Disk usage | >70% | >85% | >95% |
+| Memory usage | >70% | >85% | >95% |
+| Swap usage | >25% | >50% | >75% |
+| Swap thrashing (pages/sec) | — | >100 | >1000 |
+| CPU saturation (load/cores) | >1.5x | >3x | >5x |
+
+All thresholds are env-tunable.  The defaults are reasonable for
+a 1-4 vCPU / 2-8 GB RAM VPS — operators on heavier hardware may
+relax them; operators on tighter hardware may tighten them.
+
+**Setup:**
+
+```sh
+# 1. Create the system user.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin \
+             morphit-host-monitor
+sudo mkdir -p /var/lib/morphit-host-monitor
+sudo chown morphit-host-monitor:morphit-host-monitor \
+           /var/lib/morphit-host-monitor
+sudo chmod 0750 /var/lib/morphit-host-monitor
+
+# 2. (Optional) Write /etc/morphit/host-monitor.env with operator-
+#    tuned thresholds.  See ops/scripts/morphit-host-monitor.sh
+#    for the full list.  Skip if the defaults are fine.
+
+# 3. Install + enable the timer.
+sudo cp /opt/morphit/ops/systemd/morphit-host-monitor.service \
+        /etc/systemd/system/
+sudo cp /opt/morphit/ops/systemd/morphit-host-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-host-monitor.timer
+
+# 4. Verify (the timer fires once 30s after boot, then every 5m).
+sudo systemctl list-timers morphit-host-monitor.timer
+sudo journalctl -u morphit-host-monitor --since '10 minutes ago'
+# Expect: structured JSON lines on stdout when any threshold is
+# breached.  No output means everything is within INFO thresholds.
+```
+
+**Configurable env vars** (with defaults):
+
+```ini
+# /etc/morphit/host-monitor.env
+MORPHIT_HOST_DISK_CRITICAL=95
+MORPHIT_HOST_DISK_WARN=85
+MORPHIT_HOST_DISK_INFO=70
+MORPHIT_HOST_DISK_PATHS=/          # space-separated; add /var if separate
+
+MORPHIT_HOST_MEM_CRITICAL=95
+MORPHIT_HOST_MEM_WARN=85
+MORPHIT_HOST_MEM_INFO=70
+
+MORPHIT_HOST_SWAP_CRITICAL=75
+MORPHIT_HOST_SWAP_WARN=50
+MORPHIT_HOST_SWAP_INFO=25
+
+MORPHIT_HOST_SWAP_THRASH_CRITICAL=1000   # pages/sec
+MORPHIT_HOST_SWAP_THRASH_WARN=100
+
+MORPHIT_HOST_CPU_CRITICAL=5.0      # loadavg / cores ratio
+MORPHIT_HOST_CPU_WARN=3.0
+MORPHIT_HOST_CPU_INFO=1.5
+```
+
+**Opt-in default, same as matrix-bot.** If you don't enable the
+timer, the sidecar doesn't run and no host-resource alerts fire.
+Operators not using Matrix at all skip both the bot and the
+sidecar.
+
+**Adding more host-watch targets later:** the bot is open to any
+unit name listed in `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS`.  If
+you write your own monitor (e.g. a Nagios plugin wrapper) that
+emits the same `{ts, level, module, event, context}` JSON shape
+via `systemd-cat -t <your-name>`, the bot will tier-route it
+through the classifier.  Unknown (module, event) pairs default
+to INFO (digest); add an explicit matcher in
+`apps/matrix-bot/src/classifier.ts` if you want CRITICAL or WARN
+routing for a specific event.
+
 ## 17. Relay origin allowlist — protecting your instance from billing drift
 
 The relay consumes one of your pre-minted ACTs on every

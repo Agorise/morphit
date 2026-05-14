@@ -2,10 +2,11 @@
 /**
  * Classifier smoke — pins the alert-tier policy.
  *
- * Each scenario is a (alert payload → expected tier) pair.  The
- * tier policy controls what wakes an operator at 3 AM, so drift
- * here is non-trivial.  This smoke locks it in: every tier
- * change must come with an explicit scenario update.
+ * Each scenario is a (alert payload → expected tier) pair.  Event
+ * names + payload keys match what the indexer + relay emitters
+ * actually produce (apps/{indexer,relay}/src/log) — NOT
+ * aspirational names.  Tier policy changes require explicit
+ * scenario updates here.
  */
 
 import { classify, type StructuredAlert, type AlertTier } from '../src/classifier.ts';
@@ -16,144 +17,309 @@ interface Scenario {
 	readonly expectedTier: AlertTier;
 }
 
-function alert(
+function a(
 	module: string,
-	kind: string,
+	event: string,
 	payload?: Record<string, unknown>
 ): StructuredAlert {
-	return { module, kind, payload, ts: '2026-05-14T12:00:00.000Z' };
+	return { module, event, payload, ts: '2026-05-14T12:00:00.000Z' };
 }
 
 const scenarios: Scenario[] = [
-	// ─── CRITICAL ─────────────────────────────────────────────
+	// ─── CRITICAL — wired in code today ───────────────────────
 	{
-		name: 'tamper bundle-hash mismatch → CRITICAL',
-		alert: alert('tamper', 'BUNDLE_HASH_MISMATCH'),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'tamper pubkey mismatch → CRITICAL',
-		alert: alert('tamper', 'PUBKEY_MISMATCH'),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'kill-switch fired → CRITICAL',
-		alert: alert('kill-switch', 'FIRED', { reason: 'manual' }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'sustained RPC failure → CRITICAL (alerting itself is blind)',
-		alert: alert('operator-balance', 'SUSTAINED_RPC_FAILURE', { consecutive: 5 }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'witness-fee SUSTAINED_RPC_FAILURE → CRITICAL',
-		alert: alert('witness-fee', 'SUSTAINED_RPC_FAILURE'),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'signup daily ceiling reached → CRITICAL (active attack signal)',
-		alert: alert('signup-ceiling', 'ceiling_reached', { ceiling: 20, count: 20 }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'fee-verifier INVALID_FEE_METHOD → CRITICAL (Memory #23 — USDT attempted as listing fee)',
-		alert: alert('fee-verifier', 'INVALID_FEE_METHOD', { attempted: 'usdt' }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'backup FAILED → CRITICAL',
-		alert: alert('backup', 'FAILED', { reason: 'disk_full' }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'AIDE integrity violation → CRITICAL',
-		alert: alert('aide', 'INTEGRITY_VIOLATION', { changed: 5 }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'operator-balance LOW_BALANCE at 0 → CRITICAL (relay halted)',
-		alert: alert('operator-balance', 'LOW_BALANCE', {
-			current_blurt: 0,
-			threshold_blurt: 100,
-			account: 'my-relay',
-			role: 'relay'
-		}),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'operator-balance LOW_BALANCE negative → CRITICAL',
-		alert: alert('operator-balance', 'LOW_BALANCE', {
-			current_blurt: -0.001,
+		name: 'operator-balance low_balance at 0 → CRITICAL (relay halted)',
+		alert: a('operator-balance', 'low_balance', {
+			account: 'morphit-relay',
+			role: 'relay',
+			balance_blurt: 0,
 			threshold_blurt: 100
 		}),
 		expectedTier: 'CRITICAL'
 	},
-
-	// ─── WARN ─────────────────────────────────────────────────
 	{
-		name: 'operator-balance LOW_BALANCE positive but below threshold → WARN',
-		alert: alert('operator-balance', 'LOW_BALANCE', {
-			current_blurt: 47.2,
-			threshold_blurt: 100,
-			account: 'my-relay',
-			role: 'relay'
+		name: 'operator-balance low_balance negative → CRITICAL',
+		alert: a('operator-balance', 'low_balance', {
+			account: 'morphit-relay',
+			role: 'relay',
+			balance_blurt: -0.001,
+			threshold_blurt: 100
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'operator-balance rpc_sustained_failure → CRITICAL (alerting blind)',
+		alert: a('operator-balance', 'rpc_sustained_failure', {
+			consecutive_failures: 5,
+			last_error: 'ECONNREFUSED'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'operator-balance shape_error → CRITICAL (chain upgrade)',
+		alert: a('operator-balance', 'shape_error', {
+			account: 'morphit-relay',
+			raw_balance: 'malformed'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'signup-ceiling ceiling_reached → CRITICAL (active attack)',
+		alert: a('signup-ceiling', 'ceiling_reached', {
+			ceiling: 50,
+			reached_at: '2026-05-14T18:30:00.000Z',
+			resets_at: '2026-05-15T00:00:00.000Z'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'kill-switch kill_switch_activated → CRITICAL',
+		alert: a('kill-switch', 'kill_switch_activated', {
+			path: '/var/lib/morphit-relay/kill-switch'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'kill-switch kill_switch_active_at_startup → CRITICAL',
+		alert: a('kill-switch', 'kill_switch_active_at_startup', {
+			path: '/var/lib/morphit-relay/kill-switch'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── CRITICAL — aspirational (matcher reserved) ──────────
+	{
+		name: 'witness-fee rpc_sustained_failure → CRITICAL',
+		alert: a('witness-fee', 'rpc_sustained_failure'),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'tamper bundle_hash_mismatch → CRITICAL',
+		alert: a('tamper', 'bundle_hash_mismatch'),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'tamper pubkey_mismatch → CRITICAL',
+		alert: a('tamper', 'pubkey_mismatch'),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'tamper invalid_payload → CRITICAL',
+		alert: a('tamper', 'invalid_payload'),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'backup failed → CRITICAL',
+		alert: a('backup', 'failed', { reason: 'disk_full' }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'aide integrity_violation → CRITICAL',
+		alert: a('aide', 'integrity_violation', { changed: 5 }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'fee-verifier invalid_fee_method → CRITICAL (Memory #23 USDT block)',
+		alert: a('fee-verifier', 'invalid_fee_method', { attempted: 'usdt' }),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── CRITICAL — cp10 host-resource ────────────────────────
+	{
+		name: 'host-resource disk_critical → CRITICAL',
+		alert: a('host-resource', 'disk_critical', {
+			path: '/',
+			percent: 96,
+			threshold: 95
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'host-resource mem_critical → CRITICAL',
+		alert: a('host-resource', 'mem_critical', { percent: 96, threshold: 95 }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'host-resource swap_critical → CRITICAL',
+		alert: a('host-resource', 'swap_critical', { percent: 80, threshold: 75 }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'host-resource swap_thrashing_critical → CRITICAL',
+		alert: a('host-resource', 'swap_thrashing_critical', {
+			pages_per_sec: 1500,
+			pages_in: 800,
+			pages_out: 700
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'host-resource cpu_saturated_critical → CRITICAL',
+		alert: a('host-resource', 'cpu_saturated_critical', {
+			load1: 20.5,
+			cores: 4,
+			ratio: 5.13,
+			threshold: 5
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── WARN — wired in code today ───────────────────────────
+	{
+		name: 'operator-balance low_balance positive (above zero) → WARN',
+		alert: a('operator-balance', 'low_balance', {
+			account: 'morphit-relay',
+			role: 'relay',
+			balance_blurt: 47.2,
+			threshold_blurt: 100
+		}),
+		expectedTier: 'WARN'
+	},
+
+	// ─── WARN — aspirational ──────────────────────────────────
+	{
+		name: 'witness-fee changed → WARN',
+		alert: a('witness-fee', 'changed', { old: 100, new: 110 }),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'price feed_stale → WARN (verification unaffected)',
+		alert: a('price', 'feed_stale', { last_update_age_min: 90 }),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'price-coingecko feed_stale → WARN',
+		alert: a('price-coingecko', 'feed_stale', { last_update_age_min: 60 }),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'price-klingex feed_stale → WARN',
+		alert: a('price-klingex', 'feed_stale', { last_update_age_min: 60 }),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'signup-anomaly single_ip_spike → WARN',
+		alert: a('signup-anomaly', 'single_ip_spike', {
+			ip: '198.51.100.1',
+			count: 7
 		}),
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'witness-fee CHANGED → WARN',
-		alert: alert('witness-fee', 'CHANGED', { old: 100, new: 110 }),
+		name: 'federation-probe peer_down_24h → WARN',
+		alert: a('federation-probe', 'peer_down_24h', { peer: 'other.example' }),
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'price-feed STALE → WARN (fee verification unaffected)',
-		alert: alert('price-feed', 'STALE', { last_update_age_min: 90 }),
-		expectedTier: 'WARN'
-	},
-	{
-		name: 'signup-anomaly SINGLE_IP_SPIKE → WARN',
-		alert: alert('signup-anomaly', 'SINGLE_IP_SPIKE', { ip: '198.51.100.1', count: 7 }),
-		expectedTier: 'WARN'
-	},
-	{
-		name: 'federation-probe PEER_DOWN_24H → WARN',
-		alert: alert('federation-probe', 'PEER_DOWN_24H', { peer: 'other.example' }),
-		expectedTier: 'WARN'
-	},
-	{
-		name: 'sequential-detector PATTERN_DETECTED → WARN',
-		alert: alert('sequential-detector', 'PATTERN_DETECTED', { prefix: 'spam', count: 3 }),
+		name: 'sequential-detector pattern_detected → WARN',
+		alert: a('sequential-detector', 'pattern_detected', {
+			prefix: 'spam',
+			count: 3
+		}),
 		expectedTier: 'WARN'
 	},
 
-	// ─── INFO (catch-all) ─────────────────────────────────────
+	// ─── WARN — cp10 host-resource ────────────────────────────
 	{
-		name: 'operator-balance RECOVERED → INFO',
-		alert: alert('operator-balance', 'RECOVERED', { current_blurt: 250 }),
-		expectedTier: 'INFO'
+		name: 'host-resource disk_warn → WARN',
+		alert: a('host-resource', 'disk_warn', {
+			path: '/',
+			percent: 87,
+			threshold: 85
+		}),
+		expectedTier: 'WARN'
 	},
 	{
-		name: 'backup SUCCEEDED → INFO',
-		alert: alert('backup', 'SUCCEEDED', { size_mb: 432 }),
-		expectedTier: 'INFO'
+		name: 'host-resource mem_warn → WARN',
+		alert: a('host-resource', 'mem_warn', { percent: 87, threshold: 85 }),
+		expectedTier: 'WARN'
 	},
 	{
-		name: 'federation-probe DISCOVERED → INFO',
-		alert: alert('federation-probe', 'DISCOVERED', { peer: 'new.example' }),
-		expectedTier: 'INFO'
+		name: 'host-resource swap_warn → WARN',
+		alert: a('host-resource', 'swap_warn', { percent: 55, threshold: 50 }),
+		expectedTier: 'WARN'
 	},
 	{
-		name: 'unknown module → INFO (safe default — surface but no rate limit lookup)',
-		alert: alert('totally-new-module', 'WHATEVER_EVENT'),
-		expectedTier: 'INFO'
+		name: 'host-resource swap_thrashing_warn → WARN',
+		alert: a('host-resource', 'swap_thrashing_warn', {
+			pages_per_sec: 250,
+			pages_in: 150,
+			pages_out: 100
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'host-resource cpu_saturated_warn → WARN',
+		alert: a('host-resource', 'cpu_saturated_warn', {
+			load1: 13.2,
+			cores: 4,
+			ratio: 3.3,
+			threshold: 3
+		}),
+		expectedTier: 'WARN'
 	},
 
-	// ─── adversarial: empty payload ───────────────────────────
+	// ─── INFO (catch-all + reserved kinds) ────────────────────
 	{
-		name: 'tamper BUNDLE_HASH_MISMATCH with no payload still classifies CRITICAL',
-		alert: alert('tamper', 'BUNDLE_HASH_MISMATCH'),
-		expectedTier: 'CRITICAL'
+		name: 'operator-balance balance_recovered → INFO',
+		alert: a('operator-balance', 'balance_recovered', {
+			account: 'morphit-relay',
+			role: 'relay',
+			balance_blurt: 250,
+			threshold_blurt: 100
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'kill-switch kill_switch_deactivated → INFO',
+		alert: a('kill-switch', 'kill_switch_deactivated', {
+			path: '/var/lib/morphit-relay/kill-switch'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'backup succeeded → INFO',
+		alert: a('backup', 'succeeded', { size_mb: 432 }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'federation-probe discovered → INFO',
+		alert: a('federation-probe', 'discovered', { peer: 'new.example' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'unknown module → INFO (safe default, surface but no rate-limit lookup)',
+		alert: a('totally-new-module', 'whatever_event'),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'host-resource disk_info → INFO',
+		alert: a('host-resource', 'disk_info', {
+			path: '/',
+			percent: 72,
+			threshold: 70
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'host-resource mem_info → INFO',
+		alert: a('host-resource', 'mem_info', { percent: 72, threshold: 70 }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'host-resource swap_info → INFO',
+		alert: a('host-resource', 'swap_info', { percent: 28, threshold: 25 }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'host-resource cpu_saturated_info → INFO',
+		alert: a('host-resource', 'cpu_saturated_info', {
+			load1: 7.0,
+			cores: 4,
+			ratio: 1.75,
+			threshold: 1.5
+		}),
+		expectedTier: 'INFO'
 	}
 ];
 

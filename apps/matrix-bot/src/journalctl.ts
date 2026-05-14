@@ -19,7 +19,13 @@ export interface JournalctlTailer {
 /** Best-effort parser: pulls the structured fields out of a
  *  journald JSON line.  Returns null if the line doesn't look
  *  like a Morphit structured alert (no `module` field, etc.) —
- *  most journald lines fall into this bucket and we skip them. */
+ *  most journald lines fall into this bucket and we skip them.
+ *
+ *  Expects the inner JSON shape produced by apps/indexer/src/log
+ *  and apps/relay/src/log (both modules share the LogRecord
+ *  shape): {ts, level, module, event, context, error?}.
+ *  We map `event` → the bot's StructuredAlert.event, and pull
+ *  payload from the `context` object. */
 export function parseJournalLine(line: string): StructuredAlert | null {
 	let obj: unknown;
 	try {
@@ -31,7 +37,8 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 	const j = obj as Record<string, unknown>;
 
 	// journald wraps the original message in MESSAGE.  Morphit
-	// emits a JSON string there with {module, kind, ...payload}.
+	// emits a JSON string there with {ts, level, module, event,
+	// context}.
 	const messageField = j['MESSAGE'];
 	if (typeof messageField !== 'string') return null;
 
@@ -45,27 +52,32 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 	const m = inner as Record<string, unknown>;
 
 	if (typeof m['module'] !== 'string') return null;
-	if (typeof m['kind'] !== 'string') return null;
+	if (typeof m['event'] !== 'string') return null;
 
-	// Extract optional fields.
-	const ts =
+	// ts: prefer the inner JSON's ts (most accurate — set by the
+	// emitter), fall back to journald's __REALTIME_TIMESTAMP.
+	const innerTs = typeof m['ts'] === 'string' ? m['ts'] : null;
+	const journaldTs =
 		typeof j['__REALTIME_TIMESTAMP'] === 'string'
-			? // journald gives microseconds since epoch as a string;
-			  // convert to ISO 8601.
-			  new Date(Number(j['__REALTIME_TIMESTAMP']) / 1000).toISOString()
+			? new Date(Number(j['__REALTIME_TIMESTAMP']) / 1000).toISOString()
 			: new Date().toISOString();
+	const ts = innerTs ?? journaldTs;
+
 	const source =
 		typeof j['_SYSTEMD_UNIT'] === 'string' ? j['_SYSTEMD_UNIT'] : undefined;
 
-	// Strip module + kind from the payload so it's not duplicated.
-	const { module: _mod, kind: _knd, ...rest } = m;
-	void _mod;
-	void _knd;
-	const payload = Object.keys(rest).length > 0 ? (rest as Record<string, unknown>) : undefined;
+	// Payload comes from the `context` object — that's where the
+	// emitter put per-event fields.  Top-level fields (ts, level,
+	// module, event, error) are envelope metadata, not payload.
+	const ctx = m['context'];
+	const payload =
+		typeof ctx === 'object' && ctx !== null
+			? (ctx as Record<string, unknown>)
+			: undefined;
 
 	return {
 		module: m['module'] as string,
-		kind: m['kind'] as string,
+		event: m['event'] as string,
 		payload,
 		source,
 		ts
