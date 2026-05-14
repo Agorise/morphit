@@ -1,4 +1,4 @@
-# roles/mdadm_monitor/handlers/main.yml
+# roles/dmesg_monitor/handlers/main.yml
 ---
 - name: Reload systemd
   ansible.builtin.systemd:

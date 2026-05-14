@@ -122,6 +122,8 @@ SMOKES=(
 	"packages/asset-registry:fee-method-enum-frozen-smoke"
 	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 	"packages/asset-registry:usdt-trade-only-smoke"
+	"apps/ops-cli:ansible-structural-smoke"
+	"apps/ops-cli:ansible-lint-smoke"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
 )
 

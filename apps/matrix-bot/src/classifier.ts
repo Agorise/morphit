@@ -90,7 +90,21 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'fail2ban' && a.event === 'daemon_unreachable',
 	(a) => a.module === 'fail2ban' && a.event === 'jail_critical_ban_count',
 	(a) => a.module === 'mdadm' && a.event === 'array_failed',
-	(a) => a.module === 'mdadm' && a.event === 'array_degraded'
+	(a) => a.module === 'mdadm' && a.event === 'array_degraded',
+
+	// cp12 — dmesg kernel-log events.  All CRITICAL except
+	// segfault_other (WARN) and dmesg_unreadable (INFO).
+	(a) => a.module === 'dmesg' && a.event === 'oom_kill',
+	(a) => a.module === 'dmesg' && a.event === 'kernel_oops',
+	(a) => a.module === 'dmesg' && a.event === 'kernel_panic',
+	(a) => a.module === 'dmesg' && a.event === 'hardware_error',
+	(a) => a.module === 'dmesg' && a.event === 'segfault_in_morphit',
+
+	// cp12 — trivy Docker image vulnerability scan.
+	(a) => a.module === 'trivy' && a.event === 'image_critical_vulns',
+
+	// cp12 — postfix queue depth (silent-alerting-failure detector).
+	(a) => a.module === 'postfix' && a.event === 'queue_critical'
 ];
 
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
@@ -121,7 +135,14 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'smartctl' && a.event === 'pending_sectors',
 	(a) => a.module === 'smartctl' && a.event === 'temperature_warn',
 	(a) => a.module === 'fail2ban' && a.event === 'jail_high_ban_count',
-	(a) => a.module === 'fail2ban' && a.event === 'jail_ban_rate_warn'
+	(a) => a.module === 'fail2ban' && a.event === 'jail_ban_rate_warn',
+
+	// cp12 — WARN tier.
+	(a) => a.module === 'dmesg' && a.event === 'segfault_other',
+	(a) => a.module === 'dmesg' && a.event === 'fd_exhausted',
+	(a) => a.module === 'trivy' && a.event === 'image_high_vulns',
+	(a) => a.module === 'trivy' && a.event === 'image_scan_failed',
+	(a) => a.module === 'postfix' && a.event === 'queue_warn'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -537,6 +558,156 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'{array} ({level}) is currently rebuilding or resyncing. This is normal ' +
 			'after disk replacement or unclean shutdown. Performance will be ' +
 			'reduced until complete. Check progress with `cat /proc/mdstat`.'
+	},
+
+	// ─── cp12 dmesg sidecar ────────────────────────────────────
+	'dmesg:oom_kill': {
+		title: 'OOM-killer activated — process killed: {victim_proc}',
+		advice:
+			'The kernel ran out of memory and killed process {victim_proc} ' +
+			'(pid {victim_pid}) to free RAM. Your service may be the next victim. ' +
+			'Check what is using memory: `ps aux --sort=-%mem | head -10`. ' +
+			'Long-term: add swap or RAM, restart heavy services, or ' +
+			'temporarily disable features. Raw kernel line: {raw_line}'
+	},
+	'dmesg:kernel_oops': {
+		title: 'Kernel oops detected',
+		advice:
+			'The kernel hit an internal error (oops). The system is still ' +
+			'running but is in a degraded state — schedule a reboot at the ' +
+			'next maintenance window. If oopses repeat, the hardware may be ' +
+			'failing. Run `sudo dmesg | grep -A 30 -i oops` for full stack. ' +
+			'Raw line: {raw_line}'
+	},
+	'dmesg:kernel_panic': {
+		title: 'Kernel panic detected',
+		advice:
+			'The kernel panicked. The host is likely unstable and may need an ' +
+			'immediate reboot. Capture `sudo dmesg --ctime` output before ' +
+			'rebooting so you can diagnose the root cause. Common causes: ' +
+			'hardware failure, faulty driver, memory corruption. Raw line: {raw_line}'
+	},
+	'dmesg:hardware_error': {
+		title: 'Hardware error reported by kernel',
+		advice:
+			'The kernel reported a hardware-level error (MCE, EDAC, ATA bus, ' +
+			'or I/O error). This usually means failing RAM, CPU, or storage. ' +
+			'Run `sudo dmesg | grep -i -E "mce|edac|ata|io error"` for context. ' +
+			'For RAM specifically: `sudo edac-util -v`. Plan replacement now ' +
+			'before unrecoverable failure. Raw line: {raw_line}'
+	},
+	'dmesg:segfault_in_morphit': {
+		title: 'A morphit service segfaulted',
+		advice:
+			'A morphit-related process crashed with a segmentation fault. ' +
+			'The systemd unit will likely restart it, but the crash itself is ' +
+			'a bug worth investigating. Check `sudo journalctl --since "10 min ' +
+			'ago" --priority=err` for the immediately-preceding errors. File an ' +
+			'issue at git.agorise.net/agorise/morphit with the raw line. Raw: {raw_line}'
+	},
+	'dmesg:segfault_other': {
+		title: 'A non-morphit process segfaulted',
+		advice:
+			'A process other than morphit segfaulted. Not directly your concern ' +
+			'unless the same binary segfaults repeatedly (then suspect failing ' +
+			'RAM). Raw line: {raw_line}'
+	},
+	'dmesg:fd_exhausted': {
+		title: 'File-descriptor or PID exhaustion detected',
+		advice:
+			'The kernel could not allocate a new file descriptor or PID for ' +
+			'a process. This usually means a runaway service is leaking. ' +
+			'Check `lsof | wc -l` against `cat /proc/sys/fs/file-max`, and ' +
+			'`ps ax | wc -l` against `cat /proc/sys/kernel/pid_max`. Identify ' +
+			'the leaking process with `lsof | awk \'{print $2}\' | sort | uniq -c | sort -rn | head`. ' +
+			'Raw line: {raw_line}'
+	},
+	'dmesg:dmesg_unreadable': {
+		title: 'dmesg sidecar enabled but kernel log unreadable',
+		advice:
+			'The morphit-dmesg-monitor service is running but cannot read dmesg. ' +
+			'{hint}. Without this, kernel-log monitoring (OOM kills, kernel ' +
+			'oops, hardware errors) is OFF.'
+	},
+
+	// ─── cp12 trivy sidecar ────────────────────────────────────
+	'trivy:image_critical_vulns': {
+		title: 'Docker image has CRITICAL CVEs: {image}',
+		advice:
+			'{image} has {critical_count} CRITICAL severity CVEs (and ' +
+			'{high_count} HIGH). Pull the latest image tag if available — ' +
+			'`docker pull {image}` then restart the container. If no patch ' +
+			'is available, run `trivy image --severity CRITICAL {image}` for ' +
+			'the specific CVE IDs and assess whether you are actually exposed ' +
+			'(many CVEs in base images do not affect the way you use the ' +
+			'container). Add CVEs you have triaged to a .trivyignore file to ' +
+			'silence them.'
+	},
+	'trivy:image_high_vulns': {
+		title: 'Docker image has many HIGH CVEs: {image}',
+		advice:
+			'{image} has {high_count} HIGH severity CVEs (threshold ' +
+			'{threshold}). Not critical yet, but plan to pull a newer image ' +
+			'when available. Run `trivy image --severity HIGH {image}` for ' +
+			'the list.'
+	},
+	'trivy:image_scan_failed': {
+		title: 'Could not scan Docker image: {image}',
+		advice:
+			'trivy returned no output for {image}. {hint}. Until you fix this, ' +
+			'this image will not be vulnerability-scanned by the daily timer. ' +
+			'Common cause: trivy could not pull its CVE DB (firewall blocks ' +
+			'ghcr.io); see OPERATIONS.md §16 for the outbound allowlist.'
+	},
+	'trivy:image_scan_clean': {
+		title: 'Docker image scan clean: {image}',
+		advice:
+			'{image}: {critical_count} CRITICAL, {high_count} HIGH CVEs ' +
+			'(below thresholds). Bundled into the daily digest.'
+	},
+	'trivy:trivy_unavailable': {
+		title: 'trivy sidecar enabled but trivy not installed',
+		advice:
+			'The morphit-trivy-monitor service is running but trivy is not in ' +
+			'PATH. {hint}. Until then, no Docker image vulnerability scanning ' +
+			'will happen.'
+	},
+
+	// ─── cp12 postfix sidecar ──────────────────────────────────
+	'postfix:queue_critical': {
+		title: 'Mail queue is stuck — operator alerting may be FAILING',
+		advice:
+			'Postfix queue has {queue_depth} messages and the oldest is ' +
+			'{oldest_age_min} minutes old (thresholds: {queue_threshold} ' +
+			'depth, {age_threshold_min} min age). If you use postfix as your ' +
+			'alerting smarthost, your operator alerts are NOT being delivered ' +
+			'right now. Check: (1) `sudo postqueue -p` for the queued mail, ' +
+			'(2) `sudo journalctl -u postfix --since "1 hour ago"` for the ' +
+			'failure reason (smarthost unreachable? TLS cert expired? ' +
+			'auth failure? rate-limited?), (3) `sudo postfix flush` to retry ' +
+			'after the fix.'
+	},
+	'postfix:queue_warn': {
+		title: 'Mail queue building up',
+		advice:
+			'Postfix queue has {queue_depth} messages, oldest {oldest_age_min} ' +
+			'min old (thresholds: {queue_threshold} / {age_threshold_min} min). ' +
+			'Some queue depth is normal during smarthost hiccups; if it keeps ' +
+			'growing the operator-alerts path is broken. Check ' +
+			'`sudo journalctl -u postfix --since "30 min ago"` for retry errors.'
+	},
+	'postfix:queue_clean': {
+		title: 'Mail queue clean',
+		advice:
+			'Postfix queue has {queue_depth} messages, oldest {oldest_age_min} ' +
+			'min old. Normal operation. Bundled into the daily digest.'
+	},
+	'postfix:postfix_unavailable': {
+		title: 'postfix sidecar enabled but postqueue not installed',
+		advice:
+			'The morphit-postfix-monitor service is running but postqueue is ' +
+			'not in PATH. {hint}. Until you install postfix, your operator-' +
+			'alerting smarthost setup may not work either.'
 	}
 };
 

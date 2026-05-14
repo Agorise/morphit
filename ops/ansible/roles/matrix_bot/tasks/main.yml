@@ -54,7 +54,7 @@
     owner: root
     group: morphit-matrix-bot
     mode: '0640'
-  notify: restart morphit-matrix-bot
+  notify: Restart morphit-matrix-bot
 
 - name: Install matrix-bot systemd unit
   ansible.builtin.copy:
@@ -65,8 +65,8 @@
     mode: '0644'
     remote_src: true
   notify:
-    - reload systemd
-    - restart morphit-matrix-bot
+    - Reload systemd
+    - Restart morphit-matrix-bot
 
 - name: Verify better-sqlite3 native bindings built
   # better-sqlite3 compiles at npm-install time.  If the morphit
@@ -75,7 +75,7 @@
   # the bot crashes at startup.
   ansible.builtin.stat:
     path: /opt/morphit/node_modules/better-sqlite3/build/Release/better_sqlite3.node
-  register: bs3_build
+  register: matrix_bot_bs3_build
 
 - name: Fail with clear hint if better-sqlite3 binding missing
   ansible.builtin.fail:
@@ -94,7 +94,7 @@
         - npm install previously ran with --ignore-scripts
 
       See docs/OPERATIONS.md §16 "matrix-bot setup" for details.
-  when: not bs3_build.stat.exists
+  when: not matrix_bot_bs3_build.stat.exists
 
 - name: Enable + start morphit-matrix-bot
   ansible.builtin.systemd:

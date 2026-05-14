@@ -36,6 +36,17 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
 - **`mdadm_monitor`** (cp11) — Linux software RAID array health.
   Safe to enable defensively — exits silently on hosts without
   RAID.  Off by default.
+- **`dmesg_monitor`** (cp12) — kernel ring buffer scan every
+  5 min for OOM-killer activations, kernel oopses, hardware
+  errors, and segfaults.  Off by default.
+- **`trivy_monitor`** (cp12) — daily Docker image CVE rescan
+  for CRITICAL + HIGH vulnerabilities.  Installs trivy from
+  the Aqua Security apt repo.  Off by default.  Most useful
+  with the BunkerWeb deploy path.
+- **`postfix_monitor`** (cp12) — mail queue depth +
+  oldest-message age.  Catches silent operator-alerting
+  failures (smarthost credentials rotated, TLS bumped).  Off
+  by default.
 
 All sidecars emit structured JSON to journalctl that the
 `matrix_bot` picks up automatically via

@@ -1,10 +1,10 @@
 # roles/smartctl_monitor/handlers/main.yml
 ---
-- name: reload systemd
+- name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
 
-- name: restart morphit-smartctl-monitor-timer
+- name: Restart morphit-smartctl-monitor-timer
   ansible.builtin.systemd:
     name: morphit-smartctl-monitor.timer
     state: restarted
