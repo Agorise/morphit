@@ -1,0 +1,10 @@
+# roles/host_monitor/handlers/main.yml
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart morphit-host-monitor-timer
+  ansible.builtin.systemd:
+    name: morphit-host-monitor.timer
+    state: restarted

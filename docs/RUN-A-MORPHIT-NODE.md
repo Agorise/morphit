@@ -1520,6 +1520,42 @@ Opt-in default — if you don't `systemctl enable --now morphit-host-monitor.tim
 
 Full setup procedure + threshold tuning + adding extra mount points in `OPERATIONS.md` §16 "Host-resource monitoring sidecar".
 
+#### Extended monitoring — disk SMART, fail2ban, RAID
+
+Three more sidecars in the same pattern, each opt-in via their own systemd timer:
+
+- **`morphit-smartctl-monitor`** — disk SMART health every 6h.  Alerts on SMART overall-health FAILED, failed self-tests, high temperature, reallocated/pending sectors.  Requires `apt install -y smartmontools`.  Useful for bare-metal; less useful on VPS providers that virtualize disks.
+- **`morphit-fail2ban-monitor`** — fail2ban jail observability every 5 min.  Alerts CRITICAL if the fail2ban daemon is unreachable (meaning brute-force is no longer being blocked), WARN if any jail's currently-banned IP count spikes (active attack indicator).  Requires fail2ban itself (installed by base hardening §5).
+- **`morphit-mdadm-monitor`** — Linux software RAID health every 15 min.  Alerts CRITICAL on array_failed / array_degraded, INFO on array_resyncing.  No package install required (`/proc/mdstat` is in the kernel).  Safe to enable defensively even on hosts without RAID — exits silently.
+
+Full setup procedure + threshold tuning + per-jail overrides in `OPERATIONS.md` §16 "Extended monitoring sidecars".
+
+#### Automated deployment via Ansible
+
+The repository ships a tested Ansible playbook at `ops/ansible/` that automates everything in §1–§9 of this guide plus all the optional sidecars.  Roles: `base`, `hardening`, `tls`, `postgres`, `morphit`, `bunkerweb`, plus opt-in sidecar roles `matrix_bot`, `host_monitor`, `smartctl_monitor`, `fail2ban_monitor`, `mdadm_monitor` (all default off; set `enable_*: true` in `group_vars/all.yml`).
+
+Quick start:
+
+```sh
+cd /opt/morphit/ops/ansible
+# 1. Configure inventory (one or more hosts).
+cp inventory/hosts.yml.example inventory/hosts.yml
+$EDITOR inventory/hosts.yml
+
+# 2. Configure non-secret vars.
+$EDITOR group_vars/all.yml
+
+# 3. Configure secrets in an encrypted vault.
+cp group_vars/vault.yml.example group_vars/vault.yml
+$EDITOR group_vars/vault.yml         # fill real secrets
+ansible-vault encrypt group_vars/vault.yml
+
+# 4. Run.
+ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass
+```
+
+Run with `--tags monitors` to add monitoring to an already-deployed instance without touching the rest.
+
 #### Docker
 
 If you already use Docker for everything else, you can run Morphit's indexer + relay + web + Postgres in containers. Same monorepo, just a `docker-compose.yml` you write once. Trade-offs (consistency vs. backup complexity) and a tested compose shape in `OPERATIONS.md` §33.

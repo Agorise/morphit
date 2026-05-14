@@ -1,0 +1,102 @@
+# Role: bunkerweb
+#
+# Deploy Docker Engine + BunkerWeb in front of the morphit
+# indexer + relay per OPERATIONS.md §32 + §38.6 (network-layer
+# squatter defense).
+#
+# Caveat: BunkerWeb's env-var names change between major versions.
+# Verify against https://docs.bunkerweb.io at deploy time.  This
+# role targets the 1.5.x line.
+
+---
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+    force: false
+
+- name: Add Docker apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    filename: docker
+    state: present
+
+- name: Install Docker Engine + compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Enable + start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Create BunkerWeb config directory
+  ansible.builtin.file:
+    path: /etc/bunkerweb
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Deploy BunkerWeb docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /etc/bunkerweb/docker-compose.yml
+    owner: root
+    group: root
+    mode: '0640'
+  register: bunkerweb_compose
+
+- name: Deploy BunkerWeb environment file
+  ansible.builtin.template:
+    src: bunkerweb.env.j2
+    dest: /etc/bunkerweb/bunkerweb.env
+    owner: root
+    group: root
+    mode: '0640'
+  register: bunkerweb_env
+
+- name: Bring BunkerWeb up
+  community.docker.docker_compose_v2:
+    project_src: /etc/bunkerweb
+    state: present
+  when: bunkerweb_compose.changed or bunkerweb_env.changed
+
+- name: Print BunkerWeb verification reminder
+  ansible.builtin.debug:
+    msg: |
+      BunkerWeb container started.  Verify:
+
+        docker ps | grep bunkerweb
+        docker logs bunkerweb --tail 50
+        curl -v https://{{ morphit_domain }}/v1/instance
+
+      If the relay sees every user as the BunkerWeb Docker IP
+      (rate limits look weird), the trusted-proxy IPs setting
+      in /etc/morphit/relay.env is wrong.  Verify it matches
+      the Docker network CIDR:
+
+        docker network inspect bunkerweb_net --format \
+          '{% raw %}{{ range .IPAM.Config }}{{ .Subnet }}{{ end }}{% endraw %}'
+
+      Whatever that prints MUST appear in
+      MORPHIT_RELAY_TRUSTED_PROXY_IPS.

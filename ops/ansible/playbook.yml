@@ -1,0 +1,138 @@
+# Morphit relay/indexer + BunkerWeb deployment playbook.
+#
+# Reference: docs/OPERATIONS.md in the morphit repo.
+# See README.md for usage, caveats, and pre-flight checklist.
+#
+# Apply roles in order — each depends on the previous:
+#   base              → users, base packages, NTP, hostname, timezone
+#   hardening         → SSH + sysctl + auditd + AIDE + UFW + fail2ban
+#                       + secrets perms (§37, §34)
+#   tls               → certbot + renew timer (§35)
+#   postgres          → install + harden + DB provisioning (§30, §37.8)
+#   morphit           → clone, build, env files, systemd, backups
+#                       (§18, §23, §31, §38.7)
+#   bunkerweb         → Docker + BunkerWeb container + WAF + trusted-
+#                       proxy IPs (§32)
+#
+# Optional sidecar roles (controlled by enable_* group_vars):
+#   matrix_bot        → operator-alerts to Matrix (cp9, §16)
+#   host_monitor      → disk/mem/swap/cpu monitor (cp10, §16)
+#   smartctl_monitor  → disk SMART health (cp11, §16)
+#   fail2ban_monitor  → fail2ban jail observability (cp11, §16)
+#   mdadm_monitor     → Linux software RAID health (cp11, §16)
+#
+# Run with:
+#   ansible-playbook -i inventory/hosts.yml playbook.yml --check
+#   ansible-playbook -i inventory/hosts.yml playbook.yml
+#
+# Or one tag at a time for incremental rollout:
+#   ansible-playbook -i inventory/hosts.yml playbook.yml --tags hardening
+#   ansible-playbook -i inventory/hosts.yml playbook.yml --tags monitors
+
+---
+- name: Morphit relay + indexer + BunkerWeb deployment
+  hosts: morphit_servers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify target is Ubuntu 24.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version == "24.04"
+        fail_msg: >
+          This playbook is written for Ubuntu 24.04 LTS.  Target
+          is {{ ansible_distribution }} {{ ansible_distribution_version }}.
+          Some package names and config paths will differ on other
+          distros.  Adjust the playbook before continuing.
+
+    - name: Verify there is a sudo-capable non-root user with SSH key
+      ansible.builtin.assert:
+        that:
+          - ansible_user != "root"
+        fail_msg: >
+          Connect with a non-root sudo-capable user.  The hardening
+          role disables root SSH; if you're connected as root,
+          you'll lock yourself out partway through.
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: hardening
+      tags: [hardening]
+
+    - role: tls
+      tags: [tls]
+      when: enable_tls | default(true)
+
+    - role: postgres
+      tags: [postgres]
+
+    - role: morphit
+      tags: [morphit]
+
+    - role: bunkerweb
+      tags: [bunkerweb]
+      when: enable_bunkerweb | default(true)
+
+    # ─── Optional sidecar monitors ────────────────────────────
+    # All disabled by default — set enable_<name>: true in
+    # group_vars/all.yml (or per-host in inventory) to opt in.
+    # Each emits structured JSON via systemd-cat that the
+    # matrix-bot picks up automatically.
+
+    - role: matrix_bot
+      tags: [matrix_bot, monitors]
+      when: enable_matrix_bot | default(false)
+
+    - role: host_monitor
+      tags: [host_monitor, monitors]
+      when: enable_host_monitor | default(false)
+
+    - role: smartctl_monitor
+      tags: [smartctl_monitor, monitors]
+      when: enable_smartctl_monitor | default(false)
+
+    - role: fail2ban_monitor
+      tags: [fail2ban_monitor, monitors]
+      when: enable_fail2ban_monitor | default(false)
+
+    - role: mdadm_monitor
+      tags: [mdadm_monitor, monitors]
+      when: enable_mdadm_monitor | default(false)
+
+  post_tasks:
+    - name: Print verification reminder
+      ansible.builtin.debug:
+        msg: |
+          ─────────────────────────────────────────────────────────
+          Ansible reported success.  This does NOT mean Morphit is
+          working or that the host is secure.  Run the verification
+          checklist in morphit-sysadmin-handoff.txt:
+
+            - ssh root@host fails
+            - ssh user@host with password fails
+            - nmap shows only 22, 80, 443 open externally
+            - psql -h <public-ip> -U morphit times out
+            - X-Forwarded-For spoof test from an untrusted IP fails
+            - systemctl status morphit-relay morphit-indexer
+            - curl https://{{ morphit_domain }}/v1/instance returns
+              expected JSON
+            - Diamond-hardened squatter env vars all present in
+              /etc/morphit/relay.env
+            - Daily backup timer is scheduled (systemctl list-
+              timers | grep morphit-backup)
+            - AIDE database initialized
+            - auditd is logging
+
+          If you enabled the matrix-bot / monitor sidecars:
+            - systemctl status morphit-matrix-bot (if enable_matrix_bot)
+            - systemctl list-timers | grep morphit- (host/smartctl/
+              fail2ban/mdadm timers should fire on schedule)
+            - sudo journalctl -t morphit-host-monitor --since '10
+              minutes ago' should show structured JSON
+            - sudo journalctl -u morphit-matrix-bot should show
+              the bot ready + DM-on-alert log line
+          ─────────────────────────────────────────────────────────

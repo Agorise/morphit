@@ -1,0 +1,10 @@
+# roles/fail2ban_monitor/handlers/main.yml
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart morphit-fail2ban-monitor-timer
+  ansible.builtin.systemd:
+    name: morphit-fail2ban-monitor.timer
+    state: restarted

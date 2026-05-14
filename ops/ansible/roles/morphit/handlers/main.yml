@@ -1,0 +1,14 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart morphit-relay
+  ansible.builtin.systemd:
+    name: morphit-relay
+    state: restarted
+
+- name: Restart morphit-indexer
+  ansible.builtin.systemd:
+    name: morphit-indexer
+    state: restarted

@@ -1,0 +1,103 @@
+# Role: morphit
+#
+# Deploys the morphit relay + indexer + backup + mint-acts as
+# systemd units per ops/systemd/ in the repo.  Diamond-hardened
+# squatter defense env vars per §38.7 baked into relay.env.
+
+---
+- name: Install Node.js via NodeSource (apt)
+  ansible.builtin.import_tasks: nodejs.yml
+
+- name: Clone + build morphit repo
+  ansible.builtin.import_tasks: clone_and_build.yml
+
+- name: Deploy indexer env file
+  ansible.builtin.template:
+    src: indexer.env.j2
+    dest: /etc/morphit/indexer.env
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+  notify: Restart morphit-indexer
+
+- name: Deploy relay env file
+  ansible.builtin.template:
+    src: relay.env.j2
+    dest: /etc/morphit/relay.env
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+  notify: Restart morphit-relay
+
+- name: Deploy backup env file
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/morphit/backup.env
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+
+- name: Deploy morphit-backup.sh
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path }}/ops/backup/morphit-backup.sh"
+    dest: /usr/local/bin/morphit-backup.sh
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install systemd unit files from repo
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path }}/ops/systemd/{{ item }}"
+    dest: /etc/systemd/system/{{ item }}
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - morphit-indexer.service
+    - morphit-relay.service
+    - morphit-relay-mint-acts.service
+    - morphit-relay-mint-acts.timer
+    - morphit-backup.service
+    - morphit-backup.timer
+  notify: Reload systemd
+
+- name: Deploy backup-timer OnCalendar override
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/morphit-backup.timer.d/schedule.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Ansible — overrides repo's default schedule.
+      [Timer]
+      OnCalendar=
+      OnCalendar={{ morphit_backup_schedule }}
+  notify: Reload systemd
+
+- name: Enable + start morphit-indexer
+  ansible.builtin.systemd:
+    name: morphit-indexer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable + start morphit-relay
+  ansible.builtin.systemd:
+    name: morphit-relay
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable morphit-relay-mint-acts.timer (weekly ACT minting per §2)
+  ansible.builtin.systemd:
+    name: morphit-relay-mint-acts.timer
+    enabled: true
+    state: started
+
+- name: Enable morphit-backup.timer (daily backup per §31)
+  ansible.builtin.systemd:
+    name: morphit-backup.timer
+    enabled: true
+    state: started

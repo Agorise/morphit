@@ -1,10 +1,79 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 10)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 11)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp10-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp11-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp9-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp10-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp11 — what's shipped (npm install + 2 real typecheck bug fixes + extended monitoring sidecars + Ansible playbook landed in repo)
+
+### Pretext
+
+cp10 sealed the host-resource monitor.  Ken approved three follow-up items: (1) npm install for matrix-bot, (2) extended monitoring sidecars (smartctl/fail2ban/mdadm), (3) Ansible playbook update.  cp11 ships all three.
+
+### What shipped
+
+**Phase 1 — npm install + 2 real bugs fixed:**
+
+198 packages installed via `npm install --workspaces --ignore-scripts`.  Native better-sqlite3 build needs nodejs.org (sandbox can't reach; documented as deploy-box requirement in OPERATIONS.md).  Two real typecheck bugs that the cp9 noise filter had been hiding became visible and were fixed:
+
+1. `RustSdkCryptoStoreType.Sqlite` — const-enum access under TS isolatedModules is forbidden.  The 2nd arg to `RustSdkCryptoStorageProvider` is optional anyway; drop it.
+2. `client.crypto.prepare()` — needs `roomIds: string[]` arg.  Pass `[]`; DM rooms get auto-created on first send.
+
+Both would have crashed the bot at runtime on first boot.  matrix-bot-sdk + better-sqlite3 removed from `scripts/typecheck-sweep.sh` NOISE_PATTERNS so future bugs aren't hidden.
+
+**Phase 2 — three extended monitoring sidecars:**
+
+Same emit-via-systemd-cat pattern as cp10's host-monitor.  Each is opt-in.
+
+| Script | Module | Cadence | Events |
+|---|---|---|---|
+| `ops/scripts/morphit-smartctl-monitor.sh` | `smartctl` | 6h | 6 events (3 CRITICAL, 3 WARN, 1 INFO) |
+| `ops/scripts/morphit-fail2ban-monitor.sh` | `fail2ban` | 5min | 5 events (2 CRITICAL, 2 WARN, 1 INFO) |
+| `ops/scripts/morphit-mdadm-monitor.sh` | `mdadm` | 15min | 3 events (2 CRITICAL, 1 INFO) |
+
+Six new systemd unit files (.service + .timer per sidecar) with hardening matching indexer/relay posture.
+
+**Classifier extended:** 7 new CRITICAL matchers + 5 new WARN matchers + 15 new ALERT_COPY entries with ELI5 advice + copy-pastable debug commands.  classifier-smoke +15 scenarios.
+
+**Bot default `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS`** updated to include all three cp11 units — alerts route automatically.
+
+**Phase 3 — Ansible playbook landed in repo at `ops/ansible/`:**
+
+The cp8 morphit-ansible tarball moved into the repo.  Five new opt-in roles added:
+
+- `matrix_bot` (cp9) — deploys the matrix-bot sidecar.  CRITICALLY: explicitly checks for the compiled better-sqlite3 .node binary after npm install and fails with a clear recovery command if missing — catches the deploy-box-can't-reach-nodejs.org failure mode.
+- `host_monitor` (cp10) — deploys the host-resource sidecar.
+- `smartctl_monitor` (cp11) — installs smartmontools + deploys the smartctl sidecar.
+- `fail2ban_monitor` (cp11) — deploys the fail2ban observability sidecar.  Per-jail threshold overrides via Jinja2-rendered env vars.
+- `mdadm_monitor` (cp11) — deploys the RAID sidecar.
+
+`group_vars/all.yml` extended with `enable_*: false` defaults + per-sidecar tuning vars + nodejs.org / registry.npmjs.org in `outbound_allowed_destinations`.  `vault.yml.example` extended with matrix-bot access token slot.  `README.md` extended with Optional sidecars subsection.  All YAML validates parses cleanly.
+
+**7 P121-CP11 persona sentinels** pinning every invariant.
+
+**Docs (cross-doc grep up front per cp8 discipline):**
+
+- OPERATIONS.md §16 extended with three new monitoring subsections (smartctl, fail2ban, mdadm) + Ansible deployment subsection + matrix-bot setup updated with explicit npm install step calling out better-sqlite3 native build prereqs.
+- RUN-A-MORPHIT-NODE.md §11 extended with Extended monitoring + Ansible quick-start subsections.
+- MORPHIT-BRAG-LIST entries #260-263 (smartctl, fail2ban, mdadm, Ansible); closing summary 259 → 263.
+
+### Verification
+
+- Triple-pulse: 2,573 × 3, 0 failures.  cp10 baseline 2,551 → cp11 baseline 2,573 (+22 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces with STRICTER filter (matrix-bot-sdk + better-sqlite3 no longer noise-suppressed).
+- All three new bash sidecars live-tested in sandbox with mocked systemd-cat — valid LogRecord-envelope JSON.
+- All Ansible YAML parses cleanly via `python3 yaml.safe_load_all`.
+
+### Pending — NOT cp11 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware).
+- ansible-lint CI integration.
+- Smoke runner verifying every role in playbook.yml has a directory + tasks/main.yml.
+- Future extended monitoring: dmesg-parser (kernel panics, OOM-killer audit), smartctl SCT thermal log scraper, postfix queue depth, Docker image vulnerability rescan.
+
+---
 
 ## Part 121 cp10 — what's shipped (host-resource monitor sidecar + classifier real-event-name rewrite)
 

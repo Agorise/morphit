@@ -15,8 +15,7 @@
 import {
 	MatrixClient,
 	SimpleFsStorageProvider,
-	RustSdkCryptoStorageProvider,
-	RustSdkCryptoStoreType
+	RustSdkCryptoStorageProvider
 } from 'matrix-bot-sdk';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -56,12 +55,19 @@ export async function createMatrixSender(
 	mkdirSync(storageDir, { recursive: true });
 	const storage = new SimpleFsStorageProvider(join(storageDir, 'state.json'));
 	mkdirSync(dirname(join(storageDir, 'crypto')), { recursive: true });
-	const crypto = new RustSdkCryptoStorageProvider(
-		join(storageDir, 'crypto'),
-		RustSdkCryptoStoreType.Sqlite
-	);
+	// RustSdkCryptoStoreType is a const enum re-exported from
+	// @matrix-org/matrix-sdk-crypto-nodejs.  Accessing const-enum
+	// members under TS isolatedModules is forbidden; the second
+	// arg is optional (the SDK default is fine for our use), so
+	// we just omit it.
+	const crypto = new RustSdkCryptoStorageProvider(join(storageDir, 'crypto'));
 	const client = new MatrixClient(homeserver, accessToken, storage, crypto);
-	await client.crypto.prepare();
+	// crypto.prepare() takes the list of rooms to bootstrap for
+	// E2E session-state.  We start with an empty list — DM rooms
+	// for each operator MXID are created lazily on first send via
+	// client.dms.getOrCreateDm() which handles its own crypto
+	// setup for the new room.
+	await client.crypto.prepare([]);
 
 	/** DM rooms are looked up on first DM to each recipient and
 	 *  cached for the bot's lifetime.  Matrix protocol: a DM is
