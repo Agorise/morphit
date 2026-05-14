@@ -71,7 +71,7 @@ before relying on any of it.**
 29. [Running a second instance — DO NOT share relay accounts](#29-running-a-second-instance--do-not-share-relay-accounts)
 30. [Postgres provisioning — the password sentinel and the init script](#30-postgres-provisioning--the-password-sentinel-and-the-init-script)
 31. [Daily DB backup automation](#31-daily-db-backup-automation)
-32. [BunkerWeb — optional WAF / reverse-proxy hardening](#32-bunkerweb--optional-waf--reverse-proxy-hardening)
+32. [BunkerWeb — recommended WAF / reverse-proxy hardening](#32-bunkerweb--recommended-waf--reverse-proxy-hardening)
 33. [Docker deployment — optional alternative to bare-metal](#33-docker-deployment--optional-alternative-to-bare-metal)
 34. [UFW firewall + fail2ban — extended hardening](#34-ufw-firewall--fail2ban--extended-hardening)
 35. [TLS auto-renewal — quick reference](#35-tls-auto-renewal--quick-reference)
@@ -4078,14 +4078,25 @@ The local timer keeps a 30-day rolling backup. If the server burns down, you los
 
 ---
 
-## 32. BunkerWeb — optional WAF / reverse-proxy hardening
+## 32. BunkerWeb — recommended WAF / reverse-proxy hardening
 
-[BunkerWeb](https://www.bunkerweb.io) is an open-source AGPLv3-licensed reverse proxy with built-in Web Application Firewall (WAF) features. Same license as Morphit; no licensing concern. **Optional** — the recommended stack in `RUN-A-MORPHIT-NODE.md` is nginx (with Caddy as a noted alternative), and either is fine for a typical instance. Consider BunkerWeb when:
+[BunkerWeb](https://www.bunkerweb.io) is an open-source AGPLv3-licensed reverse proxy with built-in Web Application Firewall (WAF) features. Same license as Morphit; no licensing concern. **Recommended for any public-facing Morphit instance** — the morphit repo ships a canonical, tested-shape BunkerWeb deployment at `ops/bunkerweb/` (paralleling `ops/nginx/`, `ops/systemd/`, etc.).  Copy + edit + `docker compose up -d` and you have a WAF-fronted instance with OWASP CRS at paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly to the relay's trusted-proxy chain, and a fixed Docker network CIDR (`172.20.0.0/16`) you can hard-code into `MORPHIT_RELAY_TRUSTED_PROXY_IPS` without re-inspecting after rebuilds.
 
-- You want OWASP-Top-10 protection out of the box (SQL injection, XSS, path traversal, etc.) without writing nginx ModSecurity rules.
-- You're seeing bot traffic that's getting past your reverse proxy's basic rate limiting (consult `journalctl -u nginx.service` — or `caddy.service` if you went with Caddy — for unusual request patterns).
-- You want a single dashboard for HTTPS certs, request rate limits, country blocking, and OWASP rule tuning.
-- You're running multi-tenant infra (several Morphit operators on the same fleet) and want a single hardened ingress.
+The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operators not using Ansible follow the Quick Start in `ops/bunkerweb/README.md`.
+
+Reasons you might NOT want BunkerWeb:
+
+- **Small private instance with a single-operator audience** — the added complexity isn't worth the marginal defense.
+- **Tor-only or Lokinet-only deployment** — squatters typically don't route through anonymity networks; the .onion path has natural friction (§38.6 item a) and adding a WAF in front of an onion service complicates the routing.
+- **Resource-constrained VPS** (<1 GB RAM) — BunkerWeb + scheduler containers add ~150–250 MB resident.
+
+For everyone else, deploy it. Reasons it's the default recommendation:
+
+- OWASP-Top-10 protection out of the box (SQL injection, XSS, path traversal, etc.) without writing nginx ModSecurity rules.
+- Curated bot lists + behavioral detection layered on top of basic User-Agent blocking.
+- Per-country / per-AS rate limiting in addition to per-IP.
+- Built-in GeoIP, slow-loris guards, connection-rate limits.
+- Single dashboard for HTTPS certs, request rate limits, country blocking, and OWASP rule tuning.
 
 ### What BunkerWeb adds on top of Caddy/nginx
 
@@ -4914,6 +4925,54 @@ them improves the security posture, and skipping any one of
 them is a tradeoff you should make consciously, not by
 default.  An operator who applies all of them is well above
 the typical-VPS-deployment baseline.
+
+### Before you start — the three highest-stakes gotchas
+
+If you only remember three things from this section, remember
+these.  Each one is a footgun that costs more than the time
+spent reading it.
+
+1. **SSH lockout (§37.1).**  Before reloading sshd after the
+   key-only / no-root config change, open a SECOND ssh session
+   to the host and confirm key-based login works in it.  Only
+   then close the first session.  Every doc says this; people
+   still get it wrong; the recovery path is console / KVM
+   access to the VPS.
+
+2. **BunkerWeb trusted-proxy IPs (§32).**  The relay only
+   trusts `X-Forwarded-For` from loopback by default.  Behind
+   BunkerWeb that's wrong in two opposite ways:
+   - If you do NOT set `MORPHIT_RELAY_TRUSTED_PROXY_IPS`, the
+     relay sees every user as the same IP (BunkerWeb's).  One
+     abuser exhausts the daily rate limit for everyone.
+   - If you set it too WIDE (e.g., `0.0.0.0/0`), anyone can
+     spoof `X-Forwarded-For` and bypass rate limiting entirely.
+
+   Set it to the exact CIDR/IP of your BunkerWeb upstream.  See
+   §32 for the Docker-compose bridge case.
+
+3. **Postgres binding (§37.8).**  If `postgresql.conf` has
+   anything other than `localhost` / `127.0.0.1` in
+   `listen_addresses`, you're exposed to the network.  Default
+   is loopback-only; verify it wasn't changed by Docker or by
+   a well-meaning previous admin.  Test from an external IP:
+   `psql -h <public-ip> -U morphit_indexer` should time out,
+   never connect.
+
+### Suggested apply order
+
+Subsections are independent and can be applied in any order,
+but a sensible sequence for a fresh deployment is:
+
+  §37.1 → §37.2 → §37.3 → §37.4 → §37.5 → §37.6 → §37.7
+  → §37.8 → §37.9 → §37.10 → §37.11 → §37.12 → §37.13
+  → §37.14 → §37.15 → §37.16 → §37.17 → §34 (UFW + fail2ban)
+  → §35 (TLS) → §32 (BunkerWeb) → §38 (squatter defense)
+  → §37.18 (verification map)
+
+Test after each.  If you're triaging a partially-hardened
+existing deployment, start with §37.18 to identify what's
+missing and work backwards.
 
 ### 37.1 SSH hardening
 
@@ -5991,6 +6050,148 @@ If your threat model warrants it, also consider:
 you well above 95% of self-hosted Linux servers on the public
 internet.  Apply them in order, test each, and stop when you
 hit your operational risk tolerance.
+
+### 37.19 Verification checklist — prove each defense actually fires
+
+A hardening pass that wasn't verified isn't a hardening pass.
+Ansible reporting success, a service starting cleanly, an
+sshd reload not throwing an error — none of these prove the
+defense itself works.  Each check below is a concrete command
+that fails fast if the corresponding subsection didn't take
+effect.
+
+Run from your laptop unless noted; "host" means the morphit
+server.
+
+**SSH posture (§37.1):**
+
+```sh
+# Root login disabled
+ssh root@host                 # should fail: "Permission denied (publickey)"
+
+# Password auth disabled
+ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+    youruser@host             # should fail: "Permission denied"
+
+# Verify the actual sshd_config the daemon is running with
+ssh youruser@host sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication)'
+# Expect: permitrootlogin no
+#         passwordauthentication no
+#         kbdinteractiveauthentication no
+```
+
+**Network surface (§34, §37.13):**
+
+```sh
+# Only expected ports should be open externally
+nmap -Pn -p 1-65535 host      # expect: 22, 80, 443 only
+
+# Postgres NOT reachable externally (§37.8)
+psql -h host -U morphit_indexer -d morphit_indexer
+# expect: connection timeout, NOT a password prompt
+```
+
+**Trusted-proxy CIDR (§32) — the asymmetric footgun:**
+
+From an IP NOT in `MORPHIT_RELAY_TRUSTED_PROXY_IPS`, send a
+spoofed X-Forwarded-For and verify the relay does NOT trust it
+for rate-limiting purposes.  Easiest way: hit a rate-limited
+endpoint from your real IP, then hit it again with a spoofed
+XFF claiming a different IP; the second request should be
+rate-limited too (proving the relay is reading the socket
+peer, not the XFF):
+
+```sh
+# Replace the URL with your relay's actual rate-limited endpoint
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    curl -sI -H "X-Forwarded-For: 198.51.100.$i" \
+         https://yourinstance.example/v1/relay/account/availability/test
+done | grep -E 'HTTP|x-ratelimit'
+# Expect: 429 (or rate-limit header decrementing) after a few
+# requests, NOT 200 for all 10 with a fresh counter per XFF.
+```
+
+If every request returns 200 with a fresh rate-limit budget,
+your trusted-proxy CIDR is too wide and any user can forge XFF
+to bypass rate limiting.
+
+**Secrets file hygiene (§37.10):**
+
+```sh
+ssh host 'ls -l /etc/morphit/'
+# Expect: env files 0640, owned by root:morphit
+#         keystore 0600, owned by morphit:morphit
+#         directory itself 0750 root:morphit
+```
+
+**Service state (§37.6, §37.9, §37.14, §34):**
+
+```sh
+ssh host 'sudo systemctl is-active auditd fail2ban morphit-relay morphit-indexer'
+# Expect: active × 4
+
+ssh host 'sudo systemctl list-timers | grep -E "morphit-backup|certbot"'
+# Expect: both timers scheduled, next run within the configured window
+
+ssh host 'sudo aide --check' | head -5
+# Expect: "AIDE found NO differences" or matching the count from
+# the initial baseline.  Mismatch = something changed since baseline.
+
+ssh host 'sudo ufw status'
+# Expect: Status: active, with the expected ALLOW rules
+
+ssh host 'sudo fail2ban-client status sshd'
+# Expect: Currently failed: <small number>; ban list visible
+```
+
+**Squatter defense (§38.7) — the env vars are actually loaded:**
+
+```sh
+ssh host 'sudo systemctl show morphit-relay -p Environment | tr " " "\n" | grep MORPHIT_RELAY_'
+# OR if /etc/morphit/relay.env is the EnvironmentFile:
+ssh host 'sudo grep -E "SIGNUP_DAILY_CEILING|CREATE_SPACING_MINUTES|ALTCHA_TRIGGER_COUNT|ALTCHA_MAXNUMBER|HIGHVALUE_NAME_POLICY|HIGHVALUE_SHORT_NAME_THRESHOLD|SEQUENTIAL_DETECTOR_ENABLED|SEQUENTIAL_THRESHOLD|SEQUENTIAL_WINDOW_MS|SEQUENTIAL_MIN_PREFIX" /etc/morphit/relay.env'
+# Expect: 10 lines matching the §38.7 diamond-hardened values.
+
+# Confirm the relay actually parsed them — hit /v1/relay/limits or
+# whatever your relay's introspection endpoint surfaces.  At
+# minimum, journalctl should show the relay logging its loaded
+# config on boot:
+ssh host 'sudo journalctl -u morphit-relay --since "1 hour ago" | grep -E "ceiling|altcha|sequential"'
+```
+
+**Backup actually wrote + actually went off-host (§31, §37.12):**
+
+```sh
+# Local backup dir has recent backups
+ssh host "ls -la $(grep BACKUP_DIR /etc/morphit/backup.env | cut -d= -f2 | tr -d \"'\")"
+
+# Off-host destination has them too
+ssh backups@your-backup-host 'ls -la /morphit/' | head -10
+# Expect: recent .age files; size > 0; mtime within the last 24h
+
+# Spot-test decryption with the age key (NOT on the morphit host!)
+age -d -i /path/to/backup.key /tmp/sample-backup.sql.gz.age | head
+# Expect: the start of a pg_dump (-- PostgreSQL database dump --)
+```
+
+**Application surface — relay + indexer respond + serve the right
+JSON:**
+
+```sh
+curl -sf https://yourinstance.example/v1/instance | jq '.disabled_assets'
+# Expect: an array (may be empty); confirms the indexer is up,
+# /v1/instance is responding, and the cp6 disabled_assets field is
+# wired.
+
+curl -sf https://yourinstance.example/v1/relay/health
+# Expect: 200 + JSON; confirms BunkerWeb is proxying to the relay
+# and the relay is alive.
+```
+
+If any check above fails, fix that subsection before moving on
+— a partial hardening pass with one broken layer is worse than
+honest about the gap, because operational decisions will be
+made assuming the layer is in place.
 
 
 ## 38. Diamond-hardened squatter defense — operator playbook

@@ -1,0 +1,59 @@
+# Morphit — canonical BunkerWeb docker-compose.
+# See ops/bunkerweb/README.md for usage.
+#
+# Two services:
+#   bunkerweb            — the reverse proxy + WAF
+#   bunkerweb-scheduler  — config management agent
+#
+# Morphit relay + indexer run on the HOST (not in this compose),
+# reachable from the container via host.docker.internal (Linux:
+# resolved by host-gateway).
+
+services:
+  bunkerweb:
+    image: bunkerity/bunkerweb:1.5.10
+    container_name: bunkerweb
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+      - "443:8443"
+    env_file:
+      - ./bunkerweb.env
+    volumes:
+      - bw-data:/data
+      # Let's Encrypt certs from the host (per OPERATIONS.md §35).
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    extra_hosts:
+      # So BunkerWeb can reach the host-resident relay + indexer.
+      # Linux: host-gateway resolves to the host's docker-internal IP.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - bunkerweb_net
+    depends_on:
+      - bunkerweb-scheduler
+
+  bunkerweb-scheduler:
+    image: bunkerity/bunkerweb-scheduler:1.5.10
+    container_name: bunkerweb-scheduler
+    restart: unless-stopped
+    env_file:
+      - ./bunkerweb.env
+    volumes:
+      - bw-data:/data
+    networks:
+      - bunkerweb_net
+
+volumes:
+  bw-data:
+
+networks:
+  bunkerweb_net:
+    name: bunkerweb_net
+    driver: bridge
+    ipam:
+      config:
+        # Pin the CIDR so the operator hard-codes it in
+        # MORPHIT_RELAY_TRUSTED_PROXY_IPS without re-inspecting
+        # after rebuilds.  See OPERATIONS.md §32 + the README in
+        # this directory for the trusted-proxy CIDR rationale.
+        - subnet: 172.20.0.0/16
