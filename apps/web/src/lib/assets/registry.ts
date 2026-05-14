@@ -113,6 +113,21 @@ const validateXmr: AddressValidator = (s) =>
 
 const validateBlurt: AddressValidator = (s) => BLURT_ACCOUNT_RE.test(s);
 
+// USDT per-network address shapes.  See lib/assets/networks.ts
+// for the per-network metadata used by the address-share modal;
+// THIS validator is the any-network combined check (passes if
+// the string is a plausibly-valid USDT address on ANY supported
+// network).  Per-network pinning is the address-share modal's
+// job, not this validator's.
+const USDT_ERC20_OR_BEP20_RE = /^0x[a-fA-F0-9]{40}$/;
+const USDT_TRC20_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
+const USDT_SPL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+const validateUsdt: AddressValidator = (s) =>
+	USDT_ERC20_OR_BEP20_RE.test(s) ||
+	USDT_TRC20_RE.test(s) ||
+	USDT_SPL_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -167,6 +182,32 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportedNetworks: ['mainnet'],
 		defaultNetwork: 'mainnet',
 		privacyWarningKey: null
+	},
+	{
+		ticker: 'usdt',
+		displayTicker: 'USDT',
+		displayName: 'Tether',
+		oneLineDescription:
+			'Stablecoin pegged to USD.  Centrally controlled.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/coins/usdt.svg',
+		// Amber to mirror the privacy-warning chip's visual treatment.
+		// Distinguishes USDT from BTC's amber (BTC is amber-500;
+		// USDT is amber-400 — slightly lighter to read as "warning"
+		// vs "branded yellow").
+		accentClass: 'text-amber-400',
+		decimals: 6, // Same on all four supported networks
+		supportsMemo: false,
+		addressValidator: validateUsdt,
+		// MEMORY #23 INVARIANT: USDT cannot pay listing fees.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Multi-network: ERC-20, TRC-20, SPL, BEP-20.
+		// Native USDT only — bridged versions excluded.
+		supportedNetworks: ['erc20', 'trc20', 'spl', 'bep20'],
+		// null forces explicit user choice every trade.
+		// Cross-network sends lose funds permanently.
+		defaultNetwork: null,
+		privacyWarningKey: 'usdt_centralized'
 	}
 ] as const;
 

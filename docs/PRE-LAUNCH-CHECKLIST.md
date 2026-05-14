@@ -333,16 +333,37 @@ file in the same turn.
       remains a documented option for later.  *(Origin:
       Part 108++.)*
 
+- [ ] **[blocking]** Decide your USDT operator stance.
+      The canonical morphit.io ships USDT enabled by
+      default; alternative instances may want to disable
+      it instance-wide on philosophical (centralization)
+      or regulatory grounds.  Two options:
+      1. Accept USDT (default — no config change).
+      2. Refuse USDT — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"` in
+         your indexer config.
+
+      Federation note: disabling USDT means your own
+      users cannot POST USDT orders; you'll still see
+      USDT orders from peer instances in read-only
+      orderbook feeds (chain history is shared).
+
+      Whichever stance you take, document it publicly so
+      users know what your instance offers.  Memory #25
+      (default-on + operator override for new assets) and
+      ADR-0023 explain the design.  *(Origin: Part 121
+      cp3 USDT integration.)*
+
 ## D. Infrastructure
 
 - [ ] **[blocking]** Postgres reachable from the morphit
       processes.  Database URL configured in both
       indexer and relay envs.  Initial schema applied
       via the indexer's auto-migrate on first boot
-      (currently at v31 as of Part 113; Signal C
-      one-way pile-on detection added).
+      (currently at v32 as of Part 121; orders.asset_network
+      TEXT column added for multi-network assets like USDT).
       *(Origin: ADR-0001 schema management; version
-      refreshed Part 119 audit.)*
+      refreshed Part 121 audit.)*
 
 - [ ] **[recommended]** Enable the daily DB backup
       scheduled by the wizard (off by default; opt-in

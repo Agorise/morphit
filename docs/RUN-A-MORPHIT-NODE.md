@@ -1717,3 +1717,82 @@ is fine; sharing the relay's signing account is not.
 For the technical detail (concurrent signing race, drainer
 double-spend, halved abuse defenses), see
 `docs/OPERATIONS.md` §29.
+
+---
+
+## Trade-only assets: USDT and your operator stance (Part 121)
+
+Morphit ships with **USDT enabled by default** as a trade-only
+asset on a new node.  Users can buy/sell USDT against any of
+the four supported networks (ERC-20, TRC-20, SPL, BEP-20) and
+their listing fee is paid in BLURT, BTC, or XMR — never USDT
+(the `fee_method` enum is wire-format-frozen at BLURT/BTC/XMR
+per memory #23 and ADR-0011).
+
+### Decide your operator stance
+
+Three reasonable positions for an operator:
+
+1. **Accept USDT** (default) — the canonical morphit.io
+   posture.  Users have asked for stablecoin trading and you
+   want to serve them.  No config change needed.
+
+2. **Refuse USDT instance-wide** — your node will not write
+   new USDT orders to its DB.  Add to your indexer config:
+
+   ```bash
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
+   ```
+
+   You'll still see USDT orders from peer instances in your
+   read-only orderbook feeds (the chain is shared), but your
+   own users get an inline error if they try to post one.
+
+3. **Refuse multiple assets** — comma-separated:
+
+   ```bash
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
+   ```
+
+   (`DAI` and `USDC` aren't currently in the canonical
+   registry; the env var is forward-compatible for future
+   trade-only additions.)
+
+### Per-network explorer URLs
+
+USDT exists on four networks; each has a bundled-default
+explorer URL.  When a user shares a USDT txid in chat, the
+frontend renders a clickable link via the appropriate
+explorer:
+
+| Network | Bundled default explorer |
+|---------|--------------------------|
+| ERC-20 (Ethereum) | `https://etherscan.io/tx/{txid}` |
+| TRC-20 (Tron) | `https://tronscan.org/#/transaction/{txid}` |
+| SPL (Solana) | `https://solscan.io/tx/{txid}` |
+| BEP-20 (BNB Smart Chain) | `https://bscscan.com/tx/{txid}` |
+
+Operators running self-hosted explorers for any of these
+chains can override per-network in the frontend env (see
+`docs/OPERATIONS.md` §"Per-network explorer URL overrides").
+
+### What USDT cannot do on your node
+
+- ❌ Cannot pay listing fees (BLURT/BTC/XMR only, enforced
+  by sentinel smokes)
+- ❌ Cannot pay cold-message / stranger fees (BLURT-only,
+  unchanged)
+- ❌ Cannot pay featured-slot bids (BLURT-only, unchanged)
+- ❌ Cannot be the welcome-bonus / loyalty-reward currency
+  (BLURT-denominated, unchanged)
+- ❌ Cannot be an operator-payout currency
+
+These are wire-format invariants, not config knobs.  Two
+sentinel smokes (`fee-method-enum-frozen-smoke`,
+`first-buy-waiver-payment-agnostic-smoke`) guard them in CI.
+
+### Schema v32
+
+The Part 121 schema bump adds `orders.asset_network TEXT` —
+applies automatically on indexer startup.  Idempotent.  No
+operator action.

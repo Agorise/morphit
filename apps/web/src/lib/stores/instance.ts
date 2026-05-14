@@ -65,6 +65,18 @@ export interface InstanceState {
 	readonly chat_link_urls: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
+		/** Part 121 — USDT per-network explorer URL overrides.
+		 *  Each field is either a `https://…/{txid}…` template
+		 *  (operator override) or null (use frontend bundled
+		 *  default from `lib/assets/networks.ts`).  Adding a
+		 *  new USDT network here requires the matching entry
+		 *  in `USDT_NETWORK_METADATA` in networks.ts. */
+		readonly usdt: {
+			readonly erc20: string | null;
+			readonly trc20: string | null;
+			readonly spl: string | null;
+			readonly bep20: string | null;
+		};
 	};
 	readonly loaded: boolean;
 }
@@ -91,7 +103,11 @@ const FALLBACK: InstanceState = {
 	relay_account: 'morphit-relay',
 	operator_tag: null,
 	seo: { title: null, description: null, keywords: null },
-	chat_link_urls: { btc: null, xmr: null },
+	chat_link_urls: {
+		btc: null,
+		xmr: null,
+		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
+	},
 	loaded: false
 };
 
@@ -162,10 +178,22 @@ export function initInstance(): Promise<void> {
 						description: null,
 						keywords: null
 					},
-					chat_link_urls: result.data.chat_link_urls ?? {
-						btc: null,
-						xmr: null
-					},
+					chat_link_urls: result.data.chat_link_urls
+						? {
+								btc: result.data.chat_link_urls.btc ?? null,
+								xmr: result.data.chat_link_urls.xmr ?? null,
+								usdt: result.data.chat_link_urls.usdt ?? {
+									erc20: null,
+									trc20: null,
+									spl: null,
+									bep20: null
+								}
+							}
+						: {
+								btc: null,
+								xmr: null,
+								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
+							},
 					loaded: true
 				});
 			} else {

@@ -64,6 +64,11 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		feeRecipient: 'morphit-fees',
 		feeBaseBlurt: 60,
 		feeTolerance: 0.001,
+		// Part 121 — empty by default, meaning every canonical
+		// registry asset is enabled.  Tests that exercise the
+		// instance-wide disable gate override with e.g.
+		// `{ disabledAssets: ['USDT'] }`.
+		disabledAssets: [],
 		priceFeedEnabled: false,
 		priceFeedStaticFloor: 0.002,
 		featureFeeBlurtPerHour: 50,

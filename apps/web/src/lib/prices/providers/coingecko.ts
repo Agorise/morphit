@@ -40,7 +40,13 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// frontend. If a caller asks for BLURT here, we ask Coingecko
 	// anyway — CG does list BLURT — and let the caller wrap us in
 	// its composite fallback chain.
-	BLURT: 'blurt'
+	BLURT: 'blurt',
+	// Part 121 — USDT pegs to USD by design.  Coingecko's
+	// `tether` ID returns the live peg state; expected ~$1.00,
+	// dips during peg-stress events.  The frontend order-row
+	// subline reads this value so users see actual peg state
+	// rather than an assumed $1.00.
+	USDT: 'tether'
 };
 
 /** Max response body size from CoinGecko. Real responses are

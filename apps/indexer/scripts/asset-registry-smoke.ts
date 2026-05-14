@@ -31,9 +31,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all three current assets registered', () => {
+scenario('all current assets registered (BTC, XMR, BLURT, USDT)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['blurt', 'btc', 'xmr'];
+	const expected = ['blurt', 'btc', 'usdt', 'xmr'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -107,10 +107,10 @@ scenario('display tickers are uppercase', () => {
 });
 
 scenario('lower-case tickers match payload union', () => {
-	const valid = new Set(['btc', 'xmr', 'blurt']);
+	const valid = new Set(['btc', 'xmr', 'blurt', 'usdt']);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {
-			throw new Error(`${a.ticker}: not in PaymentMethod union — payload.ts must be updated`);
+			throw new Error(`${a.ticker}: not in ChatAssetTicker union — payload.ts must be updated`);
 		}
 	}
 });

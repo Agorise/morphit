@@ -20,7 +20,13 @@ import type { PriceProvider, PriceQuote, PricedSymbol } from '../types';
 const FALLBACK_USD: Record<PricedSymbol, number> = {
 	BTC: 95_000,
 	XMR: 180,
-	BLURT: 0.002
+	BLURT: 0.002,
+	// Part 121 — USDT pegs to USD by design.  The fallback
+	// returns exactly 1.00; when the peg breaks (2018, 2022
+	// incidents) the live CoinGecko/Klingex provider returns
+	// the actual depegged value and the order-row subline
+	// surfaces it as "1 USDT = $0.97 live" instead of $1.00.
+	USDT: 1.00
 };
 
 export const fallbackProvider: PriceProvider = {

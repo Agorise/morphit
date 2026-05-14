@@ -67,6 +67,16 @@
  *             established the original wire format MUST gain a
  *             forward-note pointing at the freeze.
  *
+ *   P121-USDT Five sentinels pinning the USDT integration
+ *             across canonical registry, frontend registry,
+ *             per-network metadata module, indexer validation
+ *             gates, and the orderbook row UI.  If any of these
+ *             surfaces silently lose their Part 121 shape (e.g.
+ *             USDT.canPayListingFee flipped to true, defaultNetwork
+ *             changed from null, the indexer's per-network gates
+ *             stripped, or the orderbook row dropping the network
+ *             chip), the smoke fails loudly.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -430,6 +440,64 @@ const SCENARIOS: readonly Scenario[] = [
 			'memory #23',
 			'fee-method-enum-frozen-smoke',
 			'first-buy-waiver-payment-agnostic-smoke'
+		]
+	},
+	// ─── Part 121 cp3 — USDT shipped ─────────────────────────
+	{
+		name: 'P121-USDT-1 — canonical asset registry has USDT entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'USDT'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['erc20', 'trc20', 'spl', 'bep20']",
+			'defaultNetwork: null',
+			"privacyWarningKey: 'usdt_centralized'"
+		]
+	},
+	{
+		name: 'P121-USDT-2 — frontend asset registry has matching USDT entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'usdt'",
+			"displayName: 'Tether'",
+			'canBeUsedForListingFee: false',
+			'defaultNetwork: null'
+		]
+	},
+	{
+		name: 'P121-USDT-3 — per-network metadata module ships ERC-20 + TRC-20 + SPL + BEP-20 bundled explorers',
+		file: 'apps/web/src/lib/assets/networks.ts',
+		rootRelative: true,
+		mustHave: [
+			'etherscan.io/tx/{txid}',
+			'tronscan.org/#/transaction/{txid}',
+			'solscan.io/tx/{txid}',
+			'bscscan.com/tx/{txid}',
+			'validateUsdtAddress',
+			'validateUsdtTxid'
+		]
+	},
+	{
+		name: 'P121-USDT-4 — indexer order handler rejects USDT orders missing/wrong/extra asset_network',
+		file: 'apps/indexer/src/indexer/handlers/order.ts',
+		rootRelative: true,
+		mustHave: [
+			'asset_network_required_for_usdt',
+			'asset_network_unknown',
+			'asset_network_not_permitted_for_asset',
+			'asset_disabled_on_instance'
+		]
+	},
+	{
+		name: 'P121-USDT-5 — orderbook row renders USDT network chip + price subline',
+		file: 'apps/web/src/routes/orderbook/+page.svelte',
+		rootRelative: true,
+		mustHave: [
+			'usdtRowNetwork',
+			'assets.usdt.order_row.network_hint',
+			'<UsdtPriceSubline'
 		]
 	}
 ];

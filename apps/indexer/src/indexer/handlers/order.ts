@@ -101,6 +101,12 @@ interface ValidatedOrder {
 	 *  fee verifier to confirm the payment without holding the
 	 *  treasury's view key. */
 	readonly tx_proof: string | null;
+	/** Part 121 — sub-network identifier for multi-network
+	 *  assets.  Non-null when asset is multi-network (USDT;
+	 *  one of 'erc20'|'trc20'|'spl'|'bep20').  Null for
+	 *  single-network assets (BTC, XMR, BLURT).  Pinned at
+	 *  post time so cross-network sends are impossible. */
+	readonly asset_network: string | null;
 }
 
 function validate(payload: unknown): ValidatedOrder | { reason: string } {
@@ -379,6 +385,33 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		}
 	}
 
+	// Part 121 — asset_network field for multi-network assets.
+	// USDT-only at launch; other assets must omit (or pass null).
+	// Single-network assets that send a non-null asset_network
+	// are rejected as malformed — the field is reserved for
+	// future multi-network additions.
+	let asset_network: string | null = null;
+	const networkRaw = payload.asset_network;
+	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
+	if (asset === 'USDT') {
+		if (typeof networkRaw !== 'string') {
+			return { reason: 'asset_network_required_for_usdt' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!USDT_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network = net;
+	} else {
+		if (networkRaw !== undefined && networkRaw !== null) {
+			// Single-network asset shipped with a network value —
+			// either a malformed client OR an attempt to confuse
+			// downstream readers.  Reject.
+			return { reason: 'asset_network_not_permitted_for_asset' };
+		}
+		asset_network = null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -394,7 +427,8 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		expires_at,
 		fee_method,
 		external_tx_id,
-		tx_proof
+		tx_proof,
+		asset_network
 	};
 }
 
@@ -463,6 +497,21 @@ async function countForSybilTier(
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	const v = validate(ctx.payload);
 	if ('reason' in v) return { ok: false, reason: v.reason };
+
+	// Part 121 — operator-level instance-wide asset disable gate
+	// (Memory #25).  If the operator has listed this asset in
+	// MORPHIT_INDEXER_DISABLED_ASSETS, refuse the order even if
+	// it would otherwise validate.  Other instances may still
+	// accept this asset's orders — federation visibility is
+	// preserved because all orders flow through the chain — but
+	// THIS instance refuses to write the row to its own DB.
+	//
+	// We compare uppercase so 'usdt' / 'USDT' / 'Usdt' all match
+	// the config value 'USDT'.  The config-loader normalizes to
+	// uppercase at boot.
+	if (ctx.config.disabledAssets.includes(v.asset)) {
+		return { ok: false, reason: 'asset_disabled_on_instance' };
+	}
 
 	// Part 111 — operator-attribution tag for federation-scoped
 	// payout queueing.  Same value the operator-earnings module
@@ -571,18 +620,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// Waiver granted. Insert the order with verified fee status.
 		const waiverRes = await client.query(
 			`INSERT INTO orders (
-				account, permlink, side, asset, fiat_currency,
+				account, permlink, side, asset, asset_network, fiat_currency,
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, operator_tag
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11,
-			          'live', $12, $12, $13, 'verified', 'waived_first_buy', $14)
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+			          'live', $13, $13, $14, 'verified', 'waived_first_buy', $15)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
 				v.permlink,
 				v.side,
 				v.asset,
+				v.asset_network,
 				v.fiat_currency,
 				v.amount_min,
 				v.amount_max,
@@ -659,19 +709,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			});
 			const reusedRes = await client.query(
 				`INSERT INTO orders (
-					account, permlink, side, asset, fiat_currency,
+					account, permlink, side, asset, asset_network, fiat_currency,
 					amount_min, amount_max, price_model, location_region,
 					payment_methods, terms, status, created_at, updated_at,
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
 					operator_tag
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11,
-				          'live', $12, $12, $13, 'reused', $14, $15, $16, $17)
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
 					v.permlink,
 					v.side,
 					v.asset,
+					v.asset_network,
 					v.fiat_currency,
 					v.amount_min,
 					v.amount_max,
@@ -734,19 +785,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 		const externalRes = await client.query(
 			`INSERT INTO orders (
-				account, permlink, side, asset, fiat_currency,
+				account, permlink, side, asset, asset_network, fiat_currency,
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, external_tx_id, tx_proof,
 				operator_tag
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11,
-			          'live', $12, $12, $13, $14, $15, $16, $17, $18)
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+			          'live', $13, $13, $14, $15, $16, $17, $18, $19)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
 				v.permlink,
 				v.side,
 				v.asset,
+				v.asset_network,
 				v.fiat_currency,
 				v.amount_min,
 				v.amount_max,
@@ -802,18 +854,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// updates go through the replace handler.
 	const res = await client.query(
 		`INSERT INTO orders (
-			account, permlink, side, asset, fiat_currency,
+			account, permlink, side, asset, asset_network, fiat_currency,
 			amount_min, amount_max, price_model, location_region,
 			payment_methods, terms, status, created_at, updated_at,
 			expires_at, fee_status, fee_method, operator_tag
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11,
-		          'live', $12, $12, $13, $14, 'blurt', $15)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+		          'live', $13, $13, $14, $15, 'blurt', $16)
 		ON CONFLICT (account, permlink) DO NOTHING`,
 		[
 			ctx.signer,
 			v.permlink,
 			v.side,
 			v.asset,
+			v.asset_network,
 			v.fiat_currency,
 			v.amount_min,
 			v.amount_max,

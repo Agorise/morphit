@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -212,6 +212,50 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// Blurt account name: 3-16 chars, must start/end with
 		// alphanumeric, lowercase + dashes only.
 		addressShape: /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/
+	}),
+	Object.freeze({
+		ticker: 'USDT',
+		// Tether uses 6 decimals on EVERY supported network (ERC-20,
+		// TRC-20, SPL, BEP-20).  Confirmed via Tether's contract
+		// docs: 0xdac17f958d2ee523a2206206994597c13d831ec7 on
+		// Ethereum exposes decimals()=6, same on all other chains.
+		decimals: 6,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: USDT is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The asset-registry-smoke + fee-method-enum-frozen-smoke
+		// pin this from two directions.
+		canPayListingFee: false,
+		// Networks shipped at launch.  Native USDT only — bridged
+		// variants (USDT.e on Avalanche L2 etc.) are deliberately
+		// excluded per Ken's design decision: fewer footguns,
+		// cleaner mental model.  Omni Layer is deprecated by
+		// Tether themselves and excluded.  If a future network
+		// gains material P2P-trading adoption, add it here AND
+		// update apps/web/src/lib/assets/networks.ts with the
+		// matching addressShape + txidShape + bundled explorer.
+		supportedNetworks: ['erc20', 'trc20', 'spl', 'bep20'],
+		// `null` forces the user to pick the network explicitly
+		// every trade.  USDT is multi-network with INCOMPATIBLE
+		// address formats — sending USDT-ERC20 to a TRC-20 address
+		// loses funds permanently.  We refuse to default the user
+		// into one of those losses.
+		defaultNetwork: null,
+		// Renders the privacy-warning chip in the post-order form
+		// and the address-share modal.  Text lives in i18n
+		// (assets.privacy_warnings.usdt_centralized).
+		privacyWarningKey: 'usdt_centralized',
+		// Combined regex matching a VALID address on ANY of the
+		// supported networks.  Per-network validation happens in
+		// apps/web/src/lib/assets/networks.ts via per-network
+		// regexes — this combined one is just the form-level
+		// "is this even plausibly an address" check.
+		//   - ERC-20 + BEP-20: 0x + 40 hex chars (Ethereum address)
+		//   - TRC-20: T + 33 base58 chars (Tron address)
+		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
+		addressShape:
+			/^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

@@ -40,6 +40,9 @@
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
+	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
+	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
+	import { type UsdtNetwork } from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import { getInstanceSnapshot } from '$lib/stores/instance';
 
@@ -79,6 +82,11 @@
 
 	let side = $state<Side | null>(null);
 	let asset = $state<Asset | null>(null);
+	// Part 121 — when asset=USDT, the user MUST pick a network
+	// (ERC-20/TRC-20/SPL/BEP-20).  Null when asset is not USDT
+	// OR when USDT is picked but the user hasn't chosen yet.
+	// canSubmit gates on this being non-null when asset==='USDT'.
+	let usdtNetwork = $state<UsdtNetwork | null>(null);
 
 	// ─── Form state (step 2) ───────────────────────────────────────
 	let fiat = $state('');
@@ -791,7 +799,9 @@
 	});
 
 	// ─── Validation ────────────────────────────────────────────────
-	const step1Done = $derived(side !== null && asset !== null);
+	const step1Done = $derived(
+		side !== null && asset !== null && (asset !== 'USDT' || usdtNetwork !== null)
+	);
 
 	const fiatError = $derived.by(() => {
 		if (fiat.length === 0) return '';
@@ -1061,6 +1071,10 @@
 			// Part 108++ — XMR per-payment proof.  Required for
 			// fee_method=xmr; ignored for everything else.
 			txProof: feeMethodChoice === 'xmr' ? txProof.trim() : undefined,
+			// Part 121 — sub-network for multi-network assets.
+			// USDT-only at launch.  Single-network assets pass
+			// undefined; the payload builder omits the field.
+			assetNetwork: asset === 'USDT' && usdtNetwork !== null ? usdtNetwork : undefined,
 			// REVISIT-LIST item 5 — pull the configured operator
 			// tag from the instance store (synchronous accessor;
 			// store hydrates on +layout mount, by the time the
@@ -1460,7 +1474,13 @@
 							type="button"
 							{disabled}
 							title={disabled ? ($_('post_order.form.waiver_asset_locked_title') as string) : ''}
-							onclick={() => (asset = a as Asset)}
+							onclick={() => {
+								asset = a as Asset;
+								// Part 121: reset network when leaving USDT,
+								// so a re-pick of USDT later forces a fresh
+								// explicit choice (no stale network value).
+								if (a !== 'USDT') usdtNetwork = null;
+							}}
 							class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
 							a
 								? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
@@ -1477,12 +1497,29 @@
 							/>
 						{:else if a === 'BTC'}
 							<Tooltip textKey="post_order.form.asset_explainer.btc" />
-						{:else}
+						{:else if a === 'XMR'}
 							<Tooltip textKey="post_order.form.asset_explainer.xmr" />
+						{:else if a === 'USDT'}
+							<Tooltip textKey="post_order.form.asset_explainer.usdt" faqKey="what_is_usdt" />
 						{/if}
 					</div>
 				{/each}
 			</div>
+
+			<!-- Part 121 — privacy/decentralization warning chip.
+			     Renders only when the chosen asset has a non-null
+			     privacyWarningKey in the canonical registry.  USDT
+			     surfaces here; BTC/XMR/BLURT are null and skip. -->
+			{#if asset === 'USDT'}
+				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
+				<!-- Network picker is REQUIRED when asset is USDT.
+				     No default network — the user must pick every
+				     time, because cross-network sends lose funds.
+				     canSubmit gates on usdtNetwork !== null below. -->
+				<div class="mt-3">
+					<UsdtNetworkPicker bind:network={usdtNetwork} />
+				</div>
+			{/if}
 		</section>
 
 		<!-- Step 2 (only appears after step 1 answered) -->

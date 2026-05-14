@@ -1146,6 +1146,18 @@
       "qr_login": {
         "q": "What is QR login and is it safe?",
         "a": "QR login lets you sign in to Morphit on a computer by scanning a code with the Morphit app on your phone — no typing your seed phrase. When you tap \"Sign in with QR\" on the computer, Morphit creates a one-time code that's valid for 5 minutes. You scan it with your phone, your phone shows you the website name and asks if you really did just open it on your computer, and only after you tap \"Yes, that was me\" does the phone send a signed permission slip back to the computer. What's safe: your private key NEVER leaves your phone. The code on the screen is a request, not a key. Even if someone screenshots the code, they can't use it without YOUR phone tapping yes. What to watch out for: when your phone asks \"Sign in to morphit.io?\", read the website name carefully. A scammer could send you to a fake page like \"morph1t.io\" (with a 1 instead of an i). Only tap Yes if YOU just opened the real Morphit on your computer. If you didn't, tap No. What this isn't: it's not a way to use Morphit without your phone. If you lose your phone you fall back to your written seed phrase. What we don't store: the operator running the website only sees an encrypted permission slip pass through. They can't read it; they can't pretend to be you."
+      },
+      "what_is_usdt": {
+        "q": "What is USDT (Tether)?",
+        "a": "USDT is a stablecoin issued by Tether Inc., designed to maintain a 1:1 peg with the US dollar. Active traders use it to park value temporarily without converting to fiat — for example, between trades, or to avoid volatility in BTC/XMR while waiting for a better entry. On Morphit you can buy and sell USDT peer-to-peer across four networks: Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), and BNB Smart Chain (BEP-20). USDT is **trade-only** on Morphit — you can never pay listing fees, cold-message fees, or featured-slot bids with it. Those always cost BLURT, BTC, or XMR. The fee invariant is wire-format-frozen and enforced by sentinel smokes in CI."
+      },
+      "why_usdt_warning": {
+        "q": "Why does Morphit show a warning when I trade USDT?",
+        "a": "Because USDT fails two of Morphit's three priorities. **Priority #1 is privacy**: USDT has no on-chain privacy. Every USDT transaction is permanently visible to anyone on whichever blockchain you choose, and blockchain analytics firms tag wallets routinely. **Priority #2 is decentralization**: USDT is centrally controlled by Tether Inc., who can freeze any USDT address — and they have, for thousands of addresses, including ones not connected to crime. We let you trade USDT because active traders find it useful for parking value temporarily, but we won't pretend the trade-offs don't exist. If you need privacy, use XMR. If you need decentralization, use BTC or BLURT. If you need stability and accept the trade-offs, USDT is the tool."
+      },
+      "which_usdt_network": {
+        "q": "Which USDT network should I pick — ERC-20, TRC-20, SPL, or BEP-20?",
+        "a": "It depends on what you and your counterparty already hold and what fees you can stomach. **TRC-20 (Tron)** is the most common for P2P trades because the network fees are around $1 — predictable and cheap. **ERC-20 (Ethereum)** is the most universally accepted: every exchange, every wallet, every smart-contract platform supports it; fees are $5-20 and slower, but if your trade settles on an Ethereum-side application, this is the network to use. **SPL (Solana)** has the lowest fees (under $0.01) and is fast, but less universally accepted; pick this if you and your counterparty both use Solana wallets. **BEP-20 (BNB Smart Chain)** has fees around $0.30, fast, but less common — useful if you're moving USDT between Binance and another BSC-using counterparty. There is **no default** on Morphit — every USDT trade requires explicit network choice because cross-network sends are unrecoverable. If you send USDT-ERC20 to a TRC-20 address (or vice versa), the funds are gone forever. The network picker on the post-order form refuses to let you submit until you choose."
       }
     },
     "share_link": "Share link",
@@ -1504,7 +1516,8 @@
       "asset_explainer": {
         "btc": "Bitcoin (BTC) — the original cryptocurrency, used worldwide. Public ledger; transactions are visible. Network fees and confirmation time vary with network demand.",
         "xmr": "Monero (XMR) — privacy-first cryptocurrency. Hides amounts, sender, and recipient by default. Ideal if privacy matters to you.",
-        "blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, but small market cap. Useful for small amounts and tipping; less useful for storing large value."
+        "blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, but small market cap. Useful for small amounts and tipping; less useful for storing large value.",
+        "usdt": "Tether (USDT) — a stablecoin pegged 1:1 to USD. Centrally controlled — Tether Inc. can freeze any address. Trade-only on Morphit: cannot pay listing fees."
       },
       "waiver_fiat_hint": "💡 BLURT trades thinly on centralized exchanges, so most BLURT-for-fiat trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. Tip: pick a fiat your local network uses (USD, EUR, MXN, etc.), or check the In-Person → Barter (goods) payment method in step 3 if you want to offer something else of value. The orderbook is small for now — your buy order helps build it.",
       "waiver_benefits_heading": "What your buy unlocks:",
@@ -2229,7 +2242,11 @@
       "send_failed": "Couldn't send the address. Try again.",
       "xmr_jitter_send_exact_hint": "Tell your buyer's wallet to send this exact amount, including the long decimals.",
       "xmr_jitter_off_warning_heading": "Privacy reduced",
-      "xmr_jitter_off_warning_body": "Round amounts are easier to correlate on the Monero chain. Leave jitter on unless you have a reason to send an exact figure."
+      "xmr_jitter_off_warning_body": "Round amounts are easier to correlate on the Monero chain. Leave jitter on unless you have a reason to send an exact figure.",
+      "method_usdt": "USDT",
+      "address_placeholder_usdt": "Tether address (matching the network you picked)",
+      "address_invalid_usdt": "This address does not match the USDT network you picked. Double-check before sending — cross-network sends lose your funds.",
+      "pill_method_usdt": "USDT address"
     },
     "funds_sent": {
       "button": "Mark funds sent",
@@ -2267,7 +2284,10 @@
       "self_verify_not_found": "Transaction not yet on chain.",
       "self_verify_wrong_op": "The transaction doesn't contain a transfer to the expected recipient.",
       "view_on_explorer": "View on explorer",
-      "send_failed": "Couldn't send the funds-sent receipt. Try again."
+      "send_failed": "Couldn't send the funds-sent receipt. Try again.",
+      "txid_invalid_usdt": "This transaction ID does not match the USDT network you picked. Double-check the network before sending.",
+      "network_pinned_hint": "The seller specified this network when sharing their address. You cannot change it here.",
+      "pill_title_usdt": "USDT sent"
     },
     "unknown_version": "This message uses a newer protocol. Please update Morphit to read it.",
     "pay_blurt": {
@@ -3346,6 +3366,47 @@
     }
   },
   "assets": {
-    "privacy_warnings": {}
+    "privacy_warnings": {
+      "usdt_centralized": "USDT is centralized and not private. Tether Inc. can freeze any USDT address, and they have done so for thousands of addresses, including ones not connected to crime. There is no on-chain privacy — every USDT transaction is permanently visible to anyone, and blockchain analytics firms tag wallets routinely. If you need privacy, use XMR."
+    },
+    "usdt": {
+      "displayName": "Tether",
+      "oneLineDescription": "Stablecoin pegged to USD. Centrally controlled. Trade-only — cannot pay listing fees on Morphit.",
+      "network": {
+        "erc20": {
+          "displayName": "Ethereum (ERC-20)",
+          "feeHint": "fee ~$5–20, slow, most widely accepted"
+        },
+        "trc20": {
+          "displayName": "Tron (TRC-20)",
+          "feeHint": "fee ~$1, fast, most common for P2P trades"
+        },
+        "spl": {
+          "displayName": "Solana (SPL)",
+          "feeHint": "fee <$0.01, fast, less universally accepted"
+        },
+        "bep20": {
+          "displayName": "BNB Smart Chain (BEP-20)",
+          "feeHint": "fee ~$0.30, fast, less common"
+        },
+        "picker": {
+          "label": "Which USDT network?",
+          "requiredHint": "Required — there is no default network. You must pick one for every USDT trade.",
+          "crossNetworkWarning": "Cross-network sends lose your funds permanently. Sending USDT on Ethereum to a Tron address (or vice versa) is unrecoverable."
+        }
+      },
+      "address_share": {
+        "network_prefix": "{network} USDT address:",
+        "warning": "Send USDT on {network} only. Sending USDT on any other network to this address loses your funds permanently."
+      },
+      "order_row": {
+        "network_hint": "You need USDT on {network} for this trade."
+      },
+      "price_subline": {
+        "live": "1 USDT = ${price} live",
+        "unavailable": "USDT/USD price feed unavailable — last seen {staleness} ago."
+      },
+      "disabled_on_instance": "This instance does not accept USDT orders. Try a different Morphit instance."
+    }
   }
 }

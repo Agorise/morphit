@@ -131,6 +131,11 @@ export interface OrderRecord {
 	 *    'waived_first_buy'   — onboarding waiver, one per account
 	 *    'btc' / 'xmr'        — sub-phase 4b; not yet emitted */
 	readonly fee_method?: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
+	/** Part 121 — sub-network for multi-network assets (USDT
+	 *  today).  One of 'erc20'|'trc20'|'spl'|'bep20' when
+	 *  `asset === 'USDT'`; null otherwise.  Pre-Part-121 rows
+	 *  (and orders with single-network assets) are null. */
+	readonly asset_network?: string | null;
 	/** Number of feedback rows this account has received.
 	 *  Proxy for "completed trades." Zero on accounts with no
 	 *  feedback yet. */
@@ -641,6 +646,19 @@ export interface InstanceResponse {
 	readonly chat_link_urls?: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
+		/** Part 121 — USDT per-network explorer URL overrides.
+		 *  Optional sub-map; older indexer builds (pre-Part-121)
+		 *  omit this field, in which case the frontend uses its
+		 *  bundled defaults from `lib/assets/networks.ts`.  Each
+		 *  per-network field is either a `https://…/{txid}…`
+		 *  template (operator override) or null (use bundled
+		 *  default for that network). */
+		readonly usdt?: {
+			readonly erc20: string | null;
+			readonly trc20: string | null;
+			readonly spl: string | null;
+			readonly bep20: string | null;
+		};
 	};
 }
 

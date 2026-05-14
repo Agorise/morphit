@@ -277,8 +277,14 @@ function noteHasForbiddenChars(s: string): boolean {
  *  Zelle, etc.) when it's actually the crypto asset for an
  *  address-share or funds-sent chat message.  The fiat
  *  payment-method registry lives in `lib/payments/registry.ts`
- *  and uses `PaymentMethodEntry`. */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt';
+ *  and uses `PaymentMethodEntry`.
+ *
+ *  Part 121 USDT addition: 'usdt' is multi-network.  When
+ *  method === 'usdt', the `network` field on AddressPayload
+ *  and FundsSentPayload is REQUIRED (one of 'erc20', 'trc20',
+ *  'spl', 'bep20').  The decoder rejects USDT payloads
+ *  without a network. */
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -295,6 +301,16 @@ export interface AddressPayload {
 	 *  convention; the wire format permits the field on any
 	 *  method for forward-compat. */
 	readonly memo?: string;
+	/** Sub-network identifier for multi-network assets.  REQUIRED
+	 *  when method === 'usdt' (one of 'erc20'|'trc20'|'spl'|
+	 *  'bep20').  Undefined for single-network assets (btc, xmr,
+	 *  blurt).  Per Part 121: USDT addresses on different
+	 *  networks have INCOMPATIBLE formats — sending USDT-ERC20
+	 *  to a TRC-20 address loses funds.  The network field
+	 *  pins the receiving network so chat-side validation
+	 *  catches mismatches and the explorer URL builder picks
+	 *  the right template. */
+	readonly network?: string;
 }
 
 export interface FundsSentPayload {
@@ -311,6 +327,11 @@ export interface FundsSentPayload {
 	 *  match what the seller originally requested in their
 	 *  AddressPayload.memo. */
 	readonly memo?: string;
+	/** Part 121: sub-network for multi-network assets.  REQUIRED
+	 *  when method === 'usdt'.  Lets the receiving client pick
+	 *  the right per-network explorer URL when rendering the
+	 *  txid as a clickable link. */
+	readonly network?: string;
 }
 
 export type StructuredPayload = AddressPayload | FundsSentPayload;
@@ -348,11 +369,41 @@ export function isValidBlurtAccount(s: string): boolean {
 	return BLURT_ACCOUNT_RE.test(s);
 }
 
+/** Validate a USDT address shape.  This is the ANY-NETWORK
+ *  check — matches a plausibly-valid address on ERC-20, BEP-20
+ *  (both EVM, same shape), TRC-20, or SPL.  For per-network
+ *  validation (the network-pinned check the address-share
+ *  modal does), use `validateUsdtAddress(network, address)`
+ *  from `$lib/assets/networks`. */
+export function isValidUsdtAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	// ERC-20 / BEP-20: 0x + 40 hex
+	if (/^0x[a-fA-F0-9]{40}$/.test(s)) return true;
+	// TRC-20: T + 33 base58
+	if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(s)) return true;
+	// SPL: base58 32-44 chars
+	if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return true;
+	return false;
+}
+
+/** Validate a USDT txid shape across all supported networks.
+ *  Per-network validation lives in `validateUsdtTxid` in
+ *  `$lib/assets/networks`. */
+export function isValidUsdtTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	// EVM (ERC-20, BEP-20): 0x + 64 hex, or 64 hex without prefix
+	if (/^(0x)?[a-fA-F0-9]{64}$/.test(s)) return true;
+	// SPL: base58 87-88 chars
+	if (/^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(s)) return true;
+	return false;
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
 	if (method === 'xmr') return isValidXmrAddress(addr);
 	if (method === 'blurt') return isValidBlurtAccount(addr);
+	if (method === 'usdt') return isValidUsdtAddress(addr);
 	return false;
 }
 
@@ -362,6 +413,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'btc') return BTC_TXID_RE.test(txid);
 	if (method === 'xmr') return XMR_TXID_RE.test(txid);
 	if (method === 'blurt') return BLURT_TXID_RE.test(txid);
+	if (method === 'usdt') return isValidUsdtTxid(txid);
 	return false;
 }
 

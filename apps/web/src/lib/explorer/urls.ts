@@ -33,6 +33,12 @@ import {
 	BUNDLED_XMR_CHAT_LINK_URL,
 	substituteTxidIntoTemplate
 } from './urlsCore';
+import {
+	USDT_NETWORK_METADATA,
+	bundledUsdtExplorerUrl,
+	validateUsdtTxid,
+	type UsdtNetwork
+} from '$lib/assets/networks';
 
 export {
 	BUNDLED_BTC_CHAT_LINK_URL,
@@ -99,6 +105,41 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 export function morphitExplorerTxUrl(trxId: string): string | null {
 	if (typeof trxId !== 'string' || !BLURT_TRXID_RE.test(trxId)) return null;
 	return `/explorer/tx/${trxId.toLowerCase()}`;
+}
+
+/** Builds a USDT explorer URL for the given network + txid.
+ *  Returns null on validation failure (wrong-shape txid for
+ *  the network).
+ *
+ *  Reads the instance store's `chat_link_urls.usdt.<network>`
+ *  override; falls back to the bundled default from
+ *  `lib/assets/networks.ts` if the operator hasn't configured
+ *  one.  Cross-network mismatch (a TRC-20 txid passed with
+ *  network='erc20') gets validated out — `validateUsdtTxid`
+ *  returns false for shape mismatches.
+ *
+ *  USDT-specific path because USDT is multi-network — the
+ *  generic `externalExplorerUrl(asset, txid)` can't tell
+ *  ERC-20 from TRC-20 from txid alone; the per-network
+ *  builder takes the network explicitly to avoid ambiguity. */
+export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | null {
+	if (typeof txid !== 'string') return null;
+	if (!validateUsdtTxid(network, txid)) return null;
+
+	// Operator override path: read the instance store.
+	const usdtOverrides = getInstanceSnapshot().chat_link_urls.usdt;
+	const override = usdtOverrides ? usdtOverrides[network] : null;
+
+	if (override) {
+		// Operator configured a per-network template — substitute
+		// the txid into it.  Normalize hex txids to lowercase;
+		// SPL is base58 case-sensitive so leave as-is.
+		const normalized = network === 'spl' ? txid : txid.toLowerCase();
+		return substituteTxidIntoTemplate(override, normalized);
+	}
+
+	// Fall back to bundled default.
+	return bundledUsdtExplorerUrl(network, txid);
 }
 
 /** Builds the Morphit explorer URL for a Blurt account.

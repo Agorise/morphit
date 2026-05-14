@@ -36,6 +36,9 @@
 		type AddressPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
+	import { validateUsdtAddress, type UsdtNetwork } from '$lib/assets/networks';
+	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
+	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 
 	interface Props {
 		/** Pre-filled order permlink — when the modal was opened
@@ -60,6 +63,14 @@
 	let address = $state('');
 	let amount = $state('');
 	let note = $state('');
+	/** Part 121 — USDT sub-network (ERC-20/TRC-20/SPL/BEP-20).
+	 *  Null when method !== 'usdt' OR when user hasn't picked
+	 *  yet.  When method === 'usdt', the form REQUIRES a non-null
+	 *  network before canSubmit goes true.  Per-network address
+	 *  validation runs against the specific network's regex
+	 *  (TRC-20 starts with T, ERC-20/BEP-20 are 0x+40-hex, SPL
+	 *  is base58 32-44 chars). */
+	let usdtNetwork = $state<UsdtNetwork | null>(null);
 	/** Phase F.4 — BLURT payment memo.  Auto-generated when the
 	 *  seller opens the modal with the BLURT tab selected (or
 	 *  switches to it).  Lets them match incoming transfers to
@@ -126,7 +137,10 @@
 	const trimmedNote = $derived(note.trim());
 
 	const addressLooksValid = $derived(
-		trimmedAddress.length > 0 && isValidAddress(method, trimmedAddress)
+		trimmedAddress.length > 0 &&
+			(method === 'usdt'
+				? usdtNetwork !== null && validateUsdtAddress(usdtNetwork, trimmedAddress)
+				: isValidAddress(method, trimmedAddress))
 	);
 	/** Amount is OPTIONAL.  Empty is fine.  Non-empty must be a
 	 *  valid positive decimal. */
@@ -135,7 +149,18 @@
 	);
 	const noteLooksValid = $derived(trimmedNote.length <= PAYLOAD_CONSTANTS.MAX_NOTE_LEN);
 
-	const canSubmit = $derived(addressLooksValid && amountLooksValid && noteLooksValid && !sending);
+	/** USDT-specific gate: network MUST be picked.  No default
+	 *  network — cross-network sends lose funds, so the form
+	 *  refuses to submit until the user explicitly chooses. */
+	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
+
+	const canSubmit = $derived(
+		addressLooksValid &&
+			amountLooksValid &&
+			noteLooksValid &&
+			usdtNetworkPicked &&
+			!sending
+	);
 
 	/** Address-error inline message.  Empty when the address looks
 	 *  valid OR is empty.  Showing an error pre-emptively (before
@@ -151,6 +176,7 @@
 		if (addressLooksValid) return null;
 		if (method === 'btc') return 'chat.address.address_invalid_btc';
 		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
+		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
 		return 'chat.address.address_invalid_blurt';
 	});
 
@@ -171,6 +197,11 @@
 		method = m;
 		// Don't clear address — user may have pasted XMR while BTC
 		// was selected, the validator will catch the mismatch.
+		// Part 121: when leaving USDT, drop the pinned network so
+		// a future re-pick of USDT forces a fresh explicit choice
+		// (no stale value).  Each USDT trade gets a deliberate
+		// network commit.
+		if (m !== 'usdt') usdtNetwork = null;
 	}
 
 	async function handleSubmit(): Promise<void> {
@@ -205,7 +236,13 @@
 				// the user hasn't toggled it off.  The memo is
 				// generated client-side; encodeAddressPayload validates
 				// the shape one more time as defense in depth.
-				...(method === 'blurt' && useMemo && memo !== '' ? { memo } : {})
+				...(method === 'blurt' && useMemo && memo !== '' ? { memo } : {}),
+				// Part 121 — pin the USDT network on the message
+				// itself.  The receiver renders "Tron (TRC-20) USDT
+				// address:" as the bold header so cross-network
+				// confusion is impossible.  Validated above by the
+				// addressLooksValid + usdtNetworkPicked gates.
+				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {})
 			};
 			const wire = encodeAddressPayload(payload);
 			await onShare(wire);
@@ -284,7 +321,33 @@
 			>
 				{$_('chat.address.method_blurt')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'usdt'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'usdt'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('usdt')}
+			>
+				{$_('chat.address.method_usdt')}
+			</button>
 		</div>
+
+		<!-- Part 121 — USDT privacy warning + network picker.
+		     Renders only when USDT is the active tab.  Sits ABOVE
+		     the address input so users see the warning + commit
+		     to a network before pasting an address (form
+		     validates against the picked network's regex). -->
+		{#if method === 'usdt'}
+			<div class="mt-4">
+				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
+				<div class="mt-3">
+					<UsdtNetworkPicker bind:network={usdtNetwork} disabled={sending} />
+				</div>
+			</div>
+		{/if}
 
 		{#if orderPermlink}
 			<div
@@ -305,7 +368,9 @@
 					? ($_('chat.address.address_placeholder_btc') as string)
 					: method === 'xmr'
 						? ($_('chat.address.address_placeholder_xmr') as string)
-						: ($_('chat.address.address_placeholder_blurt') as string)}
+						: method === 'usdt'
+							? ($_('chat.address.address_placeholder_usdt') as string)
+							: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

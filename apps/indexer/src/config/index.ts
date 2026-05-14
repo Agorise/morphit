@@ -131,6 +131,14 @@ export interface Config {
 	 *  a transfer verifies.  MUST match BASE_FEE_BLURT on the
 	 *  frontend. */
 	readonly feeBaseBlurt: number;
+	/** Operator-level instance-wide asset disable list (Part 121,
+	 *  Memory #25).  Uppercase tickers — orders posted with a
+	 *  disabled asset are rejected at handler-time.  Default
+	 *  empty (everything in the canonical registry is enabled).
+	 *  Federation: cross-instance read-only visibility is
+	 *  preserved; the operator just refuses to accept NEW orders
+	 *  from their own users for the disabled assets. */
+	readonly disabledAssets: readonly string[];
 	/** Tolerance band for fee-amount verification — fee transfers
 	 *  within ±feeTolerance of the expected amount are accepted.
 	 *  Default: 0.001 (0.1%). After the BLURT-native refactor this
@@ -394,6 +402,44 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().min(3).max(16).default('morphit-fees'),
 	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(60),
 	MORPHIT_INDEXER_FEE_TOLERANCE: z.coerce.number().positive().max(0.5).default(0.001),
+
+	/** Operator-level instance-wide asset disable list (Part 121,
+	 *  Memory #25).  Comma-separated uppercase tickers from the
+	 *  canonical registry — e.g. `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`
+	 *  to refuse all USDT orders on this instance.  The indexer's
+	 *  order handler rejects orders posted with a disabled asset;
+	 *  the frontend's asset picker hides the asset.  Default empty
+	 *  (everything in the registry is enabled).
+	 *
+	 *  Use cases:
+	 *  - Operators with philosophical objections to a specific
+	 *    asset (USDT centralization, future stablecoin freezes)
+	 *  - Operators in jurisdictions where a specific asset has
+	 *    regulatory constraints they don't want to take on
+	 *  - Operators running a private instance for a specific
+	 *    community that only wants BTC+XMR
+	 *
+	 *  Memory #23 invariant separately blocks USDT from paying
+	 *  fees regardless of this knob.  This knob blocks USDT from
+	 *  being TRADED at all on the instance.
+	 *
+	 *  Per-asset opt-out is OPERATOR-LEVEL not user-level —
+	 *  individual users who object to an asset pick a different
+	 *  Morphit instance.  Federation rules: orders for an asset
+	 *  disabled on instance A but enabled on instance B still
+	 *  appear in B's orderbook (the asset's chain history is
+	 *  shared); A simply refuses to ACCEPT new orders for that
+	 *  asset from its own users.  Cross-instance read-only
+	 *  visibility is preserved. */
+	MORPHIT_INDEXER_DISABLED_ASSETS: z
+		.string()
+		.default('')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((t) => t.trim().toUpperCase())
+				.filter((t) => t.length > 0)
+		),
 	// Account-creation fee fallback — used by /v1/chain-fee
 	// when condenser_api.get_chain_properties is unreachable.
 	// Set to the current witness-consensus value (default 100).
@@ -693,6 +739,7 @@ export function loadConfig(): Config {
 
 		feeRecipient: e.MORPHIT_INDEXER_FEE_RECIPIENT,
 		feeBaseBlurt: e.MORPHIT_INDEXER_FEE_BASE_BLURT,
+		disabledAssets: e.MORPHIT_INDEXER_DISABLED_ASSETS,
 		feeTolerance: e.MORPHIT_INDEXER_FEE_TOLERANCE,
 		accountCreationFeeBlurtFallback: e.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT,
 		attestationPhase: e.MORPHIT_INDEXER_ATTESTATION_PHASE,

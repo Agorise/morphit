@@ -227,7 +227,7 @@ for (const a of ASSETS) {
 			privacyWarningKey: null,
 			addressShape: /./
 		});
-		mutated = ASSETS.length !== 3;
+		mutated = ASSETS.length !== 4;
 	} catch {
 		// Frozen array throws on push in strict mode — good.
 	}

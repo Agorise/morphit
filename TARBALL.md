@@ -1,14 +1,133 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 2)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 3)
 
 **Snapshot date:** 2026-05-13
 
-**Tarball:** `morphit-audit-2026-05-121-cp2-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp3-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp1-delta.tar.gz`.  This cp2 closes a follow-up gap from cp1: the workspace-symlink + `npm install` + smoke-suite ERR_MODULE_NOT_FOUND troubleshooting was in `CHANGES-cp1.md` (which Ken sees) but NOT in the operator-facing docs (which node admins see).  Memory #14 violation — operator-facing claims belong in the operator docs.
+**Previous tarball:** `morphit-audit-2026-05-121-cp2-delta.tar.gz`.  This cp3 ships **USDT (Tether) end-to-end** as Morphit's first multi-network and first trade-only asset.
 
-## cp2 — what's shipped
+## Part 121 cp3 — what's shipped
 
-1. **`docs/RUN-A-MORPHIT-NODE.md` line 736** — extended the `npm install` explanation: "It also creates **workspace symlinks** under `node_modules/@morphit/*` — these are Morphit's own internal packages wired up so the indexer, relay, and frontend can `import` from them by name. Without this step the smoke suite at `bash scripts/run-smokes.sh` will fail 13 runners with `ERR_MODULE_NOT_FOUND` errors complaining about `@morphit/asset-registry` — that's the symptom that you ran the smoke suite before `npm install`, not a real code problem."
+### Pretext
+
+Ken's directive after cp2 sealed: *"let's add Tether (USDT). do not let people pay fees with it. i will never own usdt and do not want any from anyone/anywhere. it's not private at all and is very centralised, but i am choosing to add it because active traders choose to hold/use it for holding value temporarily."*
+
+Pre-execution design Q&A turn detailed how USDT would appear in Morphit, then asked 5 edge-case design questions.  Ken's answers (committed before code landed):
+
+1. **9a — wrong-network address in chat:** same posture as BTC/XMR (reject inline)
+2. **9b — order-row hint:** "you need USDT on Tron for this trade" chip
+3. **9c — operator opt-in posture:** default=ON instance-wide with operator-config override (same for all future coin additions).  **Memory #25 committed.**
+4. **9d — bridged vs native:** native only
+5. **9e — depeg risk:** live "1 USDT = $X.XX live" subline on every USDT row
+
+### Memory edit #25
+
+> Every new tradable asset ships default=ON instance-wide, with operator-config override to disable.  Pattern: `MORPHIT_INDEXER_DISABLED_ASSETS` env var.  Per-asset opt-out is OPERATOR-level not user-level.  Applies to USDT and all future coin additions.
+
+### Code changes shipped
+
+**Foundation:**
+- Canonical asset registry: USDT entry with `canPayListingFee: false`, 4 supported networks, `defaultNetwork: null`, `privacyWarningKey: 'usdt_centralized'`
+- NEW `apps/web/src/lib/assets/networks.ts` — per-network metadata module (regexes + bundled explorers: etherscan.io, tronscan.org, solscan.io, bscscan.com per Ken's list; Omni Layer excluded per Tether's own deprecation)
+- Frontend asset registry mirrors canonical with `canBeUsedForListingFee: false`
+
+**Chat payload:**
+- `ChatAssetTicker` extended to include `'usdt'`
+- `AddressPayload`/`FundsSentPayload` gained optional `network` field
+- `isValidAddress`/`isValidTxid` dispatchers extended for USDT
+
+**Indexer:**
+- New `MORPHIT_INDEXER_DISABLED_ASSETS` env var + `Config.disabledAssets` field
+- Order handler instance-wide disable gate (`asset_disabled_on_instance`)
+- `validate()` asset_network gates: `asset_network_required_for_usdt` / `asset_network_unknown` / `asset_network_not_permitted_for_asset`
+- All 4 INSERT INTO orders sites rewritten with `asset_network` column
+- Schema v32 migration: `orders.asset_network TEXT` + partial index, idempotent
+
+**Indexer-client + API:**
+- `OrderRecord.asset_network?: string | null` type
+- Orderbook SELECT + rowToWire include asset_network
+
+**Order payload builder:**
+- `OrderFormInput.assetNetwork` + `OrderPayload.asset_network` fields
+
+**Instance store:**
+- `chat_link_urls.usdt` sub-map for per-network operator-overridable explorer templates
+
+**Explorer URLs:**
+- `usdtExplorerUrl(network, txid)` — reads instance override, falls back to bundled default, SPL preserves case
+
+**Price feed:**
+- USDT added to fallback ($1.00 static) + Coingecko ('tether' ID for live peg state)
+
+**3 new Svelte components:**
+- `PrivacyWarningChip.svelte` (full + compact variants, dismissible per-session)
+- `UsdtNetworkPicker.svelte` (required radio, cross-network warning above)
+- `UsdtPriceSubline.svelte` (live + stale fallback)
+
+**3 form integrations:**
+- `/post +page.svelte` (chip + picker, step1Done gated)
+- `AddressShareModal.svelte` (USDT tab, per-network validation, picker, payload threads network)
+- `FundsSentModal.svelte` (USDT tab, `initialUsdtNetwork` prop with networkPinned read-only mode)
+
+**ChatMessage rendering:**
+- `explorerLinkForTxid` takes optional network
+- Address pill: bold-network prefix chip + amber per-message warning (stays on chat record forever)
+- Funds-sent pill: same prefix
+
+**Orderbook row:**
+- USDT network chip with title-tooltip hint (9b)
+- `<UsdtPriceSubline compact />` (9e)
+
+**SVG assets:**
+- `/icons/icon-usdt.svg` (Tether teal) + 4 sub-network chip icons at `/icons/networks/`
+
+**i18n:**
+- 28 keys × 10 locales = 280 native translations
+- 3 FAQ entries (`what_is_usdt`, `why_usdt_warning`, `which_usdt_network`) wired into FAQ_KEYS + FAQ_RELATED + locales (q+a pairs)
+- Allow-list extended for "Tether"/"Ethereum"/"Tron"/"Solana"/"BNB Smart Chain"/"USDT" proper-noun loanwords with reason codes
+
+### 2 new sentinel smokes
+
+- `usdt-trade-only-smoke` (11/11 green) — pins canonical + frontend registry invariants
+- `usdt-network-picker-required-smoke` (9/9 green) — sentinel-greps /post + AddressShareModal + FundsSentModal for usdtNetwork-gated canSubmit
+- Both registered in `scripts/run-smokes.sh`
+
+### 5 new persona-walkthrough scenarios (P121-USDT-1..5)
+
+### Docs shipped same turn (Memory #24 discipline)
+
+- NEW `docs/adr/0023-usdt-multi-network.md` — full architectural ADR, all 9 design decisions
+- `docs/ADDING-A-COIN.md` Category B example updated to match shipped reality
+- `docs/OPERATIONS.md` new "Trade-only asset configuration" tail section
+- `docs/RUN-A-MORPHIT-NODE.md` new "USDT and your operator stance" tail section
+- `docs/PRE-LAUNCH-CHECKLIST.md` new [blocking] checklist item + schema v31→v32
+
+### Marketing
+
+- `MORPHIT-BRAG-LIST.md` 252 → 254 entries; footer count + date refreshed
+
+### Verification
+
+- **Triple-pulse `bash scripts/run-smokes.sh`: 2,405 scenarios green × 3, zero failures.**  Baseline 2,377 → 2,405 (+28).
+- Locale parity 10/10 green at 2,478 keys × 10
+- Translation-completeness: 0 unexpected byte-identical
+- Fee-method-enum-frozen 7/7: USDT did NOT leak into fee_method enum (Memory #23 preserved)
+- First-buy-waiver-payment-agnostic 6/6
+- Web TS / svelte-check clean; indexer / relay / asset-registry TS clean
+
+---
+
+## Part 121 cp2 — what shipped previously
+
+Ken asked whether the "one-time `npm install`" setup note I'd given verbally in cp1 was actually present in the operator/launch docs.  Grep confirmed it was — `RUN-A-MORPHIT-NODE.md` §736, `OPERATIONS.md` §7015-7038, `PRE-LAUNCH-CHECKLIST.md` §307-324 all carry the workspace-symlinks explanation with current numbers ("13 affected runners," "2,370+ scenarios").  Ken's correction was a process one: "please stop forgetting to update the .md files as we go along."
+
+**Memory edit #24 committed 2026-05-13:** "Before EVERY tarball, grep operator/launch docs for setup/troubleshooting/operator implications of the turn's work; never assume coverage; if saying verbally 'one-time setup note' or 'environmental thing,' that's the SYMPTOM the doc update was missed — fix BEFORE tarball, not after Ken asks."
+
+The self-audit triggered by that memory rule surfaced **one real gap that should have shipped in cp1**: ADR-0011 (the fee-model ADR) did not yet carry the Part 121 enum-freeze forward-note.
+
+### cp2 changes
+
+1. **`docs/RUN-A-MORPHIT-NODE.md` line 736** — extended `npm install` explanation: workspace symlinks, ERR_MODULE_NOT_FOUND symptom, framing as pure environment setup.
 
 2. **`docs/OPERATIONS.md` §Tests + smoke** — appended a "Smoke-suite troubleshooting" block enumerating the 13 affected runners and the fix (`cd ~/morphit && npm install --no-audit --no-fund`), framed as pure environment setup not a code regression.
 
