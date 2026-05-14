@@ -27,6 +27,7 @@
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
+	import { instance } from '$stores/instance';
 
 	interface VerifyPayload {
 		schema_version: number;
@@ -198,6 +199,49 @@
 					</dd>
 				</div>
 			</dl>
+		</section>
+
+		<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.
+		     Renders THIS instance's asset-policy stance for users who
+		     want to know whether they're on a "USDT-enabled" or
+		     "privacy-pure" Morphit before deciding to trade here.
+		     Data source: $instance.disabled_assets, pulled from
+		     /v1/instance at session start (Memory #25 — every new
+		     tradable asset defaults ON instance-wide; operators opt
+		     OUT via MORPHIT_INDEXER_DISABLED_ASSETS).  Federation
+		     note: this is THIS instance's stance; peer instances'
+		     stances surface on /operators once the federation probe
+		     starts caching disabled_assets (deferred to a follow-on
+		     Part; REVISIT entry filed). -->
+		<section class="card mb-6">
+			<h2 class="font-display text-xl font-bold">
+				{$_('about_this_instance.section.asset_stance')}
+			</h2>
+			<p class="mt-2 text-ink-700 dark:text-ink-200">
+				{$_('about_this_instance.asset_stance.explain')}
+			</p>
+			<dl class="mt-4 space-y-3 text-sm">
+				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+						{$_('about_this_instance.asset_stance.disabled_label')}
+					</dt>
+					<dd>
+						{#if $instance.disabled_assets.length === 0}
+							<span class="text-morphit-emerald">
+								{$_('about_this_instance.asset_stance.disabled_none')}
+							</span>
+						{:else}
+							<span class="font-mono">{$instance.disabled_assets.join(', ')}</span>
+							<span class="ml-2 text-ink-500">
+								{$_('about_this_instance.asset_stance.disabled_suffix')}
+							</span>
+						{/if}
+					</dd>
+				</div>
+			</dl>
+			<p class="mt-4 text-xs text-ink-500">
+				{$_('about_this_instance.asset_stance.federation_note')}
+			</p>
 		</section>
 
 		<section class="card mb-6">

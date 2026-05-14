@@ -78,6 +78,14 @@ export interface InstanceState {
 			readonly bep20: string | null;
 		};
 	};
+	/** Trade-only assets this instance has disabled via the
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
+	 *  Uppercase tickers; empty array = no operator-side
+	 *  disabling.  Pre-Part-121-cp6 indexers may omit the wire
+	 *  field, in which case the store defaults to `[]`.  Used
+	 *  by `/run-a-node` to render this instance's stance and
+	 *  by `/operators` to label federated instances. */
+	readonly disabled_assets: readonly string[];
 	readonly loaded: boolean;
 }
 
@@ -108,6 +116,7 @@ const FALLBACK: InstanceState = {
 		xmr: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 	},
+	disabled_assets: [],
 	loaded: false
 };
 
@@ -194,6 +203,7 @@ export function initInstance(): Promise<void> {
 								xmr: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 							},
+					disabled_assets: result.data.disabled_assets ?? [],
 					loaded: true
 				});
 			} else {

@@ -33,7 +33,12 @@ import { join } from 'node:path';
 
 const REPO = join(import.meta.dirname, '..');
 const LOC_DIR = join(REPO, 'src/lib/i18n/locales');
-const INDEX_FILE = join(REPO, 'src/lib/i18n/index.ts');
+// As of Part 121 cp6, SUPPORTED_LOCALES + PLANNED_LOCALES SSoT
+// moved from i18n/index.ts to i18n/locales.ts (decoupled from
+// SvelteKit's $app/environment so the pure constants can be
+// imported by smokes and the prerender-redirect shell).  The
+// registry-smoke regex parses the locales.ts source directly.
+const INDEX_FILE = join(REPO, 'src/lib/i18n/locales.ts');
 
 console.log('\n── i18n-locale-registry-smoke ──────────────────────────\n');
 

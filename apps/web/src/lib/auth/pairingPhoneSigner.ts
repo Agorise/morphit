@@ -37,7 +37,6 @@
  * unlock flow before the user reaches the confirmation card.
  */
 
-import { Buffer } from 'buffer';
 import { get } from 'svelte/store';
 import { PrivateKey, cryptoUtils } from '@beblurt/dblurt';
 
@@ -104,7 +103,12 @@ export async function getPostingKeyForPairing(): Promise<{
 	// confusing desktop-side rejection.
 	let userPostingPubkeyStr: string;
 	try {
-		const privKey = new PrivateKey(Buffer.from(live.posting.privateKey));
+		// privateKey is already a Uint8Array; dblurt's PrivateKey
+		// constructor accepts that at runtime even though its TS
+		// types say Buffer.  Same pattern as $lib/blurt/sign.ts —
+		// avoids importing the Node `buffer` module into the
+		// browser bundle (Vite can't resolve it).
+		const privKey = new PrivateKey(live.posting.privateKey as unknown as Buffer);
 		userPostingPubkeyStr = privKey.createPublic().toString();
 	} catch (err) {
 		throw new PairingSignerError(
@@ -194,9 +198,12 @@ export async function getPostingKeyForPairing(): Promise<{
 	// store and wiped on lock.
 	const signer: BundleSigner = async (canonicalBytes) => {
 		const digest = await computeBundleSigningDigest(canonicalBytes);
-		const digestBuf = Buffer.from(digest);
+		// dblurt expects Buffer in its TS types but accepts any
+		// Uint8Array at runtime.  Same browser-bundle-friendly
+		// cast pattern as $lib/blurt/sign.ts.
+		const digestBuf = digest as unknown as Buffer;
 
-		const privKey = new PrivateKey(Buffer.from(live.posting.privateKey));
+		const privKey = new PrivateKey(live.posting.privateKey as unknown as Buffer);
 
 		let signature;
 		try {

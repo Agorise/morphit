@@ -87,6 +87,27 @@ export interface InstanceResponse {
 		btc: string | null;
 		xmr: string | null;
 	};
+	/** Trade-only assets this instance has DISABLED via the
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
+	 *  every new asset ships default-ON instance-wide with
+	 *  operator override).  Wire format: array of uppercase
+	 *  asset tickers (e.g. `['USDT']` or `['USDT', 'ARRR']`).
+	 *  Empty array = this instance accepts every asset in the
+	 *  canonical registry.
+	 *
+	 *  Surface intent: lets the frontend's `/run-a-node` and
+	 *  `/operators` pages render a "this instance's asset
+	 *  policy" badge so users can self-select an instance that
+	 *  matches their preference (privacy-pure operators may
+	 *  disable USDT; pragmatic operators leave it on).  ADR-0023
+	 *  USDT context + REVISIT-LIST §A recommendation.
+	 *
+	 *  Note: federation peers still see this instance's USERS
+	 *  trade USDT (chain history is shared); the gate is only
+	 *  on NEW orders posted FROM this instance.  Cross-instance
+	 *  read-only visibility is preserved regardless of operator
+	 *  stance. */
+	disabled_assets: readonly string[];
 }
 
 export function instanceRoute(config: Config): Hono {
@@ -124,7 +145,8 @@ export function instanceRoute(config: Config): Hono {
 			chat_link_urls: {
 				btc: config.frontendBtcChatLinkUrl ?? null,
 				xmr: config.frontendXmrChatLinkUrl ?? null
-			}
+			},
+			disabled_assets: config.disabledAssets
 		};
 		c.header('Cache-Control', 'public, max-age=300');
 		return c.json(body);

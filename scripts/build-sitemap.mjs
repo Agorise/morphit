@@ -48,10 +48,13 @@ const ROUTES = [
 	{ path: '/security', priority: 0.6, changefreq: 'monthly' },
 	{ path: '/support', priority: 0.5, changefreq: 'monthly' },
 	{ path: '/about-this-instance', priority: 0.5, changefreq: 'weekly' },
+	{ path: '/instances', priority: 0.5, changefreq: 'weekly' },
 	{ path: '/compare', priority: 0.5, changefreq: 'weekly' },
 	{ path: '/backup-keys', priority: 0.5, changefreq: 'monthly' },
 	{ path: '/privacy-terms', priority: 0.4, changefreq: 'yearly' },
-	{ path: '/plan', priority: 0.4, changefreq: 'monthly' }
+	{ path: '/plan', priority: 0.4, changefreq: 'monthly' },
+	{ path: '/glossary', priority: 0.6, changefreq: 'monthly' },
+	{ path: '/cheat-sheet', priority: 0.5, changefreq: 'monthly' }
 ];
 
 /**

@@ -7143,6 +7143,42 @@ Memory #23 (BLURT/BTC/XMR-only for listing fees) and Memory #25
 this knob's posture.  See `docs/adr/0023-usdt-multi-network.md`
 for the full design.
 
+### Frontend surfaces showing your instance's disabled-assets list (Part 121 cp6)
+
+The `MORPHIT_INDEXER_DISABLED_ASSETS` value flows through the
+indexer's `/v1/instance` endpoint as the `disabled_assets` field
+(an uppercase-tickers JSON array, e.g. `["USDT"]` or
+`["USDT","DAI"]`).  Two frontend pages surface this to users:
+
+- **`/about-this-instance`** renders a "This instance's asset
+  policy" section that shows the current disabled-assets list.
+  Empty array → emerald "None — this instance accepts every
+  tradable asset"; populated → "USDT (operator-disabled on this
+  instance; tradeable on peer instances)".  Federation note in
+  the same panel reminds users that peer instances' orders still
+  appear in the orderbook regardless — the gate is only on NEW
+  orders posted from THIS instance.
+- **`/run-a-node`** carries a "Your instance, your asset policy"
+  panel explaining the env var to prospective operators with
+  three pillars (default-on, opt-out env var, federation stays
+  intact) and a pointer back to this section of OPERATIONS.md.
+
+The `/operators` page does NOT yet surface peer-instance
+disabled-assets badges — that's deferred to a follow-on Part
+(needs a v33 schema migration to cache `disabled_assets` per
+peer in the `known_instances` table + a federation-probe
+handler extension).  Until then, users can check each peer's
+own `/about-this-instance` to see its stance.  REVISIT-LIST §A
+"Federation-probe extension for peer-instance asset stance"
+tracks this deferral.
+
+If you change `MORPHIT_INDEXER_DISABLED_ASSETS` after deploy,
+clients will see the new value at most 5 minutes later (the
+`/v1/instance` response carries `Cache-Control: public,
+max-age=300`).  Restart the indexer service for the env-var
+change to take effect; the cache header is the only delay
+between restart and full propagation to all browsers.
+
 ### Per-network explorer URL overrides (USDT only)
 
 USDT is Morphit's first multi-network asset (ERC-20, TRC-20,

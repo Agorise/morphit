@@ -341,6 +341,57 @@
 		</p>
 	</section>
 
+	<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.
+	     A prospective operator reading this page should know that
+	     asset-policy specialization is a degree of freedom they
+	     have (Memory #25 + REVISIT §A): every new tradable asset
+	     ships default-ON instance-wide; operators opt OUT via
+	     MORPHIT_INDEXER_DISABLED_ASSETS.  Federation note: peer
+	     instances' orders still appear regardless — the gate is
+	     only on new orders posted from THIS operator's instance. -->
+	<section class="mt-14">
+		<h2 class="font-display text-2xl font-bold">
+			{$_('run_a_node.asset_policy_heading')}
+		</h2>
+		<p class="mt-4 text-ink-700 dark:text-ink-300">
+			{$_('run_a_node.asset_policy_body')}
+		</p>
+		<ul class="mt-4 space-y-3 text-ink-700 dark:text-ink-300">
+			<li class="flex gap-3">
+				<span class="text-morphit-emerald" aria-hidden="true">✓</span>
+				<span>
+					<strong>{$_('run_a_node.asset_policy_default_label')}</strong>
+					{$_('run_a_node.asset_policy_default_body')}
+				</span>
+			</li>
+			<li class="flex gap-3">
+				<span class="text-morphit-emerald" aria-hidden="true">✓</span>
+				<span>
+					<strong>{$_('run_a_node.asset_policy_opt_out_label')}</strong>
+					{$_('run_a_node.asset_policy_opt_out_body')}
+				</span>
+			</li>
+			<li class="flex gap-3">
+				<span class="text-morphit-emerald" aria-hidden="true">✓</span>
+				<span>
+					<strong>{$_('run_a_node.asset_policy_federation_label')}</strong>
+					{$_('run_a_node.asset_policy_federation_body')}
+				</span>
+			</li>
+		</ul>
+		<p class="mt-4 text-sm text-ink-600 dark:text-ink-400">
+			{$_('run_a_node.asset_policy_doc_pointer')}
+			<a
+				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md"
+				rel="noopener"
+				class="text-morphit-emerald hover:underline"
+			>
+				OPERATIONS.md
+			</a>
+			{$_('run_a_node.asset_policy_doc_pointer_suffix')}
+		</p>
+	</section>
+
 	<!-- Requirements: hardware floor + networking. Written to be
 		 honest rather than aspirational; a would-be operator
 		 should know what they're signing up for. -->
