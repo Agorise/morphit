@@ -44,7 +44,13 @@ const OPTIONAL_SIDECAR_ROLES = [
 	'host_monitor',
 	'smartctl_monitor',
 	'fail2ban_monitor',
-	'mdadm_monitor'
+	'mdadm_monitor',
+	'dmesg_monitor',
+	'trivy_monitor',
+	'postfix_monitor',
+	'certbot_monitor',
+	'apt_monitor',
+	'compose_monitor'
 ];
 const REQUIRED_COLLECTIONS = [
 	'community.general',

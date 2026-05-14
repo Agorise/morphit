@@ -2717,6 +2717,131 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now morphit-postfix-monitor.timer
 ```
 
+#### TLS cert expiry + renewal-stall detector — `morphit-certbot-monitor`
+
+Daily check of TLS cert expiry combined with a **renewal-stall
+detector** that catches the killer pattern: cert is about to
+expire AND certbot has not had a successful renewal in N days.
+A cert renewing fine 6 months ago can silently start failing for
+weeks before it actually expires; this sidecar finds that gap.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `cert_expiry_critical` | CRITICAL | Cert expires in ≤ 7 days |
+| `cert_expiry_warn` | WARN | Cert expires in ≤ 30 days |
+| `renewal_stalled` | CRITICAL | Cert expiring AND last successful renewal > 14 days ago |
+| `certbot_unavailable` | INFO | openssl or `/etc/letsencrypt/live/` missing |
+
+All thresholds env-tunable.  Reads `/var/log/letsencrypt/letsencrypt.log`
+for the "Renewal was successful" line timestamps; falls back
+gracefully if the log is rotated or unreadable.
+
+Setup:
+
+```sh
+# certbot itself must be installed (per §35 TLS role).
+# Verify with:
+test -d /etc/letsencrypt/live || echo "certbot not configured yet"
+
+# (Optional) operator-tuned thresholds.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/certbot-monitor.env <<'ENV'
+MORPHIT_CERTBOT_EXPIRY_CRITICAL_DAYS=7
+MORPHIT_CERTBOT_EXPIRY_WARN_DAYS=30
+MORPHIT_CERTBOT_RENEWAL_STALL_DAYS=14
+ENV
+
+# Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-certbot-monitor.service \
+        /opt/morphit/ops/systemd/morphit-certbot-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-certbot-monitor.timer
+```
+
+#### Pending security updates monitor — `morphit-apt-monitor`
+
+Daily count of pending security updates.  Surfaces the same
+information the motd shows but operators stop reading after the
+first month — this routes them through the same alert channel
+as everything else.  Debian/Ubuntu only.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `security_updates_critical` | CRITICAL | Security updates pending ≥ 10 |
+| `security_updates_warn` | WARN | Security updates pending ≥ 1 |
+| `updates_pending_info` | INFO | Non-security updates only (daily digest) |
+| `apt_unavailable` | INFO | apt not in PATH |
+
+Setup:
+
+```sh
+# (Optional) operator-tuned thresholds.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/apt-monitor.env <<'ENV'
+MORPHIT_APT_SECURITY_CRITICAL=10
+MORPHIT_APT_SECURITY_WARN=1
+ENV
+
+# Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-apt-monitor.service \
+        /opt/morphit/ops/systemd/morphit-apt-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-apt-monitor.timer
+```
+
+Note: the sidecar runs `apt-get update` itself before counting,
+so it always reports against fresh package lists.  Outbound
+network requirements: same as your apt install (e.g.
+archive.ubuntu.com).
+
+#### Docker Compose service health monitor — `morphit-compose-monitor`
+
+Watches Docker Compose service health-check status + restart
+counts every 5 minutes.  Catches three patterns: services
+reporting `health: unhealthy` (canonical compose signal),
+services in state `exited` when they should be running, and
+services in restart loops (high `RestartCount` over short time).
+
+Most useful with the BunkerWeb deploy path (§32).  Useless on
+bare-metal-only — the sidecar exits cleanly with an INFO event
+in that case.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `service_unhealthy` | CRITICAL | docker compose ps reports `Health: unhealthy` |
+| `service_exited` | CRITICAL | Service stopped unexpectedly |
+| `service_restart_loop` | WARN | RestartCount ≥ 5 (env-tunable) |
+| `docker_unavailable` | INFO | Docker / Compose v2 plugin missing |
+
+Setup:
+
+```sh
+# (Optional) operator-tuned threshold + project list.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/compose-monitor.env <<'ENV'
+MORPHIT_COMPOSE_RESTART_THRESHOLD=5
+MORPHIT_COMPOSE_PROJECTS=/opt/morphit/ops/bunkerweb
+ENV
+
+# Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-compose-monitor.service \
+        /opt/morphit/ops/systemd/morphit-compose-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-compose-monitor.timer
+```
+
+For multiple compose stacks: `MORPHIT_COMPOSE_PROJECTS=` accepts
+a space-separated list of project directories.
+
 ### Deploying all sidecars at once via Ansible
 
 The repository ships an Ansible playbook at `ops/ansible/` that

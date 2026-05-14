@@ -1,10 +1,76 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 12)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 13)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp12-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp13-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp11-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp12-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp13 — what's shipped (Forgejo CI workflow + deps-pin-check + certbot/apt/compose monitor sidecars)
+
+### Pretext
+
+cp12 sealed the ansible quality gates + 3 more monitor sidecars.  Ken said "do it to it" pointing at cp12's REVISIT.  cp13 ships the CI workflow + deps-pin smoke + 3 more sidecars closing the remaining alerting blind-spots.
+
+### What shipped
+
+**Phase 1 — Forgejo CI workflow:**
+
+`.forgejo/workflows/ci.yml` with three parallel jobs on every push and PR:
+1. **typecheck** — `npm ci --ignore-scripts` + typecheck-sweep
+2. **ansible-lint** — installs lint + collections, runs `ansible-lint --offline --strict`
+3. **smokes** — full `npm ci` + `bash scripts/run-smokes.sh` × 3 (triple-pulse)
+
+Concurrency cancel-in-progress saves CI minutes on amend cycles.  GitHub-Actions-compatible syntax.
+
+**Phase 2 — matrix-bot deps-pin-check smoke:**
+
+`apps/matrix-bot/scripts/deps-pin-check.ts` (3 scenarios) compares declared semver ranges in apps/matrix-bot/package.json against installed versions in node_modules.  Tracks matrix-bot-sdk + better-sqlite3 + zod.  Catches the "tested 0.7.1, deployed 0.8.0" class of bug.  Soft-skips if node_modules empty.
+
+**Phase 3 — Three more monitor sidecars:**
+
+| Script | Module | Cadence | Events |
+|---|---|---|---|
+| `ops/scripts/morphit-certbot-monitor.sh` | `certbot` | daily 04:30 UTC | 4 events: TLS expiry + renewal-stall |
+| `ops/scripts/morphit-apt-monitor.sh` | `apt` | daily 05:00 UTC | 4 events: pending security updates |
+| `ops/scripts/morphit-compose-monitor.sh` | `compose` | 5min | 4 events: Docker Compose health |
+
+**certbot-monitor** is the standout — it catches the killer "renewal silently broke months ago" pattern by correlating cert expiry against the most recent successful renewal in `/var/log/letsencrypt/letsencrypt.log`.  Most monitoring stacks miss this.
+
+6 new systemd unit files (.service + .timer per sidecar) with hardened postures.  Daily timers use `RandomizedDelaySec` (1h, 2h) for load spreading.
+
+**Classifier extended:** 5 new CRITICAL + 3 new WARN matchers + 12 ALERT_COPY entries.  classifier-smoke +12 scenarios.
+
+**Bot default `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS`** now covers all 11 monitor sidecars + indexer + relay = **12 units**.
+
+**Three new Ansible roles + playbook + group_vars wiring.**
+
+**Structural smoke OPTIONAL_SIDECAR_ROLES const expanded 5 → 11** — retroactively covers cp12 sidecars that were only being checked for "declared role exists" before.  Smoke scenario count: 37 → 61.
+
+**5 P121-CP13 persona sentinels** pinning every invariant.
+
+**Docs:** OPERATIONS.md §16 extended with three new monitoring subsections; RUN-A-MORPHIT-NODE.md §11 extended; MORPHIT-BRAG-LIST entries #268-271; closing summary 267 → 271.
+
+### Verification
+
+- Triple-pulse: 2,676 × 3, 0 failures.  cp12 baseline 2,635 → cp13 baseline 2,676 (+41 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness against 49 files: passes 0 failures.
+- All three new bash sidecars live-tested.
+- CI YAML validates parses cleanly.
+
+### Pending — NOT cp13 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (still needs Ken's hardware)
+- smartctl SCT thermal log scraper (temperature trends)
+- bind-mount + tmpfs usage monitor extending host-monitor
+- Generalize deps-pin-check to other workspaces
+- systemd service health-check sidecar
+- journald disk-usage monitor
+- `.forgejo/workflows/release.yml` for tag-push tarball builds
+- zod schema validator for LogRecord envelope shape
+
+---
 
 ## Part 121 cp12 — what's shipped (ansible-lint integration + ansible-structural smoke + dmesg/trivy/postfix monitor sidecars)
 

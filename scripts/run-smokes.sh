@@ -124,6 +124,7 @@ SMOKES=(
 	"packages/asset-registry:usdt-trade-only-smoke"
 	"apps/ops-cli:ansible-structural-smoke"
 	"apps/ops-cli:ansible-lint-smoke"
+	"apps/matrix-bot:deps-pin-check"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
 )
 

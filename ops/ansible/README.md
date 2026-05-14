@@ -47,6 +47,17 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
   oldest-message age.  Catches silent operator-alerting
   failures (smarthost credentials rotated, TLS bumped).  Off
   by default.
+- **`certbot_monitor`** (cp13) — TLS cert expiry + renewal-
+  stall detection (cert expiring AND no successful renewal in
+  N days).  Catches the "renewal silently broke months ago"
+  pattern that most monitoring misses.  Off by default.
+- **`apt_monitor`** (cp13) — daily pending security-update
+  count.  Surfaces what the motd line shows but operators
+  stop reading.  Debian/Ubuntu only.  Off by default.
+- **`compose_monitor`** (cp13) — Docker Compose service
+  health + restart-loop detection.  Most useful with the
+  BunkerWeb deploy path.  Useless on bare-metal-only.  Off
+  by default.
 
 All sidecars emit structured JSON to journalctl that the
 `matrix_bot` picks up automatically via

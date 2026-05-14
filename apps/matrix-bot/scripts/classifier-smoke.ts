@@ -585,6 +585,116 @@ const scenarios: Scenario[] = [
 		name: 'postfix postfix_unavailable → INFO (digest)',
 		alert: a('postfix', 'postfix_unavailable', { hint: 'install postfix' }),
 		expectedTier: 'INFO'
+	},
+
+	// ─── CRITICAL — cp13 ───────────────────────────────────────
+	{
+		name: 'certbot cert_expiry_critical → CRITICAL',
+		alert: a('certbot', 'cert_expiry_critical', {
+			cert: 'morphit.example.com',
+			days_left: 5,
+			last_renewal_success_age_days: 60,
+			threshold_days: 7
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'certbot renewal_stalled → CRITICAL (silent failure pattern)',
+		alert: a('certbot', 'renewal_stalled', {
+			cert: 'morphit.example.com',
+			days_left: 5,
+			last_renewal_success_age_days: 45,
+			stall_threshold_days: 14
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'apt security_updates_critical → CRITICAL',
+		alert: a('apt', 'security_updates_critical', {
+			security_updates: 15,
+			total_updates: 22,
+			threshold: 10
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'compose service_unhealthy → CRITICAL',
+		alert: a('compose', 'service_unhealthy', {
+			service: 'bunkerweb-1',
+			state: 'running',
+			health: 'unhealthy',
+			restart_count: 0,
+			project_dir: '/opt/morphit/ops/bunkerweb'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'compose service_exited → CRITICAL',
+		alert: a('compose', 'service_exited', {
+			service: 'bunkerweb-1',
+			state: 'exited',
+			health: '',
+			restart_count: 0,
+			project_dir: '/opt/morphit/ops/bunkerweb'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── WARN — cp13 ───────────────────────────────────────────
+	{
+		name: 'certbot cert_expiry_warn → WARN',
+		alert: a('certbot', 'cert_expiry_warn', {
+			cert: 'morphit.example.com',
+			days_left: 20,
+			last_renewal_success_age_days: 60,
+			threshold_days: 30
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'apt security_updates_warn → WARN',
+		alert: a('apt', 'security_updates_warn', {
+			security_updates: 3,
+			total_updates: 8,
+			threshold: 1
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'compose service_restart_loop → WARN',
+		alert: a('compose', 'service_restart_loop', {
+			service: 'flaky-1',
+			state: 'running',
+			health: '',
+			restart_count: 8,
+			project_dir: '/opt/morphit/ops/bunkerweb'
+		}),
+		expectedTier: 'WARN'
+	},
+
+	// ─── INFO — cp13 catch-alls ───────────────────────────────
+	{
+		name: 'apt updates_pending_info → INFO',
+		alert: a('apt', 'updates_pending_info', {
+			security_updates: 0,
+			total_updates: 5
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'apt apt_unavailable → INFO (non-apt host)',
+		alert: a('apt', 'apt_unavailable', { hint: 'not Debian/Ubuntu' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'certbot certbot_unavailable → INFO',
+		alert: a('certbot', 'certbot_unavailable', { hint: 'install certbot' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'compose docker_unavailable → INFO',
+		alert: a('compose', 'docker_unavailable', { hint: 'install docker' }),
+		expectedTier: 'INFO'
 	}
 ];
 
