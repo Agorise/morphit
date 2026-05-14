@@ -43,6 +43,7 @@ SMOKES=(
 	"apps/indexer:trade-status-smoke"
 	"apps/indexer:listener-dispatch-smoke"
 	"apps/indexer:asset-registry-smoke"
+	"apps/indexer:disabled-assets-parse-smoke"
 	"apps/indexer:order-views-smoke"
 	"apps/indexer:profile-handler-smoke"
 	"apps/indexer:apr-smoke"

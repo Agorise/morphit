@@ -1152,12 +1152,16 @@
         "a": "USDT is a stablecoin issued by Tether Inc., designed to maintain a 1:1 peg with the US dollar. Active traders use it to park value temporarily without converting to fiat — for example, between trades, or to avoid volatility in BTC/XMR while waiting for a better entry. On Morphit you can buy and sell USDT peer-to-peer across four networks: Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), and BNB Smart Chain (BEP-20). USDT is **trade-only** on Morphit — you can never pay listing fees, cold-message fees, or featured-slot bids with it. Those always cost BLURT, BTC, or XMR. The fee invariant is wire-format-frozen and enforced by sentinel smokes in CI."
       },
       "why_usdt_warning": {
-        "q": "Why does Morphit show a warning when I trade USDT?",
-        "a": "Because USDT fails two of Morphit's three priorities. **Priority #1 is privacy**: USDT has no on-chain privacy. Every USDT transaction is permanently visible to anyone on whichever blockchain you choose, and blockchain analytics firms tag wallets routinely. **Priority #2 is decentralization**: USDT is centrally controlled by Tether Inc., who can freeze any USDT address — and they have, for thousands of addresses, including ones not connected to crime. We let you trade USDT because active traders find it useful for parking value temporarily, but we won't pretend the trade-offs don't exist. If you need privacy, use XMR. If you need decentralization, use BTC or BLURT. If you need stability and accept the trade-offs, USDT is the tool."
+        "q": "Why does Morphit show a chip about how USDT is issued and transmitted?",
+        "a": "USDT is the most-traded stablecoin in the world, and millions of traders rely on its dollar-stability and broad acceptance every day. When Morphit lists an asset, we tell our users about the technical properties of that asset honestly, so they can make an informed choice for each trade. For USDT, two facts worth knowing: (1) USDT is issued and administered by Tether Inc., and Tether has the technical ability to freeze addresses on the host chain — they have used this ability in the past, mostly in response to law-enforcement requests. (2) USDT transactions on every supported host chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly visible on those chains; this is a property of the chain, not unique to USDT. Different traders weigh these differently. If you want maximum on-chain privacy, XMR is the right tool. If you want maximum decentralization-from-any-single-issuer, BTC or BLURT are the right tools. If you want dollar-denominated stability and a market that's liquid almost anywhere, USDT is the right tool. The Morphit chip is information, not a verdict — pick the asset that fits the trade you're making."
       },
       "which_usdt_network": {
         "q": "Which USDT network should I pick — ERC-20, TRC-20, SPL, or BEP-20?",
         "a": "It depends on what you and your counterparty already hold and what fees you can stomach. **TRC-20 (Tron)** is the most common for P2P trades because the network fees are around $1 — predictable and cheap. **ERC-20 (Ethereum)** is the most universally accepted: every exchange, every wallet, every smart-contract platform supports it; fees are $5-20 and slower, but if your trade settles on an Ethereum-side application, this is the network to use. **SPL (Solana)** has the lowest fees (under $0.01) and is fast, but less universally accepted; pick this if you and your counterparty both use Solana wallets. **BEP-20 (BNB Smart Chain)** has fees around $0.30, fast, but less common — useful if you're moving USDT between Binance and another BSC-using counterparty. There is **no default** on Morphit — every USDT trade requires explicit network choice because cross-network sends are unrecoverable. If you send USDT-ERC20 to a TRC-20 address (or vice versa), the funds are gone forever. The network picker on the post-order form refuses to let you submit until you choose."
+      },
+      "arbitrage_morphit_vs_exchanges": {
+        "q": "How does arbitrage between Morphit and centralized/decentralized exchanges work?",
+        "a": "Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or DEX (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the global price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold."
       }
     },
     "share_link": "Share link",
@@ -3351,7 +3355,8 @@
       "heading": "BTC vs XMR vs BLURT",
       "btc": "Bitcoin. Most known. Public ledger — anyone can see who paid whom. Fees vary widely.",
       "xmr": "Monero. Private — no one can see who paid whom. Fees usually low. The privacy choice.",
-      "blurt": "The token of the Blurt blockchain that Morphit runs on. Used to pay listing fees, post messages, sign orders."
+      "blurt": "The token of the Blurt blockchain that Morphit runs on. Used to pay listing fees, post messages, sign orders.",
+      "usdt": "Tether stablecoin. Pegged 1:1 to USD. Trade across four networks: ERC-20 (Ethereum), TRC-20 (Tron), SPL (Solana), BEP-20 (BNB Smart Chain). Pick the network before sending — cross-network is unrecoverable."
     },
     "section_recovery": {
       "heading": "If something goes wrong",
@@ -3367,7 +3372,7 @@
   },
   "assets": {
     "privacy_warnings": {
-      "usdt_centralized": "USDT is centralized and not private. Tether Inc. can freeze any USDT address, and they have done so for thousands of addresses, including ones not connected to crime. There is no on-chain privacy — every USDT transaction is permanently visible to anyone, and blockchain analytics firms tag wallets routinely. If you need privacy, use XMR."
+      "usdt_centralized": "Two things to know about USDT before trading: Tether Inc. issues and administers USDT and has the technical ability to freeze addresses (and has used it). Transactions are publicly visible on each supported network (Ethereum, Tron, Solana, BNB Smart Chain) — a property of those chains. Pick the asset that fits your trade."
     },
     "usdt": {
       "displayName": "Tether",

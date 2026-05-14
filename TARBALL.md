@@ -1,12 +1,100 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 3)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 4)
 
 **Snapshot date:** 2026-05-13
 
-**Tarball:** `morphit-audit-2026-05-121-cp3-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp4-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp2-delta.tar.gz`.  This cp3 ships **USDT (Tether) end-to-end** as Morphit's first multi-network and first trade-only asset.
+**Previous tarball:** `morphit-audit-2026-05-121-cp3-delta.tar.gz`.  This cp4 ships the follow-up to cp3's USDT integration: word-for-word BRAG-LIST audit catching stale claims, respectful-copy tone-pass per Memory #27, new arbitrage FAQ, and multi-coin disable verified + tested + better-documented.
 
-## Part 121 cp3 — what's shipped
+## Part 121 cp4 — what's shipped
+
+### Pretext
+
+After cp3 sealed Ken asked four follow-up questions in a single message:
+
+1. **Trade-matrix verification** — could a user buy banana trees with USDT, sell XMR for USDT, buy BTC with USDT, sell orange trees for USDT?  All four should work; verify against shipped code.
+2. **Word-for-word BRAG-LIST audit** with USDT now present.  Ken specifically caught "Adding a fourth traded asset is a single-package edit" as stale (USDT IS that fourth asset).  Sweep for similar.
+3. **New arbitrage FAQ + brag-list entry** emphasizing Morphit's low-friction P2P fees making CEX/DEX arbitrage viable as Morphit liquidity grows.
+4. **Multi-coin disable** — how does `MORPHIT_INDEXER_DISABLED_ASSETS` work when an operator wants to disable 2 or 3 coins, not just one?
+
+Plus a standing-discipline request: marketing copy about any listed asset must be RESPECTFUL to that asset's community.  No "fails priorities" framing.
+
+### Memory edits committed (2 new)
+
+- **#26** Audit BRAG-LIST + every FAQ entry + ADRs + docs for stale claims when adding a new asset.  The new asset IS the change; future-tense claims about it must move to present-tense same turn.
+- **#27** Marketing copy about any listed asset must be RESPECTFUL to that coin's community.  No "fails priorities" / "doesn't meet standards" framings.  State trade-offs factually.  Every coin community is a potential Morphit user base.
+
+### Trade-matrix verification
+
+All four scenarios work end-to-end, verified against shipped code paths.  Two distinct patterns:
+
+- **USDT as the trade asset** (asset=USDT) → network pinned at post-time via `orders.asset_network` column.  Orderbook row shows "USDT on Tron" chip.  Examples: "buy banana trees with USDT" (side=sell, asset=USDT, payment_methods=["Banana trees"]), "sell orange trees for USDT" (side=buy, asset=USDT, payment_methods=["Orange trees"]).
+- **USDT as a payment method** (asset=BTC/XMR/etc., payment_methods includes "USDT") → network pinned at chat-time via AddressShareModal/FundsSentModal USDT tab.  Examples: "sell XMR for USDT" (side=sell, asset=XMR, payment_methods=["USDT-TRC20"]), "buy BTC with USDT" (side=buy, asset=BTC, payment_methods=["USDT"]).
+
+`payment_methods[]` accepts 1-12 items of 1-32 chars each.  Free-text labels like "Banana trees", "USDT-TRC20", "Cash in person", "Wise EUR" all work.
+
+### BRAG-LIST audit — 7 stale claims fixed
+
+- **#166** "(+ others soon)" → "BTC, XMR, BLURT, and USDT (across four networks)"
+- **#195** "Volume by asset (BTC / XMR / BLURT)" → explicit USDT + "any other asset traded on the instance"
+- **#197** USDT added to QR-share supported-assets list
+- **#200** USDT example added to barter list ("USDT for fresh-pressed olive oil")
+- **#209** (the headline catch) "Adding a fourth traded asset is a single-package edit" → reframed per Ken's suggestion to "Adding new tradable assets is usually a single day's work, not a year-long refactor"
+- **#233** cheat-sheet asset list reframed from "BTC vs XMR vs BLURT" → "supported tradable assets at a glance"
+- **#253** (just-shipped cp3 entry) "philosophical objections to USDT" softened; acknowledges USDT's value upfront
+
+### New entry #255
+
+Arbitrage between Morphit and CEX/DEX is built for, not built against — fraction-of-a-dollar listing fees, no taker fee, no per-trade withdrawal fee, no withdrawal cooldown, price-model picker's spread-vs-CoinGecko-mid for hands-off arbitrage, network effect benefits as liquidity grows.
+
+Footer count 254 → 255.
+
+### Tone-pass across USDT copy (Memory #27)
+
+Four surfaces softened:
+
+- **Privacy chip body** (`assets.privacy_warnings.usdt_centralized`) × 10 locales: now opens "Two things to know about USDT before trading:" and closes "Pick the asset that fits your trade"
+- **FAQ entry `why_usdt_warning`** × 10 locales: opens "USDT is the most-traded stablecoin in the world", states the two technical facts (Tether administration, on-chain visibility) factually, closes with neutral per-use-case guidance
+- **ADR-0023 §6** renamed "Privacy warning chip required" → "Information chip"; "USDT fails on two dimensions" → "Two facts are worth surfacing"; documents `PrivacyWarningChip` component name as historical shorthand
+- **ADR-0023 negative/accepted costs** — "USDT users see the privacy-warning chip — friction by design" → "USDT traders see the information chip — a small friction in service of an informed-choice user model"
+
+### New FAQ: arbitrage_morphit_vs_exchanges × 10 locales
+
+Wired into FAQ_KEYS + FAQ_RELATED (cross-linked from fees, trade_size_limits, how_to_buy, how_to_sell).  Body covers thin listing fees + no taker fee + price-model picker + Sybil-tier-is-anti-spam-not-anti-arbitrage.
+
+### Multi-coin disable verified + locked
+
+The zod parser in `apps/indexer/src/config/index.ts:434` was already multi-coin capable (split+trim+upper+filter-empty).  Gap was docs + test coverage.
+
+- **NEW smoke** `apps/indexer/scripts/disabled-assets-parse-smoke.ts` (12 scenarios green): empty/one/two/three coins + whitespace + case + trailing/leading/double commas.  Registered in `scripts/run-smokes.sh`.
+- **OPERATIONS.md** expanded with explicit multi-coin examples + whitespace-tolerance + pointer to parse smoke.  Tone softened on "users who object on philosophical grounds" → "Users who prefer an instance that supports the asset switch to a different Morphit operator — federation is the point."
+
+### Cheat-sheet
+
+USDT row added to `/cheat-sheet` page; `cheat_sheet.section_assets.usdt` translated to all 10 locales.  Source comment updated from "BTC vs XMR vs BLURT" to "the supported tradable assets at a glance" so future additions don't drift the doc.
+
+### Verification
+
+- **Triple-pulse `bash scripts/run-smokes.sh`: 2,418 scenarios green × 3, zero failures.**  cp3 baseline 2,405 → cp4 baseline 2,418 (+13).
+- Locale parity 10/10 green at 2,494 keys × 10
+- Translation-completeness: 0 unexpected byte-identical
+- usdt-trade-only 11/11
+- usdt-network-picker-required 9/9
+- disabled-assets-parse 12/12
+- fee-method-enum-frozen 7/7 (Memory #23 preserved through cp3 + cp4)
+- first-buy-waiver-payment-agnostic 6/6
+- svelte-check 0 errors
+
+### Pattern lessons distilled
+
+1. Asset-addition audit is recurring discipline, not one-shot.  cp3 shipped USDT in 56 files; cp4 had to touch 7 more brag-list entries + 4 i18n surfaces + cheat-sheet + ADR for tone.
+2. Marketing copy is its own architecture — "fails priorities" alienates each asset's community.  Coin communities are potential Morphit user bases; disrespect costs.
+3. Test multi-coin shapes when documenting them — the parser was correct from day one but docs only showed single-coin examples; the smoke now pins all shapes operators might write.
+4. Component names can lie even when i18n bodies are correct — `PrivacyWarningChip` is fine as internal shorthand but the public-facing copy is neutral; ADR now documents this split.
+
+---
+
+## Part 121 cp3 — what shipped previously
 
 ### Pretext
 
