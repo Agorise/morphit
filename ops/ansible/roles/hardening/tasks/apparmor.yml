@@ -5,9 +5,9 @@
 ---
 - name: Verify AppArmor is enabled
   ansible.builtin.command: aa-status --enabled
-  register: aa_status
+  register: hardening_aa_status
   changed_when: false
-  failed_when: aa_status.rc != 0
+  failed_when: hardening_aa_status.rc != 0
 
 - name: Recommend writing Morphit AppArmor profile (manual)
   ansible.builtin.debug:

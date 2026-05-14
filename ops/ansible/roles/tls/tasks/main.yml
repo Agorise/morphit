@@ -20,20 +20,20 @@
 - name: Check if cert already exists
   ansible.builtin.stat:
     path: "/etc/letsencrypt/live/{{ morphit_domain }}/fullchain.pem"
-  register: cert_stat
+  register: tls_cert_stat
 
 - name: Determine certbot server
   ansible.builtin.set_fact:
-    certbot_server: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if tls_use_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
+    tls_certbot_server: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if tls_use_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
 
 - name: Request initial cert (standalone)
   ansible.builtin.command:
     cmd: >-
       certbot certonly --standalone --non-interactive --agree-tos
       --email {{ tls_acme_email }}
-      --server {{ certbot_server }}
+      --server {{ tls_certbot_server }}
       -d {{ morphit_domain }}
-  when: not cert_stat.stat.exists
+  when: not tls_cert_stat.stat.exists
   changed_when: true
 
 - name: Ensure certbot renewal timer is enabled

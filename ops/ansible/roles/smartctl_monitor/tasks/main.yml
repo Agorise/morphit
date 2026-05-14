@@ -27,7 +27,7 @@
     mode: '0644'
   when:
     - smartctl_temp_critical is defined or smartctl_temp_warn is defined
-  notify: restart morphit-smartctl-monitor-timer
+  notify: Restart morphit-smartctl-monitor-timer
 
 - name: Install smartctl-monitor systemd service unit
   ansible.builtin.copy:
@@ -37,7 +37,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Install smartctl-monitor systemd timer
   ansible.builtin.copy:
@@ -47,7 +47,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Enable + start morphit-smartctl-monitor.timer
   ansible.builtin.systemd:

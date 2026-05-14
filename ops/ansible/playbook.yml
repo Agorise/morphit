@@ -20,6 +20,9 @@
 #   smartctl_monitor  → disk SMART health (cp11, §16)
 #   fail2ban_monitor  → fail2ban jail observability (cp11, §16)
 #   mdadm_monitor     → Linux software RAID health (cp11, §16)
+#   dmesg_monitor     → kernel-log scan (OOM, oops, MCE) (cp12, §16)
+#   trivy_monitor     → Docker image CVE rescan (cp12, §16)
+#   postfix_monitor   → mail queue depth (alerting-self-check) (cp12, §16)
 #
 # Run with:
 #   ansible-playbook -i inventory/hosts.yml playbook.yml --check
@@ -102,6 +105,18 @@
     - role: mdadm_monitor
       tags: [mdadm_monitor, monitors]
       when: enable_mdadm_monitor | default(false)
+
+    - role: dmesg_monitor
+      tags: [dmesg_monitor, monitors]
+      when: enable_dmesg_monitor | default(false)
+
+    - role: trivy_monitor
+      tags: [trivy_monitor, monitors]
+      when: enable_trivy_monitor | default(false)
+
+    - role: postfix_monitor
+      tags: [postfix_monitor, monitors]
+      when: enable_postfix_monitor | default(false)
 
   post_tasks:
     - name: Print verification reminder

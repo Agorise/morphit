@@ -1,0 +1,94 @@
+# roles/trivy_monitor/tasks/main.yml
+#
+# Deploy the morphit-trivy-monitor sidecar (Docker image CVE
+# scan).  Installs trivy from the official Aqua Security apt
+# repo.  Useful only with Docker-based deploys (BunkerWeb).
+#
+# Optional variables:
+#   trivy_critical_threshold     : default 1 (any CRITICAL CVE)
+#   trivy_high_threshold         : default 5
+#   trivy_scan_timeout           : default 300 (seconds per image)
+#
+# References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
+
+---
+- name: Install trivy apt-repo prerequisites
+  ansible.builtin.apt:
+    name:
+      - wget
+      - apt-transport-https
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Add Aqua Security trivy apt signing key
+  ansible.builtin.get_url:
+    url: https://aquasecurity.github.io/trivy-repo/deb/public.key
+    dest: /etc/apt/keyrings/trivy.asc
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Add Aqua Security trivy apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb {{ ansible_distribution_release }} main"
+    filename: trivy
+    state: present
+    update_cache: true
+
+- name: Install trivy
+  ansible.builtin.apt:
+    name:
+      - trivy
+      - jq             # used by morphit-trivy-monitor.sh for JSON parsing
+    state: present
+
+- name: Write trivy-monitor env file (optional thresholds)
+  ansible.builtin.template:
+    src: trivy-monitor.env.j2
+    dest: /etc/morphit/trivy-monitor.env
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - trivy_critical_threshold is defined or
+      trivy_high_threshold is defined or
+      trivy_scan_timeout is defined
+  notify: Restart morphit-trivy-monitor-timer
+
+- name: Install trivy-monitor systemd service unit
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-trivy-monitor.service
+    dest: /etc/systemd/system/morphit-trivy-monitor.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install trivy-monitor systemd timer
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-trivy-monitor.timer
+    dest: /etc/systemd/system/morphit-trivy-monitor.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start morphit-trivy-monitor.timer
+  ansible.builtin.systemd:
+    name: morphit-trivy-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true

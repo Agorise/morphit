@@ -142,6 +142,29 @@
  *             native build needing nodejs.org access) is
  *             documented in OPERATIONS.md §16.
  *
+ *   P121-CP12 Four sentinels pinning the cp12 quality-gates +
+ *             extended-extended sidecars work.  Two new
+ *             tsx-based smokes (ansible-structural-smoke +
+ *             ansible-lint-smoke) registered in run-smokes.sh
+ *             catch playbook drift on every CI run.  Three new
+ *             POSIX-sh sidecars at ops/scripts/morphit-{dmesg,
+ *             trivy,postfix}-monitor.sh emit structured JSON
+ *             via systemd-cat: dmesg-monitor scans the kernel
+ *             ring buffer for OOM/oops/panic/MCE/segfaults
+ *             using a cursor-based state file so successive
+ *             runs don't re-alert; trivy-monitor daily-scans
+ *             running Docker images for CRITICAL+HIGH CVEs;
+ *             postfix-monitor checks mail queue depth + age
+ *             so silent alerting failures (smarthost down,
+ *             credentials rotated) become alerts of their
+ *             own.  Classifier extended with 17 new events
+ *             (8 CRITICAL, 5 WARN, 5 INFO) + ALERT_COPY
+ *             entries with ELI5 advice including the exact
+ *             debug commands an operator should run.  Bot's
+ *             default JOURNALCTL_UNITS now covers ALL EIGHT
+ *             sidecar units (indexer + relay + 6 monitors)
+ *             with zero operator-side wiring needed.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -1007,6 +1030,72 @@ const SCENARIOS: readonly Scenario[] = [
 			'nodejs.org',
 			'npm ci --workspaces',
 			'build-essential'
+		]
+	},
+
+	// ─── P121-CP12 — quality gates + further sidecars ────────────
+	//
+	// Four sentinels pinning: the Ansible quality gates
+	// (ansible-lint + structural smoke), the three new sidecar
+	// scripts (dmesg, trivy, postfix) emitting correct LogRecord
+	// envelopes, classifier extension covering all cp12 events,
+	// and bot's default JOURNALCTL_UNITS extending to all eight
+	// monitoring sidecar units.
+
+	{
+		name: 'P121-CP12-1 — Ansible quality gates: ansible-lint + structural smoke registered in run-smokes.sh',
+		file: 'scripts/run-smokes.sh',
+		rootRelative: true,
+		mustHave: [
+			'apps/ops-cli:ansible-structural-smoke',
+			'apps/ops-cli:ansible-lint-smoke'
+		]
+	},
+	{
+		name: 'P121-CP12-2 — dmesg monitor script + classifier matchers + ALERT_COPY for OOM/oops/panic/MCE/segfaults',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'dmesg' && a.event === 'oom_kill'",
+			"'dmesg' && a.event === 'kernel_oops'",
+			"'dmesg' && a.event === 'kernel_panic'",
+			"'dmesg' && a.event === 'hardware_error'",
+			"'dmesg' && a.event === 'segfault_in_morphit'",
+			"'dmesg' && a.event === 'segfault_other'",
+			"'dmesg' && a.event === 'fd_exhausted'",
+			"'dmesg:oom_kill'",
+			"'dmesg:kernel_panic'",
+			'OOM-killer activated',
+			'Kernel panic detected'
+		]
+	},
+	{
+		name: 'P121-CP12-3 — trivy + postfix monitor scripts + classifier matchers + ALERT_COPY',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'trivy' && a.event === 'image_critical_vulns'",
+			"'trivy' && a.event === 'image_high_vulns'",
+			"'postfix' && a.event === 'queue_critical'",
+			"'postfix' && a.event === 'queue_warn'",
+			"'trivy:image_critical_vulns'",
+			"'postfix:queue_critical'",
+			'CRITICAL severity CVEs',
+			'alerting may be FAILING'
+		]
+	},
+	{
+		name: 'P121-CP12-4 — bot default JOURNALCTL_UNITS includes ALL eight sidecar units (indexer + relay + 6 monitor sidecars)',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			'morphit-host-monitor.service',
+			'morphit-smartctl-monitor.service',
+			'morphit-fail2ban-monitor.service',
+			'morphit-mdadm-monitor.service',
+			'morphit-dmesg-monitor.service',
+			'morphit-trivy-monitor.service',
+			'morphit-postfix-monitor.service'
 		]
 	}
 ];

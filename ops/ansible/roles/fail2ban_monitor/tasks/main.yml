@@ -17,9 +17,9 @@
 - name: Assert fail2ban is installed (from hardening role)
   ansible.builtin.command:
     cmd: which fail2ban-client
-  register: f2bclient
+  register: fail2ban_monitor_client_path
   changed_when: false
-  failed_when: f2bclient.rc != 0
+  failed_when: fail2ban_monitor_client_path.rc != 0
 
 - name: Create morphit-fail2ban-monitor state directory
   ansible.builtin.file:
@@ -40,7 +40,7 @@
     - fail2ban_ban_critical is defined or
       fail2ban_ban_warn is defined or
       fail2ban_per_jail is defined
-  notify: restart morphit-fail2ban-monitor-timer
+  notify: Restart morphit-fail2ban-monitor-timer
 
 - name: Install fail2ban-monitor systemd service unit
   ansible.builtin.copy:
@@ -50,7 +50,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Install fail2ban-monitor systemd timer
   ansible.builtin.copy:
@@ -60,7 +60,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Enable + start morphit-fail2ban-monitor.timer
   ansible.builtin.systemd:

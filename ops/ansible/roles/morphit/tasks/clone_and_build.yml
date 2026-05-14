@@ -7,6 +7,7 @@
     version: "{{ morphit_repo_ref }}"
     update: true
     force: false
+  become: true
   become_user: "{{ morphit_service_user }}"
   # The repo is owned by the service user so npm runs as it.
 
@@ -22,14 +23,16 @@
   ansible.builtin.command:
     cmd: npm install --workspaces --include-workspace-root
     chdir: "{{ morphit_repo_path }}"
+  become: true
   become_user: "{{ morphit_service_user }}"
-  register: npm_install_result
-  changed_when: "'changed' in npm_install_result.stdout or 'added' in npm_install_result.stdout"
+  register: morphit_npm_install_result
+  changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in npm_install_result.stdout"
 
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
   ansible.builtin.command:
     cmd: npm run build --workspaces --if-present
     chdir: "{{ morphit_repo_path }}"
+  become: true
   become_user: "{{ morphit_service_user }}"
   register: npm_build_result
   changed_when: true

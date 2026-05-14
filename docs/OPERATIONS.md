@@ -2581,6 +2581,142 @@ sudo systemctl enable --now morphit-mdadm-monitor.timer
 No service user setup needed — the unit uses `DynamicUser=true`
 since `/proc/mdstat` is world-readable.
 
+#### Kernel-log monitor — `morphit-dmesg-monitor`
+
+Scans the kernel ring buffer (`dmesg`) every 5 minutes for
+events the host-resource sidecar can't see: the host-monitor
+sees memory pressure *building*; the dmesg-monitor sees the
+consequences when it broke.
+
+State is cursor-based at `/var/lib/morphit-dmesg-monitor/last-cursor`
+so successive runs don't re-alert on old events.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `oom_kill` | CRITICAL | Kernel killed a process to free memory |
+| `kernel_oops` | CRITICAL | Kernel detected an internal error |
+| `kernel_panic` | CRITICAL | Kernel panicked (host may be unstable) |
+| `hardware_error` | CRITICAL | MCE / EDAC / ATA / I/O error |
+| `segfault_in_morphit` | CRITICAL | A morphit-related process segfaulted |
+| `segfault_other` | WARN | Some other process segfaulted |
+| `fd_exhausted` | WARN | Fork failed (out of FDs/PIDs) |
+| `dmesg_unreadable` | INFO | dmesg not readable (service must run as root) |
+
+Each alert includes the raw kernel-log line (first 200 chars)
+so you can pattern-match in `journalctl` for context.
+
+Setup:
+
+```sh
+# 1. State dir.
+sudo mkdir -p /var/lib/morphit-dmesg-monitor
+sudo chmod 0750 /var/lib/morphit-dmesg-monitor
+
+# 2. Install + enable.  (Service runs as root because
+# kernel.dmesg_restrict=1 is the default since Debian 12.
+# Hardening uses CapabilityBoundingSet=CAP_SYSLOG to confine it.)
+sudo cp /opt/morphit/ops/systemd/morphit-dmesg-monitor.service \
+        /opt/morphit/ops/systemd/morphit-dmesg-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-dmesg-monitor.timer
+```
+
+#### Docker image CVE rescan — `morphit-trivy-monitor`
+
+Daily scan of running Docker images (typically just BunkerWeb,
+when deployed) for CRITICAL + HIGH severity CVEs disclosed since
+deploy.  Without this monitor, an operator wouldn't know they
+were running a vulnerable BunkerWeb until they happened to read
+a CVE advisory and remembered they had it deployed.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `image_critical_vulns` | CRITICAL | Image has ≥ `MORPHIT_TRIVY_CRITICAL_THRESHOLD` (default 1) CRITICAL CVEs |
+| `image_high_vulns` | WARN | Image has ≥ `MORPHIT_TRIVY_HIGH_THRESHOLD` (default 5) HIGH CVEs |
+| `image_scan_failed` | WARN | trivy returned no output for an image |
+| `image_scan_clean` | INFO | No actionable findings (daily digest) |
+| `trivy_unavailable` | INFO | trivy not installed |
+
+Setup:
+
+```sh
+# 1. Install trivy from the Aqua Security apt repo.
+sudo install -d -m 0755 /etc/apt/keyrings
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+   | sudo tee /etc/apt/keyrings/trivy.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/trivy.asc] \
+https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
+sudo apt update && sudo apt install -y trivy jq
+
+# 2. (Optional) operator-tuned thresholds.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/trivy-monitor.env <<'ENV'
+MORPHIT_TRIVY_CRITICAL_THRESHOLD=1
+MORPHIT_TRIVY_HIGH_THRESHOLD=5
+ENV
+
+# 3. Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-trivy-monitor.service \
+        /opt/morphit/ops/systemd/morphit-trivy-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-trivy-monitor.timer
+```
+
+Outbound network requirements: trivy needs to pull its CVE DB
+from `ghcr.io` (with `mirror.gcr.io` as fallback).  Add both to
+your outbound firewall allowlist if you have one.
+
+Note: most CVEs in base images are not exploitable in the way
+you're using the container.  When trivy alerts on a CVE that
+doesn't apply to your setup, add it to `/etc/morphit/.trivyignore`
+to silence future alerts for that CVE ID specifically.
+
+#### Postfix queue monitor — `morphit-postfix-monitor`
+
+Watches the postfix mail queue depth + oldest-message age every
+15 minutes.  Solves a critical observability gap: if email
+alerting silently fails (smarthost credentials rotated, TLS
+bumped, network down), emails pile up in the postfix queue and
+the operator hears nothing.  This sidecar makes "alerts aren't
+arriving" itself become an alert.
+
+Useful only if you use postfix as your alerting smarthost (per
+the §37.14 alerting role).  Skip if you use a different alerting
+mechanism.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `queue_critical` | CRITICAL | Queue depth ≥ 100 OR oldest message > 120 min |
+| `queue_warn` | WARN | Queue depth ≥ 25 OR oldest message > 30 min |
+| `queue_clean` | INFO | Queue empty or below thresholds |
+| `postfix_unavailable` | INFO | postqueue not in PATH |
+
+All thresholds env-tunable in `/etc/morphit/postfix-monitor.env`.
+
+Setup:
+
+```sh
+# Postfix itself must be installed already (per §37.14).
+# Verify with:
+which postqueue || sudo apt install -y postfix
+
+# Install + enable the monitor.
+sudo cp /opt/morphit/ops/systemd/morphit-postfix-monitor.service \
+        /opt/morphit/ops/systemd/morphit-postfix-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-postfix-monitor.timer
+```
+
 ### Deploying all sidecars at once via Ansible
 
 The repository ships an Ansible playbook at `ops/ansible/` that

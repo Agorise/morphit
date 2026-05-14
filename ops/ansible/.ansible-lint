@@ -1,0 +1,20 @@
+---
+# ansible-lint configuration for Morphit's playbook.
+#
+# Skipped rules with justification.  Each entry is here because
+# the rule's default flags a pattern that's correct for an
+# in-repo operator deployment playbook (vs a public Ansible
+# Galaxy role).
+#
+# Profile `min` keeps the strict-but-portable defaults (no fqcn-
+# everywhere, no role-galaxy-name requirements).
+profile: min
+
+# Skip yaml line-length only — Jinja2 expressions in postgres,
+# bunkerweb, tls roles legitimately exceed 160 (e.g. the Docker
+# repo line, the postgres version-dir detection, the conditional
+# certbot URL).  Wrapping them makes them harder to read.
+skip_list:
+  - yaml[line-length]
+
+# Use yamllint defaults for everything else.

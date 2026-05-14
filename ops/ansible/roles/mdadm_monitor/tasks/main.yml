@@ -20,7 +20,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Install mdadm-monitor systemd timer
   ansible.builtin.copy:
@@ -30,7 +30,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Enable + start morphit-mdadm-monitor.timer
   ansible.builtin.systemd:

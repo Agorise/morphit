@@ -43,7 +43,7 @@
       host_monitor_swap_critical is defined or
       host_monitor_cpu_critical is defined or
       host_monitor_disk_paths is defined
-  notify: restart morphit-host-monitor-timer
+  notify: Restart morphit-host-monitor-timer
 
 - name: Install host-monitor systemd service unit
   ansible.builtin.copy:
@@ -53,7 +53,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Install host-monitor systemd timer
   ansible.builtin.copy:
@@ -63,7 +63,7 @@
     group: root
     mode: '0644'
     remote_src: true
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Enable + start morphit-host-monitor.timer
   ansible.builtin.systemd:

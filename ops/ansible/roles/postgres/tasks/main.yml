@@ -57,6 +57,7 @@
     password: "{{ postgres_indexer_password }}"
     role_attr_flags: NOSUPERUSER,NOCREATEROLE,NOCREATEDB
     state: present
+  become: true
   become_user: postgres
 
 - name: Create morphit_relay user
@@ -65,6 +66,7 @@
     password: "{{ postgres_relay_password }}"
     role_attr_flags: NOSUPERUSER,NOCREATEROLE,NOCREATEDB
     state: present
+  become: true
   become_user: postgres
 
 - name: Create morphit_indexer database
@@ -76,6 +78,7 @@
     lc_ctype: en_US.UTF-8
     template: template0
     state: present
+  become: true
   become_user: postgres
 
 - name: Create morphit_relay database
@@ -87,12 +90,14 @@
     lc_ctype: en_US.UTF-8
     template: template0
     state: present
+  become: true
   become_user: postgres
 
 - name: Apply repo's init.sql to indexer DB if present
   ansible.builtin.shell:
     cmd: psql -d {{ postgres_indexer_db }} -f {{ morphit_repo_path }}/ops/postgres/init.sql
     creates: "{{ morphit_repo_path }}/ops/postgres/.init.applied"
+  become: true
   become_user: postgres
   failed_when: false
   # init.sql may already have been applied; the schema migrator

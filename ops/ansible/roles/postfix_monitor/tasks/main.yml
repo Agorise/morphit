@@ -1,0 +1,63 @@
+# roles/postfix_monitor/tasks/main.yml
+#
+# Deploy the morphit-postfix-monitor sidecar.  Does NOT install
+# postfix itself — that's the operator's job via the §37.14
+# alerting role.  This role just deploys the monitor that
+# watches the queue.
+#
+# Optional variables:
+#   postfix_queue_critical          : default 100 messages
+#   postfix_queue_warn              : default 25
+#   postfix_age_critical_min        : default 120 (2 hours)
+#   postfix_age_warn_min            : default 30
+#
+# References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
+
+---
+- name: Assert postqueue exists (postfix must be installed already)
+  ansible.builtin.command:
+    cmd: which postqueue
+  register: postfix_monitor_pq_check
+  changed_when: false
+  failed_when: postfix_monitor_pq_check.rc != 0
+
+- name: Write postfix-monitor env file (optional thresholds)
+  ansible.builtin.template:
+    src: postfix-monitor.env.j2
+    dest: /etc/morphit/postfix-monitor.env
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - postfix_queue_critical is defined or
+      postfix_queue_warn is defined or
+      postfix_age_critical_min is defined or
+      postfix_age_warn_min is defined
+  notify: Restart morphit-postfix-monitor-timer
+
+- name: Install postfix-monitor systemd service unit
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-postfix-monitor.service
+    dest: /etc/systemd/system/morphit-postfix-monitor.service
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Install postfix-monitor systemd timer
+  ansible.builtin.copy:
+    src: /opt/morphit/ops/systemd/morphit-postfix-monitor.timer
+    dest: /etc/systemd/system/morphit-postfix-monitor.timer
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Reload systemd
+
+- name: Enable + start morphit-postfix-monitor.timer
+  ansible.builtin.systemd:
+    name: morphit-postfix-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true

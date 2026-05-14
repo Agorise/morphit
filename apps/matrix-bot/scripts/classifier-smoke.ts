@@ -449,6 +449,142 @@ const scenarios: Scenario[] = [
 			hint: 'install fail2ban'
 		}),
 		expectedTier: 'INFO'
+	},
+
+	// ─── CRITICAL — cp12 dmesg ────────────────────────────────
+	{
+		name: 'dmesg oom_kill → CRITICAL',
+		alert: a('dmesg', 'oom_kill', {
+			victim_proc: 'morphit-relay',
+			victim_pid: 1234,
+			raw_line: 'Out of memory: Killed process 1234 (morphit-relay)...'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'dmesg kernel_oops → CRITICAL',
+		alert: a('dmesg', 'kernel_oops', {
+			raw_line: 'kernel: Oops: 0000 [#1] SMP NOPTI...'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'dmesg kernel_panic → CRITICAL',
+		alert: a('dmesg', 'kernel_panic', {
+			raw_line: 'Kernel panic - not syncing: Fatal exception...'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'dmesg hardware_error → CRITICAL',
+		alert: a('dmesg', 'hardware_error', {
+			raw_line: 'EDAC MC0: 1 CE memory error on socket 0...'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'dmesg segfault_in_morphit → CRITICAL (a morphit service crashed)',
+		alert: a('dmesg', 'segfault_in_morphit', {
+			raw_line: 'node[5678]: segfault at 0 ip 00007fab...'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── CRITICAL — cp12 trivy + postfix ─────────────────────
+	{
+		name: 'trivy image_critical_vulns → CRITICAL',
+		alert: a('trivy', 'image_critical_vulns', {
+			image: 'bunkerity/bunkerweb:1.5.10',
+			critical_count: 3,
+			high_count: 12,
+			threshold: 1
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'postfix queue_critical → CRITICAL (alerting may be silently failing)',
+		alert: a('postfix', 'queue_critical', {
+			queue_depth: 150,
+			oldest_age_min: 240,
+			queue_threshold: 100,
+			age_threshold_min: 120
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── WARN — cp12 ───────────────────────────────────────────
+	{
+		name: 'dmesg segfault_other → WARN',
+		alert: a('dmesg', 'segfault_other', {
+			raw_line: 'random-binary[9999]: segfault at...'
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'dmesg fd_exhausted → WARN',
+		alert: a('dmesg', 'fd_exhausted', {
+			raw_line: 'fork failed: Resource temporarily unavailable'
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'trivy image_high_vulns → WARN',
+		alert: a('trivy', 'image_high_vulns', {
+			image: 'bunkerity/bunkerweb:1.5.10',
+			critical_count: 0,
+			high_count: 8,
+			threshold: 5
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'trivy image_scan_failed → WARN',
+		alert: a('trivy', 'image_scan_failed', {
+			image: 'some/image:latest',
+			hint: 'check trivy CVE DB connectivity'
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'postfix queue_warn → WARN',
+		alert: a('postfix', 'queue_warn', {
+			queue_depth: 30,
+			oldest_age_min: 45,
+			queue_threshold: 25,
+			age_threshold_min: 30
+		}),
+		expectedTier: 'WARN'
+	},
+
+	// ─── INFO — cp12 catch-alls ───────────────────────────────
+	{
+		name: 'dmesg dmesg_unreadable → INFO (digest)',
+		alert: a('dmesg', 'dmesg_unreadable', { hint: 'run as root' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'trivy image_scan_clean → INFO (digest)',
+		alert: a('trivy', 'image_scan_clean', {
+			image: 'bunkerity/bunkerweb:1.5.10',
+			critical_count: 0,
+			high_count: 1
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'trivy trivy_unavailable → INFO (digest)',
+		alert: a('trivy', 'trivy_unavailable', { hint: 'install trivy' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'postfix queue_clean → INFO (digest)',
+		alert: a('postfix', 'queue_clean', { queue_depth: 0, oldest_age_min: 0 }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'postfix postfix_unavailable → INFO (digest)',
+		alert: a('postfix', 'postfix_unavailable', { hint: 'install postfix' }),
+		expectedTier: 'INFO'
 	}
 ];
 

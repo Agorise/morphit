@@ -288,6 +288,10 @@ outbound_allowed_destinations:
   # is true.  Comment out if you're not using Matrix.
   - nodejs.org            # better-sqlite3 native build headers
   - registry.npmjs.org    # npm package fetch (matrix-bot-sdk etc.)
+  # trivy CVE DB hosts — only relevant if enable_trivy_monitor.
+  - ghcr.io                                # trivy CVE DB image
+  - aquasecurity.github.io                 # trivy apt-repo signing key
+  - mirror.gcr.io                          # trivy CVE DB fallback
 
 
 # ─── Operator-alerts via Matrix sidecar (cp9, §16) ──────────────
@@ -368,3 +372,46 @@ enable_fail2ban_monitor: false
 # Safe to enable defensively even on non-RAID hosts: the script
 # exits silently if /proc/mdstat has no md* entries.
 enable_mdadm_monitor: false
+
+
+# ─── Kernel-log monitor sidecar (cp12, §16) ─────────────────────
+#
+# Scans dmesg every 5 min for OOM-killer activations, kernel
+# oopses, kernel panics, hardware errors (MCE/EDAC/ATA), and
+# segfaults.  Catches events the host-monitor sidecar CAN'T —
+# host-monitor sees memory pressure building; dmesg_monitor sees
+# the consequences when it broke.
+enable_dmesg_monitor: false
+# (no tuning vars — dmesg events are categorical, not threshold-based)
+
+
+# ─── Docker image CVE rescan sidecar (cp12, §16) ────────────────
+#
+# Daily trivy scan of running Docker images for CRITICAL + HIGH
+# CVEs.  Most relevant for operators using the BunkerWeb deploy
+# path (§32) since BunkerWeb's Docker image accumulates CVEs
+# between releases.  Useless on bare-metal-only deploys.
+#
+# trivy needs outbound HTTPS to ghcr.io / mirror.gcr.io to pull
+# its CVE DB.  Make sure those are in outbound_allowed_destinations.
+enable_trivy_monitor: false
+# trivy_critical_threshold: 1   # any CRITICAL CVE triggers alert
+# trivy_high_threshold: 5
+# trivy_scan_timeout: 300       # seconds per image
+
+
+# ─── Postfix queue monitor sidecar (cp12, §16) ──────────────────
+#
+# Watches postfix mail queue depth + oldest message age.
+# Critical observability gap: if email alerting silently fails
+# (smarthost credentials rotated, TLS bumped, network down),
+# the operator wouldn't know — the absence of alerts becomes
+# its own alert.
+#
+# Useful only if you actually run postfix as your alerting
+# smarthost (per the §37.14 alerting role).
+enable_postfix_monitor: false
+# postfix_queue_critical: 100        # queued messages
+# postfix_queue_warn: 25
+# postfix_age_critical_min: 120      # oldest-message age, minutes
+# postfix_age_warn_min: 30

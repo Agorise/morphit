@@ -1,10 +1,88 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 11)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 12)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp11-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp12-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp10-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp11-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp12 — what's shipped (ansible-lint integration + ansible-structural smoke + dmesg/trivy/postfix monitor sidecars)
+
+### Pretext
+
+Ken said "do as much of that as you can" pointing at cp11's REVISIT pending list.  cp12 ships: (1) ansible-lint integration with all 33 violations fixed; (2) two new tsx smokes catching playbook drift; (3) three more monitoring sidecars closing different alerting blind-spots (kernel-log, Docker CVE rescan, postfix queue depth).
+
+### What shipped
+
+**Phase 1 — ansible-lint integration:**
+
+Installed ansible-lint 26.4.0.  Initial run reported 33 violations.  All fixed:
+
+| Category | Count | Resolution |
+|---|---|---|
+| `name[casing]` | 10 | Capitalize handler names across 5 sidecar roles |
+| `partial-become[task]` | 8 | Add `become: true` companion before `become_user:` in morphit/postgres roles |
+| `var-naming[no-role-prefix]` | 8 | Rename register vars to use role-name prefix (f2bclient → fail2ban_monitor_client_path etc.) |
+| `yaml[line-length]` | 4 | `.ansible-lint` config skip_list for line-length |
+| `command-instead-of-{module,shell}` | 2 | Pre-existing; left as-is |
+| `syntax-check[unknown-module]` | 1 | Ship `collections/requirements.yml` declaring community.general/postgresql/docker |
+
+Final: `Passed: 0 failure(s)... 'production' profile passed.` — passes the stricter production profile.
+
+**Phase 2 — Quality-gate smokes:**
+
+- `apps/ops-cli/scripts/ansible-structural-smoke.ts` (37 scenarios) — every declared role has tasks/main.yml; every optional sidecar gated `default(false)`; standard 6 base roles present; handler names capitalized; requirements.yml declares needed collections; no orphan dirs.
+- `apps/ops-cli/scripts/ansible-lint-smoke.ts` — runs `ansible-lint --offline --strict`; soft-skips if not installed.
+
+Both registered in `scripts/run-smokes.sh` — same triple-pulse discipline as TypeScript code.
+
+**Phase 3 — Three more monitoring sidecars:**
+
+Same emit-via-systemd-cat pattern.
+
+| Script | Module | Cadence | Events |
+|---|---|---|---|
+| `ops/scripts/morphit-dmesg-monitor.sh` | `dmesg` | 5min | 8 events: OOM/oops/panic/MCE/segfaults |
+| `ops/scripts/morphit-trivy-monitor.sh` | `trivy` | daily 03:00 UTC | 5 events: Docker image CVE scan |
+| `ops/scripts/morphit-postfix-monitor.sh` | `postfix` | 15min | 4 events: mail queue depth/age |
+
+6 new systemd unit files (.service + .timer per sidecar) with hardened postures.  All live-tested.
+
+**Classifier extended:** 8 new CRITICAL + 5 new WARN matchers + 17 ALERT_COPY entries with ELI5 advice + copy-pastable debug commands.  classifier-smoke +17 scenarios.
+
+**Bot default `MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS`** now covers indexer + relay + 6 monitor sidecars = 8 units.  Alerts route automatically.
+
+**Three new Ansible roles + playbook + group_vars wiring:**
+
+- `dmesg_monitor` — simplest (no env, no install)
+- `trivy_monitor` — installs trivy + jq from Aqua Security apt repo
+- `postfix_monitor` — asserts postqueue exists; does not install postfix (operator's job per §37.14)
+
+playbook.yml gains 3 new opt-in role invocations.  group_vars/all.yml gains 3 new `enable_*` flags + tuning vars + outbound destinations for trivy CVE DB.
+
+**4 P121-CP12 persona sentinels** pinning every invariant.
+
+**Docs:**
+
+- OPERATIONS.md §16 extended with three new monitoring subsections.
+- RUN-A-MORPHIT-NODE.md §11 extended.
+- MORPHIT-BRAG-LIST entries #264-267; closing summary 263 → 267.
+
+### Verification
+
+- Triple-pulse: 2,635 × 3, 0 failures.  cp11 baseline 2,573 → cp12 baseline 2,635 (+62 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness: passes.
+- All three new bash sidecars live-tested.
+
+### Pending — NOT cp12 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware).
+- smartctl SCT thermal log scraper, bind-mount usage, Docker Compose health-check, certbot renewal-failure detector, system-update-pending count.
+- Forgejo CI workflow yaml shipping the smoke runs.
+- matrix-bot-sdk version pin check.
+
+---
 
 ## Part 121 cp11 — what's shipped (npm install + 2 real typecheck bug fixes + extended monitoring sidecars + Ansible playbook landed in repo)
 
