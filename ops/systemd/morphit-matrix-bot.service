@@ -1,0 +1,91 @@
+[Unit]
+Description=Morphit matrix-bot — tails journalctl, classifies operator alerts by tier, DMs to operator MXID via Matrix
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target morphit-indexer.service morphit-relay.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=morphit-matrix-bot
+Group=morphit-matrix-bot
+WorkingDirectory=/opt/morphit/apps/matrix-bot
+
+# Environment file — NEVER commit a populated version.  Operator
+# fills MORPHIT_MATRIX_BOT_HOMESERVER, MORPHIT_MATRIX_BOT_ACCESS_TOKEN,
+# and MORPHIT_MATRIX_BOT_ALERT_MXID at deploy time.  The bot also
+# loads morphit.config.env from the repo root (via the operator-
+# config allowlist) so the MXID configured at `morphit-ops init`
+# time flows through automatically.
+#
+# Leading `-` makes the file OPTIONAL — systemd won't refuse to
+# start the unit if /etc/morphit/matrix-bot.env doesn't exist.
+# In that case the bot exits 0 cleanly because no Matrix surfaces
+# are configured (see apps/matrix-bot/src/main.ts opt-in gate).
+EnvironmentFile=-/etc/morphit/matrix-bot.env
+
+# tsx — same pattern as indexer/relay; no build step.
+ExecStart=/usr/bin/env node --enable-source-maps \
+    node_modules/tsx/dist/cli.mjs src/main.ts
+
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Restart on crash, BUT NOT on clean exit 0.  The bot exits 0 when
+# the operator hasn't configured Matrix surfaces (see main.ts opt-in
+# gate) — that's the documented default state for instances not using
+# Matrix.  Using `on-failure` here makes the unit cleanly inert in
+# that case instead of restart-looping.
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+# ─── Hardening ──────────────────────────────────────────────────
+# Mirrors the indexer/relay hardening posture.
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/morphit-matrix-bot /var/log/morphit
+PrivateTmp=true
+
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false  # Node's V8 JIT needs W+X
+
+LimitCORE=0
+ProtectProc=invisible
+ProcSubset=pid
+
+# Network — egress only to the Matrix homeserver.  Healthcheck
+# binds loopback only.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# ─── journalctl read access ─────────────────────────────────────
+# The bot needs to read journald to tail morphit-indexer + morphit-relay
+# units.  Two equivalent approaches:
+#
+#   (a) Add the bot user to `systemd-journal` group (recommended —
+#       least-privilege, no capabilities needed):
+#         sudo usermod -aG systemd-journal morphit-matrix-bot
+#
+#   (b) Grant the unit CAP_SYSLOG via AmbientCapabilities (if you
+#       don't want group membership):
+#         AmbientCapabilities=CAP_SYSLOG
+#         CapabilityBoundingSet=CAP_SYSLOG
+#
+# Default below is (a) — group membership.  Set up the user with:
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin \
+#                --groups systemd-journal morphit-matrix-bot
+#   sudo mkdir -p /var/lib/morphit-matrix-bot
+#   sudo chown morphit-matrix-bot:morphit-matrix-bot /var/lib/morphit-matrix-bot
+#   sudo chmod 0750 /var/lib/morphit-matrix-bot
+
+[Install]
+WantedBy=multi-user.target

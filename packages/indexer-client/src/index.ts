@@ -674,6 +674,20 @@ export interface InstanceResponse {
 	 *  render the instance's asset-policy stance so prospective
 	 *  users can self-select. */
 	readonly disabled_assets?: readonly string[];
+	/** Part 121 cp9 — public Matrix room alias for user→operator
+	 *  contact (format: `#room:server`).  Optional for back-compat
+	 *  with pre-cp9 indexers — older instances omit the field
+	 *  entirely; clients should treat absent === null === "operator
+	 *  did not configure a Matrix contact surface" and hide the
+	 *  link.
+	 *
+	 *  CRITICAL: this field carries a ROOM alias only (#-prefixed).
+	 *  It NEVER carries the operator's private alert MXID
+	 *  (@-prefixed) — that lives only in the operator's
+	 *  matrix-bot env (MORPHIT_MATRIX_BOT_ALERT_MXID) and is not
+	 *  API-exposed.  See OPERATIONS.md §16 routing-alerts-elsewhere
+	 *  + Memory's @user:server vs #room:server rule. */
+	readonly operator_matrix_room?: string | null;
 }
 
 // ─── Federation directory (Phase D.5) ──────────────────────────────

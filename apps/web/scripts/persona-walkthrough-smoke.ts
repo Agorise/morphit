@@ -655,6 +655,94 @@ const SCENARIOS: readonly Scenario[] = [
 			'stripLocalePrefix',
 			'goto(target)'
 		]
+	},
+	{
+		name: 'P121-CP9-1 — Matrix address SSoT: parseMxid + parseRoomAlias in @morphit/operator-config (no SvelteKit deps; branded types prevent @↔# confusion)',
+		file: 'packages/operator-config/src/matrixAddress.ts',
+		rootRelative: true,
+		mustHave: [
+			'export function parseMxid',
+			'export function parseRoomAlias',
+			'MatrixMxid',
+			'MatrixRoomAlias',
+			"__brand: 'MatrixMxid'",
+			"__brand: 'MatrixRoomAlias'"
+		],
+		mustNotHave: ['$app/environment', 'svelte-i18n', 'svelte/store']
+	},
+	{
+		name: 'P121-CP9-2 — indexer config refuses @-prefixed value in OPERATOR_MATRIX_ROOM (privacy framing in error)',
+		file: 'apps/indexer/src/config/index.ts',
+		rootRelative: true,
+		mustHave: [
+			'MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM',
+			'parseRoomAlias',
+			'public API',
+			'MORPHIT_MATRIX_BOT_ALERT_MXID'
+		]
+	},
+	{
+		name: 'P121-CP9-3 — /v1/instance InstanceResponse exposes operator_matrix_room: string | null (public room only)',
+		file: 'apps/indexer/src/api/instance.ts',
+		rootRelative: true,
+		mustHave: [
+			'operator_matrix_room: string | null',
+			'config.operatorMatrixRoom'
+		]
+	},
+	{
+		name: 'P121-CP9-4 — matrix-bot config refuses #-prefixed value in ALERT_MXID with privacy-violation framing in error',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			"raw.startsWith('#')",
+			'privacy violation',
+			'private MXID',
+			'parseMxid'
+		]
+	},
+	{
+		name: 'P121-CP9-5 — matrix-bot sendDm() typed signature requires MatrixMxid (branded type — compile-time prevents room-alias misuse)',
+		file: 'apps/matrix-bot/src/matrix.ts',
+		rootRelative: true,
+		mustHave: [
+			'sendDm(to: MatrixMxid',
+			"from '@morphit/operator-config'"
+		]
+	},
+	{
+		name: 'P121-CP9-6 — matrix-bot main loop iterates config.alertMxids (typed list); CRITICAL bypasses rate limiter; WARN gates through it; INFO accumulates to digest',
+		file: 'apps/matrix-bot/src/main.ts',
+		rootRelative: true,
+		mustHave: [
+			'for (const mxid of config.alertMxids)',
+			"classified.tier === 'CRITICAL'",
+			"classified.tier === 'WARN'",
+			'rateLimiter.isLimited',
+			'state.pushInfoEvent'
+		]
+	},
+	{
+		name: 'P121-CP9-7 — indexer-client InstanceResponse mirror exposes operator_matrix_room (optional for back-compat)',
+		file: 'packages/indexer-client/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			'operator_matrix_room?: string | null'
+		]
+	},
+	{
+		name: 'P121-CP9-8 — ops-cli wizard stepMatrixSurfaces validates both prefixes; rejects @ in room field and # in MXID field with explicit guidance',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: [
+			'stepMatrixSurfaces',
+			'parseMxid',
+			'parseRoomAlias',
+			"startsWith('#')",
+			"startsWith('@')",
+			'MATRIX_EXAMPLE_MXID',
+			'MATRIX_EXAMPLE_ROOM_ALIAS'
+		]
 	}
 ];
 

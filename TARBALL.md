@@ -1,10 +1,86 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 8)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 9)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp8-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp9-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp7-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp8-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp9 — what's shipped (Matrix-bot sidecar + operator alerts + user→operator contact surfaces END-TO-END)
+
+### Pretext
+
+cp8 sealed the §37 hardening doc patch + BunkerWeb bundling.  cp9 is the operator-alerts-via-Matrix work Ken asked for: a Matrix bot that tails journalctl, classifies alerts into tiers, DMs operator MXID privately; plus a separate public-room surface for user→operator contact rendered on /support, /about-this-instance, and footer.  Three explicit constraints: vacation coverage (multiple recipient MXIDs), both addresses operator-editable in wizard with examples, bot OPT-IN by default (no resource consumption when Matrix unused).
+
+Memory's @user:server vs #room:server rule informed the entire design.  Blanket @→# replacement is actively harmful — security alerts in a public room is a privacy violation.  cp9 enforces the split at five separate layers (compile-time via branded types, config-load time via parser validation, API shape via /v1/instance never carrying MXID-shaped fields, sender signature via MatrixMxid-only sendDm, persona-sentinel + adversarial-smoke verification on every CI run).
+
+### What shipped
+
+**NEW apps/matrix-bot/ workspace (~1100 LOC):**
+
+8 src/ files (classifier, config, state, rateLimit, matrix, journalctl, digest, main) + 3 scripts/ smoke tests + package.json registered in root workspaces + tsconfig.
+
+Three-tier classification, locked in by the classifier-smoke pinning policy:
+
+- **CRITICAL** (immediate, no rate limit, every recipient): tamper events (bundle/pubkey/payload mismatch), kill-switch fired, sustained RPC failure on indexer or witness-fee poller, daily signup ceiling hit, INVALID_FEE_METHOD attempt (Memory #23 USDT-as-listing-fee block), backup FAILED, AIDE INTEGRITY_VIOLATION, operator-balance at or below zero BLURT.
+- **WARN** (1/hour per category, every recipient): operator-balance LOW_BALANCE above zero, witness fee CHANGED, price-feed STALE, signup-anomaly SINGLE_IP_SPIKE, federation peer down >24h, sequential signup PATTERN_DETECTED.
+- **INFO** (daily 09:00 UTC digest, skipped on quiet days): operator-balance RECOVERED, backup SUCCEEDED, federation peer DISCOVERED, anything not matched by CRITICAL or WARN matchers (safe default).
+
+**renderAlertBody REWRITTEN with friendly per-(module, kind) copy:**
+
+ALERT_COPY table (19 entries covering all known alert kinds) with `{title, advice}` shape.  Advice is ELI5 with `{placeholder}` substitution from payload — e.g. "@{account} ({role}) is at {current_blurt} BLURT, below your alert threshold of {threshold_blurt}.  Top up before it hits zero."  Colored HTML via Matrix-supported `<font color>` tags: red (#dc2626) for CRITICAL, amber (#d97706) for WARN, gray (#6b7280) for INFO.  Plain-text fallback retains all info for clients without HTML support.  HTML-escaping for user-provided payload values.
+
+**SSoT in @morphit/operator-config:**
+
+packages/operator-config/src/matrixAddress.ts — parseMxid + parseRoomAlias with branded MatrixMxid + MatrixRoomAlias types (TypeScript refuses cross-passing without explicit cast).  Rejects lookalike sigils, length-bounds at 512 chars.  Re-exported from package index.  Matrix env vars added to ALLOWLIST.
+
+**Bot is OPT-IN BY DEFAULT (three coordinated changes):**
+
+(1) main.ts opt-in gate exits 0 cleanly if MORPHIT_MATRIX_BOT_ALERT_MXID is unset.
+(2) systemd EnvironmentFile=- (dash) makes /etc/morphit/matrix-bot.env optional.
+(3) systemd Restart=on-failure (not always) — so clean exit 0 doesn't restart-loop.
+
+Per Ken's constraint: "if the instance admin does not use matrix at all, no need to consume system resources."
+
+**ops-cli wizard:**
+
+stepMatrixSurfaces step (TOTAL_STEPS 16→17).  Prompts for admin MXID + group room with examples shown.  Defense-in-depth @-in-room and #-in-MXID rejections with privacy guidance in error.  Emits MORPHIT_MATRIX_BOT_ALERT_MXID + MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM in morphit.config.env.
+
+**Indexer + indexer-client + frontend:**
+
+/v1/instance exposes operator_matrix_room: string | null (PUBLIC).  NEVER carries an MXID.  Three frontend surfaces shipped: /support page Matrix-contact card with matrix.to deep link, /about-this-instance row, footer link.  10-locale parity for 60 new strings.
+
+**Systemd unit:**
+
+ops/systemd/morphit-matrix-bot.service — hardened (ProtectSystem=strict, NoNewPrivileges, etc.) + opt-in plumbing + systemd-journal group membership documented for journalctl read access.
+
+**Smokes:**
+
+- classifier-smoke (22 scenarios pinning tier policy)
+- rate-limiter-smoke (6 scenarios with in-memory state mock)
+- surface-invariant-smoke (14 adversarial scenarios enforcing @↔# split at every code boundary — parser, config, API shape, sender signature, main-loop code path)
+- init-smoke fixture updated + 4 new Matrix-emission scenarios
+- 8 P121-CP9 persona sentinels added
+
+**Docs (cross-doc grep done up front per cp8 corrective discipline):**
+
+- OPERATIONS.md §16 "Canonical Matrix routing — apps/matrix-bot" — full setup + tier policy + vacation coverage + dry-run testing + separated-surfaces invariant explanation.
+- RUN-A-MORPHIT-NODE.md §11 "Matrix alerting — recommended bot sidecar" between BunkerWeb and Docker.
+- MORPHIT-BRAG-LIST.md entry #258 + closing summary 257 → 258 + smoke-suite claim "2,320+" → "2,500+".
+
+### Verification
+
+- Triple-pulse smoke: 2,527 × 3, 0 failures.  cp8 baseline 2,470 → cp9 baseline 2,527 (+57 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- Adversarial surface-invariant smoke: 14/14 green.
+
+### Pending — NOT cp9 SCOPE
+
+- **Hardware-resource alerts** (disk full, CPU saturated, OOM-killed, low memory) NOT included.  Bot tails morphit-indexer + morphit-relay journals only.  To add: external monitoring sidecar emitting structured JSON via systemd-cat (cleanest) OR extend bot with /proc + statfs polling (worse).  cp10+ work.
+- **Ansible playbook update** with roles/matrix_bot/ + ops/bunkerweb/ cleanup (separate deliverable).
+- **npm install** in matrix-bot workspace to pull matrix-bot-sdk + better-sqlite3.  Classifier + rate-limiter + surface-invariant smokes run pure-TS today.
+
+---
 
 ## Part 121 cp8 — what's shipped (§37 hardening doc patch + BunkerWeb bundled into ops/)
 

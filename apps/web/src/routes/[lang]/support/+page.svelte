@@ -95,6 +95,37 @@
 		</section>
 	{/if}
 
+	<!-- 2b. Matrix group chat — distinct from contact_url above.
+	     This is a PUBLIC group room where users can chat with the
+	     operator + community.  Memory's @user:server vs #room:server
+	     rule: this is the ROOM, not an MXID; the operator's private
+	     admin MXID is bot-only and never API-exposed. -->
+	{#if $instance.operator_matrix_room}
+		<section class="card mb-4">
+			<div class="flex items-start gap-3">
+				<span class="text-2xl" aria-hidden="true">💭</span>
+				<div class="flex-1">
+					<h2 class="font-display text-lg font-bold">
+						{$_('support.operator_matrix.heading')}
+					</h2>
+					<p class="mt-1 text-sm text-ink-700 dark:text-ink-200">
+						{$_('support.operator_matrix.body', {
+							values: { room: $instance.operator_matrix_room }
+						})}
+					</p>
+					<a
+						class="btn-secondary mt-3 inline-flex"
+						href="https://matrix.to/#/{encodeURIComponent($instance.operator_matrix_room)}"
+						rel="noopener noreferrer"
+						target="_blank"
+					>
+						{$_('support.operator_matrix.cta')}
+					</a>
+				</div>
+			</div>
+		</section>
+	{/if}
+
 	<!-- 3. Security disclosure — kept distinct from the operator
 	     contact above.  Bugs that put users at risk should go to
 	     the project, not (just) to the local operator. -->

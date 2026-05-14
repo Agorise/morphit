@@ -1211,7 +1211,9 @@
     "canary_title": "Wöchentlicher Warrant-Canary des Betreibers — prüfe, dass das Datum aktuell ist",
     "pgp_keys": "PGP-Schlüssel",
     "pgp_keys_title": "PGP-Public-Keys des Betreibers für signierte Releases und Canary-Verifikation",
-    "bounty": "Bug-Bounty"
+    "bounty": "Bug-Bounty",
+    "contact_operator_matrix_label": "Matrix",
+    "contact_operator_matrix": "Öffentlichen Matrix-Raum des Betreibers öffnen ({room})"
   },
   "identity": {
     "copy_full_key_aria": "Vollständigen öffentlichen Schlüssel kopieren",
@@ -1983,7 +1985,8 @@
       "operator_tag_none": "nicht registriert",
       "file_count": "Dateien im Bundle",
       "aggregate_hash": "Aggregierter SHA-256",
-      "aggregate_hash_computing": "berechnet…"
+      "aggregate_hash_computing": "berechnet…",
+      "operator_matrix": "Matrix-Gruppenchat"
     },
     "integrity": {
       "explain": "Diese Instanz liefert {count} Dateien. Jede ist gehasht und im vollständigen Manifest unten aufgeführt. Vergleiche den aggregierten Hash oben mit dem in der neuesten signierten Release auf der Blurt-Chain veröffentlichten (@morphit postet nach jedem Build eine morphit_release_v1-Op). Stimmen sie überein, ist das Bundle byte-identisch zur offiziellen Release.",
@@ -3196,6 +3199,11 @@
       "body_generic": "Ein Operator betreibt diese Instanz. Bei Problemen, Kontoerstellung oder operatorspezifischen Fragen, nutze den Kontakt-Link unten.",
       "cta": "Operator kontaktieren",
       "no_contact_hint": "Dieser Operator hat keinen Kontakt veröffentlicht. Versuche die Sicherheitsmeldung oder Self-Hosting unten."
+    },
+    "operator_matrix": {
+      "heading": "Mit dem Betreiber auf Matrix chatten",
+      "body": "Diese Instanz hat einen öffentlichen Matrix-Gruppenchat unter {room}. Stelle Fragen, fordere einen Voucher-Code an oder hole dir in Echtzeit Hilfe vom Betreiber und der Community.",
+      "cta": "Matrix-Raum öffnen"
     },
     "security": {
       "heading": "Sicherheitsproblem entdeckt?",

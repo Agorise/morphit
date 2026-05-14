@@ -40,6 +40,7 @@ import {
 	stepSeo,
 	stepBackup,
 	stepOperatorTag,
+	stepMatrixSurfaces,
 	DEFAULT_BLURT_RPC_ENDPOINTS
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
@@ -107,7 +108,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		}
 	}
 
-	// ─── Run the 12 steps ────
+	// ─── Run the 17 steps ────
 	const instanceName = await stepInstanceName();
 	const tagline = await stepTagline();
 	const databaseUrl = await stepDatabase();
@@ -124,6 +125,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const seo = await stepSeo();
 	const backup = await stepBackup();
 	const operatorTag = await stepOperatorTag();
+	const matrix = await stepMatrixSurfaces();
 
 	const answers: WizardAnswers = {
 		instanceName,
@@ -142,7 +144,8 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		chatLinkExplorers,
 		seo,
 		backup,
-		operatorTag
+		operatorTag,
+		matrix
 	};
 
 	// ─── Review ────
