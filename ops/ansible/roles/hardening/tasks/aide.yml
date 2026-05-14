@@ -1,0 +1,42 @@
+# §37.9 — AIDE filesystem integrity baseline.
+---
+- name: Configure AIDE
+  ansible.builtin.copy:
+    dest: /etc/aide/aide.conf.d/99-morphit
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Ansible.  Watch the morphit code + config + key
+      # systemd unit files.
+      {{ morphit_repo_path }}/apps/relay      R
+      {{ morphit_repo_path }}/apps/indexer    R
+      /etc/morphit                            R
+      /etc/systemd/system/morphit-*.service   R
+      /etc/systemd/system/morphit-*.timer     R
+
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: /var/lib/aide/aide.db
+  register: aide_db_stat
+
+- name: Initialize AIDE database (first run only — can take 5-15 minutes)
+  ansible.builtin.command: aideinit -y -f
+  when: not aide_db_stat.stat.exists
+  changed_when: true
+
+- name: Move AIDE init db into place
+  ansible.builtin.command: mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+  when: not aide_db_stat.stat.exists
+  changed_when: true
+
+- name: Schedule daily AIDE integrity check
+  ansible.builtin.copy:
+    dest: /etc/cron.daily/aide-check
+    owner: root
+    group: root
+    mode: '0755'
+    content: |
+      #!/bin/sh
+      # Daily AIDE integrity check.  Output goes to operator email.
+      aide --check 2>&1 | mail -s "[morphit] AIDE check $(date +%F)" {{ morphit_alert_email_to }}

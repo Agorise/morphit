@@ -2301,13 +2301,35 @@ MORPHIT_MATRIX_BOT_ALERT_MXID=@you:matrix.org,@your-backup:matrix.org
 # MORPHIT_MATRIX_BOT_DRY_RUN=false
 ENV
 
-# 4. Install + enable the systemd unit.
+# 4. Install matrix-bot dependencies (native build for better-sqlite3).
+#
+# matrix-bot depends on better-sqlite3 (state persistence) and
+# matrix-bot-sdk (Matrix client).  better-sqlite3 compiles native
+# bindings against node headers downloaded from nodejs.org during
+# `npm install` — your deploy box needs:
+#
+#   - build-essential or equivalent (gcc, make, python3)
+#   - outbound HTTPS to nodejs.org for the node headers
+#
+# Both are present on a default Ubuntu/Debian VPS once you've run
+# `sudo apt install -y build-essential python3` (from §1 of
+# RUN-A-MORPHIT-NODE.md).  If you've sealed outbound HTTPS to a
+# strict allowlist (BunkerWeb path or similar), add nodejs.org
+# to the allowlist for the duration of `npm install`.
+cd /opt/morphit
+sudo -u morphit npm ci --workspaces --include-workspace-root \
+                       --omit=optional --no-audit --no-fund
+# Verify:
+test -d /opt/morphit/node_modules/better-sqlite3/build \
+    || (echo "better-sqlite3 native build did not produce build/ — see logs"; exit 1)
+
+# 5. Install + enable the systemd unit.
 sudo cp /opt/morphit/ops/systemd/morphit-matrix-bot.service \
         /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now morphit-matrix-bot
 
-# 5. Verify.
+# 6. Verify.
 sudo systemctl status morphit-matrix-bot
 sudo journalctl -u morphit-matrix-bot --since '5 minutes ago'
 # Expect: "morphit-matrix-bot ready." in the logs.
@@ -2431,6 +2453,150 @@ through the classifier.  Unknown (module, event) pairs default
 to INFO (digest); add an explicit matcher in
 `apps/matrix-bot/src/classifier.ts` if you want CRITICAL or WARN
 routing for a specific event.
+
+### Extended monitoring sidecars — smartctl, fail2ban, mdadm
+
+Three additional sidecars use the same emit-via-systemd-cat
+pattern as the host-resource monitor.  Each is opt-in (operator
+must enable the timer) and is included in the bot's default
+`MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS` so alerts route
+automatically once the timer is enabled.
+
+#### Disk SMART health — `morphit-smartctl-monitor`
+
+Polls `smartctl -H -A -l selftest` on every detected non-loop
+block device every 6 hours.  Emits structured JSON via
+`systemd-cat -t morphit-smartctl-monitor`.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `smart_failed` | CRITICAL | SMART overall-health self-assessment FAILED |
+| `self_test_failed` | CRITICAL | Most recent self-test reports failure |
+| `temperature_critical` | CRITICAL | Disk ≥ 60°C (env: `MORPHIT_SMART_TEMP_CRITICAL`) |
+| `temperature_warn` | WARN | Disk ≥ 50°C (env: `MORPHIT_SMART_TEMP_WARN`) |
+| `reallocated_sectors` | WARN | `Reallocated_Sector_Ct > 0` |
+| `pending_sectors` | WARN | `Current_Pending_Sector > 0` |
+| `smartctl_unavailable` | INFO | smartmontools not installed |
+
+Setup:
+
+```sh
+# 1. Install smartmontools.
+sudo apt install -y smartmontools
+
+# 2. (Optional) Operator-tuned thresholds.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/smartctl-monitor.env <<'ENV'
+MORPHIT_SMART_TEMP_CRITICAL=55   # tighter for hot data centres
+MORPHIT_SMART_TEMP_WARN=45
+ENV
+
+# 3. Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-smartctl-monitor.service \
+        /opt/morphit/ops/systemd/morphit-smartctl-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-smartctl-monitor.timer
+```
+
+Caveats: SMART monitoring is most useful on bare-metal hosts.
+On most VPS providers the disks are virtualized and smartctl
+reports either nothing or the host's own disks, so the alerts
+may be uninformative.  Useful for self-hosted dedicated
+hardware.
+
+#### fail2ban observability — `morphit-fail2ban-monitor`
+
+Polls `fail2ban-client status` every 5 minutes.  Alerts on
+daemon-down (meaning brute-force is NOT being blocked) and
+ban-count spikes (meaning attack in progress).  Delta-tracks
+total bans across runs for ban-rate detection.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `daemon_unreachable` | CRITICAL | fail2ban-client cannot reach the daemon |
+| `jail_critical_ban_count` | CRITICAL | currently-banned ≥ `MORPHIT_FAIL2BAN_BAN_CRITICAL` (50) |
+| `jail_high_ban_count` | WARN | currently-banned ≥ `MORPHIT_FAIL2BAN_BAN_WARN` (15) |
+| `jail_ban_rate_warn` | WARN | bans/hour rate ≥ 100 (delta-tracked) |
+| `fail2ban_unavailable` | INFO | fail2ban-client not in PATH |
+
+Per-jail overrides via env vars
+`MORPHIT_FAIL2BAN_<UPPERCASE-JAIL>_CRITICAL` and `_WARN` — e.g.
+a busy SSH jail might want `MORPHIT_FAIL2BAN_SSHD_CRITICAL=100`
+while a quiet postfix jail uses the default 50.
+
+Setup:
+
+```sh
+# 1. fail2ban itself must already be running (§34 covers install).
+
+# 2. (Optional) operator-tuned thresholds.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/fail2ban-monitor.env <<'ENV'
+MORPHIT_FAIL2BAN_BAN_CRITICAL=50
+MORPHIT_FAIL2BAN_BAN_WARN=15
+MORPHIT_FAIL2BAN_SSHD_CRITICAL=100   # SSH jail is allowed to be loud
+ENV
+
+# 3. State dir for ban-rate delta tracking.
+sudo mkdir -p /var/lib/morphit-fail2ban-monitor
+sudo chmod 0750 /var/lib/morphit-fail2ban-monitor
+
+# 4. Install + enable.
+sudo cp /opt/morphit/ops/systemd/morphit-fail2ban-monitor.service \
+        /opt/morphit/ops/systemd/morphit-fail2ban-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-fail2ban-monitor.timer
+```
+
+#### Linux software RAID — `morphit-mdadm-monitor`
+
+Reads `/proc/mdstat` every 15 minutes.  No package install
+needed — `/proc/mdstat` is in the kernel.  Safe to enable
+defensively on any host: exits silently if no md arrays exist.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `array_failed` | CRITICAL | Array no longer functional (all devices gone) |
+| `array_degraded` | CRITICAL | One or more devices failed/missing |
+| `array_resyncing` | INFO | Array rebuilding (normal after disk replacement) |
+
+Setup:
+
+```sh
+sudo cp /opt/morphit/ops/systemd/morphit-mdadm-monitor.service \
+        /opt/morphit/ops/systemd/morphit-mdadm-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-mdadm-monitor.timer
+```
+
+No service user setup needed — the unit uses `DynamicUser=true`
+since `/proc/mdstat` is world-readable.
+
+### Deploying all sidecars at once via Ansible
+
+The repository ships an Ansible playbook at `ops/ansible/` that
+wraps all the above into opt-in roles.  Set `enable_*: true` for
+the sidecars you want in `group_vars/all.yml`, populate the
+`vault_matrix_bot_access_token` in `group_vars/vault.yml` if
+using Matrix, and:
+
+```sh
+cd /opt/morphit/ops/ansible
+ansible-playbook -i inventory/hosts.yml playbook.yml --tags monitors
+```
+
+The `monitors` tag runs only the sidecar roles, leaving the rest
+of the deploy untouched — convenient for adding monitoring to an
+already-deployed instance.
 
 ## 17. Relay origin allowlist — protecting your instance from billing drift
 

@@ -1,0 +1,370 @@
+# Morphit Ansible — operator-editable values.
+#
+# EVERY value with `DUMMY-VALUE:` in its comment is a placeholder.
+# Replace before first run.  Use ansible-vault for secrets (passwords,
+# keystore passphrase, alert email password); reference them as
+# {{ vault_<name> }} below.
+#
+# Section references throughout point at docs/OPERATIONS.md in the
+# morphit repo.
+
+# ─── Identity ────────────────────────────────────────────────────
+
+# DUMMY-VALUE: your instance's public domain.  Used for TLS cert,
+# BunkerWeb SERVER_NAME, /v1/instance origin, and the canonical URL
+# in the frontend's <link rel="canonical">.
+morphit_domain: morphit.example.com
+
+# DUMMY-VALUE: the operator's BLURT account name (lowercase, 3-16
+# chars, a-z 0-9 -).  This is the account that signs operator-
+# registration ops, posts releases, collects stranger fees, and
+# attributes payments.  See OPERATIONS.md §0.
+morphit_operator_account: my-operator
+
+# DUMMY-VALUE: short tag (≤16 chars) the indexer uses in
+# operator_attribution_events.  Often the same as
+# morphit_operator_account, but can be shorter / branded.
+morphit_operator_tag: myoperator
+
+
+# ─── Server users ────────────────────────────────────────────────
+
+# Unprivileged service user that runs the morphit relay + indexer.
+# Created by the `base` role.  Don't change after first deploy
+# without manual data migration.
+morphit_service_user: morphit
+morphit_service_group: morphit
+morphit_service_home: /var/lib/morphit
+
+
+# ─── PostgreSQL ──────────────────────────────────────────────────
+
+# Bound to loopback only per §37.8.  External access via PgBouncer
+# is documented in §30 if you need it; this playbook does NOT
+# install PgBouncer.
+postgres_listen_addresses: "127.0.0.1"
+postgres_port: 5432
+
+# DBs + users provisioned by the `postgres` role.
+postgres_indexer_db: morphit_indexer
+postgres_indexer_user: morphit_indexer
+
+postgres_relay_db: morphit_relay
+postgres_relay_user: morphit_relay
+
+# DUMMY-VALUE: real passwords belong in group_vars/vault.yml
+# (ansible-vault encrypted).  Reference them here.  For first-time
+# scaffolding, replace these strings and re-run after creating the
+# vault.  See README §"Quick start" step 3.
+postgres_indexer_password: "{{ vault_postgres_indexer_password | default('CHANGE-ME-INDEXER') }}"
+postgres_relay_password: "{{ vault_postgres_relay_password | default('CHANGE-ME-RELAY') }}"
+
+
+# ─── Morphit source + build ──────────────────────────────────────
+
+# Forgejo repo URL.  See OPERATIONS.md §0 for the canonical source.
+morphit_repo_url: https://git.agorise.net/agorise/morphit.git
+
+# Git ref to deploy.  Pin to a release tag for prod (e.g. "v1.0.0");
+# `main` is suitable for staging.
+morphit_repo_ref: main
+
+# Local clone destination on the target host.
+morphit_repo_path: /opt/morphit
+
+
+# ─── Node.js ─────────────────────────────────────────────────────
+
+# The repo's package.json specifies the Node engine; verify before
+# pinning here.  As of Part 121, Node 22 LTS is canonical.
+morphit_node_version: "22"
+
+
+# ─── Relay environment (§18, §23, §38.7) ─────────────────────────
+
+# DUMMY-VALUE: full path to the relay's Blurt keystore (active key,
+# encrypted).  Generated per RUN-A-MORPHIT-NODE.md; place on the
+# target host BEFORE first run.
+morphit_relay_keystore_path: /etc/morphit/relay.keystore
+
+# DUMMY-VALUE: passphrase decrypting the keystore.  Belongs in
+# group_vars/vault.yml.
+morphit_relay_keystore_passphrase: "{{ vault_relay_keystore_passphrase | default('CHANGE-ME-PASSPHRASE') }}"
+
+# Relay's HTTP bind.  127.0.0.1 only — BunkerWeb proxies to it.
+morphit_relay_bind_host: 127.0.0.1
+morphit_relay_bind_port: 4001
+
+# Diamond-hardened squatter defense preset per §38.7.  These are
+# NOT dummy values — they're the canonical preset.  Relax only
+# after watching rejection logs (§38.2) and confirming you're
+# blocking legitimate users.
+morphit_relay_signup_enabled: true
+morphit_relay_signup_daily_ceiling: 20
+morphit_relay_create_spacing_minutes: 90
+morphit_relay_altcha_trigger_count: 2
+morphit_relay_altcha_maxnumber: 4000000
+morphit_relay_highvalue_name_policy: strict
+morphit_relay_highvalue_short_name_threshold: 5
+morphit_relay_sequential_detector_enabled: true
+morphit_relay_sequential_threshold: 1
+morphit_relay_sequential_window_ms: 86400000
+morphit_relay_sequential_min_prefix: 3
+
+# Trusted-proxy IPs (§32 CRITICAL).  Set to the IP/CIDR that
+# BunkerWeb runs on.  For BunkerWeb co-located in a Docker network
+# on this host, this is the Docker bridge CIDR — typically
+# 172.18.0.0/16 for a user-defined compose network.  Verify with:
+#   docker network inspect bunkerweb_net --format \
+#     '{{ "{{" }}range .IPAM.Config{{ "}}" }}{{ "{{" }}.Subnet{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
+#
+# Comma-separated for multiple proxies (e.g., CDN + BunkerWeb).
+# CRITICAL: too narrow = X-Forwarded-For ignored = users share
+# one rate-limit bucket.  Too wide (e.g. 0.0.0.0/0) = any user can
+# forge X-Forwarded-For = rate limits bypassed.  Both are bad.
+morphit_relay_trusted_proxy_ips: "172.18.0.0/16"
+
+
+# ─── Indexer environment (§18, §23) ──────────────────────────────
+
+# Indexer's HTTP bind.  127.0.0.1 only — BunkerWeb proxies to it.
+morphit_indexer_bind_host: 127.0.0.1
+morphit_indexer_bind_port: 4000
+
+# Blurt RPC endpoints — see §22 for selection criteria.  The
+# canonical primary is rpc.blurt.world; configure failover for
+# production.  Comma-separated.
+# DUMMY-VALUE: review §22 and choose endpoints for your deployment.
+morphit_indexer_blurt_rpc_endpoints: "https://rpc.blurt.world,https://blurt-rpc.actifit.io"
+
+# Asset registry: disable specific tradable assets if your instance
+# specializes (§38, Memory #25).  Comma-separated uppercase tickers.
+# Empty string = no assets disabled (default-everything posture).
+morphit_indexer_disabled_assets: ""
+
+# Attestation phase: 'launch' or 'steady'.  See §20.
+morphit_indexer_attestation_phase: launch
+
+
+# ─── Backups (§31) ───────────────────────────────────────────────
+
+# Daily backup timer fires at this systemd OnCalendar spec.
+morphit_backup_schedule: "*-*-* 04:00:00"
+
+# DUMMY-VALUE: rsync/scp destination for off-host backup.
+# CRITICAL: backups on the same disk as the DB are not backups.
+# Examples:
+#   "backups@backup-host.example.com:/morphit-backups/"
+#   "/mnt/external-volume/morphit-backups/"   (separate physical disk)
+#   "s3://my-backups-bucket/morphit/"          (with rclone configured)
+morphit_backup_remote_destination: "backups@backup.example.com:/morphit/"
+
+# DUMMY-VALUE: SSH key the backup script uses to push to the
+# remote destination.  Created by `morphit` role; the public side
+# must be in the backup destination's authorized_keys.
+morphit_backup_ssh_key_path: /etc/morphit/backup-ssh-key
+
+# DUMMY-VALUE: age recipient public key for backup encryption
+# (§37.12).  Generate with:  age-keygen -o backup.key
+# (keep backup.key private OFF the morphit host; put the matching
+# public key — starts with "age1..." — here).
+morphit_backup_age_recipient: "age1XXXXX-replace-with-real-age-public-key-XXXXX"
+
+# How many days of remote backups to retain.  Older ones are
+# deleted from the remote side by the daily timer.
+morphit_backup_retention_days: 30
+
+
+# ─── Operator alerting (§37.14) ──────────────────────────────────
+
+# DUMMY-VALUE: where to send operator alerts (signup-velocity
+# spike, stale price feed, low balance, etc.).
+morphit_alert_email_to: "operator@example.com"
+
+# DUMMY-VALUE: SMTP relay for outbound mail.  Postfix is
+# configured by the `morphit` role with this as the smarthost.
+# Common choices: Mailgun, Postmark, AWS SES.
+morphit_alert_smtp_host: "smtp.example.com"
+morphit_alert_smtp_port: 587
+morphit_alert_smtp_user: "alerts@example.com"
+morphit_alert_smtp_password: "{{ vault_alert_smtp_password | default('CHANGE-ME-SMTP') }}"
+
+
+# ─── TLS (§35) ───────────────────────────────────────────────────
+
+enable_tls: true
+
+# DUMMY-VALUE: where Let's Encrypt sends renewal notices + recovery
+# email.
+tls_acme_email: "operator@example.com"
+
+# Let's Encrypt staging server for dry-runs.  Set to true on first
+# deploy to verify the cert flow without burning prod rate limits.
+tls_use_staging: false
+
+
+# ─── BunkerWeb (§32) ─────────────────────────────────────────────
+
+enable_bunkerweb: true
+
+# BunkerWeb Docker image tag.  Verify against the BunkerWeb
+# docs at deploy time — env-var names sometimes change between
+# major versions.
+# https://docs.bunkerweb.io
+bunkerweb_image: bunkerity/bunkerweb:1.5.10
+bunkerweb_scheduler_image: bunkerity/bunkerweb-scheduler:1.5.10
+
+# OWASP CRS paranoia level.  1 = lenient, 4 = paranoid.  3 is the
+# sweet spot for a public-facing API — strict enough to catch
+# attacks, lenient enough to not break legitimate Morphit traffic.
+bunkerweb_crs_paranoia: 3
+
+# Block hosting-provider ASNs that are over-represented in
+# squatter traffic (§38.6 item c).  Verify against your own
+# rejection logs before enabling — real users on these networks
+# do exist (rare, but they do).
+bunkerweb_block_asns:
+  - "AS14061"  # DigitalOcean
+  - "AS24940"  # Hetzner
+  - "AS16276"  # OVH
+  # Add more as your rejection logs reveal patterns.
+
+# Country-block list for §38.6 item b.  Empty by default; populate
+# only under active attack.  ISO-3166-1 alpha-2 codes.
+bunkerweb_block_countries: []
+
+
+# ─── UFW (§34) ───────────────────────────────────────────────────
+
+# Inbound ports to allow.  SSH + HTTP (for ACME) + HTTPS.
+# Everything else gets denied.
+ufw_allowed_inbound_ports:
+  - "22"     # SSH
+  - "80"     # HTTP (ACME challenge + redirect to HTTPS)
+  - "443"    # HTTPS
+
+
+# ─── fail2ban (§34) ──────────────────────────────────────────────
+
+# Bantime in seconds.  3600 = 1 hour for first offense.  Repeat
+# offenders get escalating bans up to bantime_max.
+fail2ban_bantime: 3600
+fail2ban_bantime_max: 604800     # 7 days
+fail2ban_findtime: 600           # 10 min window
+fail2ban_maxretry: 4
+
+
+# ─── auditd (§37.6) ──────────────────────────────────────────────
+
+# Default — full coverage of CIS-recommended audit rules.  See
+# roles/hardening/templates/audit.rules.j2 for the policy file.
+# Override here only if you have specific compliance requirements.
+audit_log_max_size_mb: 1024
+audit_log_max_files: 5
+
+
+# ─── Outbound network policy (§37.13) ────────────────────────────
+
+# Hosts the morphit services + apt are allowed to reach.  Anything
+# else outbound is dropped by UFW.  Add to this list if your
+# backup destination, RPC endpoints, or SMTP host are not already
+# resolvable from the items above.
+outbound_allowed_destinations:
+  # apt repos
+  - archive.ubuntu.com
+  - security.ubuntu.com
+  - download.docker.com           # BunkerWeb deploy
+  # Blurt RPC (parsed from morphit_indexer_blurt_rpc_endpoints)
+  - rpc.blurt.world
+  - blurt-rpc.actifit.io
+  # ACME
+  - acme-v02.api.letsencrypt.org
+  # Federation probes — must be open since they target arbitrary
+  # peer instances by design.  The probe-layer SSRF defenses in
+  # apps/indexer/src/indexer/federationProbe.ts handle the
+  # risk (HTTPS-only, private-network deny list, 256KB cap,
+  # manual-redirect, AbortController timeout).
+  # matrix-bot prerequisites — only relevant if enable_matrix_bot
+  # is true.  Comment out if you're not using Matrix.
+  - nodejs.org            # better-sqlite3 native build headers
+  - registry.npmjs.org    # npm package fetch (matrix-bot-sdk etc.)
+
+
+# ─── Operator-alerts via Matrix sidecar (cp9, §16) ──────────────
+#
+# Set enable_matrix_bot: true and populate matrix_bot_* vars in
+# vault.yml to deploy the operator-alert sidecar.  Refer to
+# OPERATIONS.md §16 "Canonical Matrix routing — apps/matrix-bot"
+# for the full setup procedure including how to mint the bot
+# account access token.
+#
+# CRITICAL: matrix_bot_alert_mxid uses @user:server (PRIVATE
+# MXID).  Never set it to a #room:server alias — that would
+# leak operator alerts to a public room.  The bot config
+# validator refuses #-prefixed values with privacy framing in
+# the error, but defense-in-depth: don't tempt fate.
+enable_matrix_bot: false
+# matrix_bot_homeserver: "https://matrix.org"
+# matrix_bot_access_token: "{{ vault_matrix_bot_access_token }}"
+# matrix_bot_alert_mxid: "@you:matrix.org,@your-backup:matrix.org"
+# matrix_bot_digest_time: "09:00"         # daily digest UTC time
+# matrix_bot_dry_run: false               # set true for staging
+
+
+# ─── Host-resource monitor sidecar (cp10, §16) ──────────────────
+#
+# Disk / memory / swap / CPU thresholds.  All optional — the
+# script has sensible defaults for a 1-4 vCPU / 2-8 GB VPS.
+enable_host_monitor: false
+# host_monitor_disk_paths: "/ /var"     # space-separated mounts
+# host_monitor_disk_critical: 95
+# host_monitor_disk_warn: 85
+# host_monitor_disk_info: 70
+# host_monitor_mem_critical: 95
+# host_monitor_mem_warn: 85
+# host_monitor_mem_info: 70
+# host_monitor_swap_critical: 75
+# host_monitor_swap_warn: 50
+# host_monitor_swap_info: 25
+# host_monitor_swap_thrash_critical: 1000  # pages/sec
+# host_monitor_swap_thrash_warn: 100
+# host_monitor_cpu_critical: 5.0           # loadavg/cores
+# host_monitor_cpu_warn: 3.0
+# host_monitor_cpu_info: 1.5
+
+
+# ─── Disk SMART monitor sidecar (cp11, §16) ─────────────────────
+#
+# Polls smartctl every 6h on all detected block devices.
+# Installs smartmontools.  Useful on bare-metal hosts; less
+# useful on VPS providers that virtualize disks.
+enable_smartctl_monitor: false
+# smartctl_temp_critical: 60   # °C
+# smartctl_temp_warn: 50
+
+
+# ─── fail2ban monitor sidecar (cp11, §16) ───────────────────────
+#
+# Polls fail2ban-client every 5 min — alerts on ban-count
+# spikes (potential attack) and on the fail2ban daemon being
+# unreachable (which means brute-force is NOT being blocked).
+# Requires fail2ban itself, which the hardening role installs.
+enable_fail2ban_monitor: false
+# fail2ban_ban_critical: 50
+# fail2ban_ban_warn: 15
+# fail2ban_per_jail:                # per-jail overrides
+#   sshd:
+#     critical: 100
+#     warn: 30
+#   postfix-sasl:
+#     critical: 20
+#     warn: 5
+
+
+# ─── mdadm (Linux software RAID) monitor sidecar (cp11, §16) ────
+#
+# Polls /proc/mdstat every 15 min — alerts on array_failed /
+# array_degraded, INFO on array_resyncing (informational).
+# Safe to enable defensively even on non-RAID hosts: the script
+# exits silently if /proc/mdstat has no md* entries.
+enable_mdadm_monitor: false

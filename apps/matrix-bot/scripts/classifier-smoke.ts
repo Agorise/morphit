@@ -320,6 +320,135 @@ const scenarios: Scenario[] = [
 			threshold: 1.5
 		}),
 		expectedTier: 'INFO'
+	},
+
+	// ─── CRITICAL — cp11 smartctl/fail2ban/mdadm ─────────────
+	{
+		name: 'smartctl smart_failed → CRITICAL',
+		alert: a('smartctl', 'smart_failed', { device: '/dev/sda' }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'smartctl self_test_failed → CRITICAL',
+		alert: a('smartctl', 'self_test_failed', {
+			device: '/dev/sda',
+			result: 'Completed: read failure'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'smartctl temperature_critical → CRITICAL',
+		alert: a('smartctl', 'temperature_critical', {
+			device: '/dev/sda',
+			temperature_c: 62,
+			threshold: 60
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'fail2ban daemon_unreachable → CRITICAL (no protection!)',
+		alert: a('fail2ban', 'daemon_unreachable', {
+			error: 'Could not find server',
+			hint: 'check sudo systemctl status fail2ban'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'fail2ban jail_critical_ban_count → CRITICAL',
+		alert: a('fail2ban', 'jail_critical_ban_count', {
+			jail: 'sshd',
+			currently_banned: 55,
+			threshold: 50
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'mdadm array_failed → CRITICAL (data loss imminent)',
+		alert: a('mdadm', 'array_failed', {
+			array: 'md0',
+			level: 'raid1',
+			state: '[__]'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'mdadm array_degraded → CRITICAL (redundancy lost)',
+		alert: a('mdadm', 'array_degraded', {
+			array: 'md0',
+			level: 'raid1',
+			state: '[U_]'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── WARN — cp11 smartctl/fail2ban ───────────────────────
+	{
+		name: 'smartctl reallocated_sectors → WARN',
+		alert: a('smartctl', 'reallocated_sectors', {
+			device: '/dev/sda',
+			count: 12
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'smartctl pending_sectors → WARN',
+		alert: a('smartctl', 'pending_sectors', {
+			device: '/dev/sda',
+			count: 3
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'smartctl temperature_warn → WARN',
+		alert: a('smartctl', 'temperature_warn', {
+			device: '/dev/sda',
+			temperature_c: 52,
+			threshold: 50
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'fail2ban jail_high_ban_count → WARN',
+		alert: a('fail2ban', 'jail_high_ban_count', {
+			jail: 'sshd',
+			currently_banned: 20,
+			threshold: 15
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'fail2ban jail_ban_rate_warn → WARN',
+		alert: a('fail2ban', 'jail_ban_rate_warn', {
+			jail: 'sshd',
+			bans_per_hour: 150,
+			delta: 12,
+			elapsed_sec: 290
+		}),
+		expectedTier: 'WARN'
+	},
+
+	// ─── INFO — cp11 catch-alls ──────────────────────────────
+	{
+		name: 'mdadm array_resyncing → INFO (digest)',
+		alert: a('mdadm', 'array_resyncing', {
+			array: 'md0',
+			level: 'raid1'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'smartctl smartctl_unavailable → INFO (digest)',
+		alert: a('smartctl', 'smartctl_unavailable', {
+			hint: 'install smartmontools'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'fail2ban fail2ban_unavailable → INFO (digest)',
+		alert: a('fail2ban', 'fail2ban_unavailable', {
+			hint: 'install fail2ban'
+		}),
+		expectedTier: 'INFO'
 	}
 ];
 

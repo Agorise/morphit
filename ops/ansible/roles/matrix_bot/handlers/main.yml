@@ -1,0 +1,10 @@
+# roles/matrix_bot/handlers/main.yml
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart morphit-matrix-bot
+  ansible.builtin.systemd:
+    name: morphit-matrix-bot
+    state: restarted

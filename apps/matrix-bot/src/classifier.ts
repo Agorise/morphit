@@ -80,7 +80,17 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'host-resource' && a.event === 'mem_critical',
 	(a) => a.module === 'host-resource' && a.event === 'swap_critical',
 	(a) => a.module === 'host-resource' && a.event === 'swap_thrashing_critical',
-	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_critical'
+	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_critical',
+
+	// cp11 extended monitoring — disk SMART, fail2ban, mdadm RAID.
+	// Emit code: ops/scripts/morphit-{smartctl,fail2ban,mdadm}-monitor.sh.
+	(a) => a.module === 'smartctl' && a.event === 'smart_failed',
+	(a) => a.module === 'smartctl' && a.event === 'self_test_failed',
+	(a) => a.module === 'smartctl' && a.event === 'temperature_critical',
+	(a) => a.module === 'fail2ban' && a.event === 'daemon_unreachable',
+	(a) => a.module === 'fail2ban' && a.event === 'jail_critical_ban_count',
+	(a) => a.module === 'mdadm' && a.event === 'array_failed',
+	(a) => a.module === 'mdadm' && a.event === 'array_degraded'
 ];
 
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
@@ -104,7 +114,14 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'host-resource' && a.event === 'mem_warn',
 	(a) => a.module === 'host-resource' && a.event === 'swap_warn',
 	(a) => a.module === 'host-resource' && a.event === 'swap_thrashing_warn',
-	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_warn'
+	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_warn',
+
+	// cp11 extended monitoring — WARN tier.
+	(a) => a.module === 'smartctl' && a.event === 'reallocated_sectors',
+	(a) => a.module === 'smartctl' && a.event === 'pending_sectors',
+	(a) => a.module === 'smartctl' && a.event === 'temperature_warn',
+	(a) => a.module === 'fail2ban' && a.event === 'jail_high_ban_count',
+	(a) => a.module === 'fail2ban' && a.event === 'jail_ban_rate_warn'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -396,6 +413,130 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 		advice:
 			'1-min load average is {load1} on {cores} cores (ratio {ratio}, ' +
 			'threshold {threshold}x cores). Bundled into the daily digest.'
+	},
+
+	// ─── cp11 smartctl sidecar ─────────────────────────────────
+	'smartctl:smart_failed': {
+		title: 'Disk SMART self-assessment FAILED: {device}',
+		advice:
+			'{device} reports SMART overall-health FAILED. This means the drive ' +
+			'firmware itself predicts imminent failure. Back up any data on this ' +
+			'drive NOW and plan immediate replacement. Run `sudo smartctl -a ' +
+			'{device}` for full attribute detail.'
+	},
+	'smartctl:self_test_failed': {
+		title: 'Disk SMART self-test failed: {device}',
+		advice:
+			'Most recent self-test on {device} reported: {result}. The drive is ' +
+			'still functional but a SMART self-test failure is a strong predictor ' +
+			'of future failure. Back up data and schedule replacement.'
+	},
+	'smartctl:temperature_critical': {
+		title: 'Disk temperature critical: {device}',
+		advice:
+			'{device} is at {temperature_c}°C (threshold {threshold}°C). ' +
+			'Sustained high temperature shortens disk lifespan dramatically. ' +
+			'Check chassis airflow, fan operation, and ambient temperature. ' +
+			'If this persists, the drive WILL fail prematurely.'
+	},
+	'smartctl:temperature_warn': {
+		title: 'Disk temperature elevated: {device}',
+		advice:
+			'{device} is at {temperature_c}°C (threshold {threshold}°C). Not ' +
+			'immediately dangerous but worth checking airflow. Rate-limited to ' +
+			'one per hour per device.'
+	},
+	'smartctl:reallocated_sectors': {
+		title: 'Disk has reallocated sectors: {device}',
+		advice:
+			'{device} reallocated_sector_count = {count}. The drive remapped {count} ' +
+			'bad sectors to spare ones. A few is normal over the life of the drive; ' +
+			'rapidly increasing count means the drive is failing. Check the trend ' +
+			'with `sudo smartctl -A {device}` and compare to prior alerts.'
+	},
+	'smartctl:pending_sectors': {
+		title: 'Disk has pending unreadable sectors: {device}',
+		advice:
+			'{device} current_pending_sector = {count}. {count} sector(s) have read ' +
+			'errors but have not yet been reallocated. They may recover on the next ' +
+			'successful write, or they may be permanently bad. Run a long self-test ' +
+			'(`sudo smartctl -t long {device}`) to force resolution.'
+	},
+	'smartctl:smartctl_unavailable': {
+		title: 'smartctl sidecar enabled but smartmontools not installed',
+		advice:
+			'The morphit-smartctl-monitor service is running but smartctl is not in ' +
+			'PATH. {hint}. Until then, no disk-health monitoring will happen.'
+	},
+
+	// ─── cp11 fail2ban sidecar ─────────────────────────────────
+	'fail2ban:daemon_unreachable': {
+		title: 'fail2ban daemon is not responding',
+		advice:
+			'fail2ban-client could not reach the fail2ban daemon. Error: {error}. ' +
+			'{hint}. Until you fix this, no IPs are being banned — attackers ' +
+			'attempting brute-force will not be rate-limited at the firewall layer.'
+	},
+	'fail2ban:jail_critical_ban_count': {
+		title: 'fail2ban jail has many active bans: {jail}',
+		advice:
+			'{jail} has {currently_banned} currently-banned IPs (threshold ' +
+			'{threshold}). This usually means an active distributed attack. ' +
+			'fail2ban is doing its job — but the noise level is high. Check ' +
+			'`sudo fail2ban-client status {jail}` for the IP list and ' +
+			'`sudo journalctl -u fail2ban --since "1 hour ago"` for context. ' +
+			'Consider tighter jail settings (longer bantime, lower findtime) if ' +
+			'persistent.'
+	},
+	'fail2ban:jail_high_ban_count': {
+		title: 'fail2ban jail ban count elevated: {jail}',
+		advice:
+			'{jail} has {currently_banned} currently-banned IPs (threshold ' +
+			'{threshold}). Some active probing — fail2ban is handling it. Rate-' +
+			'limited to one alert per hour per jail.'
+	},
+	'fail2ban:jail_ban_rate_warn': {
+		title: 'fail2ban jail ban rate spiking: {jail}',
+		advice:
+			'{jail} banned ~{bans_per_hour} IPs/hour ({delta} new bans in the last ' +
+			'{elapsed_sec}s). A sudden spike usually signals a distributed attack ' +
+			'starting up. Check the source pattern with `sudo fail2ban-client ' +
+			'status {jail}`.'
+	},
+	'fail2ban:fail2ban_unavailable': {
+		title: 'fail2ban sidecar enabled but fail2ban not installed',
+		advice:
+			'The morphit-fail2ban-monitor service is running but fail2ban-client is ' +
+			'not in PATH. {hint}. Until then, no fail2ban monitoring will happen — ' +
+			'and if you have not installed fail2ban itself, your SSH and web ' +
+			'surfaces are NOT being protected against brute-force.'
+	},
+
+	// ─── cp11 mdadm sidecar ────────────────────────────────────
+	'mdadm:array_failed': {
+		title: 'RAID array FAILED: {array}',
+		advice:
+			'{array} ({level}) is no longer functional — state {state}. ALL devices ' +
+			'in the array are gone or failed. Any data on this array is at risk of ' +
+			'permanent loss right now. Stop writes immediately, mount the surviving ' +
+			'partition read-only if possible, and replace failed disks. ' +
+			'See `cat /proc/mdstat` for the current state.'
+	},
+	'mdadm:array_degraded': {
+		title: 'RAID array degraded: {array}',
+		advice:
+			'{array} ({level}) is degraded — state {state}. One or more devices ' +
+			'failed or are missing. The array is still functional but redundancy ' +
+			'is lost or reduced; another device failure could cause complete data ' +
+			'loss. Replace failed disks ASAP and rebuild: `sudo mdadm --manage ' +
+			'{array} --add /dev/<replacement>`.'
+	},
+	'mdadm:array_resyncing': {
+		title: 'RAID array resyncing: {array}',
+		advice:
+			'{array} ({level}) is currently rebuilding or resyncing. This is normal ' +
+			'after disk replacement or unclean shutdown. Performance will be ' +
+			'reduced until complete. Check progress with `cat /proc/mdstat`.'
 	}
 };
 

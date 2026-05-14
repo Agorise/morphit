@@ -1,0 +1,47 @@
+[Unit]
+Description=Morphit fail2ban monitor — jail status + ban-rate observability
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target fail2ban.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+# fail2ban-client needs to talk to the fail2ban daemon's UNIX
+# socket which is owned by root (default install).  Could run
+# as the fail2ban user if your packaging allows; root is the
+# safe portable default.
+
+ReadWritePaths=/var/lib/morphit-fail2ban-monitor
+EnvironmentFile=-/etc/morphit/fail2ban-monitor.env
+ExecStart=/opt/morphit/ops/scripts/morphit-fail2ban-monitor.sh
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+LimitCORE=0
+
+# fail2ban-client uses a UNIX socket; no IP networking needed.
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

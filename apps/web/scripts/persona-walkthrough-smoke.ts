@@ -123,6 +123,25 @@
  *             morphit-host-monitor.service so alerts route
  *             without any operator-side wiring.
  *
+ *   P121-CP11 Seven sentinels pinning the extended monitoring
+ *             sidecars (smartctl, fail2ban, mdadm) + the
+ *             Ansible integration that ties everything
+ *             together.  Three new POSIX-sh sidecars at
+ *             ops/scripts/morphit-{smartctl,fail2ban,mdadm}-
+ *             monitor.sh each emit structured JSON in the
+ *             LogRecord envelope; the classifier knows about
+ *             every cp11 event at every tier (7 CRITICAL,
+ *             5 WARN, 3 INFO); ALERT_COPY has ELI5 advice for
+ *             all of them; the bot's default JOURNALCTL_UNITS
+ *             list covers all five sidecar units; the Ansible
+ *             playbook at ops/ansible/playbook.yml integrates
+ *             the cp9 matrix_bot + cp10 host_monitor +
+ *             cp11 smartctl/fail2ban/mdadm roles with opt-in
+ *             enable_* flags (all default false); and the
+ *             matrix-bot npm-install requirement (better-sqlite3
+ *             native build needing nodejs.org access) is
+ *             documented in OPERATIONS.md §16.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -869,6 +888,125 @@ const SCENARIOS: readonly Scenario[] = [
 			'morphit-indexer.service',
 			'morphit-relay.service',
 			'morphit-host-monitor.service'
+		]
+	},
+
+	// ─── P121-CP11 — extended monitoring sidecars + Ansible ─────
+	//
+	// Seven sentinels pinning: the three extended-monitor scripts
+	// exist + emit module:event names matching the classifier;
+	// the bot's default JOURNALCTL_UNITS extends to cover them;
+	// the classifier has matchers + ALERT_COPY for every cp11
+	// event; the Ansible playbook integrates the new roles with
+	// opt-in enable_* flags; and the matrix-bot npm-install
+	// requirement is documented for operators.
+
+	{
+		name: 'P121-CP11-1 — smartctl monitor script exists, emits module:smartctl with real event names',
+		file: 'ops/scripts/morphit-smartctl-monitor.sh',
+		rootRelative: true,
+		mustHave: [
+			'#!/bin/sh',
+			'module":"smartctl"',
+			'systemd-cat -t morphit-smartctl-monitor',
+			'smart_failed',
+			'self_test_failed',
+			'reallocated_sectors',
+			'pending_sectors',
+			'temperature_critical',
+			'temperature_warn',
+			'MORPHIT_SMART_TEMP_CRITICAL'
+		]
+	},
+	{
+		name: 'P121-CP11-2 — fail2ban monitor script exists, emits module:fail2ban with real event names + per-jail override pattern',
+		file: 'ops/scripts/morphit-fail2ban-monitor.sh',
+		rootRelative: true,
+		mustHave: [
+			'#!/bin/sh',
+			'module":"fail2ban"',
+			'systemd-cat -t morphit-fail2ban-monitor',
+			'daemon_unreachable',
+			'jail_critical_ban_count',
+			'jail_high_ban_count',
+			'jail_ban_rate_warn',
+			'MORPHIT_FAIL2BAN_BAN_CRITICAL',
+			'MORPHIT_FAIL2BAN_${jail_upper}_CRITICAL'
+		]
+	},
+	{
+		name: 'P121-CP11-3 — mdadm monitor script exists, emits module:mdadm with real event names; exits silently on no-RAID hosts',
+		file: 'ops/scripts/morphit-mdadm-monitor.sh',
+		rootRelative: true,
+		mustHave: [
+			'#!/bin/sh',
+			'module":"mdadm"',
+			'systemd-cat -t morphit-mdadm-monitor',
+			'array_failed',
+			'array_degraded',
+			'array_resyncing',
+			'/proc/mdstat'
+		]
+	},
+	{
+		name: 'P121-CP11-4 — bot default JOURNALCTL_UNITS includes all five sidecar units (cp10 host-monitor + cp11 smartctl/fail2ban/mdadm)',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			'morphit-host-monitor.service',
+			'morphit-smartctl-monitor.service',
+			'morphit-fail2ban-monitor.service',
+			'morphit-mdadm-monitor.service'
+		]
+	},
+	{
+		name: 'P121-CP11-5 — classifier knows about cp11 events at every tier; ALERT_COPY has ELI5 advice for all of them',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'smartctl' && a.event === 'smart_failed'",
+			"'smartctl' && a.event === 'self_test_failed'",
+			"'smartctl' && a.event === 'temperature_critical'",
+			"'fail2ban' && a.event === 'daemon_unreachable'",
+			"'fail2ban' && a.event === 'jail_critical_ban_count'",
+			"'mdadm' && a.event === 'array_failed'",
+			"'mdadm' && a.event === 'array_degraded'",
+			"'smartctl:smart_failed'",
+			"'fail2ban:daemon_unreachable'",
+			"'mdadm:array_degraded'",
+			'overall-health FAILED',
+			'fail2ban-client status',
+			'cat /proc/mdstat'
+		]
+	},
+	{
+		name: 'P121-CP11-6 — Ansible playbook integrates cp9 + cp10 + cp11 sidecar roles with opt-in enable_* flags',
+		file: 'ops/ansible/playbook.yml',
+		rootRelative: true,
+		mustHave: [
+			'role: matrix_bot',
+			'role: host_monitor',
+			'role: smartctl_monitor',
+			'role: fail2ban_monitor',
+			'role: mdadm_monitor',
+			'enable_matrix_bot | default(false)',
+			'enable_host_monitor | default(false)',
+			'enable_smartctl_monitor | default(false)',
+			'enable_fail2ban_monitor | default(false)',
+			'enable_mdadm_monitor | default(false)',
+			', monitors]'
+		]
+	},
+	{
+		name: 'P121-CP11-7 — matrix-bot npm install requirement (better-sqlite3 native build + nodejs.org access) is documented in OPERATIONS.md',
+		file: 'docs/OPERATIONS.md',
+		rootRelative: true,
+		mustHave: [
+			'better-sqlite3',
+			'native build for better-sqlite3',
+			'nodejs.org',
+			'npm ci --workspaces',
+			'build-essential'
 		]
 	}
 ];

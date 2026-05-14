@@ -1,0 +1,28 @@
+# §37.14 — Operator alerting via Postfix smarthost.
+---
+- name: Configure Postfix for smarthost relay
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: "^{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    state: present
+  loop:
+    - { key: "relayhost", value: "[{{ morphit_alert_smtp_host }}]:{{ morphit_alert_smtp_port }}" }
+    - { key: "smtp_sasl_auth_enable", value: "yes" }
+    - { key: "smtp_sasl_password_maps", value: "hash:/etc/postfix/sasl_passwd" }
+    - { key: "smtp_sasl_security_options", value: "noanonymous" }
+    - { key: "smtp_tls_security_level", value: "encrypt" }
+    - { key: "smtp_tls_CAfile", value: "/etc/ssl/certs/ca-certificates.crt" }
+    - { key: "inet_interfaces", value: "loopback-only" }
+    - { key: "smtpd_relay_restrictions", value: "permit_mynetworks reject_unauth_destination" }
+  notify: Restart postfix
+
+- name: Configure Postfix SASL credentials
+  ansible.builtin.copy:
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      [{{ morphit_alert_smtp_host }}]:{{ morphit_alert_smtp_port }} {{ morphit_alert_smtp_user }}:{{ morphit_alert_smtp_password }}
+  notify: Rebuild postfix sasl map

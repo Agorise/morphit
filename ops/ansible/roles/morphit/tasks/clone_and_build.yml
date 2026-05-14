@@ -1,0 +1,35 @@
+# Clone the repo + npm install + build.
+---
+- name: Clone morphit repo
+  ansible.builtin.git:
+    repo: "{{ morphit_repo_url }}"
+    dest: "{{ morphit_repo_path }}"
+    version: "{{ morphit_repo_ref }}"
+    update: true
+    force: false
+  become_user: "{{ morphit_service_user }}"
+  # The repo is owned by the service user so npm runs as it.
+
+- name: Ensure repo ownership is correct
+  ansible.builtin.file:
+    path: "{{ morphit_repo_path }}"
+    state: directory
+    owner: "{{ morphit_service_user }}"
+    group: "{{ morphit_service_group }}"
+    recurse: true
+
+- name: npm install (workspace root)
+  ansible.builtin.command:
+    cmd: npm install --workspaces --include-workspace-root
+    chdir: "{{ morphit_repo_path }}"
+  become_user: "{{ morphit_service_user }}"
+  register: npm_install_result
+  changed_when: "'changed' in npm_install_result.stdout or 'added' in npm_install_result.stdout"
+
+- name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
+  ansible.builtin.command:
+    cmd: npm run build --workspaces --if-present
+    chdir: "{{ morphit_repo_path }}"
+  become_user: "{{ morphit_service_user }}"
+  register: npm_build_result
+  changed_when: true
