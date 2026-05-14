@@ -23,6 +23,9 @@
 #   dmesg_monitor     → kernel-log scan (OOM, oops, MCE) (cp12, §16)
 #   trivy_monitor     → Docker image CVE rescan (cp12, §16)
 #   postfix_monitor   → mail queue depth (alerting-self-check) (cp12, §16)
+#   certbot_monitor   → TLS cert expiry + renewal-stall (cp13, §16)
+#   apt_monitor       → pending security update count (cp13, §16)
+#   compose_monitor   → Docker Compose service health (cp13, §16)
 #
 # Run with:
 #   ansible-playbook -i inventory/hosts.yml playbook.yml --check
@@ -117,6 +120,18 @@
     - role: postfix_monitor
       tags: [postfix_monitor, monitors]
       when: enable_postfix_monitor | default(false)
+
+    - role: certbot_monitor
+      tags: [certbot_monitor, monitors]
+      when: enable_certbot_monitor | default(false)
+
+    - role: apt_monitor
+      tags: [apt_monitor, monitors]
+      when: enable_apt_monitor | default(false)
+
+    - role: compose_monitor
+      tags: [compose_monitor, monitors]
+      when: enable_compose_monitor | default(false)
 
   post_tasks:
     - name: Print verification reminder

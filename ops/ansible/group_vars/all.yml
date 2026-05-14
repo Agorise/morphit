@@ -415,3 +415,35 @@ enable_postfix_monitor: false
 # postfix_queue_warn: 25
 # postfix_age_critical_min: 120      # oldest-message age, minutes
 # postfix_age_warn_min: 30
+
+
+# ─── TLS certbot monitor sidecar (cp13, §16) ────────────────────
+#
+# Daily check of TLS cert expiry + a renewal-stall detector
+# (cert expiring AND no successful renewal in N days).  Most
+# monitoring stacks miss the "renewal silently broke months ago"
+# pattern; this catches it.
+enable_certbot_monitor: false
+# certbot_expiry_critical_days: 7
+# certbot_expiry_warn_days: 30
+# certbot_renewal_stall_days: 14
+
+
+# ─── apt pending security updates sidecar (cp13, §16) ───────────
+#
+# Daily count of pending security updates.  Surfaces what the
+# motd shows but operators stop reading after the first month.
+# Debian/Ubuntu only.
+enable_apt_monitor: false
+# apt_security_critical: 10        # pending security updates
+# apt_security_warn: 1
+
+
+# ─── Docker Compose health monitor sidecar (cp13, §16) ──────────
+#
+# Watches Docker Compose service health + restart loops.  Most
+# useful with BunkerWeb compose stack.  Useless on bare-metal-
+# only deploys (sidecar exits cleanly with INFO event).
+enable_compose_monitor: false
+# compose_restart_threshold: 5
+# compose_projects: /opt/morphit/ops/bunkerweb

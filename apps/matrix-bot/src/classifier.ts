@@ -104,7 +104,18 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'trivy' && a.event === 'image_critical_vulns',
 
 	// cp12 — postfix queue depth (silent-alerting-failure detector).
-	(a) => a.module === 'postfix' && a.event === 'queue_critical'
+	(a) => a.module === 'postfix' && a.event === 'queue_critical',
+
+	// cp13 — certbot TLS cert expiry + renewal-stall.
+	(a) => a.module === 'certbot' && a.event === 'cert_expiry_critical',
+	(a) => a.module === 'certbot' && a.event === 'renewal_stalled',
+
+	// cp13 — apt pending security updates.
+	(a) => a.module === 'apt' && a.event === 'security_updates_critical',
+
+	// cp13 — Docker Compose service health.
+	(a) => a.module === 'compose' && a.event === 'service_unhealthy',
+	(a) => a.module === 'compose' && a.event === 'service_exited'
 ];
 
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
@@ -142,7 +153,12 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'dmesg' && a.event === 'fd_exhausted',
 	(a) => a.module === 'trivy' && a.event === 'image_high_vulns',
 	(a) => a.module === 'trivy' && a.event === 'image_scan_failed',
-	(a) => a.module === 'postfix' && a.event === 'queue_warn'
+	(a) => a.module === 'postfix' && a.event === 'queue_warn',
+
+	// cp13 — WARN tier.
+	(a) => a.module === 'certbot' && a.event === 'cert_expiry_warn',
+	(a) => a.module === 'apt' && a.event === 'security_updates_warn',
+	(a) => a.module === 'compose' && a.event === 'service_restart_loop'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -708,6 +724,115 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'The morphit-postfix-monitor service is running but postqueue is ' +
 			'not in PATH. {hint}. Until you install postfix, your operator-' +
 			'alerting smarthost setup may not work either.'
+	},
+
+	// ─── cp13 certbot sidecar ──────────────────────────────────
+	'certbot:cert_expiry_critical': {
+		title: 'TLS cert expires very soon: {cert}',
+		advice:
+			'{cert} has only {days_left} days until expiry (threshold ' +
+			'{threshold_days} days). Last successful renewal was ' +
+			'{last_renewal_success_age_days} days ago. Run `sudo certbot ' +
+			'renew --force-renewal` to issue a new cert immediately. If that ' +
+			'fails, see `sudo journalctl -u snap.certbot.renew` (or your ' +
+			'certbot cron log) for the failure reason.'
+	},
+	'certbot:cert_expiry_warn': {
+		title: 'TLS cert expires soon: {cert}',
+		advice:
+			'{cert} expires in {days_left} days (threshold {threshold_days} ' +
+			'days). Last successful renewal {last_renewal_success_age_days} ' +
+			'days ago. Normal certbot renewal should handle this; this WARN ' +
+			'just makes sure you have weeks of headroom to act if it does not.'
+	},
+	'certbot:renewal_stalled': {
+		title: 'TLS cert expiring AND renewal has been silently failing: {cert}',
+		advice:
+			'{cert} expires in {days_left} days AND certbot has not had a ' +
+			'successful renewal in {last_renewal_success_age_days} days ' +
+			'(stall threshold {stall_threshold_days} days). This is the ' +
+			'killer pattern: renewal was working fine for months then ' +
+			'silently broke (DNS change, port 80 firewall, ACME provider ' +
+			'limits, rate-limit). Fix the renewal NOW — `sudo certbot renew ' +
+			'--dry-run` first to see what is failing without burning ' +
+			'attempts, then a real renewal.'
+	},
+	'certbot:certbot_unavailable': {
+		title: 'certbot sidecar enabled but openssl or cert dir missing',
+		advice:
+			'The morphit-certbot-monitor service is running but cannot read ' +
+			'TLS certs. {hint}. Until then, TLS expiry monitoring is OFF.'
+	},
+
+	// ─── cp13 apt sidecar ──────────────────────────────────────
+	'apt:security_updates_critical': {
+		title: '{security_updates} pending security updates',
+		advice:
+			'{security_updates} security updates are pending ({total_updates} ' +
+			'total updates available), above the alert threshold of ' +
+			'{threshold}. Apply with `sudo apt update && sudo apt upgrade ' +
+			'-y` (or just `sudo unattended-upgrade` if you trust the ' +
+			'unattended-upgrades daemon). Reboot if any updates affect the ' +
+			'kernel — `sudo needrestart` will tell you which services to ' +
+			'restart.'
+	},
+	'apt:security_updates_warn': {
+		title: '{security_updates} pending security updates',
+		advice:
+			'{security_updates} security updates pending ({total_updates} ' +
+			'total). Below CRITICAL threshold but worth applying soon. ' +
+			'`sudo apt update && sudo apt upgrade -y`.'
+	},
+	'apt:updates_pending_info': {
+		title: '{total_updates} non-security updates pending',
+		advice:
+			'{total_updates} updates available, no security updates among ' +
+			'them. Bundled into the daily digest.'
+	},
+	'apt:apt_unavailable': {
+		title: 'apt sidecar enabled but apt not in PATH',
+		advice:
+			'The morphit-apt-monitor service is running but apt is missing. ' +
+			'{hint}. This sidecar is Debian/Ubuntu-only; disable the timer ' +
+			'on non-apt systems.'
+	},
+
+	// ─── cp13 compose sidecar ──────────────────────────────────
+	'compose:service_unhealthy': {
+		title: 'Docker Compose service unhealthy: {service}',
+		advice:
+			'{service} (state={state}, health={health}, restart_count=' +
+			'{restart_count}) in project {project_dir} reports unhealthy. ' +
+			'The container is running but its health-check is failing. ' +
+			'Check container logs: `cd {project_dir} && docker compose logs ' +
+			'--tail=100 {service}`. Common causes: backend service it ' +
+			'connects to is down, config file unreadable, port-bind ' +
+			'collision.'
+	},
+	'compose:service_exited': {
+		title: 'Docker Compose service has exited: {service}',
+		advice:
+			'{service} in {project_dir} is in state={state} (not running). ' +
+			'The container stopped unexpectedly and did not restart, or its ' +
+			'restart policy is "no". Check `docker compose logs --tail=200 ' +
+			'{service}` for the exit reason and `docker compose up -d ' +
+			'{service}` to restart it.'
+	},
+	'compose:service_restart_loop': {
+		title: 'Docker Compose service in restart loop: {service}',
+		advice:
+			'{service} has restart_count={restart_count} (threshold for ' +
+			'alert). The service keeps crashing and restarting — its ' +
+			'restart policy is masking a real bug. Check container logs to ' +
+			'find why it crashes, fix the root cause, then `docker compose ' +
+			'up -d --force-recreate {service}` to reset the restart count.'
+	},
+	'compose:docker_unavailable': {
+		title: 'compose sidecar enabled but Docker / Compose missing',
+		advice:
+			'The morphit-compose-monitor service is running but Docker or ' +
+			'the Compose v2 plugin is not installed. {hint}. Disable the ' +
+			'timer if you do not use Docker at all.'
 	}
 };
 

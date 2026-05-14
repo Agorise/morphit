@@ -1,0 +1,123 @@
+# Morphit CI — runs on every push and pull request.
+#
+# Three gates, in order of cheapness:
+#   1. typecheck-sweep — fast, catches type errors across all
+#      9 workspaces
+#   2. ansible-lint    — fast, catches playbook quality drift
+#   3. run-smokes      — the full smoke suite (~2,600+ scenarios
+#      across ~100 runners)
+#
+# If any gate fails, the run fails.  All three run in parallel
+# (Forgejo Actions matrix) when possible, but the smokes runner
+# transitively depends on the deps install so it can't quite be
+# parallelized with typecheck.
+#
+# Forgejo Actions has GitHub-Actions-compatible syntax; this
+# workflow runs unchanged on either as long as the runner is a
+# Debian/Ubuntu host.
+
+name: morphit-ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# Newer pushes to the same branch cancel any still-running CI on
+# that branch.  Saves CI minutes on rapid-fire commit + amend.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: TypeScript typecheck (sweep all workspaces)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install workspace dependencies
+        # --ignore-scripts skips native-build steps (better-sqlite3
+        # needs nodejs.org headers which may be restricted).  The
+        # typecheck doesn't actually run any binaries so this is
+        # fine here — but the run-smokes job needs a full install.
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run typecheck-sweep
+        run: bash scripts/typecheck-sweep.sh
+
+  ansible-lint:
+    name: ansible-lint (playbook quality gate)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12 + ansible-lint
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            python3 python3-pip python3-venv
+          # Use --break-system-packages because Ubuntu 24.04 marks
+          # the system Python as externally managed.  This is a
+          # CI runner; the host is ephemeral.
+          pip3 install --break-system-packages --quiet \
+            ansible ansible-lint
+
+      - name: Install required ansible collections
+        run: |
+          ansible-galaxy collection install -r \
+            ops/ansible/collections/requirements.yml
+
+      - name: Run ansible-lint
+        working-directory: ops/ansible
+        run: ansible-lint --offline --strict playbook.yml
+
+  smokes:
+    name: Smoke suite (run-smokes.sh, triple-pulse)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install build tools (for better-sqlite3 native build)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3
+
+      - name: Install workspace dependencies (with native build)
+        # The smoke suite includes a matrix-bot deps-pin-check
+        # which needs node_modules populated with REAL packages.
+        # Don't pass --ignore-scripts here.
+        run: npm ci --no-audit --no-fund
+
+      - name: Install ansible-lint (for ansible-lint-smoke)
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            python3-pip
+          pip3 install --break-system-packages --quiet \
+            ansible ansible-lint
+          ansible-galaxy collection install -r \
+            ops/ansible/collections/requirements.yml
+
+      - name: Run smokes (triple-pulse)
+        # We run the suite three times to catch flakes.  Each
+        # invocation is ~30s in CI; the parallel typecheck +
+        # ansible-lint jobs finish well before this anyway.
+        run: |
+          for i in 1 2 3; do
+            echo "=== Pulse $i ==="
+            bash scripts/run-smokes.sh
+          done

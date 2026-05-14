@@ -165,6 +165,29 @@
  *             sidecar units (indexer + relay + 6 monitors)
  *             with zero operator-side wiring needed.
  *
+ *   P121-CP13 Five sentinels pinning the cp13 CI workflow +
+ *             three more sidecars + matrix-bot deps-pin check.
+ *             Forgejo Actions workflow at .forgejo/workflows/
+ *             ci.yml runs three gate jobs on every push and PR
+ *             (typecheck-sweep, ansible-lint, smokes triple-
+ *             pulse) — the same discipline manually applied at
+ *             every tarball seal now runs automatically.  Three
+ *             new POSIX-sh sidecars: certbot-monitor catches
+ *             the killer "renewal silently broke months ago"
+ *             pattern by checking cert expiry AGAINST recent
+ *             successful renewal age (not just expiry alone);
+ *             apt-monitor surfaces pending security update
+ *             counts that operators stop reading off the motd
+ *             after the first month; compose-monitor watches
+ *             Docker Compose service health + restart loops.
+ *             matrix-bot-deps-pin-check smoke catches the
+ *             "tested against 0.7.1, deployed against 0.8.0"
+ *             class of bug by comparing declared semver ranges
+ *             in apps/matrix-bot/package.json against what's
+ *             actually installed in node_modules.  Bot's
+ *             default JOURNALCTL_UNITS now covers ALL ELEVEN
+ *             sidecar units (indexer + relay + 9 monitors).
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -1096,6 +1119,96 @@ const SCENARIOS: readonly Scenario[] = [
 			'morphit-dmesg-monitor.service',
 			'morphit-trivy-monitor.service',
 			'morphit-postfix-monitor.service'
+		]
+	},
+
+	// ─── P121-CP13 — CI workflow + 3 more sidecars + deps-pin ───
+	//
+	// Five sentinels pinning: the Forgejo CI workflow ships three
+	// gate jobs (typecheck + ansible-lint + smokes triple-pulse);
+	// the three new cp13 sidecars emit correct LogRecord envelopes
+	// with their full event sets; classifier knows all cp13
+	// events at every tier with ELI5 advice; the deps-pin-check
+	// smoke catches matrix-bot-sdk drift; and the bot's default
+	// JOURNALCTL_UNITS extends to all 11 sidecar units (indexer
+	// + relay + 9 monitor sidecars).
+
+	{
+		name: 'P121-CP13-1 — Forgejo CI workflow ships three gate jobs (typecheck + ansible-lint + smokes)',
+		file: '.forgejo/workflows/ci.yml',
+		rootRelative: true,
+		mustHave: [
+			'name: morphit-ci',
+			'job',
+			'typecheck:',
+			'ansible-lint:',
+			'smokes:',
+			'bash scripts/typecheck-sweep.sh',
+			'bash scripts/run-smokes.sh',
+			'ansible-lint --offline --strict',
+			'for i in 1 2 3'
+		]
+	},
+	{
+		name: 'P121-CP13-2 — certbot monitor script + classifier matchers + renewal-stall detector',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'certbot' && a.event === 'cert_expiry_critical'",
+			"'certbot' && a.event === 'renewal_stalled'",
+			"'certbot' && a.event === 'cert_expiry_warn'",
+			"'certbot:renewal_stalled'",
+			"'certbot:cert_expiry_critical'",
+			'silently failing',
+			'sudo certbot renew'
+		]
+	},
+	{
+		name: 'P121-CP13-3 — apt + compose monitor scripts + classifier matchers + ALERT_COPY',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'apt' && a.event === 'security_updates_critical'",
+			"'apt' && a.event === 'security_updates_warn'",
+			"'compose' && a.event === 'service_unhealthy'",
+			"'compose' && a.event === 'service_exited'",
+			"'compose' && a.event === 'service_restart_loop'",
+			"'apt:security_updates_critical'",
+			"'compose:service_unhealthy'",
+			'sudo apt update',
+			'docker compose logs'
+		]
+	},
+	{
+		name: 'P121-CP13-4 — matrix-bot deps-pin-check smoke registered in run-smokes.sh + handles matrix-bot-sdk + better-sqlite3 + zod',
+		file: 'apps/matrix-bot/scripts/deps-pin-check.ts',
+		rootRelative: true,
+		mustHave: [
+			'TRACKED_DEPS',
+			'matrix-bot-sdk',
+			'better-sqlite3',
+			'zod',
+			'satisfies',
+			'DRIFT'
+		]
+	},
+	{
+		name: 'P121-CP13-5 — bot default JOURNALCTL_UNITS covers ALL 11 sidecar units (indexer + relay + 9 monitor sidecars)',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			'morphit-indexer.service',
+			'morphit-relay.service',
+			'morphit-host-monitor.service',
+			'morphit-smartctl-monitor.service',
+			'morphit-fail2ban-monitor.service',
+			'morphit-mdadm-monitor.service',
+			'morphit-dmesg-monitor.service',
+			'morphit-trivy-monitor.service',
+			'morphit-postfix-monitor.service',
+			'morphit-certbot-monitor.service',
+			'morphit-apt-monitor.service',
+			'morphit-compose-monitor.service'
 		]
 	}
 ];
