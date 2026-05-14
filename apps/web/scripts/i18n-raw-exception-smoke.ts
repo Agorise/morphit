@@ -106,12 +106,12 @@ const ALLOWLIST_LOCATIONS = new Set<string>([
 	// tooltip on hover); the visible text is i18n'd separately.
 	// Raw exception text in the tooltip is desirable — it's the
 	// debug detail an operator looks at when investigating.
-	'apps/web/src/routes/instances/+page.svelte:error',
+	'apps/web/src/routes/[lang]/instances/+page.svelte:error',
 	// `feeError` here is bound only to a `title=` attribute
 	// (debug tooltip on hover at /post); the visible text uses
 	// $_('post_order.fee.error_friendly').  Same rationale as
 	// /instances:error.
-	'apps/web/src/routes/post/+page.svelte:feeError'
+	'apps/web/src/routes/[lang]/post/+page.svelte:feeError'
 ]);
 
 // ─── Walk directories ─────────────────────────────────────────────

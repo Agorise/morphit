@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * SeedBackupNudge — gentle banner reminding the user to back up
 	 * their seed phrase 7+ days after first persisting a keystore
@@ -44,6 +47,10 @@
 		dismissSeedBackupNudge();
 		visible = false;
 	}
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 {#if visible}
@@ -60,7 +67,7 @@
 				{$_('seed_backup_nudge.body')}
 			</span>
 			<a
-				href="/faq#lost_keys"
+				href={lp('/faq#lost_keys')}
 				class="font-semibold underline decoration-dotted underline-offset-2 hover:decoration-solid"
 			>
 				{$_('seed_backup_nudge.show_me_how')}

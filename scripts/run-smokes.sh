@@ -93,6 +93,7 @@ SMOKES=(
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"
+	"apps/web:path-adversarial-smoke"
 	"apps/web:canary-template-smoke"
 	"packages/asset-registry:asset-registry-smoke"
 	".:operations-hardening-smoke"

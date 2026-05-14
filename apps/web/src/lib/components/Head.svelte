@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
+	import { building } from '$app/environment';
 	import { currentLocale } from '$i18n';
 	import { canonicalFor, hreflangAlternates, CANONICAL_ORIGIN } from '$lib/seo/urls';
 	import { computeOnionLocation } from '$lib/seo/onionLocation';
@@ -115,14 +116,22 @@
 	 *
 	 *  Mirror destination must be the same path on the .onion host
 	 *  so Tor users land on the page they were viewing.  We
-	 *  preserve `$page.url.pathname` and search/hash. */
+	 *  preserve `$page.url.pathname` and search/hash.
+	 *
+	 *  Part 121 cp7: `url.search` and `url.hash` are forbidden
+	 *  during SvelteKit prerender (they're runtime values not
+	 *  known at build time).  When `building` is true, we pass
+	 *  empty strings — the prerendered HTML carries the
+	 *  path-only onion mirror, which is correct for static
+	 *  content.  At runtime after hydration, the client-side
+	 *  re-render picks up the real search/hash from the URL. */
 	const onionLocation = $derived(
 		computeOnionLocation({
 			torAddress: $instance.alt_networks?.tor,
 			currentHostname: $page.url.hostname,
 			currentPathname: $page.url.pathname,
-			currentSearch: $page.url.search,
-			currentHash: $page.url.hash
+			currentSearch: building ? '' : $page.url.search,
+			currentHash: building ? '' : $page.url.hash
 		})
 	);
 </script>

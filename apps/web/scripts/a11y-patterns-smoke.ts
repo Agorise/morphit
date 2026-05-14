@@ -33,15 +33,15 @@ const CONFIRM_MODAL = readFileSync(
 	'utf8'
 );
 const LAYOUT = readFileSync(
-	join(REPO_ROOT, 'apps/web/src/routes/+layout.svelte'),
+	join(REPO_ROOT, 'apps/web/src/routes/[lang]/+layout.svelte'),
 	'utf8'
 );
 const POST = readFileSync(
-	join(REPO_ROOT, 'apps/web/src/routes/post/+page.svelte'),
+	join(REPO_ROOT, 'apps/web/src/routes/[lang]/post/+page.svelte'),
 	'utf8'
 );
 const POST_EDIT = readFileSync(
-	join(REPO_ROOT, 'apps/web/src/routes/post/edit/[permlink]/+page.svelte'),
+	join(REPO_ROOT, 'apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte'),
 	'utf8'
 );
 const STATUS_LINE = readFileSync(

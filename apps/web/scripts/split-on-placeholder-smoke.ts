@@ -3,7 +3,7 @@
  *
  * Validates the i18n placeholder-split helper used by the
  * daily-ceiling voucher-path UI in
- * apps/web/src/routes/onboarding/register-name/+page.svelte
+ * apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte
  * (and any future caller that needs the same pattern).
  *
  * Coverage:

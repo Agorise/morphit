@@ -119,7 +119,7 @@ const SCENARIOS: readonly Scenario[] = [
 	// ─── Bob ─────────────────────────────────────────────────────────────
 	{
 		name: 'B-2 — backup-keys paired-readonly explanation card wired',
-		file: 'src/routes/backup-keys/+page.svelte',
+		file: 'src/routes/[lang]/backup-keys/+page.svelte',
 		mustHave: [
 			'isPairedReadOnly',
 			'backup_keys.paired.heading',
@@ -162,7 +162,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'S-12 — /post asset-explainer Tooltips no longer pass hardcoded ariaLabel',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			'post_order.form.asset_explainer.blurt',
 			'post_order.form.asset_explainer.btc',
@@ -511,7 +511,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'P121-USDT-5 — orderbook row renders USDT network chip + price subline',
-		file: 'apps/web/src/routes/orderbook/+page.svelte',
+		file: 'apps/web/src/routes/[lang]/orderbook/+page.svelte',
 		rootRelative: true,
 		mustHave: [
 			'usdtRowNetwork',
@@ -546,7 +546,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'P121-CP6-4 — /about-this-instance renders asset-stance panel using $instance.disabled_assets',
-		file: 'apps/web/src/routes/about-this-instance/+page.svelte',
+		file: 'apps/web/src/routes/[lang]/about-this-instance/+page.svelte',
 		rootRelative: true,
 		mustHave: [
 			"$_('about_this_instance.section.asset_stance')",
@@ -556,7 +556,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: 'P121-CP6-5 — /run-a-node carries operator-stance explainer panel',
-		file: 'apps/web/src/routes/run-a-node/+page.svelte',
+		file: 'apps/web/src/routes/[lang]/run-a-node/+page.svelte',
 		rootRelative: true,
 		mustHave: [
 			"$_('run_a_node.asset_policy_heading')",
@@ -595,6 +595,66 @@ const SCENARIOS: readonly Scenario[] = [
 		// ZERO SvelteKit deps so it can be imported from any
 		// context (smoke, prerender-redirect shell, web worker).
 		mustNotHave: ['$app/environment', 'svelte-i18n', 'svelte/store']
+	},
+	{
+		name: 'P121-CP7-1 — [lang]/+layout.ts carries prerender + ssr=true + load() that validates lang and initI18nFor',
+		file: 'apps/web/src/routes/[lang]/+layout.ts',
+		rootRelative: true,
+		mustHave: [
+			'export const prerender = true',
+			'export const ssr = true',
+			'initI18nFor',
+			'waitLocale',
+			"throw error(404"
+		]
+	},
+	{
+		name: 'P121-CP7-2 — [lang]/+page.ts carries entries() enumerating SUPPORTED_LOCALES (entries() must live on +page.ts per SvelteKit)',
+		file: 'apps/web/src/routes/[lang]/+page.ts',
+		rootRelative: true,
+		mustHave: [
+			'export function entries',
+			'SUPPORTED_LOCALES.map'
+		]
+	},
+	{
+		name: 'P121-CP7-3 — root +page.svelte is the detection-redirect shell (pickLocale + window.location.replace + noscript fallback)',
+		file: 'apps/web/src/routes/+page.svelte',
+		rootRelative: true,
+		mustHave: [
+			'pickLocaleFromAcceptLanguages',
+			'navigator.languages',
+			'window.location.replace',
+			'meta http-equiv="refresh"'
+		]
+	},
+	{
+		name: 'P121-CP7-4 — svelte.config.js carries handleUnseenRoutes:ignore for dynamic-param routes',
+		file: 'apps/web/svelte.config.js',
+		rootRelative: true,
+		mustHave: [
+			"handleUnseenRoutes: 'ignore'"
+		]
+	},
+	{
+		name: 'P121-CP7-5 — Head.svelte gates url.search/url.hash behind building flag (prerender forbids reading them)',
+		file: 'apps/web/src/lib/components/Head.svelte',
+		rootRelative: true,
+		mustHave: [
+			"import { building } from '$app/environment'",
+			"building ? '' : $page.url.search",
+			"building ? '' : $page.url.hash"
+		]
+	},
+	{
+		name: 'P121-CP7-6 — LanguageSwitcher navigates via locale-prefixed URL (goto + localePath + stripLocalePrefix)',
+		file: 'apps/web/src/lib/components/LanguageSwitcher.svelte',
+		rootRelative: true,
+		mustHave: [
+			'localePath',
+			'stripLocalePrefix',
+			'goto(target)'
+		]
 	}
 ];
 

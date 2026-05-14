@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * Term — inline glossary-link with hover/tap tooltip.
 	 *
@@ -142,6 +144,10 @@
 	});
 
 	const popoverId = $derived(`term-tip-${key}`);
+
+	// Part 121 cp7 — per-locale internal-link wrapper.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 {#if isFirstAppearance}
@@ -181,7 +187,7 @@
 					{$_(`glossary.${key}.body`)}
 				</span>
 				<a
-					href="/glossary#{key}"
+					href={lp('/glossary#{key}')}
 					class="mt-2 inline-block text-sm font-semibold text-morphit-emerald hover:underline"
 				>
 					{$_('glossary.tooltip.open_full')} →

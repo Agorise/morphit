@@ -96,7 +96,7 @@ interface Scenario {
 const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '1 — /post imports and split state (PriceModelKind union, three picker vars)',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			'PriceModelKind',
 			'priceModelKind = $state',
@@ -106,7 +106,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '2 — /post priceModelError references all five validation keys',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			'priceModelError',
 			"post_order.errors.spread_not_a_number",
@@ -118,7 +118,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '3 — /post canonical reassembly: { kind: spread | fixed, percent | price }',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			"{ kind: 'spread', percent: Number(spreadPercent) || 0 }",
 			"{ kind: 'fixed', price: Number(fixedPrice) }"
@@ -126,7 +126,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '4 — /post picker UI (radio group bound to priceModelKind, conditional inputs)',
-		file: 'src/routes/post/+page.svelte',
+		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
 			'name="price-model-kind"',
 			'bind:group={priceModelKind}',
@@ -139,7 +139,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '5 — /post/edit imports and split state (PriceModelKind union, three picker vars)',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			'PriceModelKind',
 			'priceModelKind = $state',
@@ -157,7 +157,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '6 — /post/edit priceModelError references all five validation keys',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			'priceModelError',
 			"post_order.errors.spread_not_a_number",
@@ -169,7 +169,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '7 — /post/edit canonical reassembly mirrors /post submission shape',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			"{ kind: 'spread', percent: Number(spreadPercent) || 0 }",
 			"{ kind: 'fixed', price: Number(fixedPrice) }"
@@ -177,7 +177,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '8 — /post/edit load derives picker state defensively (spread, fixed, fallback)',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			'order.price_model',
 			"obj.kind === 'spread'",
@@ -188,7 +188,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '9 — /post/edit picker UI (radio group with edit- prefix, conditional inputs)',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
 			'name="edit-price-model-kind"',
 			'bind:group={priceModelKind}',
@@ -200,7 +200,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '10 — /post/edit canSave gate includes priceModelError',
-		file: 'src/routes/post/edit/[permlink]/+page.svelte',
+		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: ['!priceModelError']
 	},
 	{
@@ -234,7 +234,7 @@ const SCENARIOS: readonly Scenario[] = [
 	},
 	{
 		name: '13 — /my/orders relistOrder derivation handles both canonical shapes',
-		file: 'src/routes/my/orders/+page.svelte',
+		file: 'src/routes/[lang]/my/orders/+page.svelte',
 		mustHave: [
 			'function relistOrder',
 			"priceModelKind: 'spread' | 'fixed'",

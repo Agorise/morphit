@@ -41,7 +41,7 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 const ONBOARDING = readFileSync(
-	join(REPO_ROOT, 'apps/web/src/routes/onboarding/+page.svelte'),
+	join(REPO_ROOT, 'apps/web/src/routes/[lang]/onboarding/+page.svelte'),
 	'utf8'
 );
 

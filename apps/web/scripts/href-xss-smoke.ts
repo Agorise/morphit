@@ -61,7 +61,17 @@ const SAFE_BUILDER_NAMES = [
 	'validateContactUrl', // local /operators function returning string|null
 	'canonicalFor', // Head.svelte canonical builder
 	'shareUrl', // FaqSearch builder
-	'explorerLinkForTxid' // ChatMessage builder; calls morphitExplorerTxUrl/externalExplorerUrl internally
+	'explorerLinkForTxid', // ChatMessage builder; calls morphitExplorerTxUrl/externalExplorerUrl internally
+	// Part 121 cp7 — per-locale link wrapper.  `lp(path)` calls
+	// `localePath(path, currentLang)` from `$i18n/path`.  The
+	// `path` argument is always a literal authored by us at the
+	// call site (never operator/peer-controlled) and
+	// `localePath()` itself returns a `/<lang>/...` path string,
+	// never reflecting attacker-controlled values into the href.
+	// Code at $i18n/path.ts has 22 smoke scenarios pinning the
+	// shape invariants.
+	'lp',
+	'localePath'
 ];
 
 /** Per-file allowlist for href bindings the smoke can't prove safe
@@ -74,6 +84,18 @@ const SAFE_BUILDER_NAMES = [
  *  reviewer has confirmed that NO call site in <file> writes the
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+	[
+		'apps/web/src/routes/[lang]/+layout.svelte',
+		// `link.href` — from the `navLinks` array that maps over
+		// `[ { href: lp('/orderbook'), ... }, ... ]`.  Each href
+		// is constructed via `lp()` (which calls localePath() —
+		// already in SAFE_BUILDER_NAMES above) so by the time the
+		// template reads `link.href`, the value is a locale-prefixed
+		// path string that the smoke can't trace back to lp() but
+		// a reviewer has confirmed safe.  See Part 121 cp7 design
+		// doc.
+		new Set(['link.href'])
+	],
 	[
 		'apps/web/src/lib/components/ToastRegion.svelte',
 		// `toast.href` — validated at toast-creation time
@@ -92,13 +114,13 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		new Set(['canonical', 'alt.href'])
 	],
 	[
-		'apps/web/src/routes/+layout.svelte',
+		'apps/web/src/routes/[lang]/+layout.svelte',
 		// `link.href` — local navLinks config in +layout.svelte; not
 		// operator/peer-published.
 		new Set(['link.href'])
 	],
 	[
-		'apps/web/src/routes/download/+page.svelte',
+		'apps/web/src/routes/[lang]/download/+page.svelte',
 		// `store.url` — local STORES config in /download; site-controlled.
 		new Set(['store.url'])
 	],

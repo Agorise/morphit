@@ -10,7 +10,7 @@
  * identicons cannot.
  *
  * Tier 2.6 of the grandma-friendly investigation closed three
- * drift call sites in `apps/web/src/routes/settings/+page.svelte`
+ * drift call sites in `apps/web/src/routes/[lang]/settings/+page.svelte`
  * (Part 97).  This smoke runs a regex sweep over the route +
  * component source to flag any new `@{account}` / `@{author}` /
  * `@{seller}` / `@{buyer}` raw renders that don't live in an
@@ -53,7 +53,7 @@ const ACCEPTED_FILES = new Set<string>([
 	// Profile-page hero (already renders a 64px identicon
 	// adjacent to the username; would be visually redundant
 	// to wrap in IdentityLabel, which has its own avatar).
-	'apps/web/src/routes/explorer/account/[name=account]/+page.svelte'
+	'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte'
 ]);
 
 // Ignore comment-context matches.  A real raw render is one that
@@ -127,7 +127,7 @@ const scenarios = [
 	{
 		name: 'IdentityLabel component imported in settings',
 		ok: readFileSync(
-			join(REPO_ROOT, 'apps/web/src/routes/settings/+page.svelte'),
+			join(REPO_ROOT, 'apps/web/src/routes/[lang]/settings/+page.svelte'),
 			'utf8'
 		).includes("import IdentityLabel from '$components/IdentityLabel.svelte'")
 	},
@@ -135,7 +135,7 @@ const scenarios = [
 		name: 'IdentityLabel renders in hidden-accounts list',
 		ok: /\{#each hiddenList[\s\S]*?<IdentityLabel/.test(
 			readFileSync(
-				join(REPO_ROOT, 'apps/web/src/routes/settings/+page.svelte'),
+				join(REPO_ROOT, 'apps/web/src/routes/[lang]/settings/+page.svelte'),
 				'utf8'
 			)
 		)
@@ -144,7 +144,7 @@ const scenarios = [
 		name: 'IdentityLabel renders in blocked-accounts list',
 		ok: /\{#each blockedList[\s\S]*?<IdentityLabel/.test(
 			readFileSync(
-				join(REPO_ROOT, 'apps/web/src/routes/settings/+page.svelte'),
+				join(REPO_ROOT, 'apps/web/src/routes/[lang]/settings/+page.svelte'),
 				'utf8'
 			)
 		)
@@ -153,7 +153,7 @@ const scenarios = [
 		name: 'IdentityLabel renders for the user\'s own account in settings',
 		ok: /<IdentityLabel\b[\s\S]{0,200}account=\{accountSaved\}/.test(
 			readFileSync(
-				join(REPO_ROOT, 'apps/web/src/routes/settings/+page.svelte'),
+				join(REPO_ROOT, 'apps/web/src/routes/[lang]/settings/+page.svelte'),
 				'utf8'
 			)
 		)
