@@ -765,7 +765,7 @@
       },
       "trade_goods_services": {
         "q": "我能在 Morphit 上交易商品或服务吗，比如果树或黑胶唱片？",
-        "a": "可以——但有特定的形式。订单模型始终是**一边是加密资产（BTC、XMR 或 BLURT），另一边是别的东西**。\"别的东西\"可以是法币、另一种加密货币，或通过 `Barter (goods)` 支付方式——商品/服务。用橘子树换 XMR：发布 `asset=XMR`、`payment_methods=[Barter (goods)]`，在 `terms` 字段描述细节。纯易货（商品换商品，不涉及加密）无法建模——一方必须始终是 BTC/XMR/BLURT。完整说明见英文 FAQ。"
+        "a": "可以——但有特定的形式。订单模型始终是**一边是可交易资产（BTC、XMR、BLURT 或 USDT），另一边是别的东西**。\"别的东西\"可以是法币、另一种加密货币，或通过 `Barter (goods)` 支付方式——商品/服务。用橘子树换 XMR：发布 `asset=XMR`、`payment_methods=[Barter (goods)]`，在 `terms` 字段描述细节。纯易货（商品换商品，不涉及加密）无法建模——一方必须始终是 BTC、XMR、BLURT 或 USDT。完整说明见英文 FAQ。"
       },
       "order_timeouts": {
         "q": "订单会挂多久?",
@@ -1368,7 +1368,7 @@
     },
     "cheat_sheet": {
       "title": "Morphit 速查表",
-      "description": "打印一页纸的 Morphit 使用参考:账户名 vs 助记词,挂单费 vs 网络费,BTC vs XMR vs BLURT,以及出问题时该怎么办。"
+      "description": "打印一页纸的 Morphit 使用参考:账户名 vs 助记词,挂单费 vs 网络费,支持的可交易资产一览,以及出问题时该怎么办。"
     }
   },
   "prices": {
@@ -1868,6 +1868,16 @@
     "step4_title": "注册你的运营商身份",
     "step4_body": "使用你选择的标签(1-64 个字符,字母数字 + 破折号/下划线/点)运行 register-operator CLI 工具。标签是先到先得 — 一旦你广播一次性 `morphit_register_operator` 操作,该标签就是你的。你的实例出现在 /operators 中,立即开始归属订单(并赚取你以 BLURT 支付的发布费的 90% 份额)。请参阅运营商收入 FAQ 了解完整经济学。",
     "runbook_pointer": "完整运行手册：",
+    "asset_policy_heading": "你的实例,你的资产政策",
+    "asset_policy_body": "Morphit 的联邦让每个运营方选择其实例为哪些可交易资产接受新订单。新资产默认在实例范围内开启交付——运营方通过 `MORPHIT_INDEXER_DISABLED_ASSETS` 环境变量按资产逐个禁用。这样一个实例联邦可以服务不同的用户偏好,而无需任何人 fork 代码。",
+    "asset_policy_default_label": "新资产默认开启。",
+    "asset_policy_default_body": "当项目添加新的可交易资产时(USDT 是最近的一个),每个实例在升级时即开始接受相关订单。无需代码更改,无需按资产逐个启用步骤。",
+    "asset_policy_opt_out_label": "一个环境变量即可拒绝。",
+    "asset_policy_opt_out_body": "希望其实例专注于隐私优先或去中心化优先资产的运营方,可通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"`(或逗号分隔的列表表示多个)禁用任何仅交易资产。通过此运营方前端发布的用户无法选择已禁用的资产。",
+    "asset_policy_federation_label": "联邦保持完整。",
+    "asset_policy_federation_body": "在你的实例上禁用某资产不会向你的用户隐藏对等实例的订单——链历史是共享的,所以 orderbook 仍以只读方式显示它们。禁用仅适用于从你的实例发布的新订单。",
+    "asset_policy_doc_pointer": "完整的环境变量参考和多资产示例见",
+    "asset_policy_doc_pointer_suffix": "的 §Trade-only asset configuration 章节。",
     "requirements_heading": "资源需求",
     "req_hw_label": "硬件",
     "req_hw_value": "2 核 CPU,2-4 GB RAM,20 GB SSD",
@@ -1960,6 +1970,7 @@
     },
     "section": {
       "instance": "实例身份",
+      "asset_stance": "本实例的资产政策",
       "integrity": "包完整性",
       "worried": "担心你在哪里?"
     },
@@ -1987,6 +1998,13 @@
       "compare_tool_label": "orderbook 比较工具",
       "type_warning_heading": "请在浏览器地址栏输入,不要点击",
       "type_warning_body": "如果您怀疑当前实例是恶意的,这里的链接也不可信 — 恶意实例可能显示\"morphit.io\"文本,而实际 URL 指向别处。请在干净的标签页中手动输入地址。"
+    },
+    "asset_stance": {
+      "explain": "Morphit 是一个联邦市场。每个运营方选择其实例为哪些可交易资产接受新订单——默认接受标准注册表中的所有资产，但运营方可以禁用任何仅交易资产（例如 USDT），如果他们更愿意将其实例专门用于隐私优先或去中心化优先的资产。这是您实例的当前立场。联邦说明：在其他实例上发布的订单仍会出现在您的 orderbook 中——禁用仅适用于从此处发布的新订单。",
+      "disabled_label": "已禁用资产",
+      "disabled_none": "无 — 此实例接受所有可交易资产。",
+      "disabled_suffix": "(运营方在此实例上禁用；在对等实例上可交易)",
+      "federation_note": "想要不同的立场?浏览 /operators 寻找政策符合您偏好的实例,或运行您自己的实例 — 见 /run-a-node。"
     }
   },
   "compare": {
@@ -3352,7 +3370,7 @@
       "trade_payment_body": "您为交易实际发送(或接收)的钱。Morphit 从不持有 — 直接从买家到卖家,平台外进行。"
     },
     "section_assets": {
-      "heading": "BTC vs XMR vs BLURT",
+      "heading": "支持的可交易资产",
       "btc": "Bitcoin。最知名。公开账本 — 任何人都能看到谁付了谁。费用变化很大。",
       "xmr": "Monero。私密 — 没人能看到谁付了谁。费用通常较低。隐私之选。",
       "blurt": "Morphit 运行的 Blurt 区块链的代币。用于支付挂单费、发布消息、签署订单。",

@@ -765,7 +765,7 @@
       },
       "trade_goods_services": {
         "q": "Can I trade goods or services on Morphit, like fruit trees or vintage records?",
-        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a crypto asset (BTC, XMR, or BLURT) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be BTC, XMR, or BLURT — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell BLURT for BTC (crypto-for-crypto)\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
+        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, BLURT, or USDT) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be BTC, XMR, BLURT, or USDT — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell BLURT for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
       },
       "order_timeouts": {
         "q": "How long do orders stay open?",
@@ -1368,7 +1368,7 @@
     },
     "cheat_sheet": {
       "title": "Morphit cheat-sheet",
-      "description": "Print a one-page reference for using Morphit: account name vs seed phrase, listing fee vs network fee, BTC vs XMR vs BLURT, and what to do if something goes wrong."
+      "description": "Print a one-page reference for using Morphit: account name vs seed phrase, listing fee vs network fee, the supported tradable assets at a glance, and what to do if something goes wrong."
     }
   },
   "prices": {
@@ -1868,6 +1868,16 @@
     "step4_title": "Register your operator identity",
     "step4_body": "Run the register-operator CLI tool with your chosen tag (1-64 chars, alphanumeric + dashes/underscores/dots). Tags are first-come-first-served — once you broadcast the one-time `morphit_register_operator` op, that tag is yours. Your instance appears in /operators and begins attributing orders (and earning your 90% share of BLURT-paid listing fees) immediately. See the operator-earnings FAQ for the full economics.",
     "runbook_pointer": "Full runbook:",
+    "asset_policy_heading": "Your instance, your asset policy",
+    "asset_policy_body": "Morphit's federation lets each operator pick which tradable assets their instance accepts new orders for. New assets ship default-ON instance-wide — operators opt out per-asset via the `MORPHIT_INDEXER_DISABLED_ASSETS` environment variable. This is how a federation of instances can serve different user preferences without anyone needing to fork the code.",
+    "asset_policy_default_label": "Default-on for new assets.",
+    "asset_policy_default_body": "When the project adds a new tradable asset (USDT shipped most recently), every instance accepts orders for it the moment they upgrade. No code change, no per-asset enablement step.",
+    "asset_policy_opt_out_label": "One env var to refuse.",
+    "asset_policy_opt_out_body": "Operators who prefer their instance specializes in privacy-first or decentralization-first assets can disable any trade-only asset with `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (or a comma-separated list for multiple). Users posting through this operator's frontend then can't pick a disabled asset.",
+    "asset_policy_federation_label": "Federation stays intact.",
+    "asset_policy_federation_body": "Disabling an asset on your instance doesn't hide peer instances' orders from your users — chain history is shared, so the orderbook still surfaces them as read-only. The gate is only on NEW orders posted FROM your instance.",
+    "asset_policy_doc_pointer": "Full env-var reference and multi-asset examples in",
+    "asset_policy_doc_pointer_suffix": "under §Trade-only asset configuration.",
     "requirements_heading": "Resource requirements",
     "req_hw_label": "Hardware",
     "req_hw_value": "2 CPU cores, 2-4 GB RAM, 20 GB SSD",
@@ -1960,6 +1970,7 @@
     },
     "section": {
       "instance": "Instance identity",
+      "asset_stance": "This instance's asset policy",
       "integrity": "Bundle integrity",
       "worried": "Worried about where you are?"
     },
@@ -1977,6 +1988,13 @@
     "integrity": {
       "explain": "This instance serves {count} files. Each one is hashed and listed in the full manifest below. Compare the aggregate hash above to the one published in the latest signed release on the Blurt chain (@morphit posts a morphit_release_v1 op after every build). If they match, the bundle is byte-identical to the official release.",
       "raw_link": "See the full manifest (verify.json)"
+    },
+    "asset_stance": {
+      "explain": "Morphit is a federated marketplace. Every operator chooses which tradable assets their instance accepts new orders for — the default is everything in the canonical registry, but an operator can disable any trade-only asset (e.g. USDT) if they prefer their instance to specialize in privacy-first or decentralization-first assets. This is YOUR instance's current stance. Federation note: orders posted on other instances still appear in your orderbook regardless — the gate is only on new orders posted FROM here.",
+      "disabled_label": "Disabled assets",
+      "disabled_none": "None — this instance accepts every tradable asset.",
+      "disabled_suffix": "(operator-disabled on this instance; tradeable on peer instances)",
+      "federation_note": "Want a different stance? Browse /operators to find an instance whose policy matches your preference, or run your own — see /run-a-node."
     },
     "worried": {
       "explain": "Morphit is federated — anyone can stand up an instance. If this one seems off, move to one you trust. Your keys, orders, and reputation live on the Blurt chain, not on any single instance. You will see the same marketplace from anywhere.",
@@ -3352,7 +3370,7 @@
       "trade_payment_body": "The actual money you send (or receive) for the trade. Morphit never holds it — straight from buyer to seller, off-platform."
     },
     "section_assets": {
-      "heading": "BTC vs XMR vs BLURT",
+      "heading": "Supported tradable assets",
       "btc": "Bitcoin. Most known. Public ledger — anyone can see who paid whom. Fees vary widely.",
       "xmr": "Monero. Private — no one can see who paid whom. Fees usually low. The privacy choice.",
       "blurt": "The token of the Blurt blockchain that Morphit runs on. Used to pay listing fees, post messages, sign orders.",

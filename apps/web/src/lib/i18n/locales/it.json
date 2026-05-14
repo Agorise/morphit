@@ -765,7 +765,7 @@
       },
       "trade_goods_services": {
         "q": "Posso scambiare beni o servizi su Morphit, come alberi da frutto o dischi in vinile?",
-        "a": "Sì — con una forma specifica. Il modello di ordine è sempre **un asset crypto (BTC, XMR o BLURT) da un lato, e qualcos'altro dall'altro lato**. Il «qualcos'altro» può essere una valuta fiat, un'altra criptovaluta, o tramite il metodo di pagamento `Barter (goods)`, beni/servizi. Per alberi di arancio contro XMR: pubblica `asset=XMR`, `payment_methods=[Barter (goods)]`, descrivi i dettagli nel campo `terms`. Baratti puri (beni contro beni senza crypto) non sono modellabili — un lato deve sempre essere BTC/XMR/BLURT. Spiegazione completa nella FAQ inglese."
+        "a": "Sì — con una forma specifica. Il modello di ordine è sempre **un asset negoziabile (BTC, XMR, BLURT o USDT) da un lato, e qualcos'altro dall'altro lato**. Il «qualcos'altro» può essere una valuta fiat, un'altra criptovaluta, o tramite il metodo di pagamento `Barter (goods)`, beni/servizi. Per alberi di arancio contro XMR: pubblica `asset=XMR`, `payment_methods=[Barter (goods)]`, descrivi i dettagli nel campo `terms`. Baratti puri (beni contro beni senza crypto) non sono modellabili — un lato deve sempre essere BTC, XMR, BLURT o USDT. Spiegazione completa nella FAQ inglese."
       },
       "order_timeouts": {
         "q": "Per quanto tempo restano aperti gli ordini?",
@@ -1368,7 +1368,7 @@
     },
     "cheat_sheet": {
       "title": "Foglio di riferimento Morphit",
-      "description": "Stampa un riferimento di una pagina per usare Morphit: nome account vs frase seme, commissione di pubblicazione vs commissione di rete, BTC vs XMR vs BLURT, e cosa fare se qualcosa va storto."
+      "description": "Stampa un riferimento di una pagina per usare Morphit: nome account vs frase seme, commissione di pubblicazione vs commissione di rete, gli asset negoziabili supportati a colpo d'occhio, e cosa fare se qualcosa va storto."
     }
   },
   "prices": {
@@ -1868,6 +1868,16 @@
     "step4_title": "Registra la tua identità di operatore",
     "step4_body": "Esegui lo strumento CLI register-operator con il tuo tag scelto (1-64 caratteri, alfanumerici + trattini/underscore/punti). I tag sono primo-arrivato-primo-servito — una volta che trasmetti l'operazione `morphit_register_operator` una tantum, quel tag è tuo. La tua istanza appare in /operators e inizia ad attribuire ordini (e a guadagnare la tua quota del 90% delle commissioni di annuncio pagate in BLURT) immediatamente. Vedi il FAQ dei guadagni dell'operatore per l'economia completa.",
     "runbook_pointer": "Manuale completo:",
+    "asset_policy_heading": "La tua istanza, la tua politica degli asset",
+    "asset_policy_body": "La federazione di Morphit permette a ogni operatore di scegliere per quali asset negoziabili la sua istanza accetta nuovi ordini. I nuovi asset vengono rilasciati ATTIVATI di default a livello di istanza — gli operatori li disabilitano per asset tramite la variabile d'ambiente `MORPHIT_INDEXER_DISABLED_ASSETS`. Così una federazione di istanze può servire preferenze utente diverse senza che nessuno debba fare un fork del codice.",
+    "asset_policy_default_label": "Attivato di default per i nuovi asset.",
+    "asset_policy_default_body": "Quando il progetto aggiunge un nuovo asset negoziabile (USDT è stato il più recente), ogni istanza accetta ordini per esso al momento dell'aggiornamento. Nessun cambio di codice, nessun passo di abilitazione per asset.",
+    "asset_policy_opt_out_label": "Una variabile d'ambiente per rifiutare.",
+    "asset_policy_opt_out_body": "Gli operatori che preferiscono che la loro istanza si specializzi in asset privacy-first o decentralization-first possono disabilitare qualsiasi asset solo-trading con `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (o una lista separata da virgole per più). Gli utenti che pubblicano tramite il frontend di questo operatore non possono quindi selezionare un asset disabilitato.",
+    "asset_policy_federation_label": "La federazione rimane intatta.",
+    "asset_policy_federation_body": "Disabilitare un asset sulla tua istanza non nasconde gli ordini delle istanze peer ai tuoi utenti — la storia della catena è condivisa, quindi l'orderbook li mostra comunque in sola lettura. Il blocco si applica solo a NUOVI ordini pubblicati DALLA tua istanza.",
+    "asset_policy_doc_pointer": "Riferimento completo delle variabili d'ambiente ed esempi multi-asset in",
+    "asset_policy_doc_pointer_suffix": "sotto §Trade-only asset configuration.",
     "requirements_heading": "Requisiti di risorse",
     "req_hw_label": "Hardware",
     "req_hw_value": "2 core CPU, 2-4 GB RAM, 20 GB SSD",
@@ -1960,6 +1970,7 @@
     },
     "section": {
       "instance": "Identità dell'istanza",
+      "asset_stance": "Politica degli asset di questa istanza",
       "integrity": "Integrità del bundle",
       "worried": "Preoccupato per dove sei?"
     },
@@ -1987,6 +1998,13 @@
       "compare_tool_label": "strumento di confronto orderbook",
       "type_warning_heading": "Scrivili nella barra del browser — non cliccare",
       "type_warning_body": "Se sospetti che questa istanza sia disonesta, non puoi fidarti nemmeno dei link qui — un'istanza ostile può mostrare \"morphit.io\" mentre l'URL reale punta altrove. Scrivi gli indirizzi a mano in una scheda pulita."
+    },
+    "asset_stance": {
+      "explain": "Morphit è un marketplace federato. Ogni operatore sceglie per quali asset negoziabili la sua istanza accetta nuovi ordini — per default tutto il registro canonico è accettato, ma un operatore può disabilitare qualsiasi asset solo-trading (es. USDT) se preferisce specializzare la sua istanza in asset privacy-first o decentralization-first. Questa è la postura attuale della TUA istanza. Nota di federazione: gli ordini pubblicati su altre istanze appaiono comunque nel tuo orderbook — il blocco si applica solo ai nuovi ordini pubblicati DA QUI.",
+      "disabled_label": "Asset disabilitati",
+      "disabled_none": "Nessuno — questa istanza accetta tutti gli asset negoziabili.",
+      "disabled_suffix": "(disabilitato dall'operatore su questa istanza; negoziabile su istanze peer)",
+      "federation_note": "Vuoi una postura diversa? Esplora /operators per trovare un'istanza la cui politica corrisponda alla tua preferenza, o gestisci la tua — vedi /run-a-node."
     }
   },
   "compare": {
@@ -3352,7 +3370,7 @@
       "trade_payment_body": "I soldi veri che invii (o ricevi) per l'operazione. Morphit non li trattiene mai — direttamente da acquirente a venditore, fuori dalla piattaforma."
     },
     "section_assets": {
-      "heading": "BTC vs XMR vs BLURT",
+      "heading": "Asset negoziabili supportati",
       "btc": "Bitcoin. Il più conosciuto. Registro pubblico — chiunque può vedere chi ha pagato chi. Le commissioni variano molto.",
       "xmr": "Monero. Privato — nessuno può vedere chi ha pagato chi. Commissioni di solito basse. La scelta per la privacy.",
       "blurt": "Il token della blockchain Blurt su cui gira Morphit. Usato per pagare commissioni, pubblicare messaggi, firmare ordini.",

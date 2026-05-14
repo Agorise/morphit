@@ -1758,6 +1758,19 @@ Three reasonable positions for an operator:
    registry; the env var is forward-compatible for future
    trade-only additions.)
 
+**Your users will see your stance directly.**  Whatever you
+set above is published through your indexer's `/v1/instance`
+endpoint as the `disabled_assets` field, and the frontend
+renders it on `/about-this-instance` in a "This instance's
+asset policy" section.  Empty list → users see "None — this
+instance accepts every tradable asset"; populated list →
+users see the operator-disabled tickers spelled out with the
+federation reminder that peer-instance orders are still
+visible in the orderbook.  No extra wiring needed on your
+side; just set the env var and restart the indexer service.
+Browsers see the change at most 5 minutes after restart
+(`/v1/instance` carries a 5-minute Cache-Control header).
+
 ### Per-network explorer URLs
 
 USDT exists on four networks; each has a bundled-default

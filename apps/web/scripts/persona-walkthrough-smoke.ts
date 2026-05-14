@@ -77,6 +77,22 @@
  *             stripped, or the orderbook row dropping the network
  *             chip), the smoke fails loudly.
  *
+ *   P121-CP6  Five sentinels pinning the operator-stance
+ *             surfacing work (item 3 from the cp6 plow-through
+ *             session).  /v1/instance now exposes
+ *             `disabled_assets`; indexer-client mirrors the
+ *             optional field for back-compat with pre-cp6
+ *             indexers; the frontend instance store hydrates
+ *             it with `[]` fallback; /about-this-instance
+ *             renders the per-instance stance; /run-a-node
+ *             carries the prospective-operator explainer with
+ *             the MORPHIT_INDEXER_DISABLED_ASSETS env var
+ *             named directly.  Memory #25 ("every new tradable
+ *             asset ships default-ON instance-wide; operators
+ *             opt out per-asset") is what these sentinels are
+ *             defending — losing the surface would silently
+ *             erase the federation-stance feature.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -502,6 +518,83 @@ const SCENARIOS: readonly Scenario[] = [
 			'assets.usdt.order_row.network_hint',
 			'<UsdtPriceSubline'
 		]
+	},
+	{
+		name: 'P121-CP6-1 — /v1/instance surfaces disabled_assets in API + indexer-client',
+		file: 'apps/indexer/src/api/instance.ts',
+		rootRelative: true,
+		mustHave: [
+			'disabled_assets: readonly string[]',
+			'disabled_assets: config.disabledAssets'
+		]
+	},
+	{
+		name: 'P121-CP6-2 — indexer-client InstanceResponse mirrors disabled_assets (optional for back-compat)',
+		file: 'packages/indexer-client/src/index.ts',
+		rootRelative: true,
+		mustHave: ['readonly disabled_assets?: readonly string[]']
+	},
+	{
+		name: 'P121-CP6-3 — frontend instance store hydrates disabled_assets with [] fallback',
+		file: 'apps/web/src/lib/stores/instance.ts',
+		rootRelative: true,
+		mustHave: [
+			'readonly disabled_assets: readonly string[]',
+			'disabled_assets: result.data.disabled_assets ?? []',
+			'disabled_assets: []'
+		]
+	},
+	{
+		name: 'P121-CP6-4 — /about-this-instance renders asset-stance panel using $instance.disabled_assets',
+		file: 'apps/web/src/routes/about-this-instance/+page.svelte',
+		rootRelative: true,
+		mustHave: [
+			"$_('about_this_instance.section.asset_stance')",
+			'$instance.disabled_assets.length === 0',
+			"$_('about_this_instance.asset_stance.federation_note')"
+		]
+	},
+	{
+		name: 'P121-CP6-5 — /run-a-node carries operator-stance explainer panel',
+		file: 'apps/web/src/routes/run-a-node/+page.svelte',
+		rootRelative: true,
+		mustHave: [
+			"$_('run_a_node.asset_policy_heading')",
+			"$_('run_a_node.asset_policy_default_label')",
+			"$_('run_a_node.asset_policy_federation_label')",
+			'MORPHIT_INDEXER_DISABLED_ASSETS'
+		]
+	},
+	{
+		name: 'P121-CP6-6 — per-locale prerendering path helpers shipped in $i18n/path.ts',
+		file: 'apps/web/src/lib/i18n/path.ts',
+		rootRelative: true,
+		mustHave: [
+			'export function localePath',
+			'export function stripLocalePrefix',
+			'export function pickLocaleFromAcceptLanguages',
+			'export function isLocalePrefixed',
+			// path.ts must NOT import from ./index (which would
+			// pull $app/environment in via the import chain) —
+			// the constants come from ./locales (pure module).
+			"from './locales'"
+		],
+		mustNotHave: ["from './index'"]
+	},
+	{
+		name: 'P121-CP6-7 — i18n module split: SUPPORTED_LOCALES SSoT in $i18n/locales (pure, no $app/environment)',
+		file: 'apps/web/src/lib/i18n/locales.ts',
+		rootRelative: true,
+		mustHave: [
+			'export const SUPPORTED_LOCALES',
+			'export const PLANNED_LOCALES',
+			'export const DEFAULT_LOCALE',
+			'export function matchSupported'
+		],
+		// The whole point of this split is that locales.ts has
+		// ZERO SvelteKit deps so it can be imported from any
+		// context (smoke, prerender-redirect shell, web worker).
+		mustNotHave: ['$app/environment', 'svelte-i18n', 'svelte/store']
 	}
 ];
 

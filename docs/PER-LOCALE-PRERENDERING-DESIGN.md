@@ -1,13 +1,79 @@
 # Per-locale prerendering — design discussion
 
-**Status:** Design locked (Option C); implementation pending
-**Date:** 2026-04-21
+**Status:** Design locked (Option C); helpers shipped in Part 121 cp6, **route-tree restructure still pending** (needs a working `npm run build` environment).
+**Date:** 2026-04-21 (design); 2026-05-13 (partial implementation, Part 121 cp6)
 **Interacts with:** `apps/web/svelte.config.js`
 (prerender + adapter-static config), `apps/web/src/app.html`
 (pre-paint locale script), `apps/web/src/hooks.client.ts`
 (post-hydration locale sync), all routes.
 
-> **Implementation environment requirement:** this work
+## Shipping status (Part 121 cp6)
+
+✅ **Shipped & smoke-pinned:**
+- `apps/web/src/lib/i18n/locales.ts` — pure SSoT module
+  holding `SUPPORTED_LOCALES`, `PLANNED_LOCALES`,
+  `DEFAULT_LOCALE`, `LocaleCode`/`KnownLocaleCode` types,
+  and `matchSupported(tag)`.  No SvelteKit dependencies,
+  so it's safely importable from the redirect shell and
+  smoke harness without dragging in `browser` /
+  svelte-i18n runtime.
+- `apps/web/src/lib/i18n/path.ts` — pure helpers:
+  `localePath(path, lang?)` (centralised link wrapper,
+  idempotent, preserves query+fragment), `stripLocalePrefix(path)`,
+  `pickLocaleFromAcceptLanguages(prefs)` (no-DOM picker
+  for the prerender-redirect shell), `isLocalePrefixed(path)`.
+- `apps/web/scripts/i18n-path-helpers-smoke.ts` — 22
+  pure-function scenarios covering idempotency, language
+  switcher re-prefixing, query+fragment preservation, zh
+  script variant mapping, language-family fallback, empty
+  prefs, malformed entries.
+- Persona-walkthrough sentinels CP6-6 + CP6-7 pin the
+  `path.ts` module export surface and the `locales.ts`
+  no-SvelteKit-deps invariant.
+- `apps/web/src/lib/i18n/index.ts` refactored to
+  re-export pure constants from `./locales` — existing
+  call sites (`import { SUPPORTED_LOCALES } from '$i18n'`)
+  unchanged.
+- `apps/web/src/lib/auth/pairingPhoneSigner.ts` Buffer
+  import removed — unblocked the Vite client-side
+  bundle build (the `import { Buffer } from 'buffer'`
+  failed to resolve in browser context).  Now uses the
+  codebase-standard `as unknown as Buffer` cast pattern
+  from `$lib/blurt/sign.ts`.
+- `scripts/build-sitemap.mjs` ROUTES array re-synced
+  with `routes.ts` INDEXABLE_ROUTES (was 14/17 stale;
+  now 17/17 in canonical order; sitemap.xml regenerates
+  170 URLs cleanly).
+
+⏸ **Still pending — requires a working `npm run build`:**
+- Route-tree restructure under `[lang]/` per
+  "Implementation sketch" §1.  Touches ~70 page +
+  layout files in apps/web/src/routes; the test that
+  proves correctness is the build producing 170 HTML
+  files that all render in the right language without
+  English FOUC.
+- Detection-redirect shell at `+page.svelte` / `+layout.ts`
+  root.  Helpers above (`pickLocaleFromAcceptLanguages`
+  + `localePath`) are what this shell composes; the
+  shell itself needs to be written + verified against a
+  real build.
+- Internal link audit (every `<a href="/...">`,
+  `goto('/...')`, redirect URL).  Helpers are ready;
+  the audit + sweep is the work.
+- Sitemap + RSS per-locale variants (currently sitemap
+  emits 170 URLs in 10×17 product form — good — but
+  the RSS feeds and canonical/hreflang tags still need
+  per-locale wiring in the layout `<head>`).
+- Language picker (`LanguagePicker.svelte`) update to
+  emit locale-prefixed URLs via `localePath()`.
+- SvelteKit prerender failures need addressing
+  alongside this work: `[svelte-i18n] Cannot format a
+  message without first setting the initial locale`
+  for `/support`, and `handleUnseenRoutes` for the
+  dynamic-param routes (`/chat/[peer=account]`,
+  `/explorer/account/[name=account]`, etc).
+
+> **Implementation environment requirement (still applies for the route-tree work):** this work
 > **must** be done on a machine with a working
 > `npm run build` that produces the expected `build/`
 > output. Route-tree restructures need to be iteratively

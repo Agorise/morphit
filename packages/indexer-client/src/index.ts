@@ -660,6 +660,20 @@ export interface InstanceResponse {
 			readonly bep20: string | null;
 		};
 	};
+	/** Trade-only assets this instance has DISABLED via the
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
+	 *  Wire format: array of uppercase asset tickers (e.g.
+	 *  `['USDT']` or `['USDT', 'ARRR']`).  Empty array = this
+	 *  instance accepts every asset in the canonical registry.
+	 *
+	 *  Optional in the response — older indexer builds
+	 *  (pre-Part-121 cp6) omit the field entirely, in which
+	 *  case clients should default to an empty array (assume
+	 *  no operator-side asset disabling).  Federation
+	 *  visibility lets `/run-a-node` and `/operators` surfaces
+	 *  render the instance's asset-policy stance so prospective
+	 *  users can self-select. */
+	readonly disabled_assets?: readonly string[];
 }
 
 // ─── Federation directory (Phase D.5) ──────────────────────────────

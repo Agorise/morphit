@@ -2,99 +2,62 @@ import { browser } from '$app/environment';
 import { init, register, locale, _ } from 'svelte-i18n';
 import { derived, get, writable } from 'svelte/store';
 
-export const DEFAULT_LOCALE = 'en';
+// Pure constants + matchSupported() are SSoT in ./locales.  This
+// module re-exports them so existing call sites that do
+// `import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type
+// LocaleCode } from '$i18n'` keep working unchanged.
+//
+// The split exists because ./locales has no SvelteKit deps, so
+// modules like ./path.ts (used by the prerender-redirect shell)
+// and the i18n-path-helpers-smoke can import the constants
+// without dragging in `$app/environment`.
+export {
+	DEFAULT_LOCALE,
+	SUPPORTED_LOCALES,
+	PLANNED_LOCALES,
+	matchSupported,
+	type LocaleCode,
+	type KnownLocaleCode
+} from './locales';
+
+import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type LocaleCode } from './locales';
+
+// Register each SUPPORTED locale with a lazy loader — only the
+// chosen bundle is fetched at runtime.  Planned locales are NOT
+// registered (no JSON file exists yet); the switcher dropdown
+// only iterates SUPPORTED_LOCALES so users can't pick one.
+//
+// The loader path is computed from the locale code; svelte-i18n
+// memoizes the result, so repeated lookups don't re-import.
+//
+// Note: vite/rollup needs static-analyzable import paths to do
+// code-splitting per locale.  Computing `./locales/${code}.json`
+// inside an arrow returned from a loop body, with `code` from
+// `for...of`, is fine — vite recognizes the pattern as long as
+// the directory and extension are literal strings.
+for (const { code } of SUPPORTED_LOCALES) {
+	register(code, () => import(`./locales/${code}.json`));
+}
 
 /**
- * The full list of locales Morphit ships translations for.
+ * PLANNED_LOCALES and the LocaleCode types are SSoT in ./locales
+ * (re-exported at the top of this module).  Module-doc on the
+ * original lived here; moved alongside the data:
  *
- * Adding a new language is a SINGLE-ARRAY edit:
+ *   - Each entry represents work in progress for a future locale.
+ *     Once the JSON file ships native-reviewed, an entry moves
+ *     from PLANNED → SUPPORTED (one-line edit in ./locales).
  *
- *   1. Add an entry to SUPPORTED_LOCALES below — code (BCP-47),
- *      nativeName (how speakers refer to their own language),
- *      englishName (label for the language switcher when the user
- *      is currently on a different language), rtl (right-to-left
- *      script flag).
- *   2. Drop a fully-translated `<code>.json` into
- *      `apps/web/src/lib/i18n/locales/`.  The i18n parity smoke
- *      enforces that every key from en.json exists in every
- *      locale, so missing translations become a CI failure rather
- *      than a silent empty string at runtime.
+ *   - Separate lists (not a `ready: true/false` flag) so the
+ *     switcher dropdown can't accidentally expose half-translated
+ *     locales, and so vite/rollup only sees the loop over
+ *     SUPPORTED_LOCALES for bundle splitting.
  *
- * No second array to update; the register() loop below derives
- * loader bindings from this list automatically.  Pre-2026-05
- * required keeping the SUPPORTED_LOCALES array and the
- * register() calls in sync manually — easy to miss one.
- *
- * ORDER NOTE: the order here is the order languages appear in
- * the language-switcher dropdown.  We currently order roughly
- * by bundle file size (English first as the source language;
- * shorter-name Romance languages next; CJK and RTL trailing).
- * Reorder freely; nothing depends on this beyond the dropdown.
+ *   - Audience priority order for planned: Hindi (~600M), Arabic
+ *     (~370M, second RTL test alongside fa), Bengali (~270M),
+ *     Portuguese (~260M), Indonesian (~200M), Japanese (~125M),
+ *     Vietnamese (~85M).
  */
-export const SUPPORTED_LOCALES = [
-	{ code: 'en', nativeName: 'English', englishName: 'English', rtl: false },
-	{ code: 'es', nativeName: 'Español', englishName: 'Spanish', rtl: false },
-	{ code: 'de', nativeName: 'Deutsch', englishName: 'German', rtl: false },
-	{ code: 'pl', nativeName: 'Polski', englishName: 'Polish', rtl: false },
-	{ code: 'fr', nativeName: 'Français', englishName: 'French', rtl: false },
-	{ code: 'it', nativeName: 'Italiano', englishName: 'Italian', rtl: false },
-	{ code: 'ru', nativeName: 'Русский', englishName: 'Russian', rtl: false },
-	{ code: 'fa', nativeName: 'فارسی', englishName: 'Persian', rtl: true },
-	{ code: 'zh-CN', nativeName: '中文（简体）', englishName: 'Mandarin', rtl: false },
-	{ code: 'zh-HK', nativeName: '中文（繁體）', englishName: 'Cantonese', rtl: false }
-] as const;
-
-/**
- * Locales that are scaffolded for upcoming translations but NOT
- * yet shown in the language-switcher.
- *
- * Each entry here represents work in progress: a translator
- * (paid, volunteer, or via a community Weblate/Tolgee instance)
- * is producing the JSON file under
- * `apps/web/src/lib/i18n/locales/<code>.json`.  Once that JSON
- * file exists AND has been native-speaker reviewed, the entry
- * graduates from PLANNED_LOCALES → SUPPORTED_LOCALES (one-line
- * move).  Users start seeing it in the switcher on the next
- * deploy.
- *
- * Why a separate list and not just a "ready: true/false" flag?
- *   - The switcher dropdown filters from SUPPORTED_LOCALES.
- *     Keeping the lists separate means there's no chance of
- *     accidentally exposing a half-translated locale to users.
- *   - Bundle splitter for vite/rollup only sees the loop over
- *     SUPPORTED_LOCALES; PLANNED entries don't ship JS bundles
- *     until they graduate.
- *   - The i18n parity smoke can include planned locales in its
- *     drift check (separate scenario) so the missing-keys count
- *     doesn't block CI for entries that are still being worked.
- *
- * Languages here roughly ordered by speaker count / Morphit
- * audience priority:
- *   - Hindi: ~600M speakers; massive South Asian market
- *   - Arabic: ~370M, RTL — first-class RTL test alongside fa
- *   - Bengali: ~270M, second South Asian script (Devanagari →
- *     Bengali coverage)
- *   - Portuguese: ~260M, Brazil-heavy audience
- *   - Indonesian: ~200M, large mobile-first market
- *   - Japanese: ~125M
- *   - Vietnamese: ~85M, Latin script with Latin-extended chars
- */
-export const PLANNED_LOCALES = [
-	{ code: 'hi', nativeName: 'हिन्दी', englishName: 'Hindi', rtl: false },
-	{ code: 'ar', nativeName: 'العربية', englishName: 'Arabic', rtl: true },
-	{ code: 'bn', nativeName: 'বাংলা', englishName: 'Bengali', rtl: false },
-	{ code: 'pt', nativeName: 'Português', englishName: 'Portuguese', rtl: false },
-	{ code: 'id', nativeName: 'Bahasa Indonesia', englishName: 'Indonesian', rtl: false },
-	{ code: 'ja', nativeName: '日本語', englishName: 'Japanese', rtl: false },
-	{ code: 'vi', nativeName: 'Tiếng Việt', englishName: 'Vietnamese', rtl: false }
-] as const;
-
-export type LocaleCode = (typeof SUPPORTED_LOCALES)[number]['code'];
-
-/** Type covering every locale we know about, supported or
- *  planned.  Used by the parity smoke and by docs that reference
- *  language codes that might not yet ship translations. */
-export type KnownLocaleCode = LocaleCode | (typeof PLANNED_LOCALES)[number]['code'];
 
 // Register each SUPPORTED locale with a lazy loader — only the
 // chosen bundle is fetched at runtime.  Planned locales are NOT
@@ -191,42 +154,9 @@ function readNavigatorLanguages(): readonly string[] {
 	return list;
 }
 
-/** Map a single BCP-47 tag to a supported locale, or null. Handles
- *  the Chinese script-variant cases explicitly because a simple
- *  language-family match picks whichever supported variant appears
- *  first in SUPPORTED_LOCALES — arbitrary, not correct.
- *
- *  Exported for unit testing only; pickInitialLocale is the
- *  public entrypoint for runtime locale selection.
- */
-export function matchSupported(tag: string): LocaleCode | null {
-	// Exact match first — covers the common cases (en, es, de, pl,
-	// fr, it, ru, fa, zh-CN, zh-HK).
-	const exact = SUPPORTED_LOCALES.find((l) => l.code === tag);
-	if (exact) return exact.code;
-
-	const lower = tag.toLowerCase();
-
-	// Chinese script handling. BCP-47 is messy here:
-	//   zh-TW, zh-HK, zh-Hant-*, zh-MO  →  Traditional → zh-HK
-	//   zh-CN, zh-SG, zh-Hans-*, zh      →  Simplified → zh-CN
-	// Order matters: check Traditional markers before Simplified
-	// because a tag like "zh-Hant-HK" matches both "hant" and "hk".
-	if (lower.startsWith('zh')) {
-		if (/\bhant\b|^zh-tw$|^zh-hk$|^zh-mo$/.test(lower)) return 'zh-HK';
-		// Everything else under zh defaults to zh-CN (Simplified).
-		// This covers bare "zh", zh-Hans, zh-CN, zh-SG.
-		return 'zh-CN';
-	}
-
-	// Language-family match for the non-Chinese cases. e.g. "es-MX"
-	// → "es", "de-AT" → "de", "fa-IR" → "fa". Because Chinese was
-	// handled above, this branch only runs for tags whose base
-	// language has exactly one supported variant in our list.
-	const base = lower.split('-')[0] ?? lower;
-	const familyMatch = SUPPORTED_LOCALES.find((l) => l.code.split('-')[0] === base);
-	return familyMatch?.code ?? null;
-}
+/** matchSupported(tag) moved to ./locales (SSoT) and re-exported
+ *  at the top of this module.  The duplicate body that used to
+ *  live here was identical; consolidating eliminates drift risk. */
 
 export function initI18n(): void {
 	init({

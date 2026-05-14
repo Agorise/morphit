@@ -765,7 +765,7 @@
       },
       "trade_goods_services": {
         "q": "Puis-je échanger des biens ou des services sur Morphit, comme des arbres fruitiers ou des disques vinyles ?",
-        "a": "Oui — avec une forme spécifique. Le modèle d'ordre est toujours **un actif crypto (BTC, XMR ou BLURT) d'un côté, et autre chose de l'autre côté**. L'« autre chose » peut être une monnaie fiat, une autre cryptomonnaie, ou via la méthode de paiement `Barter (goods)`, des biens/services. Pour des orangers contre XMR : postez `asset=XMR`, `payment_methods=[Barter (goods)]`, décrivez les détails dans le champ `terms`. Les trocs purs (biens contre biens sans crypto) ne sont pas modélisables — un côté doit toujours être BTC/XMR/BLURT. Explication complète dans la FAQ anglaise."
+        "a": "Oui — avec une forme spécifique. Le modèle d'ordre est toujours **un actif négociable (BTC, XMR, BLURT ou USDT) d'un côté, et autre chose de l'autre côté**. L'« autre chose » peut être une monnaie fiat, une autre cryptomonnaie, ou via la méthode de paiement `Barter (goods)`, des biens/services. Pour des orangers contre XMR : postez `asset=XMR`, `payment_methods=[Barter (goods)]`, décrivez les détails dans le champ `terms`. Les trocs purs (biens contre biens sans crypto) ne sont pas modélisables — un côté doit toujours être BTC, XMR, BLURT ou USDT. Explication complète dans la FAQ anglaise."
       },
       "order_timeouts": {
         "q": "Combien de temps les ordres restent-ils ouverts ?",
@@ -1368,7 +1368,7 @@
     },
     "cheat_sheet": {
       "title": "Aide-mémoire Morphit",
-      "description": "Imprimez une référence d'une page pour utiliser Morphit : nom de compte vs phrase de récupération, frais de publication vs frais de réseau, BTC vs XMR vs BLURT, et que faire en cas de problème."
+      "description": "Imprimez une référence d'une page pour utiliser Morphit : nom de compte vs phrase de récupération, frais de publication vs frais de réseau, les actifs négociables pris en charge en un coup d'œil, et que faire en cas de problème."
     }
   },
   "prices": {
@@ -1868,6 +1868,16 @@
     "step4_title": "Enregistre ton identité d'opérateur",
     "step4_body": "Exécute l'outil CLI register-operator avec ton tag choisi (1-64 caractères, alphanumériques + tirets/underscores/points). Les tags sont premier-arrivé-premier-servi — une fois que tu diffuses l'op `morphit_register_operator` ponctuelle, ce tag est à toi. Ton instance apparaît dans /operators et commence à attribuer des ordres (et à gagner ta part de 90 % des commissions d'annonce payées en BLURT) immédiatement. Voir la FAQ des gains de l'opérateur pour l'économie complète.",
     "runbook_pointer": "Manuel complet :",
+    "asset_policy_heading": "Votre instance, votre politique d'actifs",
+    "asset_policy_body": "La fédération de Morphit permet à chaque opérateur de choisir pour quels actifs négociables son instance accepte de nouveaux ordres. Les nouveaux actifs sont livrés ACTIVÉS par défaut à l'échelle de l'instance — les opérateurs les désactivent par actif via la variable d'environnement `MORPHIT_INDEXER_DISABLED_ASSETS`. Ainsi une fédération d'instances peut servir des préférences utilisateur différentes sans que personne n'ait à bifurquer le code.",
+    "asset_policy_default_label": "Activé par défaut pour les nouveaux actifs.",
+    "asset_policy_default_body": "Quand le projet ajoute un nouvel actif négociable (USDT était le plus récent), chaque instance accepte des ordres pour lui dès la mise à jour. Pas de changement de code, pas d'étape d'activation par actif.",
+    "asset_policy_opt_out_label": "Une variable d'environnement pour refuser.",
+    "asset_policy_opt_out_body": "Les opérateurs qui préfèrent que leur instance se spécialise dans des actifs privacy-first ou decentralization-first peuvent désactiver tout actif uniquement-échangeable avec `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (ou une liste séparée par des virgules pour plusieurs). Les utilisateurs qui postent via le frontend de cet opérateur ne peuvent alors pas choisir un actif désactivé.",
+    "asset_policy_federation_label": "La fédération reste intacte.",
+    "asset_policy_federation_body": "Désactiver un actif sur votre instance ne cache pas les ordres des instances pairs à vos utilisateurs — l'historique de chaîne est partagé, donc l'orderbook les affiche toujours en lecture seule. Le blocage ne s'applique qu'aux NOUVEAUX ordres postés DEPUIS votre instance.",
+    "asset_policy_doc_pointer": "Référence complète des variables d'environnement et exemples multi-actifs dans",
+    "asset_policy_doc_pointer_suffix": "sous §Trade-only asset configuration.",
     "requirements_heading": "Exigences en ressources",
     "req_hw_label": "Matériel",
     "req_hw_value": "2 cœurs CPU, 2-4 Go RAM, 20 Go SSD",
@@ -1960,6 +1970,7 @@
     },
     "section": {
       "instance": "Identité de l'instance",
+      "asset_stance": "Politique d'actifs de cette instance",
       "integrity": "Intégrité du bundle",
       "worried": "Inquiet de savoir où vous êtes ?"
     },
@@ -1987,6 +1998,13 @@
       "compare_tool_label": "outil de comparaison d'orderbook",
       "type_warning_heading": "Tape-les dans la barre du navigateur — ne clique pas",
       "type_warning_body": "Si tu soupçonnes que cette instance est malveillante, tu ne peux pas non plus faire confiance aux liens — une instance hostile peut afficher le texte \"morphit.io\" pendant que l'URL pointe ailleurs. Tape les adresses à la main dans un onglet propre."
+    },
+    "asset_stance": {
+      "explain": "Morphit est un marché fédéré. Chaque opérateur choisit pour quels actifs négociables son instance accepte de nouveaux ordres — par défaut tout le registre canonique est accepté, mais un opérateur peut désactiver tout actif uniquement-échangeable (p. ex. USDT) s'il préfère spécialiser son instance sur des actifs privacy-first ou decentralization-first. C'est la posture actuelle de VOTRE instance. Note de fédération : les ordres postés sur d'autres instances apparaissent toujours dans votre orderbook quoi qu'il en soit — le blocage ne s'applique qu'aux nouveaux ordres postés D'ICI.",
+      "disabled_label": "Actifs désactivés",
+      "disabled_none": "Aucun — cette instance accepte tous les actifs négociables.",
+      "disabled_suffix": "(désactivé par l'opérateur sur cette instance ; négociable sur les instances pairs)",
+      "federation_note": "Vous voulez une posture différente ? Parcourez /operators pour trouver une instance dont la politique correspond à votre préférence, ou exécutez la vôtre — voir /run-a-node."
     }
   },
   "compare": {
@@ -3352,7 +3370,7 @@
       "trade_payment_body": "L'argent réel que vous envoyez (ou recevez) pour la transaction. Morphit ne le détient jamais — directement de l'acheteur au vendeur, hors plateforme."
     },
     "section_assets": {
-      "heading": "BTC vs XMR vs BLURT",
+      "heading": "Actifs négociables pris en charge",
       "btc": "Bitcoin. Le plus connu. Registre public — n'importe qui peut voir qui a payé qui. Les frais varient beaucoup.",
       "xmr": "Monero. Privé — personne ne peut voir qui a payé qui. Frais généralement bas. Le choix de la confidentialité.",
       "blurt": "Le jeton de la blockchain Blurt sur laquelle tourne Morphit. Sert à payer les frais de publication, poster des messages, signer des ordres.",

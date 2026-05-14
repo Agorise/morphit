@@ -185,7 +185,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 124. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
 125. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
-126. **22 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/`. Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing.
+126. **23 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/`. Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network.
 127. **46 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 128. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
 129. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
@@ -400,13 +400,15 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 255. **Arbitrage between Morphit and centralized/decentralized exchanges is built for, not built against.** Morphit's listing fee is a fraction of a dollar; there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, no withdrawal cooldown. Spreads between Morphit's P2P prices and exchange order books are visible to anyone watching, and the price-model picker lets a trader run a thin-spread arbitrage strategy on their own listings (set `spread: 0.5%` and let the orderbook fill at-or-above CoinGecko mid). As Morphit liquidity grows, arbitrageurs naturally pull the P2P prices into line with global market — which is good for everyone trading on the marketplace.
 
+256. **Each instance's asset policy is visible up front.** Open `/about-this-instance` on any Morphit instance and you see exactly which tradable assets that operator has chosen to accept new orders for — emerald "None — accepts every tradable asset" for the default-everything case, or a clear list of operator-disabled tickers (e.g. "USDT") for instances that have specialized. Federation stays intact regardless: peer instances' orders still appear in your orderbook read-only, so a disabled-USDT instance still lets users see USDT trades happening elsewhere on the network. New assets ship default-ON instance-wide; operators opt out per-asset via one environment variable. The point: a user picking a Morphit instance can self-select based on whether the operator's stance matches their preferences — privacy-pure operators may disable USDT, pragmatic operators leave it on, and both serve real audiences. The `/run-a-node` page surfaces the same policy explainer so prospective operators understand the degree of freedom they have before they spin up.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs **2,320+ self-checks across 100+ runners**, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0022-*.md`
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0023-*.md`
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`
@@ -418,4 +420,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*255 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-13.*
+*256 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-14.*

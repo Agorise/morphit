@@ -765,7 +765,7 @@
       },
       "trade_goods_services": {
         "q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
-        "a": "可以——但有特定嘅形式。訂單模型永遠係**一邊係加密資產（BTC、XMR 或 BLURT），另一邊係其他嘢**。「其他嘢」可以係法幣、另一種加密貨幣，或透過 `Barter (goods)` 支付方式——商品/服務。用橙樹換 XMR：發佈 `asset=XMR`、`payment_methods=[Barter (goods)]`，喺 `terms` 欄位描述細節。純易貨（商品換商品，唔涉及加密）無法建模——一邊必須永遠係 BTC/XMR/BLURT。完整說明見英文 FAQ。"
+        "a": "可以——但有特定嘅形式。訂單模型永遠係**一邊係可交易資產（BTC、XMR、BLURT 或 USDT），另一邊係其他嘢**。「其他嘢」可以係法幣、另一種加密貨幣，或透過 `Barter (goods)` 支付方式——商品/服務。用橙樹換 XMR：發佈 `asset=XMR`、`payment_methods=[Barter (goods)]`，喺 `terms` 欄位描述細節。純易貨（商品換商品，唔涉及加密）無法建模——一邊必須永遠係 BTC、XMR、BLURT 或 USDT。完整說明見英文 FAQ。"
       },
       "order_timeouts": {
         "q": "訂單會開幾耐?",
@@ -1368,7 +1368,7 @@
     },
     "cheat_sheet": {
       "title": "Morphit 速查表",
-      "description": "列印一頁紙的 Morphit 使用參考:帳戶名 vs 助記詞,掛單費 vs 網絡費,BTC vs XMR vs BLURT,以及出問題時該怎麼辦。"
+      "description": "列印一頁紙的 Morphit 使用參考:帳戶名 vs 助記詞,掛單費 vs 網絡費,支援的可交易資產一覽,以及出問題時該怎麼辦。"
     }
   },
   "prices": {
@@ -1868,6 +1868,16 @@
     "step4_title": "註冊你嘅運營商身份",
     "step4_body": "使用你揀嘅標籤(1-64 個字符,字母數字 + 破折號/下劃線/點)運行 register-operator CLI 工具。標籤係先到先得 — 一旦你廣播一次性 `morphit_register_operator` 操作,該標籤就係你嘅。你嘅實例出現喺 /operators 中,立即開始歸屬訂單(並賺取你以 BLURT 支付嘅發布費嘅 90% 份額)。請參閱運營商收入 FAQ 了解完整經濟學。",
     "runbook_pointer": "完整運行手冊：",
+    "asset_policy_heading": "你嘅實例,你嘅資產政策",
+    "asset_policy_body": "Morphit 嘅聯邦讓每個運營方揀其實例為邊啲可交易資產接受新訂單。新資產預設喺實例範圍內開啟交付——運營方透過 `MORPHIT_INDEXER_DISABLED_ASSETS` 環境變數逐個資產停用。咁樣一個實例聯邦可以服務唔同嘅用戶偏好,而唔需要任何人 fork 代碼。",
+    "asset_policy_default_label": "新資產預設開啟。",
+    "asset_policy_default_body": "當項目添加新嘅可交易資產時(USDT 係最近一個),每個實例喺升級時即開始接受相關訂單。無需代碼更改,無需逐個資產啟用步驟。",
+    "asset_policy_opt_out_label": "一個環境變數即可拒絕。",
+    "asset_policy_opt_out_body": "希望其實例專注於隱私優先或去中心化優先資產嘅運營方,可透過 `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"`(或逗號分隔嘅列表表示多個)停用任何僅交易資產。透過呢個運營方前端發佈嘅用戶無法揀已停用嘅資產。",
+    "asset_policy_federation_label": "聯邦保持完整。",
+    "asset_policy_federation_body": "喺你嘅實例上停用某資產唔會向你嘅用戶隱藏對等實例嘅訂單——鏈歷史係共享嘅,所以 orderbook 仍以只讀方式顯示佢哋。停用只適用於從你嘅實例發佈嘅新訂單。",
+    "asset_policy_doc_pointer": "完整嘅環境變數參考同多資產示例見",
+    "asset_policy_doc_pointer_suffix": "嘅 §Trade-only asset configuration 章節。",
     "requirements_heading": "資源需求",
     "req_hw_label": "硬件",
     "req_hw_value": "2 核 CPU,2-4 GB RAM,20 GB SSD",
@@ -1960,6 +1970,7 @@
     },
     "section": {
       "instance": "實例身份",
+      "asset_stance": "本實例嘅資產政策",
       "integrity": "套件完整性",
       "worried": "擔心你在哪裡?"
     },
@@ -1987,6 +1998,13 @@
       "compare_tool_label": "orderbook 比較工具",
       "type_warning_heading": "請在瀏覽器位址列輸入,不要點擊",
       "type_warning_body": "如果您懷疑當前實例是惡意的,這裡的連結也不可信 — 惡意實例可能顯示「morphit.io」文字,而實際 URL 指向別處。請在乾淨的分頁中手動輸入位址。"
+    },
+    "asset_stance": {
+      "explain": "Morphit 係一個聯邦市場。每個運營方揀其實例為邊啲可交易資產接受新訂單——預設接受標準註冊表中嘅所有資產，但運營方可以停用任何僅交易資產（例如 USDT），如果佢哋更願意將其實例專門用於隱私優先或去中心化優先嘅資產。呢個係你實例嘅當前立場。聯邦說明：喺其他實例上發佈嘅訂單仍會出現喺你嘅 orderbook 中——停用只適用於從呢度發佈嘅新訂單。",
+      "disabled_label": "已停用資產",
+      "disabled_none": "冇 — 呢個實例接受所有可交易資產。",
+      "disabled_suffix": "(運營方喺呢個實例上停用咗;喺對等實例上可交易)",
+      "federation_note": "想要唔同嘅立場?瀏覽 /operators 搵政策符合你偏好嘅實例,或者運行你自己嘅實例 — 見 /run-a-node。"
     }
   },
   "compare": {
@@ -3352,7 +3370,7 @@
       "trade_payment_body": "您為交易實際發送(或接收)的錢。Morphit 從不持有 — 直接從買家到賣家,平台外進行。"
     },
     "section_assets": {
-      "heading": "BTC vs XMR vs BLURT",
+      "heading": "支援的可交易資產",
       "btc": "Bitcoin。最知名。公開帳本 — 任何人都能看到誰付了誰。費用變化很大。",
       "xmr": "Monero。私密 — 沒人能看到誰付了誰。費用通常較低。隱私之選。",
       "blurt": "Morphit 運行的 Blurt 區塊鏈的代幣。用於支付掛單費、發布消息、簽署訂單。",
