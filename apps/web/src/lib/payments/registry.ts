@@ -75,9 +75,9 @@ export interface PaymentMethodEntry {
  *  to a name. */
 export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	// ─── Crypto ─────────────────────────────────────────────────
-	// BLURT / BTC / XMR are the three assets Morphit supports.
-	// Each can also serve as a payment method when the OTHER
-	// asset is being traded (e.g. "buy BTC, pay with XMR").
+	// BLURT / BTC / XMR / USDT are the tradable assets Morphit
+	// supports.  Each can also serve as a payment method when the
+	// OTHER asset is being traded (e.g. "buy BTC, pay with USDT").
 	// `assetExclusion` hides the method when the order's traded
 	// asset matches.  Alphabetized by display name.
 	{
@@ -100,6 +100,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		url: 'https://www.getmonero.org',
 		category: 'crypto',
 		assetExclusion: 'XMR'
+	},
+	{
+		key: 'pay_usdt',
+		name: 'Tether (USDT)',
+		url: 'https://tether.to',
+		category: 'crypto',
+		// Mirror BTC/XMR/BLURT semantics — when the trade's asset
+		// is USDT, "pay with USDT" doesn't make sense, so hide
+		// this option in the payment-methods picker.  When the
+		// trade's asset is BTC/XMR/BLURT, USDT is a valid payment
+		// rail and shows up as a selectable chip.  The specific
+		// network (ERC-20 / TRC-20 / SPL / BEP-20) is pinned at
+		// chat-time via AddressShareModal's USDT tab; the picker
+		// itself doesn't disambiguate network.
+		assetExclusion: 'USDT'
 	},
 
 	// ─── In Person ──────────────────────────────────────────────

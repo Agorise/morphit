@@ -12,10 +12,11 @@ trade-asset registry).
 
 ## Context
 
-Morphit launched with three trade-asset tickers: BTC, XMR, and
-BLURT.  Each is a single-network asset.  In the post-cp2 audit
-Ken asked whether adding new coins, specifically USDT
-(Tether), would be easy.
+Morphit's pre-launch asset registry shipped with three trade-asset
+tickers: BTC, XMR, and BLURT.  Each is a single-network asset.  In
+the post-cp2 audit Ken asked whether adding new coins, specifically
+USDT (Tether), would be easy — and committed to add USDT as the
+fourth tradable asset.
 
 The investigation findings (Part 121 AUDIT entry) confirmed the
 asset registry already carried the right discriminator flags

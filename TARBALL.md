@@ -1,12 +1,72 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 4)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 5)
 
 **Snapshot date:** 2026-05-13
 
-**Tarball:** `morphit-audit-2026-05-121-cp4-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp5-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp3-delta.tar.gz`.  This cp4 ships the follow-up to cp3's USDT integration: word-for-word BRAG-LIST audit catching stale claims, respectful-copy tone-pass per Memory #27, new arbitrage FAQ, and multi-coin disable verified + tested + better-documented.
+**Previous tarball:** `morphit-audit-2026-05-121-cp4-delta.tar.gz`.  This cp5 is a cross-session handoff sweep before Ken leaves the chat — every file made current, no drift, no outdated leftovers.
 
-## Part 121 cp4 — what's shipped
+## Part 121 cp5 — what's shipped (cross-session handoff sweep)
+
+### Pretext
+
+Ken declined a full repo-wide deep-deep audit after cp4 (recommendation accepted: scoped USDT audit + persona walks would be higher leverage if revisited later) and asked for a seamless cross-session handoff with every file current.  The sweep grep-driven plus catch-by-smoke.
+
+### Real drift fixed
+
+1. **`apps/web/src/lib/payments/registry.ts`** — registry was missing `pay_usdt` entry.  Real ship gap: without it, users posting non-USDT trades couldn't select USDT as a payment method from the structured picker (only as free-text via `terms`).  Added `pay_usdt` with `assetExclusion: 'USDT'` semantics mirroring BTC/XMR/BLURT.  Comment "BLURT / BTC / XMR are the three assets Morphit supports" → "BLURT / BTC / XMR / USDT are the tradable assets Morphit supports."
+2. **`apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`** — indexer's `RESERVED_CANONICAL_KEYS` set bumped to include `pay_usdt`.  Caught immediately by the existing `reserved-keys-parity-smoke` — exactly the failsafe pattern Memory #14 + WIRE-EVERYTHING discipline is for.
+3. **`docs/API.md`** — `asset` query-param description "Filter to `BTC`, `XMR`, or `BLURT`" → includes USDT + new `asset_network` row for multi-network filtering.  `trade_count_by_asset_*` example response shapes extended with USDT counts + a note that the asset list is dynamic.
+4. **FAQ `where_to_buy_blurt` × 10 locales** — "BLURT is one of the three assets traded here, alongside BTC and XMR" → "BLURT is one of the four assets traded here, alongside BTC, XMR, and USDT."  All 10 locales got their language-specific replacement.
+5. **`apps/web/static/llms-full.txt`** — top-of-file descriptor "fiat↔BTC/XMR/BLURT marketplace" → "fiat↔BTC/XMR/BLURT/USDT marketplace"; the "Yes — Morphit's order model is always a crypto asset (BTC, XMR, or BLURT) on one side" passage at line 106 and the "one side of every Morphit order has to be BTC, XMR, or BLURT" passage at line 116 and the "every combination works as long as the asset is one of BTC/XMR/BLURT" passage at line 128 all updated to include USDT.  Added a fourth "Buy/sell USDT (on Tron/Ethereum/Solana/BSC) for fiat via Wise" example combination.
+6. **`apps/web/static/llms.txt`** — top-of-file descriptor updated to match.
+7. **`docs/adr/0023-usdt-multi-network.md`** — context-section "Morphit launched with three trade-asset tickers" reframed since Morphit is pre-launch ("Morphit's pre-launch asset registry shipped with three trade-asset tickers").
+8. **`docs/GRANDMA-FRIENDLY-INVESTIGATION.md`** — item 1.1 status updated to mention USDT tooltip (with `faqKey="what_is_usdt"` deep-link); item 3.5 (cheat-sheet) status updated to mention the USDT row Part 121 cp4 added.
+9. **`apps/web/scripts/persona-walkthrough-smoke.ts`** — D-4 sentinel was matching against PRE-LAUNCH-CHECKLIST's update-history line ("v31") via `mustHave: ['v31']` — false-positive pass because the current schema line in the doc says v32 but the historical line still says v31.  Sentinel bumped to `mustHave: ['currently at v32 as of Part 121']` for a true verification.
+
+### Verification (post-sweep)
+
+- **Triple-pulse `bash scripts/run-smokes.sh`: 2,418 scenarios green × 3, zero failures.**  cp4 baseline 2,418 → cp5 baseline 2,418 (no count change; cp5 fixes are content + 1 wiring fix that the parity smoke caught immediately).
+- Locale parity 10/10 green at 2,494 keys × 10
+- Translation-completeness: 0 unexpected byte-identical
+- All cp3/cp4 invariants preserved (fee-method-enum-frozen, first-buy-waiver-payment-agnostic, usdt-trade-only, usdt-network-picker-required, disabled-assets-parse)
+- reserved-keys-parity-smoke: green after indexer + frontend registry sync
+- svelte-check: 0 errors
+
+### Pattern lessons from this sweep
+
+1. **The reserved-keys-parity-smoke is the single most valuable smoke in the suite.**  It caught the `pay_usdt` ship gap on the first run after I added the frontend entry.  If I'd merged without re-running smokes, operators wouldn't have been able to receive `pay_usdt` payment-method registrations at the indexer level — silent failure mode.
+2. **Static documentation files (llms.txt, llms-full.txt) need the same drift-check discipline as live docs.**  They're served to LLM crawlers and shape how external models describe Morphit; stale claims propagate widely.
+3. **Sentinel-grep smokes can false-positive when a doc has both a current and a historical mention of the same string.**  D-4's `mustHave: ['v31']` matched the update-history line.  Sentinels should pin specific phrases ("currently at v32 as of Part 121"), not bare version numbers.
+4. **Memory #26 + #27 in action.**  This entire sweep is the discipline both memories prescribe — every coin addition gets a follow-up sweep, and tone-checks across each addition are mandatory.
+
+---
+
+## Part 121 cp4 — what shipped previously
+
+### Pretext
+
+After cp3 sealed Ken asked four follow-up questions in a single message:
+
+1. **Trade-matrix verification** — could a user buy banana trees with USDT, sell XMR for USDT, buy BTC with USDT, sell orange trees for USDT?  All four should work; verify against shipped code.
+2. **Word-for-word BRAG-LIST audit** with USDT now present.  Ken specifically caught "Adding a fourth traded asset is a single-package edit" as stale (USDT IS that fourth asset).  Sweep for similar.
+3. **New arbitrage FAQ + brag-list entry** emphasizing Morphit's low-friction P2P fees making CEX/DEX arbitrage viable as Morphit liquidity grows.
+4. **Multi-coin disable** — how does `MORPHIT_INDEXER_DISABLED_ASSETS` work when an operator wants to disable 2 or 3 coins, not just one?
+
+Plus a standing-discipline request: marketing copy about any listed asset must be RESPECTFUL to that asset's community.  No "fails priorities" framing.
+
+### Memory edits committed (2 new)
+
+- **#26** Audit BRAG-LIST + every FAQ entry + ADRs + docs for stale claims when adding a new asset.  The new asset IS the change; future-tense claims about it must move to present-tense same turn.
+- **#27** Marketing copy about any listed asset must be RESPECTFUL to that coin's community.  No "fails priorities" / "doesn't meet standards" framings.  State trade-offs factually.  Every coin community is a potential Morphit user base.
+
+### cp4 work shipped (kept for cross-session handoff context)
+
+(See previous TARBALL entries for full detail.  cp4 covered: trade-matrix verification across both patterns — USDT as trade asset and USDT as payment method; 7 BRAG-LIST stale claims fixed; new entry #255 (arbitrage between Morphit and CEX/DEX); tone-pass across 4 USDT surfaces ×10 locales; new FAQ `arbitrage_morphit_vs_exchanges` × 10 locales; multi-coin disable verified with 12-scenario `disabled-assets-parse-smoke`; cheat-sheet USDT row added.  Verification: 2,418 scenarios green × 3, locale parity 10/10 green at 2,494 keys × 10, all cp3 invariants preserved.)
+
+---
+
+## Part 121 cp3 — what shipped previously
 
 ### Pretext
 

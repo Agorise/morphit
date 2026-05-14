@@ -861,7 +861,7 @@
       },
       "where_to_buy_blurt": {
         "q": "我在哪里买 BLURT 来支付网络费用？",
-        "a": "**就在 Morphit 上买——这就是重点。** Morphit 是一个点对点市场；BLURT 是这里交易的三种资产之一，与 BTC 和 XMR 并列。访问 /orderbook，筛选 BLURT 卖单，并向对手方发送消息。你用他们接受的任何法币方式付款；他们把 BLURT 发送到你的 Blurt 账户。完成。\n\n**你的第一笔订单是免费的。** 新用户获得一次性豁免，覆盖第一次 BLURT 购买的上架费。所以你的第一次 BLURT 获取也可以是你在 Morphit 上的第一笔交易，无需交易所账户、无需卡片、无需 KYC。豁免会自动提供。\n\n**最后手段的替代方案：** 如果你真的在 Morphit 订单簿上找不到对手方（某些地区订单簿较小），Klingex.io 运营 BLURT/USDT 交易对作为中心化交易所的后备。我们出于完整性提及它，但视为紧急选项——每笔通过 Klingex 购买的 BLURT 都是 Morphit 没有得到的交易，项目的目标是发展点对点订单簿，而不是把用户送往别处。如果你选择这条路径，交易页面是 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兑换 BLURT。立即提取到你自己的 Blurt 钱包。\n\n**一旦你的钱包里有 BLURT**，支付 Morphit 上架费就是自动的——在订单发布屏幕上选择\"用 BLURT 支付\"。"
+        "a": "**就在 Morphit 上买——这就是重点。** Morphit 是一个点对点市场；BLURT 是这里交易的四种资产之一，与 BTC、XMR 和 USDT 并列。访问 /orderbook，筛选 BLURT 卖单，并向对手方发送消息。你用他们接受的任何法币方式付款；他们把 BLURT 发送到你的 Blurt 账户。完成。\n\n**你的第一笔订单是免费的。** 新用户获得一次性豁免，覆盖第一次 BLURT 购买的上架费。所以你的第一次 BLURT 获取也可以是你在 Morphit 上的第一笔交易，无需交易所账户、无需卡片、无需 KYC。豁免会自动提供。\n\n**最后手段的替代方案：** 如果你真的在 Morphit 订单簿上找不到对手方（某些地区订单簿较小），Klingex.io 运营 BLURT/USDT 交易对作为中心化交易所的后备。我们出于完整性提及它，但视为紧急选项——每笔通过 Klingex 购买的 BLURT 都是 Morphit 没有得到的交易，项目的目标是发展点对点订单簿，而不是把用户送往别处。如果你选择这条路径，交易页面是 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兑换 BLURT。立即提取到你自己的 Blurt 钱包。\n\n**一旦你的钱包里有 BLURT**，支付 Morphit 上架费就是自动的——在订单发布屏幕上选择\"用 BLURT 支付\"。"
       },
       "first_order_free": {
         "q": "我的第一单真的免费吗?",
