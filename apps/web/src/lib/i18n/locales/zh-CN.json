@@ -1146,6 +1146,18 @@
       "qr_login": {
         "q": "什么是二维码登录?它安全吗?",
         "a": "二维码登录让你通过用手机上的 Morphit 应用扫描一个码,在电脑上登录 Morphit — 不需要输入助记词。当你在电脑上点击「用二维码登录」时,Morphit 会生成一个一次性码,有效期 5 分钟。你用手机扫描它,手机会显示网站名并问你是否真的刚在电脑上打开了它,只有在你点击「是,是我」之后,手机才会把一个签名的许可发回电脑。什么是安全的:你的私钥永远不会离开手机。屏幕上的码是一个请求,不是密钥。即使有人截图了码,没有你的手机点击是,他们也无法使用它。需要注意什么:当手机问「登录 morphit.io?」时,仔细阅读网站名。诈骗者可能把你引到一个假页面,例如「morph1t.io」(把 i 换成 1)。只在你刚在电脑上打开真正的 Morphit 时才点是。否则点否。这不是什么:这不是没有手机就能用 Morphit 的方法。如果你丢了手机,就回到你写下的助记词。我们不存储什么:运营网站的操作员只看到一份加密的许可经过。他们读不了它;他们无法假冒你。"
+      },
+      "what_is_usdt": {
+        "q": "什么是 USDT（泰达币）？",
+        "a": "USDT 是由 Tether 公司发行的稳定币，旨在与美元保持 1:1 锚定。活跃交易者用它来临时存放价值，而无需转换为法币 — 例如，在交易之间，或者在等待更好入场点时避免 BTC/XMR 的波动性。在 Morphit 上，你可以在四个网络上点对点买卖 USDT：以太坊 (ERC-20)、波场 (TRC-20)、索拉纳 (SPL) 和 BNB 智能链 (BEP-20)。USDT 在 Morphit 上**仅限交易** — 你永远无法用它支付挂单费、冷消息费或精选位竞价。这些始终用 BLURT、BTC 或 XMR 支付。费用不变量在线格式中是冻结的，并由 CI 中的哨兵 smoke 强制执行。"
+      },
+      "why_usdt_warning": {
+        "q": "为什么 Morphit 在我交易 USDT 时显示警告？",
+        "a": "因为 USDT 没有达到 Morphit 三大优先事项中的两项。**优先级 #1 是隐私**：USDT 没有链上隐私。每一笔 USDT 交易在你选择的区块链上对任何人都永久可见，区块链分析公司会例行标记钱包。**优先级 #2 是去中心化**：USDT 由 Tether 公司中心化控制，可以冻结任何 USDT 地址 — 他们已经对数千个地址这样做过，其中包括一些与犯罪无关的地址。我们允许你交易 USDT，是因为活跃交易者发现它对临时存放价值有用，但我们不会假装权衡不存在。如果你需要隐私，请使用 XMR。如果你需要去中心化，请使用 BTC 或 BLURT。如果你需要稳定性并接受权衡，USDT 就是合适的工具。"
+      },
+      "which_usdt_network": {
+        "q": "我应该选哪个 USDT 网络 — ERC-20、TRC-20、SPL 还是 BEP-20？",
+        "a": "这取决于你和你的交易对手已经持有什么以及你能承受什么费用。**TRC-20（波场）** 在 P2P 交易中最常见，因为网络费用约 1 美元 — 可预测且便宜。**ERC-20（以太坊）** 接受度最普遍：每个交易所、每个钱包、每个智能合约平台都支持；费用 5-20 美元且较慢，但如果你的交易在以太坊端应用结算，这是要用的网络。**SPL（索拉纳）** 费用最低（低于 0.01 美元）且速度快，但普遍接受度较低；如果你和你的交易对手都使用 Solana 钱包，请选这个。**BEP-20（BNB 智能链）** 费用约 0.30 美元，速度快，但不太常见 — 如果你在 Binance 和另一个使用 BSC 的交易对手之间转移 USDT 很有用。在 Morphit 上**没有默认值** — 每次 USDT 交易都需要明确选择网络，因为跨网络发送是不可恢复的。如果你将 USDT-ERC20 发送到 TRC-20 地址（或反之），资金将永久丢失。订单表单上的网络选择器在你选择之前不会让你提交。"
       }
     },
     "share_link": "分享链接",
@@ -1504,7 +1516,8 @@
       "asset_explainer": {
         "btc": "比特币(BTC)— 最初的加密货币,全球使用。公开账本;交易可见。网络费用和确认时间随需求变化。",
         "xmr": "门罗币(XMR)— 隐私优先的加密货币。默认隐藏金额、发送方和接收方。如果你重视隐私,这是理想选择。",
-        "blurt": "BLURT — Morphit 运行的社交区块链。快速(3 秒区块)、零费用转账,但市值较小。适用于小额和打赏;不太适合存储大额价值。"
+        "blurt": "BLURT — Morphit 运行的社交区块链。快速(3 秒区块)、零费用转账,但市值较小。适用于小额和打赏;不太适合存储大额价值。",
+        "usdt": "Tether (USDT) — 与美元 1:1 挂钩的稳定币。中心化控制 — Tether 公司可以冻结任何地址。在 Morphit 上仅限交易：不能支付挂单费。"
       },
       "waiver_fiat_hint": "💡 BLURT 在中心化交易所交易稀少，所以 Morphit 上的大多数 BLURT 兑法币交易发生在活跃的 Blurt 社交网络用户、现有运营商，或通过易货之间。提示：选择你本地网络使用的法币（USD、EUR、MXN 等），或在步骤 3 中查看面对面 → 易货（商品）支付方式，如果你想提供其他有价值的东西。订单簿目前较小——你的买单有助于建立它。",
       "waiver_benefits_heading": "你的购买能解锁：",
@@ -2229,7 +2242,11 @@
       "send_failed": "无法发送地址。请重试。",
       "xmr_jitter_send_exact_hint": "告诉买家的钱包发送此精确金额,包括长小数位。",
       "xmr_jitter_off_warning_heading": "隐私性降低",
-      "xmr_jitter_off_warning_body": "整数金额在 Monero 链上更易关联。除非有理由发送精确数字,否则保持 jitter 开启。"
+      "xmr_jitter_off_warning_body": "整数金额在 Monero 链上更易关联。除非有理由发送精确数字,否则保持 jitter 开启。",
+      "method_usdt": "USDT",
+      "address_placeholder_usdt": "泰达币地址（匹配你选择的网络）",
+      "address_invalid_usdt": "此地址与你选择的 USDT 网络不匹配。发送前请仔细核对 — 跨网络发送会损失你的资金。",
+      "pill_method_usdt": "USDT 地址"
     },
     "funds_sent": {
       "button": "标记资金已发送",
@@ -2267,7 +2284,10 @@
       "self_verify_not_found": "交易尚未上链。",
       "self_verify_wrong_op": "该交易不包含发送给预期收件人的转账。",
       "view_on_explorer": "在浏览器中查看",
-      "send_failed": "无法发送资金发送凭据。请重试。"
+      "send_failed": "无法发送资金发送凭据。请重试。",
+      "txid_invalid_usdt": "此交易 ID 与你选择的 USDT 网络不匹配。发送前请核对网络。",
+      "network_pinned_hint": "卖家在分享地址时指定了此网络。你无法在此处更改。",
+      "pill_title_usdt": "已发送 USDT"
     },
     "unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
     "pay_blurt": {
@@ -3346,6 +3366,47 @@
     }
   },
   "assets": {
-    "privacy_warnings": {}
+    "privacy_warnings": {
+      "usdt_centralized": "USDT 是中心化的，不具备隐私性。Tether 公司可以冻结任何 USDT 地址，并且已经对数千个地址采取过此类操作，其中包括一些与犯罪无关的地址。链上没有隐私 — 每一笔 USDT 交易都永久公开可见，区块链分析公司会例行标记钱包。如果你需要隐私，请使用 XMR。"
+    },
+    "usdt": {
+      "displayName": "泰达币",
+      "oneLineDescription": "与美元挂钩的稳定币。中心化控制。仅限交易 — 不能在 Morphit 上支付挂单费。",
+      "network": {
+        "erc20": {
+          "displayName": "以太坊 (ERC-20)",
+          "feeHint": "手续费约 5–20 美元，速度慢，最广泛接受"
+        },
+        "trc20": {
+          "displayName": "波场 (TRC-20)",
+          "feeHint": "手续费约 1 美元，速度快，P2P 交易最常用"
+        },
+        "spl": {
+          "displayName": "索拉纳 (SPL)",
+          "feeHint": "手续费小于 0.01 美元，速度快，普遍接受程度较低"
+        },
+        "bep20": {
+          "displayName": "BNB 智能链 (BEP-20)",
+          "feeHint": "手续费约 0.30 美元，速度快，使用较少"
+        },
+        "picker": {
+          "label": "使用哪个 USDT 网络？",
+          "requiredHint": "必填 — 没有默认网络。每次 USDT 交易都必须选择一个。",
+          "crossNetworkWarning": "跨网络发送将永久损失你的资金。将 Ethereum 上的 USDT 发送到 Tron 地址（或反之）是不可恢复的。"
+        }
+      },
+      "address_share": {
+        "network_prefix": "{network} 上的 USDT 地址：",
+        "warning": "仅在 {network} 上发送 USDT。在任何其他网络上向此地址发送 USDT 将永久损失你的资金。"
+      },
+      "order_row": {
+        "network_hint": "此交易需要 {network} 上的 USDT。"
+      },
+      "price_subline": {
+        "live": "1 USDT = ${price}（实时）",
+        "unavailable": "USDT/USD 价格源不可用 — 上次查看时间为 {staleness} 前。"
+      },
+      "disabled_on_instance": "此实例不接受 USDT 订单。请尝试其他 Morphit 实例。"
+    }
   }
 }

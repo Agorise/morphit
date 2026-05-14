@@ -28,6 +28,8 @@
 		type FundsSentPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
+	import { validateUsdtTxid, isUsdtNetwork, type UsdtNetwork } from '$lib/assets/networks';
+	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 
 	interface Props {
 		/** Initial method tab.  Pre-selected when the modal was
@@ -35,6 +37,11 @@
 		 *  method); free-choice when launched from the composer
 		 *  without context. */
 		initialMethod?: ChatAssetTicker;
+		/** Part 121 — initial USDT network.  When the modal is
+		 *  triggered from a received USDT address pill, the
+		 *  network is already pinned and the picker is read-only
+		 *  so the buyer can't accidentally pick a different one. */
+		initialUsdtNetwork?: UsdtNetwork | null;
 		/** Q5 — Initial amount, pre-filled when the modal was
 		 *  triggered from an incoming BTC/XMR address pill that
 		 *  carried an amount. The buyer types the txid; the
@@ -55,6 +62,7 @@
 
 	let {
 		initialMethod = 'btc',
+		initialUsdtNetwork = null,
 		initialAmount = '',
 		orderPermlink,
 		onShare,
@@ -67,6 +75,12 @@
 	// the parent updates these props while the modal is open.
 	// svelte-ignore state_referenced_locally
 	let method = $state<ChatAssetTicker>(initialMethod);
+	// svelte-ignore state_referenced_locally
+	let usdtNetwork = $state<UsdtNetwork | null>(initialUsdtNetwork);
+	// True if the parent pinned a USDT network up front (came
+	// from an address pill).  Locks the picker as read-only so
+	// the buyer can't accidentally pick a different network.
+	const networkPinned = initialUsdtNetwork !== null;
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally
 	let amount = $state(initialAmount);
@@ -78,26 +92,42 @@
 	const trimmedAmount = $derived(amount.trim());
 	const trimmedNote = $derived(note.trim());
 
-	const txidLooksValid = $derived(trimmedTxid.length > 0 && isValidTxid(method, trimmedTxid));
+	const txidLooksValid = $derived(
+		trimmedTxid.length > 0 &&
+			(method === 'usdt'
+				? usdtNetwork !== null && validateUsdtTxid(usdtNetwork, trimmedTxid)
+				: isValidTxid(method, trimmedTxid))
+	);
 	const amountLooksValid = $derived(
 		trimmedAmount.length === 0 || /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount)
 	);
 	const noteLooksValid = $derived(trimmedNote.length <= PAYLOAD_CONSTANTS.MAX_NOTE_LEN);
 
-	const canSubmit = $derived(txidLooksValid && amountLooksValid && noteLooksValid && !sending);
+	/** USDT-specific gate: network must be picked. */
+	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
+
+	const canSubmit = $derived(
+		txidLooksValid && amountLooksValid && noteLooksValid && usdtNetworkPicked && !sending
+	);
 
 	const txidError = $derived.by(() => {
 		if (trimmedTxid.length === 0) return null;
-		// BLURT txids are 40 hex chars; BTC/XMR are 64.  Threshold
-		// for "user still typing" is method-aware.
+		// BLURT txids are 40 hex chars; BTC/XMR are 64; USDT
+		// varies by network (32-88 chars depending on chain).
 		const minTyped = method === 'blurt' ? 20 : 32;
 		if (trimmedTxid.length < minTyped) return null;
 		if (txidLooksValid) return null;
+		if (method === 'usdt') return 'chat.funds_sent.txid_invalid_usdt';
 		return 'chat.funds_sent.txid_invalid';
 	});
 
 	function selectMethod(m: ChatAssetTicker): void {
 		method = m;
+		// Part 121: clear the picked network when leaving USDT.
+		// On re-pick, the user must explicitly choose again.
+		// Don't clear when networkPinned — the parent pinned it
+		// for a reason.
+		if (m !== 'usdt' && !networkPinned) usdtNetwork = null;
 	}
 
 	// Part 73: bring dismiss UX up to parity with the sibling
@@ -128,7 +158,11 @@
 				txid: trimmedTxid,
 				...(trimmedAmount.length > 0 ? { amount: trimmedAmount } : {}),
 				...(orderPermlink !== undefined ? { orderPermlink } : {}),
-				...(trimmedNote.length > 0 ? { note: trimmedNote } : {})
+				...(trimmedNote.length > 0 ? { note: trimmedNote } : {}),
+				// Part 121 — pin the USDT network on the message
+				// so the receiver's chat renders the right
+				// per-network explorer link.
+				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {})
 			};
 			const wire = encodeFundsSentPayload(payload);
 			await onShare(wire);
@@ -194,7 +228,44 @@
 			>
 				{$_('chat.address.method_blurt')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'usdt'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'usdt'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('usdt')}
+			>
+				{$_('chat.address.method_usdt')}
+			</button>
 		</div>
+
+		<!-- Part 121 — USDT network picker.  When the parent
+		     pinned a network (came from an address pill we
+		     received), the picker is read-only so the buyer
+		     can't accidentally pick a different one and tell
+		     the seller they sent USDT on the wrong chain. -->
+		{#if method === 'usdt'}
+			<div class="mt-4">
+				{#if networkPinned && usdtNetwork !== null}
+					<div
+						class="rounded-lg border-2 border-morphit-emerald bg-morphit-emerald/5 p-3 text-sm"
+						role="note"
+					>
+						<div class="font-semibold text-morphit-emerald">
+							{$_(`assets.usdt.network.${usdtNetwork}.displayName`)}
+						</div>
+						<div class="mt-1 text-xs text-ink-300">
+							{$_('chat.funds_sent.network_pinned_hint')}
+						</div>
+					</div>
+				{:else}
+					<UsdtNetworkPicker bind:network={usdtNetwork} disabled={sending} />
+				{/if}
+			</div>
+		{/if}
 
 		{#if orderPermlink}
 			<div

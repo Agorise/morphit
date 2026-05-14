@@ -7069,3 +7069,89 @@ Currently no automated migration — operators
 rotating accounts handle this manually.  Filed in
 REVISIT-LIST as a defer until operational evidence
 of demand.
+
+---
+
+## Trade-only asset configuration (Part 121 — USDT and future additions)
+
+**Audience:** operators deciding which trade-only assets their
+instance accepts, and how transaction-explorer links resolve for
+multi-network assets like USDT.
+
+### Disabling specific assets instance-wide
+
+**`MORPHIT_INDEXER_DISABLED_ASSETS`** — comma-separated list of
+uppercase tickers from the canonical asset registry.  Orders
+posted with a disabled asset are rejected at handler time with
+`reason: 'asset_disabled_on_instance'`.  Default empty (every
+canonical-registry asset is enabled).
+
+Examples:
+
+```bash
+# Refuse all USDT orders
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
+
+# Refuse USDT AND a hypothetical future stablecoin
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
+
+# Accept everything (default — same as omitting the var)
+MORPHIT_INDEXER_DISABLED_ASSETS=""
+```
+
+**Federation semantics:** disabling an asset is OPERATOR-level,
+not user-level.  Orders for a disabled asset still appear in
+your instance's read-only orderbook feeds (the chain history
+is shared across the federation), but your indexer refuses to
+accept NEW orders for that asset from your own users.  Users
+who object to a specific asset on philosophical grounds pick a
+different Morphit instance.
+
+**Why the canonical morphit.io ships with USDT enabled:** the
+canonical operator's stance is that active traders use USDT to
+park value temporarily.  Operators with different stances
+(privacy-pure, XMR-only, etc.) override.
+
+Memory #23 (BLURT/BTC/XMR-only for listing fees) and Memory #25
+(default-on + operator override for new assets) together define
+this knob's posture.  See `docs/adr/0023-usdt-multi-network.md`
+for the full design.
+
+### Per-network explorer URL overrides (USDT only)
+
+USDT is Morphit's first multi-network asset (ERC-20, TRC-20,
+SPL, BEP-20).  Each network has a bundled-default explorer URL
+template (etherscan.io for ERC-20, tronscan.org for TRC-20,
+solscan.io for SPL, bscscan.com for BEP-20).  Operators
+running self-hosted alternatives override per-network via
+frontend env vars exposed in the instance config payload.
+
+Operator-config example for a privacy-conscious operator:
+
+```bash
+# Override all four — point at self-hosted instances
+MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_ERC20="https://my-self-hosted-blockscout.example.org/tx/{txid}"
+MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_TRC20="https://my-self-hosted-tron.example.org/#/transaction/{txid}"
+MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_SPL="https://my-self-hosted-solana.example.org/tx/{txid}"
+MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_BEP20="https://my-self-hosted-bsc.example.org/tx/{txid}"
+```
+
+`{txid}` is the placeholder substituted at render time with
+the lowercased transaction ID.  SPL txids are base58 and
+case-preserved; the others are hex and lowercased.
+
+If you choose to disable USDT instance-wide via
+`MORPHIT_INDEXER_DISABLED_ASSETS=USDT`, the per-network
+explorer config has no effect on your instance.
+
+### Schema migration v32 (Part 121)
+
+`apps/indexer/src/db/schema.sql` adds an `orders.asset_network
+TEXT` column for multi-network assets.  Pre-Part-121 rows
+have `asset_network IS NULL`, which is the correct value for
+single-network assets too (BTC, XMR, BLURT all write NULL).
+USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`.
+
+The migration is idempotent (`ADD COLUMN IF NOT EXISTS`) and
+applied automatically on indexer startup.  No operator action
+required beyond the standard `npm run migrate` flow.

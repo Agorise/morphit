@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="BNB Smart Chain (BEP-20)">
+	<title>BNB Smart Chain (BEP-20)</title>
+	<!-- BNB's signature yellow.  "B" in a roundel for chip legibility. -->
+	<circle cx="12" cy="12" r="12" fill="#F3BA2F"/>
+	<text x="12" y="16" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">B</text>
+</svg>

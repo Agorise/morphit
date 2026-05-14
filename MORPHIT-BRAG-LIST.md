@@ -394,6 +394,10 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 252. **Operator-doc audit pinned by regression smokes.** Every CLI command, every environment variable, every API field path, every install location named in the operator docs is sentinel-grep checked against the real code. When the docs and the code disagree, CI fails loudly before the operator copy-pastes from a doc that lies.
 
+253. **USDT (Tether) peer-to-peer across four networks.** Trade USDT on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or BNB Smart Chain (BEP-20) — peer to peer, non-custodial, no KYC. Listing fees stay BLURT/BTC/XMR; USDT never touches the fee plumbing. Operators with philosophical objections to USDT disable it instance-wide with one env var; the rest of the marketplace keeps trading.
+
+254. **No default USDT network — every trade is an explicit network commit.** Cross-network sends lose funds permanently (USDT-ERC20 to a TRC-20 address is unrecoverable). Morphit refuses to default the user into that mistake: every USDT trade picks the network explicitly, every USDT address shared in chat carries a bold per-network header and a permanent per-message warning, and the post-order form refuses to submit until you choose.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -412,4 +416,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*252 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-12.*
+*254 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-13.*

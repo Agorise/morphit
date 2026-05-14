@@ -34,6 +34,8 @@
 	import EngagementChip from '$components/EngagementChip.svelte';
 	import OrderExpiryChip from '$components/OrderExpiryChip.svelte';
 	import RatingChip from '$components/RatingChip.svelte';
+	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
+	import { isUsdtNetwork } from '$lib/assets/networks';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
@@ -839,6 +841,10 @@
 						$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
 					)}
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[o.account])}
+					{@const usdtRowNetwork =
+						o.asset === 'USDT' && o.asset_network && isUsdtNetwork(o.asset_network)
+							? o.asset_network
+							: null}
 					<li
 						class="card-interactive animate-fade-up {accountIsHidden || accountIsBlocked
 							? 'opacity-50'
@@ -852,6 +858,23 @@
 											? $_('orderbook.order.buying', { values: { asset: o.asset } })
 											: $_('orderbook.order.selling', { values: { asset: o.asset } })}
 									</span>
+									{#if usdtRowNetwork !== null}
+										<!-- Part 121 — USDT network chip with the
+										     "you need USDT on Tron for this trade"
+										     hint via title-tooltip.  Renders only
+										     for USDT rows; single-network assets
+										     skip. -->
+										<span
+											class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-0.5 text-xs font-semibold text-amber-300"
+											title={$_('assets.usdt.order_row.network_hint', {
+												values: {
+													network: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`)
+												}
+											}) as string}
+										>
+											{$_(`assets.usdt.network.${usdtRowNetwork}.displayName`)}
+										</span>
+									{/if}
 									<span class="text-sm text-ink-600 dark:text-ink-300">
 										{formatRange(o)}
 									</span>
@@ -862,6 +885,12 @@
 										>
 											· {priceModelLabel}
 										</span>
+									{/if}
+									{#if o.asset === 'USDT'}
+										<!-- Part 121 — live USDT/USD price subline.
+										     Compact mode (no border) for in-row
+										     placement.  Pegging health is news. -->
+										<UsdtPriceSubline compact />
 									{/if}
 									{#if accountIsBlocked}
 										<span

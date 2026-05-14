@@ -26,7 +26,8 @@
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
-	import { externalExplorerUrl, morphitExplorerTxUrl } from '$lib/explorer/urls';
+	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl } from '$lib/explorer/urls';
+	import { isUsdtNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
@@ -135,10 +136,24 @@
 	 *  /explorer/tx route (same-tab navigation).  Returns null
 	 *  for unknown methods or malformed txids — caller hides the
 	 *  link in that case. */
-	function explorerLinkForTxid(method: ChatAssetTicker, txid: string): string | null {
+	function explorerLinkForTxid(
+		method: ChatAssetTicker,
+		txid: string,
+		network?: string
+	): string | null {
 		if (method === 'btc') return externalExplorerUrl('BTC', txid);
 		if (method === 'xmr') return externalExplorerUrl('XMR', txid);
 		if (method === 'blurt') return morphitExplorerTxUrl(txid);
+		if (method === 'usdt') {
+			// Per-network USDT explorer URL.  Without a network we
+			// can't pick the right template — older clients sending
+			// USDT payloads without the network field render the
+			// txid as plain text (no link).
+			if (network !== undefined && isUsdtNetwork(network)) {
+				return usdtExplorerUrl(network, txid);
+			}
+			return null;
+		}
 		return null;
 	}
 
@@ -325,8 +340,9 @@
 					!Number.isNaN(parsedAmount) &&
 					parsedAmount > 0}
 				{@const canMarkSent =
-					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr') && isIncoming}
+					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt') && isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
+				{@const usdtNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -335,6 +351,16 @@
 							{$_('chat.address.pill_method_btc')}
 						{:else if p.method === 'xmr'}
 							{$_('chat.address.pill_method_xmr')}
+						{:else if p.method === 'usdt'}
+							<!-- Part 121 — USDT pill header carries the
+							     network as a BOLD prefix so the buyer
+							     can't miss which chain to send on. -->
+							{#if usdtNetworkValid}
+								<span class="rounded-md bg-amber-400/20 px-2 py-0.5 font-bold text-amber-300">
+									{$_(`assets.usdt.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.address.pill_method_usdt')}
 						{:else}
 							{$_('chat.address.pill_method_blurt')}
 						{/if}
@@ -359,6 +385,21 @@
 								: $_('chat.address.pill_copy')}
 						</button>
 					</div>
+					{#if p.method === 'usdt' && usdtNetworkValid}
+						<!-- Part 121 — per-message USDT cross-network
+						     warning.  Stays on the chat record
+						     permanently so a buyer who re-checks an old
+						     message before paying still sees the
+						     warning.  Amber border + body text. -->
+						<aside
+							class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2.5 py-2 text-xs text-amber-200"
+							role="note"
+						>
+							{$_('assets.usdt.address_share.warning', {
+								values: { network: $_(`assets.usdt.network.${p.network}.displayName`) }
+							})}
+						</aside>
+					{/if}
 					{#if xmrLooksStandard}
 						<!-- Subaddress nudge — XMR addresses starting with
 						     `4` (standard or integrated) link every received
@@ -463,6 +504,7 @@
 				</div>
 			{:else if decoded?.kind === 'funds_sent'}
 				{@const p = decoded.payload}
+				{@const usdtFundsNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -471,6 +513,13 @@
 							{$_('chat.funds_sent.pill_title_btc')}
 						{:else if p.method === 'xmr'}
 							{$_('chat.funds_sent.pill_title_xmr')}
+						{:else if p.method === 'usdt'}
+							{#if usdtFundsNetworkValid}
+								<span class="rounded-md bg-amber-400/20 px-2 py-0.5 font-bold text-amber-300">
+									{$_(`assets.usdt.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.funds_sent.pill_title_usdt')}
 						{:else}
 							{$_('chat.funds_sent.pill_title_blurt')}
 						{/if}
@@ -574,9 +623,9 @@
 							>
 								{p.txid}
 							</code>
-							{#if explorerLinkForTxid(p.method, p.txid)}
+							{#if explorerLinkForTxid(p.method, p.txid, p.network)}
 								<a
-									href={explorerLinkForTxid(p.method, p.txid) ?? '#'}
+									href={explorerLinkForTxid(p.method, p.txid, p.network) ?? '#'}
 									target={p.method === 'blurt' ? undefined : '_blank'}
 									rel={p.method === 'blurt' ? undefined : 'noopener noreferrer'}
 									class="text-xs underline-offset-2 opacity-70 hover:underline hover:opacity-100"

@@ -117,6 +117,11 @@ interface OrderRow {
 	permlink: string;
 	side: 'buy' | 'sell';
 	asset: AssetTicker;
+	/** Part 121 — sub-network for multi-network assets.  Null
+	 *  for single-network assets (BTC/XMR/BLURT) and for
+	 *  pre-Part-121 rows.  One of 'erc20'|'trc20'|'spl'|'bep20'
+	 *  for USDT. */
+	asset_network: string | null;
 	fiat_currency: string;
 	amount_min: string | null; // NUMERIC returns as string from pg
 	amount_max: string | null;
@@ -159,6 +164,9 @@ function rowToWire(r: OrderRow) {
 		permlink: r.permlink,
 		side: r.side,
 		asset: r.asset,
+		// Part 121 — null for single-network assets; one of
+		// erc20/trc20/spl/bep20 for USDT.
+		asset_network: r.asset_network ?? null,
 		fiat_currency: r.fiat_currency,
 		amount_min: r.amount_min === null ? null : Number(r.amount_min),
 		amount_max: r.amount_max === null ? null : Number(r.amount_max),
@@ -368,7 +376,7 @@ export function orderbookRoute(db: Database, poller: Poller): Hono {
 			orderBy = 'o.updated_at DESC, o.account ASC, o.permlink ASC';
 		}
 
-		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
+		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
 			        o.location_region, o.payment_methods, o.terms,
 			        o.fee_method,

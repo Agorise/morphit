@@ -422,7 +422,9 @@ cannot accidentally leak into the fee path:
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
 coins (BTC, XMR, BLURT) declare `['mainnet']`.  Multi-network
-coins (USDT) list each network explicitly:
+coins (USDT — shipped in Part 121 cp3) list each network
+explicitly.  The **canonical reference** is the actual USDT
+entry at `packages/asset-registry/src/index.ts`:
 
 ```ts
 {
@@ -430,23 +432,30 @@ coins (USDT) list each network explicitly:
   decimals: 6,
   isCoordinationChain: false,
   canBeTraded: true,
-  canPayListingFee: false,                 // Category B
-  supportedNetworks: ['erc20', 'trc20', 'sol'],
+  canPayListingFee: false,                  // Category B
+  supportedNetworks: ['erc20', 'trc20', 'spl', 'bep20'],
   defaultNetwork: null,                     // force explicit user choice
   privacyWarningKey: 'usdt_centralized',
-  addressShape: /^(0x[a-fA-F0-9]{40}|T[A-Za-z0-9]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+  addressShape:
+    /^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
 }
 ```
 
 Setting `defaultNetwork: null` forces the post-order form to
 require an explicit network pick on every trade — the safest
-stance for cross-chain-mis-send-prone assets.
+stance for cross-chain-mis-send-prone assets.  Per-network
+metadata (regexes, fee hints, bundled explorer URLs) lives
+separately in `apps/web/src/lib/assets/networks.ts`; adding a
+new USDT network is a single entry there.
 
-The frontend address-share modal MUST validate the address
-against the chosen network's regex (not just the registry's
-combined regex), and SHOULD render a strong per-network warning
-in chat: "USDT on Tron (TRC-20) only.  Sending USDT-ERC20 to
-this address loses your funds."
+The frontend address-share modal validates the address against
+the chosen network's regex (not just the registry's combined
+regex), and the `<ChatMessage>` component renders a bold-network
+prefix + amber-warning aside above the address: "Tron (TRC-20)
+USDT address — send USDT on Tron only.  Sending USDT on any
+other network to this address loses your funds permanently."
+
+Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`.
 
 ### Privacy warning chip
 
@@ -458,7 +467,8 @@ private or decentralized enough that no warning is needed).
 Non-null is an i18n key looked up under
 `assets.privacy_warnings.<key>` in the locale JSON.
 
-When USDT lands, its warning text should explain:
+USDT's warning (shipped in Part 121 cp3,
+`assets.privacy_warnings.usdt_centralized`) explains:
 - Tether can freeze any USDT address (centralization risk).
 - USDT transactions are public on the network the user chose
   (no on-chain privacy).

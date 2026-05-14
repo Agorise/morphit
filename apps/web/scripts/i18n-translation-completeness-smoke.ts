@@ -624,6 +624,58 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'post_order.fee_method.tx_proof_how_to_feather_heading', locale: 'fa', reason: '(c) "Feather Wallet" is a brand/product name' },
 	{ key: 'post_order.fee_method.tx_proof_how_to_feather_heading', locale: 'zh-CN', reason: '(c) "Feather Wallet" is a brand/product name' },
 	{ key: 'post_order.fee_method.tx_proof_how_to_feather_heading', locale: 'zh-HK', reason: '(c) "Feather Wallet" is a brand/product name' },
+
+	// ─── Part 121 — USDT proper nouns ───
+	// "Tether" is a brand name; same spelling in all Latin-script
+	// locales.  fa/zh-CN/zh-HK get native transliterations (تتر,
+	// 泰达币, 泰達幣) so they're not in the allow-list.
+	{ key: 'assets.usdt.displayName', locale: 'de', reason: '(c) "Tether" is a brand name' },
+	{ key: 'assets.usdt.displayName', locale: 'es', reason: '(c) "Tether" is a brand name' },
+	{ key: 'assets.usdt.displayName', locale: 'fr', reason: '(c) "Tether" is a brand name' },
+	{ key: 'assets.usdt.displayName', locale: 'it', reason: '(c) "Tether" is a brand name' },
+	{ key: 'assets.usdt.displayName', locale: 'pl', reason: '(c) "Tether" is a brand name' },
+	{ key: 'assets.usdt.displayName', locale: 'ru', reason: '(c) "Tether" is a brand name' },
+	// Network display names: chain-name + ERC/TRC/SPL/BEP standard
+	// suffix are technical identifiers that don't translate.  fa
+	// transliterates the chain name to Persian script for most;
+	// for BNB Smart Chain even fa keeps it untranslated because
+	// BNB is an acronym + "Smart Chain" is a brand-product name.
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'de', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'es', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'fr', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'it', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'pl', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.erc20.displayName', locale: 'ru', reason: '(c) "Ethereum (ERC-20)" — brand + ERC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'de', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'es', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'fr', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'it', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'pl', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.trc20.displayName', locale: 'ru', reason: '(c) "Tron (TRC-20)" — brand + TRC-20 standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'de', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'es', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'fr', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'it', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'pl', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.spl.displayName', locale: 'ru', reason: '(c) "Solana (SPL)" — brand + SPL standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'de', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'es', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'fa', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'fr', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'it', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'pl', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+	{ key: 'assets.usdt.network.bep20.displayName', locale: 'ru', reason: '(c) "BNB Smart Chain (BEP-20)" — BNB acronym + Smart Chain brand + BEP-20 standard suffix' },
+
+	// "USDT" is a universal acronym; same spelling everywhere.
+	{ key: 'chat.address.method_usdt', locale: 'de', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'es', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'fa', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'fr', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'it', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'pl', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'ru', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'zh-CN', reason: '(c) "USDT" is a universal acronym' },
+	{ key: 'chat.address.method_usdt', locale: 'zh-HK', reason: '(c) "USDT" is a universal acronym' },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));
