@@ -9,8 +9,6 @@ ref: "main"
 
 Thanks for taking the time to report this. The more of these fields you can fill in, the faster we can fix it. If you don't know a field, just write *don't know* or leave it blank — partial reports are still useful.
 
-Copy this whole file, paste it into a new issue at <https://git.agorise.net/agorise/morphit/issues>, or send it directly to the operator who invited you.
-
 ---
 
 ## 1. One-line summary
