@@ -64,7 +64,19 @@ import type {
 	BlocksResponse,
 	ChatHistoryResponse,
 	ChatMessageRecord,
-	InstanceDirectoryResponse
+	InstanceDirectoryResponse,
+	// cp17 additions (final ~12 lower-traffic):
+	ClearingPricePoint,
+	ClearingPriceHistoryResponse,
+	BatchProfilesResponse,
+	FeedbackRecord,
+	FeedbackResponseRecord,
+	AccountFeedbackResponse,
+	AccountFeedbackGivenResponse,
+	ChatReadStateEntry,
+	ChatReadStateResponse,
+	AttestorEligibilityResponse,
+	StrangerFeeQuoteResponse
 } from '@morphit/indexer-client';
 
 // ─── Schemas ───────────────────────────────────────────────────
@@ -322,6 +334,92 @@ const InstanceDirectoryResponseSchema = z.object({
 	instances: z.array(InstanceDirectoryEntrySchema)
 });
 
+// ─── cp17 schemas (final ~12 lower-traffic types) ──────────────
+
+const ClearingPricePointSchema = z.object({
+	day: z.string(),
+	clearing_blurt_per_hour: z.number(),
+	active_visible_count: z.number(),
+	max_slots: z.number()
+});
+
+const ClearingPriceHistoryResponseSchema = z.object({
+	points: z.array(ClearingPricePointSchema),
+	window_days: z.number(),
+	max_slots: z.number()
+});
+
+const BatchProfilesResponseSchema = z.object({
+	profiles: z.record(z.string(), ProfileResponseSchema)
+});
+
+const FeedbackResponseRecordSchema = z.object({
+	responder: z.string(),
+	comment: z.string(),
+	created_at: z.string()
+});
+
+const FeedbackRecordSchema = z.object({
+	id: z.number(),
+	reviewer: z.string(),
+	subject: z.string(),
+	rating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+	comment: z.string().nullable(),
+	order_permlink: z.string().nullable(),
+	created_at: z.string(),
+	source_trx_id: z.string(),
+	suppressed: z.boolean().optional(),
+	has_verified_chat: z.boolean().optional(),
+	responses: z.array(FeedbackResponseRecordSchema)
+});
+
+const FeedbackSummarySchemaForAcct = FeedbackSummarySchema; // reuse
+
+const AccountFeedbackResponseSchema = z.object({
+	summary: FeedbackSummarySchemaForAcct,
+	items: z.array(FeedbackRecordSchema),
+	next_cursor: z.string().nullable()
+});
+
+const AccountFeedbackGivenResponseSchema = z.object({
+	items: z.array(FeedbackRecordSchema),
+	next_cursor: z.string().nullable()
+});
+
+const ChatReadStateEntrySchema = z.object({
+	peer: z.string(),
+	last_read_at: z.string()
+});
+
+const ChatReadStateResponseSchema = z.object({
+	account: z.string(),
+	items: z.array(ChatReadStateEntrySchema)
+});
+
+const AttestorEligibilityResponseSchema = z
+	.object({
+		account: z.string(),
+		phase: z.enum(['launch', 'steady']),
+		eligible: z.boolean(),
+		reason: z.string(), // AttestorEligibilityReason is a string union
+		loyalty_blurt: z.number(),
+		age_days: z.number(),
+		missing_loyalty_blurt: z.number(),
+		days_until_eligible: z.number().nullable()
+	})
+	.passthrough();
+
+const StrangerFeeQuoteResponseSchema = z.object({
+	account: z.string(),
+	base_price_blurt: z.number(),
+	price_blurt: z.number(),
+	multiplier: z.number(),
+	recent_count: z.number(),
+	window_minutes: z.number(),
+	capped: z.boolean(),
+	max_multiplier: z.number()
+});
+
 // ─── Sample literals (TS-type-cross-check) ─────────────────────
 //
 // Each literal is `satisfies` the canonical TS interface from
@@ -527,6 +625,86 @@ const sampleChatHistory = {
 const sampleInstanceDirectory = {
 	instances: [sampleInstanceDirEntry]
 } satisfies InstanceDirectoryResponse;
+
+// ─── cp17 samples ──────────────────────────────────────────────
+
+const sampleClearingPricePoint = {
+	day: '2026-05-15',
+	clearing_blurt_per_hour: 0.12,
+	active_visible_count: 4,
+	max_slots: 5
+} satisfies ClearingPricePoint;
+
+const sampleClearingPriceHistory = {
+	points: [sampleClearingPricePoint],
+	window_days: 30,
+	max_slots: 5
+} satisfies ClearingPriceHistoryResponse;
+
+const sampleBatchProfiles = {
+	profiles: { alice: sampleProfile, bob: sampleProfile }
+} satisfies BatchProfilesResponse;
+
+const sampleFeedbackResponse = {
+	responder: 'alice',
+	comment: 'Thanks for the smooth trade!',
+	created_at: '2026-05-15T00:00:00Z'
+} satisfies FeedbackResponseRecord;
+
+const sampleFeedbackRecord = {
+	id: 100,
+	reviewer: 'bob',
+	subject: 'alice',
+	rating: 5 as const,
+	comment: 'Smooth trade, fast settlement.',
+	order_permlink: 'sell-btc-2026-05-14',
+	created_at: '2026-05-15T00:00:00Z',
+	source_trx_id: 'abc123def456',
+	responses: [sampleFeedbackResponse]
+} satisfies FeedbackRecord;
+
+const sampleAccountFeedback = {
+	summary: sampleFeedbackSummary,
+	items: [sampleFeedbackRecord],
+	next_cursor: null
+} satisfies AccountFeedbackResponse;
+
+const sampleAccountFeedbackGiven = {
+	items: [sampleFeedbackRecord],
+	next_cursor: null
+} satisfies AccountFeedbackGivenResponse;
+
+const sampleChatReadStateEntry = {
+	peer: 'bob',
+	last_read_at: '2026-05-15T00:00:00Z'
+} satisfies ChatReadStateEntry;
+
+const sampleChatReadState = {
+	account: 'alice',
+	items: [sampleChatReadStateEntry]
+} satisfies ChatReadStateResponse;
+
+const sampleAttestorEligibility = {
+	account: 'alice',
+	phase: 'launch' as const,
+	eligible: true,
+	reason: 'satisfies_launch_phase',
+	loyalty_blurt: 5,
+	age_days: 90,
+	missing_loyalty_blurt: 0,
+	days_until_eligible: null
+} satisfies AttestorEligibilityResponse;
+
+const sampleStrangerFeeQuote = {
+	account: 'alice',
+	base_price_blurt: 5,
+	price_blurt: 10,
+	multiplier: 2,
+	recent_count: 2,
+	window_minutes: 60,
+	capped: false,
+	max_multiplier: 128
+} satisfies StrangerFeeQuoteResponse;
 
 // ─── Scenarios ─────────────────────────────────────────────────
 interface Scenario {
@@ -751,6 +929,88 @@ const scenarios: Scenario[] = [
 			return rest;
 		},
 		invalidReason: 'missing required field "instances"'
+	},
+
+	// ─── cp17 scenarios — final lower-traffic types ───────────
+	{
+		name: 'ClearingPricePoint',
+		schema: ClearingPricePointSchema,
+		valid: sampleClearingPricePoint,
+		invalidate: (s) => ({ ...s, day: null }),
+		invalidReason: 'day=null (must be string)'
+	},
+	{
+		name: 'ClearingPriceHistoryResponse',
+		schema: ClearingPriceHistoryResponseSchema,
+		valid: sampleClearingPriceHistory,
+		invalidate: (s) => ({ ...s, window_days: 'thirty' }),
+		invalidReason: 'window_days="thirty" (must be number)'
+	},
+	{
+		name: 'BatchProfilesResponse',
+		schema: BatchProfilesResponseSchema,
+		valid: sampleBatchProfiles,
+		invalidate: (s) => ({ ...s, profiles: 'not a record' }),
+		invalidReason: 'profiles="not a record" (must be record)'
+	},
+	{
+		name: 'FeedbackResponseRecord',
+		schema: FeedbackResponseRecordSchema,
+		valid: sampleFeedbackResponse,
+		invalidate: (s) => ({ ...s, comment: null }),
+		invalidReason: 'comment=null (must be string; FeedbackResponseRecord requires non-null)'
+	},
+	{
+		name: 'FeedbackRecord',
+		schema: FeedbackRecordSchema,
+		valid: sampleFeedbackRecord,
+		invalidate: (s) => ({ ...s, rating: 6 }),
+		invalidReason: 'rating=6 (must be 1|2|3|4|5)'
+	},
+	{
+		name: 'AccountFeedbackResponse',
+		schema: AccountFeedbackResponseSchema,
+		valid: sampleAccountFeedback,
+		invalidate: (s) => {
+			const { summary, ...rest } = s;
+			return rest;
+		},
+		invalidReason: 'missing required field "summary"'
+	},
+	{
+		name: 'AccountFeedbackGivenResponse',
+		schema: AccountFeedbackGivenResponseSchema,
+		valid: sampleAccountFeedbackGiven,
+		invalidate: (s) => ({ ...s, items: { not: 'an array' } }),
+		invalidReason: 'items=object (must be array)'
+	},
+	{
+		name: 'ChatReadStateEntry',
+		schema: ChatReadStateEntrySchema,
+		valid: sampleChatReadStateEntry,
+		invalidate: (s) => ({ ...s, last_read_at: 12345 }),
+		invalidReason: 'last_read_at=12345 (must be ISO string, not epoch number)'
+	},
+	{
+		name: 'ChatReadStateResponse',
+		schema: ChatReadStateResponseSchema,
+		valid: sampleChatReadState,
+		invalidate: (s) => ({ ...s, account: null }),
+		invalidReason: 'account=null (must be string)'
+	},
+	{
+		name: 'AttestorEligibilityResponse',
+		schema: AttestorEligibilityResponseSchema,
+		valid: sampleAttestorEligibility,
+		invalidate: (s) => ({ ...s, phase: 'beta' }),
+		invalidReason: "phase='beta' (must be 'launch'|'steady')"
+	},
+	{
+		name: 'StrangerFeeQuoteResponse',
+		schema: StrangerFeeQuoteResponseSchema,
+		valid: sampleStrangerFeeQuote,
+		invalidate: (s) => ({ ...s, capped: 'yes' }),
+		invalidReason: "capped='yes' (must be boolean)"
 	}
 ];
 

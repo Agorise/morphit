@@ -269,6 +269,22 @@
  *             54 REST-shape + 18 SSE-shape contract checks
  *             on every CI run.
  *
+ *   P121-CP17 Two sentinels pinning the final lower-traffic
+ *             schema coverage.  api-response-shape smoke now
+ *             covers ALL @morphit/indexer-client response
+ *             types (76 checks across 38 interfaces): the
+ *             cp16 set plus ClearingPricePoint, ClearingPrice-
+ *             HistoryResponse, BatchProfilesResponse, Feedback-
+ *             Record (with rating literal-union + nested
+ *             responses array), FeedbackResponseRecord,
+ *             AccountFeedback{,Given}Response, ChatReadState-
+ *             Entry/Response, AttestorEligibilityResponse,
+ *             StrangerFeeQuoteResponse.  Schema-as-contract
+ *             coverage for the indexer is complete; relay-
+ *             side ad-hoc JSON responses remain a separate
+ *             follow-up since they don't yet share a types
+ *             package the smoke can satisfies-check against.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -1482,6 +1498,43 @@ const SCENARIOS: readonly Scenario[] = [
 			'satisfies ConversationsResponse',
 			'satisfies BlocksResponse',
 			'satisfies InstanceDirectoryResponse'
+		]
+	},
+
+	// ─── P121-CP17 — final lower-traffic schema coverage ──────
+	{
+		name: 'P121-CP17-1 — api-response-shape smoke now covers ALL @morphit/indexer-client response types',
+		file: 'apps/matrix-bot/scripts/api-response-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'ClearingPricePointSchema',
+			'ClearingPriceHistoryResponseSchema',
+			'BatchProfilesResponseSchema',
+			'FeedbackRecordSchema',
+			'FeedbackResponseRecordSchema',
+			'AccountFeedbackResponseSchema',
+			'AccountFeedbackGivenResponseSchema',
+			'ChatReadStateEntrySchema',
+			'ChatReadStateResponseSchema',
+			'AttestorEligibilityResponseSchema',
+			'StrangerFeeQuoteResponseSchema'
+		]
+	},
+	{
+		name: 'P121-CP17-2 — every cp17 schema is anchored by a satisfies-clause cross-check against the TS interface',
+		file: 'apps/matrix-bot/scripts/api-response-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'satisfies ClearingPricePoint',
+			'satisfies ClearingPriceHistoryResponse',
+			'satisfies BatchProfilesResponse',
+			'satisfies FeedbackRecord',
+			'satisfies FeedbackResponseRecord',
+			'satisfies AccountFeedbackResponse',
+			'satisfies AccountFeedbackGivenResponse',
+			'satisfies ChatReadStateResponse',
+			'satisfies AttestorEligibilityResponse',
+			'satisfies StrangerFeeQuoteResponse'
 		]
 	}
 ];
