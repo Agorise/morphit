@@ -1,10 +1,74 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 13)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 14)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp13-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp14-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp12-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp13-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp14 — what's shipped (envelope-schema validator + workspace deps-pin + systemd/journald sidecars + release workflow + brag list discipline)
+
+### Pretext
+
+cp13 sealed CI + cp13 sidecars + deps-pin.  Ken said "keep goin'".  cp14 ships the highest-leverage remaining items from cp13's REVISIT.
+
+### What shipped
+
+**Phase 1 — Cross-language drift gap closed:**
+
+`apps/matrix-bot/scripts/sidecar-envelope-smoke.ts` — 24 scenarios.  Captures every bash sidecar's emit() output with mocked systemd-cat, validates against a zod schema matching the canonical `LogRecord` TypeScript interface.  Locks down the bash-emits-JSON / TS-consumes-JSON contract; cp9's drift bug class can no longer recur silently.
+
+Also greps each script's emit() pattern for event-name lowercase_snake conformance.
+
+**Phase 2 — Cross-workspace deps-pin:**
+
+`apps/ops-cli/scripts/workspace-deps-pin-check.ts` — generalizes cp13's matrix-bot-only deps-pin to ALL workspaces.  27 deps tracked across 8 workspaces.
+
+**Phase 3 — Two more monitor sidecars:**
+
+| Script | Module | Cadence | Events |
+|---|---|---|---|
+| `ops/scripts/morphit-systemd-monitor.sh` | `systemd` | 5min | 4 events: unit health + restart loops + config drift |
+| `ops/scripts/morphit-journald-monitor.sh` | `journald` | daily 06:00 UTC | 4 events: journal disk usage + rotation health |
+
+**systemd-monitor** is critical complement to journalctl-based alerting: a unit that fails to even start emits NO journal output for the bot to route.
+
+**journald-monitor** catches "journal silently grew to 8 GB over six months" — operators usually find out only when disk is full.
+
+4 new systemd unit files.  Classifier extended with 2 new CRITICAL + 4 new WARN + 8 ALERT_COPY entries.  classifier-smoke +9 scenarios.
+
+Bot default `JOURNALCTL_UNITS` now covers **14 units**.
+
+Two new Ansible roles.  Structural-smoke const expanded 11 → 13.
+
+**Phase 4 — Tag-push release workflow:**
+
+`.forgejo/workflows/release.yml` — fires on `v*` tag push.  Runs full validation gate then builds + signs (SHA-256) a release tarball, uploaded as artifact.
+
+**Phase 5 — Brag list discipline correction:**
+
+Ken called out long-windedness from cp9-cp13 entries.  Memory now stores: concise (2-4 sentences), themed-position (not appended), skip internal plumbing.
+
+Applied retroactively: 14 bloated cp9-13 entries consolidated into **8 concise** entries placed in Section 18 (Operator setup) right after the threat-model entry.  Internal plumbing (CI workflow, ansible-lint, structural-smoke, deps-pin, envelope-smoke, release.yml) DROPPED from brag list — those belong in AUDIT.
+
+Closing summary count 271 → **265**.
+
+### Verification
+
+- 5-pulse: 2,748 × 5, 0 failures.  cp13 baseline 2,676 → cp14 baseline 2,748 (+72 net).  Strengthened from triple-pulse this checkpoint because envelope-smoke caught a real schema-regex bug on first end-to-end run (host-monitor emits kebab-case `module:"host-resource"`; first schema version forbade hyphens — schema was too strict; fixed to allow lowercase-kebab for module names while keeping event names strict snake_case).  5x clean confirms the fix landed properly, not a transient flake.
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness against 53 files: passes.
+
+### Pending — NOT cp14 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (still needs Ken's hardware)
+- smartctl SCT thermal log scraper
+- bind-mount + tmpfs usage monitor extension
+- API-response zod schemas (extend envelope-smoke pattern)
+- Extract emit() helper into `ops/scripts/lib/emit.sh` for DRY across 12 scripts
+- Trigger `.forgejo/workflows/release.yml` with a real tag push
+
+---
 
 ## Part 121 cp13 — what's shipped (Forgejo CI workflow + deps-pin-check + certbot/apt/compose monitor sidecars)
 

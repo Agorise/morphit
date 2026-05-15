@@ -1533,6 +1533,8 @@ Three more sidecars in the same pattern, each opt-in via their own systemd timer
 - **`morphit-certbot-monitor`** — TLS cert expiry + renewal-stall detector.  Daily check.  Catches the killer pattern most monitoring stacks miss: cert renewing fine for months silently starts failing for weeks before it expires.  This sidecar fires CRITICAL if a cert is expiring AND certbot has not had a successful renewal in 14 days — long before expiry actually breaks your site.
 - **`morphit-apt-monitor`** — daily count of pending security updates.  Surfaces what the motd line shows but operators stop reading.  CRITICAL at ≥10 pending security updates.  Debian/Ubuntu only.
 - **`morphit-compose-monitor`** — Docker Compose service health-check status + restart-loop detector every 5 min.  Most useful with the BunkerWeb deploy path (§32); useless on bare-metal-only (sidecar exits cleanly with INFO event in that case).
+- **`morphit-systemd-monitor`** — systemd unit health every 5 min.  Watches morphit-* units for "failed" state + high restart counts.  Closes a gap journalctl-based alerting can't cover: a unit that fails to start emits no journal output.
+- **`morphit-journald-monitor`** — daily journal disk usage + rotation health.  Catches the "journal silently grew to 8 GB over six months until disk full" pattern most operators only find when it's too late.
 
 Full setup procedure + threshold tuning + per-jail overrides in `OPERATIONS.md` §16 "Extended monitoring sidecars".
 

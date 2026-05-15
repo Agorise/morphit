@@ -695,6 +695,80 @@ const scenarios: Scenario[] = [
 		name: 'compose docker_unavailable → INFO',
 		alert: a('compose', 'docker_unavailable', { hint: 'install docker' }),
 		expectedTier: 'INFO'
+	},
+
+	// ─── CRITICAL — cp14 ───────────────────────────────────────
+	{
+		name: 'systemd unit_failed → CRITICAL',
+		alert: a('systemd', 'unit_failed', {
+			unit: 'morphit-indexer.service',
+			sub_state: 'failed',
+			result: 'exit-code'
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'journald journal_size_critical → CRITICAL (disk-filling pattern)',
+		alert: a('journald', 'journal_size_critical', {
+			size_mb: 5000,
+			span_days: 730,
+			threshold_mb: 4096
+		}),
+		expectedTier: 'CRITICAL'
+	},
+
+	// ─── WARN — cp14 ───────────────────────────────────────────
+	{
+		name: 'systemd unit_restart_loop → WARN',
+		alert: a('systemd', 'unit_restart_loop', {
+			unit: 'morphit-indexer.service',
+			n_restarts: 15,
+			active_state: 'active',
+			threshold: 10
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'systemd unit_missing → WARN (config drift)',
+		alert: a('systemd', 'unit_missing', {
+			unit: 'morphit-deprecated.service'
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'journald journal_size_warn → WARN',
+		alert: a('journald', 'journal_size_warn', {
+			size_mb: 1500,
+			span_days: 60,
+			threshold_mb: 1024
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'journald journal_rotation_stale → WARN',
+		alert: a('journald', 'journal_rotation_stale', {
+			size_mb: 600,
+			span_days: 180,
+			threshold_days: 90,
+			threshold_min_mb: 500
+		}),
+		expectedTier: 'WARN'
+	},
+
+	// ─── INFO — cp14 catch-alls ───────────────────────────────
+	{
+		name: 'systemd systemctl_unavailable → INFO',
+		alert: a('systemd', 'systemctl_unavailable', {
+			hint: 'not a systemd host'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'journald journalctl_unavailable → INFO',
+		alert: a('journald', 'journalctl_unavailable', {
+			hint: 'no systemd-journald'
+		}),
+		expectedTier: 'INFO'
 	}
 ];
 

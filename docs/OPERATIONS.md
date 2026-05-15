@@ -2842,6 +2842,72 @@ sudo systemctl enable --now morphit-compose-monitor.timer
 For multiple compose stacks: `MORPHIT_COMPOSE_PROJECTS=` accepts
 a space-separated list of project directories.
 
+#### systemd unit-health monitor — `morphit-systemd-monitor`
+
+Watches `morphit-*` units (plus any in `MORPHIT_SYSTEMD_WATCH`)
+for **failed state** and **high restart counts**.  This closes
+a gap journalctl-based alerting can't cover: a unit that fails
+to even start emits no journal output for the bot to route, so
+a failed-start would be silently invisible without this sidecar.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `unit_failed` | CRITICAL | `systemctl is-failed` returns true for a watched unit |
+| `unit_restart_loop` | WARN | `NRestarts ≥ 10` (env-tunable) on a still-running unit |
+| `unit_missing` | WARN | A unit named in `MORPHIT_SYSTEMD_WATCH` does not exist (config drift) |
+| `systemctl_unavailable` | INFO | systemctl not in PATH |
+
+Setup:
+
+```sh
+# (Optional) tuning + extra units to watch.
+sudo install -m 0644 -o root -g root /dev/stdin \
+     /etc/morphit/systemd-monitor.env <<'ENV'
+MORPHIT_SYSTEMD_RESTART_THRESHOLD=10
+MORPHIT_SYSTEMD_WATCH="postgres@16-main.service docker.service"
+ENV
+
+sudo cp /opt/morphit/ops/systemd/morphit-systemd-monitor.service \
+        /opt/morphit/ops/systemd/morphit-systemd-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-systemd-monitor.timer
+```
+
+#### Journal disk-usage monitor — `morphit-journald-monitor`
+
+Daily check of journald's own disk usage + time span covered.
+Catches the "journal silently grew to 8 GB over six months"
+pattern: without `SystemMaxUse=` in `/etc/systemd/journald.conf`,
+the journal can fill the disk; operators usually find out only
+when the disk is full.
+
+Events emitted:
+
+| Event | Tier | Trigger |
+|---|---|---|
+| `journal_size_critical` | CRITICAL | Journal disk usage > 4 GB |
+| `journal_size_warn` | WARN | > 1 GB |
+| `journal_rotation_stale` | WARN | Span > 90 days AND > 500 MB (config-drift indicator) |
+| `journalctl_unavailable` | INFO | journalctl not in PATH |
+
+Setup:
+
+```sh
+sudo cp /opt/morphit/ops/systemd/morphit-journald-monitor.service \
+        /opt/morphit/ops/systemd/morphit-journald-monitor.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-journald-monitor.timer
+```
+
+Recommended companion: set `SystemMaxUse=1G` (or your preferred
+cap) in `/etc/systemd/journald.conf` and
+`sudo systemctl restart systemd-journald` so the disk-usage
+ceiling is enforced.
+
 ### Deploying all sidecars at once via Ansible
 
 The repository ships an Ansible playbook at `ops/ansible/` that

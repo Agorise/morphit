@@ -26,6 +26,8 @@
 #   certbot_monitor   → TLS cert expiry + renewal-stall (cp13, §16)
 #   apt_monitor       → pending security update count (cp13, §16)
 #   compose_monitor   → Docker Compose service health (cp13, §16)
+#   systemd_monitor   → systemd unit health (cp14, §16)
+#   journald_monitor  → journal disk usage + rotation (cp14, §16)
 #
 # Run with:
 #   ansible-playbook -i inventory/hosts.yml playbook.yml --check
@@ -132,6 +134,14 @@
     - role: compose_monitor
       tags: [compose_monitor, monitors]
       when: enable_compose_monitor | default(false)
+
+    - role: systemd_monitor
+      tags: [systemd_monitor, monitors]
+      when: enable_systemd_monitor | default(false)
+
+    - role: journald_monitor
+      tags: [journald_monitor, monitors]
+      when: enable_journald_monitor | default(false)
 
   post_tasks:
     - name: Print verification reminder

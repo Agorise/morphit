@@ -115,7 +115,13 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 
 	// cp13 — Docker Compose service health.
 	(a) => a.module === 'compose' && a.event === 'service_unhealthy',
-	(a) => a.module === 'compose' && a.event === 'service_exited'
+	(a) => a.module === 'compose' && a.event === 'service_exited',
+
+	// cp14 — systemd unit health.
+	(a) => a.module === 'systemd' && a.event === 'unit_failed',
+
+	// cp14 — journald disk usage (filling-disk-silently).
+	(a) => a.module === 'journald' && a.event === 'journal_size_critical'
 ];
 
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
@@ -158,7 +164,13 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	// cp13 — WARN tier.
 	(a) => a.module === 'certbot' && a.event === 'cert_expiry_warn',
 	(a) => a.module === 'apt' && a.event === 'security_updates_warn',
-	(a) => a.module === 'compose' && a.event === 'service_restart_loop'
+	(a) => a.module === 'compose' && a.event === 'service_restart_loop',
+
+	// cp14 — WARN tier.
+	(a) => a.module === 'systemd' && a.event === 'unit_restart_loop',
+	(a) => a.module === 'systemd' && a.event === 'unit_missing',
+	(a) => a.module === 'journald' && a.event === 'journal_size_warn',
+	(a) => a.module === 'journald' && a.event === 'journal_rotation_stale'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -833,6 +845,86 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'The morphit-compose-monitor service is running but Docker or ' +
 			'the Compose v2 plugin is not installed. {hint}. Disable the ' +
 			'timer if you do not use Docker at all.'
+	},
+
+	// ─── cp14 systemd sidecar ──────────────────────────────────
+	'systemd:unit_failed': {
+		title: 'systemd unit FAILED: {unit}',
+		advice:
+			'{unit} is in failed state (sub_state={sub_state}, ' +
+			'result={result}). The service is down — restart attempts hit ' +
+			'the start-limit burst, or the unit explicitly entered failed ' +
+			'state. journalctl-based alerting cannot see this because the ' +
+			'unit isnt running to emit anything. Check: ' +
+			'`sudo systemctl status {unit}` for the failure context, ' +
+			'`sudo journalctl -u {unit} --since "30 min ago"` for the ' +
+			'crash logs, `sudo systemctl reset-failed {unit}` then ' +
+			'`sudo systemctl start {unit}` after fixing the root cause.'
+	},
+	'systemd:unit_restart_loop': {
+		title: 'systemd unit in restart loop: {unit}',
+		advice:
+			'{unit} has NRestarts={n_restarts} (threshold {threshold}). ' +
+			'It is currently {active_state} but its restart policy is ' +
+			'masking a bug that keeps crashing it. Check ' +
+			'`sudo journalctl -u {unit} --since "1 hour ago"` for the crash ' +
+			'pattern, fix the underlying issue, then ' +
+			'`sudo systemctl reset-failed {unit}` to clear the counter.'
+	},
+	'systemd:unit_missing': {
+		title: 'configured-to-watch systemd unit not found: {unit}',
+		advice:
+			'{unit} is in MORPHIT_SYSTEMD_WATCH but does not exist on this ' +
+			'host. Either remove the unit from the watch list or install ' +
+			'the missing unit file. (This is a config drift signal — ' +
+			'someone removed the unit but forgot to update the monitor.)'
+	},
+	'systemd:systemctl_unavailable': {
+		title: 'systemd sidecar enabled but systemctl missing',
+		advice:
+			'The morphit-systemd-monitor service is running but systemctl is ' +
+			'not in PATH. {hint}. Disable the timer if this host does not ' +
+			'use systemd.'
+	},
+
+	// ─── cp14 journald sidecar ─────────────────────────────────
+	'journald:journal_size_critical': {
+		title: 'Journal disk usage critical: {size_mb} MB',
+		advice:
+			'journald is using {size_mb} MB of disk for log storage ' +
+			'(threshold {threshold_mb} MB). The journal covers ' +
+			'{span_days} days. Rotation is likely misconfigured — without ' +
+			'a SystemMaxUse limit in /etc/systemd/journald.conf, the journal ' +
+			'will eventually fill the disk. Set `SystemMaxUse=1G` (or your ' +
+			'preferred cap) in /etc/systemd/journald.conf, then ' +
+			'`sudo systemctl restart systemd-journald` and ' +
+			'`sudo journalctl --vacuum-size=1G` to reclaim space immediately.'
+	},
+	'journald:journal_size_warn': {
+		title: 'Journal disk usage growing: {size_mb} MB',
+		advice:
+			'journald is using {size_mb} MB across {span_days} days of ' +
+			'log history (threshold {threshold_mb} MB). Not critical yet, ' +
+			'but consider setting `SystemMaxUse=` in ' +
+			'/etc/systemd/journald.conf to bound future growth. ' +
+			'`sudo journalctl --vacuum-time=30d` reclaims old entries now.'
+	},
+	'journald:journal_rotation_stale': {
+		title: 'Journal covers {span_days} days — rotation may be off',
+		advice:
+			'The journal covers {span_days} days at {size_mb} MB (' +
+			'thresholds {threshold_days} days + {threshold_min_mb} MB). ' +
+			'Long span with moderate size suggests rotation policy is ' +
+			'looser than typical. Verify `SystemMaxFiles=`, ' +
+			'`MaxRetentionSec=`, and `MaxFileSec=` in ' +
+			'/etc/systemd/journald.conf match your retention needs.'
+	},
+	'journald:journalctl_unavailable': {
+		title: 'journald sidecar enabled but journalctl missing',
+		advice:
+			'The morphit-journald-monitor service is running but journalctl ' +
+			'is not in PATH. {hint}. Disable the timer if this host does ' +
+			'not use systemd-journald.'
 	}
 };
 

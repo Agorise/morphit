@@ -1,0 +1,112 @@
+# Morphit release workflow — fires on annotated-tag push.
+#
+# Runs the full validation gate (typecheck + ansible-lint +
+# triple-pulse smokes) AGAIN at release time (defensive — even
+# though ci.yml runs on every push, tag pushes may bypass
+# branch-protected CI in some forge configs), then builds a
+# release tarball with the manifest of files needed to reproduce
+# the deploy.
+#
+# Tag format: `v<MAJOR>.<MINOR>.<PATCH>` (e.g. `v1.0.0-beta.1`).
+#
+# Output: a `morphit-<tag>.tar.gz` archive uploaded as a release
+# artifact.
+
+name: morphit-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Releases should never race each other.
+concurrency:
+  group: morphit-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish release tarball
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout (full history for git describe)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install build tools (for better-sqlite3 native)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential python3 python3-pip
+
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install ansible-lint + collections
+        run: |
+          pip3 install --break-system-packages --quiet \
+            ansible ansible-lint
+          ansible-galaxy collection install -r \
+            ops/ansible/collections/requirements.yml
+
+      - name: Typecheck sweep
+        run: bash scripts/typecheck-sweep.sh
+
+      - name: ansible-lint (production profile)
+        working-directory: ops/ansible
+        run: ansible-lint --offline --strict playbook.yml
+
+      - name: Triple-pulse smokes
+        run: |
+          for i in 1 2 3; do
+            echo "=== Pulse $i ==="
+            bash scripts/run-smokes.sh
+          done
+
+      - name: Compute release version + tarball path
+        id: ver
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Build release tarball
+        # Excludes node_modules, .git, /out, /dist, and the
+        # private working directories.  Includes the full source
+        # tree the operator needs to npm-install + run on a
+        # clean Ubuntu 24.04 box.
+        run: |
+          tar --exclude='./node_modules' \
+              --exclude='./.git' \
+              --exclude='./out' \
+              --exclude='./dist' \
+              --exclude='./apps/*/node_modules' \
+              --exclude='./apps/*/dist' \
+              --exclude='./apps/*/build' \
+              --exclude='./packages/*/node_modules' \
+              --exclude='./packages/*/dist' \
+              --exclude='*.log' \
+              -czf "${{ steps.ver.outputs.tarball }}" .
+
+      - name: Compute tarball checksum
+        run: |
+          sha256sum "${{ steps.ver.outputs.tarball }}" \
+            > "${{ steps.ver.outputs.tarball }}.sha256"
+          cat "${{ steps.ver.outputs.tarball }}.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.tag }}
+          path: |
+            ${{ steps.ver.outputs.tarball }}
+            ${{ steps.ver.outputs.tarball }}.sha256
+          retention-days: 90

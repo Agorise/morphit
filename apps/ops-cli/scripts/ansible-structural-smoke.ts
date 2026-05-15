@@ -50,7 +50,9 @@ const OPTIONAL_SIDECAR_ROLES = [
 	'postfix_monitor',
 	'certbot_monitor',
 	'apt_monitor',
-	'compose_monitor'
+	'compose_monitor',
+	'systemd_monitor',
+	'journald_monitor'
 ];
 const REQUIRED_COLLECTIONS = [
 	'community.general',
