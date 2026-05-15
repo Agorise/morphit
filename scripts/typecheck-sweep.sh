@@ -115,5 +115,6 @@ project "relay (incl. test)"    apps/relay/tsconfig.json
 project "ops-cli"               apps/ops-cli/tsconfig.json
 project "matrix-bot"            apps/matrix-bot/tsconfig.json
 project "indexer-client"        packages/indexer-client/tsconfig.json
+project "relay-client"          packages/relay-client/tsconfig.json
 project "operator-config"       packages/operator-config/tsconfig.json
 project "asset-registry"        packages/asset-registry/tsconfig.json

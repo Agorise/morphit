@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5-fix2 — two mechanical smokes shipped + F15 HIGH dead-env-var-name finding caught by them and fixed)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 6 — standing-REVISIT cleanup: F7 regex-primitive + broader ariaLabel sentinel; F8 schema-migration coverage smoke; @morphit/relay-client first contract layer)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,7 +6,112 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp5-fix2 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp6 (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **3,066 × 3 scenarios, 0 failures** (cp5-fix2 baseline 3,057 → cp6 baseline 3,066 = +9: 4 new schema-migration-coverage-smoke scenarios + 1 new P122-CP6 sentinel + 4 from secondary effects of the new package landing in workspace-graph smokes)
+- Typecheck-sweep: **0 errors across all 10 workspaces** (was 9; relay-client added this turn)
+- Both new smokes self-tested by tampering
+
+**This-turn deliverable: three of the four standing REVISITs that were cleanly in-scope; the fourth (ansible-lint in CI) was already done and the standing list was stale.**
+
+### F7 — `assertNoRegexMatch` runner primitive + broader S-12 ariaLabel sentinel
+
+**Primitive added** to `apps/web/scripts/persona-walkthrough-smoke.ts`: new optional `assertNoRegexMatch?: { pattern: RegExp; reason: string }[]` field on the `Scenario` interface, alongside the existing `mustHave`, `mustNotHave`, and `assertOrdering`. Strips the global flag defensively, runs `exec()` against the file body, surfaces the first match in the diagnostic.
+
+**S-12 ariaLabel sentinel extended** with regex coverage. Pre-cp6 the sentinel listed three literal forbidden strings (`ariaLabel="What is BLURT?"`, `ariaLabel="What is BTC?"`, `ariaLabel="What is XMR?"`); a future asset like LTC or DOGE added with the same anti-pattern would have silently slipped through. The new `assertNoRegexMatch: [{ pattern: /\bariaLabel="[^"]*"/ }]` catches every Svelte `ariaLabel="..."` literal-string prop on `/post`, regardless of ticker. Acceptable forms (no prop → `effectiveAriaLabel` default, or `{$_("...")}` expression value) don't match because `{` ≠ `"`.
+
+**Self-tested:** injected `ariaLabel="What is USDT?"` → sentinel fires with `REGEX MATCH (forbidden pattern fired): /\bariaLabel="[^"]*"/` + "first hit: ariaLabel=\"What is USDT?\""; restoration → clean.
+
+### F8 — schema-migration coverage smoke
+
+**New file: `apps/indexer/scripts/schema-migration-coverage-smoke.ts`** (4 scenarios). Tighter form of cp2's F5 sentinel: instead of pinning a brittle literal head-version COMMENT STRING (which broke whenever an editor tweaked the prose), the smoke PARSES both schema.sql and migrations.ts and pins the DERIVED NUMERIC values.
+
+**Defenses:**
+1. `schema.sql` highest `-- v<N>` banner === `SCHEMA_HEAD_VERSION` (32). Strict banner-form regex (`^--\s+v(\d+)(?:\s*$|\s+\/\s+)`) excludes narrative references like `-- v5 used to add...` or `-- v1-v27 stay with treasury IS NULL` — only matches actual section banners.
+2. `MIGRATIONS[]` coverage (union of `version:` and every integer in `subsumesVersions: [...]`) highest === `MIGRATIONS_COVERAGE_HIGH` (27).
+3. `SCHEMA_HEAD_VERSION ≥ MIGRATIONS_COVERAGE_HIGH` (sanity: MIGRATIONS[] can't cover a version that doesn't exist).
+4. No schema banner above the pinned head (catches the "added v33 but forgot to bump the pin" path).
+
+**Inline-only window** documented in smoke header: `v28..v32 = 5 versions` is acceptable PRE-launch because every deploy is fresh and applies `schema.sql` in full. Post-launch, new schema versions must land as `MIGRATIONS[N]` entries with proper DDL, not inline; the smoke fails until the developer either adds the entry OR consciously updates `EXPECTED_INLINE_ONLY_VERSIONS` (which forces same-turn audit of the gap).
+
+**Self-tested both directions:**
+- Add `-- v33 / ...` banner to schema.sql → smoke fires `✗ schema.sql highest -- v<N> banner === SCHEMA_HEAD_VERSION (32)` + `✗ no schema.sql -- v<N> banner above pinned head`
+- Add `MIGRATIONS[28]` entry to migrations.ts → smoke fires `✗ MIGRATIONS[] coverage highest === MIGRATIONS_COVERAGE_HIGH (27)` with diagnostic showing the new computed inline gap (`v29..v32 = 4 versions`)
+- Restoration → clean
+
+**Registered** in `scripts/run-smokes.sh` at end of indexer block as `apps/indexer:schema-migration-coverage-smoke`.
+
+### #3 — ansible-lint in CI — **NOT A REAL TODO; already done**
+
+**Discovered during work:** `.forgejo/workflows/ci.yml` lines 63-87 already has a dedicated `ansible-lint` job:
+- Installs Python 3.12 + ansible-lint via `pip3 install --break-system-packages`
+- Installs required ansible collections via `ansible-galaxy collection install -r ops/ansible/collections/requirements.yml`
+- Runs `ansible-lint --offline --strict playbook.yml` from `ops/ansible/`
+
+Plus the `smokes` job (lines ~110-119) ALSO installs ansible-lint so the `apps/ops-cli:ansible-lint-smoke` runner has it available during the smoke suite. The "ansible-lint integration in CI" item on my standing-pending list was stale. Honest correction owed and made in cp6.
+
+### #4 — `@morphit/relay-client` (PHASE F first contract layer)
+
+**Pattern mirrored from `@morphit/indexer-client`.** Created:
+- `packages/relay-client/package.json` (name: `@morphit/relay-client`, version: `0.1.0-phase-f`, AGPL-3.0)
+- `packages/relay-client/tsconfig.json` (byte-identical compiler options to indexer-client)
+- `packages/relay-client/src/index.ts` (260 lines, types-only)
+
+**Types exported:**
+- `RelayErrorCode` — wire-contract union of 25 distinct error codes the relay can emit (`signups_disabled`, `daily_ceiling_reached`, `invite_rate_limited`, 5 altcha codes, 17 create-endpoint codes)
+- `RelayRejection` — common rejection envelope with optional `retry_after_minutes` and `resets_at`
+- `AltchaChallenge` — opaque PoW challenge shape
+- `RelayInviteIssued`, `RelayInviteAltchaRequired`, `RelayInviteResponse` (discriminated union of three shapes)
+- `RelayCreateBroadcast`, `RelayCreateResponse`
+- `RelayAvailabilityAvailable`, `RelayAvailabilityUnavailable`, `RelayAvailabilityResponse`
+- `RelayHealthMinimal`, `RelayHealthVerbose`, `RelaySignupStats`, `RelayHealthResponse`
+
+**Workspace integration:**
+- Added `packages/relay-client` to root `package.json` workspaces (alphabetically positioned between indexer-client and operator-config)
+- `npm install` ran cleanly; workspace symlink created at `node_modules/@morphit/relay-client`
+- Added relay-client to `scripts/typecheck-sweep.sh`; the sweep now covers 10 workspaces (was 9), all 0 errors
+
+**First consumer refactored:**
+- `apps/web/src/lib/auth/signupClient.ts` — pre-cp6 had 25 relay error codes duplicated inline as part of `SignupErrorCode`; post-cp6 imports `RelayErrorCode` from `@morphit/relay-client` and extends it with two client-local codes (`'unreachable'`, `'altcha_unsolvable'`). The relay-emit-able subset is now single-sourced.
+
+**Sentinel — `P122-CP6`** in persona-walkthrough-smoke.ts pins both legs of the contract:
+- `mustHave: ["import('@morphit/relay-client').RelayErrorCode"]` — the import must survive
+- `mustNotHave: ["| 'invite_rate_limited'", "| 'spacing_cooldown'"]` — rejects re-inlining of the duplicate codes (targets the two most distinctive ones)
+
+If anyone reverts the schema-as-contract approach by re-duplicating the union inline, both halves of the sentinel fire.
+
+### Pattern lessons
+
+1. **Pinning derived values is more resilient than pinning literals.** F5 pinned the entire head-comment STRING; F8 pins just the NUMBER. Prose drift no longer breaks the sentinel — only semantic drift does. This is the right shape for any sentinel whose underlying invariant is numeric, version-shaped, or otherwise structurally derivable.
+
+2. **Stale standing-REVISIT lists are a finding class.** Item #3 (ansible-lint in CI) was already done; the standing list had it as pending. Pattern: every standing item should get a sanity-grep check before being claimed as gating. A 30-second verification could have avoided me listing it.
+
+3. **First contract layer is the easiest contract layer to ship.** signupClient.ts had the duplicate-union shape begging for extraction; the relay-side endpoint files (`apps/relay/src/api/*.ts`) use Hono's untyped `c.json()` and don't easily accept the new types yet. Shipping the client-side import as the MVP gets the schema-as-contract pattern landed without forcing a full relay-side return-type refactor; future contributors can adopt the types on the relay side incrementally.
+
+4. **Subset typing via `import('@module').T` syntax avoids package-graph noise.** Using `type SignupErrorCode = import('@morphit/relay-client').RelayErrorCode | ...` keeps `signupClient.ts` from needing a top-level import that drags in unrelated symbols. Same pattern Svelte already uses for its `import('svelte/store').Writable` references.
+
+**Brag list:** 265 entries unchanged. cp6 is internal contract hardening — not a stranger-cares-about win for the brag list per cp19 discipline.
+
+**This session's arc:**
+1. cp22 → P122 cp5-fix2 as previously documented
+2. **P122 cp6** — standing-REVISIT cleanup (F7 regex primitive + broader ariaLabel sentinel; F8 schema-migration coverage smoke; ansible-lint-in-CI confirmed already done; @morphit/relay-client first contract layer with signupClient consumer refactored)
+
+**Truly pending (post-cp6):**
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (the single remaining real launch-gating item)
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
+- Upgrade tooling — parked for first-release week per memory entry #29
+- **Schema-as-contract second-layer adoption:** the relay-side endpoint files could import `RelayInviteResponse` etc. and use them to type their Hono `c.json(...)` returns. This was not in cp6 scope; the indexer-client equivalent also doesn't do this. Filed as a "post-launch hardening" item — typing untyped Hono returns is a refactor with non-zero risk and minimal pre-launch value.
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (still on cp5 — cp5-fix/fix2/cp6 are same-checkpoint follow-ons, not new sealed checkpoints).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp6-delta.tar.gz` — delta over cp5-fix2.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp5-fix2-delta.tar.gz` (two mechanical smokes + F15 dead env-var-name fixes).
+
+---
 
 **Gates — all green:**
 - Triple-pulse: **3,057 × 3 scenarios, 0 failures** (cp5-fix baseline 2,965 → cp5-fix2 baseline 3,057 = +92 = 17 scenarios in new `ansible-systemd-user-consistency-smoke` + 75 scenarios in new `ansible-env-var-consumer-smoke`)
