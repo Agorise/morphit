@@ -34,23 +34,10 @@ RENEWAL_STALL_DAYS=${MORPHIT_CERTBOT_RENEWAL_STALL_DAYS:-14}
 CERT_DIR=${MORPHIT_CERTBOT_CERT_DIR:-/etc/letsencrypt/live}
 RENEW_LOG=${MORPHIT_CERTBOT_RENEW_LOG:-/var/log/letsencrypt/letsencrypt.log}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"certbot","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-certbot-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="certbot"
+MORPHIT_EMIT_TAG="morphit-certbot-monitor"
 
 # ─── Bail if certbot / cert dir missing ────────────────────────
 if ! command -v openssl >/dev/null 2>&1; then

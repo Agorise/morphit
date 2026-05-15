@@ -217,6 +217,38 @@
  *             validation gate again.  Bot's default
  *             JOURNALCTL_UNITS now covers ALL FOURTEEN units.
  *
+ *   P121-CP15 Five sentinels pinning the API-response zod
+ *             smoke + shared emit() lib + host-monitor mount
+ *             sweep + smartctl SCT thermal-log extension.
+ *             api-response-shape-smoke.ts extends the
+ *             envelope-smoke pattern from sidecars to HTTP
+ *             API: zod schemas for 10 representative response
+ *             shapes (HealthResponse, InstanceResponse,
+ *             OrderRecord, etc.) with TS-type-cross-check via
+ *             `satisfies` clauses on sample literals — drift
+ *             between the schema and the canonical TS
+ *             interface from @morphit/indexer-client fails
+ *             typecheck at CI time, not at production-debug
+ *             time.  ops/scripts/lib/emit.sh extracts iso_now()
+ *             json_str() emit() helpers into a shared lib that
+ *             all 12 sidecars source via `. "$(dirname "$0")/
+ *             lib/emit.sh"` — removed ~180 lines of duplicate
+ *             boilerplate across the sidecar fleet.  host-
+ *             monitor extended with a bind-mount + tmpfs sweep
+ *             via `df --output=target,pcent,fstype` that skips
+ *             pseudo-filesystems (proc/sysfs/cgroup/squashfs)
+ *             and emits mount_critical/warn/info for any non-
+ *             root mount crossing thresholds — catches Docker
+ *             volumes filling, runaway tmpfs, encrypted
+ *             overlay mounts the operator forgot.  smartctl-
+ *             monitor extended with SCT thermal-log scraping
+ *             via `smartctl -l scttempsts` — surfaces
+ *             temperature_sustained_high (drive hit WARN+
+ *             range at some point in its lifetime) and
+ *             temperature_overlimit_count (drive firmware
+ *             itself flagged thermal stress) that the
+ *             instantaneous-temp check can't see.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -885,8 +917,8 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			'#!/bin/sh',
-			'module":"host-resource"',
-			'systemd-cat -t morphit-host-monitor',
+			'MORPHIT_EMIT_MODULE="host-resource"',
+			'MORPHIT_EMIT_TAG="morphit-host-monitor"',
 			'/proc/meminfo',
 			'/proc/loadavg',
 			'/proc/vmstat',
@@ -982,8 +1014,8 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			'#!/bin/sh',
-			'module":"smartctl"',
-			'systemd-cat -t morphit-smartctl-monitor',
+			'MORPHIT_EMIT_MODULE="smartctl"',
+			'MORPHIT_EMIT_TAG="morphit-smartctl-monitor"',
 			'smart_failed',
 			'self_test_failed',
 			'reallocated_sectors',
@@ -999,8 +1031,8 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			'#!/bin/sh',
-			'module":"fail2ban"',
-			'systemd-cat -t morphit-fail2ban-monitor',
+			'MORPHIT_EMIT_MODULE="fail2ban"',
+			'MORPHIT_EMIT_TAG="morphit-fail2ban-monitor"',
 			'daemon_unreachable',
 			'jail_critical_ban_count',
 			'jail_high_ban_count',
@@ -1015,8 +1047,8 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			'#!/bin/sh',
-			'module":"mdadm"',
-			'systemd-cat -t morphit-mdadm-monitor',
+			'MORPHIT_EMIT_MODULE="mdadm"',
+			'MORPHIT_EMIT_TAG="morphit-mdadm-monitor"',
 			'array_failed',
 			'array_degraded',
 			'array_resyncing',
@@ -1304,6 +1336,79 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'morphit-systemd-monitor.service',
 			'morphit-journald-monitor.service'
+		]
+	},
+
+	// ─── P121-CP15 — API-shape zod smoke + emit.sh lib refactor
+	// + host-monitor mount sweep + smartctl SCT thermal log
+	{
+		name: 'P121-CP15-1 — API-response-shape smoke extends envelope-smoke pattern to HTTP API with TS-type-cross-check',
+		file: 'apps/matrix-bot/scripts/api-response-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'HealthSchema',
+			'InstanceResponseSchema',
+			'OrderRecordSchema',
+			'satisfies HealthResponse',
+			'satisfies InstanceResponse',
+			'@morphit/indexer-client',
+			'invalidate',
+			'safeParse'
+		]
+	},
+	{
+		name: 'P121-CP15-2 — shared emit() helper lib at ops/scripts/lib/emit.sh',
+		file: 'ops/scripts/lib/emit.sh',
+		rootRelative: true,
+		mustHave: [
+			'iso_now()',
+			'json_str()',
+			'emit()',
+			'MORPHIT_EMIT_MODULE',
+			'MORPHIT_EMIT_TAG',
+			'systemd-cat -t'
+		]
+	},
+	{
+		name: 'P121-CP15-3 — host-monitor sources lib/emit.sh AND has mount-sweep section for bind-mounts + tmpfs',
+		file: 'ops/scripts/morphit-host-monitor.sh',
+		rootRelative: true,
+		mustHave: [
+			'. "$(dirname "$0")/lib/emit.sh"',
+			'MORPHIT_EMIT_MODULE="host-resource"',
+			'MORPHIT_EMIT_TAG="morphit-host-monitor"',
+			'MORPHIT_HOST_SCAN_MOUNTS',
+			'--output=target,pcent,fstype',
+			'mount_critical',
+			'mount_warn',
+			'mount_info',
+			'squashfs'
+		]
+	},
+	{
+		name: 'P121-CP15-4 — smartctl-monitor SCT thermal-log extension + classifier matchers + ALERT_COPY',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'smartctl' && a.event === 'temperature_sustained_high'",
+			"'smartctl' && a.event === 'temperature_overlimit_count'",
+			"'smartctl:temperature_sustained_high'",
+			"'smartctl:temperature_overlimit_count'",
+			'scttempsts',
+			'over-temperature'
+		]
+	},
+	{
+		name: 'P121-CP15-5 — host-resource mount_* classifier matchers + ALERT_COPY across CRITICAL/WARN/INFO tiers',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'host-resource' && a.event === 'mount_critical'",
+			"'host-resource' && a.event === 'mount_warn'",
+			"'host-resource:mount_critical'",
+			"'host-resource:mount_warn'",
+			"'host-resource:mount_info'",
+			'bind-mount'
 		]
 	}
 ];

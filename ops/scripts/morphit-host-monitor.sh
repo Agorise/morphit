@@ -65,36 +65,11 @@ STATE_DIR=${MORPHIT_HOST_STATE_DIR:-/var/lib/morphit-host-monitor}
 STATE_FILE="$STATE_DIR/last-vmstat"
 mkdir -p "$STATE_DIR"
 
-# ─── Emit helper ───────────────────────────────────────────────
-# Writes a JSON line in the LogRecord envelope the matrix-bot
-# expects: { ts, level, module, event, context: {...payload} }.
-# `level` is "error" for CRITICAL, "warn" for WARN, "info" for
-# INFO — matches the indexer/relay logger convention.
-
-iso_now() {
-    # POSIX-portable: use date -u with strftime + microseconds
-    # via /proc/uptime fallback.  GNU date supports +%N for nanos;
-    # fall back to milliseconds if not.
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    # $1 = level (error|warn|info)
-    # $2 = event name (e.g. "disk_critical")
-    # $3 = JSON-encoded payload object (e.g. '{"path":"/","percent":96}')
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"host-resource","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-host-monitor -p "$1"
-}
-
-# JSON-quote a string value (escapes backslashes + double quotes).
-json_str() {
-    # shellcheck disable=SC2039
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+# Resolve lib relative to this script so dev/test layout works too.
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="host-resource"
+MORPHIT_EMIT_TAG="morphit-host-monitor"
 
 # ─── Disk usage ────────────────────────────────────────────────
 for path in $DISK_PATHS; do
@@ -111,6 +86,71 @@ for path in $DISK_PATHS; do
         emit info disk_info "${payload}${DISK_INFO}}"
     fi
 done
+
+# ─── All-mount sweep (bind mounts + tmpfs + extras) ────────────
+# DISK_PATHS above is operator-configured and typically only covers
+# the canonical mount points (/, /var, /home).  But operators can
+# accidentally fill bind-mounts (Docker volumes, encrypted overlay
+# mounts, persistent-but-mounted-elsewhere data dirs) or tmpfs
+# instances that the operator-configured DISK_PATHS doesn't cover.
+# This sweep enumerates ALL mounts via `df --output=target,pcent,fstype`
+# (or POSIX fallback) and alerts on any writable filesystem crossing
+# thresholds, skipping pseudo-filesystems (proc, sysfs, etc.).
+#
+# Emits distinct event names (`mount_critical`/`warn`/`info`) so
+# operators can distinguish "the standard volumes are filling" from
+# "some bind-mount I forgot about is filling."
+#
+# Opt-out via MORPHIT_HOST_SCAN_MOUNTS=0.
+
+if [ "${MORPHIT_HOST_SCAN_MOUNTS:-1}" = "1" ]; then
+    # GNU df supports `--output=target,pcent,fstype`.  POSIX df
+    # doesn't, so fall back to parsing the standard 6-column output
+    # plus reading /proc/mounts for fstype if needed.  We use the
+    # GNU form when available because operator monitoring on
+    # Ubuntu/Debian (Morphit's canonical target) ships GNU df.
+    mount_listing=$(df --output=target,pcent,fstype 2>/dev/null || true)
+    if [ -n "$mount_listing" ]; then
+        # Skip the header line, iterate target / pcent / fstype.
+        echo "$mount_listing" | tail -n +2 | while read -r mount_target mount_pct mount_fstype; do
+            # Skip pseudo-filesystems.  This list matches what
+            # `df` typically excludes implicitly when given -x, but
+            # we're explicit so the operator can audit the rule.
+            case "$mount_fstype" in
+                proc|sysfs|cgroup|cgroup2|devtmpfs|devpts|mqueue|fusectl|\
+configfs|securityfs|pstore|bpf|tracefs|debugfs|hugetlbfs|nsfs|\
+binfmt_misc|fuse.gvfsd-fuse|fuse.portal|squashfs|ramfs|autofs)
+                    continue
+                    ;;
+            esac
+            # Skip if mount target is already in DISK_PATHS — that's
+            # already covered above with the disk_* events.
+            already_covered=0
+            for p in $DISK_PATHS; do
+                if [ "$mount_target" = "$p" ]; then
+                    already_covered=1
+                    break
+                fi
+            done
+            [ "$already_covered" = "1" ] && continue
+
+            # Strip the trailing % and validate numeric.
+            mount_pct_num=$(echo "$mount_pct" | tr -d '%')
+            case "$mount_pct_num" in
+                ''|*[!0-9]*) continue ;;
+            esac
+
+            payload='{"path":"'$(json_str "$mount_target")'","fstype":"'$(json_str "$mount_fstype")'","percent":'$mount_pct_num',"threshold":'
+            if [ "$mount_pct_num" -ge "$DISK_CRITICAL" ]; then
+                emit error mount_critical "${payload}${DISK_CRITICAL}}"
+            elif [ "$mount_pct_num" -ge "$DISK_WARN" ]; then
+                emit warn mount_warn "${payload}${DISK_WARN}}"
+            elif [ "$mount_pct_num" -ge "$DISK_INFO" ]; then
+                emit info mount_info "${payload}${DISK_INFO}}"
+            fi
+        done
+    fi
+fi
 
 # ─── Memory ────────────────────────────────────────────────────
 mem_total=$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo)

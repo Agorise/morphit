@@ -38,23 +38,10 @@ STATE_DIR=${MORPHIT_DMESG_STATE_DIR:-/var/lib/morphit-dmesg-monitor}
 STATE_FILE="$STATE_DIR/last-cursor"
 mkdir -p "$STATE_DIR"
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"dmesg","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-dmesg-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="dmesg"
+MORPHIT_EMIT_TAG="morphit-dmesg-monitor"
 
 # ─── Bail if dmesg unreadable ──────────────────────────────────
 # On systems with dmesg_restrict=1 (the default since Debian 12),

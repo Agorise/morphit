@@ -29,23 +29,10 @@ STATE_DIR=${MORPHIT_FAIL2BAN_STATE_DIR:-/var/lib/morphit-fail2ban-monitor}
 STATE_FILE="$STATE_DIR/last-counts"
 mkdir -p "$STATE_DIR"
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"fail2ban","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-fail2ban-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="fail2ban"
+MORPHIT_EMIT_TAG="morphit-fail2ban-monitor"
 
 # ─── Bail if fail2ban-client not installed ─────────────────────
 if ! command -v fail2ban-client >/dev/null 2>&1; then

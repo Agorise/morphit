@@ -1,10 +1,64 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 14)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 15)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp14-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp15-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp13-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp14-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp15 — what's shipped (API-response zod smoke + emit.sh lib refactor + host-monitor mount sweep + smartctl SCT thermal-log)
+
+### Pretext
+
+cp14 sealed envelope-smoke + cross-workspace deps-pin + systemd/journald sidecars + tag-push release workflow + brag-list discipline correction.  Ken said "alright, continue".  cp15 ships the highest-leverage remaining items from cp14's REVISIT.
+
+### What shipped
+
+**Phase 1 — API-response zod schemas:**
+
+`apps/matrix-bot/scripts/api-response-shape-smoke.ts` (20 scenarios).  Extends the envelope-smoke pattern from sidecars to HTTP API: zod schemas for 10 representative @morphit/indexer-client response shapes (HealthResponse, ListingFeeResponse, ReleaseResponse, ErrorResponse, OperatorRecord, InstanceResponse, InstanceDirectoryEntry, OrderRecord, FeedbackSummary, ChatAdmissionResponse).
+
+Each scenario has TS-type-cross-check via `satisfies` clause on a sample literal — drift between zod schema and TS interface fails typecheck, not just runtime.  Each also includes a negative-test invalidator.
+
+**Phase 2 — Shared emit() lib:**
+
+`ops/scripts/lib/emit.sh` — extracted iso_now()/json_str()/emit() from all 12 sidecars.  Each sidecar now sources via `. "$(dirname "$0")/lib/emit.sh"` + sets MORPHIT_EMIT_MODULE/MORPHIT_EMIT_TAG vars.  **Removed ~180 lines of duplicate boilerplate.**  Envelope-smoke confirms all 12 still emit correctly post-refactor.
+
+**Phase 3 — Host-monitor mount sweep:**
+
+Extended host-monitor with `df --output=target,pcent,fstype` sweep covering all writable filesystems beyond `MORPHIT_HOST_DISK_PATHS`.  Three new events (mount_critical/warn/info) catch Docker volumes filling, runaway tmpfs, bind-mounts the operator-configured paths miss.  Skips pseudo-fs (proc/sysfs/cgroup/squashfs/etc.) — squashfs explicitly to avoid false-positive 100% from read-only /snap/* mounts.
+
+**Phase 4 — Smartctl SCT thermal-log scraper:**
+
+Extended smartctl-monitor with `smartctl -l scttempsts` scraping.  Two new WARN events: temperature_sustained_high (drive hit WARN+ at least once in lifetime) and temperature_overlimit_count (drive firmware itself flagged thermal stress).
+
+**Phase 5 — Classifier extension:**
+
+1 new CRITICAL + 3 new WARN matchers + 5 ALERT_COPY entries.  classifier-smoke +5 scenarios.
+
+**Phase 6 — Persona sentinels:**
+
+5 new P121-CP15 sentinels.  8 stale CP10/CP11 sentinels migrated from grepping `"module":"X"` literal text (post-refactor, no longer present) to the new constructor pattern `MORPHIT_EMIT_MODULE="X"`.
+
+**Phase 7 — Brag list discipline application:**
+
+Per memory rule: no new entries for internal plumbing.  Two small refinements: entry 225 (resource alerts) + one clause about bind-mount/tmpfs sweep; entry 227 (disk health + RAID) + one clause about SCT thermal-log scraper.  Closing summary unchanged at 265.
+
+### Verification
+
+- Triple-pulse: 2,778 × 3, 0 failures.  cp14 baseline 2,748 → cp15 baseline 2,778 (+30 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness against 53 files: passes.
+- Mount sweep + SCT extension live-tested with mocked tools.
+
+### Pending — NOT cp15 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Trigger `.forgejo/workflows/release.yml` with a real tag push
+- Add zod schemas for the remaining ~30 response types in @morphit/indexer-client
+- Apply schema-as-contract pattern to the orderbook SSE stream
+
+---
 
 ## Part 121 cp14 — what's shipped (envelope-schema validator + workspace deps-pin + systemd/journald sidecars + release workflow + brag list discipline)
 

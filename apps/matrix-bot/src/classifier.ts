@@ -121,7 +121,10 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'systemd' && a.event === 'unit_failed',
 
 	// cp14 — journald disk usage (filling-disk-silently).
-	(a) => a.module === 'journald' && a.event === 'journal_size_critical'
+	(a) => a.module === 'journald' && a.event === 'journal_size_critical',
+
+	// cp15 — host-resource bind-mount + tmpfs critical.
+	(a) => a.module === 'host-resource' && a.event === 'mount_critical'
 ];
 
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
@@ -170,7 +173,14 @@ const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	(a) => a.module === 'systemd' && a.event === 'unit_restart_loop',
 	(a) => a.module === 'systemd' && a.event === 'unit_missing',
 	(a) => a.module === 'journald' && a.event === 'journal_size_warn',
-	(a) => a.module === 'journald' && a.event === 'journal_rotation_stale'
+	(a) => a.module === 'journald' && a.event === 'journal_rotation_stale',
+
+	// cp15 — host-resource mount warn (bind-mount / tmpfs).
+	(a) => a.module === 'host-resource' && a.event === 'mount_warn',
+
+	// cp15 — smartctl SCT thermal-log trend analysis.
+	(a) => a.module === 'smartctl' && a.event === 'temperature_sustained_high',
+	(a) => a.module === 'smartctl' && a.event === 'temperature_overlimit_count'
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
@@ -925,6 +935,59 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'The morphit-journald-monitor service is running but journalctl ' +
 			'is not in PATH. {hint}. Disable the timer if this host does ' +
 			'not use systemd-journald.'
+	},
+
+	// ─── cp15 host-resource mount_* (bind-mount + tmpfs sweep) ─
+	'host-resource:mount_critical': {
+		title: 'Bind-mount / tmpfs at {percent}%: {path} ({fstype})',
+		advice:
+			'{path} (fstype {fstype}) is {percent}% full (threshold ' +
+			'{threshold}%). This mount is not in your operator-' +
+			'configured `MORPHIT_HOST_DISK_PATHS` list — it could be a ' +
+			'Docker volume, an encrypted overlay mount, a tmpfs that ' +
+			'persisted longer than intended, or a bind-mount you set up ' +
+			'and forgot. Investigate with `df -hT {path}` and ' +
+			'`du -hs {path}/* 2>/dev/null | sort -h | tail -20` to find ' +
+			'the largest consumers. For tmpfs, the contents are in RAM — ' +
+			'killing the process holding them open + remounting reclaims ' +
+			'space.'
+	},
+	'host-resource:mount_warn': {
+		title: 'Bind-mount / tmpfs filling: {path} ({fstype}) {percent}%',
+		advice:
+			'{path} (fstype {fstype}) is {percent}% full (threshold ' +
+			'{threshold}%). Below CRITICAL but worth investigating before ' +
+			'it gets there. `df -hT {path}` and `du -hs {path}/*` to ' +
+			'identify what is using the space.'
+	},
+	'host-resource:mount_info': {
+		title: 'Bind-mount / tmpfs at {percent}%: {path}',
+		advice:
+			'{path} (fstype {fstype}) is {percent}% full (threshold ' +
+			'{threshold}%). Bundled into the daily digest.'
+	},
+
+	// ─── cp15 smartctl SCT thermal log (trend analysis) ──────
+	'smartctl:temperature_sustained_high': {
+		title: 'Disk reached high temperature at least once: {device}',
+		advice:
+			'{device} has hit {lifetime_max_c}°C in its lifetime history ' +
+			'(threshold {threshold}°C). The instantaneous temperature ' +
+			'might be fine right now, but the drive HAS spent time in ' +
+			'WARN+ range. Sustained high temperature dramatically shortens ' +
+			'drive lifespan — check airflow and case fan operation. View ' +
+			'full thermal history: `sudo smartctl -l scttempsts {device}`.'
+	},
+	'smartctl:temperature_overlimit_count': {
+		title: 'Drive firmware reports thermal over-limit events: {device}',
+		advice:
+			'{device}\\\'s own firmware has incremented its over-temperature ' +
+			'counter to {overlimit_count} — the drive itself flagged that ' +
+			'it crossed its safe operating temperature. This is a stronger ' +
+			'signal than instantaneous temperature reads. Improve cooling ' +
+			'NOW: check chassis fans, dust the heatsink, verify ambient ' +
+			'temperature. `sudo smartctl -l scttempsts {device}` shows the ' +
+			'full thermal history.'
 	}
 };
 

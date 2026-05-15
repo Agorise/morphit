@@ -19,23 +19,10 @@
 
 set -eu
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"mdadm","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-mdadm-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="mdadm"
+MORPHIT_EMIT_TAG="morphit-mdadm-monitor"
 
 # ─── Bail if /proc/mdstat absent OR has no arrays ──────────────
 [ -r /proc/mdstat ] || exit 0
