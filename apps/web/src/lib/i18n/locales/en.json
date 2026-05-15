@@ -213,6 +213,7 @@
       "guidance_heading": "Before you upload",
       "guidance_filetypes": "Accepts SVG, WebP, JPEG, PNG, or GIF.",
       "guidance_dimensions": "Ideal source: a square image at least 96×96 pixels. Anything larger will be resized down to 96×96 for you; anything smaller will look grainy.",
+      "guidance_filesize": "Source file size: up to 5 MB. Larger images will be downsampled to 96×96 automatically, so even a phone photo straight from your camera works fine.",
       "guidance_size": "Raster images are automatically re-encoded to WebP at high quality. SVGs are minified losslessly. The final payload must fit under 3 KB.",
       "guidance_svg_tips": "SVG tip: a square viewBox (e.g. 0 0 100 100) renders best. Scripts, external references, and HTML-in-SVG are stripped automatically for security.",
       "permanence_heading": "This goes on-chain permanently.",
@@ -233,6 +234,7 @@
       "error": {
         "unsupported_type": "That file type isn't supported. Use SVG, WebP, JPEG, PNG, or GIF.",
         "empty_file": "That file is empty.",
+        "input_too_large": "That image is too large to upload. Please choose a file under 5 MB.",
         "parse_failed": "Couldn't parse this SVG. The file may be malformed.",
         "svg_no_root": "That doesn't look like a valid SVG file.",
         "svg_too_large": "This SVG is too complex to fit under the 3 KB on-chain limit. Try simplifying it — fewer paths, less detail, or a smaller viewBox.",

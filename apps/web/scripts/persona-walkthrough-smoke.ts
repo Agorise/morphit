@@ -676,6 +676,46 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
+		// Part 122 cp5 — F14 (MEDIUM) — operator-doc wizard-step
+		// number had drifted from the code.  OPERATIONS.md said
+		// "morphit-ops init step 12 asks: Enable daily DB backup"
+		// but in current code the backup prompt is step 15
+		// (stepBackup at position 15 of 17 in
+		// apps/ops-cli/src/commands/init.ts).  Pre-Part-109 backup
+		// was step 12; Part 109 added stepFeeExplorers + stepChatLink
+		// in front of it; subsequent steps were added too.  The doc
+		// drifted three positions behind.
+		//
+		// Sentinel pins both legs of the contract:
+		//   (a) TOTAL_STEPS = 17 in steps.ts (the canonical count)
+		//   (b) OPERATIONS.md references "step 15" for backup
+		//       (matching stepBackup's actual position)
+		// If a future wizard restructure changes TOTAL_STEPS or
+		// reorders stepBackup, this sentinel fails and forces
+		// either the count or the doc to be updated.
+		name: 'P122-CP5-F14 — wizard backup-step doc reference matches stepBackup position in code',
+		file: 'docs/OPERATIONS.md',
+		rootRelative: true,
+		mustHave: [
+			'`morphit-ops init` step 15 asks: "Enable daily DB backup automation?"'
+		],
+		mustNotHave: [
+			'`morphit-ops init` step 12 asks: "Enable daily DB backup automation?"'
+		]
+	},
+	{
+		// Part 122 cp5 — F14 companion — TOTAL_STEPS pinned in
+		// steps.ts.  If the wizard ever grows or shrinks the step
+		// count, this sentinel fails so the OPERATIONS.md doc
+		// references can be re-audited at the same turn.
+		name: 'P122-CP5-F14b — wizard TOTAL_STEPS pinned (must update F14 doc reference if this changes)',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: [
+			'const TOTAL_STEPS = 17;'
+		]
+	},
+	{
 		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,

@@ -4745,7 +4745,7 @@ ops/systemd/morphit-backup.timer    # daily at 04:00 local
 
 ### Wizard flow
 
-`morphit-ops init` step 12 asks: "Enable daily DB backup automation?" — default **Yes**. If yes, also asks for:
+`morphit-ops init` step 15 asks: "Enable daily DB backup automation?" — default **Yes**. If yes, also asks for:
 
 - Backup directory (default `/home/morphit/backups`)
 - Retention days (default 30)

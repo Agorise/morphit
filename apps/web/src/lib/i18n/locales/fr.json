@@ -191,6 +191,7 @@
       "guidance_heading": "Avant l'envoi",
       "guidance_filetypes": "Accepte SVG, WebP, JPEG, PNG ou GIF.",
       "guidance_dimensions": "Idéal : une image carrée d'au moins 96×96 pixels. Plus grand sera redimensionné à 96×96 ; plus petit paraîtra pixélisé.",
+      "guidance_filesize": "Taille du fichier source : jusqu'à 5 Mo. Les images plus grandes seront automatiquement réduites à 96×96, donc même une photo prise directement avec ton téléphone fonctionne très bien.",
       "guidance_size": "Les images matricielles sont automatiquement ré-encodées en WebP haute qualité. Les SVG sont minifiés sans perte. La charge finale doit tenir sous 3 Ko.",
       "guidance_svg_tips": "Conseil SVG : un viewBox carré (par ex. 0 0 100 100) rend le mieux. Les scripts, références externes et HTML dans SVG sont automatiquement supprimés pour des raisons de sécurité.",
       "permanence_heading": "Ceci va sur la chaîne de façon permanente.",
@@ -211,6 +212,7 @@
       "error": {
         "unsupported_type": "Ce type de fichier n'est pas pris en charge. Utilise SVG, WebP, JPEG, PNG ou GIF.",
         "empty_file": "Le fichier est vide.",
+        "input_too_large": "Cette image est trop volumineuse pour être envoyée. Choisis un fichier de moins de 5 Mo.",
         "parse_failed": "Impossible de parser ce SVG. Le fichier est peut-être mal formé.",
         "svg_no_root": "Ça ne ressemble pas à un fichier SVG valide.",
         "svg_too_large": "Ce SVG est trop complexe pour tenir sous la limite on-chain de 3 Ko. Essaie de le simplifier — moins de tracés, moins de détails ou un viewBox plus petit.",
