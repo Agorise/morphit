@@ -220,11 +220,15 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 			// indexer's own internal network.
 			//
 			// Strategy: reject the obvious bad classes by hostname
-			// pattern.  This list is not exhaustive (DNS rebinding,
-			// IPv6 mapped IPv4, etc.); the probe layer should ALSO
-			// resolve+validate the IP before connecting (deferred
-			// follow-on).  At minimum, the obvious cases are
-			// closed.
+			// pattern.  This list catches literal-private-hostname
+			// attacks.  The full DNS-rebinding closure (resolve +
+			// validate every returned IP + pin via custom undici
+			// dispatcher to prevent TOCTOU) lives in the probe layer
+			// at `federationProbe.ts:fetchJson()` — shipped Part 122
+			// cp3, sentinel-locked by `P122-CP3` in
+			// apps/web/scripts/persona-walkthrough-smoke.ts.  The
+			// registration-time check here is defense-in-depth; the
+			// probe-time check is the authoritative one.
 			const hostname = parsed.hostname.toLowerCase();
 			// Reject 127.0.0.0/8 explicitly.
 			if (/^127\.\d+\.\d+\.\d+$/.test(hostname)) {

@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 2 — F3 + F4 audit sweep; both conclude existing defenses hold; F5 (schema-migration drift class) sentinel landed)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 3 — DNS-rebinding closure in federation-probe SSRF defense; cp7 REVISIT §A item closed pre-launch)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,23 +6,54 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp2 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp3 (2026-05-15)
 
 **Gates — all green:**
-- Triple-pulse: **2,911 × 3 scenarios, 0 failures** (cp1 baseline 2,910 → cp2 baseline 2,911 = +1 F5 sentinel pinning schema.sql canonical head version)
+- Triple-pulse: **2,958 × 3 scenarios, 0 failures** (cp2 baseline 2,911 → cp3 baseline 2,958 = +47 = 45 new `dns-rebinding-defense-smoke` scenarios + 1 P122-CP3 sentinel + 1 federation-probe-smoke re-tally after the cp3 test-injection hook landed)
 - Typecheck-sweep: 0 errors across all 9 workspaces
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp2 touched zero Ansible files)
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp3 touched zero Ansible files)
 
-**Brag list:** 265 entries unchanged. cp2 work is internal audit + a single new sentinel — per cp19 discipline, no brag entry.
+**Brag list:** 265 entries unchanged. cp3 work is internal security hardening — per cp19 discipline, security findings go to AUDIT doc, not brag list.
 
-**cp2 findings + dispositions:**
-- **F3 (audit) — Schema-as-contract / sentinel-as-no-op pattern generalization.** Swept every `mustNotHave` sentinel in persona-walkthrough-smoke.ts (23 of them). Conclusion: **existing sentinels are well-designed** — almost all pair `mustNotHave: ['SPECIFIC_OLD_WRONG']` with `mustHave: ['SPECIFIC_NEW_RIGHT']`, so the mustHave is the drift-anchor (any drift away from the right value fails the assertion). Earlier audit framing missed this because of an incomplete grep. No fix needed for the audited sentinels themselves. The ONE finding the sweep surfaced is below as F5.
-- **F4 (audit) — Sidecar observability sweep.** Walked every `|| true` / `2>/dev/null` pattern across all 12 sidecars. Conclusion: **existing sidecars are well-designed** — every one has an `_unavailable` precheck that emits an INFO event when its underlying tool isn't installed; the `|| true` patterns are belt-and-braces for the (rare) within-tool runtime edge cases. cp1's F2 was a cp22-specific regression where a NEW failure mode (timeout) was silently swallowed; that's not a generalizable existing-gap pattern. Pattern lesson captured: ANY future timeout-wrap should default to emitting an INFO event on non-zero exit. Forward-looking rule, not a backward fix.
-- **F5 (MEDIUM) — Schema-migration drift class.** The migration model collapsed v2-v27 into v1's `schema.sql` (May 2026 audit). v28-v32 changes live INLINE in `schema.sql`, but the `MIGRATIONS[]` array in `migrations.ts` stops at v1. Pre-launch this works (fresh deploys apply schema.sql which contains all v28-v32 DDL). But post-launch, if someone adds v33 DDL to schema.sql without ALSO adding a `MIGRATIONS[33]` entry, an upgrade-install would silently miss v33's changes — `schema_migrations` sees v1 already applied, and `MIGRATIONS[]` has nothing after v1. **Fixed** by new `P122-CP2-F5` sentinel pinning schema.sql's canonical head-version comment (`-- v32 / Part 121 — multi-network asset support (USDT)`). If future schema work adds `-- v33 ...` inline, the sentinel fails until the maintainer either adds `MIGRATIONS[v33]` AND bumps the sentinel, or makes a conscious decision to keep the inline pattern (which means bumping the sentinel). Three-way drift-anchor: schema.sql + `D-4` doc sentinel + `P122-CP2-F5` sentinel must all advance together. Self-tested by simulating a v33 inline addition: sentinel correctly fails with `MUST HAVE (not found)` diagnostic; restoration → clean.
-- **F6 (NOT_A_BUG)** — Version/count-drift sentinels too narrow. Spot-check of D-4 + D-9 + D-10 showed all three already pair `mustHave: ['CORRECT']` with `mustNotHave: ['OLD_WRONG']`. The mustHave IS the drift-anchor; this concern dissolves.
-- **F7 (LOW, FILED for cp3+)** — S-12 ariaLabel sentinel could be regex-based for broader coverage (currently lists specific hardcoded English strings like `What is BLURT?`). Spot-check via empirical grep confirmed no hardcoded ariaLabels in current code, so risk is theoretical — file as polish work alongside an `assertNoRegexMatch` primitive addition (which would also let the existing exclusions tighten).
+**cp3 shipped — DNS-rebinding closure in `apps/indexer/src/indexer/federationProbe.ts`.** Filed in cp7 REVISIT §A as information-disclosure-class risk bounded by GET-only + 256KB cap + manual-redirect; defense-in-depth scope. Pre-launch (~2026-05-22) is the right moment to close it. Three-layer defense now in place:
 
-**Audit campaign status:** Part 122 cp2 closed. Two audit areas (F3 + F4) swept; conclusion that existing defenses hold up is itself the value. One real finding (F5) crystallized into a concrete sentinel. Two polish items (F7, plus a possible `assertNoRegexMatch` runner primitive) filed for cp3+.
+1. **`isPrivateHostname(h)`** — literal-hostname denylist (refactored from inline regex pile into an exported helper). Catches the obvious cases: `https://127.0.0.1/`, `https://localhost/`, IPv6 loopback, IPv6 ULA, link-local, AWS metadata, GCP metadata, `.local`/`.localhost`/`.internal` TLDs.
+2. **`resolveAndValidatePublicIp(hostname)`** — `node:dns/promises` lookup with `{ all: true, verbatim: true }` retrieves every A + AAAA record; `isPrivateIp(ip)` validates each one. Covers IPv4 RFC 1918 + 0.0.0.0/8 + 169.254/16 + 255.255.255.255 broadcast + CGNAT 100.64/10 + IPv6 `::1` + IPv6 ULA (`fc00::/7`) + IPv6 link-local (`fe80::/10`) + IPv4-mapped IPv6 unwrap (`::ffff:a.b.c.d` re-validated as IPv4). Throws if ANY returned address is private — closes the "first record public, second record private" attack.
+3. **`buildPinnedAgent(hostname, ip, family)`** — returns an `undici.Agent` whose connect-time `lookup` hook is hard-coded to return the pre-validated IP for the pre-validated hostname. Closes the TOCTOU between our pre-validation lookup and undici's connect-time lookup: an attacker can't rebind DNS between the two operations because there IS no second lookup. Refuses unexpected hostnames as defense-in-depth (post-creation redirect or hostname-substitution attack would route to the wrong place; we already have `redirect: 'manual'` but belt-and-braces).
+
+**Smoke coverage:**
+- New `apps/indexer/scripts/dns-rebinding-defense-smoke.ts` (45 scenarios): exercises every code path in the validation helpers — IPv4 boundaries (172.15 public / 172.16 private / 172.31 private / 172.32 public), IPv4 case-insensitivity, IPv6 ULA + link-local + loopback, IPv4-mapped IPv6 unwrap (uppercase + lowercase + nested private), CGNAT lower bound (100.64) + upper bound (100.127) + just-below (100.63 public) + just-above (100.128 public), 0.0.0.0/8, 255.255.255.255, 169.254.169.254 (AWS metadata) and its IPv4-mapped form, `metadata.google.internal`, public anchor cases (8.8.8.8, 203.0.113.1 TEST-NET-3, 2001:db8::1, 2606:4700::1 Cloudflare anycast).
+- Existing `federation-probe-smoke.ts` updated with `_setDnsResolverForTesting()` injection so it stays offline-deterministic — without the stub, the new DNS-resolution layer would try to look up synthetic hostnames like `test.example` against real DNS.
+- Persona-walkthrough sentinel `P122-CP3` pins all three layers in code + the test-injection hook + the `import { Agent } from 'undici'` + `import { lookup as dnsLookup } from 'node:dns/promises'` lines + the IPv4-mapped-IPv6 unwrap regex + the CGNAT range regex. Self-tested by tampering: removing the `dispatcher: pinnedAgent` line causes the sentinel to fail loudly with `MUST HAVE (not found)`.
+- `operatorRegister.ts` inline comment that previously read "DNS rebinding, IPv6 mapped IPv4, etc.; the probe layer should ALSO resolve+validate the IP before connecting (deferred follow-on)" now points at the cp3 closure with sentinel-name reference.
+
+**This session's arc (cp22 → P122 cp3):**
+1. **cp22** — Sidecar-envelope-smoke flake fix; sysadmin-handoff persona walk; mount-sweep skip-list; TS6133 regex; upload-artifact SHA-pin.
+2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. F1 (HIGH) security-warning placement + F2 (MEDIUM) apt-monitor observability shipped.
+3. **P122 cp2** — F3 + F4 audit sweep: existing defenses hold up. F5 (MEDIUM) schema-migration drift sentinel shipped.
+4. **P122 cp3** — DNS-rebinding closure (cp7 REVISIT §A). Three-layer defense + 45-scenario unit smoke + P122-CP3 sentinel.
+
+**Parked work:** Upgrade tooling — first-release week (~2026-05-22). See memory entry #29.
+
+**Truly pending:**
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
+- Relay-side response types extracted into `@morphit/relay-client`
+- PHASE F: apply schema-as-contract pattern as first contract layer
+- F7 (LOW) — S-12 ariaLabel sentinel regex-based; needs `assertNoRegexMatch` primitive
+- F8 (LOW) — tighter F5 catch: parse schema.sql for highest version comment, cross-check vs MIGRATIONS[]
+
+**Part 122 scope (cp4+):**
+- **cp4 — Matrix/relay black-hat redux** (sendDm + room handling + bootFromPairedSession + QR-pair handshake; added cp9, never reaudited adversarially).
+- **cp5 — Pre-launch sysadmin-handoff threat-model walk** (privilege-escalation surface during handoff; env-file misconfiguration paths).
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp3 paragraph).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp3-delta.tar.gz` — delta tarball; cp3 touched zero structural moves and zero file deletions. Recipe: extract over the cp2 working tree → `git add -A` → commit + push.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` (F3/F4 audits concluded; F5 sentinel landed).
 
 **This session's arc (cp22 → P122 cp2):**
 1. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake; sysadmin-handoff persona walk caught 4 real drifts; mount-sweep skip-list extended; typecheck-sweep TS6133 regex fixed; `actions/upload-artifact` SHA-pinned.
@@ -51,6 +82,125 @@
 **Tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` — delta tarball; cp2 touched zero structural moves and zero file deletions. Recipe: extract over the cp1 working tree → `git add -A` → commit + push.
 
 **Previous tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` (closed cp1 F1+F2; F3+F4 filed for cp2).
+
+## Part 122 cp3 — DNS-rebinding closure in federation-probe SSRF defense (cp7 REVISIT §A closed)
+
+### Pretext
+
+cp7 (Part 121, two weeks ago) shipped per-locale prerendering as its main work but ran a scoped deep-deep on federation-probe + SQL/DB + HTTP/API + operator-trust as item #2. The federation-probe audit surfaced a DNS-rebinding gap in `apps/indexer/src/indexer/federationProbe.ts` — the existing hostname-string check caught literal-private hostnames (`https://127.0.0.1/`) but a hostname resolving to a private IP at fetch time would bypass the check. cp7 filed it as REVISIT §A: "information-disclosure only — damage bound by GET-only + 256KB cap + no exfiltration path. Schedule alongside any other federation-touch work."
+
+Pre-launch (~2026-05-22) is the right moment. cp3 closes it.
+
+### Threat model recap
+
+An attacker registers `evil.example.com` as a federated operator's origin. At registration time the hostname doesn't match the literal-denylist (it's not `localhost`, not `127.x.x.x`, not `.local`, etc.) and the registration handler accepts it. Some time later, the federation probe fires its periodic GET to `https://evil.example.com/v1/instance`. The attacker has CNAME'd that to `127.0.0.1` (or `169.254.169.254` AWS metadata, or an internal RFC 1918 service). The fetch lands on the indexer's own loopback or internal network.
+
+Damage bound by cp7-era defenses:
+- `redirect: 'manual'` prevents redirect-based exfiltration
+- 256KB response cap (header pre-check + streaming abort)
+- GET-only — can't write to internal services
+- User-agent identifies the probe — easy to log
+
+But: information disclosure of internal service presence/response shape (up to 256KB), and DoS by forcing probes against arbitrary internal targets.
+
+### Three-layer defense shipped
+
+**Layer 1 — `isPrivateHostname(h)`** refactored from inline regex pile in `fetchJson` into an exported function. Same denylist as before: IPv4 RFC 1918, 169.254/16, `localhost`, `0.0.0.0`, IPv6 loopback in both `::1` and `[::1]` forms, IPv6 unique-local (`fc00::/7`), IPv6 link-local (`fe80::/10`), AWS metadata `169.254.169.254`, GCP metadata `metadata.google.internal`, and the `.local`/`.localhost`/`.internal` TLDs. Now also exported so the new dns-rebinding-defense-smoke can unit-test it.
+
+**Layer 2 — `resolveAndValidatePublicIp(hostname)`** is new. Uses `node:dns/promises.lookup(hostname, { all: true, verbatim: true })` to retrieve EVERY A + AAAA record. Validates each one against `isPrivateIp(ip)`, throws if ANY is private. The "all must be public" stance (rather than "first must be public") defends against the attacker returning a mixed response like `[203.0.113.1, 127.0.0.1]` — if even one is private, the entire response is rejected, so a later connection that selects a different record can't land on the private IP.
+
+`isPrivateIp(ip)` is also new and covers more cases than the original hostname check:
+- IPv4 patterns same as hostname check (127/8, 10/8, 192.168/16, 172.16-31/12, 169.254/16)
+- 0.0.0.0/8 unspecified range
+- 255.255.255.255 broadcast
+- **CGNAT 100.64/10** (RFC 6598) — added in cp3 because some operators have internal services in this range; treating as private is the safer default
+- IPv6 `::` and `::1`
+- IPv6 ULA (`fc00::/7`)
+- IPv6 link-local (`fe80::/10`)
+- **IPv4-mapped IPv6 unwrap** (`::ffff:a.b.c.d`) — recursively re-validates as IPv4. This is the subtle one: an attacker could return `::ffff:127.0.0.1` as a AAAA record; without the unwrap, our IPv6 patterns wouldn't catch it because the loopback part is wrapped inside an IPv4-mapped form.
+
+**Layer 3 — `buildPinnedAgent(hostname, ip, family)`** returns an `undici.Agent` whose `connect.lookup` hook is hard-coded to return `(hostname, ip, family)`. This closes the TOCTOU between Layer 2's pre-validation lookup and undici's own connect-time lookup. Without this, between our resolve-and-validate (Layer 2) and undici's actual connection (which would do its OWN DNS lookup), the attacker could swap the DNS response — Layer 2 sees the public IP, undici sees the private IP, connection lands on the private network.
+
+By passing `dispatcher: pinnedAgent` to fetch, we tell undici "use THIS connect.lookup, not the real DNS." The lookup hook returns the pre-validated IP directly; no second DNS call happens. The TOCTOU window closes to zero.
+
+Defensive bonus: the lookup hook also CHECKS the hostname being looked up matches the pre-validated one. If `redirect: 'manual'` ever leaks (or a future undici behavior change tries a different hostname), the hook fails closed.
+
+### Test injection hook
+
+Added `_setDnsResolverForTesting(resolver | null)` exported from federationProbe.ts. Production runs leave `_dnsResolverForTesting = null` and the real `resolveAndValidatePublicIp` is used. The existing `federation-probe-smoke.ts` (which stubs `globalThis.fetch` for offline-deterministic testing) now also installs a stub resolver returning `{ address: '203.0.113.1', family: 4 }` (RFC 5737 documentation IP — never routable, always validates as public). Without this stub, the new Layer 2 would attempt real DNS lookups for synthetic test hostnames like `test.example` which would fail with NXDOMAIN, breaking the smoke.
+
+### New smoke — `dns-rebinding-defense-smoke.ts` (45 scenarios)
+
+Pure-unit smoke for the validation helpers. Coverage:
+- Layer 1 (`isPrivateHostname`): 21 scenarios covering all denylist branches + case-insensitivity + IPv4 boundary cases (172.15 public / 172.16 private / 172.31 private / 172.32 public) + public anchor (morphit.io, 8.8.8.8)
+- Layer 2 (`isPrivateIp`): 23 scenarios covering all IPv4 ranges + IPv6 ULA + IPv6 link-local + IPv4-mapped IPv6 unwrap (lowercase + uppercase + nested-private) + CGNAT lower bound (100.64) + upper bound (100.127) + just-below (100.63 public) + just-above (100.128 public) + public anchors (8.8.8.8, 203.0.113.1, 2001:db8::1, 2606:4700::1)
+- Layered interaction: 1 scenario verifying Layer 1 catches before Layer 2 fires for direct literal-private hostnames (the cheap path that doesn't need DNS)
+
+Registered in `scripts/run-smokes.sh` right after `federation-probe-smoke`.
+
+### Persona-walkthrough sentinel — `P122-CP3`
+
+Locks all three layers in code + the test-injection hook + the import lines for `undici` Agent and `node:dns/promises`. Specifically requires:
+- `export function isPrivateHostname` — Layer 1 export
+- `export function isPrivateIp` — Layer 2 export
+- `resolveAndValidatePublicIp` — Layer 2 function name
+- `buildPinnedAgent` — Layer 3 function name
+- `dispatcher: pinnedAgent` — the actual wiring of Layer 3 into fetch()
+- `import { Agent } from 'undici'` — Layer 3 dependency
+- `import { lookup as dnsLookup } from 'node:dns/promises'` — Layer 2 dependency
+- `::ffff:` — IPv4-mapped IPv6 unwrap (the subtle one)
+- `100\.(6[4-9]` — CGNAT range (a less-obvious addition someone might drop)
+
+Self-tested by tampering: removed `dispatcher: pinnedAgent` line from federationProbe.ts → sentinel correctly fails with `MUST HAVE (not found): "dispatcher: pinnedAgent"`. Restored → clean.
+
+### operatorRegister.ts inline comment
+
+Updated the comment at line 218-227 that previously read:
+
+> Strategy: reject the obvious bad classes by hostname pattern. This list is not exhaustive (DNS rebinding, IPv6 mapped IPv4, etc.); the probe layer should ALSO resolve+validate the IP before connecting (deferred follow-on).
+
+Now reads:
+
+> Strategy: reject the obvious bad classes by hostname pattern. This list catches literal-private-hostname attacks. The full DNS-rebinding closure (resolve + validate every returned IP + pin via custom undici dispatcher to prevent TOCTOU) lives in the probe layer at `federationProbe.ts:fetchJson()` — shipped Part 122 cp3, sentinel-locked by `P122-CP3`. The registration-time check here is defense-in-depth; the probe-time check is the authoritative one.
+
+### Verification
+
+- Triple-pulse 2,958 × 3, 0 failures (cp2 baseline 2,911 → cp3 baseline 2,958 = +47 = 45 dns-rebinding-defense + 1 P122-CP3 sentinel + 1 federation-probe-smoke re-tally)
+- Typecheck-sweep 0 errors across all 9 workspaces (including the new `import { Agent } from 'undici'` and `import { lookup as dnsLookup } from 'node:dns/promises'`)
+- Existing federation-probe-smoke passes 14/14 with the new resolver-stub injection
+- New dns-rebinding-defense-smoke passes 45/45
+- Sentinel self-tested by `dispatcher: pinnedAgent` line removal → fires correctly; restoration → clean
+- ansible-lint NOT re-verified (sandbox-environmental)
+
+### Pattern lessons
+
+1. **TOCTOU between validation and use is a class problem, not a one-off.** Our Layer 2 (resolve-and-validate) is necessary but not sufficient on its own — the second lookup undici would do at connect time could return a different answer. Layer 3 (pinned dispatcher) closes the window to zero by ensuring there's only ONE lookup, controlled by us. Any future "validate this resource before using it" code path should ask "is there a way for the resource to change between validation and use?"
+
+2. **IPv4-mapped IPv6 is the kind of trap auditors miss.** A defense that checks `127.x.x.x` and `::1` separately can miss `::ffff:127.0.0.1` entirely. The unwrap-and-revalidate pattern (recursive call to the same function) is small but easily forgotten. Sentinel pins its presence.
+
+3. **CGNAT 100.64/10 is a real operator concern.** Some operators have internal services in this range (it's allowed per RFC 6598 for ISP-internal networks). Treating it as private is the safer default — false positives (rejecting a legitimate CGNAT-served public service) are recoverable; false negatives (probing internal services) are not.
+
+4. **Test injection hooks are part of the defense contract.** Without `_setDnsResolverForTesting`, the existing federation-probe-smoke would have broken on the new DNS layer, and we'd have been tempted to gate the new defense behind a `NODE_ENV` check or similar. Test hooks let the production code be unconditional while smokes stay offline-deterministic. Pin the hook in the sentinel so it doesn't get refactored out.
+
+5. **REVISIT §A items deserve closure even when "deferred for damage bound by other defenses."** Cp7 correctly judged this not a launch blocker. But "not a launch blocker" doesn't mean "not worth closing pre-launch." The defense-in-depth value of closing it now is higher than the cost (one afternoon's work), and the LIVE threat surface opens at launch — closing it before launch means the first-day attackers don't get to play with the gap.
+
+### Files modified
+
+```
+apps/indexer/src/indexer/federationProbe.ts                    (3-layer defense + test hook)
+apps/indexer/src/indexer/handlers/operatorRegister.ts          (inline comment updated to reference cp3 closure)
+apps/indexer/scripts/federation-probe-smoke.ts                 (resolver-stub injection)
+apps/indexer/scripts/dns-rebinding-defense-smoke.ts            (NEW — 45-scenario unit smoke)
+apps/web/scripts/persona-walkthrough-smoke.ts                  (P122-CP3 sentinel — 111 → 112 scenarios)
+scripts/run-smokes.sh                                          (register new smoke)
+TARBALL.md                                                     (this entry)
+docs/REVISIT-LIST.md                                           (cp3 maintained-line + §A marked CLOSED with archive of original cp7 finding)
+docs/AUDIT-2026-05.md                                          (cp3 entry)
+```
+
+No brag-list edit (security findings per cp19 discipline). No ADR edit (no architectural shift — three defense layers, same probe architecture). No locale edits. No schema migration.
+
+---
 
 ## Part 122 cp2 — F3 + F4 audit sweep + F5 (schema-migration drift class) sentinel
 

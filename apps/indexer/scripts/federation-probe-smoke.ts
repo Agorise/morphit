@@ -16,9 +16,21 @@
 
 import {
 	probeOne,
+	_setDnsResolverForTesting,
 	type KnownInstanceRow,
 	type ProbeStatus
 } from '../src/indexer/federationProbe.ts';
+
+// Cp3 (Part 122) — stub the DNS resolver too.  Without this the
+// new DNS-rebinding defense runs a real lookup before fetch, which
+// fails offline for synthetic test hostnames like `https://test.example`.
+// The fetch stub below handles the network side; this handles the
+// pre-fetch resolution side.  Production-mode runs without this
+// stub do real DNS + per-IP validation.
+_setDnsResolverForTesting(async (_hostname: string) => ({
+	address: '203.0.113.1', // RFC 5737 documentation IP — never reachable, always public-class
+	family: 4 as const
+}));
 
 let failures = 0;
 let scenarios = 0;

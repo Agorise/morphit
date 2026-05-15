@@ -31,6 +31,9 @@
 
 import type pg from 'pg';
 
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { Agent } from 'undici';
+
 import type { Database } from '$db/pool';
 import { logger } from '$log';
 
@@ -399,6 +402,179 @@ function isWithinDays(iso: string | undefined, days: number): boolean {
 	return Date.now() - t < days * 24 * 60 * 60 * 1000;
 }
 
+/**
+ * Check whether a hostname string (as it appears in a URL) is
+ * one of the obviously-private literal forms.  This is the FIRST
+ * defense — catches `https://127.0.0.1/`, `https://localhost/`,
+ * `https://[::1]/`, cloud-metadata addresses, and the
+ * `.local`/`.localhost`/`.internal` TLDs.
+ *
+ * Exported for testing.  Used by fetchJson() before any DNS work.
+ */
+export function isPrivateHostname(hostnameRaw: string): boolean {
+	const h = hostnameRaw.toLowerCase();
+	if (/^127\.\d+\.\d+\.\d+$/.test(h)) return true;
+	if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
+	if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
+	if (/^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/.test(h)) return true;
+	if (/^169\.254\.\d+\.\d+$/.test(h)) return true;
+	if (h === 'localhost') return true;
+	if (h === '0.0.0.0') return true;
+	if (h === '[::]' || h === '[::1]' || h === '::1') return true;
+	if (h === '169.254.169.254') return true;
+	if (h === 'metadata.google.internal') return true;
+	if (/^\[?(fc|fd)[0-9a-f]{2}:/i.test(h)) return true;
+	if (/^\[?fe80:/i.test(h)) return true;
+	if (h.endsWith('.local')) return true;
+	if (h.endsWith('.localhost')) return true;
+	if (h.endsWith('.internal')) return true;
+	return false;
+}
+
+/**
+ * Check whether a *resolved IP address* (as returned by DNS lookup,
+ * canonical form — not user-supplied) is in a private range.
+ *
+ * Distinct from isPrivateHostname() because:
+ *   - DNS gives us already-normalized IP strings (no `[]` brackets,
+ *     no port, IPv6 in canonical form).
+ *   - IPv4-mapped IPv6 (`::ffff:a.b.c.d`) needs unwrap + re-check
+ *     as IPv4.
+ *   - We don't need TLD checks (no hostnames here).
+ *
+ * Exported for testing.  Cp3 of Part 122 — DNS-rebinding closure.
+ */
+export function isPrivateIp(ip: string): boolean {
+	const v = ip.toLowerCase();
+	// IPv4 patterns
+	if (/^127\.\d+\.\d+\.\d+$/.test(v)) return true;
+	if (/^10\.\d+\.\d+\.\d+$/.test(v)) return true;
+	if (/^192\.168\.\d+\.\d+$/.test(v)) return true;
+	if (/^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/.test(v)) return true;
+	if (/^169\.254\.\d+\.\d+$/.test(v)) return true;
+	if (/^0\.\d+\.\d+\.\d+$/.test(v)) return true; // 0.0.0.0/8
+	if (v === '255.255.255.255') return true; // broadcast
+	// Carrier-grade NAT (RFC 6598).  Operators sometimes have
+	// internal services in this range; treat as private for safety.
+	if (/^100\.(6[4-9]|[789][0-9]|1[01][0-9]|12[0-7])\.\d+\.\d+$/.test(v)) return true;
+	// IPv6 patterns (DNS returns canonical form: no brackets, lowercase hex).
+	if (v === '::' || v === '::1') return true;
+	if (/^fc[0-9a-f]{2}:/.test(v)) return true; // unique-local
+	if (/^fd[0-9a-f]{2}:/.test(v)) return true; // unique-local
+	if (/^fe80:/.test(v)) return true; // link-local
+	// IPv4-mapped IPv6 (::ffff:a.b.c.d) — unwrap + re-validate as IPv4
+	const v4mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v);
+	if (v4mapped !== null) return isPrivateIp(v4mapped[1]!);
+	// IPv6 loopback in compressed form (`::1` already caught above)
+	// and the unspecified address `::` (caught above).  All other
+	// public-routable IPv6 falls through to public.
+	return false;
+}
+
+/**
+ * Resolve `hostname` via DNS, validate EVERY returned address
+ * against isPrivateIp(), and return the first valid (public)
+ * record.  Throws if any resolved IP is private — the closes
+ * the DNS-rebinding gap from cp7 REVISIT §A.
+ *
+ * Why "every record must be public" rather than "at least one":
+ * an attacker controlling DNS can return [203.0.113.1, 127.0.0.1].
+ * If we connect to the first, we hit the public IP — fine.  But
+ * subsequent reconnects, retries, or a different load-balancer
+ * selection could pick the private one.  By requiring ALL records
+ * to be public, we ensure no fork of the connection can land on
+ * an internal address.
+ *
+ * Cp3 of Part 122 — DNS-rebinding closure.
+ */
+async function resolveAndValidatePublicIp(hostname: string): Promise<{
+	address: string;
+	family: 4 | 6;
+}> {
+	let records: Array<{ address: string; family: number }>;
+	try {
+		records = await dnsLookup(hostname, { all: true, verbatim: true });
+	} catch (err) {
+		throw new Error(
+			`fetchJson: DNS lookup failed for ${hostname}: ${
+				err instanceof Error ? err.message : String(err)
+			}`
+		);
+	}
+	if (records.length === 0) {
+		throw new Error(`fetchJson: hostname ${hostname} has no DNS records`);
+	}
+	for (const r of records) {
+		if (isPrivateIp(r.address)) {
+			throw new Error(
+				`fetchJson: refusing to probe ${hostname} — resolves to private IP ${r.address}`
+			);
+		}
+	}
+	const first = records[0]!;
+	const family: 4 | 6 = first.family === 6 ? 6 : 4;
+	return { address: first.address, family };
+}
+
+/**
+ * Test-only hook for injecting a stub resolver.  Production code
+ * MUST NOT set this; it's `null` at runtime in normal operation.
+ * Smokes that stub `globalThis.fetch` also stub this so the test
+ * is offline-deterministic.
+ */
+let _dnsResolverForTesting: typeof resolveAndValidatePublicIp | null = null;
+export function _setDnsResolverForTesting(
+	resolver: typeof resolveAndValidatePublicIp | null
+): void {
+	_dnsResolverForTesting = resolver;
+}
+
+/**
+ * Build an undici Agent whose connect-time DNS lookup returns
+ * `pinnedIp` for `expectedHostname` and refuses any other
+ * hostname.  This closes the TOCTOU between our pre-validation
+ * lookup and undici's connect-time lookup — the connection
+ * cannot land on an IP we didn't pre-validate.
+ *
+ * SNI + cert validation continue to use `expectedHostname`
+ * (undici derives them from the URL, not from `lookup`).
+ * Host header similarly uses the URL hostname for vhost routing.
+ *
+ * Cp3 of Part 122 — DNS-rebinding closure.
+ */
+function buildPinnedAgent(
+	expectedHostname: string,
+	pinnedIp: string,
+	pinnedFamily: 4 | 6
+): Agent {
+	return new Agent({
+		connect: {
+			lookup: (
+				hostname: string,
+				_opts: unknown,
+				cb: (err: Error | null, address: string, family: number) => void
+			): void => {
+				// Defensive: if undici ever calls lookup with a
+				// different hostname than the one we pre-validated
+				// (e.g. due to a redirect or a future API change),
+				// fail closed.  redirect:'manual' should already
+				// prevent this, but defense-in-depth.
+				if (hostname.toLowerCase() !== expectedHostname.toLowerCase()) {
+					cb(
+						new Error(
+							`pinned agent: refusing unexpected hostname ${hostname} (pinned to ${expectedHostname})`
+						),
+						'',
+						0
+					);
+					return;
+				}
+				cb(null, pinnedIp, pinnedFamily);
+			}
+		}
+	});
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
@@ -416,27 +592,19 @@ async function fetchJson<T>(url: string): Promise<T> {
 		throw new Error('fetchJson: non-https origin');
 	}
 	const hostname = parsed.hostname.toLowerCase();
-	if (
-		/^127\.\d+\.\d+\.\d+$/.test(hostname) ||
-		/^10\.\d+\.\d+\.\d+$/.test(hostname) ||
-		/^192\.168\.\d+\.\d+$/.test(hostname) ||
-		/^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/.test(hostname) ||
-		/^169\.254\.\d+\.\d+$/.test(hostname) ||
-		hostname === 'localhost' ||
-		hostname === '0.0.0.0' ||
-		hostname === '[::]' ||
-		hostname === '[::1]' ||
-		hostname === '::1' ||
-		hostname === '169.254.169.254' ||
-		hostname === 'metadata.google.internal' ||
-		/^\[?(fc|fd)[0-9a-f]{2}:/i.test(hostname) ||
-		/^\[?fe80:/i.test(hostname) ||
-		hostname.endsWith('.local') ||
-		hostname.endsWith('.localhost') ||
-		hostname.endsWith('.internal')
-	) {
+	// First defense: literal-hostname denylist (catches obvious
+	// `https://localhost/`, `https://127.0.0.1/`, etc.).
+	if (isPrivateHostname(hostname)) {
 		throw new Error('fetchJson: refusing to probe non-public host');
 	}
+	// Second defense (Part 122 cp3 — DNS-rebinding closure):
+	// Resolve the hostname BEFORE fetch, validate every returned
+	// IP, and pin the resolved IP via a custom undici dispatcher
+	// so the connection can't land on a different IP than the
+	// one we validated.
+	const resolver = _dnsResolverForTesting ?? resolveAndValidatePublicIp;
+	const { address: pinnedIp, family: pinnedFamily } = await resolver(hostname);
+	const pinnedAgent = buildPinnedAgent(hostname, pinnedIp, pinnedFamily);
 
 	const ctrl = new AbortController();
 	const timeout = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -448,7 +616,15 @@ async function fetchJson<T>(url: string): Promise<T> {
 				'user-agent': 'morphit-indexer/federation-probe'
 			},
 			signal: ctrl.signal,
-			redirect: 'manual' // Audit 2026-05 finding 5-6: don't follow redirects
+			redirect: 'manual', // Audit 2026-05 finding 5-6: don't follow redirects
+			// Part 122 cp3 — pin the resolved IP at the connect layer.
+			// Without this, undici would do its own DNS lookup which
+			// could return a different (private) IP than what we
+			// pre-validated.
+			// @ts-expect-error — `dispatcher` is a node-fetch undici extension
+			// that isn't in the standard fetch signature but is supported by
+			// Node's bundled undici-based fetch.
+			dispatcher: pinnedAgent
 		});
 		if (!resp.ok) {
 			throw new Error(`HTTP ${resp.status}`);

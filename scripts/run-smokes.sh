@@ -35,6 +35,7 @@ SMOKES=(
 	"apps/indexer:reserved-keys-parity-smoke"
 	"apps/indexer:confusables-parity-smoke"
 	"apps/indexer:federation-probe-smoke"
+	"apps/indexer:dns-rebinding-defense-smoke"
 	"apps/indexer:instances-stream-smoke"
 	"apps/indexer:orderbook-stream-smoke"
 	"apps/indexer:chat-stream-smoke"
