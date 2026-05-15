@@ -1,10 +1,40 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20 — beta-tester intake form re-shipped)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20-fix — picker contact_link re-routed to community room)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp20-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp20-fix-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp19-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp20-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp20-fix — picker contact_link re-routed from operator DM to public community room
+
+### Pretext
+
+After cp20 first-cut Ken pushed back: he doesn't want his personal Matrix MXID promoted on the public picker UI in the Forgejo repo (spam/harassment/doxxing exposure once it's in git history forever).  Initial proposed swap was `@agorise:matrix.org` → `#agorise:matrix.org` in the URL — but per memory rule #14, that would mis-route security disclosures to a public channel.  Pushed back on the implementation, satisfied the goal correctly.
+
+### What changed
+
+`.forgejo/issue_template/config.yml`:
+- Picker `contact_link` renamed from "Security disclosure (private)" to "Community chat"
+- URL switched to `https://matrix.to/#/#agorise:matrix.org` (public room alias)
+- Description rewritten as a community-resource pitch, NOT "DM the operator"
+- Explicit caveat added: "For SECURITY-SENSITIVE issues ... DO NOT post here either; the bug-report template has the right private channel in section 16."
+
+`bug_report.md` §16 is UNCHANGED: still has `@agorise:matrix.org` as the security-disclosure DM mxid.  Testers who load the bug-report form and read down to §16 see the security path.  Repo browsers clicking "New Issue" see only the community room.
+
+### Updated sentinel
+
+`P121-CP20-2` now asserts both `mustHave` (Community chat + public room URL) AND `mustNotHave` (the personal MXID URL + the old "Security disclosure (private)" wording) — locks the picker against accidentally re-promoting the security DM in a future refactor.
+
+### Verification
+
+Triple-pulse 2,886 × 3, 0 failures.  YAML still validates.  Memory #4 updated.
+
+### Pattern lesson
+
+When an operator pushes back on a security-design choice, the underlying concern is usually right (here: don't promote personal MXID publicly) BUT the proposed fix may still cause a different harm (swap `@` → `#` routes security disclosures to public room).  Treat the request as input on the GOAL, not a directive on the IMPLEMENTATION.  Push back on the implementation, satisfy the goal correctly.
+
+---
 
 ## Part 121 cp20 — what's shipped (beta-tester intake form re-shipped at canonical Forgejo path)
 
