@@ -686,6 +686,23 @@ const scenarios: Scenario[] = [
 		alert: a('apt', 'apt_unavailable', { hint: 'not Debian/Ubuntu' }),
 		expectedTier: 'INFO'
 	},
+	// Part 122 cp1 — apt-monitor observability fix (AV14)
+	{
+		name: 'apt apt_refresh_failed → INFO (timeout / mirror unreachable)',
+		alert: a('apt', 'apt_refresh_failed', {
+			exit_code: 124,
+			hint: 'apt-get update failed; package list may be stale'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'apt apt_list_failed → INFO (count unreliable)',
+		alert: a('apt', 'apt_list_failed', {
+			exit_code: 124,
+			hint: 'apt list --upgradable failed; count may be unreliable'
+		}),
+		expectedTier: 'INFO'
+	},
 	{
 		name: 'certbot certbot_unavailable → INFO',
 		alert: a('certbot', 'certbot_unavailable', { hint: 'install certbot' }),
