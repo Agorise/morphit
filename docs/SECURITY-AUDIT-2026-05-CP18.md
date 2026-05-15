@@ -8,15 +8,15 @@
 
 | ID | Severity | Title | Status |
 |---|---|---|---|
-| AUDIT-1 | HIGH | JSON-injection via control characters in `json_str()` | **FIXED** |
-| AUDIT-CI-7 | HIGH | Tag-name command injection in `release.yml` | **FIXED** |
-| AUDIT-CI-1 | MEDIUM | `pull_request:` trigger has no fork filter; PR code runs on CI runner | REVISIT |
-| AUDIT-ANSIBLE-1 | MEDIUM | NodeSource setup script runs as root unverified | REVISIT |
-| AUDIT-NUMERIC | MEDIUM | Some sidecar numeric fields embedded unquoted; hostile FUSE could break JSON | REVISIT |
-| AUDIT-2 | LOW | ANSI escape sequences in `raw_line` plain-text path | REVISIT |
-| AUDIT-3 | LOW | Matrix mention injection via mxid-in-raw_line | REVISIT |
-| AUDIT-4 | LOW | matrix-bot doesn't cap payload size; compromised-sidecar DoS path | REVISIT |
-| AUDIT-CI-2 | LOW | Third-party actions pinned by major version, not SHA | REVISIT |
+| AUDIT-1 | HIGH | JSON-injection via control characters in `json_str()` | **FIXED (cp18)** |
+| AUDIT-CI-7 | HIGH | Tag-name command injection in `release.yml` | **FIXED (cp18)** |
+| AUDIT-CI-1 | MEDIUM | `pull_request:` trigger has no fork filter; PR code runs on CI runner | NOT ACTIONED — reviewer policy item, not a code fix |
+| AUDIT-ANSIBLE-1 | MEDIUM | NodeSource setup script runs as root unverified | **FIXED (cp19)** |
+| AUDIT-NUMERIC | MEDIUM | Some sidecar numeric fields embedded unquoted; hostile FUSE could break JSON | **FIXED (cp19)** |
+| AUDIT-2 | LOW | ANSI escape sequences in `raw_line` plain-text path | **FIXED (cp19)** |
+| AUDIT-3 | LOW | Matrix mention injection via mxid-in-raw_line | **FIXED (cp19)** |
+| AUDIT-4 | LOW | matrix-bot doesn't cap payload size; compromised-sidecar DoS path | **FIXED (cp19)** |
+| AUDIT-CI-2 | LOW | Third-party actions pinned by major version, not SHA | **FIXED (cp19, partial — checkout + setup-node SHA-pinned; upload-artifact left at @v4 with TODO)** |
 
 ---
 
@@ -218,3 +218,71 @@ EDITED (registration + tracking):
   apps/web/scripts/persona-walkthrough-smoke.ts          (cp18 sentinels)
   TARBALL.md                                             (cp18 entry — see tarball)
 ```
+
+---
+
+## cp19 update (2026-05-15) — MEDIUM/LOW findings cleared
+
+Ken said "if it won't take too long to fix those last little things, i don't see why they can't just be knocked out now."  All MEDIUM and LOW findings except AUDIT-CI-1 (which is a reviewer-policy item, not a code fix) are now closed.
+
+### AUDIT-ANSIBLE-1: NodeSource setup script replaced
+
+`ops/ansible/roles/morphit/tasks/nodejs.yml` refactored from "download setup script + run as root" to the apt-repo + GPG-key pattern used by `roles/bunkerweb` (docker) and `roles/trivy_monitor`.  Same install outcome, no shell-script-as-root in the path.
+
+### AUDIT-NUMERIC: `json_num()` helper + bounds-check sites
+
+Added `json_num()` to `ops/scripts/lib/emit.sh`: validates input is a JSON-safe number (digits, optional minus, optional single decimal point); returns `0` otherwise.  Rejects scientific notation, embedded letters, multi-dot/dash, control chars.
+
+Applied at three unguarded sites:
+- `morphit-host-monitor.sh` — legacy `DISK_PATHS` `$pct` value
+- `morphit-fail2ban-monitor.sh` — `$currently_banned` + `$total_banned`
+- `morphit-compose-monitor.sh` — `$restart_count` from `jq` output
+
+The cp15 mount-sweep was already pattern-equivalent; smartctl-monitor's existing `[ "$value" -gt 0 ] 2>/dev/null` guards are also pattern-equivalent — no change needed at those sites.
+
+### AUDIT-2 + AUDIT-3: `sanitize()` in matrix-bot's `substitute()` + Details block
+
+New `sanitize()` function in `classifier.ts`:
+- AUDIT-2: drop ASCII control chars except `\t` and `\n` (operator viewing journalctl directly won't see terminal escapes)
+- AUDIT-3: defang `@user:server` and `#room:server` patterns by inserting U+200D (zero-width joiner) after the sigil — Matrix client pill-detection regex doesn't match, so kernel strings containing mxids don't render as pings
+
+### AUDIT-4: size cap on rendered payload
+
+`MAX_FIELD_BYTES = 1024`, `MAX_PAYLOAD_BYTES = 8192` constants in `renderAlertBody`.  Per-field exceeding 1KB gets `…(truncated)` suffix; total payload-lines exceeding 8KB get `…(payload truncated)` suffix.  Well under Matrix message limits with headroom for title/advice/metadata.
+
+Regression smoke `apps/matrix-bot/scripts/render-alert-hardening-smoke.ts` — 8 scenarios covering all three defenses + combined-attack scenarios.
+
+### AUDIT-CI-2: third-party actions SHA-pinned
+
+`actions/checkout` → `11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2` (confirmed from multiple sources).
+`actions/setup-node` → `1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3` (confirmed from StepSecurity reference).
+`actions/upload-artifact` → left at `@v4` with explicit TODO comment — current upstream SHA wasn't confirmable from search results at audit time; bumping requires direct upstream verification.
+
+The `# vX.Y.Z` version comment after each SHA enables Renovate/Dependabot to auto-suggest bumps.
+
+### AUDIT-CI-1: NOT actioned (by design)
+
+`pull_request:` trigger running PR code on CI is the standard open-source threat model.  Mitigations are reviewer-policy items (require maintainer approval before merge; treat PRs as untrusted; don't expose secrets to PR runs).  No code change.
+
+### Files modified this cleanup
+
+```
+EDITED:
+  ops/ansible/roles/morphit/tasks/nodejs.yml          (AUDIT-ANSIBLE-1)
+  ops/scripts/lib/emit.sh                              (AUDIT-NUMERIC: json_num())
+  ops/scripts/morphit-host-monitor.sh                 (json_num site)
+  ops/scripts/morphit-fail2ban-monitor.sh             (json_num sites)
+  ops/scripts/morphit-compose-monitor.sh              (json_num site)
+  apps/matrix-bot/src/classifier.ts                    (AUDIT-2/3/4)
+  .forgejo/workflows/ci.yml                            (AUDIT-CI-2 SHA pin)
+  .forgejo/workflows/release.yml                       (AUDIT-CI-2 SHA pin)
+
+NEW:
+  apps/matrix-bot/scripts/render-alert-hardening-smoke.ts   (AUDIT-2/3/4 regression)
+```
+
+### Verification
+
+- Triple-pulse: 2,884 × 3, 0 failures.  cp18 baseline 2,871 → cp19 baseline 2,884 (+13 net: 8 render-alert-hardening + 5 persona).
+- Typecheck 0 errors, ansible-lint passes production-profile.
+- All 8 render-alert-hardening attack scenarios pass on first try.

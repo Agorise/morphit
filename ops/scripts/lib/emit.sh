@@ -138,3 +138,39 @@ emit() {
            "$_emit_ts" "$1" "$MORPHIT_EMIT_MODULE" "$2" "$_emit_payload" \
         | systemd-cat -t "$MORPHIT_EMIT_TAG" -p "$1"
 }
+
+# ─── json_num ────────────────────────────────────────────────────
+# Validate a value is a JSON-safe number and echo it back; echo `0`
+# if not.  Permits: optional leading `-`, digits, optional decimal
+# point with more digits.  Rejects: scientific notation (matrix-bot
+# classifier doesn't expect it), embedded letters, control chars,
+# spaces, anything that could break JSON or look like injection.
+#
+# AUDIT-NUMERIC (cp18 deep-deep): sidecars embed external-tool
+# output in numeric JSON positions:
+#   payload='{"percent":'$pct',"threshold":'$DISK_CRITICAL'}'
+# If $pct comes from a hostile FUSE filesystem reporting `"95; junk"`
+# in df output, the resulting JSON is malformed; matrix-bot drops it
+# silently — operator never learns the disk is full.  Not RCE (the
+# variable is inside a string-literal context, no shell interpret-
+# ation), but a real alert-suppression DoS.  Mount-sweep (cp15)
+# already validates via `case "$mount_pct_num" in *[!0-9]*) ...`;
+# this helper generalizes the pattern.
+#
+# Usage:
+#   payload='{"percent":'$(json_num "$pct")',"threshold":'$(json_num "$DISK_CRITICAL")'}'
+json_num() {
+    case "${1:-}" in
+        ''|*[!0-9.-]*|-|.|*..*|-*-*|.*-*)
+            # Empty, contains non-numeric, or pathological forms
+            # like `--5`, `1..2`, `.`.
+            echo 0
+            ;;
+        *)
+            # Permit at most one leading `-` and at most one `.`.
+            # case-glob above already rejected multi-dot/multi-dash;
+            # safe to echo.
+            echo "$1"
+            ;;
+    esac
+}

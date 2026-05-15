@@ -77,6 +77,8 @@ for path in $DISK_PATHS; do
     pct=$(df -P "$path" 2>/dev/null \
             | awk 'NR==2 { gsub(/%/,"",$5); print $5 }')
     [ -z "$pct" ] && continue
+    # AUDIT-NUMERIC: bounds-check pct before JSON embed.
+    pct=$(json_num "$pct")
     payload='{"path":"'$(json_str "$path")'","percent":'$pct',"threshold":'
     if [ "$pct" -ge "$DISK_CRITICAL" ]; then
         emit error disk_critical "${payload}${DISK_CRITICAL}}"

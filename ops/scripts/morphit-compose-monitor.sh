@@ -74,6 +74,8 @@ for project_dir in $COMPOSE_PROJECTS; do
             state=$(echo "$line" | jq -r '.State // ""')
             health=$(echo "$line" | jq -r '.Health // ""')
             restart_count=$(echo "$line" | jq -r '.RestartCount // 0')
+            # AUDIT-NUMERIC: bounds-check before JSON embed.
+            restart_count=$(json_num "$restart_count")
             [ -z "$name" ] && continue
 
             payload_base='{"service":"'$(json_str "$name")'","state":"'$(json_str "$state")'","health":"'$(json_str "$health")'","restart_count":'${restart_count:-0}',"project_dir":"'$(json_str "$project_dir")'"}'

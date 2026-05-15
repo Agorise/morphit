@@ -76,6 +76,9 @@ for jail in $jails; do
                    | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}')
 
     [ -z "$currently_banned" ] && continue
+    # AUDIT-NUMERIC: bounds-check before JSON embed.
+    currently_banned=$(json_num "$currently_banned")
+    total_banned=$(json_num "$total_banned")
 
     # Per-jail threshold override: MORPHIT_FAIL2BAN_<UPPERCASE-JAIL>_CRITICAL
     jail_upper=$(echo "$jail" | tr '[:lower:]-' '[:upper:]_')

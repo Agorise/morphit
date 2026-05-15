@@ -15,6 +15,13 @@
 # Forgejo Actions has GitHub-Actions-compatible syntax; this
 # workflow runs unchanged on either as long as the runner is a
 # Debian/Ubuntu host.
+#
+# AUDIT-CI-2 (cp18 deep-deep): third-party actions are SHA-pinned,
+# not tag-pinned.  Tags like `@v4` can be re-pointed at attacker-
+# controlled commits if an action repo is compromised; SHAs are
+# immutable.  The version comment after each SHA (`# v4.2.2`) lets
+# Dependabot/Renovate auto-suggest updates.  When bumping, ALSO
+# audit the diff from the previous SHA before merging.
 
 name: morphit-ci
 
@@ -35,10 +42,10 @@ jobs:
     name: TypeScript typecheck (sweep all workspaces)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Node.js 22 LTS
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
           cache: npm
@@ -57,7 +64,7 @@ jobs:
     name: ansible-lint (playbook quality gate)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Python 3.12 + ansible-lint
         run: |
@@ -83,10 +90,10 @@ jobs:
     name: Smoke suite (run-smokes.sh, triple-pulse)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Node.js 22 LTS
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
           cache: npm

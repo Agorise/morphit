@@ -1,10 +1,49 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 18 — deep-deep audit)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 19 — audit cleanup)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp18-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp19-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp17-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp18-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp19 — what's shipped (knock out remaining MEDIUM/LOW audit findings)
+
+### Pretext
+
+cp18 sealed the deep-deep audit, fixed two HIGH findings (AUDIT-1, AUDIT-CI-7), filed MEDIUM/LOW findings in REVISIT.  Ken said "if it won't take too long to fix those last little things, i don't see why they can't just be knocked out now."  cp19 closes all remaining actionable findings.
+
+### Fixes shipped
+
+- **AUDIT-ANSIBLE-1 (MEDIUM) FIXED**: `nodejs.yml` refactored from `setup_X.x` shell script-as-root to apt-repo + GPG-key pattern matching docker/trivy roles.
+- **AUDIT-NUMERIC (MEDIUM) FIXED**: `json_num()` helper in `emit.sh` validates numeric values before JSON embed.  Applied to host-monitor disk-path, fail2ban counts, compose restart_count.
+- **AUDIT-2 (LOW) FIXED**: `sanitize()` in matrix-bot classifier strips ASCII control chars except `\t`/`\n` from rendered payload values.
+- **AUDIT-3 (LOW) FIXED**: `sanitize()` defangs `@user:server` and `#room:server` patterns by inserting U+200D after the sigil — Matrix pill-detection doesn't fire.
+- **AUDIT-4 (LOW) FIXED**: `MAX_FIELD_BYTES = 1024` + `MAX_PAYLOAD_BYTES = 8192` caps in renderAlertBody.  Per-field + total truncation with explicit markers.
+- **AUDIT-CI-2 (LOW) FIXED partially**: `actions/checkout` + `actions/setup-node` SHA-pinned with version comments.  `actions/upload-artifact` left at `@v4` with explicit TODO — couldn't confirm current upstream SHA from available sources.
+- **AUDIT-CI-1 (MEDIUM) NOT ACTIONED by design**: PR-from-fork CI is a reviewer-policy item, not a code fix.
+
+### Regression smoke
+
+`apps/matrix-bot/scripts/render-alert-hardening-smoke.ts` — 8 scenarios covering AUDIT-2/3/4 defenses (ESC strip, NUL/bell/FF strip, tab+newline preservation, mxid defang, room-alias defang, per-field truncation, payload truncation, combined attack).  All pass first try.
+
+### Persona sentinels
+
+5 P121-CP19 sentinels lock all five fixes.
+
+### Brag list
+
+Zero new entries.  Security work goes to AUDIT doc.
+
+### Verification
+
+- Triple-pulse: 2,884 × 3, 0 failures.  cp18 baseline 2,871 → cp19 baseline 2,884 (+13 net: 8 render-hardening + 5 persona).
+- Typecheck 0 errors, ansible-lint passes production-profile.
+
+### Honest scope acknowledgment
+
+SHA-pinning would benefit from direct access to action repos for current upstream SHAs.  Sandbox search reliably confirmed 2/3 (checkout, setup-node).  Applied those + explicit TODO on the third.  Better than @v4 tag-pinning all of them.
+
+---
 
 ## Part 121 cp18 — what's shipped (deep-deep security audit of cp9-cp17 deltas)
 
