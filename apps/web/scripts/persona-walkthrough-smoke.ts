@@ -1642,6 +1642,32 @@ const SCENARIOS: readonly Scenario[] = [
 			'# v4.2.2',
 			'# v4.0.3'
 		]
+	},
+
+	// ─── P121-CP20 — beta-tester intake form wired into Forgejo
+	{
+		name: 'P121-CP20-1 — Forgejo issue template ships at .forgejo/issue_template/bug_report.md with auto-load frontmatter',
+		file: '.forgejo/issue_template/bug_report.md',
+		rootRelative: true,
+		mustHave: [
+			'name: "Bug report"',
+			'title: "[bug] "',
+			'needs-triage',
+			'## 1. One-line summary',
+			'## 17. Anything else?',
+			'@agorise:matrix.org'
+		]
+	},
+	{
+		name: 'P121-CP20-2 — Forgejo issue-picker config disables blank issues + surfaces Matrix DM contact link',
+		file: '.forgejo/issue_template/config.yml',
+		rootRelative: true,
+		mustHave: [
+			'blank_issues_enabled: false',
+			'contact_links',
+			'Security disclosure',
+			'matrix.to/#/@agorise:matrix.org'
+		]
 	}
 ];
 
