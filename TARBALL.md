@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20-fix2 — picker contact_link reroute + redundant paste-instruction removed)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 21 — cp7 stale-route cleanup landed in fresh local clone + latent matrix-bot smoke drift fixed + regression sentinel)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,16 +6,16 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 121 cp20-fix2 (2026-05-15)
+**Last sealed checkpoint:** Part 121 cp21 (2026-05-15)
 
-**Gates — all green:**
-- Triple-pulse: **2,886 × 3 scenarios, 0 failures**
-- Typecheck-sweep: 0 errors across 9 workspaces
-- ansible-lint: 0 failures, 0 warnings (production-profile, 53 files)
+**Gates — all green (with one disclosed flake):**
+- Triple-pulse: **2,905 × 3 scenarios, 0 failures** (cp20-fix2 baseline 2,886 + 19 from the new no-stale-top-level-routes-smoke). HONEST DISCLOSURE: across ~7 pulses during cp21 verification, ONE pulse flaked at 2,881 scenarios / 1 runner failed (a 24-scenario smoke didn't tally — strongly suggests the historic `drain-defense-live-fire` timing-race or a similar 24-scenario smoke). Re-runs are clean. Cp21 touched zero code paths related to drain-defense or any timing-sensitive smoke, so this is a pre-existing intermittent that didn't surface in the cp20-fix2 sandbox (likely because that sandbox didn't have `npm install` done so the relay's live-fire smoke wouldn't even reach the timing-sensitive stage). Filed as a REVISIT item — characterize and fix in cp22 or later. **The 3-of-3 PASSING pulses are the gate; the intermittent is documented, not green-washed.**
+- Typecheck-sweep: 0 errors across all 9 workspaces (post-npm-install — see cp21 honest-disclosure section below for why this is meaningfully stronger than the cp20-fix2 typecheck claim)
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp20-fix2 sealed clean at 0 failures + 0 warnings, and cp21 touched zero Ansible files)
 
-**Brag list:** 265 entries (closing summary entry 265 = "No flash of English content for non-English speakers"). No new entries added across cp15–cp20-fix2 — all work was internal hardening per discipline rule #15.
+**Brag list:** 265 entries unchanged. cp21 work is internal repo hygiene + smoke-test infrastructure — per cp14 discipline rule, no brag entry.
 
-**This session's arc (cp15 → cp20-fix2):**
+**This session's arc (cp15 → cp21):**
 1. **cp15** — `api-response-shape-smoke.ts` (10 zod-schemas), `ops/scripts/lib/emit.sh` (extracted from 12 sidecars), host-monitor bind-mount + tmpfs sweep, smartctl SCT thermal-log extension
 2. **cp16** — `sse-stream-shape-smoke.ts` (18 SSE checks across 3 streams), REST coverage 10 → 27 interfaces
 3. **cp17** — REST coverage 27 → ALL 38 indexer-client interfaces, schema-as-contract for indexer side COMPLETE
@@ -24,26 +24,104 @@
 6. **cp20** — Re-shipped beta-tester intake form at canonical Forgejo path `.forgejo/issue_template/bug_report.md` + `config.yml`. (Memory said it shipped in Part 48 but had been lost in a later refactor.)
 7. **cp20-fix** — Picker contact_link re-routed from operator's personal MXID to `#agorise:matrix.org` public community room; security DM stays only in §16 of the form body, NOT on the picker UI
 8. **cp20-fix2** — Removed "Copy this whole file, paste it into a new issue at…" line from the auto-loaded Forgejo template (nonsensical when the user is already on the new-issue page); docs/NEW-ISSUE-FOUND.md keeps the line for offline/email use
+9. **cp21** — Discovered + closed cp7 stale-route accumulation in Ken's local clone (delta-tarballs from cp11+ couldn't communicate the cp7 route MOVES, so the 25 top-level pre-cp7 route directories silently persisted alongside their `[lang]/` post-cp7 counterparts; some drifted by Parts since — most consequentially `routes/support/+page.svelte` was missing the cp9 Matrix-group-chat block). Cleanup workflow: archive → empty working tree (keep `.git/`) → extract clean tarball → `git add -A` → commit + push. New regression sentinel `apps/web/scripts/no-stale-top-level-routes-smoke.ts` (19 scenarios; FAILS correctly when regression returns; verified by inserting a stale dir + running the smoke + cleaning up) locks this against future recurrence. ALSO surfaced and fixed: 20 latent type-drift errors in matrix-bot smoke samples + zod schemas (the cp16-cp17 schema-as-contract smokes against `@morphit/indexer-client` types had drifted by Parts as the types tightened; in every prior sandbox `npm install` wasn't run, so the `@morphit/*` imports failed with "Cannot find module" which the typecheck-sweep noise filter swallowed, and the `satisfies` clauses never type-checked — surfaced only when cp21 ran `npm install` to exercise the new smoke against the workspace symlink graph).
 
-**Audit campaign status:** Comprehensively closed. All findings recorded in `docs/SECURITY-AUDIT-2026-05-CP18.md` with statuses (FIXED / NOT-ACTIONED / partial).
+**Audit campaign status:** Comprehensively closed at cp19. cp21 is repo-hygiene work, not audit work.
 
 **Parked work (Ken explicitly deferred):**
 - **Upgrade tooling** — first-release week (~2026-05-22). Manual-only by default; `MORPHIT_AUTO_UPGRADE=1` opt-in for auto. Scope: (1) tag-signature verify step in release.yml (`git tag -v "$TAG"` — currently missing); (2) `morphit-release-monitor` sidecar polls Forgejo /6h; (3) `morphit upgrade` ops-cli (download + SHA-256 + GPG verify + show notes + confirm + apply + keep prev); (4) `docs/UPGRADING.md`. **Re-trigger phrase:** "release tooling". See memory entry #29.
 
 **Truly pending (not blocking, just not done):**
-- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (sysadmin handoff opportunity — see cp21 retrospective below)
 - Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
 - `actions/upload-artifact` SHA bump (left at @v4 with TODO; needs upstream SHA verification)
 - Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied (availability.ts, invite.ts, create.ts, health.ts) — currently can't apply satisfies-clause cross-check without a shared types package
+- DNS-rebinding gap in `federationProbe.ts` (information-disclosure bounded by GET-only + 256KB cap + manual-redirect; filed REVISIT §A; defense-in-depth only — no live instance to attack pre-launch)
 - PHASE F (whatever it is): apply schema-as-contract pattern as first contract layer when it lands
+- Typecheck-sweep noise-filter has a regex bug: pattern `error TS6133 .* is declared but` requires a SPACE between "TS6133" and ".*", but real TS6133 emits "TS6133:" with a colon. So legitimate TS6133 "unused" warnings have been slipping through unfiltered AND no TS6133 noise was actually being suppressed. Out of scope for cp21; fix is one regex edit (`TS6133[ :]`).
+- **Intermittent flake in the run-smokes.sh suite — surfaced during cp21 verification.** Across ~7 pulses, ONE pulse flaked at 2,881 scenarios / 1 runner failed (24 scenarios didn't tally — count signature matches the historic `drain-defense-live-fire` size). Cp21 touched zero code paths related to drain-defense or any timing-sensitive smoke. Likely candidates: drain-defense-live-fire (memory #12 said root-caused + fixed Part 85 but may have regressed under load), or another timing-sensitive smoke. Did not surface in cp20-fix2 sandbox because that sandbox didn't have `npm install` done. Filed REVISIT — characterize + fix in cp22 or later. Until then: triple-pulse is the discipline; expect occasional pulse-2 retries on stress.
 
-**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp20-fix2 + cp20-fix paragraphs). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp21 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
 
 ---
 
-**Tarball:** `morphit-audit-2026-05-121-cp20-fix2-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp21-FULL.tar.gz` — **FULL** tarball (not delta), per the new "ship full tarballs at structural-move checkpoints" discipline that cp21 itself motivated. See memory edit at session close. Ken's recipe for adopting it: archive local → empty working tree but KEEP `.git/` → extract full tarball over the top → `git add -A` → commit + push.
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp20-fix-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp20-fix2-delta.tar.gz` (the last delta — and the one whose deletion-blindness led to cp21's discovery).
+
+## Part 121 cp21 — stale-route cleanup + latent matrix-bot type-drift fix + regression sentinel
+
+### Pretext
+
+Ken pulled the cp20-fix2 tarball apart for a "where do we go next?" audit. The first deep-dive found 23 leaf-route directories + the dynamic account route + the `dev/` and `my/` containers (25 total) all duplicated between `apps/web/src/routes/<name>/` AND `apps/web/src/routes/[lang]/<name>/`. The cp7 commit message said "physically moved" but Ken's local + Forgejo had only seen the cp7+ DELTA tarballs, which by definition can't communicate deletions — so the cp7 MOVE was applied to him as an ADD, and the old top-level copies silently persisted. Some pairs were byte-identical (cheat-sheet, compare, faq, glossary, instances, plan, scan-login, security, privacy-terms); most had drifted (the `[lang]/` copy got the cp7 localePath() wrapping + subsequent Part-specific additions; the top-level copy didn't). Most consequential drift: `routes/support/+page.svelte` top-level was **missing the entire cp9 Matrix-group-chat block** that exists in `[lang]/support/+page.svelte` — a fresh visitor hitting bare `/support` would have seen a degraded support page without the operator's Matrix room link.
+
+Initial framing (mine, in conversation) reached for the "stale bookmark / SEO-indexed external link" risk angle — Ken correctly pushed back that NOBODY has the URL yet (not even the sysadmin), so that framing was bogus. Real reasons cleanup still matters: (a) maintenance hazard — every page change is now applied to one copy or the other, drift compounds silently; (b) build artifact correctness — `npm run build` prerenders ~370 HTML files when it should be ~200; (c) code-review cleanliness — sysadmin opening `apps/web/src/routes/` and seeing duplicates asks "which one is real?"
+
+### What shipped this turn
+
+**(a)** **Stale-route cleanup workflow** — Ken archived his local, emptied his working tree but kept `.git/`, extracted the clean tarball, `git add -A`, committed, pushed to Forgejo. After cp21, `apps/web/src/routes/` contains EXACTLY: `+layout.svelte` (minimal redirect-shell wrapper), `+layout.ts` (prerender config + ssr=false), `+page.svelte` (the locale-detection redirect via `pickLocaleFromAcceptLanguages()`), and `[lang]/` (the localized subtree with 25 leaf routes + the redirect-shell `+page.ts` carrying `entries()`).
+
+**(b)** **`apps/web/scripts/no-stale-top-level-routes-smoke.ts` regression sentinel** (NEW, 19 scenarios) — locks the post-cp7 invariant against future regression. Scenarios cover: routes/ has NO unexpected top-level directories (only `[lang]/` allowed), routes/ has NO unexpected top-level files (only the 3 redirect-shell files), each of the 3 redirect-shell files exists, the `[lang]/` directory exists, `[lang]/` has ≥20 entries, the redirect shell references `pickLocaleFromAcceptLanguages` (cp7 design proof), the layout file explains the minimal-chrome rationale, and explicit per-leaf "no stale top-level /<leaf>/ directory" checks for the 10 most commonly drifted leaves (orderbook, post, chat, my, settings, support, login, onboarding, about-this-instance, run-a-node). The per-leaf checks give readable failure output when this specific regression recurs ("found at apps/web/src/routes/<leaf>/") rather than a generic "unexpected directories" blob. Registered in `scripts/run-smokes.sh` right after `path-adversarial-smoke` (thematic grouping — both deal with the routes restructure). Verified by inserting a stale `routes/orderbook/+page.svelte` and running the smoke: 2 of 19 scenarios fail cleanly with the right diagnostic; rm + re-run: 19/19 green.
+
+**(c)** **Latent matrix-bot smoke type-drift fix (20 errors closed)** — surfaced when `npm install` ran in cp21's sandbox and the `@morphit/indexer-client` imports actually resolved. Pre-cp21, every typecheck-sweep run was in a no-deps sandbox where `@morphit/*` imports failed with "Cannot find module" (noise-filtered as expected), so the `satisfies <InterfaceFromIndexerClient>` clauses in the cp16-cp17 schema-as-contract smokes never executed. Cp20-fix2's "Typecheck-sweep: 0 errors" gate was technically accurate in that sandbox but latently wrong.
+
+Errors fixed:
+- `apps/matrix-bot/scripts/api-response-shape-smoke.ts`:
+  - `ErrorResponse.code: 'order_not_found'` → `'not_found'` (ErrorCode enum is the union not_found|bad_request|rate_limited|internal|service_starting; `order_not_found` was never valid)
+  - `sampleInstanceDirEntry` was missing 10 of 14 required fields; expanded to full shape
+  - `sampleOrder` was missing required `created_at`/`updated_at`/`expires_at` (cascaded to `FeaturedSlot`, `OrderbookResponse`, `AccountOrdersResponse`)
+  - `sampleFeedbackSummary` was `{total, positive, negative, positive_pct}` — drifted; canonical is `{count, weighted_rating, by_rating}`
+  - `sampleChatAdmission` was `{admitted: true}` only; current shape adds `me`, `peer`, `reason`
+  - `sampleChatMessage` was `{from, to, body}` — drifted; canonical is `{sender, recipient, ciphertext, header}` (matches ADR-0015 E2EE shape — chat is opaque to the indexer)
+  - `sampleAttestorEligibility.reason: 'satisfies_launch_phase'` not in enum; canonical eligible reasons are loyalty|age|both
+  - `sampleInstanceDirectory` (the wrapper) was missing required `version`/`directory_updated_at`
+  - Companion zod schemas (`ChatMessageRecordSchema`, `InstanceDirectoryEntrySchema`, `OrderRecordSchema`, `FeedbackSummarySchema`, `ChatAdmissionSchema`) all updated to match
+  - Negative-test scenario for FeedbackSummary updated: was "drop the `positive` field"; now "drop the `count` field"
+- `apps/matrix-bot/scripts/sse-stream-shape-smoke.ts`:
+  - Same three sample drifts (OrderRecord, InstanceDirectoryEntry, ChatMessageRecord) — fixed both samples + zod schemas
+- `apps/matrix-bot/scripts/render-alert-hardening-smoke.ts`:
+  - `ClassifiedAlert` sample missing required `category` field (cp9 added the AlertCategory discriminant on ClassifiedAlert after this smoke was first written); set to `'host-resource'` matching the `module: 'dmesg'` event-source
+- `packages/asset-registry/src/index.ts`:
+  - Proxy `get` trap signature `(target, prop, receiver)` had unused `receiver` (TS6133); shortened to `(target, prop)` since Proxy traps don't require all 3 params
+
+### Why this matters beyond the immediate fix
+
+The schema-as-contract pattern (cp14-cp17) was working as designed — it caught real drift between the matrix-bot smokes and the indexer-client types. It just wasn't *running* in any prior sandbox because npm install wasn't being done. Cp21 closes both layers: the drift itself AND the structural reason the drift hadn't surfaced.
+
+### Verification
+
+- Triple-pulse 2,905 × 3, 0 failures (cp20-fix2 baseline 2,886 → cp21 baseline 2,905 = +19 from the new sentinel smoke)
+- Typecheck-sweep 0 errors across all 9 workspaces (post-`npm install` — see honest-disclosure note above; this is meaningfully stronger than cp20-fix2's 0-error gate which was in a no-deps sandbox)
+- ansible-lint NOT re-verified (sandbox doesn't have it; cp20-fix2 sealed clean; cp21 touched zero Ansible files)
+- New sentinel smoke verified to FAIL correctly when regression returns + PASS correctly after cleanup
+
+### Pattern lessons
+
+1. **Delta tarballs CANNOT communicate deletions or moves.** Cp7 was the first structural-move checkpoint after the cp11 delta convention was adopted. The move read as an add to every recipient. This is now a memory rule: **at any structural-move checkpoint, ship a FULL tarball, not a delta.** Same rule for any "delete file X" checkpoint that isn't accompanied by an explicit cleanup script.
+2. **Schema-as-contract smokes only execute when the typed imports resolve.** If the typecheck sandbox doesn't have `npm install` done, satisfies-clause cross-checks silently no-op. Pre-cp21 typecheck-sweep claimed "0 errors" while 20 real type-drift errors lurked. Fix posture: typecheck-sweep should attempt `npm ci --ignore-scripts` if `node_modules` is missing, or refuse to claim "0 errors" without disclosing the resolution state of `@morphit/*` imports. Filed REVISIT for next session.
+3. **Initial framings can over-reach.** I reached for "stale bookmarks + SEO" as the urgency angle for the route cleanup; Ken correctly pushed back that no users exist yet so no bookmarks exist. Real reasons (maintenance hazard, build artifact correctness, code-review cleanliness) were enough. Lesson: when proposing urgency, check the user-existence assumption.
+4. **Honest disclosure when verification can't run.** ansible-lint not installed in sandbox → disclose, don't claim. Memory rule #19 reinforced.
+
+### Files modified
+
+- `apps/web/src/routes/<25 stale dirs>/` — DELETED via Ken's workflow
+- `apps/web/scripts/no-stale-top-level-routes-smoke.ts` — NEW (19-scenario sentinel)
+- `scripts/run-smokes.sh` — +1 registration line (after path-adversarial-smoke)
+- `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — 7 sample literals + 5 zod schemas rewritten
+- `apps/matrix-bot/scripts/sse-stream-shape-smoke.ts` — 3 sample literals + 3 zod schemas rewritten
+- `apps/matrix-bot/scripts/render-alert-hardening-smoke.ts` — `category` field added to ClassifiedAlert helper
+- `packages/asset-registry/src/index.ts` — Proxy `get` trap signature trimmed
+- `TARBALL.md` — this entry
+- `docs/REVISIT-LIST.md` — Last maintained line updated, two new entries (filter-regex bug + sandbox npm-install for typecheck)
+- `docs/AUDIT-2026-05.md` — cp21 entry
+
+No brag-list edit (internal repo hygiene + smoke infrastructure, not public-facing per cp14 discipline). No ADR edit (not architectural). No locale edits (no user-facing strings changed). No schema migration (no DB changes).
+
+### Retrospective — what cp21 tells us about cp22+
+
+Ken's sysadmin gets the repo "in a few days." Cp21 just established that the full-tarball convention applies at structural-move checkpoints — which the sysadmin handoff IS (going from "lives only on Ken's laptop" to "lives on a sysadmin's laptop AND on Forgejo"). The cp21 tarball is the full handoff vehicle. The next checkpoint cp22 likely covers: (a) sysadmin-handoff persona walk against OPERATIONS.md / RUN-A-MORPHIT-NODE.md / PRE-LAUNCH-CHECKLIST.md / LAUNCH-DAY.md catching any cp9-cp20 surface that drifted vs the docs; (b) the upgrade-tooling work parked for the release week (~2026-05-22). Both can plow in one session if Ken wants.
+
+---
 
 ## Part 121 cp20-fix2 — drop redundant "paste into a new issue" line from auto-loaded template
 

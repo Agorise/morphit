@@ -299,7 +299,7 @@ export function isAssetTicker(s: unknown): s is AssetTicker {
  *  a compile-time view; this gives us runtime enforcement too. */
 const _innerTickerSet = new Set<string>(ASSET_TICKERS);
 export const ASSET_TICKERS_SET: ReadonlySet<string> = new Proxy(_innerTickerSet, {
-	get(target, prop, receiver) {
+	get(target, prop) {
 		// Trap mutating methods.  Anything else passes through.
 		if (prop === 'add' || prop === 'delete' || prop === 'clear') {
 			return () => {

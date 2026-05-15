@@ -51,7 +51,10 @@ const OrderRecordSchema = z
 		payment_methods: z.array(z.string()),
 		terms: z.string().nullable(),
 		status: z.enum(['live', 'cancelled', 'expired']).optional(),
-		fee_status: z.string().optional()
+		fee_status: z.string().optional(),
+		created_at: z.string(),
+		updated_at: z.string(),
+		expires_at: z.string().nullable()
 	})
 	.passthrough();
 
@@ -60,16 +63,27 @@ const InstanceDirectoryEntrySchema = z
 		origin: z.string(),
 		operator_account: z.string(),
 		operator_tag: z.string().nullable(),
-		registered_at: z.string()
+		operator_display_name: z.string().nullable(),
+		name: z.string().nullable(),
+		tagline: z.string().nullable(),
+		contact_url: z.string().nullable(),
+		alt_networks: z.unknown(),
+		status: z.enum(['good', 'quiet', 'stale', 'unreachable', 'mismatch']),
+		registered_at: z.string(),
+		last_probed_at: z.string().nullable(),
+		indexed_block: z.number().nullable(),
+		chain_lag_sec: z.number().nullable(),
+		consecutive_failures: z.number()
 	})
 	.passthrough();
 
 const ChatMessageRecordSchema = z
 	.object({
 		id: z.number(),
-		from: z.string(),
-		to: z.string(),
-		body: z.string(),
+		sender: z.string(),
+		recipient: z.string(),
+		ciphertext: z.string(),
+		header: z.unknown(),
 		created_at: z.string()
 	})
 	.passthrough();
@@ -115,29 +129,43 @@ const ChatMessageAppendedSchema = ChatMessageRecordSchema;
 const sampleOrderRecord = {
 	account: 'alice',
 	permlink: 'sell-btc-2026-05-15',
-	side: 'sell',
-	asset: 'BTC',
+	side: 'sell' as const,
+	asset: 'BTC' as const,
 	fiat_currency: 'USD',
 	amount_min: 50,
 	amount_max: 500,
 	price_model: { type: 'spread', spread_pct: 1.5 },
 	location_region: 'EU',
 	payment_methods: ['sepa', 'wise'],
-	terms: null
+	terms: null,
+	created_at: '2026-05-15T00:00:00Z',
+	updated_at: '2026-05-15T00:00:00Z',
+	expires_at: null
 } satisfies OrderRecord;
 
 const sampleInstance = {
 	origin: 'https://morphit.io',
 	operator_account: 'morphit',
 	operator_tag: null,
-	registered_at: '2026-05-15T00:00:00Z'
+	operator_display_name: null,
+	name: null,
+	tagline: null,
+	contact_url: null,
+	alt_networks: null,
+	status: 'good' as const,
+	registered_at: '2026-05-15T00:00:00Z',
+	last_probed_at: null,
+	indexed_block: null,
+	chain_lag_sec: null,
+	consecutive_failures: 0
 } satisfies InstanceDirectoryEntry;
 
 const sampleChatMessage = {
 	id: 100,
-	from: 'alice',
-	to: 'bob',
-	body: 'Confirmed BTC sent to your address; tx id below.',
+	sender: 'alice',
+	recipient: 'bob',
+	ciphertext: 'opaque-base64-payload-placeholder',
+	header: { ephemeral_pub: 'x', nonce: 'y', client_tag: 'z' },
 	created_at: '2026-05-15T00:00:00Z'
 } satisfies ChatMessageRecord;
 
