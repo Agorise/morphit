@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5-fix — avatar-upload input-size gate + UI bullet; F14 wizard step-number doc drift; cp5 sentinels extended)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5-fix2 — two mechanical smokes shipped + F15 HIGH dead-env-var-name finding caught by them and fixed)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,7 +6,83 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp5-fix (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp5-fix2 (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **3,057 × 3 scenarios, 0 failures** (cp5-fix baseline 2,965 → cp5-fix2 baseline 3,057 = +92 = 17 scenarios in new `ansible-systemd-user-consistency-smoke` + 75 scenarios in new `ansible-env-var-consumer-smoke`)
+- Typecheck-sweep: 0 errors across all 9 workspaces
+- Both new smokes self-tested by tampering
+
+**This-turn deliverable: two cp5-surfaced follow-on smokes shipped, both of which immediately surfaced new findings on their first real run.**
+
+### Smoke 1 — `apps/ops-cli/scripts/ansible-systemd-user-consistency-smoke.ts`
+
+**Rule:** every `User=X` referenced in a shipped `ops/systemd/*.service` unit either (a) is a well-known system user that pre-exists on a standard Ubuntu 24.04 box (root, nobody, www-data, postgres, systemd-network, systemd-resolve, systemd-timesync, daemon), OR (b) is created by an `ansible.builtin.user: name: X` task in `ops/ansible/roles/`.
+
+Handles Jinja-templated names like `name: "{{ morphit_service_user }}"` by resolving the variable against `ops/ansible/group_vars/all.yml`.
+
+Skips units with `DynamicUser=yes` (User= is irrelevant for those).
+
+**Scenarios:** 17 (16 units scanned, 4 Ansible-created users, 1 sanity meta-check).
+
+**Self-test:** removed the `morphit-relay` user-creation task from `base/tasks/main.yml` → smoke correctly fires for BOTH `morphit-relay.service` and `morphit-relay-mint-acts.service` with a clear diagnostic ("morphit-relay.service ships with User=morphit-relay, but the Ansible playbook has no `ansible.builtin.user: name: morphit-relay` task creating it AND morphit-relay is not in the system-default allowlist. Either add the user-creation task to a role... or — if morphit-relay really is a pre-existing system account — add it to SYSTEM_USER_ALLOWLIST in this smoke."). Restoration → clean.
+
+This smoke would have mechanically caught F12 from cp5. Future regressions of the same class are now caught at PR time.
+
+### Smoke 2 — `apps/ops-cli/scripts/ansible-env-var-consumer-smoke.ts`
+
+**Rule:** every LITERAL `MORPHIT_X=...` line in an Ansible `*.env.j2` template must have its variable name referenced somewhere in `apps/**/*.{ts,tsx,js,mjs}` (excluding `.d.ts`) OR `ops/scripts/*.sh` OR `ops/scripts/lib/*.sh`.
+
+Template lines where the variable NAME itself is Jinja-templated (e.g. `MORPHIT_FAIL2BAN_{{ var_jail }}_CRITICAL=...`) are SKIPPED — those are documented dynamic-dispatch patterns; the consumer reads them via pattern construction, which we can't statically validate.
+
+Comment lines in templates (`#` prefix) are skipped.
+
+**Scenarios:** 75 (72 unique template vars, 2 sanity meta-checks plus the per-var checks).
+
+**Self-test:** added a synthetic `MORPHIT_RELAY_DEAD_PASSPHRASE_TEST={{ test }}` line → smoke correctly fires with `✗ MORPHIT_RELAY_DEAD_PASSPHRASE_TEST has a consumer in apps/ or ops/scripts/`. Restoration → clean.
+
+This smoke would have mechanically caught F13 from cp5 (the dead `MORPHIT_RELAY_PASSPHRASE`).
+
+### What smoke 2 surfaced — F15 (HIGH)
+
+On its first real run, smoke 2 surfaced **six dead env-var names** in the Ansible templates that the code never reads. Same class as F12 (broken on first Ansible deploy):
+
+| Template var (pre-fix) | Code expects | Impact |
+|---|---|---|
+| `MORPHIT_INDEXER_BIND_HOST` | `MORPHIT_INDEXER_LISTEN_HOST` | Indexer bind host config silently ignored |
+| `MORPHIT_INDEXER_BIND_PORT` | `MORPHIT_INDEXER_LISTEN_PORT` | Indexer bind port config silently ignored |
+| `MORPHIT_INDEXER_OPERATOR_ACCOUNT` | `MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME` | Community-operator account name unset → per-operator moderation features broken |
+| `MORPHIT_INDEXER_OPERATOR_TAG` | `MORPHIT_INSTANCE_OPERATOR_TAG` | Operator tag (federation attribution) unset → community operators not properly tagged in the federation |
+| `MORPHIT_RELAY_BIND_HOST` | `MORPHIT_RELAY_LISTEN_HOST` | Relay bind host config silently ignored |
+| `MORPHIT_RELAY_BIND_PORT` | `MORPHIT_RELAY_LISTEN_PORT` | Relay bind port config silently ignored |
+
+For canonical morphit.io with defaults, the bind host/port issue is moot (defaults are correct). But for any community operator who configures custom bind values via `group_vars`, their config would be silently ignored. The operator-account-name and operator-tag issues are more serious — community-operator features (per-operator content moderation, federation tagging) would be broken.
+
+**Severity HIGH:** same class as F12 — broken on first Ansible deploy. The defects were latent because (a) memory's "Live full-stack Ansible deploy" is still in PENDING, (b) the canonical morphit.io defaults happen to match the code's defaults for the bind values, so the broken ones for community operators went unnoticed.
+
+**Fix shipped:** corrected all 6 template var names to match code. No additional sentinel needed because the env-var-consumer smoke IS the sentinel — any future drift fails the smoke at PR time.
+
+### Pattern lesson
+
+Both smokes were filed at cp5-close as "would have mechanically caught F12 / F13." This is exactly what mechanical smokes are for — they don't trust the human auditor to remember to check the cross-layer invariant. Smoke 2 immediately paid for itself by surfacing F15, which was the EXACT class of bug F13 represented (dead env vars in templates) but a different INSTANCE that the cp5 human audit had missed.
+
+**Three of the six F15 dead vars are operator-affecting (account name, operator tag, plus the 3 bind values for community operators).** Memory's "Live full-stack Ansible deploy" being in PENDING was, again, an accurate alarm bell for handoff bugs. Pre-launch is the right time to land mechanical handoff smokes precisely because they catch the LATENT defects that a successful first VM deploy would have surfaced expensively.
+
+**Brag list:** 265 entries unchanged. Internal handoff hardening + bug-discovery — not stranger-cares-about wins for the brag list.
+
+**This session's arc (cp22 → P122 cp5-fix2):**
+1. cp22 → P122 cp5-fix as previously documented
+2. **P122 cp5-fix2** — shipped two mechanical handoff smokes (systemd-user-consistency, env-var-consumer); env-var-consumer smoke surfaced F15 (HIGH, 6 dead env-var-name mismatches), fix shipped same turn
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (still on cp5 — cp5-fix and cp5-fix2 are same-checkpoint follow-ons, not new sealed checkpoints).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp5-fix2-delta.tar.gz` — delta over cp5-fix.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp5-fix-delta.tar.gz` (avatar UX gap close + F14 wizard step doc drift).
+
+---
 
 **Gates — all green:**
 - Triple-pulse: **2,965 × 3 scenarios, 0 failures** (cp5 baseline 2,963 → cp5-fix baseline 2,965 = +2 = P122-CP5-F14 + P122-CP5-F14b)
