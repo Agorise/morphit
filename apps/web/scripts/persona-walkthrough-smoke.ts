@@ -1536,6 +1536,46 @@ const SCENARIOS: readonly Scenario[] = [
 			'satisfies AttestorEligibilityResponse',
 			'satisfies StrangerFeeQuoteResponse'
 		]
+	},
+
+	// ─── P121-CP18 — deep-deep security audit fixes ───────────
+	{
+		name: 'P121-CP18-1 — AUDIT-1 fix: json_str() encodes ALL C0 control chars (0x00-0x1F) per RFC 8259',
+		file: 'ops/scripts/lib/emit.sh',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-1',
+			'sed -z',
+			'\\u0000',
+			'\\u001b',
+			'\\u001f',
+			'LC_ALL=C'
+		]
+	},
+	{
+		name: 'P121-CP18-2 — AUDIT-1 regression smoke covers the dmesg-comm-injection attack vector',
+		file: 'apps/matrix-bot/scripts/json-str-injection-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-1',
+			'embedded newline (THE primary attack vector',
+			'all C0 control chars',
+			'invalid UTF-8',
+			'callJsonStr',
+			'JSON.parse'
+		]
+	},
+	{
+		name: 'P121-CP18-3 — AUDIT-CI-7 fix: release.yml validates tag format strictly + passes via env, not ${{}} interpolation',
+		file: '.forgejo/workflows/release.yml',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-CI-7',
+			'v[0-9]*.[0-9]*.[0-9]*',
+			'TARBALL: ${{ steps.ver.outputs.tarball }}',
+			'tar --exclude',
+			'$TARBALL'
+		]
 	}
 ];
 
