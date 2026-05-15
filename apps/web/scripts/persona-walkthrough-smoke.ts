@@ -489,6 +489,42 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['currently at v29 as of Part 108++']
 	},
 	{
+		// Part 122 cp2 — F5 finding from cp1 audit.
+		//
+		// The migration model collapsed v2-v27 into v1 (May 2026 audit).
+		// v28-v32 changes live INLINE in schema.sql, but MIGRATIONS[]
+		// in migrations.ts stops at v1.  This works pre-launch (fresh
+		// deploys apply schema.sql which contains all v28-v32 DDL), but
+		// has a latent foot-gun post-launch: if someone adds v33 DDL to
+		// schema.sql without ALSO adding a MIGRATIONS[33] entry, an
+		// upgrade-install would silently miss v33's changes (because
+		// schema_migrations sees v1 already applied, and MIGRATIONS[]
+		// has nothing after v1).  This sentinel catches the drift at
+		// PR time: pinning the canonical head version in schema.sql
+		// against this assertion means any v33 addition fails the
+		// smoke until either (a) MIGRATIONS[33] is added too, or (b)
+		// this sentinel is consciously bumped to v33 (which requires
+		// thinking about whether the inline-without-MIGRATIONS pattern
+		// is still right).  Belt-and-braces with the existing
+		// validateMigrationsContract() runtime check.
+		//
+		// Maintenance: every schema version bump REQUIRES updating
+		// THREE places in the same work unit:
+		//   1. apps/indexer/src/db/schema.sql (the actual DDL)
+		//   2. docs/PRE-LAUNCH-CHECKLIST.md (D-4 above)
+		//   3. this sentinel
+		// If post-launch you also add MIGRATIONS[vN], that's a fourth
+		// site.  Three drift-anchors all pulling the same direction.
+		name: 'P122-CP2-F5 — schema.sql canonical head version pinned (cp1 F5 fix)',
+		file: 'apps/indexer/src/db/schema.sql',
+		rootRelative: true,
+		// The canonical head is v32 (Part 121).  This line is the last
+		// version-header comment in schema.sql; if it changes the
+		// sentinel fails, forcing the maintainer to either bump the
+		// sentinel (and check D-4) or revert the schema change.
+		mustHave: ['v32 / Part 121 — multi-network asset support (USDT)']
+	},
+	{
 		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
