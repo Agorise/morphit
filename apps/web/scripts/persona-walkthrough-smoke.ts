@@ -1576,6 +1576,72 @@ const SCENARIOS: readonly Scenario[] = [
 			'tar --exclude',
 			'$TARBALL'
 		]
+	},
+
+	// ─── P121-CP19 — MEDIUM/LOW audit-finding cleanup ──────────
+	{
+		name: 'P121-CP19-1 — AUDIT-ANSIBLE-1 fix: nodejs.yml uses apt-repo + GPG pattern, NO setup-script-as-root',
+		file: 'ops/ansible/roles/morphit/tasks/nodejs.yml',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-ANSIBLE-1',
+			'/etc/apt/keyrings/nodesource.asc',
+			'signed-by=/etc/apt/keyrings/nodesource.asc',
+			'morphit_node_version'
+		],
+		mustNotHave: [
+			'setup_{{ morphit_node_version }}',
+			'bash /tmp/nodesource_setup.sh'
+		]
+	},
+	{
+		name: 'P121-CP19-2 — AUDIT-NUMERIC fix: emit.sh exports json_num() helper; host-monitor + fail2ban + compose-monitor use it',
+		file: 'ops/scripts/lib/emit.sh',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-NUMERIC',
+			'json_num()',
+			'*[!0-9.-]*'
+		]
+	},
+	{
+		name: 'P121-CP19-3 — AUDIT-2/3/4 fixes: matrix-bot renderAlertBody sanitizes payload (control-char strip + mxid defang + size cap)',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-2',
+			'AUDIT-3',
+			'AUDIT-4',
+			'function sanitize',
+			'MAX_FIELD_BYTES',
+			'MAX_PAYLOAD_BYTES',
+			'\\u200d'
+		]
+	},
+	{
+		name: 'P121-CP19-4 — render-alert-hardening smoke validates the AUDIT-2/3/4 defenses',
+		file: 'apps/matrix-bot/scripts/render-alert-hardening-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-2',
+			'AUDIT-3',
+			'AUDIT-4',
+			'ESC char',
+			'mxid is defanged',
+			'truncated'
+		]
+	},
+	{
+		name: 'P121-CP19-5 — AUDIT-CI-2 fix: third-party actions SHA-pinned with version-comment annotations',
+		file: '.forgejo/workflows/ci.yml',
+		rootRelative: true,
+		mustHave: [
+			'AUDIT-CI-2',
+			'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
+			'actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b',
+			'# v4.2.2',
+			'# v4.0.3'
+		]
 	}
 ];
 

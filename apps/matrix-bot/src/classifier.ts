@@ -1003,16 +1003,47 @@ const TIER_EMOJI: Record<AlertTier, string> = {
 	INFO: 'ℹ️'
 };
 
+/** Sanitize a payload value before rendering.  Defenses:
+ *
+ *  AUDIT-2 (cp18): strip ASCII control chars except tab + newline.
+ *  The cp17 json_str() fix encodes them as \uXXXX in the JSON wire
+ *  format, but JSON.parse decodes them back to raw bytes here.  In
+ *  Matrix-client plain-text bodies the chars render literally
+ *  (mostly invisible), but operators viewing journalctl directly
+ *  via terminal would see them — ANSI ESC sequences could clear
+ *  screen, set window title, or worse.
+ *
+ *  AUDIT-3 (cp18): defang Matrix mxid + room-alias patterns
+ *  (@user:server, #room:server) by inserting a zero-width joiner
+ *  after the sigil.  Visually near-identical (the ZWJ is invisible
+ *  in most fonts), but the regex Matrix clients use to detect
+ *  mentions / room pills doesn't match — so a raw kernel string
+ *  containing `@victim:matrix.org` doesn't render as a mention
+ *  pill that pings random Matrix users.
+ */
+function sanitize(s: string): string {
+	let out = s;
+	// AUDIT-2: drop C0 control chars except \t (0x09) and \n (0x0a).
+	// eslint-disable-next-line no-control-regex
+	out = out.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+	// AUDIT-3: defang @user:server and #room:server.  ZWJ = U+200D.
+	out = out.replace(/([@#])([a-z0-9._=/+-]+):([a-z0-9.-]+)/gi, '$1\u200d$2:$3');
+	return out;
+}
+
 /** Substitute {placeholder} tokens from `payload`.  Missing keys
  *  render as `<unknown>` so the operator sees something legible
  *  rather than the literal `{key}` text — that situation usually
- *  means the emitter changed shape and the bot needs a bump. */
+ *  means the emitter changed shape and the bot needs a bump.
+ *
+ *  Substituted values pass through sanitize() to defang control
+ *  chars and Matrix-pill patterns (AUDIT-2 + AUDIT-3). */
 function substitute(template: string, payload: Record<string, unknown> | undefined): string {
 	return template.replace(/\{([a-z_]+)\}/gi, (_match, key: string) => {
 		if (!payload) return '<unknown>';
 		const v = payload[key];
 		if (v === undefined || v === null) return '<unknown>';
-		return typeof v === 'string' ? v : JSON.stringify(v);
+		return sanitize(typeof v === 'string' ? v : JSON.stringify(v));
 	});
 }
 
@@ -1028,11 +1059,26 @@ export function renderAlertBody(c: ClassifiedAlert): { plain: string; html: stri
 		? substitute(copy.advice, alert.payload)
 		: 'No specific guidance for this alert kind. Raw payload follows.';
 
-	const payloadLines = alert.payload
+	// AUDIT-4 (cp18 deep-deep): cap per-field and total payload-
+	// line size so a compromised sidecar emitting a mega-payload
+	// can't DoS the bot.  Matrix plain-text body limit is ~65KB;
+	// HTML body too.  We cap aggressively well below that so
+	// title/advice/metadata still have room.  AUDIT-2 + AUDIT-3:
+	// sanitize Details-block values too (defang control chars +
+	// mxid-pill patterns).
+	const MAX_FIELD_BYTES = 1024;
+	const MAX_PAYLOAD_BYTES = 8192;
+	const truncField = (s: string): string =>
+		s.length > MAX_FIELD_BYTES ? `${s.slice(0, MAX_FIELD_BYTES)}…(truncated)` : s;
+	let payloadLines = alert.payload
 		? Object.entries(alert.payload)
-				.map(([k, v]) => `  ${k}: ${JSON.stringify(v)}`)
+				.map(([k, v]) => `  ${k}: ${truncField(sanitize(JSON.stringify(v)))}`)
 				.join('\n')
 		: '';
+	if (payloadLines.length > MAX_PAYLOAD_BYTES) {
+		payloadLines =
+			payloadLines.slice(0, MAX_PAYLOAD_BYTES) + '\n  …(payload truncated)';
+	}
 
 	const plainParts = [`${sigil} [${tier}] ${title}`, '', advice];
 	if (payloadLines) {
