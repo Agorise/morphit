@@ -307,11 +307,12 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 2370+ scenarios passed, 0 runners failed`.
+      `Total: 2,900+ scenarios passed, 0 runners failed`
+      (baseline ticks up as smokes are added each release).
 
-      If you see 13 runners fail with
-      `ERR_MODULE_NOT_FOUND` errors all referencing
-      `@morphit/asset-registry`, you skipped the
+      If you see several runners fail with
+      `ERR_MODULE_NOT_FOUND` errors all referencing a
+      `@morphit/*` package, you skipped the
       `npm install` step (or did it from inside one of
       the workspace sub-directories instead of the
       repo root).  Workspace symlinks live under

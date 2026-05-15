@@ -137,13 +137,15 @@ jobs:
           cat "$TARBALL.sha256"
 
       - name: Upload release artifact
-        # AUDIT-CI-2 (cp18 deep-deep) TODO: SHA-pin this action like
-        # actions/checkout + actions/setup-node above.  Left at @v4
-        # because the current upstream SHA wasn't confirmable from
-        # available sources at audit time.  When updating, look at
-        # github.com/actions/upload-artifact releases and update
-        # together with a comment of the form `# vX.Y.Z`.
-        uses: actions/upload-artifact@v4
+        # AUDIT-CI-2 (cp18 deep-deep) — SHA-pinned in cp22.
+        # v4.6.2 is the latest v4.x release (19 Mar 2025); v5/v6/v7
+        # exist but bump Node.js runtime so staying at v4 keeps
+        # parity with actions/checkout@v4.2.2 + actions/setup-node@v4.0.3.
+        # Verified via the release tag page on github.com/actions/upload-artifact;
+        # tag commit was signed by GitHub's verified GPG key
+        # B5690EEEBB952194.  To bump, look at the releases page
+        # and update both the SHA and the `# vX.Y.Z` comment.
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.ver.outputs.tag }}
           path: |

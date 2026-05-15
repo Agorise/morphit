@@ -148,7 +148,8 @@ Fixes:
 - **Whitelist their VPN's IP** in nginx's geo block, but ONLY
   if you trust the testers — a shared whitelist removes the
   attack defense too.
-- **Raise the per-IP daily cap** (`MORPHIT_RELAY_CREATE_PER_IP_DAILY`)
+- **Raise the per-IP daily cap** (`MORPHIT_RELAY_CREATE_RATE_PER_DAY`,
+  default 2; or `MORPHIT_RELAY_CREATE_RATE_PER_HOUR`, default 5)
   during the beta, then lower it back at launch.  Trade-off:
   raises the drain ceiling per attacker IP.
 

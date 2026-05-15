@@ -95,10 +95,9 @@ problem has time to surface without crisis pressure.
       ```bash
       bash scripts/run-smokes.sh
       ```
-      Expect ~2,296 scenarios passed, 0 runners failed
-      (baseline as of Part 114; will tick up as future
-      parts add coverage).  A failure here means *don't*
-      launch tomorrow.
+      Expect 2,900+ scenarios passed, 0 runners failed
+      (baseline ticks up as smokes are added each release).
+      A failure here means *don't* launch tomorrow.
 
 - [ ] **Take a snapshot of your DB.**  PostgreSQL
       `pg_dump`, store offsite.  This is your "rollback
