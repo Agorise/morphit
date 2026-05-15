@@ -525,6 +525,44 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['v32 / Part 121 — multi-network asset support (USDT)']
 	},
 	{
+		// Part 122 cp3 — DNS-rebinding closure in federationProbe.
+		//
+		// Cp7 REVISIT §A documented the gap: the existing hostname
+		// denylist catches `https://127.0.0.1/` etc., but a hostname
+		// resolving to a private IP at fetch time would bypass the
+		// check.  cp3 closes the gap with a three-layer defense:
+		//   1. isPrivateHostname() — literal-string check (existing)
+		//   2. resolveAndValidatePublicIp() — DNS lookup +
+		//      per-IP validation against private-network deny list
+		//   3. buildPinnedAgent() — undici dispatcher whose
+		//      connect-time lookup is hard-coded to the pre-validated
+		//      IP (closes the TOCTOU between our validation and
+		//      undici's own resolution)
+		//
+		// Sentinel pins all three layers + the test-injection hook
+		// that keeps smokes offline-deterministic.  If a future
+		// refactor strips the dispatcher or skips the pre-validation,
+		// the sentinel catches it at PR time.
+		name: 'P122-CP3 — federationProbe has 3-layer DNS-rebinding defense (hostname denylist + DNS-resolved IP validation + pinned dispatcher)',
+		file: 'apps/indexer/src/indexer/federationProbe.ts',
+		rootRelative: true,
+		mustHave: [
+			'export function isPrivateHostname',
+			'export function isPrivateIp',
+			'resolveAndValidatePublicIp',
+			'buildPinnedAgent',
+			'dispatcher: pinnedAgent',
+			"import { Agent } from 'undici'",
+			"import { lookup as dnsLookup } from 'node:dns/promises'",
+			// IPv4-mapped IPv6 unwrap is the subtle one — explicitly
+			// pin its presence so a future refactor doesn't drop it.
+			'::ffff:',
+			// CGNAT range (RFC 6598) — added in cp3 because operators
+			// sometimes have internal services in 100.64/10.
+			'100\\.(6[4-9]'
+		]
+	},
+	{
 		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
