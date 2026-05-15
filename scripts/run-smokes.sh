@@ -127,6 +127,7 @@ SMOKES=(
 	"apps/matrix-bot:deps-pin-check"
 	"apps/matrix-bot:sidecar-envelope-smoke"
 	"apps/matrix-bot:api-response-shape-smoke"
+	"apps/matrix-bot:sse-stream-shape-smoke"
 	"apps/ops-cli:workspace-deps-pin-check"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
 )

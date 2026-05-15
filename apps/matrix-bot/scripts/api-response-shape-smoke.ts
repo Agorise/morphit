@@ -45,7 +45,26 @@ import type {
 	InstanceDirectoryEntry,
 	OrderRecord,
 	FeedbackSummary,
-	ChatAdmissionResponse
+	ChatAdmissionResponse,
+	// cp16 additions:
+	OrderViewsResponse,
+	OrderViewIncrementResponse,
+	OrderbookResponse,
+	FeaturedBid,
+	FeaturedSlot,
+	FeaturedOrderbookResponse,
+	AccountOrdersResponse,
+	ProfileResponse,
+	OperatorStats,
+	OperatorsResponse,
+	ChatIdentityResponse,
+	ConversationSummary,
+	ConversationsResponse,
+	BlockEntry,
+	BlocksResponse,
+	ChatHistoryResponse,
+	ChatMessageRecord,
+	InstanceDirectoryResponse
 } from '@morphit/indexer-client';
 
 // ─── Schemas ───────────────────────────────────────────────────
@@ -194,6 +213,115 @@ const ChatAdmissionSchema = z
 	})
 	.passthrough(); // Many optional fields; passthrough for forward-compat.
 
+// ─── cp16 schemas (extend coverage to more interfaces) ─────────
+
+const OrderViewsResponseSchema = z.object({
+	count: z.number(),
+	updated_at: z.string().nullable()
+});
+
+const OrderViewIncrementResponseSchema = z.object({
+	count: z.number()
+});
+
+const OrderbookResponseSchema = z.object({
+	items: z.array(OrderRecordSchema),
+	next_cursor: z.string().nullable(),
+	indexed_block: z.number()
+});
+
+const FeaturedBidSchema = z.object({
+	hours_requested: z.number(),
+	blurt_paid: z.string(),
+	blurt_per_hour: z.string(),
+	effective_at: z.string(),
+	expires_at: z.string()
+});
+
+const FeaturedSlotSchema = z.object({
+	order: OrderRecordSchema,
+	bid: FeaturedBidSchema
+});
+
+const FeaturedOrderbookResponseSchema = z.object({
+	featured: z.array(FeaturedSlotSchema),
+	max_slots: z.number()
+});
+
+const AccountOrdersResponseSchema = z.object({
+	items: z.array(OrderRecordSchema),
+	next_cursor: z.string().nullable()
+});
+
+const ProfileResponseSchema = z.object({
+	account: z.string(),
+	display_name: z.string(),
+	json_metadata: z.unknown(),
+	source_block_num: z.number(),
+	updated_at: z.string()
+});
+
+const OperatorStatsInnerSchema = z.object({
+	cumulative_blurt_earned: z.number(),
+	total_orders_attributed: z.number()
+});
+
+const OperatorsResponseSchema = z.object({
+	operators: z.array(OperatorRecordSchema)
+});
+
+const ChatIdentityResponseSchema = z.object({
+	account: z.string(),
+	chat_pub: z.string(),
+	source_block_num: z.number(),
+	source_trx_id: z.string(),
+	updated_at: z.string()
+});
+
+const ConversationSummarySchema = z.object({
+	peer: z.string(),
+	last_message_at: z.string(),
+	message_count: z.number(),
+	has_user_sent: z.boolean()
+});
+
+const ConversationsResponseSchema = z.object({
+	account: z.string(),
+	items: z.array(ConversationSummarySchema)
+});
+
+const BlockEntrySchema = z.object({
+	blocked: z.string(),
+	since_block_num: z.number(),
+	since_trx_id: z.string(),
+	created_at: z.string(),
+	updated_at: z.string()
+});
+
+const BlocksResponseSchema = z.object({
+	account: z.string(),
+	items: z.array(BlockEntrySchema)
+});
+
+const ChatMessageRecordSchema = z
+	.object({
+		id: z.number(),
+		from: z.string(),
+		to: z.string(),
+		body: z.string(),
+		created_at: z.string()
+	})
+	.passthrough();
+
+const ChatHistoryResponseSchema = z.object({
+	items: z.array(ChatMessageRecordSchema),
+	next_cursor: z.string().nullable()
+});
+
+const InstanceDirectoryResponseSchema = z.object({
+	instances: z.array(InstanceDirectoryEntrySchema)
+});
+
 // ─── Sample literals (TS-type-cross-check) ─────────────────────
 //
 // Each literal is `satisfies` the canonical TS interface from
@@ -293,6 +421,113 @@ const sampleChatAdmission = {
 	admitted: true
 } satisfies ChatAdmissionResponse;
 
+// ─── cp16 samples ──────────────────────────────────────────────
+
+const sampleOrderViews = {
+	count: 42,
+	updated_at: '2026-05-15T00:00:00Z'
+} satisfies OrderViewsResponse;
+
+const sampleOrderViewIncrement = {
+	count: 43
+} satisfies OrderViewIncrementResponse;
+
+const sampleOrderbookResponse = {
+	items: [sampleOrder],
+	next_cursor: null,
+	indexed_block: 12345
+} satisfies OrderbookResponse;
+
+const sampleFeaturedBid = {
+	hours_requested: 24,
+	blurt_paid: '2.40',
+	blurt_per_hour: '0.10',
+	effective_at: '2026-05-15T00:00:00Z',
+	expires_at: '2026-05-16T00:00:00Z'
+} satisfies FeaturedBid;
+
+const sampleFeaturedSlot = {
+	order: sampleOrder,
+	bid: sampleFeaturedBid
+} satisfies FeaturedSlot;
+
+const sampleFeaturedOrderbook = {
+	featured: [sampleFeaturedSlot],
+	max_slots: 5
+} satisfies FeaturedOrderbookResponse;
+
+const sampleAccountOrders = {
+	items: [sampleOrder],
+	next_cursor: null
+} satisfies AccountOrdersResponse;
+
+const sampleProfile = {
+	account: 'alice',
+	display_name: 'Alice',
+	json_metadata: { bio: 'P2P trader' },
+	source_block_num: 12345,
+	updated_at: '2026-05-15T00:00:00Z'
+} satisfies ProfileResponse;
+
+const sampleOperatorStats = {
+	cumulative_blurt_earned: 100.5,
+	total_orders_attributed: 50
+} satisfies OperatorStats;
+
+const sampleOperators = {
+	operators: [sampleOperator]
+} satisfies OperatorsResponse;
+
+const sampleChatIdentity = {
+	account: 'alice',
+	chat_pub: 'aGVsbG8td29ybGQtY2hhdC1wdWJsaWMta2V5LWJhc2U2NA==',
+	source_block_num: 12345,
+	source_trx_id: 'abc123def456',
+	updated_at: '2026-05-15T00:00:00Z'
+} satisfies ChatIdentityResponse;
+
+const sampleConversationSummary = {
+	peer: 'bob',
+	last_message_at: '2026-05-15T00:00:00Z',
+	message_count: 5,
+	has_user_sent: true
+} satisfies ConversationSummary;
+
+const sampleConversations = {
+	account: 'alice',
+	items: [sampleConversationSummary]
+} satisfies ConversationsResponse;
+
+const sampleBlockEntry = {
+	blocked: 'spammer-1',
+	since_block_num: 12345,
+	since_trx_id: 'abc123def456',
+	created_at: '2026-05-15T00:00:00Z',
+	updated_at: '2026-05-15T00:00:00Z'
+} satisfies BlockEntry;
+
+const sampleBlocks = {
+	account: 'alice',
+	items: [sampleBlockEntry]
+} satisfies BlocksResponse;
+
+const sampleChatMessage = {
+	id: 100,
+	from: 'alice',
+	to: 'bob',
+	body: 'BTC sent; tx id below.',
+	created_at: '2026-05-15T00:00:00Z'
+} satisfies ChatMessageRecord;
+
+const sampleChatHistory = {
+	items: [sampleChatMessage],
+	next_cursor: null
+} satisfies ChatHistoryResponse;
+
+const sampleInstanceDirectory = {
+	instances: [sampleInstanceDirEntry]
+} satisfies InstanceDirectoryResponse;
+
 // ─── Scenarios ─────────────────────────────────────────────────
 interface Scenario {
 	readonly name: string;
@@ -383,6 +618,139 @@ const scenarios: Scenario[] = [
 		valid: sampleChatAdmission,
 		invalidate: (s) => ({ ...s, admitted: 'maybe' }),
 		invalidReason: "admitted='maybe' (must be boolean)"
+	},
+
+	// ─── cp16 scenarios — extended REST coverage ──────────────
+	{
+		name: 'OrderViewsResponse',
+		schema: OrderViewsResponseSchema,
+		valid: sampleOrderViews,
+		invalidate: (s) => ({ ...s, count: '42' }),
+		invalidReason: 'count="42" (must be number)'
+	},
+	{
+		name: 'OrderViewIncrementResponse',
+		schema: OrderViewIncrementResponseSchema,
+		valid: sampleOrderViewIncrement,
+		invalidate: (s) => {
+			const { count, ...rest } = s;
+			return rest;
+		},
+		invalidReason: 'missing required field "count"'
+	},
+	{
+		name: 'OrderbookResponse',
+		schema: OrderbookResponseSchema,
+		valid: sampleOrderbookResponse,
+		invalidate: (s) => ({ ...s, items: 'not an array' }),
+		invalidReason: 'items="not an array" (must be array)'
+	},
+	{
+		name: 'FeaturedBid',
+		schema: FeaturedBidSchema,
+		valid: sampleFeaturedBid,
+		invalidate: (s) => ({ ...s, hours_requested: '24' }),
+		invalidReason: 'hours_requested="24" (must be number — stringy numbers a common mistake)'
+	},
+	{
+		name: 'FeaturedSlot',
+		schema: FeaturedSlotSchema,
+		valid: sampleFeaturedSlot,
+		invalidate: (s) => {
+			const { bid, ...rest } = s;
+			return rest;
+		},
+		invalidReason: 'missing required field "bid"'
+	},
+	{
+		name: 'FeaturedOrderbookResponse',
+		schema: FeaturedOrderbookResponseSchema,
+		valid: sampleFeaturedOrderbook,
+		invalidate: (s) => ({ ...s, max_slots: null }),
+		invalidReason: 'max_slots=null (must be number)'
+	},
+	{
+		name: 'AccountOrdersResponse',
+		schema: AccountOrdersResponseSchema,
+		valid: sampleAccountOrders,
+		invalidate: (s) => ({ ...s, next_cursor: 12345 }),
+		invalidReason: 'next_cursor=12345 (must be string|null)'
+	},
+	{
+		name: 'ProfileResponse',
+		schema: ProfileResponseSchema,
+		valid: sampleProfile,
+		invalidate: (s) => ({ ...s, source_block_num: 'block#12345' }),
+		invalidReason: 'source_block_num="block#12345" (must be number)'
+	},
+	{
+		name: 'OperatorStats',
+		schema: OperatorStatsInnerSchema,
+		valid: sampleOperatorStats,
+		invalidate: (s) => ({ ...s, cumulative_blurt_earned: 'lots' }),
+		invalidReason: 'cumulative_blurt_earned="lots" (must be number)'
+	},
+	{
+		name: 'OperatorsResponse',
+		schema: OperatorsResponseSchema,
+		valid: sampleOperators,
+		invalidate: (s) => ({ ...s, operators: 'one operator' }),
+		invalidReason: 'operators="one operator" (must be array)'
+	},
+	{
+		name: 'ChatIdentityResponse',
+		schema: ChatIdentityResponseSchema,
+		valid: sampleChatIdentity,
+		invalidate: (s) => ({ ...s, chat_pub: null }),
+		invalidReason: 'chat_pub=null (must be string)'
+	},
+	{
+		name: 'ConversationSummary',
+		schema: ConversationSummarySchema,
+		valid: sampleConversationSummary,
+		invalidate: (s) => ({ ...s, has_user_sent: 1 }),
+		invalidReason: 'has_user_sent=1 (must be boolean)'
+	},
+	{
+		name: 'ConversationsResponse',
+		schema: ConversationsResponseSchema,
+		valid: sampleConversations,
+		invalidate: (s) => {
+			const { account, ...rest } = s;
+			return rest;
+		},
+		invalidReason: 'missing required field "account"'
+	},
+	{
+		name: 'BlockEntry',
+		schema: BlockEntrySchema,
+		valid: sampleBlockEntry,
+		invalidate: (s) => ({ ...s, since_block_num: '12345' }),
+		invalidReason: 'since_block_num="12345" (must be number)'
+	},
+	{
+		name: 'BlocksResponse',
+		schema: BlocksResponseSchema,
+		valid: sampleBlocks,
+		invalidate: (s) => ({ ...s, account: false }),
+		invalidReason: 'account=false (must be string)'
+	},
+	{
+		name: 'ChatHistoryResponse',
+		schema: ChatHistoryResponseSchema,
+		valid: sampleChatHistory,
+		invalidate: (s) => ({ ...s, items: null }),
+		invalidReason: 'items=null (must be array)'
+	},
+	{
+		name: 'InstanceDirectoryResponse',
+		schema: InstanceDirectoryResponseSchema,
+		valid: sampleInstanceDirectory,
+		invalidate: (s) => {
+			const { instances, ...rest } = s;
+			return rest;
+		},
+		invalidReason: 'missing required field "instances"'
 	}
 ];
 

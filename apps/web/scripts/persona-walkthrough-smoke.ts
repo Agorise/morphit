@@ -249,6 +249,26 @@
  *             itself flagged thermal stress) that the
  *             instantaneous-temp check can't see.
  *
+ *   P121-CP16 Three sentinels pinning the SSE-stream shape
+ *             smoke + expanded REST-API coverage.
+ *             sse-stream-shape-smoke.ts ports cp15's contract-
+ *             validation pattern to the three Server-Sent
+ *             Events endpoints (/v1/orderbook/stream,
+ *             /v1/instances/stream, /v1/chat/:a/:b/stream).
+ *             Each event-type payload gets a zod schema and a
+ *             `satisfies` cross-check against the canonical
+ *             TS interface — drift between server emit and
+ *             client parse fails CI rather than breaking
+ *             every connected EventSource at once.  The
+ *             api-response-shape smoke is also expanded from
+ *             10 schemas to 27 — covering OrderViews,
+ *             Orderbook (paged), Featured slots, Account
+ *             orders, Profiles, Operator stats, Chat identity,
+ *             Conversations, Blocks, Chat history, and
+ *             Instance directory paged responses.  Together
+ *             54 REST-shape + 18 SSE-shape contract checks
+ *             on every CI run.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -1409,6 +1429,59 @@ const SCENARIOS: readonly Scenario[] = [
 			"'host-resource:mount_warn'",
 			"'host-resource:mount_info'",
 			'bind-mount'
+		]
+	},
+
+	// ─── P121-CP16 — SSE stream shapes + expanded REST coverage
+	{
+		name: 'P121-CP16-1 — SSE-stream-shape smoke validates all three streams (orderbook, instances, chat)',
+		file: 'apps/matrix-bot/scripts/sse-stream-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'OrderbookSnapshotSchema',
+			'OrderbookOrderUpsertedSchema',
+			'OrderbookOrderRemovedSchema',
+			'InstancesSnapshotSchema',
+			'InstancesRemovedSchema',
+			'ChatSnapshotSchema',
+			'ChatMessageAppendedSchema',
+			'satisfies OrderRecord',
+			'satisfies InstanceDirectoryEntry',
+			'satisfies ChatMessageRecord'
+		]
+	},
+	{
+		name: 'P121-CP16-2 — api-response-shape smoke expanded to cover 27 interfaces (was 10 at cp15)',
+		file: 'apps/matrix-bot/scripts/api-response-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'OrderViewsResponseSchema',
+			'OrderbookResponseSchema',
+			'FeaturedOrderbookResponseSchema',
+			'AccountOrdersResponseSchema',
+			'ProfileResponseSchema',
+			'OperatorsResponseSchema',
+			'ChatIdentityResponseSchema',
+			'ConversationsResponseSchema',
+			'BlocksResponseSchema',
+			'ChatHistoryResponseSchema',
+			'InstanceDirectoryResponseSchema'
+		]
+	},
+	{
+		name: 'P121-CP16-3 — every cp16 schema is anchored by a satisfies-clause cross-check against the TS interface',
+		file: 'apps/matrix-bot/scripts/api-response-shape-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'satisfies OrderViewsResponse',
+			'satisfies OrderbookResponse',
+			'satisfies FeaturedOrderbookResponse',
+			'satisfies ProfileResponse',
+			'satisfies OperatorsResponse',
+			'satisfies ChatIdentityResponse',
+			'satisfies ConversationsResponse',
+			'satisfies BlocksResponse',
+			'satisfies InstanceDirectoryResponse'
 		]
 	}
 ];
