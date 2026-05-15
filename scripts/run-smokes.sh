@@ -80,6 +80,7 @@ SMOKES=(
 	"apps/ops-cli:edit-rpc-smoke"
 	"apps/ops-cli:altkeystore-smoke"
 	"packages/operator-config:operator-config-smoke"
+	"packages/relay-client:contract-symmetry-smoke"
 	"apps/web:balance-bus-smoke"
 	"apps/web:chain-op-verify-smoke"
 	"apps/web:yubikey-error-classifier-smoke"
