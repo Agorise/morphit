@@ -1,10 +1,59 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 19 — audit cleanup)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20 — beta-tester intake form re-shipped)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp19-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp20-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp18-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp19-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp20 — what's shipped (beta-tester intake form re-shipped at canonical Forgejo path)
+
+### Pretext
+
+Ken asked to implement the Forgejo issue template so it always loads on "New Issue."  Memory entry #4 records that Part 48 shipped this, but the `.forgejo/issue_template/NEW-ISSUE-FOUND.md` file was NOT present in current repo state — lost somewhere in a later refactor.  Re-shipped this turn at canonical path.
+
+### What shipped
+
+**`.forgejo/issue_template/bug_report.md`** (renamed from NEW-ISSUE-FOUND.md for cleaner convention) — Forgejo issue template with frontmatter that auto-loads the body into the "Leave a comment" field when a tester clicks "New Issue":
+- `name: "Bug report"` — appears in template picker
+- `title: "[bug] "` — auto-prefix; enables `title:[bug]` triage filtering
+- `labels: [needs-triage]` — auto-applies on submission
+- `ref: main` — pins template to main branch (no drift across feature branches)
+
+Body: full 17-section intake form from `docs/NEW-ISSUE-FOUND.md` (summary → goal → behavior → severity → context → repro → time → environment → connection → device → privacy → console → network → tester → recent changes → security triage → free-form).
+
+**`.forgejo/issue_template/config.yml`** — picker-config that forces the template to be the only path:
+- `blank_issues_enabled: false` — no "Open a blank issue" escape that would bypass the §16 security warning
+- `contact_links` — surfaces `matrix.to/#/@agorise:matrix.org` as the route for security disclosures (visible from the picker UI before any public issue form loads)
+
+`docs/NEW-ISSUE-FOUND.md` and `docs/NEW-ISSUE-FOUND.txt` remain unchanged in the repo as offline/email copies.
+
+### Operator-facing experience after this lands on Forgejo
+
+1. Tester clicks "New Issue" → only "Bug report" template shown in picker, plus a "Security disclosure (private)" link routing to Matrix
+2. Clicking "Bug report" auto-fills the comment editor with the full 17-section form
+3. Tester fills in what they can, submits
+4. Ken copies the resulting issue body, pastes into Claude prompt, fix lands
+
+### Caught discipline violation
+
+My initial `config.yml` comment said "Forgejo (and Gitea) read this file" — `forgejo-not-gitea-smoke.ts` correctly failed the build per memory rule #16.  Reworded to drop the Gitea mention.  The smoke does its job.
+
+### Sentinels + verification
+
+- 2 P121-CP20 sentinels (CP20-1: frontmatter + 17 sections + Matrix mxid in §16; CP20-2: picker config disables blank-issues + has Matrix contact link)
+- Triple-pulse 2,886 × 3, 0 failures.  cp19 baseline 2,884 → cp20 baseline 2,886 (+2 net)
+- YAML validators confirm both files parse cleanly + the template body retains all 17 numbered sections post-frontmatter-prepending
+
+### Brag list
+
+Zero new entries.  Intake form is internal infrastructure for the beta period, not a public-facing brag.
+
+### Pattern lesson
+
+When memory says something shipped but the repo doesn't have it, verify both — memory may be accurate about the shipment AND the repo may be accurate about the current state (a later refactor lost the file).  Don't assume one source is wrong; check both.
+
+---
 
 ## Part 121 cp19 — what's shipped (knock out remaining MEDIUM/LOW audit findings)
 

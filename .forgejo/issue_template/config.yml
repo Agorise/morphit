@@ -1,0 +1,27 @@
+# Forgejo issue-template picker config.
+#
+# Forgejo reads this file to control what shows up when a user
+# clicks "New Issue" on the repo.  Together with the .md files in
+# the same directory, this gives us:
+#
+# - A single "Bug report" template, auto-loaded into the comment
+#   field when the user picks it.
+# - No "blank issue" escape hatch — testers cannot bypass the
+#   intake form by clicking "Don't see your issue here?".  The
+#   bug_report.md template is the only path.  This matters because
+#   §16 of the template contains the security-disclosure warning;
+#   we want every reporter to see it before they post.
+# - A contact link to the Matrix DM for security-sensitive reports
+#   so testers who realize their issue is sensitive can route it
+#   the safe way directly from the picker UI, without ever loading
+#   the public-issue form.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: "Security disclosure (private)"
+    url: "https://matrix.to/#/@agorise:matrix.org"
+    about: |
+      Did you find a bug that could let someone steal funds, leak
+      private info, bypass a fee, or harm other users?  DO NOT open
+      a public issue.  DM the operator via encrypted Matrix instead.
