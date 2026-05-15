@@ -35,6 +35,46 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Import authorized release-signer keys
+        # Part 122 cp8 — release-signer pubkeys live in
+        # `.forgejo/release-signers/*.asc` (ASCII-armored, one per
+        # authorized maintainer).  We import them into the runner's
+        # keyring so the next step can verify the tag signature.
+        # Adding a new signer = adding a new .asc file in that
+        # directory and getting the PR merged.
+        run: |
+          set -eu
+          if [ ! -d .forgejo/release-signers ]; then
+            echo "ERROR: .forgejo/release-signers/ directory missing — no authorized signers configured" >&2
+            exit 1
+          fi
+          asc_count=$(find .forgejo/release-signers -name '*.asc' -type f | wc -l)
+          if [ "$asc_count" -eq 0 ]; then
+            echo "ERROR: no *.asc pubkey files in .forgejo/release-signers/" >&2
+            exit 1
+          fi
+          for key in .forgejo/release-signers/*.asc; do
+            echo "Importing $key"
+            gpg --import "$key"
+          done
+          echo "Imported $asc_count authorized signer key(s)."
+
+      - name: Verify tag is signed by an authorized key
+        # Part 122 cp8 — the tag itself must be a signed annotated
+        # tag (`git tag -s vX.Y.Z`).  `git verify-tag` consults
+        # the keyring populated above; if the tag isn't signed,
+        # or is signed by a key not in `.forgejo/release-signers/`,
+        # this step fails and the release does not proceed.
+        # Defense against a compromised CI runner producing
+        # tarballs from arbitrary commits.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          echo "Verifying tag signature for $TAG"
+          git verify-tag "$TAG"
+          echo "✓ tag signed by an authorized key"
+
       - name: Install Node.js 22 LTS
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
@@ -102,6 +142,33 @@ jobs:
           esac
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release-info.json (in-tarball provenance manifest)
+        # Part 122 cp8 — bake a manifest into the tarball that
+        # `morphit-ops upgrade` reads to verify the operator is
+        # extracting the version they think they are.  Survives
+        # tarball-rename mistakes (operator renames the file
+        # → `morphit-ops upgrade` still reads the canonical
+        # version from inside).  Contents:
+        #   tag         — the release tag (e.g. v1.0.0-beta.1)
+        #   commit      — full git commit SHA the tarball was built from
+        #   build_time  — ISO 8601 UTC of CI build
+        #   builder     — "forgejo-actions" (provenance hint)
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          COMMIT=$(git rev-parse HEAD)
+          BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat > release-info.json <<EOF
+          {
+            "tag": "${TAG}",
+            "commit": "${COMMIT}",
+            "build_time": "${BUILD_TIME}",
+            "builder": "forgejo-actions"
+          }
+          EOF
+          cat release-info.json
 
       - name: Build release tarball
         # Excludes node_modules, .git, /out, /dist, and the

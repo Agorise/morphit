@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 7 — cp6 relay-client deep-deep; 7 contract gaps closed; contract-symmetry smoke shipped)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 8 — release tooling: tag-sig verify in CI, `morphit-ops upgrade`, release-monitor sidecar, UPGRADING.md)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,7 +6,69 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp7 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp8 (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **3,073 × 3 scenarios, 0 failures** (cp7 baseline 3,071 → cp8 +2 from new systemd unit picked up by ansible-systemd-user-consistency smoke + ansible-env-var-consumer smoke)
+- Typecheck-sweep: 0 errors across all 10 workspaces
+
+### Release tooling shipped (memory entry #29 closed)
+
+Ken triggered the "release tooling" path. Per memory: manual-only by default; opt-in `MORPHIT_AUTO_UPGRADE=1` for unattended. Four items:
+
+**(1) Tag-signature verify in `.forgejo/workflows/release.yml`.** New step `Verify tag is signed by an authorized key` runs `git verify-tag $TAG` against a keyring populated from `.forgejo/release-signers/*.asc`. Defense against a compromised CI runner producing tarballs from arbitrary commits — only commits whose tag is signed by an authorized maintainer can become releases. Also added a `Generate release-info.json` step that bakes a provenance manifest into the tarball ({tag, commit, build_time, builder}) for `morphit-ops upgrade` to read at the consumer side.
+
+**(2) `.forgejo/release-signers/` directory + README.** Documents how to add/remove authorized signing keys. Each `.asc` file is one maintainer's ASCII-armored GPG pubkey; addition requires a PR with the fingerprint, verified out-of-band by a current maintainer before merge.
+
+**(3) `morphit-ops upgrade` command** (`apps/ops-cli/src/commands/upgrade.ts`, ~480 lines). Subcommand modes:
+- `--check-only [--json]`: polls Forgejo `/api/v1/repos/agorise/morphit/releases/latest`, compares against local `release-info.json`, exits 0 (up-to-date) or 1 (newer available). JSON output for scripting.
+- (default): full flow — fetch latest → show release notes → confirm (y/N unless `MORPHIT_AUTO_UPGRADE=1`) → download tarball + sha256 → verify SHA-256 → backup `/opt/morphit` → extract → `npm ci` → restart services → roll back on any failure (rollback also restarts services on the previous version). Exit codes: 0 success, 1 newer-available (check-only), 2 user-declined, 3 failed-rolled-back, 4 failed-rollback-failed (manual intervention), 5 preflight-failed.
+
+Configurable env: `MORPHIT_AUTO_UPGRADE`, `MORPHIT_RELEASE_HOST`, `MORPHIT_RELEASE_REPO`, `MORPHIT_INSTALL_DIR`, `MORPHIT_BACKUP_KEEP`. Defaults: `git.agorise.net`, `agorise/morphit`, `/opt/morphit`, 3 backups retained.
+
+What `morphit-ops upgrade` deliberately does NOT do:
+- GPG verify the tarball itself (the CI tag-verify chain + Forgejo HTTPS + SHA-256 are sufficient post-CI; operators wanting belt-and-braces verification do `git clone && git tag -v` per UPGRADING.md)
+- Schema migrations (post-launch schema changes land as MIGRATIONS[] entries; the indexer applies them at restart)
+- Cross-major upgrades (assumed major-version-compatible; major bumps will be called out in release notes)
+
+Wired into `apps/ops-cli/src/main.ts`: dispatch case before db-requiring commands (no DB needed for upgrade), `printHelp` updated, JSDoc subcommands list updated (Sally finding So-2 invariant preserved).
+
+**(4) `morphit-release-monitor` sidecar.** Three files matching the apt-monitor pattern:
+- `ops/scripts/morphit-release-monitor.sh` — calls `morphit-ops upgrade --check-only --json`, emits structured event `release_available` (or `release_check_failed`) via journald. Wrapped in `timeout 30` for slow-network defense. **OBSERVATION ONLY** — never applies upgrades itself, per Ken's manual-only preference.
+- `ops/systemd/morphit-release-monitor.service` — runs as `morphit-host-monitor` user (no new user creation needed; reuses an existing observation-only user). Full hardening matrix.
+- `ops/systemd/morphit-release-monitor.timer` — `OnBootSec=15min, OnUnitActiveSec=6h, RandomizedDelaySec=10min, Persistent=true`. Every 6 hours.
+
+**(5) `docs/UPGRADING.md`** (~330 lines). Comprehensive operator doc covering: how releases work (signed tag → CI → tarball + sha + provenance manifest); recommended path (`morphit-ops upgrade`); check-only mode; automated mode (opt-in); manual upgrade procedure (explicit recipe for operators who prefer to apply each step themselves); belt-and-braces verification (clone + `git tag -v`); rollback procedure; building from source; troubleshooting. Targeted at sysadmins, plain language.
+
+### Pattern lessons
+
+1. **Manual-only upgrade is the right default for non-trivial deploys.** Auto-apply at scale (operator with one VPS) is convenient; auto-apply with multiple instances or production data is a foot-gun. The `MORPHIT_AUTO_UPGRADE=1` opt-in puts the decision in the operator's hands per-deploy, not as a tooling default.
+
+2. **The provenance manifest closes the "did I extract what I thought I was extracting" gap.** Without `release-info.json` inside the tarball, an operator who renames the file or downloads it twice has no on-disk way to confirm the version. With it, `morphit-ops upgrade` and the sysadmin both have an authoritative reference.
+
+3. **Observation sidecars and apply tooling are different roles.** The release-monitor sidecar tells operators when to act; `morphit-ops upgrade` is what they call. Conflating them (auto-apply from the sidecar) is what the manual-only preference is specifically rejecting.
+
+4. **Rollback on failure is non-negotiable.** Half-applied upgrades are the #1 source of "now nothing works" operator pain. The command's exit-code matrix (3 = rolled back, 4 = rollback ALSO failed and needs operator help) makes the boundary explicit; the documented manual recovery procedure exists for code-4 cases.
+
+**Brag list:** unchanged (release tooling is operator-facing infrastructure, not a stranger-cares-about win).
+
+**This session's arc:**
+1. cp22 → P122 cp7 as previously documented
+2. **P122 cp8** — release tooling shipped (4 components + docs)
+
+**Truly pending (post-cp8):**
+- Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM (the v1.0.0-beta.1 first install, in Ken's hands now)
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end (Ken: this is the upcoming v1.0.0-beta.1 ceremony)
+
+**Resume directive:** Read this block, then `docs/UPGRADING.md` for the operator-facing surface.
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp8-delta.tar.gz` — delta over cp7.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp7-delta.tar.gz` (cp6 deep-deep; 7 contract gaps closed; contract-symmetry smoke).
+
+---
 
 **Gates — all green:**
 - Triple-pulse: **3,071 × 3 scenarios, 0 failures** (cp6 baseline 3,066 → cp7 baseline 3,071 = +4 new contract-symmetry-smoke scenarios; +1 from secondary effects)

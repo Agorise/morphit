@@ -14,6 +14,8 @@
  *                                       Decrypt an alt-network service key (passphrase prompted)
  *   register                            Publish operator registration on-chain (run after init)
  *   payment-method add|remove|list      Manage instance-specific payment-method additions (ADR-0021)
+ *   upgrade [--check-only] [--yes] [--json]
+ *                                       Check for and apply a newer Morphit release
  *   status                              Operator dashboard at a glance
  *   drain-queue [--age=DUR]             List pending relay transfers
  *   signups [--since=DUR]               Recent signups via this relay
@@ -57,6 +59,7 @@ import { runFlags } from './commands/flags.ts';
 import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
 import { runEdit } from './commands/edit.ts';
+import { runUpgrade } from './commands/upgrade.ts';
 import { runImportAltnetKey } from './commands/importAltnetKey.ts';
 import { runExportAltnetKey } from './commands/exportAltnetKey.ts';
 import { runPaymentMethod } from './commands/paymentMethod.ts';
@@ -145,6 +148,9 @@ function printHelp(): void {
 		'                                  Decrypt an alt-network service key (passphrase prompted)',
 		'  register                        Publish operator registration on-chain (run after init)',
 		'  payment-method add|remove|list  Manage instance-specific payment-method additions (ADR-0021)',
+		'  upgrade [--check-only] [--yes] [--json]',
+		'                                  Check for and apply a newer Morphit release (manual-only',
+		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt)',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -301,6 +307,23 @@ async function main(): Promise<number> {
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `upgrade` — check for + apply releases from Forgejo.
+	// No DB needed; talks to the release HTTP API and the local
+	// filesystem.  Manual-only by default per Memory #29; set
+	// MORPHIT_AUTO_UPGRADE=1 to skip the confirmation prompt for
+	// cron/automation use.  Part 122 cp8.
+	if (args.subcommand === 'upgrade') {
+		try {
+			return await runUpgrade({
+				flags: args.flags,
+				positional: args.positional
 			});
 		} catch (err) {
 			printError(err instanceof Error ? err.message : String(err));
