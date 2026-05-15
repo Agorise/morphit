@@ -1,10 +1,16 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20-fix — picker contact_link re-routed to community room)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20-fix2 — picker contact_link reroute + redundant paste-instruction removed)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp20-fix-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp20-fix2-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp20-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp20-fix-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp20-fix2 — drop redundant "paste into a new issue" line from auto-loaded template
+
+The line `Copy this whole file, paste it into a new issue at <…/issues>, or send it directly to the operator who invited you.` was useful in `docs/NEW-ISSUE-FOUND.md` (the offline copy people read standalone) but is nonsensical in `.forgejo/issue_template/bug_report.md` — by the time it auto-loads into the comment field, the tester is already on the new-issue page.  Removed it from the Forgejo template only; `docs/NEW-ISSUE-FOUND.md` keeps the line for offline/email use.  Section count still 17; "Thanks for taking the time to report this..." preamble kept (still useful context).  Triple-pulse 2,886 × 3 clean.
+
+---
 
 ## Part 121 cp20-fix — picker contact_link re-routed from operator DM to public community room
 
