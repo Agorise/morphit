@@ -58,6 +58,15 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
   health + restart-loop detection.  Most useful with the
   BunkerWeb deploy path.  Useless on bare-metal-only.  Off
   by default.
+- **`systemd_monitor`** (cp14) — systemd unit health.
+  Watches morphit-* units for "failed" state + high restart
+  counts.  Critical complement to journalctl-based alerting:
+  a unit that fails to even start emits no journal output.
+  Off by default.
+- **`journald_monitor`** (cp14) — journal disk usage +
+  rotation health.  Catches the "journal silently grew for
+  6 months until disk full" pattern.  Daily check.  Off by
+  default.
 
 All sidecars emit structured JSON to journalctl that the
 `matrix_bot` picks up automatically via

@@ -447,3 +447,26 @@ enable_apt_monitor: false
 enable_compose_monitor: false
 # compose_restart_threshold: 5
 # compose_projects: /opt/morphit/ops/bunkerweb
+
+
+# ─── systemd unit-health monitor sidecar (cp14, §16) ────────────
+#
+# Watches morphit-* units (plus any in MORPHIT_SYSTEMD_WATCH) for
+# "failed" state and high restart counts.  Catches what journalctl-
+# based alerting CAN'T: a unit that fails to start emits no journal
+# output for the bot to route.
+enable_systemd_monitor: false
+# systemd_monitor_restart_threshold: 10
+# systemd_monitor_extra_watch: "postgres@16-main.service docker.service"
+
+
+# ─── journald disk-usage monitor sidecar (cp14, §16) ────────────
+#
+# Daily check of journal disk usage + time span covered.  Catches
+# the "journal silently grew for 6 months until disk full" pattern
+# operators usually only find when it's too late.
+enable_journald_monitor: false
+# journald_size_critical_mb: 4096
+# journald_size_warn_mb: 1024
+# journald_rotation_stale_days: 90
+# journald_rotation_stale_min_mb: 500

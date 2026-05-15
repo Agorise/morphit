@@ -1,0 +1,10 @@
+# roles/journald_monitor/handlers/main.yml
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart morphit-journald-monitor-timer
+  ansible.builtin.systemd:
+    name: morphit-journald-monitor.timer
+    state: restarted

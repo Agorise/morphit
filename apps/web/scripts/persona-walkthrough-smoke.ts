@@ -188,6 +188,35 @@
  *             default JOURNALCTL_UNITS now covers ALL ELEVEN
  *             sidecar units (indexer + relay + 9 monitors).
  *
+ *   P121-CP14 Five sentinels pinning the cross-language drift
+ *             gap close + systemd/journald sidecars + cross-
+ *             workspace deps-pin + tag-push release workflow.
+ *             sidecar-envelope-smoke.ts captures the output of
+ *             every bash sidecar with mocked systemd-cat and
+ *             validates each emission against a zod schema
+ *             matching the canonical LogRecord interface — the
+ *             missing regression test that locks down the
+ *             bash-emits-JSON / TS-classifier-consumes-JSON
+ *             contract.  Additionally validates that every
+ *             event name in every sidecar follows the
+ *             lowercase_snake convention (catches the cp9 bug
+ *             class at source).  workspace-deps-pin-check.ts
+ *             generalizes the cp13 matrix-bot-only check to
+ *             ALL workspaces (apps/ + packages/), catching
+ *             version drift across the monorepo not just one
+ *             corner.  Two new POSIX-sh sidecars: systemd-
+ *             monitor watches morphit-* unit health + restart
+ *             counts — fills the gap journalctl-alerting can't
+ *             cover (a unit that fails to start emits no
+ *             journal output); journald-monitor watches the
+ *             journal's own disk usage + rotation health,
+ *             catching the "journal silently grew to 8 GB
+ *             over 6 months" pattern.  Forgejo release.yml
+ *             workflow fires on tag push to build a signed
+ *             release tarball after running the full
+ *             validation gate again.  Bot's default
+ *             JOURNALCTL_UNITS now covers ALL FOURTEEN units.
+ *
  * Usage:
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
@@ -1209,6 +1238,72 @@ const SCENARIOS: readonly Scenario[] = [
 			'morphit-certbot-monitor.service',
 			'morphit-apt-monitor.service',
 			'morphit-compose-monitor.service'
+		]
+	},
+
+	// ─── P121-CP14 — envelope schema + cross-workspace deps-pin +
+	// systemd-health + journald sidecars + release workflow
+	{
+		name: 'P121-CP14-1 — sidecar envelope smoke validates LogRecord schema across all sidecars',
+		file: 'apps/matrix-bot/scripts/sidecar-envelope-smoke.ts',
+		rootRelative: true,
+		mustHave: [
+			'LogRecordSchema',
+			'morphit-host-monitor.sh',
+			'morphit-dmesg-monitor.sh',
+			'morphit-systemd-monitor.sh',
+			'morphit-journald-monitor.sh',
+			'lowercase_snake convention',
+			'z.enum'
+		]
+	},
+	{
+		name: 'P121-CP14-2 — workspace-deps-pin-check covers every workspace, not just matrix-bot',
+		file: 'apps/ops-cli/scripts/workspace-deps-pin-check.ts',
+		rootRelative: true,
+		mustHave: [
+			'findWorkspaces',
+			'apps',
+			'packages',
+			'satisfies',
+			"'workspace:'",
+			'workspace deps-pin-check'
+		]
+	},
+	{
+		name: 'P121-CP14-3 — systemd unit-health sidecar + classifier matchers + ALERT_COPY',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'systemd' && a.event === 'unit_failed'",
+			"'systemd' && a.event === 'unit_restart_loop'",
+			"'systemd' && a.event === 'unit_missing'",
+			"'systemd:unit_failed'",
+			"'systemd:unit_restart_loop'",
+			'reset-failed',
+			'unit isnt running to emit'
+		]
+	},
+	{
+		name: 'P121-CP14-4 — journald disk-usage sidecar + classifier matchers + ALERT_COPY',
+		file: 'apps/matrix-bot/src/classifier.ts',
+		rootRelative: true,
+		mustHave: [
+			"'journald' && a.event === 'journal_size_critical'",
+			"'journald' && a.event === 'journal_size_warn'",
+			"'journald' && a.event === 'journal_rotation_stale'",
+			"'journald:journal_size_critical'",
+			'SystemMaxUse',
+			'journalctl --vacuum'
+		]
+	},
+	{
+		name: 'P121-CP14-5 — Forgejo release workflow + bot default JOURNALCTL_UNITS covers ALL 14 units',
+		file: 'apps/matrix-bot/src/config.ts',
+		rootRelative: true,
+		mustHave: [
+			'morphit-systemd-monitor.service',
+			'morphit-journald-monitor.service'
 		]
 	}
 ];
