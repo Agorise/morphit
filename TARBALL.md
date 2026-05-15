@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 1 — black-hat audit of cp20–cp22 delta surfaces; security-warning placement fix + apt-monitor observability gap closed)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 2 — F3 + F4 audit sweep; both conclude existing defenses hold; F5 (schema-migration drift class) sentinel landed)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,51 +6,165 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp1 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp2 (2026-05-15)
 
 **Gates — all green:**
-- Triple-pulse: **2,910 × 3 scenarios, 0 failures** (cp22 baseline 2,907 → cp1 baseline 2,910 = +1 F1 STOP-banner sentinel + 2 apt INFO classifier scenarios). The cp22 sidecar-envelope-smoke flake fix is now stress-tested at 26 scenarios + 15 sequential clean runs; cp1 added two more INFO-tier events (`apt_refresh_failed`, `apt_list_failed`) that close the AV14 silent-timeout-masking gap.
-- Typecheck-sweep: 0 errors across all 9 workspaces (post-`npm install`)
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp22 sealed clean post-mount-sweep edits; cp1 touched zero Ansible files)
+- Triple-pulse: **2,911 × 3 scenarios, 0 failures** (cp1 baseline 2,910 → cp2 baseline 2,911 = +1 F5 sentinel pinning schema.sql canonical head version)
+- Typecheck-sweep: 0 errors across all 9 workspaces
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp2 touched zero Ansible files)
 
-**Brag list:** 265 entries unchanged. cp1 work is internal security hardening — per cp14 discipline + cp19 pattern lesson, security findings go to AUDIT doc, not brag list.
+**Brag list:** 265 entries unchanged. cp2 work is internal audit + a single new sentinel — per cp19 discipline, no brag entry.
 
-**Part 122 audit campaign opened.** Scope per Ken's session-opening rationale: black-hat reaudit of cp20-cp22 delta surfaces, federation-probe DNS-rebinding closure (cp7 REVISIT §A), Matrix/relay black-hat redux. Expected 3-5 checkpoints. cp1 covers the cp20-cp22 delta surfaces; subsequent checkpoints will cover federation-probe + Matrix/relay.
+**cp2 findings + dispositions:**
+- **F3 (audit) — Schema-as-contract / sentinel-as-no-op pattern generalization.** Swept every `mustNotHave` sentinel in persona-walkthrough-smoke.ts (23 of them). Conclusion: **existing sentinels are well-designed** — almost all pair `mustNotHave: ['SPECIFIC_OLD_WRONG']` with `mustHave: ['SPECIFIC_NEW_RIGHT']`, so the mustHave is the drift-anchor (any drift away from the right value fails the assertion). Earlier audit framing missed this because of an incomplete grep. No fix needed for the audited sentinels themselves. The ONE finding the sweep surfaced is below as F5.
+- **F4 (audit) — Sidecar observability sweep.** Walked every `|| true` / `2>/dev/null` pattern across all 12 sidecars. Conclusion: **existing sidecars are well-designed** — every one has an `_unavailable` precheck that emits an INFO event when its underlying tool isn't installed; the `|| true` patterns are belt-and-braces for the (rare) within-tool runtime edge cases. cp1's F2 was a cp22-specific regression where a NEW failure mode (timeout) was silently swallowed; that's not a generalizable existing-gap pattern. Pattern lesson captured: ANY future timeout-wrap should default to emitting an INFO event on non-zero exit. Forward-looking rule, not a backward fix.
+- **F5 (MEDIUM) — Schema-migration drift class.** The migration model collapsed v2-v27 into v1's `schema.sql` (May 2026 audit). v28-v32 changes live INLINE in `schema.sql`, but the `MIGRATIONS[]` array in `migrations.ts` stops at v1. Pre-launch this works (fresh deploys apply schema.sql which contains all v28-v32 DDL). But post-launch, if someone adds v33 DDL to schema.sql without ALSO adding a `MIGRATIONS[33]` entry, an upgrade-install would silently miss v33's changes — `schema_migrations` sees v1 already applied, and `MIGRATIONS[]` has nothing after v1. **Fixed** by new `P122-CP2-F5` sentinel pinning schema.sql's canonical head-version comment (`-- v32 / Part 121 — multi-network asset support (USDT)`). If future schema work adds `-- v33 ...` inline, the sentinel fails until the maintainer either adds `MIGRATIONS[v33]` AND bumps the sentinel, or makes a conscious decision to keep the inline pattern (which means bumping the sentinel). Three-way drift-anchor: schema.sql + `D-4` doc sentinel + `P122-CP2-F5` sentinel must all advance together. Self-tested by simulating a v33 inline addition: sentinel correctly fails with `MUST HAVE (not found)` diagnostic; restoration → clean.
+- **F6 (NOT_A_BUG)** — Version/count-drift sentinels too narrow. Spot-check of D-4 + D-9 + D-10 showed all three already pair `mustHave: ['CORRECT']` with `mustNotHave: ['OLD_WRONG']`. The mustHave IS the drift-anchor; this concern dissolves.
+- **F7 (LOW, FILED for cp3+)** — S-12 ariaLabel sentinel could be regex-based for broader coverage (currently lists specific hardcoded English strings like `What is BLURT?`). Spot-check via empirical grep confirmed no hardcoded ariaLabels in current code, so risk is theoretical — file as polish work alongside an `assertNoRegexMatch` primitive addition (which would also let the existing exclusions tighten).
 
-**cp1 findings + fixes:**
-- **F1 (HIGH) — Security warning at §16 too far below §1.** Beta-tester reporting a vuln types it into §1 (one-line summary) BEFORE scrolling 15 sections to see the "DO NOT POST PUBLICLY" warning. **Fixed** by prepending a STOP banner before §1 in all three intake-form copies (`.forgejo/issue_template/bug_report.md`, `docs/NEW-ISSUE-FOUND.md`, `docs/NEW-ISSUE-FOUND.txt`). Locked with new `P122-CP1-F1` sentinel using a new `assertOrdering` field on the Scenario interface — banner substring must appear at a SMALLER byte offset than the `## 1. One-line summary` header. Sentinel self-tested by tampering: reverting the banner causes the sentinel to fail loudly with `MUST HAVE (not found)` + `"before" substring not found`.
-- **F2 (MEDIUM) — apt-monitor silently masks `apt-get update` failures.** Discovered while auditing the cp22 timeout-wrap: `timeout 20 apt-get update -qq 2>/dev/null || true` continues even when the refresh fails (exit 124 = timeout, exit 100 = dpkg lock, etc.), but operators never see that the refresh failed. The subsequent `apt list --upgradable` then runs on STALE cached lists, producing a stale upgrade count with no signal. An operator's mirror could be effectively down for a week and they'd never know. **Fixed** by capturing the exit code via `set +e; ...; rc=$?; set -e` and emitting an INFO-tier `apt_refresh_failed` event when `rc != 0`. Same pattern applied to `apt list --upgradable` → `apt_list_failed` event. Both events carry `exit_code` + `hint` fields. INFO-tier means single failures don't page, but persistent patterns accumulate in the daily digest. Classifier.ts + classifier-smoke.ts updated with the new events; sidecar-envelope-smoke continues to pass (apt-monitor still emits valid LogRecord envelopes).
-- **F3 (FILED) — schema-as-contract pattern generalization audit.** cp21's most consequential finding was that satisfies-clauses had been silently no-op'ing in every sandbox without `npm install`. Generalizable lesson: what other defense layers might be "silently no-op'ing"? Filed as cp2 scope.
-- **F4 (FILED) — observability sweep across other sidecars.** dmesg-monitor + journald-monitor + smartctl-monitor have similar `|| true` patterns to the pre-cp1 apt-monitor. Not the same root-cause as the cp21 flake (those sidecars never tripped the smoke), but the same silent-failure shape. Filed as cp2+ scope.
+**Audit campaign status:** Part 122 cp2 closed. Two audit areas (F3 + F4) swept; conclusion that existing defenses hold up is itself the value. One real finding (F5) crystallized into a concrete sentinel. Two polish items (F7, plus a possible `assertNoRegexMatch` runner primitive) filed for cp3+.
 
-**Audit campaign status:** Part 122 cp1 opened. Three cp21-pending items closed in cp22 (intermittent flake, TS6133 regex, upload-artifact SHA bump). cp1 adds F1+F2 fixes + F3/F4 follow-ups.
-
-**This session's arc (cp22 → P122 cp1):**
-1. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake (was `sidecar-envelope-smoke`, not `drain-defense-live-fire`); sysadmin-handoff persona walk across the four operator docs caught 4 real drifts (stale "13 runners" / stale ~2,296 smoke total / ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` / ghost service `morphit-web.service` — web frontend is nginx-served static files, no systemd unit); mount-sweep skip-list extended for Docker overlay drivers + network FUSE mounts; typecheck-sweep TS6133 noise-filter regex fixed; `actions/upload-artifact` SHA-pinned at v4.6.2 (closes cp18 AUDIT-CI-2 TODO).
-2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. Two real findings: F1 (HIGH) security-warning placement in beta-tester intake form (was at §16, fixed to top-of-template STOP banner with new `assertOrdering` sentinel locking the placement); F2 (MEDIUM) apt-monitor silent timeout masking (now emits `apt_refresh_failed`/`apt_list_failed` INFO events when refresh stalls). F3 + F4 filed for cp2+. Persona-walkthrough scenario count 109 → 110; classifier-smoke 98 → 100; total suite 2,907 → 2,910.
+**This session's arc (cp22 → P122 cp2):**
+1. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake; sysadmin-handoff persona walk caught 4 real drifts; mount-sweep skip-list extended; typecheck-sweep TS6133 regex fixed; `actions/upload-artifact` SHA-pinned.
+2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. Two real findings: F1 (HIGH) security-warning placement, F2 (MEDIUM) apt-monitor silent timeout masking. F3 + F4 filed for cp2.
+3. **P122 cp2** — F3 + F4 audit sweep. Both concluded: existing defenses hold up under audit. ONE real finding crystallized: F5 (MEDIUM) — schema-migration drift class. Sentinel landed pinning schema.sql canonical head version. Total suite 2,910 → 2,911 (+1 F5 sentinel). cp1 follow-ups F3 (sentinel sweep) + F4 (sidecar sweep) closed with empirical "no further fix needed" disposition.
 
 **Parked work (Ken explicitly deferred):**
-- **Upgrade tooling** — first-release week (~2026-05-22). Manual-only by default; `MORPHIT_AUTO_UPGRADE=1` opt-in for auto. Scope: (1) tag-signature verify step in release.yml (`git tag -v "$TAG"` — currently missing); (2) `morphit-release-monitor` sidecar polls Forgejo /6h; (3) `morphit upgrade` ops-cli (download + SHA-256 + GPG verify + show notes + confirm + apply + keep prev); (4) `docs/UPGRADING.md`. **Re-trigger phrase:** "release tooling". See memory entry #29.
+- **Upgrade tooling** — first-release week (~2026-05-22). See memory entry #29.
 
 **Truly pending (not blocking, just not done):**
 - Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM
 - Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
 - Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied
 - PHASE F (whatever it is): apply schema-as-contract pattern as first contract layer when it lands
+- F7 (LOW) — S-12 ariaLabel sentinel could be regex-based for broader coverage (alongside new `assertNoRegexMatch` runner primitive)
 
-**Part 122 scope (cp2+):**
-- **DNS-rebinding gap in `federationProbe.ts`** — filed REVISIT §A in cp7. Pre-launch is *now*. cp2 target.
-- **F3 — schema-as-contract pattern generalization audit.** Find other "silently no-op" defense layers across the codebase. Specifically: every sentinel-grep smoke's `mustNotHave` field (asserted-absent strings can drift away from the actual code they were meant to defend against without the sentinel firing).
-- **F4 — observability sweep across other sidecars** (dmesg-monitor, journald-monitor, smartctl-monitor) for the same silent-failure pattern apt-monitor had.
-- **Matrix/relay black-hat redux** — the Matrix-side path (sendDm, room handling, bootFromPairedSession, QR-pair handshake) was added cp9 + audited at write time but hasn't had a fresh black-hat pass.
+**Part 122 scope (cp3+):**
+- **cp3 — DNS-rebinding closure in `federationProbe.ts`** (cp7 REVISIT §A). Pre-launch is *now*.
+- **cp4 — Matrix/relay black-hat redux** (sendDm + room handling + bootFromPairedSession + QR-pair handshake; added cp9, never reaudited adversarially).
+- **cp5 — Pre-launch sysadmin-handoff threat-model walk** (privilege-escalation surface during handoff; env-file misconfiguration paths).
 
-**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp1 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp2 paragraph). Both together = exact resume point.
 
 ---
 
-**Tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` — delta tarball; cp1 touched zero structural moves and zero file deletions, so delta convention applies. Recipe: extract over the existing cp22 working tree → `git add -A` → commit + push.
+**Tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` — delta tarball; cp2 touched zero structural moves and zero file deletions. Recipe: extract over the cp1 working tree → `git add -A` → commit + push.
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp22-delta.tar.gz` (the cp22 delta that closed three cp21-pending items).
+**Previous tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` (closed cp1 F1+F2; F3+F4 filed for cp2).
+
+## Part 122 cp2 — F3 + F4 audit sweep + F5 (schema-migration drift class) sentinel
+
+### Pretext
+
+cp1 filed F3 (schema-as-contract pattern generalization) and F4 (sidecar observability sweep) as cp2 scope. Both were framed during cp1 with the hypothesis that cp21's "silently no-op'd satisfies-clauses" and cp22's apt-monitor timeout-mask were instances of broader patterns affecting many places. cp2 = empirical sweep to confirm or refute that hypothesis, then ship concrete fixes where real gaps remain.
+
+### F3 audit — `mustNotHave` sentinel review
+
+Walked every `mustNotHave` entry in `apps/web/scripts/persona-walkthrough-smoke.ts` (23 of them). Hypothesis: a sentinel asserting absence of `OLD_NAME` doesn't catch a refactor to `NEW_NAME`. Silent-no-op risk.
+
+Empirical result: **almost every mustNotHave is paired with a mustHave that anchors the correct current value.** Example:
+
+```typescript
+{
+  name: 'D-4 — PRE-LAUNCH reflects schema v32, not v31',
+  mustHave: ['currently at v32 as of Part 121'],     // ← drift-anchor
+  mustNotHave: ['currently at v29 as of Part 108++'] // ← regression sentinel
+}
+```
+
+If the doc drifts to "currently at v30 as of Part 110", the mustHave fails (the v32 string isn't there). If the doc reverts all the way back to the v29 wording, both halves fail. The audit hypothesis missed this because my initial python grep extracted only mustNotHave blocks; manually re-walking confirmed the mustHave was present in every drift-prone case (D-4, D-9, D-10, S-12, D-6, D-7, D-8).
+
+Of the unpaired mustNotHave cases (D-1, D-2 LAUNCH-DAY copy, D-3, D-5, D-11, D-12, D-13, P121-CP6-6, P121-CP6-7, P121-CP9-1, P121-CP20-2), all defend against SPECIFIC named ghost strings (literal env-var names, literal command names, literal import paths) — the regression class they're catching IS "this specific wrong string reappearing", not "any synonym of the wrong concept." Different defense intent, no silent-no-op risk.
+
+**F3 audit conclusion: existing sentinels are well-designed. No fix needed for the audited sentinels.** Filed F7 (LOW) for cp3+ as a polish opportunity: a future `assertNoRegexMatch` runner primitive would let the S-12 ariaLabel sentinel switch from listing 3 specific hardcoded strings to a regex-based "no hardcoded ariaLabel" assertion. Spot-check confirmed no hardcoded ariaLabels in current code, so this is theoretical polish, not a live gap.
+
+### F4 audit — sidecar observability sweep
+
+Walked every `|| true` / `2>/dev/null` pattern across all 12 sidecars. Hypothesis: silent-failure patterns like apt-monitor's pre-cp1 state exist in dmesg-monitor, journald-monitor, smartctl-monitor, etc.
+
+Empirical result: **every sidecar already has a `_unavailable` precheck.** apt-monitor, certbot-monitor, compose-monitor, dmesg-monitor, fail2ban-monitor, journald-monitor, mdadm-monitor, postfix-monitor, smartctl-monitor, systemd-monitor, trivy-monitor — each has a `command -v <tool>` check at the top that emits an INFO-tier `<tool>_unavailable` event if the underlying binary isn't present. Classifier ALERT_COPY map has entries for all of these (cp22 + earlier cp work).
+
+The `|| true` patterns I was worried about (e.g. `dmesg --time-format iso 2>/dev/null || true` at dmesg-monitor.sh:59) are belt-and-braces for the post-precheck race case — if dmesg IS readable at line 50 but somehow fails between line 50 and line 59, the script keeps going with empty output and downstream logic gracefully handles that (returns no events). Operator gets no false alerts; if the tool TRULY breaks, the precheck fires next run.
+
+The cp22 apt-monitor F2 was a different shape — a NEW failure mode (timeout) was added in cp22 work and the timeout's failure semantics were swallowed by the same `|| true` that handled the legitimate dpkg-lock case. THAT was a regression introduced by the cp22 fix, not a pre-existing pattern across other sidecars.
+
+**F4 audit conclusion: existing sidecars are well-designed. No additional fixes needed. Pattern lesson captured for forward-looking rule: any FUTURE timeout-wrap added to a sidecar must emit an INFO event on non-zero exit.** Not a code change; a discipline rule.
+
+### F5 (MEDIUM) — schema-migration drift class
+
+While auditing F3 (looking for "silent no-op" patterns elsewhere), surfaced a real one in the migration model.
+
+`apps/indexer/src/db/migrations.ts` declares `MIGRATIONS[]` with exactly ONE entry: `version: 1` with `subsumesVersions: [2..27]`. The comment block says "Future migrations land here. The collapse happens once pre-launch; from this point forward, every new schema change is its own additive migration with its own version number (28, 29, ...)."
+
+But `apps/indexer/src/db/schema.sql` contains v28, v29, v30, v31, v32 changes INLINE — they're DDL appended to the v1-collapsed schema, not separate migrations. Comments in schema.sql label them:
+
+```
+-- ─── v28 ────────────────────────────────────────────
+-- ─── Migration v29 — XMR per-payment tx_proof (Part 108++) ────────
+-- ─── Migration v30 — Operator-scoped payout queue (Part 111) ─────────────
+-- ─── Migration v31 — Signal C: one-way pile-on detection (Part 113) ───────
+-- v32 / Part 121 — multi-network asset support (USDT)
+```
+
+Pre-launch this works perfectly: every fresh deploy runs schema.sql which contains all v28-v32 DDL, ending at "v32 state." The migration runner records v1 as applied with v2-v27 subsumed. No bug.
+
+**The latent foot-gun lands at first production deploy + first post-launch schema change.** Consider: production deploy installs schema.sql (DB is at v32 state, schema_migrations records v1+subsumed v2-v27). Months later, someone adds v33 DDL. If they add it INLINE to schema.sql without ALSO adding `MIGRATIONS[v33]`, the upgrade-install runs `runMigrations()`, sees v1 already applied, has nothing else to apply, exits clean. v33's DDL never runs on the production DB.
+
+`validateMigrationsContract()` doesn't catch this — it only checks the `MIGRATIONS[]` array's internal consistency, not schema.sql's contents vs the array.
+
+**Fix shipped this turn:** new `P122-CP2-F5` sentinel in persona-walkthrough-smoke.ts pinning schema.sql's current canonical head-version comment:
+
+```typescript
+{
+  name: 'P122-CP2-F5 — schema.sql canonical head version pinned (cp1 F5 fix)',
+  file: 'apps/indexer/src/db/schema.sql',
+  rootRelative: true,
+  mustHave: ['v32 / Part 121 — multi-network asset support (USDT)']
+}
+```
+
+If someone adds v33 DDL to schema.sql, the comment header changes (or a new comment header appears that the maintainer should be thinking about), and the sentinel will hopefully fire OR the maintainer will consciously update the sentinel — either way they're FORCED to think about whether they also need a `MIGRATIONS[v33]` entry.
+
+Three-way drift-anchor protecting the same invariant:
+1. `apps/indexer/src/db/schema.sql` — the canonical DDL
+2. `docs/PRE-LAUNCH-CHECKLIST.md` D-4 sentinel — pins "currently at v32 as of Part 121"
+3. `apps/web/scripts/persona-walkthrough-smoke.ts` P122-CP2-F5 sentinel — pins the schema.sql head comment
+
+Any future schema bump requires updating all three (plus adding the new MIGRATIONS entry post-launch). Drift between any pair surfaces as a smoke failure.
+
+Self-tested by simulating a v33 inline addition: temporarily replaced the v32 comment with `-- v33 / Part 122 — hypothetical future feature`, ran the smoke — P122-CP2-F5 correctly failed with `MUST HAVE (not found): "v32 / Part 121 — multi-network asset support (USDT)"`. Restored → clean.
+
+**Why MEDIUM and not HIGH:** the bug only manifests post-launch + post-first-schema-change. Pre-launch every deploy is fresh and applies the full schema.sql. The sentinel closes the future risk now, before any chance of the foot-gun firing.
+
+### Verification
+
+- Triple-pulse 2,911 × 3, 0 failures (cp1 baseline 2,910 → cp2 baseline 2,911 = +1 P122-CP2-F5 sentinel)
+- Typecheck-sweep 0 errors across all 9 workspaces
+- F5 sentinel self-tested under v33-tampering: fires correctly; restoration → clean
+- ansible-lint NOT re-verified (sandbox doesn't have it; cp2 touched zero Ansible files)
+
+### Pattern lessons
+
+1. **Audit conclusions of "no fix needed" are valuable findings.** F3 + F4 both came in expecting to find broad patterns of silent-no-op defenses; the empirical sweep showed existing defenses hold up. Time spent confirming "the system is defended where we thought it might not be" is not wasted time — it's the only way to ground future audit framing.
+
+2. **Initial grep-based audit framing can mislead.** F3's hypothesis ("mustNotHave sentinels can silently no-op") was framed before I'd extracted the FULL context for each sentinel — only the mustNotHave block. The paired mustHave drift-anchor was the missing piece. Lesson: extract full context (both halves of any paired defense) before forming hypothesis.
+
+3. **Schema-as-contract auditing finds drift in OTHER schemas too.** F5 surfaced while auditing F3-style "silent no-op" patterns in sentinels — it's a structurally identical pattern in a totally different subsystem (migration runner vs sentinel-grep smoke). The bug class generalizes across "any defense layer that validates its own structure but not its relationship to a related artifact."
+
+4. **Drift-anchors compound.** Three sentinels (schema.sql comment, D-4 doc check, P122-CP2-F5 head pin) all defend the same invariant (schema version is what we think it is). Any single one drifting causes only that ONE sentinel to fail; the others provide context for diagnosis. Three-way is overkill for most invariants but appropriate for a foot-gun whose first manifestation is a corrupt production DB.
+
+5. **Forward-looking discipline rules are deliverable artifacts.** F4's pattern lesson ("future timeout-wraps must emit observable signal on non-zero exit") is documented but not enforced by any sentinel. That's intentional — the rule is for human eyes during code review, not a mechanical check. Some defenses are written as rules in TARBALL/REVISIT, not as code.
+
+### Files modified
+
+- `apps/web/scripts/persona-walkthrough-smoke.ts` — new P122-CP2-F5 sentinel (110 → 111 scenarios)
+- `TARBALL.md` — cp2 entry
+- `docs/REVISIT-LIST.md` — cp2 maintained-line + F7 polish item
+- `docs/AUDIT-2026-05.md` — cp2 entry
+
+No code changes outside the sentinel addition. No brag-list edit (audit work per cp19 discipline). No ADR edit. No locale edits. No schema migration.
+
+---
 
 ## Part 122 cp1 — black-hat audit of cp20–cp22 delta surfaces; F1 (security warning placement) + F2 (apt-monitor observability) closed
 
