@@ -94,6 +94,7 @@ SMOKES=(
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"
 	"apps/web:path-adversarial-smoke"
+	"apps/web:no-stale-top-level-routes-smoke"
 	"apps/matrix-bot:classifier-smoke"
 	"apps/matrix-bot:rate-limiter-smoke"
 	"apps/matrix-bot:surface-invariant-smoke"

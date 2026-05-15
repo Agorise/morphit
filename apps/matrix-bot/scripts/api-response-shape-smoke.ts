@@ -190,7 +190,17 @@ const InstanceDirectoryEntrySchema = z
 		origin: z.string(),
 		operator_account: z.string(),
 		operator_tag: z.string().nullable(),
-		registered_at: z.string()
+		operator_display_name: z.string().nullable(),
+		name: z.string().nullable(),
+		tagline: z.string().nullable(),
+		contact_url: z.string().nullable(),
+		alt_networks: z.unknown(), // shape varies; passthrough-tolerant
+		status: z.enum(['good', 'quiet', 'stale', 'unreachable', 'mismatch']),
+		registered_at: z.string(),
+		last_probed_at: z.string().nullable(),
+		indexed_block: z.number().nullable(),
+		chain_lag_sec: z.number().nullable(),
+		consecutive_failures: z.number()
 	})
 	.passthrough();
 
@@ -208,22 +218,33 @@ const OrderRecordSchema = z
 		payment_methods: z.array(z.string()),
 		terms: z.string().nullable(),
 		status: z.enum(['live', 'cancelled', 'expired']).optional(),
-		fee_status: z.string().optional()
+		fee_status: z.string().optional(),
+		created_at: z.string(),
+		updated_at: z.string(),
+		expires_at: z.string().nullable()
 	})
 	.passthrough();
 
 const FeedbackSummarySchema = z.object({
-	total: z.number(),
-	positive: z.number(),
-	negative: z.number(),
-	positive_pct: z.number().nullable()
+	count: z.number(),
+	weighted_rating: z.number(),
+	by_rating: z.object({
+		'1': z.number(),
+		'2': z.number(),
+		'3': z.number(),
+		'4': z.number(),
+		'5': z.number()
+	})
 });
 
 const ChatAdmissionSchema = z
 	.object({
-		admitted: z.boolean()
+		me: z.string(),
+		peer: z.string(),
+		admitted: z.boolean(),
+		reason: z.enum(['prior_exchange', 'fee_paid', 'none'])
 	})
-	.passthrough(); // Many optional fields; passthrough for forward-compat.
+	.passthrough(); // Forward-compat for future fields.
 
 // ─── cp16 schemas (extend coverage to more interfaces) ─────────
 
@@ -318,9 +339,10 @@ const BlocksResponseSchema = z.object({
 const ChatMessageRecordSchema = z
 	.object({
 		id: z.number(),
-		from: z.string(),
-		to: z.string(),
-		body: z.string(),
+		sender: z.string(),
+		recipient: z.string(),
+		ciphertext: z.string(),
+		header: z.unknown(),
 		created_at: z.string()
 	})
 	.passthrough();
@@ -459,7 +481,7 @@ const sampleRelease = {
 
 const sampleError = {
 	status: 'error',
-	code: 'order_not_found',
+	code: 'not_found',
 	message: 'order not found'
 } satisfies ErrorResponse;
 
@@ -491,32 +513,47 @@ const sampleInstanceDirEntry = {
 	origin: 'https://morphit.io',
 	operator_account: 'morphit',
 	operator_tag: null,
-	registered_at: '2026-05-14T00:00:00Z'
+	operator_display_name: null,
+	name: null,
+	tagline: null,
+	contact_url: null,
+	alt_networks: null,
+	status: 'good' as const,
+	registered_at: '2026-05-14T00:00:00Z',
+	last_probed_at: null,
+	indexed_block: null,
+	chain_lag_sec: null,
+	consecutive_failures: 0
 } satisfies InstanceDirectoryEntry;
 
 const sampleOrder = {
 	account: 'alice',
 	permlink: 'sell-btc-2026-05-14',
-	side: 'sell',
-	asset: 'BTC',
+	side: 'sell' as const,
+	asset: 'BTC' as const,
 	fiat_currency: 'USD',
 	amount_min: 50,
 	amount_max: 500,
 	price_model: { type: 'spread', spread_pct: 1.5 },
 	location_region: 'EU',
 	payment_methods: ['sepa', 'wise'],
-	terms: null
+	terms: null,
+	created_at: '2026-05-14T00:00:00Z',
+	updated_at: '2026-05-14T00:00:00Z',
+	expires_at: null
 } satisfies OrderRecord;
 
 const sampleFeedbackSummary = {
-	total: 42,
-	positive: 40,
-	negative: 2,
-	positive_pct: 95.2
+	count: 42,
+	weighted_rating: 4.75,
+	by_rating: { '1': 0, '2': 1, '3': 1, '4': 5, '5': 35 }
 } satisfies FeedbackSummary;
 
 const sampleChatAdmission = {
-	admitted: true
+	me: 'alice',
+	peer: 'bob',
+	admitted: true,
+	reason: 'fee_paid' as const
 } satisfies ChatAdmissionResponse;
 
 // ─── cp16 samples ──────────────────────────────────────────────
@@ -611,9 +648,10 @@ const sampleBlocks = {
 
 const sampleChatMessage = {
 	id: 100,
-	from: 'alice',
-	to: 'bob',
-	body: 'BTC sent; tx id below.',
+	sender: 'alice',
+	recipient: 'bob',
+	ciphertext: 'opaque-base64-payload-placeholder',
+	header: { ephemeral_pub: 'x', nonce: 'y', client_tag: 'z' },
 	created_at: '2026-05-15T00:00:00Z'
 } satisfies ChatMessageRecord;
 
@@ -623,6 +661,8 @@ const sampleChatHistory = {
 } satisfies ChatHistoryResponse;
 
 const sampleInstanceDirectory = {
+	version: 1 as const,
+	directory_updated_at: '2026-05-15T00:00:00Z',
 	instances: [sampleInstanceDirEntry]
 } satisfies InstanceDirectoryResponse;
 
@@ -688,7 +728,7 @@ const sampleAttestorEligibility = {
 	account: 'alice',
 	phase: 'launch' as const,
 	eligible: true,
-	reason: 'satisfies_launch_phase',
+	reason: 'age' as const,
 	loyalty_blurt: 5,
 	age_days: 90,
 	missing_loyalty_blurt: 0,
@@ -785,10 +825,10 @@ const scenarios: Scenario[] = [
 		schema: FeedbackSummarySchema,
 		valid: sampleFeedbackSummary,
 		invalidate: (s) => {
-			const { positive, ...rest } = s;
+			const { count, ...rest } = s;
 			return rest;
 		},
-		invalidReason: 'missing required field "positive"'
+		invalidReason: 'missing required field "count"'
 	},
 	{
 		name: 'ChatAdmissionResponse',

@@ -40,6 +40,7 @@ interface Scenario {
 function alert(payload: Record<string, unknown>): ClassifiedAlert {
 	return {
 		tier: 'WARN',
+		category: 'host-resource',
 		alert: {
 			module: 'dmesg',
 			event: 'oom_kill',
