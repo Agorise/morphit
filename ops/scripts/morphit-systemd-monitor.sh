@@ -33,23 +33,10 @@ RESTART_THRESHOLD=${MORPHIT_SYSTEMD_RESTART_THRESHOLD:-10}
 # operator-added services (e.g. backup, custom monitoring).
 EXTRA_WATCH=${MORPHIT_SYSTEMD_WATCH:-}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"systemd","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-systemd-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="systemd"
+MORPHIT_EMIT_TAG="morphit-systemd-monitor"
 
 # ─── Bail if systemctl missing ─────────────────────────────────
 if ! command -v systemctl >/dev/null 2>&1; then

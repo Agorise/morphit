@@ -29,19 +29,10 @@ QUEUE_WARN=${MORPHIT_POSTFIX_QUEUE_WARN:-25}
 AGE_CRITICAL=${MORPHIT_POSTFIX_AGE_CRITICAL_MIN:-120}
 AGE_WARN=${MORPHIT_POSTFIX_AGE_WARN_MIN:-30}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"postfix","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-postfix-monitor -p "$1"
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="postfix"
+MORPHIT_EMIT_TAG="morphit-postfix-monitor"
 
 # ─── Bail if postqueue missing ─────────────────────────────────
 if ! command -v postqueue >/dev/null 2>&1; then

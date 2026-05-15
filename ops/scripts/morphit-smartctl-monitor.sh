@@ -34,24 +34,10 @@ TEMP_WARN=${MORPHIT_SMART_TEMP_WARN:-50}
 # refuse them anyway, this just avoids the noise).
 SKIP_PATTERN='^(loop|ram|sr|fd)'
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    # $1 = level, $2 = event, $3 = JSON payload
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"smartctl","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-smartctl-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="smartctl"
+MORPHIT_EMIT_TAG="morphit-smartctl-monitor"
 
 # ─── Bail if smartctl not installed ────────────────────────────
 if ! command -v smartctl >/dev/null 2>&1; then
@@ -138,6 +124,59 @@ for dev in $devices; do
             emit error temperature_critical "${payload}${TEMP_CRITICAL}}"
         elif [ "$temp" -ge "$TEMP_WARN" ]; then
             emit warn temperature_warn "${payload}${TEMP_WARN}}"
+        fi
+    fi
+
+    # ─── SCT thermal log (trend analysis) ───
+    # The instantaneous temperature check above can MISS a drive
+    # that briefly spikes above threshold between samples.  The
+    # SCT (SMART Command Transport) thermal log records the
+    # drive's OWN view of temperature history — including
+    # max-recorded temperature since power-on, lifetime max, and
+    # an over-temperature counter the drive firmware increments
+    # itself.  We surface two events the instantaneous check
+    # can't:
+    #   temperature_sustained_high (WARN): max recorded temp >=
+    #     TEMP_WARN + 5C, meaning the drive has hit WARN+ for at
+    #     least one sample even if it's cooler now.
+    #   temperature_overlimit_count (WARN): drive firmware's
+    #     over-temperature counter is non-zero — strong signal
+    #     of past sustained thermal stress.
+    #
+    # smartctl -l scttempsts output (truncated example):
+    #     Current Temperature:                    32 Celsius
+    #     Power Cycle Max Temperature:            45 Celsius
+    #     Lifetime    Max Temperature:            58 Celsius
+    #     Lifetime    Min Temperature:            18 Celsius
+    #     Under/Over Temperature Limit Count:   0/3
+    #
+    # Not every drive supports SCT thermal logging; smartctl
+    # exits non-zero or prints "SCT Temperature support: No"
+    # when unavailable.  We silently skip those drives.
+    sct_output=$(smartctl -l scttempsts "$devpath" 2>/dev/null || true)
+    if [ -n "$sct_output" ]; then
+        # Lifetime Max — strongest signal because it includes
+        # the drive's entire history, not just current power cycle.
+        lifetime_max=$(echo "$sct_output" \
+                       | awk '/Lifetime[[:space:]]+Max Temperature:/ {print $4; exit}')
+        # Over-limit count — second number in "Under/Over ... : X/Y"
+        overlimit=$(echo "$sct_output" \
+                    | awk -F'[ /]+' '/Under\/Over Temperature Limit Count/ {print $7; exit}')
+
+        if [ -n "$lifetime_max" ] && [ "$lifetime_max" -gt 0 ] 2>/dev/null; then
+            # Sustained-high threshold: TEMP_WARN + 5C buffer to
+            # avoid alerting on a brief spike that happened to be
+            # captured in the lifetime max.
+            sustained_threshold=$(( TEMP_WARN + 5 ))
+            if [ "$lifetime_max" -ge "$sustained_threshold" ] 2>/dev/null; then
+                payload='{"device":"'$(json_str "$devpath")'","lifetime_max_c":'$lifetime_max',"threshold":'$sustained_threshold'}'
+                emit warn temperature_sustained_high "$payload"
+            fi
+        fi
+
+        if [ -n "$overlimit" ] && [ "$overlimit" -gt 0 ] 2>/dev/null; then
+            payload='{"device":"'$(json_str "$devpath")'","overlimit_count":'$overlimit'}'
+            emit warn temperature_overlimit_count "$payload"
         fi
     fi
 done

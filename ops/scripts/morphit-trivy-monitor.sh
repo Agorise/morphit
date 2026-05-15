@@ -35,23 +35,10 @@ HIGH_THRESHOLD=${MORPHIT_TRIVY_HIGH_THRESHOLD:-5}
 # Image scan timeout (some images are huge).
 SCAN_TIMEOUT=${MORPHIT_TRIVY_SCAN_TIMEOUT:-300}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"trivy","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-trivy-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="trivy"
+MORPHIT_EMIT_TAG="morphit-trivy-monitor"
 
 # ─── Bail if trivy missing ─────────────────────────────────────
 if ! command -v trivy >/dev/null 2>&1; then

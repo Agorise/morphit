@@ -769,6 +769,57 @@ const scenarios: Scenario[] = [
 			hint: 'no systemd-journald'
 		}),
 		expectedTier: 'INFO'
+	},
+
+	// ─── cp15 mount_* (bind-mount + tmpfs) ────────────────────
+	{
+		name: 'host-resource mount_critical → CRITICAL (bind-mount filling)',
+		alert: a('host-resource', 'mount_critical', {
+			path: '/var/lib/docker/volumes/data',
+			fstype: 'ext4',
+			percent: 96,
+			threshold: 95
+		}),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'host-resource mount_warn → WARN',
+		alert: a('host-resource', 'mount_warn', {
+			path: '/run/user/1000',
+			fstype: 'tmpfs',
+			percent: 87,
+			threshold: 85
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'host-resource mount_info → INFO (daily digest)',
+		alert: a('host-resource', 'mount_info', {
+			path: '/var/snap',
+			fstype: 'squashfs',
+			percent: 72,
+			threshold: 70
+		}),
+		expectedTier: 'INFO'
+	},
+
+	// ─── cp15 smartctl SCT thermal log ────────────────────────
+	{
+		name: 'smartctl temperature_sustained_high → WARN (lifetime max breached threshold+5)',
+		alert: a('smartctl', 'temperature_sustained_high', {
+			device: '/dev/sda',
+			lifetime_max_c: 58,
+			threshold: 55
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'smartctl temperature_overlimit_count → WARN (drive firmware flagged thermal stress)',
+		alert: a('smartctl', 'temperature_overlimit_count', {
+			device: '/dev/sda',
+			overlimit_count: 3
+		}),
+		expectedTier: 'WARN'
 	}
 ];
 

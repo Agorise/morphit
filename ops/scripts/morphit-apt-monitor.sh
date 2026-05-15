@@ -19,19 +19,10 @@ set -eu
 SECURITY_CRITICAL=${MORPHIT_APT_SECURITY_CRITICAL:-10}
 SECURITY_WARN=${MORPHIT_APT_SECURITY_WARN:-1}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"apt","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-apt-monitor -p "$1"
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="apt"
+MORPHIT_EMIT_TAG="morphit-apt-monitor"
 
 # ─── Bail if apt unavailable ───────────────────────────────────
 if ! command -v apt >/dev/null 2>&1; then

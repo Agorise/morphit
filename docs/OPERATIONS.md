@@ -2437,7 +2437,23 @@ MORPHIT_HOST_SWAP_THRASH_WARN=100
 MORPHIT_HOST_CPU_CRITICAL=5.0      # loadavg / cores ratio
 MORPHIT_HOST_CPU_WARN=3.0
 MORPHIT_HOST_CPU_INFO=1.5
+
+# All-mount sweep (cp15) — extends the operator-configured
+# MORPHIT_HOST_DISK_PATHS check with a sweep of every writable
+# mount that isn't a pseudo-filesystem.  Catches Docker volumes,
+# encrypted overlay mounts, runaway tmpfs.  Set to 0 to disable;
+# uses the same DISK_* thresholds.  Pseudo-fs (proc, sysfs,
+# cgroup, devtmpfs, squashfs, etc.) are always skipped.
+MORPHIT_HOST_SCAN_MOUNTS=1
 ```
+
+In addition to the operator-configured paths in `MORPHIT_HOST_DISK_PATHS`,
+the all-mount sweep emits three additional event types:
+`mount_critical` / `mount_warn` / `mount_info` (with the same
+threshold tiering as `disk_*`).  Payload includes `path`,
+`fstype`, `percent`, and `threshold`.  This catches the
+filling-bind-mount and runaway-tmpfs cases the canonical
+`DISK_PATHS` doesn't cover.
 
 **Opt-in default, same as matrix-bot.** If you don't enable the
 timer, the sidecar doesn't run and no host-resource alerts fire.
@@ -2478,7 +2494,18 @@ Events emitted:
 | `temperature_warn` | WARN | Disk ≥ 50°C (env: `MORPHIT_SMART_TEMP_WARN`) |
 | `reallocated_sectors` | WARN | `Reallocated_Sector_Ct > 0` |
 | `pending_sectors` | WARN | `Current_Pending_Sector > 0` |
+| `temperature_sustained_high` | WARN | SCT thermal log: lifetime max temp ≥ `TEMP_WARN + 5°C` (drive hit WARN+ at least once even if cool right now) |
+| `temperature_overlimit_count` | WARN | SCT thermal log: drive firmware's over-temperature counter is non-zero |
 | `smartctl_unavailable` | INFO | smartmontools not installed |
+
+The SCT thermal-log events (`temperature_sustained_high` and
+`temperature_overlimit_count`) come from `smartctl -l scttempsts`,
+which the drive itself maintains.  They surface trends the
+instantaneous temperature check can't see: a drive that briefly
+spiked above threshold between samples, and a drive whose own
+firmware has flagged sustained thermal stress.  Drives that
+don't support SCT thermal logging are silently skipped (no
+event emitted).
 
 Setup:
 

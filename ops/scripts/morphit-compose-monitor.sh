@@ -27,23 +27,10 @@ RESTART_THRESHOLD=${MORPHIT_COMPOSE_RESTART_THRESHOLD:-5}
 # space-separated list if you have multiple stacks.
 COMPOSE_PROJECTS=${MORPHIT_COMPOSE_PROJECTS:-/opt/morphit/ops/bunkerweb}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"compose","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-compose-monitor -p "$1"
-}
-
-json_str() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="compose"
+MORPHIT_EMIT_TAG="morphit-compose-monitor"
 
 # ─── Bail if docker / compose missing ──────────────────────────
 if ! command -v docker >/dev/null 2>&1; then

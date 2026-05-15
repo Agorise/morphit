@@ -32,19 +32,10 @@ SIZE_WARN_MB=${MORPHIT_JOURNALD_SIZE_WARN_MB:-1024}
 ROTATION_STALE_DAYS=${MORPHIT_JOURNALD_ROTATION_STALE_DAYS:-90}
 ROTATION_STALE_MIN_MB=${MORPHIT_JOURNALD_ROTATION_STALE_MIN_MB:-500}
 
-# ─── Emit helper ───────────────────────────────────────────────
-iso_now() {
-    date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null \
-        || date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-emit() {
-    ts=$(iso_now)
-    payload=${3:-'{}'}
-    printf '{"ts":"%s","level":"%s","module":"journald","event":"%s","context":%s}\n' \
-           "$ts" "$1" "$2" "$payload" \
-        | systemd-cat -t morphit-journald-monitor -p "$1"
-}
+# ─── Emit helpers (shared lib) ─────────────────────────────────
+. "$(dirname "$0")/lib/emit.sh"
+MORPHIT_EMIT_MODULE="journald"
+MORPHIT_EMIT_TAG="morphit-journald-monitor"
 
 # ─── Bail if journalctl missing ───────────────────────────────
 if ! command -v journalctl >/dev/null 2>&1; then
