@@ -783,9 +783,23 @@ Morphit is configured through environment files. Templates live in `ops/env/`. C
 ```
 cp ops/env/indexer.env.example /etc/morphit/indexer.env
 cp ops/env/relay.env.example /etc/morphit/relay.env
-sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env
+```
+
+Now set the owners and modes. Indexer.env is read by the indexer daemon (running as the `morphit` user, created above). Relay.env is read by the relay daemon, which runs as a **separate** `morphit-relay` system user — smaller blast radius if the relay is ever compromised. Create that user now if it doesn't already exist:
+
+```
+sudo adduser --system --group --no-create-home morphit-relay
+```
+
+Then chown each env file to the daemon that reads it:
+
+```
+sudo chown morphit:morphit       /etc/morphit/indexer.env
+sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
 sudo chmod 0600 /etc/morphit/indexer.env /etc/morphit/relay.env
 ```
+
+Mode 0600 means only the owning daemon (or root) can read the file. Group read isn't needed because each env file has exactly one consuming daemon.
 
 Then edit each file. The minimum settings to change:
 

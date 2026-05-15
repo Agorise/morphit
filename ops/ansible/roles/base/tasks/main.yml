@@ -85,6 +85,36 @@
     create_home: true
     state: present
 
+# Part 122 cp5 F12 — the shipped morphit-relay.service and
+# morphit-relay-mint-acts.service both specify
+# `User=morphit-relay / Group=morphit-relay`.  Without this task,
+# `systemctl start morphit-relay` fails with "user morphit-relay
+# does not exist" on a first deploy, AND any earlier `chown
+# morphit-relay:morphit-relay /var/lib/morphit-relay` step fails
+# with "invalid user".  Pre-cp5 the playbook would never reach
+# "relay running" on a fresh box.
+- name: Create morphit-relay system group
+  ansible.builtin.group:
+    name: morphit-relay
+    system: true
+    state: present
+
+- name: Create morphit-relay system user
+  ansible.builtin.user:
+    name: morphit-relay
+    group: morphit-relay
+    # Add to morphit_service_group so the relay can read
+    # /etc/morphit/relay.env (chowned root:morphit_service_group
+    # mode 0640 by the morphit role).  Without this membership
+    # the relay daemon can't read its own config.
+    groups: "{{ morphit_service_group }}"
+    append: true
+    home: /var/lib/morphit-relay
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+
 - name: Create /etc/morphit directory for env files + keystore
   ansible.builtin.file:
     path: /etc/morphit
