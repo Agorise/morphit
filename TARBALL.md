@@ -1,10 +1,47 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 15)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 16)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp15-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp16-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp14-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp15-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp16 — what's shipped (SSE-stream shape smoke + expanded REST-API coverage)
+
+### Pretext
+
+cp15 sealed API-response zod smoke + emit.sh lib refactor + host-monitor mount sweep + smartctl SCT thermal-log scraper.  Ken said "continue with what you were working on, without delay".  cp16 ships the remaining tractable items from cp15's REVISIT.
+
+### What shipped
+
+**Phase 1 — SSE-stream shape smoke:**
+
+`apps/matrix-bot/scripts/sse-stream-shape-smoke.ts` (18 scenarios across 3 streams).  Validates the wire-format shapes of `/v1/orderbook/stream`, `/v1/instances/stream`, and `/v1/chat/:a/:b/stream`.  Each event-type payload gets a zod schema and a `satisfies` cross-check against the canonical TS interface from @morphit/indexer-client.
+
+SSE matters more than REST because wire-format drift breaks every connected EventSource simultaneously.
+
+**Phase 2 — Expanded REST-API schema coverage:**
+
+api-response-shape-smoke expanded from 10 interfaces to **27**.  Added OrderViews, Orderbook (paged), Featured slots, Account orders, Profiles, Operator stats, Chat identity, Conversations, Blocks, Chat history, Instance directory paged responses.  54 REST checks total.
+
+**Phase 3 — Brag list discipline:**
+
+Zero new entries.  All cp16 work is internal contract-hardening; per the cp14 memory rule, no public-facing brag.
+
+### Verification
+
+- Triple-pulse: 2,833 × 3, 0 failures.  cp15 baseline 2,778 → cp16 baseline 2,833 (+55 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness: passes.
+
+### Pending — NOT cp16 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Trigger `.forgejo/workflows/release.yml` with a real tag push
+- Add schemas for the remaining ~13 lower-traffic response types
+- Consider extracting schemas into a shared package for indexer-side runtime validation
+
+---
 
 ## Part 121 cp15 — what's shipped (API-response zod smoke + emit.sh lib refactor + host-monitor mount sweep + smartctl SCT thermal-log)
 
