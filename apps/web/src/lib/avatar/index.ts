@@ -56,6 +56,14 @@
  *  URLs, and JSON-escape overhead all fit comfortably. */
 export const MAX_AVATAR_BYTES = 3072;
 
+/** Max byte size for the INPUT file the user picks.  Decoupled
+ *  from the output cap above: a 5 MB phone photo is fine — it'll
+ *  be resized to 96×96.  But a 100 MB image would freeze the tab
+ *  inside createImageBitmap before any of our checks could run.
+ *  5 MB is generous for modern phone photos and tight enough to
+ *  prevent tab-DoS on a paste of a huge file.  Part 122 cp5-fix. */
+export const MAX_INPUT_FILE_BYTES = 5 * 1024 * 1024;
+
 /** Soft warning threshold — UI shows a "getting large" hint above
  *  this, still accepts up to the hard cap. */
 export const SOFT_WARN_AVATAR_BYTES = 2048;
@@ -77,6 +85,7 @@ export type AvatarResult =
 export type AvatarErrorCode =
 	| 'unsupported_type'
 	| 'empty_file'
+	| 'input_too_large'
 	| 'parse_failed'
 	| 'svg_no_root'
 	| 'svg_too_large'
@@ -684,6 +693,14 @@ export const SVG_MIMES = new Set(['image/svg+xml']);
  *  for the profile op. Dispatches by MIME type to either the SVG
  *  sanitizer or the raster re-encoder. */
 export async function processAvatarFile(file: File): Promise<AvatarResult> {
+	// Part 122 cp5-fix: reject huge inputs BEFORE expensive decode.
+	// A 100 MB JPEG handed to createImageBitmap can freeze the tab
+	// for seconds before any of our downstream checks would catch
+	// it.  5 MB is generous for modern phone photos (which get
+	// downsampled to 96×96 anyway) and tight enough to prevent DoS.
+	if (file.size > MAX_INPUT_FILE_BYTES) {
+		return { ok: false, code: 'input_too_large' };
+	}
 	const mime = file.type.toLowerCase();
 	if (SVG_MIMES.has(mime)) {
 		const text = await file.text();

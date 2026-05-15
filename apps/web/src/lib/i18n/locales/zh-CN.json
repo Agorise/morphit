@@ -191,6 +191,7 @@
       "guidance_heading": "上传前须知",
       "guidance_filetypes": "接受 SVG、WebP、JPEG、PNG 或 GIF。",
       "guidance_dimensions": "理想：至少 96×96 像素的方形图像。更大的会被为你缩放到 96×96；更小的会显得颗粒感。",
+      "guidance_filesize": "源文件大小：最多 5 MB。更大的图像会自动缩小到 96×96，所以即使是手机直接拍摄的照片也能正常使用。",
       "guidance_size": "光栅图像会自动重新编码为高质量 WebP。SVG 无损压缩。最终负载必须小于 3 KB。",
       "guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。脚本、外部引用和 SVG 中的 HTML 出于安全原因会自动被剥离。",
       "permanence_heading": "这会永久上链。",
@@ -211,6 +212,7 @@
       "error": {
         "unsupported_type": "不支持该文件类型。请使用 SVG、WebP、JPEG、PNG 或 GIF。",
         "empty_file": "文件为空。",
+        "input_too_large": "该图像过大，无法上传。请选择小于 5 MB 的文件。",
         "parse_failed": "无法解析此 SVG。文件可能格式错误。",
         "svg_no_root": "这看起来不是有效的 SVG 文件。",
         "svg_too_large": "此 SVG 过于复杂，无法放入 3 KB 的链上限制内。尝试简化——减少路径、减少细节或使用更小的 viewBox。",

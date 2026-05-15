@@ -191,6 +191,7 @@
       "guidance_heading": "Prima di caricare",
       "guidance_filetypes": "Accetta SVG, WebP, JPEG, PNG o GIF.",
       "guidance_dimensions": "Ideale: un'immagine quadrata di almeno 96×96 pixel. Qualcosa di più grande verrà ridimensionato a 96×96; più piccolo apparirà sgranato.",
+      "guidance_filesize": "Dimensione file: fino a 5 MB. Le immagini più grandi vengono ridimensionate automaticamente a 96×96, quindi anche una foto presa direttamente dal telefono va benissimo.",
       "guidance_size": "Le immagini raster vengono ri-codificate automaticamente in WebP ad alta qualità. Gli SVG vengono minificati senza perdita. Il payload finale deve stare sotto i 3 KB.",
       "guidance_svg_tips": "Consiglio SVG: un viewBox quadrato (es. 0 0 100 100) resa al meglio. Script, riferimenti esterni e HTML-in-SVG vengono rimossi automaticamente per sicurezza.",
       "permanence_heading": "Questo va on-chain in modo permanente.",
@@ -211,6 +212,7 @@
       "error": {
         "unsupported_type": "Quel tipo di file non è supportato. Usa SVG, WebP, JPEG, PNG o GIF.",
         "empty_file": "Il file è vuoto.",
+        "input_too_large": "Questa immagine è troppo grande da caricare. Scegli un file sotto i 5 MB.",
         "parse_failed": "Impossibile analizzare questo SVG. Il file potrebbe essere malformato.",
         "svg_no_root": "Questo non sembra un file SVG valido.",
         "svg_too_large": "Questo SVG è troppo complesso per stare sotto il limite on-chain di 3 KB. Prova a semplificarlo — meno tracciati, meno dettaglio o un viewBox più piccolo.",

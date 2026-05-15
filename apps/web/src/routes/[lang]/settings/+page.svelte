@@ -1371,6 +1371,7 @@
 			<ul class="mt-2 space-y-1 text-ink-600 dark:text-ink-300">
 				<li>{$_('settings.avatar.guidance_filetypes')}</li>
 				<li>{$_('settings.avatar.guidance_dimensions')}</li>
+				<li>{$_('settings.avatar.guidance_filesize')}</li>
 				<li>{$_('settings.avatar.guidance_size')}</li>
 				<li>{$_('settings.avatar.guidance_svg_tips')}</li>
 			</ul>

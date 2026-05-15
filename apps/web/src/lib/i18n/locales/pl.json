@@ -191,6 +191,7 @@
       "guidance_heading": "Przed przesłaniem",
       "guidance_filetypes": "Akceptuje SVG, WebP, JPEG, PNG lub GIF.",
       "guidance_dimensions": "Ideał: kwadratowy obrazek o wymiarach co najmniej 96×96 pikseli. Większe zostanie przeskalowane do 96×96; mniejsze będzie ziarniste.",
+      "guidance_filesize": "Rozmiar pliku źródłowego: do 5 MB. Większe obrazy zostaną automatycznie zmniejszone do 96×96, więc nawet zdjęcie prosto z telefonu zadziała bez problemu.",
       "guidance_size": "Obrazy rastrowe są automatycznie ponownie kodowane do WebP wysokiej jakości. SVG są minifikowane bezstratnie. Ostateczny ładunek musi zmieścić się w 3 KB.",
       "guidance_svg_tips": "Wskazówka SVG: kwadratowy viewBox (np. 0 0 100 100) renderuje się najlepiej. Skrypty, zewnętrzne odniesienia i HTML w SVG są automatycznie usuwane ze względów bezpieczeństwa.",
       "permanence_heading": "To trafia do łańcucha na stałe.",
@@ -211,6 +212,7 @@
       "error": {
         "unsupported_type": "Ten typ pliku nie jest obsługiwany. Użyj SVG, WebP, JPEG, PNG lub GIF.",
         "empty_file": "Plik jest pusty.",
+        "input_too_large": "Ten obraz jest zbyt duży do przesłania. Wybierz plik mniejszy niż 5 MB.",
         "parse_failed": "Nie udało się sparsować SVG. Plik może być zniekształcony.",
         "svg_no_root": "To nie wygląda na prawidłowy plik SVG.",
         "svg_too_large": "Ten SVG jest zbyt złożony, aby zmieścić się w limicie 3 KB on-chain. Spróbuj go uprościć — mniej ścieżek, mniej szczegółów lub mniejszy viewBox.",

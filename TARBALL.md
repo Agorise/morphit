@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5 — pre-launch sysadmin-handoff threat-model walk; 4 findings (F10 HIGH Ansible Jinja typo, F11 MEDIUM doc inconsistency, F12 HIGH missing user in Ansible base, F13 LOW dead env var leaking passphrase invitation) closed)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5-fix — avatar-upload input-size gate + UI bullet; F14 wizard step-number doc drift; cp5 sentinels extended)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,7 +6,92 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp5 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp5-fix (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **2,965 × 3 scenarios, 0 failures** (cp5 baseline 2,963 → cp5-fix baseline 2,965 = +2 = P122-CP5-F14 + P122-CP5-F14b)
+- Typecheck-sweep: 0 errors across all 9 workspaces
+- Locale parity: 10/10 carrying the 2 new avatar strings
+
+**This-turn deliverable: two operator-facing finds + their fixes, after Ken asked for verification of avatar UX + sysadmin doc completeness.**
+
+### Avatar-upload UX gap closed (Ken's question)
+
+Ken: "when a user wants to upload their own avatar image for their profile, is there something on the ui that tells the user what the ideal image size is, in pixels, as well as what the max allowable filesize is? make it friendly of course, just some fine print that details that. disallow any images that do not fit within those specs of course. please verify."
+
+Verified state of avatar UX in `apps/web/src/routes/[lang]/settings/+page.svelte` + `apps/web/src/lib/avatar/index.ts`:
+
+- ✅ **Ideal pixel dimensions communicated.** `settings.avatar.guidance_dimensions` already said "Ideal source: a square image at least 96×96 pixels. Anything larger will be resized down to 96×96 for you; anything smaller will look grainy."
+- ✅ **Filetypes communicated.** "Accepts SVG, WebP, JPEG, PNG, or GIF."
+- ✅ **Output payload limit communicated.** "The final payload must fit under 3 KB."
+- ✅ **Permanence warning** present (on-chain forever).
+- ✅ **SVG security tips** present.
+- ✅ **Already enforced**: unsupported types (`unsupported_type`), empty files (`empty_file`), too-complex SVGs (`svg_too_large`), output-too-large rasters (`raster_too_large`), decode failures (`raster_decode_failed`), missing canvas support, missing WebP support — all surface to a friendly user-facing error message.
+- ❌ **Gap (FIXED this turn): no INPUT filesize gate.** The 3 KB cap is on the OUTPUT payload (after Canvas resize + WebP re-encode). A user uploading a 100 MB JPEG would have it passed straight to `createImageBitmap` — which has no documented behavior for huge inputs and would freeze the tab for many seconds before our downstream checks could see anything. Also: the user wasn't told that there's any kind of upper bound on the source file.
+
+**Fix shipped:**
+
+1. New `MAX_INPUT_FILE_BYTES = 5 * 1024 * 1024` (5 MB) constant in `apps/web/src/lib/avatar/index.ts`. Five MB is generous for modern phone photos (which get downsampled to 96×96 anyway), tight enough to prevent tab-DoS on a paste of a huge file.
+2. New `input_too_large` error code added to `AvatarErrorCode`.
+3. New early-return gate in `processAvatarFile`: if `file.size > MAX_INPUT_FILE_BYTES`, return `input_too_large` BEFORE any expensive image decode runs. Users see a friendly error instead of a frozen tab.
+4. New `settings.avatar.guidance_filesize` user-facing bullet ("Source file size: up to 5 MB. Larger images will be downsampled to 96×96 automatically, so even a phone photo straight from your camera works fine.") — added to the UI guidance card between `guidance_dimensions` and `guidance_size` for logical ordering (input size → output size).
+5. Matching `settings.avatar.error.input_too_large` localized error message ("That image is too large to upload. Please choose a file under 5 MB.").
+6. **All 10 locales updated** with native-language translations (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK) — locale parity rule per memory.
+
+No new sentinel for the avatar work since these are not security findings — they're a UX gap-close. The existing locale-parity smoke already pins all 10 locales carry the new keys.
+
+### Sysadmin docs verification (Ken's "verify, don't assume" question)
+
+Ken: "pre launch, operations, run a morphit node, and the setup wizard are absolutely perfect now, right? basically, every doc that the sysadmin needs to read before and as he begins and does the first install of morphit onto our vps. don't assume, verify."
+
+**Verified — actual things checked:**
+
+- ✅ **All four docs exist** at their referenced paths: `docs/PRE-LAUNCH-CHECKLIST.md`, `docs/OPERATIONS.md`, `docs/RUN-A-MORPHIT-NODE.md`. The "setup wizard" is `morphit-ops init` (in `apps/ops-cli/src/commands/init.ts`) — verified all 17 wizard steps actually exist as functions in `apps/ops-cli/src/init/steps.ts`.
+- ✅ **All cross-referenced docs exist**: LAUNCH-DAY.md, POST-LAUNCH-WEEK-ONE.md, PRE-LAUNCH-CHECKLIST.md, OPERATIONS.md, RUN-A-MORPHIT-NODE.md, REVISIT-LIST.md all present.
+- ✅ **All referenced `morphit-ops` commands exist in code**: init.ts, edit.ts, register.ts present in `apps/ops-cli/src/commands/`.
+- ✅ **XMR view-key references**: every reference is in retired-script-archaeology context (e.g., "Part 109 removed the `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var"). No live references that an operator would mistake as still-required.
+- ✅ **ADR count**: 23 ADRs on disk; no doc claims a stale count.
+- ✅ **F11 fix from earlier in cp5 is live** in RUN-A-MORPHIT-NODE.md (lines 798 + 1094 both have correct `chown morphit-relay:morphit-relay /etc/morphit/relay.env`).
+- ✅ **OPERATIONS.md does NOT have the F11-class drift**: lines 6334-6336 already had correct per-daemon chown (`morphit:morphit` for indexer.env; `morphit-relay:morphit-relay` for relay.env).
+- ❌ **F14 (MEDIUM) — Stale wizard step number in OPERATIONS.md.** Line 4748 said `'morphit-ops init' step 12 asks: "Enable daily DB backup automation?"`. But the wizard reorganization at Part 109 (added stepFeeExplorers + stepChatLinkExplorers) plus subsequent additions pushed `stepBackup` from step 12 to step 15. A sysadmin reading the doc, getting to "step 12" expecting a backup-automation prompt, would instead see a chat-link-explorers prompt and get confused. Same drift class as cp5's F11 (doc vs. shipped artifact). Fixed by updating to "step 15".
+
+**F14 sentinel — `P122-CP5-F14`** pins both legs of the contract:
+- (a) `OPERATIONS.md` references "step 15" for backup (matches stepBackup's actual position in `init.ts`)
+- (b) `mustNotHave` rejects the pre-fix "step 12" wording
+
+Plus **`P122-CP5-F14b`** pins `TOTAL_STEPS = 17` in steps.ts. If a future wizard restructure changes the count, this sentinel fails and forces a re-audit of doc step references at the same turn.
+
+**Things NOT verified this turn (honest disclosure):**
+- I did not end-to-end-run every command in every doc against a clean VM (sandbox can't host one).
+- I did not walk every step of the 8,167-line OPERATIONS.md for further off-by-N drifts; I checked the explicit wizard-step references but not, e.g., the RAID-recovery procedures or the BunkerWeb tuning section.
+- I did not verify every i18n string in the setup wizard matches its code reference.
+- I did not verify sub-section ordering inside the 1,896-line RUN-A-MORPHIT-NODE.md.
+
+What I checked is a high-confidence sanity scan focused on the drift classes cp5 surfaced (doc vs. shipped artifact vs. code). The four docs are MORE consistent than they were pre-cp5, but "absolutely perfect" would require a live-deploy walkthrough that the sandbox can't perform. Memory's "Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM" is still in PENDING and remains the highest-confidence way to surface any remaining handoff drift.
+
+### Standing-revisit follow-ons from cp5 (not done this turn)
+
+These were listed at cp5-close. The first two would each be ~50 lines of new smoke logic — meaningful but a proper checkpoint of their own (cp6), not a quick-turn fix:
+
+- **Smoke: every shipped `User=` in `ops/systemd/*.service` has a matching Ansible user-creation task.** Would have caught F12 mechanically. File-walking smoke that parses systemd unit files + walks Ansible role tasks. Filed for cp6 if Part 122 continues.
+- **Smoke: every env var in an Ansible `*.env.j2` template has a `process.env.X` consumer in the code workspace.** Would have caught F13 mechanically. File-walking smoke that parses Jinja templates + greps apps/ for env-var consumers. Filed for cp6.
+- **ansible-lint integration in CI.** Style check, not correctness. Belongs in `.forgejo/workflows/`.
+
+**Brag list:** 265 entries unchanged. cp5-fix is internal handoff polish + a UX gap-close — neither is a stranger-cares-about win that belongs in the brag list.
+
+**This session's arc (cp22 → P122 cp5-fix):**
+1. cp22 → P122 cp1-cp5 as previously documented
+2. **P122 cp5-fix** — avatar-upload UX gap close (Ken's question — input filesize gate + UI bullet + 10-locale strings) + F14 stale wizard step-number doc drift (discovered during the doc verification Ken requested) + 2 new sentinels
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (still on cp5 — cp5-fix is a same-checkpoint follow-on, not a new sealed checkpoint).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp5-fix-delta.tar.gz` — delta over the cp5 tarball.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp5-delta.tar.gz` (sysadmin-handoff threat-model walk; F10/F11/F12/F13 closed).
+
+---
 
 **Gates — all green:**
 - Triple-pulse: **2,963 × 3 scenarios, 0 failures** (cp4 baseline 2,959 → cp5 baseline 2,963 = +4 = P122-CP5-F10/F11/F12/F13 sentinels)
