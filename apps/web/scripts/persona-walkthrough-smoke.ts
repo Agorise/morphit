@@ -1659,14 +1659,21 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-CP20-2 — Forgejo issue-picker config disables blank issues + surfaces Matrix DM contact link',
+		name: 'P121-CP20-2 — Forgejo issue-picker config disables blank issues + surfaces public community Matrix room (NOT security DM)',
 		file: '.forgejo/issue_template/config.yml',
 		rootRelative: true,
 		mustHave: [
 			'blank_issues_enabled: false',
 			'contact_links',
-			'Security disclosure',
-			'matrix.to/#/@agorise:matrix.org'
+			'Community chat',
+			'matrix.to/#/#agorise:matrix.org'
+		],
+		mustNotHave: [
+			// The picker UI must NOT surface the operator's personal
+			// DM mxid; security disclosures route via §16 of the
+			// bug-report template, not the picker.
+			'matrix.to/#/@agorise:matrix.org',
+			'Security disclosure (private)'
 		]
 	}
 ];
