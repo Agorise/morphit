@@ -7,6 +7,28 @@ labels:
 ref: "main"
 ---
 
+---
+
+> ## ⚠ STOP — read this first if your bug involves security
+>
+> **If this issue could let someone steal funds, leak private info,
+> bypass a fee, or harm other users, DO NOT POST IT HERE.**
+>
+> Public Forgejo issues are visible to anyone, including attackers.
+> Even a one-line summary in field §1 below can disclose enough to
+> let someone exploit the vuln before a fix ships.
+>
+> Send security-sensitive reports privately via encrypted Matrix DM:
+>
+> **`@agorise:matrix.org`**
+>
+> Section §16 below has the full security-triage form (still fill it
+> in if you're sure your report is safe to post publicly). When in
+> doubt, use the Matrix DM — we'd much rather receive a
+> not-actually-security report there than a security report here.
+
+---
+
 Thanks for taking the time to report this. The more of these fields you can fill in, the faster we can fix it. If you don't know a field, just write *don't know* or leave it blank — partial reports are still useful.
 
 ---
@@ -248,6 +270,6 @@ Thanks for taking the time to report this. The more of these fields you can fill
 
 ---
 
-*Thank you! The more reports we get during the beta, the more solid Morphit will be at launch. Even small things matter.*
+*Thank you! Your report helps us make Morphit one of the world's most powerful P2P trading platforms. Even small things matter.*
 
 *— The Morphit team*

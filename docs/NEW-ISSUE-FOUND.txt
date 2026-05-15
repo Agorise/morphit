@@ -2,6 +2,31 @@
   MORPHIT — NEW ISSUE REPORT
 ================================================================
 
+================================================================
+  ⚠ STOP — READ THIS FIRST IF YOUR BUG INVOLVES SECURITY
+================================================================
+
+If this issue could let someone STEAL FUNDS, LEAK PRIVATE INFO,
+BYPASS A FEE, or HARM OTHER USERS, DO NOT POST IT AS A PUBLIC
+ISSUE.
+
+Public issues are visible to anyone, including attackers.  Even
+a one-line summary in field 1 below can disclose enough to let
+someone exploit the vuln before a fix ships.
+
+Send security-sensitive reports privately via encrypted Matrix
+DM to:
+
+  @agorise:matrix.org
+
+Section 16 below has the full security-triage form (still fill
+it in if you're sure your report is safe to post publicly).
+When in doubt, use the Matrix DM — we'd much rather receive a
+not-actually-security report there than a security report on
+the public tracker.
+
+================================================================
+
 Thanks for taking the time to report this.  The more of these
 fields you can fill in, the faster we can fix it.  If you don't
 know a field, just write "don't know" or leave it blank — partial
@@ -280,7 +305,8 @@ a hunch about what might be wrong.)
   END OF REPORT
 ================================================================
 
-Thank you!  The more reports we get during the beta, the more
-solid Morphit will be at launch.  Even small things matter.
+Thank you!  Your report helps us make Morphit one of the
+world's most powerful P2P trading platforms.  Even small
+things matter.
 
 — The Morphit team

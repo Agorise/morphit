@@ -305,6 +305,13 @@ interface Scenario {
 	readonly mustNotHave?: readonly string[];
 	/** When true, resolve `file` relative to REPO_ROOT instead of REPO_WEB. */
 	readonly rootRelative?: boolean;
+	/** Optional positional check: `before` substring must appear at a smaller
+	 *  byte offset than `after`.  Useful when ordering of two phrases matters
+	 *  (e.g. a security warning must come before a free-text input field). */
+	readonly assertOrdering?: {
+		readonly before: string;
+		readonly after: string;
+	};
 }
 
 const SCENARIOS: readonly Scenario[] = [
@@ -1678,6 +1685,36 @@ const SCENARIOS: readonly Scenario[] = [
 			'matrix.to/#/@agorise:matrix.org',
 			'Security disclosure (private)'
 		]
+	},
+
+	// ─── P122-CP1 F1 fix — STOP banner above §1
+	//
+	// Beta-tester intake form (cp20) put the security-disclosure
+	// warning at §16, fifteen sections below §1 ("one-line
+	// summary").  A tester reporting a security vuln would have
+	// typed it into §1 before scrolling to §16.  Cp1 prepended a
+	// STOP banner BEFORE §1 so the warning fires before any
+	// field is filled in.  Sentinel locks the placement: the
+	// banner phrase MUST appear in the file AND it MUST appear
+	// at a byte offset BEFORE the §1 header.
+	{
+		name: 'P122-CP1-F1 — Forgejo template has STOP banner before §1 (security warning placement)',
+		file: '.forgejo/issue_template/bug_report.md',
+		rootRelative: true,
+		mustHave: [
+			'STOP — read this first if your bug involves security',
+			'DO NOT POST IT HERE',
+			'`@agorise:matrix.org`'
+		],
+		// Custom assertion not expressible via mustHave: the banner
+		// substring must appear at a smaller file-offset than the
+		// `## 1. One-line summary` header.  We piggyback on the
+		// existing readFileSync body + a downstream check below;
+		// see the post-loop assertion for the ordering check.
+		assertOrdering: {
+			before: 'STOP — read this first',
+			after: '## 1. One-line summary'
+		}
 	}
 ];
 
@@ -1703,7 +1740,22 @@ for (const sc of SCENARIOS) {
 	const missing = (sc.mustHave ?? []).filter((s) => !body.includes(s));
 	const present = (sc.mustNotHave ?? []).filter((s) => body.includes(s));
 
-	if (missing.length === 0 && present.length === 0) {
+	// Optional positional check.  Both substrings must appear,
+	// AND `before` must precede `after` in the file.
+	let orderingError: string | null = null;
+	if (sc.assertOrdering) {
+		const beforeIdx = body.indexOf(sc.assertOrdering.before);
+		const afterIdx = body.indexOf(sc.assertOrdering.after);
+		if (beforeIdx === -1) {
+			orderingError = `ordering: "before" substring not found: ${JSON.stringify(sc.assertOrdering.before.slice(0, 60))}`;
+		} else if (afterIdx === -1) {
+			orderingError = `ordering: "after" substring not found: ${JSON.stringify(sc.assertOrdering.after.slice(0, 60))}`;
+		} else if (beforeIdx >= afterIdx) {
+			orderingError = `ordering: "${sc.assertOrdering.before.slice(0, 40)}..." at byte ${beforeIdx} but "${sc.assertOrdering.after.slice(0, 40)}..." at byte ${afterIdx}; first must precede second`;
+		}
+	}
+
+	if (missing.length === 0 && present.length === 0 && orderingError === null) {
 		console.log(`  ✓ ${sc.name}`);
 		passed++;
 	} else {
@@ -1713,6 +1765,9 @@ for (const sc of SCENARIOS) {
 		}
 		for (const s of present) {
 			console.error(`      MUST NOT HAVE (found): ${JSON.stringify(s.slice(0, 100))}`);
+		}
+		if (orderingError) {
+			console.error(`      ${orderingError}`);
 		}
 		failed++;
 	}

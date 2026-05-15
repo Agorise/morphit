@@ -818,6 +818,23 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'{hint}. This sidecar is Debian/Ubuntu-only; disable the timer ' +
 			'on non-apt systems.'
 	},
+	'apt:apt_refresh_failed': {
+		title: 'apt-get update failed (exit {exit_code})',
+		advice:
+			'The apt-monitor sidecar ran but the package-list refresh failed. ' +
+			'{hint}. If this fires repeatedly, your mirror is unreachable or ' +
+			'the dpkg lock is stuck — check `journalctl -u morphit-apt-monitor` ' +
+			'and run `sudo apt-get update` manually to see the actual error. ' +
+			'Stale package lists mean the upgrade count below may be out of date.'
+	},
+	'apt:apt_list_failed': {
+		title: 'apt list --upgradable failed (exit {exit_code})',
+		advice:
+			'apt-monitor could not enumerate upgradable packages. ' +
+			'{hint}. The upgrade-count alerts in this digest may be ' +
+			'unreliable until this clears.  Run `sudo apt list --upgradable` ' +
+			'manually to investigate.'
+	},
 
 	// ─── cp13 compose sidecar ──────────────────────────────────
 	'compose:service_unhealthy': {

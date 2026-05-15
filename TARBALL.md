@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 22 — sidecar-envelope-smoke flake characterized + fixed, sysadmin-handoff doc walk, mount-sweep skip-list extended, typecheck-sweep regex fix, upload-artifact SHA-pinned)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 1 — black-hat audit of cp20–cp22 delta surfaces; security-warning placement fix + apt-monitor observability gap closed)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,53 +6,143 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 121 cp22 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp1 (2026-05-15)
 
 **Gates — all green:**
-- Triple-pulse: **2,907 × 3 scenarios, 0 failures** (cp21 baseline 2,905 + 2 from the new sidecar-envelope-smoke regression sentinels). The cp21-disclosed intermittent flake is now characterized + fixed: it was `sidecar-envelope-smoke` (24 scenarios; matched the cp21 -24 math), root cause was `apt-monitor.sh`'s `apt-get update` occasionally stalling past the smoke's 30s spawnSync budget. Two-layer fix in cp22: (a) `apt-monitor.sh` wraps `apt-get update` (and `apt list --upgradable`) in `timeout 20`/`timeout 10` so a slow mirror can't blow the smoke budget; (b) smoke `spawnSync` timeout bumped 30s → 60s. Failure detail now surfaces SIGTERM signal so future timeouts are debuggable. Two regression sentinels lock both layers (smoke is 24 → 26 scenarios). Stress-tested: 15 sequential runs all clean.
+- Triple-pulse: **2,910 × 3 scenarios, 0 failures** (cp22 baseline 2,907 → cp1 baseline 2,910 = +1 F1 STOP-banner sentinel + 2 apt INFO classifier scenarios). The cp22 sidecar-envelope-smoke flake fix is now stress-tested at 26 scenarios + 15 sequential clean runs; cp1 added two more INFO-tier events (`apt_refresh_failed`, `apt_list_failed`) that close the AV14 silent-timeout-masking gap.
 - Typecheck-sweep: 0 errors across all 9 workspaces (post-`npm install`)
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp20-fix2 sealed clean at 0 failures + 0 warnings, and cp22 touched zero Ansible files)
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp22 sealed clean post-mount-sweep edits; cp1 touched zero Ansible files)
 
-**Brag list:** 265 entries unchanged. cp22 work is internal smoke-infrastructure + operator-doc drift cleanup — per cp14 discipline rule, no brag entry.
+**Brag list:** 265 entries unchanged. cp1 work is internal security hardening — per cp14 discipline + cp19 pattern lesson, security findings go to AUDIT doc, not brag list.
 
-**This session's arc (cp15 → cp22):**
-1. **cp15** — `api-response-shape-smoke.ts` (10 zod-schemas), `ops/scripts/lib/emit.sh` (extracted from 12 sidecars), host-monitor bind-mount + tmpfs sweep, smartctl SCT thermal-log extension
-2. **cp16** — `sse-stream-shape-smoke.ts` (18 SSE checks across 3 streams), REST coverage 10 → 27 interfaces
-3. **cp17** — REST coverage 27 → ALL 38 indexer-client interfaces, schema-as-contract for indexer side COMPLETE
-4. **cp18** — Deep-deep security audit; 2 HIGH findings FIXED: AUDIT-1 (json_str control-char injection via dmesg `comm` names → fixed with sed -z + RFC 8259 C0 escapes), AUDIT-CI-7 (release.yml tag-name command-injection via `${{}}` shell interpolation → fixed with strict tag validation + env: passing)
-5. **cp19** — Cleared all remaining MEDIUM/LOW audit findings: AUDIT-ANSIBLE-1 (NodeSource refactor to apt-repo + GPG-key pattern), AUDIT-NUMERIC (`json_num()` helper applied to 3 sites), AUDIT-2 + AUDIT-3 (sanitize() in classifier: strip C0, defang Matrix mxids with ZWJ), AUDIT-4 (1KB/8KB payload caps with truncation markers), AUDIT-CI-2 (SHA-pin checkout + setup-node with version comments; upload-artifact left at @v4 with explicit TODO). AUDIT-CI-1 NOT actioned (reviewer-policy item, not code).
-6. **cp20** — Re-shipped beta-tester intake form at canonical Forgejo path `.forgejo/issue_template/bug_report.md` + `config.yml`. (Memory said it shipped in Part 48 but had been lost in a later refactor.)
-7. **cp20-fix** — Picker contact_link re-routed from operator's personal MXID to `#agorise:matrix.org` public community room; security DM stays only in §16 of the form body, NOT on the picker UI
-8. **cp20-fix2** — Removed "Copy this whole file, paste it into a new issue at…" line from the auto-loaded Forgejo template (nonsensical when the user is already on the new-issue page); docs/NEW-ISSUE-FOUND.md keeps the line for offline/email use
-9. **cp21** — Discovered + closed cp7 stale-route accumulation in Ken's local clone (delta-tarballs from cp11+ couldn't communicate the cp7 route MOVES, so the 25 top-level pre-cp7 route directories silently persisted alongside their `[lang]/` post-cp7 counterparts; some drifted by Parts since — most consequentially `routes/support/+page.svelte` was missing the cp9 Matrix-group-chat block). Cleanup workflow: archive → empty working tree (keep `.git/`) → extract clean tarball → `git add -A` → commit + push. New regression sentinel `apps/web/scripts/no-stale-top-level-routes-smoke.ts` (19 scenarios; FAILS correctly when regression returns; verified by inserting a stale dir + running the smoke + cleaning up) locks this against future recurrence. ALSO surfaced and fixed: 20 latent type-drift errors in matrix-bot smoke samples + zod schemas.
-10. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake (was `sidecar-envelope-smoke`, not `drain-defense-live-fire`); sysadmin-handoff persona walk across the four operator docs caught 4 real drifts (stale "13 runners" / stale ~2,296 smoke total / ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` / ghost service `morphit-web.service` — web frontend is nginx-served static files, no systemd unit); mount-sweep skip-list extended for Docker overlay drivers + network FUSE mounts; typecheck-sweep TS6133 noise-filter regex fixed (was matching literal space after `TS6133`, but real tsc emits `TS6133:` with colon); `actions/upload-artifact` SHA-pinned at v4.6.2 (closes cp18 AUDIT-CI-2 TODO).
+**Part 122 audit campaign opened.** Scope per Ken's session-opening rationale: black-hat reaudit of cp20-cp22 delta surfaces, federation-probe DNS-rebinding closure (cp7 REVISIT §A), Matrix/relay black-hat redux. Expected 3-5 checkpoints. cp1 covers the cp20-cp22 delta surfaces; subsequent checkpoints will cover federation-probe + Matrix/relay.
 
-**Audit campaign status:** Comprehensively closed at cp19. cp22 is flake-fix + operator-doc-drift + audit-TODO cleanup.
+**cp1 findings + fixes:**
+- **F1 (HIGH) — Security warning at §16 too far below §1.** Beta-tester reporting a vuln types it into §1 (one-line summary) BEFORE scrolling 15 sections to see the "DO NOT POST PUBLICLY" warning. **Fixed** by prepending a STOP banner before §1 in all three intake-form copies (`.forgejo/issue_template/bug_report.md`, `docs/NEW-ISSUE-FOUND.md`, `docs/NEW-ISSUE-FOUND.txt`). Locked with new `P122-CP1-F1` sentinel using a new `assertOrdering` field on the Scenario interface — banner substring must appear at a SMALLER byte offset than the `## 1. One-line summary` header. Sentinel self-tested by tampering: reverting the banner causes the sentinel to fail loudly with `MUST HAVE (not found)` + `"before" substring not found`.
+- **F2 (MEDIUM) — apt-monitor silently masks `apt-get update` failures.** Discovered while auditing the cp22 timeout-wrap: `timeout 20 apt-get update -qq 2>/dev/null || true` continues even when the refresh fails (exit 124 = timeout, exit 100 = dpkg lock, etc.), but operators never see that the refresh failed. The subsequent `apt list --upgradable` then runs on STALE cached lists, producing a stale upgrade count with no signal. An operator's mirror could be effectively down for a week and they'd never know. **Fixed** by capturing the exit code via `set +e; ...; rc=$?; set -e` and emitting an INFO-tier `apt_refresh_failed` event when `rc != 0`. Same pattern applied to `apt list --upgradable` → `apt_list_failed` event. Both events carry `exit_code` + `hint` fields. INFO-tier means single failures don't page, but persistent patterns accumulate in the daily digest. Classifier.ts + classifier-smoke.ts updated with the new events; sidecar-envelope-smoke continues to pass (apt-monitor still emits valid LogRecord envelopes).
+- **F3 (FILED) — schema-as-contract pattern generalization audit.** cp21's most consequential finding was that satisfies-clauses had been silently no-op'ing in every sandbox without `npm install`. Generalizable lesson: what other defense layers might be "silently no-op'ing"? Filed as cp2 scope.
+- **F4 (FILED) — observability sweep across other sidecars.** dmesg-monitor + journald-monitor + smartctl-monitor have similar `|| true` patterns to the pre-cp1 apt-monitor. Not the same root-cause as the cp21 flake (those sidecars never tripped the smoke), but the same silent-failure shape. Filed as cp2+ scope.
+
+**Audit campaign status:** Part 122 cp1 opened. Three cp21-pending items closed in cp22 (intermittent flake, TS6133 regex, upload-artifact SHA bump). cp1 adds F1+F2 fixes + F3/F4 follow-ups.
+
+**This session's arc (cp22 → P122 cp1):**
+1. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake (was `sidecar-envelope-smoke`, not `drain-defense-live-fire`); sysadmin-handoff persona walk across the four operator docs caught 4 real drifts (stale "13 runners" / stale ~2,296 smoke total / ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` / ghost service `morphit-web.service` — web frontend is nginx-served static files, no systemd unit); mount-sweep skip-list extended for Docker overlay drivers + network FUSE mounts; typecheck-sweep TS6133 noise-filter regex fixed; `actions/upload-artifact` SHA-pinned at v4.6.2 (closes cp18 AUDIT-CI-2 TODO).
+2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. Two real findings: F1 (HIGH) security-warning placement in beta-tester intake form (was at §16, fixed to top-of-template STOP banner with new `assertOrdering` sentinel locking the placement); F2 (MEDIUM) apt-monitor silent timeout masking (now emits `apt_refresh_failed`/`apt_list_failed` INFO events when refresh stalls). F3 + F4 filed for cp2+. Persona-walkthrough scenario count 109 → 110; classifier-smoke 98 → 100; total suite 2,907 → 2,910.
 
 **Parked work (Ken explicitly deferred):**
 - **Upgrade tooling** — first-release week (~2026-05-22). Manual-only by default; `MORPHIT_AUTO_UPGRADE=1` opt-in for auto. Scope: (1) tag-signature verify step in release.yml (`git tag -v "$TAG"` — currently missing); (2) `morphit-release-monitor` sidecar polls Forgejo /6h; (3) `morphit upgrade` ops-cli (download + SHA-256 + GPG verify + show notes + confirm + apply + keep prev); (4) `docs/UPGRADING.md`. **Re-trigger phrase:** "release tooling". See memory entry #29.
 
 **Truly pending (not blocking, just not done):**
-- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (sysadmin handoff opportunity — see cp21 retrospective below)
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM
 - Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
-- Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied (availability.ts, invite.ts, create.ts, health.ts) — currently can't apply satisfies-clause cross-check without a shared types package
-- DNS-rebinding gap in `federationProbe.ts` (information-disclosure bounded by GET-only + 256KB cap + manual-redirect; filed REVISIT §A; defense-in-depth only — no live instance to attack pre-launch)
+- Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied
 - PHASE F (whatever it is): apply schema-as-contract pattern as first contract layer when it lands
 
-**Closed in cp22:**
-- ✅ **Intermittent flake** (cp21 disclosure) — characterized as `sidecar-envelope-smoke` (24 scenarios; matched cp21's -24 math, not drain-defense-live-fire which is 23). Root cause: `apt-monitor.sh`'s `apt-get update` stalling past the smoke's 30s spawnSync budget. Fix: inner `timeout 20` on apt + outer `spawnSync` timeout bumped 30→60s + signal field in failure detail. Two regression sentinels lock both layers.
-- ✅ **TS6133 noise-filter regex bug** — `error TS6133 ` (literal space) → `error TS6133[ :]` (matches real tsc colon-format and hypothetical space-format both).
-- ✅ **`actions/upload-artifact` SHA bump** — pinned at `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4.6.2, GitHub-GPG-signed). All three workflow actions now SHA-pinned 40 hex chars (closes cp18 AUDIT-CI-2 TODO).
-- ✅ **Mount-sweep skip-list** — extended with overlay/overlay2/fuse-overlayfs/aufs (Docker storage drivers) + rpc_pipefs/nfsd (NFS pseudo-FS) + fuse.rclone/fuse.s3fs/fuse.sshfs (network FUSE mounts whose df% is meaningless).
-- ✅ **Operator-doc drift** — 4 fixes from the sysadmin-handoff persona walk: stale "13 runners" claim → stable phrasing in 3 docs; stale "2,296 scenarios" baseline → "2,900+" in 2 docs; ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` in BETA-INCIDENT-RUNBOOK; ghost `morphit-web.service` reference removed (web frontend is nginx-served static files, no systemd unit).
+**Part 122 scope (cp2+):**
+- **DNS-rebinding gap in `federationProbe.ts`** — filed REVISIT §A in cp7. Pre-launch is *now*. cp2 target.
+- **F3 — schema-as-contract pattern generalization audit.** Find other "silently no-op" defense layers across the codebase. Specifically: every sentinel-grep smoke's `mustNotHave` field (asserted-absent strings can drift away from the actual code they were meant to defend against without the sentinel firing).
+- **F4 — observability sweep across other sidecars** (dmesg-monitor, journald-monitor, smartctl-monitor) for the same silent-failure pattern apt-monitor had.
+- **Matrix/relay black-hat redux** — the Matrix-side path (sendDm, room handling, bootFromPairedSession, QR-pair handshake) was added cp9 + audited at write time but hasn't had a fresh black-hat pass.
 
-**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp22 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp1 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
 
 ---
 
-**Tarball:** `morphit-audit-2026-05-121-cp22-delta.tar.gz` — delta tarball; cp22 touched zero structural moves and zero file deletions (apart from the ghost-service-name line in OPERATIONS.md), so delta convention applies. Recipe (no cleanup needed): extract over the existing cp21 working tree → `git add -A` → commit + push.
+**Tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` — delta tarball; cp1 touched zero structural moves and zero file deletions, so delta convention applies. Recipe: extract over the existing cp22 working tree → `git add -A` → commit + push.
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp21-FULL.tar.gz` (the FULL tarball that established the cp21 baseline after the stale-route cleanup).
+**Previous tarball:** `morphit-audit-2026-05-121-cp22-delta.tar.gz` (the cp22 delta that closed three cp21-pending items).
+
+## Part 122 cp1 — black-hat audit of cp20–cp22 delta surfaces; F1 (security warning placement) + F2 (apt-monitor observability) closed
+
+### Pretext
+
+After cp22 sealed (closing 3 cp21-pending items), Ken asked whether it was time for deep-deep code/security audits. I argued yes-but-scoped: a full-codebase walk would re-cover cp18/cp19 cleared surface, but the cp20-cp22 delta surfaces, the federation-probe DNS-rebinding gap (cp7 REVISIT §A), and a Matrix/relay black-hat redux haven't had a fresh black-hat pass. Ken said "go." Part 122 opened. cp1 covers the cp20-cp22 delta surfaces.
+
+### Audit method
+
+Standard black-hat enumeration across each new attack surface introduced cp20-cp22, with STRIDE classification for each. 24 attack vectors (AV1-AV24) probed; full list with disposition:
+
+- **AV1** (Tampering/Info disclosure): hostile tester content injection into Forgejo template rendering. → **NOT_A_BUG** — testers fill the issue body BELOW the auto-loaded template; Forgejo's markdown render of that body is normal Forgejo behavior, not template-specific.
+- **AV2** (Spoofing): homograph attack on the Matrix room URL. → **CLEAN** — `config.yml` is pure ASCII in the URL/label fields; the non-ASCII bytes that exist are em-dashes (U+2014) and section sign (U+00A7) in inline comments, not URL content.
+- **AV3** (auth bypass): direct `/issues/new?` URL bypassing the picker. → **OUT_OF_SCOPE** — Forgejo-config concern (`blank_issues_enabled: false`). No Morphit-config attack surface.
+- **AV4** (Info disclosure, HIGH): **F1 — Security warning at §16 too far below §1.** A tester reporting a security vuln would type it into §1 (one-line summary, line 14 of the rendered body) BEFORE scrolling 15 sections to see the "DO NOT POST PUBLICLY" warning at §16 (line 222). Even if they read top-to-bottom, by the time they see the warning, they've already typed the vuln summary into §1's text editor. Forgejo's draft-autosave might persist that. STRIDE = Information Disclosure, severity HIGH because a tester finding a real vuln (which is exactly the kind of beta-testing we want) gets the warning AFTER making the disclosure mistake.
+- **AV5** (default-safe ordering): §16 dropdown shows "No — safe to post publicly" first which is reasonable for the common case (most reports aren't security-sensitive), and the "Yes — STOP, use Matrix DM instead" option is listed first per the cp20 design. → **CLEAN**.
+- **AV6** (Tampering): hostile mount-target names through host-monitor mount-sweep. df output with newline/escape-bearing mount names could in theory inject ghost mount events. → **NOT_A_BUG_GIVEN_THREAT_MODEL** — defense layers in place: (a) strict numeric regex on `mount_pct_num` skips malformed rows; (b) `json_str` (cp18 hardening) escapes all C0 chars in the path. The attack also requires root/CAP_SYS_ADMIN to create the mount in the first place, at which point the operator's already compromised. Filed as defense-in-depth note.
+- **AV7** (Info leak): could the new `signal` field on `RunResult` leak privileged info? → **NOT_A_BUG** — `NodeJS.Signals` is a static union of signal names ("SIGTERM", "SIGKILL", etc.); no payload, no info leak.
+- **AV8** (Info disclosure): TS6133 regex fix surfacing latent unused-var warnings as typecheck errors. → **CLEAN** — empirical typecheck-sweep run post-cp22: 0 errors across all 9 workspaces. No latent unused-vars currently emit.
+- **AV9** (Supply chain): upload-artifact SHA verification. → **VERIFIED** — SHA `ea165f8d65b6e75b540449e92b4886f43607fa02` came from the release tag page on github.com; commit page asserts GitHub's verified GPG signature (key B5690EEEBB952194). Trust anchor = GitHub's TLS + their tag-signing policy. Not maximally verified (didn't `gpg --verify` locally with their public key); filed as REVISIT for upgrade-tooling sprint.
+- **AV10** (Tampering): public Matrix room link tampered in transit. → **OUT_OF_SCOPE** — would require Forgejo repo compromise or MITM of github.com (no morphit-attackable surface).
+- **AV11** (Artifacts): stale-route cleanup left exploitable artifacts. → **CLEAN** — no remaining references in code or docs to pre-cp7 paths beyond the regression sentinel (which is designed to detect re-introduction).
+- **AV12** (Defense-no-op pattern): generalization of cp21's "silently no-op'd schema-as-contract" lesson. What other defense layers might be silently no-op'ing? → **FILED as F3** — out of cp1 scope, will sweep in cp2.
+- **AV13** (Sentinel drift): persona-walkthrough sentinels pinning the cp22-edited doc claims still match. → **VERIFIED** — sentinels pin stable strings (`ERR_MODULE_NOT_FOUND`, `@morphit/asset-registry`, etc.), not the drifted "13 runners" count. cp22's doc edits remain compatible.
+- **AV14** (Info disclosure, MEDIUM): **F2 — apt-monitor silently masks `apt-get update` failures.** The cp22 pattern `timeout 20 apt-get update -qq 2>/dev/null || true` continues even on timeout (exit 124) or dpkg-lock (exit 100) or mirror error. The subsequent `apt list --upgradable` then operates on stale cached lists, producing a stale upgrade count with no operator-visible signal. An operator's mirror could be effectively down for a week and they'd never know. STRIDE = Information Disclosure (missed-signal class), severity MEDIUM because exploit doesn't compromise the system but blinds the operator to legitimate security-update alerts.
+- **AV15** (same as AV14): identical pattern on the `apt list --upgradable` line. → **Bundled into F2 fix.**
+- **AV16** (Tampering): §17 free-form field accepts hostile content. → **NOT_A_BUG** — Forgejo's markdown render handles this; not a template-introduced surface.
+- **AV17** (Type safety): ChatAdmissionResponse type drift from cp21 was actually fixed end-to-end. → **VERIFIED** — typecheck-sweep clean post-`npm install`; schema-as-contract smokes now actually execute the satisfies-clauses.
+- **AV18** (Sentinel-doc alignment): persona-walkthrough sentinels match the cp22-edited doc state. → **VERIFIED** — all three P121-DOC sentinels pass against current doc state.
+- **AV19** (Context drift): residual offline-context language in the auto-loaded Forgejo body. → **CLEAN** — cp20-fix2 already removed "copy this and paste it" line; grep confirms zero remaining instances.
+- **AV20** (Sentinel coverage for F1 fix): need regression sentinel for the new STOP banner placement. → **SHIPPED** — new `P122-CP1-F1` sentinel with new `assertOrdering` field on Scenario interface. Self-tested by tampering.
+- **AV21** (Side effects): the new `set +e/-e` pattern in apt-monitor doesn't break anything else. → **VERIFIED** — live-test with mocked apt-get scenarios (success-path-with-no-root → emits `apt_refresh_failed exit_code=100`; timeout-fire → emits `apt_refresh_failed exit_code=124`); main upgrade-count path still works.
+- **AV22** (Defense bypass): could the TS6133 regex fix be bypassed? → **NOT_A_BUG** — regex is for noise-filtering, not security defense. Worst case is more typecheck output (more noise visible to dev), never less.
+- **AV23** (Supply chain depth): could the upload-artifact SHA pin be subverted via a typosquat? → **NOT_A_BUG** — SHA pinning specifically defends against tag-mutation; an attacker would need to compromise GitHub itself (out of scope).
+- **AV24** (Sidecar observability sweep): other sidecars (dmesg-monitor, journald-monitor, smartctl-monitor) have similar `|| true` patterns. → **FILED as F4** — same shape as F2 but those sidecars are pre-cp20 and out of cp1 scope. Will sweep in cp2.
+
+### Findings disposition
+
+| ID | Severity | Status | Description |
+|----|----------|--------|-------------|
+| F1 | HIGH | ✅ FIXED cp1 | Security warning placement (§16 → STOP banner above §1) |
+| F2 | MEDIUM | ✅ FIXED cp1 | apt-monitor silent timeout masking (now emits INFO events on failure) |
+| F3 | (audit) | FILED cp2 | Schema-as-contract pattern generalization audit |
+| F4 | LOW | FILED cp2 | Observability sweep across other sidecars |
+
+### What shipped
+
+**F1 fix** — `.forgejo/issue_template/bug_report.md` + `docs/NEW-ISSUE-FOUND.md` + `docs/NEW-ISSUE-FOUND.txt` all get a STOP banner prepended before §1. The Forgejo template's banner is a blockquote with `## ⚠ STOP — read this first if your bug involves security` heading, the "DO NOT POST IT HERE" alarm, and the `@agorise:matrix.org` mxid. Bottom paragraph references §16 ("still fill it in if you're sure your report is safe to post publicly") so the detailed triage form retains its meaning. Markdown copy mirrors the same structure; plain-text copy uses ASCII separators (`====`) since blockquote markdown wouldn't render well in plaintext.
+
+**F2 fix** — `ops/scripts/morphit-apt-monitor.sh` `set +e/-e` blocks capture exit codes from both `apt-get update -qq` and `apt list --upgradable`. On non-zero exit, emits an INFO-tier event (`apt_refresh_failed` or `apt_list_failed`) with `exit_code` + `hint` payload fields. Hint string lists the common exit-code meanings (124=timeout, 100=dpkg lock, other=mirror error). Live-tested: both timeout and dpkg-lock scenarios emit correctly.
+
+**Classifier wiring (cp1 wire-discipline)** — `apps/matrix-bot/src/classifier.ts` ALERT_COPY map gains `apt:apt_refresh_failed` and `apt:apt_list_failed` entries with operator-helpful advice (point at `journalctl -u morphit-apt-monitor`, suggest `sudo apt-get update` manual run for diagnosis). `apps/matrix-bot/scripts/classifier-smoke.ts` gains 2 INFO-tier scenarios pinning the tier policy (98 → 100 scenarios). Classifier's fallback-to-INFO branch handles unrecognized events, so the new ones route correctly without changes to CRITICAL_MATCHERS / WARN_MATCHERS.
+
+**F1 regression sentinel** — `apps/web/scripts/persona-walkthrough-smoke.ts` gains a new `assertOrdering` field on the `Scenario` interface (with corresponding runner-loop logic) so a sentinel can require that one substring appears at a SMALLER byte offset than another. New `P122-CP1-F1` sentinel uses this to lock the STOP banner placement: banner phrase must appear in the file AND must precede the `## 1. One-line summary` header. Self-tested by tampering: temporarily removing the banner causes the sentinel to fail loudly with `MUST HAVE (not found)` + ordering-error.
+
+### Verification
+
+- Triple-pulse 2,910 × 3, 0 failures (cp22 baseline 2,907 → cp1 baseline 2,910 = +1 F1 sentinel + 2 apt INFO classifier scenarios)
+- Typecheck-sweep 0 errors across all 9 workspaces
+- Live-run of `morphit-apt-monitor.sh` with mocked systemd-cat post-F2 fix: both success path and timeout path emit correct LogRecord envelopes
+- sidecar-envelope-smoke still passes apt-monitor with the new emit() calls (26 envelope checks hold)
+- F1 sentinel self-tested under tampering: failure fires with correct diagnostic; restoration → clean
+- ansible-lint NOT re-verified (sandbox doesn't have it; cp1 touched zero Ansible files)
+
+### Pattern lessons
+
+1. **Placement of security warnings matters as much as their content.** Cp20 shipped a thorough §16 security-disclosure form. Cp1 found that placing it at section 16 of a 17-section template meant the warning fired AFTER the user could disclose the vuln in §1. Lesson: when a defense's effectiveness depends on user behavior (read top-to-bottom, fill top-to-bottom), the defense must come BEFORE the field being defended.
+
+2. **`assertOrdering` is the right primitive for placement-sensitive defenses.** Adding `mustHave: ['STOP banner phrase']` would have passed even if the banner moved to §16. The fix needs to assert "banner before §1," which is a positional constraint. New sentinel primitive — reusable for any future placement-sensitive defense.
+
+3. **Silent-failure timeouts are observable-failure timeouts in disguise.** apt-monitor.sh wrapped `apt-get update` in `timeout 20 ... || true` to keep the smoke happy (cp22 fix). The smoke is happy; operators are blind. Defense-in-depth requires *both* the smoke-protecting timeout AND an observable signal that the timeout fired. Future timeout-wraps should default to emitting an INFO event on non-zero exit, not just swallowing it.
+
+4. **Cp21's "silently no-op" lesson generalizes.** The 20 type-drifts cp21 surfaced are one instance of a broader pattern: defense layers that "pass" against an incomplete verification environment. F3 (filed) is the next audit — sweep for other defense layers that might "pass" only because their preconditions aren't fully exercised (e.g. mustNotHave-style sentinels asserting absence of strings that were renamed elsewhere; smokes that import deps that resolve no-op stubs; integration tests that pass against mocks but never against real services).
+
+5. **Black-hat audits open with AV-enumeration, not code-walking.** 24 vectors enumerated in ~15 minutes of analysis before any code edits. 2 real findings (F1+F2). 2 filed for cp2 (F3+F4). 18 confirmed-clean with reasoned dispositions. Code-walking the same surface area would have taken 5-10× longer and probably missed F1 entirely (which is a UX-placement issue, not a code-pattern issue).
+
+### Files modified
+
+- `.forgejo/issue_template/bug_report.md` — STOP banner prepended before §1 (F1 fix)
+- `docs/NEW-ISSUE-FOUND.md` — matching STOP banner (offline copy parity)
+- `docs/NEW-ISSUE-FOUND.txt` — matching STOP banner with ASCII separators (plain-text copy parity)
+- `ops/scripts/morphit-apt-monitor.sh` — `set +e/-e` blocks capture exit codes + emit `apt_refresh_failed`/`apt_list_failed` INFO events (F2 fix)
+- `apps/matrix-bot/src/classifier.ts` — 2 new ALERT_COPY entries for the F2 events
+- `apps/matrix-bot/scripts/classifier-smoke.ts` — 2 new INFO-tier scenarios (98 → 100 scenarios)
+- `apps/web/scripts/persona-walkthrough-smoke.ts` — new `assertOrdering` field on Scenario interface + runner-loop logic + new P122-CP1-F1 sentinel (109 → 110 scenarios)
+- `TARBALL.md` — this entry
+- `docs/REVISIT-LIST.md` — Part 122 cp1 maintained-line + F3/F4 follow-ups
+- `docs/AUDIT-2026-05.md` — cp1 entry
+
+No brag-list edit (internal security hardening per cp19 discipline). No ADR edit (no architectural shift). No locale edits (English-only template strings — note: this is consistent with how cp20 shipped the template; the form is intended for technical bug reporters who'll typically be English-comfortable, and the i18n cost vs reach trade-off for a 17-section operator-triage form is unfavorable. Filed REVISIT for "should bug-report template be i18n'd?" — out of cp1 scope).
+
+---
 
 ## Part 121 cp22 — sidecar-envelope-smoke flake fix + sysadmin-handoff doc walk + audit-TODO closures
 
