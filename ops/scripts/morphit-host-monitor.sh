@@ -121,7 +121,9 @@ if [ "${MORPHIT_HOST_SCAN_MOUNTS:-1}" = "1" ]; then
             case "$mount_fstype" in
                 proc|sysfs|cgroup|cgroup2|devtmpfs|devpts|mqueue|fusectl|\
 configfs|securityfs|pstore|bpf|tracefs|debugfs|hugetlbfs|nsfs|\
-binfmt_misc|fuse.gvfsd-fuse|fuse.portal|squashfs|ramfs|autofs)
+binfmt_misc|fuse.gvfsd-fuse|fuse.portal|squashfs|ramfs|autofs|\
+overlay|overlay2|fuse.fuse-overlayfs|aufs|rpc_pipefs|nfsd|\
+fuse.rclone|fuse.s3fs|fuse.sshfs)
                     continue
                     ;;
             esac

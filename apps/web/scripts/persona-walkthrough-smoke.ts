@@ -611,10 +611,13 @@ const SCENARIOS: readonly Scenario[] = [
 	// `npm install` creates the workspace symlinks under
 	// `node_modules/@morphit/*` that the smoke suite depends on, and
 	// that a fresh-clone snapshot without `npm install` yet will see
-	// 13 smoke runners fail with `ERR_MODULE_NOT_FOUND` referencing
-	// `@morphit/asset-registry`.  These sentinels pin the doc claim
-	// against future drift so an operator hitting the symptom finds
-	// the right troubleshooting in three places.
+	// several smoke runners fail with `ERR_MODULE_NOT_FOUND`
+	// referencing a `@morphit/*` package (count drifts across releases
+	// as smokes are added or refactored; cp1 saw 13, cp22 saw 6, the
+	// number itself is not load-bearing — the symptom + fix is what
+	// matters).  These sentinels pin the doc claim against future
+	// drift so an operator hitting the symptom finds the right
+	// troubleshooting in three places.
 	{
 		name: 'P121-DOC-1 — RUN-A-NODE mentions workspace symlinks + ERR_MODULE_NOT_FOUND',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',

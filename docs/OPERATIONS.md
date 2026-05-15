@@ -2438,12 +2438,17 @@ MORPHIT_HOST_CPU_CRITICAL=5.0      # loadavg / cores ratio
 MORPHIT_HOST_CPU_WARN=3.0
 MORPHIT_HOST_CPU_INFO=1.5
 
-# All-mount sweep (cp15) — extends the operator-configured
-# MORPHIT_HOST_DISK_PATHS check with a sweep of every writable
-# mount that isn't a pseudo-filesystem.  Catches Docker volumes,
-# encrypted overlay mounts, runaway tmpfs.  Set to 0 to disable;
-# uses the same DISK_* thresholds.  Pseudo-fs (proc, sysfs,
-# cgroup, devtmpfs, squashfs, etc.) are always skipped.
+# All-mount sweep (cp15, skip-list extended cp22) — extends the
+# operator-configured MORPHIT_HOST_DISK_PATHS check with a sweep
+# of every writable mount that isn't a pseudo-filesystem.
+# Catches Docker volumes, encrypted overlay mounts, runaway
+# tmpfs.  Set to 0 to disable; uses the same DISK_* thresholds.
+# Pseudo-fs are always skipped (proc, sysfs, cgroup, devtmpfs,
+# squashfs; Docker storage drivers overlay/overlay2/aufs and
+# their rootless fuse.fuse-overlayfs analog; NFS server-side
+# pseudo-FS rpc_pipefs and nfsd; and network mounts
+# fuse.rclone/fuse.s3fs/fuse.sshfs whose `df` percentages are
+# meaningless and can stall the sweep).
 MORPHIT_HOST_SCAN_MOUNTS=1
 ```
 
@@ -5984,7 +5989,13 @@ non-root users (`morphit` for the indexer, `morphit-relay` for
 the relay) which is good, but defense-in-depth means tightening
 the systemd-level isolation too.  Edit each service file (or
 create a drop-in at `/etc/systemd/system/morphit-indexer.service.d/hardening.conf`,
-similar for `morphit-relay.service` and `morphit-web.service`):
+similar for `morphit-relay.service`):
+
+> **The web frontend has no systemd unit.**  The frontend is
+> static HTML/CSS/JS built by `npm run build`; nginx serves it
+> from `/var/www/morphit-web` (root path set in
+> `ops/nginx/web.conf`).  Hardening for the web tier is an
+> nginx-config concern, not a systemd one.
 
 ```ini
 [Service]
@@ -7951,16 +7962,15 @@ These ARE gated:
   federation-wide activity).
 
 **Smoke-suite troubleshooting — `ERR_MODULE_NOT_FOUND` on
-`@morphit/asset-registry`.**  If `bash scripts/run-smokes.sh`
-fails 13 runners (order-handler, rss-orderbook,
-rss-orderbook-xml-validate, apr, balance-math, pnl,
-clearing-price-history, login-pairing-registry,
-fee-divergence, chain-op-verify, desktop-pairing-crypto,
-i18n-formatters, plus one or two others depending on the
-working snapshot) all with the same `ERR_MODULE_NOT_FOUND`
-error referencing `@morphit/asset-registry`, the cause is
-that `npm install` hasn't been run at the workspace root
-yet, so the symlinks under `node_modules/@morphit/*` that
+`@morphit/asset-registry` (or other `@morphit/*` packages).**
+If `bash scripts/run-smokes.sh` fails several runners (typically
+single digits — the count drifts each release as smokes are added
+or refactored — examples that have historically been affected:
+`order-handler`, `rss-orderbook`, `rss-orderbook-xml-validate`,
+`edit`, `edit-rpc`, `surface-invariant`) all with the same
+`ERR_MODULE_NOT_FOUND` error referencing a `@morphit/*` package,
+the cause is that `npm install` hasn't been run at the workspace
+root yet, so the symlinks under `node_modules/@morphit/*` that
 the workspace setup creates don't exist.  Fix:
 
 ```bash
@@ -7968,13 +7978,12 @@ cd ~/morphit      # repo root, where the root package.json lives
 npm install --no-audit --no-fund
 ```
 
-Then re-run the smoke suite; all 13 should pass.  This is
-NOT a code regression — `@morphit/asset-registry` is an
-internal package whose source lives at
-`packages/asset-registry/`, and the workspace symlink under
-`node_modules/@morphit/asset-registry` is what lets
-`apps/indexer/src/...` resolve `import { ASSETS } from
-'@morphit/asset-registry'`.  Pure environment setup.
+Then re-run the smoke suite; the affected runners should pass.
+This is NOT a code regression — `@morphit/asset-registry`,
+`@morphit/indexer-client`, `@morphit/operator-config`, etc. are
+internal packages whose source lives under `packages/`, and the
+workspace symlinks under `node_modules/@morphit/*` are what let
+`apps/*/src/...` resolve their imports.  Pure environment setup.
 
 
 ### Migration

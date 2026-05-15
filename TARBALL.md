@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 21 — cp7 stale-route cleanup landed in fresh local clone + latent matrix-bot smoke drift fixed + regression sentinel)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 22 — sidecar-envelope-smoke flake characterized + fixed, sysadmin-handoff doc walk, mount-sweep skip-list extended, typecheck-sweep regex fix, upload-artifact SHA-pinned)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,16 +6,16 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 121 cp21 (2026-05-15)
+**Last sealed checkpoint:** Part 121 cp22 (2026-05-15)
 
-**Gates — all green (with one disclosed flake):**
-- Triple-pulse: **2,905 × 3 scenarios, 0 failures** (cp20-fix2 baseline 2,886 + 19 from the new no-stale-top-level-routes-smoke). HONEST DISCLOSURE: across ~7 pulses during cp21 verification, ONE pulse flaked at 2,881 scenarios / 1 runner failed (a 24-scenario smoke didn't tally — strongly suggests the historic `drain-defense-live-fire` timing-race or a similar 24-scenario smoke). Re-runs are clean. Cp21 touched zero code paths related to drain-defense or any timing-sensitive smoke, so this is a pre-existing intermittent that didn't surface in the cp20-fix2 sandbox (likely because that sandbox didn't have `npm install` done so the relay's live-fire smoke wouldn't even reach the timing-sensitive stage). Filed as a REVISIT item — characterize and fix in cp22 or later. **The 3-of-3 PASSING pulses are the gate; the intermittent is documented, not green-washed.**
-- Typecheck-sweep: 0 errors across all 9 workspaces (post-npm-install — see cp21 honest-disclosure section below for why this is meaningfully stronger than the cp20-fix2 typecheck claim)
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp20-fix2 sealed clean at 0 failures + 0 warnings, and cp21 touched zero Ansible files)
+**Gates — all green:**
+- Triple-pulse: **2,907 × 3 scenarios, 0 failures** (cp21 baseline 2,905 + 2 from the new sidecar-envelope-smoke regression sentinels). The cp21-disclosed intermittent flake is now characterized + fixed: it was `sidecar-envelope-smoke` (24 scenarios; matched the cp21 -24 math), root cause was `apt-monitor.sh`'s `apt-get update` occasionally stalling past the smoke's 30s spawnSync budget. Two-layer fix in cp22: (a) `apt-monitor.sh` wraps `apt-get update` (and `apt list --upgradable`) in `timeout 20`/`timeout 10` so a slow mirror can't blow the smoke budget; (b) smoke `spawnSync` timeout bumped 30s → 60s. Failure detail now surfaces SIGTERM signal so future timeouts are debuggable. Two regression sentinels lock both layers (smoke is 24 → 26 scenarios). Stress-tested: 15 sequential runs all clean.
+- Typecheck-sweep: 0 errors across all 9 workspaces (post-`npm install`)
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental — ansible-lint binary not installed; cp20-fix2 sealed clean at 0 failures + 0 warnings, and cp22 touched zero Ansible files)
 
-**Brag list:** 265 entries unchanged. cp21 work is internal repo hygiene + smoke-test infrastructure — per cp14 discipline rule, no brag entry.
+**Brag list:** 265 entries unchanged. cp22 work is internal smoke-infrastructure + operator-doc drift cleanup — per cp14 discipline rule, no brag entry.
 
-**This session's arc (cp15 → cp21):**
+**This session's arc (cp15 → cp22):**
 1. **cp15** — `api-response-shape-smoke.ts` (10 zod-schemas), `ops/scripts/lib/emit.sh` (extracted from 12 sidecars), host-monitor bind-mount + tmpfs sweep, smartctl SCT thermal-log extension
 2. **cp16** — `sse-stream-shape-smoke.ts` (18 SSE checks across 3 streams), REST coverage 10 → 27 interfaces
 3. **cp17** — REST coverage 27 → ALL 38 indexer-client interfaces, schema-as-contract for indexer side COMPLETE
@@ -24,9 +24,10 @@
 6. **cp20** — Re-shipped beta-tester intake form at canonical Forgejo path `.forgejo/issue_template/bug_report.md` + `config.yml`. (Memory said it shipped in Part 48 but had been lost in a later refactor.)
 7. **cp20-fix** — Picker contact_link re-routed from operator's personal MXID to `#agorise:matrix.org` public community room; security DM stays only in §16 of the form body, NOT on the picker UI
 8. **cp20-fix2** — Removed "Copy this whole file, paste it into a new issue at…" line from the auto-loaded Forgejo template (nonsensical when the user is already on the new-issue page); docs/NEW-ISSUE-FOUND.md keeps the line for offline/email use
-9. **cp21** — Discovered + closed cp7 stale-route accumulation in Ken's local clone (delta-tarballs from cp11+ couldn't communicate the cp7 route MOVES, so the 25 top-level pre-cp7 route directories silently persisted alongside their `[lang]/` post-cp7 counterparts; some drifted by Parts since — most consequentially `routes/support/+page.svelte` was missing the cp9 Matrix-group-chat block). Cleanup workflow: archive → empty working tree (keep `.git/`) → extract clean tarball → `git add -A` → commit + push. New regression sentinel `apps/web/scripts/no-stale-top-level-routes-smoke.ts` (19 scenarios; FAILS correctly when regression returns; verified by inserting a stale dir + running the smoke + cleaning up) locks this against future recurrence. ALSO surfaced and fixed: 20 latent type-drift errors in matrix-bot smoke samples + zod schemas (the cp16-cp17 schema-as-contract smokes against `@morphit/indexer-client` types had drifted by Parts as the types tightened; in every prior sandbox `npm install` wasn't run, so the `@morphit/*` imports failed with "Cannot find module" which the typecheck-sweep noise filter swallowed, and the `satisfies` clauses never type-checked — surfaced only when cp21 ran `npm install` to exercise the new smoke against the workspace symlink graph).
+9. **cp21** — Discovered + closed cp7 stale-route accumulation in Ken's local clone (delta-tarballs from cp11+ couldn't communicate the cp7 route MOVES, so the 25 top-level pre-cp7 route directories silently persisted alongside their `[lang]/` post-cp7 counterparts; some drifted by Parts since — most consequentially `routes/support/+page.svelte` was missing the cp9 Matrix-group-chat block). Cleanup workflow: archive → empty working tree (keep `.git/`) → extract clean tarball → `git add -A` → commit + push. New regression sentinel `apps/web/scripts/no-stale-top-level-routes-smoke.ts` (19 scenarios; FAILS correctly when regression returns; verified by inserting a stale dir + running the smoke + cleaning up) locks this against future recurrence. ALSO surfaced and fixed: 20 latent type-drift errors in matrix-bot smoke samples + zod schemas.
+10. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake (was `sidecar-envelope-smoke`, not `drain-defense-live-fire`); sysadmin-handoff persona walk across the four operator docs caught 4 real drifts (stale "13 runners" / stale ~2,296 smoke total / ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` / ghost service `morphit-web.service` — web frontend is nginx-served static files, no systemd unit); mount-sweep skip-list extended for Docker overlay drivers + network FUSE mounts; typecheck-sweep TS6133 noise-filter regex fixed (was matching literal space after `TS6133`, but real tsc emits `TS6133:` with colon); `actions/upload-artifact` SHA-pinned at v4.6.2 (closes cp18 AUDIT-CI-2 TODO).
 
-**Audit campaign status:** Comprehensively closed at cp19. cp21 is repo-hygiene work, not audit work.
+**Audit campaign status:** Comprehensively closed at cp19. cp22 is flake-fix + operator-doc-drift + audit-TODO cleanup.
 
 **Parked work (Ken explicitly deferred):**
 - **Upgrade tooling** — first-release week (~2026-05-22). Manual-only by default; `MORPHIT_AUTO_UPGRADE=1` opt-in for auto. Scope: (1) tag-signature verify step in release.yml (`git tag -v "$TAG"` — currently missing); (2) `morphit-release-monitor` sidecar polls Forgejo /6h; (3) `morphit upgrade` ops-cli (download + SHA-256 + GPG verify + show notes + confirm + apply + keep prev); (4) `docs/UPGRADING.md`. **Re-trigger phrase:** "release tooling". See memory entry #29.
@@ -34,20 +35,106 @@
 **Truly pending (not blocking, just not done):**
 - Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (sysadmin handoff opportunity — see cp21 retrospective below)
 - Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
-- `actions/upload-artifact` SHA bump (left at @v4 with TODO; needs upstream SHA verification)
 - Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied (availability.ts, invite.ts, create.ts, health.ts) — currently can't apply satisfies-clause cross-check without a shared types package
 - DNS-rebinding gap in `federationProbe.ts` (information-disclosure bounded by GET-only + 256KB cap + manual-redirect; filed REVISIT §A; defense-in-depth only — no live instance to attack pre-launch)
 - PHASE F (whatever it is): apply schema-as-contract pattern as first contract layer when it lands
-- Typecheck-sweep noise-filter has a regex bug: pattern `error TS6133 .* is declared but` requires a SPACE between "TS6133" and ".*", but real TS6133 emits "TS6133:" with a colon. So legitimate TS6133 "unused" warnings have been slipping through unfiltered AND no TS6133 noise was actually being suppressed. Out of scope for cp21; fix is one regex edit (`TS6133[ :]`).
-- **Intermittent flake in the run-smokes.sh suite — surfaced during cp21 verification.** Across ~7 pulses, ONE pulse flaked at 2,881 scenarios / 1 runner failed (24 scenarios didn't tally — count signature matches the historic `drain-defense-live-fire` size). Cp21 touched zero code paths related to drain-defense or any timing-sensitive smoke. Likely candidates: drain-defense-live-fire (memory #12 said root-caused + fixed Part 85 but may have regressed under load), or another timing-sensitive smoke. Did not surface in cp20-fix2 sandbox because that sandbox didn't have `npm install` done. Filed REVISIT — characterize + fix in cp22 or later. Until then: triple-pulse is the discipline; expect occasional pulse-2 retries on stress.
 
-**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp21 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
+**Closed in cp22:**
+- ✅ **Intermittent flake** (cp21 disclosure) — characterized as `sidecar-envelope-smoke` (24 scenarios; matched cp21's -24 math, not drain-defense-live-fire which is 23). Root cause: `apt-monitor.sh`'s `apt-get update` stalling past the smoke's 30s spawnSync budget. Fix: inner `timeout 20` on apt + outer `spawnSync` timeout bumped 30→60s + signal field in failure detail. Two regression sentinels lock both layers.
+- ✅ **TS6133 noise-filter regex bug** — `error TS6133 ` (literal space) → `error TS6133[ :]` (matches real tsc colon-format and hypothetical space-format both).
+- ✅ **`actions/upload-artifact` SHA bump** — pinned at `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4.6.2, GitHub-GPG-signed). All three workflow actions now SHA-pinned 40 hex chars (closes cp18 AUDIT-CI-2 TODO).
+- ✅ **Mount-sweep skip-list** — extended with overlay/overlay2/fuse-overlayfs/aufs (Docker storage drivers) + rpc_pipefs/nfsd (NFS pseudo-FS) + fuse.rclone/fuse.s3fs/fuse.sshfs (network FUSE mounts whose df% is meaningless).
+- ✅ **Operator-doc drift** — 4 fixes from the sysadmin-handoff persona walk: stale "13 runners" claim → stable phrasing in 3 docs; stale "2,296 scenarios" baseline → "2,900+" in 2 docs; ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` in BETA-INCIDENT-RUNBOOK; ghost `morphit-web.service` reference removed (web frontend is nginx-served static files, no systemd unit).
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp22 paragraph). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
 
 ---
 
-**Tarball:** `morphit-audit-2026-05-121-cp21-FULL.tar.gz` — **FULL** tarball (not delta), per the new "ship full tarballs at structural-move checkpoints" discipline that cp21 itself motivated. See memory edit at session close. Ken's recipe for adopting it: archive local → empty working tree but KEEP `.git/` → extract full tarball over the top → `git add -A` → commit + push.
+**Tarball:** `morphit-audit-2026-05-121-cp22-delta.tar.gz` — delta tarball; cp22 touched zero structural moves and zero file deletions (apart from the ghost-service-name line in OPERATIONS.md), so delta convention applies. Recipe (no cleanup needed): extract over the existing cp21 working tree → `git add -A` → commit + push.
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp20-fix2-delta.tar.gz` (the last delta — and the one whose deletion-blindness led to cp21's discovery).
+**Previous tarball:** `morphit-audit-2026-05-121-cp21-FULL.tar.gz` (the FULL tarball that established the cp21 baseline after the stale-route cleanup).
+
+## Part 121 cp22 — sidecar-envelope-smoke flake fix + sysadmin-handoff doc walk + audit-TODO closures
+
+### Pretext
+
+Cp21 sealed with an explicit honest disclosure: across ~7 pulses, ONE flaked at 2,881 scenarios / 1 runner failed (count signature matched a 24-scenario smoke). Memory #12 said `drain-defense-live-fire` was root-caused + fixed in Part 85, but the count was suggestive. Filed for cp22 characterization. cp22 opened with the question: characterize the intermittent, then plow through the remaining cp21-pending items (TS6133 regex fix, upload-artifact SHA bump, mount-sweep overlay extension, sysadmin-handoff doc walk).
+
+### What shipped this turn
+
+**(a)** **Sidecar-envelope-smoke flake characterized + fixed.** Empirically counted scenarios across all candidates: `drain-defense-live-fire` actually emits `✓ all 23 scenarios passed` (not 24), `feedback-handler-smoke` / `operator-earnings-smoke` / `listener-dispatch-smoke` / `sidecar-envelope-smoke` all emit 24. Of those four, only `sidecar-envelope-smoke` has environmental dependencies (spawns 12 real bash sidecars via `spawnSync` with 30s budget each). Live-timed each sidecar individually in this sandbox: `apt-monitor.sh` clocks at 2.778s with `apt-get update` doing real work against canonical mirrors. On Ken's box under slow-mirror conditions (IPv6 stall, mirror under load, captive portal), `apt-get update` can exceed 30s, spawnSync SIGKILLs the bash tree, `r.status === null`, scenario fails, smoke exits 1, run-smokes.sh counts 0 not 24 → baseline drops by exactly 24. Matches cp21's math precisely (2,905 − 24 = 2,881).
+
+Two-layer fix:
+- `ops/scripts/morphit-apt-monitor.sh`: `apt-get update -qq` → `timeout 20 apt-get update -qq`; `apt list --upgradable` → `timeout 10 apt list --upgradable`. Inner timeouts mean apt can never blow the smoke's budget. `|| true` continues even on timeout so stale package lists still produce usable counts.
+- `apps/matrix-bot/scripts/sidecar-envelope-smoke.ts`: `spawnSync` `timeout: 30_000` → `timeout: 60_000` (belt-and-braces for every other sidecar). Failure detail now surfaces SIGTERM signal via new `signal` field on `RunResult` so future timeouts are debuggable instead of opaque `exited null`.
+
+Two new regression sentinels added to the smoke (24 → 26 scenarios):
+- `apt-monitor.sh wraps apt-get update in 'timeout' (cp22)` — regex-greps for `timeout\s+\d+\s+apt-get\s+update`.
+- `sidecar-envelope-smoke spawnSync timeout is at least 60_000ms (cp22)` — self-grep on `timeout:\s*(\d[\d_]*)` and parse, asserts ≥ 60_000.
+
+Self-tested: temporarily reverted apt-monitor's timeout → sentinel fires correctly with the right diagnostic; restored → 26/26 green. Stress-tested under serial pressure: 15 sequential runs all clean.
+
+**(b)** **Sysadmin-handoff persona walk** across the four operator docs (OPERATIONS.md / RUN-A-MORPHIT-NODE.md / PRE-LAUNCH-CHECKLIST.md / LAUNCH-DAY.md) plus the BETA-INCIDENT-RUNBOOK. Caught 4 real drifts:
+- **Stale "13 runners" claim** in three docs (OPERATIONS.md §Smoke-suite troubleshooting, PRE-LAUNCH-CHECKLIST §C, RUN-A-MORPHIT-NODE §npm-install blurb). Empirically only 6 smokes fail with `ERR_MODULE_NOT_FOUND` in a no-deps clone today (smokes have been refactored across cp9–cp21). Replaced the hard count with stable phrasing ("several runners (typically single digits — the count drifts each release...)") that won't drift each part. The list of example affected smokes also updated to the current set: `order-handler`, `rss-orderbook`, `rss-orderbook-xml-validate`, `edit`, `edit-rpc`, `surface-invariant`. Persona-walkthrough-smoke sentinels still match — they pin `ERR_MODULE_NOT_FOUND` + `@morphit/asset-registry` + `npm install --no-audit --no-fund`, not the count.
+- **Stale ~2,296 scenarios baseline** in LAUNCH-DAY.md §smoke-suite step (cp14-era number, way behind 2,907) and PRE-LAUNCH-CHECKLIST.md (cp1-era `2370+`). Bumped both to `2,900+ scenarios passed, 0 runners failed (baseline ticks up as smokes are added each release)`.
+- **Ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY`** in BETA-INCIDENT-RUNBOOK.md §5 (relay drain defense). Real name is `MORPHIT_RELAY_CREATE_RATE_PER_DAY` (default 2); also surfaced `MORPHIT_RELAY_CREATE_RATE_PER_HOUR` (default 5) as the companion knob. Operator following the runbook literally would have hit "no such env var" — silent ops failure at exactly the worst moment.
+- **Ghost `morphit-web.service`** reference in OPERATIONS.md §37.5 (process hardening). The web frontend has NO systemd unit — it's static HTML/CSS/JS served by nginx from `/var/www/morphit-web` (root path set in `ops/nginx/web.conf`). Replaced the bullet with an inline callout explaining hardening for the web tier is an nginx-config concern, not systemd.
+
+Cross-check verified zero remaining ghost service references and zero ghost env vars in the runbook. All 30 systemd units referenced in operator docs exist in `ops/systemd/`; all 30 real units are referenced by name in OPERATIONS.md or RUN-A-MORPHIT-NODE.md.
+
+**(c)** **Mount-sweep pseudo-FS skip-list extended** in `ops/scripts/morphit-host-monitor.sh`:
+- Added `overlay`, `overlay2`, `fuse.fuse-overlayfs`, `aufs` — Docker storage drivers (and Podman's rootless analog). Without these, every Docker-hosted node would surface its container-root mount as `mount_*` events that double-count the underlying disk.
+- Added `rpc_pipefs`, `nfsd` — Kernel-internal NFS pseudo-FS that never has meaningful disk usage.
+- Added `fuse.rclone`, `fuse.s3fs`, `fuse.sshfs` — Network filesystems where `df` percentages are meaningless (object stores) or stall the sweep (sshfs). Sandbox `df --output=target,pcent,fstype` shows `fuse.rclone` mounts at 0% which would either over-trigger or under-trigger the threshold logic.
+- OPERATIONS.md §Host-monitor env tuning sync'd with the expanded skip-list rationale.
+
+**(d)** **TS6133 noise-filter regex fix** in `scripts/typecheck-sweep.sh`. Per cp21's filed bug, the pattern `error TS6133 .* is declared but` requires a literal SPACE between `TS6133` and `.*`, but real TypeScript emits `error TS6133: '<name>' is declared but its value is never read.` — a colon, not a space. Fixed to `error TS6133[ :].* is declared but` so the character class matches either format. Empirical test against both formats: both match correctly. All 9 workspaces still 0 errors post-fix (no unused-variable warnings currently emit, but if one appears it'll now be correctly noise-filtered).
+
+**(e)** **`actions/upload-artifact` SHA-pinned** at `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4.6.2, 19 Mar 2025). Verified via the release tag page on github.com/actions/upload-artifact; commit signed by GitHub's verified GPG key B5690EEEBB952194. Chose v4.6.2 over v5/v6/v7 because those bump the Node.js runtime and we stay at v4 for parity with `actions/checkout@v4.2.2` + `actions/setup-node@v4.0.3`. All three workflow actions are now 40-char SHA-pinned. Closes cp18 AUDIT-CI-2 TODO.
+
+### Why this matters beyond the immediate fixes
+
+cp21's honest disclosure was important precisely because it caught the flake before it became silently green-washed. The cp22 root-cause analysis was a one-session characterization because the count signature (24) plus the post-`npm install` requirement (cp21's other lesson) plus an empirical scenario-count census across the suite pointed at exactly the right smoke. The two-layer fix (apt inner timeout + smoke outer timeout) is defense-in-depth: a future sidecar that develops similar issues will be caught by the outer 60s budget before manifesting as a flake, while the inner per-call timeouts mean we don't spend the budget on apt alone.
+
+The sysadmin-walk drift catches are the kind of thing that bites operators in the worst moment — the BETA-INCIDENT-RUNBOOK §5 ghost env var would have surfaced exactly when an operator is debugging a CGNAT drain attack. That's the canonical "doc-vs-code drift compounds silently until you need the doc" pattern from Memory #11 + cp21's "verify before claiming" rule.
+
+### Verification
+
+- Triple-pulse 2,907 × 3, 0 failures (cp21 baseline 2,905 → cp22 baseline 2,907 = +2 from the new sidecar-envelope-smoke sentinels)
+- 15-run sequential stress test of `sidecar-envelope-smoke` post-fix: 15/15 clean
+- Typecheck-sweep 0 errors across all 9 workspaces
+- ansible-lint NOT re-verified (sandbox doesn't have it; cp22 touched zero Ansible files)
+- release.yml YAML parses cleanly post-SHA-pin
+- Live-run of `morphit-apt-monitor.sh` with mocked systemd-cat post-`timeout` wrap: correctly emits `security_updates_critical` for the 29 pending security updates in this sandbox
+
+### Pattern lessons
+
+1. **Scenario-count math is forensically useful.** cp21 disclosed "baseline -24". Census of every smoke's scenario count narrowed candidates to exactly four. Only one had environmental dependencies. The diagnosis was 30 seconds of empirical work. Lesson: when a flake's count signature is specific, run a count census across the suite before guessing at causes.
+2. **Inner + outer timeouts are belt-and-braces.** `apt-monitor.sh` now has `timeout 20` on `apt-get update` AND the smoke has 60s `spawnSync` budget. The inner protects the smoke; the outer catches any other sidecar that develops similar issues. Both layers are sentinel-locked.
+3. **Stable phrasing > pinned numbers in operator docs.** The "13 runners" claim drifted three times in three Parts. Replacing it with "several runners (typically single digits — drifts each release)" buys permanent freedom from this drift class.
+4. **Ghost env-var names hit operators at the worst moment.** BETA-INCIDENT-RUNBOOK §5 is read while debugging a live drain — the operator running `export MORPHIT_RELAY_CREATE_PER_IP_DAILY=10` would have gotten "ok no error" but the relay wouldn't have changed behavior because the env var doesn't exist. Cross-checking every doc-mentioned env var against config schema before tarball is now the discipline.
+5. **Empirical SHA verification matters.** The upload-artifact SHA pin came from the release-tag page on github.com (not a search snippet, not memory). GitHub's verified GPG signature on the commit is the trust anchor. Future SHA bumps follow the same pattern.
+
+### Files modified
+
+- `ops/scripts/morphit-apt-monitor.sh` — `timeout 20` on `apt-get update`, `timeout 10` on `apt list`, explanatory comments
+- `ops/scripts/morphit-host-monitor.sh` — pseudo-FS skip-list extended with 9 additional fstypes (Docker overlays + NFS pseudo-FS + network FUSE)
+- `apps/matrix-bot/scripts/sidecar-envelope-smoke.ts` — `spawnSync` timeout 30→60s, `signal` field on `RunResult`, 2 new regression sentinels (24 → 26 scenarios)
+- `apps/web/scripts/persona-walkthrough-smoke.ts` — docblock comment updated to reflect stable phrasing for the ERR_MODULE_NOT_FOUND sentinels
+- `scripts/typecheck-sweep.sh` — TS6133 noise-filter regex `TS6133 .* is declared` → `TS6133[ :].* is declared`
+- `.forgejo/workflows/release.yml` — `actions/upload-artifact@v4` → `@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2`
+- `docs/OPERATIONS.md` — Smoke-suite troubleshooting block rewritten with stable phrasing; §37.5 ghost `morphit-web.service` removed with nginx-static callout; mount-sweep env-doc updated with extended skip-list rationale
+- `docs/RUN-A-MORPHIT-NODE.md` — "13 runners" → "several runners"
+- `docs/PRE-LAUNCH-CHECKLIST.md` — "Total: 2370+" → "Total: 2,900+", "13 runners" → "several runners"
+- `docs/LAUNCH-DAY.md` — "~2,296 scenarios" → "2,900+ scenarios"
+- `docs/BETA-INCIDENT-RUNBOOK.md` — ghost env var `MORPHIT_RELAY_CREATE_PER_IP_DAILY` → real `MORPHIT_RELAY_CREATE_RATE_PER_DAY` (+ `_PER_HOUR` companion)
+- `TARBALL.md` — this entry
+- `docs/REVISIT-LIST.md` — Last maintained line updated, three cp21 items closed (TS6133 regex, intermittent flake, upload-artifact SHA bump)
+- `docs/AUDIT-2026-05.md` — cp22 entry
+
+No brag-list edit (internal infrastructure + operator-doc drift cleanup per cp14 discipline). No ADR edit (not architectural). No locale edits (no user-facing strings touched). No schema migration (no DB changes).
+
+---
 
 ## Part 121 cp21 — stale-route cleanup + latent matrix-bot type-drift fix + regression sentinel
 

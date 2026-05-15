@@ -61,7 +61,17 @@ TS_IGNORE_DEPRECATIONS="--ignoreDeprecations 5.0"
 # The TS2345 cascade in indexer's two BalanceScanner files is a
 # single-error narrow, scoped to that exact code, and unrelated
 # to the relay flip.
-NOISE_PATTERNS='(Cannot find module .(hono|zod|pg|svelte|vitest|libsodium|@sveltejs|@morphit|@beblurt|@hono|\$|@/|@scure|@noble)|Cannot find type definition file for .(@sveltejs|svelte|libsodium|node).$|implicitly has an .any. type|error TS5101|error TS2835|error TS2688|error TS6133 .* is declared but|\.svelte-kit/tsconfig|safeStorage|preferences\.ts|Option .baseUrl|Cannot find name .(Response|TextEncoder|crypto|setInterval|clearInterval|setTimeout|clearTimeout|fetch|Buffer|process|console|URL|URLSearchParams|RequestInfo|RequestInit|Headers|Blob|atob|btoa|queueMicrotask|AbortController|AbortSignal|FormData|TextDecoder|structuredClone|globalThis).$|Cannot find namespace .NodeJS.|^apps/web/src/.*: error TS18046:|apps/indexer/src/indexer/(low|operatorAccount)BalanceScanner\.ts.* error TS2345:)'
+#
+# cp22 (Part 121): the TS6133 unused-variable clause was previously
+# `error TS6133 .* is declared but` — a literal space between
+# `TS6133` and `.*`.  Real `tsc` output is `error TS6133: '<name>'
+# is declared but its value is never read.` — a COLON, not a
+# space, follows the error code.  The old pattern matched
+# nothing, meaning legitimate TS6133 noise wasn't being
+# suppressed AND any real TS6133 in the codebase would surface
+# as a typecheck error.  Fixed to `error TS6133[ :].*` so the
+# class matches either format (real colon, hypothetical space).
+NOISE_PATTERNS='(Cannot find module .(hono|zod|pg|svelte|vitest|libsodium|@sveltejs|@morphit|@beblurt|@hono|\$|@/|@scure|@noble)|Cannot find type definition file for .(@sveltejs|svelte|libsodium|node).$|implicitly has an .any. type|error TS5101|error TS2835|error TS2688|error TS6133[ :].* is declared but|\.svelte-kit/tsconfig|safeStorage|preferences\.ts|Option .baseUrl|Cannot find name .(Response|TextEncoder|crypto|setInterval|clearInterval|setTimeout|clearTimeout|fetch|Buffer|process|console|URL|URLSearchParams|RequestInfo|RequestInit|Headers|Blob|atob|btoa|queueMicrotask|AbortController|AbortSignal|FormData|TextDecoder|structuredClone|globalThis).$|Cannot find namespace .NodeJS.|^apps/web/src/.*: error TS18046:|apps/indexer/src/indexer/(low|operatorAccount)BalanceScanner\.ts.* error TS2345:)'
 
 project() {
 	local name="$1"

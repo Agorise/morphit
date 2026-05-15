@@ -113,12 +113,17 @@ interface RunResult {
 	readonly stdout: string;
 	readonly stderr: string;
 	readonly status: number | null;
+	/** Set when the sidecar was killed by a signal (e.g.
+	 *  spawnSync's timeout fires SIGTERM).  Surfaced in error
+	 *  detail so smoke-output makes the failure mode visible
+	 *  instead of just `exited null`. */
+	readonly signal: NodeJS.Signals | null;
 }
 
 function runSidecar(spec: SidecarSpec, mockBinDir: string): RunResult {
 	const scriptPath = join(SCRIPTS_DIR, spec.script);
 	if (!existsSync(scriptPath)) {
-		return { stdout: '', stderr: `script not found: ${scriptPath}`, status: 1 };
+		return { stdout: '', stderr: `script not found: ${scriptPath}`, status: 1, signal: null };
 	}
 	const env = {
 		...process.env,
@@ -138,12 +143,22 @@ function runSidecar(spec: SidecarSpec, mockBinDir: string): RunResult {
 	const r: SpawnSyncReturns<string> = spawnSync('sh', [scriptPath], {
 		env,
 		encoding: 'utf-8',
-		timeout: 30_000
+		// Per-sidecar wall-clock budget.  Bumped 30s → 60s in cp22
+		// after the cp21 disclosure that ~1 in 7 pulses flaked at
+		// 2,881 scenarios (smoke total -24, matching this smoke's
+		// scenario count).  Root cause was apt-monitor.sh's
+		// `apt-get update` occasionally stalling past 30s under
+		// slow-mirror conditions; apt-monitor was patched to wrap
+		// the apt call in its own `timeout 20`, but a 60s
+		// smoke-level cap is the belt-and-braces for every other
+		// sidecar that might develop similar issues.
+		timeout: 60_000
 	});
 	return {
 		stdout: r.stdout ?? '',
 		stderr: r.stderr ?? '',
-		status: r.status
+		status: r.status,
+		signal: r.signal
 	};
 }
 
@@ -164,9 +179,14 @@ for (const spec of SIDECARS) {
 		run: () => {
 			const r = runSidecar(spec, mockBinDir);
 			if (r.status !== 0) {
+				// Surface the signal explicitly when set — spawnSync's
+				// timeout fires SIGTERM, and `exited null` alone is
+				// hard to debug.  Per Part 121 cp22 disclosure post-
+				// mortem.
+				const sigSuffix = r.signal ? ` (signal=${r.signal})` : '';
 				return {
 					ok: false,
-					detail: `sidecar exited ${r.status}; stderr: ${r.stderr.slice(0, 200)}`
+					detail: `sidecar exited ${r.status}${sigSuffix}; stderr: ${r.stderr.slice(0, 200)}`
 				};
 			}
 			const lines = r.stdout.split('\n').filter((l) => l.trim().length > 0);
@@ -249,6 +269,66 @@ for (const spec of SIDECARS) {
 		}
 	});
 }
+
+// ─── cp22 regression sentinel: timeout discipline ──────────────
+//
+// Per Part 121 cp21 disclosure, this smoke flaked ~1 pulse in
+// ~7 with a 24-scenario drop matching this smoke's size.  Root
+// cause was apt-monitor.sh's `apt-get update` occasionally
+// exceeding the 30s spawnSync budget.  Two-layer fix (cp22):
+//   (a) apt-monitor.sh wraps `apt-get update` in `timeout 20`
+//       so a slow mirror can't blow the smoke budget
+//   (b) this smoke's spawnSync timeout is now 60_000ms
+// This sentinel locks both fixes against regression — if a
+// future edit reverts either layer, this scenario fails loudly.
+scenarios.push({
+	name: 'apt-monitor.sh wraps apt-get update in `timeout` (cp22)',
+	run: () => {
+		const aptMonitorPath = join(SCRIPTS_DIR, 'morphit-apt-monitor.sh');
+		if (!existsSync(aptMonitorPath)) {
+			return { ok: false, detail: 'morphit-apt-monitor.sh not found' };
+		}
+		const src = readFileSync(aptMonitorPath, 'utf-8');
+		// Allow `timeout N apt-get update` where N is any positive integer.
+		// The tight regex defends against drift (e.g. someone removing the
+		// timeout entirely or wrapping a different command).
+		if (!/timeout\s+\d+\s+apt-get\s+update/.test(src)) {
+			return {
+				ok: false,
+				detail:
+					'apt-get update is not wrapped in `timeout N` — slow mirrors could stall the sidecar past the smoke budget (Part 121 cp22 regression)'
+			};
+		}
+		return { ok: true };
+	}
+});
+
+scenarios.push({
+	name: 'sidecar-envelope-smoke spawnSync timeout is at least 60_000ms (cp22)',
+	run: () => {
+		// Self-grep against this smoke file itself.  Locks the
+		// per-sidecar wall-clock budget against accidental
+		// downgrade.
+		const selfPath = new URL(import.meta.url).pathname;
+		const src = readFileSync(selfPath, 'utf-8');
+		// The active `timeout: N` literal in the spawnSync options.
+		const m = src.match(/timeout:\s*(\d[\d_]*)/);
+		if (!m) {
+			return {
+				ok: false,
+				detail: 'could not locate spawnSync `timeout:` option in this smoke source'
+			};
+		}
+		const ms = Number(m[1].replaceAll('_', ''));
+		if (!Number.isFinite(ms) || ms < 60_000) {
+			return {
+				ok: false,
+				detail: `spawnSync timeout is ${ms}ms; must be ≥ 60_000ms after Part 121 cp22 (flake fix)`
+			};
+		}
+		return { ok: true };
+	}
+});
 
 // ─── Run all scenarios ─────────────────────────────────────────
 console.log(`sidecar envelope smoke: ${scenarios.length} scenarios\n`);

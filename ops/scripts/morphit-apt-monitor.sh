@@ -34,14 +34,26 @@ fi
 # Refresh apt package lists.  `apt-get update -qq` is quiet
 # enough not to log noise but requires sudo / root.  We assume
 # the service runs as root (per the systemd unit).
-apt-get update -qq 2>/dev/null || true
+#
+# WRAPPED IN `timeout 20`: a slow apt mirror (canonical mirrors
+# under load, broken IPv6 routes, captive portals) can stall
+# `apt-get update` for tens of seconds.  Without a cap, this
+# sidecar can blow past the envelope-smoke's spawnSync budget
+# and produce an intermittent flake (Part 121 cp21 disclosure;
+# fixed in cp22).  `|| true` continues even on timeout so a
+# stale package list still produces usable upgrade counts.
+timeout 20 apt-get update -qq 2>/dev/null || true
 
 # ─── Count pending upgrades ────────────────────────────────────
 # `apt list --upgradable 2>/dev/null` prints "package/source [from] [to] [arch]"
 # lines; security ones are flagged in the source like
 # "noble-security".  This is the canonical approach Ubuntu's own
 # /etc/update-motd.d uses.
-upgradable=$(apt list --upgradable 2>/dev/null \
+#
+# Also wrapped in `timeout 10` because `apt list` can occasionally
+# stall when /var/lib/apt/lists/ is locked by an unattended-upgrade
+# run.  10s is generous for a local file scan.
+upgradable=$(timeout 10 apt list --upgradable 2>/dev/null \
               | grep -v '^Listing\.\.\.' \
               || true)
 total_count=$(echo "$upgradable" | grep -c . || true)
