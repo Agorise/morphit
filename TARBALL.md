@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 4 — Matrix/relay black-hat redux; existing defenses hold; F9 (paired-session "far past" check, defense-contract drift) closed)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 5 — pre-launch sysadmin-handoff threat-model walk; 4 findings (F10 HIGH Ansible Jinja typo, F11 MEDIUM doc inconsistency, F12 HIGH missing user in Ansible base, F13 LOW dead env var leaking passphrase invitation) closed)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,12 +6,56 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp4 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp5 (2026-05-15)
 
 **Gates — all green:**
-- Triple-pulse: **2,959 × 3 scenarios, 0 failures** (cp3 baseline 2,958 → cp4 baseline 2,959 = +1 P122-CP4-F9 sentinel)
+- Triple-pulse: **2,963 × 3 scenarios, 0 failures** (cp4 baseline 2,959 → cp5 baseline 2,963 = +4 = P122-CP5-F10/F11/F12/F13 sentinels)
 - Typecheck-sweep: 0 errors across all 9 workspaces
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp4 touched zero Ansible files)
+- YAML parse verified across all touched Ansible files
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental)
+
+**Brag list:** 265 entries unchanged. cp5 work is internal handoff-discipline + security hardening — per cp19 discipline, audit findings go to AUDIT doc, not brag list.
+
+**cp5 trigger.** Ken's "go" after cp4 sealed. Cp4 closed Matrix/relay black-hat redux with the F9 paired-session contract drift. Cp5 takes the **operator's perspective** for the first time in Part 122: the threat model is "Sally-operator follows the handoff docs literally — what could go wrong?" The audit surface is privilege-escalation paths during handoff, env-file misconfiguration, doc-vs-shipped-systemd-vs-Ansible drift. This kind of audit can ONLY find findings by walking through three layers in parallel: (a) the human-facing docs the operator reads, (b) the shipped systemd units / env templates the operator deploys, (c) the Ansible playbook that's supposed to do the same work automatically. Inconsistencies between these three layers are operator traps.
+
+**Four real findings, all SHIPPED in cp5:**
+
+- **F10 (HIGH) — Jinja variable-name typo in Ansible npm-install task.** `ops/ansible/roles/morphit/tasks/clone_and_build.yml` line 28 had `changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in npm_install_result.stdout"`. The first reference matches the registered name; the second reference uses `npm_install_result` which is NEVER registered. When npm produces output without 'changed' (the typical first-install case — "added N packages" but no "changed"), Jinja evaluates the undefined variable and Ansible aborts the playbook with `'npm_install_result' is undefined`. Pre-cp5 the playbook would 100% fail on first deploy. Fix: aligned both clauses on `morphit_npm_install_result.stdout`.
+- **F11 (MEDIUM) — Operator-doc ownership inconsistency with shipped systemd unit.** `docs/RUN-A-MORPHIT-NODE.md` previously had `sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env` as a single command. But: the shipped `ops/systemd/morphit-relay.service` specifies `User=morphit-relay / Group=morphit-relay`, and the env-file header guidance in `ops/env/relay.env.example` also says `chown morphit-relay:morphit-relay`. An operator following the literal doc would chown the relay's env file to a user the relay daemon doesn't run as → relay boot fails with "Permission denied". Loud-failure but unnecessary friction. Fix: split the chown into per-file commands targeting the correct daemon user, with explanation of why each file goes to a different user (smaller blast radius on relay compromise).
+- **F12 (HIGH) — Ansible playbook never creates the `morphit-relay` system user.** Both `morphit-relay.service` and `morphit-relay-mint-acts.service` ship with `User=morphit-relay`. The Ansible base role created `morphit_service_user` (= morphit) and `morphit_service_group` (= morphit) but NEVER created the separate `morphit-relay` user. When the morphit role tried to `systemctl enable + start morphit-relay`, systemd would fail with "User morphit-relay does not exist." Pre-cp5 the entire Ansible deploy path was broken on first deploy — and given memory's "Live full-stack Ansible deploy" is in PENDING, this was never live-tested and would have hit operators on launch day. Fix: added "Create morphit-relay system group" + "Create morphit-relay system user" tasks to `ops/ansible/roles/base/tasks/main.yml`. The user is added to `morphit_service_group` so it can read `/etc/morphit/relay.env` (chowned `root:morphit_service_group` mode 0640 by the morphit role).
+- **F13 (LOW) — Dead `MORPHIT_RELAY_PASSPHRASE` env var in relay.env.j2 invites passphrase leak to disk.** The Ansible relay.env.j2 template shipped `MORPHIT_RELAY_PASSPHRASE={{ morphit_relay_keystore_passphrase }}` and a corresponding group_vars/all.yml var with default `'CHANGE-ME-PASSPHRASE'`. But NO code path consumes this env var — the relay's encrypted-envelope keystore unlocks via interactive TTY prompt (`StandardInput=tty-force` on the systemd unit) or systemd `LoadCredential=` for the mint-acts timer. An operator seeing this placeholder in their `/etc/morphit/relay.env` might think they need to put their real passphrase there, leaking it to a 0640 disk file. Fix: removed the template line; removed the group_vars var; replaced vault.yml.example slot with a "REMOVED" placeholder + explanatory comment in the template documenting why it doesn't exist.
+
+**Audit conclusion — handoff surface in 4-finding shape post-cp5.** All four are concrete code/doc changes (not abstract recommendations). Two were hard-fail-on-first-deploy bugs (F10, F12), one was unnecessary-operator-friction (F11), one was a security-shaped trap (F13). After cp5, the Ansible deploy path is internally consistent for the first time — every User= referenced in a shipped systemd unit corresponds to an Ansible user-creation task; every chown directive in the docs matches the daemon that actually reads the file; every env var referenced in a template is actually consumed by code.
+
+**This session's arc (cp22 → P122 cp5):**
+1. **cp22** — Sidecar-envelope-smoke flake fix; sysadmin-handoff persona walk; mount-sweep skip-list; TS6133 regex; upload-artifact SHA-pin.
+2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. F1 + F2 closed.
+3. **P122 cp2** — F3 + F4 audit sweep: existing defenses hold. F5 schema-migration drift sentinel.
+4. **P122 cp3** — DNS-rebinding closure (cp7 REVISIT §A). Three-layer defense + 45-scenario smoke.
+5. **P122 cp4** — Matrix/relay black-hat redux. 25/26 AVs clean. F9 paired-session contract drift closed.
+6. **P122 cp5** — Pre-launch sysadmin-handoff threat-model walk. 4 findings (F10/F11/F12/F13) closed across Ansible playbook + operator docs + env templates.
+
+**Parked work:** Upgrade tooling — first-release week (~2026-05-22). See memory entry #29.
+
+**Truly pending:**
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (much higher confidence post-cp5 that this will actually succeed first try)
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
+- Relay-side response types extracted into `@morphit/relay-client`
+- PHASE F: apply schema-as-contract pattern as first contract layer
+- F7 (LOW) — S-12 ariaLabel sentinel regex-based; needs `assertNoRegexMatch` primitive
+- F8 (LOW) — tighter F5 catch: parse schema.sql for highest version, cross-check vs MIGRATIONS[]
+- ansible-lint integration in CI (style check, not correctness)
+- Smoke runner that asserts every shipped systemd unit's `User=` has a matching Ansible user-creation task (cp5 surfaced this gap manually; a smoke could automate it)
+
+**Part 122 scope — post-cp5:** Part 122 plausibly closes here pre-launch. Cp1-cp5 collectively walked: cp20-cp22 delta surfaces (cp1), generalized audit-pattern sweeps (cp2), federation-probe DNS-rebinding closure (cp3), Matrix/relay black-hat redux (cp4), sysadmin-handoff threat model (cp5). That's the full pre-launch deep-deep program. Remaining defects/polish carry forward as standing REVISITs (F7, F8, and a few smaller items). Launch ~2026-05-22.
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp5 paragraph).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp5-delta.tar.gz` — delta tarball; cp5 touched zero structural moves and zero file deletions (vault.yml.example line was REPLACED in place, not deleted). Recipe: extract over the cp4 working tree → `git add -A` → commit + push.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp4-delta.tar.gz` (Matrix/relay black-hat redux).
 
 **Brag list:** 265 entries unchanged. cp4 work is internal audit + small contract-drift fix — per cp19 discipline, security findings go to AUDIT doc, not brag list.
 
@@ -108,6 +152,154 @@
 **Tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` — delta tarball; cp2 touched zero structural moves and zero file deletions. Recipe: extract over the cp1 working tree → `git add -A` → commit + push.
 
 **Previous tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` (closed cp1 F1+F2; F3+F4 filed for cp2).
+
+## Part 122 cp5 — pre-launch sysadmin-handoff threat-model walk; 4 findings (F10 HIGH, F11 MEDIUM, F12 HIGH, F13 LOW) closed
+
+### Pretext
+
+Cp4 closed the Matrix/relay code surface with the F9 paired-session contract drift. Cp5 was filed at cp4-close as "Pre-launch sysadmin-handoff threat-model walk — privilege-escalation surface during handoff; env-file misconfiguration paths; what could go wrong when an operator follows the docs literally." Ken's directive: "go".
+
+### What's different about this audit
+
+Cp1-cp4 audited code paths. Cp5 audited **the human-in-the-loop deployment surface** — qualitatively different. The threat model is "Sally-operator follows the handoff docs literally — what fails on first deploy?" This kind of audit can ONLY find findings by walking three layers in parallel:
+
+1. **The human-facing docs** the operator reads (RUN-A-MORPHIT-NODE.md, PRE-LAUNCH-CHECKLIST.md)
+2. **The shipped systemd units + env templates** the operator deploys (ops/systemd/*.service, ops/env/*.example)
+3. **The Ansible playbook** that automates the same work (ops/ansible/)
+
+Inconsistencies between any two are operator traps. Pure code audit can't surface them.
+
+### Audit method
+
+- Surveyed `docs/` for operator-facing handoff docs (PRE-LAUNCH-CHECKLIST.md, RUN-A-MORPHIT-NODE.md, OPERATIONS.md).
+- Surveyed `ops/env/*.example` files for permission guidance + denylist patterns.
+- Surveyed `ops/ansible/` playbook + roles for user-creation, file-permission, and template-rendering tasks.
+- Cross-referenced every `User=X` in `ops/systemd/*.service` against Ansible user-creation tasks.
+- Cross-referenced every `chown X:Y` directive in operator docs against the daemon that actually consumes the file.
+- Cross-referenced every env var in Ansible templates against `grep -rn 'process.env.VAR' apps/`.
+
+### Findings
+
+#### F10 (HIGH) — Jinja variable-name typo in Ansible npm-install task
+
+Surface: `ops/ansible/roles/morphit/tasks/clone_and_build.yml` line 28.
+
+Bug: `changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in npm_install_result.stdout"` — first reference matches registered name; second uses `npm_install_result` which is never registered. When npm produces output without 'changed' (the typical first-install "added N packages" case), Jinja evaluates the undefined variable and Ansible aborts with `'npm_install_result' is undefined`.
+
+Severity HIGH: every fresh deploy hits this. Memory's "Live full-stack Ansible deploy" is in PENDING — this latent defect was waiting for first launch.
+
+Fix: aligned both clauses on `morphit_npm_install_result.stdout`.
+
+#### F11 (MEDIUM) — Operator-doc ownership inconsistency with shipped systemd unit
+
+Surface: `docs/RUN-A-MORPHIT-NODE.md` env-setup section.
+
+Bug: doc had a single combined chown of both env files to `morphit:morphit`. But shipped `ops/systemd/morphit-relay.service` runs as `User=morphit-relay`. Mode 0600 + owner=morphit means the morphit-relay daemon can't read the file → "Permission denied" at boot.
+
+Compounding: the `adduser morphit-relay` step was buried in a sidebar at line 1057, AFTER the chown step at line 786 that required the user to exist. An operator following docs linearly would hit "invalid user/group: morphit-relay" at line 897's `chown morphit-relay:morphit-relay /var/lib/morphit-relay` step BEFORE they got to the sidebar.
+
+Severity MEDIUM: loud failure (not silent) but unnecessary friction.
+
+Fix:
+- Split combined-chown into per-daemon commands targeting the correct users.
+- Added the `sudo adduser --system --group --no-create-home morphit-relay` command INLINE at the right ordinal step (before any chown that references morphit-relay).
+- Added rationale explaining why each env file goes to a different daemon user (smaller blast radius if relay is compromised).
+
+#### F12 (HIGH) — Ansible playbook never creates the `morphit-relay` system user
+
+Surface: `ops/ansible/roles/base/tasks/main.yml`.
+
+Bug: base role creates `morphit_service_user` (= morphit) and `morphit_service_group` (= morphit). Never creates the separate `morphit-relay` user. Both `morphit-relay.service` and `morphit-relay-mint-acts.service` ship with `User=morphit-relay`. When the morphit role's `systemctl enable + start morphit-relay` runs, systemd fails with "User morphit-relay does not exist."
+
+Severity HIGH: entire Ansible deploy path broken on first deploy. Same class as F10.
+
+Fix: added two tasks to base/tasks/main.yml:
+- `Create morphit-relay system group`
+- `Create morphit-relay system user` — with `groups: "{{ morphit_service_group }}"` membership so the relay can read `/etc/morphit/relay.env` (chowned root:morphit_service_group mode 0640 by the morphit role).
+
+#### F13 (LOW) — Dead `MORPHIT_RELAY_PASSPHRASE` env var invites passphrase leak to disk
+
+Surface: `ops/ansible/roles/morphit/templates/relay.env.j2`.
+
+Bug: template shipped `MORPHIT_RELAY_PASSPHRASE={{ morphit_relay_keystore_passphrase }}` with a group_vars/all.yml default of `'CHANGE-ME-PASSPHRASE'`. But no code path consumes `MORPHIT_RELAY_PASSPHRASE`. The relay's encrypted-envelope keystore unlocks via interactive TTY prompt (ADR-0010 §4; `StandardInput=tty-force` on the systemd unit) or systemd `LoadCredential=` for the mint-acts timer. Never env.
+
+Trap: an operator looking at their rendered `/etc/morphit/relay.env` reasonably concludes "I need to replace this placeholder with my real passphrase." They edit it, leaking the keystore passphrase to a 0640 disk file. Defense-in-depth of the encrypted envelope is now defeated.
+
+Severity LOW: no automatic failure mode; requires operator action to trigger. But design intent (ADR-0010 §4) is explicit that the passphrase should never reach disk.
+
+Fix:
+- Removed the template line.
+- Replaced group_vars/all.yml var with explanatory comment.
+- Replaced vault.yml.example slot with `REMOVED` + comment.
+- Added positive comment in relay.env.j2 documenting WHY this env var doesn't exist.
+
+### Sentinels
+
+Each finding gets a sentinel in `apps/web/scripts/persona-walkthrough-smoke.ts`:
+
+- **P122-CP5-F10**: pins corrected `morphit_npm_install_result.stdout` twice; `mustNotHave` ensures the typo can't reappear.
+- **P122-CP5-F11**: pins per-daemon chown line; `mustNotHave` rejects the combined-chown.
+- **P122-CP5-F12**: pins user-creation tasks + group-membership requirement.
+- **P122-CP5-F13**: pins absence + explanatory comment.
+
+F12 self-tested by tampering: removed user-creation task → sentinel correctly fails with `MUST HAVE (not found): "Create morphit-relay system user"` and `MUST HAVE (not found): "groups: \"{{ morphit_service_group }}\""`. Restoration → clean.
+
+### Verification
+
+- Triple-pulse 2,963 × 3, 0 failures (cp4 → cp5 = +4 sentinels)
+- Typecheck-sweep 0 errors across all 9 workspaces
+- YAML parse verified across all touched Ansible files
+- F12 sentinel self-tested by tampering
+- ansible-lint NOT re-verified (sandbox)
+
+### Post-cp5 deployment-path state
+
+For the first time in Part 122, the handoff surface is internally consistent across all three layers:
+- Every `User=` in a shipped systemd unit → matching Ansible user-creation task
+- Every `chown` directive in operator docs → matches the daemon that reads the file
+- Every env var in a template → consumed by code
+
+### Pattern lessons
+
+1. **Three-layer audit catches handoff bugs that code-only audit misses.** Walking docs + shipped artifacts + automation in parallel surfaces drift invisible to pure code audit. Pre-launch is the right time; post-launch this audit gets cluttered by real operator bug reports.
+
+2. **"Never live-tested" is itself a finding-class.** F10 + F12 would have hit operators on launch day. Memory's "Live full-stack Ansible deploy" being in PENDING was an accurate alarm bell. Anything in PENDING that gates operator experience deserves static audit before launch.
+
+3. **Dead env vars are security traps, not just dead code.** F13's placeholder doesn't fail anything if left alone, but INVITES a passphrase-to-disk leak. Future templates should pin "every var corresponds to a `process.env.X` consumer" via a smoke.
+
+4. **Loud failures still cost operators time.** F11 fails noisily, but operators may walk away if friction exceeds patience. First-deploy success should be the default.
+
+5. **Pre-existing design correctness ≠ implementation correctness.** ADR-0010 §4 designed the encrypted-envelope unlock correctly. The Ansible template drifted from the design. Same shape as cp4's F9 docblock-vs-code drift but at Ansible-vs-code level. Design audits and implementation audits are NOT the same audit.
+
+### Files modified
+
+```
+ops/ansible/roles/morphit/tasks/clone_and_build.yml   (F10)
+ops/ansible/roles/base/tasks/main.yml                 (F12)
+ops/ansible/roles/morphit/templates/relay.env.j2      (F13)
+ops/ansible/group_vars/all.yml                        (F13)
+ops/ansible/group_vars/vault.yml.example              (F13)
+docs/RUN-A-MORPHIT-NODE.md                            (F11)
+apps/web/scripts/persona-walkthrough-smoke.ts         (4 cp5 sentinels)
+TARBALL.md                                            (this entry)
+docs/REVISIT-LIST.md                                  (cp5 maintained-line)
+docs/AUDIT-2026-05.md                                 (cp5 entry)
+```
+
+No brag-list edit (audit findings per cp19 discipline). No ADR (no architectural shift; cp5 surfaced implementation drift FROM existing design, not design problems). No locale edits. No schema migration.
+
+### Part 122 close-out
+
+Cp5 plausibly closes Part 122 pre-launch. cp1-cp5 collectively walked:
+- **cp1**: cp20-cp22 delta surfaces (black-hat audit of recent additions)
+- **cp2**: generalized audit-pattern sweeps + schema-migration drift sentinel
+- **cp3**: federation-probe DNS-rebinding closure (cp7 REVISIT §A)
+- **cp4**: Matrix/relay black-hat redux (post-cp9 first reaudit)
+- **cp5**: sysadmin-handoff threat model (operator's literal-doc-follow path)
+
+That's the full pre-launch deep-deep program. Remaining defects/polish carry forward as standing REVISITs.
+
+---
 
 ## Part 122 cp4 — Matrix/relay black-hat redux; F9 (paired-session defense-contract drift) closed
 

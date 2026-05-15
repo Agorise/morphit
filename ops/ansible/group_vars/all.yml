@@ -87,9 +87,17 @@ morphit_node_version: "22"
 # target host BEFORE first run.
 morphit_relay_keystore_path: /etc/morphit/relay.keystore
 
-# DUMMY-VALUE: passphrase decrypting the keystore.  Belongs in
-# group_vars/vault.yml.
-morphit_relay_keystore_passphrase: "{{ vault_relay_keystore_passphrase | default('CHANGE-ME-PASSPHRASE') }}"
+# (Part 122 cp5 F13) — `morphit_relay_keystore_passphrase` was
+# previously defined here as a vault-with-default pattern.  It is
+# no longer needed: the relay's encrypted-envelope design unlocks
+# the keystore via interactive TTY prompt (`StandardInput=tty-force`
+# in morphit-relay.service) on first boot per reboot, or via
+# systemd `LoadCredential=` for the unattended mint-acts timer.
+# There is NO `MORPHIT_RELAY_PASSPHRASE` env var consumed by any
+# code path; putting the passphrase in env would defeat the
+# encrypted-envelope design.  Removed to prevent operators from
+# leaking their passphrase to a 0640 disk file out of misplaced
+# template-completionism.
 
 # Relay's HTTP bind.  127.0.0.1 only — BunkerWeb proxies to it.
 morphit_relay_bind_host: 127.0.0.1

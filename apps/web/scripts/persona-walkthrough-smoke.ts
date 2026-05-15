@@ -589,6 +589,93 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
+		// Part 122 cp5 — F10 (HIGH) — Jinja variable-name typo in
+		// the Ansible npm-install task's changed_when expression.
+		// Pre-cp5 the second clause referenced `npm_install_result`
+		// which doesn't exist (registered name is
+		// `morphit_npm_install_result`).  When npm produces output
+		// without 'changed' (the typical first-install case), Jinja
+		// evaluates the undefined variable and Ansible aborts the
+		// playbook with `'npm_install_result' is undefined`.
+		// Cp5 fixed by aligning both clauses on the registered name.
+		// Sentinel pins the absence of the typo + the presence of
+		// the correctly-named pair.
+		name: 'P122-CP5-F10 — Ansible clone_and_build.yml npm-install changed_when references the actual registered name twice',
+		file: 'ops/ansible/roles/morphit/tasks/clone_and_build.yml',
+		rootRelative: true,
+		mustHave: [
+			"register: morphit_npm_install_result",
+			"'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
+		],
+		mustNotHave: [
+			// The pre-cp5 typo MUST NOT reappear.
+			"'added' in npm_install_result.stdout"
+		]
+	},
+	{
+		// Part 122 cp5 — F11 (MEDIUM) — operator-doc chown
+		// guidance must route /etc/morphit/relay.env to
+		// `morphit-relay:morphit-relay`, not the dual-target
+		// `morphit:morphit` that pre-cp5 had.  The shipped
+		// morphit-relay.service runs as User=morphit-relay; an
+		// operator following the pre-cp5 doc literally would chown
+		// relay.env to a user the daemon doesn't run as, causing
+		// "Permission denied" at relay boot.  Sentinel pins the
+		// fixed chown line and the absence of the buggy combined-
+		// chown.
+		name: 'P122-CP5-F11 — RUN-A-MORPHIT-NODE chowns relay.env to morphit-relay (matching shipped systemd unit User=)',
+		file: 'docs/RUN-A-MORPHIT-NODE.md',
+		rootRelative: true,
+		mustHave: [
+			'sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env'
+		],
+		mustNotHave: [
+			// The pre-cp5 buggy combined-chown MUST NOT reappear.
+			'sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env'
+		]
+	},
+	{
+		// Part 122 cp5 — F12 (HIGH) — Ansible base role must
+		// create the `morphit-relay` system user BEFORE the
+		// morphit role tries to enable the morphit-relay.service.
+		// Pre-cp5 the playbook ran systemctl enable + start on
+		// services that reference `User=morphit-relay` without
+		// the user ever being created — a fresh-deploy hard fail.
+		// Sentinel pins the user-creation task in the base role.
+		name: 'P122-CP5-F12 — Ansible base role creates morphit-relay system user (referenced by shipped systemd unit User=morphit-relay)',
+		file: 'ops/ansible/roles/base/tasks/main.yml',
+		rootRelative: true,
+		mustHave: [
+			'Create morphit-relay system group',
+			'Create morphit-relay system user',
+			'name: morphit-relay',
+			// Group membership: the relay user must be in the
+			// morphit_service_group so it can read /etc/morphit/relay.env
+			// (chowned root:morphit_service_group mode 0640 by the
+			// morphit role).
+			'groups: "{{ morphit_service_group }}"'
+		]
+	},
+	{
+		// Part 122 cp5 — F13 (LOW) — the relay.env.j2 template
+		// must NOT carry a MORPHIT_RELAY_PASSPHRASE line.  No code
+		// path consumes that env var (the relay unlocks via TTY
+		// prompt or systemd LoadCredential); having it in the
+		// template invites operators to leak their passphrase to
+		// disk out of misplaced template-completionism.  Sentinel
+		// pins the absence + the explanatory comment that
+		// documents why.
+		name: 'P122-CP5-F13 — relay.env.j2 has no dead MORPHIT_RELAY_PASSPHRASE env var (consumed by nothing; would leak passphrase to disk)',
+		file: 'ops/ansible/roles/morphit/templates/relay.env.j2',
+		rootRelative: true,
+		mustHave: [
+			'NO MORPHIT_RELAY_PASSPHRASE env var'
+		],
+		mustNotHave: [
+			'MORPHIT_RELAY_PASSPHRASE={{'
+		]
+	},
+	{
 		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,

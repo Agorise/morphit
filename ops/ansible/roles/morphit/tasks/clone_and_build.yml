@@ -26,7 +26,7 @@
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_npm_install_result
-  changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in npm_install_result.stdout"
+  changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
 
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
   ansible.builtin.command:
