@@ -25,20 +25,40 @@
  *                                    fields only when verboseHealth=true
  *                                    in the operator's config
  *
- * Part 122 cp6 — created to close the standing "PHASE F first
- * contract layer" REVISIT item.
+ * **Middleware-level rejections can preempt any endpoint.**  Origin
+ * enforcement, content-type validation, and chunked-transfer rejection
+ * all run BEFORE the handler.  Their responses use envelopes other
+ * than `'rejected'` (`'bad_request'` for chunked-encoding; the same
+ * `'rejected'` shape for origin/content-type; `'error'` for the
+ * onError catch-all).  Each endpoint's response union therefore
+ * includes the full middleware/internal rejection shapes alongside
+ * the domain-success shapes.
+ *
+ * Part 122 cp6 — initial package landing.
+ * Part 122 cp7 — deep-deep audit closed seven contract gaps:
+ *   F16 ghost code `invite_required` removed (relay never emits it)
+ *   F17 chunked_unsupported (security middleware) added
+ *   F18 malformed_request (content-type + availability + security) added
+ *   F19 origin_required + origin_not_allowed (origin enforcement) added
+ *   F20 internal (onError catch-all) added
+ *   F21 status: 'bad_request' | 'error' | 'not_found' shapes added
+ *   F22 message?: string field on rejections added
+ *
+ * The `contract-symmetry-smoke.ts` runner verifies this contract
+ * stays in sync with the relay code; any future drift fails CI.
  */
 
 // ─── Error codes ───────────────────────────────────────────────────
 
 /**
  * Every error code the relay can emit in a `code: '...'` field of a
- * `{ status: 'rejected', code: <RelayErrorCode> }` JSON body.
+ * JSON body, across ALL response envelopes (`'rejected'`,
+ * `'bad_request'`, `'error'`).
  *
- * Grouped by originating endpoint for readability — but the wire
- * format does NOT promise which endpoint emits which code (a code
- * may be emitted by multiple endpoints).  Consumers should treat
- * the union as flat.
+ * Grouped by originating subsystem for readability — but the wire
+ * format does NOT promise which endpoint or middleware emits which
+ * code (a code may be emitted by multiple paths).  Consumers should
+ * treat the union as flat.
  *
  * Client-local error codes (network-unreachable, altcha-unsolvable)
  * are NOT in this union — they're emitted by the client code itself,
@@ -47,27 +67,28 @@
  * codes.
  */
 export type RelayErrorCode =
-	// /v1/account/invite — gate codes
+	// ─── /v1/account/invite — gate codes ───
 	| 'signups_disabled'
 	| 'daily_ceiling_reached'
 	| 'invite_rate_limited'
-	// /v1/account/invite — altcha codes
+	// ─── /v1/account/invite — altcha codes (apps/relay/src/policy/altcha.ts) ───
 	| 'altcha_bad_solution'
 	| 'altcha_bad_signature'
 	| 'altcha_expired'
 	| 'altcha_malformed'
 	| 'altcha_replayed'
-	// /v1/account/create — gate codes
+	// ─── /v1/account/create — gate codes ───
 	| 'rate_limited'
 	| 'rate_limited_daily'
 	| 'spacing_cooldown'
 	| 'relay_out_of_funds'
-	| 'invite_required'
+	// ─── /v1/account/create — invite-token codes (apps/relay/src/policy/inviteToken.ts) ───
 	| 'invite_malformed'
 	| 'invite_bad_signature'
 	| 'invite_expired'
 	| 'invite_ip_mismatch'
 	| 'invite_already_used'
+	// ─── /v1/account/create — op validation codes ───
 	| 'malformed_operation'
 	| 'name_not_allowed'
 	| 'name_high_value'
@@ -76,17 +97,45 @@ export type RelayErrorCode =
 	| 'duplicate_submission'
 	| 'already_registered'
 	| 'chain_unavailable'
-	| 'broadcast_failed';
+	| 'broadcast_failed'
+	// ─── Middleware (preempts handler — apps/relay/src/middleware/) ───
+	/** Chunked transfer-encoding rejected; client must send
+	 *  Content-Length. (security.ts) */
+	| 'chunked_unsupported'
+	/** Content-Type missing/wrong, or JSON body unparseable.
+	 *  (content_type.ts + availability.ts + security.ts) */
+	| 'malformed_request'
+	/** No Origin header on a write endpoint that requires one.
+	 *  (origin_enforcement.ts) */
+	| 'origin_required'
+	/** Origin header present but not in operator's allowlist.
+	 *  (origin_enforcement.ts) */
+	| 'origin_not_allowed'
+	// ─── Catch-all (apps/relay/src/main.ts onError) ───
+	/** Unhandled exception in the handler.  Returned with HTTP 500
+	 *  and `status: 'error'`.  Stack traces never leak over the
+	 *  wire (logged internally only). */
+	| 'internal';
+
+// ─── Rejection envelopes ───────────────────────────────────────────
 
 /**
- * Common shape of every rejection body.  All endpoints follow this
- * envelope.  Optional fields are populated case-by-case (e.g.
+ * Common shape of `status: 'rejected'` bodies emitted by both the
+ * endpoint handlers (domain rejections) and the origin/content-type
+ * middleware.  All endpoints follow this envelope for their domain
+ * rejections.  Optional fields are populated case-by-case (e.g.
  * `retry_after_minutes` for spacing_cooldown, `resets_at` for
- * daily_ceiling_reached).
+ * daily_ceiling_reached, `message` for middleware rejections).
  */
 export interface RelayRejection {
 	readonly status: 'rejected';
 	readonly code: RelayErrorCode;
+	/** Human-readable error message.  Populated by middleware
+	 *  rejections (origin, content-type) and by some endpoint
+	 *  rejections.  Domain rejections may omit it; consumers
+	 *  should i18n by `code` and treat `message` as a debug
+	 *  hint, not user-facing copy. */
+	readonly message?: string;
 	/** Minutes until the client may safely retry.  Present on
 	 *  rate-limit and cooldown rejections. */
 	readonly retry_after_minutes?: number;
@@ -94,6 +143,48 @@ export interface RelayRejection {
 	 *  Present on `daily_ceiling_reached`. */
 	readonly resets_at?: string;
 }
+
+/**
+ * `status: 'bad_request'` envelope — currently used by the security
+ * middleware for chunked transfer-encoding rejection (HTTP 411).
+ * Distinct from `'rejected'` because the relay treats this as a
+ * pre-domain HTTP-level failure, not a business-logic rejection.
+ */
+export interface RelayBadRequest {
+	readonly status: 'bad_request';
+	readonly code: 'chunked_unsupported' | 'malformed_request';
+	readonly message?: string;
+}
+
+/**
+ * `status: 'error'` envelope — emitted ONLY by the main.ts onError
+ * catch-all when a handler throws.  HTTP 500.  Stack traces never
+ * leak over the wire (logged internally only).
+ */
+export interface RelayInternalError {
+	readonly status: 'error';
+	readonly code: 'internal';
+}
+
+/**
+ * `status: 'not_found'` envelope — emitted by the Hono notFound()
+ * handler for unmatched routes.  HTTP 404.  No `code` field.
+ */
+export interface RelayNotFound {
+	readonly status: 'not_found';
+}
+
+/**
+ * Union of every "the request didn't get a domain-success response"
+ * envelope.  Every endpoint's response union includes this so
+ * consumers can handle middleware preemption and internal errors
+ * uniformly.
+ */
+export type RelayGenericFailure =
+	| RelayRejection
+	| RelayBadRequest
+	| RelayInternalError
+	| RelayNotFound;
 
 // ─── /v1/account/invite ────────────────────────────────────────────
 
@@ -128,7 +219,7 @@ export interface RelayInviteAltchaRequired {
 export type RelayInviteResponse =
 	| RelayInviteIssued
 	| RelayInviteAltchaRequired
-	| RelayRejection;
+	| RelayGenericFailure;
 
 // ─── /v1/account/create ────────────────────────────────────────────
 
@@ -141,7 +232,7 @@ export interface RelayCreateBroadcast {
 }
 
 /** All possible response shapes for `POST /v1/account/create`. */
-export type RelayCreateResponse = RelayCreateBroadcast | RelayRejection;
+export type RelayCreateResponse = RelayCreateBroadcast | RelayGenericFailure;
 
 // ─── /v1/account/availability ──────────────────────────────────────
 
@@ -166,7 +257,7 @@ export interface RelayAvailabilityUnavailable {
 export type RelayAvailabilityResponse =
 	| RelayAvailabilityAvailable
 	| RelayAvailabilityUnavailable
-	| RelayRejection;
+	| RelayGenericFailure;
 
 // ─── /v1/health ────────────────────────────────────────────────────
 
@@ -206,5 +297,12 @@ export interface RelaySignupStats {
 	readonly resets_at: string;
 }
 
-/** All possible response shapes for `GET /v1/health`. */
-export type RelayHealthResponse = RelayHealthMinimal | RelayHealthVerbose;
+/** All possible response shapes for `GET /v1/health`.  Health
+ *  doesn't sit behind origin-enforcement middleware (it's a public
+ *  liveness probe), but it CAN return RelayInternalError if the
+ *  handler throws, or RelayNotFound if the path is wrong. */
+export type RelayHealthResponse =
+	| RelayHealthMinimal
+	| RelayHealthVerbose
+	| RelayInternalError
+	| RelayNotFound;

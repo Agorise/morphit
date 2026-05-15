@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 6 — standing-REVISIT cleanup: F7 regex-primitive + broader ariaLabel sentinel; F8 schema-migration coverage smoke; @morphit/relay-client first contract layer)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 7 — cp6 relay-client deep-deep; 7 contract gaps closed; contract-symmetry smoke shipped)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,7 +6,96 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp6 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp7 (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **3,071 × 3 scenarios, 0 failures** (cp6 baseline 3,066 → cp7 baseline 3,071 = +4 new contract-symmetry-smoke scenarios; +1 from secondary effects)
+- Typecheck-sweep: **0 errors across all 10 workspaces**
+- Both directions of contract-symmetry smoke self-tested by tampering
+
+### Pretext
+
+Ken asked: "does anything you've done in the last 10 turns or so need a deep deep?" Honest inventory:
+- cp3, cp4, cp5 WERE deep-deep audits themselves (DNS-rebinding, Matrix/relay redux, sysadmin-handoff)
+- cp5-fix and cp5-fix2 were small surfaces / mechanical-smoke fixes — low risk
+- **cp6's `@morphit/relay-client` package extraction was real deep-deep candidate** — it's supposed to be the single source of truth for the relay wire contract; if the hand-extraction missed codes or got shapes wrong, the package would silently over-promise (worst-case failure mode for schema-as-contract).
+
+The deep-deep found **seven real contract gaps** in my cp6 extraction. F16-F22 all shipped this turn, plus a contract-symmetry smoke so this exact class of bug can't recur.
+
+### Findings closed
+
+**F16 (LOW informational) — Ghost code `invite_required` in RelayErrorCode.** Pre-cp6 the inline union in signupClient.ts had `invite_required`, but `grep -rn "code: 'invite_required'" apps/relay/src/` returns zero matches. Carried through into the cp6 extraction. Removed — the contract should reflect reality, not aspirations.
+
+**F17 (MEDIUM) — Missing `chunked_unsupported`.** Security middleware (`apps/relay/src/middleware/security.ts:47`) emits this when a request uses `Transfer-Encoding: chunked`. HTTP 411, `status: 'bad_request'`. Any client could hit this.
+
+**F18 (MEDIUM) — Missing `malformed_request`.** Emitted by THREE sites: `middleware/content_type.ts:25` (wrong Content-Type, HTTP 415), `middleware/security.ts:36` (request preprocessing, HTTP 400), `api/availability.ts:62` (malformed body, HTTP 400). All consumer paths could hit this.
+
+**F19 (MEDIUM) — Missing `origin_required` + `origin_not_allowed`.** Origin-enforcement middleware (`apps/relay/src/middleware/origin_enforcement.ts:115, 137`) gates write endpoints — `origin_required` when no Origin header, `origin_not_allowed` when present but not in operator allowlist. Both HTTP 403, `status: 'rejected'`. A community-operator deployment with mis-configured `MORPHIT_RELAY_ALLOWED_ORIGINS` would surface these constantly.
+
+**F20 (LOW) — Missing `internal`.** The `main.ts` onError catch-all (`apps/relay/src/main.ts:299`) emits `{ status: 'error', code: 'internal' }` HTTP 500 when a handler throws an unhandled exception. Rare on the happy path but a legitimate wire shape that must be in the contract.
+
+**F21 (MEDIUM) — Missing non-`'rejected'` rejection envelopes.** The relay can return four distinct top-level statuses for non-success: `'rejected'` (domain + origin/content-type), `'bad_request'` (chunked-encoding), `'error'` (internal), `'not_found'` (unmatched route). My cp6 extraction modeled only `'rejected'`. Fix: split into `RelayRejection` + `RelayBadRequest` + `RelayInternalError` + `RelayNotFound`, union them as `RelayGenericFailure`, include in every endpoint's response union.
+
+**F22 (LOW) — Missing `message?: string` on rejections.** Several relay rejection paths populate a human-readable `message` field (e.g. origin middleware: "This relay only accepts account-creation requests from operator-configured frontends."). Documented in the new field's JSDoc that consumers should i18n by `code` and treat `message` as a debug hint, not user-facing copy.
+
+### Contract-symmetry smoke — F23 class defense
+
+**New file: `packages/relay-client/scripts/contract-symmetry-smoke.ts`** (4 scenarios). Walks `apps/relay/src/` for every `code: '<literal>'` string (excluding `*.test.ts`), parses `RelayErrorCode`'s union from `packages/relay-client/src/index.ts`, asserts **two-way symmetry**:
+
+- **Direction A:** Every wire-emitted code is in the union. Missing codes mean the contract under-promises — consumers see runtime codes that aren't in the type system, fall through to default handlers, lose actionable error info. This was the cp6 failure mode (F17-F20).
+- **Direction B:** Every union member is emitted by the relay. Ghost members mean the contract over-promises — consumers prepare for codes that never arrive, dead i18n keys, dead error-handling branches. This was F16's failure mode.
+
+Internal-only codes (e.g. `decryption_failed` in `crypto/keyEnvelope.ts`'s `Result` type, `no_tty` in `crypto/promptPassphrase.ts`'s startup-error type) that never reach an HTTP response are explicitly listed in `INTERNAL_ONLY_CODES` and excluded from the symmetry check.
+
+**Smoke development surfaced a real bug in itself:** the union-parsing regex `/export type RelayErrorCode =([^;]+);/m` was truncating at the first `;` inside JSDoc block comments (e.g. "Chunked transfer-encoding rejected; client must send Content-Length."). Fixed by stripping block + line comments before applying the union regex. This is documented in the smoke's source as a pattern lesson — regex-based parsers must consider comment escaping when comments can contain delimiter characters.
+
+**Self-tested both directions:**
+- Removed `| 'origin_required'` from the union → smoke fires `✗ direction A` with diagnostic naming the missing code
+- Added `| 'ghost_code_test'` to the union → smoke fires `✗ direction B` with diagnostic naming the ghost
+- Restoration → 31 wire-emitted ↔ 31 union members, all 4 scenarios pass
+
+**Registered** in `scripts/run-smokes.sh` after the operator-config smoke.
+
+### Pattern lessons
+
+1. **Hand-extracting wire contracts is unsafe.** I read the relay code carefully when building cp6 and still missed 5 wire-emitted codes plus 3 non-`'rejected'` envelope shapes. A mechanical symmetry check pays for itself the first time it runs.
+
+2. **Schema-as-contract packages must include their own validation smoke.** Otherwise the package's value (single source of truth) is only as good as the extraction at the moment it landed. The contract-symmetry smoke is now part of the package's surface — it's how the package proves it's still aligned with reality.
+
+3. **The smoke that catches drift may itself have parser bugs.** F23a (the JSDoc-comment-semicolon-truncating-my-regex bug in my own smoke) was a real bug that would have silently let the missing codes slip through. The 4-scenario sanity meta-checks (Direction A + Direction B + minimum-count emitted + minimum-count union) caught it because the union-parse came back impossibly short.
+
+4. **Internal-only Result-type codes ≠ wire-emitted codes.** `apps/relay/src/policy/altcha.ts` and `apps/relay/src/policy/inviteToken.ts` both use the Result-type pattern (`| { ok: false; code: 'altcha_malformed' }`) — these codes ARE wire-emitted (the api/invite.ts handler unwraps the Result and emits the code). But `crypto/keyEnvelope.ts` uses an identical Result-shape pattern for keystore-decryption codes that NEVER reach HTTP. The symmetry smoke can't tell these apart by code alone; that's what `INTERNAL_ONLY_CODES` is for, and the README of new-code additions should ask "is this code reachable from an HTTP response?" before deciding which list to update.
+
+### Severity perspective
+
+The cp6 contract gaps had no immediate user impact (signupClient.ts uses `(body.code as SignupErrorCode) ?? 'broadcast_failed'` so unknown codes fall through to a sensible default). But the pattern was real: the schema-as-contract package was lying about what the wire contract was. Two hypothetical concrete scenarios that would have broken without cp7:
+
+- Operator deploys with mis-configured `MORPHIT_RELAY_ALLOWED_ORIGINS` → frontend gets `origin_not_allowed` → signupClient.ts displays `signup.error.broadcast_failed` ("Couldn't broadcast — try again later") instead of the actionable "Your origin isn't allowed by this relay" message. Operator chases a phantom RPC bug.
+- Network bug causes a Transfer-Encoding: chunked request → frontend gets `chunked_unsupported` → displays `broadcast_failed`. Same misdiagnosis.
+
+Both surfaces are now properly typed.
+
+**Brag list:** 265 entries unchanged. Internal contract hardening.
+
+**This session's arc:**
+1. cp22 → P122 cp6 as previously documented
+2. **P122 cp7** — deep-deep audit of cp6 found seven contract gaps in @morphit/relay-client; F16-F22 closed; contract-symmetry smoke shipped + self-tested both directions
+
+**Truly pending (post-cp7):**
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml`
+- Upgrade tooling — parked for first-release week per memory entry #29
+- Schema-as-contract second-layer adoption on the relay side (typing Hono `c.json()` returns) — post-launch hardening
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (still on cp5 — cp5-fix/fix2/cp6/cp7 are same-checkpoint follow-ons).
+
+---
+
+**Tarball:** `morphit-audit-2026-05-122-cp7-delta.tar.gz` — delta over cp6.
+
+**Previous tarball:** `morphit-audit-2026-05-122-cp6-delta.tar.gz` (F7/F8/relay-client first contract layer).
+
+---
 
 **Gates — all green:**
 - Triple-pulse: **3,066 × 3 scenarios, 0 failures** (cp5-fix2 baseline 3,057 → cp6 baseline 3,066 = +9: 4 new schema-migration-coverage-smoke scenarios + 1 new P122-CP6 sentinel + 4 from secondary effects of the new package landing in workspace-graph smokes)
