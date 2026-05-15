@@ -11,6 +11,7 @@
 		"apps/ops-cli",
 		"apps/matrix-bot",
 		"packages/indexer-client",
+		"packages/relay-client",
 		"packages/operator-config",
 		"packages/asset-registry"
 	],

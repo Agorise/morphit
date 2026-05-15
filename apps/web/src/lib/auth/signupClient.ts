@@ -30,38 +30,12 @@ export type SignupPhase = 'fetching_invite' | 'solving_altcha' | 'altcha_solved'
 
 export type SignupProgress = (phase: SignupPhase) => void;
 
-/** Signup failure codes. A subset mirrors relay response codes
- *  directly; the rest are client-local (network, unexpected). */
+/** Signup failure codes. The relay-originated subset comes from
+ *  `@morphit/relay-client`'s `RelayErrorCode` (single source of
+ *  truth for the wire contract); this client extends it with two
+ *  client-local codes that the relay can never emit. */
 export type SignupErrorCode =
-	// Relay-originated (invite endpoint)
-	| 'signups_disabled'
-	| 'daily_ceiling_reached'
-	| 'invite_rate_limited'
-	| 'altcha_bad_solution'
-	| 'altcha_bad_signature'
-	| 'altcha_expired'
-	| 'altcha_malformed'
-	| 'altcha_replayed'
-	// Relay-originated (create endpoint)
-	| 'rate_limited'
-	| 'rate_limited_daily'
-	| 'spacing_cooldown'
-	| 'relay_out_of_funds'
-	| 'invite_required'
-	| 'invite_malformed'
-	| 'invite_bad_signature'
-	| 'invite_expired'
-	| 'invite_ip_mismatch'
-	| 'invite_already_used'
-	| 'malformed_operation'
-	| 'name_not_allowed'
-	| 'name_high_value'
-	| 'name_sequential_pattern'
-	| 'invalid_pubkey'
-	| 'duplicate_submission'
-	| 'already_registered'
-	| 'chain_unavailable'
-	| 'broadcast_failed'
+	| import('@morphit/relay-client').RelayErrorCode
 	// Client-local
 	| 'unreachable'
 	| 'altcha_unsolvable';

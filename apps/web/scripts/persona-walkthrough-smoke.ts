@@ -312,6 +312,18 @@ interface Scenario {
 		readonly before: string;
 		readonly after: string;
 	};
+	/** Optional regex-based regression sentinels.  Fails if ANY match exists in
+	 *  the file.  Use this for class-of-pattern checks where listing every
+	 *  literal forbidden string would be incomplete (e.g. "no hardcoded
+	 *  English ariaLabel anywhere", which would silently miss any new ticker
+	 *  added without updating the literal list).  Each entry is a (pattern,
+	 *  reason) pair so failure diagnostics can name the invariant being
+	 *  defended.  Patterns must be `RegExp` (not string) so the smoke
+	 *  surfaces flag-handling explicitly. */
+	readonly assertNoRegexMatch?: readonly {
+		readonly pattern: RegExp;
+		readonly reason: string;
+	}[];
 }
 
 const SCENARIOS: readonly Scenario[] = [
@@ -371,6 +383,22 @@ const SCENARIOS: readonly Scenario[] = [
 			'ariaLabel="What is BLURT?"',
 			'ariaLabel="What is BTC?"',
 			'ariaLabel="What is XMR?"'
+		],
+		// Part 122 cp6 F7: broaden coverage beyond the three literals
+		// above.  Any future asset (USDT, LTC, DOGE, ...) added with a
+		// hardcoded `ariaLabel="What is X?"` Tooltip prop pattern would
+		// regress S-12 without firing the literal list.  The regex
+		// catches every `ariaLabel="..."` Svelte prop with a literal
+		// string value on this page, regardless of asset name.
+		// Acceptable forms must derive from i18n via `effectiveAriaLabel`
+		// (no ariaLabel prop set) or a `{$_("...")}` expression value
+		// (which the regex doesn't match because `{` ≠ `"`).
+		assertNoRegexMatch: [
+			{
+				pattern: /\bariaLabel="[^"]*"/,
+				reason:
+					'Tooltip ariaLabel must come from i18n (omit prop → effectiveAriaLabel default, OR pass {$_("...")} expression). Hardcoded literal blocks translation for the screen-reader label.'
+			}
 		]
 	},
 
@@ -713,6 +741,35 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			'const TOTAL_STEPS = 17;'
+		]
+	},
+	{
+		// Part 122 cp6 — schema-as-contract first layer.
+		//
+		// The signupClient module must import RelayErrorCode from
+		// the shared @morphit/relay-client package, not duplicate
+		// the literal union inline.  Pre-cp6 signupClient.ts had
+		// its own copy of the ~25 relay error codes; if the relay
+		// added a new code (e.g. 'name_reserved_for_operator') and
+		// the client didn't add it too, the client would fall
+		// through to 'broadcast_failed' for the new case — a
+		// real-world drift class.  The shared package is the
+		// single source of truth; this sentinel pins that the
+		// import survives.
+		name: 'P122-CP6 — signupClient imports RelayErrorCode from @morphit/relay-client (schema-as-contract)',
+		file: 'apps/web/src/lib/auth/signupClient.ts',
+		rootRelative: true,
+		mustHave: [
+			"import('@morphit/relay-client').RelayErrorCode"
+		],
+		// Pre-cp6 the codes were duplicated inline.  This sentinel
+		// rejects the inline duplication pattern.  The mustNotHave
+		// targets the two most distinctive relay-only codes; if
+		// either reappears as a string literal in signupClient,
+		// someone reinlined the union and broke the contract.
+		mustNotHave: [
+			"| 'invite_rate_limited'",
+			"| 'spacing_cooldown'"
 		]
 	},
 	{
@@ -1982,7 +2039,28 @@ for (const sc of SCENARIOS) {
 		}
 	}
 
-	if (missing.length === 0 && present.length === 0 && orderingError === null) {
+	// Optional regex-based forbidden-pattern checks.  Each pattern that
+	// matches contributes an entry to regexMatches with the first match
+	// span shown to the operator for diagnosis.
+	const regexMatches: Array<{ pattern: RegExp; reason: string; match: string }> = [];
+	if (sc.assertNoRegexMatch) {
+		for (const { pattern, reason } of sc.assertNoRegexMatch) {
+			// Force a fresh scan each time — patterns may have the /g flag
+			// from the scenario author.
+			const localRe = new RegExp(pattern.source, pattern.flags.replace('g', ''));
+			const m = localRe.exec(body);
+			if (m !== null) {
+				regexMatches.push({ pattern, reason, match: m[0] });
+			}
+		}
+	}
+
+	if (
+		missing.length === 0 &&
+		present.length === 0 &&
+		orderingError === null &&
+		regexMatches.length === 0
+	) {
 		console.log(`  ✓ ${sc.name}`);
 		passed++;
 	} else {
@@ -1995,6 +2073,12 @@ for (const sc of SCENARIOS) {
 		}
 		if (orderingError) {
 			console.error(`      ${orderingError}`);
+		}
+		for (const { pattern, reason, match } of regexMatches) {
+			console.error(
+				`      REGEX MATCH (forbidden pattern fired): ${pattern.toString()} — ${reason}`
+			);
+			console.error(`        first hit: ${JSON.stringify(match.slice(0, 100))}`);
 		}
 		failed++;
 	}

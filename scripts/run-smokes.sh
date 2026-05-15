@@ -65,6 +65,7 @@ SMOKES=(
 	"apps/indexer:yubikey-protocol-smoke"
 	"apps/indexer:clearing-price-history-smoke"
 	"apps/indexer:login-pairing-registry-smoke"
+	"apps/indexer:schema-migration-coverage-smoke"
 	"apps/relay:drain-defense-live-fire"
 	"apps/relay:drainer-defense-smoke"
 	"apps/relay:clock-drift-smoke"
