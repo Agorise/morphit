@@ -1,4 +1,4 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 3 — DNS-rebinding closure in federation-probe SSRF defense; cp7 REVISIT §A item closed pre-launch)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 4 — Matrix/relay black-hat redux; existing defenses hold; F9 (paired-session "far past" check, defense-contract drift) closed)
 
 **Snapshot date:** 2026-05-15
 
@@ -6,32 +6,58 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp3 (2026-05-15)
+**Last sealed checkpoint:** Part 122 cp4 (2026-05-15)
 
 **Gates — all green:**
-- Triple-pulse: **2,958 × 3 scenarios, 0 failures** (cp2 baseline 2,911 → cp3 baseline 2,958 = +47 = 45 new `dns-rebinding-defense-smoke` scenarios + 1 P122-CP3 sentinel + 1 federation-probe-smoke re-tally after the cp3 test-injection hook landed)
+- Triple-pulse: **2,959 × 3 scenarios, 0 failures** (cp3 baseline 2,958 → cp4 baseline 2,959 = +1 P122-CP4-F9 sentinel)
 - Typecheck-sweep: 0 errors across all 9 workspaces
-- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp3 touched zero Ansible files)
+- ansible-lint: NOT re-verified this checkpoint (sandbox-environmental; cp4 touched zero Ansible files)
 
-**Brag list:** 265 entries unchanged. cp3 work is internal security hardening — per cp19 discipline, security findings go to AUDIT doc, not brag list.
+**Brag list:** 265 entries unchanged. cp4 work is internal audit + small contract-drift fix — per cp19 discipline, security findings go to AUDIT doc, not brag list.
 
-**cp3 shipped — DNS-rebinding closure in `apps/indexer/src/indexer/federationProbe.ts`.** Filed in cp7 REVISIT §A as information-disclosure-class risk bounded by GET-only + 256KB cap + manual-redirect; defense-in-depth scope. Pre-launch (~2026-05-22) is the right moment to close it. Three-layer defense now in place:
+**cp4 audit conclusion: Matrix/relay surfaces are well-defended.** The Matrix DM path (matrix-bot/sendDm + getDmRoom), the alert-body rendering (classifier.ts renderAlertBody with escapeHtml + cp18/19 sanitization), the QR-pair handshake (desktopPairing.ts verifyDeliveryPayload with AAD-bound pid + echo-checks + freshness window + chain-anchored signature verifier with weight-threshold check), the paired-readonly persistence (pairedSession.ts isValidPairedSession with strict shape validation), the cross-tab storage event handler (identity.ts handleStorageEvent which re-validates via canonical readPairedSession) — all hold up under black-hat enumeration. cp9-cp19 hardening + ADR-0022 design have left the surface in solid shape.
 
-1. **`isPrivateHostname(h)`** — literal-hostname denylist (refactored from inline regex pile into an exported helper). Catches the obvious cases: `https://127.0.0.1/`, `https://localhost/`, IPv6 loopback, IPv6 ULA, link-local, AWS metadata, GCP metadata, `.local`/`.localhost`/`.internal` TLDs.
-2. **`resolveAndValidatePublicIp(hostname)`** — `node:dns/promises` lookup with `{ all: true, verbatim: true }` retrieves every A + AAAA record; `isPrivateIp(ip)` validates each one. Covers IPv4 RFC 1918 + 0.0.0.0/8 + 169.254/16 + 255.255.255.255 broadcast + CGNAT 100.64/10 + IPv6 `::1` + IPv6 ULA (`fc00::/7`) + IPv6 link-local (`fe80::/10`) + IPv4-mapped IPv6 unwrap (`::ffff:a.b.c.d` re-validated as IPv4). Throws if ANY returned address is private — closes the "first record public, second record private" attack.
-3. **`buildPinnedAgent(hostname, ip, family)`** — returns an `undici.Agent` whose connect-time `lookup` hook is hard-coded to return the pre-validated IP for the pre-validated hostname. Closes the TOCTOU between our pre-validation lookup and undici's connect-time lookup: an attacker can't rebind DNS between the two operations because there IS no second lookup. Refuses unexpected hostnames as defense-in-depth (post-creation redirect or hostname-substitution attack would route to the wrong place; we already have `redirect: 'manual'` but belt-and-braces).
+**One real finding shipped:** **F9 (LOW) — defense-contract drift in pairedSession validator.** The `isValidPairedSession` docblock promised "Reject obviously-bogus timestamps (negative, far past, far future)" but the code only enforced negative + far-future. The "far past" leg was missing. Same drift in the test file: `pairedSession.test.ts` has tests for negative + far-future but not far-past. Fix shipped: new `MAX_PAIRED_AGE_SECONDS = 365 * 86400` constant + `if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false;` check + 2 new vitest cases (rejects 400-days-old, accepts 300-days-old). `P122-CP4-F9` sentinel pins all three legs of the docblock contract (negative + far-future + far-past). Self-tested by tampering. No current downstream consequence (nothing reads pairedAt for age decisions), but the contract-vs-code drift was real and pre-launch is the right time to close it.
 
-**Smoke coverage:**
-- New `apps/indexer/scripts/dns-rebinding-defense-smoke.ts` (45 scenarios): exercises every code path in the validation helpers — IPv4 boundaries (172.15 public / 172.16 private / 172.31 private / 172.32 public), IPv4 case-insensitivity, IPv6 ULA + link-local + loopback, IPv4-mapped IPv6 unwrap (uppercase + lowercase + nested private), CGNAT lower bound (100.64) + upper bound (100.127) + just-below (100.63 public) + just-above (100.128 public), 0.0.0.0/8, 255.255.255.255, 169.254.169.254 (AWS metadata) and its IPv4-mapped form, `metadata.google.internal`, public anchor cases (8.8.8.8, 203.0.113.1 TEST-NET-3, 2001:db8::1, 2606:4700::1 Cloudflare anycast).
-- Existing `federation-probe-smoke.ts` updated with `_setDnsResolverForTesting()` injection so it stays offline-deterministic — without the stub, the new DNS-resolution layer would try to look up synthetic hostnames like `test.example` against real DNS.
-- Persona-walkthrough sentinel `P122-CP3` pins all three layers in code + the test-injection hook + the `import { Agent } from 'undici'` + `import { lookup as dnsLookup } from 'node:dns/promises'` lines + the IPv4-mapped-IPv6 unwrap regex + the CGNAT range regex. Self-tested by tampering: removing the `dispatcher: pinnedAgent` line causes the sentinel to fail loudly with `MUST HAVE (not found)`.
-- `operatorRegister.ts` inline comment that previously read "DNS rebinding, IPv6 mapped IPv4, etc.; the probe layer should ALSO resolve+validate the IP before connecting (deferred follow-on)" now points at the cp3 closure with sentinel-name reference.
+**cp4 attack-vector enumeration (full table — 26 AVs):**
 
-**This session's arc (cp22 → P122 cp3):**
+| AV | Surface | STRIDE | Disposition |
+|----|---------|--------|-------------|
+| AV1 | sendDm MXID injection via untyped string | E | NOT_A_BUG — branded MatrixMxid type prevents @↔# confusion at compile time; runtime parser in @morphit/operator-config (P121-CP9-1 sentinel) validates the form |
+| AV2 | sendDm HTML body injection via attacker-controlled payload | T | NOT_A_BUG — classifier.renderAlertBody runs escapeHtml on every dynamic field (title, advice, payloadLines, source, ts); tier+sigil are static enums |
+| AV3 | Classifier→sendDm content tampering | T | NOT_A_BUG — cp18/19 audit hardened sanitize() (strip C0, defang mxid pills) + cp19 capped payload sizes (1KB/8KB) |
+| AV4 | dmRoomCache poisoning | T | NOT_A_BUG — keyed by branded MatrixMxid, populated only from matrix-bot-sdk's getOrCreateDm |
+| AV5 | DM-as-stalker: alert body containing data harmful if leaked | I | NOT_A_BUG — body is operator-facing sysadmin alerts, no end-user data |
+| AV6 | Crypto store / state.json permissions | I | OS_LEVEL_OOS — files written via matrix-bot-sdk's providers using umask defaults |
+| AV7 | Access token leakage via stdout/journal | I | NOT_A_BUG_VERIFIED — main.ts error logs reference mxid but not token; access token only handled by matrix-bot-sdk constructor |
+| AV8 | QR payload tampering during photo/print | T | OUT_OF_SCOPE — physical security; signature defends against modification |
+| AV9 | Public-key substitution mid-handshake | T | NOT_A_BUG — desktop verifier checks signature against on-chain posting authority via condenser_api.get_accounts |
+| AV10 | bootFromPairedSession from-storage tampering | T | NOT_A_BUG — isValidPairedSession validates shape; handleStorageEvent re-reads via canonical validator |
+| AV11 | Paired-session escalation readonly→write | E | NOT_A_BUG — bootFromPairedSession refuses when state is 'unlocked' (line 190-194) |
+| AV12 | localStorage XSS reads paired session | I | NOT_A_BUG_BY_DESIGN — pairedSession contains ONLY public info (account name + chat pubkey, both on chain) per module docblock |
+| AV13 | Cross-jurisdiction shared cookies | I | BROWSER_LEVEL_OOS |
+| AV14 | QR captured by camera in shared workspace | T | OUT_OF_SCOPE — physical |
+| AV15 | Stale QR replay | T | NOT_A_BUG — QR exp (5min) + signed_at freshness (-120s/+30s) + single-shot pid all in place |
+| AV16 | Relay endpoint accepting MXID where room alias expected (or vice versa) | E | NOT_A_BUG — branded types at compile time; runtime parsers validate form |
+| AV17 | Invitation token + MXID binding | T | NOT_A_BUG — cp9 audit cleared (memory) |
+| AV18 | Relay matrix-related env vars | I | NOT_A_BUG — relay has no matrix-related env vars; matrix lives in matrix-bot service |
+| AV19 | QR `relay` URL pointing at private IP | I | NOT_A_BUG_GIVEN_THREAT_MODEL — phone-side validation accepts any https URL; if attacker's QR has `relay: https://127.0.0.1/`, phone's loopback receives the encrypted bundle (which is only public info, signed) — no info leak |
+| AV20 | Phone-as-attacker (compromised phone) | E | OUT_OF_SCOPE — phone holds posting key = full account compromise |
+| AV21 | Desktop-as-attacker (compromised desktop) | E | OUT_OF_SCOPE — same |
+| AV22 | Paired session pairedAt has no max-age | I | **F9 — DEFENSE-CONTRACT DRIFT FIXED** |
+| AV23 | Paired-session storage event as cross-tab CSRF | T | NOT_A_BUG — handleStorageEvent uses defense-in-depth pattern: re-validates via canonical readPairedSession (line 449) so even hostile same-origin writes get caught by isValidPairedSession |
+| AV24 | AEAD key + ephemeral priv wipe | I | NOT_A_BUG_VERIFIED — sodium.memzero(sharedSecret), sodium.memzero(aeadKey), sodium.memzero(desktopEpkPriv) in finally block of verifyDeliveryPayload |
+| AV25 | multisig accounts with split posting key | E | KNOWN_LIMITATION — defaultVerifier returns false for accounts requiring multiple signatures, documented in pairingClient.ts line 242-246 ("Honest limitation: document, don't pretend to support") |
+| AV26 | pairingId stored but unused downstream | I | NOT_A_BUG — pairingId is stored as forensic-correlation metadata; never read by any security-decision code path; storage-bounded length cap prevents bloat |
+
+**Audit campaign status:** Part 122 cp4 closed. Matrix/relay surface confirmed well-defended; one real contract-vs-code drift fixed (F9). Pattern lesson generalizes: "defense contracts in docblock comments must match defense reality in code" — same class as cp22's "13 runners" stale claim, but inside a security-critical validator.
+
+**This session's arc (cp22 → P122 cp4):**
 1. **cp22** — Sidecar-envelope-smoke flake fix; sysadmin-handoff persona walk; mount-sweep skip-list; TS6133 regex; upload-artifact SHA-pin.
-2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. F1 (HIGH) security-warning placement + F2 (MEDIUM) apt-monitor observability shipped.
-3. **P122 cp2** — F3 + F4 audit sweep: existing defenses hold up. F5 (MEDIUM) schema-migration drift sentinel shipped.
+2. **P122 cp1** — Black-hat audit of cp20-cp22 delta surfaces. F1 (HIGH) security-warning placement + F2 (MEDIUM) apt-monitor observability.
+3. **P122 cp2** — F3 + F4 audit sweep: existing defenses hold. F5 (MEDIUM) schema-migration drift sentinel.
 4. **P122 cp3** — DNS-rebinding closure (cp7 REVISIT §A). Three-layer defense + 45-scenario unit smoke + P122-CP3 sentinel.
+5. **P122 cp4** — Matrix/relay black-hat redux. 26 AVs enumerated; existing defenses hold across the board. F9 (LOW) defense-contract drift in pairedSession validator fixed.
 
 **Parked work:** Upgrade tooling — first-release week (~2026-05-22). See memory entry #29.
 
@@ -41,19 +67,19 @@
 - Relay-side response types extracted into `@morphit/relay-client`
 - PHASE F: apply schema-as-contract pattern as first contract layer
 - F7 (LOW) — S-12 ariaLabel sentinel regex-based; needs `assertNoRegexMatch` primitive
-- F8 (LOW) — tighter F5 catch: parse schema.sql for highest version comment, cross-check vs MIGRATIONS[]
+- F8 (LOW) — tighter F5 catch: parse schema.sql highest version, cross-check vs MIGRATIONS[]
 
-**Part 122 scope (cp4+):**
-- **cp4 — Matrix/relay black-hat redux** (sendDm + room handling + bootFromPairedSession + QR-pair handshake; added cp9, never reaudited adversarially).
-- **cp5 — Pre-launch sysadmin-handoff threat-model walk** (privilege-escalation surface during handoff; env-file misconfiguration paths).
+**Part 122 scope (cp5+):**
+- **cp5 — Pre-launch sysadmin-handoff threat-model walk** (privilege-escalation surface during handoff; env-file misconfiguration paths; what could go wrong when an operator follows the docs literally).
+- After cp5, Part 122 likely closes pre-launch; remaining defects/polish carry forward as standing REVISITs.
 
-**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp3 paragraph).
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp4 paragraph).
 
 ---
 
-**Tarball:** `morphit-audit-2026-05-122-cp3-delta.tar.gz` — delta tarball; cp3 touched zero structural moves and zero file deletions. Recipe: extract over the cp2 working tree → `git add -A` → commit + push.
+**Tarball:** `morphit-audit-2026-05-122-cp4-delta.tar.gz` — delta tarball; cp4 touched zero structural moves and zero file deletions. Recipe: extract over the cp3 working tree → `git add -A` → commit + push.
 
-**Previous tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` (F3/F4 audits concluded; F5 sentinel landed).
+**Previous tarball:** `morphit-audit-2026-05-122-cp3-delta.tar.gz` (DNS-rebinding closure).
 
 **This session's arc (cp22 → P122 cp2):**
 1. **cp22** — Characterized + fixed the cp21-disclosed intermittent flake; sysadmin-handoff persona walk caught 4 real drifts; mount-sweep skip-list extended; typecheck-sweep TS6133 regex fixed; `actions/upload-artifact` SHA-pinned.
@@ -82,6 +108,155 @@
 **Tarball:** `morphit-audit-2026-05-122-cp2-delta.tar.gz` — delta tarball; cp2 touched zero structural moves and zero file deletions. Recipe: extract over the cp1 working tree → `git add -A` → commit + push.
 
 **Previous tarball:** `morphit-audit-2026-05-122-cp1-delta.tar.gz` (closed cp1 F1+F2; F3+F4 filed for cp2).
+
+## Part 122 cp4 — Matrix/relay black-hat redux; F9 (paired-session defense-contract drift) closed
+
+### Pretext
+
+cp3 sealed with the DNS-rebinding closure in federation-probe. cp4 was filed as "Matrix/relay black-hat redux" — the Matrix-side surfaces added cp9 (matrix-bot, sendDm, QR-pair handshake, paired-readonly session) hadn't had a fresh adversarial pass since they shipped. Some had cp18/19 deep-deep coverage on specific subsystems (classifier sanitization, payload caps); the full Matrix-touch surface had not been walked end-to-end as a class.
+
+### Audit surface
+
+| Module | Concern |
+|--------|---------|
+| `apps/matrix-bot/src/matrix.ts` | sendDm + getDmRoom — the only Matrix I/O path |
+| `apps/matrix-bot/src/main.ts` | sendDm callers (digest + CRITICAL + WARN paths) |
+| `apps/matrix-bot/src/classifier.ts` | renderAlertBody producing the HTML body sent via sendDm |
+| `apps/web/src/lib/auth/desktopPairing.ts` | QR-pair crypto primitives (PURE, no DOM/network) |
+| `apps/web/src/lib/auth/pairingClient.ts` | QR-pair desktop-side glue (SSE wait + chain verifier) |
+| `apps/web/src/lib/auth/pairingPhoneSigner.ts` | Phone-side bundle signing |
+| `apps/web/src/lib/crypto/pairedSession.ts` | Persistent paired-readonly session record |
+| `apps/web/src/lib/stores/identity.ts` | bootFromPairedSession + handleStorageEvent |
+| `packages/operator-config/src/matrixAddress.ts` | MXID + Room Alias branded-type parsers |
+
+### Method — 26 AVs enumerated
+
+Black-hat enumeration before code-walking, per cp1 pattern lesson. STRIDE-classified each, tested empirically. Full AV table is in the cp4 section of TARBALL.md head; abridged here:
+
+- **AV1-7 — matrix-bot side** (sendDm injection, HTML body injection, dmRoomCache poisoning, etc.): all clean. Brand-typed MXIDs prevent @↔# confusion at compile time; renderAlertBody runs `escapeHtml` on every dynamic field (title, advice, payloadLines, source, ts); tier+sigil are static enums; classifier sanitization (cp18 AUDIT-1/2/3 + cp19 AUDIT-4) caps payload + strips C0 + defangs mxid pills.
+- **AV8-15 — QR-pair handshake**: all clean. `verifyDeliveryPayload` walks a tight defense chain: version check → pid check → AEAD decrypt with AAD-bound pid (relay can't shuffle bundles) → envelope shape validation (every field typed) → epk_echo + origin_echo + pid echo checks → signed_at freshness window (-120s/+30s) → chain-anchored signature verification with weight-threshold check. `sodium.memzero` wipes ephemeral priv + AEAD key + shared secret in `finally` blocks regardless of decrypt success.
+- **AV16-21 — runtime/operational**: relay endpoint type confusion clean (branded types), invite token binding clean (cp9 audit), QR `relay` URL pointing at private IP NOT_A_BUG_GIVEN_THREAT_MODEL (phone's loopback receives only encrypted-but-signed public info; no leak), phone-as-attacker / desktop-as-attacker explicitly OUT_OF_SCOPE per ADR-0022.
+- **AV22 — F9 finding** (see below).
+- **AV23 — cross-tab storage event CSRF**: clean. `handleStorageEvent` uses defense-in-depth pattern: re-validates via canonical `readPairedSession` (line 449) so a hostile same-origin tab writing garbage gets caught by `isValidPairedSession`.
+- **AV24 — crypto memory hygiene**: verified. Three `sodium.memzero` calls in `verifyDeliveryPayload`: shared secret (line 617), AEAD key (line 626), desktop ephemeral priv (line 632, in `finally` so it fires regardless of success/failure).
+- **AV25 — multisig accounts**: documented limitation. `defaultVerifier` requires single-key weight ≥ threshold; multisig accounts can't pair with this version. pairingClient.ts has an explicit comment ("Honest limitation: document, don't pretend to support") so the limit is visible.
+- **AV26 — pairingId stored but unused**: clean. Forensic-correlation metadata; never read by any security-decision code path; length-capped to prevent storage bloat.
+
+### F9 (LOW) — defense-contract drift in pairedSession validator
+
+**The finding.** `apps/web/src/lib/crypto/pairedSession.ts` `isValidPairedSession()` has a comment that promises:
+
+> Reject obviously-bogus timestamps (negative, far past, far future).
+
+The code immediately below only enforced two of three:
+
+```typescript
+if (r.pairedAt < 0 || r.pairedAt > now + 86400) return false;
+```
+
+`r.pairedAt < 0` catches "negative". `r.pairedAt > now + 86400` catches "far future". There is NO "far past" check. A paired-session record with `pairedAt: 0` (1970-01-01) passes validation.
+
+**Same drift in the test suite.** `pairedSession.test.ts` has:
+- `'rejects negative pairedAt'` ✓ matches code
+- `'rejects far-future pairedAt (more than 24h ahead)'` ✓ matches code
+- (no "rejects far-past pairedAt" test) ✗ matches the buggy code
+
+So the contract drift is consistent across docblock + code + tests. The test suite doesn't catch the drift because the test fixture file shares the same gap. cp21 pattern: schema-as-contract smokes only execute when their preconditions hold; here, the defense contract was in the docblock but never enforced.
+
+**Severity LOW because:** no current code path reads `pairedAt` for any age decision. The paired session has no active expiration policy. A 1970-epoch session record would deserialize fine and be used as a valid session — but the user would only get one if they wrote it themselves (no attacker path to install one in someone else's localStorage that isn't already a worse compromise). The contract drift is real; the live exploit surface is empty.
+
+**Why fix anyway:** (a) the docblock comment is a contract promise; the code violates it. (b) Future code paths that add "expire paired sessions after N days" would expect the validator to reject 1970 sessions. (c) Pre-launch is the right moment to close defense-contract drift, same rationale as cp3's REVISIT §A closure.
+
+### Fix
+
+```typescript
+const MAX_PAIRED_AGE_SECONDS = 365 * 86400;
+
+function isValidPairedSession(x: unknown): x is PairedSession {
+  // ... existing checks ...
+  const now = Math.floor(Date.now() / 1000);
+  if (r.pairedAt < 0) return false;
+  if (r.pairedAt > now + 86400) return false;             // far future: > 24h ahead
+  if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false; // far past: > 365d behind (cp4 F9 fix)
+  return true;
+}
+```
+
+The 365-day cutoff is a sanity bound, not an active expiration policy. Generous enough that any active user with low-activity devices passes (real re-pair cadence is 30-90 days); tight enough that obvious 1970 attacks fail. Round number, easy to reason about, documented with rationale in code.
+
+### Test coverage
+
+Added 2 new vitest cases to `pairedSession.test.ts`:
+
+```typescript
+it('rejects far-past pairedAt (more than 365 days behind) — Part 122 cp4 F9', () => {
+  writeRaw({ ...VALID, pairedAt: Math.floor(Date.now() / 1000) - 400 * 86400 });
+  expect(readPairedSession()).toBeNull();
+});
+
+it('accepts pairedAt within MAX_PAIRED_AGE_SECONDS window (300 days ago)', () => {
+  writeRaw({ ...VALID, pairedAt: Math.floor(Date.now() / 1000) - 300 * 86400 });
+  expect(readPairedSession()).not.toBeNull();
+});
+```
+
+The boundary cases bracket the 365-day cutoff: 400d rejected, 300d accepted.
+
+### Sentinel — `P122-CP4-F9`
+
+Pins all three legs of the docblock contract:
+
+```typescript
+{
+  name: 'P122-CP4-F9 — pairedSession validator rejects far-past timestamps (matches docblock contract)',
+  file: 'apps/web/src/lib/crypto/pairedSession.ts',
+  rootRelative: true,
+  mustHave: [
+    'MAX_PAIRED_AGE_SECONDS',
+    '365 * 86400',
+    'r.pairedAt < 0',                              // negative leg
+    'r.pairedAt > now + 86400',                    // far-future leg
+    'r.pairedAt < now - MAX_PAIRED_AGE_SECONDS'    // far-past leg (the cp4 fix)
+  ]
+}
+```
+
+Self-tested by tampering: removed the `r.pairedAt < now - MAX_PAIRED_AGE_SECONDS` line → sentinel correctly fails with `MUST HAVE (not found)`. Restoration → clean.
+
+### Verification
+
+- Triple-pulse 2,959 × 3, 0 failures (cp3 baseline 2,958 → cp4 baseline 2,959 = +1 P122-CP4-F9 sentinel)
+- Typecheck-sweep 0 errors across all 9 workspaces
+- F9 sentinel self-tested under tampering
+- Pre-existing `pairedSession.test.ts` vitest cases still all pass (extended with cp4's two new boundary cases)
+- ansible-lint NOT re-verified (sandbox-environmental)
+
+### Pattern lessons
+
+1. **Defense contracts in docblock comments must match defense reality in code.** Same class as cp22's "13 runners" stale claim, but inside a security-critical validator. The mismatch is invisible to the operator until a feature relying on the promised contract gets written — then the gap becomes an exploit.
+
+2. **Test fixtures share the bias of the code they test.** pairedSession.test.ts had tests for negative + far-future (matching the buggy code) but not far-past (which the code didn't check). Test suites that exist solely to verify the implementation can't catch the implementation-vs-contract drift; only an external reviewer reading both docblock and code can. Audit checklist item.
+
+3. **"No current exploit surface" doesn't mean "no fix needed."** F9 has no live attack today because nothing reads `pairedAt` for age decisions. Pre-launch is precisely the right time to close gaps that have no live exploit — the cost is low and the gap closes before any future code path opens it.
+
+4. **Black-hat enumeration of well-audited code yields confirmation, not findings.** 25 of 26 AVs concluded with "existing defense holds." That's the audit doing its job — pre-launch sanity check that the cp9-cp19 work has aged well. The one finding (F9) was discovered by reading the docblock comment against the code, not by attacking the code from outside.
+
+5. **AAD-bound encryption is the right primitive for shuttle protocols.** The QR-pair flow's ChaCha20-Poly1305 AEAD with `aad = pid bytes` means the relay (an untrusted intermediary) cannot shuffle ciphertext between sessions: a bundle decrypted with the wrong pid as AAD fails authentication. This pattern generalizes — any protocol with an intermediary that shuttles encrypted bundles should bind session identifiers into AEAD AAD.
+
+### Files modified
+
+```
+apps/web/src/lib/crypto/pairedSession.ts        (F9 fix: MAX_PAIRED_AGE_SECONDS + far-past check)
+apps/web/src/lib/crypto/pairedSession.test.ts   (2 new vitest cases: far-past rejected, 300d accepted)
+apps/web/scripts/persona-walkthrough-smoke.ts   (P122-CP4-F9 sentinel — 112 → 113 scenarios)
+TARBALL.md                                      (this entry)
+docs/REVISIT-LIST.md                            (cp4 maintained-line)
+docs/AUDIT-2026-05.md                           (cp4 entry)
+```
+
+No brag-list edit (audit findings per cp19 discipline). No ADR (no architectural shift). No locale edits. No schema migration.
+
+---
 
 ## Part 122 cp3 — DNS-rebinding closure in federation-probe SSRF defense (cp7 REVISIT §A closed)
 

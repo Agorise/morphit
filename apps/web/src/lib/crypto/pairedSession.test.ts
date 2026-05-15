@@ -142,6 +142,24 @@ describe('pairedSession — validator rejects malformed records', () => {
 		expect(readPairedSession()).toBeNull();
 	});
 
+	it('rejects far-past pairedAt (more than 365 days behind) — Part 122 cp4 F9', () => {
+		// Defense contract per the docblock: "Reject obviously-bogus
+		// timestamps (negative, far past, far future)".  Pre-cp4 the
+		// far-past case wasn't actually checked despite the comment
+		// promising it.  Cp4 closed the gap with a 365-day sanity
+		// cutoff (constant MAX_PAIRED_AGE_SECONDS in the module).
+		writeRaw({ ...VALID, pairedAt: Math.floor(Date.now() / 1000) - 400 * 86400 });
+		expect(readPairedSession()).toBeNull();
+	});
+
+	it('accepts pairedAt within MAX_PAIRED_AGE_SECONDS window (300 days ago)', () => {
+		// Sanity check the cutoff is generous enough for real-world use:
+		// a paired session from 300 days ago is still valid.  An active
+		// user with low-activity desktop falls in this window.
+		writeRaw({ ...VALID, pairedAt: Math.floor(Date.now() / 1000) - 300 * 86400 });
+		expect(readPairedSession()).not.toBeNull();
+	});
+
 	it('rejects NaN pairedAt', () => {
 		writeRaw({ ...VALID, pairedAt: Number.NaN });
 		expect(readPairedSession()).toBeNull();

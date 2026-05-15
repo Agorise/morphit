@@ -88,6 +88,24 @@ export function hasPairedSession(): boolean {
 	return readPairedSession() !== null;
 }
 
+/** Maximum acceptable age for a persisted paired-session record.
+ *  Anything older is rejected as "obviously bogus" — defends against
+ *  a hostile same-origin tab (or compromised localStorage) writing
+ *  a 1970-epoch timestamp to bypass a future expiration policy or
+ *  to make a stale session look fresh.
+ *
+ *  365 days chosen as the cutoff: generous enough that an active
+ *  user re-paired any time in the last year passes, tight enough
+ *  that the 1970-epoch attack fails.  This is a sanity bound, NOT
+ *  an active expiration policy — sessions don't expire after a year
+ *  during normal use because the paired marker is refreshed every
+ *  time the user re-pairs.  Pre-Part 122 cp4 this check was missing
+ *  despite the docblock comment promising it ("Reject obviously-
+ *  bogus timestamps (negative, far past, far future)").  F9 from
+ *  Part 122 cp1's audit-pattern lesson: defense contracts in
+ *  comments must match defense reality in code. */
+const MAX_PAIRED_AGE_SECONDS = 365 * 86400;
+
 /** Defensive validator.  The paired-session record is small and
  *  fully public, but we still validate shape + length so that a
  *  hostile same-origin tab writing garbage doesn't make the
@@ -115,6 +133,8 @@ function isValidPairedSession(x: unknown): x is PairedSession {
 	if (typeof r.pairedAt !== 'number' || !Number.isFinite(r.pairedAt)) return false;
 	// Reject obviously-bogus timestamps (negative, far past, far future).
 	const now = Math.floor(Date.now() / 1000);
-	if (r.pairedAt < 0 || r.pairedAt > now + 86400) return false;
+	if (r.pairedAt < 0) return false;
+	if (r.pairedAt > now + 86400) return false; // far future: > 24h ahead
+	if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false; // far past: > 365d behind (Part 122 cp4 F9 fix)
 	return true;
 }

@@ -563,6 +563,32 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
+		// Part 122 cp4 — F9 (LOW) — paired-session "far past" check.
+		//
+		// pairedSession.ts docblock promised "Reject obviously-bogus
+		// timestamps (negative, far past, far future)".  Pre-cp4 the
+		// code only checked "negative" and "far future" — the "far
+		// past" leg was missing.  Defense-contract drift surfaced
+		// during cp4's Matrix/relay black-hat redux.  Cp4 closed it
+		// with a `MAX_PAIRED_AGE_SECONDS` constant (365 days) +
+		// matching test case.  Sentinel pins all three legs of the
+		// contract against future drift.
+		name: 'P122-CP4-F9 — pairedSession validator rejects far-past timestamps (matches docblock contract)',
+		file: 'apps/web/src/lib/crypto/pairedSession.ts',
+		rootRelative: true,
+		mustHave: [
+			'MAX_PAIRED_AGE_SECONDS',
+			'365 * 86400',
+			// All three legs of the docblock contract must be enforced.
+			// Negative check:
+			'r.pairedAt < 0',
+			// Far-future check:
+			'r.pairedAt > now + 86400',
+			// Far-past check (the cp4 fix):
+			'r.pairedAt < now - MAX_PAIRED_AGE_SECONDS'
+		]
+	},
+	{
 		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
