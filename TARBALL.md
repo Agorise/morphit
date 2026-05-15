@@ -1,10 +1,50 @@
-# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 16)
+# TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 17)
 
 **Snapshot date:** 2026-05-14
 
-**Tarball:** `morphit-audit-2026-05-121-cp16-delta.tar.gz`
+**Tarball:** `morphit-audit-2026-05-121-cp17-delta.tar.gz`
 
-**Previous tarball:** `morphit-audit-2026-05-121-cp15-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+**Previous tarball:** `morphit-audit-2026-05-121-cp16-delta.tar.gz`.  This cp6 is a three-item plow-through finishing the work queued at the top of cp5's handoff: USDT drift sweep (Memory #26 finishing strokes), operator-stance surfacing (federation visibility into per-instance asset policy), and per-locale prerendering helpers (honest partial — full route restructure deferred per design-doc + Memory #11 since the sandbox can't `npm run build` end-to-end).
+
+## Part 121 cp17 — what's shipped (final indexer-side schema-coverage completion)
+
+### Pretext
+
+cp16 sealed SSE-stream shape smoke + REST expanded to 27 interfaces.  Ken said "finish this up PLEASE".  cp17 closes the indexer-side coverage gap.
+
+### What shipped
+
+api-response-shape-smoke expanded from 27 → ALL 38 @morphit/indexer-client response types.  76 checks total (38 valid-parse + 38 reject-invalid).  Final additions: ClearingPricePoint, ClearingPriceHistoryResponse, BatchProfilesResponse, FeedbackRecord (with literal-union `rating: 1|2|3|4|5`), FeedbackResponseRecord, AccountFeedback{,Given}Response, ChatReadStateEntry/Response, AttestorEligibilityResponse, StrangerFeeQuoteResponse.
+
+2 P121-CP17 persona sentinels.  Zero new brag entries (internal contract-hardening, per discipline).
+
+Relay-side ad-hoc JSON responses deferred — they need a shared types package first.
+
+### Campaign status
+
+Part 121 audit campaign comprehensive across THREE IO surfaces:
+- bash sidecar emit (cp14 envelope-smoke)
+- HTTP REST responses (cp15-17 api-response-shape, 38 interfaces)
+- SSE event streams (cp16 sse-stream-shape, 3 streams)
+
+Same architectural pattern across all three: zod schema + TS satisfies cross-check + negative-test invalidator.
+
+Matrix-bot ecosystem feature-complete: 12 monitoring sidecars, three-tier classifier with ELI5 advice, one-command Ansible deploy, CI workflow runs typecheck+lint+smokes on every push, tag-push release workflow.
+
+### Verification
+
+- Triple-pulse: 2,857 × 3, 0 failures.  cp16 baseline 2,833 → cp17 baseline 2,857 (+24 net).
+- Typecheck-sweep: 0 errors across all 9 workspaces.
+- ansible-lint at production-profile strictness: passes.
+
+### Pending — NOT cp17 SCOPE
+
+- Live full-stack Ansible test against fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Trigger `.forgejo/workflows/release.yml` with a real tag push
+- Extract `@morphit/relay-client` package + apply schema-as-contract pattern
+- Defense-in-depth: extract indexer-client schemas into a shared package consumed by BOTH smoke AND indexer handlers
+
+---
 
 ## Part 121 cp16 — what's shipped (SSE-stream shape smoke + expanded REST-API coverage)
 
