@@ -1,6 +1,45 @@
 # TARBALL — Morphit pre-launch hardening, Part 121 (in progress, checkpoint 20-fix2 — picker contact_link reroute + redundant paste-instruction removed)
 
-**Snapshot date:** 2026-05-14
+**Snapshot date:** 2026-05-15
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 121 cp20-fix2 (2026-05-15)
+
+**Gates — all green:**
+- Triple-pulse: **2,886 × 3 scenarios, 0 failures**
+- Typecheck-sweep: 0 errors across 9 workspaces
+- ansible-lint: 0 failures, 0 warnings (production-profile, 53 files)
+
+**Brag list:** 265 entries (closing summary entry 265 = "No flash of English content for non-English speakers"). No new entries added across cp15–cp20-fix2 — all work was internal hardening per discipline rule #15.
+
+**This session's arc (cp15 → cp20-fix2):**
+1. **cp15** — `api-response-shape-smoke.ts` (10 zod-schemas), `ops/scripts/lib/emit.sh` (extracted from 12 sidecars), host-monitor bind-mount + tmpfs sweep, smartctl SCT thermal-log extension
+2. **cp16** — `sse-stream-shape-smoke.ts` (18 SSE checks across 3 streams), REST coverage 10 → 27 interfaces
+3. **cp17** — REST coverage 27 → ALL 38 indexer-client interfaces, schema-as-contract for indexer side COMPLETE
+4. **cp18** — Deep-deep security audit; 2 HIGH findings FIXED: AUDIT-1 (json_str control-char injection via dmesg `comm` names → fixed with sed -z + RFC 8259 C0 escapes), AUDIT-CI-7 (release.yml tag-name command-injection via `${{}}` shell interpolation → fixed with strict tag validation + env: passing)
+5. **cp19** — Cleared all remaining MEDIUM/LOW audit findings: AUDIT-ANSIBLE-1 (NodeSource refactor to apt-repo + GPG-key pattern), AUDIT-NUMERIC (`json_num()` helper applied to 3 sites), AUDIT-2 + AUDIT-3 (sanitize() in classifier: strip C0, defang Matrix mxids with ZWJ), AUDIT-4 (1KB/8KB payload caps with truncation markers), AUDIT-CI-2 (SHA-pin checkout + setup-node with version comments; upload-artifact left at @v4 with explicit TODO). AUDIT-CI-1 NOT actioned (reviewer-policy item, not code).
+6. **cp20** — Re-shipped beta-tester intake form at canonical Forgejo path `.forgejo/issue_template/bug_report.md` + `config.yml`. (Memory said it shipped in Part 48 but had been lost in a later refactor.)
+7. **cp20-fix** — Picker contact_link re-routed from operator's personal MXID to `#agorise:matrix.org` public community room; security DM stays only in §16 of the form body, NOT on the picker UI
+8. **cp20-fix2** — Removed "Copy this whole file, paste it into a new issue at…" line from the auto-loaded Forgejo template (nonsensical when the user is already on the new-issue page); docs/NEW-ISSUE-FOUND.md keeps the line for offline/email use
+
+**Audit campaign status:** Comprehensively closed. All findings recorded in `docs/SECURITY-AUDIT-2026-05-CP18.md` with statuses (FIXED / NOT-ACTIONED / partial).
+
+**Parked work (Ken explicitly deferred):**
+- **Upgrade tooling** — first-release week (~2026-05-22). Manual-only by default; `MORPHIT_AUTO_UPGRADE=1` opt-in for auto. Scope: (1) tag-signature verify step in release.yml (`git tag -v "$TAG"` — currently missing); (2) `morphit-release-monitor` sidecar polls Forgejo /6h; (3) `morphit upgrade` ops-cli (download + SHA-256 + GPG verify + show notes + confirm + apply + keep prev); (4) `docs/UPGRADING.md`. **Re-trigger phrase:** "release tooling". See memory entry #29.
+
+**Truly pending (not blocking, just not done):**
+- Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM (needs Ken's hardware)
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end
+- `actions/upload-artifact` SHA bump (left at @v4 with TODO; needs upstream SHA verification)
+- Relay-side response types extracted into `@morphit/relay-client` + schema-as-contract pattern applied (availability.ts, invite.ts, create.ts, health.ts) — currently can't apply satisfies-clause cross-check without a shared types package
+- PHASE F (whatever it is): apply schema-as-contract pattern as first contract layer when it lands
+
+**Resume directive:** Read this block, then `docs/REVISIT-LIST.md`'s "Last maintained" entry (full cp20-fix2 + cp20-fix paragraphs). Both together = exact resume point. The per-checkpoint sections below are historical context, not required reading.
+
+---
 
 **Tarball:** `morphit-audit-2026-05-121-cp20-fix2-delta.tar.gz`
 
