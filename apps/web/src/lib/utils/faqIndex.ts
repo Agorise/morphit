@@ -28,6 +28,7 @@ export const FAQ_KEYS = [
 	'security_engineering_rigor',
 	'how_morphit_protects_me',
 	'vs_others',
+	'vs_atomic_swap_dexes',
 	'video_tutorial',
 	'signup_requirements',
 	'signup_stuck',
@@ -69,6 +70,7 @@ export const FAQ_KEYS = [
 	'chat_dispute_recourse',
 	'chat_vs_feedback_visibility',
 	'chat_inbox_features',
+	'notifications_overview',
 	'no_escrow_arbitration',
 	'feedback_immutable',
 	'feedback_reply',
@@ -155,7 +157,8 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// Intro + framing cluster — helps new readers orient between
 	// "what is this" and the handful of pages they should read next.
 	what_is_morphit: ['vs_others', 'is_it_safe', 'how_to_trade_walkthrough'],
-	vs_others: ['what_is_morphit', 'is_it_safe', 'who_runs_it'],
+	vs_others: ['vs_atomic_swap_dexes', 'what_is_morphit', 'is_it_safe', 'who_runs_it'],
+	vs_atomic_swap_dexes: ['vs_others', 'what_is_morphit', 'no_escrow_arbitration'],
 
 	// Fees + incentives cluster
 	fees: [
@@ -401,7 +404,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	use_vpn: ['privacy_practices'],
 	why_fresh_addresses: ['privacy_practices', 'xmr_txid'],
 	xmr_tx_proof: ['xmr_txid', 'privacy_practices', 'why_fresh_addresses'],
-	push_notifications_privacy: ['chat_inbox_features', 'privacy_practices', 'lock_vs_signout'],
+	push_notifications_privacy: ['notifications_overview', 'chat_inbox_features', 'privacy_practices', 'lock_vs_signout'],
 
 	// RSS — referenced by the global footer pill, per-asset
 	// orderbook link, and per-trader profile link. Privacy
@@ -422,10 +425,23 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// what_is_morphit_chat) get chat_inbox_features merged in
 	// at their existing definitions above.
 	chat_inbox_features: [
+		'notifications_overview',
 		'chat_anti_spam',
 		'chat_privacy',
 		'user_hide_accounts',
 		'push_notifications_privacy'
+	],
+
+	// Notifications system overview — ties together the chat inbox
+	// (chat_inbox_features), the push privacy story
+	// (push_notifications_privacy), and the underlying multi-channel
+	// design.  Related cluster surfaces both deep-dive companions
+	// plus chat_anti_spam (the Requests-tab triage is part of the
+	// inbox experience the overview opens with).
+	notifications_overview: [
+		'chat_inbox_features',
+		'push_notifications_privacy',
+		'chat_anti_spam'
 	],
 	chat_anti_spam: [
 		'chat_inbox_features',

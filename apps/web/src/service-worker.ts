@@ -167,4 +167,103 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 	}
 });
 
+// ─── Web Push (Part 122 cp13) ───────────────────────────────────
+//
+// `push` fires when the operator's relay delivers an encrypted
+// payload via the browser's push service.  The web-push library
+// on the relay side encrypts payloads per RFC 8291; the browser
+// decrypts before raising this event, so we receive plaintext
+// `event.data`.
+//
+// Payload shape (relay's PushSender):
+//   {
+//     title:      string,
+//     body:       string,
+//     category:   'order' | 'chat' | 'feedback',
+//     clickPath:  string | null,   // path within instance origin
+//     eventId:    string,           // queue-row id, dedup key
+//     eventAt:    string            // ISO timestamp
+//   }
+//
+// We never log payload content (privacy-preserving) and we never
+// raise a notification for malformed payloads — silently dropping
+// is safer than guessing wrong.
+self.addEventListener('push', (event: PushEvent) => {
+	let payload: {
+		title?: unknown;
+		body?: unknown;
+		category?: unknown;
+		clickPath?: unknown;
+		eventId?: unknown;
+	};
+	try {
+		const text = event.data?.text();
+		if (!text) return;
+		payload = JSON.parse(text);
+	} catch {
+		// Malformed payload — drop silently.  Never log content.
+		return;
+	}
+
+	const title = typeof payload.title === 'string' ? payload.title : 'Morphit';
+	const body = typeof payload.body === 'string' ? payload.body : '';
+	const category =
+		payload.category === 'order' ||
+		payload.category === 'chat' ||
+		payload.category === 'feedback'
+			? payload.category
+			: 'order';
+	const clickPath =
+		typeof payload.clickPath === 'string' ? payload.clickPath : '/';
+	const tag =
+		typeof payload.eventId === 'string'
+			? `morphit-${category}-${payload.eventId}`
+			: `morphit-${category}`;
+
+	event.waitUntil(
+		self.registration.showNotification(title, {
+			body,
+			tag, // dedup key — same eventId across devices doesn't double-notify
+			data: { clickPath, category },
+			// `requireInteraction: false` so notifications auto-dismiss
+			// after the OS-default window; "loud about orders, silent
+			// about chat noise" is governed at the relay side by the
+			// per-category enqueue, not by SW config.
+			requireInteraction: false
+		})
+	);
+});
+
+// Open or focus a Morphit tab at the notification's clickPath.
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+	event.notification.close();
+
+	const data = event.notification.data as
+		| { clickPath?: unknown }
+		| undefined;
+	const path = typeof data?.clickPath === 'string' ? data.clickPath : '/';
+	const targetUrl = new URL(path, self.location.origin).toString();
+
+	event.waitUntil(
+		(async () => {
+			const clientList = await self.clients.matchAll({
+				type: 'window',
+				includeUncontrolled: true
+			});
+			// Prefer an already-open Morphit tab.  Focus it and
+			// navigate it to the target URL.
+			for (const client of clientList) {
+				const url = new URL(client.url);
+				if (url.origin === self.location.origin) {
+					await (client as WindowClient).focus();
+					await (client as WindowClient).navigate(targetUrl);
+					return;
+				}
+			}
+			// No open tab — open a new one.
+			await self.clients.openWindow(targetUrl);
+		})()
+	);
+});
+
 export {};

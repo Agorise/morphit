@@ -68,12 +68,17 @@ await scenario('block gate: passes when no block row exists', async () => {
 			match: 'unique_fan_in',
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]
 		},
-		{ match: 'INSERT INTO chat_messages' }
+		{ match: 'INSERT INTO chat_messages' },
+		// Part 122 cp13 — successful chat insert is followed by a
+		// push_pending enqueue.  cp14 inserts a locale lookup
+		// before the enqueue so the indexer can localize.
+		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(makeCtx({ signer: 'alice', payload: goodPayload() }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
-	if (mock.queries.length !== 4) {
-		throw new Error(`expected 4 queries, got ${mock.queries.length}`);
+	if (mock.queries.length !== 6) {
+		throw new Error(`expected 6 queries (4 chat + locale + push enqueue), got ${mock.queries.length}`);
 	}
 });
 
@@ -319,7 +324,13 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 			match: 'unique_fan_in',
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]
 		},
-		{ match: 'INSERT INTO chat_messages' }
+		{ match: 'INSERT INTO chat_messages' },
+		// Part 122 cp14 — locale lookup before push enqueue so the
+		// indexer can localize.  Order-permlink messages route
+		// under category='order' for fan-in to the right notify
+		// channel.
+		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(
 		makeCtx({
@@ -329,9 +340,9 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 		mock.client
 	);
 	assertEqual(r, { ok: true }, 'result');
-	if (mock.queries.length !== 4) {
+	if (mock.queries.length !== 6) {
 		throw new Error(
-			`expected 4 queries (block + orders + fan-in + insert), got ${mock.queries.length}`
+			`expected 6 queries (block + orders + fan-in + chat insert + locale + push enqueue), got ${mock.queries.length}`
 		);
 	}
 	// The orders query must use both recipient and permlink as params.

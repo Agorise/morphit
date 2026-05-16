@@ -2133,3 +2133,207 @@ COMMENT ON COLUMN orders.asset_network IS
     'when asset=''USDT''; NULL otherwise.  Pinned at post time '
     'so cross-network sends are impossible — buyer sees the '
     'network on the order row before agreeing to trade.';
+
+-- ─────────────────────────────────────────────────────────────────
+-- v33 / Part 122 cp13 — Web Push subscription storage + delivery queue
+-- ─────────────────────────────────────────────────────────────────
+--
+-- Honors the FAQ entry `push_notifications_privacy` (user
+-- chooses self-hosted / standard / off; payload E2E encrypted
+-- per RFC 8291 by the web-push library; operator sees only
+-- the subscription endpoint, never the message content).
+--
+-- Two tables:
+--
+--   push_subscriptions — one row per (account, endpoint) pair.
+--     Endpoint is the URL the browser's push service issued to
+--     the client when pushManager.subscribe() ran; the relay
+--     POSTs encrypted payloads here to deliver pushes.  p256dh
+--     and auth are the client's ephemeral keypair components
+--     used by the web-push library to encrypt payloads (RFC 8291).
+--
+--     Privacy:
+--       - Subscription endpoints expose which push service
+--         (FCM = Google, autopush = Mozilla, web.push.apple.com
+--         = Apple) the browser uses.  This is normal for Web
+--         Push; the alternative is no push at all.
+--       - No IP address is ever stored.
+--       - Rows are deleted automatically when the push service
+--         returns 410 Gone (subscription expired) or 404 Not
+--         Found (subscription explicitly cancelled).
+--       - User can unsubscribe explicitly via the UI, which
+--         calls /v1/push/unsubscribe and removes the row.
+--
+--   push_pending — durable delivery queue.  When the indexer
+--     detects a notify-worthy event (order filled, payment
+--     marked, feedback arrived, chat message received) for an
+--     account that has a live subscription, it INSERTs a row
+--     here with the payload metadata.  The relay's push-sender
+--     worker drains the queue, attempts delivery, and either
+--     deletes (on success) or schedules a retry / deletes the
+--     subscription (on terminal failure).
+--
+-- Naming follows the existing relay_pending_transfers pattern
+-- (ADR-0011) since the relay owns the worker that drains both
+-- queues from the indexer's database.
+
+-- ─── v33.1: push_subscriptions ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    -- Account the subscription belongs to.  References the chain
+    -- posting-account name (e.g. 'alice') that proved ownership
+    -- by signing the subscribe request with their posting key.
+    account             TEXT        NOT NULL,
+
+    -- Push service endpoint URL the browser issued at subscribe
+    -- time.  Globally unique per browser/device/origin.  Used
+    -- as the PRIMARY KEY's second column because one account
+    -- may have multiple devices subscribed.
+    endpoint            TEXT        NOT NULL,
+
+    -- Browser-generated ephemeral P-256 public key for payload
+    -- encryption (RFC 8291).  Base64url-encoded.
+    p256dh              TEXT        NOT NULL,
+
+    -- Browser-generated 16-byte client-shared secret used as the
+    -- HKDF salt for payload encryption.  Base64url-encoded.
+    auth                TEXT        NOT NULL,
+
+    -- User-agent string sent at subscribe time, used for
+    -- operator-side "which devices are subscribed to my account"
+    -- in the Settings UI.  Truncated to 200 chars at insert
+    -- time to bound row size.  Never used for tracking.
+    user_agent          TEXT,
+
+    -- The privacy mode the user chose at subscribe time.
+    -- 'standard' = browser's default push service (FCM/autopush/
+    -- APNS).  'self_hosted' = operator's own push server (the
+    -- endpoint URL points at the operator's domain).  Recorded
+    -- for the UI to show the user what mode each device is using.
+    privacy_mode        TEXT        NOT NULL
+        CHECK (privacy_mode IN ('standard', 'self_hosted')),
+
+    -- When the subscription was created.  Used for the UI's
+    -- "subscribed since" display and operator-side metrics
+    -- ("how many subscriptions are over 90 days old / likely
+    -- stale").  No IP, no fingerprinting data.
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Updated on every push delivery attempt (success or failure)
+    -- so operators can spot stale subscriptions before the push
+    -- service returns 410.  NULL until first delivery attempt.
+    last_delivery_at    TIMESTAMPTZ,
+
+    -- Count of consecutive delivery failures.  Reset to 0 on any
+    -- 2xx response from the push service.  When this exceeds
+    -- MAX_CONSECUTIVE_FAILURES (default 5), the row is deleted
+    -- on the next failure — the subscription is presumed dead
+    -- even if the push service hasn't returned a 410 yet.
+    consecutive_failures INTEGER    NOT NULL DEFAULT 0,
+
+    -- Locale tag the user subscribed with (e.g. 'en', 'zh-CN').
+    -- Used by the indexer to localize push payload title/body
+    -- strings at enqueue time.  Defaults to 'en' for any
+    -- subscription that didn't include a locale.  Part 122 cp14.
+    locale              TEXT        NOT NULL DEFAULT 'en',
+
+    PRIMARY KEY (account, endpoint)
+);
+
+CREATE INDEX IF NOT EXISTS push_subscriptions_account_idx
+    ON push_subscriptions (account);
+
+-- Part 122 cp15 audit DD-12 — the feedback + chat handlers do
+-- `WHERE account = $1 ORDER BY created_at DESC LIMIT 1` on every
+-- enqueue.  The single-column account index makes WHERE fast but
+-- forces a heap sort over matched rows.  A composite index with
+-- DESC ordering serves the query plan in O(log n) end-to-end.
+CREATE INDEX IF NOT EXISTS push_subscriptions_account_created_idx
+    ON push_subscriptions (account, created_at DESC);
+
+-- v33.1a — locale column added in Part 122 cp14 so the indexer
+-- can localize push payload strings at enqueue time.  Idempotent
+-- with the inline column in the CREATE TABLE above; ALTER stays
+-- as a no-op on fresh cp15+ installs and runs on cp13→cp15
+-- upgrades.
+ALTER TABLE push_subscriptions
+    ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en';
+
+COMMENT ON TABLE push_subscriptions IS
+    'Part 122 cp13: Web Push subscription store.  Each row '
+    'is one (account, browser device) pairing.  Operator can '
+    'see WHICH push services accounts are subscribed via, but '
+    'NEVER sees payload content (E2E encrypted by web-push '
+    'library per RFC 8291) and NEVER stores subscriber IPs. '
+    'Part 122 cp14 — `locale` column added so push titles/bodies '
+    'are localized at enqueue time per the user''s most-recent '
+    'subscribe locale.';
+
+-- ─── v33.2: push_pending — delivery queue ──────────────────────
+CREATE TABLE IF NOT EXISTS push_pending (
+    -- Surrogate key so the worker can claim rows atomically with
+    -- SELECT ... FOR UPDATE SKIP LOCKED.
+    id                  BIGSERIAL   PRIMARY KEY,
+
+    -- Account the push targets.  Worker joins to
+    -- push_subscriptions on account to find all the user's
+    -- devices.
+    account             TEXT        NOT NULL,
+
+    -- Notification category — order / chat / feedback.  Matches
+    -- the per-category preferences toggle in the UI; the worker
+    -- skips devices whose user opted-out of this category at
+    -- subscribe time (the client filters before subscribing, but
+    -- we re-check here for defence-in-depth).
+    category            TEXT        NOT NULL
+        CHECK (category IN ('order', 'chat', 'feedback')),
+
+    -- The notification title shown to the user (the bold line
+    -- of the OS notification).  Already localized at insert
+    -- time by the indexer; the worker emits it as-is.
+    title               TEXT        NOT NULL,
+
+    -- The notification body (the second line of the OS
+    -- notification).  May be the empty string for title-only
+    -- pushes.  Already localized.
+    body                TEXT        NOT NULL,
+
+    -- An opaque URL the click handler should open when the user
+    -- taps the notification.  Always relative to the instance
+    -- origin (e.g. '/order/alice/buy-btc-eur-1234'); the SW
+    -- prepends location.origin.
+    click_path          TEXT,
+
+    -- When the source event occurred (NOT when this row was
+    -- created).  Used by the worker to drop pushes for events
+    -- older than MAX_PUSH_AGE (default: 1 hour) — pushing a
+    -- "your order filled" message 6 hours after the fact is
+    -- worse than not pushing at all.
+    event_at            TIMESTAMPTZ NOT NULL,
+
+    -- When this row was inserted by the indexer.  Used for
+    -- ordering by FIFO + age-based draining.
+    enqueued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS push_pending_enqueued_at_idx
+    ON push_pending (enqueued_at);
+
+CREATE INDEX IF NOT EXISTS push_pending_account_idx
+    ON push_pending (account);
+
+COMMENT ON TABLE push_pending IS
+    'Part 122 cp13: durable Web Push delivery queue.  Mirrors '
+    'the relay_pending_transfers pattern (ADR-0011) — indexer '
+    'enqueues, relay worker drains.  Drops events older than '
+    'MAX_PUSH_AGE (~1h) instead of pushing stale notifications. '
+    'cp15: per-row retry was originally planned via an `attempts` '
+    'column but removed — the worker deletes pending rows after '
+    'fan-out (no per-event retry) and instead handles transient '
+    'failures at the SUBSCRIPTION level via '
+    'push_subscriptions.consecutive_failures.';
+
+-- v33.2a — drop the dead `attempts` column from cp13.  Idempotent
+-- so cp15+ fresh installs (where the column was never created)
+-- and cp13→cp15 upgrades (where it WAS) both succeed.
+ALTER TABLE push_pending DROP COLUMN IF EXISTS attempts;
+

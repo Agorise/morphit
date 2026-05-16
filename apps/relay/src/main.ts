@@ -31,6 +31,9 @@ import { KillSwitch } from './policy/killSwitch.ts';
 import { SequentialDetector } from './policy/sequentialDetector.ts';
 import { configureTrustedProxies } from './middleware/ip.ts';
 import { Limiter } from './middleware/ratelimit.ts';
+import { PushSubscriptionStore } from './policy/pushSubscriptions.ts';
+import { PushSender } from './policy/pushSender.ts';
+import { PushEndpoints } from './api/push.ts';
 import { corsAllowlist } from './middleware/cors.ts';
 import { enforceOriginAllowlist } from './middleware/origin_enforcement.ts';
 import { requireJsonContentType } from './middleware/content_type.ts';
@@ -239,6 +242,36 @@ async function main(): Promise<void> {
 	);
 	const queueDrainer = new RelayQueueDrainer(cfg, db, blurt);
 
+	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	// Subscriptions store is always created (used by the endpoints
+	// even when push is disabled — the GET key-helper returns a
+	// clean 503 push_disabled, but the endpoint code path
+	// references the store).  Sender is only constructed when
+	// pushEnabled (it calls webpush.setVapidDetails which throws
+	// on undefined keys).
+	const pushSubscriptionStore = new PushSubscriptionStore(db);
+	const pushSubscribeLimiter = new Limiter(20, 60 * 60_000); // 20/hour/IP
+	const pushEndpoints = new PushEndpoints(
+		cfg.pushEnabled,
+		cfg.vapidPublicKey,
+		pushSubscribeLimiter,
+		pushSubscriptionStore,
+		blurt,
+		cfg.pushRequireSigned
+	);
+	const pushSender = cfg.pushEnabled
+		? new PushSender(cfg, db, pushSubscriptionStore)
+		: null;
+	if (pushSender) {
+		bootLog.info('push_enabled', {
+			poll_interval_ms: cfg.pushPollIntervalMs,
+			batch_size: cfg.pushBatchSize,
+			max_age_seconds: cfg.pushMaxAgeSeconds
+		});
+	} else {
+		bootLog.info('push_disabled_no_vapid_keys', {});
+	}
+
 	// Start the background BLURT-balance poll. We don't wait for it
 	// to succeed — the relay should come up even if the chain is
 	// temporarily unreachable, with `/v1/health` reporting stale=true
@@ -251,6 +284,10 @@ async function main(): Promise<void> {
 	// broadcasting queued welcome bonuses / dust refills / loyalty
 	// BP grants as they arrive from the indexer.
 	queueDrainer.start();
+
+	// Start the push-sender worker — drains push_pending into
+	// per-device Web Push deliveries.  Only when VAPID is set.
+	if (pushSender) pushSender.start();
 
 	const app = new Hono();
 
@@ -290,6 +327,7 @@ async function main(): Promise<void> {
 	registerAvailabilityRoutes(app, blurt, availLimiter);
 	inviteEndpoint.register(app);
 	createEndpoint.register(app);
+	pushEndpoints.register(app);
 
 	// Catch-all 404 returning a tight JSON body — never an HTML error page.
 	app.notFound((c) => c.json({ status: 'not_found' }, 404));

@@ -355,14 +355,51 @@ file in the same turn.
       ADR-0023 explain the design.  *(Origin: Part 121
       cp3 USDT integration.)*
 
+- [ ] **[recommended, non-blocking]** **VAPID keypair for
+      Web Push notifications** (Part 122 cp13).  Without
+      this, push notifications are disabled instance-wide
+      and users on your instance see "Not supported on this
+      device" in Settings → Notifications.  In-tab ambient
+      channels (title-bar badge, favicon dot, OS native
+      notifications when the tab is open, audio cue,
+      vibration) keep working without VAPID.
+
+      One-time setup:
+      ```
+      bash scripts/generate-vapid-keys.sh
+      ```
+      Append the three printed lines to
+      `/etc/morphit/relay.env` (replace the placeholder
+      mailto: address with a real one — push services
+      contact you there if something goes wrong).
+      Restart the relay.
+
+      The relay will boot-log either
+      `push_enabled` (success) or
+      `push_disabled_no_vapid_keys` (missing).  The
+      worker's drain interval is tunable via
+      `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default
+      30000).  Subscribe-endpoint authentication
+      requires a valid posting-key signature by default
+      (Part 122 cp14, `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=true`).
+      Full operator reference at
+      `docs/OPERATIONS.md` §42 and
+      `docs/RUN-A-MORPHIT-NODE.md` Web Push subsection.
+      *(Origin: Part 122 cp13–cp14.)*
+
 ## D. Infrastructure
 
 - [ ] **[blocking]** Postgres reachable from the morphit
       processes.  Database URL configured in both
       indexer and relay envs.  Initial schema applied
       via the indexer's auto-migrate on first boot
-      (currently at v32 as of Part 121; orders.asset_network
-      TEXT column added for multi-network assets like USDT).
+      (currently at v33 as of Part 122 cp13; adds
+      `push_subscriptions` + `push_pending` tables for
+      Web Push.  cp14 adds the `locale` column on
+      push_subscriptions; cp15 audit drops the dead
+      `attempts` column from push_pending and adds a
+      composite index on push_subscriptions(account,
+      created_at DESC) for the locale-lookup hot path).
       *(Origin: ADR-0001 schema management; version
       refreshed Part 121 audit.)*
 

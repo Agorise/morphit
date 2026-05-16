@@ -272,7 +272,70 @@ const envSchema = z.object({
 	 *  and (3) read by ops-cli + setup wizard for balance
 	 *  planning math.  Operators update this if witnesses ever
 	 *  change the chain fee. */
-	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100)
+	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100),
+
+	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	// VAPID keypair (RFC 8292) for Web Push.  Operators generate
+	// once via `bash scripts/generate-vapid-keys.sh` and add to
+	// their relay config.  When ANY of the three is unset, push
+	// is disabled at runtime — endpoints return 503 push_disabled
+	// and the client falls back to in-tab channels.  Changing the
+	// public key invalidates ALL existing subscriptions on this
+	// instance (users must re-subscribe).
+	MORPHIT_RELAY_VAPID_PUBLIC_KEY: z.string().optional(),
+	MORPHIT_RELAY_VAPID_PRIVATE_KEY: z.string().optional(),
+	// Identifies the operator to the push service.  MUST be a
+	// mailto: or https:// URL.  Push services use this to contact
+	// the operator if their pushes misbehave (per RFC 8292).
+	MORPHIT_RELAY_VAPID_SUBJECT: z
+		.string()
+		.refine(
+			(s) => s.startsWith('mailto:') || s.startsWith('https://'),
+			'VAPID subject must be a mailto: or https:// URL'
+		)
+		.optional(),
+	// Push-sender worker polling interval (ms).  Default 30s —
+	// faster than relay_pending_transfers (60s) because users
+	// expect notifications to feel immediate.
+	MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(30_000),
+	// Max queue rows drained per tick.  Bounds worst-case
+	// per-tick latency.  Default 50.
+	MORPHIT_RELAY_PUSH_BATCH_SIZE: z.coerce
+		.number()
+		.int()
+		.min(1)
+		.max(500)
+		.default(50),
+	// Max age for a pending push, in seconds.  Pushes older than
+	// this are dropped instead of delivered — a "your order
+	// filled" notification 6 hours after the fact is worse than
+	// no notification.  Default 3600 (1h).
+	MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS: z.coerce
+		.number()
+		.int()
+		.min(60)
+		.default(3600),
+	// Consecutive failures before a subscription is presumed
+	// dead and deleted.  Default 5.
+	MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES: z.coerce
+		.number()
+		.int()
+		.min(1)
+		.max(50)
+		.default(5),
+	// Part 122 cp14 — when 'true' (default), /v1/push/subscribe
+	// requires a valid posting-key signature over the canonical
+	// message.  Set to 'false' to accept unsigned subscribes
+	// (cp13-compat mode) — useful only for the brief window
+	// during a frontend roll-forward.
+	MORPHIT_RELAY_PUSH_REQUIRE_SIGNED: z
+		.enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
+		.default('true')
+		.transform((v) => v === 'true' || v === '1' || v === 'yes' || v === 'on')
 });
 
 export interface Config {
@@ -353,6 +416,35 @@ export interface Config {
 	 *  (currently 100 BLURT).  See env-schema doc for the three
 	 *  ways this is consumed. */
 	readonly accountCreationFeeBlurt: number;
+
+	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	/** VAPID public key (base64url, ~88 chars).  Sent to clients
+	 *  in pushManager.subscribe()'s applicationServerKey.  When
+	 *  undefined, push is disabled at runtime. */
+	readonly vapidPublicKey: string | undefined;
+	/** VAPID private key (base64url, ~44 chars).  Used by the
+	 *  web-push library to sign VAPID JWTs.  NEVER log, NEVER
+	 *  serialize, NEVER include in error messages. */
+	readonly vapidPrivateKey: string | undefined;
+	/** VAPID subject (mailto:|https:// URL).  Identifies the
+	 *  operator to push services per RFC 8292. */
+	readonly vapidSubject: string | undefined;
+	/** True iff all three VAPID fields are set — push subsystem
+	 *  is active. */
+	readonly pushEnabled: boolean;
+	/** Push-sender worker polling interval (ms). */
+	readonly pushPollIntervalMs: number;
+	/** Max queue rows drained per tick. */
+	readonly pushBatchSize: number;
+	/** Max age (seconds) for a pending push before it's dropped. */
+	readonly pushMaxAgeSeconds: number;
+	/** Consecutive delivery failures before subscription is
+	 *  presumed dead and deleted. */
+	readonly pushMaxConsecutiveFailures: number;
+	/** When true (default), the subscribe endpoint requires a
+	 *  valid posting-key signature on every request.  When
+	 *  false (cp13-compat), rate-limited-only.  Part 122 cp14. */
+	readonly pushRequireSigned: boolean;
 }
 
 /** Config variant guaranteed to have the active-key WIF
@@ -501,7 +593,22 @@ export function loadConfig(): Config {
 		queueMaxRetries: env.MORPHIT_RELAY_QUEUE_MAX_RETRIES,
 
 		verboseHealth: env.MORPHIT_RELAY_VERBOSE_HEALTH,
-		accountCreationFeeBlurt: env.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT
+		accountCreationFeeBlurt: env.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT,
+
+		// Web Push: enabled only when ALL three VAPID fields are set.
+		vapidPublicKey: env.MORPHIT_RELAY_VAPID_PUBLIC_KEY,
+		vapidPrivateKey: env.MORPHIT_RELAY_VAPID_PRIVATE_KEY,
+		vapidSubject: env.MORPHIT_RELAY_VAPID_SUBJECT,
+		pushEnabled: Boolean(
+			env.MORPHIT_RELAY_VAPID_PUBLIC_KEY &&
+				env.MORPHIT_RELAY_VAPID_PRIVATE_KEY &&
+				env.MORPHIT_RELAY_VAPID_SUBJECT
+		),
+		pushPollIntervalMs: env.MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS,
+		pushBatchSize: env.MORPHIT_RELAY_PUSH_BATCH_SIZE,
+		pushMaxAgeSeconds: env.MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS,
+		pushMaxConsecutiveFailures: env.MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES,
+		pushRequireSigned: env.MORPHIT_RELAY_PUSH_REQUIRE_SIGNED
 	};
 }
 

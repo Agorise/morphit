@@ -160,7 +160,16 @@ function makeStubConfig(): UnlockedConfig {
 		queueBatchSize: 20,
 		queueMaxRetries: 10,
 		verboseHealth: true,
-		accountCreationFeeBlurt: 100
+		accountCreationFeeBlurt: 100,
+		vapidPublicKey: undefined,
+		vapidPrivateKey: undefined,
+		vapidSubject: undefined,
+		pushEnabled: false,
+		pushPollIntervalMs: 30_000,
+		pushBatchSize: 50,
+		pushMaxAgeSeconds: 3600,
+		pushMaxConsecutiveFailures: 5,
+		pushRequireSigned: false
 	};
 }
 
@@ -384,7 +393,8 @@ describe('POST /v1/account/create', () => {
 				name: 'sally',
 				created: '2024-01-01',
 				balance: '0.000 BLURT',
-				pending_claimed_accounts: 0
+				pending_claimed_accounts: 0,
+			posting_pubkey: undefined
 			}
 		});
 		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(stub, makeStubHealth(true));
@@ -434,7 +444,8 @@ describe('POST /v1/account/create', () => {
 				name: 'sally',
 				created: '2026-05-06T00:00:00',
 				balance: '0.000 BLURT',
-				pending_claimed_accounts: 0
+				pending_claimed_accounts: 0,
+			posting_pubkey: undefined
 			}); // post-failure: account does exist
 
 		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(stub, makeStubHealth(true));
@@ -675,7 +686,8 @@ describe('POST /v1/account/create', () => {
 				name: 'taken',
 				created: '2025-01-01T00:00:00',
 				balance: '0.000 BLURT',
-				pending_claimed_accounts: 0
+				pending_claimed_accounts: 0,
+			posting_pubkey: undefined
 			}
 		});
 		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(

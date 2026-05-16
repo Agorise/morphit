@@ -8165,3 +8165,242 @@ USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`.
 The migration is idempotent (`ADD COLUMN IF NOT EXISTS`) and
 applied automatically on indexer startup.  No operator action
 required beyond the standard `npm run migrate` flow.
+
+## 42. Web Push notifications — VAPID setup and the push-sender worker
+
+**Part 122 cp13.**  Morphit's notification system shipped its
+in-tab channels (title-bar prefix, favicon canvas badge, PWA
+App Badge, OS notifications via the Notification API, audio
+cue, vibration cue) across phases 1–4.  Phase 3 — **Web Push**,
+which delivers notifications even when the user's Morphit tab
+is closed or their phone is locked — landed in cp13.
+
+This section covers the operator-facing pieces: generating the
+VAPID keypair, plugging it into your config, what the
+push-sender worker does and how to monitor it, and the
+privacy/security trade-offs you should be aware of.
+
+### 42.1 What ships
+
+| Component | Location | Purpose |
+| --- | --- | --- |
+| VAPID keygen | `scripts/generate-vapid-keys.sh` | Generate the operator's keypair once at install time |
+| Schema v33 — `push_subscriptions` | `apps/indexer/src/db/schema.sql` | One row per (account, browser) pairing |
+| Schema v33 — `push_pending` | same | Durable delivery queue (FIFO drain) |
+| Subscribe endpoints | `apps/relay/src/api/push.ts` | `GET /v1/push/vapid-public-key`, `POST /v1/push/subscribe`, `POST /v1/push/unsubscribe` |
+| Push-sender worker | `apps/relay/src/policy/pushSender.ts` | Drains `push_pending` every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 30 s) |
+| Indexer enqueue | per-handler in `apps/indexer/src/indexer/handlers/` | Each notify-worthy event writes a `push_pending` row |
+| Service worker | `apps/web/src/service-worker.ts` | Decrypts pushes and shows OS notifications |
+| Client subscribe | `apps/web/src/lib/notifications/push.ts` | `pushManager.subscribe()` + relay registration |
+| UI | `NotificationSettings.svelte` | Subscribe / unsubscribe button + privacy radios |
+
+### 42.2 One-time install — generate the VAPID keypair
+
+Web Push (RFC 8292) requires the operator to hold a VAPID
+keypair.  The public half identifies your instance to the
+push service so it knows pushes from your relay are
+legitimate.  Generate once, store the private half like any
+other secret, and never rotate without warning your users
+(rotating invalidates every existing subscription on your
+instance).
+
+```bash
+# From the repo root, after `npm install`:
+bash scripts/generate-vapid-keys.sh
+```
+
+The script prints three lines that go into your relay's env
+configuration (typically `/etc/morphit/relay.env`):
+
+```text
+MORPHIT_RELAY_VAPID_PUBLIC_KEY=BH5ZK...   # ~88 chars
+MORPHIT_RELAY_VAPID_PRIVATE_KEY=AzbhfY... # ~44 chars — TREAT AS SECRET
+MORPHIT_RELAY_VAPID_SUBJECT=mailto:operator@your-domain.example
+```
+
+The subject MUST be either `mailto:<address>` or `https://<url>`
+— it identifies you to the push services (FCM / autopush /
+APNS) so they can contact you if your pushes start misbehaving.
+
+If **any** of the three env vars is unset, the relay starts
+with push disabled (`/v1/push/vapid-public-key` returns 503,
+the client UI shows "Not supported on this device", and users
+fall back to the in-tab channels).  This is the correct
+behavior for operators who don't want to participate in Web
+Push.
+
+### 42.3 Optional tuning knobs
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` | `30000` | How often the worker drains the queue.  Lower = snappier deliveries, more DB load |
+| `MORPHIT_RELAY_PUSH_BATCH_SIZE` | `50` | Max queue rows per tick.  Caps worst-case latency |
+| `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` | `3600` | Drop pushes older than this.  Stale notifications are worse than no notifications |
+| `MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES` | `5` | Delete a subscription after this many consecutive failed pushes (presumed dead browser) |
+| `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED` | `true` | When `true` (default, cp14), `/v1/push/subscribe` rejects requests without a valid posting-key signature. Set to `false` only during a brief frontend roll-forward window |
+
+### 42.4 What the push-sender worker actually does
+
+Every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 30 s),
+the worker runs one tick:
+
+1. `SELECT … FROM push_pending ORDER BY enqueued_at ASC LIMIT
+   <batch_size>` — drain the oldest rows.
+2. For each row, drop if `event_at` is older than
+   `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` ago.
+3. Join against `push_subscriptions` to find every device the
+   target account is subscribed on.
+4. For each device, call `webpush.sendNotification()` — the
+   library signs a VAPID JWT, encrypts the payload per
+   RFC 8291 (E2E vs the push service), and POSTs to the push
+   service.
+5. On 2xx, mark `last_delivery_at = NOW()` and reset
+   `consecutive_failures = 0`.
+6. On 410 Gone or 404, the subscription is dead — delete it.
+7. On transient failures (429, 5xx), increment
+   `consecutive_failures`.  When it crosses
+   `MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES`, delete the
+   subscription.
+8. Always delete the `push_pending` row after fan-out —
+   re-trying after a delivery attempt invites duplicates.
+
+Logs are emitted on every non-empty tick under
+`relay-push-sender`.  Per-device push failures log status
+codes only — never endpoint URLs or payload content (privacy
+invariant).
+
+### 42.5 Privacy and security model
+
+- **Payload content is end-to-end encrypted.**  The web-push
+  library encrypts every payload per RFC 8291 using the
+  recipient's p256dh ephemeral public key and an auth secret;
+  the push service sees ciphertext, not text.  An operator
+  who controls the relay can see what they're enqueuing (the
+  title and body are stored in `push_pending` before
+  encryption), but the push service downstream cannot.
+
+- **No subscriber IPs are stored.**  The subscribe endpoint
+  is rate-limited by IP, but the IP never goes into the DB.
+
+- **Subscription endpoint URLs reveal which push service
+  the user's browser uses** (fcm.googleapis.com = Google;
+  updates.push.services.mozilla.com = Mozilla;
+  web.push.apple.com = Apple).  This is unavoidable for Web
+  Push to function.  Privacy-preserving users can either
+  decline push (in-tab channels still work) or use a custom
+  push server on Firefox via `dom.push.serverURL`.
+
+- **Posting-key signature verification on subscribe (cp14).** As
+  of Part 122 cp14, `/v1/push/subscribe` requires every request
+  to carry a valid posting-key signature over the canonical
+  message
+  `morphit:push:subscribe:<account>:<sha256(endpoint)>:<timestamp>`.
+  The signature is verified against the account's posting public
+  key fetched from the chain.  ±5 minute timestamp skew is
+  accepted.  Requests without a signature, or with an invalid
+  signature, are rejected with HTTP 401.
+
+  This closes the cp13 trade-off ("rate-limited-only auth").
+  The flag `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=false` exists
+  for the narrow case where you're rolling a new frontend out
+  ahead of the relay and want to accept unsigned requests
+  briefly; in normal operation, leave it `true`.
+
+  Multi-key posting authorities are NOT fully supported — only
+  the first listed key in the posting authority is accepted.
+  This is documented because every Morphit user account is
+  single-key in practice; if you operate a multisig posting
+  authority, push subscribe will fail for you and we'll need
+  a follow-on checkpoint.
+
+- **End-to-end vs the push service, NOT vs the operator
+  (DD-2 audit clarification).**  Payload encryption per RFC 8291
+  protects the message body from Google FCM, Mozilla autopush,
+  and Apple — they see ciphertext, not text.  The OPERATOR's
+  relay, however, sees the localized `title` and `body` strings
+  pass through the `push_pending` table before encryption.
+  Everything that ends up in those fields is derived from
+  PUBLIC chain events (sender names, ratings, order permlinks)
+  that the operator could already observe by reading the chain;
+  the queue cache adds no leak beyond chain visibility.  Chat
+  *content* is never in any push payload — the indexer doesn't
+  hold chat encryption keys.
+
+- **Unsubscribe is intentionally unauthenticated
+  (DD-4 audit clarification).**  `/v1/push/unsubscribe` accepts
+  `{account, endpoint}` without a signature.  This is a
+  deliberate UX choice — if we required posting-key sig-verify
+  on unsubscribe, a user who locked their session couldn't stop
+  notifications until they unlocked, which is exactly when many
+  users would want push off.  Attack surface: an adversary who
+  has captured a user's endpoint URL (requires HTTPS MITM or
+  local browser access) can remove the subscription.  The
+  user's worst case is missed notifications until they
+  re-subscribe — irritating, not a security failure.
+
+- **Captured-signature replay window is bounded but non-zero
+  (DD-7 audit clarification).**  The subscribe signature has
+  a ±5 minute timestamp skew tolerance.  An adversary who
+  captured a subscribe request from a user could replay it
+  within 5 minutes.  Replay creates a subscription for the
+  USER'S device (the endpoint is bound to that device by the
+  push service), so the adversary can't divert push delivery
+  to themselves.  The realized attack is "user unsubscribed
+  but their device starts receiving notifications again until
+  they unsubscribe a second time."  Nuisance, not security
+  failure.  Mitigation cost (server-side nonce cache for 5
+  minutes) outweighs the attack value.
+
+### 42.6 Monitoring + troubleshooting
+
+**Single-relay assumption (DD-10 audit clarification).**  The
+push-sender worker does NOT use `SELECT … FOR UPDATE SKIP
+LOCKED` when draining `push_pending`.  If two relay processes
+ran against the same database — not the current Morphit topology
+per ADR-0011 — both workers would SELECT the same rows and
+double-deliver.  A future HA deployment would need to add row
+locking; today's single-relay-per-instance pattern makes this a
+non-issue.
+
+**The worker is silent on a quiet queue.**  If no events are
+enqueued, no logs.  The first sign of trouble is usually a
+matrix-bot alert that `push_pending` row count is growing
+unbounded (set up via the resource-monitor sidecar pattern in
+§16.5).
+
+**Common operator-side issues:**
+
+- *Subscribe endpoint returns 503 push_disabled.*  Your VAPID
+  env vars aren't all set.  Re-run the keygen and verify each
+  line is present in your relay's env file.
+
+- *Pushes are delivered but the user reports not seeing
+  them.*  Three checks: (a) the user's browser has notification
+  permission for your origin (`chrome://settings/content/notifications`,
+  `about:preferences#privacy` etc); (b) the user has subscribed
+  on the device that should receive (browsers don't share
+  subscriptions across devices); (c) the user hasn't muted
+  notifications via the in-app mute-for / quiet-hours controls.
+
+- *Subscriptions table grows without bound.*  The auto-cleanup
+  on 410 Gone handles browsers that gracefully unsubscribed,
+  but stale rows can accumulate.  Periodically check
+  `SELECT COUNT(*) FROM push_subscriptions WHERE last_delivery_at < NOW() - interval '90 days'`
+  and consider pruning manually if the count grows large.
+
+### 42.7 Rotating VAPID keys
+
+Avoid this unless your private key is exposed.  Rotating the
+public key invalidates every existing subscription on your
+instance — users will need to re-subscribe.  Procedure:
+
+1. Generate a new keypair via `scripts/generate-vapid-keys.sh`.
+2. Post a notice to your community channel (Matrix, etc.):
+   "Web Push subscriptions will reset on <date>; please re-enable
+   in Settings if you use push."
+3. Update your env file with the new values.
+4. Restart the relay.
+5. `TRUNCATE push_subscriptions;` — all rows are now bound to
+   the old public key and won't work.
+6. Users re-subscribe via the Settings UI.
+

@@ -66,7 +66,7 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 /** Highest `-- v<N>` banner in schema.sql.  Bump in lockstep
  *  with a schema change; the smoke fails until you do, which is
  *  the point. */
-const SCHEMA_HEAD_VERSION = 32;
+const SCHEMA_HEAD_VERSION = 33;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands. */

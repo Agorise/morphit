@@ -70,6 +70,20 @@ export interface AccountInfo {
 	 *  ADR-0010 §4 the relay never directly pays the chain
 	 *  account-creation fee, so balance alone is the wrong gate. */
 	readonly pending_claimed_accounts: number;
+	/** First posting public key (BLURT-prefix base58) from the
+	 *  account's posting authority.  Part 122 cp14 — needed so
+	 *  the relay can verify posting-key signatures on
+	 *  /v1/push/subscribe.  Absent if the chain returned an
+	 *  account with no posting authority (shouldn't happen for
+	 *  any real account, but defensive against malformed chain
+	 *  responses).
+	 *
+	 *  Multi-key posting authorities exist (multisig accounts)
+	 *  but in practice every Morphit user account has a single
+	 *  posting key; for cp14 we accept signatures from the
+	 *  first key in the authority and document that multi-key
+	 *  authorities aren't fully supported for push subscribe. */
+	readonly posting_pubkey: string | undefined;
 }
 
 /** Chain properties that change on witness consensus — most
@@ -270,11 +284,29 @@ export class BlurtClient {
 				: typeof pcaRaw === 'string' && /^\d+$/.test(pcaRaw)
 					? Number(pcaRaw)
 					: 0;
+
+		// Part 122 cp14 — extract first posting public key (if any).
+		// Authority shape: { weight_threshold, account_auths,
+		//                    key_auths: [[pubkey_str, weight], ...] }
+		// Tolerate missing/malformed values — return undefined so the
+		// caller can surface a clear error instead of throwing here.
+		let postingPubkey: string | undefined;
+		const postingAuth = acct.posting as
+			| { key_auths?: unknown }
+			| undefined;
+		if (postingAuth && Array.isArray(postingAuth.key_auths)) {
+			const first = postingAuth.key_auths[0];
+			if (Array.isArray(first) && typeof first[0] === 'string') {
+				postingPubkey = first[0];
+			}
+		}
+
 		return {
 			name: String(acct.name ?? name),
 			created: String(acct.created ?? ''),
 			balance: String(acct.balance ?? '0.000 BLURT'),
-			pending_claimed_accounts: pca
+			pending_claimed_accounts: pca,
+			posting_pubkey: postingPubkey
 		};
 	}
 
