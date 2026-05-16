@@ -1,7 +1,7 @@
 # Morphit notifications system — design doc
 
-**Status:** Phases 1, 2, 4 ✅ SHIPPED; Phase 3 (Web Push for
-tab-closed delivery) deferred to post-launch.
+**Status:** Phases 1, 2, 3, 4 ✅ ALL SHIPPED.  Phase 3 (Web Push
+for tab-closed delivery) landed in Part 122 cp13.
 
 Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `ambient.ts` — title-bar prefix, favicon canvas badge, App
@@ -9,6 +9,8 @@ Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `native.ts` — Notification API (tab-open OS-level pings).
 - `audio.ts` — opt-in audio cue (default off).
 - `vibrate.ts` — opt-in vibration (default off, mobile only).
+- `push.ts` — Web Push subscribe / unsubscribe client (Part 122
+  cp13).
 - `preferences.ts` — per-category opt-in storage.
 - `tradeNotifications.ts` — order / chat / feedback event
   glue against the indexer streams.
@@ -17,16 +19,40 @@ Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `index.ts` — public `notify(event)` surface called from
   every notification site.
 
+Backend-side push infrastructure (Part 122 cp13):
+- `apps/relay/src/policy/pushSubscriptions.ts` — subscription
+  store (upsert / list / delete, failure-counter cleanup).
+- `apps/relay/src/policy/pushSender.ts` — drains the
+  `push_pending` queue, encrypts payloads per RFC 8291 via the
+  `web-push` library, handles 410 Gone and transient failures.
+- `apps/relay/src/api/push.ts` — `GET /v1/push/vapid-public-key`,
+  `POST /v1/push/subscribe`, `POST /v1/push/unsubscribe`.
+- `apps/web/src/service-worker.ts` — `push` and
+  `notificationclick` handlers (dedup via tag, deeplink
+  open/focus).
+- Schema v33 — `push_subscriptions` + `push_pending` tables
+  in `apps/indexer/src/db/schema.sql`.
+- Indexer event emission — `feedback.ts` and `chat.ts` handlers
+  enqueue `push_pending` rows; chat routes order-permlink
+  messages under `category='order'` and other messages under
+  `category='chat'` so users can opt out of chat noise but
+  still get trade alerts.
+
 `UnreadCounts` Readable store drives the title prefix +
 favicon badge + the in-app inbox-tab unread dots.
 
-Phase 3 (Web Push + service worker, tab-closed delivery)
-remains the largest open piece — see "Decision needed from
-you" section for the unresolved push-service-architecture
-question.
+The cp13 push-service-architecture decision: **user-selectable**
+(self-hosted / standard / off), matching the existing
+`push_notifications_privacy` FAQ entry. Operators ship a VAPID
+keypair generated via `scripts/generate-vapid-keys.sh`; users
+choose their privacy mode in Settings → Notifications.
+Authentication on the subscribe endpoint for cp13 is
+rate-limited-only (no cryptographic proof of account ownership);
+the trade-off is documented in `docs/OPERATIONS.md` §42.5 — a
+future checkpoint may add posting-key signature verification.
 
-**Last updated:** 2026-04-21 (design); shipped iteratively
-across Phases 5d-F.
+**Last updated:** 2026-05-15 (Part 122 cp13 — Phase 3 shipped);
+prior shipping iterated across Phases 5d-F.
 
 ## Context
 
@@ -307,21 +333,47 @@ Settings stores the preferences. Channels query settings at
 notify()-time, not at subscribe-time, so toggling in Settings takes
 effect immediately.
 
-## Decision needed from you
+## Decisions made (historical record)
 
-1. **Approve the phased ship plan** — phases 1-4 as proposed.
-2. **Approve the annoyance policy** — no-notify-when-focused,
-   coalesce-30s, per-category opt-in, audio/vibrate default OFF,
-   point-of-relevance permission request.
-3. **Push service architecture** — self-hosted only, browser-default
-   acceptable, or user-selectable? (The user-selectable option is
-   most privacy-respectful but most complex.)
-4. **Default states** — chat notifications default ON or OFF? High-
-   volume traders want them OFF by default to reduce noise; low-
-   volume users want them ON so they don't miss messages. Asking
-   on first chat ("enable notifications for this thread?") is an
-   alternative.
+All four open questions from the original design doc are now
+resolved.  Captured here so future contributors can read the
+"why" without re-litigating settled choices.
 
-Once answered, phase 1 is ~half a day of work, phase 2 is another
-half day, phase 3 is 1-2 days depending on push infrastructure
-choice, phase 4 is a couple hours.
+1. **Phased ship plan** — ✅ All four phases shipped.  Phases 1
+   and 2 in the original sprint; Phase 4 (audio + vibrate) close
+   behind; Phase 3 (Web Push) landed in Part 122 cp13 after the
+   wiring-completeness audit caught a "claim without code"
+   regression.
+2. **Annoyance policy** — ✅ Shipped as designed: no notification
+   when the tab is focused, coalesce-30s on bursty events,
+   per-category opt-in (order ON, feedback ON, chat OFF by
+   default), audio + vibrate OFF by default, permission requested
+   at the point of relevance not on page-load.
+3. **Push service architecture** — ✅ User-selectable
+   (self-hosted / standard / off), matching the user-facing
+   design the FAQ entry `push_notifications_privacy` had already
+   set out.  Operators ship a VAPID keypair generated via
+   `scripts/generate-vapid-keys.sh`; the client passes the
+   user's choice to the relay's `/v1/push/subscribe` endpoint at
+   subscribe time and the row's `privacy_mode` column records
+   it.
+4. **Default states** — ✅ Chat default OFF.  High-volume traders
+   need silence by default; users wanting per-message pings can
+   opt into chat events in Settings → Notifications.  Order and
+   feedback events are ON by default because they're rare and
+   high-signal.
+
+The push-sender worker (`apps/relay/src/policy/pushSender.ts`)
+polls every 30 seconds (tunable), encrypts payloads per RFC 8291
+via the `web-push` library, handles 410 Gone with
+auto-cleanup, and drops events older than 1 hour to avoid
+delivering stale notifications.  Subscribe endpoint
+authentication was rate-limited-only in cp13; cp14 (Part 122)
+added posting-key signature verification — every subscribe
+request must carry a signature over
+`morphit:push:subscribe:<account>:<sha256(endpoint)>:<timestamp>`
+verified against the account's posting public key from chain.
+±5 minute skew accepted.  Push payload strings are localized at
+indexer-enqueue time using the user's locale recorded in
+`push_subscriptions.locale` (also cp14); ten locales supported
+matching the client's i18n set.

@@ -914,6 +914,52 @@ sudo chmod 0700 /var/lib/morphit-relay
 
 For the full list of relay env vars, open `ops/env/relay.env.example` — every key is commented.
 
+### Web Push (optional but recommended)
+
+Morphit can deliver notifications to users even when their browser
+tab is closed or their phone is locked. This requires a one-time
+**VAPID keypair** that identifies your relay to push services
+(Google FCM, Mozilla autopush, Apple's push service). Generate it
+once, never share the private half, and you're done:
+
+```
+bash scripts/generate-vapid-keys.sh
+```
+
+The script prints three lines. Append them to `/etc/morphit/relay.env`
+(replace `mailto:operator@your-domain.example` with a real address
+you read — push services use it to contact you if something goes
+wrong with your pushes):
+
+```
+MORPHIT_RELAY_VAPID_PUBLIC_KEY=BH5ZK…   (~88 chars)
+MORPHIT_RELAY_VAPID_PRIVATE_KEY=AzbhfY…  (~44 chars — TREAT AS SECRET)
+MORPHIT_RELAY_VAPID_SUBJECT=mailto:operator@your-domain.example
+```
+
+If you don't set these, the relay starts with push disabled —
+users on your instance see "Not supported on this device" next to
+the push toggle in their Settings, and fall back to the in-tab
+notification channels (title-bar prefix, favicon badge, OS
+notifications via the Notification API, audio cue, mobile vibration).
+This is a perfectly fine state for operators who want minimal
+infrastructure.
+
+If you do enable push: the relay's `morphit-relay` daemon starts a
+**push-sender worker** that drains the `push_pending` queue every
+30 seconds (tunable via `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS`) and
+fans out to subscribed devices. Payloads are end-to-end encrypted
+per RFC 8291 (the push service sees ciphertext, not text). No
+subscriber IPs are stored. Subscriptions auto-clean when push
+services return 410 Gone.
+
+By default the relay requires every subscribe request to carry a
+**posting-key signature** — only the holder of the account's
+posting key can register a device as that account. If you need to
+roll out a new frontend before the relay (rare), set
+`MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=false` temporarily. Full
+operator reference at `docs/OPERATIONS.md` §42.
+
 ### Build the frontend (static files)
 
 The frontend is a SvelteKit app that builds to a directory of static files. There is no separate "web service" to run — nginx serves the static files directly. Build it now:

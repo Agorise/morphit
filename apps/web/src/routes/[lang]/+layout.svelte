@@ -619,6 +619,12 @@
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					rel="noopener">{$_('footer.source')}</a
 				>
+				<a
+					href="/morphit-mediakit.zip"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					title={$_('footer.mediakit_title')}
+					rel="noopener">{$_('footer.mediakit')}</a
+				>
 				<a href={lp('/operators')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>{$_('footer.operators')}</a
 				>

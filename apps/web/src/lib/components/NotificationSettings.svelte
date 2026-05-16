@@ -29,6 +29,15 @@
 		enableCrossPageTradeEvents,
 		disableCrossPageTradeEvents
 	} from '$lib/notifications/crossPageTradeEvents';
+	import {
+		isPushSupported,
+		currentSubscription,
+		subscribe as subscribeToPush,
+		unsubscribe as unsubscribeFromPush,
+		type SubscribeError,
+		type PushPrivacyMode
+	} from '$lib/notifications/push';
+	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import StatusLine from './StatusLine.svelte';
 
 	// Feature detection — render "unsupported" hints in-place for
@@ -40,6 +49,77 @@
 	const supportsVibrate = $derived(
 		browser && typeof navigator !== 'undefined' && 'vibrate' in navigator
 	);
+
+	// ─── Push subscription state (Part 122 cp13) ────────────────
+	// `supportsPush` is the structural feature-detect (SW + push +
+	// Notification APIs all present).  `pushAvailable` additionally
+	// requires that the operator's relay has VAPID configured — we
+	// learn this when our first subscribe call returns push_disabled
+	// or by an empty /vapid-public-key response.  Until we know,
+	// the UI shows the subscribe button optimistically.
+	let supportsPush = $state(false);
+	let pushSubscribed = $state(false);
+	let pushBusy = $state(false);
+	let pushError = $state<SubscribeError | null>(null);
+
+	// Bootstrap: on first mount, detect support and read current
+	// subscription so the toggle reflects reality.
+	$effect(() => {
+		if (!browser) return;
+		supportsPush = isPushSupported();
+		if (!supportsPush) return;
+		(async () => {
+			try {
+				const existing = await currentSubscription();
+				pushSubscribed = existing !== null;
+			} catch {
+				// no-op — push not available yet
+			}
+		})();
+	});
+
+	async function handlePushSubscribe(): Promise<void> {
+		if (pushBusy) return;
+		const account = getUserBlurtAccount();
+		if (!account) {
+			pushError = 'subscribe_failed';
+			return;
+		}
+		const mode: PushPrivacyMode =
+			$notificationPrefs.pushPrivacy === 'self_hosted' ? 'self_hosted' : 'standard';
+		pushBusy = true;
+		pushError = null;
+		try {
+			await subscribeToPush(account, mode);
+			pushSubscribed = true;
+			setChannel('push', true);
+		} catch (err: unknown) {
+			pushError = (err as SubscribeError) ?? 'subscribe_failed';
+			pushSubscribed = false;
+		} finally {
+			pushBusy = false;
+		}
+	}
+
+	async function handlePushUnsubscribe(): Promise<void> {
+		if (pushBusy) return;
+		const account = getUserBlurtAccount();
+		if (!account) {
+			pushError = 'subscribe_failed';
+			return;
+		}
+		pushBusy = true;
+		pushError = null;
+		try {
+			await unsubscribeFromPush(account);
+			pushSubscribed = false;
+			setChannel('push', false);
+		} catch (err: unknown) {
+			pushError = (err as SubscribeError) ?? 'subscribe_failed';
+		} finally {
+			pushBusy = false;
+		}
+	}
 
 	// Mute-until display: if currently muted, show "muted until
 	// {time}" and offer an Unmute button.
@@ -191,37 +271,71 @@
 				</label>
 			</li>
 
-			<!-- Push: phase 3. Includes the privacy-level selector
-			     because its architecture question is the most
-			     user-visible. -->
+			<!-- Push: phase 3 (Part 122 cp13 — shipped). Subscribe
+			     button asks browser permission at the point of
+			     relevance, then registers with the relay. Privacy
+			     selector remains so users see their choice; the
+			     mode is sent to the relay at subscribe time and
+			     surfaced on each device's row in the operator
+			     summary. -->
 			<li>
 				<label
-					class="flex items-start justify-between gap-4 rounded-xl border border-ink-200 p-4 opacity-70 dark:border-ink-700"
+					class="flex items-start justify-between gap-4 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
 				>
 					<div class="min-w-0">
 						<p class="font-semibold">{$_('settings.notifications.channel_push_label')}</p>
 						<p class="mt-1 text-sm text-ink-500 dark:text-ink-400">
 							{$_('settings.notifications.channel_push_help')}
 						</p>
+						{#if pushError}
+							<p
+								class="mt-2 text-sm text-rose-700 dark:text-rose-300"
+								role="alert"
+							>
+								{$_(`settings.notifications.push_error_${pushError}`)}
+							</p>
+						{/if}
 					</div>
 					<div class="flex flex-none flex-col items-end gap-2">
-						<span
-							class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-						>
-							{$_('settings.notifications.coming_soon')}
-						</span>
-						<input
-							type="checkbox"
-							checked={$notificationPrefs.channels.push}
-							onchange={(e) => setChannel('push', (e.currentTarget as HTMLInputElement).checked)}
-							disabled
-							class="h-5 w-5 accent-morphit-emerald"
-						/>
+						{#if !supportsPush}
+							<span
+								class="rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-bold text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+							>
+								{$_('settings.notifications.push_unsupported')}
+							</span>
+						{:else if pushSubscribed}
+							<span
+								class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+							>
+								{$_('settings.notifications.push_subscribed')}
+							</span>
+							<button
+								type="button"
+								onclick={handlePushUnsubscribe}
+								disabled={pushBusy}
+								class="rounded-md border border-ink-300 bg-white px-3 py-1 text-sm font-semibold text-ink-800 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
+							>
+								{pushBusy
+									? $_('settings.notifications.push_unsubscribing')
+									: $_('settings.notifications.push_unsubscribe')}
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={handlePushSubscribe}
+								disabled={pushBusy}
+								class="rounded-md bg-morphit-emerald px-3 py-1 text-sm font-semibold text-white hover:bg-morphit-emerald/90 disabled:opacity-50"
+							>
+								{pushBusy
+									? $_('settings.notifications.push_subscribing')
+									: $_('settings.notifications.push_subscribe')}
+							</button>
+						{/if}
 					</div>
 				</label>
 
-				<!-- Privacy-level radios — rendered always so user
-				     sees the eventual choice set even pre-ship. -->
+				<!-- Privacy-level radios — stays visible so the user
+				     can pick their mode before clicking Subscribe. -->
 				<fieldset
 					class="mt-3 rounded-xl border border-ink-200 bg-ink-50/50 p-4 dark:border-ink-700 dark:bg-ink-800/30"
 				>

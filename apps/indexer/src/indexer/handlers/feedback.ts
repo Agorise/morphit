@@ -22,6 +22,7 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { logger } from '$log';
+import { localize, normalizeLocale } from '$indexer/pushLocalize';
 
 const log = logger('feedback');
 
@@ -245,6 +246,56 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'duplicate_feedback' };
 		}
 		throw err;
+	}
+
+	// ─── Web Push enqueue (Part 122 cp13; localized cp14) ───────
+	// Enqueue a push notification for `subject` (the reviewed
+	// account).  The relay's push-sender worker picks this up on
+	// its next tick and fans out to all of subject's subscribed
+	// devices.  Failure here is non-fatal: the feedback itself is
+	// already recorded; missing a push notification is a UX
+	// degradation, not a data loss.
+	//
+	// Localization (cp14): pick the recipient's most-recently-
+	// subscribed device's locale (we MAX over created_at so a
+	// user switching languages gets new notifications in their
+	// new language without losing existing subscriptions).  No
+	// matching row → 'en'.  See pushLocalize.ts for the
+	// translation table.
+	try {
+		const localeRow = await client.query<{ locale: string }>(
+			`SELECT locale FROM push_subscriptions
+			  WHERE account = $1
+			  ORDER BY created_at DESC
+			  LIMIT 1`,
+			[subject]
+		);
+		const locale = normalizeLocale(localeRow.rows[0]?.locale);
+		const titleStr = localize(locale, 'feedback_title');
+		const bodyStr =
+			rating === 1
+				? localize(locale, 'feedback_body_one', ctx.signer, String(rating))
+				: localize(locale, 'feedback_body_many', ctx.signer, String(rating));
+		await client.query(
+			`INSERT INTO push_pending
+			   (account, category, title, body, click_path, event_at)
+			 VALUES ($1, 'feedback', $2, $3, $4, $5)`,
+			[
+				subject,
+				titleStr,
+				bodyStr,
+				`/profile/${subject}#feedback`,
+				ctx.blockTime
+			]
+		);
+	} catch (err) {
+		// Non-fatal — log and continue.  The feedback row is
+		// already in.  push_pending failure most likely means the
+		// table doesn't exist yet (older indexer DB).
+		log.warn('push_enqueue_failed', {
+			subject,
+			err: String((err as Error)?.message ?? err)
+		});
 	}
 
 	// ─── ADR-0011 §8: delayed welcome bonus ───────────────────────

@@ -4,6 +4,21 @@ set -u
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo"
 
+# Resolve tsx from the workspace first, then PATH.  Mirrors the
+# fallback pattern in scripts/typecheck-sweep.sh — operators who
+# call the smoke runner before `npm install` has fully populated
+# .bin/ get a clearer error than "command not found", and CI
+# workflows that don't prepend node_modules/.bin to PATH still
+# work.
+if [ -x "$repo/node_modules/.bin/tsx" ]; then
+	TSX="$repo/node_modules/.bin/tsx"
+elif command -v tsx >/dev/null 2>&1; then
+	TSX="$(command -v tsx)"
+else
+	echo "ERROR: tsx not found.  Run 'npm install' from the repo root." >&2
+	exit 2
+fi
+
 SMOKES=(
 	"apps/indexer:block-handler-smoke"
 	"apps/indexer:chat-handler-smoke"
@@ -123,6 +138,11 @@ SMOKES=(
 	"apps/web:i18n-translation-completeness-smoke"
 	"apps/web:sally-walkthrough-smoke"
 	"apps/web:persona-walkthrough-smoke"
+	"apps/web:mediakit-freshness-smoke"
+	"apps/web:wiring-completeness-smoke"
+	"apps/web:web-push-wiring-smoke"
+	"apps/web:npm-audit-gate-smoke"
+	"apps/relay:canonical-message-cross-check-smoke"
 	"packages/asset-registry:fee-method-enum-frozen-smoke"
 	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 	"packages/asset-registry:usdt-trade-only-smoke"
@@ -155,7 +175,7 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		continue
 	fi
-	if (cd "$repo/$dir" && tsx "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+	if (cd "$repo/$dir" && "$TSX" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
 		# Smokes MUST emit a canonical `✓ all N ...` line so this runner
 		# can tally scenarios.  Without that line, the smoke is treated as
 		# a runner failure rather than silently counted as 0 — see J-1

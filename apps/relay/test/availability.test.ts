@@ -86,7 +86,8 @@ describe('POST /v1/account/availability', () => {
 			name: 'taken',
 			created: '2024-01-01T00:00:00',
 			balance: '0.000 BLURT',
-			pending_claimed_accounts: 0
+			pending_claimed_accounts: 0,
+			posting_pubkey: undefined
 		});
 		const { app, limiter } = makeApp(stub);
 		limiters.push(limiter);

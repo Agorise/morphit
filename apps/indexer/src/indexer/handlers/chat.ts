@@ -75,6 +75,10 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateChatOrderPermlink } from '$indexer/permlink';
+import { logger } from '$log';
+import { localize, normalizeLocale } from '$indexer/pushLocalize';
+
+const log = logger('chat');
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
 /** Hard cap on ciphertext envelope size.
@@ -457,6 +461,50 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				lo,
 				hi,
 				messageId: parseInt(inserted.id, 10)
+			});
+		}
+
+		// ─── Web Push enqueue (Part 122 cp13; localized cp14) ──
+		// Notify `recipient` of an inbound message.  When the
+		// message carries a validated `order_permlink`, this is
+		// a trade signal — route under category='order'.
+		// Otherwise it's general chat traffic.
+		//
+		// Payload deliberately summary-only — never include the
+		// plaintext.  Chat is E2EE on chain; the indexer doesn't
+		// have the keys to decrypt anyway.  Non-fatal on enqueue
+		// failure: the message is already stored.
+		const isOrderSignal = orderResponseBypass === true && typeof claimedPermlink === 'string';
+		const pushCategory = isOrderSignal ? 'order' : 'chat';
+		const pushClickPath =
+			isOrderSignal && typeof claimedPermlink === 'string'
+				? `/order/${recipient}/${claimedPermlink}`
+				: '/chat';
+		try {
+			const localeRow = await client.query<{ locale: string }>(
+				`SELECT locale FROM push_subscriptions
+				  WHERE account = $1
+				  ORDER BY created_at DESC
+				  LIMIT 1`,
+				[recipient]
+			);
+			const locale = normalizeLocale(localeRow.rows[0]?.locale);
+			const titleStr = isOrderSignal
+				? localize(locale, 'order_title')
+				: localize(locale, 'chat_title');
+			const bodyStr = isOrderSignal
+				? localize(locale, 'order_body', ctx.signer)
+				: localize(locale, 'chat_body', ctx.signer);
+			await client.query(
+				`INSERT INTO push_pending
+				   (account, category, title, body, click_path, event_at)
+				 VALUES ($1, $2, $3, $4, $5, $6)`,
+				[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime]
+			);
+		} catch (err) {
+			log.warn('push_enqueue_failed', {
+				recipient,
+				err: String((err as Error)?.message ?? err)
 			});
 		}
 	} catch (err) {

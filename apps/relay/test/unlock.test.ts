@@ -50,7 +50,16 @@ function baseConfig(): Config {
 		queueBatchSize: 20,
 		queueMaxRetries: 10,
 		verboseHealth: false,
-		accountCreationFeeBlurt: 100
+		accountCreationFeeBlurt: 100,
+		vapidPublicKey: undefined,
+		vapidPrivateKey: undefined,
+		vapidSubject: undefined,
+		pushEnabled: false,
+		pushPollIntervalMs: 30_000,
+		pushBatchSize: 50,
+		pushMaxAgeSeconds: 3600,
+		pushMaxConsecutiveFailures: 5,
+		pushRequireSigned: false
 	};
 }
 
