@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Ethereum (ERC-20)">
-	<title>Ethereum (ERC-20)</title>
-	<!-- Ethereum slate / iconic angled diamond -->
-	<circle cx="12" cy="12" r="12" fill="#627EEA"/>
-	<g fill="#FFFFFF">
-		<!-- upper half (lighter in canonical Ethereum logo, but flat-white here for chip use) -->
-		<path d="M12 3.5v6.45l5.45 2.43z" opacity="0.6"/>
-		<path d="M12 3.5L6.55 12.38 12 9.95z"/>
-		<path d="M12 16.39v4.11l5.45-7.55z" opacity="0.6"/>
-		<path d="M12 20.5v-4.11l-5.45-3.44z"/>
-		<path d="M12 15.38l5.45-3l-5.45-2.43z" opacity="0.2"/>
-		<path d="M6.55 12.38L12 15.38V9.95z" opacity="0.6"/>
-	</g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" aria-label="Ethereum (ERC-20)" viewBox="0 0 24 24"><title>Ethereum (ERC-20)</title><circle cx="12" cy="12" r="12" fill="#627eea"/><g fill="#fff"><path d="M12 3.5v6.45l5.45 2.43z" opacity=".6"/><path d="m12 3.5-5.45 8.88L12 9.95z"/><path d="M12 16.39v4.11l5.45-7.55z" opacity=".6"/><path d="M12 20.5v-4.11l-5.45-3.44z"/><path d="m12 15.38 5.45-3L12 9.95z" opacity=".2"/><path d="m6.55 12.38 5.45 3V9.95z" opacity=".6"/></g></svg>

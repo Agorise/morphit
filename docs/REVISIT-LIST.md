@@ -1915,44 +1915,31 @@ covering EVERY field of the interface, not just the new
 field."*  The cp26 `payjoin-uri-wire-shape-smoke` includes
 scenarios 6-9 specifically asserting the cp3 fix.
 
-### BCH community-blessed logo artwork — DEFERRED 2026-05-17 (Part 122 cp21)
+### BCH community-blessed logo artwork — SHIPPED 2026-05-17 (Part 122 cp27-DD)
 
-Cp21 shipped `apps/web/static/icons/icon-bch.svg` as a path-based
-stylized "B" inside a BCH-brand-green disc (#0AC18E).  It's
-honest art (no `<text>` elements per ADDING-A-COIN.md, square
-viewBox, distinct visual identity from BTC/USDT/XMR/BLURT) but
-it is a PLACEHOLDER, not a community-blessed official mark.
+Cp21 originally shipped `apps/web/static/icons/icon-bch.svg`
+as a path-based stylized "B" placeholder.  At cp27-DD, Ken
+provided the authoritative community-canonical Bitcoin Cash
+mark (the official "Ƀ" glyph with two vertical strokes on a
+#0AC18E green disc).  Replaced the placeholder, minified via
+svgo to 0.8 KB.  ADR-0024 §8 updated to drop placeholder
+language.
 
-ADR-0024 §8 documents this explicitly.  Brag-list entry #271
-and marketing copy don't claim official artwork.
+Original file pre-replacement was a placeholder, not
+community-approved.  Post-cp27-DD: community-canonical.
 
-**To close:** drop a community-approved SVG at the same path
-(`apps/web/static/icons/icon-bch.svg`).  Same path-based
-conventions apply (no `<text>` elements, square viewBox,
-ideally under ~5KB).  No other code changes needed — every
-consumer reads the file by path.  Coordinate with the BCH
-community via Matrix `#agorise:matrix.org` or the BCH-side
-preferred channel.
+### DASH community-blessed logo artwork — SHIPPED 2026-05-17 (Part 122 cp27-DD)
 
-### DASH community-blessed logo artwork — DEFERRED 2026-05-17 (Part 122 cp27)
+Cp27 originally shipped `apps/web/static/icons/icon-dash.svg`
+as a path-based stylized "D" placeholder.  Same checkpoint
+(cp27-DD), Ken provided the authoritative community-canonical
+Dash mark (the forward-leaning rounded "D" with two horizontal
+speed lines on a #008CE7 blue disc).  Replaced the placeholder,
+minified via svgo to 0.6 KB.  ADR-0027 §9 updated to drop
+placeholder language.
 
-Cp27 shipped `apps/web/static/icons/icon-dash.svg` as a
-path-based stylized "D" inside a Dash-brand-blue disc
-(#008CE7).  Same posture as the BCH and LTC placeholders:
-honest art (no `<text>` elements per ADDING-A-COIN.md,
-square viewBox, distinct visual identity) but a PLACEHOLDER,
-not a community-blessed official mark.
-
-ADR-0027 §9 documents this explicitly.  Brag-list entry #279
-and marketing copy don't claim official artwork.
-
-**To close:** drop a community-approved SVG at the same path
-(`apps/web/static/icons/icon-dash.svg`).  Same path-based
-conventions apply (no `<text>` elements, square viewBox,
-ideally under ~5KB).  No other code changes needed — every
-consumer reads the file by path.  Coordinate with the Dash
-community via Matrix `#agorise:matrix.org`, the Dash Forum,
-or the Dash Core Group.
+Original file pre-replacement was a placeholder, not
+community-approved.  Post-cp27-DD: community-canonical.
 
 ### Dash InstantSend explainer in the privacy guide — DEFERRED 2026-05-17 (Part 122 cp27)
 

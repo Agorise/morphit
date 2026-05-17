@@ -98,13 +98,15 @@ or via the `morphit-ops init` wizard step 13.  The cp22
 wizard auto-picks up DASH via the
 `canBeTraded && !canPayListingFee` filter.
 
-**Decision 9 — Placeholder SVG logo at
-`apps/web/static/icons/icon-dash.svg`.**  Path-based stylized "D"
-in Dash-brand-blue (#008CE7) disc, no `<text>` elements (per
-ADDING-A-COIN.md font-fallback rule).  Same placeholder posture
-as the BCH/LTC logos shipped in cp21/cp24.  REVISIT §E entry
-filed for community-blessed artwork swap-in pre-launch or
-post-launch.
+**Decision 9 — Community-canonical SVG logo at
+`apps/web/static/icons/icon-dash.svg` (updated cp27-DD).**  The
+canonical Dash mark on Dash-brand-blue (#008CE7) disc: the
+forward-leaning rounded "D" with two horizontal speed lines.
+No `<text>` elements (per ADDING-A-COIN.md font-fallback rule).
+Originally shipped at cp27 as a path-based placeholder "D"
+stylization; replaced with the community-canonical SVG at cp27-DD
+when Ken provided the authoritative artwork.  Minified via svgo
+to 0.6 KB while preserving viewBox.
 
 ## Consequences
 
@@ -124,8 +126,6 @@ post-launch.
 
 **Negative / trade-offs:**
 
-- DASH SVG logo is a placeholder pending community-blessed
-  artwork.  REVISIT §E entry tracks this.
 - PrivateSend masternode-coordination is a trust trade-off the
   privacy guide must explain honestly: the protocol is
   non-custodial (masternodes never hold your coins) but the

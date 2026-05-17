@@ -141,14 +141,16 @@ peer instance B — they still appear in A's read-only orderbook
 view.  A only refuses to ACCEPT new BCH orders posted FROM its
 own users.
 
-### 8. Logo placeholder pending community artwork
+### 8. Community-canonical logo (updated Part 122 cp27-DD)
 
-`apps/web/static/icons/icon-bch.svg` ships as a path-based
-stylized "B" inside a BCH-brand-green disc (#0AC18E).  No
-`<text>` elements (font-fallback rules from ADDING-A-COIN.md).
-The placeholder is honest art, not a community-blessed
-official mark — flagged in REVISIT-LIST as a deferred swap-in
-when the BCH community provides their preferred SVG.
+`apps/web/static/icons/icon-bch.svg` ships the canonical
+Bitcoin Cash mark on a BCH-brand-green disc (#0AC18E): the
+official "Ƀ" glyph with two vertical strokes piercing the
+rounded body.  Operator-supplied from `bitcoincash.org`-style
+canonical artwork; minified via svgo to 0.8 KB while preserving
+viewBox.  Originally shipped at cp21 as a path-based placeholder
+"B" stylization; replaced with the community-canonical SVG at
+Part 122 cp27-DD when Ken provided the authoritative artwork.
 
 ## Files changed
 
@@ -222,9 +224,10 @@ i18n × 10 locales:
   `cheat_sheet.section_assets.bch`.
 
 Logo:
-- `apps/web/static/icons/icon-bch.svg` — path-based stylized
-  BCH "B" on green disc, placeholder pending community
-  artwork.
+- `apps/web/static/icons/icon-bch.svg` — community-canonical
+  Bitcoin Cash mark on green disc, swapped in from cp21
+  placeholder at cp27-DD when Ken provided authoritative
+  artwork; minified via svgo to 0.8 KB.
 
 Smoke:
 - `packages/asset-registry/scripts/bch-trade-only-smoke.ts` —
@@ -249,15 +252,11 @@ Smoke:
   recipient wallet rejects wrong-chain sends.  Friction
   considered acceptable to avoid rejecting legitimate
   legacy-format BCH addresses.
-- Logo is a placeholder.  Marketing materials note this
-  explicitly; brag-list entry doesn't claim official artwork.
 - One more chat-link override env var (`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL`)
   for operators to remember — but the ops-cli wizard step 12
   walks them through it.
 
 **Future revisits:**
-- Replace the placeholder SVG with a community-blessed BCH
-  artwork (REVISIT-LIST item).
 - If the BCH community pushes for CashAddr-only behavior,
   consider tightening the validator to reject legacy P2PKH/P2SH
   (currently accepted).
