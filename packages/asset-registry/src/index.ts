@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -256,6 +256,49 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
 		addressShape:
 			/^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+	}),
+	Object.freeze({
+		ticker: 'BCH',
+		// Bitcoin Cash uses the same 8-decimal smallest unit as
+		// Bitcoin (satoshi).  Confirmed via the BCH protocol
+		// specification — BCH forked from BTC at block 478,558 and
+		// preserved the satoshi-denominated amount semantics.
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: BCH is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; bch-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  No network picker needed in the
+		// post-order form or address-share modal — defaults to
+		// mainnet and stays there.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// BCH is transparent (like BTC), but the chain is fully
+		// decentralized and BCH addresses cannot be frozen by an
+		// issuer.  Same posture as BTC: no warning chip needed.
+		// Users opt into Bitcoin Cash knowing its traceability
+		// properties.
+		privacyWarningKey: null,
+		// CashAddr format (modern BCH standard) + legacy P2PKH/P2SH
+		// (still accepted by most BCH wallets):
+		//   - CashAddr with `bitcoincash:` prefix: 12-char prefix +
+		//     42-char body (starts with q for P2PKH or p for P2SH,
+		//     followed by 41 lowercase base32 chars).
+		//   - CashAddr without prefix: same 42-char body alone.
+		//   - Legacy P2PKH: starts with 1, 26-35 chars (same shape
+		//     as BTC legacy).
+		//   - Legacy P2SH: starts with 3, 26-35 chars.
+		// CashAddr is case-insensitive but conventionally lowercase;
+		// we accept lowercase only at the regex layer (wallets
+		// normalize).  Permissive shape check — not a checksum
+		// (BCH wallet does that on the receiving end).
+		addressShape:
+			/^(bitcoincash:[qp][a-z0-9]{41}|[qp][a-z0-9]{41}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

@@ -177,6 +177,7 @@
 		if (method === 'btc') return 'chat.address.address_invalid_btc';
 		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
 		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
+		if (method === 'bch') return 'chat.address.address_invalid_bch';
 		return 'chat.address.address_invalid_blurt';
 	});
 
@@ -333,6 +334,18 @@
 			>
 				{$_('chat.address.method_usdt')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'bch'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'bch'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('bch')}
+			>
+				{$_('chat.address.method_bch')}
+			</button>
 		</div>
 
 		<!-- Part 121 — USDT privacy warning + network picker.
@@ -370,7 +383,9 @@
 						? ($_('chat.address.address_placeholder_xmr') as string)
 						: method === 'usdt'
 							? ($_('chat.address.address_placeholder_usdt') as string)
-							: ($_('chat.address.address_placeholder_blurt') as string)}
+							: method === 'bch'
+								? ($_('chat.address.address_placeholder_bch') as string)
+								: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

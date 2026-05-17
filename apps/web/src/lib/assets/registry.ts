@@ -128,6 +128,21 @@ const validateUsdt: AddressValidator = (s) =>
 	USDT_TRC20_RE.test(s) ||
 	USDT_SPL_RE.test(s);
 
+// BCH — CashAddr (with or without `bitcoincash:` prefix) and
+// legacy P2PKH/P2SH.  Inlined copies mirroring chat/payload.ts
+// (we can't import to avoid the same registry-imports-payload
+// circular).
+const BCH_CASHADDR_PREFIXED_RE = /^bitcoincash:[qp][a-z0-9]{41}$/;
+const BCH_CASHADDR_BARE_RE = /^[qp][a-z0-9]{41}$/;
+const BCH_LEGACY_P2PKH_RE = /^1[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const BCH_LEGACY_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+
+const validateBch: AddressValidator = (s) =>
+	BCH_CASHADDR_PREFIXED_RE.test(s) ||
+	BCH_CASHADDR_BARE_RE.test(s) ||
+	BCH_LEGACY_P2PKH_RE.test(s) ||
+	BCH_LEGACY_P2SH_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -208,6 +223,33 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// Cross-network sends lose funds permanently.
 		defaultNetwork: null,
 		privacyWarningKey: 'usdt_centralized'
+	},
+	{
+		ticker: 'bch',
+		displayTicker: 'BCH',
+		displayName: 'Bitcoin Cash',
+		oneLineDescription:
+			'Bitcoin Cash — bigger blocks, lower per-tx fees.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-bch.svg',
+		// BCH brand green.  text-lime-500 is visually distinct from
+		// BLURT's text-morphit-emerald, XMR's text-orange-500, BTC's
+		// text-amber-500, USDT's text-amber-400.  Reads as "green"
+		// (the Bitcoin Cash community color) without colliding.
+		accentClass: 'text-lime-500',
+		decimals: 8, // Same as BTC — sat-denominated smallest unit
+		supportsMemo: false, // BCH transactions don't carry memos (same as BTC)
+		addressValidator: validateBch,
+		// MEMORY #23 INVARIANT: BCH cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// BCH is transparent (like BTC) but decentralized — no
+		// issuer can freeze addresses.  Same posture as BTC: no
+		// privacy warning chip.
+		privacyWarningKey: null
 	}
 ] as const;
 

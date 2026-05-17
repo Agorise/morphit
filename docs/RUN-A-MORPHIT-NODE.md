@@ -1865,38 +1865,49 @@ double-spend, halved abuse defenses), see
 
 ---
 
-## Trade-only assets: USDT and your operator stance (Part 121)
+## Trade-only assets: USDT, BCH, and your operator stance (Part 121, Part 122 cp21)
 
-Morphit ships with **USDT enabled by default** as a trade-only
-asset on a new node.  Users can buy/sell USDT against any of
-the four supported networks (ERC-20, TRC-20, SPL, BEP-20) and
-their listing fee is paid in BLURT, BTC, or XMR — never USDT
-(the `fee_method` enum is wire-format-frozen at BLURT/BTC/XMR
-per memory #23 and ADR-0011).
+Morphit ships with **USDT and BCH enabled by default** as
+trade-only assets on a new node.  Users can buy/sell USDT
+against any of the four supported networks (ERC-20, TRC-20,
+SPL, BEP-20), and can buy/sell BCH (Bitcoin Cash, single-network
+mainnet only).  All listing fees are paid in BLURT, BTC, or
+XMR — never USDT, never BCH (the `fee_method` enum is wire-
+format-frozen at BLURT/BTC/XMR per memory #23 and ADR-0011).
 
 ### Decide your operator stance
 
-Three reasonable positions for an operator:
+Reasonable positions for an operator:
 
-1. **Accept USDT** (default) — the canonical morphit.io
-   posture.  Users have asked for stablecoin trading and you
-   want to serve them.  No config change needed.
+1. **Accept USDT and BCH** (default) — the canonical morphit.io
+   posture.  Users have asked for stablecoin trading and for a
+   wider Bitcoin-fork rail.  No config change needed.
 
-2. **Refuse USDT instance-wide** — your node will not write
-   new USDT orders to its DB.  Add to your indexer config:
+2. **Refuse one specific asset instance-wide** — your node will
+   not write new orders for that asset to its DB.  Add to your
+   indexer config:
 
    ```bash
+   # Refuse USDT only
    MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
+
+   # Refuse BCH only (privacy-focused operators may prefer
+   # BTC + XMR rails and skip Bitcoin Cash)
+   MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
    ```
 
-   You'll still see USDT orders from peer instances in your
+   You'll still see those orders from peer instances in your
    read-only orderbook feeds (the chain is shared), but your
    own users get an inline error if they try to post one.
 
 3. **Refuse multiple assets** — comma-separated:
 
    ```bash
-   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
+   # Refuse both stablecoins and Bitcoin Cash (BTC + XMR + BLURT only)
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH"
+
+   # Future-compat with assets not yet in the registry
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,DAI,USDC"
    ```
 
    (`DAI` and `USDC` aren't currently in the canonical
@@ -1934,7 +1945,20 @@ Operators running self-hosted explorers for any of these
 chains can override per-network in the frontend env (see
 `docs/OPERATIONS.md` §"Per-network explorer URL overrides").
 
-### What USDT cannot do on your node
+BCH is single-network (mainnet only), so there's just one
+chat-link explorer URL:
+
+| Asset | Bundled default explorer |
+|-------|--------------------------|
+| BCH (mainnet) | `https://blockchair.com/bitcoin-cash/transaction/{txid}` |
+
+Override with `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL` (same shape
+contract as `MORPHIT_FRONTEND_BTC_CHAT_LINK_URL` and
+`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL`: `https://`, must contain
+`{txid}`, must parse as a URL).  See `docs/OPERATIONS.md`
+§"BCH chat-link explorer URL override" for alternatives.
+
+### What trade-only assets cannot do on your node
 
 - ❌ Cannot pay listing fees (BLURT/BTC/XMR only, enforced
   by sentinel smokes)

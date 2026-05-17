@@ -1,7 +1,7 @@
 # Morphit v1.0.0-beta.1
 
 First public beta of Morphit — a federated, non-custodial, no-KYC peer-to-peer
-marketplace for fiat ↔ BTC, XMR, BLURT, and USDT trades.
+marketplace for fiat ↔ BTC, XMR, BLURT, USDT, and BCH trades.
 
 This release is for community operators who want to stand up an early
 instance and for beta testers to try real trades on morphit.io.
@@ -34,10 +34,11 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Trading
 
-- Four tradable assets out of the box: **BTC, XMR, BLURT, USDT**.
+- Five tradable assets out of the box: **BTC, XMR, BLURT, USDT, BCH**.
   USDT spans four networks (Ethereum / ERC-20, Tron / TRC-20,
   Solana / SPL, BNB Smart Chain / BEP-20) with a no-default-network
-  rule so users can't accidentally cross-send.
+  rule so users can't accidentally cross-send.  BCH is single-network
+  (mainnet) and trade-only like USDT — it cannot pay listing fees.
 - Listing fees in **BLURT, BTC, or XMR** — choice belongs to the
   poster.  Default operator-treasury target is ~$0.12/order.
 - **First buy of BLURT is fee-waived** — new users can post their
@@ -120,14 +121,14 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Audit and integrity
 
-- **3,187 self-checking smoke scenarios** ship with the source.
+- **3,200 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
 - **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public
   in the repo, with every finding, every fix, every accepted
   risk documented.
-- **22 architecture decision records** in `docs/adr/0001-…`
-  through `0023-…`.
+- **23 architecture decision records** in `docs/adr/0001-…`
+  through `0024-…`.
 - **AGPL-3.0-only.**  Operators running modified instances must
   make their source available to their users.
 

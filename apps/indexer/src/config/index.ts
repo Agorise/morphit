@@ -316,6 +316,17 @@ export interface Config {
 	 *  When undefined, frontend uses its bundled default
 	 *  (`https://xmrchain.net/tx/{txid}`). */
 	readonly frontendXmrChatLinkUrl: string | undefined;
+	/** Frontend chat-link URL template for BCH txids (Part 122
+	 *  cp21).  When undefined, frontend uses its bundled default
+	 *  (`https://blockchair.com/bitcoin-cash/transaction/{txid}`).
+	 *  Same shape contract as BTC/XMR: https://, contains `{txid}`,
+	 *  parses as URL.  Operators wanting a different BCH explorer
+	 *  set MORPHIT_FRONTEND_BCH_CHAT_LINK_URL; candidates Ken
+	 *  surveyed at addition time included blockchair.com,
+	 *  blockchain.com/explorer, bitinfocharts.com, bchexplorer.info,
+	 *  oklink.com/bch, bch.tokenview.io, blockexplorer.one, and
+	 *  explorer.cloverpool.com. */
+	readonly frontendBchChatLinkUrl: string | undefined;
 
 	/** The operator's registered tag (matching their
 	 *  `morphit_operator_register_v1` op).  When set, the
@@ -741,6 +752,17 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp21 — BCH chat-link explorer URL.  Same shape
+	// contract as BTC/XMR; when unset, frontend falls back to the
+	// bundled blockchair.com/bitcoin-cash default.
+	MORPHIT_FRONTEND_BCH_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// REVISIT-LIST item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
@@ -908,6 +930,7 @@ export function loadConfig(): Config {
 		instanceSeoDescription: e.MORPHIT_INSTANCE_SEO_DESCRIPTION,
 		instanceSeoKeywords: e.MORPHIT_INSTANCE_SEO_KEYWORDS,
 		frontendBtcChatLinkUrl: e.MORPHIT_FRONTEND_BTC_CHAT_LINK_URL,
-		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL
+		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL,
+		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL
 	};
 }

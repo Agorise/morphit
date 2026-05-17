@@ -8023,11 +8023,12 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 — USDT and future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-multi-network assets like USDT.
+single-network trade-only assets (BCH) and multi-network ones
+(USDT).
 
 ### Disabling specific assets instance-wide
 
@@ -8054,11 +8055,18 @@ Multi-coin examples:
 # Refuse one specific asset
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
 
+# Refuse Bitcoin Cash (privacy-focused operators may prefer
+# BTC + XMR only)
+MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
+
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
 
 # Refuse three or more
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
+
+# Refuse BCH AND USDT (focus on BTC/XMR/BLURT only)
+MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -8156,6 +8164,49 @@ case-preserved; the others are hex and lowercased.
 If you choose to disable USDT instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=USDT`, the per-network
 explorer config has no effect on your instance.
+
+### BCH chat-link explorer URL override (Part 122 cp21)
+
+BCH is single-network (mainnet only), so there's just one
+explorer URL to think about.  Like the BTC and XMR chat-link
+URLs (`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL`,
+`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL`), the BCH override is a
+single env var:
+
+```bash
+# Default (bundled) — operators don't need to set anything to
+# get this behavior:
+# MORPHIT_FRONTEND_BCH_CHAT_LINK_URL="https://blockchair.com/bitcoin-cash/transaction/{txid}"
+
+# Override to a self-hosted or alternative explorer:
+MORPHIT_FRONTEND_BCH_CHAT_LINK_URL="https://my-self-hosted-bch-explorer.example.org/tx/{txid}"
+```
+
+`{txid}` is the placeholder substituted at render time with the
+lowercased transaction ID (BCH txids are hex like BTC).
+Validation: must be `https://`, must contain literal `{txid}`,
+must parse as a URL after substitution.  An invalid template
+fails indexer startup with a clear error message rather than
+silently shipping a broken link.
+
+Alternative BCH explorers operators can point at — surveyed at
+Part 122 cp21 addition time:
+- https://blockchair.com/bitcoin-cash (bundled default)
+- https://www.blockchain.com/explorer
+- https://bitinfocharts.com/bitcoin%20cash/explorer/
+- https://bchexplorer.info/
+- https://www.oklink.com/bch
+- https://bch.tokenview.io/
+- https://blockexplorer.one/bitcoin-cash/mainnet
+- https://explorer.cloverpool.com/bch
+
+The ops-cli wizard step 12 (Chat-link external explorer URLs)
+asks for the BCH URL after BTC and XMR with the same
+probe-reachability check that the BTC and XMR URLs get.
+
+If you choose to disable BCH instance-wide via
+`MORPHIT_INDEXER_DISABLED_ASSETS=BCH`, the chat-link config
+has no effect on your instance.
 
 ### Schema migration v32 (Part 121)
 

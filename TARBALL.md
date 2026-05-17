@@ -1,8 +1,317 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 20 — pre-launch tier-1+tier-2 review sweep + deep-deep: README replaced (3-line stub → substantive landing page); RELEASE-NOTES-v1.0.0-beta.1.md body replaced (was `...` placeholder); 14-touchpoint version unification (all 10 package.json + relay/indexer health.ts VERSION/INDEXER_VERSION constants + docs/API.md + apps/indexer/README.md example responses → 1.0.0-beta.1); new version-consistency-smoke (apps/web/scripts/version-consistency-smoke.ts, 14 scenarios, self-tested by tampering, wired into run-smokes.sh); MORPHIT-BRAG-LIST duplicate-#60 fix (cp16 push-sig-verify entry collided with section-4 federated-orderbook opener → renumbered 210 lines section-4-onwards +1; max now 270) + stale-count refresh (smoke count 2,320→3,170+; verify-anchor 2,500+/100+→3,170+/140+; audit-doc descriptor 9,600+/27→20,000+/60+ verified actual; footer 265→270 and 2026-05-14→2026-05-17); mediakit zip rebuilt; FAQ `featured_slot_displaced` updated × 10 locales (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK) with new "Two protections built into the platform" block (cp17 outbid push + cp18 anti-snipe soft-close + "Extended ×N" chip reference) + updated recap line; REVISIT-LIST §A FAQ-stale item closed; **deep-deep:** 14 findings, 4 real bugs fixed in-pass (DD-cp20-1 stale package-lock.json after version sweep; DD-cp20-9 stale "200 static HTML files" claim in README + brag #270 corrected to 170 per sitemap source of truth; DD-cp20-13 stale "23 ADRs" claim corrected to 22 per actual file count with 0016-slot explanation; DD-cp20-14 version-consistency-smoke refactored to read workspaces dynamically from root package.json, self-tested both for existing-workspace tamper and new-workspace addition); DD-cp20-10 RELEASE-NOTES smoke count bumped 3,173→3,187 to match cp20 baseline; mediakit rebuilt twice during deep-deep)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 21 — Bitcoin Cash addition: BCH wired end-to-end as Category-B trade-only single-network asset following the USDT pattern. Canonical asset registry (ASSET_TICKERS + ASSETS entry, canPayListingFee=false, canBeTraded=true, supportedNetworks=['mainnet'], defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, CashAddr + legacy P2PKH/P2SH address regex). ChatAssetTicker union extended with 'bch'; 5 BCH regex constants + isValidBchAddress/isValidBchTxid + dispatchers in chat/payload.ts. Frontend assets registry (validateBch + entry: accentClass text-lime-500, logoSvgPath /icons/icon-bch.svg). Explorer URL plumbing (BCH_TXID_RE + BUNDLED_BCH_CHAT_LINK_URL=blockchair.com/bitcoin-cash/transaction/{txid} in urlsCore; 'BCH' added to ExternalAsset type + EXPLORER_REGISTRY entry in urls.ts; chat_link_urls.bch in instance store + fallback + fetch handler; chat_link_urls.bch in indexer InstanceResponse + body construction; MORPHIT_FRONTEND_BCH_CHAT_LINK_URL Zod schema + Config field + builder mapping; bch?: in indexer-client schema + matrix-bot ChatLinkUrlsSchema). ops-cli wizard step 12 extended (DEFAULT_BCH_CHAT_LINK_URL + ChatLinkExplorersResult.bch + BCH prompt + render.ts emits MORPHIT_FRONTEND_BCH_CHAT_LINK_URL). i18n × 10 locales (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK): 10 new BCH keys per locale (assets.bch.{displayName, oneLineDescription, disabled_on_instance}, chat.address.{method_bch, address_placeholder_bch, address_invalid_bch, pill_method_bch}, chat.funds_sent.pill_title_bch, home.asset_subtitles.bch, post_order.form.asset_explainer.bch, payment_method.pay_bch.description, cheat_sheet.section_assets.bch); parity holds at 3,497 lines/file (up from 3,481). UI dispatches (AddressShareModal BCH tab + placeholder + invalid-msg dispatch; FundsSentModal BCH tab; ChatMessage BCH explorer URL dispatch + address-pill label + funds-sent pill title + canMarkSent guard + onMarkSent callback type widened to 'btc'|'xmr'|'usdt'|'bch'; ConversationView markSentArgs + handleMarkSentClick types widened; post-order page BCH tooltip block; ListingFeeAddressPanel stale-comment cleanup). New bch-trade-only-smoke (13 scenarios, mirrors usdt-trade-only-smoke pattern: canonical-in-registry, canPayListingFee=false, canBeTraded=true, single-network mainnet, defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, frontend mirror parity, address-validator accepts CashAddr+legacy+rejects garbage; registered in run-smokes.sh). BCH SVG logo (path-based stylized B on green disc #0AC18E, no <text> elements, viewBox 0 0 1024 1024, placeholder pending community artwork — REVISIT-LIST entry filed). Docs: ADR-0024 (Bitcoin Cash trade-only addition, 282 lines covering context/decision/files-changed/consequences/tradeoffs/future-revisits); README asset list updated; RELEASE-NOTES "Four"→"Five tradable assets" + BCH explanation + smoke count 3,187→3,200 + ADR 22→23 / 0023→0024; MORPHIT-BRAG-LIST new entry #271 + BCH-context additions to #171/#200/#202/#205/#214 + #129 ADR count bump + footer count 270→271 + smoke 3,170+→3,200+ + ADR range bump + header asset list + keywords; docs/OPERATIONS.md trade-only-asset header + multi-coin examples + new BCH chat-link-URL-override subsection with all 8 surveyed alternatives; docs/RUN-A-MORPHIT-NODE.md trade-only-assets section rewritten for BCH/USDT/combined stances + BCH explorer table + "What trade-only assets cannot do" generalized; docs/PRE-LAUNCH-CHECKLIST.md smoke baseline 3,187→3,200 + 4-option operator-stance matrix + new BCH chat-link explorer decision item. Mediakit zip rebuild scheduled after brag-list edits.  Deep-deep findings (6 total, 3 verified-ok + 3 real bugs fixed in-pass): DD-cp21-6 buildPaymentUri missing BCH branch (CashAddr URI scheme + amount param, contradicting brag-list #202 CashAddr-URI claim); DD-cp21-7 encodeAddressPayload + encodeFundsSentPayload method gates rejected both USDT and BCH — PRE-EXISTING bug from cp3 USDT shipping that cp21 surfaced; DD-cp21-8 symmetric bug in decodePayload morphit_addr + morphit_funds_sent branches — also pre-existing from cp3.  All 3 fixes land 4 dispatch-gate widenings in apps/web/src/lib/chat/payload.ts; verified live with round-trip encode/decode of both USDT and BCH addresses + txids.  All 4 asset-related smokes still green: bch-trade-only 13/13, usdt-trade-only 11/11, fee-method-enum-frozen 7/7, version-consistency 14/14.  Locale parity holds at 2,563 keys × 10.)
 
 **Snapshot date:** 2026-05-17
 
 ---
+
+## cp21 — Bitcoin Cash addition + deep-deep (Part 122)
+
+Ken's prompt: "add Bitcoin Cash (BCH). wire it up too and then do
+a deep deep on our latest work."  Plus eight candidate BCH block
+explorers, with the note that "any place that USDT is mentioned,
+is probably also a good place to mention these new coins like
+bch, dash, etc."
+
+### Design decisions (mirrors the USDT/ADR-0023 Category-B pattern)
+
+- **Trade-only (Category B).**  `canPayListingFee: false`,
+  `canBeTraded: true`.  fee_method enum stays frozen at
+  BLURT/BTC/XMR per memory #23.  bch-trade-only-smoke pins this
+  from the registry side; fee-method-enum-frozen-smoke pins it
+  from the wire-format side.
+- **Single-network mainnet.**  `supportedNetworks: ['mainnet']`,
+  `defaultNetwork: 'mainnet'`.  No network picker shown.  Unlike
+  USDT (which forces explicit network choice), BCH defaults
+  cleanly into mainnet.
+- **No privacy warning chip.**  `privacyWarningKey: null`.  BCH
+  is transparent (like BTC) but decentralized — no issuer can
+  freeze addresses.  Same posture as BTC: warning is for assets
+  that compromise privacy OR decentralization, BCH compromises
+  neither.
+- **Decimals = 8.**  Preserved BTC's satoshi unit across the
+  2017 fork.
+- **Address validator: CashAddr (prefixed + bare) + legacy
+  P2PKH/P2SH.**  Permissive shape check; receiver wallet does
+  the real verification.  Accepted tradeoff: legacy `1...`/`3...`
+  is indistinguishable from BTC shape — buyer's wallet rejects
+  wrong-chain sends.
+- **Bundled chat-link explorer: blockchair.com/bitcoin-cash.**
+  Chosen from Ken's eight-explorer survey for predictable URL
+  format, uptime track record, and no aggressive
+  fingerprinting.
+- **Default-ON instance-wide, operator opt-out via
+  MORPHIT_INDEXER_DISABLED_ASSETS="BCH"** (memory #25).
+
+### Files changed
+
+Canonical registry:
+- `packages/asset-registry/src/index.ts` — `ASSET_TICKERS`
+  `['BTC','XMR','BLURT','USDT']` → `['BTC','XMR','BLURT','USDT','BCH']`;
+  full BCH `AssetEntry` after USDT.
+
+Chat payload + frontend registry:
+- `apps/web/src/lib/chat/payload.ts` — 5 BCH regex constants;
+  'bch' added to `ChatAssetTicker`; `isValidBchAddress` +
+  `isValidBchTxid`; dispatchers extended.
+- `apps/web/src/lib/assets/registry.ts` — `validateBch` + BCH
+  entry with `accentClass: 'text-lime-500'`, `logoSvgPath:
+  '/icons/icon-bch.svg'`.
+
+Explorer URL plumbing:
+- `apps/web/src/lib/explorer/urlsCore.ts` — `BCH_TXID_RE`,
+  `BUNDLED_BCH_CHAT_LINK_URL`.
+- `apps/web/src/lib/explorer/urls.ts` — `'BCH'` in
+  `ExternalAsset` type, `EXPLORER_REGISTRY.BCH` entry,
+  re-exports.
+
+Instance store + API + indexer config:
+- `apps/web/src/lib/stores/instance.ts` — `chat_link_urls.bch:
+  string | null` in interface + FALLBACK + fetch defensive
+  fallback.
+- `apps/indexer/src/api/instance.ts` — `chat_link_urls.bch` in
+  InstanceResponse + body construction.
+- `apps/indexer/src/config/index.ts` — `frontendBchChatLinkUrl`
+  in Config; `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL` Zod schema
+  with same shape-validation as BTC/XMR; mapped in Config
+  builder.
+- `packages/indexer-client/src/index.ts` — `bch?: string | null`
+  in client schema (optional for back-compat).
+- `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — `bch`
+  in `ChatLinkUrlsSchema`.
+
+ops-cli wizard step 12:
+- `apps/ops-cli/src/init/steps.ts` — `DEFAULT_BCH_CHAT_LINK_URL`,
+  `ChatLinkExplorersResult.bch`, BCH prompt with reachability
+  probe.
+- `apps/ops-cli/src/init/render.ts` — emits
+  `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL` in rendered env file.
+
+i18n (all 10 locales — en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK):
+- `apps/web/src/lib/i18n/locales/{loc}.json` — 10 new BCH
+  keys per locale (mostly inserted via Python script for
+  consistency, hand-tuned translations per locale).  Line
+  parity holds: 3,497 lines/file × 10 = 34,970 total.
+
+UI dispatches:
+- `apps/web/src/lib/components/AddressShareModal.svelte` — BCH
+  tab, placeholder dispatch, invalid-address message.
+- `apps/web/src/lib/components/FundsSentModal.svelte` — BCH tab.
+- `apps/web/src/lib/components/ChatMessage.svelte` — BCH
+  branches in explorer URL dispatch, address-pill label,
+  funds-sent pill title; `canMarkSent` guard extended;
+  `onMarkSent` callback type widened to `'btc'|'xmr'|'usdt'|'bch'`.
+- `apps/web/src/lib/components/ConversationView.svelte` —
+  `markSentArgs` state type + `handleMarkSentClick` signature
+  widened.
+- `apps/web/src/routes/[lang]/post/+page.svelte` — BCH tooltip
+  block in asset picker.
+- `apps/web/src/lib/components/ListingFeeAddressPanel.svelte` —
+  stale comment updated (no BCH branch needed; fee_method
+  enum frozen).
+
+Smoke:
+- `packages/asset-registry/scripts/bch-trade-only-smoke.ts` —
+  new, 13 scenarios; mirrors usdt-trade-only-smoke pattern.
+  Stand-alone verified passing.
+- `scripts/run-smokes.sh` — registers
+  `packages/asset-registry:bch-trade-only-smoke` (smoke
+  baseline 3,187 → 3,200).
+
+Logo:
+- `apps/web/static/icons/icon-bch.svg` — new, path-based
+  stylized "B" on BCH-green disc (#0AC18E), no `<text>`
+  elements, square viewBox.  Placeholder pending official
+  community artwork (REVISIT-LIST entry filed).
+
+Docs:
+- `docs/adr/0024-bitcoin-cash-trade-only-addition.md` — new ADR.
+- `README.md` — asset list line.
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — Four → Five tradable
+  assets + BCH explanation; smoke count 3,187 → 3,200; ADR
+  count 22 → 23 / range 0023 → 0024.
+- `MORPHIT-BRAG-LIST.md` — new entry #271 (BCH P2P);
+  BCH addenda in #171/#200/#202/#205/#214; #129 ADR bump
+  with 0024 in examples; footer count 270 → 271 + smoke
+  3,170+ → 3,200+ + ADR range; header asset list + keywords
+  refreshed.
+- `docs/OPERATIONS.md` — trade-only-asset section header +
+  multi-coin disabled-assets examples (BCH variants) + new
+  "BCH chat-link explorer URL override" subsection with all
+  8 surveyed alternatives.
+- `docs/RUN-A-MORPHIT-NODE.md` — trade-only-assets section
+  rewritten for BCH/USDT/combined stances + BCH explorer
+  table + "What trade-only assets cannot do" generalized.
+- `docs/PRE-LAUNCH-CHECKLIST.md` — smoke baseline 3,187 →
+  3,200; 4-option operator-stance matrix (accept all / refuse
+  USDT / refuse BCH / refuse both); new BCH chat-link
+  explorer decision item.
+- `docs/REVISIT-LIST.md` — BCH community-artwork swap-in
+  filed as deferred.
+- `TARBALL.md` — this entry.
+
+Build artifact (to ship at deliverable time):
+- `apps/web/static/morphit-mediakit.zip` — must be rebuilt
+  after the brag-list edits.
+
+### Persona walkthroughs
+
+- **Bob (existing Blurt user opens orderbook):** asset filter
+  now offers BCH alongside BTC/XMR/BLURT/USDT.  Clicking BCH
+  filters to BCH orders.  An incoming BCH order in chat now
+  renders the address-pill with "Bitcoin Cash address" label
+  and a blockchair.com link for any BCH txid shared in the
+  conversation.  No new friction.
+- **Sally-user (never owned crypto, opens post-order form):**
+  asset picker has 5 buttons.  Clicking BCH shows the BCH
+  explainer tooltip ("forked from Bitcoin in 2017... bigger
+  blocks... trade-only on Morphit").  No privacy-warning chip
+  (BCH is transparent + decentralized, same as BTC).  No
+  network picker.  Form submits as expected.
+- **Sally-operator (running ops-cli wizard fresh):** step 12
+  now asks for BCH chat-link URL after BTC and XMR.  Default
+  prefilled (`blockchair.com/bitcoin-cash/transaction/{txid}`).
+  Reachability probe runs.  Operator can keep, change, or
+  reset to default.  Generated env file includes
+  `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL`.  Disabling BCH
+  instance-wide is the same env-var as disabling USDT
+  (`MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`).
+
+### Deep-deep on cp21
+
+Adversarial sweep over cp21 work.  Six findings total: **three
+GREEN verified-ok** (no action), **three HIGH/MEDIUM real bugs
+fixed in-pass**.  Two of the real bugs (DD-cp21-7, DD-cp21-8)
+were PRE-EXISTING from cp3 USDT shipping — cp21 surfaced them
+because the same dispatch-gate class blocks BCH and USDT
+identically; finding the BCH gap forced an honest re-check that
+caught the USDT gap that had been quietly broken since cp3.
+
+**Verified-OK (no action needed):**
+
+- **DD-cp21-1 (LOW, VERIFIED OK).**  Re-ran all 4 asset-related
+  smokes after cp21 changes.  `bch-trade-only-smoke` 13/13;
+  `version-consistency-smoke` 14/14 (BCH addition added zero
+  workspace package.json files); `fee-method-enum-frozen-smoke`
+  7/7 (BCH did NOT leak into fee_method enum — wire-format
+  invariant per Memory #23 preserved); `usdt-trade-only-smoke`
+  11/11 (USDT entry unchanged by cp21).  Asset-registry
+  cross-invariants hold.
+
+- **DD-cp21-2 (LOW, VERIFIED OK).**  Locale parity post-cp21:
+  all 10 locales (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK) carry
+  exactly 2,563 keys each, zero missing or extra across the
+  set.  The Python script that inserted 10 BCH keys per locale
+  preserved structural parity (3,481 → 3,497 lines/file × 10).
+
+- **DD-cp21-3 (LOW, VERIFIED OK).**  Every BCH i18n key in
+  every locale verified as non-empty string at its expected
+  nested path: `assets.bch.{displayName, oneLineDescription,
+  disabled_on_instance}`, `chat.address.{method_bch,
+  address_placeholder_bch, address_invalid_bch, pill_method_bch}`,
+  `chat.funds_sent.pill_title_bch`, `home.asset_subtitles.bch`,
+  `post_order.form.asset_explainer.bch`,
+  `payment_method.pay_bch.description`,
+  `cheat_sheet.section_assets.bch`.  120/120 key×locale slots
+  green (12 keys × 10 locales).
+
+- **DD-cp21-4 (LOW, VERIFIED OK).**  Every BCH UI dispatch site
+  correctly references its matching i18n key.  10/10 checks
+  green: AddressShareModal carries `chat.address.address_invalid_bch`,
+  `address_placeholder_bch`, `method_bch`, and `selectMethod('bch')`;
+  FundsSentModal carries `method_bch` and `selectMethod('bch')`;
+  ChatMessage carries `pill_method_bch`, `pill_title_bch`, and
+  `externalExplorerUrl('BCH', txid)`; post page carries
+  `post_order.form.asset_explainer.bch`.  No orphan strings,
+  no missing references.
+
+- **DD-cp21-5 (LOW, VERIFIED OK).**  BCH SVG meets every
+  ADDING-A-COIN.md constraint: 0 `<text>` elements (no font-
+  fallback issues), 0 `<image>` elements (no embedded raster),
+  square viewBox 0 0 1024 1024, SVG 1.1, 2,161 bytes (well
+  under the rough ~50KB cap).  Logo is path-based throughout.
+
+**Fixed in-pass:**
+
+- **DD-cp21-6 (HIGH, FIXED).**  `buildPaymentUri` in
+  `apps/web/src/lib/chat/payload.ts:786` was missing a BCH
+  branch.  The function dispatches `bitcoin:` URIs for BTC,
+  `monero:` URIs for XMR, bare-account-name for BLURT, and
+  falls through to `return p.address` for anything else —
+  meaning a BCH address shared in chat with the QR Show
+  affordance would have generated a bare CashAddr string
+  instead of the `bitcoincash:` URI that BCH mobile wallets
+  expect.  This DIRECTLY contradicts brag-list #202's claim
+  ("CashAddr URI for Bitcoin Cash").  **Fixed** by adding a
+  BCH branch with CashAddr URI scheme + BIP-21-derivative
+  `?amount=` parameter; address.startsWith() gates whether to
+  prepend `bitcoincash:` so both bare and prefixed forms
+  produce the same final URI.  Verified live: bare CashAddr
+  `qpm2…` → `bitcoincash:qpm2…?amount=0.5`; prefixed CashAddr
+  `bitcoincash:qpm2…` → `bitcoincash:qpm2…?amount=0.5`
+  (no double-prefix).
+
+- **DD-cp21-7 (HIGH, FIXED — PRE-EXISTING cp3 BUG SURFACED BY
+  cp21).**  `encodeAddressPayload` and `encodeFundsSentPayload`
+  in `apps/web/src/lib/chat/payload.ts` had method-validation
+  gates of the form `if (p.method !== 'btc' && p.method !==
+  'xmr' && p.method !== 'blurt') throw 'invalid method'`.
+  This gate REJECTED both USDT and BCH chat payloads at the
+  encode boundary — meaning the entire chat-side address-share
+  + funds-sent flow for USDT was BROKEN since cp3 USDT
+  shipping (Part 121, 2026-05-13).  Production sandbox didn't
+  catch this because the dispatch tests asserted on the
+  `isValidAddress` validators (which were correctly extended
+  in cp3 and cp21) — the encode-time method gate was a
+  separate, sibling check that nobody had touched since the
+  3-asset era.  This is the **exact failure pattern Memory
+  #25's "wire everything" discipline exists to prevent**:
+  adding USDT to one validator while a sibling validator
+  stayed at 3-asset breadth left a silent fail.  **Fixed**
+  in both encode functions: gate widened to
+  `'btc' && 'xmr' && 'blurt' && 'usdt' && 'bch'`.  Verified
+  live: USDT and BCH addresses both encode + decode round-trip
+  cleanly through the chat payload boundary.
+
+- **DD-cp21-8 (HIGH, FIXED — PRE-EXISTING cp3 BUG SURFACED BY
+  cp21).**  Symmetric to DD-cp21-7 on the decoder side.
+  `decodePayload` at lines 657 and 674 (handling
+  `morphit_addr` and `morphit_funds_sent` payloads
+  respectively) rejected anything where
+  `o.method !== 'btc' && o.method !== 'xmr' && o.method !==
+  'blurt'` — same 3-asset breadth.  Means a USDT or BCH
+  payload arriving over chat would be silently re-routed to
+  `{ kind: 'plaintext' }` instead of properly typed-decoded.
+  Frontend would render the JSON payload as a raw chat
+  message instead of a structured address/funds-sent pill.
+  Same root cause as DD-cp21-7.  **Fixed** in both decoder
+  branches.  Verified live with round-trip encode/decode of
+  BCH and USDT addresses + txids; all four codepaths land
+  on the correct DecodeResult kind.
+
+### Files added/changed in deep-deep
+
+- `apps/web/src/lib/chat/payload.ts` — 4 method-dispatch gates
+  widened to accept the full `ChatAssetTicker` union (one
+  encode-address gate, one encode-funds-sent gate, two
+  decoder branches) + new BCH branch in `buildPaymentUri`
+  with `bitcoincash:` URI scheme.
+
+**Total cp21 deep-deep impact:** 6 findings, 3 real bugs
+fixed, 0 deferred, 0 new sentinels needed (existing
+asset-validator pattern was already comprehensive — the gaps
+were dispatch-site coverage, not new defense classes).
+
+### Resume directive
+
+Cp21 sealed pending the final Phase 11 tarball build.  Cp22 (if
+the launch ceremony triggers further work) resumes from this
+clean state.  Solo-parked items per memory: launch ceremony at
+T-5 days, real VM Ansible deploy, real v-tag push to validate
+release.yml end-to-end.
+
+---
+
+## cp20 — pre-launch tier-1+tier-2 review sweep + deep-deep (Part 122)
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 

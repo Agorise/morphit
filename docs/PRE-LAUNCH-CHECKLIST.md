@@ -313,10 +313,10 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 3,100+ scenarios passed, 0 runners failed`
+      `Total: 3,200+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp20 baseline is 3,187 = cp19 3,173 + 14 new
-      version-consistency scenarios).
+      Part 122 cp21 baseline is 3,200 = cp20 3,187 + 13 new
+      bch-trade-only scenarios).
 
       If you see several runners fail with
       `ERR_MODULE_NOT_FOUND` errors all referencing a
@@ -342,26 +342,40 @@ file in the same turn.
       remains a documented option for later.  *(Origin:
       Part 108++.)*
 
-- [ ] **[blocking]** Decide your USDT operator stance.
-      The canonical morphit.io ships USDT enabled by
-      default; alternative instances may want to disable
-      it instance-wide on philosophical (centralization)
-      or regulatory grounds.  Two options:
-      1. Accept USDT (default — no config change).
+- [ ] **[blocking]** Decide your trade-only-asset operator
+      stance.  The canonical morphit.io ships USDT AND BCH
+      enabled by default; alternative instances may want to
+      disable one or both instance-wide on philosophical
+      (centralization, fork preference), regulatory, or
+      audience-specialization grounds.  Per-asset options:
+      1. Accept everything (default — no config change).
       2. Refuse USDT — set
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"` in
-         your indexer config.
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`.
+      3. Refuse BCH — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
+      4. Refuse both —
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH"`.
 
-      Federation note: disabling USDT means your own
-      users cannot POST USDT orders; you'll still see
-      USDT orders from peer instances in read-only
+      Federation note: disabling an asset means your own
+      users cannot POST orders for it; you'll still see
+      those orders from peer instances in read-only
       orderbook feeds (chain history is shared).
 
       Whichever stance you take, document it publicly so
       users know what your instance offers.  Memory #25
-      (default-on + operator override for new assets) and
-      ADR-0023 explain the design.  *(Origin: Part 121
-      cp3 USDT integration.)*
+      (default-on + operator override for new assets),
+      ADR-0023 (USDT), and ADR-0024 (BCH) explain the
+      design.  *(Origin: Part 121 cp3 USDT integration,
+      Part 122 cp21 BCH integration.)*
+
+- [ ] **[blocking]** Decide BCH chat-link explorer URL.
+      Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`
+      is fine for most operators.  Override via
+      `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL` if you prefer a
+      different explorer or run your own.  See
+      `docs/OPERATIONS.md` §"BCH chat-link explorer URL
+      override" for the alternatives surveyed at cp21
+      addition time.  *(Origin: Part 122 cp21 BCH integration.)*
 
 - [ ] **[recommended, non-blocking]** **VAPID keypair for
       Web Push notifications** (Part 122 cp13).  Without
