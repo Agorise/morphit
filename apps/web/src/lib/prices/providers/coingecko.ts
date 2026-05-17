@@ -54,7 +54,12 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// Part 122 cp24 — Litecoin.  Coingecko's `litecoin` ID
 	// returns live LTC/USD.  Same posture as BTC: transparent
 	// asset, no privacy-warning chip, single-network mainnet.
-	LTC: 'litecoin'
+	LTC: 'litecoin',
+	// Part 122 cp27 — Dash.  Coingecko's `dash` ID returns live
+	// DASH/USD.  Transparent asset at base layer, no privacy-warning
+	// chip, single-network mainnet, PrivateSend is wallet-side
+	// opt-in (not surfaced via price).
+	DASH: 'dash'
 };
 
 /** Max response body size from CoinGecko. Real responses are

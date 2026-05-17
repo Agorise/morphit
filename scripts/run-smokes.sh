@@ -150,6 +150,7 @@ SMOKES=(
 	"packages/asset-registry:usdt-trade-only-smoke"
 	"packages/asset-registry:bch-trade-only-smoke"
 	"packages/asset-registry:ltc-trade-only-smoke"
+	"packages/asset-registry:dash-trade-only-smoke"
 	"packages/asset-registry:privacy-features-registry-smoke"
 	"apps/web:address-history-helper-smoke"
 	"apps/web:amount-jitter-utxo-smoke"

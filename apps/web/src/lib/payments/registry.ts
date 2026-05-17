@@ -146,6 +146,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'LTC'
 	},
+	{
+		// Part 122 cp27 — Dash as a payment method.  Same
+		// Category-B semantics as BCH/LTC: when the trade's
+		// traded asset is DASH, "pay with DASH" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, DASH appears as a selectable payment-rail chip.
+		// Single-network mainnet, so no per-network picker —
+		// the `dash:` URI handles both X-prefix P2PKH and
+		// 7-prefix P2SH via the BIP-21 derivative scheme.
+		key: 'pay_dash',
+		name: 'Dash (DASH)',
+		url: 'https://dash.org',
+		category: 'crypto',
+		assetExclusion: 'DASH'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

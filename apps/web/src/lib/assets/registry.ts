@@ -157,6 +157,17 @@ const validateLtc: AddressValidator = (s) =>
 	LTC_LEGACY_P2SH_3_RE.test(s) ||
 	LTC_BECH32_RE.test(s);
 
+// DASH address regex (cp27).  P2PKH starts with `X`, P2SH starts
+// with `7`; both base58, 34 chars total.  Permissive shape check
+// — receiving wallet does checksum and chain-binding.  See
+// payload.ts and the canonical asset-registry entry for the full
+// rationale.
+const DASH_P2PKH_RE = /^X[1-9A-HJ-NP-Za-km-z]{33}$/;
+const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
+
+const validateDash: AddressValidator = (s) =>
+	DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -292,6 +303,39 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// privacy warning chip.  (LTC has MWEB opt-in privacy but
 		// it's wallet-side and per-tx, not a chain property; users
 		// seeking strongest privacy posture should use XMR.)
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'dash',
+		displayTicker: 'DASH',
+		displayName: 'Dash',
+		oneLineDescription:
+			'Dash — fast-confirmation transparent chain with opt-in PrivateSend mixing.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-dash.svg',
+		// DASH brand blue (#008CE7).  text-sky-500 reads as the
+		// Dash blue without colliding with BCH lime-500, LTC
+		// slate-400, BTC amber-500, USDT amber-400, XMR orange-500,
+		// or BLURT morphit-emerald.
+		accentClass: 'text-sky-500',
+		decimals: 8, // Same as BTC — duff == satoshi
+		supportsMemo: false, // DASH transactions don't carry memos (same as BTC)
+		addressValidator: validateDash,
+		// MEMORY #23 INVARIANT: DASH cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// DASH is transparent at the base layer (like BTC/BCH/LTC)
+		// and fully decentralized — no issuer can freeze
+		// addresses.  Same posture as BTC: no privacy warning chip.
+		// DASH does ship an opt-in privacy upgrade — PrivateSend,
+		// a masternode-coordinated CoinJoin variant — but it's
+		// wallet-side and per-tx, not a chain property; users
+		// seeking strongest privacy posture should use XMR, and
+		// users who want transparent + opt-in mixing can pre-mix
+		// via PrivateSend before sharing the address on Morphit.
 		privacyWarningKey: null
 	}
 ] as const;

@@ -38,7 +38,7 @@ function fail(name: string, detail: string): void {
 console.log('\n── privacy-features-registry smoke ───────────────────\n');
 
 const VALID_ADVICE = new Set(['subaddress', 'hd-derived', 'account-reuse']);
-const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin']);
+const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin', 'privatesend']);
 
 // ── Scenario 1 — every asset has privacyFeatures populated ────
 for (const a of ASSETS) {
@@ -106,7 +106,8 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	BLURT: 'account-reuse',
 	USDT: 'hd-derived',
 	BCH: 'hd-derived',
-	LTC: 'hd-derived'
+	LTC: 'hd-derived',
+	DASH: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -132,7 +133,8 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	BLURT: null,
 	USDT: null,
 	BCH: ['cashfusion'],
-	LTC: ['mweb']
+	LTC: ['mweb'],
+	DASH: ['privatesend']
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

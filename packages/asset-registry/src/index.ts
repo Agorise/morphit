@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH', 'LTC'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH', 'LTC', 'DASH'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -151,7 +151,9 @@ export interface AssetEntry {
 	 *  amount-randomization), 'coinjoin' (generic mixing protocol
 	 *  family, BTC and most UTXO chains), 'payjoin' (BIP-78,
 	 *  cooperative-input CoinJoin breaking common-input-ownership
-	 *  heuristic, BTC and forks).  `null` for assets without opt-in privacy tech
+	 *  heuristic, BTC and forks), 'privatesend' (Dash-specific
+	 *  CoinJoin variant using denominated input/output amounts +
+	 *  masternode coordination, pre-mix or per-send).  `null` for assets without opt-in privacy tech
 	 *  (USDT, BLURT) or assets that are already private (XMR).
 	 *
 	 *  `privacyGuideKey`: i18n key prefix for the per-asset
@@ -161,7 +163,7 @@ export interface AssetEntry {
 	readonly privacyFeatures: {
 		readonly freshAddressAdvice: 'subaddress' | 'hd-derived' | 'account-reuse';
 		readonly optInPrivacyTech:
-			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin')[]
+			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend')[]
 			| null;
 		readonly privacyGuideKey: string;
 	};
@@ -422,6 +424,56 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// that on the receiving end).
 		addressShape:
 			/^(L[1-9A-HJ-NP-Za-km-z]{25,34}|M[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|ltc1[02-9ac-hj-np-z]{6,87})$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'DASH',
+		// Dash uses 8 decimals — "duff" is Dash's smallest unit,
+		// satoshi-scale.  Confirmed via Dash Core protocol docs
+		// (1 DASH = 100_000_000 duffs).
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: DASH is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; dash-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  No network picker needed in the
+		// post-order form or address-share modal — defaults to
+		// mainnet and stays there.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// DASH is transparent at the base layer (like BTC/BCH/LTC),
+		// fully decentralized, and addresses cannot be frozen by
+		// an issuer.  PrivateSend (a Dash-specific CoinJoin
+		// variant coordinated by masternodes) provides opt-in
+		// privacy at the wallet level — users who pre-mix via
+		// PrivateSend before sending get meaningful unlinkability
+		// at moderate trade-off (extra rounds = stronger anonymity
+		// set + higher fee).  No warning chip needed; same posture
+		// as BTC/BCH/LTC.  For Morphit's strongest privacy
+		// posture, use XMR; for transparent + opt-in, DASH is the
+		// only Morphit-supported chain with chain-level masternode-
+		// coordinated mixing.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: ['privatesend'],
+			privacyGuideKey: 'dash'
+		},
+		// DASH address formats:
+		//   - P2PKH (most common): starts with `X`, base58, 34
+		//     chars total (33 after the X prefix).
+		//   - P2SH (multisig, less common): starts with `7`, same
+		//     length as P2PKH.
+		// Both share the same length + base58 alphabet; the
+		// version byte differs.  No bech32-equivalent native to
+		// Dash — the chain stayed on base58 P2PKH/P2SH.
+		// Permissive shape check; chain-binding happens on the
+		// receiving wallet side.
+		addressShape: /^[X7][1-9A-HJ-NP-Za-km-z]{33}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

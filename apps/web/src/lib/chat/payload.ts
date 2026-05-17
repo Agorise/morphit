@@ -144,6 +144,28 @@ const LTC_BECH32_RE = /^ltc1[02-9ac-hj-np-z]{6,87}$/;
 /** LTC txid: 64 lowercase hex chars (sha256d, same as BTC/BCH). */
 const LTC_TXID_RE = /^[0-9a-f]{64}$/;
 
+/** DASH address regex (cp27).  Two formats coexist on the chain:
+ *
+ *  (1) P2PKH — starts with `X`, base58, 34 chars total.  Most
+ *      DASH addresses in the wild use this form.
+ *  (2) P2SH — starts with `7`, base58, 34 chars total.  Multisig
+ *      and smart-contract addresses; rarer in P2P trading flow.
+ *
+ *  Both share the same length and base58 alphabet — the version
+ *  byte distinguishes them.  Dash deliberately chose `X`/`7`
+ *  prefixes to be unambiguous with BTC's `1`/`3` (no cross-chain
+ *  mis-send shape collision).  There's no bech32-equivalent
+ *  native to Dash — the chain stayed on base58 throughout its
+ *  evolution.
+ *
+ *  Permissive shape check — not a checksum (recipient wallet
+ *  does chain-binding on receive). */
+const DASH_P2PKH_RE = /^X[1-9A-HJ-NP-Za-km-z]{33}$/;
+const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
+
+/** DASH txid: 64 lowercase hex chars (sha256d, same as BTC family). */
+const DASH_TXID_RE = /^[0-9a-f]{64}$/;
+
 
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
@@ -352,7 +374,7 @@ export function jitterAmountForAsset(
 	base: string
 ): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc') {
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash') {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -423,7 +445,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  Part 122 cp21 BCH addition: 'bch' is single-network (mainnet
  *  only).  No network field required.  Addresses come in CashAddr
  *  or legacy formats — see BCH_*_RE constants. */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch' | 'ltc';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch' | 'ltc' | 'dash';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -605,6 +627,23 @@ export function isValidLtcTxid(s: string): boolean {
 	return LTC_TXID_RE.test(s);
 }
 
+/** Validate a DASH address shape (cp27).  Accepts both
+ *  P2PKH (`X...`, 34 chars) and P2SH (`7...`, 34 chars).
+ *  Permissive shape check; the receiving wallet does
+ *  checksum and chain-binding validation.  Dash deliberately
+ *  chose prefixes that don't collide with BTC's `1`/`3`. */
+export function isValidDashAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
+}
+
+/** Validate a DASH txid shape.  Same 64-char lowercase hex
+ *  format as the rest of the BTC family. */
+export function isValidDashTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DASH_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -613,6 +652,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'usdt') return isValidUsdtAddress(addr);
 	if (method === 'bch') return isValidBchAddress(addr);
 	if (method === 'ltc') return isValidLtcAddress(addr);
+	if (method === 'dash') return isValidDashAddress(addr);
 	return false;
 }
 
@@ -625,6 +665,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'usdt') return isValidUsdtTxid(txid);
 	if (method === 'bch') return isValidBchTxid(txid);
 	if (method === 'ltc') return isValidLtcTxid(txid);
+	if (method === 'dash') return isValidDashTxid(txid);
 	return false;
 }
 
@@ -646,7 +687,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
 		p.method !== 'bch' &&
-		p.method !== 'ltc'
+		p.method !== 'ltc' &&
+		p.method !== 'dash'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -758,7 +800,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
 		p.method !== 'bch' &&
-		p.method !== 'ltc'
+		p.method !== 'ltc' &&
+		p.method !== 'dash'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -861,7 +904,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
 			o.method !== 'bch' &&
-			o.method !== 'ltc'
+			o.method !== 'ltc' &&
+			o.method !== 'dash'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -885,7 +929,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
 			o.method !== 'bch' &&
-			o.method !== 'ltc'
+			o.method !== 'ltc' &&
+			o.method !== 'dash'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1125,6 +1170,18 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `litecoin:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'dash') {
+		// Dash uses the `dash:` URI scheme — BIP-21 conformant
+		// (cp27).  Same shape as BTC's `bitcoin:` scheme; Dash
+		// inherited Bitcoin's URI conventions from the fork.
+		// `amount` parameter is decimal DASH, BIP-21 standard.
+		// DASH addresses are unambiguous within the URI scheme
+		// (X-prefix P2PKH and 7-prefix P2SH; no bech32-equivalent).
+		// Reference: https://docs.dash.org/projects/core/en/stable/docs/api/remote-procedure-call.html
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `dash:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

@@ -366,6 +366,22 @@ const CHECKS: readonly Check[] = [
 			paths: ['apps/web/src/lib/i18n/locales/en.json']
 		},
 		status: 'live'
+	},
+	// ─── cp27 DASH P2P ────────────────────────────────────────────────
+	// New brag entry #279 claims DASH is wired as a 4th Category-B
+	// trade-only asset.  Anchor on the canonical registry entry —
+	// if DASH ever loses its registry slot the brag claim drifts
+	// into vaporware and this CHECK row fires.
+	{
+		id: 'cp27-dash-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dash (DASH) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'DASH'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
 	}
 ];
 

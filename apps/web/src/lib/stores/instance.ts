@@ -76,6 +76,12 @@ export interface InstanceState {
 		 *  Operator can override the bundled litecoinspace.org
 		 *  default via MORPHIT_FRONTEND_LTC_CHAT_LINK_URL. */
 		readonly ltc: string | null;
+		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		 *  Single-network like BTC/XMR/BCH/LTC (no per-network
+		 *  sub-map).  Operator can override the bundled
+		 *  insight.dash.org default via
+		 *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
+		readonly dash: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -137,6 +143,7 @@ const FALLBACK: InstanceState = {
 		xmr: null,
 		bch: null,
 		ltc: null,
+		dash: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 	},
 	disabled_assets: [],
@@ -217,6 +224,7 @@ export function initInstance(): Promise<void> {
 								xmr: result.data.chat_link_urls.xmr ?? null,
 								bch: result.data.chat_link_urls.bch ?? null,
 								ltc: result.data.chat_link_urls.ltc ?? null,
+								dash: result.data.chat_link_urls.dash ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,

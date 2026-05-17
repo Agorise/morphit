@@ -787,7 +787,7 @@
 			},
 			"trade_goods_services": {
 				"q": "我能在 Morphit 上交易商品或服务吗，比如果树或黑胶唱片？",
-				"a": "可以——但有特定的形式。订单模型始终是**一边是可交易资产（BTC、XMR、BLURT、USDT、BCH 或 LTC），另一边是别的东西**。\"别的东西\"可以是法币、另一种加密货币，或通过 `Barter (goods)` 支付方式——商品/服务。用橘子树换 XMR：发布 `asset=XMR`、`payment_methods=[Barter (goods)]`，在 `terms` 字段描述细节。纯易货（商品换商品，不涉及加密）无法建模——一方必须始终是 BTC、XMR、BLURT 或 USDT。完整说明见英文 FAQ。"
+				"a": "可以——但有特定的形式。订单模型始终是**一边是可交易资产（BTC、XMR、BLURT、USDT、BCH、LTC 或 DASH），另一边是别的东西**。\"别的东西\"可以是法币、另一种加密货币，或通过 `Barter (goods)` 支付方式——商品/服务。用橘子树换 XMR：发布 `asset=XMR`、`payment_methods=[Barter (goods)]`，在 `terms` 字段描述细节。纯易货（商品换商品，不涉及加密）无法建模——一方必须始终是 BTC、XMR、BLURT 或 USDT。完整说明见英文 FAQ。"
 			},
 			"order_timeouts": {
 				"q": "订单会挂多久?",
@@ -883,7 +883,7 @@
 			},
 			"where_to_buy_blurt": {
 				"q": "我在哪里买 BLURT 来支付网络费用？",
-				"a": "**就在 Morphit 上买——这就是重点。** Morphit 是一个点对点市场；BLURT 是这里交易的六种资产之一，与 BTC、XMR、USDT、BCH 和 LTC 并列。访问 /orderbook，筛选 BLURT 卖单，并向对手方发送消息。你用他们接受的任何法币方式付款；他们把 BLURT 发送到你的 Blurt 账户。完成。\n\n**你的第一笔订单是免费的。** 新用户获得一次性豁免，覆盖第一次 BLURT 购买的上架费。所以你的第一次 BLURT 获取也可以是你在 Morphit 上的第一笔交易，无需交易所账户、无需卡片、无需 KYC。豁免会自动提供。\n\n**最后手段的替代方案：** 如果你真的在 Morphit 订单簿上找不到对手方（某些地区订单簿较小），Klingex.io 运营 BLURT/USDT 交易对作为中心化交易所的后备。我们出于完整性提及它，但视为紧急选项——每笔通过 Klingex 购买的 BLURT 都是 Morphit 没有得到的交易，项目的目标是发展点对点订单簿，而不是把用户送往别处。如果你选择这条路径，交易页面是 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兑换 BLURT。立即提取到你自己的 Blurt 钱包。\n\n**一旦你的钱包里有 BLURT**，支付 Morphit 上架费就是自动的——在订单发布屏幕上选择\"用 BLURT 支付\"。"
+				"a": "**就在 Morphit 上买——这就是重点。** Morphit 是一个点对点市场；BLURT 是这里交易的七种资产之一，与 BTC、XMR、USDT、BCH、LTC 和 DASH 并列。访问 /orderbook，筛选 BLURT 卖单，并向对手方发送消息。你用他们接受的任何法币方式付款；他们把 BLURT 发送到你的 Blurt 账户。完成。\n\n**你的第一笔订单是免费的。** 新用户获得一次性豁免，覆盖第一次 BLURT 购买的上架费。所以你的第一次 BLURT 获取也可以是你在 Morphit 上的第一笔交易，无需交易所账户、无需卡片、无需 KYC。豁免会自动提供。\n\n**最后手段的替代方案：** 如果你真的在 Morphit 订单簿上找不到对手方（某些地区订单簿较小），Klingex.io 运营 BLURT/USDT 交易对作为中心化交易所的后备。我们出于完整性提及它，但视为紧急选项——每笔通过 Klingex 购买的 BLURT 都是 Morphit 没有得到的交易，项目的目标是发展点对点订单簿，而不是把用户送往别处。如果你选择这条路径，交易页面是 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兑换 BLURT。立即提取到你自己的 Blurt 钱包。\n\n**一旦你的钱包里有 BLURT**，支付 Morphit 上架费就是自动的——在订单发布屏幕上选择\"用 BLURT 支付\"。"
 			},
 			"first_order_free": {
 				"q": "我的第一单真的免费吗?",
@@ -1179,7 +1179,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "为什么 Morphit 显示关于 USDT 发行和传输方式的提示？",
-				"a": "USDT 是世界上交易量最大的稳定币，每天有数百万交易者依靠其美元稳定性和广泛接受度。当 Morphit 列出一项资产时，我们会诚实地告知用户其技术特性，以便他们为每笔交易做出明智的选择。关于 USDT，有两个值得了解的事实：(1) USDT 由 Tether 公司发行和管理，Tether 拥有冻结主链上地址的技术能力 — 他们过去曾使用过这一能力，主要是回应执法部门的请求。(2) USDT 在每个支持的主链（以太坊、波场、索拉纳、BNB 智能链）上的交易在这些链上是公开可见的；这是链的特性，并非 USDT 独有。不同的交易者对此有不同评估。如果你想要最大的链上隐私，XMR 是合适的工具。如果你想要最大的不依赖任何单一发行方的去中心化，BTC、BLURT、BCH 或 LTC 是合适的工具。如果你想要美元计价的稳定性和几乎在任何地方都流动的市场，USDT 就是合适的工具。Morphit 的提示是信息，不是判决 — 选择适合你正在进行交易的资产。"
+				"a": "USDT 是世界上交易量最大的稳定币，每天有数百万交易者依靠其美元稳定性和广泛接受度。当 Morphit 列出一项资产时，我们会诚实地告知用户其技术特性，以便他们为每笔交易做出明智的选择。关于 USDT，有两个值得了解的事实：(1) USDT 由 Tether 公司发行和管理，Tether 拥有冻结主链上地址的技术能力 — 他们过去曾使用过这一能力，主要是回应执法部门的请求。(2) USDT 在每个支持的主链（以太坊、波场、索拉纳、BNB 智能链）上的交易在这些链上是公开可见的；这是链的特性，并非 USDT 独有。不同的交易者对此有不同评估。如果你想要最大的链上隐私，XMR 是合适的工具。如果你想要最大的不依赖任何单一发行方的去中心化，BTC、BLURT、BCH、LTC 或 DASH 是合适的工具。如果你想要美元计价的稳定性和几乎在任何地方都流动的市场，USDT 就是合适的工具。Morphit 的提示是信息，不是判决 — 选择适合你正在进行交易的资产。"
 			},
 			"which_usdt_network": {
 				"q": "我应该选哪个 USDT 网络 — ERC-20、TRC-20、SPL 还是 BEP-20？",
@@ -1553,7 +1553,8 @@
 				"blurt": "BLURT — Morphit 运行的社交区块链。快速(3 秒区块)、零费用转账,但市值较小。适用于小额和打赏;不太适合存储大额价值。",
 				"usdt": "Tether (USDT) — 与美元 1:1 挂钩的稳定币。中心化控制 — Tether 公司可以冻结任何地址。在 Morphit 上仅限交易：不能支付挂单费。",
 				"bch": "比特币现金（BCH）。2017 年从比特币分叉，倾向于更大的区块和更低的每笔交易费用，而不是手续费市场动态。账本透明，与 BTC 类似；没有发行方可以冻结地址。在 Morphit 上仅限交易 — 挂单费仍以 BLURT、BTC 或 XMR 支付。",
-				"ltc": "莱特币 (LTC)。2011 年从比特币分叉,具有更快的 2.5 分钟出块和 Scrypt 挖矿。像比特币一样透明 — 每笔交易都在链上公开可见。无中央发行方;没有人能冻结你的地址。"
+				"ltc": "莱特币 (LTC)。2011 年从比特币分叉,具有更快的 2.5 分钟出块和 Scrypt 挖矿。像比特币一样透明 — 每笔交易都在链上公开可见。无中央发行方;没有人能冻结你的地址。",
+				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy."
 			},
 			"waiver_fiat_hint": "💡 BLURT 在中心化交易所交易稀少，所以 Morphit 上的大多数 BLURT 兑法币交易发生在活跃的 Blurt 社交网络用户、现有运营商，或通过易货之间。提示：选择你本地网络使用的法币（USD、EUR、MXN 等），或在步骤 3 中查看面对面 → 易货（商品）支付方式，如果你想提供其他有价值的东西。订单簿目前较小——你的买单有助于建立它。",
 			"waiver_benefits_heading": "你的购买能解锁：",
@@ -2333,7 +2334,11 @@
 			"payjoin_label": "PayJoin endpoint URL (optional)",
 			"payjoin_explain": "If your wallet supports PayJoin (BIP-78), paste its endpoint URL here. Buyers whose wallets also support PayJoin will use a cooperative transaction that breaks chain-analysis heuristics. No effect on wallets without PayJoin support.",
 			"payjoin_badge": "PayJoin available",
-			"payjoin_badge_tooltip": "The seller's wallet supports PayJoin (BIP-78). If your wallet supports it too, opening this URI will negotiate a cooperative transaction that improves privacy."
+			"payjoin_badge_tooltip": "The seller's wallet supports PayJoin (BIP-78). If your wallet supports it too, opening this URI will negotiate a cooperative transaction that improves privacy.",
+			"method_dash": "Dash",
+			"address_placeholder_dash": "X… or 7…",
+			"address_invalid_dash": "That doesn't look like a valid Dash address.",
+			"pill_method_dash": "Dash address"
 		},
 		"funds_sent": {
 			"button": "标记资金已发送",
@@ -2376,7 +2381,8 @@
 			"network_pinned_hint": "卖家在分享地址时指定了此网络。你无法在此处更改。",
 			"pill_title_usdt": "已发送 USDT",
 			"pill_title_bch": "比特币现金已发送",
-			"pill_title_ltc": "已发送莱特币"
+			"pill_title_ltc": "已发送莱特币",
+			"pill_title_dash": "Dash sent"
 		},
 		"unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
 		"pay_blurt": {
@@ -3057,6 +3063,9 @@
 		"request_missing_no_contact": "没看到你需要的？此实例未发布联系渠道——试试另一个 Morphit 实例，或在 git.agorise.net/agorise/morphit 上提交问题。",
 		"pay_ltc": {
 			"description": "用莱特币支付"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		}
 	},
 	"feedback_reminder": {
@@ -3454,7 +3463,8 @@
 			"blurt": "Morphit 运行的 Blurt 区块链的代币。用于支付挂单费、发布消息、签署订单。",
 			"usdt": "泰达稳定币。与美元 1:1 锚定。在四个网络上交易：ERC-20（以太坊）、TRC-20（波场）、SPL（索拉纳）、BEP-20（BNB 智能链）。发送前选择网络 — 跨网络无法恢复。",
 			"bch": "BCH — 比特币现金，透明、去中心化，区块比 BTC 更大",
-			"ltc": "LTC — 莱特币，比特币的快速低费分叉(自 2011 年)。Morphit 上仅供交易。使用莱特币钱包(Electrum-LTC、Litewallet、硬件钱包);接受 L… 旧版、M… 现代 P2SH 和 ltc1… SegWit 地址。"
+			"ltc": "LTC — 莱特币，比特币的快速低费分叉(自 2011 年)。Morphit 上仅供交易。使用莱特币钱包(Electrum-LTC、Litewallet、硬件钱包);接受 L… 旧版、M… 现代 P2SH 和 ltc1… SegWit 地址。",
+			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy."
 		},
 		"section_recovery": {
 			"heading": "如果出了问题",
@@ -3544,6 +3554,10 @@
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
 				"explain": "A two-party cooperative transaction protocol. Sender and receiver both contribute inputs, so chain observers cannot apply the standard \"all inputs come from the same wallet\" heuristic. Morphit's address-share modal includes an optional PayJoin endpoint field — if both wallets support BIP-78, the trade automatically uses PayJoin."
+			},
+			"privatesend": {
+				"name": "PrivateSend",
+				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
 			}
 		},
 		"common_practices": {
@@ -3590,6 +3604,12 @@
 				"one_line": "Transparent, decentralized — MWEB provides opt-in chain-level privacy.",
 				"intro": "Litecoin shares Bitcoin's transparency at the base layer, but adds MWEB (MimbleWimble Extension Blocks) — a chain-level opt-in privacy feature that hides amounts and breaks address linkability for transfers that opt in. This is the closest a Bitcoin-family chain comes to native privacy.",
 				"meta_description": "Privacy practices for Litecoin trades on Morphit: fresh addresses, MWEB, and what to avoid."
+			},
+			"dash": {
+				"one_line": "Transparent base layer, decentralized — PrivateSend provides masternode-coordinated opt-in mixing.",
+				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
+				"meta_description": "Privacy practices for Dash trades on Morphit: fresh addresses, PrivateSend pre-mixing, and what to avoid.",
+				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern. For the strongest privacy on Morphit, use XMR instead — its anonymity is chain-level and mandatory rather than opt-in."
 			}
 		}
 	}

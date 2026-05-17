@@ -8023,12 +8023,12 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH) and multi-network ones
-(USDT).
+single-network trade-only assets (BCH, LTC, DASH) and multi-network
+ones (USDT).
 
 ### How to set this (two paths)
 
@@ -8092,15 +8092,15 @@ MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
 # Refuse three or more
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
 
-# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/LTC)
+# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/LTC/DASH)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
 # Refuse all three Bitcoin-fork variants (BTC + XMR + BLURT only,
 # possibly with USDT)
-MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC"
+MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH"
 
 # Refuse everything that isn't BLURT + XMR + BTC
-MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC"
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC,DASH"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -8292,12 +8292,54 @@ If you choose to disable LTC instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=LTC`, the chat-link config
 has no effect on your instance.
 
+### DASH chat-link explorer URL override (Part 122 cp27)
+
+DASH is single-network (mainnet only), so there's just one
+explorer URL to think about.  Same shape as BTC/XMR/BCH/LTC:
+
+```bash
+# Default (bundled) — operators don't need to set anything to
+# get this behavior:
+# MORPHIT_FRONTEND_DASH_CHAT_LINK_URL="https://insight.dash.org/insight/tx/{txid}"
+
+# Override to a self-hosted or alternative explorer:
+MORPHIT_FRONTEND_DASH_CHAT_LINK_URL="https://my-self-hosted-dash-explorer.example.org/tx/{txid}"
+```
+
+`{txid}` is the placeholder substituted at render time with the
+lowercased transaction ID (DASH txids are hex like BTC).
+Validation: must be `https://`, must contain literal `{txid}`,
+must parse as a URL after substitution.  Invalid templates
+fail indexer startup with a clear error message.
+
+Alternative DASH explorers operators can point at — surveyed at
+Part 122 cp27 addition time:
+- https://insight.dash.org/insight/ (bundled default — official
+  Dash project, community-led, open-source, no third-party ads)
+- https://explorer.dash.org/insight/
+- https://blockchair.com/dash
+- https://chainz.cryptoid.info/dash/
+- https://www.oklink.com/dash
+- https://bitinfocharts.com/dash/explorer/
+- https://blockexplorer.one/dash/mainnet
+- https://www.blockchain.com/explorer/assets/dash
+- https://dash.tokenview.io/
+
+The ops-cli wizard step 12 (Chat-link external explorer URLs)
+asks for the DASH URL after BTC, XMR, BCH, and LTC with the same
+probe-reachability check that the others get.
+
+If you choose to disable DASH instance-wide via
+`MORPHIT_INDEXER_DISABLED_ASSETS=DASH`, the chat-link config
+has no effect on your instance.
+
 ### Schema migration v32 (Part 121)
 
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT all write NULL).
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH all
+write NULL).
 USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`.
 
 The migration is idempotent (`ADD COLUMN IF NOT EXISTS`) and

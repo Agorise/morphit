@@ -313,9 +313,9 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 3,306+ scenarios passed, 0 runners failed`
+      `Total: 3,327+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp26-DD baseline is 3,306 = cp26 3,301 + 5 new wiring-completeness CHECK rows added by the cp26 DD-8 closure (amount-jitter-generalized, address-reuse-detection, payjoin-bip78, privacy-guide-pages, no-wallet-recommendation-policy).  cp26 = cp24 3,231 + 36 privacy-features-registry + 12 address-history-helper + 13 amount-jitter-utxo + 9 payjoin-uri-wire-shape (cp25 added no new scenarios since it was a content/audit-only checkpoint); cp24 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
+      Part 122 cp27 baseline is 3,327 = cp26-DD 3,306 + 13 new dash-trade-only + 1 new DASH scenario in disabled-assets-wizard + 6 new DASH scenarios in privacy-features-registry + 1 new cp27-dash-p2p check in wiring-completeness.  cp26-DD = cp26 3,301 + 5 new wiring-completeness CHECK rows added by the cp26 DD-8 closure (amount-jitter-generalized, address-reuse-detection, payjoin-bip78, privacy-guide-pages, no-wallet-recommendation-policy).  cp26 = cp24 3,231 + 36 privacy-features-registry + 12 address-history-helper + 13 amount-jitter-utxo + 9 payjoin-uri-wire-shape (cp25 added no new scenarios since it was a content/audit-only checkpoint); cp24 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
       disabled-assets-wizard scenarios).
 
       If you see several runners fail with
