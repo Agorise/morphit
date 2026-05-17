@@ -567,8 +567,11 @@ working BLURT balance stays small.
 
 3. Run the mint script:
    ```sh
-   npx tsx scripts/mint-acts.ts 25
+   npm run mint-acts -- 25
    ```
+   (Equivalent to `npx tsx scripts/mint-acts.ts 25` if you prefer
+   the direct invocation; the npm script wraps it for operators
+   without `tsx` on PATH.)
    Output looks like:
    ```
    2026-04-19T12:00:00.000Z [mint-acts] loaded config; relay_account=morphit-relay endpoints=4
@@ -4110,7 +4113,7 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c "
      LIMIT 20;"
 
 # Mint ACTs
-cd /opt/morphit/apps/relay && npx tsx scripts/mint-acts.ts 25
+cd /opt/morphit/apps/relay && npm run mint-acts -- 25
 
 # Live price source status
 curl -s http://localhost:PORT/v1/health?verbose=1 | jq .diagnostics.price

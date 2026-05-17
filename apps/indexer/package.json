@@ -22,15 +22,11 @@
   },
   "dependencies": {
     "@beblurt/dblurt": "^0.10.9",
-    "@hono/node-server": "^1.13.0",
     "@morphit/asset-registry": "*",
     "@morphit/operator-config": "*",
-    "@sveltejs/kit": "0.0.30",
-    "@sveltejs/vite-plugin-svelte": "7.1.2",
     "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0",
     "pg": "^8.13.0",
-    "svelte-i18n": "3.7.1",
-    "vite": "8.0.13",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -39,6 +35,6 @@
     "prettier": "~3.6.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.3",
-    "vitest": "^4.1.6"
+    "vitest": "^2.1.9"
   }
 }

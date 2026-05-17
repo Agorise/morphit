@@ -25,7 +25,8 @@ walkthrough). Both must stay aligned with this catalog.
 ### 1.1 Weekly ACT minting ceremony — ✅ AUTOMATED (was: HIGH automation potential)
 
 **Today** (manual fallback): Operator SSHes weekly, runs
-`tsx scripts/mint-acts.ts 25`, verifies on-chain, journals.
+`npm run mint-acts -- 25` (or `npx tsx scripts/mint-acts.ts 25`),
+verifies on-chain, journals.
 
 **Today** (recommended path, since 2026-05): operator runs the
 one-time systemd setup (`ops/systemd/morphit-relay-mint-acts.{service,timer}`),

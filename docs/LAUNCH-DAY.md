@@ -50,7 +50,7 @@ problem has time to surface without crisis pressure.
       first user tries to sign up, `create_claimed_account`
       fails.  One-line command:
       ```
-      cd ~/morphit/apps/relay && tsx scripts/mint-acts.ts 25
+      cd ~/morphit/apps/relay && npm run mint-acts -- 25
       ```
       Burns ~2,500 BLURT (25 × ~100 BLURT) from
       `@morphit-relay` and adds 25 ACTs to the pool.  Size

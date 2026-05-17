@@ -923,6 +923,28 @@ locales, alignment with FAQ_KEYS registry verified.
 These need **you** (or a person with operator access / domain
 knowledge), not more code.
 
+- **FAQ `featured_slot_displaced` is stale post-cp17/cp18.**
+  *Surfaced 2026-05-17 during pre-handoff staleness sweep.*
+  The "What happens to my featured slot if someone outbids me?"
+  FAQ entry (key `faq.featured_slot_displaced` in all 10
+  locales) still says "no notification — you have to check
+  manually" implicitly by omission, and doesn't mention the
+  cp18 anti-snipe soft-close.  Both refinements changed the
+  user experience meaningfully:
+  - cp17: displaced bidder NOW gets a Web Push notification
+    (when subscribed) with deep-link to /my/orders#order-X
+  - cp18: a determined late-bidder can't snipe — the deadline
+    auto-extends by 5 min (capped at 6 extensions / 30 min
+    total) when a new bid arrives within the snipe window
+  Update needed in all 10 locales (en, es, fr, de, it, pl, ru,
+  fa, zh-CN, zh-HK) — locale parity required.  Recommend
+  ~3-5 sentence addition naming both refinements + the
+  "Extended ×N" chip surfaced in FeaturedBidHistory.  Not
+  shipped in cp19 because doing 10 FAQ translations well
+  needs care; tail-shipping a rushed translation in a
+  pre-handoff sweep would create the staleness it's trying
+  to fix.
+
 - **typecheck-sweep silently no-ops `satisfies` clauses against
   workspace types when `node_modules` is missing — ✅ CLOSED Part 122 cp16 (2026-05-16).**
   Fixed in `scripts/typecheck-sweep.sh:103–129` — the sweep now

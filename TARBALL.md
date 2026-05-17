@@ -51,7 +51,39 @@ The user's standing rule (recorded in REVISIT-LIST Memory section): every featur
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp19 (2026-05-17) — audit cadence over cp17+cp18 + pre-launch dry-run walkthrough
+**Last sealed checkpoint:** Part 122 cp19 (2026-05-17) — audit cadence over cp17+cp18 + pre-launch dry-run walkthrough + pre-handoff staleness sweep
+
+**Pre-handoff staleness sweep (2026-05-17, post-cp19 ship):**
+Sweep across all .md files for refs to old checkpoint numbers,
+old smoke baselines, and outdated invocations.  Findings:
+
+- **Stale `tsx scripts/mint-acts.ts 25` invocation in 3 operator
+  docs** — fixed in OPERATIONS.md (2 occurrences), LAUNCH-DAY.md,
+  AUTOMATION-AUDIT.md.  Now all use `npm run mint-acts -- 25`
+  matching the cp19-added npm script.  PRE-LAUNCH-CHECKLIST.md
+  was already corrected in cp19.
+
+- **FAQ `featured_slot_displaced` is stale** — doesn't mention
+  cp17 outbid push notifications or cp18 anti-snipe extensions.
+  Filed to REVISIT-LIST §A as a pending operator-decision item
+  rather than rush a 10-locale translation under handoff time
+  pressure.  Recommended fix: ~3-5 sentence addition naming both
+  refinements + the "Extended ×N" chip; locale parity required.
+
+- **All other stale-ref candidates checked and clean** — schema
+  version v33 still current (cp18 was v33.3a subschema, not a
+  head bump); D-4 persona-walkthrough sentinel still matches
+  doc verbatim; wiring-completeness count (21) reflected only in
+  TARBALL chronicle which is allowed to carry historical figures.
+
+**Memory edit #29 refreshed** from cp13 → cp19 so next chat
+picks up correctly.
+
+**Cross-session handoff guarantee:** every file in the repo is
+current as of cp19.  No stale doc trailing live code.  The
+single deliberately-deferred staleness (FAQ outbid entry) is
+captured in REVISIT-LIST §A with explicit framing of why it
+wasn't shipped this turn.
 
 **Gates — all green:**
 - Triple-pulse: **3,173 × 3 scenarios, 0 failures**

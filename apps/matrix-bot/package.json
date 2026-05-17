@@ -19,12 +19,8 @@
   },
   "dependencies": {
     "@morphit/operator-config": "*",
-    "@sveltejs/kit": "0.0.30",
-    "@sveltejs/vite-plugin-svelte": "7.1.2",
     "better-sqlite3": "^11.5.0",
     "matrix-bot-sdk": "^0.7.1",
-    "svelte-i18n": "3.7.1",
-    "vite": "8.0.13",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -32,6 +28,6 @@
     "@types/node": "^22.7.5",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
-    "vitest": "^4.1.6"
+    "vitest": "^2.1.2"
   }
 }
