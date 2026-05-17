@@ -787,7 +787,7 @@
 			},
 			"trade_goods_services": {
 				"q": "Puis-je échanger des biens ou des services sur Morphit, comme des arbres fruitiers ou des disques vinyles ?",
-				"a": "Oui — avec une forme spécifique. Le modèle d'ordre est toujours **un actif négociable (BTC, XMR, BLURT ou USDT) d'un côté, et autre chose de l'autre côté**. L'« autre chose » peut être une monnaie fiat, une autre cryptomonnaie, ou via la méthode de paiement `Barter (goods)`, des biens/services. Pour des orangers contre XMR : postez `asset=XMR`, `payment_methods=[Barter (goods)]`, décrivez les détails dans le champ `terms`. Les trocs purs (biens contre biens sans crypto) ne sont pas modélisables — un côté doit toujours être BTC, XMR, BLURT ou USDT. Explication complète dans la FAQ anglaise."
+				"a": "Oui — avec une forme spécifique. Le modèle d'ordre est toujours **un actif négociable (BTC, XMR, BLURT, USDT, BCH ou LTC) d'un côté, et autre chose de l'autre côté**. L'« autre chose » peut être une monnaie fiat, une autre cryptomonnaie, ou via la méthode de paiement `Barter (goods)`, des biens/services. Pour des orangers contre XMR : postez `asset=XMR`, `payment_methods=[Barter (goods)]`, décrivez les détails dans le champ `terms`. Les trocs purs (biens contre biens sans crypto) ne sont pas modélisables — un côté doit toujours être BTC, XMR, BLURT ou USDT. Explication complète dans la FAQ anglaise."
 			},
 			"order_timeouts": {
 				"q": "Combien de temps les ordres restent-ils ouverts ?",
@@ -883,7 +883,7 @@
 			},
 			"where_to_buy_blurt": {
 				"q": "Où acheter du BLURT pour payer les frais de réseau ?",
-				"a": "**Achetez-le sur Morphit lui-même — c'est tout l'intérêt.** Morphit est un marché pair-à-pair ; BLURT est l'un des quatre actifs échangés ici, aux côtés de BTC, XMR et USDT. Visitez /orderbook, filtrez les ordres de vente BLURT, et envoyez un message à une contrepartie. Vous le payez avec n'importe quelle méthode fiat qu'il accepte ; il vous envoie du BLURT sur votre compte Blurt. Fini.\n\n**Votre première commande est gratuite.** Les nouveaux utilisateurs reçoivent une exemption unique qui couvre les frais d'inscription pour leur premier achat de BLURT. Votre première acquisition de BLURT peut donc aussi être votre première transaction sur Morphit, sans compte d'exchange, sans carte, sans KYC. L'exemption est proposée automatiquement.\n\n**Alternative de dernier recours :** si vous ne pouvez vraiment pas trouver de contrepartie sur le carnet d'ordres Morphit (dans certaines régions, le carnet est petit), Klingex.io exploite une paire de trading BLURT/USDT comme repli centralisé. Nous le mentionnons par souci d'exhaustivité mais le traitons comme une option d'urgence — chaque BLURT acheté via Klingex est une transaction que Morphit n'a pas obtenue, et l'objectif du projet est de faire croître le carnet pair-à-pair, pas d'envoyer les utilisateurs ailleurs. Si vous prenez cette voie, la page de trading est https://klingex.io/trade/BLURT-USDT — vous devrez déposer de l'USDT pour échanger contre du BLURT. Retirez immédiatement vers votre propre portefeuille Blurt.\n\n**Une fois que vous avez du BLURT dans votre portefeuille**, payer des frais d'inscription Morphit est automatique — choisissez « Payer en BLURT »."
+				"a": "**Achetez-le sur Morphit lui-même — c'est tout l'intérêt.** Morphit est un marché pair-à-pair ; BLURT est l'un des six actifs échangés ici, aux côtés de BTC, XMR, USDT, BCH et LTC. Visitez /orderbook, filtrez les ordres de vente BLURT, et envoyez un message à une contrepartie. Vous le payez avec n'importe quelle méthode fiat qu'il accepte ; il vous envoie du BLURT sur votre compte Blurt. Fini.\n\n**Votre première commande est gratuite.** Les nouveaux utilisateurs reçoivent une exemption unique qui couvre les frais d'inscription pour leur premier achat de BLURT. Votre première acquisition de BLURT peut donc aussi être votre première transaction sur Morphit, sans compte d'exchange, sans carte, sans KYC. L'exemption est proposée automatiquement.\n\n**Alternative de dernier recours :** si vous ne pouvez vraiment pas trouver de contrepartie sur le carnet d'ordres Morphit (dans certaines régions, le carnet est petit), Klingex.io exploite une paire de trading BLURT/USDT comme repli centralisé. Nous le mentionnons par souci d'exhaustivité mais le traitons comme une option d'urgence — chaque BLURT acheté via Klingex est une transaction que Morphit n'a pas obtenue, et l'objectif du projet est de faire croître le carnet pair-à-pair, pas d'envoyer les utilisateurs ailleurs. Si vous prenez cette voie, la page de trading est https://klingex.io/trade/BLURT-USDT — vous devrez déposer de l'USDT pour échanger contre du BLURT. Retirez immédiatement vers votre propre portefeuille Blurt.\n\n**Une fois que vous avez du BLURT dans votre portefeuille**, payer des frais d'inscription Morphit est automatique — choisissez « Payer en BLURT »."
 			},
 			"first_order_free": {
 				"q": "Ma première commande est-elle vraiment gratuite ?",
@@ -1179,7 +1179,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "Pourquoi Morphit affiche-t-il une note sur l'émission et la transmission de l'USDT ?",
-				"a": "L'USDT est le stablecoin le plus échangé au monde, et des millions de traders s'appuient chaque jour sur sa stabilité par rapport au dollar et son acceptation généralisée. Lorsque Morphit liste un actif, nous informons honnêtement nos utilisateurs de ses propriétés techniques, pour qu'ils prennent une décision informée pour chaque trade. Pour l'USDT, deux faits à connaître : (1) L'USDT est émis et administré par Tether Inc., et Tether a la capacité technique de geler des adresses sur la chaîne hôte — ils ont utilisé cette capacité par le passé, principalement en réponse à des demandes des forces de l'ordre. (2) Les transactions USDT sur chaque chaîne hôte prise en charge (Ethereum, Tron, Solana, BNB Smart Chain) sont publiquement visibles sur ces chaînes ; c'est une propriété de la chaîne, pas spécifique à l'USDT. Différents traders évaluent cela différemment. Si vous voulez une confidentialité on-chain maximale, XMR est le bon outil. Si vous voulez une décentralisation maximale par rapport à tout émetteur unique, BTC ou BLURT sont les bons outils. Si vous voulez une stabilité libellée en dollars et un marché liquide presque partout, l'USDT est le bon outil. La note de Morphit est de l'information, pas un verdict — choisissez l'actif qui correspond au trade que vous faites."
+				"a": "L'USDT est le stablecoin le plus échangé au monde, et des millions de traders s'appuient chaque jour sur sa stabilité par rapport au dollar et son acceptation généralisée. Lorsque Morphit liste un actif, nous informons honnêtement nos utilisateurs de ses propriétés techniques, pour qu'ils prennent une décision informée pour chaque trade. Pour l'USDT, deux faits à connaître : (1) L'USDT est émis et administré par Tether Inc., et Tether a la capacité technique de geler des adresses sur la chaîne hôte — ils ont utilisé cette capacité par le passé, principalement en réponse à des demandes des forces de l'ordre. (2) Les transactions USDT sur chaque chaîne hôte prise en charge (Ethereum, Tron, Solana, BNB Smart Chain) sont publiquement visibles sur ces chaînes ; c'est une propriété de la chaîne, pas spécifique à l'USDT. Différents traders évaluent cela différemment. Si vous voulez une confidentialité on-chain maximale, XMR est le bon outil. Si vous voulez une décentralisation maximale par rapport à tout émetteur unique, BTC, BLURT, BCH ou LTC sont les bons outils. Si vous voulez une stabilité libellée en dollars et un marché liquide presque partout, l'USDT est le bon outil. La note de Morphit est de l'information, pas un verdict — choisissez l'actif qui correspond au trade que vous faites."
 			},
 			"which_usdt_network": {
 				"q": "Quel réseau USDT choisir — ERC-20, TRC-20, SPL ou BEP-20 ?",
@@ -3459,8 +3459,6 @@
 			"usdt_centralized": "Deux choses à savoir sur l'USDT avant de trader : Tether Inc. émet et administre l'USDT et a la capacité technique de geler des adresses (et l'a utilisée). Les transactions sont publiquement visibles sur chaque réseau pris en charge (Ethereum, Tron, Solana, BNB Smart Chain) — une propriété de ces chaînes. Choisissez l'actif qui correspond à votre trade."
 		},
 		"usdt": {
-			"displayName": "Tether",
-			"oneLineDescription": "Stablecoin indexé sur l'USD. Contrôlé de manière centralisée. Trading uniquement — ne peut pas payer les frais d'inscription sur Morphit.",
 			"network": {
 				"erc20": {
 					"displayName": "Ethereum (ERC-20)",
@@ -3485,7 +3483,6 @@
 				}
 			},
 			"address_share": {
-				"network_prefix": "Adresse USDT sur {network} :",
 				"warning": "Envoyez de l'USDT uniquement sur {network}. Envoyer de l'USDT sur tout autre réseau à cette adresse perd vos fonds définitivement."
 			},
 			"order_row": {
@@ -3494,8 +3491,7 @@
 			"price_subline": {
 				"live": "1 USDT = {price} $ en direct",
 				"unavailable": "Flux de prix USDT/USD indisponible — dernier vu il y a {staleness}."
-			},
-			"disabled_on_instance": "Cette instance n'accepte pas les ordres USDT. Essayez une autre instance Morphit."
+			}
 		}
 	}
 }

@@ -1,8 +1,73 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 24 — Litecoin addition: LTC wired end-to-end as Category-B trade-only single-network asset following the matured USDT (cp3) + BCH (cp21) template, with cp23-DD-class downstream consumers closed PROACTIVELY in the same checkpoint rather than waiting for a follow-on DD.  Canonical asset registry (ASSET_TICKERS + LTC AssetEntry, canPayListingFee=false, canBeTraded=true, supportedNetworks=['mainnet'], defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, L/M/3/ltc1 address regex per ADR-0025 §4 4-format tradeoff).  ChatAssetTicker union extended with 'ltc'; 5 LTC regex constants + isValidLtcAddress/isValidLtcTxid + dispatchers + 4 dispatch gates widened in chat/payload.ts (cp23 DD-cp21-7/8 lesson learned — widened from the start); litecoin: URI scheme in buildPaymentUri.  Frontend assets registry (validateLtc + entry: accentClass text-slate-400, logoSvgPath /icons/icon-ltc.svg).  Explorer URL plumbing (LTC_TXID_RE + BUNDLED_LTC_CHAT_LINK_URL=litecoinspace.org/tx/{txid} in urlsCore — chosen from Ken's 7-explorer survey as LTC-equivalent of mempool.space, community-led no-tracking; 'LTC' added to ExternalAsset type + EXPLORER_REGISTRY entry; chat_link_urls.ltc in instance store + fallback + fetch handler; chat_link_urls.ltc in indexer InstanceResponse + body; MORPHIT_FRONTEND_LTC_CHAT_LINK_URL Zod schema + Config field + builder mapping; ltc?: in matrix-bot ChatLinkUrlsSchema).  ops-cli wizard step 12 extended (DEFAULT_LTC_CHAT_LINK_URL + ChatLinkExplorersResult.ltc + LTC prompt with reachability probe + render.ts emits MORPHIT_FRONTEND_LTC_CHAT_LINK_URL + init.ts printReview line).  ops-cli wizard step 13 (cp22 disable-asset wizard): CATEGORY_B_DESCRIPTIONS map gained LTC entry; filter `canBeTraded && !canPayListingFee` automatically surfaces LTC.  i18n × 10 locales: 8 new LTC keys per locale (NOT 11 like BCH initially — learning from cp23 DD-23-5/9 orphan lessons): chat.address.{method_ltc, address_placeholder_ltc, address_invalid_ltc, pill_method_ltc}, chat.funds_sent.pill_title_ltc, cheat_sheet.section_assets.ltc, payment_method.pay_ltc.description, post_order.form.asset_explainer.ltc.  Skipped 4 orphan-candidate keys cp23 DD removed for BCH.  Parity 2,559→2,567 keys × 10 = 25,670.  UI dispatches (AddressShareModal LTC tab + placeholder + invalid-msg; FundsSentModal LTC tab; ChatMessage LTC branches in 4 dispatch sites + type unions widened ×2 + guard widened; ConversationView types widened ×2; post-order page LTC tooltip block).  New ltc-trade-only-smoke (13 scenarios mirroring bch-trade-only pattern + tests all 4 LTC address formats; registered in run-smokes.sh); disabled-assets-wizard-smoke updated to expect 3 Category-B (17→18 scenarios).  Smoke baseline 3,217→3,231.  LTC SVG logo placeholder at apps/web/static/icons/icon-ltc.svg (silver disc with stylized Ł).  ADR-0025 (Litecoin trade-only addition, 8 design decisions).  cp23-DD-class proactive closure: prices/index.ts internalStore + reset() have LTC:null; coingecko.ts COINGECKO_IDS has LTC:'litecoin'; fallback.ts FALLBACK_USD has LTC:100; cheat-sheet has LTC row; payment-method registry has pay_ltc; indexer RESERVED_CANONICAL_KEYS has pay_ltc (reserved-keys-parity-smoke green); schema.sql comments updated; API.md asset filter + trade_count examples updated; GRANDMA-FRIENDLY items 1.1 + cheat-sheet status notes mention LTC; llms.txt + llms-full.txt updated 6 references including new LTC barter example + "five"→"six".  Docs sync: README asset list updated; RELEASE-NOTES "Five"→"Six tradable assets" + LTC explanation + smoke count 3,217→3,231; MORPHIT-BRAG-LIST entry #273 + footer 272→273 + smoke count + ADR 0024→0025; OPERATIONS trade-only header + multi-coin examples + LTC chat-link subsection with 7 alternatives; RUN-A-MORPHIT-NODE operator-stance matrix expanded for LTC; PRE-LAUNCH-CHECKLIST smoke baseline + stance item + ADR refs.  Mediakit rebuild scheduled after brag-list edits.  PATTERN MATURATION: first asset addition where downstream typed-consumer maps ship same-day as canonical registry extension — the cp23-DD class is closed proactively, not as a follow-on.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 25 — Ken triple-prompt deep-deep on USDT parity + LTC completeness + cp24 audit.  Ken's prompt: "make sure USDT got added just as good as bch was. it seems usdt might be broken in some spots (schema.sql and others). you even said recently (after ltc was added) that we support 5 coins. but that's not true. we now support 6 assets, not 5. (BTC/XMR/BLURT/USDT/BCH/LTC). time for a deep deep on all that recent work."  Ken's instinct was right — found 4 real BUG CLASSES the cp24 in-pass DD missed despite explicit "proactive cp23-DD-class closure" framing.  FINDINGS: (1) DD-cp25-1 (HIGH) API.md `volume_estimate_by_asset_30d` example missing BCH and LTC — cp23 DD caught `trade_count_by_asset_*` sibling examples but missed the volume_estimate one literally 2 lines later in the same code block. (2) DD-cp25-2 (LOW) 4 USDT orphan i18n keys (`assets.usdt.{displayName, oneLineDescription, disabled_on_instance, address_share.network_prefix}`) — cp23 noted 3 as pre-existing cp3 debt; the 4th address_share.network_prefix was not flagged at all.  Removed across all 10 locales; empty `assets.usdt.address_share` parent dropped.  Parity 2,567 → 2,563. (3) DD-cp25-3 (HIGH) 9 brag-list entries stale: header (#3 asset list "Bitcoin/Monero/Blurt/USDT/Bitcoin Cash" missing Litecoin), keywords (#7 missing "P2P Litecoin marketplace, LTC P2P, Litecoin bech32, Litecoin MWEB"), entry #129 "23 ADRs through 0024" should be "24 ADRs through 0025", entry #171 Haveno comparison asset list missing LTC, entry #200 activity dashboard asset list missing LTC, entry #202 QR codes asset list + URI format missing LTC, entry #205 barter example missing LTC, entry #214 "currently shipped" missing LTC, entry #30 smoke count "3,170" missing 3,231 update. All 9 fixed. (4) DD-cp25-4 (HIGH, **CRITICAL**) FAQ i18n entries with stale asset lists IN ALL 10 LOCALES — `faq.entries.trade_goods_services.a` said "BTC, XMR, BLURT, or USDT" (cp21+cp24 missed both BCH and LTC) — affects 10 locales × 1 string = 10 stale FAQ strings.  `faq.entries.where_to_buy_blurt.a` said "BLURT is one of the four assets traded here, alongside BTC, XMR, and USDT" — affects 10 locales × 1 string = 10 stale strings.  `faq.entries.why_usdt_warning.a` said "BTC or BLURT are the right tools" for decentralization — should mention BCH and LTC too (they're transparent + decentralized like BTC).  All 30 stale FAQ strings fixed across 10 locales with locale-specific translation patterns.  These are user-facing FAQ pages — the most embarrassing class of stale content possible.  cp23 DD audited llms.txt + llms-full.txt for "five assets" / "BTC, XMR, BLURT, USDT, BCH" enumerations but COMPLETELY MISSED the parallel i18n FAQ entries with the same content. The llms-full.txt mirror at line 484 was correctly updated by cp24 ("six assets traded here, alongside BTC, XMR, USDT, BCH, and LTC") but the i18n source at faq.entries.where_to_buy_blurt.a in all 10 locales had been STALE since cp3 (USDT addition) — through cp21 (BCH skipped it) through cp23 DD (missed it) through cp24 (also skipped it).  This is a 4-checkpoint drift.  USDT/BCH BACKFILL VERIFIED: schema.sql USDT mentions are CORRECT (USDT is the multi-network asset; single-network = "BTC, XMR, BLURT, BCH, LTC" is correct semantics).  USDT in payment-method registry, indexer RESERVED_CANONICAL_KEYS, prices/index.ts, COINGECKO_IDS, FALLBACK_USD, cheat-sheet, API.md filter, llms.txt, llms-full.txt — all present and correct (cp3 addition was thorough for those).  USDT chat-link URLs correctly use per-network metadata (`lib/assets/networks.ts`), not a single MORPHIT_FRONTEND_USDT env var — that's a deliberate USDT-specific architectural difference, not a gap.  All 3,231 smoke scenarios still green triple-pulse.  LOCALE PARITY: 2,563 keys × 10 = 25,630 strings (down from 2,567 after USDT orphan cleanup).  MEDIAKIT rebuilt after brag-list edits.  No code changes needed (zero functional bugs, only content drift + i18n orphans).  PATTERN LESSON: even when explicitly framed as "cp23-DD-class proactive closure," the in-pass audit can MISS sibling content that lives in different files (i18n FAQ vs static llms files vs API docs vs brag list).  The cp23-DD pattern needs to be applied as a WIDER sweep that includes i18n FAQ + brag list + every operator-survey enumeration anywhere.  Cp25 added "FAQ i18n entries" + "brag-list entries enumerating assets" + "every place USDT is mentioned for parity" as new categories the per-asset addition audit must touch.)
 
 **Snapshot date:** 2026-05-17
 
 ---
+
+## cp25 — Ken triple-prompt audit (USDT parity + LTC completeness + post-cp24 DD) (Part 122)
+
+Ken's three concerns:
+1. "make sure LTC is totally done now"
+2. "make sure USDT got added just as good as bch was. it seems usdt might be broken in some spots (schema.sql and others)"
+3. "you even said recently (after ltc was added) that we support 5 coins. but that's not true. we now support 6 assets, not 5"
+4. "time for a deep deep on all that recent work"
+
+### Findings summary
+
+| ID         | Sev    | Location                                              | Status |
+|------------|--------|-------------------------------------------------------|--------|
+| DD-25-1    | HIGH   | docs/API.md `volume_estimate_by_asset_30d` example   | FIXED  |
+| DD-25-2    | LOW    | 4 USDT orphan i18n keys × 10 locales                  | FIXED  |
+| DD-25-3    | HIGH   | 9 stale brag-list entries (header, keywords, #30, #129, #171, #200, #202, #205, #214) | FIXED  |
+| DD-25-4    | HIGH   | 3 FAQ i18n entries × 10 locales = 30 stale strings   | FIXED  |
+| DD-25-5    | OK     | schema.sql USDT mentions (USDT = multi-network)       | VERIFIED OK |
+| DD-25-6    | OK     | USDT in prices/payments/cheat-sheet/API/llms          | VERIFIED OK |
+| DD-25-7    | OK     | USDT chat-link arch (per-network not single-env-var)  | VERIFIED OK |
+
+**Total:** 4 real findings closed, 3 verified-OK.
+
+### USDT/BCH/LTC parity status post-cp25
+
+- **schema.sql** — USDT correct as multi-network; BCH+LTC correct as single-network. No drift.
+- **prices** — internalStore, COINGECKO_IDS, FALLBACK_USD all have entries for all 6 assets.
+- **payment-method registry** — pay_btc, pay_blurt, pay_xmr, pay_usdt, pay_bch, pay_ltc all present + matching `assetExclusion`.
+- **indexer RESERVED_CANONICAL_KEYS** — same 6 pay_* keys present; reserved-keys-parity-smoke green.
+- **cheat-sheet** — all 6 asset rows present.
+- **API.md** — asset filter + trade_count + volume_estimate examples include all 6 assets.
+- **llms.txt + llms-full.txt** — all asset enumerations include all 6 assets.
+- **i18n FAQ entries** — `trade_goods_services`, `where_to_buy_blurt`, `why_usdt_warning` all updated across 10 locales.
+- **i18n orphans** — 4 USDT orphans + 4 BCH orphans removed (cp23 + cp25); no orphans remain for any Category-B asset.
+- **MORPHIT-BRAG-LIST** — 9 stale entries updated; smoke count + ADR count + asset list everywhere consistent.
+- **chat-link URLs** — USDT uses per-network metadata (architectural choice); BCH+LTC use single-env-var (same posture). All correct per their design.
+
+### Files changed in cp25 (16 total)
+
+- `docs/API.md` — DD-25-1 volume_estimate example
+- `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` — DD-25-2 (USDT orphan removal) + DD-25-4 (3 FAQ entries × 10 locales)
+- `MORPHIT-BRAG-LIST.md` — DD-25-3 (9 stale entries)
+- `apps/web/static/morphit-mediakit.zip` — rebuilt after brag-list edits
+- `docs/REVISIT-LIST.md` — cp25 entry
+- `TARBALL.md` — this entry
+
+### Smoke triple-pulse: green
+
+ltc-trade-only 13/13, bch-trade-only 13/13, usdt-trade-only 11/11, fee-method-enum-frozen 7/7, disabled-assets-wizard 18/18, reserved-keys-parity 1/1.  Smoke baseline unchanged at 3,231 (no new smokes added cp25).
+
+### Pattern lessons
+
+1. **The "you said X recently" check is real.** Ken caught a verbal slip — I conversationally mentioned "5 coins" when LTC was already shipped. That's not a codebase bug (codebase is correct everywhere), but it's worth flagging that internal-monologue counts and external responses can drift from repository state. Always re-verify counts against `ASSET_TICKERS.length` rather than from prior conversational state.
+
+2. **"Did USDT get added as well as BCH" requires a different lens than "did BCH/LTC get added as well as USDT".** Cp23 DD asked the second question; cp25 needed to ask the first. The asymmetry: cp3 (USDT) was thorough at its time but predates several things cp21+cp24 added.  Things cp3 DIDN'T need to do (and correctly didn't): single-env-var chat-link URL, single CashAddr/Litecoin URI scheme in buildPaymentUri.  Things cp3 SHOULD have done but didn't: avoid the 4 orphan i18n keys (assets.usdt.{displayName, oneLineDescription, disabled_on_instance, address_share.network_prefix}) — same speculation-then-unused pattern that cp21 BCH later repeated.
+
+3. **i18n FAQ entries are content that drifts like docs but is invisible to grep-for-stale-asset-list audits that only look at code or static files.** Cp23 DD caught llms.txt drift but missed the i18n FAQ entries with structurally identical content.  This drift was 4 checkpoints old (cp3 → cp21 → cp23 → cp24 all missed it).  Add "i18n FAQ entries" to every asset-addition audit checklist.
+
+4. **Brag-list entries are an asset enumeration too.** Cp24 added entry #273 (LTC) but didn't sweep existing entries for LTC mentions.  9 entries needed updating.  Add "sweep brag-list for asset enumerations" to every asset-addition audit checklist.
+
+5. **The "schema.sql USDT is broken" instinct Ken had was wrong in the literal sense (schema.sql is correct) but right in the meta sense (some sites WERE stale, just not schema.sql).** When Ken says "X seems broken," the right move is to audit X comprehensively even if X turns out to be fine — because the audit will surface the actually-broken sibling thing.
+
+### Resume directive
+
+Cp25 sealed pending tarball build.  Work tree at `/home/claude/work/`.  Solo-parked items per memory: launch ceremony at T-5 days.
 
 ## cp24 — Litecoin (LTC) addition with proactive cp23-DD-class closure (Part 122)
 
