@@ -15,7 +15,7 @@ Approaching `v1.0.0-beta.1` (~2026-05-22). The canonical public instance is **mo
 - **Federated orderbook.** Orders are signed by the user's posting key and broadcast as custom-JSON ops on the Blurt chain. Every Morphit indexer in the federation reads the same chain and surfaces the same orderbook.
 - **Non-custodial.** Trade settlement is wallet-to-wallet. There is no on-platform balance for an operator to mismanage. Listing fees are paid on-chain (BLURT, BTC, or XMR) directly to the operator's treasury.
 - **No KYC.** Signup is a cryptographic public key and a username. The system has no place to store an ID even if a regulator demanded one.
-- **Privacy first.** No cookies, no analytics, no IP logging. XMR support hardens further with subaddresses, amount jitter, per-payment view-key proofs, and a hard line that the operator's private view key never reaches the network.
+- **Privacy first.** No cookies, no analytics, no IP logging. XMR support hardens with subaddresses and per-payment view-key proofs (the operator's private view key never reaches the network). On every transparent chain Morphit trades (BTC, BCH, LTC, BLURT, XMR), the address-share modal offers default-ON amount randomization and address-reuse warnings; BTC also gets optional PayJoin (BIP-78) endpoint propagation. Per-asset privacy guides live at `/[lang]/privacy/{asset}`.
 - **Encrypted chat.** Per-message ECIES (X25519 + ChaCha20-Poly1305-IETF) with sender ephemerals, stored on-chain as ciphertext — see `docs/adr/0015-chat-crypto.md`.
 - **Reach.** Public hostname, Tor `.onion`, I2P `.b32`, Lokinet, and Nostr-relay channels are all first-class operator-config surfaces.
 

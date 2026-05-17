@@ -31,7 +31,6 @@
 		encodeAddressPayload,
 		generateBlurtMemo,
 		isValidAddress,
-		jitterMoneroAmount,
 		jitterAmountForAsset,
 		PAYLOAD_CONSTANTS,
 		type AddressPayload,

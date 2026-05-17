@@ -214,7 +214,7 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp16 — brag list #60 (sig-verify on push subscribe).
+		// cp16 — brag list #65 (sig-verify on push subscribe).
 		// The claim cites three components: (a) a canonical
 		// message format, (b) the cross-check smoke that defends
 		// the contract, (c) the rejection-reason coverage.
@@ -298,6 +298,72 @@ const CHECKS: readonly Check[] = [
 			kind: 'grep',
 			pattern: 'anti_snipe_extended',
 			paths: ['apps/indexer/src/indexer/handlers/featureBid.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp26 transparent-chain privacy framework ────────────────────
+	// 5 CHECK rows for the 5 brag entries cp26 added (29 updated +
+	// new 30/31/32/33/34).  Each pins the canonical code anchor
+	// that proves the claim.  Per cp26 DD-8: the standing rule
+	// (every brag-list claim must be wire-verifiable) was applied
+	// to cp26's new claims as a follow-up audit step.
+	{
+		id: 'cp26-amount-jitter-generalized',
+		claim_source: 'brag_list',
+		claim_phrase: 'Amount-jitter on every transparent chain',
+		anchor: {
+			kind: 'grep',
+			pattern: 'export function jitterUtxoAmount',
+			paths: ['apps/web/src/lib/chat/payload.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'cp26-address-reuse-detection',
+		claim_source: 'brag_list',
+		claim_phrase: 'Client-side address-reuse warning',
+		anchor: {
+			kind: 'grep',
+			pattern: 'export function findPriorShare',
+			paths: ['apps/web/src/lib/privacy/addressHistory.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'cp26-payjoin-bip78',
+		claim_source: 'brag_list',
+		claim_phrase: 'PayJoin (BIP-78) support for BTC',
+		anchor: {
+			kind: 'grep',
+			pattern: 'payjoin_endpoint',
+			paths: ['apps/web/src/lib/chat/payload.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'cp26-privacy-guide-pages',
+		claim_source: 'brag_list',
+		claim_phrase: 'Per-asset privacy guide pages',
+		anchor: {
+			kind: 'file_exists',
+			path: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte'
+		},
+		status: 'live'
+	},
+	{
+		// "No wallet recommendations" is a POLICY claim, not a
+		// feature claim.  The anchor here is the privacy-guide
+		// content asserting the policy verbatim, since policy is
+		// enforced through content discipline rather than code
+		// gates.  This is the canonical pattern for cp26-style
+		// policy claims.
+		id: 'cp26-no-wallet-recommendation-policy',
+		claim_source: 'brag_list',
+		claim_phrase: 'No wallet recommendations',
+		anchor: {
+			kind: 'grep',
+			pattern: 'no_wallet_recommendation',
+			paths: ['apps/web/src/lib/i18n/locales/en.json']
 		},
 		status: 'live'
 	}

@@ -531,7 +531,7 @@ launch is on the existing translation-QA backlog.
 
 Per project standing instruction, brag-list claims must
 be verifiable in code.  The brag-list claim that this ADR
-authorizes is **MORPHIT-BRAG-LIST.md item #208** ("QR
+authorizes is **MORPHIT-BRAG-LIST.md item #218** ("QR
 sign-in: scan with your phone, never type your seed on a
 strange computer"), shipped together with the implementation
 in Audit Part 30 (2026-05-04).  The claim describes the

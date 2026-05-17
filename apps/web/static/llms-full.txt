@@ -179,28 +179,37 @@ These are standard, well-audited primitives (from libsodium). The protocol is a 
 
 ---
 
-## Why does Morphit randomize my Monero amount?
+## Why does Morphit randomize my transfer amount?
 
 **FAQ key:** `monero_amount_jitter`
 
-Short version: identical amounts on the Monero chain create a fingerprint that lets passive observers correlate transactions across the ring-signature anonymity set. We add a tiny random tail (up to one millionth of an XMR (one microXMR — less than $0.0002 at typical prices)) to make every Morphit transfer unique on-chain. It's the same defense recommended by the Monero community itself (ie: 'how bad actors try to track Monero').
+Short version: identical amounts on a public chain create a fingerprint that lets passive observers correlate the trade post in the orderbook with the on-chain transfer. We add a tiny random tail (well below a cent at typical prices) to make every Morphit transfer unique on-chain. Shipped for XMR originally; cp26 generalizes the defense to every transparent asset Morphit supports — BTC, BCH, LTC, and BLURT all get amount-jitter too.
 
-**The attack we're defending against.** Even though Monero hides who is sending and who is receiving, the *amount* of the transfer is bit-identical to anyone with the recipient's view key — and bit-identical between two different transfers of the same amount. If Eve sends Alice exactly 0.5 XMR, and Alice later sends someone else exactly 0.5 XMR, an observer who suspects 'Alice is forwarding what Eve sent' has a fingerprint to test against. They can find which ring members in the second transaction match outputs of value 0.5, and the actual spend stands out among decoys.
+**The attack we're defending against.** Even on chains that hide some metadata (Monero with ring signatures and RingCT), the amount of the transfer is bit-identical between two transfers of the same value — bit-identical to anyone with the recipient's view key (XMR) or to anyone watching the public chain (BTC/BCH/LTC/BLURT). If Eve sends Alice exactly 0.5 XMR, and Alice later sends someone else exactly 0.5 XMR, an observer has a fingerprint to test against. On transparent chains the attack is even simpler: an order book entry says "selling 0.00513924 BTC for $300" and a transaction of exactly 0.00513924 BTC appears on-chain a few minutes later — that's the trade, identified.
 
-**The defense.** When you send 0.5 XMR via Morphit, we generate a random tail in the last six decimals — say 0.500000847261 XMR. The trade is still 'about 0.5 XMR' to a human, but the on-chain amount is unique. Two unrelated 0.5-XMR Morphit trades produce two completely different amounts (0.500000847261 and 0.500000124538), with no observable link between them. The seller is paid slightly *more* than asked — never less — so verification still passes. Cost: at most 999_999 piconero ≈ 0.000001 XMR ≈ ~$0.0002 at typical prices. Negligible.
+**The defense.** When you send through Morphit, we generate a random tail in the last few decimals:
+- **XMR**: up to 999,999 piconero (~1 microXMR ≈ $0.0002)
+- **BTC/BCH/LTC**: up to 999 satoshi (~$0.001 to $0.50 depending on coin)
+- **BLURT**: up to 99 milliblurt (fractions of a US cent)
 
-**It's optional but on by default.** When sharing a Monero receiving address in chat, you'll see a 'Privacy: randomize amount' checkbox right under the amount field. Default ON. If you have a reason to want exact-amount transfers (some accounting workflows, for instance), you can turn it off — but the unlinkability cost is real, so we recommend leaving it on.
+The trade is still "about 0.5 XMR" or "about 0.005 BTC" to a human, but the on-chain amount is unique. Two unrelated trades of the same nominal amount produce two completely different on-chain amounts. The seller is paid slightly *more* than asked — never less — so verification still passes.
 
-**Other Monero privacy defenses Morphit ships:**
-• **Subaddress nudge.** When you paste a main-account Monero address (one starting with `4`), Morphit recommends switching to a subaddress (`8...`) instead. Main addresses share a view-key anchor across all receipts, letting an observer who scans the chain link multiple incoming payments to one identity. Subaddresses break that anchor.
-• **Chat is on Blurt, not Monero.** Coordinating-message metadata never touches the Monero chain.
+**It's optional but on by default.** When sharing a receiving address in chat for any transparent asset, you'll see a 'Privacy: randomize amount' checkbox right under the amount field. Default ON. If you have a reason to want exact-amount transfers (accounting workflows, for instance), you can turn it off — but the unlinkability cost is real, so we recommend leaving it on.
 
-**What we do NOT do (yet):**
+**Why not USDT?** USDT's privacy issue is centralization, not amount-correlation: Tether Inc. can freeze any USDT address on any host chain. Amount-jitter doesn't address that threat model, so we don't offer it for USDT. The per-asset privacy guide at `/privacy/usdt` explains this in detail.
+
+**Other privacy defenses Morphit ships per asset:**
+• **Subaddress nudge (XMR).** When you paste a main-account Monero address (one starting with `4`), Morphit recommends switching to a subaddress (`8...`) instead. Main addresses share a view-key anchor across all receipts, letting an observer who scans the chain link multiple incoming payments to one identity. Subaddresses break that anchor.
+• **Address-reuse warning (every asset).** Morphit keeps a local-only history (your browser, never the server) of addresses you've shared from this device. If you paste an address you've shared before, you get a warning chip with the date — reuse on transparent chains is the single biggest leak.
+• **Optional PayJoin (BIP-78) for BTC.** Advanced sellers whose wallet supports BIP-78 can paste their PayJoin endpoint into the address-share modal; the buyer's wallet (if also PayJoin-capable) negotiates a cooperative transaction that breaks chain-analysis heuristics.
+• **Per-asset privacy guide pages** at `/privacy/{asset}` (e.g. `/privacy/btc`, `/privacy/ltc`) describe asset-specific protocol standards (MWEB for LTC, CashFusion for BCH, CoinJoin + PayJoin for BTC) and universal practices (fresh addresses, coin control, network-layer privacy).
+• **Chat is on Blurt, not the trade asset's chain.** Coordinating-message metadata never touches the chain the trade settles on.
+
+**What we do NOT do:**
 • Force-broadcast through a Tor exit. We assume you're already running Morphit through Tor or a VPN if your threat model requires that level of network privacy — and Morphit ships with Tor reachability via its onion mirror.
-• Output-churn-before-send guidance. That's a wallet-level defense and Morphit doesn't run a wallet — we just hand off addresses.
-• Multi-transfer splitting. Splitting a single trade across multiple transfers from the same wallet actually *hurts* Monero privacy (key-image correlation). We deliberately don't suggest this.
+• Recommend specific wallet software. Even reputable wallets have been compromised; we describe protocol standards (PayJoin, MWEB, CashFusion) so you can find your own wallet.
 
-The full threat-model writeup is in `docs/MONERO-UNLINKABILITY.md` for anyone who wants the details.
+The full threat-model writeup is in `docs/MONERO-UNLINKABILITY.md` and the per-asset guides at `/privacy/{asset}`.
 
 ---
 
@@ -387,7 +396,7 @@ Very. Security on Morphit isn't a marketing claim — it's a sustained engineeri
 
 **We use formal threat-modeling methodology.** Each audit pass runs a STRIDE matrix (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege) over every changed subsystem, then builds attack trees from the most attractive entry points, then writes adversarial red-team narratives walking through what a determined attacker — we name them and give them goals — would actually do. This is the same methodology used in commercial security reviews; the difference is we publish the result.
 
-**Open source means open audit.** Morphit is AGPL-3.0. The full source code is at git.agorise.net/agorise/morphit. Anyone can clone the repo, read the code, run the test suite (over 1,000 self-checks ship with the source), submit issues, and propose patches. We treat external review as an asset, not a threat. The threat model assumes a sophisticated attacker has already read every line of code — because that's the realistic worst case, and designing for it is what makes the system actually safe.
+**Open source means open audit.** Morphit is AGPL-3.0. The full source code is at git.agorise.net/agorise/morphit. Anyone can clone the repo, read the code, run the test suite (over 3,300 self-checks ship with the source), submit issues, and propose patches. We treat external review as an asset, not a threat. The threat model assumes a sophisticated attacker has already read every line of code — because that's the realistic worst case, and designing for it is what makes the system actually safe.
 
 **Privacy-first defaults.** The architecture is built so that even a complete server compromise doesn't leak much, because we deliberately don't have much to leak. No KYC. No email. No phone number. No IP retention. No central key store. No session cookies. Chat is end-to-end encrypted; the indexer stores only ciphertext and could not decrypt your conversations even under legal compulsion. Trade verification for cryptocurrencies happens on the user's own device against the user's own node — Morphit never sees your view keys, your wallet, or your funds. The threat model treats every operator as untrusted by default; the federation lets users choose whose mirror to use, and switch at any time.
 
