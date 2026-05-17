@@ -77,7 +77,7 @@
 		 *  Optional; the button only renders when this prop is
 		 *  present, the message is incoming, and the method is
 		 *  btc/xmr. */
-		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc'; amount?: string; orderPermlink?: string }) => void;
+		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc'; amount?: string; orderPermlink?: string; network?: string }) => void;
 	}
 
 	let { message, me, peer, onRetry, onPayNow, onMarkSent }: Props = $props();
@@ -509,7 +509,14 @@
 									onMarkSent?.({
 										method: p.method as 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc',
 										amount: p.amount,
-										orderPermlink: p.orderPermlink
+										orderPermlink: p.orderPermlink,
+										// cp26 DD-7 fix — propagate USDT network from
+										// the address payload to FundsSentModal so the
+										// receiver doesn't have to re-pick the network
+										// they already saw on the seller's pill.  Only
+										// USDT carries network; undefined for the other
+										// 5 single-network assets.
+										network: p.network
 									})}
 							>
 								{$_('chat.address.mark_sent')}

@@ -2,7 +2,7 @@
 
 All 48 strings originally captured here as byte-identical to English in
 9 non-English locales were translated as part of the Part 89 i18n
-re-walk (brag list entry #237).  Verified post-Part-102: zero of the
+re-walk (brag list entry #242).  Verified post-Part-102: zero of the
 48 keys are still byte-identical to English in es/fr/de/it/pl/ru/fa/
 zh-CN/zh-HK.
 

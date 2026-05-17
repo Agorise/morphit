@@ -368,17 +368,17 @@ section appends STRIDE rows for surfaces introduced or substantively
 expanded between Part 30 and Part 87.
 
 **Scope of this refresh:**
-1. Desktop QR-pairing (ADR-0022, Part 30, brag #208)
+1. Desktop QR-pairing (ADR-0022, Part 30, brag-list entry on IPv6 prefix bucketing was dropped during a slim pass; defense lives in apps/relay/src/middleware/ip.ts)
 2. Operator-payout automation (Part-47 era)
 3. Kill-switch middleware (Part 47)
 4. Layer 7-8 squatter defenses — Altcha PoW + RESERVED_NAMES +
    DICTIONARY_BRANDS + global daily ceiling persistence
-5. Asset-registry runtime-immutable canonical list (brag #209)
-6. Witness fee delta-alert pipeline (brag #212)
-7. IPv6 prefix bucketing at relay (brag #213)
-8. CSP-header inheritance fix at nginx (brag #214)
+5. Asset-registry runtime-immutable canonical list (brag-list entry on CSP-header inheritance was dropped during a slim pass; defense lives in nginx config + apps/web hooks.ts CSP middleware)
+6. Witness fee delta-alert pipeline (brag #221)
+7. IPv6 prefix bucketing at relay (brag-list entry on IPv6 prefix bucketing was dropped during a slim pass; defense lives in apps/relay/src/middleware/ip.ts)
+8. CSP-header inheritance fix at nginx (brag-list entry on CSP-header inheritance was dropped during a slim pass; defense lives in nginx config + apps/web hooks.ts CSP middleware)
 9. Build manifest + on-chain `morphit_release_v1` reproducibility
-   (brag #215)
+   (brag #222)
 10. CI gate posture post-Part-87 (lint pipeline + workspaces test job)
 
 ────────────────────────────────────────────────────────────────────────
@@ -552,7 +552,7 @@ those bundles after the next release-poll cycle.
 - **Build-from-source path is documented** — README §Build from
   source explicitly directs paranoid operators / users to clone
   the repo, build locally, and pin their own.  The whole point of
-  AGPL-3.0 + `npm run build:manifest` reproducibility (brag #215)
+  AGPL-3.0 + `npm run build:manifest` reproducibility (brag #222)
   is that any user can verify "the bytes I'm running match the
   bytes I see in the repo at this commit."
 - **Multi-eyes review of any release** — pre-launch, releases

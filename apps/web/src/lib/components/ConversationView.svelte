@@ -50,6 +50,7 @@
 	import FundsSentModal from '$components/FundsSentModal.svelte';
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
+	import { isUsdtNetwork, type UsdtNetwork } from '$lib/assets/networks';
 	import { recordFundsSent } from '$lib/trades/tradeStatus';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -264,6 +265,13 @@
 		method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc';
 		amount?: string;
 		orderPermlink?: string;
+		// cp26 DD-7 fix — pill's "Mark as sent" button now passes
+		// USDT network through to FundsSentModal so the buyer
+		// doesn't have to re-pick the network they already saw
+		// in the chat header.  This was a pre-existing UX gap that
+		// only became fixable after cp26 wired the network field
+		// through the AddressPayload wire shape (cp3 inline-fix).
+		network?: string;
 	} | null>(null);
 	/** Phase F.3 — pay-now BLURT flow.  When non-null, mounts
 	 *  PayBlurtModal with the captured details.  Phase F.4 adds
@@ -373,6 +381,7 @@
 		method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc';
 		amount?: string;
 		orderPermlink?: string;
+		network?: string;
 	}): void {
 		markSentArgs = args;
 		showFundsSentModal = true;
@@ -962,6 +971,18 @@
 		{orderPermlink}
 		initialMethod={markSentArgs?.method ?? 'btc'}
 		initialAmount={markSentArgs?.amount ?? ''}
+		initialUsdtNetwork={
+			/* cp26 DD-7 fix — propagate the USDT network from the
+			   pill the user tapped, so they don't have to re-pick
+			   the network they already saw in the chat header.
+			   Validate via isUsdtNetwork to defend against a
+			   garbage `network` value somehow arriving here (e.g.
+			   from a malformed pre-cp26 payload); fall through to
+			   null on mismatch so the picker re-prompts. */
+			markSentArgs?.network !== undefined && isUsdtNetwork(markSentArgs.network)
+				? (markSentArgs.network as UsdtNetwork)
+				: null
+		}
 		onShare={handleFundsSent}
 		onCancel={() => {
 			showFundsSentModal = false;
