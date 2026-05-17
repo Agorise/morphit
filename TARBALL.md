@@ -1,6 +1,150 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 22 — interactive disable-trade-only-asset wizard step.  Closes the cp21 UX gap where the env-var path for `MORPHIT_INDEXER_DISABLED_ASSETS` worked but the `morphit-ops init` wizard had no interactive prompt for the disable decision.  SHIPPED: (a) New wizard step 13 "Trade-only asset policy" between stepChatLinkExplorers and stepListingFee in apps/ops-cli/src/init/steps.ts.  Iterates `ASSETS.filter(a => a.canBeTraded && !a.canPayListingFee)` from canonical registry; surfaces USDT + BCH today, future Category-B additions surface automatically.  Per-ticker Y/n prompt with default YES (Memory #25), brief description from wizard-side `CATEGORY_B_DESCRIPTIONS` map, decision echo + final-stance summary before proceeding.  (b) `DisabledAssetsResult` interface with alphabetized `disabledTickers: readonly string[]`.  (c) TOTAL_STEPS 17→18 + renumbered existing steps 13-16 → 14-17 + fixed two pre-existing section-comment drifts ("Step 12: Daily DB backup" was stale → "Step 16"; "Step 17/18: Matrix surfaces" ambiguous → "Step 18").  (d) `render.ts` emission — new "Trade-only asset policy (indexer)" block in renderConfig() with operator-facing comment header + `MORPHIT_INDEXER_DISABLED_ASSETS=` line; empty set → empty string (accept-all).  (e) `init.ts` orchestrator — stepDisabledAssets call + disabledAssets field in WizardAnswers + printReview line surfacing the stance; added missing "BCH chat-link URL" line to printReview while there (cp21 oversight).  (f) New smoke `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts` — 17 scenarios pinning Category-B filter, fee_method enum invariants, CATEGORY_B_DESCRIPTIONS coverage, 4 env-emission variants, parser round-trip, step exports, init.ts wiring, render.ts emission, TOTAL_STEPS=18, step 13 named "Trade-only asset policy".  17/17 ✓ first run.  Registered in scripts/run-smokes.sh after bch-trade-only-smoke.  Smoke baseline 3,200 → 3,217.  DOCS: OPERATIONS.md trade-only-asset section header bumped + new "How to set this (two paths)" subsection at top (wizard recommended, post-deploy env-edit still works on existing instances); RUN-A-MORPHIT-NODE.md "Decide your operator stance" leads with wizard step then shows equivalent env-edits; PRE-LAUNCH-CHECKLIST.md smoke baseline 3,200→3,217 + stance item rewritten to lead with "The wizard handles this for you"; ADR-0023 + ADR-0024 each gained 2026-05-17 forward-note pointing at cp22 UX closure (design contracts unchanged); MORPHIT-BRAG-LIST entry #272 + smoke 3,200+→3,217+ + footer 271→272; RELEASE-NOTES smoke 3,200→3,217.  Mediakit rebuild scheduled after cp22 brag-list edit.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 23 — fresh cross-cutting deep-deep on cp20/21/22 caught 9 real bugs/drifts + 4 orphan-key cleanups that the in-pass DDs missed.  Ken's prompt: "time for a deep deep on all that recent work."  PATTERN: every HIGH finding has the same shape — cp21 added BCH to canonical sources (asset registry, chat payload, primary UI dispatches) but missed downstream consumers typed against `AssetTicker` / `PricedSymbol`, hardcoded enumerations, and stale documentation.  HIGH-severity fixes: DD-23-1 prices/index.ts `internalStore` + `reset()` missing `BCH: null` (BCH price would never store/cache/render); DD-23-2 coingecko.ts `COINGECKO_IDS` missing `BCH: 'bitcoin-cash'`; DD-23-3 fallback.ts `FALLBACK_USD` missing `BCH: 400`; DD-23-4 cheat-sheet hardcoded 4-asset list missing BCH row; DD-23-8 payment-method registry + indexer RESERVED_CANONICAL_KEYS missing `pay_bch` (brag #205 BCH-barter claim was UI-incomplete); DD-23-13 docs/API.md asset filter + trade_count_by_asset example missing BCH; DD-23-16 llms.txt + llms-full.txt (5 references) missing BCH.  MEDIUM/LOW: DD-23-5 + DD-23-9 four BCH orphan i18n keys removed across all 10 locales (parity 2,563→2,559); DD-23-12 schema.sql v32 comment stale; DD-23-14 GRANDMA-FRIENDLY-INVESTIGATION stale-status notes.  VERIFIED-OK (no action): DD-23-10 BCH legacy P2PKH/P2SH regex identical to BTC P2PKH/P2SH (ADR-0024 §4 accepted tradeoff intact); DD-23-11 order handler asset_network else-branch correctly forces NULL for BCH.  No new smokes (existing reserved-keys-parity-smoke caught DD-23-8 the moment fix landed; usdt/bch-trade-only smokes triple-pulse green; sandbox-typecheck would have caught DD-23-1/2/3 if it could run).  Smoke baseline unchanged at 3,217; locale parity 2,562→2,559 (4 orphan keys removed); 14 files modified.  No mediakit rebuild needed (no brag-list edits in cp23).)
 
 **Snapshot date:** 2026-05-17
+
+---
+
+## cp23 — Fresh cross-cutting deep-deep on cp20/21/22 (Part 122)
+
+Ken: "time for a deep deep on all that recent work."
+
+Cp21 (BCH addition) and cp22 (wizard step) each had their own
+in-pass DD that found real bugs.  Cp23 takes a FRESH adversarial
+pass days later with a black-hat + downstream-consumer-audit +
+doc-vs-code-drift lens.  The in-pass DDs reason from the same
+mental model as the work itself; a fresh DD catches a different
+class entirely.
+
+### Findings summary
+
+| ID         | Sev    | Location                                          | Status |
+|------------|--------|---------------------------------------------------|--------|
+| DD-23-1    | HIGH   | apps/web/src/lib/prices/index.ts (×2)             | FIXED  |
+| DD-23-2    | HIGH   | apps/web/src/lib/prices/providers/coingecko.ts    | FIXED  |
+| DD-23-3    | HIGH   | apps/web/src/lib/prices/providers/fallback.ts     | FIXED  |
+| DD-23-4    | HIGH   | apps/web/src/routes/[lang]/cheat-sheet/+page      | FIXED  |
+| DD-23-5    | LOW    | i18n × 10 locales (home.asset_subtitles.bch)      | FIXED  |
+| DD-23-8    | HIGH   | payment-method registry + indexer reserved keys   | FIXED  |
+| DD-23-9    | LOW    | i18n × 10 locales (3 orphan assets.bch.* keys)    | FIXED  |
+| DD-23-10   | LOW    | BCH legacy regex == BTC regex                     | VERIFIED OK |
+| DD-23-11   | LOW    | order handler asset_network else-branch           | VERIFIED OK |
+| DD-23-12   | LOW    | schema.sql v32 comment                            | FIXED  |
+| DD-23-13   | HIGH   | docs/API.md asset filter + example                | FIXED  |
+| DD-23-14   | MED    | docs/GRANDMA-FRIENDLY-INVESTIGATION.md            | FIXED  |
+| DD-23-16   | HIGH   | llms.txt + llms-full.txt (5 refs)                 | FIXED  |
+
+**Total:** 9 real bugs/drifts fixed, 2 orphan-key cleanups, 2
+verified-OK.
+
+### Files changed (14 total)
+
+Code:
+- `apps/web/src/lib/prices/index.ts` — `BCH: null` added to
+  `internalStore` initial state + `reset()` function.
+- `apps/web/src/lib/prices/providers/coingecko.ts` —
+  `BCH: 'bitcoin-cash'` added to `COINGECKO_IDS` Record.
+- `apps/web/src/lib/prices/providers/fallback.ts` —
+  `BCH: 400` added to `FALLBACK_USD` Record.
+- `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte` —
+  BCH row added between USDT and `</dl>` (i18n key already
+  shipped in cp21).
+- `apps/web/src/lib/payments/registry.ts` — `pay_bch` entry
+  added after `pay_usdt`, with `assetExclusion: 'BCH'`
+  + appropriate operator-facing description.
+- `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`
+  — `pay_bch` added to `RESERVED_CANONICAL_KEYS` Set.
+  Verified by reserved-keys-parity-smoke (1/1 ✓).
+- `apps/indexer/src/db/schema.sql` — v32 migration comment +
+  supportedNetworks comment updated from "BTC/XMR/BLURT" to
+  "BTC/XMR/BLURT/BCH".
+
+Docs:
+- `docs/API.md` — asset filter row + trade_count_by_asset_*
+  example response now include BCH.
+- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — items 1.1 +
+  cheat-sheet status notes updated to mention BCH context.
+
+Crawler-facing static content:
+- `apps/web/static/llms.txt` — top descriptor updated.
+- `apps/web/static/llms-full.txt` — 5 separate references
+  updated (top descriptor, asset-model paragraph, cannot-model
+  paragraph, vice-versa combinations + new BCH barter example,
+  "four assets traded here" → "five").
+
+i18n × 10 locales:
+- `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json`
+  — `home.asset_subtitles.bch` removed (orphan key);
+  `assets.bch.{displayName, oneLineDescription, disabled_on_instance}`
+  removed (3 orphan keys); empty `assets.bch` parent object
+  dropped.  Parity 2,563 → 2,559 keys × 10 = 25,590 total.
+
+Chronicle:
+- `docs/REVISIT-LIST.md` — cp23 entry prepended.
+- `TARBALL.md` — this entry.
+
+### Persona walkthroughs (re-walked cp21 + cp22 + cp23)
+
+- **Sally-user (post-cp23, fresh browse):** Opens orderbook.
+  BCH orders visible.  Click an order → can chat with seller.
+  Address-share modal carries BCH tab (cp21).  Funds-sent
+  modal carries BCH tab (cp21).  Live BCH/USD price renders on
+  the order row (cp23 DD-23-1/2/3 closure).  Cheat-sheet
+  reachable from footer, includes BCH row (cp23 DD-23-4
+  closure).  Picker can select "Bitcoin Cash (BCH)" as a
+  payment method when posting (cp23 DD-23-8 closure).
+- **Sally-operator (fresh `morphit-ops init` post-cp23):**
+  Wizard step 13 "Trade-only asset policy" walks through USDT +
+  BCH per-ticker (cp22).  Step 12 chat-link explorer collects
+  BCH URL (cp21).  No code path missing.
+- **Bob (experienced Blurt user post-cp23):** Existing
+  workflows unchanged.  BCH chat payloads encode + decode
+  cleanly (cp21 DD-cp21-6/7/8 fixes).  CashAddr URI works
+  (cp21 DD-cp21-6 fix).  Activity dashboard at /explorer/activity
+  shows BCH volume (cp21 — registry-driven, was always correct).
+
+### Pattern lessons
+
+1. **Fresh DD ≠ in-pass DD.**  Same author, same work, days
+   later with cross-cutting framing → 9 new findings in
+   COMPLETELY DIFFERENT files than the in-pass DDs found.
+   Memory's persona-walkthrough discipline is one form of
+   this; "audit downstream typed consumers of canonical
+   sources" is another.
+
+2. **TypeScript `Record<K, V>` exhaustiveness is load-bearing
+   — when typecheck can't run, multiple gaps appear.**
+   Sandbox `svelte-check` failure (svelte/store module
+   resolution) masked DD-23-1/2/3.  When a check is broken,
+   treat its presumed coverage as zero, not as "probably
+   caught it."  Filed for cp24+: bring the typecheck path
+   back online so these don't slip future asset additions.
+
+3. **Crawler-facing static files (llms.txt, llms-full.txt)
+   drift like docs but get LLM-distributed.**  Cp21's BCH
+   addition was correct on the actual /faq pages but stale on
+   the static crawler files.  Should be in the "every place
+   USDT is mentioned" sweep per Ken's cp21 principle.  Pre-
+   launch is the right time to fix; post-launch these are in
+   LLM training corpora.
+
+4. **Orphan i18n keys are speculative debt.**  Cp21 added 4
+   orphan BCH keys speculatively.  Removed cleanly with no UX
+   impact.  USDT has symmetric orphans from cp3 — pre-existing
+   debt that cp23 noted but didn't touch (would be a separate
+   cp24 hygiene pass).
+
+5. **Brag-list claims are checkable invariants.**  Brag #205
+   (BCH barter), #202 (CashAddr QR), #200 (BCH activity
+   dashboard), #271 (BCH on Morphit) each have downstream code
+   consequences.  Cross-check pattern for next coin addition:
+   walk the new brag-list entries and grep each named feature
+   in code to verify the claim.
+
+### Resume directive
+
+Cp23 sealed.  Solo-parked items per memory: launch ceremony at
+T-5 days (VM Ansible deploy, real v-tag push, v1.0.0-beta.1
+ceremony).
 
 ---
 

@@ -46,7 +46,11 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// dips during peg-stress events.  The frontend order-row
 	// subline reads this value so users see actual peg state
 	// rather than an assumed $1.00.
-	USDT: 'tether'
+	USDT: 'tether',
+	// Part 122 cp21 — Bitcoin Cash.  Coingecko's `bitcoin-cash`
+	// ID returns live BCH/USD.  Same posture as BTC: transparent
+	// asset, no privacy-warning chip, single-network mainnet.
+	BCH: 'bitcoin-cash'
 };
 
 /** Max response body size from CoinGecko. Real responses are

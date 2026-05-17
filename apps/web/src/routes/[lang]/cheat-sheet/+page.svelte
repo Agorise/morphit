@@ -124,6 +124,10 @@
 				<dt>USDT</dt>
 				<dd>{$_('cheat_sheet.section_assets.usdt')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>BCH</dt>
+				<dd>{$_('cheat_sheet.section_assets.bch')}</dd>
+			</div>
 		</dl>
 	</section>
 

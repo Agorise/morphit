@@ -225,7 +225,7 @@ Query parameters (all optional):
 
 | Param            | Type    | Description |
 |---|---|---|
-| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, or `USDT` |
+| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, or `BCH` |
 | `asset_network`  | string  | For multi-network assets (USDT today): `erc20`, `trc20`, `spl`, or `bep20` |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217 e.g. `USD`, `EUR` |
@@ -562,9 +562,9 @@ Aggregate trading-activity stats for the Morphit instance.
 
 ```json
 {
-  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6 },
-  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24 },
-  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72 },
+  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6, "BCH": 3 },
+  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24, "BCH": 11 },
+  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72, "BCH": 28 },
   "volume_estimate_by_asset_30d": {
     "BTC": "0.42",
     "XMR": "23.0",

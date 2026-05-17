@@ -116,6 +116,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// itself doesn't disambiguate network.
 		assetExclusion: 'USDT'
 	},
+	{
+		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment
+		// method.  Same Category-B semantics as USDT: when the
+		// trade's traded asset is BCH, "pay with BCH" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, BCH appears as a selectable payment-rail chip.
+		// Single-network mainnet, so no per-network picker —
+		// CashAddr URI handles both bare and prefixed forms via
+		// `buildPaymentUri` in chat/payload.ts.
+		key: 'pay_bch',
+		name: 'Bitcoin Cash (BCH)',
+		url: 'https://bitcoincash.org',
+		category: 'crypto',
+		assetExclusion: 'BCH'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of
