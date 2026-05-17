@@ -431,15 +431,17 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 271. **Bitcoin Cash (BCH) peer-to-peer.** Trade Bitcoin Cash on Morphit — bigger blocks, lower per-transaction fees than BTC, transparent and decentralized like BTC with no issuer who can freeze addresses. Single-network mainnet (no cross-network footguns the way USDT has). Address validator accepts both CashAddr (the modern BCH format, with or without the `bitcoincash:` prefix) and legacy P2PKH/P2SH addresses (which most BCH wallets still emit and accept), so users paste whatever format their wallet gives them and the form just works. Like USDT, BCH is trade-only on Morphit — listing fees stay BLURT/BTC/XMR (the fee-method wire format is invariant per Memory #23). Operators can disable BCH per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`; the wider federated marketplace keeps trading BCH regardless of any single operator's stance.
 
-272. **Setup wizard handles trade-only-asset opt-out — no manual env-file editing.** The `morphit-ops init` wizard, step 13 "Trade-only asset policy", walks operators through every shipped trade-only asset (USDT, BCH, plus any future Category-B addition) and asks per-ticker whether to enable it. Default is enabled for each (so the privacy-and-decentralization-first canonical posture still ships everything on). Pick "n" at any prompt and the wizard emits the correct `MORPHIT_INDEXER_DISABLED_ASSETS=` line into morphit.config.env automatically — alphabetized for diff-friendly env files. Iterates the canonical asset registry filtered to `canBeTraded && !canPayListingFee`, so future trade-only assets surface in the wizard without per-asset wizard code. Re-run the wizard to change your mind; the operator-stance UX matches the brag-#269 "your instance, your asset policy" promise without expecting operators to know which env var to edit.
+272. **Setup wizard handles trade-only-asset opt-out — no manual env-file editing.** The `morphit-ops init` wizard, step 13 "Trade-only asset policy", walks operators through every shipped trade-only asset (USDT, BCH, LTC, plus any future Category-B addition) and asks per-ticker whether to enable it. Default is enabled for each (so the privacy-and-decentralization-first canonical posture still ships everything on). Pick "n" at any prompt and the wizard emits the correct `MORPHIT_INDEXER_DISABLED_ASSETS=` line into morphit.config.env automatically — alphabetized for diff-friendly env files. Iterates the canonical asset registry filtered to `canBeTraded && !canPayListingFee`, so future trade-only assets surface in the wizard without per-asset wizard code. Re-run the wizard to change your mind; the operator-stance UX matches the brag-#269 "your instance, your asset policy" promise without expecting operators to know which env var to edit.
+
+273. **Litecoin (LTC) peer-to-peer.** Trade Litecoin on Morphit — fast 2.5-minute blocks, low transaction fees, transparent and decentralized like Bitcoin with no central issuer who can freeze addresses. Single-network mainnet, same low-footgun shape as BCH. Address validator accepts all four LTC address forms: legacy P2PKH (L…, unambiguous with Bitcoin's 1… form since LTC chose a distinct prefix), modern P2SH (M…, introduced 2017 to disambiguate from Bitcoin's 3… form), deprecated-but-still-valid P2SH (3…), and bech32/bech32m SegWit (ltc1q… and ltc1p… for taproot). Users paste whatever address their wallet emits and the form accepts it; recipient wallet does chain-binding on the receiving end. Like USDT and BCH, LTC is trade-only on Morphit — listing fees stay BLURT/BTC/XMR (the fee-method wire format is invariant per Memory #23). Operators can disable LTC per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`; the wider federated marketplace keeps trading LTC regardless of any single operator's stance.
 
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,217+ self-checks across 140+ runners**, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,231+ self-checks across 140+ runners**, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0024-*.md`
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0025-*.md`
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`
@@ -451,4 +453,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*272 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*
+*273 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*

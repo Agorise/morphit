@@ -1890,15 +1890,17 @@ the env var directly.  Both paths write the same line.
 
 Reasonable positions for an operator:
 
-1. **Accept USDT and BCH** (default) — the canonical morphit.io
-   posture.  Users have asked for stablecoin trading and for a
-   wider Bitcoin-fork rail.  Pick the default "Y" at each
-   prompt; the wizard emits `MORPHIT_INDEXER_DISABLED_ASSETS=""`.
+1. **Accept USDT, BCH, and LTC** (default) — the canonical
+   morphit.io posture.  Users have asked for stablecoin trading
+   and for wider Bitcoin-fork rails.  Pick the default "Y" at
+   each prompt; the wizard emits
+   `MORPHIT_INDEXER_DISABLED_ASSETS=""`.
 
 2. **Refuse one specific asset instance-wide** — pick "n" for
    that asset at the wizard prompt; the wizard emits e.g.
-   `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"` or
-   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`, or
+   `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`.
 
    Equivalent post-deploy env-file edit:
 
@@ -1909,6 +1911,10 @@ Reasonable positions for an operator:
    # Refuse BCH only (privacy-focused operators may prefer
    # BTC + XMR rails and skip Bitcoin Cash)
    MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
+
+   # Refuse LTC only (operators specializing in Bitcoin +
+   # privacy-coin trading without BTC-fork variants)
+   MORPHIT_INDEXER_DISABLED_ASSETS="LTC"
    ```
 
    You'll still see those orders from peer instances in your
@@ -1917,16 +1923,19 @@ Reasonable positions for an operator:
 
 3. **Refuse multiple assets** — pick "n" at multiple wizard
    prompts; the wizard alphabetizes and emits e.g.
-   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"`.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,USDT"`.
 
    Equivalent post-deploy env-file edit:
 
    ```bash
-   # Refuse both stablecoins and Bitcoin Cash (BTC + XMR + BLURT only)
-   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH"
+   # Refuse BCH + LTC (Bitcoin + XMR + BLURT + USDT only)
+   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC"
+
+   # Refuse both stablecoins and Bitcoin-forks (BTC + XMR + BLURT only)
+   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,USDT"
 
    # Future-compat with assets not yet in the registry
-   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,DAI,USDC"
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC,DAI,USDC"
    ```
 
    (`DAI` and `USDC` aren't currently in the canonical

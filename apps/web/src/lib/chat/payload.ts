@@ -126,6 +126,25 @@ const BCH_LEGACY_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
  *  same hash function as BTC). */
 const BCH_TXID_RE = /^[0-9a-f]{64}$/;
 
+/** LTC address regexes (Part 122 cp24).
+ *  LTC has three address-shape eras:
+ *  (1) Legacy P2PKH starting with `L` (unambiguous with BTC's `1`).
+ *  (2) Legacy P2SH — two variants: modern `M`-prefix (introduced
+ *      2017 to disambiguate) and deprecated `3`-prefix (still
+ *      valid on the LTC chain; BTC-shape ambiguous — see
+ *      ADR-0025 §4 for the accepted tradeoff matching ADR-0024 §4
+ *      for BCH).  Recipient wallet does chain-binding on receive.
+ *  (3) Bech32 / Bech32m with `ltc1` prefix (segwit + taproot).
+ *  Permissive shape check — not a checksum. */
+const LTC_LEGACY_P2PKH_RE = /^L[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_LEGACY_P2SH_M_RE = /^M[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_LEGACY_P2SH_3_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_BECH32_RE = /^ltc1[02-9ac-hj-np-z]{6,87}$/;
+
+/** LTC txid: 64 lowercase hex chars (sha256d, same as BTC/BCH). */
+const LTC_TXID_RE = /^[0-9a-f]{64}$/;
+
+
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
  *  account-name regex as the rest of Morphit (post chat-audit
@@ -308,7 +327,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  Part 122 cp21 BCH addition: 'bch' is single-network (mainnet
  *  only).  No network field required.  Addresses come in CashAddr
  *  or legacy formats — see BCH_*_RE constants. */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch' | 'ltc';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -444,6 +463,29 @@ export function isValidBchTxid(s: string): boolean {
 	return BCH_TXID_RE.test(s);
 }
 
+/** Validate an LTC address shape (Part 122 cp24).  Accepts the
+ *  four current LTC formats: legacy P2PKH (`L...`), modern P2SH
+ *  (`M...`), deprecated P2SH (`3...` — BTC-shape ambiguous per
+ *  ADR-0025 §4), and bech32/bech32m (`ltc1...`).  Permissive
+ *  shape check; the receiving wallet does checksum and
+ *  chain-binding validation. */
+export function isValidLtcAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return (
+		LTC_LEGACY_P2PKH_RE.test(s) ||
+		LTC_LEGACY_P2SH_M_RE.test(s) ||
+		LTC_LEGACY_P2SH_3_RE.test(s) ||
+		LTC_BECH32_RE.test(s)
+	);
+}
+
+/** Validate an LTC txid shape.  Same 64-char lowercase hex
+ *  format as BTC (sha256d of the transaction). */
+export function isValidLtcTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return LTC_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -451,6 +493,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'blurt') return isValidBlurtAccount(addr);
 	if (method === 'usdt') return isValidUsdtAddress(addr);
 	if (method === 'bch') return isValidBchAddress(addr);
+	if (method === 'ltc') return isValidLtcAddress(addr);
 	return false;
 }
 
@@ -462,6 +505,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'blurt') return BLURT_TXID_RE.test(txid);
 	if (method === 'usdt') return isValidUsdtTxid(txid);
 	if (method === 'bch') return isValidBchTxid(txid);
+	if (method === 'ltc') return isValidLtcTxid(txid);
 	return false;
 }
 
@@ -482,7 +526,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'xmr' &&
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
-		p.method !== 'bch'
+		p.method !== 'bch' &&
+		p.method !== 'ltc'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -562,7 +607,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'xmr' &&
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
-		p.method !== 'bch'
+		p.method !== 'bch' &&
+		p.method !== 'ltc'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -659,7 +705,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'xmr' &&
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
-			o.method !== 'bch'
+			o.method !== 'bch' &&
+			o.method !== 'ltc'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -682,7 +729,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'xmr' &&
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
-			o.method !== 'bch'
+			o.method !== 'bch' &&
+			o.method !== 'ltc'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -834,6 +882,18 @@ export function buildPaymentUri(p: AddressPayload): string {
 			? p.address
 			: `bitcoincash:${p.address}`;
 		return `${addr}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'ltc') {
+		// Litecoin uses the `litecoin:` URI scheme — BIP-21
+		// conformant (same shape as BTC's `bitcoin:` scheme since
+		// the LTC fork preserved Bitcoin's URI conventions).
+		// `amount` parameter is decimal LTC, BIP-21 standard.
+		// LTC addresses don't need prefix-wrapping like CashAddr
+		// — every modern format (L.../M.../3.../ltc1...) is
+		// unambiguous within the LTC URI scheme.
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `litecoin:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

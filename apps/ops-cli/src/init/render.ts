@@ -476,6 +476,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(
 		`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bch)}`
 	);
+	lines.push(
+		`MORPHIT_FRONTEND_LTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ltc)}`
+	);
 	lines.push('');
 
 	// ─── Trade-only asset policy (Part 122 cp22) ─────────────────

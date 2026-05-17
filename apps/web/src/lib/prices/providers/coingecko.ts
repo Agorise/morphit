@@ -50,7 +50,11 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// Part 122 cp21 — Bitcoin Cash.  Coingecko's `bitcoin-cash`
 	// ID returns live BCH/USD.  Same posture as BTC: transparent
 	// asset, no privacy-warning chip, single-network mainnet.
-	BCH: 'bitcoin-cash'
+	BCH: 'bitcoin-cash',
+	// Part 122 cp24 — Litecoin.  Coingecko's `litecoin` ID
+	// returns live LTC/USD.  Same posture as BTC: transparent
+	// asset, no privacy-warning chip, single-network mainnet.
+	LTC: 'litecoin'
 };
 
 /** Max response body size from CoinGecko. Real responses are

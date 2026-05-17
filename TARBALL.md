@@ -1,6 +1,124 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 23 — fresh cross-cutting deep-deep on cp20/21/22 caught 9 real bugs/drifts + 4 orphan-key cleanups that the in-pass DDs missed.  Ken's prompt: "time for a deep deep on all that recent work."  PATTERN: every HIGH finding has the same shape — cp21 added BCH to canonical sources (asset registry, chat payload, primary UI dispatches) but missed downstream consumers typed against `AssetTicker` / `PricedSymbol`, hardcoded enumerations, and stale documentation.  HIGH-severity fixes: DD-23-1 prices/index.ts `internalStore` + `reset()` missing `BCH: null` (BCH price would never store/cache/render); DD-23-2 coingecko.ts `COINGECKO_IDS` missing `BCH: 'bitcoin-cash'`; DD-23-3 fallback.ts `FALLBACK_USD` missing `BCH: 400`; DD-23-4 cheat-sheet hardcoded 4-asset list missing BCH row; DD-23-8 payment-method registry + indexer RESERVED_CANONICAL_KEYS missing `pay_bch` (brag #205 BCH-barter claim was UI-incomplete); DD-23-13 docs/API.md asset filter + trade_count_by_asset example missing BCH; DD-23-16 llms.txt + llms-full.txt (5 references) missing BCH.  MEDIUM/LOW: DD-23-5 + DD-23-9 four BCH orphan i18n keys removed across all 10 locales (parity 2,563→2,559); DD-23-12 schema.sql v32 comment stale; DD-23-14 GRANDMA-FRIENDLY-INVESTIGATION stale-status notes.  VERIFIED-OK (no action): DD-23-10 BCH legacy P2PKH/P2SH regex identical to BTC P2PKH/P2SH (ADR-0024 §4 accepted tradeoff intact); DD-23-11 order handler asset_network else-branch correctly forces NULL for BCH.  No new smokes (existing reserved-keys-parity-smoke caught DD-23-8 the moment fix landed; usdt/bch-trade-only smokes triple-pulse green; sandbox-typecheck would have caught DD-23-1/2/3 if it could run).  Smoke baseline unchanged at 3,217; locale parity 2,562→2,559 (4 orphan keys removed); 14 files modified.  No mediakit rebuild needed (no brag-list edits in cp23).)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 24 — Litecoin addition: LTC wired end-to-end as Category-B trade-only single-network asset following the matured USDT (cp3) + BCH (cp21) template, with cp23-DD-class downstream consumers closed PROACTIVELY in the same checkpoint rather than waiting for a follow-on DD.  Canonical asset registry (ASSET_TICKERS + LTC AssetEntry, canPayListingFee=false, canBeTraded=true, supportedNetworks=['mainnet'], defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, L/M/3/ltc1 address regex per ADR-0025 §4 4-format tradeoff).  ChatAssetTicker union extended with 'ltc'; 5 LTC regex constants + isValidLtcAddress/isValidLtcTxid + dispatchers + 4 dispatch gates widened in chat/payload.ts (cp23 DD-cp21-7/8 lesson learned — widened from the start); litecoin: URI scheme in buildPaymentUri.  Frontend assets registry (validateLtc + entry: accentClass text-slate-400, logoSvgPath /icons/icon-ltc.svg).  Explorer URL plumbing (LTC_TXID_RE + BUNDLED_LTC_CHAT_LINK_URL=litecoinspace.org/tx/{txid} in urlsCore — chosen from Ken's 7-explorer survey as LTC-equivalent of mempool.space, community-led no-tracking; 'LTC' added to ExternalAsset type + EXPLORER_REGISTRY entry; chat_link_urls.ltc in instance store + fallback + fetch handler; chat_link_urls.ltc in indexer InstanceResponse + body; MORPHIT_FRONTEND_LTC_CHAT_LINK_URL Zod schema + Config field + builder mapping; ltc?: in matrix-bot ChatLinkUrlsSchema).  ops-cli wizard step 12 extended (DEFAULT_LTC_CHAT_LINK_URL + ChatLinkExplorersResult.ltc + LTC prompt with reachability probe + render.ts emits MORPHIT_FRONTEND_LTC_CHAT_LINK_URL + init.ts printReview line).  ops-cli wizard step 13 (cp22 disable-asset wizard): CATEGORY_B_DESCRIPTIONS map gained LTC entry; filter `canBeTraded && !canPayListingFee` automatically surfaces LTC.  i18n × 10 locales: 8 new LTC keys per locale (NOT 11 like BCH initially — learning from cp23 DD-23-5/9 orphan lessons): chat.address.{method_ltc, address_placeholder_ltc, address_invalid_ltc, pill_method_ltc}, chat.funds_sent.pill_title_ltc, cheat_sheet.section_assets.ltc, payment_method.pay_ltc.description, post_order.form.asset_explainer.ltc.  Skipped 4 orphan-candidate keys cp23 DD removed for BCH.  Parity 2,559→2,567 keys × 10 = 25,670.  UI dispatches (AddressShareModal LTC tab + placeholder + invalid-msg; FundsSentModal LTC tab; ChatMessage LTC branches in 4 dispatch sites + type unions widened ×2 + guard widened; ConversationView types widened ×2; post-order page LTC tooltip block).  New ltc-trade-only-smoke (13 scenarios mirroring bch-trade-only pattern + tests all 4 LTC address formats; registered in run-smokes.sh); disabled-assets-wizard-smoke updated to expect 3 Category-B (17→18 scenarios).  Smoke baseline 3,217→3,231.  LTC SVG logo placeholder at apps/web/static/icons/icon-ltc.svg (silver disc with stylized Ł).  ADR-0025 (Litecoin trade-only addition, 8 design decisions).  cp23-DD-class proactive closure: prices/index.ts internalStore + reset() have LTC:null; coingecko.ts COINGECKO_IDS has LTC:'litecoin'; fallback.ts FALLBACK_USD has LTC:100; cheat-sheet has LTC row; payment-method registry has pay_ltc; indexer RESERVED_CANONICAL_KEYS has pay_ltc (reserved-keys-parity-smoke green); schema.sql comments updated; API.md asset filter + trade_count examples updated; GRANDMA-FRIENDLY items 1.1 + cheat-sheet status notes mention LTC; llms.txt + llms-full.txt updated 6 references including new LTC barter example + "five"→"six".  Docs sync: README asset list updated; RELEASE-NOTES "Five"→"Six tradable assets" + LTC explanation + smoke count 3,217→3,231; MORPHIT-BRAG-LIST entry #273 + footer 272→273 + smoke count + ADR 0024→0025; OPERATIONS trade-only header + multi-coin examples + LTC chat-link subsection with 7 alternatives; RUN-A-MORPHIT-NODE operator-stance matrix expanded for LTC; PRE-LAUNCH-CHECKLIST smoke baseline + stance item + ADR refs.  Mediakit rebuild scheduled after brag-list edits.  PATTERN MATURATION: first asset addition where downstream typed-consumer maps ship same-day as canonical registry extension — the cp23-DD class is closed proactively, not as a follow-on.)
 
 **Snapshot date:** 2026-05-17
+
+---
+
+## cp24 — Litecoin (LTC) addition with proactive cp23-DD-class closure (Part 122)
+
+Ken: "add Litecoin (LTC). wire it up as well, and THEN do a deep
+deep on our latest work. remember, any place that usdt/bch/dash
+is mentioned, is probably also a good place to mention these new
+coins like litecoin, etc."  Plus 7 candidate LTC explorers.
+
+This is the THIRD Category-B trade-only single-network asset
+(USDT was first in cp3 with multi-network; BCH was second in
+cp21 with single-network).  By cp24 the template is fully
+matured.  cp24's notable difference: the cp23-DD-class downstream
+typed-consumer audit that found 9 BCH gaps after cp21 shipped is
+closed PROACTIVELY in the same checkpoint — not waiting for a
+follow-on DD.
+
+### Files changed in canonical addition pass (~30 across cp21-style surfaces)
+
+Canonical + chat + frontend + explorer + indexer + wizard:
+- `packages/asset-registry/src/index.ts` — ASSET_TICKERS + LTC entry
+- `apps/web/src/lib/chat/payload.ts` — 5 LTC regex + validators + dispatchers + 4 dispatch gates + buildPaymentUri LTC branch
+- `apps/web/src/lib/assets/registry.ts` — validateLtc + LTC entry
+- `apps/web/src/lib/explorer/urlsCore.ts` — LTC_TXID_RE + BUNDLED_LTC_CHAT_LINK_URL
+- `apps/web/src/lib/explorer/urls.ts` — ExternalAsset extended + EXPLORER_REGISTRY entry
+- `apps/web/src/lib/stores/instance.ts` — chat_link_urls.ltc field
+- `apps/indexer/src/config/index.ts` — frontendLtcChatLinkUrl + Zod schema + env mapping
+- `apps/indexer/src/api/instance.ts` — ltc in InstanceResponse
+- `apps/ops-cli/src/init/steps.ts` — DEFAULT_LTC_CHAT_LINK_URL + ChatLinkExplorersResult.ltc + LTC prompt + CATEGORY_B_DESCRIPTIONS entry
+- `apps/ops-cli/src/init/render.ts` — MORPHIT_FRONTEND_LTC_CHAT_LINK_URL emission
+- `apps/ops-cli/src/commands/init.ts` — LTC printReview line
+- `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — ltc in ChatLinkUrlsSchema
+
+UI dispatches:
+- `apps/web/src/lib/components/AddressShareModal.svelte` — LTC tab + 2 dispatches
+- `apps/web/src/lib/components/FundsSentModal.svelte` — LTC tab
+- `apps/web/src/lib/components/ChatMessage.svelte` — 4 LTC dispatches + 3 type widenings
+- `apps/web/src/lib/components/ConversationView.svelte` — 2 type widenings
+- `apps/web/src/routes/[lang]/post/+page.svelte` — LTC tooltip block
+
+Smokes:
+- `packages/asset-registry/scripts/ltc-trade-only-smoke.ts` — NEW (13 scenarios)
+- `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts` — 3 Category-B (17→18)
+- `scripts/run-smokes.sh` — ltc-trade-only registered
+
+i18n × 10 locales — 8 LTC keys per locale (NOT 11):
+- `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json`
+
+Logo:
+- `apps/web/static/icons/icon-ltc.svg` — silver disc + stylized Ł
+
+ADR:
+- `docs/adr/0025-litecoin-trade-only-addition.md` — NEW
+
+### Files changed in cp23-DD-class proactive closure (~10 surfaces)
+
+Price providers:
+- `apps/web/src/lib/prices/index.ts` — LTC:null in internalStore + reset()
+- `apps/web/src/lib/prices/providers/coingecko.ts` — LTC:'litecoin'
+- `apps/web/src/lib/prices/providers/fallback.ts` — LTC:100
+
+UI:
+- `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte` — LTC row
+
+Payment registry:
+- `apps/web/src/lib/payments/registry.ts` — pay_ltc entry
+- `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` — pay_ltc in RESERVED_CANONICAL_KEYS
+
+Schema:
+- `apps/indexer/src/db/schema.sql` — v32 comment + supportedNetworks comment updated
+
+Docs:
+- `docs/API.md` — asset filter + 3 trade_count_by_asset examples updated
+- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — 8 LTC-context updates
+
+Crawler-facing:
+- `apps/web/static/llms.txt` — top descriptor
+- `apps/web/static/llms-full.txt` — 6 references updated, new LTC barter example
+
+### Files changed in docs sync
+
+- `README.md` — asset list
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — five→six + smoke count
+- `MORPHIT-BRAG-LIST.md` — entry #273 + footer + smoke count + ADR range
+- `docs/OPERATIONS.md` — trade-only header + multi-coin examples + LTC subsection
+- `docs/RUN-A-MORPHIT-NODE.md` — operator-stance matrix
+- `docs/PRE-LAUNCH-CHECKLIST.md` — smoke baseline + stance item + ADR refs
+- `docs/REVISIT-LIST.md` — cp24 entry
+- `TARBALL.md` — this entry
+
+### Persona walkthroughs
+
+- **Sally-user (fresh browse post-cp24):** Picks LTC chip on /post.
+  Sees LTC tooltip explainer.  Selects payment method picker → "Pay
+  with Litecoin (LTC)" appears as a chip (cp24 DD-cp24-5 closure).
+  Posts the order.  Other user finds it; address-share modal has
+  LTC tab; pastes ltc1q… or L… or M… or 3… address.  Form accepts.
+  Funds-sent modal has LTC tab; pastes txid.  ChatMessage shows
+  clickable litecoinspace.org/tx/<txid> link.  Cheat-sheet
+  printable from footer has LTC row.
+- **Sally-operator (fresh `morphit-ops init` post-cp24):** Wizard
+  step 12 prompts for BTC, XMR, BCH, LTC chat-link URLs in order
+  (litecoinspace.org default for LTC).  Wizard step 13
+  "Trade-only asset policy" walks USDT + BCH + LTC per-ticker
+  with default YES.  Wizard alphabetizes any "n" choices and
+  emits MORPHIT_INDEXER_DISABLED_ASSETS line.
+- **Bob (experienced Blurt user post-cp24):** Existing workflows
+  unchanged.  LTC chat payloads encode + decode (the 4 dispatch
+  gates widened from the start, unlike BCH's cp21-DD discovery).
+  litecoin: URI works.  Activity dashboard at /explorer/activity
+  shows LTC volume (registry-driven, was always correct).
+
+### Resume directive
+
+Cp24 sealed pending Phase 16 deep-deep (Ken's request) + tarball.
+Work tree at `/home/claude/work/`.  Solo-parked items per memory:
+launch ceremony at T-5 days.
 
 ---
 

@@ -34,11 +34,14 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Trading
 
-- Five tradable assets out of the box: **BTC, XMR, BLURT, USDT, BCH**.
+- Six tradable assets out of the box: **BTC, XMR, BLURT, USDT, BCH, LTC**.
   USDT spans four networks (Ethereum / ERC-20, Tron / TRC-20,
   Solana / SPL, BNB Smart Chain / BEP-20) with a no-default-network
-  rule so users can't accidentally cross-send.  BCH is single-network
-  (mainnet) and trade-only like USDT — it cannot pay listing fees.
+  rule so users can't accidentally cross-send.  BCH and LTC are
+  single-network (mainnet) and trade-only like USDT — they cannot
+  pay listing fees.  LTC accepts all four address forms: legacy
+  P2PKH (L…), modern P2SH (M…), deprecated P2SH (3…), and
+  bech32/bech32m (ltc1…).
 - Listing fees in **BLURT, BTC, or XMR** — choice belongs to the
   poster.  Default operator-treasury target is ~$0.12/order.
 - **First buy of BLURT is fee-waived** — new users can post their
@@ -121,7 +124,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Audit and integrity
 
-- **3,217 self-checking smoke scenarios** ship with the source.
+- **3,231 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
 - **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public

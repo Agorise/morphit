@@ -239,6 +239,7 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  BTC chat-link URL:    ${answers.chatLinkExplorers.btc}`);
 	console.log(`  XMR chat-link URL:    ${answers.chatLinkExplorers.xmr}`);
 	console.log(`  BCH chat-link URL:    ${answers.chatLinkExplorers.bch}`);
+	console.log(`  LTC chat-link URL:    ${answers.chatLinkExplorers.ltc}`);
 	if (answers.disabledAssets.disabledTickers.length === 0) {
 		console.log(`  Trade-only assets:    all enabled (default)`);
 	} else {

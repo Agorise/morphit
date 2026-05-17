@@ -92,6 +92,13 @@ export interface InstanceResponse {
 		 *  frontend falls back to the bundled blockchair.com/
 		 *  bitcoin-cash default when null. */
 		bch: string | null;
+		/** Part 122 cp24 — LTC chat-link explorer URL override.
+		 *  Same pattern as BTC/XMR/BCH (single-network, single
+		 *  field).  Operator sets via
+		 *  MORPHIT_FRONTEND_LTC_CHAT_LINK_URL; frontend falls
+		 *  back to the bundled litecoinspace.org default when
+		 *  null. */
+		ltc: string | null;
 	};
 	/** Trade-only assets this instance has DISABLED via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
@@ -169,7 +176,8 @@ export function instanceRoute(config: Config): Hono {
 			chat_link_urls: {
 				btc: config.frontendBtcChatLinkUrl ?? null,
 				xmr: config.frontendXmrChatLinkUrl ?? null,
-				bch: config.frontendBchChatLinkUrl ?? null
+				bch: config.frontendBchChatLinkUrl ?? null,
+				ltc: config.frontendLtcChatLinkUrl ?? null
 			},
 			disabled_assets: config.disabledAssets,
 			operator_matrix_room: config.operatorMatrixRoom

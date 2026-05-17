@@ -8023,7 +8023,7 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
@@ -8082,14 +8082,25 @@ MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
 # BTC + XMR only)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
 
+# Refuse Litecoin (some operators specialize in Bitcoin +
+# privacy-coin trading without BTC-fork variants)
+MORPHIT_INDEXER_DISABLED_ASSETS="LTC"
+
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
 
 # Refuse three or more
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
 
-# Refuse BCH AND USDT (focus on BTC/XMR/BLURT only)
+# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/LTC)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
+
+# Refuse all three Bitcoin-fork variants (BTC + XMR + BLURT only,
+# possibly with USDT)
+MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC"
+
+# Refuse everything that isn't BLURT + XMR + BTC
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -8240,6 +8251,45 @@ probe-reachability check that the BTC and XMR URLs get.
 
 If you choose to disable BCH instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=BCH`, the chat-link config
+has no effect on your instance.
+
+### LTC chat-link explorer URL override (Part 122 cp24)
+
+LTC is single-network (mainnet only), so there's just one
+explorer URL to think about.  Same shape as BTC/XMR/BCH:
+
+```bash
+# Default (bundled) — operators don't need to set anything to
+# get this behavior:
+# MORPHIT_FRONTEND_LTC_CHAT_LINK_URL="https://litecoinspace.org/tx/{txid}"
+
+# Override to a self-hosted or alternative explorer:
+MORPHIT_FRONTEND_LTC_CHAT_LINK_URL="https://my-self-hosted-ltc-explorer.example.org/tx/{txid}"
+```
+
+`{txid}` is the placeholder substituted at render time with the
+lowercased transaction ID (LTC txids are hex like BTC).
+Validation: must be `https://`, must contain literal `{txid}`,
+must parse as a URL after substitution.  Invalid templates
+fail indexer startup with a clear error message.
+
+Alternative LTC explorers operators can point at — surveyed at
+Part 122 cp24 addition time:
+- https://litecoinspace.org (bundled default — community-led,
+  mempool.space-style, no JS tracking, open-source)
+- https://blockchair.com/litecoin
+- https://www.oklink.com/litecoin
+- https://bitinfocharts.com/litecoin/explorer/
+- https://chain.so/LTC
+- https://blockexplorer.one/litecoin/mainnet
+- https://ltc.tokenview.io/
+
+The ops-cli wizard step 12 (Chat-link external explorer URLs)
+asks for the LTC URL after BTC, XMR, and BCH with the same
+probe-reachability check that the others get.
+
+If you choose to disable LTC instance-wide via
+`MORPHIT_INDEXER_DISABLED_ASSETS=LTC`, the chat-link config
 has no effect on your instance.
 
 ### Schema migration v32 (Part 121)

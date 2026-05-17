@@ -26,6 +26,11 @@ export const XMR_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  normalizes to lowercase before URL construction. */
 export const BCH_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** LTC txid (Part 122 cp24).  64 hex chars (sha256d, same as
+ *  BTC and BCH since all three share Bitcoin's hash structure).
+ *  Case-insensitive at regex layer; substitution normalizes. */
+export const LTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -34,8 +39,8 @@ export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
 
 /** Bundled defaults used when an operator hasn't overridden
  *  the per-instance template (via
- *  `MORPHIT_FRONTEND_{BTC,XMR,BCH}_CHAT_LINK_URL`), or when the
- *  store hasn't loaded yet (SSR / pre-hydration / fetch fail).
+ *  `MORPHIT_FRONTEND_{BTC,XMR,BCH,LTC}_CHAT_LINK_URL`), or when
+ *  the store hasn't loaded yet (SSR / pre-hydration / fetch fail).
  *  Per the original Batch K choices:
  *   - mempool.space: no JS, no tracking, fast, popular
  *   - xmrchain.net: reference for Monero block explorers
@@ -45,6 +50,13 @@ export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
  *     candidate list as the best balance of reliability +
  *     URL-format predictability — operators wanting different
  *     defaults override via MORPHIT_FRONTEND_BCH_CHAT_LINK_URL)
+ *   - litecoinspace.org/tx/{txid}: community-led Litecoin
+ *     explorer modeled on mempool.space (no JS tracking, open
+ *     source, privacy-aligned with Morphit's priority #1).
+ *     Chosen from operator's seven-explorer candidate list as
+ *     the BTC-mempool-equivalent for LTC.  Operators wanting
+ *     different defaults override via
+ *     MORPHIT_FRONTEND_LTC_CHAT_LINK_URL.
  *
  *  Operators wanting different defaults override per-instance;
  *  these bundled values are the "do nothing, ship sensible"
@@ -53,6 +65,7 @@ export const BUNDLED_BTC_CHAT_LINK_URL = 'https://mempool.space/tx/{txid}';
 export const BUNDLED_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
 export const BUNDLED_BCH_CHAT_LINK_URL =
 	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
+export const BUNDLED_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

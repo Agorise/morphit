@@ -161,6 +161,9 @@ const ChatLinkUrlsSchema = z.object({
 	// Part 122 cp21 — BCH chat-link URL override.  Optional for
 	// back-compat with pre-cp21 indexer builds.
 	bch: z.string().nullable().optional(),
+	// Part 122 cp24 — LTC chat-link URL override.  Optional for
+	// back-compat with pre-cp24 indexer builds.
+	ltc: z.string().nullable().optional(),
 	usdt: z
 		.object({
 			erc20: z.string().nullable(),

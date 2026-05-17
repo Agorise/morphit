@@ -131,6 +131,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'BCH'
 	},
+	{
+		// Part 122 cp24 — Litecoin as a payment method.  Same
+		// Category-B semantics as BCH: when the trade's traded
+		// asset is LTC, "pay with LTC" is hidden (assetExclusion);
+		// when the traded asset is something else, LTC appears as
+		// a selectable payment-rail chip.  Single-network mainnet,
+		// so no per-network picker — litecoin: URI handles all
+		// address forms (L.../M.../3.../ltc1...) via the BIP-21
+		// derivative scheme.
+		key: 'pay_ltc',
+		name: 'Litecoin (LTC)',
+		url: 'https://litecoin.org',
+		category: 'crypto',
+		assetExclusion: 'LTC'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

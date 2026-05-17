@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/BCH marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/BCH/LTC marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -103,7 +103,7 @@ A note on the spam-deterrent escalation: post a lot of orders quickly (4+ in a 2
 
 **FAQ key:** `trade_goods_services`
 
-Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a crypto asset (BTC, XMR, BLURT, USDT, or BCH) on one side, and something else on the other side**. The "something else" can be:
+Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a crypto asset (BTC, XMR, BLURT, USDT, BCH, or LTC) on one side, and something else on the other side**. The "something else" can be:
 
 • A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)
 • A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)
@@ -113,7 +113,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City."`
 
-**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be BTC, XMR, BLURT, USDT, or BCH — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.
+**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be BTC, XMR, BLURT, USDT, BCH, or LTC — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.
 
 **Why this constraint?** Three reasons:
 
@@ -125,13 +125,14 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. "Bitso transfer for moringa trees" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.
 
-**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/BCH. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
+**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/BCH/LTC. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
 
 • Buy/sell BTC for USD via PayPal
 • Buy/sell XMR for cash in person
 • Buy/sell BLURT for BTC (crypto-for-crypto)
 • Buy/sell USDT (on Tron/Ethereum/Solana/BSC) for fiat via Wise
 • Buy/sell BCH for fiat via SEPA (CashAddr or legacy address — recipient wallet handles either)
+• Buy/sell LTC for fiat via SEPA (L… legacy, M… modern P2SH, ltc1… SegWit — recipient wallet handles all forms)
 • Buy XMR for orange trees (barter, with USD reference price)
 • Sell BTC for a cherry tree (barter, with USD reference price)
 • Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)
@@ -480,7 +481,7 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the five assets traded here, alongside BTC, XMR, USDT, and BCH. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
+**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the six assets traded here, alongside BTC, XMR, USDT, BCH, and LTC. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first BLURT buy — see "Is my first order really free?" for details. So your first BLURT acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 

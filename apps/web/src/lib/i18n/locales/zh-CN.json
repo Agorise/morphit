@@ -1552,7 +1552,8 @@
 				"xmr": "门罗币(XMR)— 隐私优先的加密货币。默认隐藏金额、发送方和接收方。如果你重视隐私,这是理想选择。",
 				"blurt": "BLURT — Morphit 运行的社交区块链。快速(3 秒区块)、零费用转账,但市值较小。适用于小额和打赏;不太适合存储大额价值。",
 				"usdt": "Tether (USDT) — 与美元 1:1 挂钩的稳定币。中心化控制 — Tether 公司可以冻结任何地址。在 Morphit 上仅限交易：不能支付挂单费。",
-				"bch": "比特币现金（BCH）。2017 年从比特币分叉，倾向于更大的区块和更低的每笔交易费用，而不是手续费市场动态。账本透明，与 BTC 类似；没有发行方可以冻结地址。在 Morphit 上仅限交易 — 挂单费仍以 BLURT、BTC 或 XMR 支付。"
+				"bch": "比特币现金（BCH）。2017 年从比特币分叉，倾向于更大的区块和更低的每笔交易费用，而不是手续费市场动态。账本透明，与 BTC 类似；没有发行方可以冻结地址。在 Morphit 上仅限交易 — 挂单费仍以 BLURT、BTC 或 XMR 支付。",
+				"ltc": "莱特币 (LTC)。2011 年从比特币分叉,具有更快的 2.5 分钟出块和 Scrypt 挖矿。像比特币一样透明 — 每笔交易都在链上公开可见。无中央发行方;没有人能冻结你的地址。"
 			},
 			"waiver_fiat_hint": "💡 BLURT 在中心化交易所交易稀少，所以 Morphit 上的大多数 BLURT 兑法币交易发生在活跃的 Blurt 社交网络用户、现有运营商，或通过易货之间。提示：选择你本地网络使用的法币（USD、EUR、MXN 等），或在步骤 3 中查看面对面 → 易货（商品）支付方式，如果你想提供其他有价值的东西。订单簿目前较小——你的买单有助于建立它。",
 			"waiver_benefits_heading": "你的购买能解锁：",
@@ -2314,7 +2315,11 @@
 			"address_invalid_usdt": "此地址与你选择的 USDT 网络不匹配。发送前请仔细核对 — 跨网络发送会损失你的资金。",
 			"address_invalid_bch": "这看起来不像有效的比特币现金地址。",
 			"pill_method_usdt": "USDT 地址",
-			"pill_method_bch": "比特币现金地址"
+			"pill_method_bch": "比特币现金地址",
+			"method_ltc": "莱特币",
+			"address_placeholder_ltc": "L… 或 M… 或 ltc1…",
+			"address_invalid_ltc": "这看起来不是有效的莱特币地址。",
+			"pill_method_ltc": "莱特币地址"
 		},
 		"funds_sent": {
 			"button": "标记资金已发送",
@@ -2356,7 +2361,8 @@
 			"txid_invalid_usdt": "此交易 ID 与你选择的 USDT 网络不匹配。发送前请核对网络。",
 			"network_pinned_hint": "卖家在分享地址时指定了此网络。你无法在此处更改。",
 			"pill_title_usdt": "已发送 USDT",
-			"pill_title_bch": "比特币现金已发送"
+			"pill_title_bch": "比特币现金已发送",
+			"pill_title_ltc": "已发送莱特币"
 		},
 		"unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
 		"pay_blurt": {
@@ -3034,7 +3040,10 @@
 		},
 		"request_missing_with_contact": "没看到你需要的？",
 		"request_missing_link": "告诉我们",
-		"request_missing_no_contact": "没看到你需要的？此实例未发布联系渠道——试试另一个 Morphit 实例，或在 git.agorise.net/agorise/morphit 上提交问题。"
+		"request_missing_no_contact": "没看到你需要的？此实例未发布联系渠道——试试另一个 Morphit 实例，或在 git.agorise.net/agorise/morphit 上提交问题。",
+		"pay_ltc": {
+			"description": "用莱特币支付"
+		}
 	},
 	"feedback_reminder": {
 		"aria_label": "待处理反馈提醒",
@@ -3430,7 +3439,8 @@
 			"xmr": "Monero。私密 — 没人能看到谁付了谁。费用通常较低。隐私之选。",
 			"blurt": "Morphit 运行的 Blurt 区块链的代币。用于支付挂单费、发布消息、签署订单。",
 			"usdt": "泰达稳定币。与美元 1:1 锚定。在四个网络上交易：ERC-20（以太坊）、TRC-20（波场）、SPL（索拉纳）、BEP-20（BNB 智能链）。发送前选择网络 — 跨网络无法恢复。",
-			"bch": "BCH — 比特币现金，透明、去中心化，区块比 BTC 更大"
+			"bch": "BCH — 比特币现金，透明、去中心化，区块比 BTC 更大",
+			"ltc": "LTC — 莱特币，比特币的快速低费分叉(自 2011 年)。Morphit 上仅供交易。使用莱特币钱包(Electrum-LTC、Litewallet、硬件钱包);接受 L… 旧版、M… 现代 P2SH 和 ltc1… SegWit 地址。"
 		},
 		"section_recovery": {
 			"heading": "如果出了问题",

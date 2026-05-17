@@ -328,6 +328,18 @@ export interface Config {
 	 *  explorer.cloverpool.com. */
 	readonly frontendBchChatLinkUrl: string | undefined;
 
+	/** Per-instance LTC chat-link explorer URL template (Part 122
+	 *  cp24).  When undefined, frontend uses its bundled default
+	 *  (`https://litecoinspace.org/tx/{txid}`).  Same shape
+	 *  contract as BTC/XMR/BCH: https://, contains `{txid}`,
+	 *  parses as URL.  Operators wanting a different LTC explorer
+	 *  set MORPHIT_FRONTEND_LTC_CHAT_LINK_URL; candidates Ken
+	 *  surveyed at addition time included blockchair.com/litecoin,
+	 *  oklink.com/litecoin, bitinfocharts.com/litecoin/explorer/,
+	 *  chain.so/LTC, litecoinspace.org, blockexplorer.one/litecoin/mainnet,
+	 *  and ltc.tokenview.io. */
+	readonly frontendLtcChatLinkUrl: string | undefined;
+
 	/** The operator's registered tag (matching their
 	 *  `morphit_operator_register_v1` op).  When set, the
 	 *  /v1/instance endpoint returns this so the frontend can
@@ -763,6 +775,17 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp24 — LTC chat-link explorer URL.  Same shape
+	// contract as BTC/XMR/BCH; when unset, frontend falls back to
+	// the bundled litecoinspace.org default.
+	MORPHIT_FRONTEND_LTC_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// REVISIT-LIST item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
@@ -931,6 +954,7 @@ export function loadConfig(): Config {
 		instanceSeoKeywords: e.MORPHIT_INSTANCE_SEO_KEYWORDS,
 		frontendBtcChatLinkUrl: e.MORPHIT_FRONTEND_BTC_CHAT_LINK_URL,
 		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL,
-		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL
+		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL,
+		frontendLtcChatLinkUrl: e.MORPHIT_FRONTEND_LTC_CHAT_LINK_URL
 	};
 }

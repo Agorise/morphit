@@ -803,6 +803,17 @@ export const DEFAULT_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
 export const DEFAULT_BCH_CHAT_LINK_URL =
 	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 
+// Part 122 cp24 — LTC chat-link explorer URL bundled default.
+// litecoinspace.org is the LTC-equivalent of mempool.space:
+// community-led, no JS tracking, open-source, privacy-aligned
+// (Morphit priority #1).  Other candidates Ken surveyed at
+// addition time include blockchair.com/litecoin,
+// oklink.com/litecoin, bitinfocharts.com/litecoin/explorer/,
+// chain.so/LTC, blockexplorer.one/litecoin/mainnet, and
+// ltc.tokenview.io.  Operators wanting a different default
+// override via MORPHIT_FRONTEND_LTC_CHAT_LINK_URL.
+export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
+
 // ─── Step 11: Fee-verifier explorer URLs ─────────────────────────
 
 export interface FeeExplorersResult {
@@ -968,6 +979,10 @@ export interface ChatLinkExplorersResult {
 	 *  as btc/xmr.  Operator-tunable via the wizard or by setting
 	 *  MORPHIT_FRONTEND_BCH_CHAT_LINK_URL directly. */
 	readonly bch: string;
+	/** Part 122 cp24 — LTC chat-link explorer URL.  Same shape
+	 *  as btc/xmr/bch.  Operator-tunable via the wizard or by
+	 *  setting MORPHIT_FRONTEND_LTC_CHAT_LINK_URL directly. */
+	readonly ltc: string;
 }
 
 /** Validate a chat-link URL template.  Must be https://, must
@@ -1005,11 +1020,12 @@ export function parseChatLinkTemplate(raw: string): string | string {
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
 	step(12, TOTAL_STEPS, 'Chat-link external explorer URLs');
 	explain(
-		'When a counterparty sends a BTC, XMR, or BCH txid in chat,\n' +
-			'the Morphit frontend renders it as a clickable link that opens\n' +
-			'a third-party block explorer in a new tab.  This is\n' +
-			'separate from the FEE-VERIFIER explorer URLs (which are\n' +
-			'server-side and used for cross-checking payment claims).\n' +
+		'When a counterparty sends a BTC, XMR, BCH, or LTC txid\n' +
+			'in chat, the Morphit frontend renders it as a clickable\n' +
+			'link that opens a third-party block explorer in a new tab.\n' +
+			'This is separate from the FEE-VERIFIER explorer URLs\n' +
+			'(which are server-side and used for cross-checking\n' +
+			'payment claims).\n' +
 			'\n' +
 			'The URLs you set here are the ones YOUR USERS click.\n' +
 			'Privacy note: each click sends the user\'s IP and browser\n' +
@@ -1025,6 +1041,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'  • BTC: https://mempool.space/tx/{txid}\n' +
 			'  • XMR: https://xmrchain.net/tx/{txid}\n' +
 			'  • BCH: https://blockchair.com/bitcoin-cash/transaction/{txid}\n' +
+			'  • LTC: https://litecoinspace.org/tx/{txid}\n' +
 			'\n' +
 			'You can change these later by editing morphit.config.env.\n' +
 			'\n' +
@@ -1044,7 +1061,11 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── BCH chat-link URL ──\n');
 	const bch = await editChatLinkUrl('BCH chat-link URL', DEFAULT_BCH_CHAT_LINK_URL);
 
-	return { btc, xmr, bch };
+	// ─── LTC (Part 122 cp24) ──
+	console.log('\n  ── LTC chat-link URL ──\n');
+	const ltc = await editChatLinkUrl('LTC chat-link URL', DEFAULT_LTC_CHAT_LINK_URL);
+
+	return { btc, xmr, bch, ltc };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -1128,7 +1149,8 @@ async function getCategoryBTickers(): Promise<readonly string[]> {
  *  an entry here; unknown tickers fall back to a generic line. */
 const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze({
 	USDT: 'Tether stablecoin across 4 networks (ERC-20, TRC-20, SPL, BEP-20).\n    Most-traded stablecoin; centrally issued and freezable by Tether Inc.',
-	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.'
+	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.',
+	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {

@@ -1512,6 +1512,8 @@
 							<Tooltip textKey="post_order.form.asset_explainer.usdt" faqKey="what_is_usdt" />
 						{:else if a === 'BCH'}
 							<Tooltip textKey="post_order.form.asset_explainer.bch" />
+						{:else if a === 'LTC'}
+							<Tooltip textKey="post_order.form.asset_explainer.ltc" />
 						{/if}
 					</div>
 				{/each}

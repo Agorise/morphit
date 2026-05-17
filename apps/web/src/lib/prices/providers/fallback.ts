@@ -32,7 +32,13 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// cached since boot.  Approximate live value at cp21 ship
 	// time; rough order-of-magnitude is what matters for the
 	// fallback — live providers are the canonical source.
-	BCH: 400
+	BCH: 400,
+	// Part 122 cp24 — Litecoin.  Hardcoded fallback used only
+	// when every live provider has failed and no value has
+	// cached since boot.  Approximate live value at cp24 ship
+	// time; rough order-of-magnitude is what matters for the
+	// fallback — live providers are the canonical source.
+	LTC: 100
 };
 
 export const fallbackProvider: PriceProvider = {
