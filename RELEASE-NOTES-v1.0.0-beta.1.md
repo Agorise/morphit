@@ -112,6 +112,32 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   strictly env-only on their box, never published on-chain, in
   APIs, in logs, or in release ops.  Per-payment proofs are
   user-supplied at trade time.
+- **Transparent-chain privacy framework (cp26).**  Registry-driven
+  per-asset privacy practices surface in the address-share modal
+  and at `/[lang]/privacy/{asset}`:
+  - **Amount-jitter on every transparent asset** (BTC/BCH/LTC/
+    BLURT — XMR has been jittered since cp3): default ON; adds a
+    small random extra (≤999 sat for UTXO chains, ≤99 milliblurt
+    for BLURT) to defeat amount-correlation between the
+    orderbook post and the on-chain transfer.
+  - **Client-side address-reuse warning**: localStorage-only,
+    never transmitted to any Morphit server; surfaces an amber
+    chip when the user is about to share an address they've
+    shared from this device before.
+  - **Optional PayJoin (BIP-78) endpoint for BTC**: when both
+    seller and buyer wallets support BIP-78, the seller pastes
+    their PayJoin endpoint URL into the BTC address-share modal
+    and Morphit relays it via `pj=` in the `bitcoin:` URI.
+    Wallets without PayJoin support fall back to a normal
+    payment — zero footgun.
+  - **Per-asset privacy guide pages** at `/privacy/{btc,xmr,
+    blurt,usdt,bch,ltc}` covering fresh-address practice,
+    opt-in privacy tech (MWEB for LTC, CashFusion for BCH,
+    CoinJoin + PayJoin for BTC), universal practices, and
+    asset-specific caveats.
+  - **No wallet recommendations.**  Even reputable wallets have
+    been compromised — Morphit names protocol standards, not
+    wallet software.
 
 ### Internationalization
 
@@ -124,14 +150,15 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Audit and integrity
 
-- **3,231 self-checking smoke scenarios** ship with the source.
+- **3,301 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
 - **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public
   in the repo, with every finding, every fix, every accepted
   risk documented.
-- **23 architecture decision records** in `docs/adr/0001-…`
-  through `0024-…`.
+- **25 architecture decision records** in `docs/adr/0001-…`
+  through `0026-…` (the 0016 slot is reserved-but-unused; its
+  planned work shipped as ADR-0022).
 - **AGPL-3.0-only.**  Operators running modified instances must
   make their source available to their users.
 

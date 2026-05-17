@@ -2319,7 +2319,21 @@
 			"method_ltc": "Litecoin",
 			"address_placeholder_ltc": "L… o M… o ltc1…",
 			"address_invalid_ltc": "Esa no parece una dirección Litecoin válida.",
-			"pill_method_ltc": "Dirección Litecoin"
+			"pill_method_ltc": "Dirección Litecoin",
+			"amount_jitter_label": "Aleatorizar cantidad para privacidad",
+			"amount_jitter_explain": "Añade un pequeño extra aleatorio (lo bastante pequeño para ser una propina implícita trivial) para anular la correlación de cantidad entre tu orden y la transferencia en cadena. Muy recomendado en cadenas transparentes.",
+			"amount_jitter_will_send": "El monedero de tu comprador enviará exactamente:",
+			"amount_jitter_send_exact_hint": "Esta cantidad exacta rompe el vínculo entre tu publicación del libro de órdenes y el pago en cadena.",
+			"amount_jitter_off_warning_heading": "Cantidad no aleatorizada",
+			"amount_jitter_off_warning_body": "Cualquiera que observe la cadena puede vincular esta cantidad exacta a tu orden. Activa el aleatorizador a menos que tengas una razón específica.",
+			"reuse_warning_heading": "Dirección usada antes",
+			"reuse_warning_body": "Compartiste esta dirección desde este dispositivo el {date}. Reutilizar la misma dirección en distintas operaciones las vincula en la cadena pública. Considera derivar una dirección nueva desde tu monedero para esta operación.",
+			"reuse_warning_prior_order": "Compartida anteriormente para la orden: {permlink}",
+			"payjoin_summary": "Avanzado: endpoint PayJoin (BIP-78)",
+			"payjoin_label": "URL del endpoint PayJoin (opcional)",
+			"payjoin_explain": "Si tu monedero admite PayJoin (BIP-78), pega aquí su URL de endpoint. Los compradores con monederos compatibles usarán una transacción cooperativa que rompe las heurísticas de análisis en cadena. Sin efecto en monederos sin PayJoin.",
+			"payjoin_badge": "PayJoin disponible",
+			"payjoin_badge_tooltip": "El monedero del vendedor admite PayJoin (BIP-78). Si el tuyo también lo admite, abrir esta URI negociará una transacción cooperativa que mejora la privacidad."
 		},
 		"funds_sent": {
 			"button": "Marcar fondos enviados",
@@ -3491,6 +3505,91 @@
 			"price_subline": {
 				"live": "1 USDT = ${price} en vivo",
 				"unavailable": "Feed de precio USDT/USD no disponible — última vista hace {staleness}."
+			}
+		}
+	},
+	"privacy": {
+		"index_title": "Prácticas de privacidad — Morphit",
+		"index_meta_description": "Cómo hacer tus operaciones más privadas en cadenas transparentes y privadas. Guía por activo cubriendo direcciones frescas, tecnologías de privacidad opcionales y trampas comunes.",
+		"index_heading": "Prácticas de privacidad en Morphit",
+		"index_intro": "La mayoría de los activos negociados en Morphit (BTC, BCH, LTC, BLURT, USDT) viven en cadenas transparentes — cualquier observador puede leer el historial de la cadena. Hay pasos concretos que puedes tomar para hacer TUS operaciones mucho más difíciles de vincular, perfilar o vigilar. Esto es impulsado por el registro: el próximo activo que añada Morphit tendrá una guía automáticamente.",
+		"page_title": "Privacidad para operaciones {asset} — Morphit",
+		"guide_heading": "Prácticas de privacidad para operaciones {asset}",
+		"back_to_index": "Todos los activos",
+		"section_fresh_addresses": "Usa una dirección fresca cada operación",
+		"section_opt_in_tech": "Tecnologías de privacidad opcionales",
+		"section_opt_in_tech_intro": "Estándares que los monederos en este ecosistema pueden implementar. Morphit NO recomienda software de monedero específico — incluso los monederos reputados han sido comprometidos. Busca un monedero que admita estos estándares y revisa su postura de confianza tú mismo.",
+		"section_common_practices": "Prácticas universales",
+		"section_what_not_to_do": "Qué evitar",
+		"section_caveats": "Advertencias específicas de este activo",
+		"no_wallet_recommendation": "Morphit NO recomienda software de monedero específico. Incluso los monederos reputados han sido comprometidos o han tenido fallos ocultos. Las técnicas de privacidad aquí son estándares de protocolo, no recomendaciones — tu monedero, tu responsabilidad.",
+		"fresh_address_advice": {
+			"subaddress": "Esta cadena admite tecnología de subdirección/dirección sigilosa de forma nativa. Tu monedero deriva una dirección de recepción fresca (subdirección) por operación desde tu clave de visualización. El receptor ve una dirección única cada vez; los observadores de la cadena no pueden vincular múltiples operaciones al mismo monedero.",
+			"hd-derived": "Esta cadena usa direcciones transparentes sin sigilo nativo. La práctica estándar: usa un monedero Determinista Jerárquico (BIP-32) que derive una nueva dirección de recepción por solicitud. La mayoría de los monederos modernos lo hace automáticamente. El coste de reutilizar dirección es severo — cada operación que aceptes en la misma dirección construye un registro público de tu actividad.",
+			"account-reuse": "Esta cadena está basada en cuentas — tu nombre de cuenta es tu dirección. Cuenta-fresca-por-operación no es práctico (cada cuenta nueva cuesta recursos de cadena). Acepta que este activo tiene el mayor riesgo de correlación de cantidad en Morphit. Para operaciones de alto valor, considera usar una alt-cuenta dedicada a esa operación."
+		},
+		"opt_in_tech": {
+			"mweb": {
+				"name": "MWEB (MimbleWimble Extension Blocks)",
+				"explain": "Una función de privacidad nativa a nivel de protocolo de Litecoin. MWEB oculta los montos de transacción y rompe el vínculo dirección-monto para transferencias que la activan. Por transacción; no a nivel de cadena. Busca monederos que muestren \"MWEB\" o \"Extension Blocks\" como opción al enviar."
+			},
+			"cashfusion": {
+				"name": "CashFusion",
+				"explain": "Una variante de CoinJoin para Bitcoin Cash diseñada por la comunidad BCH. Mezcla entradas y salidas de cantidades variables para anular tanto las heurísticas de propiedad-común-de-entrada como las de correlación de cantidad. Ejecuta desde un monedero con soporte CashFusion antes o después de una operación para lavar el historial en cadena."
+			},
+			"coinjoin": {
+				"name": "CoinJoin",
+				"explain": "Una familia de protocolos donde múltiples participantes agrupan entradas y salidas en una sola transacción, rompiendo la heurística de propiedad-común-de-entrada que vincula monedas a un mismo dueño. Existen múltiples implementaciones con distintos modelos de confianza — elige con cuidado y lee el modelo de amenazas de la implementación."
+			},
+			"payjoin": {
+				"name": "PayJoin (BIP-78)",
+				"explain": "Un protocolo de transacción cooperativa entre dos partes. Remitente y receptor contribuyen entradas, así que los observadores de la cadena no pueden aplicar la heurística estándar de \"todas las entradas vienen del mismo monedero\". El modal de compartir dirección de Morphit incluye un campo opcional de endpoint PayJoin — si ambos monederos admiten BIP-78, la operación usa PayJoin automáticamente."
+			}
+		},
+		"common_practices": {
+			"fresh_per_trade": "**Usa una dirección de recepción fresca para cada operación.** Tu monedero debería admitir esto; si no, busca uno que sí. La reutilización de direcciones es la mayor fuga, sin discusión.",
+			"coin_control": "**Practica control de monedas al gastar.** Al enviar monedas más tarde, evita combinar la salida de la operación con monedas de otra fuente — eso combina sus historiales de dirección permanentemente.",
+			"network_layer": "**Transmite a través de Tor o el modo privacidad de tu monedero.** Tu IP doméstica ve la transacción primero; los nodos cerca de tu IP pueden correlacionarla contigo. Un monedero compatible con Tor transmite a través de Tor por defecto.",
+			"kyc_touchpoints": "**Evita enviar monedas de la operación hacia o desde exchanges KYC.** Una vez que las monedas de la operación toquen un exchange KYC, la operación se vuelve legalmente identificable combinando los registros del exchange con los datos de la cadena. Si necesitas hacer puente a fiat, ruta a través de un paso intermedio autocustodiado."
+		},
+		"what_not_to_do": {
+			"reuse_address": "No pegues tu misma dirección de recepción en múltiples operaciones.",
+			"exact_amount": "No envíes la cantidad exacta listada en la orden — el toggle aleatorizador de cantidad de Morphit (la casilla \"🔐 Aleatorizar cantidad\" en el modal de compartir dirección) rompe esto; déjalo ENCENDIDO.",
+			"combine_utxos": "No combines la salida de la operación con monedas de una fuente distinta al gastarla más tarde.",
+			"clearnet_broadcast": "No transmitas desde tu IP doméstica vía un monedero no privado — usa Tor."
+		},
+		"guides": {
+			"btc": {
+				"one_line": "Cadena transparente, totalmente descentralizada — protocolos de mezcla opcionales disponibles.",
+				"intro": "Bitcoin es la cadena más analizada del mundo. Cada transacción es pública; cada dirección puede ser rastreada en el tiempo. Las prácticas de privacidad siguientes reducen drásticamente lo fácil que es para un tercero perfilar tus operaciones — sin requerir que dejes BTC.",
+				"meta_description": "Prácticas de privacidad para operaciones Bitcoin en Morphit: direcciones frescas, PayJoin, CoinJoin, y qué evitar."
+			},
+			"xmr": {
+				"one_line": "Privacidad por defecto — direcciones sigilosas, montos ocultos, firmas en anillo.",
+				"intro": "Monero es la postura de privacidad más fuerte en Morphit. Por defecto, tu dirección, monto y contraparte están ocultos a terceros. Las prácticas siguientes son ajustes menores; la cadena misma hace el trabajo pesado.",
+				"meta_description": "Prácticas de privacidad para operaciones Monero en Morphit: subdirecciones y manejo de montos."
+			},
+			"blurt": {
+				"one_line": "Cadena de coordinación — transparente y basada en cuentas. Menor privacidad en Morphit.",
+				"intro": "BLURT es la cadena de coordinación de Morphit — órdenes, cifrados de chat, comisiones y reputación viven aquí. La cadena es totalmente pública y basada en cuentas, lo que significa que cada transferencia BLURT que involucra tu cuenta es permanentemente visible para cualquiera. No hay tecnología de privacidad opcional para BLURT.",
+				"caveats": "BLURT es estructuralmente el activo menos privado en Morphit. Tu nombre de cuenta es tu dirección; no puedes rotarlo. Para operaciones donde la privacidad en cadena importa más que la velocidad y el coste, prefiere XMR, BTC (con PayJoin), BCH (con CashFusion), o LTC (con MWEB).",
+				"meta_description": "Consideraciones de privacidad para operaciones BLURT en Morphit: cadena basada en cuentas, transparente por diseño."
+			},
+			"usdt": {
+				"one_line": "Centralizado — Tether puede congelar cualquier dirección. Transparente en cada cadena.",
+				"intro": "El problema de privacidad de USDT es estructuralmente distinto del de los otros activos transparentes: está centralizado. Tether Inc. puede congelar cualquier dirección USDT en cualquier cadena anfitriona, y han usado esta capacidad en el pasado. Ningún grado de rotación de dirección u ofuscación de transacción cambia la capacidad de congelación de Tether.",
+				"caveats": "Incluso con prácticas de privacidad perfectas en cadena, USDT sigue siendo congelable centralizadamente. La privacidad práctica en cadena en las cadenas anfitrionas de USDT (Ethereum, Tron, Solana, BSC) es la misma que en cualquier cadena EVM/UTXO/cuenta transparente — tu privacidad depende del ecosistema de privacidad opcional de la cadena anfitriona (Tornado Cash en ETH, etc.), que no recomendamos ni describimos más aquí.",
+				"meta_description": "Consideraciones de privacidad para operaciones USDT en Morphit: riesgo de centralización y transparencia de cadena anfitriona."
+			},
+			"bch": {
+				"one_line": "Transparente, descentralizado — CashFusion provee mezcla opcional.",
+				"intro": "Bitcoin Cash comparte el modelo de transparencia de Bitcoin: cada transacción visible en cadena, cada dirección vinculable. CashFusion (una variante de CoinJoin de la comunidad BCH con aleatorización de cantidad) es la principal tecnología de privacidad opcional y está bien integrada en varios monederos BCH.",
+				"meta_description": "Prácticas de privacidad para operaciones Bitcoin Cash en Morphit: direcciones frescas, CashFusion, y qué evitar."
+			},
+			"ltc": {
+				"one_line": "Transparente, descentralizado — MWEB provee privacidad opcional a nivel de cadena.",
+				"intro": "Litecoin comparte la transparencia de Bitcoin en la capa base, pero añade MWEB (MimbleWimble Extension Blocks) — una función de privacidad opcional a nivel de cadena que oculta los montos y rompe la vinculabilidad de direcciones para transferencias que la activan. Esto es lo más cercano que una cadena de la familia Bitcoin llega a tener privacidad nativa.",
+				"meta_description": "Prácticas de privacidad para operaciones Litecoin en Morphit: direcciones frescas, MWEB, y qué evitar."
 			}
 		}
 	}
