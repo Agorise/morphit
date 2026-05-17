@@ -52,7 +52,8 @@ Three fields:
 - `optInPrivacyTech`: `null` for assets without opt-in privacy
   technology (XMR has it built in; BLURT and USDT don't have
   any), or an array of protocol-standard identifiers from a
-  fixed enum: `'mweb'`, `'cashfusion'`, `'coinjoin'`, `'payjoin'`.
+  fixed enum: `'mweb'`, `'cashfusion'`, `'coinjoin'`, `'payjoin'`,
+  `'privatesend'` (cp27 extension; see ADR-0027).
   These are **protocol names, not wallet names** — naming a
   protocol like CashFusion is an information item, not a wallet
   endorsement.
@@ -71,6 +72,12 @@ Per-asset values:
 | USDT  | hd-derived         | null                   | usdt            |
 | BCH   | hd-derived         | [cashfusion]           | bch             |
 | LTC   | hd-derived         | [mweb]                 | ltc             |
+| DASH  | hd-derived         | [privatesend]          | dash            |
+
+> **Note (Part 122 cp27):** DASH row + `'privatesend'` enum value
+> added in ADR-0027 (Dash trade-only addition) as a registry-driven
+> extension of this framework.  No other framework changes needed —
+> DASH lit up automatically.
 
 ### 2. Generalized amount-jitter across transparent chains
 
@@ -118,8 +125,10 @@ the payload carries an endpoint.
 
 ### 5. Per-asset privacy guide pages
 
-`/[lang]/privacy` (index) lists all 6 assets with one-line
-summaries. `/[lang]/privacy/{asset}` (detail) renders an
+`/[lang]/privacy` (index) lists all tradable assets with one-line
+summaries (registry-driven — the page reads `ASSETS.filter(canBeTraded)`,
+so additions like DASH (cp27) light up automatically).
+`/[lang]/privacy/{asset}` (detail) renders an
 asset-specific guide pulling copy from registry + shared i18n:
 
 - Intro (per-asset, from `privacy.guides.{key}.intro`)

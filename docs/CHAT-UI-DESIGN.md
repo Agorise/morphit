@@ -270,9 +270,9 @@ features inherently laggy on-chain anyway.
   per-conversation chat UI. Implements the scroll-to-bottom UX
   in this doc, the block/unblock affordance, and the stranger-
   fee admission flow.
-- `apps/web/src/routes/chat/+page.svelte` — inbox with tabbed
+- `apps/web/src/routes/[lang]/chat/+page.svelte` — inbox with tabbed
   Messages / Requests partitioning.
-- `apps/web/src/routes/chat/[peer=account]/+page.svelte` —
+- `apps/web/src/routes/[lang]/chat/[peer=account]/+page.svelte` —
   per-conversation route.
 - `apps/indexer/src/api/chat.ts` — `/v1/chat/:a/:b` endpoint
   with cursor pagination. Canonicalizes the pair so
@@ -336,9 +336,9 @@ wiring described below has all shipped:
 
 1. ✅ `/chat` is in the main nav (`apps/web/src/routes/+layout.svelte:178`).
 2. ✅ "Message" CTA on profile pages
-   (`apps/web/src/routes/[x+40][account=account]/+page.svelte:450`).
+   (`apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte:450`).
 3. ✅ "Message seller" CTA on orderbook rows
-   (`apps/web/src/routes/orderbook/+page.svelte:956`).
+   (`apps/web/src/routes/[lang]/orderbook/+page.svelte:956`).
 4. i18n key coverage across all 10 locales is verified
    continuously by the locale-parity smoke
    (`apps/web/scripts/i18n-locale-parity-smoke.ts`).

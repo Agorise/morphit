@@ -1,6 +1,6 @@
 # Per-locale prerendering — design discussion
 
-**Status:** ✅ **SHIPPED in Part 121 cp7 (2026-05-14).**  Route restructure complete; build produces 200 locale-prefixed HTML files (20 routes × 10 locales) + redirect shell.  Helpers shipped in cp6 (2026-05-13); route restructure in cp7 (next day).
+**Status:** ✅ **SHIPPED in Part 121 cp7 (2026-05-14).**  Route restructure complete; at cp7 the build produced 200 locale-prefixed HTML files (20 routes × 10 locales) + redirect shell.  Route count grows as new pages ship (cp24 added cheat-sheet, cp26 added privacy index + per-asset privacy pages); the current authoritative list is whatever `apps/web/src/routes/[lang]/**/+page.svelte` enumerates at build time.  Helpers shipped in cp6 (2026-05-13); route restructure in cp7 (next day).
 **Date:** 2026-04-21 (design); 2026-05-13 (cp6 partial: helpers + smoke + i18n module split); 2026-05-14 (cp7 full: route restructure + redirect shell + 88 link-site sweep + verification)
 **Interacts with:** `apps/web/svelte.config.js`
 (prerender + adapter-static config + `handleUnseenRoutes:'ignore'`), `apps/web/src/app.html`

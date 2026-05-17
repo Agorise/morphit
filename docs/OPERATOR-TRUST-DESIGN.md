@@ -9,7 +9,7 @@ governance process) remain open.
   static asset.  Captures version + git commit + build
   timestamp + operator tag + hash manifest.
 - **Item 2** — `/about-this-instance` route at
-  `apps/web/src/routes/about-this-instance/+page.svelte`
+  `apps/web/src/routes/[lang]/about-this-instance/+page.svelte`
   visualizes the verify.json for users.  Does not yet
   cross-check against the on-chain release-op
   (intentionally — the cross-check is followup work, this

@@ -1,6 +1,6 @@
 # PRE-LAUNCH-CHECKLIST.md
 
-**Status:** living document.  Last refreshed: 2026-05-10 (Part 109).
+**Status:** living document.  Last refreshed: 2026-05-17 (Part 122 cp27-DD).
 
 This is the consolidated, ordered list of operator actions
 required (or recommended) before flipping morphit.io from

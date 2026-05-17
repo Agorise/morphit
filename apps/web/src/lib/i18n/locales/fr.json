@@ -751,7 +751,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Qu'est-ce que Morphit ?",
-				"a": "Morphit est un marché pair-à-pair où les gens échangent cash, Bitcoin, Monero et BLURT directement entre eux. Morphit ne détient jamais votre argent et ne demande jamais qui vous êtes. C'est un panneau d'annonces, pas une banque."
+				"a": "Morphit est un marché pair-à-pair où les gens échangent du cash contre des cryptomonnaies (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin et Dash) directement entre eux. Morphit ne détient jamais votre argent et ne demande jamais qui vous êtes. C'est un panneau d'annonces, pas une banque."
 			},
 			"is_it_safe": {
 				"q": "Est-ce sûr ?",
@@ -3522,7 +3522,7 @@
 		"index_title": "Pratiques de confidentialité — Morphit",
 		"index_meta_description": "Comment rendre vos transactions plus privées sur des chaînes transparentes et privées. Guide par actif couvrant les adresses fraîches, les technologies de confidentialité optionnelles et les pièges courants.",
 		"index_heading": "Pratiques de confidentialité sur Morphit",
-		"index_intro": "La plupart des actifs échangés sur Morphit (BTC, BCH, LTC, BLURT, USDT) vivent sur des chaînes transparentes — n'importe quel observateur peut lire l'historique de la chaîne. Il existe des étapes concrètes pour rendre VOS transactions beaucoup plus difficiles à lier, profiler ou surveiller. Piloté par le registre : le prochain actif que Morphit ajoutera recevra un guide automatiquement.",
+		"index_intro": "La plupart des actifs échangés sur Morphit (BTC, BCH, LTC, DASH, BLURT, USDT) vivent sur des chaînes transparentes — n'importe quel observateur peut lire l'historique de la chaîne. Il existe des étapes concrètes pour rendre VOS transactions beaucoup plus difficiles à lier, profiler ou surveiller. Piloté par le registre : le prochain actif que Morphit ajoutera recevra un guide automatiquement.",
 		"page_title": "Confidentialité pour les transactions {asset} — Morphit",
 		"guide_heading": "Pratiques de confidentialité pour les transactions {asset}",
 		"back_to_index": "Tous les actifs",
@@ -3586,7 +3586,7 @@
 			"blurt": {
 				"one_line": "Chaîne de coordination — transparente et basée sur les comptes. La plus faible confidentialité sur Morphit.",
 				"intro": "BLURT est la chaîne de coordination de Morphit — ordres, chiffrements de chat, frais et réputation y vivent. La chaîne est entièrement publique et basée sur les comptes, ce qui signifie que chaque transfert BLURT impliquant votre compte est définitivement visible par tous. Il n'y a pas de technologie de confidentialité optionnelle pour BLURT.",
-				"caveats": "BLURT est structurellement l'actif le moins privé sur Morphit. Votre nom de compte est votre adresse ; vous ne pouvez pas le faire tourner. Pour les transactions où la confidentialité en chaîne importe plus que la vitesse et le coût, préférez XMR, BTC (avec PayJoin), BCH (avec CashFusion), ou LTC (avec MWEB).",
+				"caveats": "BLURT est structurellement l'actif le moins privé sur Morphit. Votre nom de compte est votre adresse ; vous ne pouvez pas le faire tourner. Pour les transactions où la confidentialité en chaîne importe plus que la vitesse et le coût, préférez XMR, BTC (avec PayJoin), BCH (avec CashFusion), LTC (avec MWEB), ou DASH (avec PrivateSend).",
 				"meta_description": "Considérations de confidentialité pour les transactions BLURT sur Morphit : chaîne basée sur les comptes, transparente par conception."
 			},
 			"usdt": {

@@ -11,7 +11,7 @@
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a peer-to-peer marketplace where people trade cash for Bitcoin, Monero, and BLURT directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank.
+Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank.
 
 ---
 
@@ -490,7 +490,7 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the six assets traded here, alongside BTC, XMR, USDT, BCH, and LTC. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
+**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the seven assets traded here, alongside BTC, XMR, USDT, BCH, LTC, and DASH. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first BLURT buy — see "Is my first order really free?" for details. So your first BLURT acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 

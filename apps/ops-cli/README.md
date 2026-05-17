@@ -31,7 +31,7 @@ The wizard:
 1. Runs a system check (CPU, RAM, disk, OS version, Postgres
    reachability, outbound HTTPS). Catches issues before you
    commit time to interactive prompts.
-2. Walks you through 9 setup steps with ELI5 explanations.
+2. Walks you through 18 setup steps with ELI5 explanations.
 3. Validates each input (Blurt account names checked against
    the chain, database URL parsed, etc.).
 4. Shows a review and asks for confirmation.

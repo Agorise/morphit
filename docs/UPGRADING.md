@@ -36,7 +36,7 @@ push, in this order:
    authorized).
 2. Runs the **full validation gate**: typecheck across all 10
    workspaces, ansible-lint in production profile, and the
-   triple-pulse smoke suite (~3,000+ scenarios).
+   triple-pulse smoke suite (~3,300+ scenarios).
 3. Builds the **release tarball** and **SHA-256 checksum file**.
 4. Bakes a **provenance manifest** (`release-info.json`) into the
    tarball recording the tag, commit SHA, and CI build time.

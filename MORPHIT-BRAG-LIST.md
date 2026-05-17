@@ -197,7 +197,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 132. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
 133. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 134. **26 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0027 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network, ADR-0024 BCH trade-only addition, ADR-0025 LTC trade-only addition, ADR-0026 transparent-chain privacy framework, ADR-0027 DASH trade-only addition.
-135. **46 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
+135. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 136. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
 137. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
 138. **METADATA-LEAK-CATALOG.md.** A full inventory of every place metadata could leak — and what we do or don't do about each. Honest disclosure of where we're imperfect.
@@ -461,4 +461,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*278 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*
+*279 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*

@@ -755,7 +755,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Что такое Morphit?",
-				"a": "Morphit — это пиринговый рынок, где люди обменивают наличные на Bitcoin, Monero и BLURT напрямую друг с другом. Morphit никогда не держит ваши деньги и никогда не спрашивает, кто вы. Это доска объявлений, а не банк."
+				"a": "Morphit — это пиринговый рынок, где люди обменивают наличные на криптовалюты (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin и Dash) напрямую друг с другом. Morphit никогда не держит ваши деньги и никогда не спрашивает, кто вы. Это доска объявлений, а не банк."
 			},
 			"is_it_safe": {
 				"q": "Это безопасно?",
@@ -3522,7 +3522,7 @@
 		"index_title": "Privacy practices — Morphit",
 		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
 		"index_heading": "Privacy practices on Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, BLURT, USDT) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, BLURT, USDT) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
 		"page_title": "Privacy for {asset} trades — Morphit",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",
@@ -3586,7 +3586,7 @@
 			"blurt": {
 				"one_line": "Coordination chain — transparent and account-based. Lowest privacy on Morphit.",
 				"intro": "BLURT is Morphit's coordination chain — orders, chat ciphertexts, fees, and reputation all live here. The chain is fully public and account-based, meaning every BLURT transfer involving your account is permanently visible to anyone. There is no opt-in privacy technology for BLURT.",
-				"caveats": "BLURT is structurally the least private asset on Morphit. Your account name is your address; you cannot rotate it. For trades where on-chain privacy matters more than speed and cost, prefer XMR, BTC (with PayJoin), BCH (with CashFusion), or LTC (with MWEB).",
+				"caveats": "BLURT is structurally the least private asset on Morphit. Your account name is your address; you cannot rotate it. For trades where on-chain privacy matters more than speed and cost, prefer XMR, BTC (with PayJoin), BCH (with CashFusion), LTC (with MWEB), or DASH (with PrivateSend).",
 				"meta_description": "Privacy considerations for BLURT trades on Morphit: account-based chain, transparent by design."
 			},
 			"usdt": {
