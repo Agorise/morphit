@@ -26,7 +26,13 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// incidents) the live CoinGecko/Klingex provider returns
 	// the actual depegged value and the order-row subline
 	// surfaces it as "1 USDT = $0.97 live" instead of $1.00.
-	USDT: 1.00
+	USDT: 1.00,
+	// Part 122 cp21 — Bitcoin Cash.  Hardcoded fallback used
+	// only when every live provider has failed and no value has
+	// cached since boot.  Approximate live value at cp21 ship
+	// time; rough order-of-magnitude is what matters for the
+	// fallback — live providers are the canonical source.
+	BCH: 400
 };
 
 export const fallbackProvider: PriceProvider = {
