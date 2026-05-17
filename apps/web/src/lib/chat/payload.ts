@@ -264,6 +264,102 @@ export function jitterMoneroAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Part 122 cp26 — Amount-jitter for transparent UTXO chains
+ *  (BTC, BCH, LTC).  Same defense as jitterMoneroAmount but
+ *  calibrated to satoshi precision (8 decimals).
+ *
+ *  Why this exists for transparent chains: every order Morphit
+ *  posts has an exact amount derived from the fiat-amount +
+ *  market-price calculation.  When that exact amount appears on
+ *  the public chain a few minutes after the order was posted,
+ *  any chain observer can trivially correlate the order to the
+ *  on-chain payment — defeating much of the privacy buyers/
+ *  sellers might otherwise have.  Adding small random jitter to
+ *  the on-chain amount breaks that exact-match correlation.
+ *
+ *  Jitter range: up to 999 satoshis.  At cp26-era prices that's
+ *  ~$0.50 for BTC, ~$0.005 for BCH, ~$0.001 for LTC — small
+ *  enough to be an implicit tip the seller absorbs, large enough
+ *  to fully decorrelate against amount-matching heuristics.
+ *
+ *  Same caveats as the XMR version: round-UP-only (never
+ *  underpay), CSPRNG-derived (not Math.random), idempotent on
+ *  caller-side memoization (component lifetime is the right
+ *  place to cache so seller-share/buyer-echo/seller-verify all
+ *  see the same value). */
+export function jitterUtxoAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterUtxoAmount: invalid base amount');
+	}
+	// Parse base into integer-satoshi representation (bigint).
+	// 1 BTC/BCH/LTC = 10^8 satoshi (litoshi for LTC, same scale).
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '00000000').slice(0, 8);
+	const baseSat = BigInt(whole) * 100_000_000n + BigInt(fracPadded);
+
+	// Generate 2 random bytes, fold into 0..(1000 - 1).  Modulo
+	// bias is negligible at this scale.
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = (buf[0] << 8) | buf[1];
+	const jitterSat = BigInt(r % 1000);
+	const totalSat = baseSat + jitterSat;
+
+	// Format back to "W.FFFFFFFF" with 8-decimal precision.
+	const wholeOut = totalSat / 100_000_000n;
+	const fracOut = totalSat % 100_000_000n;
+	const fracStr = fracOut.toString().padStart(8, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
+/** Part 122 cp26 — Amount-jitter for BLURT.  BLURT is 3-decimal
+ *  precision (milliblurt smallest unit), account-based not UTXO,
+ *  and Morphit's coordination layer — every order, message, and
+ *  fee is on the public Blurt chain.  Amount-correlation between
+ *  the orderbook and the on-chain transfer is therefore the
+ *  highest of any Morphit-supported asset.
+ *
+ *  Jitter range: up to 99 milliblurt.  At cp26 BLURT prices
+ *  that's a fraction of a US cent — within ordinary chain-fee
+ *  noise. */
+export function jitterBlurtAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterBlurtAmount: invalid base amount');
+	}
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000').slice(0, 3);
+	const baseMilli = BigInt(whole) * 1000n + BigInt(fracPadded);
+
+	const buf = new Uint8Array(1);
+	crypto.getRandomValues(buf);
+	const jitterMilli = BigInt(buf[0] % 100);
+	const totalMilli = baseMilli + jitterMilli;
+
+	const wholeOut = totalMilli / 1000n;
+	const fracOut = totalMilli % 1000n;
+	const fracStr = fracOut.toString().padStart(3, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
+/** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
+ *  a jittered amount appropriate for the asset's smallest-unit
+ *  precision.  USDT is excluded (its privacy issue is centralization
+ *  not transparency; amount-jitter is a no-op against that threat
+ *  model) and returns the input unchanged so callers can pass any
+ *  asset uniformly. */
+export function jitterAmountForAsset(
+	asset: ChatAssetTicker,
+	base: string
+): string {
+	if (asset === 'xmr') return jitterMoneroAmount(base);
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc') {
+		return jitterUtxoAmount(base);
+	}
+	if (asset === 'blurt') return jitterBlurtAmount(base);
+	// USDT: no jitter — see function comment above
+	return base;
+}
+
 /** Phase F.5 audit fix (F-1) — forbidden-char check for the
  *  `note` field.  Rejects:
  *
@@ -354,6 +450,29 @@ export interface AddressPayload {
 	 *  catches mismatches and the explorer URL builder picks
 	 *  the right template. */
 	readonly network?: string;
+	/** cp26 — Optional PayJoin (BIP-78) endpoint URL.  When set
+	 *  AND `method === 'btc'`, the generated bitcoin: URI gains
+	 *  a `pj=<encoded>` parameter pointing to the seller's
+	 *  PayJoin endpoint.  A PayJoin-capable buyer wallet POSTs a
+	 *  PSBT to this endpoint, the seller's wallet returns a
+	 *  modified PSBT with both parties' inputs co-mingled, the
+	 *  buyer signs and broadcasts — defeating the common-input-
+	 *  ownership heuristic that links coins to a single owner.
+	 *
+	 *  Wallets without PayJoin support ignore the `pj=` parameter
+	 *  and fall back to a normal payment.  Zero downside for
+	 *  unsupported wallets; real privacy win when both sides
+	 *  support BIP-78.
+	 *
+	 *  Morphit's role is URI relay only — we don't run the
+	 *  PayJoin endpoint.  The seller's wallet (or self-hosted
+	 *  BTCPayServer / equivalent) supplies the URL.
+	 *
+	 *  Wire-format note: BIP-78 expects HTTPS or .onion endpoints.
+	 *  Frontend encoder doesn't enforce — we trust the seller's
+	 *  wallet/operator to supply a sane URL.  Validation happens
+	 *  client-side via URL parser. */
+	readonly payjoinEndpoint?: string;
 }
 
 export interface FundsSentPayload {
@@ -595,6 +714,37 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		wire.order_permlink = p.orderPermlink;
 	if (p.note !== undefined && p.note !== '') wire.note = p.note;
 	if (p.memo !== undefined && p.memo !== '') wire.memo = p.memo;
+	// cp26 inline-fix — pre-existing cp3 latent bug: USDT
+	// `network` field was on the AddressPayload interface but
+	// the encoder dropped it from the wire shape, breaking
+	// USDT cross-network display in ChatMessage on the receiving
+	// side.  Fixed here as it's the same pattern as the
+	// adjacent payjoin_endpoint addition.  Now USDT addresses
+	// shared via chat carry the network identifier through to
+	// the receiver, which is what cp3's design intended.
+	if (p.network !== undefined && p.network !== '') wire.network = p.network;
+	// cp26 — PayJoin (BIP-78) endpoint URL.  BTC-only; the
+	// encoder enforces method='btc' as defense-in-depth (UI
+	// already gates the input field to BTC).  Wire-format field
+	// name uses snake_case `payjoin_endpoint` to match the
+	// existing convention (order_permlink, etc.).
+	if (p.payjoinEndpoint !== undefined && p.payjoinEndpoint !== '') {
+		if (p.method !== 'btc') {
+			throw new Error('payload: payjoin_endpoint is only valid for btc method');
+		}
+		// Sanity check: must parse as a URL.  PayJoin endpoints
+		// per BIP-78 should be HTTPS or .onion; we don't enforce
+		// either at the encoder level (operator may run a
+		// privately-trusted plain-HTTP endpoint on a LAN) but
+		// rejecting unparseable strings catches obvious typos.
+		try {
+			// eslint-disable-next-line no-new
+			new URL(p.payjoinEndpoint);
+		} catch {
+			throw new Error('payload: invalid payjoin_endpoint URL');
+		}
+		wire.payjoin_endpoint = p.payjoinEndpoint;
+	}
 	return JSON.stringify(wire);
 }
 
@@ -665,6 +815,11 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		wire.order_permlink = p.orderPermlink;
 	if (p.note !== undefined && p.note !== '') wire.note = p.note;
 	if (p.memo !== undefined && p.memo !== '') wire.memo = p.memo;
+	// cp26 inline-fix — same cp3 latent bug as encodeAddressPayload:
+	// FundsSent USDT messages were dropping the network field on
+	// the wire, breaking the per-network explorer-link rendering
+	// in ChatMessage.  Fixed symmetrically here.
+	if (p.network !== undefined && p.network !== '') wire.network = p.network;
 	return JSON.stringify(wire);
 }
 
@@ -793,7 +948,51 @@ function optionalFieldsAddress(
 		if (base.method !== 'blurt') return null;
 		memo = o.memo;
 	}
-	return { ...base, amount, orderPermlink, note, memo };
+	// cp26 inline-fix — pre-existing cp3 latent bug: USDT
+	// `network` field was being dropped on the wire.  Decoder
+	// now reads it back when present.  USDT-only by design;
+	// other methods carrying a `network` field is malformed.
+	let network: string | undefined;
+	if (Object.hasOwn(o, 'network')) {
+		if (typeof o.network !== 'string' || o.network.length === 0) return null;
+		// USDT must have one of the 4 supported networks; other
+		// methods must not carry the field.  Defense in depth:
+		// the wire format permits the field on any method for
+		// forward-compat, but we reject network values that
+		// don't make sense for the method-asset pairing.
+		if (base.method === 'usdt') {
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'trc20' &&
+				o.network !== 'spl' &&
+				o.network !== 'bep20'
+			) {
+				return null;
+			}
+			network = o.network;
+		} else {
+			// Non-USDT method with a network field — refuse the
+			// payload rather than silently drop, since a wallet
+			// might key off it incorrectly.
+			return null;
+		}
+	}
+	// cp26 — PayJoin endpoint URL.  BTC-only.
+	let payjoinEndpoint: string | undefined;
+	if (Object.hasOwn(o, 'payjoin_endpoint')) {
+		if (typeof o.payjoin_endpoint !== 'string' || o.payjoin_endpoint.length === 0) {
+			return null;
+		}
+		if (base.method !== 'btc') return null;
+		try {
+			// eslint-disable-next-line no-new
+			new URL(o.payjoin_endpoint);
+		} catch {
+			return null;
+		}
+		payjoinEndpoint = o.payjoin_endpoint;
+	}
+	return { ...base, amount, orderPermlink, note, memo, network, payjoinEndpoint };
 }
 
 function optionalFieldsFundsSent(
@@ -826,7 +1025,27 @@ function optionalFieldsFundsSent(
 		if (base.method !== 'blurt') return null;
 		memo = o.memo;
 	}
-	return { ...base, amount, orderPermlink, note, memo };
+	// cp26 inline-fix — symmetric to optionalFieldsAddress.
+	// USDT FundsSent messages now correctly carry the network
+	// field through decode.
+	let network: string | undefined;
+	if (Object.hasOwn(o, 'network')) {
+		if (typeof o.network !== 'string' || o.network.length === 0) return null;
+		if (base.method === 'usdt') {
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'trc20' &&
+				o.network !== 'spl' &&
+				o.network !== 'bep20'
+			) {
+				return null;
+			}
+			network = o.network;
+		} else {
+			return null;
+		}
+	}
+	return { ...base, amount, orderPermlink, note, memo, network };
 }
 
 /** Build a wallet-recognized payment URI for a payload.  Used
@@ -859,6 +1078,18 @@ export function buildPaymentUri(p: AddressPayload): string {
 	const params = new URLSearchParams();
 	if (p.method === 'btc') {
 		if (p.amount !== undefined) params.set('amount', p.amount);
+		// cp26 — PayJoin (BIP-78) endpoint propagation.  BTC-only
+		// at present; the BIP doesn't apply to non-Bitcoin chains.
+		// Buyer wallets that support PayJoin will detect the pj=
+		// parameter and switch to the BIP-78 PSBT exchange flow;
+		// non-PayJoin wallets ignore the param and fall back to a
+		// normal payment.  Zero footgun.
+		if (
+			p.payjoinEndpoint !== undefined &&
+			p.payjoinEndpoint.trim().length > 0
+		) {
+			params.set('pj', p.payjoinEndpoint.trim());
+		}
 		const qs = params.toString();
 		return `bitcoin:${p.address}${qs ? `?${qs}` : ''}`;
 	}

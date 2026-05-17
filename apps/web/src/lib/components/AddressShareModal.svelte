@@ -32,6 +32,7 @@
 		generateBlurtMemo,
 		isValidAddress,
 		jitterMoneroAmount,
+		jitterAmountForAsset,
 		PAYLOAD_CONSTANTS,
 		type AddressPayload,
 		type ChatAssetTicker
@@ -39,6 +40,11 @@
 	import { validateUsdtAddress, type UsdtNetwork } from '$lib/assets/networks';
 	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
+	import {
+		findPriorShare,
+		recordAddressShare,
+		type AddressHistoryEntry
+	} from '$lib/privacy/addressHistory';
 
 	interface Props {
 		/** Pre-filled order permlink — when the modal was opened
@@ -83,36 +89,64 @@
 	 *  explicitly don't want matching support. */
 	let useMemo = $state(true);
 
-	/** Q5 — privacy: randomize Monero amount.  Default ON for XMR.
-	 *  Adds up to 999_999 piconero (~1 microXMR ≈ trivial cost) of
-	 *  random low-order digits to the typed amount, defeating
-	 *  amount-correlation attacks on the Monero chain.  See
-	 *  jitterMoneroAmount in payload.ts for the mechanism, and
-	 *  openmonero.com/knowledge/how-bad-actors-try-to-track-monero
-	 *  for the threat. */
-	let jitterXmr = $state(true);
+	/** cp26 — BTC PayJoin (BIP-78) endpoint URL.  Optional, BTC-
+	 *  only.  When non-empty, the generated bitcoin: URI gains
+	 *  a `pj=<url>` parameter and the wire payload carries
+	 *  `payjoin_endpoint`.  Wallets that support PayJoin will
+	 *  switch to the BIP-78 PSBT exchange flow with this URL;
+	 *  wallets without support ignore the parameter and fall
+	 *  back to a normal payment (zero footgun).
+	 *
+	 *  Morphit doesn't host the endpoint — the seller supplies
+	 *  it from their own wallet/BTCPayServer/equivalent.  We
+	 *  validate it parses as a URL but don't enforce HTTPS or
+	 *  .onion (operator may run trusted plain-HTTP on a LAN). */
+	let payjoinEndpoint = $state('');
+
+	/** Q5 — privacy: randomize amount for transparent chains.
+	 *  Default ON for XMR (cp3) AND all transparent assets
+	 *  (BTC/BCH/LTC/BLURT) from cp26.  XMR uses 6 trailing
+	 *  decimals of jitter to defeat amount-correlation on the
+	 *  Monero chain (see jitterMoneroAmount).  BTC/BCH/LTC use
+	 *  satoshi-precision jitter (up to 999 sat ≈ $0.001-$0.50
+	 *  trivial cost — see jitterUtxoAmount).  BLURT uses
+	 *  milliblurt-precision jitter (see jitterBlurtAmount).
+	 *  USDT is excluded — its privacy issue is Tether's freeze
+	 *  capability, which amount-jitter doesn't address.
+	 *  See jitterAmountForAsset in payload.ts for the dispatcher. */
+	let jitterAmount = $state(true);
 	/** Memoized jittered amount.  Recomputed each time the user
-	 *  edits the amount or toggles jitter; held stable so re-
-	 *  rendering the preview doesn't re-roll the random low-order
-	 *  digits (which would be confusing — the user expects the
-	 *  number they see to be the number that gets sent). */
-	let xmrJitteredAmount = $state<string | null>(null);
+	 *  edits the amount, switches asset, or toggles jitter; held
+	 *  stable so re-rendering the preview doesn't re-roll the
+	 *  random low-order digits (which would be confusing — the
+	 *  user expects the number they see to be the number that
+	 *  gets sent). */
+	let jitteredAmount = $state<string | null>(null);
+	/** Returns true when amount-jitter is available for the
+	 *  currently-selected asset.  USDT excluded (see comment
+	 *  above). */
+	const jitterEligible = $derived(method !== 'usdt');
 	$effect(() => {
 		if (
-			method !== 'xmr' ||
-			!jitterXmr ||
+			!jitterEligible ||
+			!jitterAmount ||
 			amount.trim() === '' ||
 			!/^\d{1,12}(?:\.\d{1,12})?$/.test(amount.trim())
 		) {
-			xmrJitteredAmount = null;
+			jitteredAmount = null;
 			return;
 		}
 		try {
-			xmrJitteredAmount = jitterMoneroAmount(amount.trim());
+			jitteredAmount = jitterAmountForAsset(method, amount.trim());
 		} catch {
-			xmrJitteredAmount = null;
+			jitteredAmount = null;
 		}
 	});
+
+	// cp26-back-compat aliases for any existing references to the
+	// XMR-specific names; remove once all sites use the generic ones.
+	const jitterXmr = $derived(jitterAmount);
+	const xmrJitteredAmount = $derived(method === 'xmr' ? jitteredAmount : null);
 
 	/** Auto-generate the memo the first time the user lands on
 	 *  the BLURT tab with useMemo enabled and no memo yet.  Don't
@@ -141,6 +175,18 @@
 			(method === 'usdt'
 				? usdtNetwork !== null && validateUsdtAddress(usdtNetwork, trimmedAddress)
 				: isValidAddress(method, trimmedAddress))
+	);
+	/** cp26 — Address-reuse detection.  Reads the local-only
+	 *  address-history (see lib/privacy/addressHistory.ts) and
+	 *  surfaces a warning chip when the user is about to share an
+	 *  address they've shared from this device before.  Reuse leaks
+	 *  the operator's on-chain identity to the counterparty's
+	 *  observers + builds a counterparty graph against the same
+	 *  address over time. */
+	const priorShare = $derived(
+		addressLooksValid
+			? findPriorShare(method.toUpperCase(), trimmedAddress)
+			: null
 	);
 	/** Amount is OPTIONAL.  Empty is fine.  Non-empty must be a
 	 *  valid positive decimal. */
@@ -211,17 +257,18 @@
 		sending = true;
 		sendError = null;
 		try {
-			// Q5 — if XMR jitter is enabled and we have a valid
-			// jittered amount, send that as the payload.amount; the
-			// buyer's wallet will pre-fill it from the QR/payload and
-			// the on-chain transfer will carry the jittered value.
-			// We use the memoized $state rather than re-calling
-			// jitterMoneroAmount so the preview the user saw IS the
-			// amount that gets sent (no re-roll between preview and
-			// submit).
+			// cp26 — if amount jitter is enabled for an eligible asset
+			// and we have a valid jittered amount, send that as
+			// payload.amount; the buyer's wallet will pre-fill it from
+			// the QR/payload and the on-chain transfer carries the
+			// jittered value.  We use the memoized $state rather than
+			// re-calling jitterAmountForAsset so the preview the user
+			// saw IS the amount that gets sent (no re-roll between
+			// preview and submit).  USDT is no-jitter (its privacy
+			// issue is centralization, not amount-correlation).
 			const finalAmount =
-				method === 'xmr' && jitterXmr && xmrJitteredAmount !== null
-					? xmrJitteredAmount
+				jitterEligible && jitterAmount && jitteredAmount !== null
+					? jitteredAmount
 					: trimmedAmount.length > 0
 						? trimmedAmount
 						: undefined;
@@ -244,9 +291,28 @@
 				// address:" as the bold header so cross-network
 				// confusion is impossible.  Validated above by the
 				// addressLooksValid + usdtNetworkPicked gates.
-				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {})
+				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {}),
+				// cp26 — BTC PayJoin (BIP-78) endpoint URL.  Only
+				// propagates when method is btc AND the seller
+				// supplied a non-empty endpoint.  Encoder enforces
+				// the BTC-only invariant as defense in depth.
+				...(method === 'btc' && payjoinEndpoint.trim().length > 0
+					? { payjoinEndpoint: payjoinEndpoint.trim() }
+					: {})
 			};
 			const wire = encodeAddressPayload(payload);
+			// cp26 — Record this share in the local-only address
+			// history so subsequent uses of the same address surface
+			// a reuse warning.  Best-effort: failure to record
+			// (localStorage full, private mode) does NOT block the
+			// share itself.
+			const historyEntry: AddressHistoryEntry = {
+				asset: method.toUpperCase(),
+				address: trimmedAddress,
+				sharedAt: new Date().toISOString(),
+				...(orderPermlink !== undefined ? { orderPermlink } : {})
+			};
+			recordAddressShare(historyEntry);
 			await onShare(wire);
 		} catch (err) {
 			console.warn('[AddressShareModal] send failed:', err);
@@ -419,7 +485,72 @@
 					{$_('chat.address.subaddress_tip_modal')}
 				</div>
 			{/if}
+			<!-- cp26 — Address-reuse warning.  Surfaced when the
+			     user is about to share an address they've shared
+			     from this device before.  Renders BELOW the error
+			     row (errors take priority) but ABOVE the optional
+			     subaddress tip.  Privacy posture: localStorage-only,
+			     never transmitted to any server. -->
+			{#if priorShare !== null && !addressErrorKey}
+				<div
+					class="mt-2 rounded-lg border border-amber-400 bg-amber-50 p-2 text-xs dark:border-amber-600 dark:bg-amber-950"
+					role="alert"
+				>
+					<div class="font-semibold text-amber-900 dark:text-amber-100">
+						⚠ {$_('chat.address.reuse_warning_heading')}
+					</div>
+					<p class="mt-1 text-amber-800 dark:text-amber-200">
+						{$_('chat.address.reuse_warning_body', {
+							values: {
+								date: new Date(priorShare.sharedAt).toLocaleDateString()
+							}
+						})}
+					</p>
+					{#if priorShare.orderPermlink !== undefined}
+						<p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+							{$_('chat.address.reuse_warning_prior_order', {
+								values: { permlink: priorShare.orderPermlink }
+							})}
+						</p>
+					{/if}
+				</div>
+			{/if}
 		</label>
+
+		<!-- cp26 — BTC PayJoin (BIP-78) endpoint URL.  Optional
+		     advanced field — most sellers won't use this.  Surfaces
+		     only on the BTC tab.  When the seller's wallet supports
+		     PayJoin (BIP-78), they paste the endpoint URL here; the
+		     buyer's wallet (if it also supports PayJoin) will use
+		     the URL to negotiate a cooperative PSBT that defeats
+		     the common-input-ownership heuristic.  No effect on
+		     wallets without PayJoin support — they fall back to a
+		     normal payment. -->
+		{#if method === 'btc'}
+			<details class="mt-3 rounded-lg border border-ink-200 bg-ink-50 p-2 text-sm dark:border-ink-700 dark:bg-ink-900">
+				<summary class="cursor-pointer font-semibold text-ink-700 dark:text-ink-200">
+					🔐 {$_('chat.address.payjoin_summary')}
+				</summary>
+				<div class="mt-2">
+					<label class="block">
+						<span class="text-xs font-semibold">{$_('chat.address.payjoin_label')}</span>
+						<input
+							type="url"
+							bind:value={payjoinEndpoint}
+							placeholder="https://payjoin.example.org/bip78"
+							autocomplete="off"
+							autocapitalize="none"
+							autocorrect="off"
+							spellcheck="false"
+							class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-ink-700 dark:bg-ink-950"
+						/>
+						<p class="mt-1 text-[11px] text-ink-600 dark:text-ink-400">
+							{$_('chat.address.payjoin_explain')}
+						</p>
+					</label>
+				</div>
+			</details>
+		{/if}
 
 		{#if method === 'blurt'}
 			<!-- Phase F.4 — BLURT payment memo.  Auto-generated for
@@ -485,52 +616,70 @@
 			{/if}
 		</label>
 
-		<!-- Q5 — XMR amount-jitter toggle.  Defeats amount-correlation
-		     attacks on the Monero chain (see openmonero.com guide on
-		     bad-actor tracking).  Default ON; cost is up to ~1
-		     microXMR (~$0.0002 at typical XMR price).
-		     Sally finding L13 (Part 68): copy made explicit in BOTH
-		     ON and OFF states — when ON, show the exact 12-decimal
-		     value the buyer's wallet should send; when OFF, show a
-		     visible warning that the round amount is what's being
-		     shared (the user opted out of privacy, that's the
-		     consequence). -->
-		{#if method === 'xmr' && trimmedAmount.length > 0 && amountLooksValid}
+		<!-- Q5 — Amount-jitter toggle.  Defeats amount-correlation
+		     attacks on transparent chains (any 3rd party can match
+		     order book + chain to identify the trade).  XMR shipped
+		     this in cp3 with deep Monero-specific copy (Sally finding
+		     L13 — Part 68 — explicit ON/OFF state copy).  cp26
+		     extended to BTC/BCH/LTC (satoshi precision) and BLURT
+		     (milliblurt precision).  USDT excluded — its privacy
+		     issue is centralization (Tether freeze), not amount-
+		     correlation; jitter doesn't address the actual threat. -->
+		{#if jitterEligible && trimmedAmount.length > 0 && amountLooksValid}
+			{@const unit = method.toUpperCase()}
+			{@const labelKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_label'
+				: 'chat.address.amount_jitter_label'}
+			{@const explainKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_explain'
+				: 'chat.address.amount_jitter_explain'}
+			{@const willSendKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_will_send'
+				: 'chat.address.amount_jitter_will_send'}
+			{@const sendExactKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_send_exact_hint'
+				: 'chat.address.amount_jitter_send_exact_hint'}
+			{@const offHeadingKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_off_warning_heading'
+				: 'chat.address.amount_jitter_off_warning_heading'}
+			{@const offBodyKey = method === 'xmr'
+				? 'chat.address.xmr_jitter_off_warning_body'
+				: 'chat.address.amount_jitter_off_warning_body'}
 			<div class="mt-2 rounded-lg border border-morphit-emerald/40 bg-morphit-emerald/5 p-3">
 				<label class="flex items-start gap-2 text-sm">
-					<input type="checkbox" bind:checked={jitterXmr} class="mt-0.5 h-4 w-4" />
+					<input type="checkbox" bind:checked={jitterAmount} class="mt-0.5 h-4 w-4" />
 					<span class="flex-1">
 						<span class="font-semibold">
-							🔐 {$_('chat.address.xmr_jitter_label')}
+							🔐 {$_(labelKey)}
 						</span>
 						<span class="block text-xs text-ink-600 dark:text-ink-300">
-							{$_('chat.address.xmr_jitter_explain')}
+							{$_(explainKey)}
 						</span>
 					</span>
 				</label>
-				{#if jitterXmr && xmrJitteredAmount !== null}
+				{#if jitterAmount && jitteredAmount !== null}
 					<div
 						class="mt-2 rounded-md border border-morphit-emerald/30 bg-white p-2 dark:bg-ink-950"
 					>
 						<div class="text-xs font-semibold text-morphit-emerald">
-							✓ {$_('chat.address.xmr_jitter_will_send')}
+							✓ {$_(willSendKey)}
 						</div>
 						<code class="mt-1 block break-all font-mono text-sm font-bold">
-							{xmrJitteredAmount} XMR
+							{jitteredAmount} {unit}
 						</code>
 						<p class="mt-1 text-[11px] text-ink-500 dark:text-ink-500">
-							{$_('chat.address.xmr_jitter_send_exact_hint')}
+							{$_(sendExactKey)}
 						</p>
 					</div>
-				{:else if !jitterXmr}
+				{:else if !jitterAmount}
 					<div
 						class="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-700 dark:bg-amber-950"
 					>
 						<div class="text-xs font-semibold text-amber-900 dark:text-amber-200">
-							⚠ {$_('chat.address.xmr_jitter_off_warning_heading')}
+							⚠ {$_(offHeadingKey)}
 						</div>
 						<p class="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
-							{$_('chat.address.xmr_jitter_off_warning_body')}
+							{$_(offBodyKey)}
 						</p>
 					</div>
 				{/if}

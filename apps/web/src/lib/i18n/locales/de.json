@@ -2319,7 +2319,21 @@
 			"method_ltc": "Litecoin",
 			"address_placeholder_ltc": "L… oder M… oder ltc1…",
 			"address_invalid_ltc": "Das sieht nicht wie eine gültige Litecoin-Adresse aus.",
-			"pill_method_ltc": "Litecoin-Adresse"
+			"pill_method_ltc": "Litecoin-Adresse",
+			"amount_jitter_label": "Betrag für Privatsphäre randomisieren",
+			"amount_jitter_explain": "Fügt einen winzigen Zufallszuschlag hinzu (klein genug, um ein triviales implizites Trinkgeld zu sein), um die Betragskorrelation zwischen deiner Order und der On-Chain-Überweisung zu durchbrechen. Auf transparenten Chains dringend empfohlen.",
+			"amount_jitter_will_send": "Die Wallet deines Käufers sendet genau:",
+			"amount_jitter_send_exact_hint": "Dieser genaue Betrag bricht die Verbindung zwischen deinem Orderbuch-Eintrag und der On-Chain-Zahlung.",
+			"amount_jitter_off_warning_heading": "Betrag nicht randomisiert",
+			"amount_jitter_off_warning_body": "Jeder, der die Chain beobachtet, kann diesen genauen Betrag deiner Order zuordnen. Schalte den Randomisierer ein, sofern du keinen spezifischen Grund dagegen hast.",
+			"reuse_warning_heading": "Adresse zuvor verwendet",
+			"reuse_warning_body": "Du hast diese Adresse am {date} von diesem Gerät geteilt. Wiederverwendung derselben Adresse über Trades hinweg verknüpft sie in der öffentlichen Chain. Erwäge, eine frische Adresse aus deiner Wallet für diesen Trade abzuleiten.",
+			"reuse_warning_prior_order": "Zuvor geteilt für Order: {permlink}",
+			"payjoin_summary": "Erweitert: PayJoin (BIP-78) Endpoint",
+			"payjoin_label": "PayJoin Endpoint-URL (optional)",
+			"payjoin_explain": "Wenn deine Wallet PayJoin (BIP-78) unterstützt, füge hier ihre Endpoint-URL ein. Käufer, deren Wallets ebenfalls PayJoin unterstützen, nutzen eine kooperative Transaktion, die Chain-Analyse-Heuristiken bricht. Keine Auswirkung auf Wallets ohne PayJoin-Unterstützung.",
+			"payjoin_badge": "PayJoin verfügbar",
+			"payjoin_badge_tooltip": "Die Wallet des Verkäufers unterstützt PayJoin (BIP-78). Wenn deine ebenfalls unterstützt, verhandelt das Öffnen dieser URI eine kooperative Transaktion, die die Privatsphäre verbessert."
 		},
 		"funds_sent": {
 			"button": "Gelder gesendet markieren",
@@ -3491,6 +3505,91 @@
 			"price_subline": {
 				"live": "1 USDT = ${price} (Echtzeit)",
 				"unavailable": "USDT/USD-Preisfeed nicht verfügbar — zuletzt vor {staleness} gesehen."
+			}
+		}
+	},
+	"privacy": {
+		"index_title": "Privatsphäre-Praktiken — Morphit",
+		"index_meta_description": "Wie du deine Trades auf transparenten und privaten Chains privater gestaltest. Pro-Asset-Leitfaden zu frischen Adressen, Opt-in-Privatsphäre-Techniken und häufigen Fallstricken.",
+		"index_heading": "Privatsphäre-Praktiken auf Morphit",
+		"index_intro": "Die meisten auf Morphit gehandelten Assets (BTC, BCH, LTC, BLURT, USDT) leben auf transparenten Chains — jeder Beobachter kann die Chain-Historie lesen. Es gibt konkrete Schritte, mit denen du DEINE Trades viel schwieriger verknüpfbar, profilierbar oder überwachbar machst. Registry-getrieben: das nächste Asset, das Morphit hinzufügt, bekommt automatisch einen Leitfaden.",
+		"page_title": "Privatsphäre für {asset}-Trades — Morphit",
+		"guide_heading": "Privatsphäre-Praktiken für {asset}-Trades",
+		"back_to_index": "Alle Assets",
+		"section_fresh_addresses": "Nutze eine frische Adresse pro Trade",
+		"section_opt_in_tech": "Opt-in-Privatsphäre-Technologien",
+		"section_opt_in_tech_intro": "Standards, die Wallets in diesem Ökosystem implementieren können. Morphit empfiehlt KEINE spezifische Wallet-Software — selbst renommierte Wallets wurden kompromittiert. Suche nach einer Wallet, die diese Standards unterstützt, und überprüfe ihre Vertrauensposition selbst.",
+		"section_common_practices": "Universelle Praktiken",
+		"section_what_not_to_do": "Was zu vermeiden ist",
+		"section_caveats": "Spezifische Vorbehalte für dieses Asset",
+		"no_wallet_recommendation": "Morphit empfiehlt KEINE spezifische Wallet-Software. Selbst renommierte Wallets wurden kompromittiert oder hatten versteckte Schwächen. Die hier beschriebenen Privatsphäre-Techniken sind Protokoll-Standards, keine Empfehlungen — deine Wallet, deine Verantwortung.",
+		"fresh_address_advice": {
+			"subaddress": "Diese Chain unterstützt nativ Stealth-/Subadressen-Technologie. Deine Wallet leitet pro Trade eine frische Empfangsadresse (Subadresse) aus deinem View Key ab. Der Empfänger sieht jedes Mal eine eindeutige Adresse; Chain-Beobachter können mehrere Trades nicht derselben Wallet zuordnen.",
+			"hd-derived": "Diese Chain verwendet transparente Adressen ohne native Stealth-Funktionen. Standardpraxis: nutze eine Hierarchical-Deterministic (BIP-32) Wallet, die pro Anfrage eine neue Empfangsadresse ableitet. Die meisten modernen Wallets tun das automatisch. Der Preis für Adressen-Wiederverwendung ist hoch — jeder Trade, den du an derselben Adresse akzeptierst, baut einen öffentlichen Datensatz deiner Aktivität auf.",
+			"account-reuse": "Diese Chain ist kontobasiert — dein Kontoname ist deine Adresse. Frisches-Konto-pro-Trade ist nicht praktikabel (jedes neue Konto kostet Chain-Ressourcen). Akzeptiere, dass dieses Asset das höchste Betragskorrelations-Risiko auf Morphit hat. Für hochwertige Trades erwäge ein dediziertes Alt-Konto für diesen Trade."
+		},
+		"opt_in_tech": {
+			"mweb": {
+				"name": "MWEB (MimbleWimble Extension Blocks)",
+				"explain": "Eine native Litecoin-Privatsphäre-Funktion auf Protokollebene. MWEB verbirgt Transaktionsbeträge und bricht die Adresse-Betrag-Verknüpfung für Transfers, die sich anmelden. Pro Transaktion; nicht chain-weit. Suche nach Wallets, die \"MWEB\" oder \"Extension Blocks\" beim Senden als Option anzeigen."
+			},
+			"cashfusion": {
+				"name": "CashFusion",
+				"explain": "Eine CoinJoin-Variante für Bitcoin Cash, entwickelt von der BCH-Community. Mischt Eingaben und Ausgaben unterschiedlicher Beträge, um sowohl Common-Input-Ownership- als auch Betragskorrelations-Heuristiken zu brechen. Führe es aus einer CashFusion-fähigen Wallet vor oder nach einem Trade aus, um die On-Chain-Historie zu waschen."
+			},
+			"coinjoin": {
+				"name": "CoinJoin",
+				"explain": "Eine Familie von Protokollen, bei der mehrere Teilnehmer Eingaben und Ausgaben in einer einzigen Transaktion bündeln und so die Common-Input-Ownership-Heuristik brechen, die Münzen einem Besitzer zuordnet. Mehrere Implementierungen existieren mit unterschiedlichen Vertrauensmodellen — wähle sorgfältig und lies das Threat-Modell der Implementierung."
+			},
+			"payjoin": {
+				"name": "PayJoin (BIP-78)",
+				"explain": "Ein kooperatives Zwei-Parteien-Transaktionsprotokoll. Sender und Empfänger steuern beide Eingaben bei, sodass Chain-Beobachter die Standard-Heuristik \"alle Eingaben stammen aus derselben Wallet\" nicht anwenden können. Morphits Adress-Share-Modal enthält ein optionales PayJoin-Endpoint-Feld — wenn beide Wallets BIP-78 unterstützen, verwendet der Trade automatisch PayJoin."
+			}
+		},
+		"common_practices": {
+			"fresh_per_trade": "**Nutze eine frische Empfangsadresse für jeden Trade.** Deine Wallet sollte das unterstützen; wenn nicht, suche eine, die es tut. Adressen-Wiederverwendung ist das größte Leck, ohne Diskussion.",
+			"coin_control": "**Übe Coin Control beim Ausgeben.** Vermeide beim späteren Senden von Coins, den Trade-Output mit Coins aus einer anderen Quelle zu kombinieren — das verbindet deren Adress-Historien dauerhaft.",
+			"network_layer": "**Sende über Tor oder den Privatsphäre-Modus deiner Wallet.** Deine Heim-IP sieht die Transaktion zuerst; Knoten in der Nähe deiner IP können sie mit dir korrelieren. Eine Tor-fähige Wallet sendet standardmäßig über Tor.",
+			"kyc_touchpoints": "**Vermeide, Trade-Coins an oder von KYC-Börsen zu senden.** Sobald Trade-Coins eine KYC-Börse berühren, wird der Trade rechtlich identifizierbar, indem die Börsen-Aufzeichnungen mit den Chain-Daten kombiniert werden. Wenn du zu Fiat brücken musst, route über einen selbstverwahrten Zwischenschritt."
+		},
+		"what_not_to_do": {
+			"reuse_address": "Füge nicht dieselbe Empfangsadresse in mehrere Trades ein.",
+			"exact_amount": "Sende nicht den exakten Betrag, der in der Order aufgeführt ist — Morphits Betrags-Randomisierer-Toggle (das \"🔐 Betrag randomisieren\"-Häkchen im Adress-Share-Modal) bricht das; lass es AKTIVIERT.",
+			"combine_utxos": "Kombiniere den Trade-Output nicht mit Coins aus einer anderen Quelle, wenn du ihn später ausgibst.",
+			"clearnet_broadcast": "Sende nicht von deiner Heim-IP über eine nicht-private Wallet — nutze Tor."
+		},
+		"guides": {
+			"btc": {
+				"one_line": "Transparente Chain, vollständig dezentral — Opt-in-Mixing-Protokolle verfügbar.",
+				"intro": "Bitcoin ist die am meisten analysierte Chain der Welt. Jede Transaktion ist öffentlich; jede Adresse kann über die Zeit verfolgt werden. Die folgenden Privatsphäre-Praktiken reduzieren drastisch, wie einfach ein Dritter deine Trades profilieren kann — ohne dass du BTC verlassen musst.",
+				"meta_description": "Privatsphäre-Praktiken für Bitcoin-Trades auf Morphit: frische Adressen, PayJoin, CoinJoin und was zu vermeiden ist."
+			},
+			"xmr": {
+				"one_line": "Privatsphäre standardmäßig — Stealth-Adressen, verborgene Beträge, Ring-Signaturen.",
+				"intro": "Monero ist die stärkste Privatsphäre-Position auf Morphit. Standardmäßig sind deine Adresse, dein Betrag und deine Gegenpartei vor Dritten verborgen. Die folgenden Praktiken sind kleine Verschärfungen; die Chain selbst übernimmt die Hauptarbeit.",
+				"meta_description": "Privatsphäre-Praktiken für Monero-Trades auf Morphit: Subadressen und Betragsbehandlung."
+			},
+			"blurt": {
+				"one_line": "Koordinations-Chain — transparent und kontobasiert. Niedrigste Privatsphäre auf Morphit.",
+				"intro": "BLURT ist Morphits Koordinations-Chain — Orders, Chat-Chiffriertexte, Gebühren und Reputation leben hier. Die Chain ist vollständig öffentlich und kontobasiert, was bedeutet, dass jeder BLURT-Transfer mit deinem Konto dauerhaft für jeden sichtbar ist. Es gibt keine Opt-in-Privatsphäre-Technologie für BLURT.",
+				"caveats": "BLURT ist strukturell das am wenigsten private Asset auf Morphit. Dein Kontoname ist deine Adresse; du kannst ihn nicht rotieren. Für Trades, bei denen On-Chain-Privatsphäre wichtiger ist als Geschwindigkeit und Kosten, bevorzuge XMR, BTC (mit PayJoin), BCH (mit CashFusion), oder LTC (mit MWEB).",
+				"meta_description": "Privatsphäre-Überlegungen für BLURT-Trades auf Morphit: kontobasierte Chain, transparent by design."
+			},
+			"usdt": {
+				"one_line": "Zentralisiert — Tether kann jede Adresse einfrieren. Transparent auf jeder Chain.",
+				"intro": "Das Privatsphäre-Problem von USDT ist strukturell anders als das der anderen transparenten Assets: es ist zentralisiert. Tether Inc. kann jede USDT-Adresse auf jeder Host-Chain einfrieren, und sie haben diese Fähigkeit in der Vergangenheit genutzt. Keine noch so gute Adressen-Rotation oder Transaktions-Verschleierung ändert Tethers Einfrier-Fähigkeit.",
+				"caveats": "Selbst mit perfekten On-Chain-Privatsphäre-Praktiken bleibt USDT zentral einfrierbar. Praktische On-Chain-Privatsphäre auf USDT-Host-Chains (Ethereum, Tron, Solana, BSC) ist dieselbe wie auf jeder transparenten EVM/UTXO/Konto-Chain — deine Privatsphäre hängt vom Opt-in-Privatsphäre-Ökosystem der Host-Chain ab (Tornado Cash auf ETH, etc.), das wir hier weder empfehlen noch weiter beschreiben.",
+				"meta_description": "Privatsphäre-Überlegungen für USDT-Trades auf Morphit: Zentralisierungsrisiko und Host-Chain-Transparenz."
+			},
+			"bch": {
+				"one_line": "Transparent, dezentral — CashFusion bietet Opt-in-Mixing.",
+				"intro": "Bitcoin Cash teilt Bitcoins Transparenzmodell: jede Transaktion auf der Chain sichtbar, jede Adresse verknüpfbar. CashFusion (eine BCH-Community-CoinJoin-Variante mit Betrags-Randomisierung) ist die wichtigste Opt-in-Privatsphäre-Technologie und gut in mehrere BCH-Wallets integriert.",
+				"meta_description": "Privatsphäre-Praktiken für Bitcoin Cash-Trades auf Morphit: frische Adressen, CashFusion und was zu vermeiden ist."
+			},
+			"ltc": {
+				"one_line": "Transparent, dezentral — MWEB bietet Opt-in-Privatsphäre auf Chain-Ebene.",
+				"intro": "Litecoin teilt Bitcoins Transparenz auf der Basisschicht, fügt aber MWEB (MimbleWimble Extension Blocks) hinzu — eine Opt-in-Privatsphäre-Funktion auf Chain-Ebene, die Beträge verbirgt und Adress-Verknüpfbarkeit für Transfers bricht, die sich anmelden. Das ist das Nächstgelegene, was eine Chain der Bitcoin-Familie nativer Privatsphäre erreicht.",
+				"meta_description": "Privatsphäre-Praktiken für Litecoin-Trades auf Morphit: frische Adressen, MWEB und was zu vermeiden ist."
 			}
 		}
 	}

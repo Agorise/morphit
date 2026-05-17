@@ -380,6 +380,22 @@
 						{#if p.amount}
 							<span class="font-mono">· {p.amount}</span>
 						{/if}
+						<!-- cp26 — PayJoin badge.  Renders when the
+						     seller's payload carries a PayJoin (BIP-78)
+						     endpoint and the asset is BTC.  Tells the
+						     buyer "this seller's wallet supports
+						     cooperative tx construction — if your
+						     wallet also supports PayJoin, scanning the
+						     QR / opening the URI will trigger the
+						     BIP-78 PSBT exchange." -->
+						{#if p.method === 'btc' && p.payjoinEndpoint !== undefined}
+							<span
+								class="rounded-md bg-morphit-emerald/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-morphit-emerald"
+								title={$_('chat.address.payjoin_badge_tooltip') as string}
+							>
+								🔐 {$_('chat.address.payjoin_badge')}
+							</span>
+						{/if}
 					</div>
 					<div class="flex items-start gap-2">
 						<code

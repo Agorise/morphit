@@ -121,6 +121,50 @@ export interface AssetEntry {
 	 *  must be told when an asset they're considering is not
 	 *  private. */
 	readonly privacyWarningKey: string | null;
+	/** Part 122 cp26 — Privacy-practices metadata.  Even on
+	 *  fully-decentralized transparent chains (BTC/BCH/LTC/BLURT)
+	 *  users can take wallet-side and trade-flow steps to reduce
+	 *  on-chain linkability of their trades.  This field drives
+	 *  the per-asset privacy guide page (`/[lang]/privacy/{asset}`)
+	 *  and surfaces relevant nudges (fresh-address advice, opt-in
+	 *  privacy techs) in the post-order + address-share UX.
+	 *
+	 *  Registry-driven so future asset additions (Dash, DOGE,
+	 *  etc.) get the privacy framework automatically by
+	 *  populating this struct.
+	 *
+	 *  `freshAddressAdvice`: how the user gets a fresh receive
+	 *  address on this chain.  `'subaddress'` (XMR — wallet
+	 *  generates a fresh subaddress per trade, recipient verifies
+	 *  with view key); `'hd-derived'` (UTXO chains — BIP-32
+	 *  derivation in any HD wallet); `'account-reuse'` (BLURT —
+	 *  account-based, fresh-account-per-trade not grandma-
+	 *  friendly, accept lower privacy posture).
+	 *
+	 *  `optInPrivacyTech`: array of standard opt-in privacy
+	 *  technologies the chain supports.  Identifiers are
+	 *  protocol names, NOT wallet names (Morphit deliberately
+	 *  doesn't recommend specific wallets — even reputable ones
+	 *  get compromised).  Currently used: 'mweb' (LTC
+	 *  MimbleWimble Extension Blocks, native chain feature),
+	 *  'cashfusion' (BCH community CoinJoin variant with
+	 *  amount-randomization), 'coinjoin' (generic mixing protocol
+	 *  family, BTC and most UTXO chains), 'payjoin' (BIP-78,
+	 *  cooperative-input CoinJoin breaking common-input-ownership
+	 *  heuristic, BTC and forks).  `null` for assets without opt-in privacy tech
+	 *  (USDT, BLURT) or assets that are already private (XMR).
+	 *
+	 *  `privacyGuideKey`: i18n key prefix for the per-asset
+	 *  privacy guide page content.  Pages live at
+	 *  `/[lang]/privacy/{asset_lower}` and pull copy from
+	 *  `privacy.guides.{asset_lower}.*`. */
+	readonly privacyFeatures: {
+		readonly freshAddressAdvice: 'subaddress' | 'hd-derived' | 'account-reuse';
+		readonly optInPrivacyTech:
+			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin')[]
+			| null;
+		readonly privacyGuideKey: string;
+	};
 	/** Address shape — a permissive regex that matches well-formed
 	 *  addresses for this asset.  Used by frontend forms for inline
 	 *  typo detection.  Indexer-side and explorer-side verification
@@ -171,6 +215,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// XMR provides meaningful on-chain privacy by design;
 		// no warning chip needed.
 		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'subaddress',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'xmr'
+		},
 		// Standard primary (4...), subaddress (8...), or integrated
 		// (4... longer).  Source: Monero address spec.  Not a
 		// checksum — wallet does that.
@@ -190,6 +239,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// warning chip — users opt into Bitcoin knowing its trace-
 		// ability properties.
 		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: ['coinjoin', 'payjoin'],
+			privacyGuideKey: 'btc'
+		},
 		// P2PKH (1...), P2SH (3...), or Bech32 (bc1...).
 		// Excludes P2TR for now — receiver wallets that support
 		// taproot will accept Bech32 too.
@@ -209,6 +263,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// by design but no issuer can freeze accounts.  No warning
 		// chip.
 		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'account-reuse',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'blurt'
+		},
 		// Blurt account name: 3-16 chars, must start/end with
 		// alphanumeric, lowercase + dashes only.
 		addressShape: /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/
@@ -246,6 +305,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// and the address-share modal.  Text lives in i18n
 		// (assets.privacy_warnings.usdt_centralized).
 		privacyWarningKey: 'usdt_centralized',
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'usdt'
+		},
 		// Combined regex matching a VALID address on ANY of the
 		// supported networks.  Per-network validation happens in
 		// apps/web/src/lib/assets/networks.ts via per-network
@@ -284,6 +348,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// Users opt into Bitcoin Cash knowing its traceability
 		// properties.
 		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: ['cashfusion'],
+			privacyGuideKey: 'bch'
+		},
 		// CashAddr format (modern BCH standard) + legacy P2PKH/P2SH
 		// (still accepted by most BCH wallets):
 		//   - CashAddr with `bitcoincash:` prefix: 12-char prefix +
@@ -330,6 +399,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// property; users who want Morphit's strongest privacy
 		// posture should use XMR.)
 		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: ['mweb'],
+			privacyGuideKey: 'ltc'
+		},
 		// LTC address formats (chronological evolution):
 		//   - Legacy P2PKH: starts with `L`, 26-35 chars base58
 		//     (unambiguous with BTC since BTC P2PKH starts with 1).

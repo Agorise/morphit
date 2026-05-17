@@ -313,9 +313,9 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 3,231+ scenarios passed, 0 runners failed`
+      `Total: 3,301+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp24 baseline is 3,231 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
+      Part 122 cp26 baseline is 3,301 = cp24 3,231 + 36 privacy-features-registry + 12 address-history-helper + 13 amount-jitter-utxo + 9 payjoin-uri-wire-shape (cp25 added no new scenarios since it was a content/audit-only checkpoint); cp24 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
       disabled-assets-wizard scenarios).
 
       If you see several runners fail with
