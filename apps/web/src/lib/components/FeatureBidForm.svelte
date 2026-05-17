@@ -28,6 +28,8 @@
 	import { identity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import FeaturedBidHistory from '$components/FeaturedBidHistory.svelte';
 
 	interface Props {
 		/** Permlink of the order to promote. Must be a live order
@@ -54,6 +56,13 @@
 	let password = $state('');
 	let submitting = $state(false);
 	let errorMessage = $state('');
+
+	// Current account for the FeaturedBidHistory upsell.  Null
+	// when no account is on file (locked or pre-registration);
+	// FeaturedBidHistory simply isn't rendered in that case.
+	// Resolved once at mount — account name doesn't change
+	// during a session.
+	const historyAccount: string | null = getUserBlurtAccount();
 
 	const totalBlurt = $derived(feeBlurtPerHour * selectedHours);
 	// Ceil at 3 decimals to match on-chain formatting and avoid
@@ -123,6 +132,10 @@
 <div
 	class="rounded-xl border-2 border-morphit-emerald/40 bg-gradient-to-br from-morphit-emerald/5 to-morphit-teal/5 p-4"
 >
+	{#if historyAccount !== null}
+		<FeaturedBidHistory account={historyAccount} />
+	{/if}
+
 	<p class="mb-1 font-display text-sm font-bold">
 		⭐ {$_('feature_bid.title')}
 	</p>

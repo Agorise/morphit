@@ -1987,7 +1987,17 @@
 		"password_label": "Ваш пароль (для подписи активным ключом)",
 		"error_password_required": "Введите пароль, чтобы подписать ставку.",
 		"error_bad_password": "Этот пароль не разблокировал ваш активный ключ.",
-		"error_generic": "Не удалось разместить ставку. Попробуй снова."
+		"error_generic": "Не удалось разместить ставку. Попробуй снова.",
+		"history_heading": "Ваши недавние выделенные ставки",
+		"history_expand": "Показать ещё {extra}",
+		"history_collapse": "Показать меньше",
+		"history_row": "{hours}ч · {blurt} BLURT @ {rate}/ч · с {start}",
+		"history_state_visible": "Видна",
+		"history_state_outranked": "Перебита",
+		"history_state_expired": "Истекла",
+		"history_state_order_inactive": "Ордер завершён",
+		"history_extended": "Продлено ×{n}",
+		"history_extended_title": "Ставка продлена {n} раз(а) защитой от снайпинга"
 	},
 	"about_this_instance": {
 		"heading": "Об этом инстансе",

@@ -102,7 +102,41 @@ project() {
 
 cd "$REPO_ROOT"
 
-echo "=== Typecheck (uninstalled-module noise filtered) ==="
+# REVISIT-LIST A (Part 121 cp21 finding) — when node_modules is
+# missing or @morphit/* workspace packages aren't built, every
+# `import from '@morphit/...'` resolves to "Cannot find module"
+# which the noise filter swallows.  Any `satisfies <Type>` clause
+# downstream of those imports then silently no-ops, and the
+# sweep claims "0 errors" while latent type-drift bugs hide.
+#
+# Disclose the resolution state explicitly so the "0 errors"
+# line can't be trusted without context.
+#
+# DEEP-DEEP NOTE (DD-cp16-4): this check assumes npm workspaces.
+# pnpm and yarn berry (PnP) resolve workspace packages without a
+# `node_modules/@morphit` directory; if Morphit ever migrates,
+# update the heuristic.  Today the repo is npm-workspaces only.
+if [ -d "$REPO_ROOT/node_modules" ] && [ -d "$REPO_ROOT/node_modules/@morphit" ]; then
+	echo "=== Typecheck (uninstalled-module noise filtered) ==="
+	echo "    node_modules: present"
+	echo "    @morphit/*:   resolved (workspace packages built)"
+else
+	echo "=== Typecheck (uninstalled-module noise filtered) ==="
+	if [ ! -d "$REPO_ROOT/node_modules" ]; then
+		echo "    ⚠ node_modules MISSING — run 'npm ci' first"
+		echo "    ⚠ Any '@morphit/*' or third-party import will be"
+		echo "      filtered as 'Cannot find module' noise.  This means"
+		echo "      'satisfies <InterfaceFromIndexerClient>' clauses in"
+		echo "      apps/matrix-bot/scripts/ silently no-op; the '0 errors'"
+		echo "      line below is NOT a clean-bill-of-health."
+	elif [ ! -d "$REPO_ROOT/node_modules/@morphit" ]; then
+		echo "    ⚠ node_modules: present, but @morphit/* workspace"
+		echo "      packages aren't linked.  Run 'npm install' from the"
+		echo "      repo root to populate the workspace links."
+		echo "      satisfies-clauses against @morphit/* types silently"
+		echo "      no-op until this is resolved."
+	fi
+fi
 project "indexer (src only)"    apps/indexer/tsconfig.json        apps/indexer/src/
 project "indexer (incl. test)"  apps/indexer/tsconfig.json
 project "relay (src only)"      apps/relay/tsconfig.json          apps/relay/src/

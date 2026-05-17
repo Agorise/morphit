@@ -6,7 +6,306 @@
 
 ## REPO STATE NOW (read this first if resuming in a fresh chat)
 
-**Last sealed checkpoint:** Part 122 cp16 (2026-05-16)
+**Last sealed checkpoint:** Part 122 cp16 (2026-05-16, third re-tarball — Sally-operator walkthrough surfaced missing VAPID env block in relay.env.example; deep-deep on cp16 itself surfaced 4 more findings, all fixed in-pass)
+
+**Gates — all green:**
+- Triple-pulse: **3,154 × 3 scenarios, 0 failures**
+- Typecheck-sweep: 0 errors across all 10 workspaces; resolution-state disclosure with npm-workspaces note
+- wiring-completeness-smoke: **18 live + 0 deferred + 0 failed** (new `vapid-env-documented-in-example` row catches the relay.env.example gap)
+- web-push-wiring smoke: 36/36
+- canonical-message-cross-check smoke: 11/11
+- npm-audit-gate smoke: 3/3 — CVE-pinned; offline-skip path no longer falsely reports "1 scenarios pass"
+- persona-walkthrough smoke: 120/120
+
+### Walkthrough + audit-of-audit findings (this session)
+
+The user's standing rule (recorded in REVISIT-LIST Memory section): every feature/tweak runs full discipline by default — wire end-to-end, walk as Bob/Sally-user/Sally-operator, deep-deep.  Applied retroactively to this whole session's work:
+
+**Wiring sweep:** all cp9/cp13/cp14/cp15-audit/cp16 components verified wired:
+- cp9 PATH fix: `TSX=` variable resolved + used (2 hits in run-smokes.sh)
+- cp14 sig-verify: verifyPushSubscribeSignature imported + called in api/push.ts; PushEndpoints instantiated in main.ts; signSubscribe called from client subscribe()
+- cp14 per-account locale: `SELECT locale FROM push_subscriptions` in both feedback and chat handlers; pushLocalize.{localize,normalizeLocale} imported via `$indexer/pushLocalize`
+- cp15 cross-check smoke: registered in run-smokes.sh
+- cp16 npm-audit-gate: registered in run-smokes.sh
+- cp16 typecheck-sweep disclosure: prints at top of every run
+
+**Walkthrough findings:**
+- **Sally-operator (BUG, FIXED):** `ops/env/relay.env.example` was missing the Web Push env block entirely.  An operator setting up a fresh node by reading the example file would never know to run `generate-vapid-keys.sh`.  Push would be silently disabled.  Fixed by adding a documented Web Push section to the env example with commented-out placeholders + tuning knobs + sig-verify env var.  New wiring-completeness row `vapid-env-documented-in-example` so this can't drift.
+- **Bob (OK):** Settings → Notifications → Enable push flow handles all SubscribeError values including the new cp14 codes (`signature_required`, `signature_invalid`, `locked_session`).  Each has a localized string in all 10 locales.  Try/catch in NotificationSettings.svelte routes errors to localized rose-700 alert text.
+- **Sally-user (OK):** multi-device locale switch behavior is the documented design — `ORDER BY created_at DESC LIMIT 1` picks newest still-live subscription's locale; 410-Gone cleanup ensures stale subscriptions don't poison the lookup.
+
+**Deep-deep on cp16:**
+
+- **DD-cp16-1 (MEDIUM, FIXED).** `npm-audit-gate-smoke.ts` offline-tolerant path was reporting `✓ all 1 npm-audit-gate scenarios pass (gate-skipped, offline-tolerant)` — false sense of safety.  An adversary controlling CI network could block `registry.npmjs.org` and turn the gate into a no-op.  Now reports `0 scenarios actually checked (offline-skip)` with explicit warnings telling CI reviewers to treat this as a gate failure when the commit touches dependency files.  Exit code stays 0 so transient issues don't break unrelated CI runs, but no false "pass" message.
+- **DD-cp16-2 (LOW, FIXED).** The `cveTitles()` helper used a fancy conditional-type extraction.  Refactored to an explicit `ViaEntry` type alias — same type checking, less indirection.
+- **DD-cp16-3 (LOW, FALSE ALARM).** PRE-LAUNCH-CHECKLIST schema-version reference already mentions cp14 locale + cp15-audit refinements.  Closed without action.
+- **DD-cp16-4 (LOW, DOCUMENTED).** Typecheck-sweep disclosure assumes npm workspaces.  pnpm and yarn berry (PnP) resolve workspace packages differently.  Repo is npm-workspaces only; noted as inline comment for future migration awareness.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 16 — doc-pack + audit follow-ups + audit-of-the-audit + walkthrough-gap-fix: DD-2/4/7/10 OPERATIONS clarifications; DD-13 `npm audit` gate CVE-pinned (with DD-cp16-1 offline-skip honesty fix); pre-launch checklist gains VAPID setup step + schema v33 bump; brag list entry #60 for posting-key sig-verify; wiring-completeness smoke gains `push-subscribe-sig-verify` + `vapid-env-documented-in-example` claim rows; mediakit zip rebuilt; persona-walkthrough D-4 sentinel bumped v32→v33; **post-snapshot:** typecheck-sweep gains resolution-state disclosure (REVISIT A1 closed); npm-audit-gate allowlist CVE-pinned; **walkthrough fix:** relay.env.example gains Web Push env block (was missing entirely — Sally-operator would have shipped push-disabled by default); **cp16 deep-deep:** 4 findings, 2 fixed)
+
+**Snapshot date:** 2026-05-16
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp19 (2026-05-17) — audit cadence over cp17+cp18 + pre-launch dry-run walkthrough
+
+**Gates — all green:**
+- Triple-pulse: **3,173 × 3 scenarios, 0 failures**
+- Typecheck-sweep: 0 errors across all 10 workspaces
+- wiring-completeness: 21 live + 0 deferred + 0 failed
+
+### Audit cadence over cp17 + cp18 — findings
+
+Re-read every claim in the cp17 + cp18 TARBALL entries against actual files.  All "fixed-in-pass" claims verified.  One systemic finding surfaced that the original cp17 deep-deep missed:
+
+- **DD-meta-cp1718-1 (HIGH, FIXED).**  Push enqueue handlers in featureBid.ts (cp17), feedback.ts (cp14), and chat.ts (cp14) all enqueue a `push_pending` row even when the recipient has NO push subscriptions.  The push-sender worker drops these rows on the next poll (`droppedNoSubscriptions++`), so it's not a correctness bug — but it wastes work, pollutes the operator-monitored `push_sender_drops_no_subscriptions` counter, and runs INSERT-then-DELETE for every chat/feedback/outbid event involving a non-subscribed account.  Fixed in all three handlers by checking `localeRow.rowCount === 0` before the INSERT.  Same code pattern, same comment annotation; consistent across the three call sites.  The cp17 deep-deep missed this because it audited only the cp17-new code; the bug came from cp14 and was replicated in cp17.
+
+- **DD-meta-cp1718-2 (LOW, ACCEPT).** Anti-snipe TS smoke predicate (`wouldExtend()`) is stricter than the SQL UPDATE — checks cancelled/effective/expired conditions that the SQL relies on the visible-CTE for.  Over-defensive but produces the same result; arguably better documentation.  Accept.
+
+- **DD-meta-cp1718-3 (LOW, VERIFIED OK).** Anti-snipe UPDATE could in theory deadlock with concurrent /v1/orderbook/featured queries.  Verified: featuredOrderbook.ts uses plain SELECT (no FOR UPDATE / FOR SHARE).  No lock contention.
+
+### Pre-launch dry-run walkthrough — Sally-operator from scratch
+
+Walked every §A–H item as a fresh operator on a clean Ubuntu box.  Four real findings, all fixed:
+
+- **PRE-LAUNCH-DRY-RUN-1 (LOW, FIXED).**  Section A mint-acts invocation used bare `tsx scripts/mint-acts.ts 25`.  On a fresh production box, `tsx` is in `node_modules/.bin`, not on PATH — operator would hit "tsx: command not found."  Added `mint-acts` npm script to `apps/relay/package.json`; checklist now uses `npm run mint-acts -- 25` which works from any environment that ran `npm install`.
+
+- **PRE-LAUNCH-DRY-RUN-2 (LOW, FIXED).**  Section C smoke baseline stale at "3,154" — cp18 is 3,173.  Bumped.
+
+- **PRE-LAUNCH-DRY-RUN-3 (MEDIUM, FIXED).**  Section E told operator to "include the hash manifest in the next release op" but didn't say HOW to generate the manifest.  `apps/web/scripts/build-manifest.mjs` exists for exactly this purpose; doc now instructs `node scripts/build-manifest.mjs` and points at the `--hash-manifest` flag on `release-build-payload.ts`.
+
+- **PRE-LAUNCH-DRY-RUN-4 (LOW, FIXED).**  Section H Day-0 fee-verification check didn't say where to look.  Added the `psql SELECT permlink, fee_method, fee_status` query (same query already documented in OPERATIONS §4467 — surfaced into the checklist for parity).
+
+### Files changed
+
+- `apps/indexer/src/indexer/handlers/featureBid.ts` — no-subs guard before outbid INSERT
+- `apps/indexer/src/indexer/handlers/feedback.ts` — no-subs guard before feedback INSERT
+- `apps/indexer/src/indexer/handlers/chat.ts` — no-subs guard before chat/order INSERT
+- `apps/relay/package.json` — added `mint-acts` npm script
+- `docs/PRE-LAUNCH-CHECKLIST.md` — 4 dry-run findings + update-history row
+
+**Tarball:** `morphit-audit-2026-05-122-cp19-audit-cadence-and-dry-run-delta.tar.gz` — delta over cp18.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 19 — audit cadence over cp17 + cp18: DD-meta-cp1718-1 systemic bug found in all 3 push enqueue handlers (featureBid, feedback, chat) — INSERT-then-drop wasted work when recipient has no subscriptions; guard added to all three; pre-launch dry-run walkthrough surfaced 4 doc gaps: mint-acts invocation (npm script added), smoke baseline bump 3154→3173, hash-manifest builder script reference added, Day-0 fee-verification psql query added)
+
+**Snapshot date:** 2026-05-17
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp19 (2026-05-17)
+
+**Gates — all green:**
+- Triple-pulse: **3,173 × 3 scenarios, 0 failures** (cp17 baseline 3,159 + 12 anti-snipe smoke scenarios + 2 new wiring)
+- Typecheck-sweep: 0 errors across all 10 workspaces
+- wiring-completeness: **21 live + 0 deferred + 0 failed** (new `featured-bid-anti-snipe` row)
+- anti-snipe-extension smoke: 12/12 (boundary, cap, rank gate, cancellation, self-skip, future effective_at, MAX_EXTENSIONS sanity)
+
+### Shipped this checkpoint
+
+**Anti-snipe soft-close extension** — when a new bid arrives, the handler runs an UPDATE that extends any top-MAX_SLOTS bid expiring within `SNIPE_WINDOW_MINUTES` (5) by `SNIPE_EXTENSION_MINUTES` (5), capped at `MAX_EXTENSIONS` (6 = 30 min total per bid).  Same "soft close" pattern eBay and NFT marketplaces use to prevent T-2s sniping.
+
+| Component | Location | What it does |
+| --- | --- | --- |
+| Schema | `apps/indexer/src/db/schema.sql` v33.3a | `extension_count INT NOT NULL DEFAULT 0` + `last_extended_at TIMESTAMPTZ` columns; idempotent ALTER for upgrades; new `ix_featured_bids_expires` partial index for the snipe-window range scan |
+| Handler logic | `apps/indexer/src/indexer/handlers/featureBid.ts` | After INSERT, BEFORE outbid notification: CTE picks top-MAX_SLOTS active bids, UPDATE extends those whose expires_at ≤ NOW() + 5 min AND extension_count < MAX_EXTENSIONS AND trx_id ≠ self.  Sets last_extended_at = NOW(); increments extension_count.  Non-fatal on failure |
+| API surface | `apps/indexer/src/api/featuredBids.ts` | SELECT now returns extension_count + last_extended_at |
+| Types | `packages/indexer-client/src/index.ts` | `FeaturedBidHistoryEntry` extended with `extension_count: number` + `last_extended_at: string | null` |
+| UI chip | `apps/web/src/lib/components/FeaturedBidHistory.svelte` | "Extended ×N" chip on rows with extension_count > 0; localized tooltip explains anti-snipe |
+| Locale strings | 10 locales × 2 keys | `feature_bid.history_extended` + `history_extended_title` |
+| Smoke | `apps/indexer/scripts/anti-snipe-extension-smoke.ts` (new) | 12 scenarios covering window-edge inclusive boundary, MAX_EXTENSIONS cap, rank gate, cancellation, self-skip, future effective_at |
+
+**Ordering:** anti-snipe runs BEFORE outbid notification.  If a new bid would have sniped an expiring top-5 bid, the extension keeps that bid visible; the rank query then correctly identifies the new bid as rank-6 (not displacing anyone).  No false outbid notifications fire to a bidder whose expiring bid was just protected.
+
+**Cap rationale:** 6 extensions × 5 min = 30 min max drag per bid.  With 5 simultaneously-sniped bids, worst-case auction-drag is 30 min total (extensions for all 5 stack in parallel, not series).  Acceptable vs unbounded auction; matches typical NFT marketplace defaults.
+
+### Persona walkthroughs (standing rule)
+
+- **Bob (bids near deadline):** INSERT succeeds → anti-snipe extends the expiring top-5 bid by 5 min → rank query reports Bob at rank 6 → no outbid push fires (correct — soft close kept Sally visible) → Sally has 5 min to counter.  ✓
+- **Sally (gets normally outbid):** INSERT → no expiring bids → no extension → Sally drops to rank 6 → outbid push fires → tap → /my/orders scrolls to her bid → "Outranked" chip + 0 extensions.  ✓
+- **Sally-operator (upgrade from cp17):** ALTER TABLE IF NOT EXISTS runs idempotently → 2 columns added to featured_slot_bids → new ix_featured_bids_expires index created → no new env vars, no operator-visible config.  ✓
+
+### Deep-deep on cp18 (in-pass findings)
+
+- **DD-cp18-1 (MEDIUM, BY DESIGN).** Anti-snipe runs BEFORE outbid notification so the downstream rank query sees extended expires_at values.  Critical ordering verified by walkthrough.
+- **DD-cp18-2 (LOW, ACCEPT).** Defensive `trx_id <> $5` self-skip is belt-and-suspenders; the new bid's expires_at is always ≥1h from now so wouldn't be selected anyway.  Keep for clarity.
+- **DD-cp18-3 (MEDIUM, FALSE ALARM).** Backlog-replay concern with NOW(): historical bids have expires_at long past, so they don't get selected.  Replay is a no-op for both anti-snipe and outbid.
+- **DD-cp18-4 (LOW, ACCEPT).** Worst-case auction drag of 30 min per bid is acceptable; matches NFT marketplace defaults.
+- **DD-cp18-5 (LOW, ACCEPT).** New partial index supports the range scan well.
+- **DD-cp18-6 (LOW, MITIGATED).** Smoke predicate must change in lockstep with SQL; comments call out source-of-truth contract.  Same discipline pattern as cp14 canonical-message-cross-check.
+
+### Resume directive
+
+Featured-slot auction polish complete.  REVISIT-LIST §E "SCHEDULED" list now empty — all three originally-scheduled refinements shipped (bid history cp17, outbid push cp17, anti-snipe cp18).  Slot-duration configurability remains DEFERRED as premature abstraction.
+
+**Tarball:** `morphit-audit-2026-05-122-cp18-anti-snipe-delta.tar.gz` — delta over cp17.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 18 — anti-snipe soft-close extension: schema v33.3a adds extension_count + last_extended_at columns + ix_featured_bids_expires index; featureBid handler extends expiring top-5 bids by 5 min when a new bid arrives within the 5-min snipe window, capped at 6 extensions; featuredBids API surfaces extension_count + last_extended_at; FeaturedBidHistory UI shows "Extended ×N" chip with localized anti-snipe tooltip; 12-scenario anti-snipe-extension smoke covers boundary, cap, rank gate, cancellation, self-skip, future effective_at; brag #119 extended; mediakit rebuilt; REVISIT §E SCHEDULED list now empty)
+
+**Snapshot date:** 2026-05-16
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp18 (2026-05-16)
+
+**Gates — all green:**
+- Triple-pulse: **3,159 × 3 scenarios, 0 failures** (cp16 baseline 3,154 + 4 new wiring + 1 i18n allowlist test point)
+- Typecheck-sweep: 0 errors across all 10 workspaces
+- wiring-completeness: **20 live + 0 deferred + 0 failed** (2 new cp17 claims: featured-bid-history-endpoint, featured-bid-outbid-push)
+
+### Shipped this checkpoint
+
+**Phase A — bid history per account (full):**
+
+| Component | Location | What it does |
+| --- | --- | --- |
+| Types | `packages/indexer-client/src/index.ts` | New `FeaturedBidHistoryEntry` + `FeaturedBidHistoryResponse` shape |
+| Endpoint | `apps/indexer/src/api/featuredBids.ts` (new) | `GET /v1/orderbook/featured/bids?account=X`.  Returns up to 30 recent bids ordered newest-first; each row carries `is_visible` (currently ranked in top-MAX_SLOTS) + `order_status` (live / cancelled / completed) |
+| Route mount | `apps/indexer/src/main.ts` | Mounted under orderbookApp, inherits 'list' rate-limit tier |
+| Client wrapper | `apps/web/src/lib/indexer/client.ts` | `getFeaturedBidHistory(account, signal)` |
+| UI component | `apps/web/src/lib/components/FeaturedBidHistory.svelte` (new) | Renders bidder's own recent bids with state chip per row: Visible / Outranked / Expired / Order ended.  Auto-collapses to 5 rows with "Show all (N)" expand toggle.  Renders nothing on empty — no first-time-bidder pep talk |
+| Integration | `apps/web/src/lib/components/FeatureBidForm.svelte` | History rendered above the bid title when an account is known |
+| Locale strings | 10 locales × 8 keys | `feature_bid.history_heading`, `history_expand`, `history_collapse`, `history_row`, `history_state_visible`/`_outranked`/`_expired`/`_order_inactive` |
+
+**Phase B — outbid push notifications (full):**
+
+| Component | Location | What it does |
+| --- | --- | --- |
+| Handler logic | `apps/indexer/src/indexer/handlers/featureBid.ts` | After successful bid INSERT: ROW_NUMBER rank query against active bids; if our new bid is in top-MAX_SLOTS AND there's a rank-MAX_SLOTS+1 bidder AND that bidder isn't self → enqueue push_pending with category='order', localized title/body, click_path `/my/orders#order-<permlink>` |
+| Translation keys | `apps/indexer/src/indexer/pushLocalize.ts` | `PushStringKey` extended with `outbid_title` + `outbid_body`; all 10 locales have entries (TS-enforced Record completeness) |
+| Deep-link target | `apps/web/src/routes/[lang]/my/orders/+page.svelte` | Each order row gets `id="order-{permlink}"`; onMount post-load adds `requestAnimationFrame(() => scrollIntoView)` when URL hash matches `#order-<permlink>` |
+
+**Phase C — anti-snipe extensions: DESIGN ONLY, IMPLEMENTATION DEFERRED.**  Per Ken's "small UX polish" scope direction.  REVISIT-LIST §E updated to mark Phase A + B SHIPPED and detail the remaining anti-snipe design (column + handler check + chained-extension cap).  Estimated 1 evening of work; safe to defer because the cp17 minimum-hours-floor already prevents micro-bid sniping (the highest-leverage anti-snipe defense already shipped earlier).
+
+**Bonus fix surfaced by walkthrough:** the existing `/my/orders` page had no row-level id attributes, so the outbid push deep link wouldn't scroll the relevant order into view.  Added `id="order-{permlink}"` + scroll-into-view handler with input validation against CSS-injection via crafted hash.
+
+**Bonus fix surfaced by gates:** `i18n-translation-completeness-smoke` flagged "Visible" as byte-identical to English in es + fr — legitimate cognate (Spanish "Visible," French "Visible" both mean visible).  Allow-listed with (a) same-word reason.
+
+### Brag list + mediakit
+
+- Entry #119 (Featured-slot bidding) extended in-place to mention the cp17 polish: "Bidders see their own recent bids inline with the bid form... When a new bid pushes someone out of the top-5 visible set, the displaced bidder gets a push notification."  Per the standing brag-list discipline (concise, public-facing, evidence-anchored, no marketing fluff).
+- Mediakit zip rebuilt (memory #11 discipline: brag list change → regenerate `apps/web/static/morphit-mediakit.zip` same turn).
+
+### Persona walkthroughs (standing rule)
+
+- **Bob (first-time bidder):** opens /my/orders → taps "feature this" → FeaturedBidHistory mounts, fetches empty → renders nothing.  FeatureBidForm shows normally.  Bid succeeds.  ✓
+- **Sally-user (gets outbid):** another bidder places higher bid → indexer enqueues push → SW delivers within 30s → "Te superaron la puja" notification → tap → /my/orders#order-... → page loads → scroll-into-view fires post-rAF → Sally sees FeaturedBidHistory with "Outranked" chip on her bid.  ✓
+- **Sally-operator (no new config):** new endpoint auto-mounted via main.ts.  Outbid push uses existing cp13/cp14 infra.  No new env vars.  ✓
+
+### Deep-deep on cp17 (in-pass findings)
+
+- **DD-cp17-1 (MEDIUM, FALSE ALARM).** Backlog-processing concern with NOW() — actually correct because ctx.blockTime ≤ NOW() always.
+- **DD-cp17-2 (MEDIUM, FALSE ALARM).** Tie-break behavior consistent with featuredOrderbook.ts (older bids win ties; newer drop out).
+- **DD-cp17-3 (LOW, ACCEPT).** Permlink in push body is readable enough.
+- **DD-cp17-4 (MEDIUM, FALSE ALARM).** LEFT JOIN on (account, permlink) is correct — orders PK matches.
+- **DD-cp17-5 (LOW, ACCEPT).** Rate limit inherited from orderbookApp's 'list' tier.
+- **DD-cp17-6 (MEDIUM, FIXED).** featuredBids.ts SQL used a `CASE WHEN ... THEN ROW_NUMBER OVER (PARTITION BY ...)` pattern that was correct but obscure.  Refactored to "filter first, ROW_NUMBER over filtered set" pattern matching featureBid.ts handler for cross-file consistency + readability.  Same query plan, same result, easier to audit.
+- **DD-cp17-7 (LOW, ACCEPT).** is_visible column mapping is clean.
+- **DD-cp17-8 (MEDIUM, ACCEPT).** Endpoint reveals chain-public data; no leak.
+- **DD-cp17-9 (LOW, ACCEPT).** Auto-scroll defensively short-circuits when target not in DOM.
+
+### Verified gates
+
+- Triple-pulse: **3,159 × 3 = 9,477 scenario runs, 0 failures**
+- Typecheck-sweep: **0 errors across all 10 workspaces**
+- wiring-completeness: **20 live + 0 deferred + 0 failed**
+- web-push-wiring smoke: 36/36
+- canonical-message-cross-check smoke: 11/11
+- npm-audit-gate smoke: 3/3 (CVE-pinned)
+- persona-walkthrough smoke: 120/120
+- i18n-translation-completeness smoke: 4/4 (1 new (a)-class cognate allowlisted)
+- featurebid-handler-smoke: 14/14 (mock-client forgiving past expectations — new rank query returns empty, no side effects)
+
+**Tarball:** `morphit-audit-2026-05-122-cp17-featured-auction-delta.tar.gz` — delta over cp16-v4.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 17 — featured-slot auction refinements: Phase A bid-history endpoint + UI component (FeaturedBidHistory shows bidder's own recent bids with Visible/Outranked/Expired/Order-ended state chips); Phase B outbid push notifications (handler detects rank-MAX_SLOTS+1 displaced bidder + enqueues localized push); /my/orders gains row anchors + scroll-into-view for outbid deep links; REVISIT-LIST §E refinements moved from SCHEDULED to SHIPPED; brag list #119 extended; mediakit rebuilt; Phase C anti-snipe deferred to cp18+ per "small UX polish" scope)
+
+**Snapshot date:** 2026-05-16
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp17 (2026-05-16)
+
+**Gates — all green:**
+- Triple-pulse: **3,154 × 3 scenarios, 0 failures**
+- Typecheck-sweep: 0 errors across all 10 workspaces
+- wiring-completeness: 18 live + 0 deferred + 0 failed
+- persona-walkthrough: 120/120
+
+### Meta-audit + pre-launch walkthrough findings this turn
+
+**Audit cadence 3 (deep-deep on cp15-audit + cp16 itself).** Re-read every claim in `docs/AUDIT-cp14-deep-deep.md` against the actual current code/docs. All 6 fixed-in-pass claims (DD-1, DD-3, DD-5, DD-6, DD-9, DD-12) verified — code matches the report.  All 4 cp16-doc-clarification claims (DD-2, DD-4, DD-7, DD-10) verified — OPERATIONS contains the exact text the report promised.  Three new meta-findings surfaced:
+
+- **DD-meta-1 (MEDIUM, FIXED).** Cross-check smoke's "different account" and "different endpoint" negative-test scenario names were misleading.  The stubBlurt fixture returns the same pubkey regardless of account name, so what we're actually testing is canonical-message account/endpoint *binding* — not pubkey-lookup correctness.  Logic was correct; comments rewritten to describe what's actually exercised.
+- **DD-meta-2 (LOW, FIXED).** Audit report claimed scope was "cp11 through cp14" but cp11 was a single FAQ entry that contributed zero findings.  Scope statement tightened.
+- **DD-meta-3 (LOW, FIXED).** npm-audit-gate allowlist had no last-reviewed date.  Stale rationales need re-checking when supply-chain evolves; added `lastReviewed: string` field and prints date in the allowlist report.  Reviewers know when each entry needs refresh.
+
+**Pre-launch checklist Sally-operator walkthrough.** Walked every §A–H item as a fresh operator setting up morphit.io from scratch.  Four findings:
+
+- **PRE-LAUNCH-1 (LOW, FIXED).** Section A item 2 referenced stale keystore path `/etc/morphit/keys/relay-active.key`.  Ops-cli init wizard writes to `apps/relay/keystore.{wif,json}`.  Doc corrected.
+- **PRE-LAUNCH-2 (LOW, FIXED).** Section C env-load verification only covered the indexer.  Relay env is just as launch-blocking; added a matching `cd apps/relay && timeout 5 npm run start || true` step.
+- **PRE-LAUNCH-3 (LOW, FIXED).** Section C smoke-count baseline was stale at "2,900+ scenarios."  Bumped to "3,100+ (cp16 baseline 3,154)."
+- **PRE-LAUNCH-4 (LOW, FIXED).** Section H Day-0 monitoring had no push_pending queue-health check.  Worker wedged = queue grows unboundedly; added a `psql -c 'SELECT COUNT(*) FROM push_pending'` check guarded by "if push enabled."
+
+False alarm closed: mediakit regeneration is a developer discipline (every commit), not a Sally-operator step — the zip ships in source.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 16 — doc-pack + audit follow-ups + audit-of-the-audit + walkthrough-gap-fix + deep-deep-of-the-deep-deep + pre-launch sanity pass: DD-2/4/7/10 OPERATIONS clarifications, DD-13 `npm audit` gate CVE-pinned with lastReviewed dates, pre-launch checklist gains VAPID + schema v33 bump + keystore path fix + relay-env validation + smoke-count refresh + push_pending Day-0 monitoring, brag list #60 for sig-verify, wiring-completeness gains push-subscribe-sig-verify + vapid-env-documented-in-example claim rows, relay.env.example gains Web Push env block, npm-audit-gate offline-skip honesty fix, cross-check smoke scenario commentary fix; audit-cadence-3 verified every claim in cp15-audit + cp16 against actual files)
+
+**Snapshot date:** 2026-05-16
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp16 (2026-05-16, fourth re-tarball with audit-cadence-3 + pre-launch walkthrough)
+
+**Gates — all green:**
+- Triple-pulse: **3,153 × 3 scenarios, 0 failures**
+- Typecheck-sweep: 0 errors across all 10 workspaces; resolution-state disclosure now prints at the top of every run (REVISIT-LIST A1 finding closed)
+- wiring-completeness-smoke: 17 live + 0 deferred + 0 failed
+- web-push-wiring smoke: 36/36
+- canonical-message-cross-check smoke: 11/11
+- npm-audit-gate smoke: 3/3 — NOW CVE-pinned (allowlist entries name the exact accepted CVE titles; a new CVE added to an allowlisted package surfaces in the "new CVE title(s) not yet reviewed" report)
+- persona-walkthrough smoke: 120/120
+
+### Audit-of-the-audit fixes landed in this snapshot
+
+cp16 doc-pack shipped a new gate (npm-audit-gate) and updated the schema-sentinel D-4. A mini-audit on those changes surfaced two real findings, both fixed before re-tarballing:
+
+- **cp16-A-1 (REVISIT-LIST A1, CLOSED).** `scripts/typecheck-sweep.sh` now prints an explicit disclosure of resolution state at the top of every run. When `node_modules` is missing or `node_modules/@morphit` isn't linked, the sweep emits a prominent ⚠ warning that satisfies-clauses silently no-op and the "0 errors" line is NOT a clean-bill-of-health. The schema-as-contract pattern (matrix-bot cp16-cp17 satisfies-clauses against `@morphit/indexer-client`) is now protected from the silent-no-op failure mode that originally surfaced this item in Part 121 cp21.
+
+- **cp16-A-2.** `npm-audit-gate-smoke.ts` allowlist matched by package name only. A new CVE added to `request`, `form-data`, or `tough-cookie` would have silently slipped through the gate. Fix: allowlist entries now pin the exact CVE titles we've reviewed; `cveTitles()` extracts titles from `audit.vulnerabilities[name].via[i].title`; `isAllowed()` returns `{ok, unknownTitles}` so the report can surface specifically WHICH new CVE titles need review. The original 3 documented CVEs are listed in the allowlist (Server-Side Request Forgery in Request, form-data uses unsafe random function, tough-cookie Prototype Pollution); any new title fails the gate with a clear remediation hint.
+
+- **cp16-A-3.** TS6133 noise-filter regex bug (originally surfaced Part 121 cp21) — REVISIT-LIST entry was stale; was actually fixed in Part 121 cp22. Marked CLOSED with archaeology preserved.
+
+---
+
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 16 — doc-pack + audit follow-ups + audit-of-the-audit: DD-2/4/7 operator-trust + replay-window clarifications appended to OPERATIONS §42.5; DD-10 single-relay assumption note in §42.6; DD-13 `npm audit` gate shipped CVE-pinned with documented allowlist for matrix-bot-sdk's deprecated `request`+`form-data`+`tough-cookie` transitive CRITICAL/HIGH vulns; pre-launch checklist gains VAPID setup step in §C + schema v33 bump in §D; brag list entry #60 for posting-key sig-verify on push subscribe; wiring-completeness smoke gets the matching `push-subscribe-sig-verify` claim row; mediakit zip rebuilt; persona-walkthrough D-4 sentinel bumped v32→v33; **post-snapshot audit-of-audit:** typecheck-sweep gains resolution-state disclosure (REVISIT A1 closed); npm-audit-gate allowlist CVE-pinned by exact title so future CVE additions surface for review)
+
+**Snapshot date:** 2026-05-16
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp16 (2026-05-16, re-tarballed with cp16-A audit-of-audit fixes)
 
 **Gates — all green:**
 - Triple-pulse: **3,153 × 3 scenarios, 0 failures** (cp15-audit baseline 3,149 + 3 npm-audit-gate scenarios + 1 new wiring-completeness claim)

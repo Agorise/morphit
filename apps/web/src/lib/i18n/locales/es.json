@@ -1987,7 +1987,17 @@
 		"password_label": "Tu contraseña (para firmar con tu clave activa)",
 		"error_password_required": "Ingresa tu contraseña para firmar la oferta.",
 		"error_bad_password": "Esa contraseña no desbloqueó tu clave activa.",
-		"error_generic": "No se pudo realizar tu oferta. Inténtalo de nuevo."
+		"error_generic": "No se pudo realizar tu oferta. Inténtalo de nuevo.",
+		"history_heading": "Tus pujas destacadas recientes",
+		"history_expand": "Mostrar {extra} más",
+		"history_collapse": "Mostrar menos",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · desde {start}",
+		"history_state_visible": "Visible",
+		"history_state_outranked": "Superado",
+		"history_state_expired": "Caducado",
+		"history_state_order_inactive": "Orden finalizada",
+		"history_extended": "Extendida ×{n}",
+		"history_extended_title": "Puja extendida {n} vez/veces por anti-snipe"
 	},
 	"about_this_instance": {
 		"heading": "Sobre esta instancia",

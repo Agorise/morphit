@@ -25,6 +25,7 @@ import type {
 	ConversationsResponse,
 	FeaturedOrderbookResponse,
 	ClearingPriceHistoryResponse,
+	FeaturedBidHistoryResponse,
 	HealthResponse,
 	InstanceResponse,
 	InstanceDirectoryResponse,
@@ -240,6 +241,22 @@ export function getClearingPriceHistory(
 	if (opts.window !== undefined) params.set('window', String(opts.window));
 	return request<ClearingPriceHistoryResponse>('/v1/orderbook/featured/clearing-price-history', {
 		signal: opts.signal,
+		query: params
+	});
+}
+
+/** GET /v1/orderbook/featured/bids?account=X — recent featured-
+ *  slot bids placed by an account on their own orders.  Part 122
+ *  cp17.  Returns up to 30 bids ordered newest-first; each row
+ *  carries `is_visible` so the UI can mark currently-visible
+ *  bids vs paid-but-outranked vs expired. */
+export function getFeaturedBidHistory(
+	account: string,
+	signal?: AbortSignal
+): Promise<Result<FeaturedBidHistoryResponse>> {
+	const params = new URLSearchParams({ account });
+	return request<FeaturedBidHistoryResponse>('/v1/orderbook/featured/bids', {
+		signal,
 		query: params
 	});
 }

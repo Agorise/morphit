@@ -1987,7 +1987,17 @@
 		"password_label": "La tua password (per firmare con la tua chiave attiva)",
 		"error_password_required": "Inserisci la password per firmare l'offerta.",
 		"error_bad_password": "Questa password non ha sbloccato la tua chiave attiva.",
-		"error_generic": "Impossibile piazzare la tua offerta. Riprova."
+		"error_generic": "Impossibile piazzare la tua offerta. Riprova.",
+		"history_heading": "Le tue offerte in evidenza recenti",
+		"history_expand": "Mostra altre {extra}",
+		"history_collapse": "Mostra meno",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · da {start}",
+		"history_state_visible": "Visibile",
+		"history_state_outranked": "Superata",
+		"history_state_expired": "Scaduta",
+		"history_state_order_inactive": "Ordine concluso",
+		"history_extended": "Estesa ×{n}",
+		"history_extended_title": "Offerta estesa {n} volta/e dall'anti-snipe"
 	},
 	"about_this_instance": {
 		"heading": "Su questa istanza",

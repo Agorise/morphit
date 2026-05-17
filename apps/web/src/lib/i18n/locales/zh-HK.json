@@ -1987,7 +1987,17 @@
 		"password_label": "你的密碼(用於使用 Active 密鑰簽名)",
 		"error_password_required": "請輸入密碼以對出價簽名。",
 		"error_bad_password": "此密碼未能解鎖你的活躍金鑰。",
-		"error_generic": "無法提交你嘅出價。請重試。"
+		"error_generic": "無法提交你嘅出價。請重試。",
+		"history_heading": "你最近嘅精選競價",
+		"history_expand": "再顯示 {extra} 條",
+		"history_collapse": "顯示較少",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · 由 {start}",
+		"history_state_visible": "展示中",
+		"history_state_outranked": "已被超越",
+		"history_state_expired": "已過期",
+		"history_state_order_inactive": "訂單已結束",
+		"history_extended": "已延期 ×{n}",
+		"history_extended_title": "該競價被反狙擊機制延長咗 {n} 次"
 	},
 	"about_this_instance": {
 		"heading": "關於此實例",

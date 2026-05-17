@@ -1,7 +1,7 @@
 # Deep-deep audit — Part 122 cp11 through cp14
 
 **Audited:** 2026-05-16 (immediately after cp14 ships)
-**Scope:** cp11 (FAQ notifications_overview), cp12 (wiring-completeness smoke + 3 brag entries), cp13 (Web Push end-to-end), cp14 (sig-verify + per-account locale + cp9 PATH cleanup)
+**Scope:** cp11 (FAQ notifications_overview — content-only; no findings surfaced), cp12 (wiring-completeness smoke + 3 brag entries), cp13 (Web Push end-to-end), cp14 (sig-verify + per-account locale + cp9 PATH cleanup).  The substantive code surface is cp12 onward; cp11 was a single FAQ entry add and contributed no findings to this audit.
 **Methodology:** 94-task static audit, black-hat mindset, categories A–L (static code, deps/supply-chain, SQL/DB, HTTP/API, crypto, privacy, operator-trust, frontend, contracts, build/CI, threat-modeling, per-subsystem deep dives). No padding — only real findings.
 
 ## Summary

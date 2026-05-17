@@ -143,6 +143,7 @@ SMOKES=(
 	"apps/web:web-push-wiring-smoke"
 	"apps/web:npm-audit-gate-smoke"
 	"apps/relay:canonical-message-cross-check-smoke"
+	"apps/indexer:anti-snipe-extension-smoke"
 	"packages/asset-registry:fee-method-enum-frozen-smoke"
 	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 	"packages/asset-registry:usdt-trade-only-smoke"

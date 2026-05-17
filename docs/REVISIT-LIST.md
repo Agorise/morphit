@@ -924,11 +924,33 @@ These need **you** (or a person with operator access / domain
 knowledge), not more code.
 
 - **typecheck-sweep silently no-ops `satisfies` clauses against
-  workspace types when `node_modules` is missing — surfaced
-  2026-05-15 (Part 121 cp21).**  `apps/matrix-bot/scripts/`
-  carries cp16-cp17 schema-as-contract smokes that use
-  `satisfies <InterfaceFromIndexerClient>` to cross-check zod
-  schemas against canonical TS types from
+  workspace types when `node_modules` is missing — ✅ CLOSED Part 122 cp16 (2026-05-16).**
+  Fixed in `scripts/typecheck-sweep.sh:103–129` — the sweep now
+  prints an explicit disclosure of the resolution state at the
+  top of each run:
+
+  - When `node_modules` exists AND `node_modules/@morphit` is
+    populated: `node_modules: present / @morphit/*: resolved`.
+    "0 errors" is trustworthy.
+  - When `node_modules` is missing entirely: prominent ⚠ warning
+    that satisfies-clauses silently no-op and the run is NOT a
+    clean-bill-of-health.
+  - When `node_modules` is present but `@morphit/*` workspace
+    links are missing (partial install): same ⚠ warning with
+    a different remediation hint (`npm install`).
+
+  Took the disclosure path rather than the auto-install path
+  per the REVISIT-LIST proposal: auto-install is slow + opinionated,
+  disclosure is fast + leaves the choice with the operator.  The
+  schema-as-contract pattern (cp16-cp17 satisfies-clauses in
+  apps/matrix-bot/scripts/) is now protected from the silent
+  no-op failure mode that originally surfaced this item.  Kept
+  entry below for archaeology.
+
+  Original finding — surfaced 2026-05-15 (Part 121 cp21):
+  `apps/matrix-bot/scripts/` carries cp16-cp17 schema-as-contract
+  smokes that use `satisfies <InterfaceFromIndexerClient>` to
+  cross-check zod schemas against canonical TS types from
   `@morphit/indexer-client`.  These cross-checks ONLY execute
   if the `@morphit/*` imports actually resolve.  Pre-cp21 the
   typecheck-sweep was always run in a no-deps sandbox where
@@ -938,43 +960,25 @@ knowledge), not more code.
   errors" gate passed despite 20 latent type-drift bugs that
   surfaced the moment cp21 ran `npm install`.
 
-  **Fix posture:** `scripts/typecheck-sweep.sh` should EITHER
-  (a) attempt `npm ci --ignore-scripts --no-audit --no-fund`
-  if `node_modules` is missing (with a clear log message
-  about what it's doing and why), OR (b) refuse to claim "0
-  errors" without disclosing the resolution state of
-  `@morphit/*` imports.  Option (a) is cleaner; option (b)
-  is faster.  Either works; pick at next-session time.
+- **typecheck-sweep noise-filter regex bug for TS6133 — ✅ CLOSED Part 121 cp22.**
+  Fixed in `scripts/typecheck-sweep.sh:74` — the pattern is now
+  `error TS6133[ :].* is declared but` (allowing either space OR
+  colon after the error code).  Verified at cp22 sweep time; the
+  comment in the script (lines 65–73) records the fix history.
+  Kept entry below for archaeology.
 
-  **Why this matters going forward:** the schema-as-contract
-  pattern is load-bearing for catching API drift between the
-  indexer's published types and the matrix-bot's consuming
-  smokes (and any future @morphit/relay-client + frontend
-  smokes once Phase F lands).  A silent no-op gate is a
-  worse failure mode than a noisy red gate.
-
-- **typecheck-sweep noise-filter regex bug for TS6133 —
-  surfaced 2026-05-15 (Part 121 cp21).**  The NOISE_PATTERNS
-  string in `scripts/typecheck-sweep.sh` contains the
-  fragment `error TS6133 .* is declared but` — meant to
+  Original finding — surfaced 2026-05-15 (Part 121 cp21):
+  The NOISE_PATTERNS string in `scripts/typecheck-sweep.sh` contained
+  the fragment `error TS6133 .* is declared but` — meant to
   suppress "X is declared but its value is never read"
-  warnings for unused variables.  But the regex requires a
+  warnings for unused variables.  But the regex required a
   literal SPACE between "TS6133" and ".*", whereas tsc
   actually emits `error TS6133:` with a colon.  So this
-  noise rule has been matching NOTHING — every TS6133
-  warning has been flowing through the filter unsuppressed.
-  (cp21's asset-registry TS6133 was caught and fixed
-  in-place; the regex bug means any future TS6133 will
-  also surface as a real error rather than be silently
-  filtered, which is arguably the right outcome — but the
-  filter rule's existence is misleading.)
+  noise rule had been matching NOTHING — every TS6133
+  warning had been flowing through the filter unsuppressed.
 
-  **Fix:** change the fragment to `error TS6133[ :]` (allow
-  EITHER space or colon).  One-character edit.  Then decide
-  whether TS6133 should genuinely be suppressed by the
-  filter (current intent) or whether the filter rule
-  should be REMOVED (since suppressing real unused-variable
-  warnings is arguably a bad idea anyway).
+  Fix: change the fragment to `error TS6133[ :]` (allow
+  EITHER space or colon).  One-character edit.  Done in cp22.
 
 - **DNS rebinding gap in federation-probe SSRF defense — ✅ CLOSED Part 122 cp3 (2026-05-15).**  Original cp7 finding kept below for archaeology.  Cp3 shipped the three-layer defense:
     1. `isPrivateHostname(h)` — literal-hostname denylist (existing, refactored from inline to exported function).
@@ -1771,46 +1775,59 @@ later sub-phase.
 These aren't bugs — the features work — but there's known
 follow-up polish the original ship didn't include.
 
-### Featured-slot auction — refinements SCHEDULED 2026-04-24
+### Featured-slot auction — refinements SCHEDULED 2026-04-24, FULLY SHIPPED 2026-05-16 (Part 122 cp17 + cp18)
 
 The MVP (5 slots, highest-bidder-wins) is shipped and works.
-Polish items below either prevent abuse or improve discoverability;
-the three SCHEDULED items should land together in a focused session
-since they share the same auction-state surface. Slot-duration
-configurability is deferred as premature abstraction.
+All three originally-SCHEDULED refinements have now shipped:
+bid history (cp17), outbid push notifications (cp17), and
+anti-snipe soft-close extension (cp18).  Slot-duration
+configurability stays deferred as premature abstraction.
 
-**SCHEDULED:**
+**SHIPPED (Part 122 cp17, 2026-05-16):**
 
-- **Anti-sniping deadline extension.** Problem: without this,
-  a bidder at T-2s wins uncontested because nobody else has
-  time to respond. Fix: if any bid arrives within the last
-  N minutes of a slot's window, extend the window by N
-  minutes. Recommended N = 5 minutes (compromise between
-  fairness and auction-drag). The indexer's featureBid
-  handler already knows the current window; adding an
-  extension path is one SQL update + one check. Standard
-  "soft close" / "going, going, gone" auction rule used by
-  eBay and most NFT platforms.
+- **Bid history per account** ✅ — `GET /v1/orderbook/featured/bids?account=X`
+  returns up to 30 recent bids with visibility status (Visible /
+  Outranked / Expired / Order ended).  Inlined into the FeatureBidForm
+  via `FeaturedBidHistory.svelte` so bidders see their own activity
+  before bidding again.  Wiring smoke claims at
+  `apps/web/scripts/wiring-completeness-smoke.ts:featured-bid-history-endpoint`.
 
-- **Minimum-bid increments.** Problem: someone bidding
-  101 BLURT beats 100 BLURT, which invites penny-war bidding
-  spam. Fix: reject bids that don't beat the current high
-  by at least `max(1 BLURT, 5%)`. One predicate in the
-  featureBid handler validator. Reason to keep it in the
-  indexer (not just UI): hostile frontends could submit raw
-  penny-bump ops otherwise. Consistency means blocking at
-  intake.
+- **Minimum-bid increments** ✅ (originally shipped earlier;
+  `max(1 BLURT/hour, 5%)` enforced in the featureBid handler).
 
-- **Historical auction log / clearing-price history.** UX
-  discovery feature — bidders see what past slots cleared
-  at, set realistic expectations before bidding. Data is
-  already there (every won bid is a `morphit_featurebid_v1`
-  op on-chain); the indexer just needs a new API endpoint
-  `GET /v1/featured-history?limit=N` returning the last N
-  clearing prices with timestamp + asset + slot index. UI
-  surfaces it on the featured-bid modal as a small "recent
-  clearing prices" sidebar. No on-chain schema work needed;
-  it's purely a derive-from-existing-state + present feature.
+- **Outbid push notifications** ✅ — when a new bid pushes
+  someone out of the top-5 visible set, the displaced bidder
+  gets a push notification (category='order') with deep-link
+  back to /my/orders#order-<permlink>.  Detection logic at
+  `apps/indexer/src/indexer/handlers/featureBid.ts` (rank query
+  after INSERT, identifies the rank-MAX_SLOTS+1 bidder).
+  Localized via the existing pushLocalize mechanism (10 locales
+  × outbid_title + outbid_body).  Wiring smoke claims at
+  `apps/web/scripts/wiring-completeness-smoke.ts:featured-bid-outbid-push`.
+
+- **Historical auction log / clearing-price history** ✅
+  (originally shipped earlier as
+  `/v1/orderbook/featured/clearing-price-history` +
+  `FeaturedAuctionHistory.svelte`).
+
+**SHIPPED (Part 122 cp18, 2026-05-16):**
+
+- **Anti-sniping deadline extension** ✅ — soft-close auction
+  rule.  When a new bid arrives, the featureBid handler runs
+  an UPDATE that extends any top-MAX_SLOTS bid expiring within
+  SNIPE_WINDOW_MINUTES (5) by SNIPE_EXTENSION_MINUTES (5),
+  capped at MAX_EXTENSIONS (6 = 30 min total).  Schema v33.3a
+  adds `extension_count` + `last_extended_at` columns to
+  featured_slot_bids; new partial index `ix_featured_bids_expires`
+  supports the range scan.  Surfaced in the UI as an "Extended
+  ×N" chip with localized tooltip; the bidder sees why their
+  bid is still visible past the original deadline.  12-scenario
+  anti-snipe-extension smoke covers the rules (boundary
+  inclusive, cap, rank gate, cancellation, self-skip, future
+  effective_at).  Wiring smoke claims at
+  `apps/web/scripts/wiring-completeness-smoke.ts:featured-bid-anti-snipe`.
+
+**DEFERRED (unchanged):**
 
 **DEFERRED:**
 
@@ -24899,6 +24916,15 @@ Full ceremony in `OPERATIONS.md §40`.
 
 ## Memory facts re-confirmed top of REVISIT-LIST
 
+- **STANDING RULE re-confirmed 2026-05-16 (Ken, mid-Part-122):** every new
+  feature added AND every tweak made — no matter how small — runs
+  the full discipline by default: (1) wire end-to-end (call site +
+  runner/config registration + tested), (2) walk it as
+  Bob/Sally-user/Sally-operator and fix anywhere the persona
+  flow snags, (3) deep-deep audit it.  No asking permission per
+  item; this is the default for the session.  Lighter rule when
+  the change is a doc-only edit (skip persona walk for typo fixes;
+  deep-deep still applies to the doc claim's truthfulness).
 - BLURT split: 90/10 (operator/treasury); BTC/XMR split:
   100/0 (treasury/operators).  ✓ Re-confirmed during
   ADR-0011 amendment review.

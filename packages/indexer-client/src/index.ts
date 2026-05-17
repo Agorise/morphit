@@ -249,6 +249,50 @@ export interface ClearingPriceHistoryResponse {
 	readonly max_slots: number;
 }
 
+// ─── Bid history (featured-slot auction) ───────────────────────────
+
+/** A single bid placed by some account on one of their orders.
+ *  Returned by /v1/orderbook/featured/bids?account=X.  Part 122
+ *  cp17 — gives a bidder context on their own recent activity
+ *  ("what did I pay last time, how did it perform"). */
+export interface FeaturedBidHistoryEntry {
+	/** Permlink of the bidder's own order that this bid promoted. */
+	readonly order_permlink: string;
+	readonly hours_requested: number;
+	/** Total BLURT paid, stringified NUMERIC. */
+	readonly blurt_paid: string;
+	readonly blurt_per_hour: string;
+	readonly effective_at: string;
+	readonly expires_at: string;
+	/** True if the bid is currently in the top-N visible
+	 *  featured set.  When false but `expires_at` is still in
+	 *  the future, the bid is "outranked" — paid for but not
+	 *  visible because higher bidders occupy all slots. */
+	readonly is_visible: boolean;
+	/** Status of the underlying order at query time.  When the
+	 *  order is no longer 'live' (cancelled / completed), the
+	 *  bid won't appear in featured orderbook even if it would
+	 *  rank — important UX context. */
+	readonly order_status: string;
+	/** Part 122 cp18 — number of anti-snipe extensions applied
+	 *  to this bid.  Zero on a normally-elapsed bid; non-zero
+	 *  if a later bidder triggered the soft-close extension
+	 *  while this bid was in the top-MAX_SLOTS and expiring
+	 *  within the snipe window. */
+	readonly extension_count: number;
+	/** ISO timestamp of the most-recent extension, or null if
+	 *  never extended.  Part 122 cp18. */
+	readonly last_extended_at: string | null;
+}
+
+export interface FeaturedBidHistoryResponse {
+	readonly account: string;
+	readonly bids: readonly FeaturedBidHistoryEntry[];
+	/** Mirrors MAX_SLOTS so the client renders "ranked X / 5"
+	 *  consistently with the rest of the auction UI. */
+	readonly max_slots: number;
+}
+
 // ─── Orders by account ─────────────────────────────────────────────
 
 export interface AccountOrdersResponse {

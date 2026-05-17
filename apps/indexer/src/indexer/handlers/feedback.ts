@@ -270,24 +270,33 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			  LIMIT 1`,
 			[subject]
 		);
-		const locale = normalizeLocale(localeRow.rows[0]?.locale);
-		const titleStr = localize(locale, 'feedback_title');
-		const bodyStr =
-			rating === 1
-				? localize(locale, 'feedback_body_one', ctx.signer, String(rating))
-				: localize(locale, 'feedback_body_many', ctx.signer, String(rating));
-		await client.query(
-			`INSERT INTO push_pending
-			   (account, category, title, body, click_path, event_at)
-			 VALUES ($1, 'feedback', $2, $3, $4, $5)`,
-			[
-				subject,
-				titleStr,
-				bodyStr,
-				`/profile/${subject}#feedback`,
-				ctx.blockTime
-			]
-		);
+		// DD-meta-cp1718-1: skip enqueue when no push subscription
+		// exists.  Sender would gracefully drop the row anyway but
+		// enqueue-then-drop wastes work and pollutes operator
+		// metrics.  No-subs is the common case for users who
+		// haven't opted into Web Push.
+		if (localeRow.rowCount === 0) {
+			// no-op; user has no push subs.
+		} else {
+			const locale = normalizeLocale(localeRow.rows[0]?.locale);
+			const titleStr = localize(locale, 'feedback_title');
+			const bodyStr =
+				rating === 1
+					? localize(locale, 'feedback_body_one', ctx.signer, String(rating))
+					: localize(locale, 'feedback_body_many', ctx.signer, String(rating));
+			await client.query(
+				`INSERT INTO push_pending
+				   (account, category, title, body, click_path, event_at)
+				 VALUES ($1, 'feedback', $2, $3, $4, $5)`,
+				[
+					subject,
+					titleStr,
+					bodyStr,
+					`/profile/${subject}#feedback`,
+					ctx.blockTime
+				]
+			);
+		}
 	} catch (err) {
 		// Non-fatal — log and continue.  The feedback row is
 		// already in.  push_pending failure most likely means the

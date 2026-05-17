@@ -1987,7 +1987,17 @@
 		"password_label": "你的密码(用于使用 Active 密钥签名)",
 		"error_password_required": "请输入密码以对出价签名。",
 		"error_bad_password": "此密码未能解锁你的活跃密钥。",
-		"error_generic": "无法提交你的出价。请重试。"
+		"error_generic": "无法提交你的出价。请重试。",
+		"history_heading": "你近期的精选竞价",
+		"history_expand": "再显示 {extra} 条",
+		"history_collapse": "显示较少",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · 自 {start}",
+		"history_state_visible": "展示中",
+		"history_state_outranked": "已被超越",
+		"history_state_expired": "已过期",
+		"history_state_order_inactive": "订单已结束",
+		"history_extended": "已延期 ×{n}",
+		"history_extended_title": "该竞价被反狙击机制延长了 {n} 次"
 	},
 	"about_this_instance": {
 		"heading": "关于此实例",

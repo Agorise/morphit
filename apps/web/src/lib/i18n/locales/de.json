@@ -1987,7 +1987,17 @@
 		"password_label": "Dein Passwort (zum Signieren mit deinem Active Key)",
 		"error_password_required": "Passwort eingeben, um das Gebot zu signieren.",
 		"error_bad_password": "Dieses Passwort hat deinen Active-Key nicht entsperrt.",
-		"error_generic": "Konnte dein Gebot nicht abgeben. Versuche es erneut."
+		"error_generic": "Konnte dein Gebot nicht abgeben. Versuche es erneut.",
+		"history_heading": "Deine letzten Featured-Gebote",
+		"history_expand": "{extra} weitere anzeigen",
+		"history_collapse": "Weniger anzeigen",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · ab {start}",
+		"history_state_visible": "Sichtbar",
+		"history_state_outranked": "Überboten",
+		"history_state_expired": "Abgelaufen",
+		"history_state_order_inactive": "Order beendet",
+		"history_extended": "Verlängert ×{n}",
+		"history_extended_title": "Gebot {n}× durch Anti-Snipe verlängert"
 	},
 	"about_this_instance": {
 		"heading": "Über diese Instanz",
