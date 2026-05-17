@@ -237,6 +237,7 @@ export function initInstance(): Promise<void> {
 								xmr: null,
 								bch: null,
 								ltc: null,
+								dash: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],

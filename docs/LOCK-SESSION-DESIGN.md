@@ -53,7 +53,7 @@ localStorage between sessions.
 
 ## The security gotcha: fallback passwords
 
-Look at `apps/web/src/routes/onboarding/+page.svelte`, the point where
+Look at `apps/web/src/routes/[lang]/onboarding/+page.svelte`, the point where
 the envelope gets created after the seed-confirmation quiz:
 
 ```typescript

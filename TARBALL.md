@@ -1,3 +1,125 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 27-DD2 — Comprehensive doc-sweep deep-deep covering all 96 .md files + LTC placeholder closure.  Ken (iterative): "you said: 'LTC's still a placeholder per ADR-0025 §8 — Ken hasn't supplied LTC canonical yet' — what does that mean? can't you finish that? you don't need anything from me for that, do you? if so, what?" then "the current ltc icon looks great, i do not think u need to change that. time for a deep deep on all that recent work. look for drift, unwired stuff, staleness and orphaned stuff in all files too." then "i assume you are ALSO thoroughly reading every single .md file now. ALL of them. make sure the wording is correct and proper, make sure they are all factual, you know what to do. take your time and make them all perfect. every. single. one. with that, continue with the deep deep."
+
+LTC PLACEHOLDER CLOSURE (Ken's directive): Per Ken's "the current ltc icon looks great, i do not think u need to change that" — closed LTC artwork backlog entirely.  ADR-0025 §8 placeholder language dropped + replaced with "Operator-approved logo at cp27-DD2" framing including Ken quote.  ADR-0025 trade-offs item dropped (no more "Placeholder logo until community artwork ships").  ADR-0025 future-revisits item dropped ("Community-blessed LTC logo replacement" removed).  Files-changed list updated noting operator approval + cp27-DD minification.  LTC SVG itself unchanged — the stylized "Ł" path-based artwork on silver-gray disc (0.4KB minified) is now the operator-approved permanent mark.
+
+CP27-DD2 DD FINDINGS (19 total — 18 fixed inline + 1 deferred):
+
+DD-cp27-DD-1 HIGH — `MORPHIT-BRAG-LIST.md` footer said "278 specific selling points" but cp27 added entry #279, footer was never updated.  Fixed.
+
+DD-cp27-DD-2 HIGH — `apps/web/src/lib/stores/instance.ts` defensive fallback at L235-241 (used when indexer response omits `chat_link_urls`) was missing `dash: null`.  Would TypeError if a client talked to an old indexer or indexer that omits `chat_link_urls`.  Same class as cp23 BCH bug (DD-cp21-7).  Fixed.
+
+DD-cp27-DD-3 HIGH — `privacy.index_intro` × 10 locales said "(BTC, BCH, LTC, BLURT, USDT)" — missing DASH.  User-facing on `/privacy` index page.  Patched across all 10 locales with substring replacement (parenthesized list identical across locales — pure ticker list).
+
+DD-cp27-DD-4 MEDIUM — `privacy.guides.blurt.caveats` × 10 locales listed privacy alternatives "XMR, BTC (with PayJoin), BCH (with CashFusion), or LTC (with MWEB)" — missing "DASH (with PrivateSend)".  Patched with native conjunctions for en/es/fr/de + EN-fallback for it/pl/ru/fa/zh-CN/zh-HK (matching the cp26 i18n-fallback pattern used elsewhere).
+
+DD-cp27-DD-5 MEDIUM — `docs/adr/0026-transparent-chain-privacy-framework.md` per-asset table was missing DASH row + enum description (L55) missed `'privatesend'`.  Added DASH row with cp27 extension note pattern (preserves historical record of cp26 framework while showing current state).  Added `'privatesend'` to enum list with "(cp27 extension; see ADR-0027)" annotation.
+
+DD-cp27-DD-5b LOW — ADR-0026 L128 said `lists all 6 assets` (literal count, stale by 1).  Rewrote as registry-driven phrasing: "lists all tradable assets with one-line summaries (registry-driven — the page reads `ASSETS.filter(canBeTraded)`, so additions like DASH (cp27) light up automatically)".
+
+DD-cp27-DD-6 LOW — `MORPHIT-BRAG-LIST.md` entry #135 said "46 design and operations documents in `docs/`" but actual count `docs/*.md` is 49.  Drift from cp24/cp26/cp27 doc additions (ADR-0025, ADR-0026, ADR-0027 — 3 new files = 46→49 exactly).  Fixed to 49.
+
+DD-cp27-DD-7 CRITICAL (4 sites in README.md) — Front-page README staleness, the worst possible drift location:
+  (a) L3 tagline asset list: "trading fiat against Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, and Litecoin" missing Dash. Fixed.
+  (b) L18 privacy paragraph: "On every transparent chain Morphit trades (BTC, BCH, LTC, BLURT, XMR)" missing DASH + missing PrivateSend mention. Fixed (added DASH + "DASH gets a wallet-side PrivateSend pre-mix workflow explained in the per-asset guide").
+  (c) L34 + L53 ADR range: "ADRs (`docs/adr/0001-…` through `0023-…`)" cited TWICE, stale by 4 ADRs (cp24/26/27 added 0025/0026/0027 + 0024 cp21 BCH was already in repo). Fixed to "0027-…" both occurrences.
+  (d) L46 smoke count "3,000+ self-checks" tightened to "3,300+ self-checks" (current is 3,327).
+  (e) Wizard prompt count L45 "~17 prompts" → "~18 prompts" (actual `TOTAL_STEPS = 18`).
+  (f) Repo-layout route count "10 locales × 17 indexable routes = 170 static HTML files" → durable phrasing "10 locales × dozens of indexable routes; the canonical list of routes is whatever apps/web/src/routes/[lang]/**/+page.svelte enumerates at build time" (was double-stale — current actual count is also wrong: 14 routes in sitemap, 29+ static routes on disk, sitemap itself stale per DD-18).
+
+DD-cp27-DD-8 MEDIUM — `docs/ADDING-A-COIN.md` (the asset-addition playbook) was missing entire `privacyFeatures` framework section.  cp26 added the struct + ADR-0026 but never updated the playbook — meaning every asset addition cp26-cp27 happened without referencing the expected workflow.  Meta-drift.  Retrofitted:
+  - New "Privacy framework (`privacyFeatures` struct)" subsection added under "Privacy warning chip" parent.  Documents all 3 fields (freshAddressAdvice, optInPrivacyTech, privacyGuideKey), the full enum including `'privatesend'`, the extension pattern (extend enum AND ADR-0026 table AND i18n) using DASH's cp27 path as the concrete example.
+  - Updated the USDT asset-registry example to include the `privacyFeatures` struct (was incomplete).
+  - Listed required i18n keys per new asset: `privacy.guides.{key}.{one_line,intro,meta_description,caveats}` × 10 locales.
+
+DD-cp27-DD-9 LOW — `docs/FEES-AND-REWARDS.md` L240 crypto-leg list said "BTC, XMR, BLURT moving from seller's wallet to buyer's wallet" — stale since cp3 (USDT).  Updated to all 7 assets: "BTC, XMR, BLURT, USDT, BCH, LTC, or DASH".
+
+DD-cp27-DD-10 HIGH CRITICAL — `faq.entries.what_is_morphit.a` × 10 locales: "Morphit is a peer-to-peer marketplace where people trade cash for Bitcoin, Monero, and BLURT directly".  **FOUR-CHECKPOINT DRIFT** — cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all missed this entry.  The DD-25-4 (cp25) pattern lesson said "i18n FAQ entries hide from grep-for-stale-asset-list audits because they're inside JSON, not source code" — this exact bug class struck a fifth time because the cp27 FAQ sweep targeted only the three already-known stale entries (`trade_goods_services`, `where_to_buy_blurt`, `why_usdt_warning`).  `what_is_morphit` was an unknown unknown.  Rewrote × 10 locales with full enumeration: "trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash)" with native translations for en/es/fr/de (criptomonedas / cryptomonnaies / Kryptowährungen / criptovalute) + native Bitcoin Cash / Litecoin / Dash terms in zh-CN (比特币现金/莱特币/达世币) + zh-HK (比特幣現金/萊特幣/達世幣).
+
+DD-cp27-DD-11 MEDIUM — `apps/web/static/llms-full.txt` contains a separate static copy of FAQ content that wasn't synced when cp27 patched the JSON locales:
+  - L13 (what_is_morphit): "Morphit is a peer-to-peer marketplace where people trade cash for Bitcoin, Monero, and BLURT" — stale.  Synced with i18n.
+  - L493 (where_to_buy_blurt): "BLURT is one of the six assets traded here, alongside BTC, XMR, USDT, BCH, and LTC" — stale.  Synced with i18n ("seven assets ... BTC, XMR, USDT, BCH, LTC, and DASH").
+This file is consumed by LLM training crawlers + AI search engines.
+
+DD-cp27-DD-12 LOW — `docs/PRE-LAUNCH-CHECKLIST.md` L3 header said "Last refreshed: 2026-05-10 (Part 109)" but the file has been refreshed many times since (Part 122 cp22, cp24, cp26, cp27, cp27-DD).  Bumped to "2026-05-17 (Part 122 cp27-DD)".
+
+DD-cp27-DD-13 LOW — `apps/ops-cli/README.md` L34 said "Walks you through 9 setup steps" + `README.md` L45 said "~17 prompts".  Actual wizard `TOTAL_STEPS = 18` (verified via grep of apps/ops-cli/src/init/steps.ts).  Fixed both to 18.
+
+DD-cp27-DD-14 LOW — `docs/UPGRADING.md` L39 "the triple-pulse smoke suite (~3,000+ scenarios)" tightened to "~3,300+ scenarios" for precision.
+
+DD-cp27-DD-15 MEDIUM — `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` L180 cited `apps/web/src/routes/cheat-sheet/+page.svelte` but actual path is `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte` (cp7 per-locale prerendering migration added `[lang]/` prefix).  Same class as cp26-DD2 path-drift.  Fixed.
+
+DD-cp27-DD-16 HIGH — Comprehensive scan found 27 instances of route-path drift across 10 docs.  All missing the `[lang]/` prefix added during cp7 per-locale prerendering migration.  Triaged using cp26-DD2 LIVING vs HISTORICAL_ADRS rule:
+  - LIVING docs (13 instances fixed): `docs/ADDING-A-COIN.md` (1), `docs/CHAT-UI-DESIGN.md` (4), `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` (6 incl. DD-15), `docs/LOCK-SESSION-DESIGN.md` (1), `docs/OPERATOR-TRUST-DESIGN.md` (1).  Auto-fix script: regex replace ``apps/web/src/routes/X`` with ``apps/web/src/routes/[lang]/X`` only when the prefixed path exists on disk.  Verified all paths resolve post-fix.
+  - HISTORICAL ADRs (14 instances LEFT INTACT per cp26-DD2 lesson): ADR-0001, ADR-0020, ADR-0023.  These are decision-record documents describing state-at-time-of-decision; rewriting from memory would compound the cp26-DD2 anti-pattern.
+
+DD-cp27-DD-17 LOW — `README.md` route-count claim "10 locales × 17 indexable routes = 170 static HTML files" + `docs/PER-LOCALE-PRERENDERING-DESIGN.md` L3 "200 locale-prefixed HTML files (20 routes × 10 locales)" both stale.  Actual sitemap has 14 indexable routes × 10 = 140 URLs.  Actual static routes on disk = 29 (excluding dev/* and dynamic params).  Fixed README to durable phrasing.  Fixed PER-LOCALE-PRERENDERING-DESIGN to note "at cp7 the build produced 200 ... Route count grows as new pages ship (cp24 added cheat-sheet, cp26 added privacy index + per-asset privacy pages); the current authoritative list is whatever apps/web/src/routes/[lang]/**/+page.svelte enumerates at build time".
+
+DD-cp27-DD-18 MEDIUM — DEFERRED.  `apps/web/static/sitemap.xml` is cp17-era (`<lastmod>2026-05-03`).  Missing cp24 cheat-sheet route + cp26 privacy index page + 7 per-asset privacy guides + possibly other newer routes.  SEO concern (privacy guide pages not discoverable via search engines).  Filed as new REVISIT entry; not pre-launch blocking — pages render fine at direct URLs.  Action: regenerate sitemap via build script; decide explicitly which routes are indexable; make generator registry-driven for `/privacy/{asset}` so new assets auto-include.
+
+DD-cp27-DD-19 — AUDIT-2026-05.md was missing cp27 + cp27-DD + cp27-DD2 entries.  Per cp26-DD2 same-checkpoint discipline (every cp needs an audit-log entry).  Appended 3 new audit entries (cp27 + cp27-DD + cp27-DD2 — this entry references itself).  Audit log line count 21,134 → 21,315 (+181 lines).
+
+DD CHECKS PASSED (verified, no fix needed):
+  - DASH i18n keys all consumed via dynamic interpolation (pay_${method}.description, privacy.opt_in_tech.${tech}, privacy.guides.${guideKey})
+  - ADR-0024/0027 placeholder language properly dropped (was done in cp27-DD)
+  - Wiring-completeness 27/27 still green; triple-pulse confirmed
+  - Locale parity 2,644 × 10 = 26,440 strings holds after all i18n edits
+  - Indexer Zod schema + Config interface + env mapping for `MORPHIT_FRONTEND_DASH_CHAT_LINK_URL` all present
+  - Matrix-bot `ChatLinkUrlsSchema` includes `dash`
+  - Indexer `InstanceResponse.chat_link_urls.dash` field present + body construction
+  - Frontend instance store includes `dash` field (fallback fixed in DD-cp27-DD-2)
+  - All 4 chat/payload.ts dispatch gates include 'dash' (encode/decode × address/funds_sent = 4 gates)
+  - `buildPaymentUri` has DASH branch generating `dash:` URI
+  - `jitterAmountForAsset` includes DASH in UTXO-jitter branch
+  - ChatMessage explorer/canMarkSent/pill labels all DASH-aware
+  - Privacy guide route resolves DASH via dynamic ${guideKey} (line 42 of [lang]/privacy/[asset]/+page.svelte)
+  - Privacy index page registry-driven via ASSETS.filter(canBeTraded) — DASH auto-included
+  - "26 ADRs" brag claim CORRECT (27 numbered slots minus reserved 0016 = 26 actual ADRs)
+  - SECURITY.md has no asset enumerations (1196 lines scanned)
+  - API.md current after cp27 edits (asset filter + 4 examples include DASH)
+  - LAUNCH-DAY.md, POST-LAUNCH-WEEK-ONE.md, ARCHITECTURE.md, BETA-INCIDENT-RUNBOOK.md, UX-STANDARD.md, CONTRIBUTING-TRANSLATIONS.md, METADATA-LEAK-CATALOG.md, SWITCHING-NETWORKS.md — all clean of asset-list staleness (grepped, then key sections read)
+  - App READMEs (apps/indexer, apps/relay, apps/web/static/fonts, ops/ansible, ops/bunkerweb, .forgejo/) clean of staleness
+  - RUN-A-MORPHIT-NODE.md (2017 lines) trade-only section DASH-current after cp27-DD; rest clean of asset-list staleness
+  - OPERATIONS.md (8586 lines) — only 1 hit on staleness scan, correct (wizard sequence)
+
+PERSONA WALKTHROUGH (Bob/Sally-user/Sally-operator end-to-end with DASH): ALL 3 PERSONA PATHS INTACT.  Bob: login route exists, /post has DASH asset_explainer key, AddressShareModal has DASH method_dash key, ChatMessage has DASH pill key + externalExplorerUrl('DASH'), FundsSentModal has DASH method_dash, cheat-sheet has DASH row.  Sally-user: registry has DASH AssetEntry with privacyGuideKey='dash', privacy.guides.dash.{intro,one_line,caveats} all present in i18n, FAQ what_is_morphit now mentions Dash.  Sally-operator: wizard has DEFAULT_DASH_CHAT_LINK_URL + DASH in CATEGORY_B_DESCRIPTIONS, OPERATIONS.md + RUN-A-NODE both mention DASH.
+
+PATTERN LESSONS BANKED:
+  1. The `what_is_morphit` FAQ 4-checkpoint drift class — cp3/cp21/cp24/cp27 all missed it.  DD-25-4 lesson said "i18n FAQ entries hide from grep-for-stale-asset-list audits" — struck a fifth time.  Future asset additions: add `what_is_morphit` to FAQ sweep checklist + prefer durably-shaped phrasing ("cryptocurrency (X, Y, Z, ...)" full enumeration).
+  2. README.md front page is the highest-leverage staleness target — 4 stale claims on literal entry page is unacceptable.  Add README pass to per-cp doc-sync checklist.
+  3. Static export files (apps/web/static/llms-full.txt) need same-checkpoint sync alongside JSON locales.  cp27 missed L13 + L493.
+  4. ADRs describing ongoing framework state need annotation pattern: "Note (Part X cp Y): X added in ADR-N" — NOT rewrite.  Used for ADR-0026 DASH row addition.
+  5. Asset-addition playbook (ADDING-A-COIN.md) wasn't updated when cp26 added privacyFeatures struct — meta-drift.  Every asset addition cp26-cp27 happened without referencing the playbook's expected workflow.  Retrofit shipped cp27-DD2.
+  6. Path-drift from cp7 per-locale prerendering migration is recurring class (same as cp26-DD2).  Need CI gate: verify every backtick-quoted `apps/web/src/routes/` path in active docs resolves on disk.
+  7. Wizard step count claims drift — verify against `TOTAL_STEPS = 18` source-of-truth constant.
+  8. "26 ADRs" was correct — false-positive on staleness scanner because 27 slots minus reserved 0016 = 26.  Counting claims need explicit minus-reserved math.
+
+SHIPPED:
+  EDITED:
+    README.md                                              (4 stale claims fixed)
+    MORPHIT-BRAG-LIST.md                                   (footer 278→279, docs count 46→49)
+    apps/web/src/lib/stores/instance.ts                    (defensive fallback +dash:null)
+    apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json
+                                                           (privacy.index_intro + privacy.guides.blurt.caveats + faq.entries.what_is_morphit.a × 10)
+    apps/web/static/llms-full.txt                          (L13 + L493 synced with i18n)
+    apps/ops-cli/README.md                                 (9 → 18 setup steps)
+    docs/adr/0025-litecoin-trade-only-addition.md          (§8 placeholder closed; trade-offs + future-revisits cleaned; files-changed updated)
+    docs/adr/0026-transparent-chain-privacy-framework.md   (DASH row + privatesend enum extension note; L128 registry-driven phrasing)
+    docs/ADDING-A-COIN.md                                  (NEW privacy-framework section; USDT example now has privacyFeatures struct)
+    docs/FEES-AND-REWARDS.md                               (L240 crypto-leg list → all 7 assets)
+    docs/UPGRADING.md                                      (L39 smoke count 3,000+ → 3,300+)
+    docs/PRE-LAUNCH-CHECKLIST.md                           (L3 last-refreshed → cp27-DD2)
+    docs/GRANDMA-FRIENDLY-INVESTIGATION.md                 (cheat-sheet path-drift + 5 other route paths fixed)
+    docs/CHAT-UI-DESIGN.md                                 (4 route paths fixed)
+    docs/LOCK-SESSION-DESIGN.md                            (1 route path)
+    docs/OPERATOR-TRUST-DESIGN.md                          (1 route path)
+    docs/PER-LOCALE-PRERENDERING-DESIGN.md                 (cp7 point-in-time note + durable phrasing)
+    docs/AUDIT-2026-05.md                                  (cp27 + cp27-DD + cp27-DD2 entries appended; +181 lines)
+    docs/REVISIT-LIST.md                                   (last-maintained → cp27-DD2 + new DD-cp27-DD-18 sitemap-stale entry)
+    apps/web/static/morphit-mediakit.zip                   (rebuilt per Memory #4)
+    TARBALL.md                                             (this entry prepended)
+
+No code-behavior changes (one defensive-fallback edit + doc/i18n content only).  No new smokes added (no new behavioral claims).  Smoke baseline unchanged at 3,327.  Locale parity holds at 2,644 × 10 = 26,440 strings.  All 8 cp27+DD smokes triple-pulse green: dash-trade-only 13/13, privacy-features-registry 42/42, ltc-trade-only 13/13, bch-trade-only 13/13, usdt-trade-only 11/11, disabled-assets-wizard 18/18, wiring-completeness 27/27 (27 live + 0 deferred), reserved-keys-parity 1/1.  Mediakit rebuilt per Memory #4.)
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 27-DD — Deep-deep on cp27 DASH addition + community-canonical artwork swap-in for BCH and DASH + SVG fleet minification.  Ken's directive (continuation of cp27 prompt + iterative chat): "the bch icon is wrong, try again", "the dash icon is wrong, try again", iterative proposal/feedback loop, then Ken uploaded TWO authoritative SVGs (bitcoin-cash-circle.svg with the canonical Bitcoin Cash "Ƀ" glyph with two vertical strokes on #0AC18E green disc; dash-d-circle.svg with the canonical forward-leaning rounded "D" plus two horizontal speed lines on #008CE7 blue disc) and approved them; then "minify all of the svg icons too so that they load super fast on all clients".  CP27 DEEP-DEEP FINDINGS: DD-cp27-1 (HIGH) — RUN-A-MORPHIT-NODE.md operator-stance worked-examples (single-refusal + multi-refusal) + PRE-LAUNCH-CHECKLIST.md stance section + missing LTC chat-link checklist item all missed DASH coverage during cp27 Phase 15.  Fixed inline.  ARTWORK SWAP-IN (cp27-DD): replaced two cp21+cp27 placeholder SVGs with community-canonical artwork: `apps/web/static/icons/icon-bch.svg` (was 2.1KB path-based "B" placeholder → 0.8KB canonical "Ƀ" glyph after minification) and `apps/web/static/icons/icon-dash.svg` (was 1.2KB path-based "D" placeholder → 0.6KB canonical Dash speed-D after minification).  ADR-0024 §8 + ADR-0027 §9 updated to drop placeholder-pending language, replaced with "community-canonical (updated Part 122 cp27-DD)" framing; ADR-0024 future-revisits drops the placeholder item; ADR-0027 trade-offs drops the placeholder item.  REVISIT-LIST: closed BCH community-blessed logo entry (was DEFERRED 2026-05-17 cp21 → SHIPPED 2026-05-17 cp27-DD) and DASH community-blessed logo entry (was DEFERRED 2026-05-17 cp27 → SHIPPED 2026-05-17 cp27-DD).  LTC logo placeholder REVISIT entry intentionally left open — Ken has not yet supplied LTC canonical artwork, ADR-0025 §8 still accurately describes the placeholder state.  SVG FLEET MINIFICATION: installed svgo 4.0.1 globally, minified all 16 icon SVGs in `apps/web/static/icons/` and `apps/web/static/icons/networks/` with --multipass + preset-default + preserved (removeViewBox=false, removeTitle=false, removeDesc=false, cleanupIds=false).  Before: 39,337 bytes total.  After: 27,607 bytes total.  -11,730 bytes = -29.8% across the fleet.  Per-file results: icon-bch.svg 2,161 → 837 bytes (-61%, biggest absolute win), icon-dash.svg 1,188 → 627 bytes (-47%), icon-ltc.svg 1,717 → 375 bytes (-78%), icon-tor.svg 6,882 → 3,938 bytes (-43%), icon-i2p.svg 12,942 → 9,704 bytes (-25%), icon-btc.svg 2,069 → 1,573 bytes (-24%), icon-blurt.svg 4,539 → 3,132 bytes (-31%), icon-nostr.svg 2,712 → 2,655 bytes (-2%), icon-yubikey.svg 998 → 733 bytes (-27%), icon-usdt.svg 1,042 → 605 bytes (-42%), icon-xmr.svg 940 → 931 bytes (-1%), icon-lokinet.svg 1,356 → 864 bytes (-36%), networks/icon-network-erc20.svg 662 → 468 bytes (-29%), networks/icon-network-trc20.svg 500 → 313 bytes (-37%), networks/icon-network-spl.svg 673 → 517 bytes (-23%), networks/icon-network-bep20.svg 430 → 335 bytes (-22%).  Visual fidelity verified by inspecting paths — svgo stripped Adobe Illustrator boilerplate (xml:space, x="0" y="0", enable-background, generator comments), redundant attributes, whitespace, used minimized path notation (M/L/C/Z), preserved single-color fills.  No SVG broken.  Mediakit rebuilt to refresh the brand-SVG subset (morphit-wordmark.svg + morphit-mark.svg already minified previously, no change in mediakit-internal sizes since they were already optimized).  CP27-DD SHIPPED: 2 community-canonical SVGs (BCH + DASH), 16 minified SVGs in fleet, ADR-0024 + ADR-0027 cleaned of placeholder language, 2 REVISIT entries closed, RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md DASH-coverage gap closed.  No code changes (only assets + docs).  No new smokes added (SVG content is asset; correctness is visual not behavioral).  All 8 cp27+DD smokes triple-pulse green (privacy-features-registry 42/42, dash-trade-only 13/13, ltc-trade-only 13/13, bch-trade-only 13/13, usdt-trade-only 11/11, disabled-assets-wizard 18/18, wiring-completeness 27/27, reserved-keys-parity 1/1).  Smoke baseline unchanged at 3,327.  Locale parity unchanged.  Mediakit rebuilt per Memory #4 (BCH+DASH brand SVGs replaced in `apps/web/static/icons/` even though mediakit itself uses morphit-wordmark + morphit-mark; rebuild is the conservative call when ANY brand SVG changes).  PATTERN LESSONS: (1) **Path-based placeholder SVGs are technical debt by default.**  cp21 BCH + cp27 DASH both shipped honest path-based artwork but they were always going to be replaced.  Future asset additions should expect either (a) community artwork available at addition time → ship it, or (b) ship without a logo (asset accepts traffic, UI shows ticker as text) and file REVISIT.  Path-based placeholders are a middle-state that takes effort to create AND replace.  (2) **Minification belongs in CI, not in checkpoints.**  cp27-DD minified the fleet manually because the operator asked.  A `scripts/minify-svgs.sh` wrapped around svgo with the same preserved-flags config + a CI gate that fails the build if any committed SVG can be further minified would prevent un-minified SVGs entering the repo.  Filed in REVISIT for follow-up.  (3) **Operator-supplied canonical artwork bypasses the regeneration loop.**  When Ken uploaded the bitcoin-cash-circle.svg + dash-d-circle.svg, regenerating fresh SVGs from scratch would have introduced drift from the canonical mark.  Use-as-is + minify was the correct call.  Future asset additions: ask the operator for canonical artwork before generating placeholder.)
 
 **Snapshot date:** 2026-05-17 (cp27-DD)

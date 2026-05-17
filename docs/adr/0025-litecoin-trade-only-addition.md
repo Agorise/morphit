@@ -121,15 +121,18 @@ install time; LTC surfaces in the wizard automatically because
 the wizard iterates `ASSETS.filter(a => a.canBeTraded &&
 !a.canPayListingFee)` from the canonical registry.
 
-### 8. Placeholder logo at `apps/web/static/icons/icon-ltc.svg`
+### 8. Operator-approved logo at `apps/web/static/icons/icon-ltc.svg` (updated Part 122 cp27-DD2)
 
-Same posture as BCH (ADR-0024 §8): silver-gray disc with
-stylized "Ł" (the Polish-style L with diagonal slash that
-distinguishes Litecoin's mark from a generic L).  No
-`<text>` elements (font-fallback rules from ADDING-A-COIN.md).
-Placeholder pending community-blessed artwork from the
-Litecoin Foundation; replacing it is a drop-in SVG swap with
-no other code changes.
+Silver-gray disc with stylized "Ł" (the Polish-style L with
+diagonal slash that distinguishes Litecoin's mark from a
+generic L).  No `<text>` elements (font-fallback rules from
+ADDING-A-COIN.md).  Originally shipped at cp24 as a placeholder
+pending community-blessed artwork from the Litecoin Foundation;
+operator-approved as-is at cp27-DD2 (Ken: "the current ltc icon
+looks great, i do not think u need to change that").  Minified
+via svgo to 0.4 KB while preserving viewBox.  Drop-in SVG swap
+remains supported with no other code changes if the Litecoin
+Foundation later publishes a different mark.
 
 ## Files changed (cp24)
 
@@ -161,7 +164,10 @@ i18n:
 - `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` — 8 LTC keys per locale
 
 Logo:
-- `apps/web/static/icons/icon-ltc.svg` — placeholder
+- `apps/web/static/icons/icon-ltc.svg` — operator-approved
+  stylized "Ł" on silver disc, originally shipped cp24 as
+  placeholder; operator approval Part 122 cp27-DD2; minified
+  via svgo at cp27-DD.
 
 cp23-DD-class downstream consumers (the BCH-class bugs cp23 found, closed proactively for LTC):
 - `apps/web/src/lib/prices/index.ts` — `LTC: null` in `internalStore` + `reset()`
@@ -194,14 +200,12 @@ cp23-DD-class downstream consumers (the BCH-class bugs cp23 found, closed proact
 
 - **Legacy `3`-prefix P2SH is BTC-shape ambiguous** (§4 above).
   Wallet does chain-binding on receive.  Same posture as BCH.
-- **Placeholder logo until community artwork ships** (§8).
 - **One more chat-link env var** — `MORPHIT_FRONTEND_LTC_CHAT_LINK_URL`.
   Operators editing the env file have one more line; the wizard
   hides this complexity behind a single prompt.
 
 ### Future revisits
 
-- Community-blessed LTC logo replacement.
 - Possible MWEB awareness chip if/when MWEB-only trades become
   a UX concern (not at launch — wallet-side opt-in, no Morphit
   surface area).

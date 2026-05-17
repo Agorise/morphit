@@ -751,7 +751,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Was ist Morphit?",
-				"a": "Morphit ist ein Peer-to-Peer-Marktplatz, auf dem Menschen Bargeld direkt gegen Bitcoin, Monero und BLURT tauschen. Morphit verwahrt niemals dein Geld und fragt nie, wer du bist. Es ist ein schwarzes Brett, keine Bank."
+				"a": "Morphit ist ein Peer-to-Peer-Marktplatz, auf dem Menschen Bargeld direkt gegen Kryptowährungen (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin und Dash) tauschen. Morphit verwahrt niemals dein Geld und fragt nie, wer du bist. Es ist ein schwarzes Brett, keine Bank."
 			},
 			"is_it_safe": {
 				"q": "Ist das sicher?",
@@ -3522,7 +3522,7 @@
 		"index_title": "Privatsphäre-Praktiken — Morphit",
 		"index_meta_description": "Wie du deine Trades auf transparenten und privaten Chains privater gestaltest. Pro-Asset-Leitfaden zu frischen Adressen, Opt-in-Privatsphäre-Techniken und häufigen Fallstricken.",
 		"index_heading": "Privatsphäre-Praktiken auf Morphit",
-		"index_intro": "Die meisten auf Morphit gehandelten Assets (BTC, BCH, LTC, BLURT, USDT) leben auf transparenten Chains — jeder Beobachter kann die Chain-Historie lesen. Es gibt konkrete Schritte, mit denen du DEINE Trades viel schwieriger verknüpfbar, profilierbar oder überwachbar machst. Registry-getrieben: das nächste Asset, das Morphit hinzufügt, bekommt automatisch einen Leitfaden.",
+		"index_intro": "Die meisten auf Morphit gehandelten Assets (BTC, BCH, LTC, DASH, BLURT, USDT) leben auf transparenten Chains — jeder Beobachter kann die Chain-Historie lesen. Es gibt konkrete Schritte, mit denen du DEINE Trades viel schwieriger verknüpfbar, profilierbar oder überwachbar machst. Registry-getrieben: das nächste Asset, das Morphit hinzufügt, bekommt automatisch einen Leitfaden.",
 		"page_title": "Privatsphäre für {asset}-Trades — Morphit",
 		"guide_heading": "Privatsphäre-Praktiken für {asset}-Trades",
 		"back_to_index": "Alle Assets",
@@ -3586,7 +3586,7 @@
 			"blurt": {
 				"one_line": "Koordinations-Chain — transparent und kontobasiert. Niedrigste Privatsphäre auf Morphit.",
 				"intro": "BLURT ist Morphits Koordinations-Chain — Orders, Chat-Chiffriertexte, Gebühren und Reputation leben hier. Die Chain ist vollständig öffentlich und kontobasiert, was bedeutet, dass jeder BLURT-Transfer mit deinem Konto dauerhaft für jeden sichtbar ist. Es gibt keine Opt-in-Privatsphäre-Technologie für BLURT.",
-				"caveats": "BLURT ist strukturell das am wenigsten private Asset auf Morphit. Dein Kontoname ist deine Adresse; du kannst ihn nicht rotieren. Für Trades, bei denen On-Chain-Privatsphäre wichtiger ist als Geschwindigkeit und Kosten, bevorzuge XMR, BTC (mit PayJoin), BCH (mit CashFusion), oder LTC (mit MWEB).",
+				"caveats": "BLURT ist strukturell das am wenigsten private Asset auf Morphit. Dein Kontoname ist deine Adresse; du kannst ihn nicht rotieren. Für Trades, bei denen On-Chain-Privatsphäre wichtiger ist als Geschwindigkeit und Kosten, bevorzuge XMR, BTC (mit PayJoin), BCH (mit CashFusion), LTC (mit MWEB), oder DASH (mit PrivateSend).",
 				"meta_description": "Privatsphäre-Überlegungen für BLURT-Trades auf Morphit: kontobasierte Chain, transparent by design."
 			},
 			"usdt": {

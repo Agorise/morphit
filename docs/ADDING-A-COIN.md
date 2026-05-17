@@ -282,7 +282,7 @@ new entry automatically once the registry is updated.
 Same pattern — switch hard-coded branches to registry lookups
 where reasonable.
 
-**File:** `apps/web/src/routes/post/+page.svelte`
+**File:** `apps/web/src/routes/[lang]/post/+page.svelte`
 
 The order-creation form.  Find the asset-picker UI.  Replace
 hardcoded `<button>BTC</button> <button>XMR</button>` triples
@@ -437,7 +437,12 @@ entry at `packages/asset-registry/src/index.ts`:
   defaultNetwork: null,                     // force explicit user choice
   privacyWarningKey: 'usdt_centralized',
   addressShape:
-    /^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+    /^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/,
+  privacyFeatures: {                         // Part 122 cp26 — required
+    freshAddressAdvice: 'hd-derived',
+    optInPrivacyTech: null,                  // USDT has no chain-level opt-in
+    privacyGuideKey: 'usdt'
+  }
 }
 ```
 
@@ -479,3 +484,49 @@ This warning is required by Memory #19 (privacy is priority
 #1): users must be told when an asset they're considering
 fails the privacy bar.
 
+### Privacy framework (`privacyFeatures` struct)
+
+Every `AssetEntry` carries a `privacyFeatures` struct (shipped in
+Part 122 cp26 — see `docs/adr/0026-transparent-chain-privacy-framework.md`).
+The struct drives four user-facing surfaces simultaneously:
+amount-jitter, address-reuse warnings, opt-in privacy-tech
+listings, and the per-asset privacy guide page at
+`/[lang]/privacy/{key}`.
+
+Three fields, all required:
+
+- **`freshAddressAdvice`** — one of `'subaddress'` (XMR-style),
+  `'hd-derived'` (BTC and forks, transparent UTXO chains), or
+  `'account-reuse'` (account-model chains like BLURT where the
+  address IS the account name).
+- **`optInPrivacyTech`** — `null` if the chain has no in-protocol
+  opt-in privacy tech, OR an array of protocol-standard
+  identifiers from the fixed enum:
+  `'mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend'`.
+  These are PROTOCOL NAMES not wallet names — Morphit never
+  endorses specific wallets.
+- **`privacyGuideKey`** — lowercase i18n key prefix.  Pages live
+  at `/[lang]/privacy/{key}` and pull from `privacy.guides.{key}.*`
+  i18n strings.
+
+If a new coin has a privacy tech not in the enum, **extend the
+enum** in `packages/asset-registry/src/index.ts` AND in
+`docs/adr/0026-transparent-chain-privacy-framework.md`'s table.
+Then add localized copy under `privacy.opt_in_tech.{tech}.{name,explain}`
+× 10 locales.  Same path DASH took to add `'privatesend'` (cp27,
+ADR-0027 §7).
+
+Required i18n keys per new asset (× 10 locales):
+
+- `privacy.guides.{key}.one_line` — under-80-char summary shown
+  on the `/privacy` index page next to the asset icon.
+- `privacy.guides.{key}.intro` — 2-3 sentence intro paragraph
+  shown on the per-asset guide page.
+- `privacy.guides.{key}.meta_description` — `<meta name=description>`
+  for SEO + social cards.
+- `privacy.guides.{key}.caveats` — honest disclosure of where
+  the asset's privacy story falls short and what stronger
+  alternatives exist on Morphit (typically XMR).
+
+Skip the caveats key if the asset has no caveats worth flagging
+(rare — every asset has some compromise).
