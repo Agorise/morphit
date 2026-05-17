@@ -1987,7 +1987,17 @@
 		"password_label": "Twoje hasło (do podpisania kluczem Active)",
 		"error_password_required": "Wpisz hasło, aby podpisać ofertę.",
 		"error_bad_password": "To hasło nie odblokowało twojego klucza aktywnego.",
-		"error_generic": "Nie można złożyć oferty. Spróbuj ponownie."
+		"error_generic": "Nie można złożyć oferty. Spróbuj ponownie.",
+		"history_heading": "Twoje ostatnie wyróżnione oferty",
+		"history_expand": "Pokaż {extra} więcej",
+		"history_collapse": "Pokaż mniej",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · od {start}",
+		"history_state_visible": "Widoczna",
+		"history_state_outranked": "Przebita",
+		"history_state_expired": "Wygasła",
+		"history_state_order_inactive": "Oferta zakończona",
+		"history_extended": "Wydłużona ×{n}",
+		"history_extended_title": "Oferta wydłużona {n} raz(y) przez anti-snipe"
 	},
 	"about_this_instance": {
 		"heading": "O tej instancji",

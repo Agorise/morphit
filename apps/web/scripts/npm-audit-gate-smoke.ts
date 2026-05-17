@@ -30,18 +30,34 @@ import { join } from 'node:path';
 const REPO = join(import.meta.dirname, '..', '..', '..');
 
 /** Vulnerabilities we accept with their rationale.  Each entry
- *  is one package name (as reported by `npm audit`); ALL severity
- *  levels for that package are accepted unless tightened. */
+ *  names a package + the severity we accept for it + the EXACT
+ *  CVE titles we've reviewed + a rationale + a last-reviewed
+ *  date.  The gate fires when a NEW CVE title appears for an
+ *  allowlisted package — forces a fresh review when the
+ *  supply-chain landscape shifts under us, even on packages
+ *  we've already accepted.
+ *
+ *  `lastReviewed` is informational — not enforced as an expiry —
+ *  but reviewers should re-check entries older than ~6 months
+ *  to catch quietly-evolved attack surfaces.  CI doesn't fail
+ *  on stale dates; humans should. */
 interface AllowlistEntry {
 	readonly package: string;
 	readonly maxSeverity: 'low' | 'moderate' | 'high' | 'critical';
+	readonly acceptedTitles: readonly string[];
 	readonly rationale: string;
+	/** ISO date (YYYY-MM-DD) of the last human review of this
+	 *  entry.  Bump when re-evaluating the rationale, NOT when
+	 *  unrelated changes touch the file. */
+	readonly lastReviewed: string;
 }
 
 const ALLOWLIST: readonly AllowlistEntry[] = [
 	{
 		package: 'request',
 		maxSeverity: 'critical',
+		acceptedTitles: ['Server-Side Request Forgery in Request'],
+		lastReviewed: '2026-05-16',
 		rationale:
 			'Deprecated HTTP library brought in transitively by matrix-bot-sdk@0.7.1. ' +
 			'Carries CRITICAL SSRF (CVE in request) but matrix-bot only makes outbound ' +
@@ -52,6 +68,10 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 	{
 		package: 'form-data',
 		maxSeverity: 'critical',
+		acceptedTitles: [
+			'form-data uses unsafe random function in form-data for choosing boundary'
+		],
+		lastReviewed: '2026-05-16',
 		rationale:
 			'Transitive of `request` (see above). The unsafe Math.random() boundary ' +
 			'generation matters for cross-origin request forgery via predictable ' +
@@ -61,6 +81,8 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 	{
 		package: 'tough-cookie',
 		maxSeverity: 'high',
+		acceptedTitles: ['tough-cookie Prototype Pollution vulnerability'],
+		lastReviewed: '2026-05-16',
 		rationale:
 			'Transitive of `request` (see above). Prototype-pollution via crafted ' +
 			'cookie names; matrix-bot only receives cookies from operator-configured ' +
@@ -74,6 +96,9 @@ interface NpmAuditOutput {
 		{
 			readonly name: string;
 			readonly severity: string;
+			readonly via?: ReadonlyArray<
+				string | { readonly title?: string; readonly name?: string }
+			>;
 		}
 	>;
 	readonly metadata?: {
@@ -89,41 +114,83 @@ const SEVERITY_RANK: Record<string, number> = {
 	critical: 4
 };
 
-function isAllowed(name: string, severity: string): boolean {
+type ViaEntry = string | { readonly title?: string; readonly name?: string };
+
+/** Extract the set of CVE titles `npm audit` reports for one
+ *  vulnerable package.  `via` is heterogeneous: each entry is
+ *  either a string (the name of a downstream package that brings
+ *  the vuln in) or an object with `title` + `name` fields (the
+ *  actual CVE).  We want only the latter. */
+function cveTitles(via: ReadonlyArray<ViaEntry> | undefined): string[] {
+	if (!Array.isArray(via)) return [];
+	const out: string[] = [];
+	for (const entry of via) {
+		if (typeof entry === 'object' && entry !== null && typeof entry.title === 'string') {
+			out.push(entry.title);
+		}
+	}
+	return out;
+}
+
+interface AllowDecision {
+	readonly ok: boolean;
+	/** Titles present in audit output but not yet on the allowlist
+	 *  for this package.  Non-empty when the smoke should fail
+	 *  the package even though it's named on the allowlist —
+	 *  forces a fresh review when supply-chain shifts. */
+	readonly unknownTitles: readonly string[];
+}
+
+function isAllowed(name: string, severity: string, titles: readonly string[]): AllowDecision {
 	const entry = ALLOWLIST.find((e) => e.package === name);
-	if (!entry) return false;
-	return SEVERITY_RANK[severity]! <= SEVERITY_RANK[entry.maxSeverity]!;
+	if (!entry) return { ok: false, unknownTitles: titles };
+	if (SEVERITY_RANK[severity]! > SEVERITY_RANK[entry.maxSeverity]!) {
+		return { ok: false, unknownTitles: titles };
+	}
+	const accepted = new Set(entry.acceptedTitles);
+	const unknown = titles.filter((t) => !accepted.has(t));
+	return { ok: unknown.length === 0, unknownTitles: unknown };
 }
 
 // Run npm audit.  In offline / restricted networks, this fails
 // with a non-zero exit but still emits useful JSON; we tolerate
 // the exit code and parse what we get.
+//
+// DEEP-DEEP NOTE (DD-cp16-1): offline-skip exits 0 so that
+// transient network issues don't break unrelated CI runs, but
+// the output explicitly reports "0 scenarios actually checked"
+// rather than misleadingly counting the skip as a pass.  An
+// attacker who can block the npm registry would see the smoke
+// SKIP — not silently green-light a vulnerable build.  CI
+// reviewers should treat "0 scenarios actually checked" as a
+// gate failure for any commit touching dependencies.
 let audit: NpmAuditOutput;
 try {
 	const out = execSync('npm audit --json', {
 		cwd: REPO,
 		encoding: 'utf-8',
 		stdio: ['ignore', 'pipe', 'pipe'],
-		// `npm audit` returns non-zero when vulnerabilities are
-		// present.  We want the output, not the exit code.
 		maxBuffer: 32 * 1024 * 1024
 	});
 	audit = JSON.parse(out);
 } catch (err: unknown) {
-	// `execSync` throws when exit code is non-zero.  The error
-	// object carries stdout.  Parse it; non-zero exit code is
-	// expected when vulnerabilities are present.
 	const stdout = (err as { stdout?: Buffer | string })?.stdout;
 	if (!stdout) {
-		console.log('⚠ npm audit unavailable (offline?  no network?) — skipping gate.');
-		console.log('✓ all 1 npm-audit-gate scenarios pass (gate-skipped, offline-tolerant)');
+		console.log('⚠ npm audit unavailable — registry unreachable from this host.');
+		console.log('⚠ 0 scenarios actually checked.  CI must treat this as a gate failure');
+		console.log('⚠ when the commit touches package.json or package-lock.json.');
+		console.log('');
+		console.log('npm-audit-gate smoke: 0 scenarios actually checked (offline-skip)');
 		process.exit(0);
 	}
 	try {
 		audit = JSON.parse(stdout.toString());
 	} catch {
-		console.log('⚠ npm audit produced unparseable output — skipping gate.');
-		console.log('✓ all 1 npm-audit-gate scenarios pass (gate-skipped, parse-error)');
+		console.log('⚠ npm audit produced unparseable output — gate cannot evaluate.');
+		console.log('⚠ 0 scenarios actually checked.  CI must treat this as a gate failure');
+		console.log('⚠ when the commit touches package.json or package-lock.json.');
+		console.log('');
+		console.log('npm-audit-gate smoke: 0 scenarios actually checked (parse-error)');
 		process.exit(0);
 	}
 }
@@ -142,12 +209,20 @@ for (const [pkgName, info] of Object.entries(vulns)) {
 	if (!severity || !(severity in SEVERITY_RANK)) continue;
 	if (SEVERITY_RANK[severity]! < SEVERITY_RANK.high) continue;
 	totalConsidered++;
-	if (isAllowed(pkgName, severity)) {
+	const titles = cveTitles(info.via);
+	const decision = isAllowed(pkgName, severity, titles);
+	if (decision.ok) {
 		allowedCount++;
 		continue;
 	}
 	failed++;
-	failures.push(`${severity.toUpperCase()}: ${pkgName}`);
+	if (decision.unknownTitles.length > 0) {
+		failures.push(
+			`${severity.toUpperCase()}: ${pkgName} — new CVE title(s) not yet reviewed:\n      ${decision.unknownTitles.map((t) => `· ${t}`).join('\n      ')}`
+		);
+	} else {
+		failures.push(`${severity.toUpperCase()}: ${pkgName}`);
+	}
 }
 
 // Report.
@@ -162,7 +237,11 @@ console.log('');
 if (failed === 0) {
 	if (allowedCount > 0) {
 		console.log(`  Allowlisted (rationale documented in this file):`);
-		for (const entry of ALLOWLIST) console.log(`    · ${entry.package} (≤${entry.maxSeverity})`);
+		for (const entry of ALLOWLIST) {
+			console.log(
+				`    · ${entry.package} (≤${entry.maxSeverity}, last reviewed ${entry.lastReviewed})`
+			);
+		}
 		console.log('');
 	}
 	console.log(`✓ all ${1 + totalConsidered} npm-audit-gate scenarios pass`);

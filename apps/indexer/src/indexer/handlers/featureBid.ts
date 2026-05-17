@@ -44,6 +44,10 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { validateOrderPermlink } from '$indexer/permlink';
+import { logger } from '$log';
+import { localize, normalizeLocale } from '$indexer/pushLocalize';
+
+const log = logger('featureBid');
 
 // Minimum bid duration: 6 hours.  Anti-sniping floor — without
 // this, a one-hour bid at slightly higher blurt_per_hour can
@@ -303,6 +307,197 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: true };
 		}
 		throw err;
+	}
+
+	// ─── Anti-snipe extension (Part 122 cp18) ───────────────────
+	// When a new bid arrives that would push someone out of the
+	// top-MAX_SLOTS, AND any current top-MAX_SLOTS bid expires
+	// within SNIPE_WINDOW_MINUTES, extend those expiring bids'
+	// expires_at by SNIPE_EXTENSION_MINUTES.  Same "soft close"
+	// pattern as eBay — the auction can't be sniped at T-2s
+	// because the deadline moves.
+	//
+	// Cap at MAX_EXTENSIONS to prevent indefinite auction-drag:
+	// if a bid has already been extended 6 times (30 min total
+	// at 5-min granularity), stop extending it.  The bid will
+	// then expire normally and a determined sniper wins one
+	// slot — acceptable trade-off vs unbounded auction.
+	//
+	// Run BEFORE the outbid notification step so the rank query
+	// downstream sees the extended expires_at values and
+	// correctly identifies who's still visible vs displaced.
+	//
+	// Non-fatal on failure — bid is already recorded.  An
+	// extension miss is a UX regression, not a data-loss event.
+	const MAX_SLOTS_FOR_NOTIFY = 5;
+	const SNIPE_WINDOW_MINUTES = 5;
+	const SNIPE_EXTENSION_MINUTES = 5;
+	const MAX_EXTENSIONS = 6;
+	try {
+		// Update all top-MAX_SLOTS_FOR_NOTIFY bids whose
+		// expires_at is within the snipe window AND haven't
+		// hit MAX_EXTENSIONS yet.  Excludes the new bid we
+		// just inserted (its trx_id is ctx.trxId).
+		//
+		// The CTE picks the current top-MAX_SLOTS by the same
+		// rank predicate as featuredOrderbook.ts; UPDATE...FROM
+		// applies the extension to that subset.
+		const extensionResult = await client.query<{ bid_id: string }>(
+			`WITH visible AS (
+				SELECT b.bid_id
+				  FROM featured_slot_bids b
+				 WHERE b.cancelled = FALSE
+				   AND b.effective_at <= NOW()
+				   AND b.expires_at > NOW()
+				 ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
+				 LIMIT $1
+			)
+			UPDATE featured_slot_bids b
+			   SET expires_at = b.expires_at + ($3 * INTERVAL '1 minute'),
+			       extension_count = b.extension_count + 1,
+			       last_extended_at = NOW()
+			  FROM visible v
+			 WHERE b.bid_id = v.bid_id
+			   AND b.trx_id <> $5
+			   AND b.expires_at <= NOW() + ($2 * INTERVAL '1 minute')
+			   AND b.extension_count < $4
+			RETURNING b.bid_id`,
+			[
+				MAX_SLOTS_FOR_NOTIFY,
+				SNIPE_WINDOW_MINUTES,
+				SNIPE_EXTENSION_MINUTES,
+				MAX_EXTENSIONS,
+				ctx.trxId
+			]
+		);
+		if (extensionResult.rows.length > 0) {
+			log.info('anti_snipe_extended', {
+				count: extensionResult.rows.length,
+				new_bidder: ctx.signer,
+				new_permlink: permlink,
+				extension_minutes: SNIPE_EXTENSION_MINUTES
+			});
+		}
+	} catch (err) {
+		log.warn('anti_snipe_extension_failed', {
+			bidder: ctx.signer,
+			permlink,
+			err: String((err as Error)?.message ?? err)
+		});
+	}
+
+	// ─── Outbid notification (Part 122 cp17) ────────────────────
+	// If this new bid pushed someone out of the top-N visible
+	// set, enqueue a push_pending row for the displaced bidder.
+	// They paid for a slot and just lost visibility — they
+	// should know so they can decide whether to counter-bid.
+	//
+	// Strategy: query the bid currently at rank MAX_SLOTS+1
+	// among active bids.  If our new bid is in the top-MAX_SLOTS
+	// (rank <= MAX_SLOTS) AND there's a bid at rank MAX_SLOTS+1
+	// that isn't our own, that bidder is who we displaced.
+	//
+	// Edge cases handled:
+	//   - Our new bid didn't make top-N: no rank MAX_SLOTS+1 bidder
+	//     to notify (we didn't displace anyone).
+	//   - We had the only existing bid: no rank MAX_SLOTS+1 — no
+	//     notification (no one was visible to displace).
+	//   - Self-displacement (we already had a top-N bid and
+	//     replaced ourselves with a higher one): the rank
+	//     MAX_SLOTS+1 bid would be our OWN old bid; skip
+	//     self-notification.
+	//
+	// Non-fatal on enqueue failure — bid is recorded; missing a
+	// push is a UX regression, not a data-loss event.
+	try {
+		const rankResult = await client.query<{
+			bidder: string;
+			order_permlink: string;
+			rank: string;
+		}>(
+			`WITH ranked AS (
+				SELECT
+					b.bidder,
+					b.order_permlink,
+					ROW_NUMBER() OVER (
+						ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
+					) AS rank
+				FROM featured_slot_bids b
+				WHERE b.cancelled = FALSE
+				  AND b.effective_at <= NOW()
+				  AND b.expires_at > NOW()
+			)
+			SELECT bidder, order_permlink, rank::text AS rank
+			  FROM ranked
+			 WHERE rank IN ($1, $2)
+			 ORDER BY rank`,
+			[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1]
+		);
+
+		// Did our new bid make the top-N?
+		const ourBidIsVisible = rankResult.rows.some(
+			(r) =>
+				r.bidder === ctx.signer &&
+				r.order_permlink === permlink &&
+				parseInt(r.rank, 10) <= MAX_SLOTS_FOR_NOTIFY
+		);
+		// Who's at rank MAX_SLOTS+1?
+		const displaced = rankResult.rows.find(
+			(r) => parseInt(r.rank, 10) === MAX_SLOTS_FOR_NOTIFY + 1
+		);
+
+		if (ourBidIsVisible && displaced && displaced.bidder !== ctx.signer) {
+			// Read the displaced bidder's locale (cp14 pattern —
+			// same query shape as feedback.ts and chat.ts).
+			//
+			// DD-meta-cp1718-1: skip the INSERT entirely if the
+			// bidder has no push subscription on file.  The
+			// push-sender will gracefully drop a no-subs row,
+			// but enqueue-then-drop wastes work and pollutes the
+			// `push_sender_drops_no_subscriptions` counter that
+			// operators monitor.  When no subs exist, the locale
+			// query returns 0 rows; that's our signal.
+			const localeRow = await client.query<{ locale: string }>(
+				`SELECT locale FROM push_subscriptions
+				  WHERE account = $1
+				  ORDER BY created_at DESC
+				  LIMIT 1`,
+				[displaced.bidder]
+			);
+			if (localeRow.rowCount === 0) {
+				// No subscriptions — skip the INSERT.  The user
+				// will still see their bid as "Outranked" in the
+				// FeaturedBidHistory next time they open
+				// /my/orders; push is best-effort.
+			} else {
+				const locale = normalizeLocale(localeRow.rows[0]?.locale);
+				const titleStr = localize(locale, 'outbid_title');
+				const bodyStr = localize(
+					locale,
+					'outbid_body',
+					ctx.signer,
+					displaced.order_permlink
+				);
+				await client.query(
+					`INSERT INTO push_pending
+					   (account, category, title, body, click_path, event_at)
+					 VALUES ($1, 'order', $2, $3, $4, $5)`,
+					[
+						displaced.bidder,
+						titleStr,
+						bodyStr,
+						`/my/orders#order-${displaced.order_permlink}`,
+						ctx.blockTime
+					]
+				);
+			}
+		}
+	} catch (err) {
+		log.warn('outbid_notify_failed', {
+			bidder: ctx.signer,
+			permlink,
+			err: String((err as Error)?.message ?? err)
+		});
 	}
 
 	return { ok: true };

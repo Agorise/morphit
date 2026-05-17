@@ -42,6 +42,7 @@ import { listingFeeRoute } from '$api/listingFee';
 import { orderbookRoute } from '$api/orderbook';
 import { orderbookStreamRoute } from '$api/orderbookStream';
 import { featuredRoute } from '$api/featuredOrderbook';
+import { featuredBidsRoute } from '$api/featuredBids';
 import { clearingPriceHistoryRoute } from '$api/clearingPriceHistory';
 import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
 import { ordersByAccountRoute } from '$api/orders';
@@ -180,6 +181,11 @@ async function main(): Promise<void> {
 	// (closely related; lets clients fetch in one base URL).  Same
 	// 'list' rate-limit tier inherited from orderbookApp.
 	orderbookApp.route('/featured/clearing-price-history', clearingPriceHistoryRoute(db));
+	// Bid history per account — cp17 refinement.  Same 'list'
+	// tier inheritance.  Account is a query param, not a path
+	// segment, because it's optional/filterable rather than
+	// addressable.
+	orderbookApp.route('/featured/bids', featuredBidsRoute(db));
 	app.route('/v1/orderbook', orderbookApp);
 
 	// ADR-0022 — desktop QR pairing.  Mounted at top level

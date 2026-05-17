@@ -143,6 +143,24 @@
 		// resolves, so badges appear progressively rather than
 		// blocking on the slowest network round-trip.
 		void loadViewCounts();
+
+		// cp17 — if the URL hash names a specific order (set by
+		// the outbid-push deep link `/my/orders#order-<permlink>`),
+		// scroll it into view after the rows have rendered.  Done
+		// after `phase = 'ready'` so the {#each} has produced the
+		// target element.  requestAnimationFrame gives the DOM one
+		// commit cycle before we query.
+		if (typeof window !== 'undefined' && window.location.hash.startsWith('#order-')) {
+			const id = window.location.hash.slice(1); // 'order-<permlink>'
+			// Validate to defend against a malicious hash
+			// containing CSS selector special chars.
+			if (/^order-[A-Za-z0-9-]+$/.test(id)) {
+				requestAnimationFrame(() => {
+					const el = document.getElementById(id);
+					el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				});
+			}
+		}
 	}
 
 	async function loadViewCounts(): Promise<void> {
@@ -586,7 +604,7 @@
 					o,
 					$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
 				)}
-				<li class="card-interactive">
+				<li id="order-{o.permlink}" class="card-interactive scroll-mt-20">
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="flex-1">
 							<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

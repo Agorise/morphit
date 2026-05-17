@@ -488,19 +488,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				  LIMIT 1`,
 				[recipient]
 			);
-			const locale = normalizeLocale(localeRow.rows[0]?.locale);
-			const titleStr = isOrderSignal
-				? localize(locale, 'order_title')
-				: localize(locale, 'chat_title');
-			const bodyStr = isOrderSignal
-				? localize(locale, 'order_body', ctx.signer)
-				: localize(locale, 'chat_body', ctx.signer);
-			await client.query(
-				`INSERT INTO push_pending
-				   (account, category, title, body, click_path, event_at)
-				 VALUES ($1, $2, $3, $4, $5, $6)`,
-				[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime]
-			);
+			// DD-meta-cp1718-1: skip enqueue when no push
+			// subscription exists.  See feedback.ts + featureBid.ts
+			// for the same guard.
+			if (localeRow.rowCount === 0) {
+				// no-op; user has no push subs.
+			} else {
+				const locale = normalizeLocale(localeRow.rows[0]?.locale);
+				const titleStr = isOrderSignal
+					? localize(locale, 'order_title')
+					: localize(locale, 'chat_title');
+				const bodyStr = isOrderSignal
+					? localize(locale, 'order_body', ctx.signer)
+					: localize(locale, 'chat_body', ctx.signer);
+				await client.query(
+					`INSERT INTO push_pending
+					   (account, category, title, body, click_path, event_at)
+					 VALUES ($1, $2, $3, $4, $5, $6)`,
+					[recipient, pushCategory, titleStr, bodyStr, pushClickPath, ctx.blockTime]
+				);
+			}
 		} catch (err) {
 			log.warn('push_enqueue_failed', {
 				recipient,

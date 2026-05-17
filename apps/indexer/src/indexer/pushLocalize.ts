@@ -65,7 +65,9 @@ export type PushStringKey =
 	| 'chat_title'
 	| 'chat_body'
 	| 'order_title'
-	| 'order_body';
+	| 'order_body'
+	| 'outbid_title'
+	| 'outbid_body';
 
 /** A template is either a plain string or a function that takes
  *  positional substitution args.  Keeping it flexible because
@@ -81,7 +83,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'New chat message',
 		chat_body: (sender) => `${sender} sent you a message.`,
 		order_title: 'New trade message',
-		order_body: (sender) => `${sender} sent a message about one of your orders.`
+		order_body: (sender) => `${sender} sent a message about one of your orders.`,
+		outbid_title: 'You\'ve been outbid',
+		outbid_body: (bidder, permlink) => `${bidder} placed a higher featured bid on ${permlink}.`
 	},
 	es: {
 		feedback_title: 'Nueva valoración recibida',
@@ -90,7 +94,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Nuevo mensaje de chat',
 		chat_body: (sender) => `${sender} te envió un mensaje.`,
 		order_title: 'Nuevo mensaje de operación',
-		order_body: (sender) => `${sender} envió un mensaje sobre una de tus órdenes.`
+		order_body: (sender) => `${sender} envió un mensaje sobre una de tus órdenes.`,
+		outbid_title: 'Te superaron la puja',
+		outbid_body: (bidder, permlink) => `${bidder} puso una puja destacada más alta en ${permlink}.`
 	},
 	fr: {
 		feedback_title: 'Nouvelle évaluation reçue',
@@ -99,7 +105,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Nouveau message de chat',
 		chat_body: (sender) => `${sender} vous a envoyé un message.`,
 		order_title: 'Nouveau message d’échange',
-		order_body: (sender) => `${sender} a envoyé un message à propos d’une de vos commandes.`
+		order_body: (sender) => `${sender} a envoyé un message à propos d’une de vos commandes.`,
+		outbid_title: 'Vous avez été dépassé',
+		outbid_body: (bidder, permlink) => `${bidder} a placé une enchère plus élevée sur ${permlink}.`
 	},
 	de: {
 		feedback_title: 'Neue Bewertung erhalten',
@@ -108,7 +116,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Neue Chat-Nachricht',
 		chat_body: (sender) => `${sender} hat dir eine Nachricht geschickt.`,
 		order_title: 'Neue Handelsnachricht',
-		order_body: (sender) => `${sender} hat eine Nachricht zu einer deiner Bestellungen geschickt.`
+		order_body: (sender) => `${sender} hat eine Nachricht zu einer deiner Bestellungen geschickt.`,
+		outbid_title: 'Du wurdest überboten',
+		outbid_body: (bidder, permlink) => `${bidder} hat ein höheres Featured-Gebot auf ${permlink} abgegeben.`
 	},
 	it: {
 		feedback_title: 'Nuova valutazione ricevuta',
@@ -117,7 +127,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Nuovo messaggio in chat',
 		chat_body: (sender) => `${sender} ti ha inviato un messaggio.`,
 		order_title: 'Nuovo messaggio di scambio',
-		order_body: (sender) => `${sender} ha inviato un messaggio su uno dei tuoi ordini.`
+		order_body: (sender) => `${sender} ha inviato un messaggio su uno dei tuoi ordini.`,
+		outbid_title: 'Sei stato superato',
+		outbid_body: (bidder, permlink) => `${bidder} ha fatto un\'offerta in evidenza più alta su ${permlink}.`
 	},
 	pl: {
 		feedback_title: 'Nowa opinia',
@@ -126,7 +138,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Nowa wiadomość czatu',
 		chat_body: (sender) => `${sender} wysłał/a ci wiadomość.`,
 		order_title: 'Nowa wiadomość transakcyjna',
-		order_body: (sender) => `${sender} wysłał/a wiadomość dotyczącą jednej z twoich ofert.`
+		order_body: (sender) => `${sender} wysłał/a wiadomość dotyczącą jednej z twoich ofert.`,
+		outbid_title: 'Twoja oferta została przebita',
+		outbid_body: (bidder, permlink) => `${bidder} złożył/a wyższą ofertę wyróżnioną na ${permlink}.`
 	},
 	ru: {
 		feedback_title: 'Получен новый отзыв',
@@ -135,7 +149,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'Новое сообщение в чате',
 		chat_body: (sender) => `${sender} отправил(а) вам сообщение.`,
 		order_title: 'Новое сообщение по сделке',
-		order_body: (sender) => `${sender} отправил(а) сообщение об одной из ваших ордеров.`
+		order_body: (sender) => `${sender} отправил(а) сообщение об одной из ваших ордеров.`,
+		outbid_title: 'Вашу ставку перебили',
+		outbid_body: (bidder, permlink) => `${bidder} разместил(а) более высокую ставку на ${permlink}.`
 	},
 	fa: {
 		feedback_title: 'بازخورد جدید دریافت شد',
@@ -144,7 +160,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: 'پیام چت جدید',
 		chat_body: (sender) => `${sender} برای شما یک پیام فرستاد.`,
 		order_title: 'پیام معاملاتی جدید',
-		order_body: (sender) => `${sender} درباره یکی از سفارش‌های شما پیام فرستاد.`
+		order_body: (sender) => `${sender} درباره یکی از سفارش‌های شما پیام فرستاد.`,
+		outbid_title: 'پیشنهاد شما رد شد',
+		outbid_body: (bidder, permlink) => `${bidder} پیشنهاد برجسته بالاتری روی ${permlink} ارائه داد.`
 	},
 	'zh-CN': {
 		feedback_title: '收到新评价',
@@ -153,7 +171,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: '新聊天消息',
 		chat_body: (sender) => `${sender} 给你发了一条消息。`,
 		order_title: '新交易消息',
-		order_body: (sender) => `${sender} 关于你的一个订单发来了消息。`
+		order_body: (sender) => `${sender} 关于你的一个订单发来了消息。`,
+		outbid_title: '你的竞价已被超越',
+		outbid_body: (bidder, permlink) => `${bidder} 在 ${permlink} 上提交了更高的精选竞价。`
 	},
 	'zh-HK': {
 		feedback_title: '收到新評價',
@@ -162,7 +182,9 @@ const TABLE: Record<IndexerPushLocale, Record<PushStringKey, Template>> = {
 		chat_title: '新聊天訊息',
 		chat_body: (sender) => `${sender} 發咗條訊息畀你。`,
 		order_title: '新交易訊息',
-		order_body: (sender) => `${sender} 就你嘅一張訂單發咗條訊息。`
+		order_body: (sender) => `${sender} 就你嘅一張訂單發咗條訊息。`,
+		outbid_title: '你嘅競價已被超越',
+		outbid_body: (bidder, permlink) => `${bidder} 喺 ${permlink} 上提交咗更高嘅精選競價。`
 	}
 };
 

@@ -84,6 +84,8 @@ const nonEn = locales.filter((l) => l !== 'en');
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
 	// ─── (a) same-word: spelling matches in target locale ───
+	{ key: 'feature_bid.history_state_visible', locale: 'es', reason: '(a) "Visible" is also Spanish (same spelling, same meaning)' },
+	{ key: 'feature_bid.history_state_visible', locale: 'fr', reason: '(a) "Visible" is also French (same spelling, same meaning)' },
 	{ key: 'profile.reputation_heading', locale: 'de', reason: '(a) "Reputation" is also German' },
 	{ key: 'post_order.form.region_label', locale: 'de', reason: '(a) "Region (optional)" is German verbatim' },
 	{ key: 'chat.funds_sent.pill_txid_label', locale: 'fr', reason: '(a) "Transaction" is also French' },

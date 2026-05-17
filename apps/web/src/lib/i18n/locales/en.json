@@ -1987,7 +1987,17 @@
 		"password_label": "Your password (to sign with your active key)",
 		"error_password_required": "Enter your password to sign the bid.",
 		"error_bad_password": "That password did not unlock your active key.",
-		"error_generic": "Couldn't place your bid. Try again."
+		"error_generic": "Couldn't place your bid. Try again.",
+		"history_heading": "Your recent featured bids",
+		"history_expand": "Show {extra} more",
+		"history_collapse": "Show fewer",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/hr · from {start}",
+		"history_state_visible": "Visible",
+		"history_state_outranked": "Outranked",
+		"history_state_expired": "Expired",
+		"history_state_order_inactive": "Order ended",
+		"history_extended": "Extended ×{n}",
+		"history_extended_title": "Bid extended {n} time(s) by anti-snipe"
 	},
 	"about_this_instance": {
 		"heading": "About this instance",

@@ -235,6 +235,71 @@ const CHECKS: readonly Check[] = [
 			]
 		},
 		status: 'live'
+	},
+	{
+		// cp16 walkthrough surfaced this — operator following
+		// the env-example file MUST see VAPID placeholders so
+		// they know push notifications need setup.  Without
+		// this, an operator who skips RUN-A-MORPHIT-NODE.md
+		// would ship push-disabled silently.
+		id: 'vapid-env-documented-in-example',
+		claim_source: 'brag_list',
+		claim_phrase: 'Push subscriptions are proof-of-ownership protected',
+		anchor: {
+			kind: 'grep',
+			pattern: 'MORPHIT_RELAY_VAPID_PUBLIC_KEY',
+			paths: ['ops/env/relay.env.example']
+		},
+		status: 'live'
+	},
+	{
+		// cp17 — featured-slot auction refinements (bid history).
+		// Phase A claim: users see their own recent bids with
+		// visibility status above the bid form.
+		id: 'featured-bid-history-endpoint',
+		claim_source: 'brag_list',
+		claim_phrase: 'Bidders see their own recent bids inline',
+		anchor: {
+			kind: 'any_of',
+			specs: [
+				{
+					kind: 'file_exists',
+					path: 'apps/indexer/src/api/featuredBids.ts'
+				},
+				{
+					kind: 'file_exists',
+					path: 'apps/web/src/lib/components/FeaturedBidHistory.svelte'
+				}
+			]
+		},
+		status: 'live'
+	},
+	{
+		// cp17 — outbid push notifications.
+		id: 'featured-bid-outbid-push',
+		claim_source: 'brag_list',
+		claim_phrase: 'displaced bidder gets a push notification',
+		anchor: {
+			kind: 'grep',
+			pattern: 'outbid_notify_failed',
+			paths: ['apps/indexer/src/indexer/handlers/featureBid.ts']
+		},
+		status: 'live'
+	},
+	{
+		// cp18 — anti-snipe extension.  Soft-close auction rule:
+		// late bids extend the deadline so snipers can be
+		// countered.  Capped at MAX_EXTENSIONS to bound
+		// auction-drag.
+		id: 'featured-bid-anti-snipe',
+		claim_source: 'brag_list',
+		claim_phrase: 'minimum-hours floors prevent micro-bid sniping',
+		anchor: {
+			kind: 'grep',
+			pattern: 'anti_snipe_extended',
+			paths: ['apps/indexer/src/indexer/handlers/featureBid.ts']
+		},
+		status: 'live'
 	}
 ];
 

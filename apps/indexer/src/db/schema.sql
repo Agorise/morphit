@@ -777,7 +777,25 @@ CREATE TABLE featured_slot_bids (
     -- Cancelled means the bidder rescinded (future feature);
     -- for MVP always FALSE.
     cancelled BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Part 122 cp18 — anti-snipe extension tracking.
+    -- When a new bid arrives that would push someone out of the
+    -- top-MAX_SLOTS, AND any current top-MAX_SLOTS bid expires
+    -- within SNIPE_WINDOW_MINUTES, those expiring bids get their
+    -- expires_at extended by SNIPE_EXTENSION_MINUTES.  Cap at
+    -- MAX_EXTENSIONS to prevent indefinite auction-drag.
+    --
+    -- extension_count: how many times this bid's expires_at has
+    --   been extended.  When it reaches MAX_EXTENSIONS the bid
+    --   stops being extendable.
+    -- last_extended_at: audit-trail timestamp of the most recent
+    --   extension, useful for operators investigating disputes
+    --   ("did my bid really get extended at 3am?").  NULL if
+    --   never extended.
+    extension_count INT NOT NULL DEFAULT 0
+        CHECK (extension_count >= 0 AND extension_count <= 100),
+    last_extended_at TIMESTAMPTZ
 );
 
 -- Order-permlink foreign key is intentionally NOT declared here —
@@ -785,6 +803,13 @@ CREATE TABLE featured_slot_bids (
 -- cancelled or expired to remain in the audit table (for
 -- refund-tracking and anti-abuse analysis). The query-time
 -- predicate "AND order is still live" handles visibility.
+
+-- v33.3a — idempotent backfill for upgrades from cp17 and earlier.
+-- Fresh installs already have the columns from the CREATE above.
+ALTER TABLE featured_slot_bids
+    ADD COLUMN IF NOT EXISTS extension_count INT NOT NULL DEFAULT 0;
+ALTER TABLE featured_slot_bids
+    ADD COLUMN IF NOT EXISTS last_extended_at TIMESTAMPTZ;
 
 CREATE INDEX ix_featured_bids_active
     ON featured_slot_bids (blurt_per_hour DESC, block_time_at ASC)
@@ -795,6 +820,15 @@ CREATE INDEX ix_featured_bids_bidder
 
 CREATE INDEX ix_featured_bids_order
     ON featured_slot_bids (order_permlink, expires_at DESC);
+
+-- Part 122 cp18 — anti-snipe extension lookup.  The handler
+-- needs to find "active bids in the top-MAX_SLOTS whose
+-- expires_at is within SNIPE_WINDOW_MINUTES of NOW()".  The
+-- existing ix_featured_bids_active partial index covers the
+-- rank part; this index supports the expires_at range filter.
+CREATE INDEX IF NOT EXISTS ix_featured_bids_expires
+    ON featured_slot_bids (expires_at, bid_id)
+    WHERE cancelled = FALSE;
 
 -- Query pattern: "what are the top 5 currently featured
 -- orders?" — covered by ix_featured_bids_active with an

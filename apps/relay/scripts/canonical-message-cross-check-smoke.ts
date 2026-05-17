@@ -189,8 +189,16 @@ async function buildClientCanonical(
 		stale.ok === false && stale.reason === 'timestamp_out_of_range'
 	);
 
-	// Negative case: account mismatch — server reconstructs canonical
-	// with a DIFFERENT account, signature won't match.
+	// Negative case: account-binding in canonical message.
+	// Caller claims to be 'bob.test' but submits a signature
+	// signed for the canonical containing 'alice.test'.  The
+	// verifier reconstructs canonical with 'bob.test' and
+	// verifies against the pubkey returned for 'bob.test'.
+	// Even when the stub returns the same pubkey for any
+	// account (so we're not testing pubkey-lookup correctness,
+	// we're testing canonical-message account-binding), the
+	// verifier rejects because the signed digest doesn't match
+	// the digest reconstructed from 'bob.test'.
 	const wrongAccount = await verifyPushSubscribeSignature(
 		stubBlurt,
 		{
@@ -202,12 +210,14 @@ async function buildClientCanonical(
 		fixedTimestamp + 1
 	);
 	record(
-		'verifier rejects a signature replayed against a different account',
+		'verifier rejects signatures whose canonical was bound to a different account',
 		wrongAccount.ok === false && wrongAccount.reason === 'signature_mismatch'
 	);
 
-	// Negative case: endpoint binding — server reconstructs canonical
-	// with a different endpoint, signature won't match.
+	// Negative case: endpoint-binding in canonical message.
+	// Same logic — the verifier reconstructs canonical from
+	// the submitted endpoint string and the signed digest
+	// won't match if any byte of the endpoint changed.
 	const wrongEndpoint = await verifyPushSubscribeSignature(
 		stubBlurt,
 		{

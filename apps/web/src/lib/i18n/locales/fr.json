@@ -1987,7 +1987,17 @@
 		"password_label": "Votre mot de passe (pour signer avec votre clé active)",
 		"error_password_required": "Entrez votre mot de passe pour signer l'offre.",
 		"error_bad_password": "Ce mot de passe n'a pas déverrouillé votre clé active.",
-		"error_generic": "Impossible de placer ton offre. Réessaie."
+		"error_generic": "Impossible de placer ton offre. Réessaie.",
+		"history_heading": "Vos enchères mises en avant récentes",
+		"history_expand": "Afficher {extra} de plus",
+		"history_collapse": "Afficher moins",
+		"history_row": "{hours}h · {blurt} BLURT @ {rate}/h · depuis {start}",
+		"history_state_visible": "Visible",
+		"history_state_outranked": "Dépassée",
+		"history_state_expired": "Expirée",
+		"history_state_order_inactive": "Annonce terminée",
+		"history_extended": "Prolongée ×{n}",
+		"history_extended_title": "Enchère prolongée {n} fois par l'anti-snipe"
 	},
 	"about_this_instance": {
 		"heading": "À propos de cette instance",

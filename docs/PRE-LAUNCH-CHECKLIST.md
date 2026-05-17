@@ -37,11 +37,13 @@ file in the same turn.
       treasury addresses on chain.  *(Origin: Part 106.)*
 
 - [ ] **[blocking]** Generate the `@morphit-relay` Blurt
-      account.  Active key is encrypted and stored in
-      `/etc/morphit/keys/relay-active.key` (mode 0400),
-      read by the relay process for account creation,
-      operator payouts, and all relay broadcasts.
-      *(Origin: ADR-0010 §3.)*
+      account.  Active key is encrypted by the ops-cli init
+      wizard (Section C below) into
+      `apps/relay/keystore.json` (or `.wif`), read by the
+      relay process for account creation, operator payouts,
+      and all relay broadcasts.  *(Origin: ADR-0010 §3;
+      keystore path corrected to match ops-cli init wizard
+      output, Part 122 cp16.)*
 
 - [ ] **[blocking]** Generate the canonical BTC treasury
       address.  Native segwit (`bc1q...`) recommended.
@@ -157,7 +159,7 @@ file in the same turn.
 
       ```
       cd ~/morphit/apps/relay
-      tsx scripts/mint-acts.ts 25
+      npm run mint-acts -- 25
       ```
 
       This burns ~2,500 BLURT (25 × 100 BLURT) from
@@ -293,22 +295,27 @@ file in the same turn.
       by starting the indexer briefly and watching for
       Zod config-validation errors:
       `cd apps/indexer && timeout 5 npm run start || true`.
-      The indexer's `loadConfig()` runs synchronously
-      via a Zod schema before any side effects — any
-      misconfiguration shows up as a `ZodError` in the
-      first ~100 ms of stderr.  No `--dry-run` flag
-      exists; a 5-second `timeout` is the simplest
-      grandma-friendly way to exercise validation
-      without staying connected to chain.  *(Origin:
-      ops-cli init, post-Part-106 hardening; Part 119
-      audit corrected the nonexistent `--dry-run` flag
-      reference.)*
+      Repeat for the relay:
+      `cd apps/relay && timeout 5 npm run start || true`.
+      Both apps' `loadConfig()` run synchronously via Zod
+      schemas before any side effects — any misconfiguration
+      shows up as a `ZodError` in the first ~100 ms of stderr.
+      No `--dry-run` flag exists on either; a 5-second
+      `timeout` is the simplest grandma-friendly way to
+      exercise validation without staying connected to
+      chain.  *(Origin: ops-cli init, post-Part-106 hardening;
+      Part 119 audit corrected the nonexistent `--dry-run`
+      flag reference; Part 122 cp16 walkthrough extended
+      validation to the relay env after the cp16 VAPID
+      walkthrough showed how easily a relay-env gap can
+      hide.)*
 
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 2,900+ scenarios passed, 0 runners failed`
-      (baseline ticks up as smokes are added each release).
+      `Total: 3,100+ scenarios passed, 0 runners failed`
+      (baseline ticks up as smokes are added each release;
+      Part 122 cp18 baseline is 3,173).
 
       If you see several runners fail with
       `ERR_MODULE_NOT_FOUND` errors all referencing a
@@ -399,7 +406,11 @@ file in the same turn.
       push_subscriptions; cp15 audit drops the dead
       `attempts` column from push_pending and adds a
       composite index on push_subscriptions(account,
-      created_at DESC) for the locale-lookup hot path).
+      created_at DESC) for the locale-lookup hot path;
+      cp18 adds `extension_count` + `last_extended_at`
+      columns on featured_slot_bids for the anti-snipe
+      soft-close auction rule, plus an ix_featured_bids_expires
+      index for the "expiring within snipe window" check).
       *(Origin: ADR-0001 schema management; version
       refreshed Part 121 audit.)*
 
@@ -429,7 +440,18 @@ file in the same turn.
 - [ ] **[blocking]** Hash the bundle and include the
       hash manifest in the next `morphit_release_v1`
       op so federated frontends can verify integrity.
-      *(Origin: ADR-0007 chain-pinned hash manifest.)*
+      Generate the manifest from the built bundle:
+      ```
+      cd apps/web && node scripts/build-manifest.mjs
+      ```
+      This walks `apps/web/build/` and emits a sorted
+      SHA-256-per-file manifest (deterministic
+      fingerprint of the bundle bytes).  Pass the output
+      path to `apps/indexer/scripts/release-build-payload.ts`
+      via `--hash-manifest <path>` when building the
+      next release op.  *(Origin: ADR-0007 chain-pinned
+      hash manifest; build-manifest script reference
+      added Part 122 cp19 pre-launch dry-run.)*
 
 - [ ] **[recommended]** Verify your frontend renders
       correctly for ALL 10 locales (en, es, fr, de, it,
@@ -515,12 +537,26 @@ block initial launch:
       user-supplied per-payment proof (Part 108++) —
       verify the post-order form rendered correctly with
       the proof textarea and per-wallet instructions for
-      the first XMR-paying user.
+      the first XMR-paying user.  Inspect status via:
+      `psql -c "SELECT permlink, fee_method, fee_status FROM orders WHERE fee_status IS NOT NULL ORDER BY created_at DESC LIMIT 10;"`.
+      Healthy: rows transition from `pending` → `verified`
+      within a few minutes of the fee transfer being mined.
 - [ ] Watch the **relay balance** trend.  If
       auto-refills are firing on day-zero traffic, the
       relay account drain rate is real; top up
       pre-emptively if you're approaching the
       low-balance threshold.
+- [ ] **[if push enabled]** Watch the `push_pending`
+      queue size.  Quick check:
+      `psql -c 'SELECT COUNT(*) FROM push_pending;'`.
+      Healthy: drains to ≤ batch_size (default 50)
+      within poll_interval (default 30s).  Growing
+      unboundedly = worker is wedged (VAPID misconfig,
+      web-push library auth failure, or DB lock).
+      Cross-reference with the relay's
+      `push_sender_tick` log lines.  *(Origin: Part 122
+      cp16 walkthrough — DD-10 single-relay invariant
+      makes queue growth a clean failure signal.)*
 
 ---
 
@@ -533,4 +569,6 @@ block initial launch:
 | 110 | 2026-05-10 | Section A gained two new items: relay-account funding (`[blocking]`) and fees-account-exists-on-chain (`[recommended]`).  Operator-reported gap: previous revisions assumed operators knew the relay needed BLURT upfront; explicit checkbox reduces failed first-day launches.  Section A also updated to retire the `verify-xmr-viewkey.ts` reference (script retired Part 110).  Section H expanded with reference to `LAUNCH-DAY.md` (new) and `POST-LAUNCH-WEEK-ONE.md` (new) for day-zero and week-one runbooks. |
 | 110 | 2026-05-10 | Section A gained a `[recommended]` "Review listing fee + fallback BLURT price" item.  The wizard prompts for these during init, but BTC/XMR prices drift between wizard-run and launch day so a pre-launch re-confirmation is worth doing — `morphit-ops edit → Listing fee + fallback BLURT price` re-fetches live Coingecko prices and recomputes amounts. |
 | 111 | 2026-05-10 | Section A gained two new items for the federation-cost-attribution model: `[blocking]` set `MORPHIT_INSTANCE_OPERATOR_TAG` (canonical morphit.io uses `morphit`; community operators pick their own) and `[blocking — community operators only]` register the tag on chain via `morphit_operator_register_v1`.  Without these, the relay queues NO payouts because it can't prove which ops are "ours." |
+| 122 cp19 | 2026-05-17 | Pre-launch dry-run walkthrough surfaced 4 doc gaps: (1) Section A mint-acts invocation used bare `tsx scripts/mint-acts.ts 25` which fails on operator boxes without global tsx; corrected to `npm run mint-acts -- 25` (matching npm script added to `apps/relay/package.json`); (2) Section C smoke baseline bumped from 3,154 → 3,173 to match cp18; (3) Section E added build-manifest script invocation (`node scripts/build-manifest.mjs`) so operators know HOW to produce the hash manifest, not just that they need to; (4) Section H fee-verification check now includes the `psql SELECT permlink, fee_method, fee_status` query so operators can inspect status without spelunking. |
+| 122 cp16 | 2026-05-16 | Sally-operator walkthrough surfaced 4 doc gaps: (1) Section A keystore path was stale (`/etc/morphit/keys/relay-active.key` → corrected to `apps/relay/keystore.{wif,json}` matching ops-cli init); (2) Section C env-load verification now covers relay too, not just indexer; (3) Section C smoke-count baseline bumped from 2,900+ → 3,100+ (cp16 baseline 3,154); (4) Section H Day-0 monitoring gains push_pending queue-health check when push is enabled.  Section C VAPID setup step + Section D schema-v33 reference + audit-cp15 refinements landed earlier in cp16. |
 | 119 | 2026-05-11 | Section C wizard step-count corrected (14 → ~17 with disclaimer pointing at `apps/ops-cli/src/init/steps.ts` as the source-of-truth list).  Section C also corrected the nonexistent `--dry-run` flag — the indexer has no such flag; use a 5-second `timeout npm run start` to exercise Zod env validation instead.  Section D schema version updated v29 → v31 to reflect Part 113's Signal C addition. |
