@@ -923,8 +923,29 @@ locales, alignment with FAQ_KEYS registry verified.
 These need **you** (or a person with operator access / domain
 knowledge), not more code.
 
-- **FAQ `featured_slot_displaced` is stale post-cp17/cp18.**
-  *Surfaced 2026-05-17 during pre-handoff staleness sweep.*
+- **FAQ `featured_slot_displaced` is stale post-cp17/cp18 — ✅ CLOSED Part 122 cp20 (2026-05-17).**
+  Updated across all 10 locales (en, es, fr, de, it, pl, ru, fa,
+  zh-CN, zh-HK) — new `**Two protections built into the platform**`
+  block inserted after the existing "How to avoid being displaced"
+  user-mitigations section and before the Recap line, with two
+  bullets covering (a) cp17 outbid push notifications (deep-link
+  to `/my/orders#order-X`, no manual orderbook refresh needed),
+  and (b) cp18 anti-snipe soft-close (5-min extension on a new
+  bid arriving within 5 min of an expiring top-5 deadline, capped
+  at 6 extensions / 30 min total drag, "Extended ×N" chip in
+  FeaturedBidHistory).  Recap line updated in each locale to
+  mention both protections.  All 10 locale JSON files re-parsed
+  cleanly and retained 3,481-line structural parity (newlines
+  were inside string values, no key-count delta).  Size deltas:
+  en 1533→2364, es 1523→2497, fr 1679→2732, de 1617→2646, it
+  1499→2454, pl 1463→2362, ru 1460→2395, fa 1447→2335, zh-CN
+  513→840, zh-HK 516→844 characters.  Native-speaker QA for fa,
+  ru, zh-CN, zh-HK remains an open standing item separately in
+  this section — this turn ships best-effort translations
+  consistent with prior auto-assisted Phase-4+ practice.
+  Kept original entry below for archaeology.
+
+  Original finding — surfaced 2026-05-17 during pre-handoff staleness sweep:
   The "What happens to my featured slot if someone outbids me?"
   FAQ entry (key `faq.featured_slot_displaced` in all 10
   locales) still says "no notification — you have to check

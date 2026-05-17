@@ -1,6 +1,6 @@
 {
 	"name": "@morphit/indexer-client",
-	"version": "0.1.0-phase3b",
+	"version": "1.0.0-beta.1",
 	"private": true,
 	"type": "module",
 	"description": "Shared TypeScript types for the Morphit indexer HTTP API",

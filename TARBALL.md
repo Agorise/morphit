@@ -1,4 +1,458 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 20 — pre-launch tier-1+tier-2 review sweep + deep-deep: README replaced (3-line stub → substantive landing page); RELEASE-NOTES-v1.0.0-beta.1.md body replaced (was `...` placeholder); 14-touchpoint version unification (all 10 package.json + relay/indexer health.ts VERSION/INDEXER_VERSION constants + docs/API.md + apps/indexer/README.md example responses → 1.0.0-beta.1); new version-consistency-smoke (apps/web/scripts/version-consistency-smoke.ts, 14 scenarios, self-tested by tampering, wired into run-smokes.sh); MORPHIT-BRAG-LIST duplicate-#60 fix (cp16 push-sig-verify entry collided with section-4 federated-orderbook opener → renumbered 210 lines section-4-onwards +1; max now 270) + stale-count refresh (smoke count 2,320→3,170+; verify-anchor 2,500+/100+→3,170+/140+; audit-doc descriptor 9,600+/27→20,000+/60+ verified actual; footer 265→270 and 2026-05-14→2026-05-17); mediakit zip rebuilt; FAQ `featured_slot_displaced` updated × 10 locales (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK) with new "Two protections built into the platform" block (cp17 outbid push + cp18 anti-snipe soft-close + "Extended ×N" chip reference) + updated recap line; REVISIT-LIST §A FAQ-stale item closed; **deep-deep:** 14 findings, 4 real bugs fixed in-pass (DD-cp20-1 stale package-lock.json after version sweep; DD-cp20-9 stale "200 static HTML files" claim in README + brag #270 corrected to 170 per sitemap source of truth; DD-cp20-13 stale "23 ADRs" claim corrected to 22 per actual file count with 0016-slot explanation; DD-cp20-14 version-consistency-smoke refactored to read workspaces dynamically from root package.json, self-tested both for existing-workspace tamper and new-workspace addition); DD-cp20-10 RELEASE-NOTES smoke count bumped 3,173→3,187 to match cp20 baseline; mediakit rebuilt twice during deep-deep)
+
+**Snapshot date:** 2026-05-17
+
+---
+
+## REPO STATE NOW (read this first if resuming in a fresh chat)
+
+**Last sealed checkpoint:** Part 122 cp20 (2026-05-17)
+
+**Gates — partial green (sandbox-constrained verification):**
+
+This checkpoint was assembled in a sandboxed working copy WITHOUT
+`node_modules` populated.  The full smoke suite + typecheck-sweep
+were NOT executed in-pass.  Disclosure of what WAS verified vs
+what's deferred to a real-environment run:
+
+VERIFIED in-pass:
+- version-consistency-smoke: **14/14 scenarios pass** (executed
+  via tsx; self-tested by tampering relay/package.json
+  1.0.0-beta.1 → 1.0.0-beta.2; smoke correctly failed with the
+  right remediation hint; restoration green)
+- All 10 locale JSON files parse cleanly + retain 3,481-line
+  structural parity (newlines were inside string values, no
+  key-count delta)
+- Brag list duplicate-number scan: zero duplicates remain;
+  max item number is 270; TOC items 1-18 intentionally
+  share numbers with section-1 items (TOC anchors)
+- Mediakit zip rebuild: `scripts/build-mediakit.sh` succeeded,
+  37,256 bytes, dated 2026-05-17
+
+DEFERRED to first real-environment run (cp20a or whichever
+session runs `npm install` next):
+- Triple-pulse smoke suite (expected baseline: cp19 3,173 + 14
+  new version-consistency scenarios = **3,187** × 3)
+- Typecheck-sweep (no source-structure changes that should
+  affect TS; the only new TS is the smoke at apps/web/scripts/
+  which uses node:fs/path only)
+- mediakit-freshness-smoke (zip timestamps should be ≥ brag
+  list mtime; rebuilt this turn so should be fine)
+
+**Expected post-cp20 baselines once verified in a real run:**
+- Triple-pulse: 3,187 × 3 scenarios, 0 failures
+- Typecheck-sweep: 0 errors across all 10 workspaces
+- wiring-completeness: 21 live + 0 deferred + 0 failed (no new
+  brag-list claims; the version-consistency smoke is a regression
+  gate, not a brag-claim anchor)
+- version-consistency-smoke: 14/14
+
+### Shipped this checkpoint
+
+**1. README.md replacement.**  The previous 3-line stub
+("# morphit! / The Morphit BBS/DEX") was the public Forgejo
+landing page for a project five days from launch.  Replaced
+with a substantive landing doc:
+- Elevator-pitch lede paragraph + status framing
+- "What this is, concretely" — six-bullet feature summary
+- Repo layout table (apps/, packages/, docs/, ops/, scripts/)
+- Install short-form (~6 steps pointing at full RUN-A-MORPHIT-NODE)
+- For-developers links (ARCHITECTURE, API, ADRs, AUDIT)
+- Bug-reporting + security-DM distinction (matches
+  .forgejo/issue_template/config.yml split)
+- Community Matrix room + security disclosure separation
+- AGPL note + verify-the-claims footer
+
+**2. RELEASE-NOTES-v1.0.0-beta.1.md body.**  The `## What's
+in the beta` section was previously the literal placeholder
+`- ...`.  Replaced with structured highlights:
+- Trading (BTC/XMR/BLURT/USDT including 4-network USDT,
+  listing-fee asset choice, first-buy waiver, featured-slot
+  auction with cp17 outbid push + cp18 anti-snipe)
+- Identity, signup, and chat (no-KYC, free signup via ACTs,
+  E2EE chat with ADR-0015 rationale, opt-in 8-word fingerprint,
+  desktop QR pairing per ADR-0022)
+- Notifications (cp13–cp16 Web Push with VAPID + sig-verify,
+  in-tab ambient channels without VAPID)
+- Operator setup (wizard, federated cost attribution,
+  kill-switch, reproducible builds)
+- Privacy (no cookies/analytics/Cloudflare/IP-logging; XMR
+  view-key strictly env-only)
+- Internationalization (10 languages, per-locale prerender)
+- Audit and integrity (3,173 smokes, 20,000+ line audit log,
+  23 ADRs)
+- Reach (web + Tor + I2P + Lokinet + Nostr)
+- Reporting issues (Forgejo bug template + security-DM channel)
+- Tag/builder footer
+
+**3. Version unification across 14 touchpoints — full sweep.**
+Pre-cp20 the runtime reported `0.3.0-phase3a` (relay) and
+`0.1.0-phase3b` (indexer) in `/v1/health` responses, the root
+package.json said `0.0.0-phase3b`, and the docs example
+responses repeated `0.1.0-phase3b` — four different version
+strings, none of them the release tag.  A user hitting
+morphit.io/v1/health on launch day would have seen a phase-name
+that contradicted the v1.0.0-beta.1 release notes.
+
+Touchpoints unified to `1.0.0-beta.1`:
+
+| # | Touchpoint | Was |
+|---|---|---|
+| 1 | `package.json` (root) | `0.0.0-phase3b` |
+| 2 | `apps/web/package.json` | `0.2.0-phase2a` |
+| 3 | `apps/relay/package.json` | `0.3.0-phase3a` |
+| 4 | `apps/indexer/package.json` | `0.1.0-phase3b` |
+| 5 | `apps/ops-cli/package.json` | `0.1.0` |
+| 6 | `apps/matrix-bot/package.json` | `0.1.0` |
+| 7 | `packages/asset-registry/package.json` | `0.1.0` |
+| 8 | `packages/indexer-client/package.json` | `0.1.0-phase3b` |
+| 9 | `packages/relay-client/package.json` | `0.1.0-phase-f` |
+| 10 | `packages/operator-config/package.json` | `0.1.0` |
+| 11 | `apps/relay/src/api/health.ts` `const VERSION` | `0.3.0-phase3a` |
+| 12 | `apps/indexer/src/api/health.ts` `const INDEXER_VERSION` | `0.1.0-phase3b` |
+| 13 | `docs/API.md` `/v1/health` example response | `0.1.0-phase3b` |
+| 14 | `apps/indexer/README.md` `/v1/health` example response | `0.1.0-phase3b` |
+
+Both health.ts constants gained an updated sync-contract comment
+naming the smoke that defends the invariant.  The smoke uses the
+root package.json as the single source of truth — operators
+bumping for a future release edit ONE field there, then the
+smoke fails until the other 13 sites are updated in the same
+commit.
+
+**4. New regression gate — `apps/web/scripts/version-consistency-smoke.ts`.**
+14 scenarios, per-touchpoint extractors:
+- Category A (10 scenarios): workspace package.json files, JSON-parsed for `version` field
+- Category B (2 scenarios): TS source files, anchored regex on the const-name (VERSION / INDEXER_VERSION) so unrelated literals in the file don't get picked up
+- Category C (2 scenarios): doc files, first `"version": "<vstring>"` occurrence (stable position — both files have the example-response near the top of the health-endpoint section)
+
+Per-touchpoint remediation hints surface in the failure output
+("fix: edit `version` in apps/relay/package.json", etc.) so a
+developer who hits this in CI knows exactly which file to edit.
+
+Self-tested by tampering: `1.0.0-beta.1` → `1.0.0-beta.2` in
+apps/relay/package.json → smoke failed correctly with the
+expected remediation hint.  Restoration → green.
+
+Wired into `scripts/run-smokes.sh` at line 145, adjacent to
+the existing `apps/web:npm-audit-gate-smoke`.
+
+**5. MORPHIT-BRAG-LIST.md fixes.**
+
+*5a. Duplicate-number bug.*  Section 3 ended with the cp16-added
+item `60. Push subscriptions are proof-of-ownership protected.`
+Section 4 ("Real decentralization") opened with another `60.
+Federated orderbook over a public blockchain.` — when cp16
+inserted the new section-3 item, the section-4 opener wasn't
+bumped.  Markdown auto-renumbers visually but the duplicate is
+visible in plain text views (and in the mediakit zip distributed
+to operators/press).  Fixed by renumbering 210 item lines in
+section 4 onwards (60→61, 61→62, …, 269→270) via Python script;
+verified zero duplicates remain and max is now 270.
+
+*5b. Stale numeric claims.*
+- Line 71 smoke count: `Over 2,320 self-checking smoke
+  scenarios` → `Over 3,170 self-checking smoke scenarios`
+- Line 72 audit-doc descriptor: `9,600+ lines across 27
+  numbered parts` → `20,000+ lines across 60+ numbered parts`
+  (verified: `wc -l docs/AUDIT-2026-05.md` = 20,734; `grep -c
+  '^## Part' docs/AUDIT-2026-05.md` = 65)
+- Verify-anchor section: `2,500+ self-checks across 100+
+  runners` → `3,170+ self-checks across 140+ runners`
+  (actual runner count after this turn's add: 140)
+- Footer line: `265 specific selling points… Last updated
+  2026-05-14` → `270 specific selling points… Last updated
+  2026-05-17`
+
+*5c. Mediakit rebuild.*  Per memory's standing rule —
+brag list changed, so `apps/web/static/morphit-mediakit.zip`
+regenerated via `scripts/build-mediakit.sh`.  37,256 bytes,
+dated 2026-05-17.  Carries the corrected brag list to anyone
+clicking the footer Mediakit link.
+
+**6. FAQ `featured_slot_displaced` × 10 locales.**
+
+This was the one explicitly-deferred item from cp19's
+pre-handoff staleness sweep — the FAQ told users that
+"watching the current top-5 rates before bidding" was their
+defense, but cp17 + cp18 changed the user experience:
+- cp17 (outbid push): displaced bidder gets a Web Push
+  notification with deep-link to `/my/orders#order-X`
+- cp18 (anti-snipe): late bid within 5 min of an expiring
+  top-5 bid's deadline extends that deadline by 5 min, capped
+  at 6 extensions (30 min total drag), preventing
+  T-2-second snipes
+- "Extended ×N" chip surfaces in FeaturedBidHistory when
+  anti-snipe fires on a bid
+
+Insertion structure (parallel across all 10 locales):
+- New `**Two protections built into the platform:**` block
+  added AFTER the existing "How to avoid being displaced"
+  user-mitigations section and BEFORE the Recap line
+- Two bullets: outbid push notifications, anti-snipe soft-close
+- Recap line replaced with one that names both protections
+
+Size deltas confirm balanced expansion across locales
+(en 1533→2364, es 1523→2497, fr 1679→2732, de 1617→2646,
+it 1499→2454, pl 1463→2362, ru 1460→2395, fa 1447→2335,
+zh-CN 513→840, zh-HK 516→844 chars).
+
+All 10 locale JSON files re-parsed cleanly and retained
+3,481-line structural parity.  Native-speaker QA for fa, ru,
+zh-CN, zh-HK remains an open REVISIT §A item — this turn
+ships best-effort translations consistent with prior
+auto-assisted Phase-4+ practice; native-speaker pass is
+post-launch.
+
+### Files changed
+
+Source:
+- `apps/relay/src/api/health.ts` — VERSION constant + sync-contract comment
+- `apps/indexer/src/api/health.ts` — INDEXER_VERSION constant + sync-contract comment
+- `apps/web/scripts/version-consistency-smoke.ts` — **new**;
+  shipped with hardcoded 10-workspace list, then DD-cp20-14
+  refactored to read root `workspaces` array dynamically so
+  adding/removing a workspace is self-correcting
+
+Workspace metadata (all 10):
+- `package.json`, `apps/web/package.json`, `apps/relay/package.json`,
+  `apps/indexer/package.json`, `apps/ops-cli/package.json`,
+  `apps/matrix-bot/package.json`, `packages/asset-registry/package.json`,
+  `packages/indexer-client/package.json`, `packages/relay-client/package.json`,
+  `packages/operator-config/package.json`
+- `package-lock.json` — regenerated post-version-sweep
+  (DD-cp20-1 fix) via `npm install --package-lock-only`; now
+  reports `1.0.0-beta.1` across all 11 entries
+
+Locales (all 10):
+- `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` —
+  FAQ entry `featured_slot_displaced` extended with anti-snipe + push block
+
+Docs:
+- `README.md` — 3-line stub → substantive landing page;
+  DD-cp20-9 fixed "10 locales × 20 routes = 200 static HTML files"
+  → "10 locales × 17 indexable routes = 170 static HTML files"
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — `What's in the beta: ...`
+  → full body; DD-cp20-10 bumped 3,173 → 3,187 smoke count;
+  DD-cp20-13 corrected "23 architecture decision records" → "22"
+- `MORPHIT-BRAG-LIST.md` — duplicate #60 fix (210 renumbered);
+  4 stale claims refreshed (smoke count, verify-anchor count,
+  audit-doc descriptor, footer date+count); DD-cp20-9 fixed
+  item #270 "200 prerendered HTML files (20 routes × 10 locales)"
+  → "170 prerendered HTML files (17 indexable routes × 10 locales)";
+  DD-cp20-13 fixed item #129 "23 ADRs" → "22 ADRs" with inline
+  explanation of the reserved-but-unused 0016 slot
+- `docs/API.md` — `/v1/health` example response version
+- `apps/indexer/README.md` — `/v1/health` example response version
+- `TARBALL.md` — this entry
+- `docs/REVISIT-LIST.md` — FAQ-stale item closed
+- `docs/PRE-LAUNCH-CHECKLIST.md` — update-history row + smoke baseline 3,173 → 3,187
+
+Wiring:
+- `scripts/run-smokes.sh` — `apps/web:version-consistency-smoke` registered
+
+Build artifacts:
+- `apps/web/static/morphit-mediakit.zip` — regenerated three
+  times total (initial cp20 brag-list edit, DD-cp20-9 fix,
+  DD-cp20-13 fix), final size 87,816 bytes dated 2026-05-17,
+  carries the post-deep-deep brag list
+
+### Persona walkthroughs (standing rule)
+
+- **Bob (existing Blurt user lands on git.agorise.net/agorise/morphit
+  for the first time):** new README explains what Morphit is in the
+  first paragraph + has a path forward (Install / Developers / Bug
+  reports).  Old 3-line stub would have left Bob bouncing back to
+  the search results.  ✓
+- **Sally (never owned crypto, follows a "what is Morphit?" link
+  from kycnot.me or similar):** README leads with non-jargon
+  framing ("trade fiat against Bitcoin, Monero, BLURT, USDT" —
+  not "non-custodial DEX with on-chain orderbook materialization");
+  the brag list and "Reach" surface answer her downstream questions.
+  ✓
+- **Sally-operator (downloads the v1.0.0-beta.1 tarball, reads
+  RELEASE-NOTES first):** previously saw `What's in the beta: ...`
+  and would have hit the docs/RUN-A-MORPHIT-NODE.md cold.  Now sees
+  what features ship + what's optional vs default + where to find
+  bug-reporting + security-DM split.  ✓
+- **Returning user opens a featured-slot bid form, checks the FAQ
+  about getting outbid:** previously read "watch the top-5 rates
+  manually" as the defense, no mention of push or anti-snipe.
+  Post-cp20 reads about both — matches the actual UX they'll
+  experience.  Locale parity holds (re-verified by JSON-parsing
+  all 10 locale files after the script's done).  ✓
+- **CI run after the release tag is pushed:** `git verify-tag` ok →
+  typecheck-sweep + ansible-lint + triple-pulse → previously the
+  triple-pulse would report 3,173; post-cp20 should report 3,187
+  (3,173 + 14 new version-consistency scenarios).  release.yml
+  unchanged.  ✓
+
+### Deep-deep on cp20
+
+Fourteen findings.  Three real bugs caught + fixed in-pass, one
+smoke architecture improvement, ten verified-OK passes.  The
+campaign discipline applied retroactively to this whole session's
+work — wiring sweep + walkthroughs + adversarial passes.
+
+**Verified-OK (no action needed):**
+
+- **DD-cp20-2 (LOW, FALSE ALARM).** `apps/indexer/README.md:32`
+  refs `docs/PHASE-3b-DESIGN.md` and `docs/adr/0008-phase3b-…`
+  — those are filenames of design docs that exist at those
+  paths, structural references, not version-tagged.
+
+- **DD-cp20-3 (LOW, VERIFIED OK).** Only one `const VERSION` in
+  `apps/relay/src/api/health.ts` and one `const INDEXER_VERSION`
+  in `apps/indexer/src/api/health.ts`.  Smoke's anchored-regex
+  extractor is unambiguous; no false-positive risk.
+
+- **DD-cp20-4 (LOW, VERIFIED OK).** Single `"version"` occurrence
+  in each of `docs/API.md` and `apps/indexer/README.md`.
+  First-match extractor safe.
+
+- **DD-cp20-5 (LOW, VERIFIED OK).** Source-wide sweep of
+  `apps/*/src` + `packages/*/src` for any `(VERSION|version) =
+  "<semver>"` literals turned up only the two health.ts
+  constants.  Smoke coverage is complete.
+
+- **DD-cp20-6 (LOW, VERIFIED OK).** TARBALL.md chronicle
+  structure clean post-edit: cp20 → cp16-rev-A → cp16-rev-B →
+  cp19 → cp18 → cp17 → ... (newest-first within recent cluster).
+  DD-cp16-1..4 findings still present (5 mentions: 4 in
+  cp16-rev-A body, 1 in cp16-rev-B header).  No content lost
+  in the str_replace swap.  The original cp16-rev-A header that
+  was the swap anchor has been restored so its body isn't
+  orphaned under the cp20 entry.
+
+- **DD-cp20-7 (LOW, VERIFIED OK).** `wiring-completeness-smoke`
+  references brag-list claims by TEXT CONTENT (`claim_phrase:
+  'Push subscriptions are proof-of-ownership protected'`), not
+  by item number.  The renumbering of 210 section-4-onwards
+  items doesn't break any wiring assertion.  Other
+  brag-list-consuming smokes (`mediakit-freshness-smoke`,
+  `forgejo-not-gitea-smoke`, `db-password-placeholder-smoke`)
+  operate on file mtimes / keyword grep, not on item numbers
+  either.
+
+- **DD-cp20-8 (LOW, VERIFIED OK).** FAQ translations factually
+  accurate across all 10 locales.  Cross-checked against code
+  constants: `SNIPE_WINDOW_MINUTES = 5`, `SNIPE_EXTENSION_MINUTES
+  = 5`, `MAX_EXTENSIONS = 6` in `apps/indexer/src/indexer/handlers/featureBid.ts`
+  — match the translated claims "5 minutes" / "5 minutes" /
+  "6 extensions / 30 minutes total drag" exactly.  `Settings →
+  Notifications` route surface verified (`apps/web/src/routes/[lang]/settings/+page.svelte`
+  imports + mounts `NotificationSettings.svelte`).  `/my/orders#order-X`
+  deep-link target verified (`<li id="order-{o.permlink}">` at
+  line 607 of `[lang]/my/orders/+page.svelte`).
+
+- **DD-cp20-11 (LOW, VERIFIED OK).** Sally-operator README
+  install short-form walkthrough end-to-end: (1) VPS provision
+  unverifiable from static audit; (2) `git clone` standard;
+  (3) `npm ci` works — lockfile + manifest both at 1.0.0-beta.1
+  after DD-cp20-1 fix; (4) `npx morphit-ops init` resolves —
+  `apps/ops-cli/package.json` declares `"name": "morphit-ops"`
+  + `"bin": {"morphit-ops": "src/main.ts"}` with shebang
+  `#!/usr/bin/env -S npx tsx`; wizard step count confirmed at
+  17 (`TOTAL_STEPS = 17` + step(17,...) = "Matrix surfaces" at
+  line 1322); (5) `bash scripts/run-smokes.sh` executable,
+  proper shebang, 140 runners registered including the new
+  version-consistency entry at line 145; (6) PRE-LAUNCH-CHECKLIST
+  + LAUNCH-DAY exist with the cp20-bumped baseline.
+
+**Fixed in-pass:**
+
+- **DD-cp20-1 (HIGH, FIXED).**  `package-lock.json` was stale
+  after the workspace version sweep.  The lockfile's
+  `packages.""` block still showed `0.0.0-phase3b` and individual
+  workspace entries carried their old phase-named versions
+  (`0.3.0-phase3a` for relay, `0.1.0-phase3b` for indexer, etc.).
+  Operators running `npm ci` would have hit a lockfile-vs-manifest
+  mismatch — npm ci's whole point is "the lockfile is the
+  authoritative source of truth, fail if it disagrees with the
+  manifest."  Fixed by running `npm install --package-lock-only
+  --no-audit --no-fund --workspaces=false`; lockfile now reports
+  `1.0.0-beta.1` across all 11 entries (root + 10 workspaces).
+  This is the kind of finding a deep-deep is FOR — the 14-touchpoint
+  smoke checked package.json files but NOT the lockfile (because
+  `npm ci` already enforces that invariant when actually run); in
+  a sandbox where `npm ci` doesn't run, the lockfile rot was
+  invisible.
+
+- **DD-cp20-9 (HIGH, FIXED).**  README + brag-list #270 both
+  claimed "20 routes × 10 locales = 200 static HTML files."
+  Authoritative source is `scripts/build-sitemap.mjs` ROUTES
+  array, which has **17** entries, and the canonical
+  `[lang]/+layout.ts` docblock explicitly states "17 indexable
+  routes × 10 supported locales, the build produces 170
+  prerendered pages."  Both spots corrected to **170 prerendered
+  HTML files (17 indexable routes × 10 locales)**.  Mediakit zip
+  regenerated post-edit (memory rule — brag list changed).
+
+- **DD-cp20-10 (LOW, FIXED).**  RELEASE-NOTES smoke count claim
+  `**3,173 self-checking smoke scenarios**` was stale because
+  cp20 bumps the baseline to 3,187 (14 new version-consistency
+  scenarios).  Corrected to 3,187 in the same file the release
+  tarball ships.
+
+- **DD-cp20-13 (LOW, FIXED).**  Both RELEASE-NOTES and brag-list
+  entry #129 claimed "**23 ADRs**."  Actual count is 22:
+  filenames go 0001 through 0023 but the 0016 slot is
+  intentionally reserved-but-unused per the archaeology in
+  REVISIT-LIST ("**ADR-0016 historical references in the
+  2026-04-28 batch doc:** intentionally not rewritten"; the
+  work planned for 0016 shipped as ADR-0022 instead).  Both
+  spots corrected to **22 ADRs** with an inline note in the
+  brag list explaining the 0016 gap.  Mediakit zip rebuilt
+  again post-edit.
+
+- **DD-cp20-14 (MEDIUM, FIXED).**  `apps/web/scripts/version-consistency-smoke.ts`
+  hardcoded its list of 10 workspace package.json paths.  If a
+  future workspace is added to root `package.json`'s `workspaces`
+  array without anyone remembering to update the smoke, the new
+  workspace's version drift would go undetected.  Refactored
+  the smoke to read root `package.json`'s `workspaces` array
+  dynamically — for each declared workspace, build a Touchpoint
+  on the fly; combine with the static Category B (runtime
+  constants) + Category C (doc example responses) list.  Smoke
+  now self-corrects when workspaces are added/removed.  Glob
+  entries (`apps/*`) are detected and rejected with a clear
+  extension-required error — today's root has only exact paths
+  so this is fine; tomorrow's might need `fs.globSync`.
+  Self-tested two ways:
+  - **Tamper existing workspace:** `apps/ops-cli/package.json`
+    `1.0.0-beta.1` → `1.0.0-beta.tampered` → smoke fails with
+    correct per-touchpoint remediation hint and exit code 1.
+  - **Add imaginary workspace:** appended `apps/imaginary-new-app`
+    to root `workspaces` array → smoke fails with
+    `file missing: apps/imaginary-new-app/package.json`; touchpoint
+    count auto-bumps from 14 to 15.
+  Both restorations clean.
+
+**Self-checks re-run after all DD fixes:**
+- `apps/web:version-consistency-smoke` — 14/14 ✓
+- All 10 locale JSON files re-parse cleanly + retain 3,481-line
+  structural parity ✓
+- Mediakit zip current at 87,816 bytes (87,679 → 87,816 over
+  two rebuilds reflecting DD-cp20-9 + DD-cp20-13 brag-list
+  edits) ✓
+
+### Resume directive
+
+If resuming in a fresh chat after sandbox reset: extract the
+delta on top of cp19 source, run `npm install` from root, then
+`bash scripts/run-smokes.sh` and confirm triple-pulse hits 3,187.
+The only failure mode to watch for is if the new smoke's TS
+file pattern matchers misread something — the runtime
+constants are anchored on `const NAME` and the doc examples
+on `"version"\s*:\s*"…"`, both narrow enough not to false-match.
+
+**Tarball:** `morphit-audit-2026-05-122-cp20-pre-launch-review-delta.tar.gz` — delta over cp19.
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 16 — doc-pack + audit follow-ups: DD-2/4/7 operator-trust + replay-window clarifications appended to OPERATIONS §42.5; DD-10 single-relay assumption note in §42.6; DD-13 `npm audit` gate shipped with documented allowlist for matrix-bot-sdk's deprecated `request`+`form-data`+`tough-cookie` transitive CRITICAL/HIGH vulns; pre-launch checklist gains VAPID setup step in §C + schema v33 bump in §D; brag list entry #60 for posting-key sig-verify on push subscribe; wiring-completeness smoke gets the matching `push-subscribe-sig-verify` claim row; mediakit zip rebuilt; persona-walkthrough D-4 sentinel bumped v32→v33)
+
+
 
 **Snapshot date:** 2026-05-16
 

@@ -23,9 +23,14 @@ import type { BlurtPriceSource } from '$indexer/price/source';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
 
-// Keep this in sync with apps/indexer/package.json version. Read at
-// module-load time; no runtime cost.
-const INDEXER_VERSION = '0.1.0-phase3b';
+// Keep in sync with the root package.json `version`.  The
+// version-consistency-smoke (Part 122 cp20) fails the build if
+// this constant drifts from any other package.json or from the
+// relay's VERSION constant.  When bumping for a new release,
+// update all 10 package.json files + this constant +
+// apps/relay/src/api/health.ts VERSION + the example response
+// in docs/API.md in the same commit.
+const INDEXER_VERSION = '1.0.0-beta.1';
 
 export function healthRoute(
 	config: Config,
