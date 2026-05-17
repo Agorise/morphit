@@ -1552,7 +1552,8 @@
 				"xmr": "Monero (XMR) — privacy-first cryptocurrency. Hides amounts, sender, and recipient by default. Ideal if privacy matters to you.",
 				"blurt": "BLURT — the social blockchain Morphit runs on. Fast (3-second blocks), zero-fee transfers, but small market cap. Useful for small amounts and tipping; less useful for storing large value.",
 				"usdt": "Tether (USDT) — a stablecoin pegged 1:1 to USD. Centrally controlled — Tether Inc. can freeze any address. Trade-only on Morphit: cannot pay listing fees.",
-				"bch": "Bitcoin Cash (BCH). Forked from Bitcoin in 2017 to favor bigger blocks and lower per-transaction fees over fee-market dynamics. Transparent ledger like BTC; no issuer can freeze addresses. Trade-only on Morphit — listing fees still paid in BLURT, BTC, or XMR."
+				"bch": "Bitcoin Cash (BCH). Forked from Bitcoin in 2017 to favor bigger blocks and lower per-transaction fees over fee-market dynamics. Transparent ledger like BTC; no issuer can freeze addresses. Trade-only on Morphit — listing fees still paid in BLURT, BTC, or XMR.",
+				"ltc": "Litecoin (LTC). Forked from Bitcoin in 2011 with faster 2.5-minute blocks and Scrypt mining. Transparent like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses."
 			},
 			"waiver_fiat_hint": "💡 BLURT trades thinly on centralized exchanges, so most BLURT-for-fiat trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. Tip: pick a fiat your local network uses (USD, EUR, MXN, etc.), or check the In-Person → Barter (goods) payment method in step 3 if you want to offer something else of value. The orderbook is small for now — your buy order helps build it.",
 			"waiver_benefits_heading": "What your buy unlocks:",
@@ -2314,7 +2315,11 @@
 			"address_invalid_usdt": "This address does not match the USDT network you picked. Double-check before sending — cross-network sends lose your funds.",
 			"address_invalid_bch": "That doesn't look like a valid Bitcoin Cash address.",
 			"pill_method_usdt": "USDT address",
-			"pill_method_bch": "Bitcoin Cash address"
+			"pill_method_bch": "Bitcoin Cash address",
+			"method_ltc": "Litecoin",
+			"address_placeholder_ltc": "L… or M… or ltc1…",
+			"address_invalid_ltc": "That doesn't look like a valid Litecoin address.",
+			"pill_method_ltc": "Litecoin address"
 		},
 		"funds_sent": {
 			"button": "Mark funds sent",
@@ -2356,7 +2361,8 @@
 			"txid_invalid_usdt": "This transaction ID does not match the USDT network you picked. Double-check the network before sending.",
 			"network_pinned_hint": "The seller specified this network when sharing their address. You cannot change it here.",
 			"pill_title_usdt": "USDT sent",
-			"pill_title_bch": "Bitcoin Cash sent"
+			"pill_title_bch": "Bitcoin Cash sent",
+			"pill_title_ltc": "Litecoin sent"
 		},
 		"unknown_version": "This message uses a newer protocol. Please update Morphit to read it.",
 		"pay_blurt": {
@@ -3034,7 +3040,10 @@
 		},
 		"request_missing_with_contact": "Don't see what you need?",
 		"request_missing_link": "Let us know",
-		"request_missing_no_contact": "Don't see what you need? This instance hasn't published a contact channel — try a different Morphit instance, or open an issue at git.agorise.net/agorise/morphit."
+		"request_missing_no_contact": "Don't see what you need? This instance hasn't published a contact channel — try a different Morphit instance, or open an issue at git.agorise.net/agorise/morphit.",
+		"pay_ltc": {
+			"description": "Pay with Litecoin"
+		}
 	},
 	"feedback_reminder": {
 		"aria_label": "Pending feedback reminders",
@@ -3430,7 +3439,8 @@
 			"xmr": "Monero. Private — no one can see who paid whom. Fees usually low. The privacy choice.",
 			"blurt": "The token of the Blurt blockchain that Morphit runs on. Used to pay listing fees, post messages, sign orders.",
 			"usdt": "Tether stablecoin. Pegged 1:1 to USD. Trade across four networks: ERC-20 (Ethereum), TRC-20 (Tron), SPL (Solana), BEP-20 (BNB Smart Chain). Pick the network before sending — cross-network is unrecoverable.",
-			"bch": "BCH — Bitcoin Cash, transparent, decentralized, bigger blocks than BTC"
+			"bch": "BCH — Bitcoin Cash, transparent, decentralized, bigger blocks than BTC",
+			"ltc": "LTC — Litecoin, fast, low-fee Bitcoin fork (since 2011). Trade-only on Morphit. Use a Litecoin wallet (Electrum-LTC, Litewallet, hardware wallets); accepts L… legacy, M… modern P2SH, and ltc1… SegWit addresses."
 		},
 		"section_recovery": {
 			"heading": "If something goes wrong",

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Litecoin logo placeholder (Part 122 cp24).  Path-based
+     stylized "Ł" inside a brand-silver circle; matches the LTC
+     community visual identity (silver-gray, distinct from BCH's
+     lime, BTC's amber, USDT's amber-400, XMR's orange, BLURT's
+     emerald).  No <text> elements (font fallback issues per
+     ADDING-A-COIN.md).  Square viewBox 0 0 1024 1024 to match
+     the convention of the other icon-*.svg files in this directory.
+
+     Placeholder pending official artwork from the Litecoin
+     community.  Replace by dropping a community-approved SVG in
+     this same path; no other code changes needed. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
+     version="1.1" shape-rendering="geometricPrecision"
+     text-rendering="geometricPrecision" image-rendering="optimizeQuality"
+     fill-rule="evenodd" clip-rule="evenodd">
+  <!-- Outer disc: Litecoin brand silver (#A6A9AA).  Sourced
+       from the Litecoin Foundation's standard color palette. -->
+  <circle cx="512" cy="512" r="480" fill="#A6A9AA"/>
+  <!-- Stylized "Ł" stroke — vertical descender with diagonal
+       slash through it.  Centered vertically; positioned slightly
+       left of center to leave room for the slash crossbar.
+       The diagonal slash that distinguishes Ł from L runs from
+       upper-right of the descender to lower-left at ~35° angle. -->
+  <!-- Main vertical stroke of the L (descender) -->
+  <path d="M 420 280 L 520 280 L 520 660 L 720 660 L 720 760 L 420 760 Z"
+        fill="#FFFFFF"/>
+  <!-- Diagonal slash crossbar (the Ł distinguishing mark) -->
+  <path d="M 365 540 L 660 440 L 685 510 L 390 610 Z"
+        fill="#FFFFFF"/>
+</svg>

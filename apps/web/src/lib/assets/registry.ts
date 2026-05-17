@@ -143,6 +143,20 @@ const validateBch: AddressValidator = (s) =>
 	BCH_LEGACY_P2PKH_RE.test(s) ||
 	BCH_LEGACY_P2SH_RE.test(s);
 
+// LTC — legacy P2PKH (L...), modern P2SH (M...), deprecated P2SH
+// (3..., BTC-shape ambiguous per ADR-0025 §4), bech32/bech32m
+// (ltc1...).  Inlined copies mirroring chat/payload.ts.
+const LTC_LEGACY_P2PKH_RE = /^L[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_LEGACY_P2SH_M_RE = /^M[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_LEGACY_P2SH_3_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const LTC_BECH32_RE = /^ltc1[02-9ac-hj-np-z]{6,87}$/;
+
+const validateLtc: AddressValidator = (s) =>
+	LTC_LEGACY_P2PKH_RE.test(s) ||
+	LTC_LEGACY_P2SH_M_RE.test(s) ||
+	LTC_LEGACY_P2SH_3_RE.test(s) ||
+	LTC_BECH32_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -249,6 +263,35 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// BCH is transparent (like BTC) but decentralized — no
 		// issuer can freeze addresses.  Same posture as BTC: no
 		// privacy warning chip.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'ltc',
+		displayTicker: 'LTC',
+		displayName: 'Litecoin',
+		oneLineDescription:
+			'Litecoin — fast, low-fee Bitcoin fork.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-ltc.svg',
+		// LTC brand silver/gray.  text-slate-400 reads as the
+		// Litecoin "silver" without colliding with BCH's lime-500,
+		// BTC's amber-500, USDT's amber-400, XMR's orange-500, or
+		// BLURT's morphit-emerald.
+		accentClass: 'text-slate-400',
+		decimals: 8, // Same as BTC — litoshi == satoshi
+		supportsMemo: false, // LTC transactions don't carry memos (same as BTC)
+		addressValidator: validateLtc,
+		// MEMORY #23 INVARIANT: LTC cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// LTC is transparent (like BTC and BCH) but decentralized —
+		// no issuer can freeze addresses.  Same posture as BTC: no
+		// privacy warning chip.  (LTC has MWEB opt-in privacy but
+		// it's wallet-side and per-tx, not a chain property; users
+		// seeking strongest privacy posture should use XMR.)
 		privacyWarningKey: null
 	}
 ] as const;

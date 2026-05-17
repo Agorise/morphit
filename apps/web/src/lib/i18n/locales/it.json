@@ -1552,7 +1552,8 @@
 				"xmr": "Monero (XMR) — criptovaluta orientata alla privacy. Nasconde importi, mittente e destinatario per impostazione predefinita. Ideale se la privacy ti interessa.",
 				"blurt": "BLURT — la blockchain sociale su cui gira Morphit. Veloce (blocchi da 3 secondi), trasferimenti senza commissioni, ma capitalizzazione piccola. Utile per piccoli importi e mance; meno utile per conservare grandi valori.",
 				"usdt": "Tether (USDT) — una stablecoin ancorata 1:1 al USD. Controllata centralmente — Tether Inc. può congelare qualsiasi indirizzo. Solo trading su Morphit: non può pagare commissioni di inserzione.",
-				"bch": "Bitcoin Cash (BCH). Forkato da Bitcoin nel 2017 per favorire blocchi più grandi e commissioni per transazione più basse rispetto alle dinamiche di mercato delle commissioni. Registro trasparente come BTC; nessun emittente può congelare gli indirizzi. Solo scambio su Morphit — le tariffe di pubblicazione si pagano ancora in BLURT, BTC o XMR."
+				"bch": "Bitcoin Cash (BCH). Forkato da Bitcoin nel 2017 per favorire blocchi più grandi e commissioni per transazione più basse rispetto alle dinamiche di mercato delle commissioni. Registro trasparente come BTC; nessun emittente può congelare gli indirizzi. Solo scambio su Morphit — le tariffe di pubblicazione si pagano ancora in BLURT, BTC o XMR.",
+				"ltc": "Litecoin (LTC). Fork di Bitcoin del 2011 con blocchi più veloci (2,5 min) e mining Scrypt. Trasparente come Bitcoin — ogni transazione è pubblicamente visibile sulla chain. Nessun emittente centrale; nessuno può congelare i tuoi indirizzi."
 			},
 			"waiver_fiat_hint": "💡 BLURT è scambiato poco sugli exchange centralizzati, quindi la maggior parte degli scambi BLURT-per-fiat su Morphit avviene con utenti attivi della rete social Blurt, operatori esistenti o tramite baratto. Suggerimento: scegli una valuta fiat che la tua rete locale usa (USD, EUR, MXN, ecc.), o controlla il metodo di pagamento In persona → Baratto (beni) al passo 3 se vuoi offrire qualcos'altro di valore. Il libro ordini è piccolo per ora — il tuo ordine d'acquisto aiuta a costruirlo.",
 			"waiver_benefits_heading": "Cosa sblocca il tuo acquisto:",
@@ -2314,7 +2315,11 @@
 			"address_invalid_usdt": "Questo indirizzo non corrisponde alla rete USDT scelta. Controlla due volte prima di inviare — gli invii cross-network perdono i fondi.",
 			"address_invalid_bch": "Non sembra un indirizzo Bitcoin Cash valido.",
 			"pill_method_usdt": "Indirizzo USDT",
-			"pill_method_bch": "Indirizzo Bitcoin Cash"
+			"pill_method_bch": "Indirizzo Bitcoin Cash",
+			"method_ltc": "Litecoin",
+			"address_placeholder_ltc": "L… o M… o ltc1…",
+			"address_invalid_ltc": "Non sembra un indirizzo Litecoin valido.",
+			"pill_method_ltc": "Indirizzo Litecoin"
 		},
 		"funds_sent": {
 			"button": "Segna fondi inviati",
@@ -2356,7 +2361,8 @@
 			"txid_invalid_usdt": "Questo ID di transazione non corrisponde alla rete USDT scelta. Controlla la rete prima di inviare.",
 			"network_pinned_hint": "Il venditore ha specificato questa rete quando ha condiviso il suo indirizzo. Non puoi cambiarla qui.",
 			"pill_title_usdt": "USDT inviato",
-			"pill_title_bch": "Bitcoin Cash inviato"
+			"pill_title_bch": "Bitcoin Cash inviato",
+			"pill_title_ltc": "Litecoin inviato"
 		},
 		"unknown_version": "Questo messaggio usa un protocollo più recente. Aggiorna Morphit per leggerlo.",
 		"pay_blurt": {
@@ -3034,7 +3040,10 @@
 		},
 		"request_missing_with_contact": "Non vedi quello che ti serve?",
 		"request_missing_link": "Faccelo sapere",
-		"request_missing_no_contact": "Non vedi quello che ti serve? Questa istanza non ha pubblicato un canale di contatto — prova un'altra istanza Morphit, o apri un issue su git.agorise.net/agorise/morphit."
+		"request_missing_no_contact": "Non vedi quello che ti serve? Questa istanza non ha pubblicato un canale di contatto — prova un'altra istanza Morphit, o apri un issue su git.agorise.net/agorise/morphit.",
+		"pay_ltc": {
+			"description": "Paga con Litecoin"
+		}
 	},
 	"feedback_reminder": {
 		"aria_label": "Promemoria recensioni in attesa",
@@ -3430,7 +3439,8 @@
 			"xmr": "Monero. Privato — nessuno può vedere chi ha pagato chi. Commissioni di solito basse. La scelta per la privacy.",
 			"blurt": "Il token della blockchain Blurt su cui gira Morphit. Usato per pagare commissioni, pubblicare messaggi, firmare ordini.",
 			"usdt": "Stablecoin Tether. Ancorata 1:1 al USD. Trada su quattro reti: ERC-20 (Ethereum), TRC-20 (Tron), SPL (Solana), BEP-20 (BNB Smart Chain). Scegli la rete prima di inviare — cross-network è irrecuperabile.",
-			"bch": "BCH — Bitcoin Cash, trasparente, decentralizzato, blocchi più grandi di BTC"
+			"bch": "BCH — Bitcoin Cash, trasparente, decentralizzato, blocchi più grandi di BTC",
+			"ltc": "LTC — Litecoin, fork veloce e a basse commissioni di Bitcoin (dal 2011). Solo scambi su Morphit. Usa un wallet Litecoin (Electrum-LTC, Litewallet, wallet hardware); accetta indirizzi L… legacy, M… P2SH moderno e ltc1… SegWit."
 		},
 		"section_recovery": {
 			"heading": "Se qualcosa va storto",

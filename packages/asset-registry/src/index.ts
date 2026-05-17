@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH', 'LTC'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -299,6 +299,55 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// (BCH wallet does that on the receiving end).
 		addressShape:
 			/^(bitcoincash:[qp][a-z0-9]{41}|[qp][a-z0-9]{41}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/
+	}),
+	Object.freeze({
+		ticker: 'LTC',
+		// Litecoin uses the same 8-decimal smallest unit as Bitcoin
+		// (litoshi == satoshi).  Confirmed via the Litecoin protocol
+		// specification — LTC forked from BTC's codebase in 2011
+		// and preserved the satoshi-denominated amount semantics
+		// (just renamed "litoshi" for clarity).
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: LTC is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; ltc-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  No network picker needed in the
+		// post-order form or address-share modal — defaults to
+		// mainnet and stays there.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// LTC is transparent (like BTC), but the chain is fully
+		// decentralized and LTC addresses cannot be frozen by an
+		// issuer.  Same posture as BTC and BCH: no warning chip
+		// needed.  (LTC has an opt-in privacy upgrade — MWEB —
+		// but it's wallet-side and per-transaction, not a chain
+		// property; users who want Morphit's strongest privacy
+		// posture should use XMR.)
+		privacyWarningKey: null,
+		// LTC address formats (chronological evolution):
+		//   - Legacy P2PKH: starts with `L`, 26-35 chars base58
+		//     (unambiguous with BTC since BTC P2PKH starts with 1).
+		//   - Legacy P2SH: starts with `M`, 26-35 chars base58
+		//     (modern Litecoin P2SH; introduced 2017 to disambiguate
+		//     from the deprecated 3-prefix form which is BTC-shape
+		//     ambiguous — see ADR-0025 §4).
+		//   - Legacy P2SH (deprecated 3-prefix): still valid on the
+		//     LTC chain; accepted here to match ADR-0024 §4 stance
+		//     for BCH (wallet does chain-binding on receive).
+		//   - Bech32/Bech32m: starts with `ltc1`, 6-87 chars body.
+		//     Lowercase canonical (mixed-case forbidden by BIP-173);
+		//     covers both segwit-v0 (ltc1q...) and taproot
+		//     (ltc1p...).
+		// Permissive shape check — not a checksum (LTC wallet does
+		// that on the receiving end).
+		addressShape:
+			/^(L[1-9A-HJ-NP-Za-km-z]{25,34}|M[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|ltc1[02-9ac-hj-np-z]{6,87})$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

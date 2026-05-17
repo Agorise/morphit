@@ -1,6 +1,6 @@
 # Morphit
 
-**A federated, non-custodial, no-KYC peer-to-peer marketplace for trading fiat against Bitcoin, Monero, BLURT, USDT, and Bitcoin Cash.**
+**A federated, non-custodial, no-KYC peer-to-peer marketplace for trading fiat against Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, and Litecoin.**
 
 You hold your own keys. There are no deposits to make and no withdrawals to wait for; trades settle directly between counterparty wallets. There is no central server to subpoena and no central database to leak — the orderbook lives on the public Blurt blockchain, and any operator running a Morphit indexer sees the same data. If one operator goes dark, another's URL still works and the federation continues.
 

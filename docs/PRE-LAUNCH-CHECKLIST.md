@@ -313,9 +313,9 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 3,217+ scenarios passed, 0 runners failed`
+      `Total: 3,231+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp22 baseline is 3,217 = cp21 3,200 + 17 new
+      Part 122 cp24 baseline is 3,231 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
       disabled-assets-wizard scenarios).
 
       If you see several runners fail with
@@ -343,7 +343,7 @@ file in the same turn.
       Part 108++.)*
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
-      stance.  The canonical morphit.io ships USDT AND BCH
+      stance.  The canonical morphit.io ships USDT, BCH AND LTC
       enabled by default; alternative instances may want to
       disable one or both instance-wide on philosophical
       (centralization, fork preference), regulatory, or
@@ -365,8 +365,10 @@ file in the same turn.
          `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`.
       3. Refuse BCH — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
-      4. Refuse both —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH"`.
+      4. Refuse LTC — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`.
+      5. Refuse multiple —
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see
@@ -376,10 +378,10 @@ file in the same turn.
       Whichever stance you take, document it publicly so
       users know what your instance offers.  Memory #25
       (default-on + operator override for new assets),
-      ADR-0023 (USDT), ADR-0024 (BCH), and Part 122 cp22
-      (wizard step) explain the design.  *(Origin: Part 121
+      ADR-0023 (USDT), ADR-0024 (BCH), ADR-0025 (LTC),
+      and Part 122 cp22 (wizard step) explain the design.  *(Origin: Part 121
       cp3 USDT integration, Part 122 cp21 BCH integration,
-      Part 122 cp22 wizard step.)*
+      Part 122 cp22 wizard step, Part 122 cp24 LTC integration.)*
 
 - [ ] **[blocking]** Decide BCH chat-link explorer URL.
       Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`

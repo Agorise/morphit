@@ -128,6 +128,10 @@
 				<dt>BCH</dt>
 				<dd>{$_('cheat_sheet.section_assets.bch')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>LTC</dt>
+				<dd>{$_('cheat_sheet.section_assets.ltc')}</dd>
+			</div>
 		</dl>
 	</section>
 
