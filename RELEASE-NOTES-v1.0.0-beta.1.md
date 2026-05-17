@@ -91,10 +91,11 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Operator setup
 
-- **Setup wizard** (`npx morphit-ops init`, ~17 prompts) covers
+- **Setup wizard** (`npx morphit-ops init`, ~18 prompts) covers
   treasury addresses (BTC + XMR), explorer URLs with live health
   probes, listing-fee USD target with live price recompute, VAPID
-  keys for Web Push, operator-tag for federation cost attribution.
+  keys for Web Push, operator-tag for federation cost attribution,
+  and the trade-only asset policy (USDT/BCH/LTC/DASH enable/disable).
 - **Federated cost attribution** — each operator's relay pays only
   for ops that route through their own instance (operator tag
   registered on-chain via `morphit_operator_register_v1`).

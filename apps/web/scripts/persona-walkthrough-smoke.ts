@@ -717,8 +717,8 @@ const SCENARIOS: readonly Scenario[] = [
 		// drifted three positions behind.
 		//
 		// Sentinel pins both legs of the contract:
-		//   (a) TOTAL_STEPS = 17 in steps.ts (the canonical count)
-		//   (b) OPERATIONS.md references "step 15" for backup
+		//   (a) TOTAL_STEPS = 18 in steps.ts (the canonical count)
+		//   (b) OPERATIONS.md references "step 16" for backup
 		//       (matching stepBackup's actual position)
 		// If a future wizard restructure changes TOTAL_STEPS or
 		// reorders stepBackup, this sentinel fails and forces
@@ -727,10 +727,11 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: [
-			'`morphit-ops init` step 15 asks: "Enable daily DB backup automation?"'
+			'`morphit-ops init` step 16 asks: "Enable daily DB backup automation?"'
 		],
 		mustNotHave: [
-			'`morphit-ops init` step 12 asks: "Enable daily DB backup automation?"'
+			'`morphit-ops init` step 12 asks: "Enable daily DB backup automation?"',
+			'`morphit-ops init` step 15 asks: "Enable daily DB backup automation?"'
 		]
 	},
 	{
@@ -742,7 +743,7 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/ops-cli/src/init/steps.ts',
 		rootRelative: true,
 		mustHave: [
-			'const TOTAL_STEPS = 17;'
+			'const TOTAL_STEPS = 18;'
 		]
 	},
 	{
@@ -833,7 +834,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'D-9 — PRE-LAUNCH wizard step-count realistic',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
-		mustHave: ['~17 prompts', 'steps.ts'],
+		mustHave: ['~18 prompts', 'steps.ts'],
 		mustNotHave: ['covers all 14 steps']
 	},
 	{

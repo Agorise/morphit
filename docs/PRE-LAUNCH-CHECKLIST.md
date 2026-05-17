@@ -275,13 +275,14 @@ file in the same turn.
 ## C. Operator-config files (on the morphit.io production box)
 
 - [ ] **[blocking]** Run the setup wizard:
-      `npx morphit-ops init`.  As of Part 109+ the wizard
-      covers ~17 prompts including the fee-verifier
+      `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
+      covers ~18 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
-      URLs (BTC + XMR) with live health-checks.  (Exact
+      URLs (BTC + XMR + BCH + LTC + DASH) with live health-checks,
+      plus the trade-only asset policy step.  (Exact
       count drifts as we add operator-config surface;
       see `apps/ops-cli/src/init/steps.ts` for the
-      authoritative list.)  Writes:
+      authoritative list — `TOTAL_STEPS` constant.)  Writes:
        - `morphit.config.env` (allowlisted user-tunables)
        - `morphit.env` (critical infrastructure)
        - `apps/relay/keystore.json` or `.wif` (posting key)
