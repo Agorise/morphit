@@ -569,7 +569,9 @@ Aggregate trading-activity stats for the Morphit instance.
     "BTC": "0.42",
     "XMR": "23.0",
     "BLURT": "12500",
-    "USDT": "4200"
+    "USDT": "4200",
+    "BCH": "1.8",
+    "LTC": "8.5"
   }
 }
 ```

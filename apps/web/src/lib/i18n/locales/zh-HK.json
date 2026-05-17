@@ -787,7 +787,7 @@
 			},
 			"trade_goods_services": {
 				"q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
-				"a": "可以——但有特定嘅形式。訂單模型永遠係**一邊係可交易資產（BTC、XMR、BLURT 或 USDT），另一邊係其他嘢**。「其他嘢」可以係法幣、另一種加密貨幣，或透過 `Barter (goods)` 支付方式——商品/服務。用橙樹換 XMR：發佈 `asset=XMR`、`payment_methods=[Barter (goods)]`，喺 `terms` 欄位描述細節。純易貨（商品換商品，唔涉及加密）無法建模——一邊必須永遠係 BTC、XMR、BLURT 或 USDT。完整說明見英文 FAQ。"
+				"a": "可以——但有特定嘅形式。訂單模型永遠係**一邊係可交易資產（BTC、XMR、BLURT、USDT、BCH 或 LTC），另一邊係其他嘢**。「其他嘢」可以係法幣、另一種加密貨幣，或透過 `Barter (goods)` 支付方式——商品/服務。用橙樹換 XMR：發佈 `asset=XMR`、`payment_methods=[Barter (goods)]`，喺 `terms` 欄位描述細節。純易貨（商品換商品，唔涉及加密）無法建模——一邊必須永遠係 BTC、XMR、BLURT 或 USDT。完整說明見英文 FAQ。"
 			},
 			"order_timeouts": {
 				"q": "訂單會開幾耐?",
@@ -883,7 +883,7 @@
 			},
 			"where_to_buy_blurt": {
 				"q": "我喺邊度買 BLURT 嚟支付網絡費用？",
-				"a": "**就喺 Morphit 上買——呢個就係重點。** Morphit 係一個點對點市場；BLURT 係呢度交易嘅四種資產之一，與 BTC、XMR 同 USDT 並列。訪問 /orderbook，篩選 BLURT 賣單，並向對手方發送消息。你用佢哋接受嘅任何法幣方式付款；佢哋將 BLURT 發送到你嘅 Blurt 賬戶。完成。\n\n**你嘅第一筆訂單係免費嘅。** 新用戶獲得一次性豁免，覆蓋第一次 BLURT 購買嘅上架費。所以你嘅第一次 BLURT 獲取亦可以係你喺 Morphit 上嘅第一筆交易，唔需要交易所賬戶、唔需要卡片、唔需要 KYC。豁免會自動提供。\n\n**最後手段嘅替代方案：** 如果你真係喺 Morphit 訂單簿上搵唔到對手方（某啲地區訂單簿較細），Klingex.io 運營 BLURT/USDT 交易對作為中心化交易所嘅後備。我哋出於完整性提及佢，但視為緊急選項——每筆通過 Klingex 購買嘅 BLURT 都係 Morphit 冇得到嘅交易，項目嘅目標係發展點對點訂單簿，唔係將用戶送去其他地方。如果你揀呢條路徑，交易頁面係 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兌換 BLURT。立即提取到你自己嘅 Blurt 錢包。\n\n**一旦你嘅錢包入面有 BLURT**，支付 Morphit 上架費就係自動嘅——喺訂單發布畫面上揀「用 BLURT 支付」。"
+				"a": "**就喺 Morphit 上買——呢個就係重點。** Morphit 係一個點對點市場；BLURT 係呢度交易嘅六種資產之一，與 BTC、XMR、USDT、BCH 同 LTC 並列。訪問 /orderbook，篩選 BLURT 賣單，並向對手方發送消息。你用佢哋接受嘅任何法幣方式付款；佢哋將 BLURT 發送到你嘅 Blurt 賬戶。完成。\n\n**你嘅第一筆訂單係免費嘅。** 新用戶獲得一次性豁免，覆蓋第一次 BLURT 購買嘅上架費。所以你嘅第一次 BLURT 獲取亦可以係你喺 Morphit 上嘅第一筆交易，唔需要交易所賬戶、唔需要卡片、唔需要 KYC。豁免會自動提供。\n\n**最後手段嘅替代方案：** 如果你真係喺 Morphit 訂單簿上搵唔到對手方（某啲地區訂單簿較細），Klingex.io 運營 BLURT/USDT 交易對作為中心化交易所嘅後備。我哋出於完整性提及佢，但視為緊急選項——每筆通過 Klingex 購買嘅 BLURT 都係 Morphit 冇得到嘅交易，項目嘅目標係發展點對點訂單簿，唔係將用戶送去其他地方。如果你揀呢條路徑，交易頁面係 https://klingex.io/trade/BLURT-USDT——你需要存入 USDT 以兌換 BLURT。立即提取到你自己嘅 Blurt 錢包。\n\n**一旦你嘅錢包入面有 BLURT**，支付 Morphit 上架費就係自動嘅——喺訂單發布畫面上揀「用 BLURT 支付」。"
 			},
 			"first_order_free": {
 				"q": "我嘅第一張單真係免費咩?",
@@ -1179,7 +1179,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "點解 Morphit 顯示關於 USDT 點樣發行同傳輸嘅提示？",
-				"a": "USDT 係全世界交易量最大嘅穩定幣，每日有幾百萬個交易者依靠佢嘅美元穩定性同廣泛接受度。當 Morphit 上架一個資產嘅時候，我哋會誠實咁話用戶知佢嘅技術特性，等佢哋可以為每筆交易做明智選擇。關於 USDT，有兩個值得知嘅事實：(1) USDT 由 Tether 公司發行同管理，Tether 有技術能力凍結主鏈上嘅地址 — 佢哋過去用過呢個能力，主要係回應執法部門嘅請求。(2) USDT 喺每條支持嘅主鏈（以太坊、波場、索拉納、BNB 智能鏈）上面嘅交易喺嗰啲鏈上面係公開可見嘅；呢個係鏈嘅特性，唔係 USDT 獨有。唔同嘅交易者會有唔同評估。如果你要最大嘅鏈上隱私，XMR 係合適嘅工具。如果你要最大嘅唔依賴任何單一發行方嘅去中心化，BTC 或者 BLURT 係合適嘅工具。如果你要美元計價嘅穩定性同幾乎喺任何地方都有流動性嘅市場，USDT 就係合適嘅工具。Morphit 嘅提示係資訊，唔係判決 — 揀啱你做緊嘅交易嘅資產。"
+				"a": "USDT 係全世界交易量最大嘅穩定幣，每日有幾百萬個交易者依靠佢嘅美元穩定性同廣泛接受度。當 Morphit 上架一個資產嘅時候，我哋會誠實咁話用戶知佢嘅技術特性，等佢哋可以為每筆交易做明智選擇。關於 USDT，有兩個值得知嘅事實：(1) USDT 由 Tether 公司發行同管理，Tether 有技術能力凍結主鏈上嘅地址 — 佢哋過去用過呢個能力，主要係回應執法部門嘅請求。(2) USDT 喺每條支持嘅主鏈（以太坊、波場、索拉納、BNB 智能鏈）上面嘅交易喺嗰啲鏈上面係公開可見嘅；呢個係鏈嘅特性，唔係 USDT 獨有。唔同嘅交易者會有唔同評估。如果你要最大嘅鏈上隱私，XMR 係合適嘅工具。如果你要最大嘅唔依賴任何單一發行方嘅去中心化，BTC、BLURT、BCH 或 LTC 係合適嘅工具。如果你要美元計價嘅穩定性同幾乎喺任何地方都有流動性嘅市場，USDT 就係合適嘅工具。Morphit 嘅提示係資訊，唔係判決 — 揀啱你做緊嘅交易嘅資產。"
 			},
 			"which_usdt_network": {
 				"q": "我應該揀邊個 USDT 網絡 — ERC-20、TRC-20、SPL 定 BEP-20？",
@@ -3459,8 +3459,6 @@
 			"usdt_centralized": "交易 USDT 之前要知嘅兩件事：Tether 公司發行同管理 USDT，並有凍結地址嘅技術能力（而且曾經用過）。交易喺每條支持嘅網絡（以太坊、波場、索拉納、BNB 智能鏈）上面都係公開可見嘅 — 呢個係嗰啲鏈嘅特性。揀啱你交易嘅資產。"
 		},
 		"usdt": {
-			"displayName": "泰達幣",
-			"oneLineDescription": "同美元掛鈎嘅穩定幣。中心化控制。淨係用嚟交易 — 唔可以喺 Morphit 上面畀掛單費。",
 			"network": {
 				"erc20": {
 					"displayName": "以太坊 (ERC-20)",
@@ -3485,7 +3483,6 @@
 				}
 			},
 			"address_share": {
-				"network_prefix": "{network} 上嘅 USDT 地址：",
 				"warning": "只可以喺 {network} 上面寄 USDT。喺其他網絡上面寄 USDT 嚟呢個地址會永久損失你嘅資金。"
 			},
 			"order_row": {
@@ -3494,8 +3491,7 @@
 			"price_subline": {
 				"live": "1 USDT = ${price}（即時）",
 				"unavailable": "USDT/USD 價格源唔可用 — 上次睇到係 {staleness} 之前。"
-			},
-			"disabled_on_instance": "呢個實例唔接受 USDT 訂單。試吓另一個 Morphit 實例。"
+			}
 		}
 	}
 }
