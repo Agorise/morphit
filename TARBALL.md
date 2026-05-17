@@ -1,6 +1,250 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 21 — Bitcoin Cash addition: BCH wired end-to-end as Category-B trade-only single-network asset following the USDT pattern. Canonical asset registry (ASSET_TICKERS + ASSETS entry, canPayListingFee=false, canBeTraded=true, supportedNetworks=['mainnet'], defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, CashAddr + legacy P2PKH/P2SH address regex). ChatAssetTicker union extended with 'bch'; 5 BCH regex constants + isValidBchAddress/isValidBchTxid + dispatchers in chat/payload.ts. Frontend assets registry (validateBch + entry: accentClass text-lime-500, logoSvgPath /icons/icon-bch.svg). Explorer URL plumbing (BCH_TXID_RE + BUNDLED_BCH_CHAT_LINK_URL=blockchair.com/bitcoin-cash/transaction/{txid} in urlsCore; 'BCH' added to ExternalAsset type + EXPLORER_REGISTRY entry in urls.ts; chat_link_urls.bch in instance store + fallback + fetch handler; chat_link_urls.bch in indexer InstanceResponse + body construction; MORPHIT_FRONTEND_BCH_CHAT_LINK_URL Zod schema + Config field + builder mapping; bch?: in indexer-client schema + matrix-bot ChatLinkUrlsSchema). ops-cli wizard step 12 extended (DEFAULT_BCH_CHAT_LINK_URL + ChatLinkExplorersResult.bch + BCH prompt + render.ts emits MORPHIT_FRONTEND_BCH_CHAT_LINK_URL). i18n × 10 locales (en/es/fr/de/it/pl/ru/fa/zh-CN/zh-HK): 10 new BCH keys per locale (assets.bch.{displayName, oneLineDescription, disabled_on_instance}, chat.address.{method_bch, address_placeholder_bch, address_invalid_bch, pill_method_bch}, chat.funds_sent.pill_title_bch, home.asset_subtitles.bch, post_order.form.asset_explainer.bch, payment_method.pay_bch.description, cheat_sheet.section_assets.bch); parity holds at 3,497 lines/file (up from 3,481). UI dispatches (AddressShareModal BCH tab + placeholder + invalid-msg dispatch; FundsSentModal BCH tab; ChatMessage BCH explorer URL dispatch + address-pill label + funds-sent pill title + canMarkSent guard + onMarkSent callback type widened to 'btc'|'xmr'|'usdt'|'bch'; ConversationView markSentArgs + handleMarkSentClick types widened; post-order page BCH tooltip block; ListingFeeAddressPanel stale-comment cleanup). New bch-trade-only-smoke (13 scenarios, mirrors usdt-trade-only-smoke pattern: canonical-in-registry, canPayListingFee=false, canBeTraded=true, single-network mainnet, defaultNetwork='mainnet', privacyWarningKey=null, decimals=8, frontend mirror parity, address-validator accepts CashAddr+legacy+rejects garbage; registered in run-smokes.sh). BCH SVG logo (path-based stylized B on green disc #0AC18E, no <text> elements, viewBox 0 0 1024 1024, placeholder pending community artwork — REVISIT-LIST entry filed). Docs: ADR-0024 (Bitcoin Cash trade-only addition, 282 lines covering context/decision/files-changed/consequences/tradeoffs/future-revisits); README asset list updated; RELEASE-NOTES "Four"→"Five tradable assets" + BCH explanation + smoke count 3,187→3,200 + ADR 22→23 / 0023→0024; MORPHIT-BRAG-LIST new entry #271 + BCH-context additions to #171/#200/#202/#205/#214 + #129 ADR count bump + footer count 270→271 + smoke 3,170+→3,200+ + ADR range bump + header asset list + keywords; docs/OPERATIONS.md trade-only-asset header + multi-coin examples + new BCH chat-link-URL-override subsection with all 8 surveyed alternatives; docs/RUN-A-MORPHIT-NODE.md trade-only-assets section rewritten for BCH/USDT/combined stances + BCH explorer table + "What trade-only assets cannot do" generalized; docs/PRE-LAUNCH-CHECKLIST.md smoke baseline 3,187→3,200 + 4-option operator-stance matrix + new BCH chat-link explorer decision item. Mediakit zip rebuild scheduled after brag-list edits.  Deep-deep findings (6 total, 3 verified-ok + 3 real bugs fixed in-pass): DD-cp21-6 buildPaymentUri missing BCH branch (CashAddr URI scheme + amount param, contradicting brag-list #202 CashAddr-URI claim); DD-cp21-7 encodeAddressPayload + encodeFundsSentPayload method gates rejected both USDT and BCH — PRE-EXISTING bug from cp3 USDT shipping that cp21 surfaced; DD-cp21-8 symmetric bug in decodePayload morphit_addr + morphit_funds_sent branches — also pre-existing from cp3.  All 3 fixes land 4 dispatch-gate widenings in apps/web/src/lib/chat/payload.ts; verified live with round-trip encode/decode of both USDT and BCH addresses + txids.  All 4 asset-related smokes still green: bch-trade-only 13/13, usdt-trade-only 11/11, fee-method-enum-frozen 7/7, version-consistency 14/14.  Locale parity holds at 2,563 keys × 10.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 22 — interactive disable-trade-only-asset wizard step.  Closes the cp21 UX gap where the env-var path for `MORPHIT_INDEXER_DISABLED_ASSETS` worked but the `morphit-ops init` wizard had no interactive prompt for the disable decision.  SHIPPED: (a) New wizard step 13 "Trade-only asset policy" between stepChatLinkExplorers and stepListingFee in apps/ops-cli/src/init/steps.ts.  Iterates `ASSETS.filter(a => a.canBeTraded && !a.canPayListingFee)` from canonical registry; surfaces USDT + BCH today, future Category-B additions surface automatically.  Per-ticker Y/n prompt with default YES (Memory #25), brief description from wizard-side `CATEGORY_B_DESCRIPTIONS` map, decision echo + final-stance summary before proceeding.  (b) `DisabledAssetsResult` interface with alphabetized `disabledTickers: readonly string[]`.  (c) TOTAL_STEPS 17→18 + renumbered existing steps 13-16 → 14-17 + fixed two pre-existing section-comment drifts ("Step 12: Daily DB backup" was stale → "Step 16"; "Step 17/18: Matrix surfaces" ambiguous → "Step 18").  (d) `render.ts` emission — new "Trade-only asset policy (indexer)" block in renderConfig() with operator-facing comment header + `MORPHIT_INDEXER_DISABLED_ASSETS=` line; empty set → empty string (accept-all).  (e) `init.ts` orchestrator — stepDisabledAssets call + disabledAssets field in WizardAnswers + printReview line surfacing the stance; added missing "BCH chat-link URL" line to printReview while there (cp21 oversight).  (f) New smoke `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts` — 17 scenarios pinning Category-B filter, fee_method enum invariants, CATEGORY_B_DESCRIPTIONS coverage, 4 env-emission variants, parser round-trip, step exports, init.ts wiring, render.ts emission, TOTAL_STEPS=18, step 13 named "Trade-only asset policy".  17/17 ✓ first run.  Registered in scripts/run-smokes.sh after bch-trade-only-smoke.  Smoke baseline 3,200 → 3,217.  DOCS: OPERATIONS.md trade-only-asset section header bumped + new "How to set this (two paths)" subsection at top (wizard recommended, post-deploy env-edit still works on existing instances); RUN-A-MORPHIT-NODE.md "Decide your operator stance" leads with wizard step then shows equivalent env-edits; PRE-LAUNCH-CHECKLIST.md smoke baseline 3,200→3,217 + stance item rewritten to lead with "The wizard handles this for you"; ADR-0023 + ADR-0024 each gained 2026-05-17 forward-note pointing at cp22 UX closure (design contracts unchanged); MORPHIT-BRAG-LIST entry #272 + smoke 3,200+→3,217+ + footer 271→272; RELEASE-NOTES smoke 3,200→3,217.  Mediakit rebuild scheduled after cp22 brag-list edit.)
 
 **Snapshot date:** 2026-05-17
+
+---
+
+## cp22 — Interactive disable-trade-only-asset wizard step (Part 122)
+
+Ken's prompt: "yes, do that please so that any of these new
+coins can be easily disabled without the instance admin having
+to edit a file manually."  Cp22 closes the UX gap that cp21
+left open: the env-var path worked, but operators had to know
+the env var existed and which file to edit.  Cp22 makes the
+decision interactive at install time.
+
+### Design choices
+
+- **Iterate the canonical registry, don't hardcode tickers.**
+  `ASSETS.filter(a => a.canBeTraded && !a.canPayListingFee)`
+  returns exactly the trade-only set — USDT + BCH today; future
+  Category-B additions surface automatically.  No per-asset
+  wizard code when new tickers ship.
+- **Default YES for every prompt.**  Memory #25 invariant: new
+  assets ship default-ON instance-wide.  The wizard step
+  preserves this by defaulting each Y/n to Yes; an operator who
+  just hits enter on every prompt ends up with the canonical
+  morphit.io posture (accept everything).
+- **Alphabetize the disabled list.**  `disabledTickers` is
+  sorted before return so the rendered env file is
+  diff-friendly across wizard re-runs.
+- **Three echo opportunities before commit.**  Per-prompt echo
+  ("BCH stays enabled (default)" / "USDT will be DISABLED..."),
+  end-of-step summary ("Disabling 1 asset(s): BCH"), and
+  printReview line ("Trade-only assets: DISABLED: BCH") before
+  the operator confirms the final write.  Three chances to
+  catch a misclick.
+- **Wizard-side display strings, not canonical-registry ones.**
+  Canonical registry stays display-string-free (cp21 design).
+  Wizard-side `CATEGORY_B_DESCRIPTIONS` map carries the brief
+  operator-facing line per known ticker; unknown tickers fall
+  back to a generic line.  Trades a tiny coupling (new ticker
+  → new map entry for nice description) for keeping the
+  canonical registry pure.
+
+### Step number changes
+
+| Old step | New step | Name                                       |
+|----------|----------|--------------------------------------------|
+| 12       | 12       | Chat-link external explorer URLs           |
+| —        | 13       | **Trade-only asset policy (NEW cp22)**     |
+| 13       | 14       | Listing fee + fallback BLURT price         |
+| 14       | 15       | SEO override (optional)                    |
+| 15       | 16       | Daily DB backup                            |
+| 16       | 17       | Operator tag                               |
+| 17       | 18       | Matrix surfaces (uses TOTAL_STEPS macro)   |
+
+`TOTAL_STEPS` constant bumped 17 → 18.  All `step(N, ...)`
+calls and section comments updated.
+
+### Files changed
+
+ops-cli:
+- `apps/ops-cli/src/init/steps.ts` — TOTAL_STEPS 17→18; renumbered
+  existing steps 13-16 → 14-17 in `step()` calls; fixed two
+  pre-existing section-comment drifts; new `DisabledAssetsResult`
+  interface; new `stepDisabledAssets` async function (~90 lines)
+  with `getCategoryBTickers()` lazy-importer + `CATEGORY_B_DESCRIPTIONS`
+  Object.freeze map.
+- `apps/ops-cli/src/init/render.ts` — `DisabledAssetsResult` in
+  type imports; `disabledAssets` field on WizardAnswers
+  interface; new "Trade-only asset policy (indexer)" emission
+  block in `renderConfig()` between chat-link-explorers and
+  listing-fee blocks.
+- `apps/ops-cli/src/commands/init.ts` — `stepDisabledAssets`
+  in imports; `await stepDisabledAssets()` call in wizard flow
+  between `stepChatLinkExplorers` and `stepListingFee`;
+  `disabledAssets` field in WizardAnswers object; new printReview
+  lines for both BCH chat-link URL (cp21 oversight) and trade-only
+  asset stance.
+- `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts` — new
+  17-scenario smoke covering filter correctness, fee_method
+  invariants, CATEGORY_B_DESCRIPTIONS coverage, env emission
+  variants, parser round-trip, wiring verification, step
+  numbering.
+
+Runner:
+- `scripts/run-smokes.sh` — registers
+  `apps/ops-cli:disabled-assets-wizard-smoke` after
+  bch-trade-only-smoke.
+
+Docs:
+- `docs/OPERATIONS.md` — trade-only-asset section header bumped
+  to mention Part 122 cp22; new "How to set this (two paths)"
+  subsection at top of the section distinguishing wizard-driven
+  (recommended at install time) from post-deploy env-edit (still
+  works for existing instances), with note that both paths write
+  the same env var.
+- `docs/RUN-A-MORPHIT-NODE.md` — "Decide your operator stance"
+  rewritten to lead with "The wizard handles this for you" + the
+  4-option matrix now shows wizard prompt + equivalent env-edit
+  for each option.
+- `docs/PRE-LAUNCH-CHECKLIST.md` — smoke baseline 3,200 → 3,217;
+  trade-only-asset stance item rewritten to lead with wizard
+  step; cross-refs include "Part 122 cp22 (wizard step)".
+- `docs/adr/0023-usdt-multi-network.md` — 2026-05-17 forward-note
+  pointing at cp22 UX closure.  Design contract unchanged.
+- `docs/adr/0024-bitcoin-cash-trade-only-addition.md` — same
+  forward-note style.
+- `docs/REVISIT-LIST.md` — cp22 entry prepended.
+- `MORPHIT-BRAG-LIST.md` — new entry #272; smoke count 3,200+ →
+  3,217+; footer 271 → 272.
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — smoke count 3,200 → 3,217.
+- `TARBALL.md` — this entry.
+
+Build artifact (rebuilt after brag-list edit):
+- `apps/web/static/morphit-mediakit.zip` — must be rebuilt
+  after the brag-list edit per Memory #4.
+
+### Persona walkthroughs
+
+- **Sally-operator (fresh `morphit-ops init` run):** Reaches
+  step 13 "Trade-only asset policy" after the chat-link explorer
+  step.  Sees brief explainer of trade-only assets + federation
+  semantics.  Prompted for USDT first: "Enable USDT trading on
+  this instance? [Y/n]"  Reads the USDT description ("Tether
+  stablecoin across 4 networks... centrally issued and freezable
+  by Tether Inc.") and decides based on operator posture.  Hits
+  Enter (Yes) → "USDT stays enabled (default)" echo.  Prompted
+  for BCH: "Enable BCH trading on this instance? [Y/n]"  Hits
+  Enter again → "BCH stays enabled (default)" echo.  Summary
+  shows "All trade-only assets remain enabled (default
+  posture)."  Continues to step 14 (Listing fee).  Final
+  printReview shows "Trade-only assets: all enabled (default)."
+  Writes morphit.config.env with `MORPHIT_INDEXER_DISABLED_ASSETS=""`.
+- **Sally-operator (privacy-purist posture):** Same flow.  At
+  USDT prompt, types "n" → "USDT will be DISABLED.  Your users
+  will see an inline error if they try to post a new USDT
+  order; peer-instance USDT orders still appear in the
+  orderbook."  At BCH prompt, hits Enter (keeps BCH).  Summary:
+  "Disabling 1 asset(s): USDT.  These will be written to
+  MORPHIT_INDEXER_DISABLED_ASSETS in morphit.config.env."
+  printReview: "Trade-only assets: DISABLED: USDT".  Three
+  echo opportunities to catch a misclick.  Writes
+  `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`.
+- **Sally-operator (re-running wizard to change mind):** Same
+  flow.  Each step's `step(N, TOTAL_STEPS, ...)` header is now
+  "STEP 13 / 18" (was "STEP 13 / 17" in cp21 — operators
+  noticing the bump understand it as the new step's addition).
+  No state survives between wizard runs; defaults reset to YES;
+  operator's previous stance is in the env file but the wizard
+  doesn't read it back.  Re-running and accepting all defaults
+  re-enables anything previously disabled.  This is a deliberate
+  UX choice — re-running the wizard is a fresh decision, not a
+  diff.
+
+### Deep-deep on cp22
+
+Adversarial sweep on cp22.  Eight findings: **five
+verified-OK** (no action), **three real drifts/footgun fixed
+in-pass**.
+
+**Verified-OK (no action needed):**
+
+- **DD-cp22-1 (LOW, VERIFIED OK).**  Defensive empty-registry
+  skip path.  If a future Morphit build ships zero Category-B
+  assets, `getCategoryBTickers()` returns `[]` and the wizard
+  step prints "This Morphit build ships no trade-only assets;
+  nothing to disable.  Skipping." and returns `{ disabledTickers:
+  [] }` without prompting.  No misclick possible; emission is
+  `MORPHIT_INDEXER_DISABLED_ASSETS=""`.
+
+- **DD-cp22-2 (LOW, VERIFIED OK).**  Wizard output → indexer
+  parser round-trip verified for all 4 cases: empty, USDT-only,
+  BCH-only, both alphabetized.  Each input set encodes to the
+  exact env-string the indexer's Zod transform decodes back to
+  the same set.
+
+- **DD-cp22-3 (LOW, VERIFIED OK).**  Indexer Zod schema for
+  `MORPHIT_INDEXER_DISABLED_ASSETS` at
+  `apps/indexer/src/config/index.ts:451`: `z.string().default('')
+  .transform(s => s.split(',').map(t => t.trim().toUpperCase())
+  .filter(t => t.length > 0))`.  The wizard's alphabetized
+  comma-joined output is a strict subset of what this parser
+  accepts (case-tolerant, whitespace-tolerant, empty-string-
+  tolerant, trailing-comma-tolerant).
+
+- **DD-cp22-6 (LOW, VERIFIED OK).**  Duplicate-ticker safety.
+  Wizard's iteration-and-push pattern naturally cannot produce
+  duplicates (each ticker is offered once).  Manual env-edit
+  duplicates like `"USDT,USDT"` would parse to `['USDT','USDT']`
+  but the indexer's gate is `.includes(asset)` which is
+  duplicate-safe.  Benign.
+
+- **DD-cp22-7 (LOW, VERIFIED OK).**  Non-registry-ticker
+  tolerance.  Manual env-edit with `MORPHIT_INDEXER_DISABLED_ASSETS=
+  "DAI,USDC"` (tickers not in the canonical registry today) is
+  intentionally silently tolerated per Memory #25's forward-
+  compat design.  `OPERATIONS.md` already documents this
+  explicitly ("forward-compatible for future trade-only
+  additions").  No code change needed.
+
+**Fixed in-pass:**
+
+- **DD-cp22-4 (LOW, FIXED).**  Stale "17 steps" comment in
+  `apps/ops-cli/src/commands/init.ts:112`: `// ─── Run the 17
+  steps ────`.  Bumped to "Run the 18 steps".  Pre-existing
+  comment-vs-code drift surfaced by cp22's TOTAL_STEPS bump.
+
+- **DD-cp22-5 (LOW, FIXED).**  Stale "9 steps × ~50 LOC each"
+  in steps.ts file-header docblock.  Updated to "18 steps ×
+  ~50-100 LOC each."  Pre-existing drift dating back to early
+  wizard development (file has had >9 steps for many Parts).
+
+- **DD-cp22-8 (LOW, FIXED — docs).**  Category-A footgun
+  surfaced during the sweep.  The wizard step 13 cannot offer
+  Category-A (fee-payable) tickers (BTC, XMR, BLURT) because
+  the Category-B filter excludes them.  But an operator
+  manually editing the env file to set
+  `MORPHIT_INDEXER_DISABLED_ASSETS="BLURT"` would create a
+  weird state: BLURT trading disabled, but BLURT fee payments
+  still work (fee_method enum is independent of asset
+  registry per Memory #23).  Fix: added explicit "Do NOT
+  disable Category-A assets" footgun warning to
+  `docs/OPERATIONS.md` trade-only-asset section explaining the
+  asymmetry and pointing back to opening an issue if the
+  operator genuinely wants a different product.  No code
+  change — wizard already prevents this path.
+
+### Files added/changed in deep-deep
+
+- `apps/ops-cli/src/commands/init.ts` — "17 steps" comment → "18".
+- `apps/ops-cli/src/init/steps.ts` — file-header "9 steps × ~50
+  LOC" → "18 steps × ~50-100 LOC".
+- `docs/OPERATIONS.md` — new Category-A footgun warning
+  paragraph in trade-only-asset section.
+
+**Total cp22 deep-deep impact:** 8 findings, 3 real drift/UX
+fixes (all documentation-grade, not behavioral), 0 new
+sentinels needed (the existing 17-scenario
+disabled-assets-wizard-smoke already pins TOTAL_STEPS=18 + step
+13 name + render emission + init.ts wiring).
+
+### Resume directive
+
+Cp22 sealed pending final Phase 8 tarball build.  Work tree at
+`/home/claude/work/`.  Solo-parked items per memory: launch
+ceremony at T-5 days, real VM Ansible deploy, real v-tag push.
 
 ---
 

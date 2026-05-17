@@ -39,6 +39,7 @@ import type {
 	AltNetworkResult,
 	FeeExplorersResult,
 	ChatLinkExplorersResult,
+	DisabledAssetsResult,
 	SeoResult,
 	BackupResult,
 	OperatorTagResult
@@ -59,6 +60,11 @@ export interface WizardAnswers {
 	readonly listingFee: ListingFeeResult;
 	readonly feeExplorers: FeeExplorersResult;
 	readonly chatLinkExplorers: ChatLinkExplorersResult;
+	/** Part 122 cp22 — operator-chosen trade-only-asset disable
+	 *  set.  Renders into MORPHIT_INDEXER_DISABLED_ASSETS in
+	 *  morphit.config.env.  Empty means accept everything
+	 *  (default posture). */
+	readonly disabledAssets: DisabledAssetsResult;
 	readonly seo: SeoResult;
 	readonly backup: BackupResult;
 	/** Part 111 — operator tag for federation-scoped payouts. */
@@ -469,6 +475,37 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	);
 	lines.push(
 		`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bch)}`
+	);
+	lines.push('');
+
+	// ─── Trade-only asset policy (Part 122 cp22) ─────────────────
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Trade-only asset policy (indexer)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Comma-separated list of uppercase tickers your indexer');
+	lines.push('# REFUSES to write new orders for.  Empty (or unset)');
+	lines.push('# means accept every trade-only asset shipped in this');
+	lines.push('# release.  Peer-instance orders for the same asset');
+	lines.push('# still appear in your read-only orderbook feeds — the');
+	lines.push('# chain history is shared across the federation.');
+	lines.push('#');
+	lines.push('# Parser is tolerant of whitespace, mixed case, and');
+	lines.push('# trailing commas — write it however you like.');
+	lines.push('#');
+	lines.push('# Examples:');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS=""        (accept all)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"    (refuse USDT)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH"     (refuse BCH)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH" (refuse both)');
+	lines.push('#');
+	lines.push('# Change your mind later by editing this line and');
+	lines.push('# restarting the indexer service.  Browsers see the');
+	lines.push('# change at most 5 minutes after restart (the');
+	lines.push('# /v1/instance response carries a 5-minute Cache-Control');
+	lines.push('# header).  See docs/OPERATIONS.md §"Trade-only asset');
+	lines.push('# configuration" for the full operator playbook.');
+	lines.push(
+		`MORPHIT_INDEXER_DISABLED_ASSETS=${quote(answers.disabledAssets.disabledTickers.join(','))}`
 	);
 	lines.push('');
 

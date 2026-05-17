@@ -36,6 +36,7 @@ import {
 	stepAltNetworks,
 	stepFeeExplorers,
 	stepChatLinkExplorers,
+	stepDisabledAssets,
 	stepListingFee,
 	stepSeo,
 	stepBackup,
@@ -108,7 +109,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		}
 	}
 
-	// ─── Run the 17 steps ────
+	// ─── Run the 18 steps ────
 	const instanceName = await stepInstanceName();
 	const tagline = await stepTagline();
 	const databaseUrl = await stepDatabase();
@@ -121,6 +122,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const altNetworks = await stepAltNetworks();
 	const feeExplorers = await stepFeeExplorers();
 	const chatLinkExplorers = await stepChatLinkExplorers();
+	const disabledAssets = await stepDisabledAssets();
 	const listingFee = await stepListingFee();
 	const seo = await stepSeo();
 	const backup = await stepBackup();
@@ -142,6 +144,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		listingFee,
 		feeExplorers,
 		chatLinkExplorers,
+		disabledAssets,
 		seo,
 		backup,
 		operatorTag,
@@ -235,6 +238,14 @@ function printReview(answers: WizardAnswers): void {
 	);
 	console.log(`  BTC chat-link URL:    ${answers.chatLinkExplorers.btc}`);
 	console.log(`  XMR chat-link URL:    ${answers.chatLinkExplorers.xmr}`);
+	console.log(`  BCH chat-link URL:    ${answers.chatLinkExplorers.bch}`);
+	if (answers.disabledAssets.disabledTickers.length === 0) {
+		console.log(`  Trade-only assets:    all enabled (default)`);
+	} else {
+		console.log(
+			`  Trade-only assets:    DISABLED: ${answers.disabledAssets.disabledTickers.join(', ')}`
+		);
+	}
 	console.log(
 		`  Listing fee target:   $${answers.listingFee.targetUsd.toFixed(2)} ` +
 			`(${answers.listingFee.source}) → ${answers.listingFee.btcSatoshis} sats / ` +
