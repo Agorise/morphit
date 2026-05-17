@@ -1503,21 +1503,11 @@ These are blocked not because the work is hard but because
 the design choices need to be ratified before code can
 commit to one path.
 
-### Sitemap.xml stale — missing cp24 cheat-sheet + cp26 privacy routes — DEFERRED 2026-05-17 (Part 122 cp27-DD2)
+### Sitemap.xml stale — missing cp24 cheat-sheet + cp26 privacy routes — SHIPPED 2026-05-17 (Part 122 cp27-DD2)
 
-`apps/web/static/sitemap.xml` was last regenerated cp17-era (`<lastmod>2026-05-03`) and contains 14 routes × 10 locales = 140 URLs.  Routes added since are NOT in the sitemap:
+Ran `node scripts/build-sitemap.mjs` to regenerate `apps/web/static/sitemap.xml`.  Added `/privacy` index to both source-of-truth (`apps/web/src/lib/seo/routes.ts`) and the build-sitemap.mjs ROUTES array so the consistency check passes.  Result: 180 URLs (was 140) = 18 indexable routes × 10 locales.  Cheat-sheet, glossary, plan, and /privacy now in sitemap.  Per-asset privacy pages (`/privacy/btc`, `/privacy/xmr`, `/privacy/dash`, etc.) intentionally NOT enumerated in static sitemap — they're discoverable via internal links from the /privacy index page (search engines crawl those naturally).  This decouples the SEO route registry from the asset registry; new assets light up via internal links without sitemap regen.
 
-- `/[lang]/cheat-sheet` (cp24 added but intentionally excluded as print-only?)
-- `/[lang]/privacy` (cp26 — index, MISSING — SEO concern)
-- `/[lang]/privacy/{asset}` (cp26 — 7 per-asset guides, MISSING — SEO concern)
-- `/[lang]/instances` (debatable — federation directory, but may be intentionally excluded)
-- `/[lang]/glossary` (debatable)
-
-Action: regenerate sitemap via `scripts/build-sitemap.sh` (or whatever the current generator is — verify it exists; if not, write one); decide explicitly which routes are indexable; update generator to be registry-driven for `/privacy/{asset}` so it auto-includes new assets.
-
-Not pre-launch blocking — affects discoverability of privacy guide pages and other newer routes via search engines, but the pages themselves render correctly when reached by direct URL.  Worth closing in a focused checkpoint after launch when SEO observability matures.
-
-Origin: Part 122 cp27-DD2 doc-sweep DD found `lastmod=2026-05-03` + privacy routes absent from sitemap.
+Closed during the cp27-DD2 cross-session-handoff polish pass after deferring it initially as post-launch SEO task — turned out to be a single-command regen since the generator + consistency check were already in place.
 
 ### ADR-0013 (operator incentives) — Phase 5 item 3
 

@@ -97,6 +97,29 @@ PATTERN LESSONS BANKED:
   7. Wizard step count claims drift — verify against `TOTAL_STEPS = 18` source-of-truth constant.
   8. "26 ADRs" was correct — false-positive on staleness scanner because 27 slots minus reserved 0016 = 26.  Counting claims need explicit minus-reserved math.
 
+
+
+CP27-DD2 ADDENDUM-2 (after Ken "Continue" prompt — continued polish instead of stopping):
+
+DD-cp27-DD-18 (was DEFERRED, NOW CLOSED) — Sitemap regen.  Ran `node scripts/build-sitemap.mjs`; the generator existed already with a consistency check against `apps/web/src/lib/seo/routes.ts`.  Added `/privacy` to both source-of-truth AND build-sitemap.mjs ROUTES array.  Sitemap.xml now 180 URLs (18 indexable routes × 10 locales) = was 140 stale + 30 new (cheat-sheet/glossary/plan/privacy × 10).  Per-asset privacy pages (`/privacy/btc`, `/privacy/dash`, etc.) intentionally NOT enumerated — discoverable via internal links from the /privacy index page (decouples SEO route registry from asset registry; new assets light up without sitemap regen).  REVISIT entry status moved DEFERRED → SHIPPED.
+
+DD-cp27-DD-22 MEDIUM — `ops/env/indexer.env.example` was massively stale on the chat-link URL section: only BTC + XMR documented (cp21 BCH + cp24 LTC + cp27 DASH all missed it).  Also missing the entire `MORPHIT_INDEXER_DISABLED_ASSETS` env var section — that's the operator-stance path that brag entry #272 explicitly highlights as "Setup wizard handles trade-only-asset opt-out".  Operators consulting the env example as the canonical reference would have no idea these knobs exist.  Retrofitted: chat-link URL section now documents all 5 chat-link overrides (BTC/XMR/BCH/LTC/DASH) with cp-of-origin annotations + USDT no-override rationale; new "Trade-only asset operator stance" section documents `MORPHIT_INDEXER_DISABLED_ASSETS` with 5 worked examples (empty/USDT-only/USDT+BCH/DASH-only/all-4-disabled).  Cross-references the wizard step + Memory #25.
+
+Pattern lessons added:
+  9. **`ops/env/*.env.example` files are operator-facing reference docs** — they drift exactly like .md files when new env vars ship.  cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all shipped without retrofitting indexer.env.example.  Add env example sync to per-cp doc-sync checklist alongside README/RELEASE-NOTES/OPERATIONS.
+  10. **"Deferred to REVISIT" is sometimes premature** — DD-18 sitemap was filed as a post-launch task but turned out to be a single-command regen since the generator + consistency check were already in place.  Check if a "deferred" item is actually a 30-second fix before filing it.
+
+CP27-DD2 FINAL FINAL STATE:
+  Sitemap: 180 URLs (was 140 stale)
+  Smoke baseline 3,327 unchanged
+  Locale parity 2,644 × 10 = 26,440 strings
+  All 10 sentinel smokes triple-pulse green at 268 scenarios/pulse
+  Persona-walkthrough-smoke 120/120 ✓ (was 119/120 pre-DD20)
+  Mediakit rebuilt one final time per Memory #4 (39,870 bytes)
+  Audit log 21,355 lines (was 21,135 entering cp27-DD2)
+  All cp27-DD2 findings closed (18→0 deferred); nothing deferred for next session
+  Pre-existing sandbox limitation persists: 27 runners hit ERR_MODULE_NOT_FOUND when `npm install` not run — handoff tarball assumes fresh `npm install` after extraction
+
 SHIPPED:
   EDITED:
     README.md                                              (4 stale claims fixed)

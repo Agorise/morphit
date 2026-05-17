@@ -54,7 +54,8 @@ const ROUTES = [
 	{ path: '/privacy-terms', priority: 0.4, changefreq: 'yearly' },
 	{ path: '/plan', priority: 0.4, changefreq: 'monthly' },
 	{ path: '/glossary', priority: 0.6, changefreq: 'monthly' },
-	{ path: '/cheat-sheet', priority: 0.5, changefreq: 'monthly' }
+	{ path: '/cheat-sheet', priority: 0.5, changefreq: 'monthly' },
+	{ path: '/privacy', priority: 0.6, changefreq: 'monthly' }
 ];
 
 /**

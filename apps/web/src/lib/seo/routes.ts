@@ -94,6 +94,13 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	// /cheat-sheet — added Part 95 (printable one-page reference).
 	// Same Part-101 reverse-drift fix.
 	{ path: '/cheat-sheet', key: 'cheat_sheet', indexable: true, priority: 0.5, changefreq: 'monthly' },
+	// /privacy — added Part 122 cp26 (per-asset privacy guide index).
+	// The per-asset subpages (/privacy/btc, /privacy/xmr, /privacy/dash,
+	// etc.) are dynamic via [asset] param; not enumerated in the static
+	// sitemap to avoid coupling the SEO route registry to the asset
+	// registry.  Search engines discover the per-asset pages via the
+	// index page's internal links.
+	{ path: '/privacy', key: 'privacy_index', indexable: true, priority: 0.6, changefreq: 'monthly' },
 
 	// ─── Non-indexable: auth / mid-funnel / user-specific ────────
 	// These pages get <Head /> tags (so they have decent titles if
