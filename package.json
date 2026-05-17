@@ -1,6 +1,6 @@
 {
 	"name": "morphit",
-	"version": "0.0.0-phase3b",
+	"version": "1.0.0-beta.1",
 	"private": true,
 	"description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
 	"license": "AGPL-3.0-only",

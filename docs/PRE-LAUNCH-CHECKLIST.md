@@ -315,7 +315,8 @@ file in the same turn.
       `bash scripts/run-smokes.sh`.  Expected output:
       `Total: 3,100+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp18 baseline is 3,173).
+      Part 122 cp20 baseline is 3,187 = cp19 3,173 + 14 new
+      version-consistency scenarios).
 
       If you see several runners fail with
       `ERR_MODULE_NOT_FOUND` errors all referencing a
@@ -564,6 +565,7 @@ block initial launch:
 
 | Part | Date | Change to this file |
 |---|---|---|
+| 122 cp20 | 2026-05-17 | Section C smoke baseline bumped from 3,173 → 3,187 to match the new `version-consistency-smoke` (14 scenarios) shipped this turn.  The smoke catches drift between the root `package.json` version, the 9 sub-package versions, the runtime `VERSION`/`INDEXER_VERSION` constants in relay+indexer `/v1/health`, and the example responses in `docs/API.md` + `apps/indexer/README.md` — pre-cp20 those touchpoints had four different version strings, none of them the release tag.  All 14 unified to `1.0.0-beta.1` and the smoke is wired into `scripts/run-smokes.sh`. |
 | 109 | 2026-05-10 | Initial consolidated checklist. Items A-H gathered from Parts 106 + 107 + 108++ + 109 operator-action lists in REVISIT-LIST, OPERATIONS.md §40, RUN-A-MORPHIT-NODE.md, and TARBALL.md.  Section G "explicitly NOT required" reflects operator decision in Part 109 to defer self-hosted explorers. |
 | 109 | 2026-05-10 | Section G updated mid-Part-109 after the quorum gate and viewkey-env removal landed.  Removed the two now-closed items (viewkey removal, quorum) and added two new deferred items (per-user explorer preference, auto-defaulted quorum threshold) per Memory #5 same-turn update rule. |
 | 110 | 2026-05-10 | Section A gained two new items: relay-account funding (`[blocking]`) and fees-account-exists-on-chain (`[recommended]`).  Operator-reported gap: previous revisions assumed operators knew the relay needed BLURT upfront; explicit checkbox reduces failed first-day launches.  Section A also updated to retire the `verify-xmr-viewkey.ts` reference (script retired Part 110).  Section H expanded with reference to `LAUNCH-DAY.md` (new) and `POST-LAUNCH-WEEK-ONE.md` (new) for day-zero and week-one runbooks. |

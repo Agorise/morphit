@@ -19,7 +19,14 @@ import type { Config } from '../config/index.ts';
 import type { BlurtClient } from '../blurt/client.ts';
 import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
 
-const VERSION = '0.3.0-phase3a';
+// Keep in sync with the root package.json `version`.  The
+// version-consistency-smoke (Part 122 cp20) fails the build if
+// this constant drifts from any other package.json or from the
+// indexer's INDEXER_VERSION constant.  When bumping for a new
+// release, update all 10 package.json files + this constant +
+// apps/indexer/src/api/health.ts INDEXER_VERSION + the example
+// response in docs/API.md in the same commit.
+const VERSION = '1.0.0-beta.1';
 const POLL_INTERVAL_MS = 30_000;
 /** When pending_claimed_accounts drops below this, the relay
  *  rejects new create requests with relay_out_of_funds.  This

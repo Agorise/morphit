@@ -142,6 +142,7 @@ SMOKES=(
 	"apps/web:wiring-completeness-smoke"
 	"apps/web:web-push-wiring-smoke"
 	"apps/web:npm-audit-gate-smoke"
+	"apps/web:version-consistency-smoke"
 	"apps/relay:canonical-message-cross-check-smoke"
 	"apps/indexer:anti-snipe-extension-smoke"
 	"packages/asset-registry:fee-method-enum-frozen-smoke"
