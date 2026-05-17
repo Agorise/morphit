@@ -343,11 +343,11 @@ file in the same turn.
       Part 108++.)*
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
-      stance.  The canonical morphit.io ships USDT, BCH AND LTC
-      enabled by default; alternative instances may want to
-      disable one or both instance-wide on philosophical
-      (centralization, fork preference), regulatory, or
-      audience-specialization grounds.
+      stance.  The canonical morphit.io ships USDT, BCH, LTC,
+      AND DASH enabled by default; alternative instances may
+      want to disable one or more instance-wide on
+      philosophical (centralization, fork preference),
+      regulatory, or audience-specialization grounds.
 
       **The wizard handles this for you.**  `morphit-ops init`
       step 13 "Trade-only asset policy" (Part 122 cp22) walks
@@ -367,8 +367,10 @@ file in the same turn.
          `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
       4. Refuse LTC — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`.
-      5. Refuse multiple —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC"`.
+      5. Refuse DASH — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`.
+      6. Refuse multiple —
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC,DASH"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see
@@ -379,9 +381,11 @@ file in the same turn.
       users know what your instance offers.  Memory #25
       (default-on + operator override for new assets),
       ADR-0023 (USDT), ADR-0024 (BCH), ADR-0025 (LTC),
-      and Part 122 cp22 (wizard step) explain the design.  *(Origin: Part 121
-      cp3 USDT integration, Part 122 cp21 BCH integration,
-      Part 122 cp22 wizard step, Part 122 cp24 LTC integration.)*
+      ADR-0027 (DASH), and Part 122 cp22 (wizard step) explain
+      the design.  *(Origin: Part 121 cp3 USDT integration,
+      Part 122 cp21 BCH integration, Part 122 cp22 wizard
+      step, Part 122 cp24 LTC integration, Part 122 cp27 DASH
+      integration.)*
 
 - [ ] **[blocking]** Decide BCH chat-link explorer URL.
       Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`
@@ -391,6 +395,24 @@ file in the same turn.
       `docs/OPERATIONS.md` §"BCH chat-link explorer URL
       override" for the alternatives surveyed at cp21
       addition time.  *(Origin: Part 122 cp21 BCH integration.)*
+
+- [ ] **[blocking]** Decide LTC chat-link explorer URL.
+      Default `https://litecoinspace.org/tx/{txid}` is fine for
+      most operators.  Override via `MORPHIT_FRONTEND_LTC_CHAT_LINK_URL`
+      if you prefer a different explorer or run your own.  See
+      `docs/OPERATIONS.md` §"LTC chat-link explorer URL
+      override" for the alternatives surveyed at cp24
+      addition time.  *(Origin: Part 122 cp24 LTC integration.)*
+
+- [ ] **[blocking]** Decide DASH chat-link explorer URL.
+      Default `https://insight.dash.org/insight/tx/{txid}`
+      (official Dash project Insight, community-led,
+      open-source) is fine for most operators.  Override via
+      `MORPHIT_FRONTEND_DASH_CHAT_LINK_URL` if you prefer a
+      different explorer or run your own.  See
+      `docs/OPERATIONS.md` §"DASH chat-link explorer URL
+      override" for the 9 alternatives surveyed at cp27
+      addition time.  *(Origin: Part 122 cp27 DASH integration.)*
 
 - [ ] **[recommended, non-blocking]** **VAPID keypair for
       Web Push notifications** (Part 122 cp13).  Without
