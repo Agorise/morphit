@@ -2133,7 +2133,7 @@ COMMENT ON TABLE one_way_pile_on IS
 --
 -- Adds `asset_network` column to `orders` for multi-network
 -- tradable assets.  USDT-only at launch (ERC-20/TRC-20/SPL/BEP-20);
--- single-network assets (BTC, XMR, BLURT, BCH, LTC) write NULL.
+-- single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH) write NULL.
 --
 -- Pre-Part-121 rows stay NULL on this column.  Validate-time
 -- gates in the order handler:
@@ -2142,7 +2142,7 @@ COMMENT ON TABLE one_way_pile_on IS
 --   - asset!='USDT' MUST have asset_network NULL
 --
 -- The combined constraint mirrors the registry rule:
--- `supportedNetworks` is a singleton for BTC/XMR/BLURT/BCH/LTC and a
+-- `supportedNetworks` is a singleton for BTC/XMR/BLURT/BCH/LTC/DASH and a
 -- 4-element list for USDT.  The wire-format-frozen `fee_method`
 -- enum stays at exactly `'blurt'|'waived_first_buy'|'btc'|'xmr'`
 -- (memory #23) — `asset_network` is a SEPARATE column from

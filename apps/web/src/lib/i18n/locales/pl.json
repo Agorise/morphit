@@ -787,7 +787,7 @@
 			},
 			"trade_goods_services": {
 				"q": "Czy mogę handlować towarami lub usługami na Morphit, takimi jak drzewa owocowe lub płyty winylowe?",
-				"a": "Tak — z określoną strukturą. Model zlecenia to zawsze **aktywo handlowe (BTC, XMR, BLURT, USDT, BCH lub LTC) po jednej stronie, a coś innego po drugiej stronie**. „Coś innego\" może być walutą fiat, inną kryptowalutą lub poprzez metodę płatności `Barter (goods)` — towary/usługi. Dla drzew pomarańczowych za XMR: opublikuj `asset=XMR`, `payment_methods=[Barter (goods)]`, opisz szczegóły w polu `terms`. Czyste wymiany (towar za towar bez krypto) nie są modelowalne — jedna strona zawsze musi być BTC, XMR, BLURT lub USDT. Pełne wyjaśnienie w angielskiej FAQ."
+				"a": "Tak — z określoną strukturą. Model zlecenia to zawsze **aktywo handlowe (BTC, XMR, BLURT, USDT, BCH, LTC lub DASH) po jednej stronie, a coś innego po drugiej stronie**. „Coś innego\" może być walutą fiat, inną kryptowalutą lub poprzez metodę płatności `Barter (goods)` — towary/usługi. Dla drzew pomarańczowych za XMR: opublikuj `asset=XMR`, `payment_methods=[Barter (goods)]`, opisz szczegóły w polu `terms`. Czyste wymiany (towar za towar bez krypto) nie są modelowalne — jedna strona zawsze musi być BTC, XMR, BLURT lub USDT. Pełne wyjaśnienie w angielskiej FAQ."
 			},
 			"order_timeouts": {
 				"q": "Jak długo zlecenia pozostają otwarte?",
@@ -883,7 +883,7 @@
 			},
 			"where_to_buy_blurt": {
 				"q": "Gdzie kupić BLURT, aby użyć go jako opłaty sieciowej?",
-				"a": "**Kup go na samym Morphit — o to chodzi.** Morphit jest rynkiem peer-to-peer; BLURT jest jednym z sześciu aktywów handlowanych tutaj, obok BTC, XMR, USDT, BCH i LTC. Odwiedź /orderbook, filtruj zlecenia sprzedaży BLURT, i wyślij wiadomość do kontrahenta. Płacisz dowolną metodą fiat, którą akceptuje; wysyłają ci BLURT na twoje konto Blurt. Gotowe.\n\n**Twoje pierwsze zlecenie jest bezpłatne.** Nowi użytkownicy otrzymują jednorazowe zwolnienie pokrywające opłatę za wystawienie pierwszego zakupu BLURT. Twój pierwszy zakup BLURT może więc być także twoją pierwszą transakcją na Morphit, bez konta giełdowego, bez karty, bez KYC. Zwolnienie jest oferowane automatycznie.\n\n**Alternatywa ostatecznego ratunku:** jeśli naprawdę nie możesz znaleźć kontrahenta na księdze ordersów Morphit (w niektórych regionach księga jest mała), Klingex.io prowadzi parę handlową BLURT/USDT jako scentralizowane wsparcie awaryjne. Wspominamy o tym dla kompletności, ale traktujemy jako opcję awaryjną — każdy BLURT kupiony przez Klingex to transakcja, której Morphit nie otrzymał, a celem projektu jest rozwój księgi peer-to-peer, nie wysyłanie użytkowników gdzie indziej. Jeśli pójdziesz tą drogą, strona handlu to https://klingex.io/trade/BLURT-USDT — musisz wpłacić USDT, aby wymienić na BLURT. Wypłać natychmiast do własnego portfela Blurt.\n\n**Gdy masz BLURT w portfelu**, płacenie opłaty za wystawienie Morphit jest automatyczne — wybierz \"Zapłać w BLURT\"."
+				"a": "**Kup go na samym Morphit — o to chodzi.** Morphit jest rynkiem peer-to-peer; BLURT jest jednym z siedmiu aktywów handlowanych tutaj, obok BTC, XMR, USDT, BCH, LTC i DASH. Odwiedź /orderbook, filtruj zlecenia sprzedaży BLURT, i wyślij wiadomość do kontrahenta. Płacisz dowolną metodą fiat, którą akceptuje; wysyłają ci BLURT na twoje konto Blurt. Gotowe.\n\n**Twoje pierwsze zlecenie jest bezpłatne.** Nowi użytkownicy otrzymują jednorazowe zwolnienie pokrywające opłatę za wystawienie pierwszego zakupu BLURT. Twój pierwszy zakup BLURT może więc być także twoją pierwszą transakcją na Morphit, bez konta giełdowego, bez karty, bez KYC. Zwolnienie jest oferowane automatycznie.\n\n**Alternatywa ostatecznego ratunku:** jeśli naprawdę nie możesz znaleźć kontrahenta na księdze ordersów Morphit (w niektórych regionach księga jest mała), Klingex.io prowadzi parę handlową BLURT/USDT jako scentralizowane wsparcie awaryjne. Wspominamy o tym dla kompletności, ale traktujemy jako opcję awaryjną — każdy BLURT kupiony przez Klingex to transakcja, której Morphit nie otrzymał, a celem projektu jest rozwój księgi peer-to-peer, nie wysyłanie użytkowników gdzie indziej. Jeśli pójdziesz tą drogą, strona handlu to https://klingex.io/trade/BLURT-USDT — musisz wpłacić USDT, aby wymienić na BLURT. Wypłać natychmiast do własnego portfela Blurt.\n\n**Gdy masz BLURT w portfelu**, płacenie opłaty za wystawienie Morphit jest automatyczne — wybierz \"Zapłać w BLURT\"."
 			},
 			"first_order_free": {
 				"q": "Czy moja pierwsza oferta naprawdę jest darmowa?",
@@ -1179,7 +1179,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "Dlaczego Morphit pokazuje informację o tym, jak USDT jest emitowany i przesyłany?",
-				"a": "USDT to najczęściej handlowany stablecoin na świecie, a miliony traderów polegają na jego stabilności wobec dolara i szerokiej akceptowalności każdego dnia. Gdy Morphit listuje aktywo, informujemy naszych użytkowników uczciwie o jego właściwościach technicznych, aby mogli podjąć świadomą decyzję dla każdej transakcji. Dla USDT, dwa fakty warte poznania: (1) USDT jest emitowany i administrowany przez Tether Inc., a Tether ma techniczną możliwość zamrażania adresów w łańcuchu hostującym — używali tej możliwości w przeszłości, głównie w odpowiedzi na żądania organów ścigania. (2) Transakcje USDT na każdym wspieranym łańcuchu hostującym (Ethereum, Tron, Solana, BNB Smart Chain) są publicznie widoczne w tych łańcuchach; jest to właściwość łańcucha, a nie unikalna dla USDT. Różni traderzy oceniają to różnie. Jeśli chcesz maksymalnej prywatności on-chain, XMR to właściwe narzędzie. Jeśli chcesz maksymalnej decentralizacji-od-każdego-pojedynczego-emitenta, BTC, BLURT, BCH lub LTC to właściwe narzędzia. Jeśli chcesz stabilności denominowanej w dolarach i rynku płynnego niemal wszędzie, USDT to właściwe narzędzie. Informacja Morphit to informacja, nie werdykt — wybierz aktywo pasujące do transakcji, którą wykonujesz."
+				"a": "USDT to najczęściej handlowany stablecoin na świecie, a miliony traderów polegają na jego stabilności wobec dolara i szerokiej akceptowalności każdego dnia. Gdy Morphit listuje aktywo, informujemy naszych użytkowników uczciwie o jego właściwościach technicznych, aby mogli podjąć świadomą decyzję dla każdej transakcji. Dla USDT, dwa fakty warte poznania: (1) USDT jest emitowany i administrowany przez Tether Inc., a Tether ma techniczną możliwość zamrażania adresów w łańcuchu hostującym — używali tej możliwości w przeszłości, głównie w odpowiedzi na żądania organów ścigania. (2) Transakcje USDT na każdym wspieranym łańcuchu hostującym (Ethereum, Tron, Solana, BNB Smart Chain) są publicznie widoczne w tych łańcuchach; jest to właściwość łańcucha, a nie unikalna dla USDT. Różni traderzy oceniają to różnie. Jeśli chcesz maksymalnej prywatności on-chain, XMR to właściwe narzędzie. Jeśli chcesz maksymalnej decentralizacji-od-każdego-pojedynczego-emitenta, BTC, BLURT, BCH, LTC lub DASH to właściwe narzędzia. Jeśli chcesz stabilności denominowanej w dolarach i rynku płynnego niemal wszędzie, USDT to właściwe narzędzie. Informacja Morphit to informacja, nie werdykt — wybierz aktywo pasujące do transakcji, którą wykonujesz."
 			},
 			"which_usdt_network": {
 				"q": "Którą sieć USDT wybrać — ERC-20, TRC-20, SPL czy BEP-20?",
@@ -1553,7 +1553,8 @@
 				"blurt": "BLURT — blockchain społecznościowy, na którym działa Morphit. Szybki (3-sekundowe bloki), transfery bez opłat, ale mała kapitalizacja. Przydatny do małych kwot i napiwków; mniej do przechowywania dużej wartości.",
 				"usdt": "Tether (USDT) — stablecoin powiązany 1:1 z USD. Kontrolowany centralnie — Tether Inc. może zamrozić każdy adres. Tylko handel na Morphit: nie może płacić opłat za wystawianie.",
 				"bch": "Bitcoin Cash (BCH). Forknięty z Bitcoina w 2017 r., aby preferować większe bloki i niższe opłaty transakcyjne ponad dynamikę rynku opłat. Przejrzysty rejestr jak BTC; żaden emitent nie może zamrozić adresów. Tylko do handlu na Morphit — opłaty za wystawienie nadal płacone w BLURT, BTC lub XMR.",
-				"ltc": "Litecoin (LTC). Fork Bitcoina z 2011 r. z szybszymi 2,5-minutowymi blokami i wydobyciem Scrypt. Przezroczysty jak Bitcoin — każda transakcja jest publicznie widoczna w łańcuchu. Brak centralnego emitenta; nikt nie może zamrozić twoich adresów."
+				"ltc": "Litecoin (LTC). Fork Bitcoina z 2011 r. z szybszymi 2,5-minutowymi blokami i wydobyciem Scrypt. Przezroczysty jak Bitcoin — każda transakcja jest publicznie widoczna w łańcuchu. Brak centralnego emitenta; nikt nie może zamrozić twoich adresów.",
+				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy."
 			},
 			"waiver_fiat_hint": "💡 BLURT jest słabo wymieniany na scentralizowanych giełdach, więc większość transakcji BLURT-za-fiat na Morphit odbywa się z aktywnymi użytkownikami sieci społecznościowej Blurt, istniejącymi operatorami lub przez wymianę barterową. Wskazówka: wybierz walutę fiat, której używa twoja lokalna sieć (USD, EUR, MXN itd.), lub sprawdź metodę płatności Osobiście → Wymiana (towary) w kroku 3, jeśli chcesz zaoferować coś innego o wartości. Księga zleceń jest na razie mała — twoje zlecenie kupna pomaga ją zbudować.",
 			"waiver_benefits_heading": "Co odblokowuje twój zakup:",
@@ -2333,7 +2334,11 @@
 			"payjoin_label": "PayJoin endpoint URL (optional)",
 			"payjoin_explain": "If your wallet supports PayJoin (BIP-78), paste its endpoint URL here. Buyers whose wallets also support PayJoin will use a cooperative transaction that breaks chain-analysis heuristics. No effect on wallets without PayJoin support.",
 			"payjoin_badge": "PayJoin available",
-			"payjoin_badge_tooltip": "The seller's wallet supports PayJoin (BIP-78). If your wallet supports it too, opening this URI will negotiate a cooperative transaction that improves privacy."
+			"payjoin_badge_tooltip": "The seller's wallet supports PayJoin (BIP-78). If your wallet supports it too, opening this URI will negotiate a cooperative transaction that improves privacy.",
+			"method_dash": "Dash",
+			"address_placeholder_dash": "X… or 7…",
+			"address_invalid_dash": "That doesn't look like a valid Dash address.",
+			"pill_method_dash": "Dash address"
 		},
 		"funds_sent": {
 			"button": "Oznacz środki jako wysłane",
@@ -2376,7 +2381,8 @@
 			"network_pinned_hint": "Sprzedawca określił tę sieć, udostępniając swój adres. Nie możesz jej tutaj zmienić.",
 			"pill_title_usdt": "USDT wysłany",
 			"pill_title_bch": "Bitcoin Cash wysłane",
-			"pill_title_ltc": "Litecoin wysłany"
+			"pill_title_ltc": "Litecoin wysłany",
+			"pill_title_dash": "Dash sent"
 		},
 		"unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
 		"pay_blurt": {
@@ -3057,6 +3063,9 @@
 		"request_missing_no_contact": "Nie widzisz tego, czego potrzebujesz? Ta instancja nie opublikowała kanału kontaktowego — spróbuj innej instancji Morphit lub otwórz issue na git.agorise.net/agorise/morphit.",
 		"pay_ltc": {
 			"description": "Zapłać Litecoinem"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		}
 	},
 	"feedback_reminder": {
@@ -3454,7 +3463,8 @@
 			"blurt": "Token blockchainu Blurt, na którym działa Morphit. Używany do płacenia opłat za ogłoszenia, publikowania wiadomości, podpisywania zleceń.",
 			"usdt": "Stablecoin Tether. Powiązany 1:1 z USD. Handel w czterech sieciach: ERC-20 (Ethereum), TRC-20 (Tron), SPL (Solana), BEP-20 (BNB Smart Chain). Wybierz sieć przed wysłaniem — międzysieciowo to nieodwracalne.",
 			"bch": "BCH — Bitcoin Cash, przejrzysty, zdecentralizowany, większe bloki niż BTC",
-			"ltc": "LTC — Litecoin, szybki fork Bitcoina z niskimi opłatami (od 2011). Tylko handel na Morphit. Użyj portfela Litecoin (Electrum-LTC, Litewallet, portfele sprzętowe); akceptuje adresy L… legacy, M… nowoczesne P2SH oraz ltc1… SegWit."
+			"ltc": "LTC — Litecoin, szybki fork Bitcoina z niskimi opłatami (od 2011). Tylko handel na Morphit. Użyj portfela Litecoin (Electrum-LTC, Litewallet, portfele sprzętowe); akceptuje adresy L… legacy, M… nowoczesne P2SH oraz ltc1… SegWit.",
+			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy."
 		},
 		"section_recovery": {
 			"heading": "Jeśli coś pójdzie nie tak",
@@ -3544,6 +3554,10 @@
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
 				"explain": "A two-party cooperative transaction protocol. Sender and receiver both contribute inputs, so chain observers cannot apply the standard \"all inputs come from the same wallet\" heuristic. Morphit's address-share modal includes an optional PayJoin endpoint field — if both wallets support BIP-78, the trade automatically uses PayJoin."
+			},
+			"privatesend": {
+				"name": "PrivateSend",
+				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
 			}
 		},
 		"common_practices": {
@@ -3590,6 +3604,12 @@
 				"one_line": "Transparent, decentralized — MWEB provides opt-in chain-level privacy.",
 				"intro": "Litecoin shares Bitcoin's transparency at the base layer, but adds MWEB (MimbleWimble Extension Blocks) — a chain-level opt-in privacy feature that hides amounts and breaks address linkability for transfers that opt in. This is the closest a Bitcoin-family chain comes to native privacy.",
 				"meta_description": "Privacy practices for Litecoin trades on Morphit: fresh addresses, MWEB, and what to avoid."
+			},
+			"dash": {
+				"one_line": "Transparent base layer, decentralized — PrivateSend provides masternode-coordinated opt-in mixing.",
+				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
+				"meta_description": "Privacy practices for Dash trades on Morphit: fresh addresses, PrivateSend pre-mixing, and what to avoid.",
+				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern. For the strongest privacy on Morphit, use XMR instead — its anonymity is chain-level and mandatory rather than opt-in."
 			}
 		}
 	}

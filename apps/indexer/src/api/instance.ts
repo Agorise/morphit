@@ -99,6 +99,13 @@ export interface InstanceResponse {
 		 *  back to the bundled litecoinspace.org default when
 		 *  null. */
 		ltc: string | null;
+		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		 *  Same pattern as BTC/XMR/BCH/LTC (single-network,
+		 *  single field).  Operator sets via
+		 *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL; frontend falls
+		 *  back to the bundled insight.dash.org default when
+		 *  null. */
+		dash: string | null;
 	};
 	/** Trade-only assets this instance has DISABLED via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
@@ -177,7 +184,8 @@ export function instanceRoute(config: Config): Hono {
 				btc: config.frontendBtcChatLinkUrl ?? null,
 				xmr: config.frontendXmrChatLinkUrl ?? null,
 				bch: config.frontendBchChatLinkUrl ?? null,
-				ltc: config.frontendLtcChatLinkUrl ?? null
+				ltc: config.frontendLtcChatLinkUrl ?? null,
+				dash: config.frontendDashChatLinkUrl ?? null
 			},
 			disabled_assets: config.disabledAssets,
 			operator_matrix_room: config.operatorMatrixRoom

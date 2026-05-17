@@ -814,6 +814,20 @@ export const DEFAULT_BCH_CHAT_LINK_URL =
 // override via MORPHIT_FRONTEND_LTC_CHAT_LINK_URL.
 export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 
+// Part 122 cp27 — DASH chat-link explorer URL bundled default.
+// insight.dash.org is the official Dash project's Insight
+// instance — community-led, open-source backend, no third-party
+// ad/tracking layer.  Same posture as litecoinspace.org for LTC,
+// privacy-aligned (Morphit priority #1).  Other candidates Ken
+// surveyed at addition time include blockchair.com/dash,
+// explorer.dash.org/insight/, chainz.cryptoid.info/dash/,
+// oklink.com/dash, bitinfocharts.com/dash/explorer/,
+// blockexplorer.one/dash/mainnet,
+// blockchain.com/explorer/assets/dash, and dash.tokenview.io.
+// Operators wanting a different default override via
+// MORPHIT_FRONTEND_DASH_CHAT_LINK_URL.
+export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
+
 // ─── Step 11: Fee-verifier explorer URLs ─────────────────────────
 
 export interface FeeExplorersResult {
@@ -983,6 +997,10 @@ export interface ChatLinkExplorersResult {
 	 *  as btc/xmr/bch.  Operator-tunable via the wizard or by
 	 *  setting MORPHIT_FRONTEND_LTC_CHAT_LINK_URL directly. */
 	readonly ltc: string;
+	/** Part 122 cp27 — DASH chat-link explorer URL.  Same shape
+	 *  as btc/xmr/bch/ltc.  Operator-tunable via the wizard or
+	 *  by setting MORPHIT_FRONTEND_DASH_CHAT_LINK_URL directly. */
+	readonly dash: string;
 }
 
 /** Validate a chat-link URL template.  Must be https://, must
@@ -1020,8 +1038,8 @@ export function parseChatLinkTemplate(raw: string): string | string {
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
 	step(12, TOTAL_STEPS, 'Chat-link external explorer URLs');
 	explain(
-		'When a counterparty sends a BTC, XMR, BCH, or LTC txid\n' +
-			'in chat, the Morphit frontend renders it as a clickable\n' +
+		'When a counterparty sends a BTC, XMR, BCH, LTC, or DASH\n' +
+			'txid in chat, the Morphit frontend renders it as a clickable\n' +
 			'link that opens a third-party block explorer in a new tab.\n' +
 			'This is separate from the FEE-VERIFIER explorer URLs\n' +
 			'(which are server-side and used for cross-checking\n' +
@@ -1038,10 +1056,11 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'{txid}, which Morphit substitutes at render time.\n' +
 			'\n' +
 			'Defaults:\n' +
-			'  • BTC: https://mempool.space/tx/{txid}\n' +
-			'  • XMR: https://xmrchain.net/tx/{txid}\n' +
-			'  • BCH: https://blockchair.com/bitcoin-cash/transaction/{txid}\n' +
-			'  • LTC: https://litecoinspace.org/tx/{txid}\n' +
+			'  • BTC:  https://mempool.space/tx/{txid}\n' +
+			'  • XMR:  https://xmrchain.net/tx/{txid}\n' +
+			'  • BCH:  https://blockchair.com/bitcoin-cash/transaction/{txid}\n' +
+			'  • LTC:  https://litecoinspace.org/tx/{txid}\n' +
+			'  • DASH: https://insight.dash.org/insight/tx/{txid}\n' +
 			'\n' +
 			'You can change these later by editing morphit.config.env.\n' +
 			'\n' +
@@ -1065,7 +1084,11 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── LTC chat-link URL ──\n');
 	const ltc = await editChatLinkUrl('LTC chat-link URL', DEFAULT_LTC_CHAT_LINK_URL);
 
-	return { btc, xmr, bch, ltc };
+	// ─── DASH (Part 122 cp27) ──
+	console.log('\n  ── DASH chat-link URL ──\n');
+	const dash = await editChatLinkUrl('DASH chat-link URL', DEFAULT_DASH_CHAT_LINK_URL);
+
+	return { btc, xmr, bch, ltc, dash };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -1150,7 +1173,8 @@ async function getCategoryBTickers(): Promise<readonly string[]> {
 const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze({
 	USDT: 'Tether stablecoin across 4 networks (ERC-20, TRC-20, SPL, BEP-20).\n    Most-traded stablecoin; centrally issued and freezable by Tether Inc.',
 	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.',
-	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.'
+	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.',
+	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {

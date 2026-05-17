@@ -38,7 +38,11 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// cached since boot.  Approximate live value at cp24 ship
 	// time; rough order-of-magnitude is what matters for the
 	// fallback — live providers are the canonical source.
-	LTC: 100
+	LTC: 100,
+	// Part 122 cp27 — Dash.  Same posture as the other fallbacks:
+	// rough order-of-magnitude only, used when live providers
+	// have all failed.  Approximate live DASH/USD at cp27 ship time.
+	DASH: 30
 };
 
 export const fallbackProvider: PriceProvider = {

@@ -1,6 +1,6 @@
 # Morphit — revisit list
 
-**Last maintained:** 2026-05-17 (Part 122 cp26-DD2 — AUDIT-2026-05.md catch-up for cp20-cp26-DD + DD on the catch-up.  Ken's prompt: "i think this should be done now, unless you don't: 'Deferred (single follow-up): AUDIT-2026-05.md missing cp20-cp26 entries — cumulative documentation gap going back 6 checkpoints, deserves its own focused audit-log-catchup checkpoint rather than getting buried inside a DD.' ...then immediately do a deep deep on it as well."  CATCH-UP: 8 new audit entries written (Part 122 cp20, cp21, cp22, cp23, cp24, cp25, cp26, cp26-DD).  Note: existing cp1-cp5 entries used a parallel audit-driven cp series (cp1 was "black-hat audit of cp20-cp22 delta surfaces" — those cp20-cp22 referred to Part 121).  Disambiguation note added at top of new cp20 entry.  DD ON THE CATCH-UP: 2 findings, both fixed inline: (1) HIGH — fabricated baseline number "2,964" in cp21 entry; replaced with honest disclosure that pre-cp21 baseline was unverified at audit time (cp17 anchor 3,170 + cp18/19/20 increments). (2) HIGH — path-name drift in 6+ citations: `apps/ops-cli/src/wizard/{init,step12,step13,render}.ts` (no such dir, actual = `apps/ops-cli/src/init/{steps,render,prompt}.ts`); `apps/relay/src/config.ts` (actual = `apps/relay/src/config/index.ts`); `docs/adr/0024-bch-trade-only-addition.md` (actual = `docs/adr/0024-bitcoin-cash-trade-only-addition.md`); `apps/web/src/lib/explorers/*` (actual = singular `explorer/`); `apps/web/src/lib/cheat-sheet/` (actual = `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte`); `apps/indexer/.../paymentMethods.ts` (actual = `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`).  All paths now verified on disk.  Pattern lesson: writing retrospective audit entries from memory creates path drift; future practice is to grep-verify every cited path before sealing the entry.  Audit log line count 20,734 → 21,134 (+400).  Closes prior REVISIT item DD-cp26-11 (AUDIT-2026-05.md cp20-cp26 gap).
+**Last maintained:** 2026-05-17 (Part 122 cp27 — DASH addition + PrivateSend privacy support.  Ken's prompt: "add Dash (DASH). wire it up as well, and THEN do a deep deep on our latest work." + 9 candidate Dash block explorers + "dash offers some sort of privacy features (PrivateSend), so let's support as much of that as possible".  4th Category-B trade-only asset shipped end-to-end with proactive cp23-DD-class closure: every downstream typed-consumer site (prices, payments registry, cheat-sheet, schema.sql, API.md, GRANDMA, llms files) touched THIS turn, not deferred to a follow-up DD.  Also applied cp25 FAQ-sweep discipline SAME-CHECKPOINT (3 FAQ entries × 10 locales with native conjunctions) and cp26-DD-9 phrase-anchored brag-list discipline (new entry appended at END as #279 — no renumbering, no cross-doc citation breakage).  PrivateSend support via new `'privatesend'` enum in `optInPrivacyTech` + per-asset privacy guide page at `/[lang]/privacy/dash` documenting the masternode-coordination trade-off honestly.  Bundled chat-link explorer = `https://insight.dash.org/insight/tx/{txid}` (official Dash project Insight, community-led, open-source, no third-party tracking — chosen from operator's 9-candidate survey per priority #1 privacy/anonymity).  Smoke baseline 3,306 → 3,327 (+21).  Locale parity 2,630 → 2,644 keys × 10 = 26,440 strings.  All 7 cp27-touched smokes triple-pulse green.  Closes the standing per-asset-addition checklist with cp23-DD-class + cp25-FAQ + cp26-DD9-brag-list lessons all applied same-checkpoint.  cp27-DD on this work to follow per Ken's directive — findings will live in TARBALL cp27-DD entry.)  Ken's prompt: "i think this should be done now, unless you don't: 'Deferred (single follow-up): AUDIT-2026-05.md missing cp20-cp26 entries — cumulative documentation gap going back 6 checkpoints, deserves its own focused audit-log-catchup checkpoint rather than getting buried inside a DD.' ...then immediately do a deep deep on it as well."  CATCH-UP: 8 new audit entries written (Part 122 cp20, cp21, cp22, cp23, cp24, cp25, cp26, cp26-DD).  Note: existing cp1-cp5 entries used a parallel audit-driven cp series (cp1 was "black-hat audit of cp20-cp22 delta surfaces" — those cp20-cp22 referred to Part 121).  Disambiguation note added at top of new cp20 entry.  DD ON THE CATCH-UP: 2 findings, both fixed inline: (1) HIGH — fabricated baseline number "2,964" in cp21 entry; replaced with honest disclosure that pre-cp21 baseline was unverified at audit time (cp17 anchor 3,170 + cp18/19/20 increments). (2) HIGH — path-name drift in 6+ citations: `apps/ops-cli/src/wizard/{init,step12,step13,render}.ts` (no such dir, actual = `apps/ops-cli/src/init/{steps,render,prompt}.ts`); `apps/relay/src/config.ts` (actual = `apps/relay/src/config/index.ts`); `docs/adr/0024-bch-trade-only-addition.md` (actual = `docs/adr/0024-bitcoin-cash-trade-only-addition.md`); `apps/web/src/lib/explorers/*` (actual = singular `explorer/`); `apps/web/src/lib/cheat-sheet/` (actual = `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte`); `apps/indexer/.../paymentMethods.ts` (actual = `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`).  All paths now verified on disk.  Pattern lesson: writing retrospective audit entries from memory creates path drift; future practice is to grep-verify every cited path before sealing the entry.  Audit log line count 20,734 → 21,134 (+400).  Closes prior REVISIT item DD-cp26-11 (AUDIT-2026-05.md cp20-cp26 gap).
 
 **Previous maintained:** 2026-05-17 (Part 122 cp26-DD — deep-deep on cp26.  Ken's prompt: "time for a deep deep on all that recent work. look for drift, unwired stuff, staleness and orphaned stuff in all files too."  Applied cp25 pattern lessons (i18n FAQ entries drift, brag-list entries are an asset enumeration too, every-place-X-is-mentioned sweep, end-to-end roundtrip on new interface fields).  11 findings: 9 fixed inline + 1 follow-up entry filed for cumulative gap (cp20-cp26 audit log) + 1 new REVISIT for phrase-anchored brag citations.  Notable findings: DD-cp26-4 (HIGH CRITICAL) i18n FAQ `monero_amount_jitter` stale × 10 locales (same drift pattern cp25 found in cp24 — FAQ entries described XMR-only feature after cp26 generalized it; fixed with native rewrites for en/es/fr/de + EN-fallback for the other 6).  DD-cp26-7 (HIGH) completed cp3 latent-fix's full UX path — USDT network now flows AddressPayload → wire → decode → pill → onMarkSent → markSentArgs → FundsSentModal prefill with isUsdtNetwork() validation guarding the cast.  DD-cp26-9 (HIGH) 4 docs reference brag-list by NUMBER; cp26's +5 renumber broke 7+ citations — and these were ALREADY STALE from earlier Part 120 slim that dropped entries (real shift was +5-10, not +5).  Re-aligned to current positions and filed NEW REVISIT entry recommending phrase-anchored citations to defang this entire class permanently.  DD-cp26-8 added 5 new wiring-completeness CHECK rows for the cp26 brag claims (smoke total 21 → 26, baseline 3,301 → 3,306).  Locale parity holds at 2,630 × 10 = 26,300 (no new keys, only value updates).  All 9 cp26-DD smokes triple-pulse green.  PATTERN LESSONS: (1) The cp3-fix bug class repeats — data is somewhere upstream but not plumbed end-to-end through every UI surface; per-asset-addition checklist needs "trace every interface field end-to-end." (2) Renumbering brag-list items is structurally fragile — REVISIT filed for phrase-anchored migration. (3) FAQ generalization keeps the same key; renaming would break translation history. (4) Pre-existing drift compounds with new drift — a DD on recent work surfaces drift older than the work being audited. (5) Every new brag-list claim needs a wiring-completeness CHECK row in the same checkpoint, not a follow-up DD.)
 
@@ -1933,6 +1933,47 @@ ideally under ~5KB).  No other code changes needed — every
 consumer reads the file by path.  Coordinate with the BCH
 community via Matrix `#agorise:matrix.org` or the BCH-side
 preferred channel.
+
+### DASH community-blessed logo artwork — DEFERRED 2026-05-17 (Part 122 cp27)
+
+Cp27 shipped `apps/web/static/icons/icon-dash.svg` as a
+path-based stylized "D" inside a Dash-brand-blue disc
+(#008CE7).  Same posture as the BCH and LTC placeholders:
+honest art (no `<text>` elements per ADDING-A-COIN.md,
+square viewBox, distinct visual identity) but a PLACEHOLDER,
+not a community-blessed official mark.
+
+ADR-0027 §9 documents this explicitly.  Brag-list entry #279
+and marketing copy don't claim official artwork.
+
+**To close:** drop a community-approved SVG at the same path
+(`apps/web/static/icons/icon-dash.svg`).  Same path-based
+conventions apply (no `<text>` elements, square viewBox,
+ideally under ~5KB).  No other code changes needed — every
+consumer reads the file by path.  Coordinate with the Dash
+community via Matrix `#agorise:matrix.org`, the Dash Forum,
+or the Dash Core Group.
+
+### Dash InstantSend explainer in the privacy guide — DEFERRED 2026-05-17 (Part 122 cp27)
+
+Cp27 covered PrivateSend in the `/[lang]/privacy/dash` guide,
+but Dash's other distinguishing feature — **InstantSend**
+(near-instant transaction confirmation, ~1-2 seconds via
+masternode quorum locking) — is mentioned in the asset
+explainer tooltip but not yet covered in any guide page.
+
+InstantSend isn't a privacy feature per se, so the per-asset
+privacy guide isn't its natural home.  It's a UX-relevant
+property worth surfacing somewhere — possibly in a future
+"Asset-specific transaction features" page, or as a callout
+in the cheat-sheet's DASH row.
+
+**To close:** decide where InstantSend documentation belongs
+(privacy guide caveats section, cheat-sheet expansion, new
+asset-features page, or just leave it as-is and let users
+discover via their Dash wallet).  Low-priority; users who
+care about transaction speed will discover InstantSend through
+their wallet anyway.
 
 ### Featured-slot auction — refinements SCHEDULED 2026-04-24, FULLY SHIPPED 2026-05-16 (Part 122 cp17 + cp18)
 

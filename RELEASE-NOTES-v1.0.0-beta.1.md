@@ -1,7 +1,7 @@
 # Morphit v1.0.0-beta.1
 
 First public beta of Morphit — a federated, non-custodial, no-KYC peer-to-peer
-marketplace for fiat ↔ BTC, XMR, BLURT, USDT, and BCH trades.
+marketplace for fiat ↔ BTC, XMR, BLURT, USDT, BCH, LTC, and DASH trades.
 
 This release is for community operators who want to stand up an early
 instance and for beta testers to try real trades on morphit.io.
@@ -34,14 +34,18 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Trading
 
-- Six tradable assets out of the box: **BTC, XMR, BLURT, USDT, BCH, LTC**.
+- Seven tradable assets out of the box: **BTC, XMR, BLURT, USDT, BCH, LTC, DASH**.
   USDT spans four networks (Ethereum / ERC-20, Tron / TRC-20,
   Solana / SPL, BNB Smart Chain / BEP-20) with a no-default-network
-  rule so users can't accidentally cross-send.  BCH and LTC are
-  single-network (mainnet) and trade-only like USDT — they cannot
-  pay listing fees.  LTC accepts all four address forms: legacy
-  P2PKH (L…), modern P2SH (M…), deprecated P2SH (3…), and
-  bech32/bech32m (ltc1…).
+  rule so users can't accidentally cross-send.  BCH, LTC, and DASH
+  are single-network (mainnet) and trade-only like USDT — they
+  cannot pay listing fees.  LTC accepts all four address forms:
+  legacy P2PKH (L…), modern P2SH (M…), deprecated P2SH (3…), and
+  bech32/bech32m (ltc1…).  DASH accepts both base58 forms: P2PKH
+  (X…) and P2SH (7…).  DASH ships with optional **PrivateSend**
+  awareness — a chain-level masternode-coordinated CoinJoin
+  variant — surfaced in the per-asset privacy guide; users
+  pre-mix in their Dash wallet before sharing the address.
 - Listing fees in **BLURT, BTC, or XMR** — choice belongs to the
   poster.  Default operator-treasury target is ~$0.12/order.
 - **First buy of BLURT is fee-waived** — new users can post their
@@ -116,10 +120,10 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   per-asset privacy practices surface in the address-share modal
   and at `/[lang]/privacy/{asset}`:
   - **Amount-jitter on every transparent asset** (BTC/BCH/LTC/
-    BLURT — XMR has been jittered since cp3): default ON; adds a
-    small random extra (≤999 sat for UTXO chains, ≤99 milliblurt
-    for BLURT) to defeat amount-correlation between the
-    orderbook post and the on-chain transfer.
+    DASH/BLURT — XMR has been jittered since cp3): default ON;
+    adds a small random extra (≤999 sat for UTXO chains, ≤99
+    milliblurt for BLURT) to defeat amount-correlation between
+    the orderbook post and the on-chain transfer.
   - **Client-side address-reuse warning**: localStorage-only,
     never transmitted to any Morphit server; surfaces an amber
     chip when the user is about to share an address they've
@@ -131,13 +135,23 @@ commit.  For the exhaustive claim-by-claim breakdown, read
     Wallets without PayJoin support fall back to a normal
     payment — zero footgun.
   - **Per-asset privacy guide pages** at `/privacy/{btc,xmr,
-    blurt,usdt,bch,ltc}` covering fresh-address practice,
+    blurt,usdt,bch,ltc,dash}` covering fresh-address practice,
     opt-in privacy tech (MWEB for LTC, CashFusion for BCH,
-    CoinJoin + PayJoin for BTC), universal practices, and
-    asset-specific caveats.
+    PrivateSend for DASH, CoinJoin + PayJoin for BTC), universal
+    practices, and asset-specific caveats.
   - **No wallet recommendations.**  Even reputable wallets have
     been compromised — Morphit names protocol standards, not
     wallet software.
+- **DASH PrivateSend awareness (cp27).**  Dash's masternode-
+  coordinated CoinJoin variant is documented in the per-asset
+  privacy guide at `/privacy/dash`.  Pre-mixing happens
+  entirely wallet-side BEFORE the address is shared on Morphit
+  — Morphit does not coordinate the mix, hold the funds, or
+  expose users to masternode-trust trade-offs beyond what their
+  wallet already does.  The privacy guide explains the
+  trade-offs honestly: anonymity set depends on simultaneous
+  participants, and for the strongest privacy on Morphit XMR
+  is still the right tool.
 
 ### Internationalization
 
@@ -150,7 +164,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Audit and integrity
 
-- **3,306 self-checking smoke scenarios** ship with the source.
+- **3,327 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
 - **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public

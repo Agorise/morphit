@@ -31,6 +31,11 @@ export const BCH_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  Case-insensitive at regex layer; substitution normalizes. */
 export const LTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** DASH txid (Part 122 cp27).  64 hex chars (sha256d, same as
+ *  the whole BTC family — DASH forked from Litecoin which forked
+ *  from Bitcoin, preserving the hash structure). */
+export const DASH_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -66,6 +71,38 @@ export const BUNDLED_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
 export const BUNDLED_BCH_CHAT_LINK_URL =
 	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 export const BUNDLED_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
+
+/** Bundled DASH chat-link explorer (Part 122 cp27).
+ *
+ *  Chosen from operator's nine-explorer candidate list as the
+ *  community-led, official-project equivalent of mempool.space /
+ *  litecoinspace.org for Dash:
+ *
+ *    https://insight.dash.org/insight/tx/{txid}
+ *
+ *  Rationale aligned with priority #1 (privacy / anonymity):
+ *
+ *  - insight.dash.org is the official Dash project's Insight
+ *    instance — community-led, open-source backend, no
+ *    third-party ad/tracking layer.  Same posture as
+ *    litecoinspace.org for LTC.
+ *
+ *  Other candidates evaluated and not chosen:
+ *
+ *  - blockchair.com/dash and tokenview.io/dash — multi-chain
+ *    aggregators, commercial, more tracking surface.
+ *  - oklink.com/dash and blockchain.com/explorer/assets/dash —
+ *    exchange-affiliated; conflicts with priority #2
+ *    (decentralization — no exchange chokepoint).
+ *  - bitinfocharts.com, blockexplorer.one, chainz.cryptoid.info
+ *    — third-party aggregators with various ad/analytics
+ *    overhead.
+ *  - explorer.dash.org/insight/ — official, same backend as
+ *    insight.dash.org; we use the shorter subdomain.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
+export const BUNDLED_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

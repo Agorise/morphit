@@ -132,6 +132,10 @@
 				<dt>LTC</dt>
 				<dd>{$_('cheat_sheet.section_assets.ltc')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>DASH</dt>
+				<dd>{$_('cheat_sheet.section_assets.dash')}</dd>
+			</div>
 		</dl>
 	</section>
 

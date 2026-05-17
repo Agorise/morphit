@@ -340,6 +340,19 @@ export interface Config {
 	 *  and ltc.tokenview.io. */
 	readonly frontendLtcChatLinkUrl: string | undefined;
 
+	/** Per-instance DASH chat-link explorer URL template (Part 122
+	 *  cp27).  When undefined, frontend uses its bundled default
+	 *  (`https://insight.dash.org/insight/tx/{txid}`).  Same shape
+	 *  contract as BTC/XMR/BCH/LTC: https://, contains `{txid}`,
+	 *  parses as URL.  Operators wanting a different DASH explorer
+	 *  set MORPHIT_FRONTEND_DASH_CHAT_LINK_URL; candidates Ken
+	 *  surveyed at addition time included blockchair.com/dash,
+	 *  explorer.dash.org/insight/, chainz.cryptoid.info/dash/,
+	 *  oklink.com/dash, bitinfocharts.com/dash/explorer/,
+	 *  insight.dash.org/insight/, blockexplorer.one/dash/mainnet,
+	 *  blockchain.com/explorer/assets/dash, and dash.tokenview.io. */
+	readonly frontendDashChatLinkUrl: string | undefined;
+
 	/** The operator's registered tag (matching their
 	 *  `morphit_operator_register_v1` op).  When set, the
 	 *  /v1/instance endpoint returns this so the frontend can
@@ -786,6 +799,17 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp27 — DASH chat-link explorer URL.  Same shape
+	// contract as BTC/XMR/BCH/LTC; when unset, frontend falls
+	// back to the bundled insight.dash.org default.
+	MORPHIT_FRONTEND_DASH_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// REVISIT-LIST item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
@@ -955,6 +979,7 @@ export function loadConfig(): Config {
 		frontendBtcChatLinkUrl: e.MORPHIT_FRONTEND_BTC_CHAT_LINK_URL,
 		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL,
 		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL,
-		frontendLtcChatLinkUrl: e.MORPHIT_FRONTEND_LTC_CHAT_LINK_URL
+		frontendLtcChatLinkUrl: e.MORPHIT_FRONTEND_LTC_CHAT_LINK_URL,
+		frontendDashChatLinkUrl: e.MORPHIT_FRONTEND_DASH_CHAT_LINK_URL
 	};
 }

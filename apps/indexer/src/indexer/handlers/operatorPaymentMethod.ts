@@ -59,6 +59,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'pay_usdt',
 	'pay_bch',
 	'pay_ltc',
+	'pay_dash',
 	// In Person
 	'barter_goods',
 	'cash',
