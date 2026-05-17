@@ -121,7 +121,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Audit and integrity
 
-- **3,200 self-checking smoke scenarios** ship with the source.
+- **3,217 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
 - **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public

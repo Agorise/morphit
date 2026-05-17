@@ -313,10 +313,10 @@ file in the same turn.
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
-      `Total: 3,200+ scenarios passed, 0 runners failed`
+      `Total: 3,217+ scenarios passed, 0 runners failed`
       (baseline ticks up as smokes are added each release;
-      Part 122 cp21 baseline is 3,200 = cp20 3,187 + 13 new
-      bch-trade-only scenarios).
+      Part 122 cp22 baseline is 3,217 = cp21 3,200 + 17 new
+      disabled-assets-wizard scenarios).
 
       If you see several runners fail with
       `ERR_MODULE_NOT_FOUND` errors all referencing a
@@ -347,7 +347,19 @@ file in the same turn.
       enabled by default; alternative instances may want to
       disable one or both instance-wide on philosophical
       (centralization, fork preference), regulatory, or
-      audience-specialization grounds.  Per-asset options:
+      audience-specialization grounds.
+
+      **The wizard handles this for you.**  `morphit-ops init`
+      step 13 "Trade-only asset policy" (Part 122 cp22) walks
+      through every shipped trade-only asset and asks
+      per-ticker whether to enable it.  Default for each is YES.
+      Pick "n" at the prompt to disable that asset; the wizard
+      emits the correct `MORPHIT_INDEXER_DISABLED_ASSETS=` line
+      into `morphit.config.env` for you.  Re-run the wizard
+      later to change your mind without touching the env file
+      by hand.
+
+      Equivalent post-deploy env-edit per-asset options:
       1. Accept everything (default — no config change).
       2. Refuse USDT — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`.
@@ -364,9 +376,10 @@ file in the same turn.
       Whichever stance you take, document it publicly so
       users know what your instance offers.  Memory #25
       (default-on + operator override for new assets),
-      ADR-0023 (USDT), and ADR-0024 (BCH) explain the
-      design.  *(Origin: Part 121 cp3 USDT integration,
-      Part 122 cp21 BCH integration.)*
+      ADR-0023 (USDT), ADR-0024 (BCH), and Part 122 cp22
+      (wizard step) explain the design.  *(Origin: Part 121
+      cp3 USDT integration, Part 122 cp21 BCH integration,
+      Part 122 cp22 wizard step.)*
 
 - [ ] **[blocking]** Decide BCH chat-link explorer URL.
       Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`

@@ -8023,12 +8023,35 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
 single-network trade-only assets (BCH) and multi-network ones
 (USDT).
+
+### How to set this (two paths)
+
+**At install time (recommended):** the `morphit-ops init`
+wizard, step 13 "Trade-only asset policy" (Part 122 cp22), walks
+through every shipped trade-only asset and asks per-ticker
+whether to enable it.  Default for each is YES per Memory #25.
+The wizard emits the right
+`MORPHIT_INDEXER_DISABLED_ASSETS=` line into
+`morphit.config.env` — no manual env-file editing needed.
+
+**Post-deploy or on an existing instance:** edit
+`MORPHIT_INDEXER_DISABLED_ASSETS` directly in
+`/etc/morphit/morphit.config.env` (or wherever your
+`EnvironmentFile=` points) and restart the indexer service.
+Browsers see the change at most 5 minutes after restart (the
+`/v1/instance` response carries a 5-minute `Cache-Control`
+header).
+
+Both paths write the same env var — the wizard is a UX
+affordance, not a separate code path.  Re-running the wizard
+later (via `morphit-ops init` again) will let you change your
+mind without touching the env file by hand.
 
 ### Disabling specific assets instance-wide
 
@@ -8082,6 +8105,17 @@ is shared across the federation), but your indexer refuses to
 accept NEW orders for that asset from your own users.  Users
 who prefer an instance that supports the asset switch to a
 different Morphit operator — federation is the point.
+
+**Do NOT disable Category-A (fee-payable) assets — BTC, XMR,
+BLURT.**  The wizard step 13 cannot offer this (the
+Category-B filter excludes them).  An operator manually editing
+the env file to set `MORPHIT_INDEXER_DISABLED_ASSETS="BLURT"`
+or similar will create a weird state: trading in that asset is
+disabled, but listing-fee payments in that asset still work
+(fee_method enum is independent of asset registry per Memory
+#23).  Don't do this.  If you genuinely don't want to trade
+BTC/XMR/BLURT, you're running a different product — start by
+opening an issue describing what you actually want.
 
 **Why the canonical morphit.io ships with USDT enabled:** active
 traders find dollar-stable assets useful for parking value

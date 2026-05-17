@@ -11,9 +11,9 @@
  * answers and writes morphit.config.env at the end after the
  * operator approves the review.
  *
- * Why one big file: 9 steps × ~50 LOC each is within readable
- * limits, and consolidating them lets the wizard tone stay
- * consistent without cross-file imports for shared phrasing.
+ * Why one big file: 18 steps × ~50-100 LOC each is within
+ * readable limits, and consolidating them lets the wizard tone
+ * stay consistent without cross-file imports for shared phrasing.
  */
 
 import {
@@ -42,7 +42,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import type { ListingFeeResult } from './render.ts';
 
-const TOTAL_STEPS = 17;
+const TOTAL_STEPS = 18;
 
 // ─── Step 1: Instance name ───────────────────────────────────────
 
@@ -575,7 +575,7 @@ export interface SeoResult {
 }
 
 export async function stepSeo(): Promise<SeoResult> {
-	step(14, TOTAL_STEPS, 'SEO override (optional)');
+	step(15, TOTAL_STEPS, 'SEO override (optional)');
 	const wantsOverride = await askYesNo(
 		'Override homepage SEO copy (title/description/keywords)?',
 		false
@@ -593,7 +593,7 @@ export async function stepSeo(): Promise<SeoResult> {
 	};
 }
 
-// ─── Step 12: Daily DB backup automation ─────────────────────────
+// ─── Step 16: Daily DB backup automation ─────────────────────────
 //
 // Default = enabled.  An operator who's never set up backups
 // before will have backups by default; one who wants to
@@ -626,7 +626,7 @@ export interface BackupResult {
 }
 
 export async function stepBackup(): Promise<BackupResult> {
-	step(15, TOTAL_STEPS, 'Daily DB backup');
+	step(16, TOTAL_STEPS, 'Daily DB backup');
 	explain(
 		"The indexer's PostgreSQL database is rebuildable from the\n" +
 			'Blurt blockchain in case of total loss, but a same-day\n' +
@@ -1078,7 +1078,145 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
 	}
 }
 
-// ─── Step 13: Listing fee + fallback BLURT price ─────────────────
+// ─── Step 13: Trade-only asset policy (Part 122 cp22) ────────────
+
+/**
+ * Part 122 cp22 — interactive disable-asset wizard step.
+ *
+ * Morphit ships every Category-B (trade-only) asset enabled by
+ * default on a new instance per Memory #25.  This step lets the
+ * operator opt out per-asset WITHOUT having to edit the rendered
+ * env file by hand afterward.  The result feeds
+ * `MORPHIT_INDEXER_DISABLED_ASSETS` in morphit.config.env.
+ *
+ * Category-B = `canBeTraded && !canPayListingFee` from the
+ * canonical asset registry.  Currently: USDT, BCH.  Any future
+ * trade-only addition (Dash, Litecoin, etc.) will surface here
+ * automatically — the step iterates the registry filtered by
+ * the Category-B predicate, so no per-asset wizard code is
+ * needed when new tickers ship.
+ *
+ * Category-A (fee-payable) assets — BTC, XMR, BLURT — do NOT
+ * appear in this step.  They are load-bearing for the listing
+ * fee mechanism (fee_method enum-frozen per Memory #23) and
+ * cannot be disabled instance-wide without breaking trading
+ * altogether.  An operator who genuinely wants to disable them
+ * is running a different product.
+ */
+
+export interface DisabledAssetsResult {
+	/** Uppercase tickers the operator has chosen to disable on
+	 *  this instance.  Empty means accept every trade-only
+	 *  asset (the default).  Renders into
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"` (alphabetized
+	 *  for stable env-file output). */
+	readonly disabledTickers: readonly string[];
+}
+
+/** Return the Category-B (trade-only) asset tickers from the
+ *  canonical registry.  Imported lazily so the wizard step can
+ *  be tested without dragging the full asset-registry into the
+ *  ops-cli unit-test surface. */
+async function getCategoryBTickers(): Promise<readonly string[]> {
+	const { ASSETS } = await import('@morphit/asset-registry');
+	return ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map((a) => a.ticker);
+}
+
+/** Brief operator-facing description per known Category-B
+ *  ticker.  Wizard-side only — the canonical registry stays
+ *  display-string-free.  Future trade-only additions should add
+ *  an entry here; unknown tickers fall back to a generic line. */
+const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze({
+	USDT: 'Tether stablecoin across 4 networks (ERC-20, TRC-20, SPL, BEP-20).\n    Most-traded stablecoin; centrally issued and freezable by Tether Inc.',
+	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.'
+});
+
+export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
+	step(13, TOTAL_STEPS, 'Trade-only asset policy');
+	const categoryBTickers = await getCategoryBTickers();
+	if (categoryBTickers.length === 0) {
+		// Defensive: registry could theoretically ship without any
+		// Category-B asset.  Skip the step cleanly rather than
+		// presenting an empty prompt.
+		console.log(
+			'  This Morphit build ships no trade-only assets; nothing to\n' +
+				'  disable.  Skipping.\n'
+		);
+		return { disabledTickers: [] };
+	}
+
+	explain(
+		'Trade-only assets are coins users can buy and sell on\n' +
+			'your instance but CANNOT use to pay listing fees.  Listing\n' +
+			'fees remain BLURT, BTC, or XMR only — that wire format is\n' +
+			'frozen (per ADR-0011 + ADR-0023 + ADR-0024).\n' +
+			'\n' +
+			'Every trade-only asset ships ENABLED by default on a fresh\n' +
+			"instance.  You can disable any of them below if you don't\n" +
+			'want your users to trade them on YOUR node.\n' +
+			'\n' +
+			'Federation note: disabling an asset is operator-scoped, not\n' +
+			"federation-scoped.  Your users still SEE peer instances'\n" +
+			'orders for that asset in their orderbook (chain history is\n' +
+			'shared); they just cannot POST new orders for it from your\n' +
+			'instance.\n' +
+			'\n' +
+			'Reasonable reasons to disable an asset:\n' +
+			'  • USDT — operator preferring privacy-first or\n' +
+			'    decentralization-first posture; USDT is centrally\n' +
+			'    controllable (Tether Inc. can freeze addresses).\n' +
+			'  • BCH — operator preferring BTC + XMR only as the\n' +
+			'    Bitcoin-family rail.\n' +
+			'  • Any — operator wants to specialize their instance.\n' +
+			'\n' +
+			'Skipping any answer keeps that asset ENABLED (the default).\n' +
+			"You can change your mind later by editing the\n" +
+			'MORPHIT_INDEXER_DISABLED_ASSETS env var or re-running this\n' +
+			'wizard.'
+	);
+
+	const disabled: string[] = [];
+	for (const ticker of categoryBTickers) {
+		const description =
+			CATEGORY_B_DESCRIPTIONS[ticker] ??
+			'Trade-only asset (cannot pay listing fees).';
+		console.log(`\n  ${ticker}\n    ${description}\n`);
+		const keepEnabled = await askYesNo(
+			`  Enable ${ticker} trading on this instance?`,
+			true
+		);
+		if (!keepEnabled) {
+			disabled.push(ticker);
+			console.log(
+				`    ↳ ${ticker} will be DISABLED.  Your users will see\n` +
+					`      an inline error if they try to post a new ${ticker} order;\n` +
+					`      peer-instance ${ticker} orders still appear in the orderbook.\n`
+			);
+		} else {
+			console.log(`    ↳ ${ticker} stays enabled (default).\n`);
+		}
+	}
+
+	// Summary so the operator sees the final stance before
+	// proceeding (catches misclicks).
+	if (disabled.length === 0) {
+		console.log('  ✓ All trade-only assets remain enabled (default posture).');
+	} else {
+		const list = disabled.slice().sort().join(', ');
+		console.log(`  ✓ Disabling ${disabled.length} asset(s): ${list}`);
+		console.log(`    These will be written to MORPHIT_INDEXER_DISABLED_ASSETS\n    in morphit.config.env.`);
+	}
+
+	return {
+		// Alphabetize for stable env-file output.  Indexer's
+		// disabled-assets parser is case-tolerant + whitespace-
+		// tolerant + comma-trailing-tolerant, but a stable order
+		// makes the env file diff-friendly across re-runs.
+		disabledTickers: disabled.slice().sort()
+	};
+}
+
+// ─── Step 14: Listing fee + fallback BLURT price ─────────────────
 
 /**
  * Part 110 — operator-configurable listing fee USD target and
@@ -1108,7 +1246,7 @@ const DEFAULT_LISTING_FEE_XMR_PICONERO = 781_250_000;
 const DEFAULT_FALLBACK_BLURT_PRICE_USD = 0.002;
 
 export async function stepListingFee(): Promise<ListingFeeResult> {
-	step(13, TOTAL_STEPS, 'Listing fee + fallback BLURT price');
+	step(14, TOTAL_STEPS, 'Listing fee + fallback BLURT price');
 	explain(
 		'Two operator-tunable amounts:\n' +
 			'\n' +
@@ -1228,7 +1366,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	};
 }
 
-// ─── Step 16: Operator tag (Part 111) ────────────────────────────
+// ─── Step 17: Operator tag (Part 111) ────────────────────────────
 
 /** Result of step 16 — the operator tag for this instance. */
 export interface OperatorTagResult {
@@ -1266,7 +1404,7 @@ const OPERATOR_TAG_MAX = 64;
  * ops as "ours" and queues nothing.
  */
 export async function stepOperatorTag(): Promise<OperatorTagResult> {
-	step(16, TOTAL_STEPS, 'Operator tag');
+	step(17, TOTAL_STEPS, 'Operator tag');
 	explain(
 		'Your operator tag identifies this instance in the\n' +
 			'federation.  Each Morphit order op carries it, and\n' +
@@ -1319,7 +1457,7 @@ export async function stepOperatorTag(): Promise<OperatorTagResult> {
 	}
 }
 
-// ─── Step 17/18: Matrix surfaces ─────────────────────────────────
+// ─── Step 18: Matrix surfaces ────────────────────────────────────
 
 import {
 	parseMxid,

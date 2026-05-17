@@ -1877,15 +1877,30 @@ format-frozen at BLURT/BTC/XMR per memory #23 and ADR-0011).
 
 ### Decide your operator stance
 
+The `morphit-ops init` wizard, step 13 "Trade-only asset
+policy" (Part 122 cp22), walks through every shipped trade-only
+asset and asks per-ticker whether to enable it on your
+instance.  Default is YES for each (per Memory #25).  Choose
+"n" at the prompt to disable that asset; the wizard emits the
+correct `MORPHIT_INDEXER_DISABLED_ASSETS=` line into
+`morphit.config.env` for you — no manual env-file editing.
+
+You can re-run the wizard later to change your mind, or edit
+the env var directly.  Both paths write the same line.
+
 Reasonable positions for an operator:
 
 1. **Accept USDT and BCH** (default) — the canonical morphit.io
    posture.  Users have asked for stablecoin trading and for a
-   wider Bitcoin-fork rail.  No config change needed.
+   wider Bitcoin-fork rail.  Pick the default "Y" at each
+   prompt; the wizard emits `MORPHIT_INDEXER_DISABLED_ASSETS=""`.
 
-2. **Refuse one specific asset instance-wide** — your node will
-   not write new orders for that asset to its DB.  Add to your
-   indexer config:
+2. **Refuse one specific asset instance-wide** — pick "n" for
+   that asset at the wizard prompt; the wizard emits e.g.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"` or
+   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
+
+   Equivalent post-deploy env-file edit:
 
    ```bash
    # Refuse USDT only
@@ -1900,7 +1915,11 @@ Reasonable positions for an operator:
    read-only orderbook feeds (the chain is shared), but your
    own users get an inline error if they try to post one.
 
-3. **Refuse multiple assets** — comma-separated:
+3. **Refuse multiple assets** — pick "n" at multiple wizard
+   prompts; the wizard alphabetizes and emits e.g.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"`.
+
+   Equivalent post-deploy env-file edit:
 
    ```bash
    # Refuse both stablecoins and Bitcoin Cash (BTC + XMR + BLURT only)

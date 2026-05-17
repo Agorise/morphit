@@ -9,6 +9,23 @@
 Category A/B trade-only pattern that BCH follows), ADR-0011
 (fee model + fee_method enum-freeze).
 
+---
+
+**2026-05-17 (Part 122 cp22) forward-note — operator-stance UX
+closure.**  Same closure as ADR-0023's cp22 forward-note: the
+`MORPHIT_INDEXER_DISABLED_ASSETS` env var path established here
+remains the canonical contract; cp22 adds an interactive wizard
+step that walks operators through enabling/disabling each
+trade-only asset (USDT and BCH today, plus any future
+Category-B addition) and emits the right env-file line without
+manual editing.  The wizard iterates the canonical registry
+filtered to `canBeTraded && !canPayListingFee`, so future
+trade-only assets surface in the wizard automatically without
+per-asset wizard code changes.  Discoverability win for
+operators; design contract from this ADR unchanged.
+
+---
+
 ## Context
 
 After USDT shipped as Morphit's first Category-B trade-only

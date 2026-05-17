@@ -10,6 +10,23 @@ fee_method enum-freeze forward-note), ADR-0021 (payment-method
 registry — fiat rails, intentionally separate from
 trade-asset registry).
 
+---
+
+**2026-05-17 (Part 122 cp22) forward-note — operator-stance UX
+closure.**  This ADR established `MORPHIT_INDEXER_DISABLED_ASSETS`
+as the operator-stance knob for USDT.  Part 122 cp22 shipped an
+interactive `morphit-ops init` wizard step ("Trade-only asset
+policy", step 13) that walks through every Category-B asset and
+asks per-ticker whether to enable it, then emits the right
+`MORPHIT_INDEXER_DISABLED_ASSETS=` line into morphit.config.env.
+Operators can decide their USDT stance at install time without
+needing to know which env var to edit afterward.  The env-var
+path still works (and is what the wizard writes), so this is
+purely a UX affordance — the design contract from this ADR is
+unchanged.
+
+---
+
 ## Context
 
 Morphit's pre-launch asset registry shipped with three trade-asset
