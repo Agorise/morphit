@@ -65,6 +65,12 @@ export interface InstanceState {
 	readonly chat_link_urls: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
+		/** Part 122 cp21 — BCH chat-link explorer URL override.
+		 *  Single-network like BTC/XMR (no per-network sub-map).
+		 *  Operator can override the bundled
+		 *  blockchair.com/bitcoin-cash default via
+		 *  MORPHIT_FRONTEND_BCH_CHAT_LINK_URL. */
+		readonly bch: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -124,6 +130,7 @@ const FALLBACK: InstanceState = {
 	chat_link_urls: {
 		btc: null,
 		xmr: null,
+		bch: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 	},
 	disabled_assets: [],
@@ -202,6 +209,7 @@ export function initInstance(): Promise<void> {
 						? {
 								btc: result.data.chat_link_urls.btc ?? null,
 								xmr: result.data.chat_link_urls.xmr ?? null,
+								bch: result.data.chat_link_urls.bch ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -212,6 +220,7 @@ export function initInstance(): Promise<void> {
 						: {
 								btc: null,
 								xmr: null,
+								bch: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],

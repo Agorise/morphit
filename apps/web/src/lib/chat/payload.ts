@@ -106,6 +106,26 @@ const XMR_TXID_RE = /^[0-9a-f]{64}$/;
  *  truncated SHA-256 of the serialized transaction). */
 const BLURT_TXID_RE = /^[0-9a-f]{40}$/;
 
+/** BCH mainnet address regexes (Part 122 cp21 BCH addition).
+ *  Accept both CashAddr (modern BCH standard) and legacy P2PKH/
+ *  P2SH (still emitted by some BCH wallets).  See the canonical
+ *  registry's BCH addressShape doc-comment for full rationale. */
+// CashAddr WITH `bitcoincash:` prefix: 12-char prefix + 42-char
+// body (q or p start + 41 lowercase base32 chars).
+const BCH_CASHADDR_PREFIXED_RE = /^bitcoincash:[qp][a-z0-9]{41}$/;
+// CashAddr WITHOUT prefix: same 42-char body alone.  Most modern
+// BCH wallets emit this form by default.
+const BCH_CASHADDR_BARE_RE = /^[qp][a-z0-9]{41}$/;
+// Legacy P2PKH: starts with 1, 26-35 chars total (same shape as
+// BTC legacy — chain history before the 2017 fork shares it).
+const BCH_LEGACY_P2PKH_RE = /^1[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+// Legacy P2SH: starts with 3, same charset.
+const BCH_LEGACY_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
+
+/** BCH txid: 64 lowercase hex chars (sha256d of the transaction —
+ *  same hash function as BTC). */
+const BCH_TXID_RE = /^[0-9a-f]{64}$/;
+
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
  *  account-name regex as the rest of Morphit (post chat-audit
@@ -283,8 +303,12 @@ function noteHasForbiddenChars(s: string): boolean {
  *  method === 'usdt', the `network` field on AddressPayload
  *  and FundsSentPayload is REQUIRED (one of 'erc20', 'trc20',
  *  'spl', 'bep20').  The decoder rejects USDT payloads
- *  without a network. */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt';
+ *  without a network.
+ *
+ *  Part 122 cp21 BCH addition: 'bch' is single-network (mainnet
+ *  only).  No network field required.  Addresses come in CashAddr
+ *  or legacy formats — see BCH_*_RE constants. */
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -398,12 +422,35 @@ export function isValidUsdtTxid(s: string): boolean {
 	return false;
 }
 
+/** Validate a BCH address shape (Part 122 cp21).  Accepts both
+ *  CashAddr (with or without `bitcoincash:` prefix) and legacy
+ *  P2PKH/P2SH formats — most modern BCH wallets emit CashAddr,
+ *  but many still accept and display legacy.  Permissive shape
+ *  check; the receiving wallet does checksum validation. */
+export function isValidBchAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return (
+		BCH_CASHADDR_PREFIXED_RE.test(s) ||
+		BCH_CASHADDR_BARE_RE.test(s) ||
+		BCH_LEGACY_P2PKH_RE.test(s) ||
+		BCH_LEGACY_P2SH_RE.test(s)
+	);
+}
+
+/** Validate a BCH txid shape.  Same 64-char lowercase hex
+ *  format as BTC (sha256d of the transaction). */
+export function isValidBchTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return BCH_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
 	if (method === 'xmr') return isValidXmrAddress(addr);
 	if (method === 'blurt') return isValidBlurtAccount(addr);
 	if (method === 'usdt') return isValidUsdtAddress(addr);
+	if (method === 'bch') return isValidBchAddress(addr);
 	return false;
 }
 
@@ -414,6 +461,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'xmr') return XMR_TXID_RE.test(txid);
 	if (method === 'blurt') return BLURT_TXID_RE.test(txid);
 	if (method === 'usdt') return isValidUsdtTxid(txid);
+	if (method === 'bch') return isValidBchTxid(txid);
 	return false;
 }
 
@@ -429,7 +477,13 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 export function encodeAddressPayload(p: AddressPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_addr') throw new Error('payload: wrong kind');
-	if (p.method !== 'btc' && p.method !== 'xmr' && p.method !== 'blurt') {
+	if (
+		p.method !== 'btc' &&
+		p.method !== 'xmr' &&
+		p.method !== 'blurt' &&
+		p.method !== 'usdt' &&
+		p.method !== 'bch'
+	) {
 		throw new Error('payload: invalid method');
 	}
 	if (!isValidAddress(p.method, p.address)) {
@@ -503,7 +557,13 @@ export function encodeAddressPayload(p: AddressPayload): string {
 export function encodeFundsSentPayload(p: FundsSentPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_funds_sent') throw new Error('payload: wrong kind');
-	if (p.method !== 'btc' && p.method !== 'xmr' && p.method !== 'blurt') {
+	if (
+		p.method !== 'btc' &&
+		p.method !== 'xmr' &&
+		p.method !== 'blurt' &&
+		p.method !== 'usdt' &&
+		p.method !== 'bch'
+	) {
 		throw new Error('payload: invalid method');
 	}
 	if (!isValidTxid(p.method, p.txid)) {
@@ -594,7 +654,13 @@ export function decodePayload(plaintext: string): DecodeResult {
 
 	if (o.kind === 'morphit_addr') {
 		if (typeof o.method !== 'string') return { kind: 'plaintext' };
-		if (o.method !== 'btc' && o.method !== 'xmr' && o.method !== 'blurt')
+		if (
+			o.method !== 'btc' &&
+			o.method !== 'xmr' &&
+			o.method !== 'blurt' &&
+			o.method !== 'usdt' &&
+			o.method !== 'bch'
+		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
 		if (!isValidAddress(o.method, o.address)) return { kind: 'plaintext' };
@@ -611,7 +677,13 @@ export function decodePayload(plaintext: string): DecodeResult {
 
 	if (o.kind === 'morphit_funds_sent') {
 		if (typeof o.method !== 'string') return { kind: 'plaintext' };
-		if (o.method !== 'btc' && o.method !== 'xmr' && o.method !== 'blurt')
+		if (
+			o.method !== 'btc' &&
+			o.method !== 'xmr' &&
+			o.method !== 'blurt' &&
+			o.method !== 'usdt' &&
+			o.method !== 'bch'
+		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
 		if (!isValidTxid(o.method, o.txid)) return { kind: 'plaintext' };
@@ -747,6 +819,21 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('tx_amount', p.amount);
 		const qs = params.toString();
 		return `monero:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'bch') {
+		// Bitcoin Cash uses the `bitcoincash:` URI scheme per the
+		// CashAddr spec (BIP-21 derivative for BCH).  If the
+		// address is already in `bitcoincash:` prefixed form, use
+		// it verbatim; if bare (CashAddr without prefix, or legacy
+		// 1.../3...), wrap with the scheme.  Most BCH wallets
+		// accept both forms.  `amount` parameter follows BIP-21
+		// conventions (decimal BCH).
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		const addr = p.address.startsWith('bitcoincash:')
+			? p.address
+			: `bitcoincash:${p.address}`;
+		return `${addr}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

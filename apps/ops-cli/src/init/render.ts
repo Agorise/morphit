@@ -460,11 +460,15 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# Defaults:');
 	lines.push('#   BTC: https://mempool.space/tx/{txid}');
 	lines.push('#   XMR: https://xmrchain.net/tx/{txid}');
+	lines.push('#   BCH: https://blockchair.com/bitcoin-cash/transaction/{txid}');
 	lines.push(
 		`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.btc)}`
 	);
 	lines.push(
 		`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xmr)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bch)}`
 	);
 	lines.push('');
 

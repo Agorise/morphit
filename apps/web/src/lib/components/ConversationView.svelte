@@ -261,7 +261,7 @@
 	 *  pill-level Mark-as-sent button (with prefill) share the
 	 *  modal but supply different starting state. */
 	let markSentArgs = $state<{
-		method: 'btc' | 'xmr';
+		method: 'btc' | 'xmr' | 'usdt' | 'bch';
 		amount?: string;
 		orderPermlink?: string;
 	} | null>(null);
@@ -370,7 +370,7 @@
 	 *  (scanning the QR / pasting the address), then comes back
 	 *  to this modal with the txid in hand. */
 	function handleMarkSentClick(args: {
-		method: 'btc' | 'xmr';
+		method: 'btc' | 'xmr' | 'usdt' | 'bch';
 		amount?: string;
 		orderPermlink?: string;
 	}): void {

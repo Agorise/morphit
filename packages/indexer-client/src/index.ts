@@ -690,6 +690,12 @@ export interface InstanceResponse {
 	readonly chat_link_urls?: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
+		/** Part 122 cp21 — BCH chat-link explorer URL override.
+		 *  Optional; older indexer builds (pre-Part-122-cp21) omit
+		 *  the field.  When present, either an `https://…/{txid}…`
+		 *  template (operator override) or null (use bundled
+		 *  blockchair.com/bitcoin-cash default). */
+		readonly bch?: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (pre-Part-121)
 		 *  omit this field, in which case the frontend uses its

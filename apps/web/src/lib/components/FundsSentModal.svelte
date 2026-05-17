@@ -112,7 +112,7 @@
 
 	const txidError = $derived.by(() => {
 		if (trimmedTxid.length === 0) return null;
-		// BLURT txids are 40 hex chars; BTC/XMR are 64; USDT
+		// BLURT txids are 40 hex chars; BTC/XMR/BCH are 64; USDT
 		// varies by network (32-88 chars depending on chain).
 		const minTyped = method === 'blurt' ? 20 : 32;
 		if (trimmedTxid.length < minTyped) return null;
@@ -239,6 +239,18 @@
 				onclick={() => selectMethod('usdt')}
 			>
 				{$_('chat.address.method_usdt')}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'bch'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'bch'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('bch')}
+			>
+				{$_('chat.address.method_bch')}
 			</button>
 		</div>
 

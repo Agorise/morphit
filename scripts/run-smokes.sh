@@ -148,6 +148,7 @@ SMOKES=(
 	"packages/asset-registry:fee-method-enum-frozen-smoke"
 	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 	"packages/asset-registry:usdt-trade-only-smoke"
+	"packages/asset-registry:bch-trade-only-smoke"
 	"apps/ops-cli:ansible-structural-smoke"
 	"apps/ops-cli:ansible-systemd-user-consistency-smoke"
 	"apps/ops-cli:ansible-env-var-consumer-smoke"

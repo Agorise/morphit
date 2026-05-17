@@ -795,6 +795,13 @@ export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = [
  *  the frontend substitutes the txid at render time. */
 export const DEFAULT_BTC_CHAT_LINK_URL = 'https://mempool.space/tx/{txid}';
 export const DEFAULT_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
+// Part 122 cp21 — BCH chat-link explorer URL default.  Operator
+// can override; alternatives surveyed at Part 122 cp21 addition
+// time include blockchain.com/explorer, bitinfocharts.com,
+// bchexplorer.info, oklink.com/bch, bch.tokenview.io,
+// blockexplorer.one, explorer.cloverpool.com.
+export const DEFAULT_BCH_CHAT_LINK_URL =
+	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 
 // ─── Step 11: Fee-verifier explorer URLs ─────────────────────────
 
@@ -957,6 +964,10 @@ async function editExplorerList(
 export interface ChatLinkExplorersResult {
 	readonly btc: string;
 	readonly xmr: string;
+	/** Part 122 cp21 — BCH chat-link explorer URL.  Same shape
+	 *  as btc/xmr.  Operator-tunable via the wizard or by setting
+	 *  MORPHIT_FRONTEND_BCH_CHAT_LINK_URL directly. */
+	readonly bch: string;
 }
 
 /** Validate a chat-link URL template.  Must be https://, must
@@ -994,8 +1005,8 @@ export function parseChatLinkTemplate(raw: string): string | string {
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
 	step(12, TOTAL_STEPS, 'Chat-link external explorer URLs');
 	explain(
-		'When a counterparty sends a BTC or XMR txid in chat, the\n' +
-			'Morphit frontend renders it as a clickable link that opens\n' +
+		'When a counterparty sends a BTC, XMR, or BCH txid in chat,\n' +
+			'the Morphit frontend renders it as a clickable link that opens\n' +
 			'a third-party block explorer in a new tab.  This is\n' +
 			'separate from the FEE-VERIFIER explorer URLs (which are\n' +
 			'server-side and used for cross-checking payment claims).\n' +
@@ -1013,6 +1024,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'Defaults:\n' +
 			'  • BTC: https://mempool.space/tx/{txid}\n' +
 			'  • XMR: https://xmrchain.net/tx/{txid}\n' +
+			'  • BCH: https://blockchair.com/bitcoin-cash/transaction/{txid}\n' +
 			'\n' +
 			'You can change these later by editing morphit.config.env.\n' +
 			'\n' +
@@ -1028,7 +1040,11 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── XMR chat-link URL ──\n');
 	const xmr = await editChatLinkUrl('XMR chat-link URL', DEFAULT_XMR_CHAT_LINK_URL);
 
-	return { btc, xmr };
+	// ─── BCH (Part 122 cp21) ──
+	console.log('\n  ── BCH chat-link URL ──\n');
+	const bch = await editChatLinkUrl('BCH chat-link URL', DEFAULT_BCH_CHAT_LINK_URL);
+
+	return { btc, xmr, bch };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {

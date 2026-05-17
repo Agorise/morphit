@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bitcoin Cash logo placeholder (Part 122 cp21).  Path-based
+     stylized "B" inside a brand-green circle; matches the BCH
+     community visual identity (lime/green, distinct from BTC's
+     amber, USDT's amber-400, XMR's orange, BLURT's emerald).
+     No <text> elements (font fallback issues per ADDING-A-COIN.md).
+     Square viewBox 0 0 1024 1024 to match the convention of the
+     other icon-*.svg files in this directory.
+
+     Placeholder pending official artwork from the BCH community.
+     Replace by dropping a community-approved SVG in this same
+     path; no other code changes needed. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
+     version="1.1" shape-rendering="geometricPrecision"
+     text-rendering="geometricPrecision" image-rendering="optimizeQuality"
+     fill-rule="evenodd" clip-rule="evenodd">
+  <!-- Outer disc: Bitcoin Cash brand green (#0AC18E).  Sourced
+       from the BCH community's standard color palette. -->
+  <circle cx="512" cy="512" r="480" fill="#0AC18E"/>
+  <!-- Vertical bars (BCH "B" extender strokes) -->
+  <path fill="#FFFFFF" fill-rule="nonzero"
+        d="M 388 224 L 388 800 L 444 800 L 444 224 Z
+           M 580 224 L 580 800 L 636 800 L 636 224 Z"/>
+  <!-- Stylized "B" — two stacked rounded bumps, outlined-path
+       style mirroring the BTC logo's white-on-disc treatment.
+       Upper bump (smaller, narrower); lower bump (larger). -->
+  <path fill="#FFFFFF" fill-rule="nonzero"
+        d="M 360 304
+           L 360 488
+           L 596 488
+           C 696 488 760 446 760 396
+           C 760 346 696 304 596 304
+           Z
+           M 432 360
+           L 596 360
+           C 650 360 688 376 688 396
+           C 688 416 650 432 596 432
+           L 432 432
+           Z"/>
+  <path fill="#FFFFFF" fill-rule="nonzero"
+        d="M 360 504
+           L 360 720
+           L 620 720
+           C 728 720 800 672 800 612
+           C 800 552 728 504 620 504
+           Z
+           M 432 560
+           L 620 560
+           C 686 560 728 584 728 612
+           C 728 640 686 664 620 664
+           L 432 664
+           Z"/>
+</svg>

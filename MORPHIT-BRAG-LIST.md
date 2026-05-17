@@ -1,10 +1,10 @@
 # The Morphit Brag List
 
-**Why a peer-to-peer fiat ↔ Bitcoin / Monero / Blurt marketplace that's actually non-custodial, actually no-KYC, and actually federated beats every centralized exchange and every fake "DEX" that calls itself decentralized.**
+**Why a peer-to-peer fiat ↔ Bitcoin / Monero / Blurt / USDT / Bitcoin Cash marketplace that's actually non-custodial, actually no-KYC, and actually federated beats every centralized exchange and every fake "DEX" that calls itself decentralized.**
 
 A reference list of 250+ specific things Morphit does — privacy, security, decentralization, Monero-friendliness, anti-Sybil economics, operator independence — written for sharing, citing, and arguing with.
 
-> Keywords: peer-to-peer crypto exchange, P2P Bitcoin marketplace, P2P Monero marketplace, no-KYC exchange, non-custodial DEX, federated marketplace, Blurt, Monero subaddress, amount jitter, view key privacy, AGPL crypto exchange, censorship-resistant trading, Tor onion service, I2P b32 service, Lokinet, Nostr, GrapheneOS, F-Droid, Aptoide, decentralized orderbook, on-chain reputation, end-to-end encrypted chat, on-chain chat ciphertext, STRIDE threat model, reproducible build, multi-explorer attestation, mempool.space, xmrchain.net, sock-puppet detection, Sybil-resistant, privacy guides, kycnot.me
+> Keywords: peer-to-peer crypto exchange, P2P Bitcoin marketplace, P2P Monero marketplace, P2P Bitcoin Cash marketplace, no-KYC exchange, non-custodial DEX, federated marketplace, Blurt, USDT P2P, BCH P2P, CashAddr, Monero subaddress, amount jitter, view key privacy, AGPL crypto exchange, censorship-resistant trading, Tor onion service, I2P b32 service, Lokinet, Nostr, GrapheneOS, F-Droid, Aptoide, decentralized orderbook, on-chain reputation, end-to-end encrypted chat, on-chain chat ciphertext, STRIDE threat model, reproducible build, multi-explorer attestation, mempool.space, xmrchain.net, blockchair.com, sock-puppet detection, Sybil-resistant, privacy guides, kycnot.me
 
 ---
 
@@ -191,7 +191,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 127. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
 128. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
-129. **22 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0023 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network.
+129. **23 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0024 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network, ADR-0024 BCH trade-only addition.
 130. **46 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 131. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
 132. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
@@ -251,7 +251,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 168. **LocalBitcoins shut down.** Single-operator failure killed the platform. Morphit is federated; no single shutdown can do this.
 169. **Hodl Hodl uses on-chain Bitcoin escrow.** That's better than CEX custody but still escrow. Morphit is fully no-escrow.
 170. **Bisq has been hacked twice, user funds stolen. They require you to run their desktop app, a Tor node, and provide them with collateral.** Morphit runs in any browser, requires no collateral, and let's the user choose options like Tor, i2p, Lokinet, etc.
-171. **Haveno/RetoSwap is Monero-only, non-PWA, not Grandma-friendly, requires you to run a node, and trust them with a required security deposit. Platform relies on unbonded, uncapped, non-random, trusted arbitrators with multisig. Arbiters and taker bots can collude for a "rug pull".** Morphit is super lightweight and trades BTC, XMR, BLURT, and USDT (across four networks) out of the box; same multi-node federation, same orderbook, same reputation, zero third-party trust. New assets added as the community asks for them — the asset-registry pattern means days, not months.
+171. **Haveno/RetoSwap is Monero-only, non-PWA, not Grandma-friendly, requires you to run a node, and trust them with a required security deposit. Platform relies on unbonded, uncapped, non-random, trusted arbitrators with multisig. Arbiters and taker bots can collude for a "rug pull".** Morphit is super lightweight and trades BTC, XMR, BLURT, USDT (across four networks), and BCH out of the box; same multi-node federation, same orderbook, same reputation, zero third-party trust. New assets added as the community asks for them — the asset-registry pattern means days, not months.
 172. **Some P2P platforms have admin "dispute resolution" that overrides users.** Morphit has no admin role; chat history is the dispute record, and it's signed and immutable.
 
 ## 14. What Morphit deliberately does NOT do
@@ -289,15 +289,15 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 ## 16. Built-in tools — block explorer, activity stats, payment QR codes
 
 199. **Built-in block explorer at `/explorer`.** Search by Blurt account name, transaction ID, or block number — Morphit ships its own explorer so you don't have to trust a third-party block-explorer site (which sees your IP and search history). The explorer is served by the same indexer that powers the orderbook; same trust model, same operator, no extra service to inspect.
-200. **Trading-activity dashboard at `/explorer/activity`.** Volume by asset over 7-day, 30-day, and 90-day windows (BTC, XMR, BLURT, USDT — and any other asset traded on the instance). Live listings histogram. Updates every 30 seconds. Useful for traders gauging market activity; useful for academics studying P2P-marketplace economics; useful for anyone who wants the raw numbers without a CoinGecko-style intermediary.
+200. **Trading-activity dashboard at `/explorer/activity`.** Volume by asset over 7-day, 30-day, and 90-day windows (BTC, XMR, BLURT, USDT, BCH — and any other asset traded on the instance). Live listings histogram. Updates every 30 seconds. Useful for traders gauging market activity; useful for academics studying P2P-marketplace economics; useful for anyone who wants the raw numbers without a CoinGecko-style intermediary.
 201. **Cross-chain explorer links inside chat.** When a counterparty sends you a Bitcoin txid, the chat bubble auto-routes to mempool.space; Monero txid auto-routes to xmrchain.net (or the operator-configured XMR explorer); BLURT txid routes to the in-app `/explorer`. Click → confirm payment landed. No copy-paste-into-a-third-party-site dance.
-202. **Display-payment QR codes for receiving addresses.** When you share a BTC, XMR, BLURT, or USDT receive address through the trade flow, Morphit can render it as a QR code on screen (BIP-21 for Bitcoin, official URI scheme for Monero, native-network formats for USDT). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service. The QR library is lazy-loaded — users who never tap "Show QR" don't pay the bytes.
+202. **Display-payment QR codes for receiving addresses.** When you share a BTC, XMR, BLURT, USDT, or BCH receive address through the trade flow, Morphit can render it as a QR code on screen (BIP-21 for Bitcoin, official URI scheme for Monero, native-network formats for USDT, CashAddr URI for Bitcoin Cash). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service. The QR library is lazy-loaded — users who never tap "Show QR" don't pay the bytes.
 203. **Live BLURT staking APR display** in the balance card. Computed locally from chain DGP — no third-party endpoint, no CoinGecko, no fee-feed dependency. (Current chain inflation is 7.6% as of 2026-05-03; ~75% of new emission goes to BP holders pro-rata, so the real APR per staked BP unit varies with the vesting pool size.)
 
 ## 17. Trade anything — barter, cash, precious metals
 
 204. **Curated registry of 40+ payment methods** organized by category: crypto (BTC ↔ XMR, etc.), bank rails (Zelle, Interac e-Transfer, SPEI, Oxxo Pay, SEPA), in-person, and operator-defined extras. Pickers fuzzy-match on the canonical 40-entry list to avoid the "did you mean Cash App or CashApp or Venmo or PayPal" dropdown soup.
-205. **Barter for goods is a first-class payment method.** Trade BTC for orange trees, XMR for raw garlic, BLURT for a used bicycle, USDT for fresh-pressed olive oil. The order's free-form `terms` field carries the specifics — Morphit doesn't try to be the eBay-of-everything, but barter as a trading rail is fully supported and treated like any other in-person payment method.
+205. **Barter for goods is a first-class payment method.** Trade BTC for orange trees, XMR for raw garlic, BLURT for a used bicycle, USDT for fresh-pressed olive oil, BCH for a farm-share. The order's free-form `terms` field carries the specifics — Morphit doesn't try to be the eBay-of-everything, but barter as a trading rail is fully supported and treated like any other in-person payment method.
 206. **Cash + precious metals (gold/silver coins/bars)** also covered as in-person methods. Meet up, exchange, leave on-chain feedback. Morphit's role ends at "facilitating the introduction"; the actual exchange is between two humans.
 207. **Operator-defined payment methods.** Per-instance, an operator can add region-specific payment rails their community uses (a local fintech app, a national bank-transfer system) without forking the codebase — the registry is operator-extensible.
 
@@ -315,7 +315,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 213. **Sign in to a strange computer by scanning a QR with your phone.** Posting key never leaves the phone. Your phone shows a confirmation card with the website name so you can spot phishing like `morph1t.io` before tapping "Yes, that was me." See `docs/adr/0022-desktop-qr-pairing.md` for the full protocol and threat model.
 
-214. **Adding new tradable assets is usually a single day's work, not a year-long refactor.** The canonical asset list lives in one package (`packages/asset-registry/`). Add an entry with the right flags (tradable, can-pay-fees, supported-networks), drop a logo, add translations for the privacy/network copy if needed, register the explorer URL templates. Pre-2026 the same change required edits at 32 separate sites; now it's contained. Currently shipped: BTC, XMR, BLURT (the coordination chain), and USDT across four networks (ERC-20, TRC-20, SPL, BEP-20). When the community asks for the next one, that's the workflow.
+214. **Adding new tradable assets is usually a single day's work, not a year-long refactor.** The canonical asset list lives in one package (`packages/asset-registry/`). Add an entry with the right flags (tradable, can-pay-fees, supported-networks), drop a logo, add translations for the privacy/network copy if needed, register the explorer URL templates. Pre-2026 the same change required edits at 32 separate sites; now it's contained. Currently shipped: BTC, XMR, BLURT (the coordination chain), USDT across four networks (ERC-20, TRC-20, SPL, BEP-20), and BCH (Bitcoin Cash, single-network mainnet). When the community asks for the next one, that's the workflow.
 
 215. **Adding a new language is a single-array edit.** Drop a translation JSON, add the locale code to the supported array. The framework knows the difference between "shipped" and "in progress" — work-in-progress translations don't appear in the language switcher until they're done. Translator workflow is documented for native-speaker contributors.
 
@@ -429,13 +429,15 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 270. **No flash of English content for non-English speakers.** Every page is prerendered once per supported locale — `/de/orderbook` ships pre-rendered German bytes, `/fa/orderbook` ships pre-rendered Persian, `/zh-HK/orderbook` ships pre-rendered Traditional Chinese, and so on. A first-time visitor's browser language preference (Accept-Language) is detected by a tiny inline script at the bare `/` URL and the browser is redirected to the matching prefix within one animation frame. The user never sees English text "flash" and re-render into their language — by the time the first paint happens, the page is already in the right language. Search engines index each locale URL separately so a Polish search query lands on `/pl/orderbook` not `/orderbook?lang=pl`. The language switcher updates the URL prefix (it's a real navigation, not a client-side string swap) so sharing a page link preserves the language for the recipient. Total: 170 prerendered HTML files (17 indexable routes × 10 locales) all built statically, no server runtime needed.
 
+271. **Bitcoin Cash (BCH) peer-to-peer.** Trade Bitcoin Cash on Morphit — bigger blocks, lower per-transaction fees than BTC, transparent and decentralized like BTC with no issuer who can freeze addresses. Single-network mainnet (no cross-network footguns the way USDT has). Address validator accepts both CashAddr (the modern BCH format, with or without the `bitcoincash:` prefix) and legacy P2PKH/P2SH addresses (which most BCH wallets still emit and accept), so users paste whatever format their wallet gives them and the form just works. Like USDT, BCH is trade-only on Morphit — listing fees stay BLURT/BTC/XMR (the fee-method wire format is invariant per Memory #23). Operators can disable BCH per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`; the wider federated marketplace keeps trading BCH regardless of any single operator's stance.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,170+ self-checks across 140+ runners**, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,200+ self-checks across 140+ runners**, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0023-*.md`
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0024-*.md`
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`
@@ -447,4 +449,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*270 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*
+*271 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-17.*

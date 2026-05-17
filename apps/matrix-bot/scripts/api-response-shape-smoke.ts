@@ -158,6 +158,9 @@ const SeoSchema = z.object({
 const ChatLinkUrlsSchema = z.object({
 	btc: z.string().nullable(),
 	xmr: z.string().nullable(),
+	// Part 122 cp21 — BCH chat-link URL override.  Optional for
+	// back-compat with pre-cp21 indexer builds.
+	bch: z.string().nullable().optional(),
 	usdt: z
 		.object({
 			erc20: z.string().nullable(),

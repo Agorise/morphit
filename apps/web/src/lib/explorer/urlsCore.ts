@@ -20,6 +20,12 @@ export const BTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 /** XMR txid: 64 hex chars (32 bytes).  Case-insensitive. */
 export const XMR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** BCH txid (Part 122 cp21).  64 hex chars (sha256d of the
+ *  transaction, same format as BTC since BCH forked from BTC).
+ *  Case-insensitive at the regex layer; chat-link substitution
+ *  normalizes to lowercase before URL construction. */
+export const BCH_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -28,17 +34,25 @@ export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
 
 /** Bundled defaults used when an operator hasn't overridden
  *  the per-instance template (via
- *  `MORPHIT_FRONTEND_{BTC,XMR}_CHAT_LINK_URL`), or when the
+ *  `MORPHIT_FRONTEND_{BTC,XMR,BCH}_CHAT_LINK_URL`), or when the
  *  store hasn't loaded yet (SSR / pre-hydration / fetch fail).
  *  Per the original Batch K choices:
  *   - mempool.space: no JS, no tracking, fast, popular
  *   - xmrchain.net: reference for Monero block explorers
+ *   - blockchair.com/bitcoin-cash: established multi-chain
+ *     explorer, predictable URL format, good uptime (Part 122
+ *     cp21 BCH addition; chosen from operator's eight-explorer
+ *     candidate list as the best balance of reliability +
+ *     URL-format predictability — operators wanting different
+ *     defaults override via MORPHIT_FRONTEND_BCH_CHAT_LINK_URL)
  *
  *  Operators wanting different defaults override per-instance;
  *  these bundled values are the "do nothing, ship sensible"
  *  fallback. */
 export const BUNDLED_BTC_CHAT_LINK_URL = 'https://mempool.space/tx/{txid}';
 export const BUNDLED_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
+export const BUNDLED_BCH_CHAT_LINK_URL =
+	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who
