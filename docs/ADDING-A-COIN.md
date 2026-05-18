@@ -421,9 +421,9 @@ cannot accidentally leak into the fee path:
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
-coins (BTC, XMR, BLURT) declare `['mainnet']`.  Multi-network
-coins (USDT — shipped in Part 121 cp3) list each network
-explicitly.  The **canonical reference** is the actual USDT
+coins (BTC, XMR, BLURT, BCH, LTC, DASH) declare `['mainnet']`.
+Multi-network coins (USDT — shipped in Part 121 cp3) list each
+network explicitly.  The **canonical reference** is the actual USDT
 entry at `packages/asset-registry/src/index.ts`:
 
 ```ts
@@ -467,10 +467,11 @@ Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`.
 A new field `privacyWarningKey: string | null` opts an asset
 into rendering a localized privacy/decentralization warning in
 the post-order form and address-share modal.  `null` means no
-warning (BTC, XMR, BLURT all have null — they're either
-private or decentralized enough that no warning is needed).
-Non-null is an i18n key looked up under
-`assets.privacy_warnings.<key>` in the locale JSON.
+warning (BTC, XMR, BLURT, BCH, LTC, DASH all have null — they're
+either private, decentralized, or transparent-but-non-custodial
+enough that no warning is needed).  Non-null is an i18n key
+looked up under `assets.privacy_warnings.<key>` in the locale
+JSON.
 
 USDT's warning (shipped in Part 121 cp3,
 `assets.privacy_warnings.usdt_centralized`) explains:

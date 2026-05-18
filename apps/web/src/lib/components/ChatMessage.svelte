@@ -68,15 +68,18 @@
 			orderPermlink?: string;
 		}) => void;
 		/** Q5 — invoked when the user taps "Mark as sent" on an
-		 *  incoming BTC/XMR address pill. Opens FundsSentModal
-		 *  pre-filled with the seller's specified method+amount —
-		 *  critical for the Monero amount-jitter flow, since the
-		 *  buyer's funds-sent echo needs to reference the same
-		 *  jittered value the seller asked for.
+		 *  incoming address pill (BTC, XMR, USDT, BCH, LTC, or
+		 *  DASH).  Opens FundsSentModal pre-filled with the
+		 *  seller's specified method+amount — critical for the
+		 *  Monero amount-jitter flow, since the buyer's
+		 *  funds-sent echo needs to reference the same jittered
+		 *  value the seller asked for.
 		 *
 		 *  Optional; the button only renders when this prop is
 		 *  present, the message is incoming, and the method is
-		 *  btc/xmr. */
+		 *  one of the six listed above (BLURT excluded —
+		 *  BLURT transfers are single-tx and don't go through
+		 *  the mark-sent reconciliation flow). */
 		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash'; amount?: string; orderPermlink?: string; network?: string }) => void;
 	}
 
@@ -134,10 +137,12 @@
 	}
 
 	/** Batch K — build the right explorer URL for a funds-sent
-	 *  txid.  BTC/XMR go to known-good external explorers (link
-	 *  opens in new tab).  Native BLURT transfers go to our own
-	 *  /explorer/tx route (same-tab navigation).  Returns null
-	 *  for unknown methods or malformed txids — caller hides the
+	 *  txid.  Transparent external chains (BTC, XMR, BCH, LTC,
+	 *  DASH, and each USDT network) go to known-good external
+	 *  explorers (link opens in new tab).  Native BLURT transfers
+	 *  go to our own /explorer/tx route (same-tab navigation).
+	 *  Returns null for unknown methods, malformed txids, or
+	 *  USDT payloads missing a network field — caller hides the
 	 *  link in that case. */
 	function explorerLinkForTxid(
 		method: ChatAssetTicker,

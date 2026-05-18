@@ -122,7 +122,7 @@ A VPS ("Virtual Private Server") is a small computer that lives in a datacenter 
 
 **What to order:** the smallest "shared CPU" instance that has 2 GB of RAM and 20 GB of disk. That's all you need. The provider's website will list it as something like "Cloud Server 1" or "Cloud Compute 1GB" — pick the second-smallest tier (the smallest is usually only 1 GB RAM, which works but is tight). Spend the extra dollar.
 
-**Operating system:** choose **Debian 12** or **Ubuntu 22.04 LTS**. Both are fine. Debian if you have no preference. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
+**Operating system:** choose **Ubuntu 24.04 LTS**. This is the only OS the Morphit Ansible playbook (which `morphit-ops install` invokes) currently supports — it hard-fails on anything else, including Debian and earlier Ubuntu LTS releases. Debian and Ubuntu 22.04 will *almost certainly* work in principle (the underlying packages and systemd units are not Ubuntu-24-specific), but you'd be off-piste and would need to fork the playbook. For your first instance, stick with Ubuntu 24.04 LTS. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
 
 **SSH key vs password:** the provider will ask whether you want to log in with a password or with an "SSH key". **Pick SSH key.** It's safer and easier. We'll cover how to make one in step 5. If you're feeling intimidated by the SSH key step, you can use a password to start and switch later, but plan to do that switch within a week.
 

@@ -168,11 +168,11 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 - **3,327 self-checking smoke scenarios** ship with the source.
   Run them yourself: `bash scripts/run-smokes.sh`.  Triple-pulse
   them (three times back-to-back) to filter flakes.
-- **Audit log** in `docs/AUDIT-2026-05.md` (~20,000 lines), public
+- **Audit log** in `docs/AUDIT-2026-05.md` (~21,000 lines), public
   in the repo, with every finding, every fix, every accepted
   risk documented.
-- **25 architecture decision records** in `docs/adr/0001-…`
-  through `0026-…` (the 0016 slot is reserved-but-unused; its
+- **26 architecture decision records** in `docs/adr/0001-…`
+  through `0027-…` (the 0016 slot is reserved-but-unused; its
   planned work shipped as ADR-0022).
 - **AGPL-3.0-only.**  Operators running modified instances must
   make their source available to their users.

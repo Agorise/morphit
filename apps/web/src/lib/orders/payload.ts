@@ -102,10 +102,10 @@ export interface OrderPayload {
 	/** Part 121 — sub-network identifier for multi-network
 	 *  assets.  REQUIRED when asset === 'USDT' (one of 'erc20',
 	 *  'trc20', 'spl', 'bep20').  Omitted for single-network
-	 *  assets (BTC, XMR, BLURT).  Pins the network on the order
-	 *  row so buyers know which USDT chain to settle on;
-	 *  cross-network sends lose funds permanently and must be
-	 *  surfaced as a hint on the order row. */
+	 *  assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pins the
+	 *  network on the order row so buyers know which USDT chain
+	 *  to settle on; cross-network sends lose funds permanently
+	 *  and must be surfaced as a hint on the order row. */
 	readonly asset_network?: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When present,
 	 *  the indexer credits the operator who registered this tag

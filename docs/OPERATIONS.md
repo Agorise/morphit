@@ -3155,13 +3155,20 @@ token). That's a larger design change not yet built.
 
 ## 18. Signup-drain prevention — the full defense stack
 
-The relay's `/v1/account/create` endpoint pays BLURT to create
-each new Blurt account. Without defenses, a third-party
-operator who forges the `Origin` header (server-side scripts
-can) could bill THEIR users' registrations to YOUR relay. The
-signup-drain defense is a layer cake; each layer is cheap,
-additive, and tunable. None alone is sufficient; together they
-make drains **bounded, detectable fast, and reversible**.
+The relay's `/v1/account/create` endpoint consumes one pre-minted
+Account Creation Token (ACT) from the relay's pool to create each
+new Blurt account.  The BLURT that ACTs cost was paid earlier at
+ACT-mint time during the relay's weekly `claim_account` ceremony
+(see §2 and ADR-0010 §4), so signup itself is fee-free — but a
+successful signup still depletes one ACT from a finite weekly
+budget.  Without defenses, a third-party operator who forges the
+`Origin` header (server-side scripts can) could attribute THEIR
+users' registrations to YOUR relay, draining your ACT pool and
+forcing you to either pause signups or mint extra ACTs out-of-cycle
+(both BLURT-expensive).  The signup-drain defense is a layer cake;
+each layer is cheap, additive, and tunable.  None alone is
+sufficient; together they make drains **bounded, detectable fast,
+and reversible**.
 
 ### Layer 1: Kill-switch
 
@@ -3187,8 +3194,11 @@ unavailable, please try another Morphit mirror" message.
 
 ### Layer 2: Global daily ceiling
 
-Hard cap on successful signups per UTC day. Bounds worst-case
-loss to `(ceiling × account_creation_fee)` BLURT per day. Reset
+Hard cap on successful signups per UTC day.  Bounds worst-case ACT
+depletion to `ceiling` ACTs per day; in BLURT terms that's
+`ceiling × act_mint_cost` BLURT of pre-paid value at risk (where
+`act_mint_cost` is whatever the chain's `account_creation_fee`
+witness-parameter is at claim time, typically ~100 BLURT).  Reset
 at UTC midnight.
 
 ```ini

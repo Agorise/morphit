@@ -256,11 +256,12 @@
 	/** Phase F — address-share + funds-sent modal state. */
 	let showAddressShareModal = $state(false);
 	let showFundsSentModal = $state(false);
-	/** Q5 — Mark-as-sent prefill from an incoming BTC/XMR address
-	 *  pill. Held separately from showFundsSentModal so the
-	 *  composer-level "I sent it" button (no prefill) and the
-	 *  pill-level Mark-as-sent button (with prefill) share the
-	 *  modal but supply different starting state. */
+	/** Q5 — Mark-as-sent prefill from an incoming address pill
+	 *  (BTC/XMR/USDT/BCH/LTC/DASH).  Held separately from
+	 *  showFundsSentModal so the composer-level "I sent it"
+	 *  button (no prefill) and the pill-level Mark-as-sent
+	 *  button (with prefill) share the modal but supply
+	 *  different starting state. */
 	let markSentArgs = $state<{
 		method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash';
 		amount?: string;
@@ -366,17 +367,18 @@
 		};
 	}
 
-	/** Q5 — Mark-as-sent click on an incoming BTC/XMR address
-	 *  pill. Captures the seller's specified method+amount and
-	 *  opens FundsSentModal pre-filled. Critical for the Monero
-	 *  amount-jitter flow: the buyer's funds-sent echo MUST carry
-	 *  the same jittered amount the seller asked for, otherwise
-	 *  the seller's verification false-mismatches.
+	/** Q5 — Mark-as-sent click on an incoming address pill
+	 *  (BTC/XMR/USDT/BCH/LTC/DASH).  Captures the seller's
+	 *  specified method+amount and opens FundsSentModal
+	 *  pre-filled. Critical for the Monero amount-jitter flow:
+	 *  the buyer's funds-sent echo MUST carry the same jittered
+	 *  amount the seller asked for, otherwise the seller's
+	 *  verification false-mismatches.
 	 *
-	 *  We don't open PayBlurtModal here — Morphit doesn't run a
-	 *  BTC/XMR wallet. The buyer pays from their own wallet
-	 *  (scanning the QR / pasting the address), then comes back
-	 *  to this modal with the txid in hand. */
+	 *  We don't open PayBlurtModal here — Morphit doesn't run an
+	 *  external-chain wallet of its own.  The buyer pays from
+	 *  their own wallet (scanning the QR / pasting the address),
+	 *  then comes back to this modal with the txid in hand. */
 	function handleMarkSentClick(args: {
 		method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash';
 		amount?: string;

@@ -19,8 +19,8 @@
  *
  * Signed feedback can later be responded to by the subject via
  * morphit_feedback_response_v1 (different op id, same key, same
- * broadcast pattern). This module only builds the "leave feedback"
- * op; responses are a separate op-builder (not shipped yet).
+ * broadcast pattern).  See ./feedbackResponse.ts for the response
+ * op-builder.
  */
 
 import { broadcastCustomJson } from '../sign';

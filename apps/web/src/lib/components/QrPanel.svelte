@@ -7,9 +7,21 @@
 	 * URI encoded in the QR carries the address + (optional)
 	 * amount in the asset's native URI scheme:
 	 *
-	 *   - BTC: BIP-21 (`bitcoin:bc1q...?amount=0.005`)
-	 *   - XMR: official URI scheme (`monero:4...?tx_amount=0.5`)
+	 *   - BTC:  BIP-21 (`bitcoin:bc1q...?amount=0.005`)
+	 *   - XMR:  official URI scheme (`monero:4...?tx_amount=0.5`)
+	 *   - BCH:  CashAddr (`bitcoincash:q...?amount=0.5`)
+	 *   - LTC:  BIP-21 derivative (`litecoin:ltc1...?amount=0.5`)
+	 *   - DASH: BIP-21 derivative (`dash:X...?amount=0.5`)
 	 *   - BLURT: bare account name (no widely-supported scheme)
+	 *   - USDT: no widely-supported single URI scheme across the four
+	 *          networks Morphit ships (ERC-20/TRC-20/SPL/BEP-20); the
+	 *          QR encodes the bare address and the network is
+	 *          conveyed out-of-band in the chat-side network pill.
+	 *
+	 * Canonical reference for the per-asset URI shape is
+	 * `buildPaymentUri` in `apps/web/src/lib/chat/payload.ts` —
+	 * that function is authoritative; this comment block is a
+	 * summary, not a contract.
 	 *
 	 * Lazy-loaded library: `qrcode` (~30kB).  The dynamic import
 	 * keeps it out of even the chat chunk; users who never tap
