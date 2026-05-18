@@ -1,3 +1,98 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD — deep-deep on cp30 USDC addition + Ken-supplied USDC icon swap.  14 findings, all 14 fixed inline.  The most consequential were DD-10/10b/11 — wiring-missing findings exposing that the per-network USDT explorer URL override has apparently never actually worked on the public API since Part 121 cp3 (9 checkpoints!) because the indexer-side `InstanceResponse` interface never declared `chat_link_urls.usdt`.  cp30 made the same mistake with USDC.  Both fixed by adding 8 new indexer Config fields + Zod schema entries + env vars and wiring them through the InstanceResponse body.
+
+CP30-DD SCOPE: closure of every cp30 gap surfaced by walking the canonical wire-format surfaces, the prices store, the FAQ surface, the docs surface, and the smoke surface independently per cp28 LL #11-15 + cp29 LL #16-17 + cp30 LL #18-22.  Plus Ken's USDC icon swap mid-session (replaced placeholder with Circle's canonical "$" + dual C-curves mark, accessibility-hardened with aria-label + title + sizing-attribute normalization).
+
+CP30-DD INVENTORY:
+
+**14 findings closed inline:**
+
+DD-1 HIGH — README.md L3 tagline omits USDC; L18 privacy paragraph extended for stablecoin jitter; ADR range 0027 → 0028 (2 sites); smoke baseline 3,300+ → 3,340+.
+
+DD-2 LOW — Brag list smoke claim "3,327+" → "3,340+" (entry #35 + verify footer).  Mediakit rebuilt per Memory #4 (40559 bytes).
+
+DD-3 HIGH grandma-friendliness — USDC missing 3 FAQ entries (`what_is_usdc`, `why_usdc_warning`, `which_usdc_network`) + /post tooltip faqKey wiring + FAQ_KEYS array + FAQ_RELATED cross-nav.  Locale parity 2,674 → 2,680 × 10 = 26,800.  llms-full.txt regen 110 → 113 entries.
+
+DD-4 HIGH — payload.ts:5 module-doc adds USDC.
+
+DD-5/DD-6 HIGH WIRING-CRITICAL — `apps/web/src/lib/prices/index.ts` initial-state + setProvider() reset both omitted `USDC: null`; would have left USDC slot `undefined` not `null` on page load and on every provider swap.  Fixed.
+
+DD-7 HIGH SMOKE-FAILING — `disabled-assets-wizard-smoke.ts` Category-B scenario assertion `catB.length === 4` would FAIL on next run post-cp30 (USDC now in registry = length 5).  Fixed to expect USDC + length===5.
+
+DD-8 MEDIUM — module-doc drift in 4 code files (ConversationView × 2, assets/registry.ts, qrcode.d.ts, asset-registry.ts) + orders/payload.ts × 3 field-doc/comment sites — all referenced USDT as the only multi-network asset, missing USDC.  Fixed.
+
+DD-9 MEDIUM — indexer-client `asset_network` field doc covers USDC.
+
+**DD-10 CRITICAL** WIRING-MISSING — `apps/indexer/src/api/instance.ts` InstanceResponse interface had NO `chat_link_urls.usdc` sub-map AND body construction never populated it.  cp30 had claimed adding it but the file only got the frontend store + indexer-client mirror.  Closed: InstanceResponse interface declares `usdc: { erc20, spl, base, polygon }`; body construction reads from 4 new Config fields (`frontendUsdcErc20ChatLinkUrl`, etc).
+
+**DD-10b CRITICAL** WIRING-MISSING — `packages/indexer-client/src/index.ts` ChatLinkUrls had `usdt` but NO `usdc`.  Closed: usdc sub-map added with same back-compat-optional shape.
+
+**DD-11 HIGH** WIRING-MISSING (LATENT SINCE cp3!) — Per-network USDT explorer URL override has apparently never worked on the public API since Part 121 cp3 (9 checkpoints).  Frontend store, indexer-client mirror, and matrix-bot smoke ALL declared `chat_link_urls.usdt` as a 4-network sub-map, but the indexer's `InstanceResponse` interface had no `usdt` field declared and body construction never populated one.  Frontend defensive `?? {…}` fallback masked the absence — `usdtExplorerUrl()` ALWAYS fell through to the bundled defaults regardless of operator config.  cp30 only surfaced this because cp30 itself was missing `chat_link_urls.usdc` in the same way.  Closed: 4 new Config fields + 4 new Zod schema entries + 4 new env vars + body-construction populates `usdt:` sub-map alongside the new `usdc:` sub-map.
+
+DD-12 LOW — `ops/env/indexer.env.example` documented 5 single-network env vars but no per-network USDT/USDC vars.  Closed: 8 new env-var examples added (4 USDT networks + 4 USDC networks) with bundled-default URLs as example values + cross-reference to ADR-0028 §1 for BEP-20 absence on the USDC side.
+
+DD-13 LOW — Wiring-completeness smoke had `cp30-usdc-p2p` CHECK row but no checks for DD-10/11 closures.  Closed: 2 new CHECK rows pin the new body-construction lines in `apps/indexer/src/api/instance.ts`.
+
+DD-14 LOW — audit-log + REVISIT-LIST + TARBALL updates (this entry plus the AUDIT and REVISIT entries).
+
+**Icon swap (Ken-supplied, mid-session):**
+- `apps/web/static/icons/icon-usdc.svg` — replaced with Ken's preferred art (Circle's canonical "$" mark with dual C-curves on `#2775ca` brand-blue disc).  Two adjustments from source: (1) removed explicit `width="2000.001" height="2000.001"` attributes for consumer-sizing parity with USDT/BTC siblings (controlled by consuming `<img>` or CSS); (2) added `aria-label="USD Coin (USDC)"` + `<title>USD Coin (USDC)</title>` for screen-reader accessibility parity with USDT and BTC icons.  Color `#2775ca` verified against `accentClass: 'text-blue-500'` choice in frontend asset registry and ADR-0028.
+
+**Files touched this checkpoint:**
+
+Code:
+- `README.md` (DD-1)
+- `MORPHIT-BRAG-LIST.md` (DD-2)
+- `apps/web/static/morphit-mediakit.zip` (regenerated)
+- `apps/web/src/lib/i18n/locales/{10}.json` (DD-3, 3 new FAQ × 10 locales)
+- `apps/web/src/lib/utils/faqIndex.ts` (DD-3)
+- `apps/web/src/routes/[lang]/post/+page.svelte` (DD-3 faqKey)
+- `apps/web/static/llms-full.txt` (DD-3 regenerated 110 → 113)
+- `apps/web/src/lib/chat/payload.ts` (DD-4)
+- `apps/web/src/lib/prices/index.ts` (DD-5, DD-6)
+- `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts` (DD-7)
+- `apps/web/src/lib/components/ConversationView.svelte` (DD-8)
+- `apps/web/src/lib/assets/registry.ts` (DD-8)
+- `apps/web/src/qrcode.d.ts` (DD-8)
+- `packages/asset-registry/src/index.ts` (DD-8)
+- `apps/web/src/lib/orders/payload.ts` (DD-8)
+- `packages/indexer-client/src/index.ts` (DD-9, DD-10b)
+- `apps/indexer/src/api/instance.ts` (DD-10, DD-11)
+- `apps/indexer/src/config/index.ts` (DD-10, DD-11; +8 Config fields, +8 Zod schema entries, +8 builder mapping lines)
+- `ops/env/indexer.env.example` (DD-12)
+- `apps/web/scripts/wiring-completeness-smoke.ts` (DD-13)
+- `apps/web/static/icons/icon-usdc.svg` (Ken swap)
+
+Audit trail:
+- `docs/AUDIT-2026-05.md` (cp30-DD entry appended; line count 21663 → 21762)
+- `docs/REVISIT-LIST.md` (maintenance entry prepended)
+- `TARBALL.md` (this entry)
+
+**CP30-DD FINAL STATE:**
+
+- Smoke baseline: cp30 baseline 3,343 + 2 new wiring-completeness CHECK rows ≈ 3,345 (pre-existing sandbox npm-install limitation prevents pulse-test in this session; structurally verified instead)
+- Locale parity 2,680 × 10 = 26,800 strings (+60 from cp30's 26,740 baseline: 3 new FAQ entries × 2 fields q+a × 10 locales)
+- Brag list 280 entries (unchanged; DD-2 was a count text update, not a new entry)
+- ADR count 28 (unchanged; cp30-DD is correctness/closure work, no architectural shift)
+- Mediakit rebuilt cleanly (40559 bytes, 6 files)
+- llms-full.txt 113 entries (170246 chars)
+- All 14 DD findings closed inline; nothing carried to next session
+
+**PATTERN LESSONS RECORDED (numbered 23-27 for continuity with cp30's 18-22):**
+
+23. **Multi-surface wire-format declarations need cross-surface verification SAME-TURN.**  cp30 declared `chat_link_urls.usdc` in three of four canonical surfaces (frontend store + indexer-client mirror + matrix-bot smoke) but missed the indexer-side InstanceResponse interface + body construction.  Future per-network-asset additions: walk the FOUR canonical wire-format surfaces explicitly in the same turn.
+
+24. **Defensive-fallback patterns ARE useful but they hide wiring bugs indefinitely.**  cp23 BCH and cp27 DASH both surfaced TypeError-class bugs from missing fallbacks; cp30 ADDED defensive fallbacks for USDC; cp30-DD discovered the same defensive fallbacks were hiding a never-wired USDT path latent for 9 checkpoints.  Every defensive `?? {…}` fallback added during an asset addition deserves a same-turn audit asking "what would break if the indexer SOMETIMES populated this field?"
+
+25. **Smoke files that grep for asset enumerations need bumping every asset addition** (cp28 LL #12 extended).  cp30-DD-7 caught `disabled-assets-wizard-smoke.ts` with hardcoded `catB.length === 4` that would fail post-cp30.
+
+26. **Initial-state declarations in stateful frontend stores are silent wiring traps** (DD-5/DD-6 closures).  `writable<Record<PricedSymbol, …>>({...})` only initialises listed keys.  Missing keys land as `undefined`, NOT `null`.  Pattern: grep every `Record<PricedSymbol, …>` and similar wire-format-typed Record literal for parity when adding a new asset.
+
+27. **Per-network env var declarations are a 16-changes-per-4-network-asset class.**  cp30-DD-12 added 8 new env vars (4 USDT + 4 USDC).  Future asset-addition checklist should bullet these out explicitly per (asset, network).
+
+PARKED (external-blockers — unchanged from cp29/cp30): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30 — USDC addition as the second multi-network Category-B trade-only asset, ADR-0028 capturing 4 design decisions including the BEP-20-USDC decline and the cp26-USDT-no-jitter reversal, full UI dispatch across 5 components + 10 locales, mediakit rebuilt, brag list extended with new entry #280 and the amount-jitter enumeration update on #29).
 
 CP30 SCOPE: USDC (USD Coin) end-to-end across 4 networks (ERC-20, SPL, Base, Polygon) — explicitly NOT including BEP-20 (Binance-Peg variant, 18-decimal divergence) or TRC-20 (no native Circle issuance).  Includes the cp26 USDT-no-jitter decision reversal: jitterStablecoinAmount(base) now routes BOTH USDT and USDC through 6-decimal/999-microunit jitter because the cp26 rationale ("centralization is the issue, not amount-correlation") was incomplete — both threats are real and independent.

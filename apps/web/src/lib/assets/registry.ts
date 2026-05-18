@@ -280,7 +280,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateUsdc,
 		// MEMORY #23 INVARIANT: USDC cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/BCH/LTC/DASH.
+		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC

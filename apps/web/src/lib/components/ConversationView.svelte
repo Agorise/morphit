@@ -262,7 +262,7 @@
 	let showAddressShareModal = $state(false);
 	let showFundsSentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
-	 *  (BTC/XMR/USDT/BCH/LTC/DASH).  Held separately from
+	 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
 	 *  button (no prefill) and the pill-level Mark-as-sent
 	 *  button (with prefill) share the modal but supply
@@ -374,7 +374,7 @@
 	}
 
 	/** Q5 — Mark-as-sent click on an incoming address pill
-	 *  (BTC/XMR/USDT/BCH/LTC/DASH).  Captures the seller's
+	 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH).  Captures the seller's
 	 *  specified method+amount and opens FundsSentModal
 	 *  pre-filled. Critical for the Monero amount-jitter flow:
 	 *  the buyer's funds-sent echo MUST carry the same jittered

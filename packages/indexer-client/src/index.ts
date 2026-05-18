@@ -131,10 +131,12 @@ export interface OrderRecord {
 	 *    'waived_first_buy'   — onboarding waiver, one per account
 	 *    'btc' / 'xmr'        — sub-phase 4b; not yet emitted */
 	readonly fee_method?: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
-	/** Part 121 — sub-network for multi-network assets (USDT
-	 *  today).  One of 'erc20'|'trc20'|'spl'|'bep20' when
-	 *  `asset === 'USDT'`; null otherwise.  Pre-Part-121 rows
-	 *  (and orders with single-network assets) are null. */
+	/** Part 121 / cp30 — sub-network for multi-network assets
+	 *  (USDT and USDC).  For USDT: one of 'erc20'|'trc20'|'spl'|
+	 *  'bep20' when `asset === 'USDT'`.  For USDC: one of
+	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.
+	 *  Null otherwise (pre-Part-121 rows and orders with single-
+	 *  network assets BTC/XMR/BLURT/BCH/LTC/DASH). */
 	readonly asset_network?: string | null;
 	/** Number of feedback rows this account has received.
 	 *  Proxy for "completed trades." Zero on accounts with no
@@ -708,6 +710,18 @@ export interface InstanceResponse {
 			readonly trc20: string | null;
 			readonly spl: string | null;
 			readonly bep20: string | null;
+		};
+		/** Part 122 cp30 — USDC per-network explorer URL overrides.
+		 *  Same shape as USDT above with USDC's 4-network set
+		 *  (erc20/spl/base/polygon).  BEP-20 intentionally absent
+		 *  per ADR-0028 §1 (Binance-Peg + 18-decimal divergence).
+		 *  Older indexer builds (pre-cp30) omit this field; frontend
+		 *  defensive-fallback supplies a 4-network null sub-map. */
+		readonly usdc?: {
+			readonly erc20: string | null;
+			readonly spl: string | null;
+			readonly base: string | null;
+			readonly polygon: string | null;
 		};
 	};
 	/** Trade-only assets this instance has DISABLED via the

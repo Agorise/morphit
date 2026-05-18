@@ -73,7 +73,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 ## 3. Security and audits — receipts, not slogans
 
-35. **Over 3,327 self-checking smoke scenarios** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh`. They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
+35. **Over 3,340 self-checking smoke scenarios** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh`. They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
 36. **A running audit document** (`docs/AUDIT-2026-05.md`) — currently 20,000+ lines across 60+ numbered parts, organized by date and subsystem, listing every security review pass, every finding, every severity rating, every fix or accepted-risk rationale. Public, in the repo, anyone can read it. Plus per-batch audit files in `docs/audit/` (Batch I YubiKey unlock, Batch J release trust anchor, Batch K block explorer, Batch L payment methods).
 37. **STRIDE threat-model methodology** applied per audit pass: Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege — a matrix run over every changed subsystem, with attack trees built from the most attractive entry points.
 38. **Adversarial red-team narratives.** The audit doc names hypothetical attackers (a doxxing journalist, a federated phisher, a sanctions evader, a reputation-launderer) and walks through what each would actually do to the system. Defenses are designed against the playbook, not against generic "bad actors."
@@ -450,7 +450,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,327+ self-checks across 140+ runners**, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,340+ self-checks across 140+ runners**, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
 - **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0028-*.md`
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)

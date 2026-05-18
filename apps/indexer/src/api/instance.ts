@@ -106,6 +106,32 @@ export interface InstanceResponse {
 		 *  back to the bundled insight.dash.org default when
 		 *  null. */
 		dash: string | null;
+		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
+		 *  overrides.  Optional sub-map; older indexer builds
+		 *  (pre-cp30 — yes, this includes every prior build of
+		 *  USDT support which had the per-network override
+		 *  declared in the indexer-client mirror but never landed
+		 *  in the InstanceResponse body itself) omit the field,
+		 *  in which case the frontend's defensive `?? {…}`
+		 *  fallback in lib/stores/instance.ts supplies a 4-network
+		 *  null sub-map.  Each per-network field is either a
+		 *  template string or null (use bundled default). */
+		usdt: {
+			erc20: string | null;
+			trc20: string | null;
+			spl: string | null;
+			bep20: string | null;
+		};
+		/** Part 122 cp30 (DD-10) — USDC per-network explorer URL
+		 *  overrides.  Same shape as USDT above with USDC's
+		 *  4-network set.  BEP-20 intentionally absent per
+		 *  ADR-0028 §1. */
+		usdc: {
+			erc20: string | null;
+			spl: string | null;
+			base: string | null;
+			polygon: string | null;
+		};
 	};
 	/** Trade-only assets this instance has DISABLED via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
@@ -185,7 +211,19 @@ export function instanceRoute(config: Config): Hono {
 				xmr: config.frontendXmrChatLinkUrl ?? null,
 				bch: config.frontendBchChatLinkUrl ?? null,
 				ltc: config.frontendLtcChatLinkUrl ?? null,
-				dash: config.frontendDashChatLinkUrl ?? null
+				dash: config.frontendDashChatLinkUrl ?? null,
+				usdt: {
+					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
+					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,
+					spl: config.frontendUsdtSplChatLinkUrl ?? null,
+					bep20: config.frontendUsdtBep20ChatLinkUrl ?? null
+				},
+				usdc: {
+					erc20: config.frontendUsdcErc20ChatLinkUrl ?? null,
+					spl: config.frontendUsdcSplChatLinkUrl ?? null,
+					base: config.frontendUsdcBaseChatLinkUrl ?? null,
+					polygon: config.frontendUsdcPolygonChatLinkUrl ?? null
+				}
 			},
 			disabled_assets: config.disabledAssets,
 			operator_matrix_room: config.operatorMatrixRoom
