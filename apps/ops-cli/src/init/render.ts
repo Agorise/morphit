@@ -522,6 +522,19 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(
 		`MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.polygon)}`
 	);
+	// Part 122 cp31 — DAI per-network env vars (4 EVM networks).
+	lines.push(
+		`MORPHIT_FRONTEND_DAI_ERC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.erc20)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_DAI_POLYGON_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.polygon)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_DAI_BASE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.base)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_DAI_ARBITRUM_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.arbitrum)}`
+	);
 	lines.push('');
 
 	// ─── Trade-only asset policy (Part 122 cp22) ─────────────────
@@ -542,7 +555,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS=""        (accept all)');
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"    (refuse USDT)');
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDC"    (refuse USDC)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC" (refuse both stablecoins — privacy-pure)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI" (refuse all three stablecoins — privacy-pure)');
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH" (refuse BTC-forks)');
 	lines.push('#');
 	lines.push('# Change your mind later by editing this line and');

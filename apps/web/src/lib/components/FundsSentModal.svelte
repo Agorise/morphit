@@ -36,10 +36,14 @@
 		type UsdtNetwork,
 		validateUsdcTxid,
 		isUsdcNetwork,
-		type UsdcNetwork
+		type UsdcNetwork,
+		validateDaiTxid,
+		isDaiNetwork,
+		type DaiNetwork
 	} from '$lib/assets/networks';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
+	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
 
 	interface Props {
 		/** Initial method tab.  Pre-selected when the modal was
@@ -58,9 +62,17 @@
 		 *  buyer cannot accidentally pick a different chain when
 		 *  reporting the txid. */
 		initialUsdcNetwork?: UsdcNetwork | null;
+		/** Part 122 cp31 — initial DAI network.  Same role as
+		 *  initialUsdtNetwork and initialUsdcNetwork: pre-pins the
+		 *  network when the modal is launched from a received DAI
+		 *  address pill so the buyer cannot accidentally pick a
+		 *  different chain when reporting the txid.  DAI is the
+		 *  multi-network asset where this matters MOST because all
+		 *  4 networks share the EVM 0x address format. */
+		initialDaiNetwork?: DaiNetwork | null;
 		/** Q5 — Initial amount, pre-filled when the modal was
 		 *  triggered from an incoming external-asset address pill
-		 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH) that carried an amount.
+		 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH) that carried an amount.
 		 *  The buyer types the txid; the amount field starts
 		 *  populated with whatever the seller asked for (which,
 		 *  for jittered XMR/UTXO/stablecoin amounts, is the exact
@@ -80,6 +92,7 @@
 		initialMethod = 'btc',
 		initialUsdtNetwork = null,
 		initialUsdcNetwork = null,
+		initialDaiNetwork = null,
 		initialAmount = '',
 		orderPermlink,
 		onShare,
@@ -96,12 +109,15 @@
 	let usdtNetwork = $state<UsdtNetwork | null>(initialUsdtNetwork);
 	// svelte-ignore state_referenced_locally
 	let usdcNetwork = $state<UsdcNetwork | null>(initialUsdcNetwork);
-	// True if the parent pinned a USDT or USDC network up front
-	// (came from an address pill).  Locks the matching picker as
-	// read-only so the buyer can't accidentally pick a different
-	// network when reporting the txid.
+	// svelte-ignore state_referenced_locally
+	let daiNetwork = $state<DaiNetwork | null>(initialDaiNetwork);
+	// True if the parent pinned a USDT, USDC, or DAI network up
+	// front (came from an address pill).  Locks the matching
+	// picker as read-only so the buyer can't accidentally pick a
+	// different network when reporting the txid.
 	const networkPinned = initialUsdtNetwork !== null;
 	const usdcNetworkPinned = initialUsdcNetwork !== null;
+	const daiNetworkPinned = initialDaiNetwork !== null;
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally
 	let amount = $state(initialAmount);
@@ -119,7 +135,9 @@
 				? usdtNetwork !== null && validateUsdtTxid(usdtNetwork, trimmedTxid)
 				: method === 'usdc'
 					? usdcNetwork !== null && validateUsdcTxid(usdcNetwork, trimmedTxid)
-					: isValidTxid(method, trimmedTxid))
+					: method === 'dai'
+						? daiNetwork !== null && validateDaiTxid(daiNetwork, trimmedTxid)
+						: isValidTxid(method, trimmedTxid))
 	);
 	const amountLooksValid = $derived(
 		trimmedAmount.length === 0 || /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount)
@@ -134,6 +152,11 @@
 	 *  shape, so without a pinned network we couldn't tell which
 	 *  explorer to link to. */
 	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
+	/** DAI-specific gate (cp31): mirror of USDC — network must be
+	 *  picked.  MOST important of the three because ALL FOUR DAI
+	 *  networks share the EVM 0x[64 hex] txid shape (no SPL
+	 *  branch to distinguish like USDC has). */
+	const daiNetworkPicked = $derived(method !== 'dai' || daiNetwork !== null);
 
 	const canSubmit = $derived(
 		txidLooksValid &&
@@ -141,31 +164,35 @@
 			noteLooksValid &&
 			usdtNetworkPicked &&
 			usdcNetworkPicked &&
+			daiNetworkPicked &&
 			!sending
 	);
 
 	const txidError = $derived.by(() => {
 		if (trimmedTxid.length === 0) return null;
-		// BLURT txids are 40 hex chars; BTC/XMR/BCH are 64; USDT
-		// and USDC vary by network (32-88 chars depending on chain).
+		// BLURT txids are 40 hex chars; BTC/XMR/BCH are 64; USDT,
+		// USDC, and DAI vary by network (32-88 chars depending on
+		// chain — DAI is all 64-hex EVM-family so on the lower end).
 		const minTyped = method === 'blurt' ? 20 : 32;
 		if (trimmedTxid.length < minTyped) return null;
 		if (txidLooksValid) return null;
 		if (method === 'usdt') return 'chat.funds_sent.txid_invalid_usdt';
 		if (method === 'usdc') return 'chat.funds_sent.txid_invalid_usdc';
+		if (method === 'dai') return 'chat.funds_sent.txid_invalid_dai';
 		return 'chat.funds_sent.txid_invalid';
 	});
 
 	function selectMethod(m: ChatAssetTicker): void {
 		method = m;
-		// Part 121 / cp30: clear the picked network when leaving
-		// a multi-network method.  On re-pick, the user must
-		// explicitly choose again.  Don't clear when the
+		// Part 121 / cp30 / cp31: clear the picked network when
+		// leaving a multi-network method.  On re-pick, the user
+		// must explicitly choose again.  Don't clear when the
 		// corresponding network was pinned by the parent — the
 		// parent pinned it for a reason (the buyer is responding
 		// to an address pill that already named the network).
 		if (m !== 'usdt' && !networkPinned) usdtNetwork = null;
 		if (m !== 'usdc' && !usdcNetworkPinned) usdcNetwork = null;
+		if (m !== 'dai' && !daiNetworkPinned) daiNetwork = null;
 	}
 
 	// Part 73: bring dismiss UX up to parity with the sibling
@@ -206,7 +233,14 @@
 				// txid shape, so the network is the ONLY way to pick
 				// the right explorer URL (etherscan vs basescan vs
 				// polygonscan).
-				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {})
+				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {}),
+				// Part 122 cp31 — same for DAI.  MOST critical of the
+				// three stablecoins because ALL FOUR DAI networks
+				// (ERC-20, Polygon, Base, Arbitrum) share the same
+				// EVM 0x[64 hex] txid shape — the network field is
+				// the ONLY way to pick the right explorer URL
+				// (etherscan vs polygonscan vs basescan vs arbiscan).
+				...(method === 'dai' && daiNetwork !== null ? { network: daiNetwork } : {})
 			};
 			const wire = encodeFundsSentPayload(payload);
 			await onShare(wire);
@@ -381,6 +415,37 @@
 					</div>
 				{:else}
 					<UsdcNetworkPicker bind:network={usdcNetwork} disabled={sending} />
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Part 122 cp31 — DAI network picker.  Same pinning
+		     semantics as USDC: when the parent triggered this
+		     modal from a received DAI address pill, the network
+		     is pinned and the picker renders as a read-only
+		     confirmation card so the buyer can't accidentally
+		     report the txid on the wrong chain.  DAI is MOST
+		     critical here because ALL FOUR networks (ERC-20,
+		     Polygon, Base, Arbitrum) share the same EVM 0x[64 hex]
+		     txid format — without the network pin the receiver's
+		     chat couldn't pick the right explorer (etherscan vs
+		     polygonscan vs basescan vs arbiscan). -->
+		{#if method === 'dai'}
+			<div class="mt-4">
+				{#if daiNetworkPinned && daiNetwork !== null}
+					<div
+						class="rounded-lg border-2 border-morphit-emerald bg-morphit-emerald/5 p-3 text-sm"
+						role="note"
+					>
+						<div class="font-semibold text-morphit-emerald">
+							{$_(`assets.dai.network.${daiNetwork}.displayName`)}
+						</div>
+						<div class="mt-1 text-xs text-ink-300">
+							{$_('chat.funds_sent.network_pinned_hint')}
+						</div>
+					</div>
+				{:else}
+					<DaiNetworkPicker bind:network={daiNetwork} disabled={sending} />
 				{/if}
 			</div>
 		{/if}

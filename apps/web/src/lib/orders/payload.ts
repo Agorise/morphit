@@ -215,10 +215,10 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.txProof !== undefined && input.txProof.trim().length > 0
 			? { tx_proof: input.txProof.trim() }
 			: {}),
-		// Part 121 / cp30 — sub-network for multi-network assets.
-		// Set when the form provides one (USDT or USDC); omitted
-		// for single-network assets.  Lowercased on the way out
-		// for canonicalization with the asset-registry's
+		// Part 121 / cp30 / cp31 — sub-network for multi-network
+		// assets.  Set when the form provides one (USDT, USDC, or
+		// DAI); omitted for single-network assets.  Lowercased on
+		// the way out for canonicalization with the asset-registry's
 		// supportedNetworks values.
 		...(input.assetNetwork !== undefined && input.assetNetwork.length > 0
 			? { asset_network: input.assetNetwork.toLowerCase() }

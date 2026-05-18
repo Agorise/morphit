@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, BCH, LTC, DASH) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -84,8 +84,11 @@ import {
 	validateUsdtTxid,
 	validateUsdcAddress,
 	validateUsdcTxid,
+	validateDaiAddress,
+	validateDaiTxid,
 	type UsdtNetwork,
-	type UsdcNetwork
+	type UsdcNetwork,
+	type DaiNetwork
 } from '$lib/assets/networks';
 
 const MAX_NOTE_LEN = 100;
@@ -302,22 +305,28 @@ export function jitterMoneroAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp30 — Amount-jitter for stablecoin chains (USDT,
- *  USDC).  Same defense as jitterUtxoAmount + jitterMoneroAmount
- *  but calibrated to 6-decimal stablecoin precision.
+/** Part 122 cp30/cp31 — Amount-jitter for stablecoin chains
+ *  (USDT, USDC, DAI).  Same defense as jitterUtxoAmount +
+ *  jitterMoneroAmount but calibrated to 6-decimal stablecoin
+ *  precision.  DAI uses 18-decimal underlying token math; the
+ *  jitter clamps to display precision so the user-visible
+ *  effect is uniform across all three stablecoins.
  *
  *  Why this exists for stablecoins: even though USDT and USDC
  *  carry separate centralization concerns (Circle/Tether can
  *  freeze addresses on regulatory request — documented in their
- *  per-asset privacy guides), the SEPARATE amount-correlation
- *  linkability attack still applies.  An observer with knowledge
- *  of an off-platform agreed price ("I'm buying $5,000 of USDC
- *  for $5,000 cash") can correlate the on-chain transfer with
- *  the agreement by matching the exact amount.  Adding 0-999
- *  micro-USDT/USDC of jitter — about a tenth of a US cent maximum
- *  — breaks the exact-match correlation without imposing any
- *  meaningful cost.  Both threats are real and independent;
- *  jitter addresses one of them.
+ *  per-asset privacy guides), and DAI carries the more-nuanced
+ *  PSM/USDC backing dependency + MKR governance upgradeability
+ *  path documented in its own guide, the SEPARATE amount-
+ *  correlation linkability attack still applies to all three.
+ *  An observer with knowledge of an off-platform agreed price
+ *  ("I'm buying $5,000 of DAI for $5,000 cash") can correlate
+ *  the on-chain transfer with the agreement by matching the
+ *  exact amount.  Adding 0-999 micro-stablecoin of jitter —
+ *  about a tenth of a US cent maximum — breaks the exact-match
+ *  correlation without imposing any meaningful cost.  All
+ *  threats are real and independent; jitter addresses one of
+ *  them.
  *
  *  Pre-cp30 this function didn't exist and stablecoins fell
  *  through `jitterAmountForAsset` to a pass-through (`return
@@ -343,6 +352,10 @@ export function jitterStablecoinAmount(base: string): string {
 	}
 	// Parse base into integer-microunit representation (bigint).
 	// 1 USDT/USDC = 10^6 micro-units on every supported network.
+	// DAI uses 18-decimal token math underneath, but the jitter
+	// clamps to 6-decimal display precision so the user-visible
+	// effect is uniform across all three stablecoins (about $0.001
+	// maximum jitter regardless of which one).
 	const [whole = '0', frac = ''] = base.split('.');
 	const fracPadded = (frac + '000000').slice(0, 6);
 	const baseMicro = BigInt(whole) * 1_000_000n + BigInt(fracPadded);
@@ -457,14 +470,18 @@ export function jitterAmountForAsset(
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
-	if (asset === 'usdt' || asset === 'usdc') {
-		// Part 122 cp30 — stablecoins get jitter too.  The
-		// centralization threat (Circle/Tether freeze power) is
-		// real and documented in /privacy/{usdt,usdc}, but it
-		// doesn't refute the SEPARATE amount-correlation
-		// linkability threat that jitter addresses.  6-decimal
-		// precision, 0-999 micro-unit range — see
-		// jitterStablecoinAmount for the full rationale.
+	if (asset === 'usdt' || asset === 'usdc' || asset === 'dai') {
+		// Part 122 cp30/cp31 — stablecoins get jitter too.  The
+		// centralization threat (Circle/Tether freeze power for
+		// USDT/USDC; DAI's PSM/USDC backing dependency + MKR
+		// governance for DAI) is real and documented in
+		// /privacy/{usdt,usdc,dai}, but it doesn't refute the
+		// SEPARATE amount-correlation linkability threat that
+		// jitter addresses.  6-decimal display precision, 0-999
+		// micro-unit range — see jitterStablecoinAmount for the
+		// full rationale.  Same routine handles DAI (18-decimal
+		// underlying) because the jitter clamps to display
+		// precision, not token-native decimals.
 		return jitterStablecoinAmount(base);
 	}
 	return base;
@@ -542,7 +559,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'bch' | 'ltc' | 'dash';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -561,19 +578,23 @@ export interface AddressPayload {
 	readonly memo?: string;
 	/** Sub-network identifier for multi-network assets.  REQUIRED
 	 *  when method === 'usdt' (one of 'erc20'|'trc20'|'spl'|
-	 *  'bep20') and when method === 'usdc' (one of 'erc20'|'spl'|
-	 *  'base'|'polygon').  Undefined for single-network assets
-	 *  (btc, xmr, blurt, bch, ltc, dash).  Per Part 121/cp30:
-	 *  USDT and USDC addresses on different network families
-	 *  have INCOMPATIBLE formats — sending USDT-ERC20 to a
-	 *  TRC-20 address loses funds; sending USDC-Solana to an
-	 *  EVM 0x address loses funds.  The network field pins the
-	 *  receiving network so chat-side validation catches
-	 *  mismatches and the explorer URL builder picks the right
-	 *  template.  Note that within USDC, ERC-20 / Base / Polygon
-	 *  all share the EVM 0x[40 hex] shape — so this field is the
-	 *  ONLY thing telling the sender which chain to broadcast
-	 *  on for cross-EVM-USDC sends. */
+	 *  'bep20'), when method === 'usdc' (one of 'erc20'|'spl'|
+	 *  'base'|'polygon'), and when method === 'dai' (one of
+	 *  'erc20'|'polygon'|'base'|'arbitrum').  Undefined for
+	 *  single-network assets (btc, xmr, blurt, bch, ltc, dash).
+	 *  Per Part 121/cp30/cp31: USDT, USDC, and DAI addresses on
+	 *  different network families have INCOMPATIBLE formats —
+	 *  sending USDT-ERC20 to a TRC-20 address loses funds; sending
+	 *  USDC-Solana to an EVM 0x address loses funds.  The network
+	 *  field pins the receiving network so chat-side validation
+	 *  catches mismatches and the explorer URL builder picks the
+	 *  right template.  Note that within USDC, ERC-20 / Base /
+	 *  Polygon all share the EVM 0x[40 hex] shape — so this field
+	 *  is the ONLY thing telling the sender which chain to
+	 *  broadcast on for cross-EVM-USDC sends.  And ALL FOUR DAI
+	 *  networks (ERC-20, Polygon, Base, Arbitrum) share that same
+	 *  EVM shape — DAI is the highest cross-network address-
+	 *  confusion surface on Morphit. */
 	readonly network?: string;
 	/** cp26 — Optional PayJoin (BIP-78) endpoint URL.  When set
 	 *  AND `method === 'btc'`, the generated bitcoin: URI gains
@@ -717,6 +738,29 @@ export function isValidUsdcTxid(s: string): boolean {
 	return false;
 }
 
+/** Validate a DAI address shape across all supported networks
+ *  (ERC-20, Polygon, Base, Arbitrum — Part 122 cp31).  ALL FOUR
+ *  networks use the EVM 0x[40 hex] format, so this is just the
+ *  EVM-address shape.  Per-network validation (which doesn't
+ *  actually disambiguate the SHAPE here, but does pin which
+ *  chain the picker locked in) lives in `validateDaiAddress` in
+ *  `$lib/assets/networks`.  See ADR-0029 §3 — DAI has the
+ *  highest cross-network address-confusion surface of any asset
+ *  on Morphit because all 4 networks are visually identical. */
+export function isValidDaiAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return /^0x[a-fA-F0-9]{40}$/.test(s);
+}
+
+/** Validate a DAI txid shape across all supported networks.
+ *  All four are EVM-family (32-byte hash, displayed as 64 hex
+ *  with optional 0x prefix).  Per-network validation lives in
+ *  `validateDaiTxid` in `$lib/assets/networks`. */
+export function isValidDaiTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return /^(0x)?[a-fA-F0-9]{64}$/.test(s);
+}
+
 /** Validate a BCH address shape (Part 122 cp21).  Accepts both
  *  CashAddr (with or without `bitcoincash:` prefix) and legacy
  *  P2PKH/P2SH formats — most modern BCH wallets emit CashAddr,
@@ -786,6 +830,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'blurt') return isValidBlurtAccount(addr);
 	if (method === 'usdt') return isValidUsdtAddress(addr);
 	if (method === 'usdc') return isValidUsdcAddress(addr);
+	if (method === 'dai') return isValidDaiAddress(addr);
 	if (method === 'bch') return isValidBchAddress(addr);
 	if (method === 'ltc') return isValidLtcAddress(addr);
 	if (method === 'dash') return isValidDashAddress(addr);
@@ -800,6 +845,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'blurt') return BLURT_TXID_RE.test(txid);
 	if (method === 'usdt') return isValidUsdtTxid(txid);
 	if (method === 'usdc') return isValidUsdcTxid(txid);
+	if (method === 'dai') return isValidDaiTxid(txid);
 	if (method === 'bch') return isValidBchTxid(txid);
 	if (method === 'ltc') return isValidLtcTxid(txid);
 	if (method === 'dash') return isValidDashTxid(txid);
@@ -917,7 +963,7 @@ export function encodeAddressPayload(p: AddressPayload): string {
 	// multi-network message without the network field.  Closes the
 	// missing-required-field hole at both encode and decode.
 	if (
-		(p.method === 'usdt' || p.method === 'usdc') &&
+		(p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai') &&
 		(p.network === undefined || p.network === '')
 	) {
 		throw new Error(`payload: network field is REQUIRED for method='${p.method}'`);
@@ -938,6 +984,20 @@ export function encodeAddressPayload(p: AddressPayload): string {
 			}
 			if (!validateUsdcAddress(p.network as UsdcNetwork, p.address)) {
 				throw new Error(`payload: address shape does not match USDC network '${p.network}'`);
+			}
+		} else if (p.method === 'dai') {
+			// Part 122 cp31 — DAI 4 networks per ADR-0029 §1.
+			// All EVM-family; per-network address validation enforced
+			// by validateDaiAddress (each network has its own pinned
+			// regex even though they all share the EVM shape — this
+			// is the cross-network-mis-send hardening per cp30-DD-DD
+			// SEC-3 / SEC-6 pattern).
+			const validDaiNets = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
+			if (!validDaiNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for DAI`);
+			}
+			if (!validateDaiAddress(p.network as DaiNetwork, p.address)) {
+				throw new Error(`payload: address shape does not match DAI network '${p.network}'`);
 			}
 		} else {
 			// Single-network method shipping a `network` value is
@@ -1056,7 +1116,7 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 	// cp30-DD-DD CODE-1 — symmetric to decoder: refuse to emit a
 	// multi-network funds_sent message without the network field.
 	if (
-		(p.method === 'usdt' || p.method === 'usdc') &&
+		(p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai') &&
 		(p.network === undefined || p.network === '')
 	) {
 		throw new Error(`payload: network field is REQUIRED for funds_sent method='${p.method}'`);
@@ -1077,6 +1137,15 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 			}
 			if (!validateUsdcTxid(p.network as UsdcNetwork, p.txid)) {
 				throw new Error(`payload: txid shape does not match USDC network '${p.network}'`);
+			}
+		} else if (p.method === 'dai') {
+			// Part 122 cp31 — DAI 4 networks.
+			const validDaiNets = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
+			if (!validDaiNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for DAI funds_sent`);
+			}
+			if (!validateDaiTxid(p.network as DaiNetwork, p.txid)) {
+				throw new Error(`payload: txid shape does not match DAI network '${p.network}'`);
 			}
 		} else {
 			throw new Error(`payload: network field is only valid for multi-network methods (got method='${p.method}')`);
@@ -1229,14 +1298,14 @@ function optionalFieldsAddress(
 	// uncertain which chain to send on.  Reject at the trust gate.
 	let network: string | undefined;
 	if (
-		(base.method === 'usdt' || base.method === 'usdc') &&
+		(base.method === 'usdt' || base.method === 'usdc' || base.method === 'dai') &&
 		!Object.hasOwn(o, 'network')
 	) {
 		return null;
 	}
 	if (Object.hasOwn(o, 'network')) {
 		if (typeof o.network !== 'string' || o.network.length === 0) return null;
-		// USDT/USDC must have one of their supported networks;
+		// USDT/USDC/DAI must have one of their supported networks;
 		// other methods must not carry the field.  Defense in
 		// depth: the wire format permits the field on any
 		// method for forward-compat, but we reject network
@@ -1286,6 +1355,33 @@ function optionalFieldsAddress(
 			// it because the asset-wide regex is the UNION of
 			// per-network shapes.
 			if (!validateUsdcAddress(o.network as UsdcNetwork, base.address)) {
+				return null;
+			}
+			network = o.network;
+		} else if (base.method === 'dai') {
+			// Part 122 cp31: DAI's four shipped networks.  All four
+			// are EVM-family (ERC-20, Polygon, Base, Arbitrum); no
+			// SPL/TRC-20/BEP-20 per ADR-0029 §1 (no canonical
+			// Maker-issued native DAI on those chains).
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'polygon' &&
+				o.network !== 'base' &&
+				o.network !== 'arbitrum'
+			) {
+				return null;
+			}
+			// cp30-DD-DD SEC-3 pattern — cross-check address shape
+			// against the decoded network.  For DAI this is the
+			// HIGHEST-RISK class of mismatch because ALL FOUR
+			// networks share the EVM 0x[40 hex] format — a hostile
+			// peer can't be caught by simple shape inspection alone.
+			// But validateDaiAddress's per-network regex also enforces
+			// that DAI cannot ship a non-EVM shape under any DAI
+			// network value, so an SPL-format address paired with
+			// `network:'erc20'` would still fail this check via the
+			// network-pinned EVM regex.
+			if (!validateDaiAddress(o.network as DaiNetwork, base.address)) {
 				return null;
 			}
 			network = o.network;
@@ -1355,7 +1451,7 @@ function optionalFieldsFundsSent(
 	// right explorer.
 	let network: string | undefined;
 	if (
-		(base.method === 'usdt' || base.method === 'usdc') &&
+		(base.method === 'usdt' || base.method === 'usdc' || base.method === 'dai') &&
 		!Object.hasOwn(o, 'network')
 	) {
 		return null;
@@ -1395,6 +1491,27 @@ function optionalFieldsFundsSent(
 			// txid shape; only the network field disambiguates which
 			// explorer to link.
 			if (!validateUsdcTxid(o.network as UsdcNetwork, base.txid)) {
+				return null;
+			}
+			network = o.network;
+		} else if (base.method === 'dai') {
+			// Part 122 cp31 — DAI four shipped networks.  All
+			// EVM-family (no SPL/TRC-20/BEP-20 per ADR-0029 §1).
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'polygon' &&
+				o.network !== 'base' &&
+				o.network !== 'arbitrum'
+			) {
+				return null;
+			}
+			// cp30-DD-DD SEC-3 — same cross-check on DAI.  ALL FOUR
+			// networks share the EVM 0x[64 hex] txid shape; only
+			// the network field disambiguates which explorer to
+			// link.  Without this, a hostile peer could mislabel an
+			// Arbitrum txid as `network:'polygon'` and the UI would
+			// render a Polygonscan link that 404s.
+			if (!validateDaiTxid(o.network as DaiNetwork, base.txid)) {
 				return null;
 			}
 			network = o.network;

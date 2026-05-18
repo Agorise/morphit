@@ -58,6 +58,7 @@
 		{ key: 'blurt', path: '/coins/blurt.svg' },
 		{ key: 'usdt', path: '/coins/usdt.svg' },
 		{ key: 'usdc', path: '/icons/icon-usdc.svg' },
+		{ key: 'dai', path: '/icons/icon-dai.svg' },
 		{ key: 'bch', path: '/icons/icon-bch.svg' },
 		{ key: 'ltc', path: '/icons/icon-ltc.svg' },
 		{ key: 'dash', path: '/icons/icon-dash.svg' },

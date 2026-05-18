@@ -395,9 +395,14 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
+	// Part 122 cp31 — DAI's 4 EVM networks per ADR-0029 §1.
+	// Note 'arbitrum' is unique to DAI; the other three overlap
+	// names with USDC's set (erc20/base/polygon) but each asset's
+	// allowlist is independently enforced.
+	const DAI_NETWORKS_VALID = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
 	// cp30-DD-DD I-1 (defense-in-depth) — bound the input before
 	// allocating a lowercased copy.  Every valid network name is
-	// ≤ 7 chars ('polygon').  Reject anything longer early — the
+	// ≤ 8 chars ('arbitrum').  Reject anything longer early — the
 	// allowlist would reject it anyway, but skipping the
 	// toLowerCase() allocation for clearly-malformed input is
 	// cheap defense against memory waste on weird custom_json.
@@ -417,6 +422,15 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		}
 		const net = networkRaw.toLowerCase();
 		if (!USDC_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network = net;
+	} else if (asset === 'DAI') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
+			return { reason: 'asset_network_required_for_dai' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!DAI_NETWORKS_VALID.has(net)) {
 			return { reason: 'asset_network_unknown' };
 		}
 		asset_network = net;

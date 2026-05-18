@@ -430,6 +430,54 @@ const CHECKS: readonly Check[] = [
 			paths: ['apps/indexer/src/api/instance.ts']
 		},
 		status: 'live'
+	},
+	// ─── cp31 DAI P2P ─────────────────────────────────────────────────
+	// cp31 brag entry claims DAI is wired as the 6th Category-B
+	// trade-only asset (parallel to USDT and USDC — multi-network).
+	// Anchor on the canonical registry entry; if DAI ever loses its
+	// registry slot the brag claim drifts into vaporware and this
+	// CHECK row fires.
+	{
+		id: 'cp31-dai-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dai (DAI) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'DAI'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp31 DAI per-network explorer override actually works
+	// Same pattern as cp30-DD-10/11 — anchor on indexer-side body
+	// construction.  Catches the same "interface declared, body
+	// missing" class of bug DD-10 closed for USDC at cp30-DD.
+	{
+		id: 'cp31-dai-per-network-override-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dai (DAI) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'frontendDaiErc20ChatLinkUrl',
+			paths: ['apps/indexer/src/api/instance.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp31 DAI distinct privacy-warning class (not lumped with
+	// USDT/USDC).  Brag claims DAI gets the more-nuanced
+	// `dai_partly_centralized` warning rather than the
+	// freeze-power-implying `*_centralized` class.  Anchor on the
+	// canonical registry where the warning key is declared.
+	{
+		id: 'cp31-dai-partly-centralized-warning-class',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dai (DAI) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "privacyWarningKey: 'dai_partly_centralized'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
 	}
 ];
 

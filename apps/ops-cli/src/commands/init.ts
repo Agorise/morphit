@@ -254,11 +254,21 @@ function printReview(answers: WizardAnswers): void {
 		answers.chatLinkExplorers.usdc.spl === 'https://solscan.io/tx/{txid}' &&
 		answers.chatLinkExplorers.usdc.base === 'https://basescan.org/tx/{txid}' &&
 		answers.chatLinkExplorers.usdc.polygon === 'https://polygonscan.com/tx/{txid}';
+	// Part 122 cp31 — DAI per-network defaults.  All 4 EVM
+	// networks (no SPL); arbiscan is the new explorer name.
+	const daiAllDefault =
+		answers.chatLinkExplorers.dai.erc20 === 'https://etherscan.io/tx/{txid}' &&
+		answers.chatLinkExplorers.dai.polygon === 'https://polygonscan.com/tx/{txid}' &&
+		answers.chatLinkExplorers.dai.base === 'https://basescan.org/tx/{txid}' &&
+		answers.chatLinkExplorers.dai.arbitrum === 'https://arbiscan.io/tx/{txid}';
 	console.log(
 		`  USDT chat-link URLs:  ${usdtAllDefault ? 'all 4 defaults (ERC-20/TRC-20/SPL/BEP-20)' : 'customized — see env file'}`
 	);
 	console.log(
 		`  USDC chat-link URLs:  ${usdcAllDefault ? 'all 4 defaults (ERC-20/SPL/Base/Polygon)' : 'customized — see env file'}`
+	);
+	console.log(
+		`  DAI chat-link URLs:   ${daiAllDefault ? 'all 4 defaults (ERC-20/Polygon/Base/Arbitrum)' : 'customized — see env file'}`
 	);
 	if (answers.disabledAssets.disabledTickers.length === 0) {
 		console.log(`  Trade-only assets:    all enabled (default)`);

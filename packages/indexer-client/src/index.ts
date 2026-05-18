@@ -131,12 +131,13 @@ export interface OrderRecord {
 	 *    'waived_first_buy'   — onboarding waiver, one per account
 	 *    'btc' / 'xmr'        — sub-phase 4b; not yet emitted */
 	readonly fee_method?: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
-	/** Part 121 / cp30 — sub-network for multi-network assets
-	 *  (USDT and USDC).  For USDT: one of 'erc20'|'trc20'|'spl'|
+	/** Part 121 / cp30 / cp31 — sub-network for multi-network assets
+	 *  (USDT, USDC, DAI).  For USDT: one of 'erc20'|'trc20'|'spl'|
 	 *  'bep20' when `asset === 'USDT'`.  For USDC: one of
-	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.
-	 *  Null otherwise (pre-Part-121 rows and orders with single-
-	 *  network assets BTC/XMR/BLURT/BCH/LTC/DASH). */
+	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.  For
+	 *  DAI: one of 'erc20'|'polygon'|'base'|'arbitrum' when
+	 *  `asset === 'DAI'`.  Null otherwise (pre-Part-121 rows and
+	 *  orders with single-network assets BTC/XMR/BLURT/BCH/LTC/DASH). */
 	readonly asset_network?: string | null;
 	/** Number of feedback rows this account has received.
 	 *  Proxy for "completed trades." Zero on accounts with no
@@ -722,6 +723,19 @@ export interface InstanceResponse {
 			readonly spl: string | null;
 			readonly base: string | null;
 			readonly polygon: string | null;
+		};
+		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
+		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
+		 *  ADR-0029 §1 (no canonical Maker-issued DAI on those
+		 *  chains).  Older indexer builds (pre-cp31) omit this
+		 *  field; frontend defensive-fallback supplies a 4-network
+		 *  null sub-map. */
+		readonly dai?: {
+			readonly erc20: string | null;
+			readonly polygon: string | null;
+			readonly base: string | null;
+			readonly arbitrum: string | null;
 		};
 	};
 	/** Trade-only assets this instance has DISABLED via the

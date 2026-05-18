@@ -53,6 +53,13 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// the live value so users see actual peg state during stress
 	// events rather than an assumed $1.00.
 	USDC: 'usd-coin',
+	// Part 122 cp31 — Dai pegs to USD via MakerDAO's overcollateralized
+	// vaults + Peg Stability Module.  Coingecko's `dai` ID returns
+	// the live peg state; expected ~$1.00, dips during stress events
+	// (the March 2023 USDC depeg transitively reduced DAI to ~$0.97
+	// because the PSM holds USDC as collateral).  Live value is the
+	// canonical source — order-row subline surfaces actual peg state.
+	DAI: 'dai',
 	// Part 122 cp21 — Bitcoin Cash.  Coingecko's `bitcoin-cash`
 	// ID returns live BCH/USD.  Same posture as BTC: transparent
 	// asset, no privacy-warning chip, single-network mainnet.

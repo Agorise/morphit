@@ -666,3 +666,190 @@ describe('orderReplace asset_network gate (cp30-DD-DD CODE-3)', () => {
 		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_usdt' });
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────
+// cp31-DD DD-6 — DAI asset_network gate test coverage.
+//
+// Mirror of the cp30-DD-DD CODE-3 USDC tests above, targeting DAI's
+// 4-EVM-network allowlist and the same replace-substance lock.
+// DAI carries the most-amplified version of the cross-network mis-
+// send risk on Morphit because ALL FOUR DAI networks (ERC-20,
+// Polygon, Base, Arbitrum) share the EVM 0x[40 hex] address shape.
+// The orderReplace handler's substance-field lock parallels USDC
+// (via the structurally-identical Mirror-of-order.ts pattern), but
+// the regression layer needs DAI-targeted scenarios so a future
+// breakage in the DAI branch fires loudly instead of silently
+// being covered only by mirror-equivalence.
+// ─────────────────────────────────────────────────────────────────
+
+function validDaiPayload(): Record<string, unknown> {
+	return {
+		permlink: 'sell-dai-eur-2026-04',
+		side: 'sell',
+		asset: 'DAI',
+		fiat_currency: 'EUR',
+		amount_min: 50,
+		amount_max: 5000,
+		price_model: { kind: 'spread', percent: 1 },
+		payment_methods: ['sepa'],
+		asset_network: 'arbitrum'
+	};
+}
+
+describe('orderReplace asset_network gate — DAI (cp31-DD DD-6)', () => {
+	it('rejects DAI replace missing asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+		const payload = validDaiPayload();
+		delete payload.asset_network;
+
+		const r = await handler(
+			makeCtx({ signer: 'alice', blockTime, payload }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_dai' });
+	});
+
+	it('rejects DAI replace with unknown asset_network', async () => {
+		// 'spl' is a valid USDC network but DAI is exclusively EVM
+		// (no canonical Maker DAI on Solana per ADR-0029 §1).  Catch
+		// the wrong-network class explicitly.
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validDaiPayload(),
+					asset_network: 'spl'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_unknown' });
+	});
+
+	it('rejects DAI replace with USDT-only network (trc20)', async () => {
+		// trc20 is valid for USDT, invalid for DAI.  Each asset's
+		// allowlist is independent; a cross-asset network value
+		// must be rejected.
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validDaiPayload(),
+					asset_network: 'trc20'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_unknown' });
+	});
+
+	it('rejects DAI replace that changes asset_network from target', async () => {
+		// CRITICAL DAI case — bait-and-switch amplified by the
+		// 4-way EVM-identity property.  Original was DAI/arbitrum;
+		// replace tries to flip to DAI/polygon.  Counterparty who
+		// saw "DAI on Arbitrum One" listing can't visually
+		// distinguish that the seller flipped to Polygon — same
+		// 0x address shape.  This is THE attack surface DAI's
+		// strongest cross-network warning was written for, and it
+		// reaches into the orderReplace flow too.
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'DAI',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'arbitrum'
+					}
+				]
+			}
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validDaiPayload(),
+					asset_network: 'polygon' // CHANGED from target's 'arbitrum'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'replace_asset_network_change_forbidden' });
+	});
+
+	it('allows DAI replace that preserves asset_network', async () => {
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'DAI',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'arbitrum'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validDaiPayload(),
+					asset_network: 'arbitrum', // unchanged
+					amount_max: 7500 // detail-field tweak
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('cp30-DD-DD I-1: rejects DAI asset_network exceeding length cap', async () => {
+		// I-1 defense-in-depth inherited by the DAI branch:
+		// bound input length BEFORE allocating a lowercased copy.
+		// Pathological input gets the standard
+		// required-for-dai reason (not a distinct "too long"
+		// code).
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validDaiPayload(),
+					asset_network: 'arbitrum-pathologically-extended-beyond-MAX_NETWORK_LEN'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_dai' });
+	});
+});

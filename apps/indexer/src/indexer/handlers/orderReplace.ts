@@ -60,7 +60,7 @@ interface Validated {
 	readonly terms: string | null;
 	readonly expires_at: Date | null;
 	/** cp30-DD-DD CODE-3 — multi-network asset_network (Part 121
-	 *  USDT + cp30 USDC).  Required for USDT/USDC, null for every
+	 *  USDT + cp30 USDC + cp31 DAI).  Required for USDT/USDC/DAI, null for every
 	 *  other asset.  Same shape contract as order.ts. */
 	readonly asset_network: string | null;
 }
@@ -199,7 +199,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 	}
 
 	// cp30-DD-DD CODE-3 — asset_network gate.  Mirror of order.ts
-	// §"asset_network for multi-network assets".  USDT and USDC
+	// §"asset_network for multi-network assets".  USDT, USDC, and DAI
 	// REQUIRE asset_network; every other asset must omit (or pass
 	// null).  Strict per-asset allowlists.  The replace handler
 	// will additionally enforce that the network matches the
@@ -209,6 +209,8 @@ function validate(payload: unknown): Validated | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
+	// Part 122 cp31 — DAI's 4 EVM networks per ADR-0029 §1.
+	const DAI_NETWORKS_VALID = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
 	// cp30-DD-DD I-1 (defense-in-depth) — bound input before
 	// allocating a lowercased copy.  Mirror of order.ts.
 	const MAX_NETWORK_LEN = 16;
@@ -227,6 +229,15 @@ function validate(payload: unknown): Validated | { reason: string } {
 		}
 		const net = networkRaw.toLowerCase();
 		if (!USDC_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network_validated = net;
+	} else if (asset === 'DAI') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
+			return { reason: 'asset_network_required_for_dai' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!DAI_NETWORKS_VALID.has(net)) {
 			return { reason: 'asset_network_unknown' };
 		}
 		asset_network_validated = net;
@@ -252,7 +263,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 		expires_at,
 		// cp30-DD-DD CODE-3 — multi-network asset_network gate.
 		// Mirror of order.ts §"asset_network for multi-network
-		// assets".  Required for USDT/USDC, forbidden for single-
+		// assets".  Required for USDT/USDC/DAI, forbidden for single-
 		// network assets, strictly allowlisted per asset.  The
 		// orderReplace handler also locks this against changes
 		// (see handle() body for the target.asset_network check) —
@@ -341,7 +352,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (v.fiat_currency !== target.fiat_currency) {
 		return { ok: false, reason: 'replace_fiat_change_forbidden' };
 	}
-	// cp30-DD-DD CODE-3 — for multi-network assets (USDT/USDC),
+	// cp30-DD-DD CODE-3 — for multi-network assets (USDT/USDC/DAI),
 	// asset_network is substance per ADR-0023/0028 (which chain
 	// is the trade actually on?) and must not change in a replace.
 	// For single-network assets both are null so the comparison

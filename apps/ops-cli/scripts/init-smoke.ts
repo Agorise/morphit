@@ -187,6 +187,12 @@ const sampleAnswers: WizardAnswers = {
 			spl: 'https://solscan.io/tx/{txid}',
 			base: 'https://basescan.org/tx/{txid}',
 			polygon: 'https://polygonscan.com/tx/{txid}'
+		},
+		dai: {
+			erc20: 'https://etherscan.io/tx/{txid}',
+			polygon: 'https://polygonscan.com/tx/{txid}',
+			base: 'https://basescan.org/tx/{txid}',
+			arbitrum: 'https://arbiscan.io/tx/{txid}'
 		}
 	},
 	listingFee: {

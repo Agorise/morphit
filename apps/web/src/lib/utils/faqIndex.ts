@@ -134,6 +134,9 @@ export const FAQ_KEYS = [
 	'what_is_usdc',
 	'why_usdc_warning',
 	'which_usdc_network',
+	'what_is_dai',
+	'why_dai_warning',
+	'which_dai_network',
 	'arbitrage_morphit_vs_exchanges'
 ] as const;
 
@@ -488,12 +491,15 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	],
 	public_api: ['run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer'],
 	qr_login: ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me'],
-	what_is_usdt: ['why_usdt_warning', 'which_usdt_network', 'what_is_usdc', 'fees', 'how_to_buy'],
-	why_usdt_warning: ['what_is_usdt', 'which_usdt_network', 'why_usdc_warning', 'how_morphit_protects_me', 'privacy_practices'],
-	which_usdt_network: ['what_is_usdt', 'why_usdt_warning', 'which_usdc_network', 'fees', 'how_to_buy'],
-	what_is_usdc: ['why_usdc_warning', 'which_usdc_network', 'what_is_usdt', 'fees', 'how_to_buy'],
-	why_usdc_warning: ['what_is_usdc', 'which_usdc_network', 'why_usdt_warning', 'how_morphit_protects_me', 'privacy_practices'],
-	which_usdc_network: ['what_is_usdc', 'why_usdc_warning', 'which_usdt_network', 'fees', 'how_to_buy'],
+	what_is_usdt: ['why_usdt_warning', 'which_usdt_network', 'what_is_usdc', 'what_is_dai', 'fees', 'how_to_buy'],
+	why_usdt_warning: ['what_is_usdt', 'which_usdt_network', 'why_usdc_warning', 'why_dai_warning', 'how_morphit_protects_me', 'privacy_practices'],
+	which_usdt_network: ['what_is_usdt', 'why_usdt_warning', 'which_usdc_network', 'which_dai_network', 'fees', 'how_to_buy'],
+	what_is_usdc: ['why_usdc_warning', 'which_usdc_network', 'what_is_usdt', 'what_is_dai', 'fees', 'how_to_buy'],
+	why_usdc_warning: ['what_is_usdc', 'which_usdc_network', 'why_usdt_warning', 'why_dai_warning', 'how_morphit_protects_me', 'privacy_practices'],
+	which_usdc_network: ['what_is_usdc', 'why_usdc_warning', 'which_usdt_network', 'which_dai_network', 'fees', 'how_to_buy'],
+	what_is_dai: ['why_dai_warning', 'which_dai_network', 'what_is_usdt', 'what_is_usdc', 'fees', 'how_to_buy'],
+	why_dai_warning: ['what_is_dai', 'which_dai_network', 'why_usdt_warning', 'why_usdc_warning', 'how_morphit_protects_me', 'privacy_practices'],
+	which_dai_network: ['what_is_dai', 'why_dai_warning', 'which_usdc_network', 'which_usdt_network', 'fees', 'how_to_buy'],
 	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
 };
 

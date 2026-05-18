@@ -109,6 +109,18 @@ export interface InstanceState {
 			readonly base: string | null;
 			readonly polygon: string | null;
 		};
+		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
+		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
+		 *  ADR-0029 §1.  Pre-cp31 indexers may omit this field
+		 *  entirely; the defensive fallback at fetch time fills
+		 *  in all-nulls. */
+		readonly dai: {
+			readonly erc20: string | null;
+			readonly polygon: string | null;
+			readonly base: string | null;
+			readonly arbitrum: string | null;
+		};
 	};
 	/** Trade-only assets this instance has disabled via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
@@ -160,7 +172,8 @@ const FALLBACK: InstanceState = {
 		ltc: null,
 		dash: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
-		usdc: { erc20: null, spl: null, base: null, polygon: null }
+		usdc: { erc20: null, spl: null, base: null, polygon: null },
+		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
 	},
 	disabled_assets: [],
 	operator_matrix_room: null,
@@ -252,6 +265,12 @@ export function initInstance(): Promise<void> {
 									spl: null,
 									base: null,
 									polygon: null
+								},
+								dai: result.data.chat_link_urls.dai ?? {
+									erc20: null,
+									polygon: null,
+									base: null,
+									arbitrum: null
 								}
 							}
 						: {
@@ -261,7 +280,8 @@ export function initInstance(): Promise<void> {
 								ltc: null,
 								dash: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
-								usdc: { erc20: null, spl: null, base: null, polygon: null }
+								usdc: { erc20: null, spl: null, base: null, polygon: null },
+								dai: { erc20: null, polygon: null, base: null, arbitrum: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],
 				operator_matrix_room: result.data.operator_matrix_room ?? null,

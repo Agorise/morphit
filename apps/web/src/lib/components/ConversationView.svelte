@@ -54,7 +54,9 @@
 		isUsdtNetwork,
 		type UsdtNetwork,
 		isUsdcNetwork,
-		type UsdcNetwork
+		type UsdcNetwork,
+		isDaiNetwork,
+		type DaiNetwork
 	} from '$lib/assets/networks';
 	import { recordFundsSent } from '$lib/trades/tradeStatus';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -262,7 +264,7 @@
 	let showAddressShareModal = $state(false);
 	let showFundsSentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
-	 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH).  Held separately from
+	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
 	 *  button (no prefill) and the pill-level Mark-as-sent
 	 *  button (with prefill) share the modal but supply
@@ -274,7 +276,7 @@
 		// cp26 DD-7 fix + cp30 — pill's "Mark as sent" button now
 		// passes the network through to FundsSentModal so the
 		// buyer doesn't have to re-pick a network they already saw
-		// in the chat header.  Both USDT and USDC are multi-network
+		// in the chat header.  USDT, USDC, and DAI are all multi-network
 		// trade-only assets that ride a `network` discriminator
 		// (cp26 wired this through the AddressPayload wire shape
 		// originally for USDT; cp30 extended it to USDC).
@@ -374,7 +376,7 @@
 	}
 
 	/** Q5 — Mark-as-sent click on an incoming address pill
-	 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH).  Captures the seller's
+	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH).  Captures the seller's
 	 *  specified method+amount and opens FundsSentModal
 	 *  pre-filled. Critical for the Monero amount-jitter flow:
 	 *  the buyer's funds-sent echo MUST carry the same jittered
@@ -1004,6 +1006,20 @@
 			markSentArgs?.network !== undefined &&
 			isUsdcNetwork(markSentArgs.network)
 				? (markSentArgs.network as UsdcNetwork)
+				: null
+		}
+		initialDaiNetwork={
+			/* Part 122 cp31 — same propagation path for DAI.
+			   Guarded by method === 'dai' for the same
+			   defense-in-depth reasons.  DAI is the most
+			   important case here because all 4 networks share
+			   the EVM 0x address format — the network from the
+			   pill is the ONLY way the buyer's modal can know
+			   which chain to expect a txid on. */
+			markSentArgs?.method === 'dai' &&
+			markSentArgs?.network !== undefined &&
+			isDaiNetwork(markSentArgs.network)
+				? (markSentArgs.network as DaiNetwork)
 				: null
 		}
 		onShare={handleFundsSent}
