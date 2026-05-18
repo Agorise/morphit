@@ -29,8 +29,8 @@
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
-	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl } from '$lib/explorer/urls';
-	import { isUsdtNetwork, isUsdcNetwork } from '$lib/assets/networks';
+	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl } from '$lib/explorer/urls';
+	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
@@ -215,6 +215,19 @@
 			// network we can't pick the right scanner.
 			if (network !== undefined && isUsdcNetwork(network)) {
 				return usdcExplorerUrl(network, txid);
+			}
+			return null;
+		}
+		if (method === 'dai') {
+			// Part 122 cp31 — per-network DAI explorer URL.  Same
+			// shape as USDC.  MOST important here because ALL FOUR
+			// DAI networks (ERC-20, Polygon, Base, Arbitrum) share
+			// the same EVM 0x[64 hex] txid format — no SPL branch to
+			// fall back to.  Without `network` we can't pick the
+			// right scanner: etherscan vs polygonscan vs basescan vs
+			// arbiscan.
+			if (network !== undefined && isDaiNetwork(network)) {
+				return daiExplorerUrl(network, txid);
 			}
 			return null;
 		}
@@ -424,10 +437,11 @@
 					!Number.isNaN(parsedAmount) &&
 					parsedAmount > 0}
 				{@const canMarkSent =
-					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash') && isIncoming}
+					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash') && isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
 				{@const usdtNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
 				{@const usdcNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
+				{@const daiNetworkValid = p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -466,6 +480,20 @@
 								</span>
 							{/if}
 							{$_('chat.address.pill_method_usdc')}
+						{:else if p.method === 'dai'}
+							<!-- Part 122 cp31 — DAI pill header parallel
+							     to USDC.  MakerDAO orange chip to
+							     visually distinguish from USDT amber +
+							     USDC Circle-blue.  MOST important here
+							     because ALL FOUR DAI networks share the
+							     EVM 0x address format — the chip is the
+							     ONLY visual signal of which chain. -->
+							{#if daiNetworkValid}
+								<span class="rounded-md bg-orange-400/20 px-2 py-0.5 font-bold text-orange-300">
+									{$_(`assets.dai.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.address.pill_method_dai')}
 						{:else}
 							{$_('chat.address.pill_method_blurt')}
 						{/if}
@@ -534,6 +562,24 @@
 						>
 							{$_('assets.usdc.address_share.warning', {
 								values: { network: $_(`assets.usdc.network.${p.network}.displayName`) }
+							})}
+						</aside>
+					{/if}
+					{#if p.method === 'dai' && daiNetworkValid}
+						<!-- Part 122 cp31 — per-message DAI cross-network
+						     warning.  Same shape as USDC but with
+						     MakerDAO-orange trim.  MOST critical here
+						     because ALL FOUR DAI networks share the EVM
+						     0x[40 hex] shape — no SPL branch to provide
+						     visual cue (USDC at least has SPL/EVM
+						     dimorphism).  This is the highest cross-
+						     network-confusion surface on Morphit. -->
+						<aside
+							class="rounded-md border border-orange-400/30 bg-orange-400/5 px-2.5 py-2 text-xs text-orange-200"
+							role="note"
+						>
+							{$_('assets.dai.address_share.warning', {
+								values: { network: $_(`assets.dai.network.${p.network}.displayName`) }
 							})}
 						</aside>
 					{/if}
@@ -622,7 +668,7 @@
 										// from the address payload to FundsSentModal so
 										// the receiver doesn't have to re-pick a network
 										// they already saw on the seller's pill.  Both
-										// USDT and USDC carry a network field; the other
+										// USDT, USDC, and DAI carry a network field; the other
 										// single-network assets leave this undefined.
 										network: p.network
 									})}
@@ -650,6 +696,7 @@
 				{@const p = decoded.payload}
 				{@const usdtFundsNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
 				{@const usdcFundsNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
+				{@const daiFundsNetworkValid = p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -683,6 +730,17 @@
 								</span>
 							{/if}
 							{$_('chat.funds_sent.pill_title_usdc')}
+						{:else if p.method === 'dai'}
+							<!-- Part 122 cp31 — DAI funds-sent pill.
+							     MakerDAO-orange chip to distinguish from
+							     USDT amber + USDC Circle-blue.  Visually
+							     consistent with the address-pill side. -->
+							{#if daiFundsNetworkValid}
+								<span class="rounded-md bg-orange-400/20 px-2 py-0.5 font-bold text-orange-300">
+									{$_(`assets.dai.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.funds_sent.pill_title_dai')}
 						{:else}
 							{$_('chat.funds_sent.pill_title_blurt')}
 						{/if}

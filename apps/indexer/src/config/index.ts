@@ -388,6 +388,20 @@ export interface Config {
 	readonly frontendUsdcBaseChatLinkUrl: string | undefined;
 	readonly frontendUsdcPolygonChatLinkUrl: string | undefined;
 
+	/** Per-instance per-network DAI chat-link explorer URL
+	 *  templates (Part 122 cp31).  4 networks, all EVM-family.
+	 *  Bundled defaults:
+	 *    erc20    → https://etherscan.io/tx/{txid}
+	 *    polygon  → https://polygonscan.com/tx/{txid}
+	 *    base     → https://basescan.org/tx/{txid}
+	 *    arbitrum → https://arbiscan.io/tx/{txid}
+	 *  SPL/TRC-20/BEP-20 intentionally NOT supported (ADR-0029 §1)
+	 *  — no canonical Maker-issued DAI on those chains. */
+	readonly frontendDaiErc20ChatLinkUrl: string | undefined;
+	readonly frontendDaiPolygonChatLinkUrl: string | undefined;
+	readonly frontendDaiBaseChatLinkUrl: string | undefined;
+	readonly frontendDaiArbitrumChatLinkUrl: string | undefined;
+
 	/** The operator's registered tag (matching their
 	 *  `morphit_operator_register_v1` op).  When set, the
 	 *  /v1/instance endpoint returns this so the frontend can
@@ -918,6 +932,42 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp31 — DAI per-network chat-link explorer URLs.
+	// 4 networks: ERC-20 (Ethereum), Polygon, Base, Arbitrum.
+	// SPL/TRC-20/BEP-20 intentionally NOT supported per ADR-0029 §1
+	// (no canonical Maker-issued DAI on those chains).
+	MORPHIT_FRONTEND_DAI_ERC20_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_DAI_POLYGON_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_DAI_BASE_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_DAI_ARBITRUM_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// REVISIT-LIST item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
@@ -1100,6 +1150,11 @@ export function loadConfig(): Config {
 		frontendUsdcErc20ChatLinkUrl: e.MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL,
 		frontendUsdcSplChatLinkUrl: e.MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL,
 		frontendUsdcBaseChatLinkUrl: e.MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL,
-		frontendUsdcPolygonChatLinkUrl: e.MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL
+		frontendUsdcPolygonChatLinkUrl: e.MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL,
+		// Part 122 cp31 — DAI per-network env vars.
+		frontendDaiErc20ChatLinkUrl: e.MORPHIT_FRONTEND_DAI_ERC20_CHAT_LINK_URL,
+		frontendDaiPolygonChatLinkUrl: e.MORPHIT_FRONTEND_DAI_POLYGON_CHAT_LINK_URL,
+		frontendDaiBaseChatLinkUrl: e.MORPHIT_FRONTEND_DAI_BASE_CHAT_LINK_URL,
+		frontendDaiArbitrumChatLinkUrl: e.MORPHIT_FRONTEND_DAI_ARBITRUM_CHAT_LINK_URL
 	};
 }

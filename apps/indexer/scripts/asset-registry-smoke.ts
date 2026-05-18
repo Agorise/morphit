@@ -130,6 +130,7 @@ scenario('lower-case tickers match payload union', () => {
 		'blurt',
 		'usdt',
 		'usdc',
+		'dai',
 		'bch',
 		'ltc',
 		'dash'

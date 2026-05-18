@@ -132,6 +132,18 @@ export interface InstanceResponse {
 			base: string | null;
 			polygon: string | null;
 		};
+		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
+		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
+		 *  ADR-0029 §1 (no canonical Maker-issued DAI on those
+		 *  chains).  Highest cross-network address-confusion
+		 *  surface of any asset (4-way EVM identity). */
+		dai: {
+			erc20: string | null;
+			polygon: string | null;
+			base: string | null;
+			arbitrum: string | null;
+		};
 	};
 	/** Trade-only assets this instance has DISABLED via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
@@ -223,6 +235,12 @@ export function instanceRoute(config: Config): Hono {
 					spl: config.frontendUsdcSplChatLinkUrl ?? null,
 					base: config.frontendUsdcBaseChatLinkUrl ?? null,
 					polygon: config.frontendUsdcPolygonChatLinkUrl ?? null
+				},
+				dai: {
+					erc20: config.frontendDaiErc20ChatLinkUrl ?? null,
+					polygon: config.frontendDaiPolygonChatLinkUrl ?? null,
+					base: config.frontendDaiBaseChatLinkUrl ?? null,
+					arbitrum: config.frontendDaiArbitrumChatLinkUrl ?? null
 				}
 			},
 			disabled_assets: config.disabledAssets,

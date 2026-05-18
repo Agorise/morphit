@@ -185,6 +185,18 @@ const ChatLinkUrlsSchema = z.object({
 			base: z.string().nullable(),
 			polygon: z.string().nullable()
 		})
+		.optional(),
+	// Part 122 cp31 — DAI per-network chat-link URL overrides.
+	// 4 EVM networks: ERC-20, Polygon, Base, Arbitrum.  No SPL
+	// per ADR-0029 §1 (no canonical Maker DAI on Solana).
+	// Same back-compat optionality as USDC.
+	dai: z
+		.object({
+			erc20: z.string().nullable(),
+			polygon: z.string().nullable(),
+			base: z.string().nullable(),
+			arbitrum: z.string().nullable()
+		})
 		.optional()
 });
 

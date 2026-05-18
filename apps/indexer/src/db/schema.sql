@@ -2169,15 +2169,17 @@ CREATE INDEX IF NOT EXISTS idx_orders_asset_asset_network
     WHERE asset_network IS NOT NULL;
 
 COMMENT ON COLUMN orders.asset_network IS
-    'Part 121 / cp30: sub-network identifier for multi-network '
-    'assets (USDT and USDC today).  For USDT: one of '
+    'Part 121 / cp30 / cp31: sub-network identifier for multi-network '
+    'assets (USDT, USDC, and DAI today).  For USDT: one of '
     '''erc20''/''trc20''/''spl''/''bep20''.  For USDC: one of '
-    '''erc20''/''spl''/''base''/''polygon''.  NULL for every '
+    '''erc20''/''spl''/''base''/''polygon''.  For DAI: one of '
+    '''erc20''/''polygon''/''base''/''arbitrum''.  NULL for every '
     'other asset.  Pinned at post time so cross-network sends '
     'are impossible — buyer sees the network on the order row '
     'before agreeing to trade.  Note that USDC ERC-20, Base, and '
-    'Polygon addresses all share the EVM 0x[40-hex] format; this '
-    'column is the only thing telling the sender which chain.';
+    'Polygon addresses all share the EVM 0x[40-hex] format, and '
+    'ALL FOUR DAI networks share that same format; this column '
+    'is the only thing telling the sender which chain.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- v33 / Part 122 cp13 — Web Push subscription storage + delivery queue

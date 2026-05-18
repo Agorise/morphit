@@ -48,7 +48,11 @@ import {
 	USDC_NETWORK_METADATA,
 	bundledUsdcExplorerUrl,
 	validateUsdcTxid,
-	type UsdcNetwork
+	type UsdcNetwork,
+	DAI_NETWORK_METADATA,
+	bundledDaiExplorerUrl,
+	validateDaiTxid,
+	type DaiNetwork
 } from '$lib/assets/networks';
 
 export {
@@ -230,6 +234,37 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 	}
 
 	return bundledUsdcExplorerUrl(network, txid);
+}
+
+/** Builds the per-network DAI explorer URL.  Same shape as
+ *  `usdcExplorerUrl` — operator override consulted first, bundled
+ *  default from `lib/assets/networks.ts` if absent.  DAI-specific
+ *  path because DAI is multi-network (Part 122 cp31) — 4 EVM
+ *  networks (ERC-20, Polygon, Base, Arbitrum), no SPL.  Simpler
+ *  normalization than USDC because there's no case-sensitive SPL
+ *  branch to preserve. */
+export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null {
+	if (typeof txid !== 'string') return null;
+	if (!validateDaiTxid(network, txid)) return null;
+
+	const daiOverrides = getInstanceSnapshot().chat_link_urls.dai;
+	const override = daiOverrides ? daiOverrides[network] : null;
+
+	// cp30-DD-DD SEC-1 (defense-in-depth) — same XSS-protection
+	// posture as usdtExplorerUrl + usdcExplorerUrl above.  Hostile
+	// indexer serving `javascript:...` template would be rejected
+	// here and the bundled default would be used instead.
+	if (override && isValidChatLinkTemplate(override)) {
+		// cp30-DD-DD SEC-4 — EVM-family normalization (all 4 DAI
+		// networks are EVM; no SPL/TRC-20 branch).  Etherscan,
+		// Polygonscan, Basescan, Arbiscan all return 404 to
+		// bare-hex; emit canonical 0x-prefixed lowercase.
+		const lc = txid.toLowerCase();
+		const normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
+		return substituteTxidIntoTemplate(override, normalized);
+	}
+
+	return bundledDaiExplorerUrl(network, txid);
 }
 
 /** Builds the Morphit explorer URL for a Blurt account.

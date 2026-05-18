@@ -850,6 +850,15 @@ export const DEFAULT_USDC_SPL_CHAT_LINK_URL = 'https://solscan.io/tx/{txid}';
 export const DEFAULT_USDC_BASE_CHAT_LINK_URL = 'https://basescan.org/tx/{txid}';
 export const DEFAULT_USDC_POLYGON_CHAT_LINK_URL = 'https://polygonscan.com/tx/{txid}';
 
+// Part 122 cp31 — DAI per-network chat-link explorer URL bundled
+// defaults.  4 EVM networks (ERC-20, Polygon, Base, Arbitrum).
+// SPL/TRC-20/BEP-20 intentionally not supported per ADR-0029 §1
+// (no canonical Maker-issued DAI on those chains).
+export const DEFAULT_DAI_ERC20_CHAT_LINK_URL = 'https://etherscan.io/tx/{txid}';
+export const DEFAULT_DAI_POLYGON_CHAT_LINK_URL = 'https://polygonscan.com/tx/{txid}';
+export const DEFAULT_DAI_BASE_CHAT_LINK_URL = 'https://basescan.org/tx/{txid}';
+export const DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL = 'https://arbiscan.io/tx/{txid}';
+
 // ─── Step 11: Fee-verifier explorer URLs ─────────────────────────
 
 export interface FeeExplorersResult {
@@ -1045,6 +1054,17 @@ export interface ChatLinkExplorersResult {
 		readonly base: string;
 		readonly polygon: string;
 	};
+	/** Part 122 cp31 — multi-network DAI per-network chat-link
+	 *  URLs.  4 EVM networks (erc20/polygon/base/arbitrum).
+	 *  SPL/TRC-20/BEP-20 intentionally absent per ADR-0029 §1.
+	 *  All four explorers are -scan-style (etherscan, polygonscan,
+	 *  basescan, arbiscan). */
+	readonly dai: {
+		readonly erc20: string;
+		readonly polygon: string;
+		readonly base: string;
+		readonly arbitrum: string;
+	};
 }
 
 /** Validate a chat-link URL template.  Must be https://, must
@@ -1105,6 +1125,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'Multi-network assets (one URL per network):\n' +
 			'  • USDT: ERC-20, TRC-20, SPL, BEP-20\n' +
 			'  • USDC: ERC-20, SPL, Base, Polygon\n' +
+			'  • DAI:  ERC-20, Polygon, Base, Arbitrum\n' +
 			'\n' +
 			'You can change these later by editing morphit.config.env.\n' +
 			'\n' +
@@ -1207,7 +1228,45 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			polygon: await editChatLinkUrl('USDC Polygon chat-link URL', DEFAULT_USDC_POLYGON_CHAT_LINK_URL)
 		};
 
-	return { btc, xmr, bch, ltc, dash, usdt, usdc };
+	// ─── DAI multi-network (Part 122 cp31) ──
+	// Same shape as USDC but 4 EVM networks (Ethereum, Polygon,
+	// Base, Arbitrum).  No SPL/TRC-20/BEP-20 — per ADR-0029 §1,
+	// MakerDAO does not issue canonical native DAI on those
+	// chains; existing wrapped/bridged variants defeat DAI's
+	// decentralization rationale.  All four explorers are
+	// -scan-style (etherscan/polygonscan/basescan/arbiscan).
+	console.log('\n  ── DAI per-network chat-link URLs (4 networks) ──\n');
+	explain(
+		'DAI is multi-network: ERC-20 (Ethereum), Polygon (PoS),\n' +
+			'Base, or Arbitrum One.  All four are EVM-family; no SPL\n' +
+			'or BEP-20 per ADR-0029 — Maker does not issue native DAI\n' +
+			'on those chains.\n' +
+			'\n' +
+			'Defaults:\n' +
+			'  • ERC-20:   ' + DEFAULT_DAI_ERC20_CHAT_LINK_URL + '\n' +
+			'  • Polygon:  ' + DEFAULT_DAI_POLYGON_CHAT_LINK_URL + '\n' +
+			'  • Base:     ' + DEFAULT_DAI_BASE_CHAT_LINK_URL + '\n' +
+			'  • Arbitrum: ' + DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
+	);
+	const daiChoice = await askChoice(
+		'How would you like to handle DAI per-network URLs?',
+		['Accept all 4 defaults', 'Customize each one']
+	);
+	const dai = daiChoice === 0
+		? {
+			erc20: DEFAULT_DAI_ERC20_CHAT_LINK_URL,
+			polygon: DEFAULT_DAI_POLYGON_CHAT_LINK_URL,
+			base: DEFAULT_DAI_BASE_CHAT_LINK_URL,
+			arbitrum: DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
+		}
+		: {
+			erc20: await editChatLinkUrl('DAI ERC-20 chat-link URL', DEFAULT_DAI_ERC20_CHAT_LINK_URL),
+			polygon: await editChatLinkUrl('DAI Polygon chat-link URL', DEFAULT_DAI_POLYGON_CHAT_LINK_URL),
+			base: await editChatLinkUrl('DAI Base chat-link URL', DEFAULT_DAI_BASE_CHAT_LINK_URL),
+			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
+		};
+
+	return { btc, xmr, bch, ltc, dash, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {

@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'BCH', 'LTC', 'DASH'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -337,7 +337,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// MEMORY #23 INVARIANT: USDC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
-		// USDT/USDC/BCH/LTC/DASH as Category-B trade-only assets.
+		// USDT/DAI/BCH/LTC/DASH as Category-B trade-only assets.
 		canPayListingFee: false,
 		// Networks shipped at launch.  Native USDC only — bridged
 		// variants (USDC.e on Avalanche / Optimism / Arbitrum,
@@ -385,6 +385,87 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// issued on Tron by Circle.
 		addressShape:
 			/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+	}),
+	Object.freeze({
+		ticker: 'DAI',
+		// MakerDAO's DAI uses 18 decimals on every supported network
+		// — the EVM-standard ERC-20 precision.  Different from USDT
+		// and USDC (which use 6 decimals because Tether/Circle chose
+		// that for cheaper math at small amounts).  Higher decimals
+		// means more microunit-jitter resolution: the same 0-999
+		// microunit range we use for 6-decimal stablecoins gives
+		// $0.001 jitter on USDT/USDC; for 18-decimal DAI the
+		// equivalent micro-dollar resolution is 0-999 _trillionths_
+		// of a DAI, which is far below any rounding the wallet UIs
+		// surface.  The jitter routine clamps to 6-decimal display
+		// precision regardless of the underlying token's decimals,
+		// so the user-visible jitter is the same $0.001-magnitude
+		// effect across all three stablecoins.
+		decimals: 18,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: DAI is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// fee_method enum is frozen at BLURT/BTC/XMR; DAI joins
+		// USDT/USDC/BCH/LTC/DASH as Category-B trade-only assets.
+		// See ADR-0029 §4 for the rationale.
+		canPayListingFee: false,
+		// Networks shipped at launch: Ethereum, Polygon (PoS), Base,
+		// Arbitrum One.  All four are canonical MakerDAO-issued
+		// contracts on those chains (verified via the contract
+		// addresses on each chain's explorer).  Notable exclusions:
+		//   - Solana SPL: no canonical Maker-issued DAI on Solana.
+		//     Existing Solana DAI variants are bridged/wrapped (e.g.,
+		//     Wormhole, Allbridge); using them would add wrapper-
+		//     custodian trust which defeats DAI's decentralization
+		//     rationale.
+		//   - Tron TRC-20: same — no canonical Maker DAI.
+		//   - BNB Smart Chain (BEP-20): Binance-Peg DAI is wrapped
+		//     not Maker-native; same exclusion rationale as USDC's
+		//     BEP-20 (ADR-0028 §1).
+		//   - Arbitrum Nova: only Arbitrum One ships in cp31; Nova
+		//     is a separate chain with different security
+		//     assumptions and is a separate decision.
+		// See ADR-0029 §1 for the full network-set rationale.  If
+		// MakerDAO ships native DAI on a new chain in the future,
+		// add it here AND update apps/web/src/lib/assets/networks.ts
+		// with the matching addressShape + txidShape + bundled
+		// explorer template.
+		supportedNetworks: ['erc20', 'polygon', 'base', 'arbitrum'],
+		// `null` forces the user to pick the network explicitly
+		// every trade.  All four DAI networks use the EVM 0x[40 hex]
+		// address format, so they're visually IDENTICAL — the
+		// network picker exists precisely to disambiguate which
+		// chain the sender's wallet should broadcast on.  Cross-
+		// network mis-send risk is the same class as USDC's three
+		// EVM networks (ADR-0028); ADR-0029 §3 documents the
+		// per-message warning surface for this asset.
+		defaultNetwork: null,
+		// Renders the privacy-warning chip in the post-order form
+		// and the address-share modal.  DISTINCT from the USDT/USDC
+		// `*_centralized` warning class — DAI has no direct address-
+		// freeze power at the token contract level (MakerDAO can't
+		// blacklist addresses the way Tether or Circle can).  But
+		// DAI does have a Peg Stability Module (PSM) that holds USDC
+		// as collateral, so when DAI's peg is supported by USDC,
+		// Circle's freeze power transitively affects DAI redeemability.
+		// The warning key reflects that nuance.  Text lives in i18n
+		// (assets.privacy_warnings.dai_partly_centralized).
+		// See ADR-0029 §2 for the design rationale on tone + content.
+		privacyWarningKey: 'dai_partly_centralized',
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'dai'
+		},
+		// Combined regex matching a VALID address on ANY of the
+		// supported networks.  All four are EVM-style 0x[40 hex],
+		// so the combined check is just the EVM address shape.
+		// Per-network validation happens in
+		// apps/web/src/lib/assets/networks.ts via per-network
+		// regexes — this combined one is the form-level "is this
+		// even plausibly an address" check.
+		addressShape: /^0x[a-fA-F0-9]{40}$/
 	}),
 	Object.freeze({
 		ticker: 'BCH',

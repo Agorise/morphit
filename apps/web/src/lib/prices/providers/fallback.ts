@@ -33,6 +33,13 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// events (USDC saw a brief depeg to ~$0.87 during the
 	// March 2023 SVB incident — providers carry the live truth).
 	USDC: 1.00,
+	// Part 122 cp31 — Dai pegs to USD by design via overcollateralized
+	// vaults + the Peg Stability Module.  Same hardcoded fallback as
+	// USDT/USDC.  DAI's peg has held remarkably well historically
+	// (briefly traded ~$0.97 during the March 2023 USDC depeg, which
+	// transitively affected DAI through the PSM's USDC reserves).
+	// Live providers surface the actual state during stress events.
+	DAI: 1.00,
 	// Part 122 cp21 — Bitcoin Cash.  Hardcoded fallback used
 	// only when every live provider has failed and no value has
 	// cached since boot.  Approximate live value at cp21 ship

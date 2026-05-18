@@ -1197,6 +1197,18 @@
 				"q": "¿Qué red de USDC debería usar?",
 				"a": "Depende de lo que tú y tu contraparte ya posean y de las comisiones que puedas soportar. **Solana (SPL)** es la más barata de las cuatro — las comisiones suelen ser una fracción de centavo — pero requiere que ambas partes tengan una cartera de Solana (Phantom, Solflare, etc.). **Base** es una capa 2 sobre Ethereum y ofrece comisiones de alrededor de $0.01-0.10; si ambos tienen una cartera EVM (MetaMask, Rabby, etc.), Base suele ser la elección correcta. **Polygon (PoS)** es similar a Base con un soporte de carteras ligeramente diferente; muchos exchanges retiran USDC en Polygon de forma nativa. **Ethereum (ERC-20)** es la más universalmente aceptada: todos los exchanges, todas las carteras, todas las plataformas de contratos inteligentes la soportan; pero las comisiones en mainnet pueden ser de $5-20 por transacción, por lo que rara vez es la elección correcta para una operación P2P a menos que uno de los dos esté enviando DESDE o HACIA un servicio que solo soporta ERC-20. Trampa crítica: tres de las cuatro (ERC-20, Base, Polygon) usan el mismo formato de dirección Ethereum `0x[40 hex]`. Una dirección válida en Polygon también es una dirección válida en Ethereum y Base — pero cada cadena mantiene su propio saldo de USDC separado para esa dirección. Si envías USDC en Polygon a una dirección que tu contraparte te dio para Base, los fondos llegarán a Polygon, no a Base, y la cartera de Base de la contraparte no los mostrará. Ambas partes deben confirmar explícitamente qué red antes de enviar; el selector de red del formulario de orden bloquea esto en el momento de la publicación para que el encabezado del mensaje de chat le diga al receptor qué cadena esperar."
 			},
+			"what_is_dai": {
+				"q": "What is DAI?",
+				"a": "DAI is a USD-pegged stablecoin issued by the MakerDAO protocol on Ethereum.  Unlike USDT (Tether Inc.) and USDC (Circle), DAI is not issued by a single corporate entity — it's governed by holders of the MKR token through on-chain votes, and the DAI token contract itself has no admin-controlled freeze function.  Many traders prefer DAI for that reason.  Honest nuance: since 2020, MakerDAO's Peg Stability Module (PSM) holds USDC as collateral to dampen peg deviations, so when DAI's peg is supported by USDC, Circle's freeze power over USDC indirectly affects DAI's redeemability.  DAI is also upgradeable in principle through MKR governance, though no freeze mechanism has been deployed in practice.  On Morphit you can buy and sell DAI peer-to-peer across four networks: Ethereum (ERC-20, native), Polygon, Base, and Arbitrum One.  Pick whichever network you and your counterparty both support; the network picker locks this in at post-time so a cross-network send can't accidentally lose your funds.  DAI is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR.  See also the per-asset privacy guide at `/privacy/dai`."
+			},
+			"why_dai_warning": {
+				"q": "Why does Morphit show a privacy warning when I trade DAI?",
+				"a": "DAI's warning is more nuanced than USDT's or USDC's because DAI is genuinely more decentralized — but not freeze-immune.  Three things to know: (1) The Dai token contract has NO admin-controlled freeze function.  MakerDAO can't blacklist your address and stop transfers, the way Tether or Circle can on their stablecoins.  This is a real advantage that DAI supporters rightly point to.  (2) The Peg Stability Module (PSM) holds significant USDC reserves as collateral to dampen peg deviation.  When DAI's peg is partly supported by USDC, Circle's freeze power over USDC transitively affects DAI's redemption mechanics — if Circle were to freeze the PSM's USDC, the peg-arbitrage path closes for that portion of the supply.  (3) MakerDAO governance (MKR token holders) could theoretically deploy a contract upgrade that adds freeze or pause mechanisms.  This hasn't happened in practice, but it's possible.  Bottom line: DAI's decentralization story is real but partial — better than fully centralized stablecoins on the freeze-immunity axis, less so than truly decentralized assets like BTC/XMR.  Like all stablecoins on Morphit, DAI transactions are publicly visible on each supported network — there is no on-chain privacy.  The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed.  Operators can disable DAI instance-wide if they prefer to keep their instance free of stablecoins entirely."
+			},
+			"which_dai_network": {
+				"q": "Which DAI network should I use?",
+				"a": "DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (PoS), Base, and Arbitrum One.  All four are EVM-family with `0x[40 hex]` addresses — they look IDENTICAL.  An address that's valid on Polygon is also a valid-format address on Ethereum, Base, AND Arbitrum, but each chain holds its own separate DAI balance for that address.  The network picker on the order form locks the network in at post-time so the chat message header tells the receiver which chain to expect.  This is the highest cross-network address-confusion surface on Morphit — be especially careful.  **Ethereum (ERC-20)** is the most universal — every exchange, wallet, and smart-contract platform supports it — but mainnet fees can be $5-20 per transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20.  **Polygon (PoS)** is much cheaper (cents per transaction); many exchanges withdraw DAI on Polygon natively.  **Base** is Coinbase's layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.), Base is often the right pick.  **Arbitrum One** is similar territory to Base — another major Ethereum layer-2 with very low fees.  Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time."
+			},
 			"arbitrage_morphit_vs_exchanges": {
 				"q": "¿Cómo funciona el arbitraje entre Morphit y exchanges centralizados/descentralizados?",
 				"a": "Morphit está construido para que el arbitraje sea fácil. Las tarifas de listado son una fracción de dólar, no hay tarifa de taker, no hay tarifa de retiro sobre la operación en sí, no hay límite de retiro y no hay período de espera. Un trader que ve una brecha de precio entre el mercado P2P de Morphit y un CEX (Coinbase, Kraken, Binance) o DEX (Uniswap, THORChain) puede publicar una orden Morphit con un spread fino en cualquier lado y dejar que el orderbook se llene. El selector de modelo de precio permite fijar un `spread: 0.5%` contra el precio medio en vivo de CoinGecko para que tu orden siga al mercado automáticamente — sin reprecio manual mientras el precio global se mueve. A medida que más traders usen Morphit, los arbitrajistas naturalmente alinean los precios P2P con el mercado global, lo cual es bueno para todos: spreads más ajustados, mejores ejecuciones, ejecución más predecible. Algunas notas prácticas: la liquidación por trade en Morphit es lo que tú haces — wallet-a-wallet directo para pares cripto-vs-cripto (XMR por USDT, BTC por USDT), o vía tu banco/rail fiat preferido para cripto-vs-fiat. Para arbitraje de alta frecuencia, la estructura de tarifas Sybil-tier escala el costo de listado si publicas muchas órdenes rápidamente desde la misma cuenta; esto es infraestructura anti-spam, no anti-arbitraje — la mayoría de arbitrajistas usan una cuenta por dirección y nunca alcanzan el umbral tier-2."
@@ -1567,7 +1579,8 @@
 				"bch": "Bitcoin Cash (BCH). Bifurcado de Bitcoin en 2017 para favorecer bloques más grandes y comisiones por transacción más bajas frente a la dinámica del mercado de comisiones. Libro mayor transparente como BTC; ningún emisor puede congelar direcciones. Solo para operar en Morphit — las tarifas de listado se siguen pagando en BLURT, BTC o XMR.",
 				"ltc": "Litecoin (LTC). Bifurcación de Bitcoin de 2011 con bloques más rápidos (2,5 min) y minería Scrypt. Transparente como Bitcoin — cada transacción es públicamente visible en la cadena. Sin emisor central; nadie puede congelar tus direcciones.",
 				"dash": "Dash (DASH). Bifurcación de Litecoin en 2014 con servicios coordinados por masternodes. Transparente en la capa base como Bitcoin — cada transacción es públicamente visible en la cadena. Sin emisor central; nadie puede congelar tus direcciones. La mezcla opcional PrivateSend (una variante CoinJoin coordinada por masternodes) ofrece privacidad opt-in.",
-				"usdc": "USD Coin (USDC) — una stablecoin vinculada 1:1 al USD, emitida por Circle. Controlada centralmente — Circle puede congelar cualquier dirección. Solo operaciones en Morphit: no puede pagar tarifas de publicación."
+				"usdc": "USD Coin (USDC) — una stablecoin vinculada 1:1 al USD, emitida por Circle. Controlada centralmente — Circle puede congelar cualquier dirección. Solo operaciones en Morphit: no puede pagar tarifas de publicación.",
+				"dai": "DAI is a USD-pegged stablecoin by MakerDAO.  More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module.  Trade-only on Morphit."
 			},
 			"waiver_fiat_hint": "💡 BLURT se comercia poco en exchanges centralizados, así que la mayoría de las operaciones BLURT-por-fiat en Morphit ocurren con usuarios activos de la red social Blurt, operadores existentes, o por trueque. Consejo: elige una moneda fiat que tu red local use (USD, EUR, MXN, etc.), o revisa el método de pago En persona → Trueque (bienes) en el paso 3 si quieres ofrecer algo más de valor. El libro de órdenes es pequeño por ahora — tu orden de compra ayuda a construirlo.",
 			"waiver_benefits_heading": "Lo que desbloquea tu compra:",
@@ -2357,7 +2370,11 @@
 			"method_usdc": "USDC",
 			"address_placeholder_usdc": "Dirección USD Coin (coincidente con la red que elegiste)",
 			"address_invalid_usdc": "Esta dirección no coincide con la red USDC que elegiste. Verifica antes de enviar — los envíos entre redes pierden tus fondos. Ten en cuenta que las direcciones de Ethereum, Base y Polygon empiezan todas por 0x y parecen idénticas a nivel de formato.",
-			"pill_method_usdc": "Dirección USDC"
+			"pill_method_usdc": "Dirección USDC",
+			"method_dai": "DAI",
+			"address_invalid_dai": "Not a valid DAI address shape (expected EVM 0x[40 hex]).",
+			"address_placeholder_dai": "0x... (EVM-format DAI address)",
+			"pill_method_dai": "DAI {network}"
 		},
 		"funds_sent": {
 			"button": "Marcar fondos enviados",
@@ -2403,7 +2420,9 @@
 			"pill_title_ltc": "Litecoin enviado",
 			"pill_title_dash": "Dash enviado",
 			"txid_invalid_usdc": "Este txid no coincide con la red USDC que elegiste. Las discrepancias de txid entre redes generalmente significan que se usó la cadena incorrecta para el envío.",
-			"pill_title_usdc": "USDC enviado"
+			"pill_title_usdc": "USDC enviado",
+			"txid_invalid_dai": "Not a valid DAI txid shape (expected 64-hex with optional 0x prefix).",
+			"pill_title_dai": "DAI {network} payment sent"
 		},
 		"unknown_version": "Este mensaje usa un protocolo más nuevo. Actualiza Morphit para leerlo.",
 		"pay_blurt": {
@@ -3486,7 +3505,8 @@
 			"bch": "BCH — Bitcoin Cash, transparente, descentralizado, bloques más grandes que BTC",
 			"ltc": "LTC — Litecoin, bifurcación rápida y de baja comisión de Bitcoin (desde 2011). Solo para negociar en Morphit. Usa un monedero Litecoin (Electrum-LTC, Litewallet, monederos hardware); acepta direcciones L… legacy, M… P2SH moderno y ltc1… SegWit.",
 			"dash": "DASH — Dash, cadena tipo Bitcoin de confirmación rápida (desde 2014). Solo para comerciar en Morphit. Usa una billetera Dash (Dash Core, Dash Electrum, billeteras hardware); acepta direcciones X… P2PKH y 7… P2SH. Mezcla opcional PrivateSend mediante masternodes — pre-mezcla antes de compartir la dirección para mayor privacidad.",
-			"usdc": "Stablecoin USD Coin. Centralizada — Circle puede congelar cualquier dirección. Solo operaciones."
+			"usdc": "Stablecoin USD Coin. Centralizada — Circle puede congelar cualquier dirección. Solo operaciones.",
+			"dai": "DAI — MakerDAO USD-pegged stablecoin.  Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM).  Trade-only.  Partly USDC-backed."
 		},
 		"section_recovery": {
 			"heading": "Si algo sale mal",
@@ -3503,7 +3523,8 @@
 	"assets": {
 		"privacy_warnings": {
 			"usdt_centralized": "Dos cosas a saber sobre USDT antes de operar: Tether Inc. emite y administra USDT y tiene la capacidad técnica de congelar direcciones (y la ha usado). Las transacciones son públicamente visibles en cada red soportada (Ethereum, Tron, Solana, BNB Smart Chain) — una propiedad de esas cadenas. Elige el activo que se adapta a tu operación.",
-			"usdc_centralized": "Dos cosas que debes saber sobre USDC antes de operar: Circle emite y administra USDC y tiene la capacidad técnica de congelar direcciones (y lo ha hecho). Las transacciones son públicamente visibles en cada red compatible (Ethereum, Solana, Base, Polygon) — una propiedad de esas cadenas. Elige el activo que se ajuste a tu operación."
+			"usdc_centralized": "Dos cosas que debes saber sobre USDC antes de operar: Circle emite y administra USDC y tiene la capacidad técnica de congelar direcciones (y lo ha hecho). Las transacciones son públicamente visibles en cada red compatible (Ethereum, Solana, Base, Polygon) — una propiedad de esas cadenas. Elige el activo que se ajuste a tu operación.",
+			"dai_partly_centralized": "Three things to know about DAI before trading: (1) Unlike USDT and USDC, DAI's token contract has no admin-controlled freeze function — MakerDAO can't blacklist your address.  This is a real decentralization advantage.  (2) DAI is partly backed by USDC via the Peg Stability Module, so Circle's freeze power over USDC indirectly affects DAI redemption when the PSM holds USDC.  (3) Like all stablecoins, DAI transactions are publicly visible on each supported network (Ethereum, Polygon, Base, Arbitrum) — a property of those chains, no on-chain privacy.  Pick the asset that fits your trade."
 		},
 		"usdt": {
 			"network": {
@@ -3573,6 +3594,41 @@
 			"price_subline": {
 				"live": "1 USDC = ${price} en directo",
 				"unavailable": "Fuente de precios USDC/USD no disponible — última vez vista hace {staleness}."
+			}
+		},
+		"dai": {
+			"network": {
+				"erc20": {
+					"displayName": "Ethereum (ERC-20)",
+					"feeHint": "High fees ($5-20/tx, slower), most universal"
+				},
+				"polygon": {
+					"displayName": "Polygon (PoS)",
+					"feeHint": "Low fees (~$0.01-0.10), fast, broad wallet support"
+				},
+				"base": {
+					"displayName": "Base",
+					"feeHint": "Coinbase L2, low fees (~$0.01-0.10), fast"
+				},
+				"arbitrum": {
+					"displayName": "Arbitrum One",
+					"feeHint": "Ethereum L2, low fees (~$0.01-0.30), fast"
+				},
+				"picker": {
+					"label": "DAI network",
+					"requiredHint": "Required.  Pick the same network your counterparty uses.",
+					"crossNetworkWarning": "All four DAI networks use the same address format.  An address that's valid on Polygon is also valid-format on Ethereum, Base, and Arbitrum — but each chain holds a separate balance.  DAI sent on the wrong chain is unrecoverable.  Both parties must agree on the network before sending."
+				}
+			},
+			"address_share": {
+				"warning": "Stablecoin trade — DAI is more decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the PSM.  Pick a network with both counterparties."
+			},
+			"order_row": {
+				"network_hint": "DAI on {network}"
+			},
+			"price_subline": {
+				"live": "1 DAI = ${price}",
+				"unavailable": "price unavailable"
 			}
 		}
 	},
@@ -3674,6 +3730,11 @@
 				"intro": "La postura de privacidad de USDC refleja la de USDT: está centralizado. Circle (el emisor de USDC) puede congelar cualquier dirección USDC en cualquier cadena anfitriona, y lo ha hecho por requerimiento regulatorio. Ninguna cantidad de rotación de direcciones u ofuscación de transacciones cambia la capacidad de congelación de Circle. La defensa contra correlación de cantidades (jitter) SÍ está activa para operaciones USDC — ver /{lang}/faq#monero_amount_jitter — pero el jitter aborda una amenaza diferente a la centralización.",
 				"caveats": "Incluso con prácticas perfectas de privacidad en cadena, USDC sigue siendo congelable centralmente. La privacidad práctica en cadena en las cadenas anfitrionas de USDC (Ethereum, Solana, Base, Polygon) es la misma que en cualquier cadena EVM/de cuentas transparente — tu privacidad depende del ecosistema de privacidad opt-in de la cadena anfitriona, que no respaldamos ni describimos más aquí. USDC BEP-20 en BNB Chain NO está soportado intencionalmente: esa variante es Binance-Peg (envoltorio custodiado por Binance de USDC emitido por Circle), añadiendo un segundo custodio al existente.",
 				"meta_description": "Consideraciones de privacidad para operaciones USDC en Morphit: riesgo de centralización, transparencia de la cadena anfitriona y defensa de jitter de cantidades."
+			},
+			"dai": {
+				"one_line": "DAI — USD-pegged stablecoin governed by MakerDAO.  No admin freeze on the token, but partly backed by USDC.",
+				"meta_description": "Honest privacy notes for trading DAI on Morphit: more decentralized than USDT/USDC at the contract level, partly backed by USDC via the Peg Stability Module.",
+				"intro": "DAI is MakerDAO's USD-pegged stablecoin, deployed on Ethereum and several other EVM chains.  It's the most-decentralized US-dollar-pegged asset Morphit supports — but \"decentralized\" doesn't mean \"freeze-immune\" or \"fully crypto-backed\" anymore.  This page is the honest picture so you can choose with eyes open."
 			}
 		}
 	}

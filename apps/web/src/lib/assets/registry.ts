@@ -141,6 +141,20 @@ const USDC_SPL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const validateUsdc: AddressValidator = (s) =>
 	USDC_EVM_RE.test(s) || USDC_SPL_RE.test(s);
 
+// DAI — ALL FOUR supported networks (Ethereum, Polygon, Base,
+// Arbitrum) use the same EVM 0x[40 hex] address format.  Unlike
+// USDC, no SPL branch — Maker doesn't issue native DAI on Solana
+// (only third-party wrapped variants exist, which Morphit
+// excludes per ADR-0029 §1).  Cross-network mis-send risk is the
+// SAME amplification class as USDC's ERC-20/Base/Polygon (three-
+// way visual identity) but with an extra EVM network (Arbitrum)
+// added — so DAI has the highest cross-network address-confusion
+// surface of any asset on Morphit.  Per-network disambiguation is
+// the network picker's job.
+const DAI_EVM_RE = /^0x[a-fA-F0-9]{40}$/;
+
+const validateDai: AddressValidator = (s) => DAI_EVM_RE.test(s);
+
 // BCH — CashAddr (with or without `bitcoincash:` prefix) and
 // legacy P2PKH/P2SH.  Inlined copies mirroring chat/payload.ts
 // (we can't import to avoid the same registry-imports-payload
@@ -280,7 +294,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateUsdc,
 		// MEMORY #23 INVARIANT: USDC cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH.
+		// Trade-only Category B asset alongside USDT/DAI/BCH/LTC/DASH.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC
@@ -296,6 +310,64 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// which chain the sender's wallet should broadcast on.
 		defaultNetwork: null,
 		privacyWarningKey: 'usdc_centralized'
+	},
+	{
+		ticker: 'dai',
+		displayTicker: 'DAI',
+		displayName: 'Dai',
+		// Honest one-liner per ADR-0029 §2 + Memory #29 ("respectful
+		// to that coin's community").  Acknowledges DAI's
+		// decentralization edge over single-issuer stablecoins
+		// without overselling — the PSM/USDC backing dependency is
+		// real and we don't pretend otherwise.  The per-asset
+		// privacy guide at /privacy/dai gives the full picture.
+		oneLineDescription:
+			'Stablecoin pegged to USD, issued by MakerDAO.  More decentralized than USDT/USDC at the contract level (no admin freeze power), but partly backed by USDC via the Peg Stability Module.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-dai.svg',
+		// MakerDAO orange (#F5AC37) — the canonical brand color
+		// shipping in Ken's supplied icon.  text-orange-500
+		// (~#f97316) is the closest Tailwind utility class; reads
+		// as "Maker orange" while staying clearly distinct from
+		// USDT amber-400, USDC blue-500, BLURT emerald, etc.  The
+		// privacy-warning chip stays as a separate channel; the
+		// accent isn't the warning surface.
+		accentClass: 'text-orange-500',
+		// EVM-standard 18 decimals — different from USDT/USDC's 6.
+		// Affects the underlying token's smallest-unit math but
+		// not the user-visible amount-jitter resolution (the
+		// jitter routine clamps to 6-decimal display precision
+		// regardless of token decimals, so the user-visible
+		// $0.001 jitter effect is uniform across all three
+		// stablecoins).
+		decimals: 18,
+		supportsMemo: false,
+		addressValidator: validateDai,
+		// MEMORY #23 INVARIANT: DAI cannot pay listing fees.
+		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Multi-network: ERC-20 (native), Polygon (PoS), Base,
+		// Arbitrum.  All Maker-issued native; bridged variants
+		// (Wormhole DAI on Solana etc.) excluded per ADR-0029 §1
+		// to avoid wrapper-custodian trust dependency.
+		supportedNetworks: ['erc20', 'polygon', 'base', 'arbitrum'],
+		// null forces explicit user choice every trade.  ALL FOUR
+		// networks share the EVM 0x address shape, so addresses
+		// are visually indistinguishable across them — the picker
+		// is the ONLY thing that disambiguates which chain the
+		// sender's wallet should broadcast on.  This makes DAI
+		// the highest cross-network address-confusion surface of
+		// any asset on Morphit; the per-message warning in
+		// ChatMessage uses the same template as USDC's EVM
+		// branches but applied to all 4 DAI networks.
+		defaultNetwork: null,
+		// DISTINCT from the USDT/USDC `*_centralized` class — DAI
+		// has no direct token-contract address-freeze function, but
+		// the PSM holds USDC as collateral so Circle's freeze power
+		// transitively affects DAI redeemability.  Warning copy
+		// gives DAI credit for the design choice while being honest
+		// about the dependency.  See ADR-0029 §2.
+		privacyWarningKey: 'dai_partly_centralized'
 	},
 	{
 		ticker: 'bch',

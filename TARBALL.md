@@ -1,3 +1,105 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 31-DD — DAI multi-network addition + deep-deep on cp31.  Per Ken's standing instruction "i hope you are doing the full security, as well as the full code audits with these deep deeps."  Cp31 ships DAI as 9th tradable asset / 6th Category-B / 3rd multi-network using the cp30 USDC template with distinct decentralization profile per ADR-0029.  Cp31-DD applies the A-L + STRIDE framework to cp31's work; 6 findings, all closed inline.
+
+CP31 SCOPE:
+
+**Why DAI is structurally similar to USDC but profile-distinct.**  Same Category-B template (trade-only, fee_method enum frozen at BLURT/BTC/XMR, default-ON instance-wide).  Same 4-canonical-wire-format-surface extension pattern (frontend store + indexer InstanceResponse + indexer-client mirror + matrix-bot smoke).  But three deliberate deviations: (1) 4 EVM networks only (ERC-20, Polygon, Base, Arbitrum) — no SPL/TRC-20/BEP-20 per ADR-0029 §1; existing variants are wrapper-bridged (Wormhole, Allbridge, Binance-Peg) and would defeat DAI's decentralization rationale.  (2) Distinct `dai_partly_centralized` privacy-warning class per ADR-0029 §2 — gives DAI credit for contract-level decentralization (no admin freeze function) while honest about PSM/USDC backing dependency + MKR governance upgradeability.  (3) Strongest cross-network address-confusion warning on Morphit — all 4 supported DAI networks share EVM 0x[40 hex] format (highest visual-confusion surface of any asset).
+
+**Files shipped cp31.**  ADR-0029 + ASSET_TICKERS extended + canonical DAI entry + frontend mirror + 4 canonical wire-format surfaces + indexer Config (4 fields + Zod + builder) + order.ts + orderReplace.ts DAI gate with MAX_NETWORK_LEN cap (cp30-DD-DD I-1 pattern inherited) + price providers (Coingecko 'dai' + fallback 1.00) + initial-state Record + Ken's DAI icon with accessibility hardening + new Arbitrum network icon at brand blue #28a0f0 + 33 i18n keys × 10 locales = 330 new strings (locale parity 2,680 → 2,713) + 3 new FAQ entries (113 → 116) + FAQ_KEYS array + FAQ_RELATED cross-nav including symmetric which_*_network links + DaiNetworkPicker.svelte mirroring UsdcNetworkPicker with strongest cross-network warning + AddressShareModal + FundsSentModal + ConversationView + ChatMessage all extended with DAI conditional render paths (orange chip to distinguish from USDT amber + USDC Circle-blue) + ops-cli wizard (4 DEFAULT_DAI_* constants + ChatLinkExplorersResult.dai sub-object + stepChatLinkExplorers DAI prompts + render.ts emissions + init.ts summary + init-smoke fixture 8-field shape) + ops/env/indexer.env.example DAI env-var examples + dai-trade-only-smoke 15 scenarios (1 more than USDC's 14: privacyWarningKey === 'dai_partly_centralized' pinning) + 3 new wiring-completeness CHECK rows + asset-registry-smoke lowercase allowlist + brag entries #29/#134/#176 extended + NEW brag #281 "basic props for decentralization" per Ken's framing + mediakit rebuilt + llms-full.txt 116 entries (174449 chars) + module-doc drift sweep extending every USDT/USDC mention to USDT/USDC/DAI across orders/payload.ts + DB schema asset_network COMMENT + jitterStablecoinAmount header + ChatAssetTicker network field doc + indexer-client mirror + orderReplace.ts × 4 doc strings + ConversationView × 2 + FundsSentModal + AddressShareModal + ChatMessage + networks.ts header + llms.txt asset roster.
+
+CP31-DD SCOPE (A-L + STRIDE applied to cp31 work):
+
+**A (static code) — CLEAN.**  11 DAI symbols audited (validateDaiAddress, validateDaiTxid, isDaiNetwork, DaiNetwork, DAI_NETWORK_METADATA, DAI_NETWORKS, bundledDaiExplorerUrl, daiExplorerUrl, isValidDaiAddress, isValidDaiTxid, getDaiNetworkMetadata).  Every symbol has ≥1 consumer; no orphans.
+
+**B (deps/supply-chain) — CLEAN.**  cp31 added zero new external dependencies.  All work is pure-function additions and configuration extensions.
+
+**C (SQL/DB) — CLEAN.**  order.ts + orderReplace.ts DAI gates with DAI_NETWORKS_VALID allowlist + new `asset_network_required_for_dai` rejection reason + MAX_NETWORK_LEN cap before toLowerCase per cp30-DD-DD I-1.  Mirror parity preserved.
+
+**D (HTTP/API) — CLEAN.**  All 4 canonical wire-format surfaces extended same-turn — frontend store interface + 2 fallback sites, indexer InstanceResponse interface + body construction, indexer-client mirror, matrix-bot smoke ChatLinkUrlsSchema.  Cp30-DD LL #23 satisfied — no "interface declared but body never populated" gap of the cp30-DD-10/11 class.
+
+**E (crypto) — CLEAN.**  Jitter dispatcher routes DAI through jitterStablecoinAmount with same CSPRNG-derived 2-byte → 0..999 modulo-bias-acknowledged math as USDT/USDC.  No new crypto primitives.
+
+**F (privacy) — CLEAN.**  daiExplorerUrl calls isValidChatLinkTemplate(override) per cp30-DD-DD SEC-1 pattern.  Falls through to bundled default on validation failure.  Bundled defaults (etherscan.io / polygonscan.com / basescan.org / arbiscan.io) are all `https://`-only.
+
+**G (operator-trust) — CLEAN.**  DAI defaults ON instance-wide per Memory #25.  Operators disable via `MORPHIT_INDEXER_DISABLED_ASSETS="DAI"` — documented in ops/env/indexer.env.example + brag #281 + OPERATIONS.md.
+
+**H (frontend) — CLEAN.**  daiNetworkPicked $derived gates force network selection before submit in both AddressShareModal and FundsSentModal.  Picker render blocks include dai_partly_centralized PrivacyWarningChip above picker (before the choice — Memory #19).  ChatMessage includes DAI conditional renders for address pill, cross-network warning aside, funds-sent pill — orange chip distinguishes from USDT amber + USDC Circle-blue.
+
+**I (contracts) — CLEAN.**  MAX_NETWORK_LEN = 16 covers `arbitrum` (8 chars) with comfortable headroom.  Cap applied in both order.ts and orderReplace.ts BEFORE toLowerCase allocation per cp30-DD-DD I-1.
+
+**J (build/CI) — CLEAN.**  dai-trade-only-smoke registered in scripts/run-smokes.sh.  3 new wiring-completeness-smoke CHECK rows pin canonical registry entry + indexer per-network env-var wiring + distinct privacy-warning class.  asset-registry-smoke lowercase allowlist gains 'dai'.
+
+**K (STRIDE) — 16 NEW THREAT ROWS APPENDED to `docs/audit/2026-05-stride-matrix.md`:**
+- Spoofing (3): S-cp31-1 (hostile peer spoofs DAI network — amplified vs USDC due to 4-way EVM-identity; shape validation cannot disambiguate; mitigation via strongest cross-network warning + receiver-visible chain label, not shape validation), S-cp31-2 (operator typosquatted explorer URL), S-cp31-3 (marketing-style spoof of DAI's privacy framing; triple-pinned by smoke + brag + ADR)
+- Tampering (4): T-cp31-1 (hostile indexer XSS via chat_link_urls.dai), T-cp31-2 (replace-window asset_network flip amplified by 4-way EVM-identity; mitigated by cp30-DD-DD CODE-3 replace-substance lock inherited via mirror), T-cp31-3 (chat payload network tamper), T-cp31-4 (DAI icon SVG tampering)
+- Repudiation (1): R-cp31-1 (DAI trade repudiation — same chain-signed posture as R-cp30-1)
+- Information disclosure (2): I-cp31-1 (privacy-warning chip DOM revelation — DAI's more specific than USDT/USDC; acceptable), I-cp31-2 (per-network DAI explorer URL IP leak)
+- Denial of service (4): D-cp31-1 (gigantic chat_link_urls.dai env values), D-cp31-2 (huge asset_network in DAI order), D-cp31-3 (ReDoS via DAI regexes — anchored, bounded, no backtracking), D-cp31-4 (jitter on 18-decimal DAI amounts — clamped to 6-decimal display precision regardless of token-native decimals)
+- Elevation of privilege (2): E-cp31-1 (DAI fee_method bypass — triple-pinned), E-cp31-2 (operator privilege via unknown DAI env vars)
+
+Every row carries explicit mitigations; no criticals.  Most consequential is S-cp31-1 (4-way EVM-identity in DAI address formats — shape validation cannot disambiguate; mitigation is user-attention via strongest cross-network warning copy + receiver-visible chain label on pill).
+
+**L (per-subsystem deep dive) — CLEAN.**
+- L-1 Symbol-import verification: covered in A.
+- L-2 Encoder error-handling: 4 throw sites for DAI encoder defense (payload.ts:997/1000/1145/1148); all caught by caller try/catch in modals.
+- L-3 Async correctness: All cp31 functions synchronous (no Promises).
+- L-4 Comment-vs-code drift: closed in module-doc sweep.
+- L-5 Defensive programming: getDaiNetworkMetadata throws with self-documenting error pointing at registration site.
+- L-6 Typeguard usage: 5 `as DaiNetwork` casts across payload.ts (lines 999, 1147, 1384, 1514) and ConversationView (line 1022); every cast preceded by either isDaiNetwork typeguard OR literal-string allowlist check (`p.method === 'dai'` + validDaiNets.has(p.network)).  No unguarded casts.
+- L-7 order.ts vs orderReplace.ts gate parity: structurally identical (only `asset_network` vs `asset_network_validated` variable name differs).  Comment-marked as "Mirror of order.ts".
+
+CP31-DD FINDINGS INLINE (6 total, 4 clean on inspection + 2 closed inline):
+
+**DD-1 — CLEAN.**  All 18 critical i18n keys present in en.json (asset form, picker, chat pills, FAQ entries, privacy guide).
+
+**DD-2 — CLEAN.**  isDaiNetwork typeguard properly exported from apps/web/src/lib/assets/networks.ts.
+
+**DD-3 LOW — CLOSED.**  FAQ_RELATED cross-nav asymmetry: which_dai_network linked to which_usdc_network but which_usdt_network did not link to which_dai_network, and vice versa.  Closed both directions in apps/web/src/lib/utils/faqIndex.ts.
+
+**DD-4 — CLEAN.**  DAI cross-network warning copy is stronger than USDC's — names all 4 networks (ERC-20, Polygon, Base, Arbitrum), emphasizes 4-way visual identity, requires both-parties-agreement before sending.
+
+**DD-5 — CLEAN.**  dai-trade-only-smoke 15 scenarios cover registry presence (Scenarios 1, 11), fee invariant (Scenarios 2, 12), trade flag (Scenarios 3, 13), network allowlist (Scenario 4) with 3 explicit exclusions (Scenarios 5/6/7 for SPL/TRC-20/BEP-20 with ADR-0029 §1 rationale in failure messages), defaultNetwork null (Scenarios 8, 14), distinct privacy-warning class (Scenarios 9, 15), 18-decimal precision (Scenario 10).
+
+**DD-6 MEDIUM — CLOSED.**  orderReplace.test.ts had 10 cp30-DD-DD-addendum tests covering USDC/USDT but ZERO tests for DAI's asset_network gate.  Gate logic correct (mirror of USDC's via structurally-identical mirror pattern), but unexercised by regression — future breakage in DAI branch would not fire loudly.  Closed inline: added 6 new DAI-targeted regression tests via new describe block "orderReplace asset_network gate — DAI (cp31-DD DD-6)" with validDaiPayload helper:
+1. Rejects DAI replace missing asset_network (→ asset_network_required_for_dai)
+2. Rejects DAI replace with unknown asset_network 'spl' (USDC-only network — catches cross-asset value leak)
+3. Rejects DAI replace with USDT-only 'trc20'
+4. Rejects DAI replace that changes asset_network from target ('arbitrum'→'polygon' — THE bait-and-switch surface S-cp31-1 was written for, reaching into orderReplace flow; CRITICAL for the 4-way EVM-identity surface)
+5. Allows DAI replace that preserves asset_network with detail-field tweak
+6. cp30-DD-DD I-1: rejects pathologically-long asset_network ('arbitrum-pathologically-extended-beyond-MAX_NETWORK_LEN')
+
+orderReplace.test.ts grew from 669 → 855 lines.
+
+PATTERN LESSONS:
+
+**LL #34 post-cp31 — Mirror-equivalence is necessary but not sufficient regression coverage.**  Cp30-DD-DD CODE-3 added USDC tests to orderReplace.test.ts to exercise gate logic; cp31 inherited correct DAI gate logic via the mirror pattern but inherited ZERO test coverage for it (because the mirror is structural, not test-fixture-based).  DD-6 surfaced this as a class of issue: every asset-addition pass must add asset-specific tests to mirror files that branch per asset, even when the branch is structurally parallel.  Generalizes: whenever mirror-parity is the design pattern, the testing layer needs its own per-asset extension every addition pass — mirror-by-code does not propagate test coverage.
+
+VERIFICATION:
+
+- Locale parity 2,713 × 10 = 27,130 ✓
+- ADRs 29 (0029-dai shipped) ✓
+- FAQ entries 116 ✓
+- Brag list 281 ✓ (footer + count + ADR range bumped)
+- STRIDE matrix 1,414 lines ✓
+- dai-trade-only-smoke 15 scenarios ✓
+- 3 new wiring-completeness CHECK rows ✓
+- 6 new orderReplace.test.ts DAI regression tests ✓
+- DAI icon at /icons/icon-dai.svg with accessibility hardening ✓
+- Arbitrum network icon at brand blue #28a0f0 ✓
+- DaiNetworkPicker.svelte shipped ✓
+- Mediakit rebuilt per Memory #4 ✓
+- llms.txt + llms-full.txt regenerated (116 entries, 174449 chars) ✓
+- Module-doc drift sweep complete (15+ files extended) ✓
+
+Sandbox state holds all cp31 + cp31-DD work.  Build cp31-DD-FULL-STATE tarball this turn.
+
+PARKED EXTERNAL-BLOCKERS (unchanged from cp30-DD-DD):
+(a) Live full-stack Ansible deploy on fresh Ubuntu 24.04 VM (hardware blocker)
+(b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
+
+---
+
+PRIOR CHECKPOINT — cp30-DD-DD ADDENDUM (sealed 2026-05-18):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD-DD ADDENDUM — full deep-deep closure of the four categories the first cp30-DD-DD pass had partial or zero coverage of: B (deps/supply-chain), I (contracts), K (STRIDE), L (per-subsystem deep dives).  Per Ken's prompt asking whether ALL the deep-deep points were covered including the STRIDE test ("STRIKE" was a typo).  Honest accounting: first cp30-DD-DD pass covered A/C/D/E/F/G/H/J but skipped B/I/K/L.  This addendum closes that gap.
 
 ADDENDUM SCOPE:

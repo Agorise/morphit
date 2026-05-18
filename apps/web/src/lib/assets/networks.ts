@@ -11,12 +11,12 @@
  *     metadata (explorer URLs, fee hints, display copy) is
  *     frontend-only concern.
  *   - Operators override explorer URLs at runtime via the
- *     instance store's `chat_link_urls.{usdt,usdc}` sub-maps;
+ *     instance store's `chat_link_urls.{usdt,usdc,dai}` sub-maps;
  *     the bundled defaults in this file are the fallback.
  *
- * Adding a new USDT or USDC network is a single-entry addition
- * to {USDT,USDC}_NETWORKS plus a matching i18n key triplet
- * (assets.{usdt,usdc}.network.<key>.{displayName,feeHint,warning}).
+ * Adding a new USDT, USDC, or DAI network is a single-entry
+ * addition to {USDT,USDC,DAI}_NETWORKS plus a matching i18n key
+ * triplet (assets.{usdt,usdc,dai}.network.<key>.{displayName,feeHint,warning}).
  *
  * Per Ken's design decisions:
  *   - USDT (Part 121): NATIVE USDT ONLY on each network.
@@ -335,5 +335,155 @@ export function bundledUsdcExplorerUrl(network: UsdcNetwork, txid: string): stri
 		const lc = txid.toLowerCase();
 		normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
 	}
+	return md.bundledExplorerUrl.replace('{txid}', normalized);
+}
+
+// ──────────────────────────────────────────────────────────────
+// DAI (added Part 122 cp31)
+// ──────────────────────────────────────────────────────────────
+
+/** The set of networks we ship DAI support for at launch.
+ *  Four chains, all canonical MakerDAO-issued deployments:
+ *  Ethereum mainnet (ERC-20, native), Polygon PoS, Base, and
+ *  Arbitrum One.  Notable exclusions per ADR-0029 §1: no SPL
+ *  (no native Maker DAI on Solana — only third-party wrapped
+ *  variants which would defeat the decentralization rationale),
+ *  no TRC-20 (same), no BEP-20 (Binance-Peg wrapped, same
+ *  rationale as USDC's BEP-20 exclusion).  All four are EVM-
+ *  format addresses — DAI has the highest cross-network
+ *  visual-confusion surface of any asset on Morphit. */
+export const DAI_NETWORKS = ['erc20', 'polygon', 'base', 'arbitrum'] as const;
+
+export type DaiNetwork = (typeof DAI_NETWORKS)[number];
+
+/** Per-network metadata for DAI.  Identical shape to
+ *  UsdcNetworkMetadata — kept as a separate interface for
+ *  type-discrimination clarity at call sites. */
+export interface DaiNetworkMetadata {
+	/** Wire-format network identifier (lowercase, used in chain
+	 *  payloads and DB columns). */
+	readonly key: DaiNetwork;
+	/** i18n key for the display name (e.g. "Ethereum (ERC-20)"). */
+	readonly displayNameKey: string;
+	/** i18n key for the one-line fee hint. */
+	readonly feeHintKey: string;
+	/** Per-network address shape regex.  All four DAI networks
+	 *  share the EVM `0x[40 hex]` shape — the network picker is
+	 *  what disambiguates them at form time.  This is the highest
+	 *  cross-network-mis-send risk surface on Morphit (4-way
+	 *  EVM identity vs USDC's 3-way). */
+	readonly addressShape: RegExp;
+	/** Per-network txid shape regex. */
+	readonly txidShape: RegExp;
+	/** Bundled default explorer URL template.  `{txid}` is
+	 *  substituted with the lowercased + 0x-prefixed transaction
+	 *  ID.  Operators can override via the instance store's
+	 *  `chat_link_urls.dai.<key>` field at runtime. */
+	readonly bundledExplorerUrl: string;
+}
+
+export const DAI_NETWORK_METADATA: Readonly<Record<DaiNetwork, DaiNetworkMetadata>> =
+	Object.freeze({
+		erc20: Object.freeze({
+			key: 'erc20',
+			displayNameKey: 'assets.dai.network.erc20.displayName',
+			feeHintKey: 'assets.dai.network.erc20.feeHint',
+			// Ethereum address: 0x + 40 hex chars
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Ethereum txid: 0x + 64 hex (canonical), or 64 hex
+			// without prefix (some wallets strip it)
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Etherscan — canonical Ethereum explorer.  Per Ken's
+			// DAI URL list 2026-05-18.
+			bundledExplorerUrl: 'https://etherscan.io/tx/{txid}'
+		}),
+		polygon: Object.freeze({
+			key: 'polygon',
+			displayNameKey: 'assets.dai.network.polygon.displayName',
+			feeHintKey: 'assets.dai.network.polygon.feeHint',
+			// Polygon address: EVM 0x + 40 hex.  IDENTICAL to ERC-20.
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Polygon txid: EVM 0x + 64 hex.
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Polygonscan — canonical Polygon explorer.  Per Ken's
+			// DAI URL list 2026-05-18.
+			bundledExplorerUrl: 'https://polygonscan.com/tx/{txid}'
+		}),
+		base: Object.freeze({
+			key: 'base',
+			displayNameKey: 'assets.dai.network.base.displayName',
+			feeHintKey: 'assets.dai.network.base.feeHint',
+			// Base address: EVM 0x + 40 hex.  IDENTICAL to ERC-20.
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Base txid: EVM 0x + 64 hex.
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Basescan — canonical Base explorer.  Per Ken's DAI
+			// URL list 2026-05-18.
+			bundledExplorerUrl: 'https://basescan.org/tx/{txid}'
+		}),
+		arbitrum: Object.freeze({
+			key: 'arbitrum',
+			displayNameKey: 'assets.dai.network.arbitrum.displayName',
+			feeHintKey: 'assets.dai.network.arbitrum.feeHint',
+			// Arbitrum address: EVM 0x + 40 hex.  IDENTICAL to ERC-20.
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Arbitrum txid: EVM 0x + 64 hex.
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Arbiscan — canonical Arbitrum explorer.  Per Ken's
+			// DAI URL list 2026-05-18.
+			bundledExplorerUrl: 'https://arbiscan.io/tx/{txid}'
+		})
+	});
+
+/** Type guard: is `s` a registered DAI network key? */
+export function isDaiNetwork(s: unknown): s is DaiNetwork {
+	return typeof s === 'string' && (DAI_NETWORKS as readonly string[]).includes(s);
+}
+
+/** Look up the metadata for a DAI network.  Throws on miss —
+ *  callers should pass a DaiNetwork (type-checked). */
+export function getDaiNetworkMetadata(network: DaiNetwork): DaiNetworkMetadata {
+	const md = DAI_NETWORK_METADATA[network];
+	if (md === undefined) {
+		throw new Error(
+			`networks.ts: DAI network '${network}' is not registered.  Add it to DAI_NETWORK_METADATA.`
+		);
+	}
+	return md;
+}
+
+/** Validate a DAI address against the specific network's regex.
+ *  Returns true if shape-valid, false otherwise.  Note: because
+ *  all 4 DAI networks share the EVM 0x[40 hex] shape, this
+ *  per-network validator behaves identically across networks at
+ *  the shape level.  Its purpose is to ENFORCE that callers
+ *  passed a valid DaiNetwork value (compile-time + runtime), not
+ *  to disambiguate the shape. */
+export function validateDaiAddress(network: DaiNetwork, address: string): boolean {
+	if (typeof address !== 'string') return false;
+	return getDaiNetworkMetadata(network).addressShape.test(address);
+}
+
+/** Validate a DAI txid against the specific network's regex. */
+export function validateDaiTxid(network: DaiNetwork, txid: string): boolean {
+	if (typeof txid !== 'string') return false;
+	return getDaiNetworkMetadata(network).txidShape.test(txid);
+}
+
+/** Build the bundled-default explorer URL for a DAI transaction.
+ *  Operators override per-instance via the instance store; this
+ *  is the fallback.  All 4 DAI networks are EVM-family so the
+ *  txid normalization (lowercase + 0x prefix) is uniform — no
+ *  SPL branch needed. */
+export function bundledDaiExplorerUrl(network: DaiNetwork, txid: string): string | null {
+	if (!validateDaiTxid(network, txid)) return null;
+	const md = getDaiNetworkMetadata(network);
+	// cp30-DD-DD SEC-4 — normalize txids: lowercase + REQUIRE
+	// leading 0x.  Every explorer for the 4 DAI networks
+	// (Etherscan, Polygonscan, Basescan, Arbiscan) returns 404
+	// to bare-hex paths; our regex accepts both forms but the
+	// emitted URL must be canonical.  No SPL case to handle.
+	const lc = txid.toLowerCase();
+	const normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
 	return md.bundledExplorerUrl.replace('{txid}', normalized);
 }

@@ -1131,3 +1131,284 @@ strict regex anchoring) or surfaced by the cp30-DD-DD security audit
 needs test coverage.  Filed as REVISIT.
 
 **No criticals.**  The cp30 attack surface is well-mitigated end-to-end.
+
+## Part 122 cp31 refresh — DAI multi-network addition (2026-05-18)
+
+This refresh covers the threat surfaces introduced by cp31 DAI addition.
+DAI is structurally similar to USDC (multi-network stablecoin) but the
+threat model is meaningfully different on TWO axes: (a) DAI has the
+highest cross-network address-confusion surface on Morphit (4-way EVM-
+identity vs USDC's 3-way), (b) DAI's privacy/centralization story is
+nuanced — the token contract has no admin freeze power, but the PSM
+holds USDC as collateral so Circle's freeze power transitively affects
+DAI redeemability.  These differences earn DAI a distinct
+`dai_partly_centralized` warning class (per ADR-0029 §2) and require
+the strongest cross-network warning copy of any picker.
+
+Existing STRIDE rows covering single-network multi-asset wire format
+and the cp30 USDC refresh remain in force; this refresh adds rows
+specific to DAI's unique threat surfaces.
+
+────────────────────────────────────────────────────────────────────────
+
+## Spoofing — cp31 refresh
+
+### S-cp31-1 — Hostile peer spoofs DAI network discriminator
+**Surface:** Frontend (chat decoder) / Indexer (order handler)
+**Threat:** Attacker sends `{method:'dai', network:'erc20', address:
+'0x<valid-evm>...'}` when the actual address holds funds only on
+Polygon.  Receiver UI displays "Ethereum (ERC-20) DAI address:" but the
+sender's wallet (broadcasting on Ethereum) sends to a chain where the
+recipient holds no balance.  More confusable than USDT/USDC because
+DAI has 4 EVM-identical networks instead of 3.
+**Mitigation:**
+- cp31 inherits cp30-DD-DD SEC-3 cross-validation: `validateDaiAddress
+  (network, address)` rejects mismatched address shapes per network.
+  BUT — note that within DAI the per-network validators all return
+  the same value for any valid EVM address (4-way identity), so this
+  defense doesn't disambiguate.  The receiver UI MUST display the
+  chain prominently for the receiver to verify the sender's intent.
+- The DAI cross-network warning aside in `ChatMessage.svelte` is the
+  strongest of any picker: it explicitly names all four networks and
+  warns the receiver to confirm the chain off-band before scanning.
+- Per ADR-0029 §3, DAI defaultNetwork is null — the picker forces an
+  explicit choice on every trade.
+**Residual risk:** Higher than USDT/USDC because shape validation
+can't disambiguate among the 4 EVM networks.  Mitigated by the
+strongest cross-network warning copy + receiver visibility of the
+chain label on the address pill.
+**Gap:** None observed; ideally future wallet integrations would
+include a "balance check on this chain" round-trip before send, but
+that's a wallet feature not a Morphit feature.
+
+### S-cp31-2 — Operator spoofs DAI chain explorer
+**Surface:** Operator → user (privacy)
+**Threat:** Same class as USDT's S-cp30-2 — operator configures a
+typosquatted explorer host as the per-network template.  Adds 4 more
+attack surfaces (one per DAI network).
+**Mitigation:**
+- Same SEC-1 defense: `isValidChatLinkTemplate` validates operator-
+  supplied templates at every consumer site (line 257 of
+  `lib/explorer/urls.ts` for DAI).
+- Operator-trust threat model: users explicitly trust their chosen
+  instance.
+**Residual risk:** Same as cp30; disclosed in OPERATIONS.md.
+
+### S-cp31-3 — Hostile claim about DAI's decentralization
+**Surface:** Marketing copy / per-asset privacy guide
+**Threat:** A future contributor "simplifies" DAI's privacy-warning
+copy to lump it with USDT/USDC's `*_centralized` class, OR removes
+the PSM/USDC backing dependency disclosure, OR overstates DAI's
+decentralization claims.  This is a marketing-style spoof of the
+honest threat model.
+**Mitigation:**
+- `dai-trade-only-smoke.ts` Scenario 9: pins
+  `privacyWarningKey === 'dai_partly_centralized'` in BOTH canonical
+  and frontend registries.  Failure message points back to
+  ADR-0029 §2 for the design rationale.
+- Brag #281 carries the honest framing as a stable reference.
+- ADR-0029 §2 documents the design decision with explicit rejection
+  of both "lump with `*_centralized`" and "no warning at all"
+  alternatives.
+**Residual risk:** None — three independent pins (smoke + brag +
+ADR) catch any drift.
+
+────────────────────────────────────────────────────────────────────────
+
+## Tampering — cp31 refresh
+
+### T-cp31-1 — Hostile indexer tampers with chat_link_urls.dai
+**Surface:** Indexer → Frontend
+**Threat:** Same XSS class as cp30 T-cp30-1 — hostile indexer serves
+`chat_link_urls.dai.erc20 = "javascript:..."`.
+**Mitigation:**
+- `daiExplorerUrl` line 257: re-validates via
+  `isValidChatLinkTemplate`, falls through to bundled default on
+  validation failure.  Same defense posture as USDC.
+- Bundled defaults (etherscan/polygonscan/basescan/arbiscan) are
+  all `https://`-only.
+**Residual risk:** Low.
+
+### T-cp31-2 — Tampering with DAI order asset_network via replace
+**Surface:** Indexer / chain
+**Threat:** Within the 15-minute replace window, attacker submits a
+replace op flipping `asset_network` from `erc20` to `arbitrum`.  More
+amplified than USDC because all four DAI networks are visually
+identical EVM addresses — buyer who committed to "Ethereum DAI" can't
+notice the flip from the address alone.
+**Mitigation:**
+- cp30-DD-DD CODE-3 inherited: `orderReplace.ts` validates
+  asset_network as substance and rejects changes with
+  `replace_asset_network_change_forbidden`.  Mirror of order.ts.
+- DAI_NETWORKS_VALID strict allowlist of 4 EVM networks.
+**Residual risk:** Low.  Same coverage as USDC; gate logic exercised
+by 10 regression tests added in the cp30-DD-DD addendum (which now
+also cover DAI through the parallel branches).
+**Gap:** New tests specifically targeting DAI's asset_network gate
+not yet added (parallel to the cp30-DD-DD CODE-3 USDC tests).  Filed
+as REVISIT.
+
+### T-cp31-3 — Tampering with chat DAI payload network field
+**Surface:** Chain (custom_json) / Frontend (decoder)
+**Threat:** Same class as cp30 T-cp30-3.
+**Mitigation:**
+- Decoder uses strict literal-string `o.network !== 'erc20' && ...`
+  comparison.  4 EVM network names allowed; anything else rejected.
+- cp30-DD-DD CODE-1 inherited: missing-network rejected for DAI as
+  well as USDT/USDC.
+- cp30-DD-DD I-1 inherited: MAX_NETWORK_LEN=16 length cap before
+  toLowerCase.
+**Residual risk:** None observed.
+
+### T-cp31-4 — DAI icon SVG tampering
+**Surface:** Frontend (static asset serving)
+**Threat:** Same class as cp30 T-cp30-4.
+**Mitigation:**
+- Icon served as `<img src="/icons/icon-dai.svg">` (not inline
+  `{@html}`); SVG `<script>` would not execute.
+- Operator-controlled; out of scope per operator-trust model.
+- The asset's TEXT identifier ("DAI") is i18n-driven, not derived
+  from icon content.
+**Residual risk:** Low.
+
+────────────────────────────────────────────────────────────────────────
+
+## Repudiation — cp31 refresh
+
+### R-cp31-1 — User claims DAI trade didn't happen
+**Surface:** Indexer / chain
+**Threat:** Same as R1/R-cp30-1.  Every DAI order op is a chain-signed
+custom_json carrying the signer + blockTime + full payload on the
+public Blurt blockchain.  No new repudiation surface vs cp30.
+**Mitigation:** Same as R1.
+**Residual risk:** None.
+
+────────────────────────────────────────────────────────────────────────
+
+## Information disclosure — cp31 refresh
+
+### I-cp31-1 — DAI privacy-warning chip reveals trade intent
+**Surface:** Frontend (UI rendering)
+**Threat:** A user considering DAI sees the `dai_partly_centralized`
+warning chip in the DOM (3 sentences naming MakerDAO, the PSM, and
+Circle).  Session capture reveals more specific intent than the USDT/
+USDC chips would (which name only the issuer + freeze power).
+**Mitigation:**
+- Same posture as cp30 I-cp30-1 — informational, not blocking.
+- DOM exposure of this specific intent is no different from any
+  asset-form selection; same shared-device guidance applies.
+**Residual risk:** Same as USDT/USDC.  Acceptable.
+
+### I-cp31-2 — Per-network DAI explorer URL leak
+**Surface:** Operator → third party
+**Threat:** Same as cp30 I-cp30-2.  Each click sends user IP + tx
+hash to the operator-configured explorer (default:
+etherscan/polygonscan/basescan/arbiscan).
+**Mitigation:**
+- Operator override path: `MORPHIT_FRONTEND_DAI_<NET>_CHAT_LINK_URL`
+  per network.
+- Disclosed in /privacy/dai per-asset guide.
+- User can copy txid manually.
+**Residual risk:** Same as cp30 I-cp30-2.
+
+────────────────────────────────────────────────────────────────────────
+
+## Denial of service — cp31 refresh
+
+### D-cp31-1 — DoS via gigantic chat_link_urls.dai env values
+**Surface:** Indexer (config parsing)
+**Threat:** Operator misconfigures env with a billion-char value for
+one of the 4 new DAI chat-link URL env vars.
+**Mitigation:**
+- Zod schema `.max(512)` on every DAI chat-link env var (same as USDC
+  + USDT).  Indexer fails to start with a clear error.
+**Residual risk:** None.
+
+### D-cp31-2 — DoS via huge asset_network value in DAI order
+**Surface:** Indexer (order handler)
+**Threat:** Hostile chain peer broadcasts a `morphit_order_v1` with a
+multi-MB `asset_network` string.
+**Mitigation:**
+- Chain-layer custom_json size cap (~8KB).
+- cp30-DD-DD I-1 inherited: `networkRaw.length > MAX_NETWORK_LEN`
+  (16 chars) check BEFORE `toLowerCase()`.  Mirrored in orderReplace.
+**Residual risk:** None.
+
+### D-cp31-3 — ReDoS via DAI address/txid regexes
+**Surface:** Frontend (chat decoder) / Indexer (order handler)
+**Mitigation:**
+- All cp31 regexes anchored (`^...$`), bounded quantifiers (`{40}`,
+  `{64}`), no backreferences, no nested groups.  EVM `0x[a-fA-F0-9]
+  {40}` is the entire DAI address shape — extremely simple.
+**Residual risk:** None.
+
+### D-cp31-4 — DoS via jitter on 18-decimal DAI amounts
+**Surface:** Frontend (UI jitter computation)
+**Threat:** AddressShareModal calls `jitterAmountForAsset` on DAI
+input.  DAI uses 18-decimal token math; pathological string could
+trigger huge-BigInt allocation.
+**Mitigation:**
+- `AMOUNT_RE = /^\d{1,12}(?:\.\d{1,12})?$/` bounds input to 12+12
+  digits.  Jitter routine clamps to 6-decimal display precision
+  regardless of token-native decimals, so the BigInt is the same
+  size as for USDT/USDC.
+**Residual risk:** None.
+
+────────────────────────────────────────────────────────────────────────
+
+## Elevation of privilege — cp31 refresh
+
+### E-cp31-1 — DAI added to fee_method enum via misconfiguration
+**Surface:** Indexer (canonical registry) / chain
+**Threat:** Contributor flips DAI's `canPayListingFee:false → true`,
+allowing DAI to bypass the BLURT/BTC/XMR-only fee gate.
+**Mitigation:**
+- `dai-trade-only-smoke.ts` Scenario 2 asserts
+  `canonical DAI.canPayListingFee === false`.
+- `dai-trade-only-smoke.ts` Scenario 12 asserts
+  `frontend DAI.canBeUsedForListingFee === false` (drift detection).
+- `fee-method-enum-frozen-smoke.ts` asserts no asset can flip.
+- 3 independent smokes from different angles.
+**Residual risk:** None.
+
+### E-cp31-2 — Operator privilege via unknown DAI env vars
+**Surface:** Operator → indexer
+**Threat:** Operator adds `MORPHIT_FRONTEND_DAI_<unknown>_CHAT_LINK_URL`
+for a network not in the canonical DAI supportedNetworks set.
+**Mitigation:**
+- Indexer Zod schema enumerates exactly the 4 DAI networks (erc20/
+  polygon/base/arbitrum) as known env-var names.  Unknown env vars
+  are ignored by Zod.
+- Indexer order handler's `DAI_NETWORKS_VALID = new Set(['erc20',
+  'polygon', 'base', 'arbitrum'])` strict allowlist rejects unknown
+  values.
+**Residual risk:** None.
+
+────────────────────────────────────────────────────────────────────────
+
+## Part 122 cp31 refresh summary
+
+| Category | New rows | Pre-existing rows still in force |
+|----------|----------|----------------------------------|
+| Spoofing | 3 (S-cp31-1, S-cp31-2, S-cp31-3) | S-cp30-* + S1-S7 |
+| Tampering | 4 (T-cp31-1, T-cp31-2, T-cp31-3, T-cp31-4) | T-cp30-* + T1-T7 |
+| Repudiation | 1 (R-cp31-1) | R-cp30-1 + R1-R4 |
+| Information disclosure | 2 (I-cp31-1, I-cp31-2) | I-cp30-* + I1-I8 |
+| Denial of service | 4 (D-cp31-1, D-cp31-2, D-cp31-3, D-cp31-4) | D-cp30-* + D1-D7 |
+| Elevation of privilege | 2 (E-cp31-1, E-cp31-2) | E-cp30-* + E1-E4 |
+
+**Net new threats:** 16 across 6 categories.  No criticals.
+
+**Outstanding gap (cp31-specific):** DAI-targeted asset_network gate
+tests parallel to the cp30-DD-DD CODE-3 USDC tests not yet added —
+gate logic correct (mirror of USDC's), but unexercised by regression.
+Filed as REVISIT.
+
+**The cp31 attack surface is well-mitigated end-to-end.  Highest
+remaining concern is S-cp31-1 (4-way EVM-identity in DAI address
+formats), mitigated by the strongest cross-network warning copy of
+any picker — but mitigated by USER attention, not by shape
+validation.  Wallet-integration improvements (balance-check round-
+trip) would be the next defense layer if Morphit ever ships a
+direct-send feature; for now the receiver-must-confirm-chain workflow
+is the boundary.**

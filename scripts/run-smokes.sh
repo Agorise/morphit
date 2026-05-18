@@ -149,6 +149,7 @@ SMOKES=(
 	"packages/asset-registry:first-buy-waiver-payment-agnostic-smoke"
 	"packages/asset-registry:usdt-trade-only-smoke"
 	"packages/asset-registry:usdc-trade-only-smoke"
+	"packages/asset-registry:dai-trade-only-smoke"
 	"packages/asset-registry:bch-trade-only-smoke"
 	"packages/asset-registry:ltc-trade-only-smoke"
 	"packages/asset-registry:dash-trade-only-smoke"

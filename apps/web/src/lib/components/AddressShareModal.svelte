@@ -37,10 +37,11 @@
 		type AddressPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
-	import { validateUsdtAddress, type UsdtNetwork, validateUsdcAddress, type UsdcNetwork } from '$lib/assets/networks';
+	import { validateUsdtAddress, type UsdtNetwork, validateUsdcAddress, type UsdcNetwork, validateDaiAddress, type DaiNetwork } from '$lib/assets/networks';
 	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
+	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
 	import {
 		findPriorShare,
 		recordAddressShare,
@@ -89,6 +90,14 @@
 	 *  address can receive USDC on any of the three EVM chains
 	 *  but the wallet has to send on the matching chain. */
 	let usdcNetwork = $state<UsdcNetwork | null>(null);
+	/** Part 122 cp31 — selected DAI network for multi-network
+	 *  trades.  4 EVM networks (ERC-20/Polygon/Base/Arbitrum),
+	 *  ALL visually identical at the address-format level —
+	 *  highest cross-network-confusion surface on Morphit.  The
+	 *  picker is the only thing that disambiguates which chain
+	 *  the sender's wallet should broadcast on.  Same modal-state
+	 *  shape as usdcNetwork. */
+	let daiNetwork = $state<DaiNetwork | null>(null);
 	/** Phase F.4 — BLURT payment memo.  Auto-generated when the
 	 *  seller opens the modal with the BLURT tab selected (or
 	 *  switches to it).  Lets them match incoming transfers to
@@ -123,7 +132,7 @@
 	 *  satoshi-precision jitter (up to 999 sat ≈ $0.001-$0.50
 	 *  trivial cost — see jitterUtxoAmount).  BLURT uses
 	 *  milliblurt-precision jitter (see jitterBlurtAmount).
-	 *  USDT and USDC (cp30, reversing cp26's USDT-no-jitter
+	 *  USDT, USDC, and DAI (cp30 reversed cp26's USDT-no-jitter
 	 *  decision per ADR-0028 Decision 2): 6-decimal precision,
 	 *  0-999 microunit jitter ≈ $0.001 (jitterStablecoinAmount).
 	 *  The cp26 rationale "centralization is the issue, not
@@ -196,7 +205,9 @@
 				? usdtNetwork !== null && validateUsdtAddress(usdtNetwork, trimmedAddress)
 				: method === 'usdc'
 					? usdcNetwork !== null && validateUsdcAddress(usdcNetwork, trimmedAddress)
-					: isValidAddress(method, trimmedAddress))
+					: method === 'dai'
+						? daiNetwork !== null && validateDaiAddress(daiNetwork, trimmedAddress)
+						: isValidAddress(method, trimmedAddress))
 	);
 	/** cp26 — Address-reuse detection.  Reads the local-only
 	 *  address-history (see lib/privacy/addressHistory.ts) and
@@ -226,6 +237,13 @@
 	 *  here because ERC-20 / Base / Polygon look identical at the
 	 *  address-format level (all 0x[40 hex]). */
 	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
+	/** DAI-specific gate (cp31, mirror of USDC): network MUST be
+	 *  picked before submit, no default — ESPECIALLY important
+	 *  here because ALL FOUR DAI networks (ERC-20 / Polygon /
+	 *  Base / Arbitrum) look identical at the address-format
+	 *  level (all 0x[40 hex]).  Highest cross-network-confusion
+	 *  surface on Morphit. */
+	const daiNetworkPicked = $derived(method !== 'dai' || daiNetwork !== null);
 
 	const canSubmit = $derived(
 		addressLooksValid &&
@@ -233,6 +251,7 @@
 			noteLooksValid &&
 			usdtNetworkPicked &&
 			usdcNetworkPicked &&
+			daiNetworkPicked &&
 			!sending
 	);
 
@@ -241,8 +260,8 @@
 	 *  the user has typed enough chars) is jarring, so only flag
 	 *  invalid AFTER they've typed something substantial.  BLURT
 	 *  account names are short (3-16 chars) so the threshold is
-	 *  lower than for the other assets (BTC, XMR, USDT, USDC, BCH,
-	 *  LTC, DASH, all of which use the same 10-char threshold). */
+	 *  lower than for the other assets (BTC, XMR, USDT, USDC, DAI,
+	 *  BCH, LTC, DASH, all of which use the same 10-char threshold). */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
 		// Method-aware "still typing" threshold.
@@ -253,6 +272,7 @@
 		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
 		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
 		if (method === 'usdc') return 'chat.address.address_invalid_usdc';
+		if (method === 'dai') return 'chat.address.address_invalid_dai';
 		if (method === 'bch') return 'chat.address.address_invalid_bch';
 		if (method === 'ltc') return 'chat.address.address_invalid_ltc';
 		if (method === 'dash') return 'chat.address.address_invalid_dash';
@@ -276,12 +296,13 @@
 		method = m;
 		// Don't clear address — user may have pasted XMR while BTC
 		// was selected, the validator will catch the mismatch.
-		// Part 121 / cp30: when leaving a multi-network asset (USDT
-		// or USDC), drop the pinned network so a future re-pick
-		// forces a fresh explicit choice (no stale value).  Each
-		// multi-network trade gets a deliberate network commit.
+		// Part 121 / cp30 / cp31: when leaving a multi-network asset
+		// (USDT, USDC, or DAI), drop the pinned network so a future
+		// re-pick forces a fresh explicit choice (no stale value).
+		// Each multi-network trade gets a deliberate network commit.
 		if (m !== 'usdt') usdtNetwork = null;
 		if (m !== 'usdc') usdcNetwork = null;
+		if (m !== 'dai') daiNetwork = null;
 	}
 
 	async function handleSubmit(): Promise<void> {
@@ -330,6 +351,13 @@
 				// the network field the receiver couldn't tell which
 				// chain to expect.
 				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {}),
+				// Part 122 cp31 — pin the DAI network the same way.
+				// MOST critical of the three stablecoins because ALL
+				// FOUR DAI networks use the EVM 0x[40 hex] shape (no
+				// SPL branch to disambiguate); without the network
+				// field the receiver couldn't tell which of ERC-20 /
+				// Polygon / Base / Arbitrum to expect.
+				...(method === 'dai' && daiNetwork !== null ? { network: daiNetwork } : {}),
 				// cp26 — BTC PayJoin (BIP-78) endpoint URL.  Only
 				// propagates when method is btc AND the seller
 				// supplied a non-empty endpoint.  Encoder enforces
@@ -515,6 +543,23 @@
 				<PrivacyWarningChip privacyWarningKey="usdc_centralized" />
 				<div class="mt-3">
 					<UsdcNetworkPicker bind:network={usdcNetwork} disabled={sending} />
+				</div>
+			</div>
+		{/if}
+
+		<!-- Part 122 cp31 — DAI multi-network picker.  Same
+		     pattern as USDC; the privacy warning copy is
+		     DIFFERENT (dai_partly_centralized acknowledges DAI's
+		     decentralization at the contract level while being
+		     honest about the PSM/USDC backing dependency).
+		     Cross-network warning is the strongest of any picker
+		     because ALL FOUR DAI networks share the EVM 0x address
+		     format — no SPL branch to provide visual cue. -->
+		{#if method === 'dai'}
+			<div class="mt-4">
+				<PrivacyWarningChip privacyWarningKey="dai_partly_centralized" />
+				<div class="mt-3">
+					<DaiNetworkPicker bind:network={daiNetwork} disabled={sending} />
 				</div>
 			</div>
 		{/if}
