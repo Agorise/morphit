@@ -60,6 +60,7 @@
 		height={size}
 		draggable="false"
 		loading="lazy"
+		decoding="async"
 	/>
 </span>
 

@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "Monero : cryptomonnaie axée sur la confidentialité avec montants et adresses confidentiels."
 		},
+		"pay_usdt": {
+			"description": "Tether : stablecoin adossé au USD disponible sur plusieurs réseaux."
+		},
+		"pay_usdc": {
+			"description": "USD Coin : stablecoin adossé au USD émis par Circle."
+		},
+		"pay_dai": {
+			"description": "Dai : stablecoin adossé au USD sur les réseaux EVM."
+		},
 		"pay_bch": {
 			"description": "Payer avec Bitcoin Cash"
+		},
+		"pay_ltc": {
+			"description": "Payer en Litecoin"
+		},
+		"pay_dash": {
+			"description": "Payer avec Dash"
 		},
 		"barter_goods": {
 			"description": "Échange de biens directement contre l'actif — décris ce que tu offres ou ce que tu veux dans le champ « conditions » de l'annonce (p. ex. « orangers », « vélo d'occasion », « ail maison »)."
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "Vous ne voyez pas ce qu'il vous faut ?",
 		"request_missing_link": "Faites-le-nous savoir",
-		"request_missing_no_contact": "Vous ne voyez pas ce qu'il vous faut ? Cette instance n'a pas publié de canal de contact — essayez une autre instance Morphit, ou ouvrez un ticket sur git.agorise.net/agorise/morphit.",
-		"pay_ltc": {
-			"description": "Payer en Litecoin"
-		},
-		"pay_dash": {
-			"description": "Payer avec Dash"
-		}
+		"request_missing_no_contact": "Vous ne voyez pas ce qu'il vous faut ? Cette instance n'a pas publié de canal de contact — essayez une autre instance Morphit, ou ouvrez un ticket sur git.agorise.net/agorise/morphit."
 	},
 	"feedback_reminder": {
 		"aria_label": "Rappels d'avis en attente",

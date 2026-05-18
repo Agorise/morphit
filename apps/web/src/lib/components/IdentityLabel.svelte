@@ -267,6 +267,8 @@
 				alt=""
 				width={avatarSize}
 				height={avatarSize}
+				loading="lazy"
+				decoding="async"
 				class="flex-none rounded-full bg-ink-200/50 object-cover ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				aria-hidden="true"
 			/>
@@ -276,6 +278,8 @@
 				alt=""
 				width={avatarSize}
 				height={avatarSize}
+				loading="lazy"
+				decoding="async"
 				class="flex-none rounded-full bg-ink-200/50 ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				aria-hidden="true"
 			/>

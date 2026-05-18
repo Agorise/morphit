@@ -439,7 +439,7 @@
 	{:else if submit.kind === 'done'}
 		<!-- Success state — briefly shown before we redirect. -->
 		<section class="card animate-fade-up text-center" aria-live="polite">
-			<img src={avatarUri} alt="" class="mx-auto mb-4 h-24 w-24 rounded-2xl" />
+			<img src={avatarUri} alt="" class="mx-auto mb-4 h-24 w-24 rounded-2xl" loading="lazy" decoding="async" />
 			<h2 class="font-display text-2xl font-bold">
 				{$_('onboarding.register_name.success.title')}
 			</h2>
@@ -454,7 +454,7 @@
 		<section class="animate-fade-up" aria-labelledby="register-heading">
 			<div class="card">
 				<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-					<img src={avatarUri} alt="" class="h-24 w-24 flex-none rounded-2xl" />
+					<img src={avatarUri} alt="" class="h-24 w-24 flex-none rounded-2xl" loading="lazy" decoding="async" />
 					<div class="flex-1 text-center sm:text-left">
 						<h1 id="register-heading" class="font-display text-2xl font-bold">
 							{$_('onboarding.register_name.title')}

@@ -424,9 +424,11 @@
 				width="96"
 				height="96"
 				class="mb-3 rounded-2xl object-cover"
+				loading="lazy"
+				decoding="async"
 			/>
 		{:else}
-			<img src={heroAvatar} alt="" width="96" height="96" class="mb-3 rounded-2xl" />
+			<img src={heroAvatar} alt="" width="96" height="96" class="mb-3 rounded-2xl" loading="lazy" decoding="async" />
 		{/if}
 		<h1 class="font-display text-3xl font-extrabold">
 			{effectiveDisplayName}

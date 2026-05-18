@@ -187,7 +187,7 @@
 			<div
 				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
 			>
-				<img src="/icons/icon-btc.svg" alt="Bitcoin" class="h-12 w-12 flex-none" />
+				<img src="/icons/icon-btc.svg" alt="Bitcoin" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
 				<div>
 					<p class="font-display text-lg font-bold">Bitcoin</p>
 					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.btc')}</p>
@@ -196,7 +196,7 @@
 			<div
 				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
 			>
-				<img src="/icons/icon-xmr.svg" alt="Monero" class="h-12 w-12 flex-none" />
+				<img src="/icons/icon-xmr.svg" alt="Monero" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
 				<div>
 					<p class="font-display text-lg font-bold">Monero</p>
 					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.xmr')}</p>
@@ -205,7 +205,7 @@
 			<div
 				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
 			>
-				<img src="/icons/icon-blurt.svg" alt="Blurt" class="h-12 w-12 flex-none" />
+				<img src="/icons/icon-blurt.svg" alt="Blurt" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
 				<div>
 					<p class="font-display text-lg font-bold">Blurt</p>
 					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.blurt')}</p>

@@ -137,6 +137,13 @@ to 0.6 KB while preserving viewBox.
   priority.  The horizontal-scrolling tab layout still fits
   comfortably; revisit if/when an 8th asset is added.
 
+> **Forward-note (Part 122 cp32, 2026-05-18):** the 8th (USDC,
+> cp30, ADR-0028) and 9th (DAI, cp31, ADR-0029) assets have since
+> shipped.  The asset-picker tab layout continues to fit
+> comfortably at 9; cheat-sheet readability still holds.  The
+> grandma-friendly review re-ran at cp31 and cp32 and remains
+> clean.  Revisit if/when a 10th asset is added.
+
 ## Files changed
 
 Canonical asset registry, chat payload (regex + dispatchers +

@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "门罗币:专注隐私的加密货币,金额和地址保密。"
 		},
+		"pay_usdt": {
+			"description": "Tether: USD-pegged stablecoin available across multiple networks."
+		},
+		"pay_usdc": {
+			"description": "USD Coin: USD-pegged stablecoin issued by Circle."
+		},
+		"pay_dai": {
+			"description": "Dai: USD-pegged stablecoin on EVM networks."
+		},
 		"pay_bch": {
 			"description": "用比特币现金支付"
+		},
+		"pay_ltc": {
+			"description": "用莱特币支付"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		},
 		"barter_goods": {
 			"description": "直接以商品换取资产 — 在订单条款中描述你提供或想要的(例如「橙子树」「二手自行车」「自家种的大蒜」)。"
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "没看到你需要的？",
 		"request_missing_link": "告诉我们",
-		"request_missing_no_contact": "没看到你需要的？此实例未发布联系渠道——试试另一个 Morphit 实例，或在 git.agorise.net/agorise/morphit 上提交问题。",
-		"pay_ltc": {
-			"description": "用莱特币支付"
-		},
-		"pay_dash": {
-			"description": "Pay with Dash"
-		}
+		"request_missing_no_contact": "没看到你需要的？此实例未发布联系渠道——试试另一个 Morphit 实例，或在 git.agorise.net/agorise/morphit 上提交问题。"
 	},
 	"feedback_reminder": {
 		"aria_label": "待处理反馈提醒",

@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "مونرو: ارز رمزنگاری متمرکز بر حریم خصوصی با مقادیر و آدرس‌های محرمانه."
 		},
+		"pay_usdt": {
+			"description": "Tether: USD-pegged stablecoin available across multiple networks."
+		},
+		"pay_usdc": {
+			"description": "USD Coin: USD-pegged stablecoin issued by Circle."
+		},
+		"pay_dai": {
+			"description": "Dai: USD-pegged stablecoin on EVM networks."
+		},
 		"pay_bch": {
 			"description": "با بیت‌کوین کش بپرداز"
+		},
+		"pay_ltc": {
+			"description": "پرداخت با لایت‌کوین"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		},
 		"barter_goods": {
 			"description": "کالاها را مستقیم با دارایی مبادله کن — در فیلد شرایط سفارش بنویس چه ارائه می‌دهی یا می‌خواهی (مثلاً «درخت پرتقال»، «دوچرخه دست دوم»، «سیر خانگی»)."
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "چیزی که نیاز داری را نمی‌بینی؟",
 		"request_missing_link": "به ما خبر بده",
-		"request_missing_no_contact": "چیزی که نیاز داری را نمی‌بینی؟ این نمونه کانال تماسی منتشر نکرده است — یک نمونه Morphit دیگر را امتحان کن، یا یک مسئله در git.agorise.net/agorise/morphit باز کن.",
-		"pay_ltc": {
-			"description": "پرداخت با لایت‌کوین"
-		},
-		"pay_dash": {
-			"description": "Pay with Dash"
-		}
+		"request_missing_no_contact": "چیزی که نیاز داری را نمی‌بینی؟ این نمونه کانال تماسی منتشر نکرده است — یک نمونه Morphit دیگر را امتحان کن، یا یک مسئله در git.agorise.net/agorise/morphit باز کن."
 	},
 	"feedback_reminder": {
 		"aria_label": "یادآوری‌های بازخورد در انتظار",

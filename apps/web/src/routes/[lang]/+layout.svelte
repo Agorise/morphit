@@ -323,10 +323,14 @@
 
 	<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
 		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
-			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed. -->
+			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed.
+			     Lazy-loaded per Priority #4 — footer is below-the-fold on every page;
+			     never in LCP candidate set. -->
 			<img
 				src="/brand/morphit-wordmark.svg"
 				alt="Morphit"
+				loading="lazy"
+				decoding="async"
 				class="animate-morphit-hue-shift h-10 w-auto"
 			/>
 

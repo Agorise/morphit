@@ -302,6 +302,8 @@
 			src="/icons/icon-yubikey.svg"
 			alt=""
 			aria-hidden="true"
+			loading="lazy"
+			decoding="async"
 			class="hidden h-24 w-auto flex-none opacity-90 sm:block"
 		/>
 

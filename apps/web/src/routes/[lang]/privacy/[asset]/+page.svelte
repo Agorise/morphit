@@ -67,6 +67,8 @@
 					alt=""
 					class="h-10 w-10"
 					aria-hidden="true"
+					loading="lazy"
+					decoding="async"
 				/>
 				<h1 class="text-2xl font-bold">
 					{$_('privacy.guide_heading', { values: { asset: asset.ticker } })}
