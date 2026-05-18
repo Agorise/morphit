@@ -172,7 +172,22 @@ const sampleAnswers: WizardAnswers = {
 	},
 	chatLinkExplorers: {
 		btc: 'https://mempool.space/tx/{txid}',
-		xmr: 'https://xmrchain.net/tx/{txid}'
+		xmr: 'https://xmrchain.net/tx/{txid}',
+		bch: 'https://blockchair.com/bitcoin-cash/transaction/{txid}',
+		ltc: 'https://litecoinspace.org/tx/{txid}',
+		dash: 'https://insight.dash.org/insight/tx/{txid}',
+		usdt: {
+			erc20: 'https://etherscan.io/tx/{txid}',
+			trc20: 'https://tronscan.org/#/transaction/{txid}',
+			spl: 'https://solscan.io/tx/{txid}',
+			bep20: 'https://bscscan.com/tx/{txid}'
+		},
+		usdc: {
+			erc20: 'https://etherscan.io/tx/{txid}',
+			spl: 'https://solscan.io/tx/{txid}',
+			base: 'https://basescan.org/tx/{txid}',
+			polygon: 'https://polygonscan.com/tx/{txid}'
+		}
 	},
 	listingFee: {
 		targetUsd: 0.25,

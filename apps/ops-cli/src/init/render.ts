@@ -463,10 +463,22 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   - start with https://');
 	lines.push('#   - contain {txid} exactly where the txid should appear');
 	lines.push('#');
-	lines.push('# Defaults:');
-	lines.push('#   BTC: https://mempool.space/tx/{txid}');
-	lines.push('#   XMR: https://xmrchain.net/tx/{txid}');
-	lines.push('#   BCH: https://blockchair.com/bitcoin-cash/transaction/{txid}');
+	lines.push('# Defaults (single-network):');
+	lines.push('#   BTC:  https://mempool.space/tx/{txid}');
+	lines.push('#   XMR:  https://xmrchain.net/tx/{txid}');
+	lines.push('#   BCH:  https://blockchair.com/bitcoin-cash/transaction/{txid}');
+	lines.push('#   LTC:  https://litecoinspace.org/tx/{txid}');
+	lines.push('#   DASH: https://insight.dash.org/insight/tx/{txid}');
+	lines.push('#');
+	lines.push('# Defaults (multi-network, per chain):');
+	lines.push('#   USDT (ERC-20):  https://etherscan.io/tx/{txid}');
+	lines.push('#   USDT (TRC-20):  https://tronscan.org/#/transaction/{txid}');
+	lines.push('#   USDT (SPL):     https://solscan.io/tx/{txid}');
+	lines.push('#   USDT (BEP-20):  https://bscscan.com/tx/{txid}');
+	lines.push('#   USDC (ERC-20):  https://etherscan.io/tx/{txid}');
+	lines.push('#   USDC (SPL):     https://solscan.io/tx/{txid}');
+	lines.push('#   USDC (Base):    https://basescan.org/tx/{txid}');
+	lines.push('#   USDC (Polygon): https://polygonscan.com/tx/{txid}');
 	lines.push(
 		`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.btc)}`
 	);
@@ -481,6 +493,34 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	);
 	lines.push(
 		`MORPHIT_FRONTEND_DASH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dash)}`
+	);
+	// Part 122 cp30-DD-11 — USDT per-network env vars.  These
+	// finally route through the indexer body to the frontend's
+	// usdtExplorerUrl() lookup after the DD-11 closure.
+	lines.push(
+		`MORPHIT_FRONTEND_USDT_ERC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdt.erc20)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDT_TRC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdt.trc20)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDT_SPL_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdt.spl)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdt.bep20)}`
+	);
+	// Part 122 cp30 — USDC per-network env vars.
+	lines.push(
+		`MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.erc20)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.spl)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.base)}`
+	);
+	lines.push(
+		`MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.polygon)}`
 	);
 	lines.push('');
 
@@ -501,8 +541,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# Examples:');
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS=""        (accept all)');
 	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"    (refuse USDT)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH"     (refuse BCH)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH" (refuse both)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDC"    (refuse USDC)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC" (refuse both stablecoins — privacy-pure)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH" (refuse BTC-forks)');
 	lines.push('#');
 	lines.push('# Change your mind later by editing this line and');
 	lines.push('# restarting the indexer service.  Browsers see the');

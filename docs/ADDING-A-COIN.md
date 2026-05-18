@@ -417,14 +417,35 @@ cannot accidentally leak into the fee path:
   user's first BLURT buy still gets the waiver even if they
   pay their counterparty in USDT.
 
-### Multi-network coins (USDT on ERC-20 / TRC-20 / SPL / etc.)
+### Multi-network coins (USDT, USDC; possible future ETH, ARRR, etc.)
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
 coins (BTC, XMR, BLURT, BCH, LTC, DASH) declare `['mainnet']`.
-Multi-network coins (USDT — shipped in Part 121 cp3) list each
-network explicitly.  The **canonical reference** is the actual USDT
-entry at `packages/asset-registry/src/index.ts`:
+Multi-network coins list each network explicitly.  As of Part
+122 cp30 two multi-network assets are shipped:
+
+1. **USDT** (Part 121 cp3) — `supportedNetworks: ['erc20',
+   'trc20', 'spl', 'bep20']`.  Each network has a visually
+   distinct address format (TRC-20 starts with `T`, ERC-20/BEP-20
+   start with `0x`, SPL is base58 32-44 chars), so users can
+   *usually* tell at a glance which network an address belongs
+   to.
+2. **USDC** (Part 122 cp30) — `supportedNetworks: ['erc20',
+   'spl', 'base', 'polygon']`.  WATCH OUT: three of the four
+   (ERC-20, Base, Polygon) all use the EVM `0x[40 hex]` address
+   format — they are visually IDENTICAL.  An address that's
+   valid on Polygon is also a valid address on Ethereum AND on
+   Base, but each chain holds its own separate USDC balance for
+   that address.  The network discriminator field is the ONLY
+   thing telling the sender's wallet which chain to broadcast
+   on.  Cross-network-mis-send is more dangerous on USDC than
+   on USDT for this reason; the per-message cross-network
+   warning in `ChatMessage.svelte` reflects this.  See ADR-0028
+   §"Why surface the EVM identical-address warning so prominently?".
+
+The **canonical reference** is the actual USDT and USDC entries
+at `packages/asset-registry/src/index.ts`.  USDT:
 
 ```ts
 {
@@ -446,21 +467,68 @@ entry at `packages/asset-registry/src/index.ts`:
 }
 ```
 
+USDC mirrors the structure (note the simpler regex — no Tron
+T-prefix branch because Circle doesn't issue natively on Tron):
+
+```ts
+{
+  ticker: 'USDC',
+  decimals: 6,
+  isCoordinationChain: false,
+  canBeTraded: true,
+  canPayListingFee: false,                  // Category B (same as USDT)
+  supportedNetworks: ['erc20', 'spl', 'base', 'polygon'],
+  defaultNetwork: null,                     // force explicit user choice
+  privacyWarningKey: 'usdc_centralized',
+  addressShape:
+    /^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/,
+  privacyFeatures: {
+    freshAddressAdvice: 'hd-derived',
+    optInPrivacyTech: null,                  // USDC has no chain-level opt-in
+    privacyGuideKey: 'usdc'
+  }
+}
+```
+
 Setting `defaultNetwork: null` forces the post-order form to
 require an explicit network pick on every trade — the safest
 stance for cross-chain-mis-send-prone assets.  Per-network
 metadata (regexes, fee hints, bundled explorer URLs) lives
 separately in `apps/web/src/lib/assets/networks.ts`; adding a
-new USDT network is a single entry there.
+new network to an existing multi-network asset is a single
+entry there.
+
+**Indexer wire-format wiring** — both the indexer's `InstanceResponse`
+interface AND the indexer-client mirror declare a per-network
+`chat_link_urls.<asset>` sub-map (Part 122 cp30-DD-10/11 — when
+adding a new multi-network asset, do NOT just add the field to
+the indexer-client mirror.  The indexer-side body construction
+must ALSO populate it from the corresponding Config field + Zod
+env-var schema entry).  The 4 canonical wire-format surfaces
+that must ALL be updated for any new multi-network asset:
+1. Frontend store interface + defensive `?? {…}` fallback +
+   fetch normalization (`apps/web/src/lib/stores/instance.ts`)
+2. Indexer-side InstanceResponse interface + body construction
+   (`apps/indexer/src/api/instance.ts`)
+3. Indexer-client mirror (`packages/indexer-client/src/index.ts`)
+4. Matrix-bot api-response-shape-smoke ChatLinkUrlsSchema
+   (`apps/matrix-bot/scripts/api-response-shape-smoke.ts`)
+
+Plus the Config schema fields + env-var Zod entries in
+`apps/indexer/src/config/index.ts`, the example env file at
+`ops/env/indexer.env.example`, and the ops-cli wizard's
+`ChatLinkExplorersResult` + step prompts + render emission.
 
 The frontend address-share modal validates the address against
 the chosen network's regex (not just the registry's combined
 regex), and the `<ChatMessage>` component renders a bold-network
-prefix + amber-warning aside above the address: "Tron (TRC-20)
-USDT address — send USDT on Tron only.  Sending USDT on any
-other network to this address loses your funds permanently."
+prefix + amber-warning (USDT) or blue-warning (USDC) aside
+above the address: "Tron (TRC-20) USDT address — send USDT on
+Tron only.  Sending USDT on any other network to this address
+loses your funds permanently."
 
-Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`.
+Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`
+and `docs/adr/0028-usdc-multi-network-trade-only-addition.md`.
 
 ### Privacy warning chip
 
@@ -473,13 +541,19 @@ enough that no warning is needed).  Non-null is an i18n key
 looked up under `assets.privacy_warnings.<key>` in the locale
 JSON.
 
-USDT's warning (shipped in Part 121 cp3,
-`assets.privacy_warnings.usdt_centralized`) explains:
-- Tether can freeze any USDT address (centralization risk).
-- USDT transactions are public on the network the user chose
+Both stablecoins ship a warning:
+- USDT's warning (Part 121 cp3,
+  `assets.privacy_warnings.usdt_centralized`)
+- USDC's warning (Part 122 cp30,
+  `assets.privacy_warnings.usdc_centralized`)
+
+Both explain:
+- The issuer (Tether Inc. for USDT, Circle for USDC) can freeze
+  any address on any supported network.
+- Transactions are public on whichever network the user chose
   (no on-chain privacy).
-- Morphit can't make USDT private — only XMR has meaningful
-  on-chain privacy.
+- Morphit can't make centralized stablecoins private — only XMR
+  has meaningful on-chain privacy.
 
 This warning is required by Memory #19 (privacy is priority
 #1): users must be told when an asset they're considering

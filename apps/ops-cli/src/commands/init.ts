@@ -240,6 +240,26 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  XMR chat-link URL:    ${answers.chatLinkExplorers.xmr}`);
 	console.log(`  BCH chat-link URL:    ${answers.chatLinkExplorers.bch}`);
 	console.log(`  LTC chat-link URL:    ${answers.chatLinkExplorers.ltc}`);
+	console.log(`  DASH chat-link URL:   ${answers.chatLinkExplorers.dash}`);
+	// Part 122 cp30-DD — multi-network chat-link URLs.  Each
+	// asset spans 4 chains; summarize as "all defaults" if every
+	// URL matches its bundled default, otherwise "customized".
+	const usdtAllDefault =
+		answers.chatLinkExplorers.usdt.erc20 === 'https://etherscan.io/tx/{txid}' &&
+		answers.chatLinkExplorers.usdt.trc20 === 'https://tronscan.org/#/transaction/{txid}' &&
+		answers.chatLinkExplorers.usdt.spl === 'https://solscan.io/tx/{txid}' &&
+		answers.chatLinkExplorers.usdt.bep20 === 'https://bscscan.com/tx/{txid}';
+	const usdcAllDefault =
+		answers.chatLinkExplorers.usdc.erc20 === 'https://etherscan.io/tx/{txid}' &&
+		answers.chatLinkExplorers.usdc.spl === 'https://solscan.io/tx/{txid}' &&
+		answers.chatLinkExplorers.usdc.base === 'https://basescan.org/tx/{txid}' &&
+		answers.chatLinkExplorers.usdc.polygon === 'https://polygonscan.com/tx/{txid}';
+	console.log(
+		`  USDT chat-link URLs:  ${usdtAllDefault ? 'all 4 defaults (ERC-20/TRC-20/SPL/BEP-20)' : 'customized — see env file'}`
+	);
+	console.log(
+		`  USDC chat-link URLs:  ${usdcAllDefault ? 'all 4 defaults (ERC-20/SPL/Base/Polygon)' : 'customized — see env file'}`
+	);
 	if (answers.disabledAssets.disabledTickers.length === 0) {
 		console.log(`  Trade-only assets:    all enabled (default)`);
 	} else {
