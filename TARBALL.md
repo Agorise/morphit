@@ -67,6 +67,15 @@ REVISITS DEFERRED: (a) orderReplace `replace_asset_network_change_forbidden` tes
 
 ---
 
+# Post-session note (2026-05-18) — DD-DD-7 closed
+
+`docs/adr/0000-template.md` confirmed as ADR-skeleton template (not a real ADR), header literally `# ADR-NNNN: Title` with placeholder `Proposed | Accepted | Superseded | Deprecated` status.  Brag #134 claim "27 ADRs ... files numbered 0001 through 0028 with the 0016 slot intentionally reserved-but-unused" is CORRECT.  No action needed.  Only outstanding REVISIT from cp30-DD-DD: orderReplace replace_asset_network_change_forbidden test coverage.
+
+---
+
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD-DD — recursive deep-deep on cp30 + cp30-DD with FULL SECURITY + CODE AUDIT pass per Ken's directive.  Plus Ken-supplied LTC icon swap mid-session.  20 audit items: 11 DD findings (10 closed + 1 false-positive cleared) + 6 SEC findings closed + 3 CODE findings closed.  Pre-existing latent bugs uncovered: SEC-1 orphaned XSS defender, SEC-3 cross-network-mis-send through wire, SEC-5/CODE-A+B ~9-month broken smoke since cp21, SEC-2 cp26 design-decision reversal incomplete.  Two icon swaps (USDC + LTC) cleanly applied with same accessibility parity treatment.
 
 CP30-DD-DD SCOPE: switching from drift-hunting to a proper security + code audit on the cp30 + cp30-DD wire-format work.  Walked the wire-format trust gates, defense-in-depth defenders, UI-vs-logic enforcement asymmetries, cross-field-coupling validation, broken-since-cp21 smokes, replace-handler asset_network gaps, and ops-cli wizard surface.
