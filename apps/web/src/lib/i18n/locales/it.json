@@ -2149,6 +2149,8 @@
 				"incoming": "Messaggio ricevuto"
 			},
 			"placeholder_encrypted": "(cifrato)",
+			"placeholder_encrypted_paired": "Messaggio cifrato — apri Morphit sul tuo telefono per leggerlo.",
+			"placeholder_encrypted_failed": "Impossibile decifrare questo messaggio su questo dispositivo. Potrebbe essere danneggiato o inviato a una chiave destinataria diversa.",
 			"sending": "invio…",
 			"failed_label": "Fallito",
 			"retry": "Riprova",

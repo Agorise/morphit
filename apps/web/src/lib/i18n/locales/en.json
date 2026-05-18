@@ -2149,6 +2149,8 @@
 				"incoming": "Incoming message"
 			},
 			"placeholder_encrypted": "(encrypted)",
+			"placeholder_encrypted_paired": "Encrypted message — open Morphit on your phone to read it.",
+			"placeholder_encrypted_failed": "This message couldn't be decrypted on this device. It may be damaged or sent to a different recipient key.",
 			"sending": "sending…",
 			"failed_label": "Failed",
 			"retry": "Retry",

@@ -2149,6 +2149,8 @@
 				"incoming": "收到的訊息"
 			},
 			"placeholder_encrypted": "(已加密)",
+			"placeholder_encrypted_paired": "已加密嘅訊息 — 喺你嘅手機上打開 Morphit 嚟閱讀。",
+			"placeholder_encrypted_failed": "此訊息喺呢部裝置上無法解密。可能已損壞或發送到唔同嘅收件人密鑰。",
 			"sending": "傳送中…",
 			"failed_label": "失敗",
 			"retry": "重試",

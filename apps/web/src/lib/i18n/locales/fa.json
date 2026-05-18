@@ -2149,6 +2149,8 @@
 				"incoming": "پیام دریافتی"
 			},
 			"placeholder_encrypted": "(رمزنگاری‌شده)",
+			"placeholder_encrypted_paired": "پیام رمزنگاری‌شده — برای خواندنش Morphit را روی گوشی‌ات باز کن.",
+			"placeholder_encrypted_failed": "این پیام روی این دستگاه قابل رمزگشایی نبود. ممکن است خراب باشد یا به کلید گیرنده دیگری ارسال شده باشد.",
 			"sending": "در حال ارسال…",
 			"failed_label": "ناموفق",
 			"retry": "تلاش مجدد",

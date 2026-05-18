@@ -34,6 +34,7 @@
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
+	import { isPairedReadOnly } from '$lib/stores/identity';
 	import QrPanel from '$components/QrPanel.svelte';
 
 	interface Props {
@@ -94,6 +95,46 @@
 	// shows the placeholder).
 	const isPlaceholder = $derived(
 		message.decryptFailed || message.text === CHAT_CONSTANTS.ENCRYPTED_PLACEHOLDER
+	);
+
+	// Part 122 cp29 — closes Part 119 finding B-3 (paired-readonly
+	// Bob saw "(encrypted)" with no actionable guidance about why
+	// decryption isn't happening on this device).  Three distinct
+	// failure modes were previously collapsed into a single
+	// "(encrypted)" placeholder; now each gets its own copy:
+	//
+	//   - 'failed'   → decryption was attempted and failed; could
+	//                  be tampered ciphertext, wrong recipient key,
+	//                  or a malformed envelope.  Worth flagging
+	//                  loudly so the user knows the message is
+	//                  suspect, not just temporarily unreadable.
+	//   - 'paired'   → user is signed in via ADR-0022 QR-pair on
+	//                  this desktop; their posting key (and chat
+	//                  decryption material) lives on their phone.
+	//                  Tells them to open Morphit on the phone.
+	//   - 'default'  → the catch-all (legacy-stub messages with no
+	//                  ephemeral_pub, messages we sent from a
+	//                  different session of our own, locked-session
+	//                  state).  Keeps the original terse
+	//                  "(encrypted)" copy.
+	//
+	// Decryption-failed beats paired-readonly: a corrupt message
+	// is corrupt regardless of which device the user is signed in
+	// from, and we want the louder warning to surface even on a
+	// paired-readonly device.
+	const placeholderKind: 'failed' | 'paired' | 'default' = $derived(
+		message.decryptFailed
+			? 'failed'
+			: $isPairedReadOnly
+				? 'paired'
+				: 'default'
+	);
+	const placeholderI18nKey = $derived(
+		placeholderKind === 'failed'
+			? 'chat.message.placeholder_encrypted_failed'
+			: placeholderKind === 'paired'
+				? 'chat.message.placeholder_encrypted_paired'
+				: 'chat.message.placeholder_encrypted'
 	);
 
 	/** Decode structured payloads from the plaintext.  Phase F adds
@@ -341,9 +382,25 @@
 				: ($_('chat.message.aria.incoming') as string)}
 		>
 			{#if isPlaceholder}
-				<span class="italic text-ink-500 dark:text-ink-400">
-					{$_('chat.message.placeholder_encrypted')}
-				</span>
+				<!-- Part 122 cp29: closes Part 119 finding B-3 — the
+				     three placeholder cases (decrypt-failed / paired-
+				     readonly / default) get distinct copy via the
+				     derived placeholderI18nKey above.  Failed
+				     decryption gets louder visual treatment (amber
+				     border + not italic) since it's a real signal
+				     the message may be tampered; paired-readonly +
+				     default share the muted-italic style. -->
+				{#if placeholderKind === 'failed'}
+					<span
+						class="block rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-sm text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200"
+					>
+						{$_(placeholderI18nKey)}
+					</span>
+				{:else}
+					<span class="italic text-ink-500 dark:text-ink-400">
+						{$_(placeholderI18nKey)}
+					</span>
+				{/if}
 			{:else if decoded?.kind === 'address'}
 				{@const p = decoded.payload}
 				{@const isIncoming = !isOutgoing}

@@ -2149,6 +2149,8 @@
 				"incoming": "Empfangene Nachricht"
 			},
 			"placeholder_encrypted": "(verschlüsselt)",
+			"placeholder_encrypted_paired": "Verschlüsselte Nachricht — öffne Morphit auf deinem Telefon, um sie zu lesen.",
+			"placeholder_encrypted_failed": "Diese Nachricht konnte auf diesem Gerät nicht entschlüsselt werden. Sie könnte beschädigt sein oder an einen anderen Empfängerschlüssel gesendet worden sein.",
 			"sending": "wird gesendet…",
 			"failed_label": "Fehlgeschlagen",
 			"retry": "Erneut versuchen",

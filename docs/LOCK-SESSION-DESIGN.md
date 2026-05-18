@@ -15,7 +15,9 @@ This doc captures the original design rationale.  The header
 ratified before implementation; the body matches what shipped.
 
 **Last updated:** 2026-04-21 (design ratification); shipped
-shortly after.
+shortly after.  Doc maintained through 2026-05-17 (Part 122
+cp27-DD2 fixed a route-path reference for cp7 per-locale
+prerendering migration).
 
 ## Problem
 
