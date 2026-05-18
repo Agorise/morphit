@@ -2,7 +2,7 @@
 
 **Status:** Investigation, not yet a roadmap. Item 13 of Batch M.
 **Author:** Agorise
-**Last updated:** 2026-04
+**Last updated:** 2026-05-17 (Part 122 cp28 — route-path drift fixes in cp27-DD2; status field updates throughout cp21/cp23-DD/cp24/cp27 for per-asset tooltip and cheat-sheet row additions).
 
 This document is a survey of friction points a complete crypto-naive user (the canonical "grandma") would hit on Morphit today, organized into severity tiers. Each gap names the specific friction, where it surfaces, and a sketch of what a fix could look like. Nothing here is committed work — it's a triage list to reference when planning Batch N.
 

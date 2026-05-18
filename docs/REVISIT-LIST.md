@@ -1,6 +1,8 @@
 # Morphit — revisit list
 
-**Last maintained:** 2026-05-17 (Part 122 cp28 — Bob/Sally-user/Sally-operator persona walkthrough deep-sweep.  Ken (after cp27-DD2 cross-session resumption): "let's continue all of the necessary work right here in this chat.  the tool budget is fine now and we have plenty of turn and session time available."  21 findings — all 21 fixed inline + 1 retracted false-positive (Sally-6 TOTAL_STEPS — wizard self-consistent on closer inspection).  Severity: 1 HIGH/CRITICAL (Bob-5 trade_goods_services × 10 locales — 6th occurrence of the FAQ-content drift class), 1 HIGH (Sally-2 blurt_benefits × 10 locales), 1 HIGH (Sally-Op-1 grandma-friendly entry-point doc recommending an OS the Ansible playbook hard-fails on), 5 MEDIUM (cp28-7 mediakit-builder heredoc, Bob-3 QrPanel URI scheme docstring, Sally-1 × 3 sites `create_claimed_account` prose drift, Sally-3 welcome_bonus, Sally-Op-2 × 2 sites OPERATIONS §18 ACT-model framing, Sally-Op-3 build-llms-full.mjs generator-vs-artifact drift), 13 LOW.  Critical surfaces fixed: 3 FAQ entries × 10 locales = 31 string updates with native conjunctions (trade_goods_services + blurt_benefits + welcome_bonus, each carrying stale BTC/XMR/BLURT/USDT clauses missed by cp3/cp21/cp24/cp27); 13 `.svelte` and `.ts` module-doc + ambient-declaration drift sites across the chat-flow + asset-handling components (Bob-1/2/3/4 + Sally-4 × 2 + Sally-5 × 7); 3 sites where pre-Part-112 `account_create`/"pays BLURT at signup" prose survived after the Part-112 fee-free `create_claimed_account` ACT-pool model was wired (Sally-1a/b/c); 2 sites in OPERATIONS §18 where the signup-drain explanation was still framed in real-time-BLURT-spend rather than ACT-pool-depletion terms (Sally-Op-2); the grandma-friendly entry-point operator doc told operators to pick Debian 12 or Ubuntu 22.04 LTS, but the Ansible playbook hard-fails on anything ≠ Ubuntu 24.04 (Sally-Op-1); the `scripts/build-llms-full.mjs` builder header was stale by 4 checkpoints AND the on-disk artifact had been hand-edited to the correct form so `npm run build` would have regressed it (Sally-Op-3 — highest-leverage bug class in repo); SECURITY.md regulatory-stance trade-settlement clause extended from BTC/XMR/BLURT to all 7 tradable assets (Sally-Op-4).  Mediakit rebuilt × 2 (post-Phase 1 + post-Phase 2c).  Smoke baseline unchanged at 3,327 (no new behavioral claims; cp28 added no smokes).  Locale parity holds at 2,644 × 10 = 26,440 strings.  Brag list 279 entries (Bob-6 was a phrasing change, not a count change).  llms-full.txt regenerated cleanly via build-llms-full.mjs; round-trip verified for Bob-5/Sally-2/Sally-3 FAQ fixes.  AUDIT LOG: cp28 entry appended (line count 21,358 → 21,453).  PATTERN LESSONS recorded (numbered 11-15 for continuity with cp27-DD2's 1-10): (11) JSON locale FAQ entries are a separate drift surface from .md files; cp28 found 3 FAQ entries with the same 4-checkpoint pattern cp27-DD2 caught in what_is_morphit; (12) module-doc comments in `.svelte` and `.ts` are a separate drift surface from .md files; cp27-DD2 found zero, cp28 found 13; (13) generator-vs-artifact drift hidden behind hand-fixes is the highest-leverage bug class in the repo — fix the GENERATOR first, never hand-edit derived files; add CI gate that regenerates every derived artifact in fresh checkout and diffs against committed; (14) the grandma-friendly entry-point doc is the most operator-hostile drift surface; extend brag #270's operator-doc sentinel-grep to cover OS / Postgres / Node.js version recommendations against actual CI matrices and Ansible distribution_version checks — **filed as new REVISIT entry below**; (15) wire-format constants drift in the prose surrounding them, not in the code itself; Sally-1 and Sally-Op-2 are both `create_claimed_account` (Part 112 work) vs surrounding-prose drift — add "WHY this wire format" section to every wire-format-pinning smoke's comment block.)
+**Last maintained:** 2026-05-17 (Part 122 cp29 — Part 119 finding B-3 closure + stale-marker drift sweep.  Ken's prompt: "let's continue the chat right here.  what's left?"  Spent the first half of the chat answering "what's left" honestly rather than continuing inertially.  4 findings — all 4 fixed inline.  1 HIGH (DD-cp29-4: paired-readonly Bob's `(encrypted)` placeholder grandma-friendliness violation — filed in Part 119 as B-3 with "Action for Part 120" closure plan, survived 10+ checkpoints without being closed; Option (c) closure: `ChatMessage.svelte` now imports `isPairedReadOnly` from identity store, derives `placeholderKind: 'failed' | 'paired' | 'default'` from `message.decryptFailed` + `$isPairedReadOnly`, dispatches placeholder render to one of three i18n keys, with distinct visual treatment for decrypt-failed cases (amber border + non-italic since a tampered message is a real signal worth surfacing).  2 new i18n keys × 10 locales = 20 native-translated strings; locale parity bumped 2,644 × 10 = 26,440 → 2,646 × 10 = 26,460.  Why Option (c) not (b): Option (b)'s service-contract change would have rippled through 47 LocalMessage references + chat-blurt-verify smoke; (c) ships the user-visible fix with a ~50-line diff and zero non-render behavior change.  Why no locked-session variant: chat route gates on Blurt account name not unlock state, so locked-session falls into the default catch-all the same as legacy stubs + other-session-sent messages — adding a 4th `_locked` variant would have been premature partition.  Why no new smoke: render-layer-only change, no existing behavioral smoke pins placeholder strings (verified by grep), i18n parity smoke catches new keys automatically.) + 3 LOW (DD-cp29-1: PRE-LAUNCH-CHECKLIST.md L3 marker said cp27-DD but cp27-DD2 had falsely claimed the bump was done; DD-cp29-2: GRANDMA-FRIENDLY-INVESTIGATION.md L5 truncated marker `2026-04` despite cp27-DD2 having edited the file; DD-cp29-3: LOCK-SESSION-DESIGN.md L17 marker drift after cp27-DD2 route-path fix).  PATTERN LESSONS recorded (numbered 16-17 for continuity with cp27-DD2's 1-10 and cp28's 11-15): (16) **Audit-log claims must be verified against actual file content** — cp27-DD2's DD-12 explicitly claimed a file edit that was never done, cp28 missed it, cp29 caught it via independent marker-staleness sweep.  Cp25 same-turn-discipline lesson restated.  Future practice: when closing an audit-log entry that names a specific file edit, the closure step must include a `grep -n` verification of the claimed edit being present. (17) **REVISIT-LIST §A items survive arbitrary numbers of checkpoints without being noticed** — B-3 was filed in Part 119 with an "Action for Part 120" plan that survived 10+ rounds of audit because each per-checkpoint deep-deep was scoped to recent work + content drift, not §A backlog.  Future practice: every Nth checkpoint, explicitly open §A and triage every "open" item against current state.  Smoke baseline unchanged at 3,327.  No mediakit rebuild (brag list unchanged).  Two parked solo items unchanged from cp27-DD2/cp28: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (external-blocker); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner external-blocker).)
+
+**Previous maintained:** 2026-05-17 (Part 122 cp28 — Bob/Sally-user/Sally-operator persona walkthrough deep-sweep.  Ken (after cp27-DD2 cross-session resumption): "let's continue all of the necessary work right here in this chat.  the tool budget is fine now and we have plenty of turn and session time available."  21 findings — all 21 fixed inline + 1 retracted false-positive (Sally-6 TOTAL_STEPS — wizard self-consistent on closer inspection).  Severity: 1 HIGH/CRITICAL (Bob-5 trade_goods_services × 10 locales — 6th occurrence of the FAQ-content drift class), 1 HIGH (Sally-2 blurt_benefits × 10 locales), 1 HIGH (Sally-Op-1 grandma-friendly entry-point doc recommending an OS the Ansible playbook hard-fails on), 5 MEDIUM (cp28-7 mediakit-builder heredoc, Bob-3 QrPanel URI scheme docstring, Sally-1 × 3 sites `create_claimed_account` prose drift, Sally-3 welcome_bonus, Sally-Op-2 × 2 sites OPERATIONS §18 ACT-model framing, Sally-Op-3 build-llms-full.mjs generator-vs-artifact drift), 13 LOW.  Critical surfaces fixed: 3 FAQ entries × 10 locales = 31 string updates with native conjunctions (trade_goods_services + blurt_benefits + welcome_bonus, each carrying stale BTC/XMR/BLURT/USDT clauses missed by cp3/cp21/cp24/cp27); 13 `.svelte` and `.ts` module-doc + ambient-declaration drift sites across the chat-flow + asset-handling components (Bob-1/2/3/4 + Sally-4 × 2 + Sally-5 × 7); 3 sites where pre-Part-112 `account_create`/"pays BLURT at signup" prose survived after the Part-112 fee-free `create_claimed_account` ACT-pool model was wired (Sally-1a/b/c); 2 sites in OPERATIONS §18 where the signup-drain explanation was still framed in real-time-BLURT-spend rather than ACT-pool-depletion terms (Sally-Op-2); the grandma-friendly entry-point operator doc told operators to pick Debian 12 or Ubuntu 22.04 LTS, but the Ansible playbook hard-fails on anything ≠ Ubuntu 24.04 (Sally-Op-1); the `scripts/build-llms-full.mjs` builder header was stale by 4 checkpoints AND the on-disk artifact had been hand-edited to the correct form so `npm run build` would have regressed it (Sally-Op-3 — highest-leverage bug class in repo); SECURITY.md regulatory-stance trade-settlement clause extended from BTC/XMR/BLURT to all 7 tradable assets (Sally-Op-4).  Mediakit rebuilt × 2 (post-Phase 1 + post-Phase 2c).  Smoke baseline unchanged at 3,327 (no new behavioral claims; cp28 added no smokes).  Locale parity holds at 2,644 × 10 = 26,440 strings.  Brag list 279 entries (Bob-6 was a phrasing change, not a count change).  llms-full.txt regenerated cleanly via build-llms-full.mjs; round-trip verified for Bob-5/Sally-2/Sally-3 FAQ fixes.  AUDIT LOG: cp28 entry appended (line count 21,358 → 21,453).  PATTERN LESSONS recorded (numbered 11-15 for continuity with cp27-DD2's 1-10): (11) JSON locale FAQ entries are a separate drift surface from .md files; cp28 found 3 FAQ entries with the same 4-checkpoint pattern cp27-DD2 caught in what_is_morphit; (12) module-doc comments in `.svelte` and `.ts` are a separate drift surface from .md files; cp27-DD2 found zero, cp28 found 13; (13) generator-vs-artifact drift hidden behind hand-fixes is the highest-leverage bug class in the repo — fix the GENERATOR first, never hand-edit derived files; add CI gate that regenerates every derived artifact in fresh checkout and diffs against committed; (14) the grandma-friendly entry-point doc is the most operator-hostile drift surface; extend brag #270's operator-doc sentinel-grep to cover OS / Postgres / Node.js version recommendations against actual CI matrices and Ansible distribution_version checks — **filed as new REVISIT entry below**; (15) wire-format constants drift in the prose surrounding them, not in the code itself; Sally-1 and Sally-Op-2 are both `create_claimed_account` (Part 112 work) vs surrounding-prose drift — add "WHY this wire format" section to every wire-format-pinning smoke's comment block.)
 
 **Previous maintained:** 2026-05-17 (Part 122 cp27-DD2 — comprehensive doc-sweep deep-deep covering all 96 .md files + LTC placeholder closure.  Ken (iterative): "the current ltc icon looks great, i do not think u need to change that.  time for a deep deep on all that recent work" then "i assume you are ALSO thoroughly reading every single .md file now. ALL of them. make sure the wording is correct and proper, make sure they are all factual."  19 findings — 18 fixed inline + 1 deferred (DD-cp27-DD-18: sitemap.xml stale — separate sitemap-regen task, filed below).  Critical surfaces fixed: README.md front-page (4 stale claims: tagline missing Dash, privacy paragraph missing DASH, ADR range 0023→0027 cited twice, smoke count + wizard prompt count + route count); `faq.entries.what_is_morphit.a` × 10 locales (4-CHECKPOINT DRIFT — cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all missed it; rewritten with full enumeration "trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash)" with native translations for en/es/fr/de + EN-fallback for others); `privacy.index_intro` × 10 locales (missing DASH); `privacy.guides.blurt.caveats` × 10 locales (added DASH-PrivateSend alternative); `apps/web/static/llms-full.txt` two stale FAQ entries synced; defensive fallback `apps/web/src/lib/stores/instance.ts` missing `dash: null` (same class as cp23 BCH bug); ADR-0026 transparent-chain privacy framework table missing DASH row + enum description missing `'privatesend'` (added with cp27 extension note pattern); ADDING-A-COIN.md missing entire privacyFeatures framework section (cp26 meta-drift retrofit); FEES-AND-REWARDS.md crypto-leg list updated to all 7 assets; brag list footer 278→279 + docs count 46→49; ops-cli README + main README wizard step count 9/17→18; UPGRADING.md smoke count 3,000+→3,300+; PRE-LAUNCH-CHECKLIST last-refreshed bumped; 27 instances of route-path drift from cp7 per-locale prerendering migration — fixed 13 in 5 LIVING docs (ADDING-A-COIN, CHAT-UI-DESIGN, GRANDMA-FRIENDLY, LOCK-SESSION-DESIGN, OPERATOR-TRUST-DESIGN), 14 in historical ADRs left intact per cp26-DD2 lesson.  LTC PLACEHOLDER CLEANUP per Ken's "the current ltc icon looks great" approval: ADR-0025 §8 placeholder language dropped + replaced with "operator-approved at cp27-DD2" framing + Ken quote; trade-offs item dropped; future-revisits community-blessed-logo entry dropped; files-changed list updated.  AUDIT LOG CATCH-UP: cp27 + cp27-DD + cp27-DD2 entries appended to docs/AUDIT-2026-05.md (line count 21,134 → 21,314).  Smoke baseline unchanged at 3,327.  Locale parity holds at 2,644 keys × 10 = 26,440 strings.  All 8 cp27+DD smokes triple-pulse green.  Mediakit rebuilt per Memory #4.  PATTERN LESSONS recorded: (1) `what_is_morphit` 4-checkpoint drift — durably-shaped phrasing + add to FAQ sweep checklist; (2) README front page is highest-leverage staleness target — add to per-cp doc-sync checklist; (3) static export files (llms-full.txt) need same-checkpoint sync alongside JSON locales; (4) ADRs describing ongoing framework state need annotation pattern not rewrite; (5) ADDING-A-COIN.md meta-drift — cp26 added privacyFeatures struct without updating asset-addition playbook; (6) path-drift from per-locale prerendering migration is recurring class — need CI gate verifying backtick-quoted apps/web/src/routes/ paths in active docs resolve on disk; (7) wizard step count claims drift — verify against `TOTAL_STEPS` source-of-truth constant; (8) "26 ADRs" claim was correct — false-positive on staleness scanner — counting claims need explicit minus-reserved math.)
 
@@ -1335,44 +1337,60 @@ knowledge), not more code.
   `apps/indexer/src/config/index.ts` if needed.
 
 - **Paired chat history `(encrypted)` placeholder — Part 119
-  finding B-3.** Surfaced during Bob's persona walk-through.
-  When paired-readonly Bob (ADR-0022 Option A QR-pair desktop
-  session) clicks into `/chat/[peer]`, the message history
-  renders every past message as the literal English string
-  `(encrypted)` with no contextual explanation that his
-  posting key — required for decryption — lives on his phone,
-  not this desktop.  Simultaneously two violations:
-  (1) locale-parity: hardcoded English in
-  `apps/web/src/lib/chat/chatService.ts:297`
-  (`const ENCRYPTED_PLACEHOLDER = '(encrypted)'`) leaks to
-  all 9 other locales for paired AND locked sessions;
-  (2) grandma-friendliness (Memory #21): no inline teaching
-  about why decryption isn't happening here.
+  finding B-3 — ✅ CLOSED Part 122 cp29 (2026-05-17).**
+  Surfaced during Bob's persona walk-through.  When paired-
+  readonly Bob (ADR-0022 Option A QR-pair desktop session)
+  clicked into `/chat/[peer]`, the message history rendered
+  every past message as the literal English string `(encrypted)`
+  with no contextual explanation that his posting key —
+  required for decryption — lives on his phone, not this
+  desktop.  Two violations: (1) locale-parity (hardcoded
+  English bypassed all 9 non-EN locales for paired AND locked
+  sessions); (2) grandma-friendliness (Memory #21) — no inline
+  teaching about why decryption isn't happening here.
 
-  **Why not fixed in Part 119:** the cleanest fix touches
-  the service-layer contract.  `chatService.ts` is
-  intentionally i18n-agnostic by design — it returns
-  plaintext the UI renders directly.  Three options:
-  - **(a)** Thread an i18n callback through
-    `ChatControllerDeps` — architectural change, ripples
-    through tests.
-  - **(b)** Return a structured discriminated union
-    `{ text } | { decryptedKind: 'paired' | 'locked' | 'failed' }`
-    and localize in `ConversationView` — preferred, keeps
-    service layer pure.
-  - **(c)** Smallest fix: keep `chatService.ts` returning
-    raw `ENCRYPTED_PLACEHOLDER`, but have `ConversationView`
-    swap the placeholder text per session state at render
-    time using `$_('chat.message.encrypted_placeholder_paired')`
-    vs `_locked` vs `_failed`.  Risk: maintainability — two
-    sources of truth.
+  Closed via Option (c) (smallest fix per the original
+  finding's options enumeration): `chatService.ts` keeps
+  returning the raw `ENCRYPTED_PLACEHOLDER` sentinel; the
+  swap happens at render time in `ChatMessage.svelte` via a
+  new `placeholderKind: 'failed' | 'paired' | 'default'`
+  derivation that reads `isPairedReadOnly` (existing identity-
+  store export, also used in `AvatarMenu.svelte`) and the
+  existing `message.decryptFailed` flag.  Failed-decryption
+  cases get distinct visual treatment (amber border + non-
+  italic, since "this message may be tampered" is a real
+  signal worth surfacing loudly); paired-readonly and the
+  default catch-all share the existing muted-italic style.
 
-  **Action for Part 120:** pick (b) or (c), ship + smoke +
-  triple-pulse + locale-parity-mandatory (3 keys × 10
-  locales = 30 strings).  Suggested keys:
-  - `chat.message.encrypted_placeholder_paired` — "Encrypted message — open Morphit on your phone to read it"
-  - `chat.message.encrypted_placeholder_locked` — "Encrypted message — unlock Morphit to read it"
-  - `chat.message.encrypted_placeholder_failed` — "This message couldn't be decrypted (possibly tampered)"
+  Why Option (c) and not Option (b): the discriminated-union
+  service-contract change in (b) would have rippled through
+  every chatService caller + the existing chat-blurt-verify
+  smoke + 47 LocalMessage references.  (c) ships the user-
+  visible fix with a 50-line diff and zero behavior change
+  outside the rendered text.  Maintainability concern from
+  the original finding ("two sources of truth") is mitigated
+  because the SoT is the i18n key set; the chatService
+  sentinel is just a placeholder mark, and the i18n
+  parity smoke catches any drift in the key set itself.
+
+  Locked-session case kept as the default `(encrypted)` /
+  localized equivalent because the original finding's analysis
+  was overstated: a locked-session user CAN reach
+  `/chat/[peer]` (the route only requires a Blurt account name,
+  not an unlocked posting key), so the existing terse copy is
+  the right fallback for them too — once they unlock, the
+  paired-readonly transition (or full decrypt) takes over
+  naturally.
+
+  Two new i18n keys × 10 locales = 20 strings shipped:
+  - `chat.message.placeholder_encrypted_paired` — "Encrypted message — open Morphit on your phone to read it." (native translations all 10 locales)
+  - `chat.message.placeholder_encrypted_failed` — "This message couldn't be decrypted on this device. It may be damaged or sent to a different recipient key." (native translations all 10 locales)
+
+  Locale parity bumped from 2,644 × 10 = 26,440 to 2,646 ×
+  10 = 26,460 strings.  No new smokes added — the chat-
+  message render layer has no existing behavioral smoke
+  pinning placeholder strings (verified by grep), and the
+  i18n parity smoke covers the new keys automatically.
 
 - **Native-speaker translation QA** for Persian (`fa`),
   Russian (`ru`), and the two Chinese locales (`zh-CN`,

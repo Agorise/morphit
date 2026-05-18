@@ -2149,6 +2149,8 @@
 				"incoming": "Wiadomość przychodząca"
 			},
 			"placeholder_encrypted": "(zaszyfrowane)",
+			"placeholder_encrypted_paired": "Zaszyfrowana wiadomość — otwórz Morphit na telefonie, aby ją przeczytać.",
+			"placeholder_encrypted_failed": "Nie udało się odszyfrować tej wiadomości na tym urządzeniu. Może być uszkodzona lub wysłana do innego klucza odbiorcy.",
 			"sending": "wysyłanie…",
 			"failed_label": "Nieudane",
 			"retry": "Ponów",

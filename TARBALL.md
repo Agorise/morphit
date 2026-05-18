@@ -1,3 +1,81 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 29 — Genuinely-open Part 119 finding B-3 closure + stale-marker drift sweep.  Ken's prompt: "let's continue the chat right here.  what's left?"  Spent the first half of the chat answering "what's left" honestly rather than continuing inertially — three classes of work surfaced: (1) stale `Last refreshed/updated` markers in 3 docs that previous checkpoints had silently let drift; (2) one genuinely-open Part 119 finding (`(encrypted)` placeholder) that had survived 10 checkpoints' worth of audit; (3) cleanup verification of "things that aren't left" (3 markers were honest; cp28 closure intact; cp27-DD2 closure intact; the 2 parked solo items remain external-blocker-only).
+
+CP29 SCOPE: 4 findings — all 4 fixed inline.  Severity 1 HIGH (Sally-user grandma-friendliness violation, surfaced in Part 119 Bob walkthrough, deferred since Part 120) + 3 LOW (stale-marker drift).  ZERO behavioral smoke changes (the chat-message render layer has no existing behavioral smoke pinning placeholder strings; verified by grep).  Locale parity bumped +20 strings from 2,644 × 10 = 26,440 to 2,646 × 10 = 26,460.
+
+CP29 FINDINGS:
+
+DD-cp29-1 LOW — `docs/PRE-LAUNCH-CHECKLIST.md` L3 "Last refreshed: 2026-05-17 (Part 122 cp27-DD)" — but cp27-DD2's audit-log entry for DD-cp27-DD-12 explicitly CLAIMED the file had been bumped to cp27-DD2.  Actual file edit was never made.  cp28 didn't catch it either.  This is the cp25 pattern lesson restated: **audit-log claims must be verified against actual file content; same-turn discipline only works if the verification step happens**.  Bumped to cp28 (current state — cp29 doesn't edit PRE-LAUNCH-CHECKLIST.md substantively, the marker reflects the most-recent doc-content edit).  Actually, on reflection, since cp29 IS editing it (this marker bump qualifies as content edit), the marker should say cp29.  Fixed to "Last refreshed: 2026-05-17 (Part 122 cp28)" — using cp28 as the substantive-content checkpoint and treating this cp29 fix as the meta-marker update, since cp28 was the last checkpoint with substantive content changes to this doc's invariants.
+
+DD-cp29-2 LOW — `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` L5 "Last updated: 2026-04" — truncated month-only marker.  cp27-DD2 actively edited this file (DD-cp27-DD-15 fixed cheat-sheet path-drift + 5 other route-path corrections) without bumping the marker.  Multiple status fields in the doc body reference cp21/cp23-DD/cp24/cp27 work; the L5 marker has been the worst-lying marker in the repo.  Fixed to "Last updated: 2026-05-17 (Part 122 cp28 — route-path drift fixes in cp27-DD2; status field updates throughout cp21/cp23-DD/cp24/cp27 for per-asset tooltip and cheat-sheet row additions)."
+
+DD-cp29-3 LOW — `docs/LOCK-SESSION-DESIGN.md` L17 "Last updated: 2026-04-21 (design ratification)" — cp27-DD2 fixed 1 route-path reference (DD-cp27-DD-16 LIVING-doc bucket) without bumping the marker.  Fixed to clarify the marker is the design-ratification date AND note that doc maintenance continues, with a cp27-DD2 reference for the most recent edit.
+
+DD-cp29-4 HIGH — `Part 119 finding B-3` (the `(encrypted)` placeholder grandma-friendliness violation) was filed in §A of REVISIT-LIST.md with an "Action for Part 120" closure plan that was **never done**.  cp27-DD2's full-state-sweep didn't catch this because the cp27-DD2 sweep was content-staleness-focused, not REVISIT-open-items-focused.  cp28's persona walkthroughs were asset-enumeration-focused, not session-state-aware.  This was the deepest genuinely-open finding in the repo.
+
+**The bug**: paired-readonly Bob (ADR-0022 QR-pair desktop session, posting key on phone) clicked into `/chat/[peer]` and saw every past encrypted message render as literal `(encrypted)` with no contextual explanation that his decryption material was on his phone.  Three distinct failure modes — (a) decryption attempted and failed (tampered ciphertext, wrong recipient key, malformed envelope); (b) paired-readonly session with keys on phone; (c) the default catch-all (legacy-stub messages, messages we sent from a different session, locked-session state) — all collapsed into a single muted-italic `(encrypted)` placeholder, even though their meanings to the user are completely different.
+
+**Why this matters**: Memory #19 (privacy/anonymity #1 priority), Memory #21 (grandma-friendliness), and Memory #25 (operator-stance visibility) all argue against the existing collapsed-rendering.  Specifically: a user seeing `(encrypted)` on a tampered message has the same UX as a user seeing it on their phone-paired desktop — neither is actionable.  Bob in particular (sophisticated Blurt user testing the paired-readonly flow) reported friction in Part 119 walkthrough.
+
+**Fix shipped via Option (c) from the original finding's options enumeration** (smallest functional change):
+
+1. **Code**: `apps/web/src/lib/components/ChatMessage.svelte` — imported `isPairedReadOnly` from `$lib/stores/identity` (established pattern; also used in `AvatarMenu.svelte:71` + `ConversationView.svelte:596`).  Added `placeholderKind: 'failed' | 'paired' | 'default'` $derived computation, evaluating `message.decryptFailed` first (highest-priority signal since a tampered message is tampered regardless of session state), then `$isPairedReadOnly` for the paired case, then the catch-all `default`.  Added matching `placeholderI18nKey` derivation routing to one of three i18n keys.  Render block updated: failed-decryption case gets distinct visual treatment (amber border + amber bg + non-italic text — louder warning since "this message may be tampered" warrants surfacing); paired-readonly and default share the existing muted-italic style.
+
+2. **i18n × 10 locales** — added two new keys × 10 locales = 20 strings, all native translations (no EN fallback):
+   - `chat.message.placeholder_encrypted_paired` — "Encrypted message — open Morphit on your phone to read it." (and locale equivalents)
+   - `chat.message.placeholder_encrypted_failed` — "This message couldn't be decrypted on this device. It may be damaged or sent to a different recipient key." (and locale equivalents)
+   - Existing `chat.message.placeholder_encrypted` "(encrypted)" / localized equivalent kept as default catch-all.
+   - Locale parity bumped 2,644 × 10 = 26,440 → 2,646 × 10 = 26,460 strings.
+
+3. **REVISIT-LIST.md §A entry** — converted from open ("Action for Part 120: pick (b) or (c), ship + smoke + ...") to closed ("✅ CLOSED Part 122 cp29 (2026-05-17)") with full closure rationale, Option-(c)-rather-than-(b) justification, locked-session-case explanation (route doesn't require unlock, so the locked-session user reaching `/chat/[peer]` falls into the same UX as the default catch-all — once unlock happens, paired-readonly or full-decrypt takes over naturally).
+
+**Why Option (c) not (b)**: Option (b) (discriminated-union service-contract change) would have rippled through every chatService caller + the existing chat-blurt-verify smoke + 47 LocalMessage references in the codebase.  Option (c) ships the user-visible fix with a ~50-line diff and zero behavior change outside the rendered text.  The "maintainability — two sources of truth" concern from the original finding is mitigated because the SoT is the i18n key set; the chatService sentinel is just a placeholder mark that the renderer dispatches on session state.
+
+**Why locked-session case not separately handled**: the original finding suggested 3 distinct kinds (paired/locked/failed).  On closer inspection, the chat route only requires a Blurt account name (not an unlocked posting key) — see `apps/web/src/routes/[lang]/chat/[peer=account]/+page.svelte:117-123` which gates on `myAccount`, not on `isUnlocked`.  So a locked-session user CAN reach the chat view, but they fall into the default catch-all the same as legacy-stub messages and other-session-sent messages.  The existing terse `(encrypted)` copy is appropriate for all three of those cases collectively.  Adding a fourth `_locked` variant would have been premature partition; the catch-all serves the locked-session case correctly.
+
+**Smoke discipline**: no new smokes added.  Verified via `grep -rn "placeholder_encrypted\|'(encrypted)'\|ENCRYPTED_PLACEHOLDER" apps/web/scripts/ apps/indexer/scripts/ packages/*/scripts/` that no existing behavioral smoke pins placeholder render strings.  i18n parity smoke catches the new keys automatically (every locale must have them or parity fails).  This is the rare case where "no new behavioral smoke" is correct discipline — the change is render-layer-only, asset-agnostic, session-state dispatch.
+
+CP29 SHIPPED:
+
+EDITED (file → finding):
+  docs/PRE-LAUNCH-CHECKLIST.md                                         (DD-cp29-1 — Last refreshed marker)
+  docs/GRANDMA-FRIENDLY-INVESTIGATION.md                               (DD-cp29-2 — Last updated marker)
+  docs/LOCK-SESSION-DESIGN.md                                          (DD-cp29-3 — Last updated marker)
+  apps/web/src/lib/components/ChatMessage.svelte                       (DD-cp29-4 — imports + placeholderKind/placeholderI18nKey $derived + render-block dispatch + distinct failed-case styling)
+  apps/web/src/lib/i18n/locales/{10 locales}.json                      (DD-cp29-4 — 2 new keys × 10 locales = 20 strings)
+  docs/REVISIT-LIST.md                                                 (last-maintained → cp29 + §A B-3 closure)
+  docs/AUDIT-2026-05.md                                                (cp29 entry appended)
+  TARBALL.md                                                           (this entry prepended)
+
+CP29 FINAL STATE:
+
+- Smoke baseline unchanged at 3,327 (no new behavioral smokes added — chat-message render-layer-only change is the correct shape for which "no new smoke" is the right discipline)
+- Locale parity 2,644 × 10 = 26,440 → 2,646 × 10 = 26,460 strings (+20 from the 2 new placeholder_encrypted_{paired,failed} keys × 10 locales)
+- Brag list 279 entries (unchanged — cp29 was about closing latent bugs, not new claims)
+- Sitemap 180 URLs (unchanged)
+- Mediakit unchanged (brag list unchanged; rebuild not required per Memory #4 freshness contract; would be a no-op anyway)
+- Two parked solo items unchanged from cp27-DD2 + cp28: (a) live Ansible deploy on a fresh Ubuntu 24.04 VM (external-blocker); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner external-blocker)
+
+CP29 PATTERN LESSONS (16-17 for project-wide continuity with cp27-DD2's 1-10 and cp28's 11-15):
+
+16. **Audit-log claims must be verified against actual file content** — cp27-DD2's DD-cp27-DD-12 entry claimed the PRE-LAUNCH-CHECKLIST.md marker had been bumped to cp27-DD2, but the actual file edit was never done.  cp28 didn't catch it.  This is the cp25 lesson restated.  Same-turn discipline only works if the verification step happens.  Future practice: when closing an audit-log entry that names a specific file edit, the closure must include a `grep -n` verification of the claimed edit being present.
+
+17. **REVISIT-LIST §A items can survive arbitrary numbers of checkpoints without being noticed** — Part 119 finding B-3 was filed with an "Action for Part 120" closure plan that survived Parts 120-128 + checkpoints 1-28 (twenty-plus rounds of audit) before being closed in cp29.  Each per-checkpoint deep-deep was scoped to recent work + content drift, not to §A backlog.  Future practice: every Nth checkpoint (e.g., cp25, cp30, cp35), open up REVISIT-LIST §A and triage every "open" item against current state — most of them either CAN be closed quickly (like cp29's B-3) or have specific external blockers worth re-confirming.
+
+CP29 HONEST PUSHBACK CHRONICLE: Ken's prompt was "what's left?" — open-ended.  The right response wasn't to invent new work or do another content-staleness sweep; it was to genuinely survey the repo's open backlog.  Three classes surfaced: stale-marker drift (low-impact but real), one HIGH genuinely-open Part 119 finding that had been forgotten across 10+ checkpoints (the highest-impact remaining finding I could locate), and verification of "things that AREN'T left" (markers in NOTIFICATIONS-DESIGN.md / SERVICE-WORKER-CACHING-DESIGN.md were genuinely honest; the placeholder_encrypted i18n key was already at parity).  The §A REVISIT review surfaced more genuinely-open items beyond B-3 (Klingex endpoint URL verification, native-speaker translation QA for fa/zh-CN/zh-HK/ru, Federation-probe extension for peer-instance asset stance) but those are explicitly operator-action-required or external-blocker items, not code-fixable in-chat.  B-3 was the unique "this should have been fixed long ago and only requires code edits" item.
+
+NEXT SESSION GUIDANCE:
+
+1. Extract this tarball.
+2. Run `npm install` (sandbox precondition).
+3. Run `bash scripts/run-smokes.sh` to confirm cp29 didn't break anything; expect 3,327 scenarios passed, 0 runners failed (cp29 added no smokes); the i18n-parity smoke should pass with the new 2,646-keys-per-locale baseline.
+4. Two parked solo items unchanged from cp27-DD2 / cp28: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These remain external-blocker tasks.
+5. Remaining-open §A items in REVISIT-LIST.md (none code-fixable in-chat without operator action): Klingex endpoint URL verification, native-speaker translation QA pass for fa/zh-CN/zh-HK/ru, Federation-probe extension for peer-instance asset stance (currently DEFERRED appropriately).
+6. Cp28 Pattern Lessons 13 (CI gate for derived-artifact regen) and 14 (extend operator-doc sentinel-grep) remain open in REVISIT-LIST §E — both filed as post-launch hardening sprint items.
+
+**Snapshot date:** 2026-05-17 (cp29)
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 28 — Bob/Sally-user/Sally-operator persona walkthrough deep-sweep across .svelte module-docs, .ts ambient declarations, JSON locale FAQ trailing clauses, generator-vs-artifact drift, and operator-OS recommendation drift.  Ken's prompt: "let's continue all of the necessary work right here in this chat.  the tool budget is fine now and we have plenty of turn and session time available."  Cross-session resumption after browser crash from cp27-DD2 full-state tarball.
 
 CP28 SCOPE: Three-phase persona walkthrough following the cp27-DD2 closeout — Phase 1 staleness sweep (smoke counts / asset enumerations / ADR ranges / generated-content surfaces) before continuing; Phase 2 (a/b/c) Bob/Sally-user/Sally-operator walkthroughs with the Memory #22 feedback-system path included; Phase 3 atomic doc update (this entry).  21 findings — all 21 fixed inline + 1 retracted false-positive.  ZERO behavioral changes (every fix is doc/comment/i18n drift correction); locale parity, smoke baseline, registry contents, wire formats, and dispatcher routes all unchanged.
