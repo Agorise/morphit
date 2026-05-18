@@ -6448,3 +6448,26 @@ test ! -f docs/SYNDICATION-DESIGN.md && echo "deletion confirmed"
 grep -B0 -A2 "Syndicate-to-community" docs/REVISIT-LIST.md | head -5
 # Expected: now points at SYNDICATION-CHECKPOINT.md, not SYNDICATION-DESIGN.md
 ```
+
+---
+
+# Post-session note 2 (2026-05-18) — orderReplace test coverage REVISIT closed
+
+cp30-DD-DD CODE-3 filed a follow-up REVISIT noting the new `replace_asset_network_change_forbidden` rejection path had no regression test.  Closed now: appended a `describe('orderReplace asset_network gate (cp30-DD-DD CODE-3)')` block with 10 new tests to `apps/indexer/test/handlers/orderReplace.test.ts` (370 → 668 lines):
+
+1. rejects USDT replace missing asset_network
+2. rejects USDC replace missing asset_network
+3. rejects USDT replace with unknown asset_network (uses USDC-only network value)
+4. rejects USDC replace with unknown asset_network (uses USDT-only network value)
+5. rejects single-network asset (BTC) carrying asset_network
+6. rejects USDT replace that CHANGES asset_network from target (bait-and-switch)
+7. rejects USDC replace that CHANGES asset_network from target (EVM-amplified)
+8. allows USDT replace that preserves asset_network + tweaks detail field
+9. allows USDC replace that preserves asset_network + tweaks detail field
+10. cp30-DD-DD I-1: rejects USDT asset_network exceeding MAX_NETWORK_LEN
+
+Pre-existing `validPayload()` helper extended with `validUsdtPayload()` + `validUsdcPayload()` for the stablecoin paths.  Tests exercise both the validate()-side gates AND the handle()-side lock-down (parallel to side/asset/fiat).  Comments mark each as cp30-DD-DD CODE-3 / I-1 for future grep-ability.
+
+Sandbox npm-install limitation prevents pulse-test; tests are statically verified to match the handler logic.  Run on next CI invocation.
+
+**Both cp30-DD-DD REVISIT items now closed.**  Only outstanding follow-ups are the two parked external-blockers (Ansible VM, Forgejo runner standup).
