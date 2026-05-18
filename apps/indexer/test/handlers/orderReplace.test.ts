@@ -368,3 +368,301 @@ describe('orderReplace handler', () => {
 		expect(r).toEqual({ ok: true });
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────
+// cp30-DD-DD CODE-3 — asset_network gate test coverage.
+//
+// orderReplace handler treats asset_network as a frozen substance
+// field, parallel to side/asset/fiat: USDT and USDC orders REQUIRE
+// it, single-network assets must omit it, and replace cannot
+// change the value within the 15-minute window.
+//
+// These tests were filed as REVISIT in cp30-DD-DD and added now
+// to close that follow-up.  Gate logic was correct on first ship;
+// these tests prevent future regression.
+// ─────────────────────────────────────────────────────────────────
+
+function validUsdtPayload(): Record<string, unknown> {
+	return {
+		permlink: 'sell-usdt-eur-2026-04',
+		side: 'sell',
+		asset: 'USDT',
+		fiat_currency: 'EUR',
+		amount_min: 50,
+		amount_max: 5000,
+		price_model: { kind: 'spread', percent: 1 },
+		payment_methods: ['sepa'],
+		asset_network: 'erc20'
+	};
+}
+
+function validUsdcPayload(): Record<string, unknown> {
+	return {
+		permlink: 'sell-usdc-eur-2026-04',
+		side: 'sell',
+		asset: 'USDC',
+		fiat_currency: 'EUR',
+		amount_min: 50,
+		amount_max: 5000,
+		price_model: { kind: 'spread', percent: 1 },
+		payment_methods: ['sepa'],
+		asset_network: 'base'
+	};
+}
+
+describe('orderReplace asset_network gate (cp30-DD-DD CODE-3)', () => {
+	it('rejects USDT replace missing asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+		const payload = validUsdtPayload();
+		delete payload.asset_network;
+
+		const r = await handler(
+			makeCtx({ signer: 'alice', blockTime, payload }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_usdt' });
+	});
+
+	it('rejects USDC replace missing asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+		const payload = validUsdcPayload();
+		delete payload.asset_network;
+
+		const r = await handler(
+			makeCtx({ signer: 'alice', blockTime, payload }),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_usdc' });
+	});
+
+	it('rejects USDT replace with unknown asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdtPayload(),
+					asset_network: 'polygon' // USDC network, not USDT
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_unknown' });
+	});
+
+	it('rejects USDC replace with unknown asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdcPayload(),
+					asset_network: 'trc20' // USDT network, not USDC
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_unknown' });
+	});
+
+	it('rejects single-network asset (BTC) carrying asset_network', async () => {
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validPayload(),
+					asset_network: 'erc20' // BTC doesn't have networks
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_not_permitted_for_asset' });
+	});
+
+	it('rejects USDT replace that changes asset_network from target', async () => {
+		// CRITICAL — this is the bait-and-switch we guard against:
+		// counterparty saw "USDT on Ethereum" listing, sender flips to
+		// Tron within the 15-minute window after DM, buyer's funds go
+		// to the wrong chain.
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'USDT',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'erc20'
+					}
+				]
+			}
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdtPayload(),
+					asset_network: 'trc20' // CHANGED from target's 'erc20'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'replace_asset_network_change_forbidden' });
+	});
+
+	it('rejects USDC replace that changes asset_network from target', async () => {
+		// Same bait-and-switch on USDC.  The risk is amplified here
+		// because three of USDC's four networks (ERC-20/Base/Polygon)
+		// share the same EVM 0x[40 hex] address format — a buyer who
+		// saw "USDC on Base" can't visually distinguish the seller's
+		// address from a USDC-on-Polygon address.
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'USDC',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'base'
+					}
+				]
+			}
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdcPayload(),
+					asset_network: 'polygon' // CHANGED from target's 'base'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'replace_asset_network_change_forbidden' });
+	});
+
+	it('allows USDT replace that preserves asset_network', async () => {
+		// Honest path: replace within 15 minutes, keeping substance
+		// fields (side/asset/fiat/asset_network) the same, only
+		// tweaking detail fields (amount, terms, etc.).
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'USDT',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'erc20'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdtPayload(),
+					asset_network: 'erc20', // unchanged
+					amount_max: 7500 // detail-field tweak
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('allows USDC replace that preserves asset_network', async () => {
+		const createdAt = new Date('2026-04-19T12:00:00Z');
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'sell',
+						asset: 'USDC',
+						fiat_currency: 'EUR',
+						fee_method: 'blurt',
+						asset_network: 'base'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdcPayload(),
+					asset_network: 'base', // unchanged
+					amount_max: 7500 // detail-field tweak
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+	});
+
+	it('cp30-DD-DD I-1: rejects USDT asset_network exceeding length cap', async () => {
+		// Defense-in-depth: indexer bounds input length BEFORE
+		// allocating a lowercased copy.  Pathological input gets the
+		// standard required-for-usdt reason (not a distinct
+		// "too long" code) so attackers can't distinguish length-
+		// rejected from type-rejected paths.
+		const blockTime = new Date('2026-04-19T12:02:00Z');
+		const mock = makeMockClient([]);
+
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				payload: {
+					...validUsdtPayload(),
+					asset_network: 'erc20-but-pathologically-extended-beyond-MAX_NETWORK_LEN'
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'asset_network_required_for_usdt' });
+	});
+});
