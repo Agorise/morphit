@@ -353,6 +353,41 @@ export interface Config {
 	 *  blockchain.com/explorer/assets/dash, and dash.tokenview.io. */
 	readonly frontendDashChatLinkUrl: string | undefined;
 
+	/** Per-instance per-network USDT chat-link explorer URL
+	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
+	 *  USDT explorer override has never actually worked on the
+	 *  public API since Part 121 cp3 because the indexer never
+	 *  declared these fields.  Frontend defensive-fallback hid the
+	 *  breakage).  Each field independently undefined→bundled
+	 *  default; when set, the frontend uses this template for the
+	 *  matching USDT network.  Bundled defaults:
+	 *    erc20 → https://etherscan.io/tx/{txid}
+	 *    trc20 → https://tronscan.org/#/transaction/{txid}
+	 *    spl   → https://solscan.io/tx/{txid}
+	 *    bep20 → https://bscscan.com/tx/{txid}
+	 *  Validation: same shape contract as the single-network
+	 *  variants; https://, contains `{txid}`, parses as URL after
+	 *  substitution. */
+	readonly frontendUsdtErc20ChatLinkUrl: string | undefined;
+	readonly frontendUsdtTrc20ChatLinkUrl: string | undefined;
+	readonly frontendUsdtSplChatLinkUrl: string | undefined;
+	readonly frontendUsdtBep20ChatLinkUrl: string | undefined;
+
+	/** Per-instance per-network USDC chat-link explorer URL
+	 *  templates (Part 122 cp30 — DD-10 closure).  Same shape
+	 *  contract as USDT above.  Bundled defaults:
+	 *    erc20   → https://etherscan.io/tx/{txid}
+	 *    spl     → https://solscan.io/tx/{txid}
+	 *    base    → https://basescan.org/tx/{txid}
+	 *    polygon → https://polygonscan.com/tx/{txid}
+	 *  BEP-20 is intentionally NOT supported (ADR-0028 §1) — that
+	 *  variant is Binance-Peg, not Circle-native, and uses 18-decimal
+	 *  precision vs 6-decimal on every supported USDC network. */
+	readonly frontendUsdcErc20ChatLinkUrl: string | undefined;
+	readonly frontendUsdcSplChatLinkUrl: string | undefined;
+	readonly frontendUsdcBaseChatLinkUrl: string | undefined;
+	readonly frontendUsdcPolygonChatLinkUrl: string | undefined;
+
 	/** The operator's registered tag (matching their
 	 *  `morphit_operator_register_v1` op).  When set, the
 	 *  /v1/instance endpoint returns this so the frontend can
@@ -810,6 +845,79 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
+	// DD-11 closure: these were missing since Part 121 cp3 so the
+	// public-API per-network override never worked.  Frontend
+	// defensive-fallback hid the breakage.  Each undefined →
+	// frontend uses bundled default for that network.
+	MORPHIT_FRONTEND_USDT_ERC20_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDT_TRC20_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDT_SPL_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	// Part 122 cp30 — USDC per-network chat-link explorer URLs.
+	// DD-10 closure.  4 networks: erc20, spl, base, polygon.
+	// BEP-20 intentionally not supported (ADR-0028 §1, Binance-Peg
+	// + 18-decimal divergence).
+	MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
+	MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// REVISIT-LIST item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
@@ -980,6 +1088,18 @@ export function loadConfig(): Config {
 		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL,
 		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL,
 		frontendLtcChatLinkUrl: e.MORPHIT_FRONTEND_LTC_CHAT_LINK_URL,
-		frontendDashChatLinkUrl: e.MORPHIT_FRONTEND_DASH_CHAT_LINK_URL
+		frontendDashChatLinkUrl: e.MORPHIT_FRONTEND_DASH_CHAT_LINK_URL,
+		// Part 122 cp30 — multi-network USDT + USDC chat-link
+		// overrides.  Independent fields per (asset, network) since
+		// the underlying explorers vary per chain and an operator's
+		// trust-posture can differ per chain too.
+		frontendUsdtErc20ChatLinkUrl: e.MORPHIT_FRONTEND_USDT_ERC20_CHAT_LINK_URL,
+		frontendUsdtTrc20ChatLinkUrl: e.MORPHIT_FRONTEND_USDT_TRC20_CHAT_LINK_URL,
+		frontendUsdtSplChatLinkUrl: e.MORPHIT_FRONTEND_USDT_SPL_CHAT_LINK_URL,
+		frontendUsdtBep20ChatLinkUrl: e.MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL,
+		frontendUsdcErc20ChatLinkUrl: e.MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL,
+		frontendUsdcSplChatLinkUrl: e.MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL,
+		frontendUsdcBaseChatLinkUrl: e.MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL,
+		frontendUsdcPolygonChatLinkUrl: e.MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL
 	};
 }

@@ -1530,7 +1530,7 @@
 						{:else if a === 'USDT'}
 							<Tooltip textKey="post_order.form.asset_explainer.usdt" faqKey="what_is_usdt" />
 						{:else if a === 'USDC'}
-							<Tooltip textKey="post_order.form.asset_explainer.usdc" />
+							<Tooltip textKey="post_order.form.asset_explainer.usdc" faqKey="what_is_usdc" />
 						{:else if a === 'BCH'}
 							<Tooltip textKey="post_order.form.asset_explainer.bch" />
 						{:else if a === 'LTC'}

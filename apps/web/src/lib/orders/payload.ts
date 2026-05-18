@@ -99,13 +99,14 @@ export interface OrderPayload {
 	 *  paid this address this amount" — nothing else about the
 	 *  user's wallet or other payments to the treasury. */
 	readonly tx_proof?: string;
-	/** Part 121 — sub-network identifier for multi-network
+	/** Part 121 / cp30 — sub-network identifier for multi-network
 	 *  assets.  REQUIRED when asset === 'USDT' (one of 'erc20',
-	 *  'trc20', 'spl', 'bep20').  Omitted for single-network
-	 *  assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pins the
-	 *  network on the order row so buyers know which USDT chain
-	 *  to settle on; cross-network sends lose funds permanently
-	 *  and must be surfaced as a hint on the order row. */
+	 *  'trc20', 'spl', 'bep20') OR when asset === 'USDC' (one of
+	 *  'erc20', 'spl', 'base', 'polygon').  Omitted for single-
+	 *  network assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pins the
+	 *  network on the order row so buyers know which chain to
+	 *  settle on; cross-network sends lose funds permanently and
+	 *  must be surfaced as a hint on the order row. */
 	readonly asset_network?: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When present,
 	 *  the indexer credits the operator who registered this tag
@@ -145,11 +146,12 @@ export interface OrderFormInput {
 	 *  this amount" — nothing else about the user's wallet,
 	 *  other treasury payments, or future inflows. */
 	readonly txProof?: string;
-	/** Part 121 — sub-network identifier for multi-network
-	 *  assets.  REQUIRED when asset === 'USDT'.  Omitted for
-	 *  single-network assets.  Form layer validates this is one
-	 *  of 'erc20'|'trc20'|'spl'|'bep20' before invoking
-	 *  buildOrderPayload. */
+	/** Part 121 / cp30 — sub-network identifier for multi-network
+	 *  assets.  REQUIRED when asset === 'USDT' or asset === 'USDC'.
+	 *  Omitted for single-network assets.  Form layer validates
+	 *  this is one of the asset-appropriate values (USDT:
+	 *  'erc20'|'trc20'|'spl'|'bep20'; USDC: 'erc20'|'spl'|'base'|
+	 *  'polygon') before invoking buildOrderPayload. */
 	readonly assetNetwork?: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When non-empty,
 	 *  the post-order form passes this in.  Form layer reads it
@@ -213,10 +215,10 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.txProof !== undefined && input.txProof.trim().length > 0
 			? { tx_proof: input.txProof.trim() }
 			: {}),
-		// Part 121 — sub-network for multi-network assets.  Only
-		// set when the form provides one (USDT case); omitted for
-		// single-network assets.  Lowercased on the way out for
-		// canonicalization with the asset-registry's
+		// Part 121 / cp30 — sub-network for multi-network assets.
+		// Set when the form provides one (USDT or USDC); omitted
+		// for single-network assets.  Lowercased on the way out
+		// for canonicalization with the asset-registry's
 		// supportedNetworks values.
 		...(input.assetNetwork !== undefined && input.assetNetwork.length > 0
 			? { asset_network: input.assetNetwork.toLowerCase() }

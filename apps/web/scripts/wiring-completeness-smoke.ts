@@ -401,6 +401,35 @@ const CHECKS: readonly Check[] = [
 			paths: ['packages/asset-registry/src/index.ts']
 		},
 		status: 'live'
+	},
+	// ─── cp30-DD-11 USDT per-network explorer override actually works
+	// Anchor on the indexer-side body construction that DD-11 added.
+	// Before cp30-DD, the indexer-client declared this field but the
+	// indexer body never populated it — frontend defensive-fallback
+	// hid the bug.  Sentinel pins the new body-construction line.
+	{
+		id: 'cp30-dd-11-usdt-per-network-override-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Tether (USDT) peer-to-peer across four networks',
+		anchor: {
+			kind: 'grep',
+			pattern: 'frontendUsdtErc20ChatLinkUrl',
+			paths: ['apps/indexer/src/api/instance.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp30-DD-10 USDC per-network explorer override actually works
+	// Same pattern as DD-11 above; anchor on the body-construction.
+	{
+		id: 'cp30-dd-10-usdc-per-network-override-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'USD Coin (USDC) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'frontendUsdcErc20ChatLinkUrl',
+			paths: ['apps/indexer/src/api/instance.ts']
+		},
+		status: 'live'
 	}
 ];
 

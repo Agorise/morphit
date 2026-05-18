@@ -28,17 +28,18 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns USDT + BCH + LTC + DASH from canonical registry',
+		name: 'Category-B filter returns USDT + USDC + BCH + LTC + DASH from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
 				(a) => a.ticker
 			);
 			return (
 				catB.includes('USDT') &&
+				catB.includes('USDC') &&
 				catB.includes('BCH') &&
 				catB.includes('LTC') &&
 				catB.includes('DASH') &&
-				catB.length === 4
+				catB.length === 5
 			);
 		}
 	},

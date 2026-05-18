@@ -337,7 +337,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// MEMORY #23 INVARIANT: USDC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
-		// USDT/BCH/LTC/DASH as Category-B trade-only assets.
+		// USDT/USDC/BCH/LTC/DASH as Category-B trade-only assets.
 		canPayListingFee: false,
 		// Networks shipped at launch.  Native USDC only — bridged
 		// variants (USDC.e on Avalanche / Optimism / Arbitrum,
