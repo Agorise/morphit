@@ -395,8 +395,15 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
+	// cp30-DD-DD I-1 (defense-in-depth) — bound the input before
+	// allocating a lowercased copy.  Every valid network name is
+	// ≤ 7 chars ('polygon').  Reject anything longer early — the
+	// allowlist would reject it anyway, but skipping the
+	// toLowerCase() allocation for clearly-malformed input is
+	// cheap defense against memory waste on weird custom_json.
+	const MAX_NETWORK_LEN = 16;
 	if (asset === 'USDT') {
-		if (typeof networkRaw !== 'string') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
 			return { reason: 'asset_network_required_for_usdt' };
 		}
 		const net = networkRaw.toLowerCase();
@@ -405,7 +412,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		}
 		asset_network = net;
 	} else if (asset === 'USDC') {
-		if (typeof networkRaw !== 'string') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
 			return { reason: 'asset_network_required_for_usdc' };
 		}
 		const net = networkRaw.toLowerCase();

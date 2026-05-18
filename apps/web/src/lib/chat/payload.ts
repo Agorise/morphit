@@ -441,10 +441,13 @@ export function jitterBlurtAmount(base: string): string {
 
 /** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
  *  a jittered amount appropriate for the asset's smallest-unit
- *  precision.  USDT is excluded (its privacy issue is centralization
- *  not transparency; amount-jitter is a no-op against that threat
- *  model) and returns the input unchanged so callers can pass any
- *  asset uniformly. */
+ *  precision.  Every tradable asset is jitter-eligible as of cp30
+ *  (cp26 had originally excluded USDT under a "centralization is
+ *  the issue, not amount-correlation" rationale; cp30 ADR-0028
+ *  Decision 2 reversed this on the grounds that those are
+ *  SEPARATE threats and amount-jitter addresses one of them.
+ *  See jitterStablecoinAmount for full rationale).  Unknown
+ *  future assets return the input unchanged for forward-compat. */
 export function jitterAmountForAsset(
 	asset: ChatAssetTicker,
 	base: string
