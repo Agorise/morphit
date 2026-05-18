@@ -307,6 +307,8 @@
 				src={identiconDataUri(new TextEncoder().encode(account))}
 				alt=""
 				class="h-16 w-16 rounded-xl"
+				loading="lazy"
+				decoding="async"
 			/>
 			<div>
 				<h1 class="font-display text-2xl font-bold">@{account}</h1>

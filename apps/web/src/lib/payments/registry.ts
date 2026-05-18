@@ -109,11 +109,12 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// Mirror BTC/XMR/BLURT semantics — when the trade's asset
 		// is USDT, "pay with USDT" doesn't make sense, so hide
 		// this option in the payment-methods picker.  When the
-		// trade's asset is BTC/XMR/BLURT, USDT is a valid payment
-		// rail and shows up as a selectable chip.  The specific
-		// network (ERC-20 / TRC-20 / SPL / BEP-20) is pinned at
-		// chat-time via AddressShareModal's USDT tab; the picker
-		// itself doesn't disambiguate network.
+		// trade's asset is BTC, XMR, BLURT, USDC, DAI, BCH, LTC,
+		// or DASH, USDT is a valid payment rail and shows up as a
+		// selectable chip.  The specific network (ERC-20 / TRC-20
+		// / SPL / BEP-20) is pinned at chat-time via
+		// AddressShareModal's USDT tab; the picker itself doesn't
+		// disambiguate network.
 		assetExclusion: 'USDT'
 	},
 	{
@@ -130,6 +131,28 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		url: 'https://www.circle.com/usdc',
 		category: 'crypto',
 		assetExclusion: 'USDC'
+	},
+	{
+		// Part 122 cp31 — Dai as a payment method.  Same Category-B
+		// semantics as USDT/USDC: when the trade's traded asset is
+		// DAI, "pay with DAI" is hidden (assetExclusion); when the
+		// traded asset is something else, DAI appears as a
+		// selectable payment-rail chip.  The specific network
+		// (ERC-20 / Polygon / Base / Arbitrum — all 4 EVM) is
+		// pinned at chat-time via AddressShareModal's DAI tab; the
+		// picker itself doesn't disambiguate network.
+		//
+		// Part 122 cp32 — this entry was MISSING from cp31 and
+		// surfaced as CODE-1 (HIGH) finding in the cp32 deep-deep:
+		// DAI was wired as a tradable asset but not as a payment
+		// rail.  Without this entry, a seller posting a BTC order
+		// who wanted to accept DAI as payment had no way to pick
+		// DAI from the payment-methods picker.  Closed inline.
+		key: 'pay_dai',
+		name: 'Dai (DAI)',
+		url: 'https://makerdao.com',
+		category: 'crypto',
+		assetExclusion: 'DAI'
 	},
 	{
 		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment

@@ -1412,3 +1412,100 @@ validation.  Wallet-integration improvements (balance-check round-
 trip) would be the next defense layer if Morphit ever ships a
 direct-send feature; for now the receiver-must-confirm-chain workflow
 is the boundary.**
+
+---
+
+## CP32 STRIDE refresh (2026-05-18)
+
+Cp32 scope: 7 network icon swap (Ken-supplied) + Priority #4 "TINY
+FOOTPRINT" introduction + 41-site lazy-loading retrofit + new
+network-icon-coverage-smoke (20 scenarios).
+
+### Spoofing — 1 row
+
+**S-cp32-1 (LOW).**  Hostile operator replaces a network icon SVG on
+their instance (e.g. swaps `icon-network-erc20.svg` for an icon that
+looks like `icon-network-bep20.svg`) to confuse users into believing
+they're sending on the wrong chain — a "visual identity attack" on top
+of the existing 4-way EVM-identity surface (S-cp31-1).
+Mitigation: every Morphit instance serves icons from `apps/web/static`
+at build time; an operator who tampers with the bundle is operating an
+adversarial fork.  Morphit's federation model assumes some operators
+may misbehave (METADATA-LEAK-CATALOG.md §"Operator threat model"); the
+cross-network-warning text NAMES the chosen network in plain text
+above the icon, so the icon is not the only signal.  No additional
+defense needed at icon layer; addressed at trust-the-instance layer.
+
+### Tampering — 2 rows
+
+**T-cp32-1 (LOW).**  Hostile operator serves a malicious SVG with
+`<script>` or external `<image href>` to fingerprint visitors.
+Mitigation: every cp32-shipped icon is a pure-path SVG with no
+external references (verified in deep-deep F-1).  Morphit's CSP
+(documented in `apps/web/src/hooks.server.ts`) blocks inline scripts
+from SVG.  network-icon-coverage-smoke could be extended to grep for
+`<script>` / `href=` / `<foreignObject>` / `<image` in each icon —
+filed as future hardening; not blocking.
+
+**T-cp32-2 (MEDIUM).**  Lazy-loading regression: a future component
+edit drops `loading="lazy"` from a below-the-fold image without
+realizing it was there.  Repeated drift over many checkpoints reverts
+to all-eager loading silently.  Mitigation: byte-budget assertion in
+network-icon-coverage-smoke catches NEW-icon-bloat; per-page byte
+budget assertion would catch lazy-loss drift.  Filed as cp32 REVISIT.
+
+### Repudiation — 0 rows
+
+No repudiation surface in cp32.
+
+### Information Disclosure — 1 row
+
+**I-cp32-1 (LOW).**  Lazy-loading is a slight fingerprinting signal:
+which icons loaded for a given visitor depends on their scroll +
+viewport.  But every Morphit page is auth-free at the icon layer
+(icons are publicly cacheable static files), and the icon roster is
+public (every visitor has identical roster).  No identity correlation
+risk.  Trade-off accepted: native browser `loading="lazy"` ships
+universally without third-party JS loaders (which WOULD introduce real
+fingerprinting surface).
+
+### Denial of Service — 2 rows
+
+**D-cp32-1 (LOW).**  Future icon swap balloons individual icon to
+megabyte-scale (e.g. uncompressed PNG renamed `.svg` with embedded
+base64 raster).  Mitigation: network-icon-coverage-smoke per-icon
+ceiling (4,096 bytes), total budget (16,384 bytes for all 7 multi-
+network icons combined).  Currently using 36% of total budget after
+cp32 swap.  Self-tested by simulating future bloat: smoke fires the
+"Priority #4 says re-minify" diagnostic.
+
+**D-cp32-2 (LOW).**  Hostile peer creates a chat message with many
+inline icons to force a slow first-paint on the recipient.
+Mitigation: per-message attachment payloads do NOT permit raw SVG
+embedding; only the canonical asset/network ticker is in the payload
+and the icon is rendered from the static path.  Recipient browser
+applies its own lazy-loading + per-domain connection caps.
+
+### Elevation of Privilege — 0 rows
+
+No EoP surface in cp32.
+
+### Summary
+
+| Category | New rows | Pre-existing rows still in force |
+|----------|----------|----------------------------------|
+| Spoofing | 1 (S-cp32-1) | S-cp31-* + S-cp30-* + S1-S7 |
+| Tampering | 2 (T-cp32-1, T-cp32-2) | T-cp31-* + T-cp30-* + T1-T7 |
+| Repudiation | 0 | R-cp31-1 + R-cp30-1 + R1-R4 |
+| Information disclosure | 1 (I-cp32-1) | I-cp31-* + I-cp30-* + I1-I8 |
+| Denial of service | 2 (D-cp32-1, D-cp32-2) | D-cp31-* + D-cp30-* + D1-D7 |
+| Elevation of privilege | 0 | E-cp31-* + E-cp30-* + E1-E4 |
+
+**Net new threats:** 6 across 4 categories.  No criticals.
+
+**Notable design lesson:** Priority #4 (TINY FOOTPRINT) is a
+**performance** property, but enforcing it via a smoke turns it into a
+**security** property too — the byte-ceiling assertion prevents
+malicious or accidental bloat in future swaps.  Performance budgets
+double as DoS mitigations when they're enforced rather than
+aspirational.

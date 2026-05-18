@@ -1,3 +1,82 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 32 — 7 network icon swap (Ken-supplied) + Priority #4 "TINY FOOTPRINT" established + 94-task deep-deep yielding 4 inline closures (A-1 LOW + J-2 MEDIUM + CODE-1 HIGH + CODE-2 HIGH) + 10 drift fixes + STRIDE refresh (+6 rows) + 2 new smokes + 3 pattern lessons.  Per Ken's three asks: (1) swap 7 Ken-supplied network icons with accessibility hardening, (2) establish Priority #4 — pages load LIGHTNING fast on every device worldwide via lazy-loading + byte-weight discipline, (3) full security + code audit on cp31/cp32 work.
+
+CP32 SCOPE:
+
+**Icon swap (Ken-supplied, 7 SVGs).**  All accessibility-hardened: aria-label + `<title>` element + width/height stripped for consumer-sizing parity matching cp30/cp31 swap pattern.  Post-hardening sizes: erc20 603B / spl 1679B / trc20 506B / polygon 856B / bep20 418B / base 151B (Ken-confirmed intentional brand-minimalism plain blue disc, no inner mark — Coinbase's new brand-awareness campaign) / arbitrum 1833B.  Total 6,046 B = 5.90 KB across all 7.
+
+**Priority #4 — TINY FOOTPRINT.**  Pages load LIGHTNING fast on every device worldwide regardless of bandwidth/CPU/RAM.  Images and SVGs lazy-loaded so only assets needed for the current page transfer.  Below privacy (1), decentralization (2), grandma-friendly (3).  Mobile users on slow networks are the design target.
+
+**Lazy-loading retrofit (41 sites across 16 files).**  Components: DaiNetworkPicker, UsdtNetworkPicker, UsdcNetworkPicker, AltNetworkIcon (+ A-1 closure adding decoding=async), HardwareKeyCard, IdentityLabel (2 variants), +layout footer wordmark.  Pages: /dev/icons (21 imgs), /+page.svelte (3 home asset showcase), /privacy/+page.svelte, /privacy/[asset]/+page.svelte, /explorer/account/[name=account]/+page.svelte, /onboarding/+page.svelte, /onboarding/register-name/+page.svelte (2), /[x+40][account=account]/+page.svelte (2), /login/+page.svelte:401 (Yubikey-only-rendered).  Intentionally eager (6 total): header logo (LCP candidate), footer logo lazy-applied OK, AvatarMenu trigger (visible in header), login Yubikey hero (above-fold on login route), 3 false-positive doc-comment matches in AltNetworkIcon.
+
+CP32 DEEP-DEEP (A-L + STRIDE + drift):
+
+**A-1 (LOW).**  AltNetworkIcon `loading="lazy"` without `decoding="async"` — partial Priority #4 application; closed.
+
+**J-2 (MEDIUM).**  NEW smoke `apps/web/scripts/network-icon-coverage-smoke.ts` (40 scenarios) pinning every network slug in registry has corresponding icon SVG + per-icon 4 KB ceiling + 16 KB total network-icon budget + 32 KB total asset-icon budget (Priority #4) + accessibility parity (aria-label + `<title>` present on every icon).  Self-tested by tamper.  Registered in run-smokes.sh.  Would have caught any future network addition that ships without artwork OR balloons to megabyte-scale (D-cp32-1 mitigation).
+
+**CODE-1 (HIGH).**  `pay_dai` MISSING from both `apps/web/src/lib/payments/registry.ts` AND indexer's RESERVED_CANONICAL_KEYS in `operatorPaymentMethod.ts`.  Pre-cp32 reality: DAI was wired as TRADABLE ASSET (post buy/sell DAI orders OK) but NOT as PAYMENT RAIL (couldn't pick DAI as payment for a BTC trade).  This was a cp31 MISS — cp31 extended every "tradable asset" wire-format surface but missed the "payment rail" axis.  Closed inline in BOTH sites: frontend pay_dai entry with `assetExclusion: 'DAI'`, name='Dai (DAI)', url='https://makerdao.com', inline comment documenting cp32 closure rationale; indexer 'pay_dai' to RESERVED_CANONICAL_KEYS in correct position between 'pay_usdc' and 'pay_bch'.  reserved-keys-parity-smoke would have fired on landing only one side.
+
+**CODE-2 (HIGH).**  3-checkpoint drift cp3 USDT / cp30 USDC / cp31 DAI all missing their `payment_method.pay_<asset>.description` i18n keys in EVERY locale.  Picker rendered "pay_dai" literally instead of friendly description.  Closed: 3 keys × 10 locales = 30 new strings.  Native translations en/es/fr/de per Memory #29 respectful-copy guidance (factual no-value-judgment phrasing parallel to existing pay_btc/pay_xmr/pay_blurt); EN-fallback for it/pl/ru/fa/zh-CN/zh-HK per Memory #8 + cp31 i18n precedent.  Locale parity 2,713 → 2,716 (+3 × 10).  NEW smoke `apps/web/scripts/payment-method-i18n-parity-smoke.ts` (14 scenarios) asserts every PAYMENT_METHODS entry has corresponding i18n key in every locale; self-tested by pay_dai tamper.
+
+CP32 DRIFT FINDINGS (10 inline closures — Memory #26 cleanup):
+
+- DRIFT-1 GRANDMA-FRIENDLY-INVESTIGATION.md L5 "8→9 tradable assets" + cp32 marker
+- DRIFT-2 ADR-0027 forward-note about cp30 USDC + cp31 DAI shipping (annotation pattern per cp26-DD2)
+- DRIFT-3 brag #205 trading-activity dashboard asset list
+- DRIFT-4 brag #207 QR-code receive-address asset list
+- DRIFT-5 brag #219 currently-shipped roster
+- DRIFT-6 SECURITY.md:595 trade-settlement clause
+- DRIFT-7 FEES-AND-REWARDS.md:240 crypto-leg list
+- DRIFT-8 llms-full.txt:158 orderbook combinations
+- DRIFT-9 AddressShareModal.svelte:4 module-doc asset roster
+- DRIFT-10 payments/registry.ts:112 pay_usdt context comment
+
+CP32 STRIDE refresh (1414 → 1511 lines, +6 threat rows):
+
+- S-cp32-1 (LOW) hostile operator icon-swap visual identity attack — mitigated at trust-the-instance + cross-network warning copy names chain in plain text
+- T-cp32-1 (LOW) malicious SVG with script/href/foreignObject — verified zero in cp32-shipped icons + CSP blocks inline
+- T-cp32-2 (MEDIUM) lazy-loading regression — partial mitigation via byte-budget smoke; filed REVISIT for per-page-byte-budget smoke
+- I-cp32-1 (LOW) lazy-loading fingerprinting signal — accepted (no identity gating)
+- D-cp32-1 (LOW) future icon swap megabyte-bloat — caught by per-icon 4 KB ceiling
+- D-cp32-2 (LOW) hostile peer many-inline-icons in chat — only canonical ticker in payload, not raw SVG
+
+Notable: Priority #4 (TINY FOOTPRINT) as a SMOKE-ENFORCED byte budget is a security mitigation too, not just UX.
+
+PATTERN LESSONS RECORDED:
+
+**LL #35 — Multi-checkpoint drift compounds across checkpoints.**  CODE-2 surfaced that pay_usdt was missing its i18n description since Part 121 cp3.  Cp30 USDC missed its description AND missed pay_usdt's existing gap.  Cp31 DAI missed its description AND missed both prior gaps.  Generalizes: whenever adding a new tradable asset, walk every cp3-era infrastructure surface (payment registry, picker, smoke, i18n) and verify EXISTING entries for the same class of bug the new one might also have.  cp32's payment-method-i18n-parity-smoke now enforces this mechanically for the i18n parity case.
+
+**LL #36 — Asset wiring has TWO orthogonal axes: "tradable" and "payment rail".**  Cp30/cp31 extended every "tradable asset" surface but missed the "payment rail" axis.  An asset is tradable when you can POST IT (buy/sell orders); a payment rail when you can ACCEPT IT for a trade of a different asset.  Mirror-image surfaces maintained separately.  Future asset additions must extend BOTH: tradable (ASSET_TICKERS, frontend AssetMetadata, payload codec, 4 wire-format surfaces, network picker if multi-network, privacy chip, ADR, smoke) AND payment rail (payments/registry.ts pay_<asset> entry, RESERVED_CANONICAL_KEYS, payment_method.pay_<asset>.description × 10 locales).
+
+**LL #37 — Performance budgets enforced via smoke are security mitigations.**  Priority #4 framed as UX win, but network-icon-coverage-smoke's per-icon byte ceiling + total budget mechanically prevent future bloat (accidental developer drops 500 KB PNG renamed `.svg`, OR malicious compromise of upstream icon source).  D-cp32-1 STRIDE row captures this.  Generalizes: any performance budget worth aspiring to is worth locking with a smoke.
+
+VERIFICATION:
+
+- 7 network icons swapped + accessibility hardened ✓
+- 41 lazy-loaded `<img>` sites (6 intentionally eager) ✓
+- 2 NEW smokes (network-icon-coverage 40 scenarios + payment-method-i18n-parity 14 scenarios) ✓
+- Both new smokes self-tested by tamper ✓
+- network-icon-coverage-smoke registered in run-smokes.sh ✓
+- payment-method-i18n-parity-smoke registered in run-smokes.sh ✓
+- Locale parity 2,716 × 10 = 27,160 strings ✓
+- pay_dai in BOTH apps/web/src/lib/payments/registry.ts AND apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts RESERVED_CANONICAL_KEYS ✓
+- 3 stablecoin pay_*.description keys × 10 locales ✓
+- 10 drift findings closed inline ✓
+- STRIDE matrix 1,414 → 1,511 lines (+97, +6 threat rows) ✓
+- AUDIT-2026-05.md 22,352 → 22,690 lines (+338 lines for cp32 entry) ✓
+- Mediakit rebuilt per Memory #4 (brag #205/#207/#219 changed) ✓
+- 3 pattern lessons recorded (LL #35, #36, #37) ✓
+
+Sandbox state holds all cp32 work.  Build cp32-FULL-STATE tarball this turn per Memory #30 (structural-add checkpoint ships FULL not delta).
+
+PARKED EXTERNAL-BLOCKERS (unchanged from cp31-DD):
+(a) Live full-stack Ansible deploy on fresh Ubuntu 24.04 VM (hardware blocker)
+(b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
+
+---
+
+PRIOR CHECKPOINT — cp31-DD (sealed 2026-05-18):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 31-DD — DAI multi-network addition + deep-deep on cp31.  Per Ken's standing instruction "i hope you are doing the full security, as well as the full code audits with these deep deeps."  Cp31 ships DAI as 9th tradable asset / 6th Category-B / 3rd multi-network using the cp30 USDC template with distinct decentralization profile per ADR-0029.  Cp31-DD applies the A-L + STRIDE framework to cp31's work; 6 findings, all closed inline.
 
 CP31 SCOPE:

@@ -451,7 +451,7 @@
 		<section class="animate-fade-up" aria-labelledby="review-heading">
 			<div class="card">
 				<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-					<img src={avatarUri} alt="" class="h-24 w-24 flex-none rounded-2xl" />
+					<img src={avatarUri} alt="" class="h-24 w-24 flex-none rounded-2xl" loading="lazy" decoding="async" />
 					<div class="flex-1 text-center sm:text-left">
 						<h2 id="review-heading" class="font-display text-2xl font-bold">
 							{$_('onboarding.generated_title')}

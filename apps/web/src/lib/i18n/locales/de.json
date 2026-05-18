@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "Monero: privatsphärenorientierte Kryptowährung mit verschleierten Beträgen und Adressen."
 		},
+		"pay_usdt": {
+			"description": "Tether: USD-gekoppelter Stablecoin auf mehreren Netzwerken verfügbar."
+		},
+		"pay_usdc": {
+			"description": "USD Coin: USD-gekoppelter Stablecoin von Circle."
+		},
+		"pay_dai": {
+			"description": "Dai: USD-gekoppelter Stablecoin auf EVM-Netzwerken."
+		},
 		"pay_bch": {
 			"description": "Mit Bitcoin Cash bezahlen"
+		},
+		"pay_ltc": {
+			"description": "Mit Litecoin bezahlen"
+		},
+		"pay_dash": {
+			"description": "Mit Dash bezahlen"
 		},
 		"barter_goods": {
 			"description": "Tausche Waren direkt gegen das Asset — beschreibe in den Auftragsbedingungen, was du anbietest oder willst (z. B. „Orangenbäume\", „gebrauchtes Fahrrad\", „selbst angebauter Knoblauch\")."
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "Findest du nicht, was du brauchst?",
 		"request_missing_link": "Sag uns Bescheid",
-		"request_missing_no_contact": "Findest du nicht, was du brauchst? Diese Instanz hat keinen Kontaktkanal veröffentlicht — probiere eine andere Morphit-Instanz oder öffne ein Issue auf git.agorise.net/agorise/morphit.",
-		"pay_ltc": {
-			"description": "Mit Litecoin bezahlen"
-		},
-		"pay_dash": {
-			"description": "Mit Dash bezahlen"
-		}
+		"request_missing_no_contact": "Findest du nicht, was du brauchst? Diese Instanz hat keinen Kontaktkanal veröffentlicht — probiere eine andere Morphit-Instanz oder öffne ein Issue auf git.agorise.net/agorise/morphit."
 	},
 	"feedback_reminder": {
 		"aria_label": "Erinnerungen an ausstehende Bewertungen",

@@ -1,8 +1,8 @@
 <script lang="ts">
 	/**
 	 * AddressShareModal — share a receiving address through the
-	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, BCH,
-	 * LTC, DASH).
+	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, USDC,
+	 * DAI, BCH, LTC, DASH).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
 	 * sends it through the same chat-send path as a normal text

@@ -105,11 +105,11 @@
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-ink-950 p-6 dark:border-ink-800">
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-400">Wordmark · dark surface</p>
-				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" />
+				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" loading="lazy" decoding="async" />
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-white p-6 dark:border-ink-800">
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-500">Wordmark · light surface</p>
-				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" />
+				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" loading="lazy" decoding="async" />
 			</div>
 		</div>
 	</section>
@@ -130,9 +130,9 @@
 					favicon.svg · transparent on light
 				</p>
 				<div class="flex items-center justify-around gap-2">
-					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" loading="lazy" decoding="async" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" loading="lazy" decoding="async" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" loading="lazy" decoding="async" />
 				</div>
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-ink-950 p-4 dark:border-ink-800">
@@ -140,9 +140,9 @@
 					favicon.svg · transparent on dark
 				</p>
 				<div class="flex items-center justify-around gap-2">
-					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" loading="lazy" decoding="async" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" loading="lazy" decoding="async" />
+					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" loading="lazy" decoding="async" />
 				</div>
 			</div>
 			<!-- app-icon.svg — dark background, default PWA icon -->
@@ -157,6 +157,8 @@
 						width="48"
 						height="48"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon.svg"
@@ -164,6 +166,8 @@
 						width="72"
 						height="72"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon.svg"
@@ -171,6 +175,8 @@
 						width="96"
 						height="96"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 				</div>
 			</div>
@@ -186,6 +192,8 @@
 						width="48"
 						height="48"
 						class="rounded-full"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -193,6 +201,8 @@
 						width="72"
 						height="72"
 						class="rounded-full"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -200,6 +210,8 @@
 						width="96"
 						height="96"
 						class="rounded-full"
+						loading="lazy"
+						decoding="async"
 					/>
 				</div>
 			</div>
@@ -214,6 +226,8 @@
 						width="48"
 						height="48"
 						style="border-radius: 25%"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -221,6 +235,8 @@
 						width="72"
 						height="72"
 						style="border-radius: 25%"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -228,6 +244,8 @@
 						width="96"
 						height="96"
 						style="border-radius: 25%"
+						loading="lazy"
+						decoding="async"
 					/>
 				</div>
 			</div>
@@ -242,6 +260,8 @@
 						width="48"
 						height="48"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -249,6 +269,8 @@
 						width="72"
 						height="72"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 					<img
 						src="/app-icon-maskable.svg"
@@ -256,6 +278,8 @@
 						width="96"
 						height="96"
 						class="rounded-lg"
+						loading="lazy"
+						decoding="async"
 					/>
 				</div>
 			</div>
@@ -274,7 +298,7 @@
 					</p>
 					<div class="flex items-center justify-around">
 						{#each SIZES as sz (sz)}
-							<img src={asset.path} alt={asset.key} width={sz} height={sz} />
+							<img src={asset.path} alt={asset.key} width={sz} height={sz} loading="lazy" decoding="async" />
 						{/each}
 					</div>
 				</div>

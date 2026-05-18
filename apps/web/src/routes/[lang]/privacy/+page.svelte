@@ -41,6 +41,8 @@
 						alt=""
 						class="h-8 w-8 flex-none"
 						aria-hidden="true"
+						loading="lazy"
+						decoding="async"
 					/>
 					<div class="flex-1">
 						<div class="font-semibold">{asset.ticker}</div>

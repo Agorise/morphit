@@ -80,6 +80,8 @@
 				<img
 					src="/icons/networks/icon-network-{net}.svg"
 					alt=""
+					loading="lazy"
+					decoding="async"
 					class="h-6 w-6 flex-none"
 					aria-hidden="true"
 				/>

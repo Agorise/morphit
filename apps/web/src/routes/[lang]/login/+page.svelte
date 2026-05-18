@@ -402,6 +402,8 @@
 								src="/icons/icon-yubikey.svg"
 								alt=""
 								aria-hidden="true"
+								loading="lazy"
+								decoding="async"
 								class="h-5 w-auto opacity-90"
 							/>
 							{$_('login.welcome_back.unlock_with_yubikey')}

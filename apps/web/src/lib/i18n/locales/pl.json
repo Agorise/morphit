@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "Monero: kryptowaluta skupiona na prywatności z poufnymi kwotami i adresami."
 		},
+		"pay_usdt": {
+			"description": "Tether: USD-pegged stablecoin available across multiple networks."
+		},
+		"pay_usdc": {
+			"description": "USD Coin: USD-pegged stablecoin issued by Circle."
+		},
+		"pay_dai": {
+			"description": "Dai: USD-pegged stablecoin on EVM networks."
+		},
 		"pay_bch": {
 			"description": "Zapłać Bitcoin Cash"
+		},
+		"pay_ltc": {
+			"description": "Zapłać Litecoinem"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		},
 		"barter_goods": {
 			"description": "Wymień towary bezpośrednio na aktywo — opisz co oferujesz lub czego chcesz w warunkach zlecenia (np. „drzewa pomarańczowe\", „używany rower\", „domowy czosnek\")."
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "Nie widzisz tego, czego potrzebujesz?",
 		"request_missing_link": "Daj nam znać",
-		"request_missing_no_contact": "Nie widzisz tego, czego potrzebujesz? Ta instancja nie opublikowała kanału kontaktowego — spróbuj innej instancji Morphit lub otwórz issue na git.agorise.net/agorise/morphit.",
-		"pay_ltc": {
-			"description": "Zapłać Litecoinem"
-		},
-		"pay_dash": {
-			"description": "Pay with Dash"
-		}
+		"request_missing_no_contact": "Nie widzisz tego, czego potrzebujesz? Ta instancja nie opublikowała kanału kontaktowego — spróbuj innej instancji Morphit lub otwórz issue na git.agorise.net/agorise/morphit."
 	},
 	"feedback_reminder": {
 		"aria_label": "Przypomnienia o oczekujących opiniach",

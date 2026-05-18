@@ -155,7 +155,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. "Bitso transfer for moringa trees" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.
 
-**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/BCH/LTC/DASH. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
+**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
 
 • Buy/sell BTC for USD via PayPal
 • Buy/sell XMR for cash in person

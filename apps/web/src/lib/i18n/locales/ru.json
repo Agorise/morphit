@@ -2969,8 +2969,23 @@
 		"pay_xmr": {
 			"description": "Monero: криптовалюта с фокусом на приватность, со скрытыми суммами и адресами."
 		},
+		"pay_usdt": {
+			"description": "Tether: USD-pegged stablecoin available across multiple networks."
+		},
+		"pay_usdc": {
+			"description": "USD Coin: USD-pegged stablecoin issued by Circle."
+		},
+		"pay_dai": {
+			"description": "Dai: USD-pegged stablecoin on EVM networks."
+		},
 		"pay_bch": {
 			"description": "Заплатить Bitcoin Cash"
+		},
+		"pay_ltc": {
+			"description": "Оплата Litecoin"
+		},
+		"pay_dash": {
+			"description": "Pay with Dash"
 		},
 		"barter_goods": {
 			"description": "Обмен товаров напрямую на актив — опиши, что предлагаешь или хочешь, в условиях ордера (например, «апельсиновые деревья», «подержанный велосипед», «домашний чеснок»)."
@@ -3100,13 +3115,7 @@
 		},
 		"request_missing_with_contact": "Не видите того, что нужно?",
 		"request_missing_link": "Сообщите нам",
-		"request_missing_no_contact": "Не видите того, что нужно? Эта инстанция не опубликовала канал связи — попробуйте другую инстанцию Morphit или откройте issue на git.agorise.net/agorise/morphit.",
-		"pay_ltc": {
-			"description": "Оплата Litecoin"
-		},
-		"pay_dash": {
-			"description": "Pay with Dash"
-		}
+		"request_missing_no_contact": "Не видите того, что нужно? Эта инстанция не опубликовала канал связи — попробуйте другую инстанцию Morphit или откройте issue на git.agorise.net/agorise/morphit."
 	},
 	"feedback_reminder": {
 		"aria_label": "Напоминания об ожидающих отзывах",
