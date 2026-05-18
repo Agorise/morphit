@@ -101,11 +101,12 @@ interface ValidatedOrder {
 	 *  fee verifier to confirm the payment without holding the
 	 *  treasury's view key. */
 	readonly tx_proof: string | null;
-	/** Part 121 — sub-network identifier for multi-network
-	 *  assets.  Non-null when asset is multi-network (USDT;
-	 *  one of 'erc20'|'trc20'|'spl'|'bep20').  Null for
-	 *  single-network assets (BTC, XMR, BLURT).  Pinned at
-	 *  post time so cross-network sends are impossible. */
+	/** Part 121 / cp30 — sub-network identifier for multi-network
+	 *  assets.  Non-null when asset is multi-network: for USDT
+	 *  one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
+	 *  'erc20'|'spl'|'base'|'polygon'.  Null for single-network
+	 *  assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pinned at post
+	 *  time so cross-network sends are impossible. */
 	readonly asset_network: string | null;
 }
 
@@ -385,20 +386,30 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		}
 	}
 
-	// Part 121 — asset_network field for multi-network assets.
-	// USDT-only at launch; other assets must omit (or pass null).
-	// Single-network assets that send a non-null asset_network
-	// are rejected as malformed — the field is reserved for
-	// future multi-network additions.
+	// Part 121 / cp30 — asset_network field for multi-network assets.
+	// USDT (erc20/trc20/spl/bep20) and USDC (erc20/spl/base/polygon)
+	// both REQUIRE asset_network.  Single-network assets must omit
+	// (or pass null); a non-null asset_network on a single-network
+	// asset is rejected as malformed.
 	let asset_network: string | null = null;
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
+	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
 	if (asset === 'USDT') {
 		if (typeof networkRaw !== 'string') {
 			return { reason: 'asset_network_required_for_usdt' };
 		}
 		const net = networkRaw.toLowerCase();
 		if (!USDT_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network = net;
+	} else if (asset === 'USDC') {
+		if (typeof networkRaw !== 'string') {
+			return { reason: 'asset_network_required_for_usdc' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!USDC_NETWORKS_VALID.has(net)) {
 			return { reason: 'asset_network_unknown' };
 		}
 		asset_network = net;

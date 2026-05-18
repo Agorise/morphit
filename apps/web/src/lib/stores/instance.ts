@@ -94,6 +94,21 @@ export interface InstanceState {
 			readonly spl: string | null;
 			readonly bep20: string | null;
 		};
+		/** Part 122 cp30 — USDC per-network explorer URL overrides.
+		 *  Same shape as `usdt` above: per-network nullable override
+		 *  with bundled defaults in `lib/assets/networks.ts`.
+		 *  USDC's four shipped networks are ERC-20, SPL, Base, and
+		 *  Polygon.  Adding a new USDC network here requires the
+		 *  matching entry in `USDC_NETWORK_METADATA` in
+		 *  networks.ts.  Pre-cp30 indexers may omit this field
+		 *  entirely; the defensive fallback at fetch time fills
+		 *  in all-nulls. */
+		readonly usdc: {
+			readonly erc20: string | null;
+			readonly spl: string | null;
+			readonly base: string | null;
+			readonly polygon: string | null;
+		};
 	};
 	/** Trade-only assets this instance has disabled via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
@@ -144,7 +159,8 @@ const FALLBACK: InstanceState = {
 		bch: null,
 		ltc: null,
 		dash: null,
-		usdt: { erc20: null, trc20: null, spl: null, bep20: null }
+		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
+		usdc: { erc20: null, spl: null, base: null, polygon: null }
 	},
 	disabled_assets: [],
 	operator_matrix_room: null,
@@ -230,6 +246,12 @@ export function initInstance(): Promise<void> {
 									trc20: null,
 									spl: null,
 									bep20: null
+								},
+								usdc: result.data.chat_link_urls.usdc ?? {
+									erc20: null,
+									spl: null,
+									base: null,
+									polygon: null
 								}
 							}
 						: {
@@ -238,7 +260,8 @@ export function initInstance(): Promise<void> {
 								bch: null,
 								ltc: null,
 								dash: null,
-								usdt: { erc20: null, trc20: null, spl: null, bep20: null }
+								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
+								usdc: { erc20: null, spl: null, base: null, polygon: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],
 				operator_matrix_room: result.data.operator_matrix_room ?? null,

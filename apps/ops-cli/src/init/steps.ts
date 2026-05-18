@@ -1172,6 +1172,7 @@ async function getCategoryBTickers(): Promise<readonly string[]> {
  *  an entry here; unknown tickers fall back to a generic line. */
 const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze({
 	USDT: 'Tether stablecoin across 4 networks (ERC-20, TRC-20, SPL, BEP-20).\n    Most-traded stablecoin; centrally issued and freezable by Tether Inc.',
+	USDC: 'USD Coin stablecoin across 4 networks (ERC-20, SPL, Base, Polygon).\n    Issued by Circle; centrally controllable like USDT — Circle can\n    freeze addresses on regulatory request.  No BEP-20 (Binance-Peg\n    wrapper would add a second custodian) and no TRC-20 (Circle does\n    not natively issue on Tron).',
 	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.',
 	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.',
 	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.'
@@ -1208,9 +1209,10 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 			'instance.\n' +
 			'\n' +
 			'Reasonable reasons to disable an asset:\n' +
-			'  • USDT — operator preferring privacy-first or\n' +
-			'    decentralization-first posture; USDT is centrally\n' +
-			'    controllable (Tether Inc. can freeze addresses).\n' +
+			'  • USDT or USDC — operator preferring privacy-first or\n' +
+			'    decentralization-first posture; both stablecoins are\n' +
+			'    centrally controllable (Tether Inc. / Circle can freeze\n' +
+			'    addresses).\n' +
 			'  • BCH — operator preferring BTC + XMR only as the\n' +
 			'    Bitcoin-family rail.\n' +
 			'  • Any — operator wants to specialize their instance.\n' +

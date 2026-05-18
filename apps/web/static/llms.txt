@@ -1,6 +1,6 @@
 # Morphit
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/BCH/LTC/DASH marketplace. No KYC, no custody, no server that can lose your money. Run by Agorise; built on the Blurt blockchain; open source (AGPL-3.0).
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH marketplace. No KYC, no custody, no server that can lose your money. Run by Agorise; built on the Blurt blockchain; open source (AGPL-3.0).
 
 Morphit is a marketplace for people to trade local currency for cryptocurrency, directly with another person, without an intermediary holding anyone's money. Listings are published on-chain on Blurt so the orderbook is censorship-resistant: no matter what happens to morphit.io the data remains accessible and any operator can stand up a working instance.
 

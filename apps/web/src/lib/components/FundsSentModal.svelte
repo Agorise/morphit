@@ -30,8 +30,16 @@
 		type FundsSentPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
-	import { validateUsdtTxid, isUsdtNetwork, type UsdtNetwork } from '$lib/assets/networks';
+	import {
+		validateUsdtTxid,
+		isUsdtNetwork,
+		type UsdtNetwork,
+		validateUsdcTxid,
+		isUsdcNetwork,
+		type UsdcNetwork
+	} from '$lib/assets/networks';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
+	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
 
 	interface Props {
 		/** Initial method tab.  Pre-selected when the modal was
@@ -44,14 +52,20 @@
 		 *  network is already pinned and the picker is read-only
 		 *  so the buyer can't accidentally pick a different one. */
 		initialUsdtNetwork?: UsdtNetwork | null;
+		/** Part 122 cp30 — initial USDC network.  Same role as
+		 *  initialUsdtNetwork: pre-pins the network when the modal
+		 *  is launched from a received USDC address pill so the
+		 *  buyer cannot accidentally pick a different chain when
+		 *  reporting the txid. */
+		initialUsdcNetwork?: UsdcNetwork | null;
 		/** Q5 — Initial amount, pre-filled when the modal was
 		 *  triggered from an incoming external-asset address pill
-		 *  (BTC/XMR/USDT/BCH/LTC/DASH) that carried an amount.
+		 *  (BTC/XMR/USDT/USDC/BCH/LTC/DASH) that carried an amount.
 		 *  The buyer types the txid; the amount field starts
 		 *  populated with whatever the seller asked for (which,
-		 *  for jittered XMR amounts, is the exact 12-decimal value
-		 *  the buyer's wallet should have sent). User can still
-		 *  edit if they paid a different value. */
+		 *  for jittered XMR/UTXO/stablecoin amounts, is the exact
+		 *  value the buyer's wallet should have sent). User can
+		 *  still edit if they paid a different value. */
 		initialAmount?: string;
 		/** Pre-filled order permlink, same role as in
 		 *  AddressShareModal. */
@@ -65,6 +79,7 @@
 	let {
 		initialMethod = 'btc',
 		initialUsdtNetwork = null,
+		initialUsdcNetwork = null,
 		initialAmount = '',
 		orderPermlink,
 		onShare,
@@ -79,10 +94,14 @@
 	let method = $state<ChatAssetTicker>(initialMethod);
 	// svelte-ignore state_referenced_locally
 	let usdtNetwork = $state<UsdtNetwork | null>(initialUsdtNetwork);
-	// True if the parent pinned a USDT network up front (came
-	// from an address pill).  Locks the picker as read-only so
-	// the buyer can't accidentally pick a different network.
+	// svelte-ignore state_referenced_locally
+	let usdcNetwork = $state<UsdcNetwork | null>(initialUsdcNetwork);
+	// True if the parent pinned a USDT or USDC network up front
+	// (came from an address pill).  Locks the matching picker as
+	// read-only so the buyer can't accidentally pick a different
+	// network when reporting the txid.
 	const networkPinned = initialUsdtNetwork !== null;
+	const usdcNetworkPinned = initialUsdcNetwork !== null;
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally
 	let amount = $state(initialAmount);
@@ -98,7 +117,9 @@
 		trimmedTxid.length > 0 &&
 			(method === 'usdt'
 				? usdtNetwork !== null && validateUsdtTxid(usdtNetwork, trimmedTxid)
-				: isValidTxid(method, trimmedTxid))
+				: method === 'usdc'
+					? usdcNetwork !== null && validateUsdcTxid(usdcNetwork, trimmedTxid)
+					: isValidTxid(method, trimmedTxid))
 	);
 	const amountLooksValid = $derived(
 		trimmedAmount.length === 0 || /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount)
@@ -107,29 +128,44 @@
 
 	/** USDT-specific gate: network must be picked. */
 	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
+	/** USDC-specific gate (cp30): mirror of USDT — network must
+	 *  be picked.  Even more important than USDT's gate because
+	 *  ERC-20 / Base / Polygon all share the EVM 0x[64 hex] txid
+	 *  shape, so without a pinned network we couldn't tell which
+	 *  explorer to link to. */
+	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
 
 	const canSubmit = $derived(
-		txidLooksValid && amountLooksValid && noteLooksValid && usdtNetworkPicked && !sending
+		txidLooksValid &&
+			amountLooksValid &&
+			noteLooksValid &&
+			usdtNetworkPicked &&
+			usdcNetworkPicked &&
+			!sending
 	);
 
 	const txidError = $derived.by(() => {
 		if (trimmedTxid.length === 0) return null;
 		// BLURT txids are 40 hex chars; BTC/XMR/BCH are 64; USDT
-		// varies by network (32-88 chars depending on chain).
+		// and USDC vary by network (32-88 chars depending on chain).
 		const minTyped = method === 'blurt' ? 20 : 32;
 		if (trimmedTxid.length < minTyped) return null;
 		if (txidLooksValid) return null;
 		if (method === 'usdt') return 'chat.funds_sent.txid_invalid_usdt';
+		if (method === 'usdc') return 'chat.funds_sent.txid_invalid_usdc';
 		return 'chat.funds_sent.txid_invalid';
 	});
 
 	function selectMethod(m: ChatAssetTicker): void {
 		method = m;
-		// Part 121: clear the picked network when leaving USDT.
-		// On re-pick, the user must explicitly choose again.
-		// Don't clear when networkPinned — the parent pinned it
-		// for a reason.
+		// Part 121 / cp30: clear the picked network when leaving
+		// a multi-network method.  On re-pick, the user must
+		// explicitly choose again.  Don't clear when the
+		// corresponding network was pinned by the parent — the
+		// parent pinned it for a reason (the buyer is responding
+		// to an address pill that already named the network).
 		if (m !== 'usdt' && !networkPinned) usdtNetwork = null;
+		if (m !== 'usdc' && !usdcNetworkPinned) usdcNetwork = null;
 	}
 
 	// Part 73: bring dismiss UX up to parity with the sibling
@@ -164,7 +200,13 @@
 				// Part 121 — pin the USDT network on the message
 				// so the receiver's chat renders the right
 				// per-network explorer link.
-				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {})
+				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {}),
+				// Part 122 cp30 — same for USDC.  Especially critical
+				// because ERC-20 / Base / Polygon share the same EVM
+				// txid shape, so the network is the ONLY way to pick
+				// the right explorer URL (etherscan vs basescan vs
+				// polygonscan).
+				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {})
 			};
 			const wire = encodeFundsSentPayload(payload);
 			await onShare(wire);
@@ -245,6 +287,18 @@
 			<button
 				type="button"
 				role="tab"
+				aria-selected={method === 'usdc'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'usdc'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('usdc')}
+			>
+				{$_('chat.address.method_usdc')}
+			</button>
+			<button
+				type="button"
+				role="tab"
 				aria-selected={method === 'bch'}
 				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
 				'bch'
@@ -301,6 +355,32 @@
 					</div>
 				{:else}
 					<UsdtNetworkPicker bind:network={usdtNetwork} disabled={sending} />
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Part 122 cp30 — USDC network picker.  Same pinning
+		     semantics as USDT: when the parent triggered this
+		     modal from a received USDC address pill, the network
+		     is pinned and the picker renders as a read-only
+		     confirmation card so the buyer can't accidentally
+		     report the txid on the wrong chain. -->
+		{#if method === 'usdc'}
+			<div class="mt-4">
+				{#if usdcNetworkPinned && usdcNetwork !== null}
+					<div
+						class="rounded-lg border-2 border-morphit-emerald bg-morphit-emerald/5 p-3 text-sm"
+						role="note"
+					>
+						<div class="font-semibold text-morphit-emerald">
+							{$_(`assets.usdc.network.${usdcNetwork}.displayName`)}
+						</div>
+						<div class="mt-1 text-xs text-ink-300">
+							{$_('chat.funds_sent.network_pinned_hint')}
+						</div>
+					</div>
+				{:else}
+					<UsdcNetworkPicker bind:network={usdcNetwork} disabled={sending} />
 				{/if}
 			</div>
 		{/if}

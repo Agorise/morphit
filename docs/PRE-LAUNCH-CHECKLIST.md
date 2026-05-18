@@ -1,6 +1,6 @@
 # PRE-LAUNCH-CHECKLIST.md
 
-**Status:** living document.  Last refreshed: 2026-05-17 (Part 122 cp28).
+**Status:** living document.  Last refreshed: 2026-05-17 (Part 122 cp30).
 
 This is the consolidated, ordered list of operator actions
 required (or recommended) before flipping morphit.io from
@@ -278,7 +278,7 @@ file in the same turn.
       `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
       covers ~18 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
-      URLs (BTC + XMR + BCH + LTC + DASH) with live health-checks,
+      URLs (BTC + XMR + BCH + LTC + DASH; USDT and USDC have per-network explorers configured separately) with live health-checks,
       plus the trade-only asset policy step.  (Exact
       count drifts as we add operator-config surface;
       see `apps/ops-cli/src/init/steps.ts` for the
@@ -371,7 +371,7 @@ file in the same turn.
       5. Refuse DASH — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`.
       6. Refuse multiple —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC,DASH"`.
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,BCH,LTC,DASH"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see

@@ -117,6 +117,21 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'USDT'
 	},
 	{
+		// Part 122 cp30 — USD Coin as a payment method.  Same
+		// Category-B semantics as USDT: when the trade's traded
+		// asset is USDC, "pay with USDC" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, USDC appears as a selectable payment-rail chip.
+		// The specific network (ERC-20 / SPL / Base / Polygon) is
+		// pinned at chat-time via AddressShareModal's USDC tab;
+		// the picker itself doesn't disambiguate network.
+		key: 'pay_usdc',
+		name: 'USD Coin (USDC)',
+		url: 'https://www.circle.com/usdc',
+		category: 'crypto',
+		assetExclusion: 'USDC'
+	},
+	{
 		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment
 		// method.  Same Category-B semantics as USDT: when the
 		// trade's traded asset is BCH, "pay with BCH" is hidden

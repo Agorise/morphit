@@ -174,6 +174,17 @@ const ChatLinkUrlsSchema = z.object({
 			spl: z.string().nullable(),
 			bep20: z.string().nullable()
 		})
+		.optional(),
+	// Part 122 cp30 — USDC per-network chat-link URL overrides.
+	// Same back-compat optionality as USDT — pre-cp30 indexer
+	// builds may omit this field entirely.
+	usdc: z
+		.object({
+			erc20: z.string().nullable(),
+			spl: z.string().nullable(),
+			base: z.string().nullable(),
+			polygon: z.string().nullable()
+		})
 		.optional()
 });
 

@@ -45,7 +45,8 @@
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
 	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
-	import { type UsdtNetwork } from '$lib/assets/networks';
+	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
+	import { type UsdtNetwork, type UsdcNetwork } from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import { getInstanceSnapshot } from '$lib/stores/instance';
 
@@ -90,6 +91,13 @@
 	// OR when USDT is picked but the user hasn't chosen yet.
 	// canSubmit gates on this being non-null when asset==='USDT'.
 	let usdtNetwork = $state<UsdtNetwork | null>(null);
+	// Part 122 cp30 — same shape for USDC.  When asset=USDC the
+	// user MUST pick a network (ERC-20/SPL/Base/Polygon) before
+	// the form can submit.  Especially critical because three of
+	// the four supported USDC networks share the EVM 0x[40 hex]
+	// address shape — the picker is the only thing telling the
+	// sender's wallet which chain to broadcast on.
+	let usdcNetwork = $state<UsdcNetwork | null>(null);
 
 	// ─── Form state (step 2) ───────────────────────────────────────
 	let fiat = $state('');
@@ -803,7 +811,10 @@
 
 	// ─── Validation ────────────────────────────────────────────────
 	const step1Done = $derived(
-		side !== null && asset !== null && (asset !== 'USDT' || usdtNetwork !== null)
+		side !== null &&
+			asset !== null &&
+			(asset !== 'USDT' || usdtNetwork !== null) &&
+			(asset !== 'USDC' || usdcNetwork !== null)
 	);
 
 	const fiatError = $derived.by(() => {
@@ -1074,10 +1085,16 @@
 			// Part 108++ — XMR per-payment proof.  Required for
 			// fee_method=xmr; ignored for everything else.
 			txProof: feeMethodChoice === 'xmr' ? txProof.trim() : undefined,
-			// Part 121 — sub-network for multi-network assets.
-			// USDT-only at launch.  Single-network assets pass
-			// undefined; the payload builder omits the field.
-			assetNetwork: asset === 'USDT' && usdtNetwork !== null ? usdtNetwork : undefined,
+			// Part 121 / cp30 — sub-network for multi-network assets.
+			// USDT and USDC both carry a network discriminator;
+			// single-network assets pass undefined and the payload
+			// builder omits the field.
+			assetNetwork:
+				asset === 'USDT' && usdtNetwork !== null
+					? usdtNetwork
+					: asset === 'USDC' && usdcNetwork !== null
+						? usdcNetwork
+						: undefined,
 			// REVISIT-LIST item 5 — pull the configured operator
 			// tag from the instance store (synchronous accessor;
 			// store hydrates on +layout mount, by the time the
@@ -1485,10 +1502,12 @@
 							title={disabled ? ($_('post_order.form.waiver_asset_locked_title') as string) : ''}
 							onclick={() => {
 								asset = a as Asset;
-								// Part 121: reset network when leaving USDT,
-								// so a re-pick of USDT later forces a fresh
-								// explicit choice (no stale network value).
+								// Part 121 / cp30: reset network when leaving
+								// a multi-network asset, so a re-pick later
+								// forces a fresh explicit choice (no stale
+								// network value).
 								if (a !== 'USDT') usdtNetwork = null;
+								if (a !== 'USDC') usdcNetwork = null;
 							}}
 							class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
 							a
@@ -1510,6 +1529,8 @@
 							<Tooltip textKey="post_order.form.asset_explainer.xmr" />
 						{:else if a === 'USDT'}
 							<Tooltip textKey="post_order.form.asset_explainer.usdt" faqKey="what_is_usdt" />
+						{:else if a === 'USDC'}
+							<Tooltip textKey="post_order.form.asset_explainer.usdc" />
 						{:else if a === 'BCH'}
 							<Tooltip textKey="post_order.form.asset_explainer.bch" />
 						{:else if a === 'LTC'}
@@ -1521,19 +1542,30 @@
 				{/each}
 			</div>
 
-			<!-- Part 121 — privacy/decentralization warning chip.
+			<!-- Part 121 / cp30 — privacy/decentralization warning chip.
 			     Renders only when the chosen asset has a non-null
 			     privacyWarningKey in the canonical registry.  USDT
-			     is currently the only asset that surfaces here;
-			     BTC/XMR/BLURT/BCH/LTC/DASH all carry null and skip. -->
+			     and USDC are the two stablecoin assets that surface
+			     here; BTC/XMR/BLURT/BCH/LTC/DASH all carry null and
+			     skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
 				<!-- Network picker is REQUIRED when asset is USDT.
 				     No default network — the user must pick every
 				     time, because cross-network sends lose funds.
-				     canSubmit gates on usdtNetwork !== null below. -->
+				     canSubmit gates on usdtNetwork !== null above. -->
 				<div class="mt-3">
 					<UsdtNetworkPicker bind:network={usdtNetwork} />
+				</div>
+			{/if}
+			{#if asset === 'USDC'}
+				<PrivacyWarningChip privacyWarningKey="usdc_centralized" />
+				<!-- Same network-picker contract as USDT — required
+				     pre-submit gate.  Three of USDC's four networks
+				     share the EVM 0x address format, so the picker
+				     is the only thing disambiguating which chain. -->
+				<div class="mt-3">
+					<UsdcNetworkPicker bind:network={usdcNetwork} />
 				</div>
 			{/if}
 		</section>

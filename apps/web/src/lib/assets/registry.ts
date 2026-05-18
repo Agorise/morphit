@@ -128,6 +128,19 @@ const validateUsdt: AddressValidator = (s) =>
 	USDT_TRC20_RE.test(s) ||
 	USDT_SPL_RE.test(s);
 
+// USDC — Ethereum + Base + Polygon all share the EVM 0x[40 hex]
+// address format; SPL is base58 32-44 chars.  Note no TRC-20
+// variant (Circle doesn't issue on Tron) and no BEP-20 in the
+// initial set (filed as REVISIT for non-breaking later add).
+// Per-network disambiguation is the network picker's job; this
+// validator is the form-level "is this even plausibly a USDC
+// address" check.
+const USDC_EVM_RE = /^0x[a-fA-F0-9]{40}$/;
+const USDC_SPL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+const validateUsdc: AddressValidator = (s) =>
+	USDC_EVM_RE.test(s) || USDC_SPL_RE.test(s);
+
 // BCH — CashAddr (with or without `bitcoincash:` prefix) and
 // legacy P2PKH/P2SH.  Inlined copies mirroring chat/payload.ts
 // (we can't import to avoid the same registry-imports-payload
@@ -248,6 +261,41 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// Cross-network sends lose funds permanently.
 		defaultNetwork: null,
 		privacyWarningKey: 'usdt_centralized'
+	},
+	{
+		ticker: 'usdc',
+		displayTicker: 'USDC',
+		displayName: 'USD Coin',
+		oneLineDescription:
+			'Stablecoin pegged to USD, issued by Circle.  Centrally controlled.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-usdc.svg',
+		// Circle brand blue (#2775CA approx).  text-blue-500 reads
+		// as "Circle blue" while staying clearly distinct from
+		// USDT's amber-400 (the other centralized stablecoin) and
+		// from BLURT's emerald.  Both stablecoins keep the
+		// privacy-warning chip; the accent color isn't the
+		// warning channel.
+		accentClass: 'text-blue-500',
+		decimals: 6, // Same on all four supported networks (Circle standard)
+		supportsMemo: false,
+		addressValidator: validateUsdc,
+		// MEMORY #23 INVARIANT: USDC cannot pay listing fees.
+		// Trade-only Category B asset alongside USDT/BCH/LTC/DASH.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC
+		// only — bridged versions (USDC.e, USDbC, etc.) excluded.
+		// No TRC-20 (Circle doesn't issue on Tron) and no BEP-20
+		// in the initial set; see ADR-0028 + REVISIT-LIST for the
+		// non-breaking later-add path.
+		supportedNetworks: ['erc20', 'spl', 'base', 'polygon'],
+		// null forces explicit user choice every trade.  Note
+		// ERC-20 + Base + Polygon SHARE the EVM 0x address shape,
+		// so an address looks identical between those three at
+		// the format level — the picker is what disambiguates
+		// which chain the sender's wallet should broadcast on.
+		defaultNetwork: null,
+		privacyWarningKey: 'usdc_centralized'
 	},
 	{
 		ticker: 'bch',
