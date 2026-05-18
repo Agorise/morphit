@@ -59,6 +59,10 @@ interface Validated {
 	readonly payment_methods: readonly string[];
 	readonly terms: string | null;
 	readonly expires_at: Date | null;
+	/** cp30-DD-DD CODE-3 — multi-network asset_network (Part 121
+	 *  USDT + cp30 USDC).  Required for USDT/USDC, null for every
+	 *  other asset.  Same shape contract as order.ts. */
+	readonly asset_network: string | null;
 }
 
 function validate(payload: unknown): Validated | { reason: string } {
@@ -194,6 +198,42 @@ function validate(payload: unknown): Validated | { reason: string } {
 		expires_at = d;
 	}
 
+	// cp30-DD-DD CODE-3 — asset_network gate.  Mirror of order.ts
+	// §"asset_network for multi-network assets".  USDT and USDC
+	// REQUIRE asset_network; every other asset must omit (or pass
+	// null).  Strict per-asset allowlists.  The replace handler
+	// will additionally enforce that the network matches the
+	// original (parallel to side/asset/fiat lock-down) — see
+	// handle() body.
+	let asset_network_validated: string | null = null;
+	const networkRaw = payload.asset_network;
+	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
+	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
+	if (asset === 'USDT') {
+		if (typeof networkRaw !== 'string') {
+			return { reason: 'asset_network_required_for_usdt' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!USDT_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network_validated = net;
+	} else if (asset === 'USDC') {
+		if (typeof networkRaw !== 'string') {
+			return { reason: 'asset_network_required_for_usdc' };
+		}
+		const net = networkRaw.toLowerCase();
+		if (!USDC_NETWORKS_VALID.has(net)) {
+			return { reason: 'asset_network_unknown' };
+		}
+		asset_network_validated = net;
+	} else {
+		if (networkRaw !== undefined && networkRaw !== null) {
+			return { reason: 'asset_network_not_permitted_for_asset' };
+		}
+		asset_network_validated = null;
+	}
+
 	return {
 		permlink,
 		side: side as 'buy' | 'sell',
@@ -206,7 +246,15 @@ function validate(payload: unknown): Validated | { reason: string } {
 		location_region,
 		payment_methods: normalizedPm,
 		terms,
-		expires_at
+		expires_at,
+		// cp30-DD-DD CODE-3 — multi-network asset_network gate.
+		// Mirror of order.ts §"asset_network for multi-network
+		// assets".  Required for USDT/USDC, forbidden for single-
+		// network assets, strictly allowlisted per asset.  The
+		// orderReplace handler also locks this against changes
+		// (see handle() body for the target.asset_network check) —
+		// network is substance per ADR-0023/0028, not detail.
+		asset_network: asset_network_validated
 	};
 }
 
@@ -244,8 +292,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		asset: string;
 		fiat_currency: string;
 		fee_method: string;
+		// cp30-DD-DD CODE-3 — read original asset_network so we
+		// can enforce it as a frozen substance field on replace.
+		asset_network: string | null;
 	}>(
-		`SELECT status, created_at, side, asset, fiat_currency, fee_method
+		`SELECT status, created_at, side, asset, fiat_currency, fee_method, asset_network
 		 FROM orders WHERE account = $1 AND permlink = $2`,
 		[ctx.signer, v.permlink]
 	);
@@ -286,6 +337,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 	if (v.fiat_currency !== target.fiat_currency) {
 		return { ok: false, reason: 'replace_fiat_change_forbidden' };
+	}
+	// cp30-DD-DD CODE-3 — for multi-network assets (USDT/USDC),
+	// asset_network is substance per ADR-0023/0028 (which chain
+	// is the trade actually on?) and must not change in a replace.
+	// For single-network assets both are null so the comparison
+	// is a no-op.  Without this, a USDT-ERC20 order could be
+	// replaced to USDT-TRC20 within the 15-minute window, fooling
+	// a counterparty who clicked through on the original listing.
+	if (v.asset_network !== target.asset_network) {
+		return { ok: false, reason: 'replace_asset_network_change_forbidden' };
 	}
 
 	// B1 audit fix — waiver substance protection.

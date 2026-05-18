@@ -158,9 +158,26 @@ export function validateUsdtTxid(network: UsdtNetwork, txid: string): boolean {
 export function bundledUsdtExplorerUrl(network: UsdtNetwork, txid: string): string | null {
 	if (!validateUsdtTxid(network, txid)) return null;
 	const md = getUsdtNetworkMetadata(network);
-	// Normalize to lowercase for hex-encoded txids; SPL
-	// (base58) is case-sensitive so we preserve as-is for SPL.
-	const normalized = network === 'spl' ? txid : txid.toLowerCase();
+	// cp30-DD-DD SEC-4 — normalize txids per-network so the resulting
+	// URL actually resolves on the target explorer:
+	//   - EVM family (erc20, bep20): lowercase + REQUIRE leading 0x.
+	//     Our regex accepts both `0x...` and bare 64-hex (some
+	//     wallets strip it) but Etherscan / BscScan respond with
+	//     404 to bare-hex paths.  Always emit with 0x.
+	//   - TRC-20 (Tron): lowercase, no prefix.  Tronscan accepts
+	//     case-insensitive hex with no prefix.
+	//   - SPL (Solana): base58 — CASE-SENSITIVE; do NOT lowercase.
+	//     Solscan would return 404 to a lowercased Solana signature.
+	let normalized: string;
+	if (network === 'spl') {
+		normalized = txid;
+	} else if (network === 'erc20' || network === 'bep20') {
+		const lc = txid.toLowerCase();
+		normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
+	} else {
+		// trc20 — no prefix conversion needed
+		normalized = txid.toLowerCase();
+	}
 	return md.bundledExplorerUrl.replace('{txid}', normalized);
 }
 
@@ -302,8 +319,21 @@ export function validateUsdcTxid(network: UsdcNetwork, txid: string): boolean {
 export function bundledUsdcExplorerUrl(network: UsdcNetwork, txid: string): string | null {
 	if (!validateUsdcTxid(network, txid)) return null;
 	const md = getUsdcNetworkMetadata(network);
-	// Normalize to lowercase for hex-encoded txids; SPL
-	// (base58) is case-sensitive so we preserve as-is for SPL.
-	const normalized = network === 'spl' ? txid : txid.toLowerCase();
+	// cp30-DD-DD SEC-4 — normalize txids per-network so the resulting
+	// URL resolves on the target explorer (same logic as
+	// bundledUsdtExplorerUrl above):
+	//   - EVM family (erc20, base, polygon): lowercase + REQUIRE
+	//     leading 0x.  Etherscan/Basescan/Polygonscan return 404 to
+	//     bare-hex paths; our regex accepts both forms but the
+	//     emitted URL must be canonical.
+	//   - SPL (Solana): base58, CASE-SENSITIVE; do NOT lowercase.
+	let normalized: string;
+	if (network === 'spl') {
+		normalized = txid;
+	} else {
+		// erc20, base, polygon — all EVM-family
+		const lc = txid.toLowerCase();
+		normalized = lc.startsWith('0x') ? lc : `0x${lc}`;
+	}
 	return md.bundledExplorerUrl.replace('{txid}', normalized);
 }

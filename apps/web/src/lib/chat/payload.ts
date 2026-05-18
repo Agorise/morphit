@@ -73,6 +73,21 @@
  * can render appropriately.
  */
 
+/** cp30-DD-DD SEC-3 — per-network address/txid cross-validators
+ *  imported from the canonical networks module.  Used by the
+ *  decoder to defend against hostile peers sending a mismatched
+ *  `network` + `address` combination (asset-wide shape passes
+ *  but per-network shape fails).  networks.ts has no imports
+ *  itself, so no circular-dep risk. */
+import {
+	validateUsdtAddress,
+	validateUsdtTxid,
+	validateUsdcAddress,
+	validateUsdcTxid,
+	type UsdtNetwork,
+	type UsdcNetwork
+} from '$lib/assets/networks';
+
 const MAX_NOTE_LEN = 100;
 const MAX_AMOUNT_LEN = 32; // "1234567890.123456789" is plenty
 
@@ -884,7 +899,51 @@ export function encodeAddressPayload(p: AddressPayload): string {
 	// adjacent payjoin_endpoint addition.  Now USDT addresses
 	// shared via chat carry the network identifier through to
 	// the receiver, which is what cp3's design intended.
-	if (p.network !== undefined && p.network !== '') wire.network = p.network;
+	//
+	// cp30-DD-DD SEC-6 — symmetric encoder-side defense-in-depth
+	// matching the decoder's SEC-3 fix.  Without these checks, a
+	// buggy caller could pass `{method:'usdc', network:'erc20',
+	// address:'<spl-base58>'}` and the encoder would emit a wire
+	// message the receiver decoder would then reject (cf. SEC-3) —
+	// the sender thinking they sent something valid.  Catching at
+	// the encoder produces a clearer developer-time error.  TS
+	// types enforce this at compile time but `as`-cast escape
+	// hatches in callers can bypass; encoder is the runtime gate.
+	//
+	// cp30-DD-DD CODE-1 — symmetric to decoder: refuse to emit a
+	// multi-network message without the network field.  Closes the
+	// missing-required-field hole at both encode and decode.
+	if (
+		(p.method === 'usdt' || p.method === 'usdc') &&
+		(p.network === undefined || p.network === '')
+	) {
+		throw new Error(`payload: network field is REQUIRED for method='${p.method}'`);
+	}
+	if (p.network !== undefined && p.network !== '') {
+		if (p.method === 'usdt') {
+			const validUsdtNets = new Set(['erc20', 'trc20', 'spl', 'bep20']);
+			if (!validUsdtNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for USDT`);
+			}
+			if (!validateUsdtAddress(p.network as UsdtNetwork, p.address)) {
+				throw new Error(`payload: address shape does not match USDT network '${p.network}'`);
+			}
+		} else if (p.method === 'usdc') {
+			const validUsdcNets = new Set(['erc20', 'spl', 'base', 'polygon']);
+			if (!validUsdcNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for USDC`);
+			}
+			if (!validateUsdcAddress(p.network as UsdcNetwork, p.address)) {
+				throw new Error(`payload: address shape does not match USDC network '${p.network}'`);
+			}
+		} else {
+			// Single-network method shipping a `network` value is
+			// always a caller bug — refuse rather than silently
+			// emit a malformed wire-format message.
+			throw new Error(`payload: network field is only valid for multi-network methods (got method='${p.method}')`);
+		}
+		wire.network = p.network;
+	}
 	// cp26 — PayJoin (BIP-78) endpoint URL.  BTC-only; the
 	// encoder enforces method='btc' as defense-in-depth (UI
 	// already gates the input field to BTC).  Wire-format field
@@ -983,7 +1042,44 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 	// FundsSent USDT messages were dropping the network field on
 	// the wire, breaking the per-network explorer-link rendering
 	// in ChatMessage.  Fixed symmetrically here.
-	if (p.network !== undefined && p.network !== '') wire.network = p.network;
+	//
+	// cp30-DD-DD SEC-6 — symmetric encoder-side per-network txid
+	// validation matching the decoder's SEC-3 fix.  Same posture as
+	// encodeAddressPayload: a buggy caller passing mismatched
+	// method/network/txid produces a clear developer-time error
+	// rather than a silent wire-format message that the receiver
+	// then discards.
+	//
+	// cp30-DD-DD CODE-1 — symmetric to decoder: refuse to emit a
+	// multi-network funds_sent message without the network field.
+	if (
+		(p.method === 'usdt' || p.method === 'usdc') &&
+		(p.network === undefined || p.network === '')
+	) {
+		throw new Error(`payload: network field is REQUIRED for funds_sent method='${p.method}'`);
+	}
+	if (p.network !== undefined && p.network !== '') {
+		if (p.method === 'usdt') {
+			const validUsdtNets = new Set(['erc20', 'trc20', 'spl', 'bep20']);
+			if (!validUsdtNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for USDT funds_sent`);
+			}
+			if (!validateUsdtTxid(p.network as UsdtNetwork, p.txid)) {
+				throw new Error(`payload: txid shape does not match USDT network '${p.network}'`);
+			}
+		} else if (p.method === 'usdc') {
+			const validUsdcNets = new Set(['erc20', 'spl', 'base', 'polygon']);
+			if (!validUsdcNets.has(p.network)) {
+				throw new Error(`payload: invalid network '${p.network}' for USDC funds_sent`);
+			}
+			if (!validateUsdcTxid(p.network as UsdcNetwork, p.txid)) {
+				throw new Error(`payload: txid shape does not match USDC network '${p.network}'`);
+			}
+		} else {
+			throw new Error(`payload: network field is only valid for multi-network methods (got method='${p.method}')`);
+		}
+		wire.network = p.network;
+	}
 	return JSON.stringify(wire);
 }
 
@@ -1121,7 +1217,20 @@ function optionalFieldsAddress(
 	// now reads it back when present.  Multi-network assets
 	// (USDT + USDC) ride a `network` discriminator on the wire;
 	// other methods carrying a `network` field is malformed.
+	//
+	// cp30-DD-DD CODE-1 — multi-network methods now REQUIRE the
+	// network field (per ADR-0023 + ADR-0028).  Before this fix,
+	// a wire-format message `{method:'usdc', address:'0xabc'}`
+	// without `network` was accepted; downstream UI rendered the
+	// address pill without the network chip, leaving the buyer
+	// uncertain which chain to send on.  Reject at the trust gate.
 	let network: string | undefined;
+	if (
+		(base.method === 'usdt' || base.method === 'usdc') &&
+		!Object.hasOwn(o, 'network')
+	) {
+		return null;
+	}
 	if (Object.hasOwn(o, 'network')) {
 		if (typeof o.network !== 'string' || o.network.length === 0) return null;
 		// USDT/USDC must have one of their supported networks;
@@ -1139,6 +1248,19 @@ function optionalFieldsAddress(
 			) {
 				return null;
 			}
+			// cp30-DD-DD SEC-3 — cross-check address shape against
+			// the decoded network.  Without this, a hostile peer
+			// could send `{method:'usdt', network:'spl', address:
+			// '0xevmformatstring...'}` and the asset-wide check
+			// `isValidUsdtAddress` would accept it (any USDT-shape).
+			// Downstream UI would display the address under the
+			// claimed network's label, potentially confusing the
+			// buyer into routing funds incorrectly.  Per-network
+			// validation closes the gap; same trust-gate
+			// posture as the cp30-DD-11 latent-since-cp3 lesson.
+			if (!validateUsdtAddress(o.network as UsdtNetwork, base.address)) {
+				return null;
+			}
 			network = o.network;
 		} else if (base.method === 'usdc') {
 			// Part 122 cp30: USDC's four shipped networks.  No
@@ -1150,6 +1272,17 @@ function optionalFieldsAddress(
 				o.network !== 'base' &&
 				o.network !== 'polygon'
 			) {
+				return null;
+			}
+			// cp30-DD-DD SEC-3 — cross-check USDC address shape
+			// against the decoded network.  Critical here because
+			// ERC-20, Base, and Polygon all share the EVM 0x[40
+			// hex] format; a hostile peer could mislabel an SPL
+			// base58 address as `network:'erc20'` (or vice versa)
+			// and the asset-wide `isValidUsdcAddress` would accept
+			// it because the asset-wide regex is the UNION of
+			// per-network shapes.
+			if (!validateUsdcAddress(o.network as UsdcNetwork, base.address)) {
 				return null;
 			}
 			network = o.network;
@@ -1212,7 +1345,18 @@ function optionalFieldsFundsSent(
 	// Multi-network assets (USDT + USDC) ride a `network`
 	// discriminator on the wire that needs to round-trip through
 	// FundsSent payloads too.
+	//
+	// cp30-DD-DD CODE-1 — multi-network methods REQUIRE network
+	// field (same posture as optionalFieldsAddress).  A funds-sent
+	// message without network gives the seller no way to pick the
+	// right explorer.
 	let network: string | undefined;
+	if (
+		(base.method === 'usdt' || base.method === 'usdc') &&
+		!Object.hasOwn(o, 'network')
+	) {
+		return null;
+	}
 	if (Object.hasOwn(o, 'network')) {
 		if (typeof o.network !== 'string' || o.network.length === 0) return null;
 		if (base.method === 'usdt') {
@@ -1224,6 +1368,15 @@ function optionalFieldsFundsSent(
 			) {
 				return null;
 			}
+			// cp30-DD-DD SEC-3 — cross-check txid shape against the
+			// decoded network.  Same defense-in-depth as the
+			// AddressPayload path; without this, a hostile peer could
+			// send `{method:'usdt', network:'erc20', txid:'<spl-txid>'}`
+			// and the asset-wide `isValidUsdtTxid` would accept it,
+			// causing the UI to render a misleading explorer link.
+			if (!validateUsdtTxid(o.network as UsdtNetwork, base.txid)) {
+				return null;
+			}
 			network = o.network;
 		} else if (base.method === 'usdc') {
 			if (
@@ -1232,6 +1385,13 @@ function optionalFieldsFundsSent(
 				o.network !== 'base' &&
 				o.network !== 'polygon'
 			) {
+				return null;
+			}
+			// cp30-DD-DD SEC-3 — same cross-check on USDC.  Critical
+			// because ERC-20/Base/Polygon share the EVM 0x[64 hex]
+			// txid shape; only the network field disambiguates which
+			// explorer to link.
+			if (!validateUsdcTxid(o.network as UsdcNetwork, base.txid)) {
 				return null;
 			}
 			network = o.network;

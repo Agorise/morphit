@@ -88,9 +88,18 @@ scenario('logo paths are stable + distinct', () => {
 	if (set.size !== paths.length) {
 		throw new Error('duplicate logo path');
 	}
+	// cp30-DD-DD CODE-A — pre-existing broken assertion: BCH (cp21),
+	// LTC (cp24), DASH (cp27), USDC (cp30) all live under /icons/
+	// (not /coins/), so the original `startsWith('/coins/')` check
+	// has been broken since cp21.  Accept either prefix; both are
+	// served by SvelteKit's static path resolver and the registry's
+	// `logoSvgPath` is currently only consumed by this smoke
+	// (nothing in the UI reads it — components hardcode their own
+	// path template), so the path-convention split is purely
+	// declarative.  REVISIT to consolidate to one directory.
 	for (const p of paths) {
-		if (!p.startsWith('/coins/')) {
-			throw new Error(`logo path should start with /coins/: ${p}`);
+		if (!p.startsWith('/coins/') && !p.startsWith('/icons/')) {
+			throw new Error(`logo path should start with /coins/ or /icons/: ${p}`);
 		}
 		if (!p.endsWith('.svg')) {
 			throw new Error(`logo path should end with .svg: ${p}`);
@@ -107,7 +116,24 @@ scenario('display tickers are uppercase', () => {
 });
 
 scenario('lower-case tickers match payload union', () => {
-	const valid = new Set(['btc', 'xmr', 'blurt', 'usdt']);
+	// cp30-DD-DD CODE-B — pre-existing broken assertion: this set
+	// was last updated at cp3 (USDT addition) and never extended for
+	// BCH (cp21), LTC (cp24), DASH (cp27), or USDC (cp30) so the
+	// scenario has been throwing on first non-baseline asset since
+	// cp21.  Source of truth is the ChatAssetTicker union in
+	// `lib/chat/payload.ts`; keep this list in lockstep with that
+	// union (or, better: import the union's values dynamically —
+	// follow-up).
+	const valid = new Set([
+		'btc',
+		'xmr',
+		'blurt',
+		'usdt',
+		'usdc',
+		'bch',
+		'ltc',
+		'dash'
+	]);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {
 			throw new Error(`${a.ticker}: not in ChatAssetTicker union — payload.ts must be updated`);

@@ -828,6 +828,28 @@ export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 // MORPHIT_FRONTEND_DASH_CHAT_LINK_URL.
 export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
 
+// Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
+// bundled defaults.  USDT is multi-network so the operator
+// override is per-network (each chain has its own explorer
+// ecosystem).  Closure of DD-11 (the per-network USDT explorer
+// override was declared in indexer-client + frontend store but
+// never populated by the indexer body since Part 121 cp3; cp30-DD
+// finally landed both the indexer-side wiring AND these wizard
+// defaults so operators get sane out-of-box URLs).
+export const DEFAULT_USDT_ERC20_CHAT_LINK_URL = 'https://etherscan.io/tx/{txid}';
+export const DEFAULT_USDT_TRC20_CHAT_LINK_URL = 'https://tronscan.org/#/transaction/{txid}';
+export const DEFAULT_USDT_SPL_CHAT_LINK_URL = 'https://solscan.io/tx/{txid}';
+export const DEFAULT_USDT_BEP20_CHAT_LINK_URL = 'https://bscscan.com/tx/{txid}';
+
+// Part 122 cp30 — USDC per-network chat-link explorer URL bundled
+// defaults.  4 networks (ERC-20, SPL, Base, Polygon); BEP-20
+// intentionally not supported per ADR-0028 §1 (Binance-Peg + 18-
+// decimal divergence).
+export const DEFAULT_USDC_ERC20_CHAT_LINK_URL = 'https://etherscan.io/tx/{txid}';
+export const DEFAULT_USDC_SPL_CHAT_LINK_URL = 'https://solscan.io/tx/{txid}';
+export const DEFAULT_USDC_BASE_CHAT_LINK_URL = 'https://basescan.org/tx/{txid}';
+export const DEFAULT_USDC_POLYGON_CHAT_LINK_URL = 'https://polygonscan.com/tx/{txid}';
+
 // ─── Step 11: Fee-verifier explorer URLs ─────────────────────────
 
 export interface FeeExplorersResult {
@@ -1001,6 +1023,28 @@ export interface ChatLinkExplorersResult {
 	 *  as btc/xmr/bch/ltc.  Operator-tunable via the wizard or
 	 *  by setting MORPHIT_FRONTEND_DASH_CHAT_LINK_URL directly. */
 	readonly dash: string;
+	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
+	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
+	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
+	 *  _CHAT_LINK_URL.  The override has historically existed on the
+	 *  client wire-format mirror since Part 121 cp3 but never actually
+	 *  worked end-to-end on the public API until cp30-DD-11 closed
+	 *  the indexer-side gap. */
+	readonly usdt: {
+		readonly erc20: string;
+		readonly trc20: string;
+		readonly spl: string;
+		readonly bep20: string;
+	};
+	/** Part 122 cp30 — multi-network USDC per-network chat-link
+	 *  URLs.  4 networks (erc20/spl/base/polygon).  BEP-20
+	 *  intentionally absent per ADR-0028 §1. */
+	readonly usdc: {
+		readonly erc20: string;
+		readonly spl: string;
+		readonly base: string;
+		readonly polygon: string;
+	};
 }
 
 /** Validate a chat-link URL template.  Must be https://, must
@@ -1038,11 +1082,11 @@ export function parseChatLinkTemplate(raw: string): string | string {
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
 	step(12, TOTAL_STEPS, 'Chat-link external explorer URLs');
 	explain(
-		'When a counterparty sends a BTC, XMR, BCH, LTC, or DASH\n' +
-			'txid in chat, the Morphit frontend renders it as a clickable\n' +
-			'link that opens a third-party block explorer in a new tab.\n' +
-			'This is separate from the FEE-VERIFIER explorer URLs\n' +
-			'(which are server-side and used for cross-checking\n' +
+		'When a counterparty sends a txid for any tradable asset\n' +
+			'in chat, the Morphit frontend renders it as a clickable\n' +
+			'link that opens a third-party block explorer in a new\n' +
+			'tab.  This is separate from the FEE-VERIFIER explorer\n' +
+			'URLs (which are server-side and used for cross-checking\n' +
 			'payment claims).\n' +
 			'\n' +
 			'The URLs you set here are the ones YOUR USERS click.\n' +
@@ -1055,12 +1099,12 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'Format: an https:// URL template containing the placeholder\n' +
 			'{txid}, which Morphit substitutes at render time.\n' +
 			'\n' +
-			'Defaults:\n' +
-			'  • BTC:  https://mempool.space/tx/{txid}\n' +
-			'  • XMR:  https://xmrchain.net/tx/{txid}\n' +
-			'  • BCH:  https://blockchair.com/bitcoin-cash/transaction/{txid}\n' +
-			'  • LTC:  https://litecoinspace.org/tx/{txid}\n' +
-			'  • DASH: https://insight.dash.org/insight/tx/{txid}\n' +
+			'Single-network assets (one URL each):\n' +
+			'  • BTC, XMR, BCH, LTC, DASH\n' +
+			'\n' +
+			'Multi-network assets (one URL per network):\n' +
+			'  • USDT: ERC-20, TRC-20, SPL, BEP-20\n' +
+			'  • USDC: ERC-20, SPL, Base, Polygon\n' +
 			'\n' +
 			'You can change these later by editing morphit.config.env.\n' +
 			'\n' +
@@ -1088,7 +1132,82 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── DASH chat-link URL ──\n');
 	const dash = await editChatLinkUrl('DASH chat-link URL', DEFAULT_DASH_CHAT_LINK_URL);
 
-	return { btc, xmr, bch, ltc, dash };
+	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
+	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
+	// Solana / BNB Smart Chain); each chain has its own explorer
+	// ecosystem so the override is per-network.  Most operators
+	// accept defaults — we offer a single grouped prompt rather
+	// than 4 separate prompts.  Operators wanting to point any
+	// network at a self-hosted explorer can choose "Customize"
+	// or edit morphit.config.env directly.
+	console.log('\n  ── USDT per-network chat-link URLs (4 networks) ──\n');
+	explain(
+		'USDT is multi-network: a trade on USDT is actually a trade\n' +
+			'on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or\n' +
+			'BNB Smart Chain (BEP-20).  Each chain has its own\n' +
+			'explorer.  Defaults below.  You can accept all 4 defaults\n' +
+			'or customize per-network.\n' +
+			'\n' +
+			'Defaults:\n' +
+			'  • ERC-20: ' + DEFAULT_USDT_ERC20_CHAT_LINK_URL + '\n' +
+			'  • TRC-20: ' + DEFAULT_USDT_TRC20_CHAT_LINK_URL + '\n' +
+			'  • SPL:    ' + DEFAULT_USDT_SPL_CHAT_LINK_URL + '\n' +
+			'  • BEP-20: ' + DEFAULT_USDT_BEP20_CHAT_LINK_URL
+	);
+	const usdtChoice = await askChoice(
+		'How would you like to handle USDT per-network URLs?',
+		['Accept all 4 defaults', 'Customize each one']
+	);
+	const usdt = usdtChoice === 0
+		? {
+			erc20: DEFAULT_USDT_ERC20_CHAT_LINK_URL,
+			trc20: DEFAULT_USDT_TRC20_CHAT_LINK_URL,
+			spl: DEFAULT_USDT_SPL_CHAT_LINK_URL,
+			bep20: DEFAULT_USDT_BEP20_CHAT_LINK_URL
+		}
+		: {
+			erc20: await editChatLinkUrl('USDT ERC-20 chat-link URL', DEFAULT_USDT_ERC20_CHAT_LINK_URL),
+			trc20: await editChatLinkUrl('USDT TRC-20 chat-link URL', DEFAULT_USDT_TRC20_CHAT_LINK_URL),
+			spl: await editChatLinkUrl('USDT SPL chat-link URL', DEFAULT_USDT_SPL_CHAT_LINK_URL),
+			bep20: await editChatLinkUrl('USDT BEP-20 chat-link URL', DEFAULT_USDT_BEP20_CHAT_LINK_URL)
+		};
+
+	// ─── USDC multi-network (Part 122 cp30) ──
+	// Same shape as USDT but 4 different networks (Ethereum,
+	// Solana, Base, Polygon).  BEP-20 intentionally not supported
+	// (ADR-0028 §1: Binance-Peg is a 2-custodian wrapper + 18-
+	// decimal precision divergence).
+	console.log('\n  ── USDC per-network chat-link URLs (4 networks) ──\n');
+	explain(
+		'USDC is multi-network: ERC-20 (Ethereum), SPL (Solana),\n' +
+			'Base, or Polygon PoS.  No BEP-20 — that variant is\n' +
+			'Binance-Peg, not Circle-native, per ADR-0028.\n' +
+			'\n' +
+			'Defaults:\n' +
+			'  • ERC-20:  ' + DEFAULT_USDC_ERC20_CHAT_LINK_URL + '\n' +
+			'  • SPL:     ' + DEFAULT_USDC_SPL_CHAT_LINK_URL + '\n' +
+			'  • Base:    ' + DEFAULT_USDC_BASE_CHAT_LINK_URL + '\n' +
+			'  • Polygon: ' + DEFAULT_USDC_POLYGON_CHAT_LINK_URL
+	);
+	const usdcChoice = await askChoice(
+		'How would you like to handle USDC per-network URLs?',
+		['Accept all 4 defaults', 'Customize each one']
+	);
+	const usdc = usdcChoice === 0
+		? {
+			erc20: DEFAULT_USDC_ERC20_CHAT_LINK_URL,
+			spl: DEFAULT_USDC_SPL_CHAT_LINK_URL,
+			base: DEFAULT_USDC_BASE_CHAT_LINK_URL,
+			polygon: DEFAULT_USDC_POLYGON_CHAT_LINK_URL
+		}
+		: {
+			erc20: await editChatLinkUrl('USDC ERC-20 chat-link URL', DEFAULT_USDC_ERC20_CHAT_LINK_URL),
+			spl: await editChatLinkUrl('USDC SPL chat-link URL', DEFAULT_USDC_SPL_CHAT_LINK_URL),
+			base: await editChatLinkUrl('USDC Base chat-link URL', DEFAULT_USDC_BASE_CHAT_LINK_URL),
+			polygon: await editChatLinkUrl('USDC Polygon chat-link URL', DEFAULT_USDC_POLYGON_CHAT_LINK_URL)
+		};
+
+	return { btc, xmr, bch, ltc, dash, usdt, usdc };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {

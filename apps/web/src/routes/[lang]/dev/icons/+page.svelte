@@ -44,7 +44,25 @@
 		'obtainium',
 		'direct'
 	] as const;
-	const ASSETS = ['btc', 'xmr', 'blurt', 'yubikey'] as const;
+	// cp30-DD-DD CODE-2 — pre-existing drift: list was frozen at the
+	// cp3-pre era (btc/xmr/blurt + yubikey).  Brought up to current
+	// 8-asset reality so the dev visual surface actually exercises
+	// the icons that real users see in the orderbook + chat.  Note
+	// the path-convention split (/coins/ for the cp3-era assets vs
+	// /icons/ for cp21+ additions) — both work, both served by
+	// SvelteKit's static handler.  See asset-registry-smoke.ts
+	// CODE-A comment for the convention rationale.
+	const ASSETS = [
+		{ key: 'btc', path: '/coins/btc.svg' },
+		{ key: 'xmr', path: '/coins/xmr.svg' },
+		{ key: 'blurt', path: '/coins/blurt.svg' },
+		{ key: 'usdt', path: '/coins/usdt.svg' },
+		{ key: 'usdc', path: '/icons/icon-usdc.svg' },
+		{ key: 'bch', path: '/icons/icon-bch.svg' },
+		{ key: 'ltc', path: '/icons/icon-ltc.svg' },
+		{ key: 'dash', path: '/icons/icon-dash.svg' },
+		{ key: 'yubikey', path: '/icons/icon-yubikey.svg' }
+	] as const;
 
 	const SIZES = [16, 24, 48] as const;
 </script>
@@ -248,14 +266,14 @@
 		<h2 class="mb-4 font-display text-2xl font-bold">2. Asset icons</h2>
 		<p class="mb-4 text-sm text-ink-500">Each shown at 16, 24, 48 px on a dark surface.</p>
 		<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-			{#each ASSETS as asset (asset)}
+			{#each ASSETS as asset (asset.key)}
 				<div class="rounded-xl border border-ink-200 bg-ink-950 p-4 dark:border-ink-800">
 					<p class="mb-2 text-xs uppercase tracking-widest text-ink-400">
-						/icons/icon-{asset}.svg
+						{asset.path}
 					</p>
 					<div class="flex items-center justify-around">
 						{#each SIZES as sz (sz)}
-							<img src={`/icons/icon-${asset}.svg`} alt={asset} width={sz} height={sz} />
+							<img src={asset.path} alt={asset.key} width={sz} height={sz} />
 						{/each}
 					</div>
 				</div>

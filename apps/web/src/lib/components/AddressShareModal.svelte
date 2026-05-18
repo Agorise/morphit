@@ -119,12 +119,18 @@
 	 *  Default ON for XMR (cp3) AND all transparent assets
 	 *  (BTC/BCH/LTC/BLURT) from cp26.  XMR uses 6 trailing
 	 *  decimals of jitter to defeat amount-correlation on the
-	 *  Monero chain (see jitterMoneroAmount).  BTC/BCH/LTC use
+	 *  Monero chain (see jitterMoneroAmount).  BTC/BCH/LTC/DASH use
 	 *  satoshi-precision jitter (up to 999 sat ≈ $0.001-$0.50
 	 *  trivial cost — see jitterUtxoAmount).  BLURT uses
 	 *  milliblurt-precision jitter (see jitterBlurtAmount).
-	 *  USDT is excluded — its privacy issue is Tether's freeze
-	 *  capability, which amount-jitter doesn't address.
+	 *  USDT and USDC (cp30, reversing cp26's USDT-no-jitter
+	 *  decision per ADR-0028 Decision 2): 6-decimal precision,
+	 *  0-999 microunit jitter ≈ $0.001 (jitterStablecoinAmount).
+	 *  The cp26 rationale "centralization is the issue, not
+	 *  amount-correlation" correctly observed that jitter doesn't
+	 *  help against Circle/Tether freezes, but did NOT refute the
+	 *  SEPARATE amount-correlation linkability threat.  Both
+	 *  threats are real and independent; jitter addresses one.
 	 *  See jitterAmountForAsset in payload.ts for the dispatcher. */
 	let jitterAmount = $state(true);
 	/** Memoized jittered amount.  Recomputed each time the user
@@ -135,9 +141,11 @@
 	 *  gets sent). */
 	let jitteredAmount = $state<string | null>(null);
 	/** Returns true when amount-jitter is available for the
-	 *  currently-selected asset.  USDT excluded (see comment
-	 *  above). */
-	const jitterEligible = $derived(method !== 'usdt');
+	 *  currently-selected asset.  Every tradable asset is jitter-
+	 *  eligible as of cp30 (USDT was excluded in cp26 but the
+	 *  exclusion was reverted in cp30; see jitterAmount comment
+	 *  above for the design rationale). */
+	const jitterEligible = $derived(true);
 	$effect(() => {
 		if (
 			!jitterEligible ||
