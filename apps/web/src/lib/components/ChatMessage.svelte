@@ -29,8 +29,8 @@
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
-	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl } from '$lib/explorer/urls';
-	import { isUsdtNetwork } from '$lib/assets/networks';
+	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl } from '$lib/explorer/urls';
+	import { isUsdtNetwork, isUsdcNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
@@ -78,10 +78,10 @@
 		 *
 		 *  Optional; the button only renders when this prop is
 		 *  present, the message is incoming, and the method is
-		 *  one of the six listed above (BLURT excluded —
+		 *  one of the seven listed above (BLURT excluded —
 		 *  BLURT transfers are single-tx and don't go through
 		 *  the mark-sent reconciliation flow). */
-		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash'; amount?: string; orderPermlink?: string; network?: string }) => void;
+		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'bch' | 'ltc' | 'dash'; amount?: string; orderPermlink?: string; network?: string }) => void;
 	}
 
 	let { message, me, peer, onRetry, onPayNow, onMarkSent }: Props = $props();
@@ -203,6 +203,18 @@
 			// txid as plain text (no link).
 			if (network !== undefined && isUsdtNetwork(network)) {
 				return usdtExplorerUrl(network, txid);
+			}
+			return null;
+		}
+		if (method === 'usdc') {
+			// Part 122 cp30 — per-network USDC explorer URL.  Same
+			// shape as USDT: requires the wire-format `network`
+			// field to disambiguate among erc20/spl/base/polygon.
+			// Especially important here because ERC-20, Base, and
+			// Polygon share the same EVM txid shape, so without the
+			// network we can't pick the right scanner.
+			if (network !== undefined && isUsdcNetwork(network)) {
+				return usdcExplorerUrl(network, txid);
 			}
 			return null;
 		}
@@ -412,9 +424,10 @@
 					!Number.isNaN(parsedAmount) &&
 					parsedAmount > 0}
 				{@const canMarkSent =
-					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash') && isIncoming}
+					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash') && isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
 				{@const usdtNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
+				{@const usdcNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -439,6 +452,20 @@
 								</span>
 							{/if}
 							{$_('chat.address.pill_method_usdt')}
+						{:else if p.method === 'usdc'}
+							<!-- Part 122 cp30 — USDC pill header parallel
+							     to USDT.  Circle-blue chip instead of
+							     amber so the two stablecoins are
+							     visually distinguishable.  Especially
+							     important on EVM chains (ERC-20 / Base /
+							     Polygon) where the address format alone
+							     can't tell them apart. -->
+							{#if usdcNetworkValid}
+								<span class="rounded-md bg-blue-400/20 px-2 py-0.5 font-bold text-blue-300">
+									{$_(`assets.usdc.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.address.pill_method_usdc')}
 						{:else}
 							{$_('chat.address.pill_method_blurt')}
 						{/if}
@@ -491,6 +518,22 @@
 						>
 							{$_('assets.usdt.address_share.warning', {
 								values: { network: $_(`assets.usdt.network.${p.network}.displayName`) }
+							})}
+						</aside>
+					{/if}
+					{#if p.method === 'usdc' && usdcNetworkValid}
+						<!-- Part 122 cp30 — per-message USDC cross-network
+						     warning.  Same shape as the USDT case but with
+						     Circle-blue trim to keep the two stablecoins
+						     visually distinct.  Critical here because
+						     three of USDC's four networks share the EVM
+						     0x[40 hex] shape. -->
+						<aside
+							class="rounded-md border border-blue-400/30 bg-blue-400/5 px-2.5 py-2 text-xs text-blue-200"
+							role="note"
+						>
+							{$_('assets.usdc.address_share.warning', {
+								values: { network: $_(`assets.usdc.network.${p.network}.displayName`) }
 							})}
 						</aside>
 					{/if}
@@ -572,15 +615,15 @@
 								class="hover:bg-morphit-emerald-dark rounded-md border-2 border-morphit-emerald bg-morphit-emerald px-3 py-1 text-xs font-semibold text-white"
 								onclick={() =>
 									onMarkSent?.({
-										method: p.method as 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash',
+										method: p.method as 'btc' | 'xmr' | 'usdt' | 'usdc' | 'bch' | 'ltc' | 'dash',
 										amount: p.amount,
 										orderPermlink: p.orderPermlink,
-										// cp26 DD-7 fix — propagate USDT network from
-										// the address payload to FundsSentModal so the
-										// receiver doesn't have to re-pick the network
-										// they already saw on the seller's pill.  Only
-										// USDT carries network; undefined for the other
-										// 5 single-network assets.
+										// cp26 DD-7 fix + cp30 — propagate the network
+										// from the address payload to FundsSentModal so
+										// the receiver doesn't have to re-pick a network
+										// they already saw on the seller's pill.  Both
+										// USDT and USDC carry a network field; the other
+										// single-network assets leave this undefined.
 										network: p.network
 									})}
 							>
@@ -606,6 +649,7 @@
 			{:else if decoded?.kind === 'funds_sent'}
 				{@const p = decoded.payload}
 				{@const usdtFundsNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
+				{@const usdcFundsNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
 				<div class="flex flex-col gap-2">
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
@@ -627,6 +671,18 @@
 								</span>
 							{/if}
 							{$_('chat.funds_sent.pill_title_usdt')}
+						{:else if p.method === 'usdc'}
+							<!-- Part 122 cp30 — USDC funds-sent pill.
+							     Mirrors USDT shape but with Circle-blue
+							     trim.  Network chip prefixes the title
+							     so a glance at the chat tells the seller
+							     which chain to scan. -->
+							{#if usdcFundsNetworkValid}
+								<span class="rounded-md bg-blue-400/20 px-2 py-0.5 font-bold text-blue-300">
+									{$_(`assets.usdc.network.${p.network}.displayName`)}
+								</span>
+							{/if}
+							{$_('chat.funds_sent.pill_title_usdc')}
 						{:else}
 							{$_('chat.funds_sent.pill_title_blurt')}
 						{/if}

@@ -50,7 +50,12 @@
 	import FundsSentModal from '$components/FundsSentModal.svelte';
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
-	import { isUsdtNetwork, type UsdtNetwork } from '$lib/assets/networks';
+	import {
+		isUsdtNetwork,
+		type UsdtNetwork,
+		isUsdcNetwork,
+		type UsdcNetwork
+	} from '$lib/assets/networks';
 	import { recordFundsSent } from '$lib/trades/tradeStatus';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -263,15 +268,16 @@
 	 *  button (with prefill) share the modal but supply
 	 *  different starting state. */
 	let markSentArgs = $state<{
-		method: 'btc' | 'xmr' | 'usdt' | 'bch' | 'ltc' | 'dash';
+		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'bch' | 'ltc' | 'dash';
 		amount?: string;
 		orderPermlink?: string;
-		// cp26 DD-7 fix — pill's "Mark as sent" button now passes
-		// USDT network through to FundsSentModal so the buyer
-		// doesn't have to re-pick the network they already saw
-		// in the chat header.  This was a pre-existing UX gap that
-		// only became fixable after cp26 wired the network field
-		// through the AddressPayload wire shape (cp3 inline-fix).
+		// cp26 DD-7 fix + cp30 — pill's "Mark as sent" button now
+		// passes the network through to FundsSentModal so the
+		// buyer doesn't have to re-pick a network they already saw
+		// in the chat header.  Both USDT and USDC are multi-network
+		// trade-only assets that ride a `network` discriminator
+		// (cp26 wired this through the AddressPayload wire shape
+		// originally for USDT; cp30 extended it to USDC).
 		network?: string;
 	} | null>(null);
 	/** Phase F.3 — pay-now BLURT flow.  When non-null, mounts
@@ -981,8 +987,23 @@
 			   garbage `network` value somehow arriving here (e.g.
 			   from a malformed pre-cp26 payload); fall through to
 			   null on mismatch so the picker re-prompts. */
-			markSentArgs?.network !== undefined && isUsdtNetwork(markSentArgs.network)
+			markSentArgs?.method === 'usdt' &&
+			markSentArgs?.network !== undefined &&
+			isUsdtNetwork(markSentArgs.network)
 				? (markSentArgs.network as UsdtNetwork)
+				: null
+		}
+		initialUsdcNetwork={
+			/* Part 122 cp30 — same propagation path for USDC.
+			   Guarded by method === 'usdc' so a wire-format
+			   `network` value carried on a non-multi-network
+			   asset (which the encoder forbids, but defense in
+			   depth) can't accidentally route into the USDC
+			   picker. */
+			markSentArgs?.method === 'usdc' &&
+			markSentArgs?.network !== undefined &&
+			isUsdcNetwork(markSentArgs.network)
+				? (markSentArgs.network as UsdcNetwork)
 				: null
 		}
 		onShare={handleFundsSent}

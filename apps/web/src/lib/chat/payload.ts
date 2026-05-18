@@ -287,6 +287,66 @@ export function jitterMoneroAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Part 122 cp30 — Amount-jitter for stablecoin chains (USDT,
+ *  USDC).  Same defense as jitterUtxoAmount + jitterMoneroAmount
+ *  but calibrated to 6-decimal stablecoin precision.
+ *
+ *  Why this exists for stablecoins: even though USDT and USDC
+ *  carry separate centralization concerns (Circle/Tether can
+ *  freeze addresses on regulatory request — documented in their
+ *  per-asset privacy guides), the SEPARATE amount-correlation
+ *  linkability attack still applies.  An observer with knowledge
+ *  of an off-platform agreed price ("I'm buying $5,000 of USDC
+ *  for $5,000 cash") can correlate the on-chain transfer with
+ *  the agreement by matching the exact amount.  Adding 0-999
+ *  micro-USDT/USDC of jitter — about a tenth of a US cent maximum
+ *  — breaks the exact-match correlation without imposing any
+ *  meaningful cost.  Both threats are real and independent;
+ *  jitter addresses one of them.
+ *
+ *  Pre-cp30 this function didn't exist and stablecoins fell
+ *  through `jitterAmountForAsset` to a pass-through (`return
+ *  base`).  That was the wrong call — the original rationale
+ *  ("USDT's privacy issue is centralization not amount-
+ *  correlation; jitter doesn't address Tether freezes") was an
+ *  incomplete argument; the absence of jitter benefit on the
+ *  freeze threat doesn't refute the jitter benefit on the
+ *  correlation threat.  Cp30 fixed the gap.
+ *
+ *  Jitter range: up to 999 micro-units of the stablecoin (6
+ *  decimals).  At a 1:1 USD peg that's $0.000001 to $0.000999 —
+ *  effectively a sub-cent rounding, less than the gas fee on
+ *  any of the supported chains.
+ *
+ *  Same caveats as the UTXO and XMR versions: round-UP-only
+ *  (never underpay), CSPRNG-derived (not Math.random), the
+ *  caller is responsible for caching so seller-share, buyer-
+ *  echo, and seller-verify all see the same value. */
+export function jitterStablecoinAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterStablecoinAmount: invalid base amount');
+	}
+	// Parse base into integer-microunit representation (bigint).
+	// 1 USDT/USDC = 10^6 micro-units on every supported network.
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000000').slice(0, 6);
+	const baseMicro = BigInt(whole) * 1_000_000n + BigInt(fracPadded);
+
+	// Generate 2 random bytes, fold into 0..(1000 - 1).  Modulo
+	// bias is negligible at this scale.
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = (buf[0] << 8) | buf[1];
+	const jitterMicro = BigInt(r % 1000);
+	const totalMicro = baseMicro + jitterMicro;
+
+	// Format back to "W.FFFFFF" with 6-decimal precision.
+	const wholeOut = totalMicro / 1_000_000n;
+	const fracOut = totalMicro % 1_000_000n;
+	const fracStr = fracOut.toString().padStart(6, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
 /** Part 122 cp26 — Amount-jitter for transparent UTXO chains
  *  (BTC, BCH, LTC).  Same defense as jitterMoneroAmount but
  *  calibrated to satoshi precision (8 decimals).
@@ -379,7 +439,16 @@ export function jitterAmountForAsset(
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
-	// USDT: no jitter — see function comment above
+	if (asset === 'usdt' || asset === 'usdc') {
+		// Part 122 cp30 — stablecoins get jitter too.  The
+		// centralization threat (Circle/Tether freeze power) is
+		// real and documented in /privacy/{usdt,usdc}, but it
+		// doesn't refute the SEPARATE amount-correlation
+		// linkability threat that jitter addresses.  6-decimal
+		// precision, 0-999 micro-unit range — see
+		// jitterStablecoinAmount for the full rationale.
+		return jitterStablecoinAmount(base);
+	}
 	return base;
 }
 
@@ -445,8 +514,17 @@ function noteHasForbiddenChars(s: string): boolean {
  *
  *  Part 122 cp21 BCH addition: 'bch' is single-network (mainnet
  *  only).  No network field required.  Addresses come in CashAddr
- *  or legacy formats — see BCH_*_RE constants. */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'bch' | 'ltc' | 'dash';
+ *  or legacy formats — see BCH_*_RE constants.
+ *
+ *  Part 122 cp30 USDC addition: 'usdc' is multi-network like
+ *  USDT.  When method === 'usdc', the `network` field is
+ *  REQUIRED (one of 'erc20', 'spl', 'base', 'polygon').  Note
+ *  ERC-20, Base, and Polygon all share the EVM 0x[40 hex]
+ *  address shape; the network discriminator is what tells the
+ *  sender which chain to broadcast on.  No TRC-20 (Circle
+ *  doesn't issue on Tron) and no BEP-20 in this initial set
+ *  (see ADR-0028). */
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'bch' | 'ltc' | 'dash';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -465,13 +543,19 @@ export interface AddressPayload {
 	readonly memo?: string;
 	/** Sub-network identifier for multi-network assets.  REQUIRED
 	 *  when method === 'usdt' (one of 'erc20'|'trc20'|'spl'|
-	 *  'bep20').  Undefined for single-network assets (btc, xmr,
-	 *  blurt).  Per Part 121: USDT addresses on different
-	 *  networks have INCOMPATIBLE formats — sending USDT-ERC20
-	 *  to a TRC-20 address loses funds.  The network field
-	 *  pins the receiving network so chat-side validation
-	 *  catches mismatches and the explorer URL builder picks
-	 *  the right template. */
+	 *  'bep20') and when method === 'usdc' (one of 'erc20'|'spl'|
+	 *  'base'|'polygon').  Undefined for single-network assets
+	 *  (btc, xmr, blurt, bch, ltc, dash).  Per Part 121/cp30:
+	 *  USDT and USDC addresses on different network families
+	 *  have INCOMPATIBLE formats — sending USDT-ERC20 to a
+	 *  TRC-20 address loses funds; sending USDC-Solana to an
+	 *  EVM 0x address loses funds.  The network field pins the
+	 *  receiving network so chat-side validation catches
+	 *  mismatches and the explorer URL builder picks the right
+	 *  template.  Note that within USDC, ERC-20 / Base / Polygon
+	 *  all share the EVM 0x[40 hex] shape — so this field is the
+	 *  ONLY thing telling the sender which chain to broadcast
+	 *  on for cross-EVM-USDC sends. */
 	readonly network?: string;
 	/** cp26 — Optional PayJoin (BIP-78) endpoint URL.  When set
 	 *  AND `method === 'btc'`, the generated bitcoin: URI gains
@@ -512,10 +596,11 @@ export interface FundsSentPayload {
 	 *  match what the seller originally requested in their
 	 *  AddressPayload.memo. */
 	readonly memo?: string;
-	/** Part 121: sub-network for multi-network assets.  REQUIRED
-	 *  when method === 'usdt'.  Lets the receiving client pick
-	 *  the right per-network explorer URL when rendering the
-	 *  txid as a clickable link. */
+	/** Part 121 / cp30: sub-network for multi-network assets.
+	 *  REQUIRED when method === 'usdt' or method === 'usdc'.
+	 *  Lets the receiving client pick the right per-network
+	 *  explorer URL when rendering the txid as a clickable
+	 *  link. */
 	readonly network?: string;
 }
 
@@ -580,6 +665,37 @@ export function isValidUsdtTxid(s: string): boolean {
 	if (/^(0x)?[a-fA-F0-9]{64}$/.test(s)) return true;
 	// SPL: base58 87-88 chars
 	if (/^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(s)) return true;
+	return false;
+}
+
+/** Validate a USDC address shape across all supported networks
+ *  (ERC-20, SPL, Base, Polygon — Part 122 cp30).  Permissive
+ *  check used by the form-level "is this even plausibly an
+ *  address" gate.  For per-network pinning (the address-share
+ *  modal's network-aware check), use `validateUsdcAddress(network,
+ *  address)` from `$lib/assets/networks`.
+ *
+ *  Note ERC-20, Base, and Polygon all share the EVM 0x[40 hex]
+ *  shape — the network picker, not this validator, is what
+ *  disambiguates them at form time. */
+export function isValidUsdcAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	// EVM (ERC-20, Base, Polygon): 0x + 40 hex
+	if (/^0x[a-fA-F0-9]{40}$/.test(s)) return true;
+	// SPL: base58 32-44 chars
+	if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return true;
+	return false;
+}
+
+/** Validate a USDC txid shape across all supported networks.
+ *  Per-network validation lives in `validateUsdcTxid` in
+ *  `$lib/assets/networks`. */
+export function isValidUsdcTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	// EVM (ERC-20, Base, Polygon): 0x + 64 hex, or 64 hex without prefix
+	if (/^(0x)?[a-fA-F0-9]{64}$/.test(s)) return true;
+	// SPL: base58 64-90 chars (Solana signatures are typically 87-88)
+	if (/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(s)) return true;
 	return false;
 }
 
@@ -651,6 +767,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'xmr') return isValidXmrAddress(addr);
 	if (method === 'blurt') return isValidBlurtAccount(addr);
 	if (method === 'usdt') return isValidUsdtAddress(addr);
+	if (method === 'usdc') return isValidUsdcAddress(addr);
 	if (method === 'bch') return isValidBchAddress(addr);
 	if (method === 'ltc') return isValidLtcAddress(addr);
 	if (method === 'dash') return isValidDashAddress(addr);
@@ -664,6 +781,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'xmr') return XMR_TXID_RE.test(txid);
 	if (method === 'blurt') return BLURT_TXID_RE.test(txid);
 	if (method === 'usdt') return isValidUsdtTxid(txid);
+	if (method === 'usdc') return isValidUsdcTxid(txid);
 	if (method === 'bch') return isValidBchTxid(txid);
 	if (method === 'ltc') return isValidLtcTxid(txid);
 	if (method === 'dash') return isValidDashTxid(txid);
@@ -687,6 +805,7 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'xmr' &&
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
+		p.method !== 'usdc' &&
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
 		p.method !== 'dash'
@@ -800,6 +919,7 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'xmr' &&
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
+		p.method !== 'usdc' &&
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
 		p.method !== 'dash'
@@ -904,6 +1024,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'xmr' &&
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
+			o.method !== 'usdc' &&
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
 			o.method !== 'dash'
@@ -929,6 +1050,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'xmr' &&
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
+			o.method !== 'usdc' &&
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
 			o.method !== 'dash'
@@ -996,16 +1118,18 @@ function optionalFieldsAddress(
 	}
 	// cp26 inline-fix — pre-existing cp3 latent bug: USDT
 	// `network` field was being dropped on the wire.  Decoder
-	// now reads it back when present.  USDT-only by design;
+	// now reads it back when present.  Multi-network assets
+	// (USDT + USDC) ride a `network` discriminator on the wire;
 	// other methods carrying a `network` field is malformed.
 	let network: string | undefined;
 	if (Object.hasOwn(o, 'network')) {
 		if (typeof o.network !== 'string' || o.network.length === 0) return null;
-		// USDT must have one of the 4 supported networks; other
-		// methods must not carry the field.  Defense in depth:
-		// the wire format permits the field on any method for
-		// forward-compat, but we reject network values that
-		// don't make sense for the method-asset pairing.
+		// USDT/USDC must have one of their supported networks;
+		// other methods must not carry the field.  Defense in
+		// depth: the wire format permits the field on any
+		// method for forward-compat, but we reject network
+		// values that don't make sense for the method-asset
+		// pairing.
 		if (base.method === 'usdt') {
 			if (
 				o.network !== 'erc20' &&
@@ -1016,9 +1140,22 @@ function optionalFieldsAddress(
 				return null;
 			}
 			network = o.network;
+		} else if (base.method === 'usdc') {
+			// Part 122 cp30: USDC's four shipped networks.  No
+			// TRC-20 (Circle doesn't issue on Tron); no BEP-20
+			// in this initial set.
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'spl' &&
+				o.network !== 'base' &&
+				o.network !== 'polygon'
+			) {
+				return null;
+			}
+			network = o.network;
 		} else {
-			// Non-USDT method with a network field — refuse the
-			// payload rather than silently drop, since a wallet
+			// Single-network method with a network field — refuse
+			// the payload rather than silently drop, since a wallet
 			// might key off it incorrectly.
 			return null;
 		}
@@ -1072,8 +1209,9 @@ function optionalFieldsFundsSent(
 		memo = o.memo;
 	}
 	// cp26 inline-fix — symmetric to optionalFieldsAddress.
-	// USDT FundsSent messages now correctly carry the network
-	// field through decode.
+	// Multi-network assets (USDT + USDC) ride a `network`
+	// discriminator on the wire that needs to round-trip through
+	// FundsSent payloads too.
 	let network: string | undefined;
 	if (Object.hasOwn(o, 'network')) {
 		if (typeof o.network !== 'string' || o.network.length === 0) return null;
@@ -1083,6 +1221,16 @@ function optionalFieldsFundsSent(
 				o.network !== 'trc20' &&
 				o.network !== 'spl' &&
 				o.network !== 'bep20'
+			) {
+				return null;
+			}
+			network = o.network;
+		} else if (base.method === 'usdc') {
+			if (
+				o.network !== 'erc20' &&
+				o.network !== 'spl' &&
+				o.network !== 'base' &&
+				o.network !== 'polygon'
 			) {
 				return null;
 			}

@@ -43,7 +43,11 @@ import {
 	USDT_NETWORK_METADATA,
 	bundledUsdtExplorerUrl,
 	validateUsdtTxid,
-	type UsdtNetwork
+	type UsdtNetwork,
+	USDC_NETWORK_METADATA,
+	bundledUsdcExplorerUrl,
+	validateUsdcTxid,
+	type UsdcNetwork
 } from '$lib/assets/networks';
 
 export {
@@ -164,6 +168,27 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 
 	// Fall back to bundled default.
 	return bundledUsdtExplorerUrl(network, txid);
+}
+
+/** Builds the per-network USDC explorer URL.  Same shape as
+ *  `usdtExplorerUrl` — operator override consulted first, bundled
+ *  default from `lib/assets/networks.ts` if absent.  USDC-specific
+ *  path because USDC is multi-network (Part 122 cp30) — the
+ *  generic `externalExplorerUrl(asset, txid)` is for SINGLE-
+ *  network external assets only. */
+export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | null {
+	if (typeof txid !== 'string') return null;
+	if (!validateUsdcTxid(network, txid)) return null;
+
+	const usdcOverrides = getInstanceSnapshot().chat_link_urls.usdc;
+	const override = usdcOverrides ? usdcOverrides[network] : null;
+
+	if (override) {
+		const normalized = network === 'spl' ? txid : txid.toLowerCase();
+		return substituteTxidIntoTemplate(override, normalized);
+	}
+
+	return bundledUsdcExplorerUrl(network, txid);
 }
 
 /** Builds the Morphit explorer URL for a Blurt account.

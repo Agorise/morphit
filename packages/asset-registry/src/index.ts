@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'BCH', 'LTC', 'DASH'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'BCH', 'LTC', 'DASH'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -322,6 +322,69 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
 		addressShape:
 			/^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+	}),
+	Object.freeze({
+		ticker: 'USDC',
+		// Circle's USDC uses 6 decimals on EVERY supported network
+		// (Ethereum ERC-20, Solana SPL, Base, Polygon PoS).
+		// Confirmed via Circle's contract registry: each chain's
+		// USDC token contract exposes decimals()=6.  Matches USDT's
+		// precision so the form-level amount handling is identical
+		// between the two stablecoins.
+		decimals: 6,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: USDC is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
+		// USDT/BCH/LTC/DASH as Category-B trade-only assets.
+		canPayListingFee: false,
+		// Networks shipped at launch.  Native USDC only — bridged
+		// variants (USDC.e on Avalanche / Optimism / Arbitrum,
+		// USDbC, etc.) are deliberately excluded per the same
+		// design decision as USDT: fewer footguns, cleaner mental
+		// model.  Notably NO TRC-20: Circle has formally distanced
+		// from Tron, and BEP-20 is excluded from this initial set
+		// per the operator's canonical network list (the four chain-
+		// specific block-explorer URLs supplied at addition time);
+		// see ADR-0028 for the full network-set rationale.  If a
+		// future network gains material P2P-trading adoption, add
+		// it here AND update apps/web/src/lib/assets/networks.ts
+		// with the matching addressShape + txidShape + bundled
+		// explorer template.
+		supportedNetworks: ['erc20', 'spl', 'base', 'polygon'],
+		// `null` forces the user to pick the network explicitly
+		// every trade.  USDC is multi-network with INCOMPATIBLE
+		// address formats across the SPL chain — sending USDC on
+		// Solana to an Ethereum-style 0x address loses funds
+		// permanently.  Note that ERC-20 + Base + Polygon SHARE
+		// the EVM 0x address format, so an address looks
+		// indistinguishable between those three at the format
+		// level — the network picker exists precisely to disambiguate
+		// which chain the sender's wallet should broadcast on.
+		defaultNetwork: null,
+		// Renders the privacy-warning chip in the post-order form
+		// and the address-share modal.  Same "centralized
+		// stablecoin" warning shape as USDT — Circle can freeze
+		// addresses on regulatory request just like Tether can.
+		// Text lives in i18n (assets.privacy_warnings.usdc_centralized).
+		privacyWarningKey: 'usdc_centralized',
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'usdc'
+		},
+		// Combined regex matching a VALID address on ANY of the
+		// supported networks.  Per-network validation happens in
+		// apps/web/src/lib/assets/networks.ts via per-network
+		// regexes — this combined one is just the form-level
+		// "is this even plausibly an address" check.
+		//   - ERC-20 + Base + Polygon: 0x + 40 hex chars (all EVM)
+		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
+		// Note no Tron-style T-prefix branch since USDC isn't
+		// issued on Tron by Circle.
+		addressShape:
+			/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
 	}),
 	Object.freeze({
 		ticker: 'BCH',

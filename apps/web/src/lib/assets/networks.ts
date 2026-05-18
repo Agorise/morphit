@@ -1,8 +1,8 @@
 /**
- * Per-network metadata for multi-network assets.  Today only
- * USDT exercises this surface (USDT is the same asset on
- * ERC-20, TRC-20, SPL, BEP-20 — same ticker, different
- * underlying chains).
+ * Per-network metadata for multi-network assets.  Today USDT
+ * and USDC both exercise this surface (each is the same asset
+ * on multiple underlying chains — same ticker, different
+ * chains, INCOMPATIBLE address formats across chain families).
  *
  * Why a separate module:
  *   - The canonical `@morphit/asset-registry` lives in a
@@ -11,18 +11,26 @@
  *     metadata (explorer URLs, fee hints, display copy) is
  *     frontend-only concern.
  *   - Operators override explorer URLs at runtime via the
- *     instance store's `chat_link_urls.usdt` sub-map; the
- *     bundled defaults in this file are the fallback.
+ *     instance store's `chat_link_urls.{usdt,usdc}` sub-maps;
+ *     the bundled defaults in this file are the fallback.
  *
- * Adding a new USDT network is a single-entry addition to
- * USDT_NETWORKS plus a matching i18n key triplet
- * (assets.usdt.network.<key>.{displayName,feeHint,warning}).
+ * Adding a new USDT or USDC network is a single-entry addition
+ * to {USDT,USDC}_NETWORKS plus a matching i18n key triplet
+ * (assets.{usdt,usdc}.network.<key>.{displayName,feeHint,warning}).
  *
- * Per Ken's design decision (Part 121 USDT step):
- *   - NATIVE USDT ONLY on each network.  Bridged versions
- *     (USDT.e on Avalanche L2, etc.) are excluded.
- *   - Omni Layer USDT is excluded.  Tether deprecated it;
- *     we shouldn't endorse it as a choice.
+ * Per Ken's design decisions:
+ *   - USDT (Part 121): NATIVE USDT ONLY on each network.
+ *     Bridged versions (USDT.e on Avalanche L2, etc.) are
+ *     excluded.  Omni Layer USDT is excluded — Tether deprecated
+ *     it.
+ *   - USDC (Part 122 cp30): NATIVE USDC ONLY on each network.
+ *     Bridged versions (USDC.e on Avalanche, USDbC, etc.) are
+ *     excluded for the same footgun-minimization reason.  The
+ *     four shipped networks (ERC-20, SPL, Base, Polygon) follow
+ *     the operator's canonical list at the time of addition.
+ *     Notably no TRC-20 (Circle has formally distanced from
+ *     Tron) and no BEP-20 (excluded from the initial set; see
+ *     ADR-0028 for the rationale and the non-breaking add path).
  */
 
 /** The set of networks we ship USDT support for at launch. */
@@ -150,6 +158,150 @@ export function validateUsdtTxid(network: UsdtNetwork, txid: string): boolean {
 export function bundledUsdtExplorerUrl(network: UsdtNetwork, txid: string): string | null {
 	if (!validateUsdtTxid(network, txid)) return null;
 	const md = getUsdtNetworkMetadata(network);
+	// Normalize to lowercase for hex-encoded txids; SPL
+	// (base58) is case-sensitive so we preserve as-is for SPL.
+	const normalized = network === 'spl' ? txid : txid.toLowerCase();
+	return md.bundledExplorerUrl.replace('{txid}', normalized);
+}
+
+// ──────────────────────────────────────────────────────────────
+// USDC (added Part 122 cp30)
+// ──────────────────────────────────────────────────────────────
+
+/** The set of networks we ship USDC support for at launch.
+ *  Four chains, drawn from the operator's canonical block-
+ *  explorer survey: Ethereum mainnet (ERC-20), Solana (SPL),
+ *  Base (Coinbase L2), and Polygon PoS.  No TRC-20 (Circle
+ *  doesn't issue on Tron) and no BEP-20 in this initial set
+ *  (file as REVISIT to add non-breaking later if demand
+ *  materializes). */
+export const USDC_NETWORKS = ['erc20', 'spl', 'base', 'polygon'] as const;
+
+export type UsdcNetwork = (typeof USDC_NETWORKS)[number];
+
+/** Per-network metadata for USDC.  Identical shape to
+ *  UsdtNetworkMetadata — kept as a separate interface for
+ *  type-discrimination clarity at call sites. */
+export interface UsdcNetworkMetadata {
+	/** Wire-format network identifier (lowercase, used in chain
+	 *  payloads and DB columns). */
+	readonly key: UsdcNetwork;
+	/** i18n key for the display name (e.g. "Ethereum (ERC-20)"). */
+	readonly displayNameKey: string;
+	/** i18n key for the one-line fee hint (e.g. "fee ~$5–20,
+	 *  slow"). */
+	readonly feeHintKey: string;
+	/** Per-network address shape regex.  STRICTER than the
+	 *  canonical registry's combined regex.  Note that ERC-20,
+	 *  Base, and Polygon all share the EVM `0x[40 hex]` shape —
+	 *  the network picker is what disambiguates them at form
+	 *  time. */
+	readonly addressShape: RegExp;
+	/** Per-network txid shape regex. */
+	readonly txidShape: RegExp;
+	/** Bundled default explorer URL template.  `{txid}` is
+	 *  substituted with the lowercased transaction ID (or the
+	 *  preserved-case base58 txid for SPL).  Operators can
+	 *  override via the instance store's
+	 *  `chat_link_urls.usdc.<key>` field at runtime. */
+	readonly bundledExplorerUrl: string;
+}
+
+export const USDC_NETWORK_METADATA: Readonly<Record<UsdcNetwork, UsdcNetworkMetadata>> =
+	Object.freeze({
+		erc20: Object.freeze({
+			key: 'erc20',
+			displayNameKey: 'assets.usdc.network.erc20.displayName',
+			feeHintKey: 'assets.usdc.network.erc20.feeHint',
+			// Ethereum address: 0x + 40 hex chars
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Ethereum txid: 0x + 64 hex chars (canonical),
+			// or 64 hex without 0x (some wallets strip it)
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Etherscan — the canonical Ethereum explorer.  Per
+			// Ken's USDC URL list 2026-05-17.
+			bundledExplorerUrl: 'https://etherscan.io/tx/{txid}'
+		}),
+		spl: Object.freeze({
+			key: 'spl',
+			displayNameKey: 'assets.usdc.network.spl.displayName',
+			feeHintKey: 'assets.usdc.network.spl.feeHint',
+			// Solana pubkey: base58, 32-44 chars (no prefix).
+			// Excludes the base58 ambiguous chars 0OIl.
+			addressShape: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
+			// Solana transaction signature: base58, 64-90 chars
+			// (typically 87-88).  Case-sensitive — Solscan won't
+			// resolve a lowercased copy.
+			txidShape: /^[1-9A-HJ-NP-Za-km-z]{64,90}$/,
+			// Solscan — most widely-used Solana explorer.
+			// Per Ken's URL list 2026-05-17.
+			bundledExplorerUrl: 'https://solscan.io/tx/{txid}'
+		}),
+		base: Object.freeze({
+			key: 'base',
+			displayNameKey: 'assets.usdc.network.base.displayName',
+			feeHintKey: 'assets.usdc.network.base.feeHint',
+			// Base address: 0x + 40 hex chars (EVM).  IDENTICAL
+			// shape to ERC-20 and Polygon — the network picker
+			// is what disambiguates.
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Base txid: 0x + 64 hex (EVM).
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Basescan — the canonical Base explorer.  Per
+			// Ken's URL list 2026-05-17.
+			bundledExplorerUrl: 'https://basescan.org/tx/{txid}'
+		}),
+		polygon: Object.freeze({
+			key: 'polygon',
+			displayNameKey: 'assets.usdc.network.polygon.displayName',
+			feeHintKey: 'assets.usdc.network.polygon.feeHint',
+			// Polygon address: 0x + 40 hex chars (EVM-compatible).
+			// IDENTICAL shape to ERC-20 and Base.
+			addressShape: /^0x[a-fA-F0-9]{40}$/,
+			// Polygon txid: 0x + 64 hex (EVM).
+			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
+			// Polygonscan — the canonical Polygon explorer.
+			// Per Ken's URL list 2026-05-17.
+			bundledExplorerUrl: 'https://polygonscan.com/tx/{txid}'
+		})
+	});
+
+/** Type guard: is `s` a registered USDC network key? */
+export function isUsdcNetwork(s: unknown): s is UsdcNetwork {
+	return typeof s === 'string' && (USDC_NETWORKS as readonly string[]).includes(s);
+}
+
+/** Look up the metadata for a USDC network.  Throws on miss —
+ *  callers should pass a UsdcNetwork (type-checked). */
+export function getUsdcNetworkMetadata(network: UsdcNetwork): UsdcNetworkMetadata {
+	const md = USDC_NETWORK_METADATA[network];
+	if (md === undefined) {
+		throw new Error(
+			`networks.ts: USDC network '${network}' is not registered.  Add it to USDC_NETWORK_METADATA.`
+		);
+	}
+	return md;
+}
+
+/** Validate a USDC address against the specific network's
+ *  regex.  Returns true if shape-valid, false otherwise. */
+export function validateUsdcAddress(network: UsdcNetwork, address: string): boolean {
+	if (typeof address !== 'string') return false;
+	return getUsdcNetworkMetadata(network).addressShape.test(address);
+}
+
+/** Validate a USDC txid against the specific network's regex. */
+export function validateUsdcTxid(network: UsdcNetwork, txid: string): boolean {
+	if (typeof txid !== 'string') return false;
+	return getUsdcNetworkMetadata(network).txidShape.test(txid);
+}
+
+/** Build the bundled-default explorer URL for a USDC
+ *  transaction.  Operators override per-instance via the
+ *  instance store; this is the fallback. */
+export function bundledUsdcExplorerUrl(network: UsdcNetwork, txid: string): string | null {
+	if (!validateUsdcTxid(network, txid)) return null;
+	const md = getUsdcNetworkMetadata(network);
 	// Normalize to lowercase for hex-encoded txids; SPL
 	// (base58) is case-sensitive so we preserve as-is for SPL.
 	const normalized = network === 'spl' ? txid : txid.toLowerCase();

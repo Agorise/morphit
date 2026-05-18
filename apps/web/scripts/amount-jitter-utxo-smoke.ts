@@ -3,16 +3,24 @@
  * amount-jitter-utxo-smoke.
  *
  * Part 122 cp26 sentinel for the transparent-chain amount-jitter
- * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher).
+ * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher);
+ * extended in cp30 to cover the stablecoin variant
+ * (jitterStablecoinAmount via jitterAmountForAsset routing).
  *
  * The XMR jitter is already covered by older payload smokes; this
- * sentinel covers the cp26 additions:
- *  - jitterUtxoAmount: 8-decimal precision (BTC/BCH/LTC), 0-999
- *    satoshi jitter range, round-UP only
+ * sentinel covers:
+ *  - jitterUtxoAmount: 8-decimal precision (BTC/BCH/LTC/DASH),
+ *    0-999 satoshi jitter range, round-UP only
  *  - jitterBlurtAmount: 3-decimal precision, 0-99 milliblurt
  *    jitter range, round-UP only
- *  - jitterAmountForAsset dispatcher: per-asset routing
- *  - USDT pass-through (no jitter)
+ *  - jitterStablecoinAmount (cp30, via dispatcher): 6-decimal
+ *    precision (USDT/USDC), 0-999 micro-unit jitter range,
+ *    round-UP only.  See ADR-0028 Decision 2 — the cp26
+ *    USDT-pass-through behaviour was reversed in cp30 because
+ *    the amount-correlation linkability threat is independent
+ *    of the centralization concern.
+ *  - jitterAmountForAsset dispatcher: per-asset routing across
+ *    all 8 tradable assets
  *  - input validation throws on garbage
  */
 
@@ -123,17 +131,47 @@ console.log('\n── amount-jitter-utxo smoke ───────────
 	const ltc = jitterAmountForAsset('ltc', '0.5');
 	if (/^\d+\.\d{8}$/.test(ltc)) pass('dispatcher routes LTC to 8-decimal');
 	else fail('dispatcher routes LTC to 8-decimal', `got "${ltc}"`);
+	// DASH: 8-decimal (cp27)
+	const dash = jitterAmountForAsset('dash', '0.5');
+	if (/^\d+\.\d{8}$/.test(dash)) pass('dispatcher routes DASH to 8-decimal');
+	else fail('dispatcher routes DASH to 8-decimal', `got "${dash}"`);
 	// BLURT: 3-decimal
 	const blurt = jitterAmountForAsset('blurt', '10');
 	if (/^\d+\.\d{3}$/.test(blurt)) pass('dispatcher routes BLURT to 3-decimal');
 	else fail('dispatcher routes BLURT to 3-decimal', `got "${blurt}"`);
+	// USDT: 6-decimal (cp30 — reversed the cp26 USDT-no-jitter
+	// decision; see ADR-0028 Decision 2).
+	const usdt = jitterAmountForAsset('usdt', '100');
+	if (/^\d+\.\d{6}$/.test(usdt)) pass('dispatcher routes USDT to 6-decimal (cp30)');
+	else fail('dispatcher routes USDT to 6-decimal (cp30)', `got "${usdt}"`);
+	// USDC: 6-decimal (cp30 — new asset, stablecoin jitter)
+	const usdc = jitterAmountForAsset('usdc', '100');
+	if (/^\d+\.\d{6}$/.test(usdc)) pass('dispatcher routes USDC to 6-decimal (cp30)');
+	else fail('dispatcher routes USDC to 6-decimal (cp30)', `got "${usdc}"`);
 }
 
-// ── Scenario 7 — USDT passes through unchanged (no jitter) ───
+// ── Scenario 7 — stablecoin jitter range + round-up (cp30) ───
+// Per ADR-0028 Decision 2: jitter for stablecoins is 0–999
+// micro-units (6-decimal precision), round-UP only — same
+// invariants as the UTXO jitter, just at a different scale.
 {
-	const out = jitterAmountForAsset('usdt', '100');
-	if (out === '100') pass('USDT pass-through (no jitter)');
-	else fail('USDT pass-through (no jitter)', `got "${out}"`);
+	for (const asset of ['usdt', 'usdc'] as const) {
+		const baseMicro = BigInt(100) * 1_000_000n; // 100.000000
+		let underpayment = 0;
+		let maxJitter = 0n;
+		for (let i = 0; i < 1000; i++) {
+			const out = jitterAmountForAsset(asset, '100');
+			const [w, f = ''] = out.split('.');
+			const micro = BigInt(w) * 1_000_000n + BigInt((f + '000000').slice(0, 6));
+			if (micro < baseMicro) underpayment++;
+			const diff = micro - baseMicro;
+			if (diff > maxJitter) maxJitter = diff;
+		}
+		if (underpayment === 0) pass(`jitterAmountForAsset('${asset}') never rounds down`);
+		else fail(`jitterAmountForAsset('${asset}') never rounds down`, `${underpayment} underpayments out of 1000`);
+		if (maxJitter < 1000n) pass(`jitterAmountForAsset('${asset}') jitter < 1000 micro-units (saw max ${maxJitter})`);
+		else fail(`jitterAmountForAsset('${asset}') jitter < 1000 micro-units`, `saw ${maxJitter}`);
+	}
 }
 
 const total = passed + failed;

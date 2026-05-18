@@ -8033,11 +8033,11 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH) and multi-network
+single-network trade-only assets (BCH, LTC, DASH) and multi-network trade-only assets (USDT, USDC) and multi-network
 ones (USDT).
 
 ### How to set this (two paths)
@@ -8102,15 +8102,17 @@ MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
 # Refuse three or more
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
 
-# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/LTC/DASH)
+# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/USDC/LTC/DASH)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
 # Refuse all three Bitcoin-fork variants (BTC + XMR + BLURT only,
 # possibly with USDT)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH"
+# Refuse both stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH only)
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC"
 
 # Refuse everything that isn't BLURT + XMR + BTC
-MORPHIT_INDEXER_DISABLED_ASSETS="USDT,BCH,LTC,DASH"
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,BCH,LTC,DASH"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -8348,7 +8350,7 @@ has no effect on your instance.
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH all
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH all single-network; USDT and USDC multi-network; all
 write NULL).
 USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`.
 

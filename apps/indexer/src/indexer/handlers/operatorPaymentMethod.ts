@@ -57,6 +57,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'pay_blurt',
 	'pay_xmr',
 	'pay_usdt',
+	'pay_usdc',
 	'pay_bch',
 	'pay_ltc',
 	'pay_dash',

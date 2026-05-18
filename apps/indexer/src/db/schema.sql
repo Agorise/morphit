@@ -2132,27 +2132,34 @@ COMMENT ON TABLE one_way_pile_on IS
 -- ─────────────────────────────────────────────────────────────────
 --
 -- Adds `asset_network` column to `orders` for multi-network
--- tradable assets.  USDT-only at launch (ERC-20/TRC-20/SPL/BEP-20);
--- single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH) write NULL.
+-- tradable assets.  Originally USDT-only at Part 121 launch
+-- (ERC-20/TRC-20/SPL/BEP-20); Part 122 cp30 added USDC as a
+-- second multi-network asset (ERC-20/SPL/Base/Polygon).
+-- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH) write
+-- NULL.
 --
 -- Pre-Part-121 rows stay NULL on this column.  Validate-time
 -- gates in the order handler:
 --   - asset='USDT' MUST have asset_network non-null and in
 --     ('erc20', 'trc20', 'spl', 'bep20')
---   - asset!='USDT' MUST have asset_network NULL
+--   - asset='USDC' MUST have asset_network non-null and in
+--     ('erc20', 'spl', 'base', 'polygon')   -- cp30 added
+--   - any other asset MUST have asset_network NULL
 --
 -- The combined constraint mirrors the registry rule:
--- `supportedNetworks` is a singleton for BTC/XMR/BLURT/BCH/LTC/DASH and a
--- 4-element list for USDT.  The wire-format-frozen `fee_method`
--- enum stays at exactly `'blurt'|'waived_first_buy'|'btc'|'xmr'`
--- (memory #23) — `asset_network` is a SEPARATE column from
--- fee_method and never conflates with it.
+-- `supportedNetworks` is a singleton for BTC/XMR/BLURT/BCH/LTC/DASH;
+-- a 4-element list for USDT (erc20/trc20/spl/bep20); a 4-element
+-- list for USDC (erc20/spl/base/polygon).  The wire-format-frozen
+-- `fee_method` enum stays at exactly
+-- `'blurt'|'waived_first_buy'|'btc'|'xmr'` (memory #23) —
+-- `asset_network` is a SEPARATE column from fee_method and never
+-- conflates with it.
 --
 -- Index: per-network filtering on the orderbook query path
--- (`asset = 'USDT' AND asset_network = 'trc20'` is the
--- expected hot query).  No standalone idx on asset_network
--- because asset is always specified before network in any
--- query the frontend issues.
+-- (`asset = 'USDT' AND asset_network = 'trc20'` and `asset =
+-- 'USDC' AND asset_network = 'base'` are both expected hot
+-- queries).  No standalone idx on asset_network because asset is
+-- always specified before network in any query the frontend issues.
 
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS asset_network TEXT;
@@ -2162,11 +2169,15 @@ CREATE INDEX IF NOT EXISTS idx_orders_asset_asset_network
     WHERE asset_network IS NOT NULL;
 
 COMMENT ON COLUMN orders.asset_network IS
-    'Part 121: sub-network identifier for multi-network assets '
-    '(USDT today).  One of ''erc20''/''trc20''/''spl''/''bep20'' '
-    'when asset=''USDT''; NULL otherwise.  Pinned at post time '
-    'so cross-network sends are impossible — buyer sees the '
-    'network on the order row before agreeing to trade.';
+    'Part 121 / cp30: sub-network identifier for multi-network '
+    'assets (USDT and USDC today).  For USDT: one of '
+    '''erc20''/''trc20''/''spl''/''bep20''.  For USDC: one of '
+    '''erc20''/''spl''/''base''/''polygon''.  NULL for every '
+    'other asset.  Pinned at post time so cross-network sends '
+    'are impossible — buyer sees the network on the order row '
+    'before agreeing to trade.  Note that USDC ERC-20, Base, and '
+    'Polygon addresses all share the EVM 0x[40-hex] format; this '
+    'column is the only thing telling the sender which chain.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- v33 / Part 122 cp13 — Web Push subscription storage + delivery queue

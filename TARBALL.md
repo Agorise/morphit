@@ -1,3 +1,99 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30 — USDC addition as the second multi-network Category-B trade-only asset, ADR-0028 capturing 4 design decisions including the BEP-20-USDC decline and the cp26-USDT-no-jitter reversal, full UI dispatch across 5 components + 10 locales, mediakit rebuilt, brag list extended with new entry #280 and the amount-jitter enumeration update on #29).
+
+CP30 SCOPE: USDC (USD Coin) end-to-end across 4 networks (ERC-20, SPL, Base, Polygon) — explicitly NOT including BEP-20 (Binance-Peg variant, 18-decimal divergence) or TRC-20 (no native Circle issuance).  Includes the cp26 USDT-no-jitter decision reversal: jitterStablecoinAmount(base) now routes BOTH USDT and USDC through 6-decimal/999-microunit jitter because the cp26 rationale ("centralization is the issue, not amount-correlation") was incomplete — both threats are real and independent.
+
+CP30 SHIPPED INVENTORY:
+
+**Code (registry + payload + explorer + store):**
+- packages/asset-registry/src/index.ts — USDC AssetEntry, ASSET_TICKERS=8 (BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH)
+- apps/web/src/lib/assets/networks.ts — USDC_NETWORKS, USDC_NETWORK_METADATA (4 entries), isUsdcNetwork, getUsdcNetworkMetadata, validateUsdcAddress, validateUsdcTxid, bundledUsdcExplorerUrl
+- apps/web/src/lib/assets/registry.ts — validateUsdc + USDC AssetMetadata (accentClass='text-blue-500', decimals=6)
+- apps/web/src/lib/chat/payload.ts — 'usdc' widened into ChatAssetTicker; isValidUsdcAddress + isValidUsdcTxid + jitterStablecoinAmount(base) added; jitterAmountForAsset dispatcher routes USDT+USDC through stablecoin jitter (reverses cp26 pass-through)
+- apps/web/src/lib/explorer/urls.ts — usdcExplorerUrl(network, txid)
+- apps/web/src/lib/stores/instance.ts — chat_link_urls.usdc sub-map + FALLBACK + fetch normalization with defensive ?? fallback
+- apps/web/src/lib/payments/registry.ts — pay_usdc entry
+- apps/web/src/lib/prices/providers/coingecko.ts — 'usd-coin' Coingecko ID
+- apps/web/src/lib/prices/providers/fallback.ts — $1.00 fallback
+
+**Indexer + matrix-bot + ops-cli:**
+- apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts — pay_usdc in RESERVED_CANONICAL_KEYS
+- apps/indexer/src/indexer/handlers/order.ts — asset_network validation gate for USDC (4 networks); ValidatedOrder field doc updated
+- apps/indexer/src/db/schema.sql — v32 comment block updated (USDT + USDC asset_network sets + EVM-ambiguity warning)
+- apps/matrix-bot/scripts/api-response-shape-smoke.ts — usdc sub-schema in ChatLinkUrlsSchema
+- apps/ops-cli/src/init/steps.ts — CATEGORY_B_DESCRIPTIONS USDC entry (notes Circle centralization, no BEP-20, no TRC-20); disabled-assets explanation updated
+
+**UI (full dispatch):**
+- apps/web/src/lib/components/UsdcNetworkPicker.svelte (NEW, mirrors UsdtNetworkPicker)
+- apps/web/static/icons/icon-usdc.svg (NEW, Circle blue #2775ca)
+- apps/web/static/icons/networks/icon-network-base.svg (NEW)
+- apps/web/static/icons/networks/icon-network-polygon.svg (NEW)
+- apps/web/src/lib/components/AddressShareModal.svelte — USDC tab + state + picker block + placeholder dispatch + invalid-msg dispatch + payload wire-format spread + selectMethod reset
+- apps/web/src/lib/components/FundsSentModal.svelte — initialUsdcNetwork prop + USDC state + pinned-mode read-only confirmation card + tab + picker block + payload spread + txid validation
+- apps/web/src/lib/components/ChatMessage.svelte — onMarkSent union widened to 'usdc'; explorer URL USDC branch; USDC pill header with Circle-blue chip; usdcNetworkValid derived; USDC cross-network warning aside; usdcFundsNetworkValid for funds-sent pill; USDC funds-sent pill
+- apps/web/src/lib/components/ConversationView.svelte — markSentArgs widening; initialUsdcNetwork prop (method-guarded); isUsdcNetwork import
+- apps/web/src/routes/[lang]/post/+page.svelte — usdcNetwork state + step1Done extended + USDC tooltip + privacy chip + UsdcNetworkPicker block + asset_network on order submission + tab-reset
+- apps/web/src/routes/[lang]/cheat-sheet/+page.svelte — USDC row after USDT
+- /[lang]/privacy/usdc auto-renders via registry-driven dynamic route (canBeTraded:true triggers route)
+
+**i18n × 10 locales** (parity 2,673×10=26,730 → 2,674×10=26,740):
+- Multi-batch additions: 21 asset/privacy/payment USDC keys (privacy_warnings.usdc_centralized, 4 networks × {displayName,feeHint}, picker {label,requiredHint,crossNetworkWarning}, address_share.warning, order_row.hint, price_subline.{live,unavail}, privacy guide one_line+intro+caveats+meta_description, post_order.asset_explainer)
+- monero_amount_jitter FAQ rewritten × 10 locales (USDT no longer excluded; USDC added)
+- 5 FAQ asset enumerations × 10 locales with native conjunctions (what_is_morphit, trade_goods_services, blurt_benefits, welcome_bonus, where_to_buy_blurt)
+- 4 chat.address USDC keys × 10 locales (method_usdc, address_placeholder_usdc, address_invalid_usdc, pill_method_usdc)
+- 2 chat.funds_sent USDC keys × 10 locales (txid_invalid_usdc, pill_title_usdc)
+- cheat_sheet.section_assets.usdc × 10 locales
+- privacy.index_intro × 10 locales (USDC append with native conjunctions)
+- Native EN/ES/FR/DE; EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK per cp27 precedent (filed REVISIT Z2 for cp30 native-QA upgrade)
+
+**Docs + ADR + brag list:**
+- docs/adr/0028-usdc-multi-network-trade-only-addition.md (NEW) — captures 4 decisions: 4-network not 5; jitter reversal; BEP-20-USDC decline rationale (Binance-Peg + 18-decimal divergence); operator-stance freedom
+- docs/RUN-A-MORPHIT-NODE.md — trade-only-assets §1895-1955 rewritten with USDC env-var examples (USDT,USDC privacy-pure option, accept-all default updated to include USDC)
+- ops/env/indexer.env.example — USDC-aware comments; per-network chat-link override section references both ADR-0023 (USDT) and ADR-0028 (USDC); MORPHIT_INDEXER_DISABLED_ASSETS examples extended
+- docs/API.md — asset filter + asset_network rows USDC-aware; trade_count_by_asset examples extended
+- docs/GRANDMA-FRIENDLY-INVESTIGATION.md — 5 asset enumerations updated; last-updated marker bumped to cp30
+- apps/web/static/llms.txt + llms-full.txt — asset enumeration headers updated; llms-full regenerated (110 entries, 166587 chars)
+- scripts/build-llms-full.mjs — header asset enumeration extended (genertor-first per cp28 LL #13)
+- MORPHIT-BRAG-LIST.md — #29 amount-jitter extended with stablecoins; #134 ADR count 26→27 range 0001-0028; footer ADR range 0027→0028; final count 279→280; NEW #280 "USD Coin (USDC) peer-to-peer across four networks" with full Circle/BEP-20-decline/jitter rationale
+- apps/web/static/morphit-mediakit.zip — rebuilt via bash scripts/build-mediakit.sh (40559 bytes, 6 files) per Memory #4
+
+**Smokes:**
+- packages/asset-registry/scripts/usdc-trade-only-smoke.ts (NEW, 14 scenarios — mirrors usdt-trade-only with BEP-20-decline sentinel + TRC-20-decline sentinel + decimals=6 sentinel + 4-network supportedNetworks check)
+- Registered in scripts/run-smokes.sh after usdt-trade-only-smoke
+- apps/web/scripts/wiring-completeness-smoke.ts — new cp30-usdc-p2p CHECK row anchored on `ticker: 'USDC'`
+- apps/web/scripts/amount-jitter-utxo-smoke.ts — module-doc updated to cover cp30 stablecoin jitter; Scenario 6 dispatcher routes USDT+USDC to 6-decimal AND DASH 6-decimal; Scenario 7 replaced cp26 "USDT pass-through" with new stablecoin jitter range + round-up test for both USDT and USDC
+
+**Schema migration:** N/A (orders.asset_network column reused from Part 121 cp3; only comments updated).
+
+CP30 DESIGN DECISIONS RECORDED IN ADR-0028:
+1. **Network set = 4, not 5.** BEP-20 USDC DECLINED.  Web-verified (bscscan + exponential.fi + coinwatch.finance) that BSC USDC `0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d` is "Binance-Peg" — Binance-custodial wrapper, NOT Circle-native; CoinDesk distinguishes as separate BPUSDC ticker.  Adopting it stacks 2 custodians (Binance + Circle).  PLUS 18-decimal precision vs 6-decimal on every other USDC network — wire-format footgun (Morphit's wire-format amount strings carry no per-network decimal metadata).  TRC-20 similarly declined (Circle doesn't issue natively on Tron).
+
+2. **Amount-jitter for stablecoins: ADOPTED.**  Reversed cp26 USDT-no-jitter.  Original cp26 rationale ("centralization is the issue, not amount-correlation") correctly observed jitter doesn't address Circle/Tether freezes but did NOT refute the SEPARATE amount-correlation linkability threat.  Both threats real and independent.  jitterStablecoinAmount(base) ships at 6-decimal precision, 0-999 microunit range (~$0.001 max cost).  jitterAmountForAsset routes both USDT and USDC through it.
+
+3. **USDC asset shape:** Category-B trade-only.  canPayListingFee:false per Memory #23 (fee_method enum frozen at BLURT/BTC/XMR).  defaultNetwork:null (forces explicit choice every trade; ERC-20/Base/Polygon all share EVM 0x[40 hex] address format = picker is the only disambiguator).  privacyWarningKey:'usdc_centralized'.  decimals:6 (Circle standard across all 4 supported networks).
+
+4. **Operator-stance freedom unchanged.**  MORPHIT_INDEXER_DISABLED_ASSETS=USDC opt-out per Memory #25; default-ON instance-wide.
+
+LOCALE PARITY MATH:
+- cp29 close baseline: 2,646 × 10 = 26,460
+- cp30 mid-run after USDC i18n batches: 2,673 × 10 = 26,730 (+27 keys per locale × 10 across multiple multi-key batches: ~21 asset/privacy/payment + 6 multi-net + 4 chat.address + 2 chat.funds_sent + various FAQ updates that landed alongside)
+- cp30 close: 2,674 × 10 = 26,740 (+1 cheat_sheet.section_assets.usdc on the final cleanup pass)
+- All cp30 strings native EN/ES/FR/DE; EN-fallback IT/PL/RU/FA/zh-CN/zh-HK (REVISIT Z2 filed)
+
+REVISIT entries filed:
+- Z1: BEP-20 USDC reconsideration if Circle ever issues natively on BSC at 6-decimal precision (currently Binance-Peg only)
+- Z2: cp30 native-QA for the 6 EN-fallback locales to upgrade USDC strings from EN-fallback to native (parallel to existing DASH/BCH/LTC native-QA REVISITs)
+
+PATTERN LESSONS RECORDED (numbered 18-22 for continuity with cp29's 16-17):
+18. Multi-network template (USDT cp3) ports to a SECOND multi-network asset with even more reuse than single-network templates — 5 distinct subsystems each got a parallel branch with no architectural new work.
+19. The "EVM address shape is identical across chains" foot-gun is unique to USDC's network set (3 of 4 networks share the EVM 0x format; SPL is the odd one out).  Documented prominently in ADR-0028 + per-message cross-network warning copy.
+20. Reversed-decision discipline: cp26 USDT-pass-through was incomplete reasoning, not defensible.  Pattern: when a past decision's rationale has the structure "X is the issue, not Y," ask whether Y is ALSO an issue.
+21. External web-search verification before declining an operator-named option matters even when the option seems plausible — the BEP-20-USDC decline rested on web-found facts (Binance-Peg + 18-decimal) that prior knowledge alone wouldn't have surfaced.
+22. Cross-session continuity from mid-state tarballs requires honest in-flight inventories — verification before continuing confirmed the cp30-mid completed-list was honest and the remaining-list was real.
+
+PARKED (external-blockers — unchanged from cp29): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 29 — Genuinely-open Part 119 finding B-3 closure + stale-marker drift sweep.  Ken's prompt: "let's continue the chat right here.  what's left?"  Spent the first half of the chat answering "what's left" honestly rather than continuing inertially — three classes of work surfaced: (1) stale `Last refreshed/updated` markers in 3 docs that previous checkpoints had silently let drift; (2) one genuinely-open Part 119 finding (`(encrypted)` placeholder) that had survived 10 checkpoints' worth of audit; (3) cleanup verification of "things that aren't left" (3 markers were honest; cp28 closure intact; cp27-DD2 closure intact; the 2 parked solo items remain external-blocker-only).
 
 CP29 SCOPE: 4 findings — all 4 fixed inline.  Severity 1 HIGH (Sally-user grandma-friendliness violation, surfaced in Part 119 Bob walkthrough, deferred since Part 120) + 3 LOW (stale-marker drift).  ZERO behavioral smoke changes (the chat-message render layer has no existing behavioral smoke pinning placeholder strings; verified by grep).  Locale parity bumped +20 strings from 2,644 × 10 = 26,440 to 2,646 × 10 = 26,460.

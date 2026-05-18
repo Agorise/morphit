@@ -755,7 +755,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Morphit چیست؟",
-				"a": "Morphit یک بازار نفر‌به‌نفر است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، BLURT، USDT، Bitcoin Cash، Litecoin و Dash) معامله می‌کنند. Morphit هرگز پول تو را نگه نمی‌دارد و هرگز نمی‌پرسد کی هستی. این یک تختهٔ اعلانات است، نه یک بانک."
+				"a": "Morphit یک بازار نفر‌به‌نفر است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، BLURT، USDT، USD Coin (USDC)، Bitcoin Cash، Litecoin و Dash) معامله می‌کنند. Morphit هرگز پول تو را نگه نمی‌دارد و هرگز نمی‌پرسد کی هستی. این یک تختهٔ اعلانات است، نه یک بانک."
 			},
 			"is_it_safe": {
 				"q": "آیا امن است؟",
@@ -791,7 +791,7 @@
 			},
 			"trade_goods_services": {
 				"q": "آیا می‌توانم در Morphit کالا یا خدمات معامله کنم، مثل درختان میوه یا صفحه‌های وینیل؟",
-				"a": "بله — با شکل خاصی. مدل سفارش همیشه **یک دارایی قابل معامله (BTC، XMR، BLURT، USDT، BCH، LTC یا DASH) در یک طرف، و چیز دیگری در طرف دیگر** است. «چیز دیگر» می‌تواند یک ارز فیات، یک رمزارز دیگر، یا از طریق روش پرداخت `Barter (goods)` کالا/خدمات باشد. برای درختان پرتقال در ازای XMR: `asset=XMR`، `payment_methods=[Barter (goods)]` پست کنید و جزئیات را در فیلد `terms` بنویسید. تهاتر خالص (کالا در ازای کالا بدون کریپتو) قابل مدل‌سازی نیست — یک طرف باید همیشه BTC، XMR، BLURT، USDT، BCH، LTC یا DASH باشد. توضیح کامل در FAQ انگلیسی."
+				"a": "بله — با شکل خاصی. مدل سفارش همیشه **یک دارایی قابل معامله (BTC، XMR، BLURT، USDT، USDC، BCH، LTC یا DASH) در یک طرف، و چیز دیگری در طرف دیگر** است. «چیز دیگر» می‌تواند یک ارز فیات، یک رمزارز دیگر، یا از طریق روش پرداخت `Barter (goods)` کالا/خدمات باشد. برای درختان پرتقال در ازای XMR: `asset=XMR`، `payment_methods=[Barter (goods)]` پست کنید و جزئیات را در فیلد `terms` بنویسید. تهاتر خالص (کالا در ازای کالا بدون کریپتو) قابل مدل‌سازی نیست — یک طرف باید همیشه BTC، XMR، BLURT، USDT، USDC، BCH، LTC یا DASH باشد. توضیح کامل در FAQ انگلیسی."
 			},
 			"order_timeouts": {
 				"q": "سفارش‌ها چقدر باز می‌مانند؟",
@@ -807,7 +807,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Why does Morphit randomize my transfer amount?",
-				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalizes to every transparent asset — BTC, BCH, LTC, and BLURT all get amount-jitter too. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. USDT is excluded: its privacy issue is centralization (Tether can freeze any address), which amount-jitter doesn't address. The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
+				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp30 extends it to stablecoins too — USDT and USDC now also get amount-jitter. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
 			},
 			"feedback_immutable": {
 				"q": "آیا بازخورد قابل ویرایش یا حذف است؟",
@@ -883,11 +883,11 @@
 			},
 			"blurt_benefits": {
 				"q": "BLURT چیست و چرا مورفیت گاهی به آن اشاره می‌کند؟",
-				"a": "مورفیت هماهنگی روی-زنجیره خود را روی دفتر کل عمومی به نام Blurt تسویه می‌کند. واحد بومی این دفتر کل نیز BLURT نامیده می‌شود — هر بلاک، هر امضا، هر انتقال کارمزد از طریق آن جریان می‌یابد. می‌توانید BLURT را به‌عنوان توکن گاز برای لایه هماهنگی تصور کنید، همان‌طور که ETH گاز برای اتریوم است، فقط کوچک‌تر و آرام‌تر.\n\nبرای معامله BTC، XMR، USDT، BCH، LTC یا DASH در مورفیت لازم نیست با BLURT تعامل داشته باشید. اگر اپراتور شما BTC یا XMR را برای کارمزد شبکه می‌پذیرد (بیشترشان می‌پذیرند)، می‌توانید سفارش‌ها را فهرست کنید، با طرف‌های مقابل پیام‌رسانی کنید و معاملات را بدون لمس BLURT تکمیل کنید.\n\nپس چرا اصلاً مطرح می‌شود؟ سه دلیل:\n\n۱. **کارمزدهای شبکه می‌تواند با BLURT پرداخت شود** به‌عنوان جایگزین BTC/XMR. برخی کاربران این را ترجیح می‌دهند زیرا تأییدیه‌های BLURT لحظه‌ای هستند — بدون انتظار برای اکسپلورر بلوک خارجی. اگر اپراتور شما فقط BLURT را برای کارمزد پیکربندی کرده، این مسیری است که استفاده خواهید کرد.\n\n۲. **پاداش خوش‌آمدگویی به BLURT نام‌گذاری شده است** (هدیه کوچک یک‌بار پس از اولین معامله موفق). نادیده گرفتنش بی‌ضرر است، یا می‌توانید آن را برای کارمزدهای شبکه آینده خرج کنید.\n\n۳. **موجودی BLURT شما به شما وزن رأی می‌دهد** در فرانت‌اندهای اجتماعی Blurt مانند blurt.blog. این خارج از محدوده مورفیت است، اما اگر خود را با BLURT یافتید و کنجکاو هستید، این گزینه‌های شما هستند.\n\nمورفیت روی Blurt ساخته شده زیرا طراحی این دفتر کل (سربار تراکنش پایین، پست‌های رایگان، حالت پیش‌فرض عمومی) برای یک محل تجارت همتا-به-همتا بهتر از جایگزین‌هایی که ارزیابی کردیم مناسب است. ما با دفتر کل به‌عنوان لوله‌کشی برخورد می‌کنیم — لازم، عمداً انتخاب‌شده، اما نه چیزی که در حین معامله مجبور باشید به آن فکر کنید."
+				"a": "مورفیت هماهنگی روی-زنجیره خود را روی دفتر کل عمومی به نام Blurt تسویه می‌کند. واحد بومی این دفتر کل نیز BLURT نامیده می‌شود — هر بلاک، هر امضا، هر انتقال کارمزد از طریق آن جریان می‌یابد. می‌توانید BLURT را به‌عنوان توکن گاز برای لایه هماهنگی تصور کنید، همان‌طور که ETH گاز برای اتریوم است، فقط کوچک‌تر و آرام‌تر.\n\nبرای معامله BTC، XMR، USDT، USDC، BCH، LTC یا DASH در مورفیت لازم نیست با BLURT تعامل داشته باشید. اگر اپراتور شما BTC یا XMR را برای کارمزد شبکه می‌پذیرد (بیشترشان می‌پذیرند)، می‌توانید سفارش‌ها را فهرست کنید، با طرف‌های مقابل پیام‌رسانی کنید و معاملات را بدون لمس BLURT تکمیل کنید.\n\nپس چرا اصلاً مطرح می‌شود؟ سه دلیل:\n\n۱. **کارمزدهای شبکه می‌تواند با BLURT پرداخت شود** به‌عنوان جایگزین BTC/XMR. برخی کاربران این را ترجیح می‌دهند زیرا تأییدیه‌های BLURT لحظه‌ای هستند — بدون انتظار برای اکسپلورر بلوک خارجی. اگر اپراتور شما فقط BLURT را برای کارمزد پیکربندی کرده، این مسیری است که استفاده خواهید کرد.\n\n۲. **پاداش خوش‌آمدگویی به BLURT نام‌گذاری شده است** (هدیه کوچک یک‌بار پس از اولین معامله موفق). نادیده گرفتنش بی‌ضرر است، یا می‌توانید آن را برای کارمزدهای شبکه آینده خرج کنید.\n\n۳. **موجودی BLURT شما به شما وزن رأی می‌دهد** در فرانت‌اندهای اجتماعی Blurt مانند blurt.blog. این خارج از محدوده مورفیت است، اما اگر خود را با BLURT یافتید و کنجکاو هستید، این گزینه‌های شما هستند.\n\nمورفیت روی Blurt ساخته شده زیرا طراحی این دفتر کل (سربار تراکنش پایین، پست‌های رایگان، حالت پیش‌فرض عمومی) برای یک محل تجارت همتا-به-همتا بهتر از جایگزین‌هایی که ارزیابی کردیم مناسب است. ما با دفتر کل به‌عنوان لوله‌کشی برخورد می‌کنیم — لازم، عمداً انتخاب‌شده، اما نه چیزی که در حین معامله مجبور باشید به آن فکر کنید."
 			},
 			"where_to_buy_blurt": {
 				"q": "BLURT را برای استفاده به عنوان کارمزد شبکه از کجا بخرم؟",
-				"a": "**در خود Morphit بخر — این کل هدف است.** Morphit یک بازار همتا-به-همتا است؛ BLURT یکی از هفت دارایی است که در اینجا معامله می‌شود، در کنار BTC، XMR، USDT، BCH، LTC و DASH. به /orderbook برو، سفارش‌های فروش BLURT را فیلتر کن، و به یک طرف معامله پیام بده. تو با هر روش فیات که می‌پذیرد به او پرداخت می‌کنی؛ او BLURT را به حساب Blurt تو می‌فرستد. تمام.\n\n**اولین سفارش تو رایگان است.** کاربران جدید یک معافیت یکباره دریافت می‌کنند که کارمزد فهرست‌سازی اولین خرید BLURT را پوشش می‌دهد. پس اولین خرید BLURT تو می‌تواند اولین معامله‌ات در Morphit نیز باشد، بدون حساب صرافی، بدون کارت، بدون KYC. معافیت به طور خودکار ارائه می‌شود.\n\n**جایگزین آخرین چاره:** اگر واقعاً نمی‌توانی در کتاب سفارش Morphit طرف معامله‌ای پیدا کنی (در برخی مناطق کتاب کوچک است)، Klingex.io یک جفت معاملاتی BLURT/USDT را به عنوان پشتیبان متمرکز اجرا می‌کند. ما برای کامل بودن آن را ذکر می‌کنیم اما به عنوان گزینه اضطراری در نظر می‌گیریم — هر BLURT خریداری شده از طریق Klingex معامله‌ای است که Morphit دریافت نکرد، و هدف پروژه رشد کتاب همتا-به-همتا است، نه فرستادن کاربران به جای دیگر. اگر این مسیر را بروی، صفحه معاملات https://klingex.io/trade/BLURT-USDT است — باید USDT واریز کنی تا با BLURT تعویض کنی. بلافاصله به کیف‌پول Blurt خودت برداشت کن.\n\n**وقتی BLURT در کیف‌پولت داشتی**، پرداخت کارمزد فهرست‌سازی Morphit خودکار است — \"پرداخت با BLURT\" را انتخاب کن."
+				"a": "**در خود Morphit بخر — این کل هدف است.** Morphit یک بازار همتا-به-همتا است؛ BLURT یکی از هفت دارایی است که در اینجا معامله می‌شود، در کنار BTC، XMR، USDT، USDC، BCH، LTC و DASH. به /orderbook برو، سفارش‌های فروش BLURT را فیلتر کن، و به یک طرف معامله پیام بده. تو با هر روش فیات که می‌پذیرد به او پرداخت می‌کنی؛ او BLURT را به حساب Blurt تو می‌فرستد. تمام.\n\n**اولین سفارش تو رایگان است.** کاربران جدید یک معافیت یکباره دریافت می‌کنند که کارمزد فهرست‌سازی اولین خرید BLURT را پوشش می‌دهد. پس اولین خرید BLURT تو می‌تواند اولین معامله‌ات در Morphit نیز باشد، بدون حساب صرافی، بدون کارت، بدون KYC. معافیت به طور خودکار ارائه می‌شود.\n\n**جایگزین آخرین چاره:** اگر واقعاً نمی‌توانی در کتاب سفارش Morphit طرف معامله‌ای پیدا کنی (در برخی مناطق کتاب کوچک است)، Klingex.io یک جفت معاملاتی BLURT/USDT را به عنوان پشتیبان متمرکز اجرا می‌کند. ما برای کامل بودن آن را ذکر می‌کنیم اما به عنوان گزینه اضطراری در نظر می‌گیریم — هر BLURT خریداری شده از طریق Klingex معامله‌ای است که Morphit دریافت نکرد، و هدف پروژه رشد کتاب همتا-به-همتا است، نه فرستادن کاربران به جای دیگر. اگر این مسیر را بروی، صفحه معاملات https://klingex.io/trade/BLURT-USDT است — باید USDT واریز کنی تا با BLURT تعویض کنی. بلافاصله به کیف‌پول Blurt خودت برداشت کن.\n\n**وقتی BLURT در کیف‌پولت داشتی**، پرداخت کارمزد فهرست‌سازی Morphit خودکار است — \"پرداخت با BLURT\" را انتخاب کن."
 			},
 			"first_order_free": {
 				"q": "آیا اولین سفارش من واقعاً رایگان است؟",
@@ -895,7 +895,7 @@
 			},
 			"welcome_bonus": {
 				"q": "پاداش خوش‌آمدگویی چیست و چگونه آن را به دست آورم؟",
-				"a": "در واقع سه پاداش خوش‌آمد در Morphit وجود دارد، و در لحظات مختلف فعال می‌شوند:\n\n**۱. اولین کارمزد آگهی پرداخت‌شده در BLURT → ۱ BP تفویض می‌شود.** لحظه‌ای که اولین کارمزد آگهی BLURT خود را پرداخت می‌کنی — حتی قبل از تطبیق یا تکمیل هر معامله‌ای — Morphit ۱ BP (Blurt Power) به حساب تو تفویض می‌کند. این یک استیک یک‌باره کوچک «به شبکه خوش آمدی» است که فوراً شروع به کسب APR/پاداش‌های کوریشن می‌کند. مستقل از این که سفارش تو سرانجام طرف مقابلی پیدا کند یا نه، فعال می‌شود. یک بار در هر حساب.\n\n**۲. اولین معامله تکمیل‌شده → ۱۰ BLURT liquid + ۱۰ BLURT Power.** وقتی اولین معامله واقعی خود را تکمیل می‌کنی (طرف مقابل بازخوردی را امضا می‌کند که سفارش را ذکر می‌کند)، Morphit ۱۰ BLURT liquid به علاوه ۱۰ BLURT Power (≈۱۳ BP وزن رأی) می‌فرستد. «تکمیل‌شده» یعنی: سفارشی منتشر کردی، طرف مقابلی پاسخ داد، معامله خارج از پلتفرم تسویه شد، و طرف مقابل بازخورد مثبت درباره تو امضا کرد که سفارش تو را ذکر می‌کند. این بازخورد است که این بونوس را فعال می‌کند — این مدرک یک معامله واقعی با انسان دیگری است، نه فقط یک سفارش منتشرشده و رهاشده.\n\n**۳. نقاط عطف وفاداری → تا ۱۲۶۰ BP.** همانطور که با گذشت زمان کارمزدهای BLURT بیشتری می‌پردازی، آستانه‌های ۱۰۰/۵۰۰/۲۰۰۰/۱۰۰۰۰ BLURT را عبور می‌کنی و افزایش‌های تفویض دریافت می‌کنی (۱۰/۵۰/۲۰۰/۱۰۰۰ BP در هر سطح). برای جزئیات به FAQ وفاداری مراجعه کن.\n\nچرا طراحی پلکانی: تحویل کامل بونوس در زمان ثبت‌نام در دقایق توسط حساب‌های Sybil farm می‌شد. بونوس ۱ BP در اولین کارمزد پرداخت‌شده به اندازه کافی کوچک است که فارمینگ Sybil سودآور نباشد (۰.۱۲۵ دلار هزینه به ازای هر مهاجم برای ۱ BP)، و بزرگ‌تر ۱۰ BLURT liquid + ۱۰ BLURT Power نیاز به مدرک واقعی معامله دارد (بازخورد طرف مقابل). با هم وزن استیک قابل ملاحظه‌ای برای کاربران صادق جمع می‌کنند.\n\nاگر منحصراً در دارایی‌های غیر-BLURT (BTC، XMR، USDT، BCH، LTC یا DASH) معامله می‌کنی و هرگز کارمزد BLURT نمی‌پردازی، ۱۰ BLURT liquid + ۱۰ BLURT Power اولین معامله تکمیل‌شده‌ات را دریافت خواهی کرد ولی نه بونوس ۱ BP اولین کارمزد را (که محدود به پرداخت در BLURT است). بونوس BLURT بی‌ضرر است که دریافت و نادیده گرفته شود — می‌تواند نامحدود در حسابت بماند یا کارمزدهای شبکه آینده را پوشش دهد.\n\nپاداش‌ها به صورت عملیات `delegate_vesting_shares` و `transfer` از @morphit-relay در تاریخچه حسابت می‌رسند."
+				"a": "در واقع سه پاداش خوش‌آمد در Morphit وجود دارد، و در لحظات مختلف فعال می‌شوند:\n\n**۱. اولین کارمزد آگهی پرداخت‌شده در BLURT → ۱ BP تفویض می‌شود.** لحظه‌ای که اولین کارمزد آگهی BLURT خود را پرداخت می‌کنی — حتی قبل از تطبیق یا تکمیل هر معامله‌ای — Morphit ۱ BP (Blurt Power) به حساب تو تفویض می‌کند. این یک استیک یک‌باره کوچک «به شبکه خوش آمدی» است که فوراً شروع به کسب APR/پاداش‌های کوریشن می‌کند. مستقل از این که سفارش تو سرانجام طرف مقابلی پیدا کند یا نه، فعال می‌شود. یک بار در هر حساب.\n\n**۲. اولین معامله تکمیل‌شده → ۱۰ BLURT liquid + ۱۰ BLURT Power.** وقتی اولین معامله واقعی خود را تکمیل می‌کنی (طرف مقابل بازخوردی را امضا می‌کند که سفارش را ذکر می‌کند)، Morphit ۱۰ BLURT liquid به علاوه ۱۰ BLURT Power (≈۱۳ BP وزن رأی) می‌فرستد. «تکمیل‌شده» یعنی: سفارشی منتشر کردی، طرف مقابلی پاسخ داد، معامله خارج از پلتفرم تسویه شد، و طرف مقابل بازخورد مثبت درباره تو امضا کرد که سفارش تو را ذکر می‌کند. این بازخورد است که این بونوس را فعال می‌کند — این مدرک یک معامله واقعی با انسان دیگری است، نه فقط یک سفارش منتشرشده و رهاشده.\n\n**۳. نقاط عطف وفاداری → تا ۱۲۶۰ BP.** همانطور که با گذشت زمان کارمزدهای BLURT بیشتری می‌پردازی، آستانه‌های ۱۰۰/۵۰۰/۲۰۰۰/۱۰۰۰۰ BLURT را عبور می‌کنی و افزایش‌های تفویض دریافت می‌کنی (۱۰/۵۰/۲۰۰/۱۰۰۰ BP در هر سطح). برای جزئیات به FAQ وفاداری مراجعه کن.\n\nچرا طراحی پلکانی: تحویل کامل بونوس در زمان ثبت‌نام در دقایق توسط حساب‌های Sybil farm می‌شد. بونوس ۱ BP در اولین کارمزد پرداخت‌شده به اندازه کافی کوچک است که فارمینگ Sybil سودآور نباشد (۰.۱۲۵ دلار هزینه به ازای هر مهاجم برای ۱ BP)، و بزرگ‌تر ۱۰ BLURT liquid + ۱۰ BLURT Power نیاز به مدرک واقعی معامله دارد (بازخورد طرف مقابل). با هم وزن استیک قابل ملاحظه‌ای برای کاربران صادق جمع می‌کنند.\n\nاگر منحصراً در دارایی‌های غیر-BLURT (BTC، XMR، USDT، USDC، BCH، LTC یا DASH) معامله می‌کنی و هرگز کارمزد BLURT نمی‌پردازی، ۱۰ BLURT liquid + ۱۰ BLURT Power اولین معامله تکمیل‌شده‌ات را دریافت خواهی کرد ولی نه بونوس ۱ BP اولین کارمزد را (که محدود به پرداخت در BLURT است). بونوس BLURT بی‌ضرر است که دریافت و نادیده گرفته شود — می‌تواند نامحدود در حسابت بماند یا کارمزدهای شبکه آینده را پوشش دهد.\n\nپاداش‌ها به صورت عملیات `delegate_vesting_shares` و `transfer` از @morphit-relay در تاریخچه حسابت می‌رسند."
 			},
 			"loyalty_milestones": {
 				"q": "پاداش‌های وفاداری چگونه کار می‌کنند؟ (نقاط عطف BP که ذکر شد)",
@@ -1554,7 +1554,8 @@
 				"usdt": "تتر (USDT) — یک استیبل‌کوین متصل ۱:۱ به دلار آمریکا. به‌صورت متمرکز کنترل می‌شود — شرکت Tether می‌تواند هر آدرس را مسدود کند. فقط برای معامله در Morphit: نمی‌تواند کارمزد ثبت آگهی پرداخت کند.",
 				"bch": "بیت‌کوین کش (BCH). در سال ۲۰۱۷ از بیت‌کوین فورک شد تا بلوک‌های بزرگ‌تر و کارمزد کمتر در هر تراکنش را به‌جای پویایی بازار کارمزد ترجیح دهد. دفتر کل شفاف مانند BTC؛ هیچ ناشر نمی‌تواند آدرس‌ها را مسدود کند. فقط معامله در Morphit — کارمزدهای فهرست‌بندی همچنان به BLURT، BTC یا XMR پرداخت می‌شوند.",
 				"ltc": "لایت‌کوین (LTC). فورک بیت‌کوین در ۲۰۱۱ با بلوک‌های سریع‌تر (۲٫۵ دقیقه) و استخراج Scrypt. شفاف مانند بیت‌کوین — هر تراکنش به‌طور عمومی روی زنجیره قابل مشاهده است. بدون صادرکننده مرکزی؛ هیچ‌کس نمی‌تواند آدرس‌های شما را مسدود کند.",
-				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy."
+				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy.",
+				"usdc": "USD Coin (USDC) — a stablecoin pegged 1:1 to USD, issued by Circle. Centrally controlled — Circle can freeze any address. Trade-only on Morphit: cannot pay listing fees."
 			},
 			"waiver_fiat_hint": "💡 BLURT در صرافی‌های متمرکز کم معامله می‌شود، بنابراین بیشتر معاملات BLURT-در-ازای-فیات در Morphit با کاربران فعال شبکه اجتماعی Blurt، اپراتورهای موجود، یا از طریق تهاتر انجام می‌شود. نکته: یک ارز فیات که شبکه محلی‌ات استفاده می‌کند انتخاب کن (USD، EUR، MXN و غیره)، یا روش پرداخت حضوری → تهاتر (کالا) در مرحله ۳ را بررسی کن اگر می‌خواهی چیز دیگری با ارزش پیشنهاد دهی. دفتر سفارشات فعلاً کوچک است — سفارش خرید تو به ساختن آن کمک می‌کند.",
 			"waiver_benefits_heading": "خرید تو چه چیزی را باز می‌کند:",
@@ -2340,7 +2341,11 @@
 			"method_dash": "Dash",
 			"address_placeholder_dash": "X… or 7…",
 			"address_invalid_dash": "That doesn't look like a valid Dash address.",
-			"pill_method_dash": "Dash address"
+			"pill_method_dash": "Dash address",
+			"method_usdc": "USDC",
+			"address_placeholder_usdc": "USD Coin address (matching the network you picked)",
+			"address_invalid_usdc": "This address does not match the USDC network you picked. Double-check before sending — cross-network sends lose your funds. Note that Ethereum, Base, and Polygon addresses all start with 0x and look identical at the format level.",
+			"pill_method_usdc": "USDC address"
 		},
 		"funds_sent": {
 			"button": "علامت‌گذاری وجوه ارسالی",
@@ -2384,7 +2389,9 @@
 			"pill_title_usdt": "USDT ارسال شد",
 			"pill_title_bch": "بیت‌کوین کش ارسال شد",
 			"pill_title_ltc": "لایت‌کوین ارسال شد",
-			"pill_title_dash": "Dash sent"
+			"pill_title_dash": "Dash sent",
+			"txid_invalid_usdc": "This txid doesn't match the USDC network you picked. Cross-network txid mismatches usually mean the wrong chain was used for the send.",
+			"pill_title_usdc": "USDC sent"
 		},
 		"unknown_version": "این پیام از پروتکل جدیدتری استفاده می‌کند. برای خواندن آن، Morphit را به‌روزرسانی کنید.",
 		"pay_blurt": {
@@ -3466,7 +3473,8 @@
 			"usdt": "استیبل‌کوین تتر. ۱:۱ به دلار آمریکا متصل است. در چهار شبکه معامله کنید: ERC-20 (اتریوم)، TRC-20 (ترون)، SPL (سولانا)، BEP-20 (BNB Smart Chain). قبل از ارسال شبکه را انتخاب کنید — بین شبکه‌ای غیرقابل بازیابی است.",
 			"bch": "BCH — بیت‌کوین کش، شفاف، غیرمتمرکز، بلوک‌های بزرگ‌تر از BTC",
 			"ltc": "LTC — لایت‌کوین، فورک سریع و کم‌هزینه بیت‌کوین (از ۲۰۱۱). فقط برای معامله در مورفیت. از کیف پول لایت‌کوین (Electrum-LTC، Litewallet، کیف پول‌های سخت‌افزاری) استفاده کنید؛ آدرس‌های …L قدیمی، …M P2SH مدرن، و …ltc1 SegWit را می‌پذیرد.",
-			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy."
+			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy.",
+			"usdc": "USD Coin stablecoin. Centralized — Circle can freeze any address. Trade-only."
 		},
 		"section_recovery": {
 			"heading": "اگر چیزی اشتباه پیش رفت",
@@ -3482,7 +3490,8 @@
 	},
 	"assets": {
 		"privacy_warnings": {
-			"usdt_centralized": "دو نکته که قبل از معامله درباره USDT بدانید: شرکت Tether USDT را منتشر و مدیریت می‌کند و توانایی فنی مسدود کردن آدرس‌ها را دارد (و از آن استفاده کرده است). تراکنش‌ها در هر شبکه پشتیبانی‌شده (اتریوم، ترون، سولانا، BNB Smart Chain) به‌صورت عمومی قابل مشاهده هستند — این یک ویژگی آن زنجیره‌هاست. دارایی متناسب با معامله خود را انتخاب کنید."
+			"usdt_centralized": "دو نکته که قبل از معامله درباره USDT بدانید: شرکت Tether USDT را منتشر و مدیریت می‌کند و توانایی فنی مسدود کردن آدرس‌ها را دارد (و از آن استفاده کرده است). تراکنش‌ها در هر شبکه پشتیبانی‌شده (اتریوم، ترون، سولانا، BNB Smart Chain) به‌صورت عمومی قابل مشاهده هستند — این یک ویژگی آن زنجیره‌هاست. دارایی متناسب با معامله خود را انتخاب کنید.",
+			"usdc_centralized": "Two things to know about USDC before trading: Circle issues and administers USDC and has the technical ability to freeze addresses (and has used it). Transactions are publicly visible on each supported network (Ethereum, Solana, Base, Polygon) — a property of those chains. Pick the asset that fits your trade."
 		},
 		"usdt": {
 			"network": {
@@ -3518,13 +3527,48 @@
 				"live": "۱ USDT = ${price} زنده",
 				"unavailable": "فید قیمت USDT/USD در دسترس نیست — آخرین بار {staleness} پیش دیده شد."
 			}
+		},
+		"usdc": {
+			"network": {
+				"erc20": {
+					"displayName": "Ethereum (ERC-20)",
+					"feeHint": "fee ~$5–20, slow, most widely accepted"
+				},
+				"spl": {
+					"displayName": "Solana (SPL)",
+					"feeHint": "fee <$0.01, fast, less universally accepted"
+				},
+				"base": {
+					"displayName": "Base",
+					"feeHint": "fee ~$0.01, fast, growing adoption"
+				},
+				"polygon": {
+					"displayName": "Polygon",
+					"feeHint": "fee ~$0.01, fast, EVM-compatible"
+				},
+				"picker": {
+					"label": "Which USDC network?",
+					"requiredHint": "Required — there is no default network. You must pick one for every USDC trade.",
+					"crossNetworkWarning": "Cross-network sends lose your funds permanently. Sending USDC on Ethereum to a Solana address (or vice versa) is unrecoverable. Note that Ethereum, Base, and Polygon addresses look identical (all start with 0x) — the network choice is what tells your wallet which chain to broadcast on."
+				}
+			},
+			"address_share": {
+				"warning": "Send USDC on {network} only. Sending USDC on any other network to this address loses your funds permanently."
+			},
+			"order_row": {
+				"network_hint": "You need USDC on {network} for this trade."
+			},
+			"price_subline": {
+				"live": "1 USDC = ${price} live",
+				"unavailable": "USDC/USD price feed unavailable — last seen {staleness} ago."
+			}
 		}
 	},
 	"privacy": {
 		"index_title": "Privacy practices — Morphit",
 		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
 		"index_heading": "Privacy practices on Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, BLURT, USDT) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, BLURT, USDT, USDC) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
 		"page_title": "Privacy for {asset} trades — Morphit",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",
@@ -3612,6 +3656,12 @@
 				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
 				"meta_description": "Privacy practices for Dash trades on Morphit: fresh addresses, PrivateSend pre-mixing, and what to avoid.",
 				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern. For the strongest privacy on Morphit, use XMR instead — its anonymity is chain-level and mandatory rather than opt-in."
+			},
+			"usdc": {
+				"one_line": "Centralized — Circle can freeze any address. Transparent on every chain.",
+				"intro": "USDC's privacy posture mirrors USDT's: it's centralized. Circle (USDC's issuer) can freeze any USDC address on any host chain, and has done so on regulatory request. No amount of address rotation or transaction obfuscation changes Circle's freeze capability. The amount-correlation defense (jitter) IS active for USDC trades — see /{lang}/faq#monero_amount_jitter — but jitter addresses a different threat than centralization.",
+				"caveats": "Even with perfect on-chain privacy practices, USDC remains centrally freezable. Practical on-chain privacy on USDC host chains (Ethereum, Solana, Base, Polygon) is the same as on any transparent EVM/account chain — your privacy depends on the host chain's opt-in privacy ecosystem, which we do not endorse or describe further here. BEP-20 USDC on BNB Chain is intentionally NOT supported: that variant is Binance-Peg (Binance-custodied wrapper of Circle-issued USDC), adding a second custodian to the existing one.",
+				"meta_description": "Privacy considerations for USDC trades on Morphit: centralization risk, host-chain transparency, and the amount-jitter defense."
 			}
 		}
 	}

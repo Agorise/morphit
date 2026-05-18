@@ -47,6 +47,12 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// subline reads this value so users see actual peg state
 	// rather than an assumed $1.00.
 	USDT: 'tether',
+	// Part 122 cp30 — USD Coin pegs to USD by design.  Coingecko's
+	// `usd-coin` ID returns the live peg state; expected ~$1.00.
+	// Same surface contract as USDT — order-row subline reads
+	// the live value so users see actual peg state during stress
+	// events rather than an assumed $1.00.
+	USDC: 'usd-coin',
 	// Part 122 cp21 — Bitcoin Cash.  Coingecko's `bitcoin-cash`
 	// ID returns live BCH/USD.  Same posture as BTC: transparent
 	// asset, no privacy-warning chip, single-network mainnet.

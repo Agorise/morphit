@@ -37,9 +37,10 @@
 		type AddressPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
-	import { validateUsdtAddress, type UsdtNetwork } from '$lib/assets/networks';
+	import { validateUsdtAddress, type UsdtNetwork, validateUsdcAddress, type UsdcNetwork } from '$lib/assets/networks';
 	import PrivacyWarningChip from './PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
+	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
 	import {
 		findPriorShare,
 		recordAddressShare,
@@ -77,6 +78,17 @@
 	 *  (TRC-20 starts with T, ERC-20/BEP-20 are 0x+40-hex, SPL
 	 *  is base58 32-44 chars). */
 	let usdtNetwork = $state<UsdtNetwork | null>(null);
+	/** Part 122 cp30 — USDC sub-network (ERC-20/SPL/Base/Polygon).
+	 *  Same shape as usdtNetwork above: null when method !== 'usdc',
+	 *  required pre-submit otherwise.  Note ERC-20, Base, and
+	 *  Polygon all share the EVM 0x[40-hex] address format, so
+	 *  per-network shape validation is mostly a no-op for choosing
+	 *  among those three (validateUsdcAddress returns true for all
+	 *  of them given a 0x... value); the picker exists to tell
+	 *  the SENDER which chain to broadcast on, since the same
+	 *  address can receive USDC on any of the three EVM chains
+	 *  but the wallet has to send on the matching chain. */
+	let usdcNetwork = $state<UsdcNetwork | null>(null);
 	/** Phase F.4 — BLURT payment memo.  Auto-generated when the
 	 *  seller opens the modal with the BLURT tab selected (or
 	 *  switches to it).  Lets them match incoming transfers to
@@ -174,7 +186,9 @@
 		trimmedAddress.length > 0 &&
 			(method === 'usdt'
 				? usdtNetwork !== null && validateUsdtAddress(usdtNetwork, trimmedAddress)
-				: isValidAddress(method, trimmedAddress))
+				: method === 'usdc'
+					? usdcNetwork !== null && validateUsdcAddress(usdcNetwork, trimmedAddress)
+					: isValidAddress(method, trimmedAddress))
 	);
 	/** cp26 — Address-reuse detection.  Reads the local-only
 	 *  address-history (see lib/privacy/addressHistory.ts) and
@@ -199,12 +213,18 @@
 	 *  network — cross-network sends lose funds, so the form
 	 *  refuses to submit until the user explicitly chooses. */
 	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
+	/** USDC-specific gate (cp30, mirror of USDT): network MUST be
+	 *  picked before submit, no default — especially important
+	 *  here because ERC-20 / Base / Polygon look identical at the
+	 *  address-format level (all 0x[40 hex]). */
+	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
 
 	const canSubmit = $derived(
 		addressLooksValid &&
 			amountLooksValid &&
 			noteLooksValid &&
 			usdtNetworkPicked &&
+			usdcNetworkPicked &&
 			!sending
 	);
 
@@ -213,7 +233,7 @@
 	 *  the user has typed enough chars) is jarring, so only flag
 	 *  invalid AFTER they've typed something substantial.  BLURT
 	 *  account names are short (3-16 chars) so the threshold is
-	 *  lower than for the other assets (BTC, XMR, USDT, BCH,
+	 *  lower than for the other assets (BTC, XMR, USDT, USDC, BCH,
 	 *  LTC, DASH, all of which use the same 10-char threshold). */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
@@ -224,6 +244,7 @@
 		if (method === 'btc') return 'chat.address.address_invalid_btc';
 		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
 		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
+		if (method === 'usdc') return 'chat.address.address_invalid_usdc';
 		if (method === 'bch') return 'chat.address.address_invalid_bch';
 		if (method === 'ltc') return 'chat.address.address_invalid_ltc';
 		if (method === 'dash') return 'chat.address.address_invalid_dash';
@@ -247,11 +268,12 @@
 		method = m;
 		// Don't clear address — user may have pasted XMR while BTC
 		// was selected, the validator will catch the mismatch.
-		// Part 121: when leaving USDT, drop the pinned network so
-		// a future re-pick of USDT forces a fresh explicit choice
-		// (no stale value).  Each USDT trade gets a deliberate
-		// network commit.
+		// Part 121 / cp30: when leaving a multi-network asset (USDT
+		// or USDC), drop the pinned network so a future re-pick
+		// forces a fresh explicit choice (no stale value).  Each
+		// multi-network trade gets a deliberate network commit.
 		if (m !== 'usdt') usdtNetwork = null;
+		if (m !== 'usdc') usdcNetwork = null;
 	}
 
 	async function handleSubmit(): Promise<void> {
@@ -294,6 +316,12 @@
 				// confusion is impossible.  Validated above by the
 				// addressLooksValid + usdtNetworkPicked gates.
 				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {}),
+				// Part 122 cp30 — pin the USDC network the same way.
+				// Especially critical because ERC-20 / Base / Polygon
+				// all use the EVM 0x[40 hex] address shape, so without
+				// the network field the receiver couldn't tell which
+				// chain to expect.
+				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {}),
 				// cp26 — BTC PayJoin (BIP-78) endpoint URL.  Only
 				// propagates when method is btc AND the seller
 				// supplied a non-empty endpoint.  Encoder enforces
@@ -406,6 +434,18 @@
 			<button
 				type="button"
 				role="tab"
+				aria-selected={method === 'usdc'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'usdc'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('usdc')}
+			>
+				{$_('chat.address.method_usdc')}
+			</button>
+			<button
+				type="button"
+				role="tab"
 				aria-selected={method === 'bch'}
 				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
 				'bch'
@@ -455,6 +495,22 @@
 			</div>
 		{/if}
 
+		<!-- Part 122 cp30 — USDC privacy warning + network picker.
+		     Same shape as USDT: privacy chip above the picker, picker
+		     enforces network commit before submit.  Extra emphasis
+		     on the cross-network warning because ERC-20 / Base /
+		     Polygon all use the EVM 0x[40 hex] address shape —
+		     visually indistinguishable, only the picker tells the
+		     sender's wallet which chain to broadcast on. -->
+		{#if method === 'usdc'}
+			<div class="mt-4">
+				<PrivacyWarningChip privacyWarningKey="usdc_centralized" />
+				<div class="mt-3">
+					<UsdcNetworkPicker bind:network={usdcNetwork} disabled={sending} />
+				</div>
+			</div>
+		{/if}
+
 		{#if orderPermlink}
 			<div
 				class="mt-4 rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
@@ -476,13 +532,15 @@
 						? ($_('chat.address.address_placeholder_xmr') as string)
 						: method === 'usdt'
 							? ($_('chat.address.address_placeholder_usdt') as string)
-							: method === 'bch'
-								? ($_('chat.address.address_placeholder_bch') as string)
-								: method === 'ltc'
-									? ($_('chat.address.address_placeholder_ltc') as string)
-									: method === 'dash'
-										? ($_('chat.address.address_placeholder_dash') as string)
-										: ($_('chat.address.address_placeholder_blurt') as string)}
+							: method === 'usdc'
+								? ($_('chat.address.address_placeholder_usdc') as string)
+								: method === 'bch'
+									? ($_('chat.address.address_placeholder_bch') as string)
+									: method === 'ltc'
+										? ($_('chat.address.address_placeholder_ltc') as string)
+										: method === 'dash'
+											? ($_('chat.address.address_placeholder_dash') as string)
+											: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

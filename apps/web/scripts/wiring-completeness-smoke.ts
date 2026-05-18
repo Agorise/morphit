@@ -382,6 +382,25 @@ const CHECKS: readonly Check[] = [
 			paths: ['packages/asset-registry/src/index.ts']
 		},
 		status: 'live'
+	},
+	// ─── cp30 USDC P2P ────────────────────────────────────────────────
+	// New brag entry #280 claims USDC is wired as the 5th Category-B
+	// trade-only asset (parallel to USDT — multi-network).  Anchor
+	// on the canonical registry entry — if USDC ever loses its
+	// registry slot the brag claim drifts into vaporware and this
+	// CHECK row fires.  Brag #29 (amount-jitter) is also extended
+	// in cp30 to claim stablecoin coverage; this CHECK row implicitly
+	// covers that since #29 only makes sense if USDC is registered.
+	{
+		id: 'cp30-usdc-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'USD Coin (USDC) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'USDC'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
 	}
 ];
 
