@@ -2,8 +2,10 @@
  * Minimal ambient declaration for the `qrcode` npm package.
  *
  * Morphit uses qrcode lazy-loaded inside the QrPanel component
- * to render BTC/XMR/BLURT addresses as scannable QR codes.  We
- * declare only the API surface we actually call — the package
+ * to render per-asset payment URIs as scannable QR codes (BTC,
+ * XMR, BLURT, USDT, BCH, LTC, DASH — see `buildPaymentUri` in
+ * `apps/web/src/lib/chat/payload.ts` for the canonical per-asset
+ * URI shape).  We declare only the API surface we actually call — the package
  * is not installed in development sandboxes, so without these
  * stubs tsc would fail to resolve the import even though the
  * import is dynamic.

@@ -3,9 +3,12 @@
  *
  * Second half of the two-step signup protocol. Accepts an
  * invite token (see policy/inviteToken.ts) and an unsigned
- * account_create op body, validates, wraps in a transaction
- * signed with the relay's own active key, pays the chain's
- * account-creation fee in BLURT, and returns the chain's
+ * account-creation op body, validates, wraps in a transaction
+ * signed with the relay's own active key, and broadcasts as a
+ * fee-free `create_claimed_account` consuming one pre-minted ACT
+ * from the relay's pool (the chain's BLURT fee was paid earlier
+ * at ACT-minting time via the weekly `claim_account` ceremony —
+ * see ADR-0010 §4 and docs/OPERATIONS.md §2).  Returns the chain's
  * confirmation.
  *
  * Anti-abuse checks, in order:
@@ -60,10 +63,13 @@ import { logger } from '$log';
 
 const log = logger('relay-create');
 
-/** Request body schema. `op` matches the account_create op shape
- *  that we'll pass through (minus fee + creator, which the relay
- *  fills in). `invite_token` is the signed invite obtained from
- *  the /v1/account/invite endpoint. */
+/** Request body schema.  `op` carries the account-creation field
+ *  set (new_account_name + owner/active/posting/memo pubkeys +
+ *  json_metadata) that the relay will broadcast as a fee-free
+ *  `create_claimed_account` (NOT classical `account_create` — the
+ *  ACT-pool model means the relay consumes a pre-minted token at
+ *  this point, not BLURT).  `invite_token` is the signed invite
+ *  obtained from the /v1/account/invite endpoint. */
 const requestSchema = z
 	.object({
 		invite_token: z.string().min(1).max(4096),

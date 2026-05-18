@@ -591,7 +591,8 @@ code concerns but should shape deployment posture:
   cannot block a user in a sanctioned jurisdiction from reading
   the orderbook. However, Morphit itself never facilitates the
   atomic trade — two users agree off-platform (Matrix chat,
-  external wallets), and the BTC/XMR/BLURT transfer happens
+  external wallets), and the per-asset settlement transfer
+  (BTC, XMR, BLURT, USDT, BCH, LTC, or DASH) happens
   between their own wallets. The operator hosts a reader over
   public chain data, not a money-transmission service.
 - **Takedown requests.** Orders live on the Blurt blockchain and

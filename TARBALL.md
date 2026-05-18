@@ -1,3 +1,145 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 28 — Bob/Sally-user/Sally-operator persona walkthrough deep-sweep across .svelte module-docs, .ts ambient declarations, JSON locale FAQ trailing clauses, generator-vs-artifact drift, and operator-OS recommendation drift.  Ken's prompt: "let's continue all of the necessary work right here in this chat.  the tool budget is fine now and we have plenty of turn and session time available."  Cross-session resumption after browser crash from cp27-DD2 full-state tarball.
+
+CP28 SCOPE: Three-phase persona walkthrough following the cp27-DD2 closeout — Phase 1 staleness sweep (smoke counts / asset enumerations / ADR ranges / generated-content surfaces) before continuing; Phase 2 (a/b/c) Bob/Sally-user/Sally-operator walkthroughs with the Memory #22 feedback-system path included; Phase 3 atomic doc update (this entry).  21 findings — all 21 fixed inline + 1 retracted false-positive.  ZERO behavioral changes (every fix is doc/comment/i18n drift correction); locale parity, smoke baseline, registry contents, wire formats, and dispatcher routes all unchanged.
+
+CP28 FINDINGS (21 fixed inline; 1 retracted false-positive; Sally-6):
+
+PHASE 1 — pre-walkthrough staleness sweep (7 findings):
+
+DD-cp28-1 LOW — `docs/LAUNCH-DAY.md` L98 "Expect 2,900+ scenarios passed" — same class as cp27-DD2 catch for README/UPGRADING (2,900 was cp14-era; current 3,327).  cp27-DD2 swept this fix into README and UPGRADING but missed LAUNCH-DAY.md.  Fixed to "3,300+ scenarios passed, 0 runners failed (baseline ticks up as smokes are added each release; Part 122 cp27 baseline is 3,327)".
+
+DD-cp28-2 LOW — `docs/ADDING-A-COIN.md` L424 single-network coin list `(BTC, XMR, BLURT)` — stale since cp21 BCH addition.  Fixed to `(BTC, XMR, BLURT, BCH, LTC, DASH)`.
+
+DD-cp28-3 LOW — `docs/ADDING-A-COIN.md` L470 privacy-warning null-list `(BTC, XMR, BLURT all have null)` — stale since cp21.  Fixed to `(BTC, XMR, BLURT, BCH, LTC, DASH all have null)` with framing extended to "either private, decentralized, or transparent-but-non-custodial enough that no warning is needed".
+
+DD-cp28-4 LOW — `RELEASE-NOTES-v1.0.0-beta.1.md` L171 + L174-175 — audit-log line count "~20,000 lines" (now ~21,000+) AND ADR-count claim "25 architecture decision records in `docs/adr/0001-…` through `0026-…`" — stale by 1 ADR + audit count round number.  Fixed to "26 architecture decision records" + "0001-… through 0027-…" + audit ~21,000.
+
+DD-cp28-5 LOW — `MORPHIT-BRAG-LIST.md` verification-anchors footer "Architecture decisions: `docs/adr/0001-*.md` through `docs/adr/0026-*.md`" — stale by 1 ADR (cp27 added 0027).  Fixed.
+
+DD-cp28-6 (bundled into DD-cp28-4) — audit-log line-count round-number bump in RELEASE-NOTES.
+
+DD-cp28-7 MEDIUM — `scripts/build-mediakit.sh` README.txt heredoc (L75-76) said "fiat ↔ Bitcoin, Monero, BLURT, and USDT trades" — stale by 3 assets (cp21 BCH, cp24 LTC, cp27 DASH).  Fixed to "fiat ↔ Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash trades".  Mediakit rebuilt twice during cp28 (after Phase 1 + after Phase 2c brag-list edits).
+
+PHASE 2a — BOB walkthrough (6 findings):
+
+DD-cp28-Bob-1 LOW — `apps/web/src/lib/blurt/ops/feedback.ts:20-24` module-doc claimed `morphit_feedback_response_v1` op-builder "not shipped yet" — but `feedbackResponse.ts` (131 lines) + indexer handler (107 lines) ship, and `OP_IDS.feedbackResponse` is registered at `apps/web/src/lib/net/config.ts:160`.  Fixed comment to point at sibling file.
+
+DD-cp28-Bob-2 LOW — `apps/web/src/routes/[lang]/post/+page.svelte:1524-1527` comment "USDT surfaces here; BTC/XMR/BLURT are null and skip" — behavior is correct (USDT is still the only asset with non-null `privacyWarningKey`), but the comment listing BTC/XMR/BLURT misses BCH/LTC/DASH which also carry null.  Fixed comment to enumerate all 6 null-warning assets.
+
+DD-cp28-Bob-3 MEDIUM — `apps/web/src/lib/components/QrPanel.svelte:10-12` URI scheme list was BTC/XMR/BLURT-only — `buildPaymentUri` actually emits `bitcoincash:` (BCH), `litecoin:` (LTC), `dash:` (DASH).  Fixed docstring to enumerate all 7 trade assets + clarify USDT's no-single-scheme reality + point at `buildPaymentUri` as authoritative source.
+
+DD-cp28-Bob-4 LOW — `apps/web/src/qrcode.d.ts:5` ambient declaration "renders BTC/XMR/BLURT addresses" — same comment drift class as DD-cp28-Bob-3.  Fixed to enumerate full asset set + point at `buildPaymentUri`.
+
+DD-cp28-Bob-5 HIGH/CRITICAL — `faq.entries.trade_goods_services.a` × 10 locales: 11 stale trailing clauses "BTC, XMR, BLURT, or USDT" (en has 2 such clauses, 9 other locales have 1 each).  Same 4-checkpoint drift class as cp27-DD2 DD-10 (`what_is_morphit`) — cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all missed sweeping THIS particular FAQ entry's two internal asset-list clauses.  This is the FAQ-content drift class striking for the SIXTH time across the project's history.  Rewrote × 10 locales with full enumeration + native conjunctions (Spanish `o`, French `ou`, German `oder`, Italian `o`, Polish `lub`, Russian `или`, Persian `یا`, Chinese `或`).  Mirror llms-full.txt update.  JSON syntax validated for all 10 locales post-edit (`json.loads` per file).
+
+DD-cp28-Bob-6 LOW — `MORPHIT-BRAG-LIST.md` entry #275 "170 prerendered HTML files (17 indexable routes × 10 locales)" — double-stale: cp7 raised per-locale route count, cp27-DD2 made sitemap 18 indexable.  Per cp27-DD2 LESSON #6 (durable-phrasing fix), replaced with registry-driven framing pointing at `apps/web/src/lib/seo/routes.ts` SoT ("currently 18, lighting up new routes the moment they're registered").
+
+PHASE 2b — SALLY-USER walkthrough (5 findings; 1 retracted):
+
+DD-cp28-Sally-1 MEDIUM (3 sites) — Pre-Part-112 `account_create` / "pays the chain's BLURT fee at signup" wording survived module-docs at 3 sites after the operator-facing layer was corrected.  Real code uses fee-free `create_claimed_account` consuming a pre-minted ACT (the BLURT was paid earlier at the weekly `claim_account` ceremony).  PRE-LAUNCH-CHECKLIST and OPERATIONS.md §2 are correct, but developers reading the module-docs would have gotten the wrong mental model — exactly the class of staleness that causes operators to mis-size relay funding.  Three sites fixed:
+  (a) `apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte:17-18` module-doc.
+  (b) `apps/relay/src/api/create.ts` module-doc (lines 4-9).
+  (c) `apps/relay/src/api/create.ts:63-66` request-schema comment.
+
+DD-cp28-Sally-2 HIGH — `faq.entries.blurt_benefits.a` × 10 locales: "You don't have to interact with BLURT to trade BTC or XMR on Morphit" — stale-asset-list drift (cp3/cp21/cp24/cp27 all missed it).  All 10 locales had exactly one occurrence each of the locale-specific equivalent.  Fixed to enumerate all 6 non-BLURT assets ("BTC, XMR, USDT, BCH, LTC, or DASH").  Mirror llms-full.txt update.  JSON validated.
+
+DD-cp28-Sally-3 MEDIUM — `faq.entries.welcome_bonus.a` × 10 locales: "If you trade exclusively in BTC or XMR and never pay a BLURT listing fee" — same drift class.  Fixed to "in non-BLURT assets (BTC, XMR, USDT, BCH, LTC, or DASH)".  Mirror llms-full.txt update.  JSON validated.
+
+DD-cp28-Sally-4 LOW — `apps/web/src/lib/components/AddressShareModal.svelte:2-4` docstring "share a BTC/XMR receiving address" — modal actually dispatches 7 method tabs (BTC/XMR/BLURT/USDT/BCH/LTC/DASH).  Fixed.  Same file L216 also had stale "lower than for BTC/XMR" comment around the address-input min-typed threshold; behavior at L220 is `method === 'blurt' ? 3 : 10` (3 chars for BLURT, 10 for all others).  Fixed to "for the other assets (BTC, XMR, USDT, BCH, LTC, DASH, all of which use the same 10-char threshold)".
+
+DD-cp28-Sally-5 (5 sites) — Module-doc / inline-comment asset-enumeration drift across chat-flow components.  All fixed:
+  (a) `ChatMessage.svelte:70-79` `onMarkSent` prop doc said "btc/xmr address pill" / "method is btc/xmr"; type union at L80 is `'btc'|'xmr'|'usdt'|'bch'|'ltc'|'dash'` (BLURT excluded — BLURT transfers are single-tx, don't go through mark-sent reconciliation).  Fixed.
+  (b) `ChatMessage.svelte:139-144` `explorerLinkForTxid` doc said "BTC/XMR go to known-good external explorers"; function dispatches BTC/XMR/BCH/LTC/DASH/USDT (5+) external + BLURT internal.  Fixed.
+  (c) `ConversationView.svelte:259-263` `markSentArgs` comment "Mark-as-sent prefill from an incoming BTC/XMR address pill"; type union at L265 is full 6-asset external set.  Fixed.
+  (d) `ConversationView.svelte:369-379` `handleMarkSentClick` comment + "Morphit doesn't run a BTC/XMR wallet" — fixed to "incoming address pill (BTC/XMR/USDT/BCH/LTC/DASH)" + "external-chain wallet of its own".
+  (e) `FundsSentModal.svelte:12-20` docstring claimed "BTC/XMR RPC dependency we don't ship" + "Bitcoin sent / Monero sent pill" + "BTC → mempool.space, XMR → xmrchain.net, BLURT → /explorer"; same file L46-52 `initialAmount` "incoming BTC/XMR address pill".  Fixed both — RPC framing extended to "per-asset RPC dependency we don't ship for any of the external chains"; explorer dispatch listed BCH/LTC/DASH/USDT per-asset entries.
+  (f) `chat/payload.ts:1-10` module-doc "Buyers and sellers exchange BTC/XMR receiving addresses"; module dispatches every traded asset.  Fixed to "receiving addresses for the traded asset (BTC, XMR, BLURT, USDT, BCH, LTC, DASH)".
+  (g) `orders/payload.ts:102-108` `asset_network` field comment "Omitted for single-network assets (BTC, XMR, BLURT)" — stale.  Fixed to "(BTC, XMR, BLURT, BCH, LTC, DASH)".
+
+DD-cp28-Sally-6 — RETRACTED (false positive).  Initial scan thought `TOTAL_STEPS = 18` was off by 1 because `apps/ops-cli/src/init/steps.ts` had only 17 `step(N, TOTAL_STEPS, …)` invocations visible to grep.  Investigation: `stepRpcEndpoints` (L731) is shared between `init` and `edit` and intentionally doesn't render `step(…)` because it's used out-of-wizard-flow; `stepMatrixSurfaces` (L1521) uses `step(TOTAL_STEPS, TOTAL_STEPS, …)` (i.e., step 18/18) so it renders correctly.  init.ts at L113-130 invokes 18 step functions in sequence.  README + RELEASE-NOTES + PRE-LAUNCH-CHECKLIST all say `~18` consistently.  Wizard is self-consistent; finding withdrawn.
+
+PHASE 2c — SALLY-OPERATOR walkthrough (4 findings):
+
+DD-cp28-Sally-Op-1 HIGH — `docs/RUN-A-MORPHIT-NODE.md:125` (the GRANDMA-FRIENDLY entry-point operator runbook) said:
+    "Operating system: choose Debian 12 or Ubuntu 22.04 LTS. Both are fine. Debian if you have no preference."
+But: `ops/ansible/playbook.yml:47-54` hard-fails unless `ansible_distribution == "Ubuntu"` AND `ansible_distribution_version == "24.04"`; `scripts/vps-bootstrap.sh:21` does an Ubuntu 24.04 grep with a "Continue anyway? [y/N]" prompt on mismatch; README.md L7 + L42 say `Ubuntu 24.04`; OPERATIONS.md throughout says `Ubuntu 24`.  An operator following RUN-A-MORPHIT-NODE.md literally would pick a Debian 12 or Ubuntu 22.04 VPS, then `morphit-ops install` (Ansible path) would refuse to run.  This is the highest-impact operator-hostile drift class (the grandma-friendly path tells them the one OS the playbook won't accept).  Brag #270 ("Operator-doc audit pinned by regression smokes") indicates a sentinel-grep should be catching this — the gap is real and should be added to that smoke surface.  Fixed §3 OS recommendation to Ubuntu 24.04 LTS with explicit "this is the only OS the Morphit Ansible playbook currently supports" framing + Debian/22.04 off-piste note.
+
+DD-cp28-Sally-Op-2 MEDIUM (2 sites) — `docs/OPERATIONS.md` §18 "Signup-drain prevention" introduction misframed in BLURT-real-time-spend terms instead of ACT-pool depletion (same class as Sally-1).  Layer 2 "Global daily ceiling" text said "Bounds worst-case loss to (ceiling × account_creation_fee) BLURT per day" — that's the pre-Part-112 mental model.  Real risk is ACT-pool exhaustion forcing operators to either pause signups or mint extra ACTs out-of-cycle.  Fixed both — §18 head reframed to ACT-pool model with weekly-ceremony reference (ADR-0010 §4 + §2); Layer 2 ceiling text reframed in ACT terms.
+
+DD-cp28-Sally-Op-3 MEDIUM — `scripts/build-llms-full.mjs:38` generator header `"> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT marketplace."` — STALE BY 4 CHECKPOINTS (cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH).  Critically, the on-disk `apps/web/static/llms-full.txt` header was already correct (`BTC/XMR/BLURT/USDT/BCH/LTC/DASH`) — meaning **someone hand-edited the generated artifact instead of fixing the builder**, and the next `npm run build` would have regenerated it with the stale 3-asset header, silently wiping the manual fix.  Highest-leverage bug class in the repo: generator-vs-artifact drift hidden behind hand-fixes.  Fixed builder; regenerated llms-full.txt; verified Sally-2 + Sally-3 mirror fixes round-trip correctly through the builder (`grep -nE "trade BTC, XMR|exclusively in non-BLURT" apps/web/static/llms-full.txt` shows 2 hits on regen output).  cp27-DD2 LESSON #7 ("Derived artifacts and their generators must drift in lockstep") was the right warning — cp28 caught the worst instance of this class.
+
+DD-cp28-Sally-Op-4 LOW — `docs/SECURITY.md:594` regulatory-stance paragraph "the BTC/XMR/BLURT transfer happens between their own wallets" — stale-asset-list drift in trade-settlement (NOT listing-fee) scope.  Listing-fee scope (`BLURT/BTC/XMR`) is intentionally frozen per Memory #23; trade-settlement scope follows the full tradable-asset registry.  Fixed to "the per-asset settlement transfer (BTC, XMR, BLURT, USDT, BCH, LTC, or DASH) happens between their own wallets".
+
+CP28 PATTERN LESSONS BANKED (5 new lessons, numbered 11-15 for project-wide continuity with cp27-DD2's 1-10):
+
+11. **JSON locale FAQ entries are a separate drift surface from .md files.**  cp25/cp26/cp27-DD2 swept .md aggressively but the asset-enumeration drift class kept reproducing in FAQ JSON values.  cp28 found 3 additional FAQ entries (trade_goods_services, blurt_benefits, welcome_bonus) with the SAME 4-checkpoint pattern that cp27-DD2 caught in `what_is_morphit`.  Future asset additions: add the FAQ-walkthrough explicit step to ADDING-A-COIN.md ("scan every `faq.entries.*.a` value × 10 locales for stale asset-list clauses").
+
+12. **Module-doc comments in `.svelte` and `.ts` files are a separate drift surface from .md files entirely.**  cp27-DD2 found zero of these because its grep targeted .md.  cp28 found 13 of these in 30 minutes (Bob-1, Bob-2, Bob-3, Bob-4 + Sally-4×2, Sally-5×7).  Manual persona walkthroughs catch this class; static greps don't.  Surface to monitor.
+
+13. **Generator-vs-artifact drift hidden behind hand-fixes is the highest-leverage bug class in the repo.**  Sally-Op-3 was generated content that had been hand-corrected on disk so it read correctly NOW, but the next `npm run build` would have regressed it.  Future practice: when a generated artifact (llms-full.txt, sitemap.xml, mediakit.zip, etc.) shows stale content, fix the GENERATOR first, then regenerate.  Never hand-edit a derived file without fixing the source.  Add CI gate: regenerate every derived artifact in a fresh checkout and `diff` against committed version (any mismatch fails the build).
+
+14. **The grandma-friendly entry-point doc is the most operator-hostile drift surface.**  Sally-Op-1 had RUN-A-MORPHIT-NODE.md recommending an OS the Ansible playbook refuses.  An operator following the doc literally would experience deployment failure as their first interaction.  Brag #270 ("Operator-doc audit pinned by regression smokes") names this discipline; the gap is real.  Filed in REVISIT-LIST: extend operator-doc sentinel-grep to verify every recommended/expected OS, Postgres version, Node.js version, and command-line invocation against actual CI matrices and Ansible distribution_version checks.
+
+15. **Wire-format constants (`create_claimed_account`, `morphit_feedback_v1`, `fee_method` enum, etc.) drift in the prose surrounding them, not in the code itself.**  Sally-1 and Sally-Op-2 are both `create_claimed_account` (Part 112 work) vs surrounding prose drift class.  The wire-format invariants are pinned by smokes; the explanation of WHY those are the wire formats drifts independently.  Add a "WHY this wire format" section to every wire-format-pinning smoke's comment block, and verify smokes' comments against the explanations in module-docs + OPERATIONS.md when drift is found.
+
+CP28 SHIPPED:
+
+EDITED (file → finding):
+  docs/LAUNCH-DAY.md                                                                     (DD-cp28-1)
+  docs/ADDING-A-COIN.md                                                                  (DD-cp28-2 + DD-cp28-3)
+  RELEASE-NOTES-v1.0.0-beta.1.md                                                         (DD-cp28-4)
+  MORPHIT-BRAG-LIST.md                                                                   (DD-cp28-5 + DD-cp28-Bob-6)
+  scripts/build-mediakit.sh                                                              (DD-cp28-7)
+  apps/web/static/morphit-mediakit.zip                                                   (rebuilt × 2 per Memory #4)
+  apps/web/src/lib/blurt/ops/feedback.ts                                                 (DD-cp28-Bob-1)
+  apps/web/src/routes/[lang]/post/+page.svelte                                           (DD-cp28-Bob-2)
+  apps/web/src/lib/components/QrPanel.svelte                                             (DD-cp28-Bob-3)
+  apps/web/src/qrcode.d.ts                                                               (DD-cp28-Bob-4)
+  apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json               (DD-cp28-Bob-5 + DD-cp28-Sally-2 + DD-cp28-Sally-3 — 31 strings total across 3 FAQ entries × 10 locales, en has +2 internal clauses)
+  apps/web/static/llms-full.txt                                                          (regenerated from i18n via build-llms-full.mjs after Sally-Op-3 builder fix; mirror updates for Bob-5/Sally-2/Sally-3)
+  apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte                       (DD-cp28-Sally-1a)
+  apps/relay/src/api/create.ts                                                           (DD-cp28-Sally-1b + DD-cp28-Sally-1c)
+  apps/web/src/lib/components/AddressShareModal.svelte                                   (DD-cp28-Sally-4 × 2 locations)
+  apps/web/src/lib/components/ChatMessage.svelte                                         (DD-cp28-Sally-5a + DD-cp28-Sally-5b)
+  apps/web/src/lib/components/ConversationView.svelte                                    (DD-cp28-Sally-5c + DD-cp28-Sally-5d)
+  apps/web/src/lib/components/FundsSentModal.svelte                                      (DD-cp28-Sally-5e)
+  apps/web/src/lib/chat/payload.ts                                                       (DD-cp28-Sally-5f)
+  apps/web/src/lib/orders/payload.ts                                                     (DD-cp28-Sally-5g)
+  docs/RUN-A-MORPHIT-NODE.md                                                             (DD-cp28-Sally-Op-1)
+  docs/OPERATIONS.md                                                                     (DD-cp28-Sally-Op-2 × 2 sites)
+  scripts/build-llms-full.mjs                                                            (DD-cp28-Sally-Op-3 — generator header)
+  docs/SECURITY.md                                                                       (DD-cp28-Sally-Op-4)
+  docs/AUDIT-2026-05.md                                                                  (cp28 entry appended; this turn)
+  docs/REVISIT-LIST.md                                                                   (last-maintained → cp28 + new sentinel-grep REVISIT entry for Pattern Lesson 14)
+  TARBALL.md                                                                             (this entry prepended)
+
+CP28 FINAL STATE:
+
+- Smoke baseline unchanged at 3,327 (no new behavioral claims; no new smokes)
+- Locale parity holds at 2,644 keys × 10 = 26,440 strings (FAQ values updated, no key changes)
+- Brag list 279 entries (Bob-6 was a phrasing change, not a count change)
+- Sitemap: 180 URLs (unchanged from cp27-DD2)
+- Mediakit rebuilt × 2 in cp28 per Memory #4 (final size 39,886 bytes); generator at scripts/build-mediakit.sh now correctly enumerates all 7 tradable assets in the README.txt heredoc
+- llms-full.txt regenerated cleanly via build-llms-full.mjs; round-trip verified for Bob-5/Sally-2/Sally-3 FAQ fixes
+- All cp28 findings closed (21→0 deferred); nothing carried to next session
+- All 21 cp28 fixes are doc/comment/i18n drift corrections; no behavioral changes; wire formats and asset-registry contents identical to cp27-DD2
+- 1 pre-existing sandbox limitation (ERR_MODULE_NOT_FOUND in 27 runners pre-`npm install`) persists — handoff tarball assumes fresh `npm install` will run
+
+HONEST PUSHBACK CHRONICLE: This was cp28's value-vs-cost call.  Started with an honest pushback to Ken on whether all-three-personas was warranted given cp27-DD2's persona-walkthrough-smoke was 120/120 — but Bob walkthrough started finding things immediately (6 in Bob alone, including the HIGH/CRITICAL trade_goods_services 10-locale drift), then Sally-user found 5 more including 2 HIGH FAQ drifts that mirror Bob-5's class, then Sally-operator found the doc-vs-Ansible OS recommendation gap (Sally-Op-1) and the generator-vs-artifact drift (Sally-Op-3) which is arguably the highest-leverage bug class in the repo.  Net 21 findings in one chat session that cp27-DD2's content-targeted sweep had not surfaced.  Pushback would have been wrong; Ken's "all of them unless legit pushback" directive was the right call.  Pattern: when a cp27-DD2-class content sweep clears the doc surfaces, the NEXT high-value sweep is module-doc + JSON-FAQ + generator-vs-artifact rather than another doc-content pass.
+
+NEXT SESSION GUIDANCE:
+
+1. Extract this tarball.
+2. Run `npm install` (sandbox precondition).
+3. Run `bash scripts/run-smokes.sh` to confirm cp28 didn't break anything; expect 3,327 scenarios passed, 0 runners failed (same baseline as cp27-DD2 — cp28 added no smokes).
+4. Two parked solo items unchanged from cp27-DD2: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning), (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These are external-blocker tasks, not code tasks.
+5. Optional: extend operator-doc sentinel-grep CI to enforce Pattern Lesson 14 (OS/Postgres/Node.js recommendations vs actual CI matrices).
+6. Optional: add CI gate per Pattern Lesson 13 (regenerate every derived artifact in fresh checkout, diff against committed, fail on mismatch).
+
+**Snapshot date:** 2026-05-17 (cp28)
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 27-DD2 — Comprehensive doc-sweep deep-deep covering all 96 .md files + LTC placeholder closure.  Ken (iterative): "you said: 'LTC's still a placeholder per ADR-0025 §8 — Ken hasn't supplied LTC canonical yet' — what does that mean? can't you finish that? you don't need anything from me for that, do you? if so, what?" then "the current ltc icon looks great, i do not think u need to change that. time for a deep deep on all that recent work. look for drift, unwired stuff, staleness and orphaned stuff in all files too." then "i assume you are ALSO thoroughly reading every single .md file now. ALL of them. make sure the wording is correct and proper, make sure they are all factual, you know what to do. take your time and make them all perfect. every. single. one. with that, continue with the deep deep."
 
 LTC PLACEHOLDER CLOSURE (Ken's directive): Per Ken's "the current ltc icon looks great, i do not think u need to change that" — closed LTC artwork backlog entirely.  ADR-0025 §8 placeholder language dropped + replaced with "Operator-approved logo at cp27-DD2" framing including Ken quote.  ADR-0025 trade-offs item dropped (no more "Placeholder logo until community artwork ships").  ADR-0025 future-revisits item dropped ("Community-blessed LTC logo replacement" removed).  Files-changed list updated noting operator approval + cp27-DD minification.  LTC SVG itself unchanged — the stylized "Ł" path-based artwork on silver-gray disc (0.4KB minified) is now the operator-approved permanent mark.

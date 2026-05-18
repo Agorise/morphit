@@ -73,7 +73,8 @@ Morphit media kit
 
 This bundle contains current brand assets and a public-facing claims
 list for Morphit — a federated, non-custodial, no-KYC peer-to-peer
-marketplace for fiat ↔ Bitcoin, Monero, BLURT, and USDT trades.
+marketplace for fiat ↔ Bitcoin, Monero, BLURT, USDT, Bitcoin Cash,
+Litecoin, and Dash trades.
 
 Source repo:  https://git.agorise.net/agorise/morphit
 Project URL:  https://morphit.io  (one instance among many)

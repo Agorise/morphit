@@ -95,8 +95,9 @@ problem has time to surface without crisis pressure.
       ```bash
       bash scripts/run-smokes.sh
       ```
-      Expect 2,900+ scenarios passed, 0 runners failed
-      (baseline ticks up as smokes are added each release).
+      Expect 3,300+ scenarios passed, 0 runners failed
+      (baseline ticks up as smokes are added each release; Part
+      122 cp27 baseline is 3,327).
       A failure here means *don't* launch tomorrow.
 
 - [ ] **Take a snapshot of your DB.**  PostgreSQL

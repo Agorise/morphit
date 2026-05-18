@@ -1,12 +1,13 @@
 /**
  * Morphit chat — structured payload encode/decode (Phase F).
  *
- * Buyers and sellers exchange BTC/XMR receiving addresses (and
- * "funds sent" acknowledgments) inside encrypted chat messages.
- * The chat layer below this module treats the inner plaintext as
- * an opaque string — encryption, broadcast, and indexer storage
- * don't care about its shape.  This module is the structured
- * shape that rides inside the plaintext.
+ * Buyers and sellers exchange receiving addresses for the traded
+ * asset (BTC, XMR, BLURT, USDT, BCH, LTC, DASH) and "funds sent"
+ * acknowledgments inside encrypted chat messages.  The chat layer
+ * below this module treats the inner plaintext as an opaque
+ * string — encryption, broadcast, and indexer storage don't care
+ * about its shape.  This module is the structured shape that
+ * rides inside the plaintext.
  *
  * ─── Wire format ───────────────────────────────────────────────
  *

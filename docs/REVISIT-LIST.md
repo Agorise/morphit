@@ -1,6 +1,8 @@
 # Morphit — revisit list
 
-**Last maintained:** 2026-05-17 (Part 122 cp27-DD2 — comprehensive doc-sweep deep-deep covering all 96 .md files + LTC placeholder closure.  Ken (iterative): "the current ltc icon looks great, i do not think u need to change that.  time for a deep deep on all that recent work" then "i assume you are ALSO thoroughly reading every single .md file now. ALL of them. make sure the wording is correct and proper, make sure they are all factual."  19 findings — 18 fixed inline + 1 deferred (DD-cp27-DD-18: sitemap.xml stale — separate sitemap-regen task, filed below).  Critical surfaces fixed: README.md front-page (4 stale claims: tagline missing Dash, privacy paragraph missing DASH, ADR range 0023→0027 cited twice, smoke count + wizard prompt count + route count); `faq.entries.what_is_morphit.a` × 10 locales (4-CHECKPOINT DRIFT — cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all missed it; rewritten with full enumeration "trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash)" with native translations for en/es/fr/de + EN-fallback for others); `privacy.index_intro` × 10 locales (missing DASH); `privacy.guides.blurt.caveats` × 10 locales (added DASH-PrivateSend alternative); `apps/web/static/llms-full.txt` two stale FAQ entries synced; defensive fallback `apps/web/src/lib/stores/instance.ts` missing `dash: null` (same class as cp23 BCH bug); ADR-0026 transparent-chain privacy framework table missing DASH row + enum description missing `'privatesend'` (added with cp27 extension note pattern); ADDING-A-COIN.md missing entire privacyFeatures framework section (cp26 meta-drift retrofit); FEES-AND-REWARDS.md crypto-leg list updated to all 7 assets; brag list footer 278→279 + docs count 46→49; ops-cli README + main README wizard step count 9/17→18; UPGRADING.md smoke count 3,000+→3,300+; PRE-LAUNCH-CHECKLIST last-refreshed bumped; 27 instances of route-path drift from cp7 per-locale prerendering migration — fixed 13 in 5 LIVING docs (ADDING-A-COIN, CHAT-UI-DESIGN, GRANDMA-FRIENDLY, LOCK-SESSION-DESIGN, OPERATOR-TRUST-DESIGN), 14 in historical ADRs left intact per cp26-DD2 lesson.  LTC PLACEHOLDER CLEANUP per Ken's "the current ltc icon looks great" approval: ADR-0025 §8 placeholder language dropped + replaced with "operator-approved at cp27-DD2" framing + Ken quote; trade-offs item dropped; future-revisits community-blessed-logo entry dropped; files-changed list updated.  AUDIT LOG CATCH-UP: cp27 + cp27-DD + cp27-DD2 entries appended to docs/AUDIT-2026-05.md (line count 21,134 → 21,314).  Smoke baseline unchanged at 3,327.  Locale parity holds at 2,644 keys × 10 = 26,440 strings.  All 8 cp27+DD smokes triple-pulse green.  Mediakit rebuilt per Memory #4.  PATTERN LESSONS recorded: (1) `what_is_morphit` 4-checkpoint drift — durably-shaped phrasing + add to FAQ sweep checklist; (2) README front page is highest-leverage staleness target — add to per-cp doc-sync checklist; (3) static export files (llms-full.txt) need same-checkpoint sync alongside JSON locales; (4) ADRs describing ongoing framework state need annotation pattern not rewrite; (5) ADDING-A-COIN.md meta-drift — cp26 added privacyFeatures struct without updating asset-addition playbook; (6) path-drift from per-locale prerendering migration is recurring class — need CI gate verifying backtick-quoted apps/web/src/routes/ paths in active docs resolve on disk; (7) wizard step count claims drift — verify against `TOTAL_STEPS` source-of-truth constant; (8) "26 ADRs" claim was correct — false-positive on staleness scanner — counting claims need explicit minus-reserved math.)
+**Last maintained:** 2026-05-17 (Part 122 cp28 — Bob/Sally-user/Sally-operator persona walkthrough deep-sweep.  Ken (after cp27-DD2 cross-session resumption): "let's continue all of the necessary work right here in this chat.  the tool budget is fine now and we have plenty of turn and session time available."  21 findings — all 21 fixed inline + 1 retracted false-positive (Sally-6 TOTAL_STEPS — wizard self-consistent on closer inspection).  Severity: 1 HIGH/CRITICAL (Bob-5 trade_goods_services × 10 locales — 6th occurrence of the FAQ-content drift class), 1 HIGH (Sally-2 blurt_benefits × 10 locales), 1 HIGH (Sally-Op-1 grandma-friendly entry-point doc recommending an OS the Ansible playbook hard-fails on), 5 MEDIUM (cp28-7 mediakit-builder heredoc, Bob-3 QrPanel URI scheme docstring, Sally-1 × 3 sites `create_claimed_account` prose drift, Sally-3 welcome_bonus, Sally-Op-2 × 2 sites OPERATIONS §18 ACT-model framing, Sally-Op-3 build-llms-full.mjs generator-vs-artifact drift), 13 LOW.  Critical surfaces fixed: 3 FAQ entries × 10 locales = 31 string updates with native conjunctions (trade_goods_services + blurt_benefits + welcome_bonus, each carrying stale BTC/XMR/BLURT/USDT clauses missed by cp3/cp21/cp24/cp27); 13 `.svelte` and `.ts` module-doc + ambient-declaration drift sites across the chat-flow + asset-handling components (Bob-1/2/3/4 + Sally-4 × 2 + Sally-5 × 7); 3 sites where pre-Part-112 `account_create`/"pays BLURT at signup" prose survived after the Part-112 fee-free `create_claimed_account` ACT-pool model was wired (Sally-1a/b/c); 2 sites in OPERATIONS §18 where the signup-drain explanation was still framed in real-time-BLURT-spend rather than ACT-pool-depletion terms (Sally-Op-2); the grandma-friendly entry-point operator doc told operators to pick Debian 12 or Ubuntu 22.04 LTS, but the Ansible playbook hard-fails on anything ≠ Ubuntu 24.04 (Sally-Op-1); the `scripts/build-llms-full.mjs` builder header was stale by 4 checkpoints AND the on-disk artifact had been hand-edited to the correct form so `npm run build` would have regressed it (Sally-Op-3 — highest-leverage bug class in repo); SECURITY.md regulatory-stance trade-settlement clause extended from BTC/XMR/BLURT to all 7 tradable assets (Sally-Op-4).  Mediakit rebuilt × 2 (post-Phase 1 + post-Phase 2c).  Smoke baseline unchanged at 3,327 (no new behavioral claims; cp28 added no smokes).  Locale parity holds at 2,644 × 10 = 26,440 strings.  Brag list 279 entries (Bob-6 was a phrasing change, not a count change).  llms-full.txt regenerated cleanly via build-llms-full.mjs; round-trip verified for Bob-5/Sally-2/Sally-3 FAQ fixes.  AUDIT LOG: cp28 entry appended (line count 21,358 → 21,453).  PATTERN LESSONS recorded (numbered 11-15 for continuity with cp27-DD2's 1-10): (11) JSON locale FAQ entries are a separate drift surface from .md files; cp28 found 3 FAQ entries with the same 4-checkpoint pattern cp27-DD2 caught in what_is_morphit; (12) module-doc comments in `.svelte` and `.ts` are a separate drift surface from .md files; cp27-DD2 found zero, cp28 found 13; (13) generator-vs-artifact drift hidden behind hand-fixes is the highest-leverage bug class in the repo — fix the GENERATOR first, never hand-edit derived files; add CI gate that regenerates every derived artifact in fresh checkout and diffs against committed; (14) the grandma-friendly entry-point doc is the most operator-hostile drift surface; extend brag #270's operator-doc sentinel-grep to cover OS / Postgres / Node.js version recommendations against actual CI matrices and Ansible distribution_version checks — **filed as new REVISIT entry below**; (15) wire-format constants drift in the prose surrounding them, not in the code itself; Sally-1 and Sally-Op-2 are both `create_claimed_account` (Part 112 work) vs surrounding-prose drift — add "WHY this wire format" section to every wire-format-pinning smoke's comment block.)
+
+**Previous maintained:** 2026-05-17 (Part 122 cp27-DD2 — comprehensive doc-sweep deep-deep covering all 96 .md files + LTC placeholder closure.  Ken (iterative): "the current ltc icon looks great, i do not think u need to change that.  time for a deep deep on all that recent work" then "i assume you are ALSO thoroughly reading every single .md file now. ALL of them. make sure the wording is correct and proper, make sure they are all factual."  19 findings — 18 fixed inline + 1 deferred (DD-cp27-DD-18: sitemap.xml stale — separate sitemap-regen task, filed below).  Critical surfaces fixed: README.md front-page (4 stale claims: tagline missing Dash, privacy paragraph missing DASH, ADR range 0023→0027 cited twice, smoke count + wizard prompt count + route count); `faq.entries.what_is_morphit.a` × 10 locales (4-CHECKPOINT DRIFT — cp3 USDT, cp21 BCH, cp24 LTC, cp27 DASH all missed it; rewritten with full enumeration "trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, and Dash)" with native translations for en/es/fr/de + EN-fallback for others); `privacy.index_intro` × 10 locales (missing DASH); `privacy.guides.blurt.caveats` × 10 locales (added DASH-PrivateSend alternative); `apps/web/static/llms-full.txt` two stale FAQ entries synced; defensive fallback `apps/web/src/lib/stores/instance.ts` missing `dash: null` (same class as cp23 BCH bug); ADR-0026 transparent-chain privacy framework table missing DASH row + enum description missing `'privatesend'` (added with cp27 extension note pattern); ADDING-A-COIN.md missing entire privacyFeatures framework section (cp26 meta-drift retrofit); FEES-AND-REWARDS.md crypto-leg list updated to all 7 assets; brag list footer 278→279 + docs count 46→49; ops-cli README + main README wizard step count 9/17→18; UPGRADING.md smoke count 3,000+→3,300+; PRE-LAUNCH-CHECKLIST last-refreshed bumped; 27 instances of route-path drift from cp7 per-locale prerendering migration — fixed 13 in 5 LIVING docs (ADDING-A-COIN, CHAT-UI-DESIGN, GRANDMA-FRIENDLY, LOCK-SESSION-DESIGN, OPERATOR-TRUST-DESIGN), 14 in historical ADRs left intact per cp26-DD2 lesson.  LTC PLACEHOLDER CLEANUP per Ken's "the current ltc icon looks great" approval: ADR-0025 §8 placeholder language dropped + replaced with "operator-approved at cp27-DD2" framing + Ken quote; trade-offs item dropped; future-revisits community-blessed-logo entry dropped; files-changed list updated.  AUDIT LOG CATCH-UP: cp27 + cp27-DD + cp27-DD2 entries appended to docs/AUDIT-2026-05.md (line count 21,134 → 21,314).  Smoke baseline unchanged at 3,327.  Locale parity holds at 2,644 keys × 10 = 26,440 strings.  All 8 cp27+DD smokes triple-pulse green.  Mediakit rebuilt per Memory #4.  PATTERN LESSONS recorded: (1) `what_is_morphit` 4-checkpoint drift — durably-shaped phrasing + add to FAQ sweep checklist; (2) README front page is highest-leverage staleness target — add to per-cp doc-sync checklist; (3) static export files (llms-full.txt) need same-checkpoint sync alongside JSON locales; (4) ADRs describing ongoing framework state need annotation pattern not rewrite; (5) ADDING-A-COIN.md meta-drift — cp26 added privacyFeatures struct without updating asset-addition playbook; (6) path-drift from per-locale prerendering migration is recurring class — need CI gate verifying backtick-quoted apps/web/src/routes/ paths in active docs resolve on disk; (7) wizard step count claims drift — verify against `TOTAL_STEPS` source-of-truth constant; (8) "26 ADRs" claim was correct — false-positive on staleness scanner — counting claims need explicit minus-reserved math.)
 
 **Previous maintained:** 2026-05-17 (Part 122 cp27 — DASH addition + PrivateSend privacy support.  Ken's prompt: "add Dash (DASH). wire it up as well, and THEN do a deep deep on our latest work." + 9 candidate Dash block explorers + "dash offers some sort of privacy features (PrivateSend), so let's support as much of that as possible".  4th Category-B trade-only asset shipped end-to-end with proactive cp23-DD-class closure: every downstream typed-consumer site (prices, payments registry, cheat-sheet, schema.sql, API.md, GRANDMA, llms files) touched THIS turn, not deferred to a follow-up DD.  Also applied cp25 FAQ-sweep discipline SAME-CHECKPOINT (3 FAQ entries × 10 locales with native conjunctions) and cp26-DD-9 phrase-anchored brag-list discipline (new entry appended at END as #279 — no renumbering, no cross-doc citation breakage).  PrivateSend support via new `'privatesend'` enum in `optInPrivacyTech` + per-asset privacy guide page at `/[lang]/privacy/dash` documenting the masternode-coordination trade-off honestly.  Bundled chat-link explorer = `https://insight.dash.org/insight/tx/{txid}` (official Dash project Insight, community-led, open-source, no third-party tracking — chosen from operator's 9-candidate survey per priority #1 privacy/anonymity).  Smoke baseline 3,306 → 3,327 (+21).  Locale parity 2,630 → 2,644 keys × 10 = 26,440 strings.  All 7 cp27-touched smokes triple-pulse green.  Closes the standing per-asset-addition checklist with cp23-DD-class + cp25-FAQ + cp26-DD9-brag-list lessons all applied same-checkpoint.  cp27-DD on this work to follow per Ken's directive — findings will live in TARBALL cp27-DD entry.)
 
@@ -1837,6 +1839,89 @@ later sub-phase.
 
 These aren't bugs — the features work — but there's known
 follow-up polish the original ship didn't include.
+
+### Extend brag #270's operator-doc sentinel-grep to OS / Postgres / Node.js version recommendations — DEFERRED 2026-05-17 (Part 122 cp28)
+
+cp28's Sally-operator walkthrough surfaced DD-cp28-Sally-Op-1
+(HIGH): `docs/RUN-A-MORPHIT-NODE.md` §3 told operators to choose
+**Debian 12 or Ubuntu 22.04 LTS**, but `ops/ansible/playbook.yml:47-54`
+hard-fails unless `ansible_distribution == "Ubuntu"` AND
+`ansible_distribution_version == "24.04"`; `scripts/vps-bootstrap.sh:21`
+prompts on mismatch; `README.md` L7+L42 + `OPERATIONS.md` throughout
+all say Ubuntu 24.04.  An operator following the grandma-friendly
+runbook literally would pick an unsupported OS and hit deployment
+failure as their first interaction with the project.
+
+Brag list entry #270 ("Operator-doc audit pinned by regression
+smokes — every CLI command, every environment variable, every API
+field path, every install location named in the operator docs is
+sentinel-grep checked against the real code") names exactly the
+discipline that should have caught this — but the actual sentinel
+surface in `apps/web/scripts/persona-walkthrough-smoke.ts` only
+covers CLI commands + env var names + path locations.  Recommended
+OS versions, Postgres versions, Node.js versions, and similar
+"system-prerequisite" claims are NOT currently covered.
+
+Action items for the post-launch sweep:
+1. Add a new sentinel class to persona-walkthrough-smoke.ts that
+   parses operator-facing docs (`RUN-A-MORPHIT-NODE.md`,
+   `OPERATIONS.md`, `README.md`, `RELEASE-NOTES-v1.0.0-beta.1.md`)
+   for phrases of the form `Ubuntu N.NN`, `Debian N`,
+   `Postgres N` / `PostgreSQL N`, `Node.js N`/`node N`.
+2. For each match, verify the recommended version against the
+   matching source-of-truth:
+   - OS recommendations → `ops/ansible/playbook.yml` distribution
+     assertion + `scripts/vps-bootstrap.sh` os-release grep
+   - Postgres recommendations → schema-applies-cleanly CI matrix
+   - Node.js recommendations → root `package.json:engines.node`
+3. Sentinel failure if any doc recommends a version the CI
+   matrix / playbook assertion does not accept.
+
+This finding's class is exactly the cp28 Pattern Lesson 14:
+"The grandma-friendly entry-point doc is the most operator-hostile
+drift surface."  Extending the sentinel-grep closes the class.
+
+Estimated work: ~2 hours.  Not pre-launch blocking (cp28 fixed
+the specific Sally-Op-1 instance; the sentinel extension prevents
+recurrence).  Filed for the first post-launch hardening sprint.
+
+### Add CI gate that regenerates every derived artifact in a fresh checkout and diffs against committed — DEFERRED 2026-05-17 (Part 122 cp28)
+
+cp28's Sally-operator walkthrough surfaced DD-cp28-Sally-Op-3
+(MEDIUM): `scripts/build-llms-full.mjs:38` generator header was
+**stale by 4 checkpoints** (cp3/cp21/cp24/cp27), but the on-disk
+`apps/web/static/llms-full.txt` had been **hand-edited** to the
+correct 7-asset form during an earlier checkpoint.  This created
+a silent ticking bomb: the next `npm run build` would have
+regenerated llms-full.txt with the stale 3-asset header, silently
+wiping the manual fix.
+
+cp28 Pattern Lesson 13 banked this as the highest-leverage bug
+class in the repo: **generator-vs-artifact drift hidden behind
+hand-fixes.**  The artifacts at risk include (at minimum):
+
+- `apps/web/static/llms-full.txt` (built by `scripts/build-llms-full.mjs`)
+- `apps/web/static/sitemap.xml` (built by `scripts/build-sitemap.mjs`)
+- `apps/web/static/morphit-mediakit.zip` (built by `scripts/build-mediakit.sh`)
+- `apps/web/static/verify.json` (built by `scripts/build-verify-json.mjs`)
+- `apps/web/static/llms.txt` (status: needs verification — does it have a builder, or is it hand-maintained?)
+
+Recommended CI gate:
+1. In a fresh checkout (no committed-artifact bias), run every
+   `scripts/build-*.{mjs,sh}` builder.
+2. Diff the output against the committed version of each derived
+   artifact.
+3. Any non-empty diff fails the CI run with a clear error message:
+   "Generated artifact X is out-of-sync with its generator Y.
+   Either re-run `Y` and commit, OR fix the generator if it's
+   stale."
+
+Estimated work: ~3 hours (mostly figuring out which artifacts have
+nondeterministic outputs like timestamps and either making the
+builders deterministic or normalizing diffs).  Not pre-launch
+blocking (cp28 fixed the specific Sally-Op-3 instance, and the
+mediakit-builder fix is the only known hand-edit hidden behind a
+stale builder); the CI gate prevents recurrence.
 
 ### Replace brag-list-by-number citations with phrase-anchored citations — DEFERRED 2026-05-17 (Part 122 cp26 DD)
 

@@ -1,7 +1,8 @@
 <script lang="ts">
 	/**
-	 * AddressShareModal — share a BTC/XMR receiving address through
-	 * the chat.
+	 * AddressShareModal — share a receiving address through the
+	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, BCH,
+	 * LTC, DASH).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
 	 * sends it through the same chat-send path as a normal text
@@ -212,7 +213,8 @@
 	 *  the user has typed enough chars) is jarring, so only flag
 	 *  invalid AFTER they've typed something substantial.  BLURT
 	 *  account names are short (3-16 chars) so the threshold is
-	 *  lower than for BTC/XMR. */
+	 *  lower than for the other assets (BTC, XMR, USDT, BCH,
+	 *  LTC, DASH, all of which use the same 10-char threshold). */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
 		// Method-aware "still typing" threshold.

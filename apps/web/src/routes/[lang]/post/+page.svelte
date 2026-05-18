@@ -1524,7 +1524,8 @@
 			<!-- Part 121 — privacy/decentralization warning chip.
 			     Renders only when the chosen asset has a non-null
 			     privacyWarningKey in the canonical registry.  USDT
-			     surfaces here; BTC/XMR/BLURT are null and skip. -->
+			     is currently the only asset that surfaces here;
+			     BTC/XMR/BLURT/BCH/LTC/DASH all carry null and skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
 				<!-- Network picker is REQUIRED when asset is USDT.

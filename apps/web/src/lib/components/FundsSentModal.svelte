@@ -11,13 +11,15 @@
 	 *
 	 * Validation is lighter than AddressShareModal — the txid is a
 	 * 64-hex string, that's it.  We don't try to look up the txid
-	 * on the chain (would require a BTC/XMR RPC dependency we
-	 * don't ship; counterparty's own wallet/explorer will do that).
+	 * on the chain (would require a per-asset RPC dependency we
+	 * don't ship for any of the external chains; the counterparty's
+	 * own wallet/explorer will do that).
 	 *
 	 * The recipient's ChatMessage decodes the payload and renders
-	 * a "Bitcoin sent" / "Monero sent" pill with the txid and a
-	 * "View on explorer" link via explorerLinkForTxid (BTC →
-	 * mempool.space, XMR → xmrchain.net, BLURT → /explorer).
+	 * a per-asset "X sent" pill with the txid and a "View on
+	 * explorer" link via explorerLinkForTxid (BTC → mempool.space,
+	 * XMR → xmrchain.net, BCH/LTC/DASH/USDT → per-asset external
+	 * explorers, BLURT → /explorer).
 	 */
 
 	import { _ } from 'svelte-i18n';
@@ -43,13 +45,13 @@
 		 *  so the buyer can't accidentally pick a different one. */
 		initialUsdtNetwork?: UsdtNetwork | null;
 		/** Q5 — Initial amount, pre-filled when the modal was
-		 *  triggered from an incoming BTC/XMR address pill that
-		 *  carried an amount. The buyer types the txid; the
-		 *  amount field starts populated with whatever the seller
-		 *  asked for (which, for jittered XMR amounts, is the
-		 *  exact 12-decimal value the buyer's wallet should have
-		 *  sent). User can still edit if they paid a different
-		 *  value. */
+		 *  triggered from an incoming external-asset address pill
+		 *  (BTC/XMR/USDT/BCH/LTC/DASH) that carried an amount.
+		 *  The buyer types the txid; the amount field starts
+		 *  populated with whatever the seller asked for (which,
+		 *  for jittered XMR amounts, is the exact 12-decimal value
+		 *  the buyer's wallet should have sent). User can still
+		 *  edit if they paid a different value. */
 		initialAmount?: string;
 		/** Pre-filled order permlink, same role as in
 		 *  AddressShareModal. */
