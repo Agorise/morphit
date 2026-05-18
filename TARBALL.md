@@ -1,3 +1,72 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD-DD ADDENDUM — full deep-deep closure of the four categories the first cp30-DD-DD pass had partial or zero coverage of: B (deps/supply-chain), I (contracts), K (STRIDE), L (per-subsystem deep dives).  Per Ken's prompt asking whether ALL the deep-deep points were covered including the STRIDE test ("STRIKE" was a typo).  Honest accounting: first cp30-DD-DD pass covered A/C/D/E/F/G/H/J but skipped B/I/K/L.  This addendum closes that gap.
+
+ADDENDUM SCOPE:
+
+**B (deps/supply-chain) — CLEAN.**  cp30 added zero new external dependencies.  Supply-chain attack surface unchanged from cp29.
+
+**I (contracts) — ONE finding closed: I-1 (LOW DEFENSE-IN-DEPTH).**  order.ts + orderReplace.ts did `networkRaw.toLowerCase()` BEFORE bounding input length.  With chain-layer custom_json size caps (~8KB) the practical worst case is small but still wastes memory on toLowerCase allocation for clearly-malformed inputs.  Closed: added `MAX_NETWORK_LEN = 16` length cap before the toLowerCase + allowlist check in BOTH order.ts AND orderReplace.ts.  Pre-existing latent class going back to cp3 USDT.  Note: MAX_AMOUNT_LEN=32 is dead-but-redundant-with-AMOUNT_RE quantifier bounds (12+1+12=25 chars max) — no action needed.
+
+**K (STRIDE / threat-modeling) — 15 NEW THREAT ROWS APPENDED to `docs/audit/2026-05-stride-matrix.md`:**
+- Spoofing (2): S-cp30-1 (hostile peer spoofs USDC network), S-cp30-2 (operator typosquatted explorer URL)
+- Tampering (4): T-cp30-1 (hostile indexer XSS via chat_link_urls), T-cp30-2 (replace-window network flip), T-cp30-3 (chat payload network tamper), T-cp30-4 (icon SVG phishing via brand confusion)
+- Repudiation (1): R-cp30-1 (USDC trade repudiation — same as USDT mitigated)
+- Information disclosure (2): I-cp30-1 (privacy-warning chip DOM revelation), I-cp30-2 (explorer URL IP leak)
+- Denial of service (4): D-cp30-1 (gigantic env values), D-cp30-2 (gigantic asset_network), D-cp30-3 (ReDoS), D-cp30-4 (jitter computation)
+- Elevation of privilege (2): E-cp30-1 (USDC fee_method bypass), E-cp30-2 (operator privilege via unknown env vars)
+
+Every row carries explicit mitigations either from cp30 design (canonical allowlists, Zod max(512), strict regex anchoring) or surfaced by cp30-DD-DD security audit (SEC-1 through SEC-6, CODE-1 through CODE-3, I-1).  NO CRITICALS.  Outstanding gap: one — orderReplace `replace_asset_network_change_forbidden` lacks test coverage.  STRIDE matrix now 1133 lines covering 56 threat rows total across the pre-launch security review + Part 88 refresh + Part 122 cp30 refresh.
+
+**L (per-subsystem deep dives) — WALKED 6 cp30-touched subsystems:**
+
+- L-1 Symbol-import verification: all 11 USDC-class exports properly wired at consumer sites.  No orphans (2 functions are exported-but-internal-only as public API surface for future tests).
+- L-2 Error-handling: all encoder throws caught by caller try/catch with UI-gate `usdcNetworkPicked` preventing defensive throws from firing in honest flow.
+- L-3 Async correctness: all cp30 functions synchronous; no race conditions or unawaited promises.
+- L-4 Comment-vs-code drift: ONE finding closed.  payload.ts:444 jitterAmountForAsset header still said "USDT is excluded" (cp26 wording stale).  Rewrote to reflect cp30 reversal + ADR-0028 Decision 2 rationale.
+- L-5 Defensive programming: `getUsdcNetworkMetadata` throws on unknown-network miss with self-documenting error pointing at the registration site.
+- L-6 Typeguard usage: `isUsdcNetwork` consumed at 4 sites; all `as UsdcNetwork` casts gated by prior typeguard.
+- L-7 order.ts vs orderReplace.ts gate parity: both handlers use structurally identical asset_network validation block.  Comment-marked "Mirror of order.ts" per cp14 convention.  Variable name differs (`asset_network` vs `asset_network_validated`) but logic equivalent.
+
+**FILES TOUCHED (this addendum):**
+- apps/indexer/src/indexer/handlers/order.ts (I-1, MAX_NETWORK_LEN cap)
+- apps/indexer/src/indexer/handlers/orderReplace.ts (I-1, mirror)
+- apps/web/src/lib/chat/payload.ts (L-4 comment fix)
+- docs/audit/2026-05-stride-matrix.md (K, 15 new threat rows appended; +293 lines)
+- docs/AUDIT-2026-05.md (addendum entry; +86 lines)
+- docs/REVISIT-LIST.md (maintenance entry prepended)
+- TARBALL.md (this entry)
+
+**UPDATED CP30-DD-DD TOTALS:**
+- 22 audit items (20 initial + I-1 + L-4)
+- ALL 12 categories A-L closed
+- STRIDE matrix refreshed with 15 new cp30 threat rows
+- 21 findings closed inline + 1 cleared as false-positive
+- Locale parity unchanged at 2,680 × 10 = 26,800
+- Brag list unchanged at 280; ADR count unchanged at 28; FAQ entries unchanged at 113
+- Smoke baseline ~3,345 (no new scenarios; 4 previously-broken scenarios fixed)
+
+**CONFIRMED A-L COVERAGE:**
+
+| Category | Status | Findings this session |
+|----------|--------|----------------------|
+| A static code | ✓ | module-doc drift, dead defenders, symbol verification |
+| B deps/supply-chain | ✓ | zero new deps confirmed |
+| C SQL/DB | ✓ | CODE-3 (orderReplace asset_network gap) |
+| D HTTP/API | ✓ | SEC-3, SEC-6, CODE-1 (wire-format trust gates) |
+| E crypto | ✓ | jitterStablecoinAmount CSPRNG + modulo bias |
+| F privacy | ✓ | SEC-1 (XSS), SEC-2 (privacy regression) |
+| G operator-trust | ✓ | SEC-1 + STRIDE T-cp30-1/2/4 |
+| H frontend | ✓ | CODE-2 (/dev/icons), SEC-2 ($derived gate) |
+| I contracts | ✓ | I-1 (asset_network length cap × 2 sites) |
+| J build/CI | ✓ | SEC-5/CODE-A+B (broken-since-cp21 smokes), DD-DD-3 |
+| K STRIDE | ✓ | 15 new threat rows × 6 categories |
+| L per-subsystem | ✓ | L-1 through L-7 walked + L-4 stale-comment fix |
+
+PARKED (external-blockers — unchanged): live Ansible deploy on fresh Ubuntu 24.04 VM; v1.0.0-beta.1 release ceremony steps 8/9/10.
+
+REVISITS DEFERRED: (a) orderReplace `replace_asset_network_change_forbidden` test coverage; (b) DD-DD-7 0000 ADR file role clarification.
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 30-DD-DD — recursive deep-deep on cp30 + cp30-DD with FULL SECURITY + CODE AUDIT pass per Ken's directive.  Plus Ken-supplied LTC icon swap mid-session.  20 audit items: 11 DD findings (10 closed + 1 false-positive cleared) + 6 SEC findings closed + 3 CODE findings closed.  Pre-existing latent bugs uncovered: SEC-1 orphaned XSS defender, SEC-3 cross-network-mis-send through wire, SEC-5/CODE-A+B ~9-month broken smoke since cp21, SEC-2 cp26 design-decision reversal incomplete.  Two icon swaps (USDC + LTC) cleanly applied with same accessibility parity treatment.
 
 CP30-DD-DD SCOPE: switching from drift-hunting to a proper security + code audit on the cp30 + cp30-DD wire-format work.  Walked the wire-format trust gates, defense-in-depth defenders, UI-vs-logic enforcement asymmetries, cross-field-coupling validation, broken-since-cp21 smokes, replace-handler asset_network gaps, and ops-cli wizard surface.

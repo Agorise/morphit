@@ -209,8 +209,11 @@ function validate(payload: unknown): Validated | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
+	// cp30-DD-DD I-1 (defense-in-depth) — bound input before
+	// allocating a lowercased copy.  Mirror of order.ts.
+	const MAX_NETWORK_LEN = 16;
 	if (asset === 'USDT') {
-		if (typeof networkRaw !== 'string') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
 			return { reason: 'asset_network_required_for_usdt' };
 		}
 		const net = networkRaw.toLowerCase();
@@ -219,7 +222,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 		}
 		asset_network_validated = net;
 	} else if (asset === 'USDC') {
-		if (typeof networkRaw !== 'string') {
+		if (typeof networkRaw !== 'string' || networkRaw.length > MAX_NETWORK_LEN) {
 			return { reason: 'asset_network_required_for_usdc' };
 		}
 		const net = networkRaw.toLowerCase();
