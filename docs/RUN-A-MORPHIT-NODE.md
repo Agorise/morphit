@@ -1944,6 +1944,8 @@ Reasonable positions for an operator:
    # coin to their users; DOGE itself is technically sound, this
    # is a brand/audience choice; see ADR-0030)
    MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"
+# Refuse only ZEC trades (cp39):
+MORPHIT_INDEXER_DISABLED_ASSETS="ZEC"
    ```
 
    You'll still see those orders from peer instances in your

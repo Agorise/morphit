@@ -8111,6 +8111,8 @@ MORPHIT_INDEXER_DISABLED_ASSETS="DASH"
 # Refuse Dogecoin (Part 122 cp33 — brand/audience choice for
 # operators specializing in serious-money trading; see ADR-0030)
 MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"
+# Refuse only ZEC trades (cp39):
+MORPHIT_INDEXER_DISABLED_ASSETS="ZEC"
 
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"

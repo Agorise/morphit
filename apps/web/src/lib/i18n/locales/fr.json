@@ -3709,6 +3709,10 @@
 			"privatesend": {
 				"name": "PrivateSend",
 				"explain": "Variante CoinJoin native de Dash. Utilise des montants d'entrée/sortie dénommés et la coordination par masternodes pour mélanger les pièces entre plusieurs participants, rompant le lien entre expéditeur et destinataire sur la chaîne. Exécutez plusieurs cycles de mélange (plus de cycles = ensemble d'anonymat plus large = frais plus élevés). Pré-mélangez dans votre portefeuille Dash AVANT de partager l'adresse — quand les fonds arrivent sur Morphit ils sont déjà mélangés."
+			},
+			"shielded-pools": {
+				"name": "Pools blindées (Sapling + Orchard)",
+				"explain": "La confidentialité au niveau du protocole de Zcash. Les transactions blindées (zs1 Sapling, u1 Unified Address) utilisent des preuves à divulgation nulle (zk-SNARKs) pour masquer l'expéditeur, le destinataire et le montant sur la chaîne. Sapling est la pool blindée établie (depuis 2018); Orchard est la pool plus récente (Network Upgrade 5, 2022) accessible via les Adresses Unifiées. Par adresse — les destinataires choisissent z/u-addr pour les transactions blindées ou t-addr pour les transparentes. Les deux sont de premier rang sur le protocole. Portefeuilles compatibles avec l'envoi blindé complet: Zashi (mobile, officiel d'Electric Coin Co, Sapling + Orchard), Zecwallet (bureau, Sapling), Nighthawk Wallet (mobile, Sapling)."
 			}
 		},
 		"common_practices": {

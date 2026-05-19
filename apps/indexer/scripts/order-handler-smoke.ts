@@ -515,7 +515,13 @@ await scenario('rejects payload that is not an object', async () => {
 
 await scenario('rejects unknown asset', async () => {
 	const ctx = makeCtx({
-		payload: makePayload({ asset: 'DOGE' }),
+		// cp40-A1: previously used 'DOGE' as the "unknown" stand-in,
+		// but DOGE became a valid asset at cp33 and ZEC at cp39, which
+		// silently broke this scenario.  Using a clearly-fictional
+		// 4-letter ticker that cannot collide with any future asset
+		// addition.  Future deep-deeps: if XYZQ ever becomes a real
+		// ticker, replace it here.
+		payload: makePayload({ asset: 'XYZQ' }),
 		siblingOps: []
 	});
 	const mock = makeMockClient([]);
