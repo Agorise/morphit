@@ -164,6 +164,7 @@ SMOKES=(
 	"packages/asset-registry:arrr-trade-only-smoke"
 	"packages/asset-registry:dcr-trade-only-smoke"
 	"packages/asset-registry:sol-trade-only-smoke"
+	"apps/web:asset-payload-precision-parity-smoke"
 	"workspace-typecheck-smoke"
 	"packages/asset-registry:asset-accent-class-uniqueness-smoke"
 	"packages/asset-registry:payment-rail-coverage-parity-smoke"
