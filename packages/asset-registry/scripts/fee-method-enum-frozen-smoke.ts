@@ -96,7 +96,7 @@ if (INITIALIZER_UNION.test(body)) {
 // ── Scenario 3 — no expansion tickers leaked in on fee_method ────
 // If anyone added 'usdt', 'ltc', 'doge', 'arrr', 'eth', 'sol' as
 // a fee_method value, the wire-format enum is no longer frozen.
-const FORBIDDEN_TICKERS = ['usdt', 'ltc', 'doge', 'arrr', 'eth', 'sol', 'bch', 'xlm', 'dash'];
+const FORBIDDEN_TICKERS = ['usdt', 'ltc', 'doge', 'zec', 'arrr', 'eth', 'sol', 'bch', 'xlm', 'dash'];
 let expansionFound = false;
 for (const line of body.split('\n')) {
 	if (!line.includes('fee_method')) continue;
@@ -112,7 +112,7 @@ for (const line of body.split('\n')) {
 	}
 }
 if (!expansionFound) {
-	pass(`no expansion tickers (USDT/LTC/DOGE/etc.) in fee_method enum`);
+	pass(`no expansion tickers (USDT/LTC/DOGE/ZEC/etc.) in fee_method enum`);
 }
 
 // ── Scenario 4 — the four required values are individually present ─

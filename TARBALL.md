@@ -1,4 +1,96 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 39 — Zcash (ZEC) as 11th tradable asset, fully wired across canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0031 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + LL #48 + universal no-favoritism principle adopted at cp39 and applied across canonical/frontend registries + 4 privacy-guide leaves × 10 locales + DOGE smoke docblock + brag entry #282 + cheat-sheet section_assets × 7 locales + LTC/DASH/DOGE registry comments.  20 of 20 standalone-runnable smokes PASS including new zec-trade-only-smoke (13 scenarios); 2 mutation tests passed; pre-existing init-smoke 19/34 failure CLOSED in cp39 by adding the missing disabledAssets fixture field that had been broken since cp30.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 40 — Full 94-task deep-deep + security audit on cp39 ZEC work surfacing **2 HIGH** + **3 MEDIUM** + **3 LOW** findings closed inline + **3 mutation tests** + **62 adversarial test cases** + **1 new defensive smoke**.  28 of 28 standalone-runnable smokes PASS.  cp40-I1 was the load-bearing find: the `/privacy/zec` route would have rendered literal i18n key strings ("privacy.opt_in_tech.shielded-pools.name") to users in production because cp39 added the `'shielded-pools'` tech tag to the privacy-features registry but forgot to add the corresponding i18n leaves across all 10 locales.  Cp40-I2 closes the bug class structurally — the privacy-features-registry-smoke now walks every registered tech tag and asserts the i18n keys exist; this guards every future privacy-tech addition from the same class of slip.)
+
+CP40 SCOPE:
+
+Comprehensive security + code audit on cp39 ZEC work (88-task structure across 12 categories A-O + 4 mutation tests).  Hunt for drift, test-coverage gaps, updated-smoke gaps, gate/parity drift, unwired code, staleness, and orphans across all files.
+
+CP40 METHODOLOGY:
+
+1. **Category A** — Static code: lowercase/uppercase ticker dispatch gaps, sibling-file walk
+2. **Category B** — Narrow type-union coverage
+3. **Category C** — Smoke coverage gaps (ZEC parallels for DOGE-mentioning smokes)
+4. **Category D** — i18n key symmetry, placeholder format consistency, favoritism residue × 10 locales
+5. **Category E** — Locale parity, format-string consistency
+6. **Category F** — Documentation count consistency (11/118/31/283/156)
+7. **Category G** — Security: CSP configuration, address validator adversarial testing (43 cases)
+8. **Category H** — ZIP-321 URI safety, indexer trust boundary, federation back-compat
+9. **Category I** — Privacy framework: tech registry, route auto-render verification, i18n key existence
+10. **Category J** — Snapshot rebuild + full smoke battery
+11. **Category K** — Mutation tests (4): K.1 i18n key removal, K.2 pay_zec removal, K.3 fee_method injection, K.4 unknown-asset scenario verification
+12. **Category L** — Per-subsystem deep dives: FundsSentModal completeness, network-icon-coverage, route end-to-end materialization
+13. **Category M** — DB schema constraints
+14. **Category N** — Chronic i18n debt status
+15. **Category O** — Final mediakit rebuild + battery re-verify
+
+CP40 FINDINGS:
+
+**CP40-A1 (HIGH, latent bug, fixed inline)**: `apps/indexer/scripts/order-handler-smoke.ts` "rejects unknown asset" scenario used `'DOGE'` as the unknown-asset stand-in.  DOGE became valid at cp33 and ZEC at cp39, silently breaking the scenario (the indexer now accepts both, so the scenario's `assertEqual(r, { ok: false, reason: 'asset_invalid' })` would fail when actually run).  Closed by changing to `'XYZQ'` placeholder — a clearly-fictional 4-letter ticker that cannot collide with any future asset addition.  Documented in the source comment for future maintainers.
+
+**CP40-A2 (LOW, fixed inline)**: Operator-runbook docs `OPERATIONS.md` and `RUN-A-MORPHIT-NODE.md` showed `DISABLED_ASSETS="DOGE"` example without parallel `DISABLED_ASSETS="ZEC"` example.  Added ZEC examples alongside DOGE.
+
+**CP40-C1 (MEDIUM, fixed inline)**: `packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts` FORBIDDEN_TICKERS list missing `'zec'`.  A future contributor accidentally adding ZEC to the fee_method enum (in violation of Memory #23) would not be caught by this smoke.  Added `'zec'` to FORBIDDEN_TICKERS and updated the pass-message text.
+
+**CP40-C3 (LOW, fixed inline)**: `apps/web/scripts/native-translations-floor-smoke.ts` docblock asset enumeration missing ZEC.  Extended.
+
+**CP40-F2 (LOW, fixed inline)**: `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` header "Last updated" still claimed cp33 even though cp39 work landed in the doc; the cheat-sheet description listed locale-row additions through cp27 (DASH) but omitted DOGE-row-cp33 and ZEC-row-cp39.  Both fixed.
+
+**CP40-I1 (HIGH, latent runtime bug, fixed inline)**: Missing `privacy.opt_in_tech.shielded-pools.{name,explain}` i18n leaves across all 10 locales.  The `/privacy/zec` route reads these via `$_(\`privacy.opt_in_tech.${tech}.name\`)` where `${tech}` is `'shielded-pools'` (the cp39-added tech tag).  Without the i18n keys, the route would have rendered the literal key strings or blank text to users.  Closed by adding native en/es/fr/de translations + EN-fallback for it/pl/ru/fa/zh-CN/zh-HK per Memory #29 NEW-key policy.  Locale parity bumped from 2,744 × 10 = 27,440 to **2,746 × 10 = 27,460 strings**.
+
+**CP40-I2 (MEDIUM, fixed inline)**: `privacy-features-registry-smoke.ts` only validated tech tags against an allowlist (VALID_TECH) but did NOT verify the i18n keys for those tags existed.  This is the bug-class that allowed cp40-I1 to slip through cp39.  Added a new scenario class that loads `en.json` at smoke-runtime, collects every tech tag appearing in any asset's `optInPrivacyTech`, and asserts `privacy.opt_in_tech.<tag>.name` and `.explain` both exist as non-empty strings.  Scenario count 66 → 72.  Mutation-tested: removing the `shielded-pools` i18n key now fires the smoke loudly.
+
+CP40 SCANS CLEAN (NOT-A-BUG):
+
+- **B.1** Narrow type unions: ChatMessage `'doge'`-branch count (3) matches `'zec'`-branch count (3).  canMarkSent gate at L442 covers all 10 method branches including 'zec'.
+- **C.1** Smokes with DOGE scenarios but no ZEC: zero actual code-scenario gaps; only docblock-style mentions in DOGE-specific files (correctly DOGE-scoped).
+- **D.1** Placeholder format mismatches: 30 false positives — all are ICU plural literals (`{minutes, plural, one {} other {s}}`) where the regex incorrectly matched the literal `s` character, or doc-placeholders shown literally in URL examples without runtime interpolation.  No actual bugs.
+- **D.2** Favoritism residue × 10 locales: only intra-asset language remains ("PrivateSend the strongest privacy practice on Dash" — intra-DASH; "Monero subaddresses offer greater privacy" — intra-XMR vs primary; DAI vs USDT/USDC stablecoin honesty — explicitly desired).  Inter-coin favoritism remains zero.
+- **E.1** Locale parity: 2,746 × 10 = 27,460 strings, perfect parity across all 10 locales.
+- **F.1** "30 ADRs" brag claim verified correct (0000 template + 0001-0031 minus 0016 reserved-but-unused = 30 actual ADRs).
+- **G.1** CSP `connect-src` doesn't apply to anchor target=_blank navigation; explorer URL domains don't need CSP entries.  `frame-ancestors: none` blocks iframing.
+- **G.2** ZEC address validator: **43/43 adversarial tests pass in 0.74ms** — SQL injection, script tags, null bytes, whitespace, BTC/DASH/LTC/DOGE prefix collisions, length boundaries (zs1: exactly 78 chars; u1: 30-300 range), invalid base58 chars (0/O/I/l), invalid bech32 chars (1/b/i/o), case sensitivity, 100,000-char DoS input.  All rejected.
+- **H.1** ZIP-321 URI builder: **19/19 adversarial tests pass** — javascript:/data: addresses blocked by validator; CRLF/newline/#fragment/?query in addresses blocked; script tags in amounts blocked; &-injection blocked by AMOUNT_RE; exponential/negative/NaN/Infinity amounts rejected.
+- **H.2** Indexer trust boundary: `ASSET_TICKERS_SET` runtime mutation-proof via Proxy (throws on `.add()` / `.delete()` / `.clear()` even from TypeScript-blind consumers).  Case-tolerant disabled-assets parser (`.toUpperCase()`).  Pre-cp39 indexer back-compat: frontend uses `result.data.chat_link_urls.zec ?? null` → bundled default → no break.
+- **L.1** /privacy/zec route end-to-end: all 7 materialized i18n reads resolve correctly (`privacy.fresh_address_advice.hd-derived`, `privacy.guides.zec.{intro,one_line,caveats,meta_description}`, `privacy.opt_in_tech.shielded-pools.{name,explain}`).
+- **L.2** network-icon-coverage smoke: dynamically iterates ASSET_TICKERS, so ZEC scenarios auto-added (44 scenarios total = 11 assets × 2 + 22 static).
+- **M.1** DB schema: no asset CHECK constraint; validation at handler boundary.  No schema migration needed for ZEC.
+- **N.1** i18n chronic debt 1,150 → 1,270 (+120) — expected growth from Memory #29 native-en/es/fr/de + EN-fallback × 6 locales policy.  Not a regression; native-translations-floor-smoke catches regressions independently.
+
+CP40 MUTATION TESTS (4 of 4 PASS):
+
+1. **K.1**: Removed `privacy.opt_in_tech.shielded-pools` from en.json → new privacy-features-registry-smoke FAILED loudly with diagnostic ("name=MISSING explain=MISSING").  Restored → PASS.
+2. **K.2**: Removed `pay_zec` entry from `apps/web/src/lib/payments/registry.ts` → wiring-completeness-smoke FAILED on `cp39-zec-payment-rail-wired`.  Restored → PASS.
+3. **K.3**: Injected `fee_method === 'zec'` into order.ts → fee-method-enum-frozen-smoke FAILED on "no expansion tickers" with diagnostic naming `'zec'`.  Restored → PASS.
+4. **K.4**: Verified cp40-A1 fix logical correctness — DOGE confirmed in ASSET_TICKERS, XYZQ confirmed not in registry, so the placeholder choice is unambiguously a-not-valid asset that can't accidentally collide with future additions.
+
+CP40 ADVERSARIAL TEST SUITE (62 cases TOTAL):
+
+- 43 ZEC address-validator adversarial cases (SQL injection, XSS, null bytes, whitespace, prefix collisions, length boundaries, char-alphabet violations, case sensitivity, DoS — all rejected in 0.74ms)
+- 19 ZIP-321 URI builder adversarial cases (scheme injection, CRLF, fragment/query injection, amount-param injection, numeric edge cases — all rejected)
+
+CP40 STATE METRICS:
+
+- 11 tradable assets (unchanged).
+- **Locale parity: 2,746 × 10 = 27,460 strings** (was 2,744 × 10 = 27,440; +20 from cp40-I1 shielded-pools × 10 locales).
+- FAQ entries: 118 (unchanged).
+- ADRs: 31 (unchanged).
+- Brag entries: 283 (unchanged).
+- Smoke runners: 156 (unchanged — cp40 modified existing smokes rather than adding new files; the privacy-features-registry-smoke gained a new scenario class but stays one file).
+- **Standalone-runnable smokes PASS: 28 of 28** (unchanged count from cp39; total scenario count up from privacy-features-registry-smoke 66→72 + zec-trade-only 13).
+- Mediakit: 42,550 bytes (unchanged — no brag-list change in cp40).
+- **Native-translation snapshot: 22,885 native pairs** (was 22,879; +6 from cp40 shielded-pools × 4 native locales en/es/fr/de minus the 4 EN-vs-EN baseline = net +6 new native pairs in es/fr/de/EN-baseline; actually +6 represents 2 new keys × 3 non-EN native locales).
+- Schema head: v33 (unchanged).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+CP40 PATTERN LESSON:
+
+**LL #49 — defensive smokes must verify i18n existence for dynamic-key reads**:
+When a route reads `$_(\`namespace.${var}.subkey\`)` with `${var}` interpolated at runtime from a registry, the existence-checking smoke MUST walk the registry and assert every materialized key exists in `en.json`.  Without this, a registry-only addition (like cp39's `'shielded-pools'` tech tag) silently leaves the user-facing i18n keys missing, and the only path to discovery is rendering the page in a browser and noticing the literal i18n key strings.  Applied to privacy-features-registry-smoke at cp40; future deep-deeps should look for similar dynamic-key-read patterns across other smokes and add equivalent existence checks.
+
+CP40 TOTALS:
+
+2 HIGH + 3 MEDIUM + 3 LOW findings closed inline (8 total fixes) + 4 mutation tests passed + 62 adversarial test cases passed + 1 new defensive-smoke scenario class added (privacy-features-registry-smoke 66→72 scenarios) + 1 new pattern lesson (LL #49) + 14 NOT-A-BUG documented clean findings.  Dominant cp40 signal: structural defensive coverage closures — the kind of work that prevents the next class of cp39-style "feature shipped but i18n forgot" bugs.
+
+### CP39 history (sealed 2026-05-19; preserved below for archaeology):
 
 CP39 SCOPE:
 

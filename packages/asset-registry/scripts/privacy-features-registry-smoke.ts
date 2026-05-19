@@ -178,6 +178,53 @@ for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	}
 }
 
+// ── Scenario 4 — every registered tech tag has its i18n keys (cp40-I2) ─
+// CP39 shipped 'shielded-pools' tech tag for ZEC but forgot to add the
+// corresponding `privacy.opt_in_tech.shielded-pools.{name,explain}` i18n
+// keys. The /privacy/zec route reads these dynamically via
+// `$_(\`privacy.opt_in_tech.${tech}.name\`)`, so a missing key surfaces
+// as literal-key text to the user. Cp40 closed the bug and added this
+// defensive smoke so any future tech addition that forgets the i18n
+// pairs fires loud.
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const enPath = resolve(__dirname, '../../../apps/web/src/lib/i18n/locales/en.json');
+let en: Record<string, unknown>;
+try {
+	en = JSON.parse(readFileSync(enPath, 'utf8')) as Record<string, unknown>;
+} catch (e) {
+	fail('en.json loadable for tech-i18n parity check', String(e));
+	en = {};
+}
+
+const i18nTechs = (en.privacy as Record<string, unknown> | undefined)?.opt_in_tech as
+	| Record<string, { name?: string; explain?: string }>
+	| undefined;
+
+// Collect every tech that appears in the canonical registry
+const techsInRegistry = new Set<string>();
+for (const a of ASSETS) {
+	const t = a.privacyFeatures?.optInPrivacyTech;
+	if (t) for (const tag of t) techsInRegistry.add(tag);
+}
+
+for (const tag of techsInRegistry) {
+	const entry = i18nTechs?.[tag];
+	const hasName = typeof entry?.name === 'string' && entry.name.length > 0;
+	const hasExplain = typeof entry?.explain === 'string' && entry.explain.length > 0;
+	if (hasName && hasExplain) {
+		pass(`i18n: privacy.opt_in_tech.${tag}.{name,explain} both present in en.json`);
+	} else {
+		fail(
+			`i18n: privacy.opt_in_tech.${tag}.{name,explain} both present in en.json`,
+			`name=${hasName ? 'OK' : 'MISSING'} explain=${hasExplain ? 'OK' : 'MISSING'}`
+		);
+	}
+}
+
 const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 

@@ -3709,6 +3709,10 @@
 			"privatesend": {
 				"name": "PrivateSend",
 				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
+			},
+			"shielded-pools": {
+				"name": "Shielded pools (Sapling + Orchard)",
+				"explain": "Zcash's protocol-level privacy. Shielded transactions (zs1 Sapling, u1 Unified Address) use zero-knowledge proofs (zk-SNARKs) to hide sender, recipient, and amount on chain. Sapling is the established shielded pool (since 2018); Orchard is the newer pool (Network Upgrade 5, 2022) accessed through Unified Addresses. Per-address — recipients pick z/u-addr for shielded transactions or t-addr for transparent. Both transparent and shielded are first-class on the protocol. Wallets that fully support shielded sends: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk Wallet (mobile, Sapling). Older wallets may only support transparent (t-addr) sends, so confirm your counterparty's wallet supports the address type you intend to use."
 			}
 		},
 		"common_practices": {
