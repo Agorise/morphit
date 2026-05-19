@@ -156,6 +156,10 @@
 				<dt>ARRR</dt>
 				<dd>{$_('cheat_sheet.section_assets.arrr')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>DCR</dt>
+				<dd>{$_('cheat_sheet.section_assets.dcr')}</dd>
+			</div>
 		</dl>
 	</section>
 

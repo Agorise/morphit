@@ -616,6 +616,52 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp43 DCR P2P trading wired ──────────────────────────────────
+	// Decred addition (cp43 — Part 122).  Thirteenth tradable asset.
+	// Brag list (new entry #285) advertises DCR peer-to-peer trading.
+	// Anchor: canonical registry must contain a ticker entry for DCR.
+	{
+		id: 'cp43-dcr-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Decred (DCR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'DCR'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp43 DCR payment-rail wired (cp32 LL #36) ───────────────────
+	// Cp32 LL #36: every tradable asset must also be wired as a
+	// payment rail.  Cp43 ships DCR with both axes same-turn per the
+	// pattern established for DOGE/cp33, ZEC/cp39, and ARRR/cp41.
+	{
+		id: 'cp43-dcr-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Decred (DCR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_dcr'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp43 DCR explorer URL bundled default ───────────────────────
+	// dcrdata.decred.org chosen from Ken's 4-explorer survey as the
+	// official project explorer.  Anchor on the constant; a renamed
+	// or removed constant means the frontend has lost its fallback
+	// default.
+	{
+		id: 'cp43-dcr-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Decred (DCR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_DCR_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

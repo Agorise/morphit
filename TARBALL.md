@@ -1,4 +1,68 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 42 — Full 94-task deep-deep + security audit on cp41 ARRR work surfacing **1 HIGH** + **3 LOW** findings closed inline + **4 new defensive smokes** + **3 mutation tests** + **19 adversarial test cases**.  33 of 33 standalone-runnable smokes PASS.  Cp42-J-68 was the load-bearing find: the `optInPrivacyTech` type union in the canonical asset-registry never had `'shielded-pools'` added when ZEC shipped at cp39 — this means cp39 ZEC AND cp41 ARRR both shipped with TypeScript compile errors in their privacyFeatures entries that no smoke caught.  The runtime tolerated it because TS is structurally typed, but `tsc --noEmit` would have caught it.  Cp42-J-68 fix widens the union to include `'shielded-pools'`.  Cp42-H-55 was pre-existing accent-class collision (XMR + DAI both used `text-orange-500` since cp31 DAI addition); fixed inline.  Cp42-D-32 and cp42-D-33 were small drift fixes from the cp41 work itself.  Cp42 ships 4 new defensive smokes that pin invariants the cp41 deep-deep was unable to verify structurally: accent-class uniqueness, payment-rail coverage parity (LL #36 structural pin), address-shape overlap registry (LL #50 closure), and price-provider coverage parity.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 43 — Decred (DCR) as 13th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0033 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +3 rows + highValueName policy + snapshot + llms-full).  NEW dcr-trade-only-smoke (17 scenarios + 22 adversarial inputs); 3 new wiring-completeness CHECK rows; 3 mutation tests passed; 35 adversarial test cases PASS.  34 of 34 standalone-runnable smokes PASS.  NEW `csppmix` privacy-tech tag introduced for CoinShuffle++ wallet-side mixing — type union widened BEFORE the DCR entry was added per the cp42-J-68 LL #51 discipline (no TS compile errors).  Universal no-favoritism principle from cp39/cp41 reapplied — Morphit never compares DCR's mixing posture to XMR, ZEC, ARRR, DASH, or BTC coinjoin.)
+
+CP43 SCOPE:
+
+Add Decred (DCR) as the thirteenth tradable asset on Morphit. Decred is a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency launched in 2016. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders chosen pseudo-randomly from the staking pool — neither group can change protocol rules unilaterally. On-chain governance via Politeia lets stakeholders propose, debate, and ratify protocol changes; treasury funds (10% of block reward) flow through community vote. The chain is transparent at the base layer but ships an opt-in CoinShuffle++ (CSPP) mixing protocol integrated into dcrwallet.
+
+Per Ken's directive: "never compare this privacy coin with xmr or other privacy coins. let all users think their privacy coin is the most private." The universal no-favoritism principle adopted at cp39 reapplied at cp43 to all DCR copy.
+
+CP43 KEY DESIGN DECISIONS:
+
+- **Address regex** `/^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/` — accepts Ds P2PKH-Secp256k1 + Dc P2SH (35 chars each); REJECTS Dp/Dr/De prefixes. The Dr rejection is load-bearing security: Dr is an extended PRIVKEY (xprv-equivalent) and pasting it as a receive address would publish the wallet's full spend authority on-chain.
+- **NEW `csppmix` tech tag** for `optInPrivacyTech` — CoinShuffle++ wallet-side mixing. Type union widened proactively BEFORE the DCR entry (applied cp42-J-68 LL #51 discipline; no TS compile error).
+- **`decred:` BIP-21-style URI scheme** for dcrwallet/Decrediton/Cake Wallet.
+- **`text-teal-500` accent** — verified distinct from all 12 existing via cp42 asset-accent-class-uniqueness-smoke.
+- **Coingecko ID `'decred'`**, fallback price $20.00.
+- **`dcrdata.decred.org` bundled chat-link explorer** chosen from 4-survey (official project explorer).
+
+CP43 NEW i18n KEYS (16 total × 10 locales = 160 new leaves):
+
+- 14 DCR-specific keys: faq.entries.what_is_dcr.{q,a}, post_order.form.asset_explainer.dcr, chat.address.{method_dcr, address_placeholder_dcr, address_invalid_dcr, pill_method_dcr}, chat.funds_sent.pill_title_dcr, payment_method.pay_dcr.description, cheat_sheet.section_assets.dcr, privacy.guides.dcr.{one_line, intro, caveats, meta_description}.
+- 2 csppmix tech-tag leaves: privacy.opt_in_tech.csppmix.{name, explain} (LL #49 protection auto-applies via the cp40 privacy-features-registry-smoke walking the registry dynamically).
+
+CP43 MUTATION TESTS (3 of 3 PASS):
+
+- **M-90**: Tampered DCR.canPayListingFee → true → dcr-trade-only-smoke FAILED with diagnostic. Restored → PASS.
+- **M-91**: Removed pay_dcr entry → wiring-completeness FAILED on cp43-dcr-payment-rail-wired. Restored → PASS.
+- **M-92**: Removed csppmix from VALID_TECH allowlist → privacy-features-registry FAILED with "DCR optInPrivacyTech values valid". Restored → PASS.
+
+CP43 ADVERSARIAL TEST SUITE (35 of 35 PASS):
+
+`/tmp/cp43-adversarial.ts` exercised the DCR validator. Classes covered: SQL injection, XSS, null bytes, whitespace, base58 alphabet violations (`0`, `O`, `I`, `l`), prefix variations (Dp/Dr/De/Da/ds/DS), length boundaries (32/34/35/36), cross-chain rejection (BTC/DOGE/DASH/ZEC-transparent/ARRR-Sapling), 100K-char DoS, type tests (undefined/null/number/object/array). **Critical assertion: `Dr` extended privkey is correctly REJECTED** — the load-bearing security check.
+
+CP43 CATEGORY-B no-favoritism FRAMING:
+
+DCR canonical entry / frontend metadata / brag entry #285 / ADR-0033 / privacy guide × 10 locales / CATEGORY_B_DESCRIPTIONS all describe DCR factually:
+- Hybrid PoW/PoS consensus with on-chain governance via Politeia.
+- Opt-in CoinShuffle++ wallet-side mixing for transaction-level privacy.
+- Two receive-address formats (Ds P2PKH and Dc P2SH).
+
+NO inter-coin comparisons. Cp43 shipped clean from the start (no retroactive favoritism cleanup needed).
+
+CP43 STATE METRICS:
+
+| Metric | cp42 | cp43 | Δ |
+|---|---|---|---|
+| Tradable assets | 12 | **13** | +DCR |
+| Locale parity strings | 27,600 | **27,760** | +160 |
+| FAQ entries | 119 | **120** | +1 |
+| ADRs | 31 | **32** | +ADR-0033 |
+| Brag entries | 284 | **285** | +#285 |
+| Smoke runners | 161 | **162** | +dcr-trade-only |
+| Standalone smokes PASS | 33/33 | **34/34** | +1 |
+| Mediakit bytes | 42,929 | **43,491** | +562 |
+| Native snapshot pairs | 22,900 | **22,918** | +18 |
+| STRIDE matrix lines | 1,800 | **1,824** | +24 |
+| Privacy tech tags | 6 | **7** | +csppmix |
+| Schema head | v33 | v33 | — |
+
+CP43 totals: 1 new tradable asset + 14 new DCR i18n leaves × 10 + 2 csppmix tech-tag leaves × 10 + 1 new FAQ × 10 + 1 new ADR + 1 new brag entry + 1 new smoke (17 scenarios + 22 adversarial inputs) + 3 new wiring-completeness CHECK rows + 0 favoritism cleanups (clean from the start) + 18 docblock drift sweeps + 3 STRIDE rows + 3 mutation tests + 35 adversarial cases + 1 new privacy tech tag (`csppmix`) with proactive type-union widening applying LL #51.
+
+CP43 LL #51 APPLIED — PROOF THE LESSON HELD:
+
+Cp42 finding J-68 surfaced that the `optInPrivacyTech` type union was missing `'shielded-pools'` since cp39, causing TS compile errors in ZEC and ARRR entries that no smoke caught. The cp42 fix widened the union; LL #51 was proposed as a discipline: widen the type union BEFORE adding entries that use new tech tags. Cp43 ARRR's csppmix tag is the first chance to apply this discipline. **Order of operations at cp43: type union widened to include 'csppmix' (line 165-166) FIRST, then the DCR entry with `optInPrivacyTech: ['csppmix']` added (line 821-826).** Final `tsc --noEmit` on `packages/asset-registry/` is clean. The bug class is closed structurally going forward.
+
+### CP42 history (sealed 2026-05-19; preserved below for archaeology):  The runtime tolerated it because TS is structurally typed, but `tsc --noEmit` would have caught it.  Cp42-J-68 fix widens the union to include `'shielded-pools'`.  Cp42-H-55 was pre-existing accent-class collision (XMR + DAI both used `text-orange-500` since cp31 DAI addition); fixed inline.  Cp42-D-32 and cp42-D-33 were small drift fixes from the cp41 work itself.  Cp42 ships 4 new defensive smokes that pin invariants the cp41 deep-deep was unable to verify structurally: accent-class uniqueness, payment-rail coverage parity (LL #36 structural pin), address-shape overlap registry (LL #50 closure), and price-provider coverage parity.)
 
 CP42 SCOPE:
 

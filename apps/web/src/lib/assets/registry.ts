@@ -231,6 +231,19 @@ const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
 
 const validateArrr: AddressValidator = (s) => ARRR_ZS_RE.test(s);
 
+// DCR address regex (cp43 — Part 122).  Decred uses base58check
+// with two address types used for receiving payments:
+//   - `Ds` P2PKH-Secp256k1 (most common)
+//   - `Dc` P2SH (multisig / scripts)
+// 33 base58 data chars after the 2-char prefix = 35 chars total.
+// Other prefixes (`Dp` extended pubkey, `Dr` extended privkey,
+// `De` Edwards-curve) are NOT used for regular receive — they
+// would be incorrect to share as trade payment destinations and
+// are rejected by this regex.
+const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
+
+const validateDcr: AddressValidator = (s) => DCR_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -594,6 +607,38 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// shielded pool — there's no transparent address option.
 		// The chain hides sender, recipient, and amount by
 		// construction.  No warning chip needed.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'dcr',
+		displayTicker: 'DCR',
+		displayName: 'Decred',
+		oneLineDescription:
+			'Decred — hybrid PoW/PoS cryptocurrency with on-chain governance (Politeia) and opt-in CoinShuffle++ (CSPP) mixing.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-dcr.svg',
+		// Decred brand teal-green (#2dd8a3) and blue (#2970ff) — use
+		// text-teal-500 to land a clean teal accent distinct from
+		// every existing assignment: BTC amber-500, USDT amber-400,
+		// USDC blue-500, DAI yellow-600 (cp42), BCH lime-500, LTC
+		// slate-400, DASH sky-500, DOGE yellow-500, ZEC yellow-400,
+		// ARRR amber-600, XMR orange-500.
+		accentClass: 'text-teal-500',
+		decimals: 8, // Same as BTC — Decred inherited the 8-decimal smallest-unit convention from Bitcoin
+		supportsMemo: false,
+		addressValidator: validateDcr,
+		// MEMORY #23 INVARIANT: DCR cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Decred is decentralized via hybrid PoW + PoS consensus
+		// (every block is mined by PoW miners AND voted on by 5
+		// PoS ticket-holders chosen pseudo-randomly).  Politeia
+		// on-chain governance lets stakeholders propose and
+		// ratify protocol changes.  Addresses cannot be frozen
+		// by an issuer.  No warning chip needed.
 		privacyWarningKey: null
 	}
 ] as const;

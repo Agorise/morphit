@@ -84,7 +84,8 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// (z/u-addr) transactions per recipient choice — surfaced via
 	// the privacy guide page, not the price feed.
 	ZEC: 'zcash',
-	ARRR: 'pirate-chain'
+	ARRR: 'pirate-chain',
+	DCR: 'decred'
 };
 
 /** Max response body size from CoinGecko. Real responses are

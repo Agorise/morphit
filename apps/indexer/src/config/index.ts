@@ -399,6 +399,20 @@ export interface Config {
 	 *  aggregator). */
 	readonly frontendArrrChatLinkUrl: string | undefined;
 
+	/** DCR (Decred) chat-link explorer URL template (Part 122
+	 *  cp43).  When set, the frontend uses this template instead
+	 *  of the bundled `dcrdata.decred.org/tx/{txid}` default.
+	 *  Must contain `{txid}` placeholder; checked at config load.
+	 *
+	 *  Operator's 4-explorer survey at addition time
+	 *  (2026-05-19): dcrdata.decred.org (chosen as bundled
+	 *  default — official project explorer, project-aligned, no
+	 *  third-party tracking), blockchain.com/explorer/assets/dcr
+	 *  (third-party aggregator), dcr.tokenview.io (multi-chain
+	 *  Tokenview), bitinfocharts.com/decred/ (community
+	 *  analytics + block explorer). */
+	readonly frontendDcrChatLinkUrl: string | undefined;
+
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
@@ -939,6 +953,18 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp43 — DCR (Decred) chat-link explorer URL
+	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/
+	// ZEC/ARRR.  When unset, falls back to the bundled
+	// dcrdata.decred.org default.
+	MORPHIT_FRONTEND_DCR_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since Part 121 cp3 so the
 	// public-API per-network override never worked.  Frontend
@@ -1222,6 +1248,7 @@ export function loadConfig(): Config {
 		frontendDogeChatLinkUrl: e.MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL,
 		frontendZecChatLinkUrl: e.MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL,
 		frontendArrrChatLinkUrl: e.MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL,
+		frontendDcrChatLinkUrl: e.MORPHIT_FRONTEND_DCR_CHAT_LINK_URL,
 		// Part 122 cp30 — multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

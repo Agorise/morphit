@@ -803,7 +803,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Warum randomisiert Morphit meinen Überweisungsbetrag?",
-				"a": "Identische Beträge auf einer öffentlichen Chain erzeugen einen Fingerabdruck, der deinen Orderbook-Post mit dem On-Chain-Transfer verknüpft. Morphit fügt jedem Transfer einen winzigen Zufalls-Tail hinzu (deutlich unter einem Cent bei üblichen Preisen), um das zu unterbinden. Ursprünglich für XMR; cp26 verallgemeinerte auf BTC/BCH/LTC/BLURT; cp27 erweitert auf DASH; cp30 erweitert auf Stablecoins — USDT und USDC erhalten ebenfalls Amount-Jitter; cp31 erweitert auf DAI; cp33 erweitert auf DOGE. Jitter-Bereich pro Asset: bis zu 999.999 Piconero (~$0,0002) für XMR, bis zu 999 Satoshi für BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR (~$0,001 bis $0,50), bis zu 99 Milliblurt für BLURT (Bruchteile eines Cent), bis zu 999 Mikro-Einheiten von USDT/USDC/DAI (unter einem Zehntel Cent). Der Verkäufer erhält immer leicht MEHR als verlangt, nie weniger — die Verifikation bleibt gültig. Standardmäßig EIN; Schalter sichtbar direkt unter dem Betragsfeld im Adressfreigabe-Modal. Jitter adressiert die Bedrohung durch Betragskorrelation; es adressiert NICHT die separate Zentralisierungs-Bedrohung für Stablecoins (Circle/Tether können Adressen unabhängig vom Betrag einfrieren). Der Privacy-Leitfaden pro Asset unter /privacy/{asset} behandelt die volle Privacy-Haltung jeder Chain."
+				"a": "Identische Beträge auf einer öffentlichen Chain erzeugen einen Fingerabdruck, der deinen Orderbook-Post mit dem On-Chain-Transfer verknüpft. Morphit fügt jedem Transfer einen winzigen Zufalls-Tail hinzu (deutlich unter einem Cent bei üblichen Preisen), um das zu unterbinden. Ursprünglich für XMR; cp26 verallgemeinerte auf BTC/BCH/LTC/BLURT; cp27 erweitert auf DASH; cp30 erweitert auf Stablecoins — USDT und USDC erhalten ebenfalls Amount-Jitter; cp31 erweitert auf DAI; cp33 erweitert auf DOGE. Jitter-Bereich pro Asset: bis zu 999.999 Piconero (~$0,0002) für XMR, bis zu 999 Satoshi für BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR (~$0,001 bis $0,50), bis zu 99 Milliblurt für BLURT (Bruchteile eines Cent), bis zu 999 Mikro-Einheiten von USDT/USDC/DAI (unter einem Zehntel Cent). Der Verkäufer erhält immer leicht MEHR als verlangt, nie weniger — die Verifikation bleibt gültig. Standardmäßig EIN; Schalter sichtbar direkt unter dem Betragsfeld im Adressfreigabe-Modal. Jitter adressiert die Bedrohung durch Betragskorrelation; es adressiert NICHT die separate Zentralisierungs-Bedrohung für Stablecoins (Circle/Tether können Adressen unabhängig vom Betrag einfrieren). Der Privacy-Leitfaden pro Asset unter /privacy/{asset} behandelt die volle Privacy-Haltung jeder Chain."
 			},
 			"feedback_immutable": {
 				"q": "Kann man Bewertungen bearbeiten oder löschen?",
@@ -1187,7 +1187,7 @@
 			},
 			"why_usdc_warning": {
 				"q": "Warum zeigt Morphit eine Datenschutzwarnung an, wenn ich USDC handele?",
-				"a": "USDC trägt die gleiche Warnklasse wie USDT: Es ist ein zentralisierter Stablecoin. Circle (USDCs Emittent) hat die technische Fähigkeit, jede einzelne USDC-Adresse in jedem der unterstützten Netzwerke über eine vertragliche Admin-Funktion einzufrieren. Sie haben dies in der Vergangenheit als Reaktion auf Gerichtsbeschlüsse, OFAC-Sanktionen und gemeldete Betrugsfälle getan. Keiner der anderen Assets auf Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR) hat einen Emittenten; niemand kann eine Adresse einfrieren. Wir denken nicht, dass dies USDC schlecht macht — viele Trader akzeptieren diesen Kompromiss bewusst für die Dollar-Stabilität, die damit einhergeht — aber wir denken, Sie sollten es vor jedem USDC-Trade wissen, genauso wie wir möchten, dass Sie wissen, dass XMR-Trades einen stärkeren Datenschutz haben als BTC-Trades. Der Warn-Chip auf dem Auftragsformular ist informativ, nicht blockierend; er ist da, damit die Wahl Ihre und informiert ist. Betreiber können USDC instanzweit deaktivieren, wenn sie ihre Instanz frei von zentralisierten Stablecoins halten möchten; Benutzer können einfach ein anderes Asset auf dieser Instanz wählen oder die Instanz eines anderen Betreibers wählen, wenn sie es vorziehen."
+				"a": "USDC trägt die gleiche Warnklasse wie USDT: Es ist ein zentralisierter Stablecoin. Circle (USDCs Emittent) hat die technische Fähigkeit, jede einzelne USDC-Adresse in jedem der unterstützten Netzwerke über eine vertragliche Admin-Funktion einzufrieren. Sie haben dies in der Vergangenheit als Reaktion auf Gerichtsbeschlüsse, OFAC-Sanktionen und gemeldete Betrugsfälle getan. Keiner der anderen Assets auf Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR) hat einen Emittenten; niemand kann eine Adresse einfrieren. Wir denken nicht, dass dies USDC schlecht macht — viele Trader akzeptieren diesen Kompromiss bewusst für die Dollar-Stabilität, die damit einhergeht — aber wir denken, Sie sollten es vor jedem USDC-Trade wissen, genauso wie wir möchten, dass Sie wissen, dass XMR-Trades einen stärkeren Datenschutz haben als BTC-Trades. Der Warn-Chip auf dem Auftragsformular ist informativ, nicht blockierend; er ist da, damit die Wahl Ihre und informiert ist. Betreiber können USDC instanzweit deaktivieren, wenn sie ihre Instanz frei von zentralisierten Stablecoins halten möchten; Benutzer können einfach ein anderes Asset auf dieser Instanz wählen oder die Instanz eines anderen Betreibers wählen, wenn sie es vorziehen."
 			},
 			"which_usdt_network": {
 				"q": "Welches USDT-Netzwerk soll ich wählen — ERC-20, TRC-20, SPL oder BEP-20?",
@@ -1224,6 +1224,10 @@
 			"what_is_arrr": {
 				"q": "What is Pirate Chain (ARRR), and why is it on Morphit?",
 				"a": "Pirate Chain (ARRR) is a proof-of-work cryptocurrency that runs the Sapling zk-SNARK shielded pool as its only transaction type — every transfer hides sender, recipient, and amount on chain by construction. There's no transparent address option on Pirate Chain; the transparent pool was sunset early in the chain's life and all funds migrated to the shielded pool.\n\nOn Morphit, ARRR is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in ARRR. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nAddresses use a single format: `zs1` Sapling shielded (bech32, 78 chars). Visually identical to Zcash Sapling addresses — Morphit's per-asset tab and placeholder disambiguate which chain the address belongs to. Use a Pirate Chain wallet like Treasure Chest (mobile), Pirate.Black, or the Verus-integrated Pirate wallet to generate addresses and receive funds.\n\nOperators can refuse ARRR trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"ARRR\"`; the federated marketplace keeps trading ARRR regardless of any single operator's stance."
+			},
+			"what_is_dcr": {
+				"q": "What is Decred (DCR), and why is it on Morphit?",
+				"a": "Decred (DCR) is a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency launched in 2016. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders chosen pseudo-randomly from the staking pool — this dual consensus means neither miners nor stakers alone can change protocol rules. On-chain governance via Politeia lets stakeholders propose, debate, and ratify protocol changes; treasury funds flow through community vote.\n\nOn Morphit, DCR is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in DCR. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nAddresses use two formats: `Ds` P2PKH-Secp256k1 (most common receive format) and `Dc` P2SH (multisig/escrow scripts) — both 35 chars, base58. Use a Decred wallet like dcrwallet, Decrediton, or Cake Wallet for DCR to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, amount visible on chain), but offers an opt-in CoinShuffle++ (CSPP) mixing protocol integrated into dcrwallet for users who want transaction-level privacy.\n\nOperators can refuse DCR trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"DCR\"`; the federated marketplace keeps trading DCR regardless of any single operator's stance."
 			}
 		},
 		"share_link": "Link teilen",
@@ -1595,7 +1599,8 @@
 				"dai": "DAI is a USD-pegged stablecoin by MakerDAO. More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module. Trade-only on Morphit.",
 				"doge": "Dogecoin (DOGE). 2013 als fairer Start-Fork von Lucky Coin (selbst ein Litecoin-Fork) gestartet. Auf der Basisebene transparent wie Bitcoin — jede Transaktion ist öffentlich auf der Kette sichtbar. Kein zentraler Emittent; niemand kann Adressen einfrieren. Seit 2014 mit Litecoin merge-gemined (Hilfs-Proof-of-Work).",
 				"zec": "Zcash (ZEC). Launched 2016 as the first practical deployment of zero-knowledge proofs in a cryptocurrency. Transparent and shielded address types coexist on the same chain — t1/t3 addresses are publicly visible like Bitcoin's legacy addresses, while zs1 (Sapling) and u1 (Unified Address with Orchard receivers) use zk-SNARKs to hide sender, recipient, and amount. Choose the address type that matches your trade's privacy posture. Trade-only — cannot pay listing fees.",
-				"arrr": "Pirate Chain (ARRR) — chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer is private by construction. Single address format (zs1 Sapling, bech32, 78 chars). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
+				"arrr": "Pirate Chain (ARRR) — chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer is private by construction. Single address format (zs1 Sapling, bech32, 78 chars). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
+				"dcr": "Decred (DCR) — hybrid PoW/PoS cryptocurrency with on-chain governance (Politeia). Two receive-address formats (Ds P2PKH-Secp256k1 and Dc P2SH, 35 chars each). Opt-in transaction-level privacy via CoinShuffle++ (CSPP) integrated into dcrwallet. Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
 			},
 			"waiver_fiat_hint": "💡 BLURT wird auf zentralisierten Börsen dünn gehandelt, also passieren die meisten BLURT-für-Fiat-Trades auf Morphit mit aktiven Blurt-Social-Network-Nutzern, bestehenden Operatoren oder per Tausch. Tipp: wähle eine Fiat-Währung, die dein lokales Netzwerk nutzt (USD, EUR, MXN, etc.), oder schau dir Persönlich → Tausch (Waren) als Zahlungsmethode in Schritt 3 an, wenn du etwas anderes Wertvolles anbieten möchtest. Das Orderbuch ist noch klein — deine Kauforder hilft, es aufzubauen.",
 			"waiver_benefits_heading": "Was dein Kauf freischaltet:",
@@ -2401,7 +2406,11 @@
 			"method_arrr": "ARRR",
 			"address_placeholder_arrr": "Deine ARRR-Adresse (zs1...)",
 			"address_invalid_arrr": "Keine gültige Pirate-Chain-Adresse.  Erwartet wurde `zs1`-Präfix + 75 Bech32-Datenzeichen (78 Zeichen insgesamt).",
-			"pill_method_arrr": "Pirate Chain (ARRR)"
+			"pill_method_arrr": "Pirate Chain (ARRR)",
+			"method_dcr": "DCR",
+			"address_placeholder_dcr": "Deine DCR-Adresse (Ds... oder Dc...)",
+			"address_invalid_dcr": "Keine gültige Decred-Adresse.  Erwartet wurde `Ds`- oder `Dc`-Präfix + 33 Base58-Datenzeichen (35 Zeichen insgesamt).",
+			"pill_method_dcr": "Decred (DCR)"
 		},
 		"funds_sent": {
 			"button": "Gelder gesendet markieren",
@@ -2452,7 +2461,8 @@
 			"pill_title_dai": "DAI {network} payment sent",
 			"pill_title_doge": "Dogecoin gesendet",
 			"pill_title_zec": "Zcash gesendet",
-			"pill_title_arrr": "ARRR gesendet"
+			"pill_title_arrr": "ARRR gesendet",
+			"pill_title_dcr": "DCR gesendet"
 		},
 		"unknown_version": "Diese Nachricht verwendet ein neueres Protokoll. Aktualisiere Morphit, um sie zu lesen.",
 		"pay_blurt": {
@@ -3154,6 +3164,9 @@
 		},
 		"pay_arrr": {
 			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
+		},
+		"pay_dcr": {
+			"description": "Pay in Decred (DCR).  Decred is a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency with on-chain governance via Politeia.  Two receive-address formats: Ds (P2PKH) and Dc (P2SH).  Use a Decred wallet like dcrwallet, Decrediton, or Cake Wallet."
 		}
 	},
 	"feedback_reminder": {
@@ -3557,7 +3570,8 @@
 			"dai": "DAI — MakerDAO USD-pegged stablecoin. Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM). Trade-only. Partly USDC-backed.",
 			"doge": "DOGE — Dogecoin, transparente Proof-of-Work-Kette (seit 2013), mit Litecoin merge-gemined. Nur Handel auf Morphit. Verwenden Sie eine Dogecoin-Wallet (Dogecoin Core, MyDoge, Hardware-Wallets); akzeptiert D…-P2PKH- und 9…/A…-P2SH-Adressen. Kein natives Privatsphäre-Upgrade — für maximale Privatsphäre auf Morphit nutzen Sie XMR.",
 			"zec": "ZEC — Zcash, Proof-of-Work-Kette mit optionalen geschützten Transaktionen über Zero-Knowledge-Beweise (Sapling- + Orchard-Pools). Unterstützt transparente Adressen (t1/t3, base58, ähnlich zu Bitcoins Legacy-Adressen) und geschützte Adressen (zs1/u1, bech32, verbergen Absender/Empfänger/Betrag). Nur Handel — kann keine Listing-Gebühren bezahlen.",
-			"arrr": "ARRR — Pirate Chain.  Proof-of-Work-Kryptowährung mit geschützten Transaktionen auf Protokollebene über den zk-SNARK-Sapling-Pool (jede Transaktion ist konstruktionsbedingt privat).  Nur zum Handeln auf Morphit.  Verwende eine Pirate-Chain-Wallet (Treasure Chest, Pirate.Black, Verus); es gibt nur ein Adressformat (zs1 Sapling geschützt, 78 Zeichen — optisch identisch mit Zcash Sapling)."
+			"arrr": "ARRR — Pirate Chain.  Proof-of-Work-Kryptowährung mit geschützten Transaktionen auf Protokollebene über den zk-SNARK-Sapling-Pool (jede Transaktion ist konstruktionsbedingt privat).  Nur zum Handeln auf Morphit.  Verwende eine Pirate-Chain-Wallet (Treasure Chest, Pirate.Black, Verus); es gibt nur ein Adressformat (zs1 Sapling geschützt, 78 Zeichen — optisch identisch mit Zcash Sapling).",
+			"dcr": "DCR — Decred.  Hybride Proof-of-Work + Proof-of-Stake-Kryptowährung mit On-Chain-Governance (Politeia).  Nur zum Handeln auf Morphit.  Verwende eine Decred-Wallet (dcrwallet, Decrediton, Cake Wallet); zwei Adressformate (Ds P2PKH und Dc P2SH, je 35 Zeichen).  Optionales CoinShuffle++-Mixing wallet-seitig verfügbar für Benutzer, die Privatsphäre auf Transaktionsebene wünschen."
 		},
 		"section_recovery": {
 			"heading": "Wenn etwas schiefgeht",
@@ -3687,7 +3701,7 @@
 		"index_title": "Privatsphäre-Praktiken — Morphit",
 		"index_meta_description": "Wie du deine Trades auf transparenten und privaten Chains privater gestaltest. Pro-Asset-Leitfaden zu frischen Adressen, Opt-in-Privatsphäre-Techniken und häufigen Fallstricken.",
 		"index_heading": "Privatsphäre-Praktiken auf Morphit",
-		"index_intro": "Die meisten auf Morphit gehandelten Assets (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, BLURT, USDT, USDC, DAI) leben auf transparenten Chains — jeder Beobachter kann die Chain-Historie lesen. Es gibt konkrete Schritte, mit denen du DEINE Trades viel schwieriger verknüpfbar, profilierbar oder überwachbar machst. Registry-gesteuert: Das nächste Asset, das Morphit hinzufügt, bekommt automatisch einen Leitfaden.",
+		"index_intro": "Die meisten auf Morphit gehandelten Assets (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, BLURT, USDT, USDC, DAI) leben auf transparenten Chains — jeder Beobachter kann die Chain-Historie lesen. Es gibt konkrete Schritte, mit denen du DEINE Trades viel schwieriger verknüpfbar, profilierbar oder überwachbar machst. Registry-gesteuert: Das nächste Asset, das Morphit hinzufügt, bekommt automatisch einen Leitfaden.",
 		"page_title": "Privatsphäre für {asset}-Trades — Morphit",
 		"guide_heading": "Privatsphäre-Praktiken für {asset}-Trades",
 		"back_to_index": "Alle Assets",
@@ -3727,6 +3741,10 @@
 			"shielded-pools": {
 				"name": "Geschützte Pools (Sapling + Orchard)",
 				"explain": "Zcashs Privatsphäre auf Protokollebene. Geschützte Transaktionen (zs1 Sapling, u1 Unified Address) verwenden Zero-Knowledge-Beweise (zk-SNARKs), um Absender, Empfänger und Betrag auf der Chain zu verbergen. Sapling ist die etablierte geschützte Pool (seit 2018); Orchard ist die neuere Pool (Network Upgrade 5, 2022), die über Unified Addresses zugänglich ist. Pro Adresse — Empfänger wählen z/u-addr für geschützte Transaktionen oder t-addr für transparente. Beide sind erstklassig im Protokoll. Wallets, die geschützte Sendungen vollständig unterstützen: Zashi (mobil, offiziell von Electric Coin Co, Sapling + Orchard), Zecwallet (Desktop, Sapling), Nighthawk Wallet (mobil, Sapling)."
+			},
+			"csppmix": {
+				"name": "CoinShuffle++ (CSPP)-Mixing",
+				"explain": "A wallet-side mixing protocol that bundles your transaction inputs with other participants in a single multi-party round.  After mixing, your outputs are no longer linkable to your original inputs on chain.  Integrated into dcrwallet for Decred — enable the \"Mix Account\" option.  Opt-in (you choose when to mix); off-protocol (mixing rounds aren't enforced by consensus)."
 			}
 		},
 		"common_practices": {
@@ -3808,6 +3826,12 @@
 				"intro": "Pirate Chain (ARRR) launched in 2018 as a fork of the Zcash codebase, configured so that the Sapling shielded pool is the only available transaction type.  Every transfer goes through zero-knowledge proofs (zk-SNARKs) that hide sender, recipient, and amount on chain.  Pirate Chain sunsetted the transparent pool early in the chain's life and forcibly migrated all transparent balances to shielded — there is no transparent address option.  Addresses use the `zs1` Sapling format (bech32, 78 chars total), visually identical to Zcash Sapling addresses.\n\nThe practices below cover wallet-side hygiene that survives even chain-level shielding — the on-chain payload is private, but what you share off-chain (which addresses you publish, which counterparties you transact with) is what links your Morphit trades together over time.",
 				"meta_description": "Privacy practices for Pirate Chain trades on Morphit: chain-level shielded transactions, fresh-address hygiene, and wallet compatibility.",
 				"caveats": "Pirate Chain's chain-level shielding hides sender, recipient, and amount on chain — but it does not erase off-chain linkability.\n\n- **Share fresh addresses per trade.**  Using the same `zs1` address across multiple Morphit listings lets observers correlate your orders even though the chain itself reveals nothing.  Generate a fresh receive address per trade (Pirate Chain wallets derive these from your HD seed).\n- **Wallet compatibility.**  Not every wallet supports Pirate Chain (the major options are Treasure Chest, Pirate.Black, and Verus-integrated Pirate).  Confirm your counterparty has a compatible wallet before agreeing to a price.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Visual collision with Zcash Sapling addresses.**  Pirate Chain `zs1` addresses look exactly like Zcash `zs1` addresses.  Morphit's per-asset tab and placeholder disambiguate, but if you copy an address from a different context, confirm it belongs to the chain you intend to send on."
+			},
+			"dcr": {
+				"one_line": "Hybride PoW/PoS-Kryptowährung mit On-Chain-Governance (Politeia) und optionalem CoinShuffle++ (CSPP)-Mixing wallet-seitig.",
+				"intro": "Decred (DCR) launched in 2016 as a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency with on-chain governance.  Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders chosen pseudo-randomly from the staking pool — neither group can change the protocol rules unilaterally.  On-chain governance via Politeia lets stakeholders propose, debate, and ratify protocol changes; treasury funds (10% of block reward) flow through community vote.\n\nThe chain is transparent at the base layer — sender, recipient, and amount are visible on chain like Bitcoin.  Decred ships an opt-in CoinShuffle++ (CSPP) mixing protocol integrated into dcrwallet: users can enable mixing in their wallet to break the on-chain transaction graph between deposit and withdrawal, similar in posture to Bitcoin coinjoin or Dash PrivateSend.\n\nThe practices below cover wallet-side hygiene to make the most of Decred's privacy features.",
+				"meta_description": "Privacy practices for Decred trades on Morphit: hybrid PoW/PoS chain, on-chain governance, opt-in CoinShuffle++ wallet mixing, and fresh-address hygiene.",
+				"caveats": "Decred is transparent at the base layer; mixing is opt-in and wallet-side.\n\n- **Share fresh addresses per trade.**  Using the same `Ds` or `Dc` address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade (Decred wallets derive these from your HD seed).\n- **Use CSPP mixing if you want transaction-level privacy.**  In dcrwallet enable the \"Mix Account\" option; deposits flow through CoinShuffle++ rounds with other participants before becoming spendable from your mixed account.  Mixing rounds happen approximately every 20 minutes on mainnet.\n- **Wallet compatibility.**  The official wallets are dcrwallet (CLI/headless), Decrediton (GUI), and Cake Wallet (mobile, DCR mode).  Some other wallets support DCR send/receive but not CSPP mixing.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Politeia treasury proposals are public.**  Decred's on-chain governance system shows every proposal, vote, and discussion publicly.  This isn't a Morphit-trading concern, but worth knowing if you participate in DCR governance."
 			}
 		}
 	}

@@ -43,7 +43,8 @@ const scenarios: Scenario[] = [
 				catB.includes('DOGE') &&
 				catB.includes('ZEC') &&
 				catB.includes('ARRR') &&
-				catB.length === 9
+				catB.includes('DCR') &&
+				catB.length === 10
 			);
 		}
 	},

@@ -162,6 +162,7 @@ SMOKES=(
 	"packages/asset-registry:doge-trade-only-smoke"
 	"packages/asset-registry:zec-trade-only-smoke"
 	"packages/asset-registry:arrr-trade-only-smoke"
+	"packages/asset-registry:dcr-trade-only-smoke"
 	"packages/asset-registry:asset-accent-class-uniqueness-smoke"
 	"packages/asset-registry:payment-rail-coverage-parity-smoke"
 	"packages/asset-registry:address-shape-overlap-smoke"

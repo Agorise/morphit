@@ -13,9 +13,9 @@
  *   /rss/orderbook/by-asset/<asset>.xml
  *     Same shape, filtered to a single asset
  *     (BTC | XMR | BLURT | USDT | USDC | DAI | BCH | LTC | DASH
- *     | DOGE | ZEC | ARRR). Lets a subscriber follow only the trades they
+ *     | DOGE | ZEC | ARRR | DCR). Lets a subscriber follow only the trades they
  *     care about. The set of valid URLs is fixed and
- *     enumerable — twelve of them. A subscriber polling
+ *     enumerable — thirteen of them. A subscriber polling
  *     /rss/orderbook/by-asset/btc.xml reveals "I care about
  *     BTC" and nothing more granular than that.
  *

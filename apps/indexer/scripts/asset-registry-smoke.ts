@@ -31,9 +31,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (12 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR)', () => {
+scenario('all current assets registered (13 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['arrr', 'bch', 'blurt', 'btc', 'dai', 'dash', 'doge', 'ltc', 'usdc', 'usdt', 'xmr', 'zec'];
+	const expected = ['arrr', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'ltc', 'usdc', 'usdt', 'xmr', 'zec'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -136,7 +136,8 @@ scenario('lower-case tickers match payload union', () => {
 		'dash',
 		'doge',
 		'zec',
-		'arrr'
+		'arrr',
+		'dcr'
 	]);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {

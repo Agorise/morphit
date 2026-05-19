@@ -873,6 +873,17 @@ export const DEFAULT_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/tran
 // via MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL.
 export const DEFAULT_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{txid}';
 
+// Part 122 cp43 — Decred (DCR) chat-link explorer URL bundled
+// default.  Operator's 4-explorer survey at cp43:
+// dcrdata.decred.org (chosen as bundled default — official project
+// explorer, project-aligned, no third-party tracking),
+// blockchain.com/explorer/assets/dcr (third-party aggregator),
+// dcr.tokenview.io (Tokenview multi-chain),
+// bitinfocharts.com/decred/ (community analytics + block explorer).
+// Operators wanting different default override via
+// MORPHIT_FRONTEND_DCR_CHAT_LINK_URL.
+export const DEFAULT_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
+
 // Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1087,6 +1098,7 @@ export interface ChatLinkExplorersResult {
 	 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL directly. */
 	readonly zec: string;
 	readonly arrr: string;
+	readonly dcr: string;
 	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1220,6 +1232,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── ARRR chat-link URL ──\n');
 	const arrr = await editChatLinkUrl('ARRR chat-link URL', DEFAULT_ARRR_CHAT_LINK_URL);
 
+	// ─── DCR (Part 122 cp43) ──
+	console.log('\n  ── DCR chat-link URL ──\n');
+	const dcr = await editChatLinkUrl('DCR chat-link URL', DEFAULT_DCR_CHAT_LINK_URL);
+
 	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
 	// Solana / BNB Smart Chain); each chain has its own explorer
@@ -1333,7 +1349,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
 		};
 
-	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, usdt, usdc, dai };
+	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -1425,7 +1441,8 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.',
 	DOGE: 'Dogecoin — single-network mainnet.  Fair-launched 2013, merge-mined\n    with Litecoin since 2014 (auxiliary proof-of-work).  Transparent at\n    base layer like BTC; no native privacy upgrade (no PrivateSend\n    equivalent, no confidential transactions, no segwit-enabled mixing).\n    No central issuer.',
 	ZEC: 'Zcash — single-network mainnet.  Launched 2016.  Supports both\n    transparent addresses (t1/t3, base58, like BTC) and shielded\n    addresses (zs1 Sapling, u1 Unified Address) using zero-knowledge\n    proofs to hide sender, recipient, and amount.  Per-trade, recipients\n    pick the address type that fits their posture.  No central issuer.',
-	ARRR: 'Pirate Chain — single-network mainnet.  Launched 2018 as a fork of\n    the Zcash codebase, configured so that the Sapling zk-SNARK shielded\n    pool is the only available transaction type — every transfer hides\n    sender, recipient, and amount on chain by construction.  No\n    transparent address option (transparent funds were sunset early in\n    the chain).  Single address format (zs1 Sapling, bech32, 78 chars).\n    No central issuer.'
+	ARRR: 'Pirate Chain — single-network mainnet.  Launched 2018 as a fork of\n    the Zcash codebase, configured so that the Sapling zk-SNARK shielded\n    pool is the only available transaction type — every transfer hides\n    sender, recipient, and amount on chain by construction.  No\n    transparent address option (transparent funds were sunset early in\n    the chain).  Single address format (zs1 Sapling, bech32, 78 chars).\n    No central issuer.',
+	DCR: 'Decred — single-network mainnet.  Launched 2016.  Hybrid Proof-of-Work\n    + Proof-of-Stake consensus: every block is mined by PoW miners AND\n    voted on by 5 PoS ticket-holders chosen pseudo-randomly from the\n    staking pool.  On-chain governance via Politeia lets stakeholders\n    propose and ratify protocol changes.  Two receive-address formats\n    (Ds P2PKH and Dc P2SH, 35 chars each, base58).  Opt-in CoinShuffle++\n    (CSPP) mixing integrated into dcrwallet for wallet-side transaction-\n    level privacy.  No central issuer.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
