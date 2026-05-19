@@ -215,7 +215,7 @@ export async function subscribe(
 	try {
 		sub = await reg.pushManager.subscribe({
 			userVisibleOnly: true,
-			applicationServerKey: urlBase64ToUint8Array(vapidKey)
+			applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
 		});
 	} catch {
 		throw 'subscribe_failed' satisfies SubscribeError;

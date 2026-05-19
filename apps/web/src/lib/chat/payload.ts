@@ -468,7 +468,7 @@ export function jitterStablecoinAmount(base: string): string {
 	// bias is negligible at this scale.
 	const buf = new Uint8Array(2);
 	crypto.getRandomValues(buf);
-	const r = (buf[0] << 8) | buf[1];
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
 	const jitterMicro = BigInt(r % 1000);
 	const totalMicro = baseMicro + jitterMicro;
 
@@ -516,7 +516,7 @@ export function jitterUtxoAmount(base: string): string {
 	// bias is negligible at this scale.
 	const buf = new Uint8Array(2);
 	crypto.getRandomValues(buf);
-	const r = (buf[0] << 8) | buf[1];
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
 	const jitterSat = BigInt(r % 1000);
 	const totalSat = baseSat + jitterSat;
 
@@ -547,7 +547,7 @@ export function jitterBlurtAmount(base: string): string {
 
 	const buf = new Uint8Array(1);
 	crypto.getRandomValues(buf);
-	const jitterMilli = BigInt(buf[0] % 100);
+	const jitterMilli = BigInt((buf[0] ?? 0) % 100);
 	const totalMilli = baseMilli + jitterMilli;
 
 	const wholeOut = totalMilli / 1000n;

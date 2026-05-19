@@ -133,9 +133,12 @@ export function findPriorShare(
 	const all = loadAddressHistory();
 	// Search from most-recent backward (entries are appended at
 	// the end, so iterate in reverse for the latest match).
+	// cp44-J-71 fix: explicit undefined guard.  At runtime
+	// all[i] is always defined for i in [0, all.length); strict
+	// mode requires the guard for the union type to be sound.
 	for (let i = all.length - 1; i >= 0; i--) {
 		const e = all[i];
-		if (e.asset === asset && e.address === address) return e;
+		if (e !== undefined && e.asset === asset && e.address === address) return e;
 	}
 	return null;
 }
