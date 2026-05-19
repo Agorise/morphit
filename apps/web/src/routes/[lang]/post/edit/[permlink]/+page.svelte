@@ -39,6 +39,9 @@
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
+	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
+	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
+	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
 
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -49,6 +52,14 @@
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+	import {
+		type UsdtNetwork,
+		type UsdcNetwork,
+		type DaiNetwork,
+		isUsdtNetwork,
+		isUsdcNetwork,
+		isDaiNetwork
+	} from '$lib/assets/networks';
 
 	type Asset = AssetTicker;
 	type Side = 'buy' | 'sell';
@@ -102,6 +113,33 @@
 	let priceModelKind = $state<PriceModelKind>('spread');
 	let spreadPercent = $state('0');
 	let fixedPrice = $state('');
+
+	// ─── Multi-network asset state ─────────────────────────────────
+	// USDT, USDC, and DAI carry an `asset_network` discriminator
+	// (cp30/cp31 schema v32-v33). The edit form must surface the
+	// same picker UI as /post, hydrate from the existing order's
+	// asset_network on load, reset when the user switches asset
+	// off the multi-network class, and re-emit asset_network in
+	// the OrderFormInput so broadcastOrderReplace's underlying
+	// buildOrderPayload can include it. Without this wiring, the
+	// indexer's orderReplace handler returns
+	// `asset_network_required_for_<asset>` for USDT/USDC/DAI
+	// replaces.
+	//
+	// Note: the orderReplace handler ADDITIONALLY enforces that
+	// the network cannot CHANGE during a replace (replace must
+	// preserve the original asset_network — see
+	// `replace_asset_network_change_forbidden` in
+	// orderReplace.ts). That's a downstream rejection the user
+	// will see if they fiddle with the picker on a multi-network
+	// asset whose original network they shouldn't touch; the
+	// form lets them try, the chain says no. Long-term we may
+	// want to surface a UI lock in this form, but that's a
+	// follow-up — the indexer-side enforcement is the
+	// load-bearing correctness guarantee.
+	let usdtNetwork = $state<UsdtNetwork | null>(null);
+	let usdcNetwork = $state<UsdcNetwork | null>(null);
+	let daiNetwork = $state<DaiNetwork | null>(null);
 
 	// ─── Private-key protection for the terms field ────────────────
 	// Same defense stack as the /post screen: visual highlight via
@@ -229,6 +267,24 @@
 			spreadPercent = '0';
 		}
 
+		// cp36 Bob-3 fix — hydrate the multi-network picker from
+		// `order.asset_network`. The defensive typeguards
+		// (`isUsdtNetwork` etc.) catch the case where the indexer
+		// returns a network value we don't recognize (forward-
+		// compat with future network additions, or a malformed
+		// pre-cp30 row that somehow survived migration).  On
+		// mismatch we leave the picker null so the canSave gate
+		// forces the user to re-pick — failing closed rather
+		// than silently broadcasting a stale value.
+		const netRaw = order.asset_network;
+		if (order.asset === 'USDT' && typeof netRaw === 'string' && isUsdtNetwork(netRaw)) {
+			usdtNetwork = netRaw;
+		} else if (order.asset === 'USDC' && typeof netRaw === 'string' && isUsdcNetwork(netRaw)) {
+			usdcNetwork = netRaw;
+		} else if (order.asset === 'DAI' && typeof netRaw === 'string' && isDaiNetwork(netRaw)) {
+			daiNetwork = netRaw;
+		}
+
 		// Kick off the countdown.
 		tickTimer = setInterval(() => {
 			remainingMs = windowExpiresAt - Date.now();
@@ -334,7 +390,20 @@
 	});
 
 	const canSave = $derived(
-		phase === 'ready' && !amountError && !pmError && !fiatError && !priceModelError && remainingMs > 0
+		phase === 'ready' &&
+			!amountError &&
+			!pmError &&
+			!fiatError &&
+			!priceModelError &&
+			remainingMs > 0 &&
+			// cp36 Bob-3 fix — multi-network assets require a picked
+			// network. Without this gate the user can save with an
+			// empty picker; the indexer rejects with
+			// `asset_network_required_for_<asset>` after broadcast,
+			// which is a poor UX. Fail-closed on the client side.
+			(asset !== 'USDT' || usdtNetwork !== null) &&
+			(asset !== 'USDC' || usdcNetwork !== null) &&
+			(asset !== 'DAI' || daiNetwork !== null)
 	);
 
 	// ─── Save ──────────────────────────────────────────────────────
@@ -385,7 +454,22 @@
 			// we re-anchor it off NOW so the user's "make it last 14d
 			// from now" intent is respected, not "14d from the original
 			// post time."
-			expiresAt: new Date(Date.now() + expiresDays * 86_400_000)
+			expiresAt: new Date(Date.now() + expiresDays * 86_400_000),
+			// cp36 Bob-3 fix — emit the active multi-network asset's
+			// network in the replace payload. buildOrderPayload (in
+			// $lib/orders/payload.ts) reads this and writes the wire-
+			// shape `asset_network` field; the indexer's orderReplace
+			// handler requires it for USDT/USDC/DAI. canSubmit gates
+			// already enforced that the picker has a value when the
+			// asset is multi-network.
+			assetNetwork:
+				asset === 'USDT' && usdtNetwork !== null
+					? usdtNetwork
+					: asset === 'USDC' && usdcNetwork !== null
+						? usdcNetwork
+						: asset === 'DAI' && daiNetwork !== null
+							? daiNetwork
+							: undefined
 		};
 
 		try {
@@ -590,7 +674,17 @@
 				{#each ASSET_TICKERS as a}
 					<button
 						type="button"
-						onclick={() => (asset = a as Asset)}
+						onclick={() => {
+							asset = a as Asset;
+							// cp36 Bob-3 fix — clear stale picker
+							// selections when the user switches off a
+							// multi-network asset, so a USDT→BTC→USDT
+							// round-trip doesn't smuggle a phantom
+							// USDT network into the payload.
+							if (a !== 'USDT') usdtNetwork = null;
+							if (a !== 'USDC') usdcNetwork = null;
+							if (a !== 'DAI') daiNetwork = null;
+						}}
 						class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
 						a
 							? 'border-morphit-emerald bg-emerald-50 dark:bg-ink-800'
@@ -600,6 +694,32 @@
 					</button>
 				{/each}
 			</div>
+
+			<!-- cp36 Bob-3 fix — multi-network picker mounts.
+			     Mirror /post's UI exactly: a picker appears only
+			     when its asset is selected. canSave gates above
+			     enforce that the picker has a value before save
+			     is allowed.  When editing a USDT/USDC/DAI order
+			     the picker is pre-hydrated from the order's
+			     existing asset_network via the load() block;
+			     changing it will be rejected at broadcast time
+			     by the indexer's
+			     `replace_asset_network_change_forbidden` rule. -->
+			{#if asset === 'USDT'}
+				<div class="mt-4">
+					<UsdtNetworkPicker bind:network={usdtNetwork} />
+				</div>
+			{/if}
+			{#if asset === 'USDC'}
+				<div class="mt-4">
+					<UsdcNetworkPicker bind:network={usdcNetwork} />
+				</div>
+			{/if}
+			{#if asset === 'DAI'}
+				<div class="mt-4">
+					<DaiNetworkPicker bind:network={daiNetwork} />
+				</div>
+			{/if}
 		</section>
 
 		<section class="card mb-4">

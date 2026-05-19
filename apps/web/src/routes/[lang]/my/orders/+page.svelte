@@ -355,6 +355,12 @@
 		const payload = {
 			side: o.side,
 			asset: o.asset,
+			// cp36 Bob-4 fix — carry forward the multi-network
+			// asset's asset_network so /post can pre-hydrate its
+			// network picker. Without this, relisting a USDT/USDC/DAI
+			// order lands on /post with an empty picker and the user
+			// has to remember which network they had.
+			assetNetwork: o.asset_network ?? null,
 			fiat: o.fiat_currency,
 			amountMin: o.amount_min !== null ? String(o.amount_min) : '',
 			amountMax: o.amount_max !== null ? String(o.amount_max) : '',

@@ -73,7 +73,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 ## 3. Security and audits — receipts, not slogans
 
-35. **Over 3,340 self-checking smoke scenarios** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh`. They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
+35. **Several thousand self-checking smoke scenarios across ~150 runners** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh` (and triple-pulse it for flake filtering). They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
 36. **A running audit document** (`docs/AUDIT-2026-05.md`) — currently 20,000+ lines across 60+ numbered parts, organized by date and subsystem, listing every security review pass, every finding, every severity rating, every fix or accepted-risk rationale. Public, in the repo, anyone can read it. Plus per-batch audit files in `docs/audit/` (Batch I YubiKey unlock, Batch J release trust anchor, Batch K block explorer, Batch L payment methods).
 37. **STRIDE threat-model methodology** applied per audit pass: Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege — a matrix run over every changed subsystem, with attack trees built from the most attractive entry points.
 38. **Adversarial red-team narratives.** The audit doc names hypothetical attackers (a doxxing journalist, a federated phisher, a sanctions evader, a reputation-launderer) and walks through what each would actually do to the system. Defenses are designed against the playbook, not against generic "bad actors."
@@ -196,7 +196,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 132. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
 133. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
-134. **28 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0029 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network, ADR-0024 BCH trade-only addition, ADR-0025 LTC trade-only addition, ADR-0026 transparent-chain privacy framework, ADR-0027 DASH trade-only addition, ADR-0028 USDC multi-network trade-only addition, ADR-0029 DAI multi-network trade-only addition.
+134. **29 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0030 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Examples: ADR-0010 key custody, ADR-0014 chat and counterparty reputation, ADR-0015 chat crypto, ADR-0017 YubiKey unlock, ADR-0019 release trust anchor, ADR-0022 desktop QR pairing, ADR-0023 USDT multi-network, ADR-0024 BCH trade-only addition, ADR-0025 LTC trade-only addition, ADR-0026 transparent-chain privacy framework, ADR-0027 DASH trade-only addition, ADR-0028 USDC multi-network trade-only addition, ADR-0029 DAI multi-network trade-only addition, ADR-0030 DOGE trade-only addition.
 135. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 136. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
 137. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
@@ -454,7 +454,7 @@ A reference list of 250+ specific things Morphit does — privacy, security, dec
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs **3,355+ self-checks across 145+ runners**, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~150 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
 - **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0030-*.md`
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)

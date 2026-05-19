@@ -47,7 +47,14 @@
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
 	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
-	import { type UsdtNetwork, type UsdcNetwork, type DaiNetwork } from '$lib/assets/networks';
+	import {
+		type UsdtNetwork,
+		type UsdcNetwork,
+		type DaiNetwork,
+		isUsdtNetwork,
+		isUsdcNetwork,
+		isDaiNetwork
+	} from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import { getInstanceSnapshot } from '$lib/stores/instance';
 
@@ -680,6 +687,7 @@
 				const p = JSON.parse(raw) as Partial<{
 					side: 'buy' | 'sell';
 					asset: string;
+					assetNetwork: string | null;
 					amountMin: string;
 					amountMax: string;
 					fiat: string;
@@ -695,6 +703,20 @@
 				if (p.side === 'buy' || p.side === 'sell') side = p.side;
 				if (isAssetTicker(p.asset)) {
 					asset = p.asset;
+				}
+				// cp36 Bob-4 fix — hydrate the matching multi-network
+				// picker from the prefill payload's assetNetwork.
+				// Defensive typeguards: an unknown value lands the
+				// picker on null so the canSubmit gate forces the
+				// user to re-pick rather than silently broadcasting
+				// a stale value (same posture as the /post/edit
+				// load hydration added in cp36).
+				if (asset === 'USDT' && typeof p.assetNetwork === 'string' && isUsdtNetwork(p.assetNetwork)) {
+					usdtNetwork = p.assetNetwork;
+				} else if (asset === 'USDC' && typeof p.assetNetwork === 'string' && isUsdcNetwork(p.assetNetwork)) {
+					usdcNetwork = p.assetNetwork;
+				} else if (asset === 'DAI' && typeof p.assetNetwork === 'string' && isDaiNetwork(p.assetNetwork)) {
+					daiNetwork = p.assetNetwork;
 				}
 				if (typeof p.amountMin === 'string') amountMin = p.amountMin;
 				if (typeof p.amountMax === 'string') amountMax = p.amountMax;

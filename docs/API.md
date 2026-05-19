@@ -571,18 +571,21 @@ Aggregate trading-activity stats for the Morphit instance.
     "BLURT": "12500",
     "USDT": "4200",
     "USDC": "3100",
+    "DAI": "2400",
     "BCH": "1.8",
     "LTC": "8.5",
-    "DASH": "3.2"
+    "DASH": "3.2",
+    "DOGE": "1200"
   }
 }
 ```
 
 Notes: the asset list is dynamic — new tradable assets added to the
-canonical registry appear here automatically. USDT and USDC are
+canonical registry appear here automatically. USDT, USDC, and DAI are
 each reported as a single rollup; per-network breakdown is not
 exposed in this endpoint (see `/v1/orderbook?asset=USDT&asset_network=trc20`
-or `/v1/orderbook?asset=USDC&asset_network=base` for per-network
+or `/v1/orderbook?asset=USDC&asset_network=base` or
+`/v1/orderbook?asset=DAI&asset_network=polygon` for per-network
 filtering on the live orderbook).
 
 **Trade count semantics:** unique completed orders that received

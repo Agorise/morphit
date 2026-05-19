@@ -8088,6 +8088,14 @@ Multi-coin examples:
 # Refuse one specific asset
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT"
 
+# Refuse USDC (Part 122 cp30 — operators preferring to avoid
+# a Circle-custodial stablecoin)
+MORPHIT_INDEXER_DISABLED_ASSETS="USDC"
+
+# Refuse DAI (Part 122 cp31 — operators preferring to keep
+# stablecoin exposure to USDT/USDC only; see ADR-0029)
+MORPHIT_INDEXER_DISABLED_ASSETS="DAI"
+
 # Refuse Bitcoin Cash (privacy-focused operators may prefer
 # BTC + XMR only)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
@@ -8095,6 +8103,14 @@ MORPHIT_INDEXER_DISABLED_ASSETS="BCH"
 # Refuse Litecoin (some operators specialize in Bitcoin +
 # privacy-coin trading without BTC-fork variants)
 MORPHIT_INDEXER_DISABLED_ASSETS="LTC"
+
+# Refuse Dash (operators preferring to limit the surface to
+# Bitcoin-family chains without masternode-coordinated coins)
+MORPHIT_INDEXER_DISABLED_ASSETS="DASH"
+
+# Refuse Dogecoin (Part 122 cp33 — brand/audience choice for
+# operators specializing in serious-money trading; see ADR-0030)
+MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"
 
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
@@ -8350,9 +8366,12 @@ has no effect on your instance.
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH all single-network; USDT and USDC multi-network; all
-write NULL).
-USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`.
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE
+all single-network; USDT, USDC, DAI multi-network; all
+single-network assets write NULL).
+USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`;
+USDC orders carry one of `'erc20'|'spl'|'base'|'polygon'`;
+DAI orders carry one of `'erc20'|'polygon'|'base'|'arbitrum'`.
 
 The migration is idempotent (`ADD COLUMN IF NOT EXISTS`) and
 applied automatically on indexer startup.  No operator action
