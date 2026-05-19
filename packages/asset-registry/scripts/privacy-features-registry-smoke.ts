@@ -42,7 +42,7 @@ function fail(name: string, detail: string): void {
 console.log('\n── privacy-features-registry smoke ───────────────────\n');
 
 const VALID_ADVICE = new Set(['subaddress', 'hd-derived', 'account-reuse']);
-const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin', 'privatesend', 'shielded-pools']);
+const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin', 'privatesend', 'shielded-pools', 'csppmix']);
 
 // ── Scenario 1 — every asset has privacyFeatures populated ────
 for (const a of ASSETS) {
@@ -116,7 +116,8 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	DASH: 'hd-derived',
 	DOGE: 'hd-derived',
 	ZEC: 'hd-derived',
-	ARRR: 'hd-derived'
+	ARRR: 'hd-derived',
+	DCR: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -148,7 +149,8 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	DASH: ['privatesend'],
 	DOGE: null,
 	ZEC: ['shielded-pools'],
-	ARRR: ['shielded-pools']
+	ARRR: ['shielded-pools'],
+	DCR: ['csppmix']
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

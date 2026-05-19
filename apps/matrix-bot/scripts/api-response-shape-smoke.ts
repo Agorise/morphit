@@ -174,6 +174,7 @@ const ChatLinkUrlsSchema = z.object({
 	// back-compat with pre-cp39 indexer builds.
 	zec: z.string().nullable().optional(),
 	arrr: z.string().nullable().optional(),
+	dcr: z.string().nullable().optional(),
 	usdt: z
 		.object({
 			erc20: z.string().nullable(),

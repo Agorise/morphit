@@ -18,6 +18,8 @@
  *     for Unified Address)
  *   - ARRR: BIP-21-style URI (`arrr:zs1...?amount=0.5`) —
  *     single Sapling shielded format on Pirate Chain
+ *   - DCR: BIP-21-style URI (`decred:Ds...?amount=1.5`) —
+ *     both Ds P2PKH and Dc P2SH formats on Decred
 	 *   - BLURT: bare account name (no widely-supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships

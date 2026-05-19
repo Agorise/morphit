@@ -58,7 +58,8 @@ const SPECIMENS: Record<string, string[]> = {
 	DASH: ['XwnLY8qaFu8aGM9XRdcaQ9XgnnQ8AbnXkc', '7gnwGHt17heGpG9Crfeh4KGpYNFugPhJdh'],
 	DOGE: ['DPHwLrG5Cm5R8KCNNfMcXSEoVbCRBkXxhf', '9oWnzfQwHJxQwgKZBJjBPNxhSEy7sCwbtL', 'A7M2sPo9o6KBdaA1V8tNuS9YqQ8eJ9YHHb'],
 	ZEC: ['t1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA', 't3JXcyHRZqv6sgCnJiR9Zc4sXh9pK77HQjE', 'zs1' + 'q'.repeat(75), 'u1' + 'q'.repeat(80)],
-	ARRR: ['zs1' + 'q'.repeat(75)]
+	ARRR: ['zs1' + 'q'.repeat(75)],
+	DCR: ['Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d', 'DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N']
 };
 
 // Documented intentional overlaps as (A_owner, addr_class, B_acceptors).
@@ -83,6 +84,10 @@ const EXPECTED_OVERLAPS: Set<string> = new Set([
 	'DASH-7gnwGHt17heGpG9Crfeh4KGpYNFugPhJdh->USDT',
 	'DASH-XwnLY8qaFu8aGM9XRdcaQ9XgnnQ8AbnXkc->USDC',
 	'DASH-XwnLY8qaFu8aGM9XRdcaQ9XgnnQ8AbnXkc->USDT',
+	'DCR-DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N->USDC',
+	'DCR-DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N->USDT',
+	'DCR-Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d->USDC',
+	'DCR-Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d->USDT',
 	'DOGE-9oWnzfQwHJxQwgKZBJjBPNxhSEy7sCwbtL->USDC',
 	'DOGE-9oWnzfQwHJxQwgKZBJjBPNxhSEy7sCwbtL->USDT',
 	'DOGE-A7M2sPo9o6KBdaA1V8tNuS9YqQ8eJ9YHHb->USDC',

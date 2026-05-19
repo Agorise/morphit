@@ -145,6 +145,7 @@ const DICTIONARY_BRANDS: ReadonlySet<string> = new Set([
 	'dogecoin',
 	'zcash',
 	'piratechain',
+	'decred',
 	'cardano',
 	'solana',
 	'polkadot',
@@ -161,6 +162,7 @@ const DICTIONARY_BRANDS: ReadonlySet<string> = new Set([
 	'doge',
 	'zec',
 	'arrr',
+	'dcr',
 	// Apparel / consumer brands
 	'nike',
 	'adidas',

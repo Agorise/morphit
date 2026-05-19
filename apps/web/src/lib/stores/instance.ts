@@ -95,6 +95,7 @@ export interface InstanceState {
 		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
 		readonly zec: string | null;
 		readonly arrr: string | null;
+		readonly dcr: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -187,6 +188,7 @@ const FALLBACK: InstanceState = {
 		doge: null,
 		zec: null,
 		arrr: null,
+		dcr: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 		usdc: { erc20: null, spl: null, base: null, polygon: null },
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
@@ -273,6 +275,7 @@ export function initInstance(): Promise<void> {
 								doge: result.data.chat_link_urls.doge ?? null,
 								zec: result.data.chat_link_urls.zec ?? null,
 								arrr: result.data.chat_link_urls.arrr ?? null,
+								dcr: result.data.chat_link_urls.dcr ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -301,6 +304,7 @@ export function initInstance(): Promise<void> {
 								doge: null,
 								zec: null,
 								arrr: null,
+								dcr: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 								usdc: { erc20: null, spl: null, base: null, polygon: null },
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }

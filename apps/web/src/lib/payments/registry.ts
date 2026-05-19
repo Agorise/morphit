@@ -264,6 +264,27 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'ARRR'
 	},
+	{
+		// Part 122 cp43 — Decred as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC/ARRR:
+		// when the trade's traded asset is DCR, "pay with DCR"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, DCR appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `decred:`
+		// URI (BIP-21-style) handles both receive-address
+		// formats (Ds P2PKH-Secp256k1 and Dc P2SH).
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp43 ships DCR with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// and ARRR at cp41.
+		key: 'pay_dcr',
+		name: 'Decred (DCR)',
+		url: 'https://decred.org',
+		category: 'crypto',
+		assetExclusion: 'DCR'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

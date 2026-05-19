@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -262,6 +262,32 @@ const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
  *  the BTC family on the wire; shielded payload is hidden inside
  *  the tx but the txid itself is canonical and shareable. */
 const ARRR_TXID_RE = /^[0-9a-f]{64}$/;
+
+/** DCR address (cp43 — Part 122).  Decred uses base58check
+ *  with two address types for receiving payments:
+ *
+ *  - `Ds` P2PKH-Secp256k1: bech58check, `Ds` prefix + 33 base58
+ *    data chars = 35 chars total.  Most common receive format.
+ *  - `Dc` P2SH: same shape but `Dc` prefix.  Used for multisig
+ *    and escrow scripts.
+ *
+ *  Other prefixes (`Dp` extended pubkey, `Dr` extended privkey,
+ *  `De` Edwards-curve) are NOT used for receiving regular
+ *  payments — they would be incorrect to share as trade
+ *  destinations and are rejected by this regex.
+ *
+ *  Permissive shape check; chain-binding happens on the receiving
+ *  wallet side.  Base58 alphabet excludes `0`, `O`, `I`, `l` to
+ *  avoid visual ambiguity (we use [1-9A-HJ-NP-Za-km-z] for the
+ *  data portion, matching the BTC/DASH/DOGE/ZEC-transparent
+ *  patterns).
+ */
+const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
+
+/** DCR txid: 64 lowercase hex chars.  Same shape as the BTC
+ *  family — Decred forked from a Bitcoin-derived codebase and
+ *  inherited the SHA-256 32-byte txid convention. */
+const DCR_TXID_RE = /^[0-9a-f]{64}$/;
 
 
 /** BLURT "address" is actually a Blurt account name — the
@@ -544,7 +570,7 @@ export function jitterAmountForAsset(
 	base: string
 ): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec' || asset === 'arrr') {
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec' || asset === 'arrr' || asset === 'dcr') {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -637,7 +663,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -958,6 +984,23 @@ export function isValidArrrTxid(s: string): boolean {
 	return ARRR_TXID_RE.test(s);
 }
 
+/** Validate a DCR address shape (cp43 — Part 122).  Decred has
+ *  two receive-address formats: `Ds` P2PKH-Secp256k1 and `Dc`
+ *  P2SH.  Other prefixes (extended pubkey/privkey, Edwards-curve)
+ *  are NOT used for regular receive and are rejected. */
+export function isValidDcrAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DCR_RE.test(s);
+}
+
+/** Validate a DCR txid shape.  Same 64-char lowercase hex as
+ *  the BTC family on the wire; Decred forked from a Bitcoin-
+ *  derived codebase and inherited the SHA-256 txid convention. */
+export function isValidDcrTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DCR_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -972,6 +1015,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'doge') return isValidDogeAddress(addr);
 	if (method === 'zec') return isValidZecAddress(addr);
 	if (method === 'arrr') return isValidArrrAddress(addr);
+	if (method === 'dcr') return isValidDcrAddress(addr);
 	return false;
 }
 
@@ -990,6 +1034,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'doge') return isValidDogeTxid(txid);
 	if (method === 'zec') return isValidZecTxid(txid);
 	if (method === 'arrr') return isValidArrrTxid(txid);
+	if (method === 'dcr') return isValidDcrTxid(txid);
 	return false;
 }
 
@@ -1017,7 +1062,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'dash' &&
 		p.method !== 'doge' &&
 		p.method !== 'zec' &&
-		p.method !== 'arrr'
+		p.method !== 'arrr' &&
+		p.method !== 'dcr'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1193,7 +1239,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'dash' &&
 		p.method !== 'doge' &&
 		p.method !== 'zec' &&
-		p.method !== 'arrr'
+		p.method !== 'arrr' &&
+		p.method !== 'dcr'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1348,7 +1395,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'dash' &&
 			o.method !== 'doge' &&
 			o.method !== 'zec' &&
-			o.method !== 'arrr'
+			o.method !== 'arrr' &&
+			o.method !== 'dcr'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1378,7 +1426,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'dash' &&
 			o.method !== 'doge' &&
 			o.method !== 'zec' &&
-			o.method !== 'arrr'
+			o.method !== 'arrr' &&
+			o.method !== 'dcr'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1813,6 +1862,18 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `arrr:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'dcr') {
+		// Decred uses the `decred:` URI scheme — BIP-21-style
+		// shape (cp43 — Part 122).  Same form as BTC's
+		// `bitcoin:` scheme with `amount` as decimal DCR.  Both
+		// receive-address formats (Ds P2PKH and Dc P2SH) are
+		// accepted under the same scheme.  Decred wallets
+		// (dcrwallet, Decrediton, Cake Wallet) recognize the
+		// `decred:` scheme.
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `decred:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

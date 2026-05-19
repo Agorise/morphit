@@ -1798,3 +1798,27 @@ ZEC Sapling and Pirate Chain Sapling addresses are visually identical — same p
 4. Smoke coverage: a defensive smoke could check that no two assets share an exact-equal addressShape regex (this would catch accidental cross-asset regex collisions that aren't caught by chain-routing alone).
 
 **LL #50 candidate for cp42 deep-deep:** consider adding a "no two assets share an identical addressShape" smoke scenario to `asset-registry-smoke.ts`. ZEC and ARRR currently both accept `/^zs1[02-9ac-hj-np-z]{75}$/` as one of their formats (ZEC: as one of three alternations; ARRR: as the only format) — the smoke would need to detect overlap, not equality.
+
+---
+
+## CP43 — Decred (DCR) addition threat rows (2026-05-19)
+
+### T-cp43-1 — `Dr` extended privkey accidentally pasted as receive address (info-disclosure class, LOW)
+
+Decred has several base58 address types — `Ds` and `Dc` for receive, but also `Dp` (extended pubkey), `Dr` (extended privkey), and `De` (Edwards-curve). The `Dr` prefix carries an extended private key — equivalent in sensitivity to a BIP-32 xprv: anyone with it can derive every child address in the wallet's branch and spend everything. A user copying their xprv-equivalent from dcrwallet and pasting it as a receive address would publish their private key on-chain via a Morphit listing — a catastrophic privacy/security leak.
+
+**Mitigation:** the canonical regex `/^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/` REJECTS Dr/Dp/De prefixes. The user gets the `address_invalid_dcr` error: "Not a valid Decred address. Expected `Ds` or `Dc` prefix...". The dcr-trade-only-smoke (cp43) includes an explicit adversarial test that `Dr` is rejected with a comment flagging it as "SENSITIVE; never share". **Residual risk:** extremely low — the regex blocks the publish path entirely.
+
+### T-cp43-2 — CSPP mixing claim vs reality (information-disclosure class, LOW)
+
+Decred's CoinShuffle++ (CSPP) mixing is opt-in and wallet-side. A trader publishing a `Ds` receive address has NOT necessarily mixed those coins; the on-chain transaction graph remains visible. Users seeing DCR offered on Morphit might assume mixing-by-default and reveal more than they intended. **Mitigation:** the `privacy.guides.dcr.caveats` × 10 locales explicitly state that mixing is opt-in and wallet-side; the `csppmix` tech-tag explainer also documents this. **Residual risk:** user inattention; mitigated through guide-content prominence.
+
+### I-cp43-1 — Politeia governance metadata (info-disclosure class, N/A for Morphit users)
+
+Decred's Politeia governance system records every proposal, vote, and discussion publicly on the Decred network. This isn't a Morphit-trading concern (Politeia activity is independent of trade addresses), but the `privacy.guides.dcr.caveats` notes it for completeness for users who participate in DCR governance separately.
+
+### CP43 + LL #50 status
+
+The cp42 `address-shape-overlap-smoke` was extended at cp43 with DCR specimens. 4 new overlaps observed (DCR-Ds and DCR-Dc both accepted by USDT and USDC's permissive SPL base58 pattern) — same documented class as DOGE/DASH/BCH-legacy overlaps. Added to EXPECTED_OVERLAPS allowlist; smoke now passes with 49 documented overlaps (was 45 at cp42).
+
+**No new threat class from cp43.** Decred's opt-in mixing posture is similar in shape to DASH's PrivateSend or BTC's coinjoin — already covered by the LL #38 / LL #41 / LL #49 / LL #50 framework.

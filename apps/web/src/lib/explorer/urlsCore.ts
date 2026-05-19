@@ -49,6 +49,11 @@ export const ZEC_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  inside the shielded payload. */
 export const ARRR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** DCR txid (Part 122 cp43).  64 hex chars — Decred forked
+ *  from a Bitcoin-derived codebase and inherited the 32-byte
+ *  SHA-256 txid convention. */
+export const DCR_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -192,6 +197,31 @@ export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/tran
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL. */
 export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{txid}';
+
+/** DCR chat-link explorer (cp43 — Part 122).  Default uses
+ *  Decred's official project explorer at dcrdata.decred.org —
+ *  project-aligned, run by Decred itself (no third-party
+ *  tracking), supports both transparent and mixed-output
+ *  transactions, full Politeia governance integration.
+ *  Privacy/decentralization rationale matches the choices for
+ *  BUNDLED_ZEC_CHAT_LINK_URL (mainnet.zcashexplorer.app) and
+ *  BUNDLED_ARRR_CHAT_LINK_URL (explorer.piratechain.com):
+ *  prefer a project-aligned explorer over third-party
+ *  aggregators or exchange-affiliated services.
+ *
+ *  Operator's 4-explorer survey at cp43:
+ *  - dcrdata.decred.org — official project explorer.
+ *    CHOSEN as bundled default.
+ *  - blockchain.com/explorer/assets/dcr — third-party
+ *    aggregator; multi-asset; secondary.
+ *  - dcr.tokenview.io — Tokenview multi-chain explorer;
+ *    tertiary.
+ *  - bitinfocharts.com/decred/ — community-run analytics +
+ *    block explorer; quaternary.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_DCR_CHAT_LINK_URL. */
+export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

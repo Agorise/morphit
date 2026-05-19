@@ -2136,7 +2136,7 @@ COMMENT ON TABLE one_way_pile_on IS
 -- (ERC-20/TRC-20/SPL/BEP-20); Part 122 cp30 added USDC as a
 -- second multi-network asset (ERC-20/SPL/Base/Polygon); Part
 -- 122 cp31 added DAI as a third (ERC-20/Polygon/Base/Arbitrum).
--- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR)
+-- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR)
 -- write NULL.
 --
 -- Pre-Part-121 rows stay NULL on this column.  Validate-time

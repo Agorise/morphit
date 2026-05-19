@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -163,7 +163,7 @@ export interface AssetEntry {
 	readonly privacyFeatures: {
 		readonly freshAddressAdvice: 'subaddress' | 'hd-derived' | 'account-reuse';
 		readonly optInPrivacyTech:
-			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend' | 'shielded-pools')[]
+			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend' | 'shielded-pools' | 'csppmix')[]
 			| null;
 		readonly privacyGuideKey: string;
 	};
@@ -783,6 +783,69 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// [02-9ac-hj-np-z] for the data portion, matching the
 		// LTC MWEB and Zcash Sapling patterns).
 		addressShape: /^zs1[02-9ac-hj-np-z]{75}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'DCR',
+		// Decred uses 8 decimals — same smallest-unit semantics as
+		// the BTC family (Decred forked from a Bitcoin-derived
+		// codebase in 2016 and inherited the 8-decimal convention).
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: DCR is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; dcr-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  Decred has a testnet but Morphit
+		// trades only on mainnet (consistent with BCH/LTC/DASH/DOGE/
+		// ZEC/ARRR — none of those run testnet on Morphit either).
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Decred runs a hybrid Proof-of-Work + Proof-of-Stake
+		// consensus (PoW miners + PoS ticket-holder voting on
+		// every block).  On-chain governance (Politeia) lets
+		// stakeholders propose and ratify protocol changes.
+		// Addresses cannot be frozen by an issuer — fully
+		// decentralized.  The chain is transparent at the base
+		// layer (sender, recipient, and amount visible on chain)
+		// but offers an opt-in mixing protocol (CoinShuffle++ /
+		// CSPP, integrated in dcrwallet) for users who want
+		// transaction-level privacy.  No warning chip needed;
+		// the chain is decentralized.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// Decred addresses derive from HD seeds in modern
+			// wallets (dcrwallet, Decrediton, Cake Wallet for DCR).
+			// Standard "fresh address per trade" advice applies —
+			// transparent base layer means address reuse is
+			// directly visible on chain.
+			freshAddressAdvice: 'hd-derived',
+			// Decred's privacy story is its opt-in CoinShuffle++
+			// (CSPP) mixing protocol integrated into dcrwallet.
+			// Users can enable mixing in their wallet to break
+			// the on-chain transaction graph between deposit and
+			// withdrawal.  Similar in posture to Dash's PrivateSend
+			// (opt-in, wallet-side, defeats chain-graph analysis)
+			// or Bitcoin's coinjoin (off-protocol mixing).
+			// New tech tag introduced at cp43.
+			optInPrivacyTech: ['csppmix'],
+			privacyGuideKey: 'dcr'
+		},
+		// Decred address format:
+		//   - `Ds` prefix: P2PKH-Secp256k1 (most common receive addr)
+		//   - `Dc` prefix: P2SH (multisig, escrow scripts)
+		//   - 33 base58 data chars after the 2-char prefix
+		//   - 35 chars total
+		// Base58 alphabet excludes `0`, `O`, `I`, `l` to avoid
+		// visual ambiguity (we use [1-9A-HJ-NP-Za-km-z] — same as
+		// BTC/DASH/DOGE/ZEC-transparent patterns).
+		// Other prefixes exist (`Dp` extended pubkey, `Dr` extended
+		// privkey, `De` Edwards) but are NOT used for receiving
+		// regular payments — Morphit rejects them.
+		addressShape: /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

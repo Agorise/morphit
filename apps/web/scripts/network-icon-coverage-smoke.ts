@@ -157,9 +157,9 @@ if (tickerMatch) {
 scenarios.push({
 	name: 'ASSET_TICKERS extracted from registry source',
 	run: () =>
-		tickerSet.size >= 12
+		tickerSet.size >= 13
 			? null
-			: `expected ≥12 tradable assets at cp41, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
+			: `expected ≥13 tradable assets at cp43, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
 });
 
 for (const ticker of [...tickerSet].sort()) {
