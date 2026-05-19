@@ -141,7 +141,7 @@ for (const slug of [...networkSet].sort()) {
 
 // CP32 EXTENSION — also pin every per-asset icon at /icons/icon-<ticker>.svg.
 // Per-icon ceiling: 64 KB (asset icons may carry detailed brand
-// artwork — Shibu Inu DOGE etc).  Total budget for 15 asset icons
+// artwork — Shibu Inu DOGE etc).  Total budget for 16 asset icons
 // at present (cp47 — Part 122) + headroom = 128 KB.  Last verified
 // cp48 deep-deep finding L-1 (was "10 asset icons" stale since
 // cp32; asset additions at cp33 DOGE, cp39 ZEC, cp41 ARRR, cp43
@@ -161,9 +161,9 @@ if (tickerMatch) {
 scenarios.push({
 	name: 'ASSET_TICKERS extracted from registry source',
 	run: () =>
-		tickerSet.size >= 15
+		tickerSet.size >= 16
 			? null
-			: `expected ≥15 tradable assets at cp47, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
+			: `expected ≥16 tradable assets at cp49, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
 });
 
 for (const ticker of [...tickerSet].sort()) {

@@ -1892,3 +1892,54 @@ User wallets talk to an Ethereum RPC endpoint (Infura, Alchemy, QuickNode, publi
 The cp42 `address-shape-overlap-smoke` was extended at cp47 with ETH specimens. 9 new overlaps observed — USDT-ERC20 → ETH, USDC-ERC20 → ETH, DAI-ERC20 → ETH, and ETH specimens → USDT/USDC/DAI. ALL by design — Ethereum 0x-addresses ARE 20-byte hex regardless of which asset they hold (native ETH or any ERC-20 token on any EVM chain). Added to EXPECTED_OVERLAPS allowlist; smoke now passes with **81 documented overlaps** (was 72 at cp46).
 
 **No new threat class from cp47.** Ethereum's transparent base layer + opt-out-of-protocol privacy posture is similar in shape to BTC and SOL (different consensus, similar privacy story). Already covered by the LL #38 / LL #41 / LL #49 / LL #50 / LL #52 / cp46-O-1 framework.
+
+---
+
+## CP49 — Ripple (XRP) addition threat rows (2026-05-19)
+
+### T-cp49-1 — XRP destination tag confusion (fund-loss class, MEDIUM)
+
+XRPL has a unique routing-metadata feature: the destination tag, a 32-bit integer that exchanges use to route XRP to user accounts under their omnibus wallet. Sending XRP to an exchange-hosted address (Binance, Bitstamp, Kraken, Bitfinex, Coinbase, etc.) WITHOUT the required destination tag causes the funds to land in the exchange's general pool — practically lost from the user's perspective; recovery requires opening a support ticket with the exchange.
+
+**Morphit-specific concern:** when a user trades XRP on Morphit and the counterparty supplies an exchange-hosted address (knowingly or not), the buyer might send native XRP without the tag and the transaction succeeds on-chain but the trade fails.
+
+**Mitigation:** Three layers of defense.
+1. **`ripple:` URI builder supports `?dt=N`** — when the receiver explicitly provides a tag, the URI handles it.
+2. **Privacy guide warns × 10 locales** — `privacy.guides.xrp.caveats` explicitly documents the destination-tag UX in EN/ES/FR/DE native + EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK.
+3. **CATEGORY_B_DESCRIPTIONS in ops-cli** — operator-facing docs mention destination tags up-front.
+
+**Residual risk:** non-zero but contained. User must read the privacy guide or FAQ to learn about destination tags. Wallet UX on the sender side typically prompts for a destination tag when sending to known exchange addresses (Xaman/Xumm has this built-in). Counterparty reputation system + dispute escalation cover the residual.
+
+### T-cp49-2 — XRPL reserve requirement send-fails (fund-loss class, LOW)
+
+XRPL accounts require a base reserve (currently 1 XRP) to exist on the ledger. Sending less than 1 XRP to a never-funded address fails on-chain — the transaction reverts and the user pays the network fee with no settlement.
+
+**Morphit-specific concern:** a user's first incoming XRP must be ≥1 XRP. If a counterparty agrees to a 0.5 XRP trade, the funding payment fails.
+
+**Mitigation:** documented in `privacy.guides.xrp.caveats` × 10 locales. Workaround: the buyer funds the receive address themselves first (from an existing XRPL account) before sharing it for the trade.
+
+**Residual risk:** low. Most XRP trades on Morphit are likely to be larger than 1 XRP. Smaller trades just fail at the transaction layer with a clear error from the wallet — funds aren't lost, the trade just doesn't settle.
+
+### T-cp49-3 — UNL centralization narrative (information-disclosure / governance class, ADVISORY)
+
+XRPL's Federated Byzantine Agreement (FBA) consensus relies on a Unique Node List (UNL) — a published set of validators that participate in consensus. The default UNL is published by the XRP Ledger Foundation (a non-profit), with the for-profit Ripple Labs Inc. historically influencing validator selection.
+
+**Morphit-specific concern:** this is a known property of XRPL that some users care about. Morphit's job is not to opine on whether UNL composition is "decentralized enough" — that's a political judgment.
+
+**Mitigation:** documented FACTUALLY in `privacy.guides.xrp.caveats` × 10 locales. The guide notes UNL composition as a property, mentions that censorship-resistance considerations apply (a coordinated UNL could refuse to include transactions), and lets users decide based on their threat model. NO comparative framing against PoW or PoS chains. NO endorsement or condemnation. Per universal no-favoritism principle (cp39 ADR-0031 §5, reapplied 6th consecutive checkpoint).
+
+**Residual risk:** none — this is informational disclosure. Users sensitive to this property can opt out of XRP trades.
+
+### R-cp49-1 — XRPL RPC provider correlation (information-disclosure class, MEDIUM advisory)
+
+User wallets talk to an XRPL RPC endpoint (xrplcluster.com, Ripple's official endpoints, or a self-hosted rippled node) to read state and broadcast transactions. That RPC provider sees every transaction the user signs, every account they query, and the IP source of each request. This is a Morphit-adjacent privacy concern: a user trading XRP on Morphit reveals their address activity to whichever RPC they're using.
+
+**Mitigation:** `privacy.guides.xrp.caveats` × 10 locales advises self-hosting a rippled node or rotating between providers. The advisory is informational; the chain-level threat is not Morphit-specific (any XRPL user has this exposure). SAME class as R-cp45-1 (Solana RPC correlation) and R-cp47-1 (Ethereum RPC correlation).
+
+**Residual risk:** acknowledged-and-disclosed; users are informed.
+
+### CP49 + LL #50 status
+
+The cp42 `address-shape-overlap-smoke` was extended at cp49 with XRP specimens. 6 new overlaps observed — XRP specimens pass USDT/USDC/SOL regexes (because all three use loose base58 32-44 char patterns and XRP addresses fit in that range). NO reverse-direction overlaps because no existing asset's specimens start with `r`. ALL by design — the LL #50 framework documents intentional same-format-different-chain ambiguity at the regex layer; asset field on the order disambiguates. Added to EXPECTED_OVERLAPS allowlist; smoke now passes with **87 documented overlaps** (was 81 at cp47).
+
+**No new threat class from cp49.** The destination-tag UX and reserve-requirement UX are well-known XRPL features that Morphit handles correctly via URI + privacy guide + operator docs. The UNL/centralization narrative is informational disclosure documented factually.

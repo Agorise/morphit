@@ -36,6 +36,7 @@ import {
 	DCR_TXID_RE,
 	SOL_TXID_RE,
 	ETH_TXID_RE,
+	XRP_TXID_RE,
 	BLURT_TRXID_RE,
 	ACCOUNT_NAME_RE,
 	BUNDLED_BTC_CHAT_LINK_URL,
@@ -49,6 +50,7 @@ import {
 	BUNDLED_DCR_CHAT_LINK_URL,
 	BUNDLED_SOL_CHAT_LINK_URL,
 	BUNDLED_ETH_CHAT_LINK_URL,
+	BUNDLED_XRP_CHAT_LINK_URL,
 	substituteTxidIntoTemplate,
 	isValidChatLinkTemplate
 } from './urlsCore';
@@ -78,13 +80,14 @@ export {
 	BUNDLED_ARRR_CHAT_LINK_URL,
 	BUNDLED_DCR_CHAT_LINK_URL,
 	BUNDLED_SOL_CHAT_LINK_URL,
-	BUNDLED_ETH_CHAT_LINK_URL
+	BUNDLED_ETH_CHAT_LINK_URL,
+	BUNDLED_XRP_CHAT_LINK_URL
 } from './urlsCore';
 
 /** External (non-BLURT) asset tickers Morphit knows how to build
  *  explorer URLs for.  Uppercase to match the canonical asset
  *  registry's `AssetTicker` spelling. */
-export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'ZEC' | 'ARRR' | 'DCR' | 'SOL' | 'ETH';
+export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'ZEC' | 'ARRR' | 'DCR' | 'SOL' | 'ETH' | 'XRP';
 
 /** Registry-driven dispatch for external-explorer URL building.
  *  Each entry pairs an asset's txid validator with the keys used
@@ -103,7 +106,7 @@ export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'Z
  *  explorer-URL builder serves that path. */
 interface ExplorerEntry {
 	readonly txidRe: RegExp;
-	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth';
+	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
 	readonly bundledDefault: string;
 }
 const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object.freeze({
@@ -161,6 +164,11 @@ const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object
 		txidRe: ETH_TXID_RE,
 		instanceTplKey: 'eth',
 		bundledDefault: BUNDLED_ETH_CHAT_LINK_URL
+	}),
+	XRP: Object.freeze({
+		txidRe: XRP_TXID_RE,
+		instanceTplKey: 'xrp',
+		bundledDefault: BUNDLED_XRP_CHAT_LINK_URL
 	})
 });
 

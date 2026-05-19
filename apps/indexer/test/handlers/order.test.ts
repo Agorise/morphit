@@ -71,7 +71,21 @@ describe('order handler', () => {
 
 	it('rejects unknown asset', async () => {
 		const mock = makeMockClient();
-		const r = await handler(makeCtx({ payload: { ...validPayload(), asset: 'ETH' } }), mock.client);
+		// Part 122 cp49 deep-deep A-2: this test previously used
+		// 'ETH' as the unknown-asset stand-in.  ETH became a real
+		// tradable asset at cp47, silently breaking this test
+		// (handler returned ok:true instead of asset_invalid; the
+		// vitest unit test path was not part of the standalone
+		// smoke battery so the breakage went undetected for 2
+		// checkpoints).  Cp49 fixes inline and pins the structural
+		// defense in cp49 LL #53 (handler-test-stand-in-meta-
+		// assertion-smoke): synthetic non-ticker '__UNKNOWN__'
+		// with underscores rejects from the canonical ticker
+		// regex which enforces uppercase letters only —
+		// mathematically cannot become a real ticker.  Same
+		// pattern as cp48-O1's UNKNOWN_STANDIN closure but
+		// extended in scope to vitest unit tests.
+		const r = await handler(makeCtx({ payload: { ...validPayload(), asset: '__UNKNOWN__' } }), mock.client);
 		expect(r).toEqual({ ok: false, reason: 'asset_invalid' });
 	});
 

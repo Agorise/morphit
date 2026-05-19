@@ -40,7 +40,8 @@ const internalStore = writable<Record<PricedSymbol, PriceQuote | null>>({
 	ARRR: null,
 	DCR: null,
 	SOL: null,
-	ETH: null
+	ETH: null,
+	XRP: null
 });
 
 /**
@@ -94,7 +95,7 @@ export function setProvider(provider: PriceProvider): void {
 	// Cache is invalidated because a different provider will have
 	// different quotes; don't serve old values from the previous source.
 	cache.clear();
-	internalStore.set({ BTC: null, XMR: null, BLURT: null, USDT: null, USDC: null, DAI: null, BCH: null, LTC: null, DASH: null, DOGE: null, ZEC: null, ARRR: null, DCR: null, SOL: null, ETH: null });
+	internalStore.set({ BTC: null, XMR: null, BLURT: null, USDT: null, USDC: null, DAI: null, BCH: null, LTC: null, DASH: null, DOGE: null, ZEC: null, ARRR: null, DCR: null, SOL: null, ETH: null, XRP: null });
 }
 
 export function currentProviderName(): string {

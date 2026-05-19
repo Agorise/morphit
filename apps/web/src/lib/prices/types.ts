@@ -2,8 +2,8 @@ import type { AssetTicker } from '@morphit/asset-registry';
 /**
  * Morphit — price feeds.
  *
- * Provider-swappable interface for USD prices of all 15 tradable
- * assets (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH).
+ * Provider-swappable interface for USD prices of all 16 tradable
+ * assets (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP).
  * Phase 2 ships a hardcoded fallback as the default provider; Phase 3
  * adds on-chain oracle reads and/or a relay-based API provider.
  *

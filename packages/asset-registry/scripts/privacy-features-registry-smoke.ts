@@ -119,7 +119,8 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	ARRR: 'hd-derived',
 	DCR: 'hd-derived',
 	SOL: 'hd-derived',
-	ETH: 'hd-derived'
+	ETH: 'hd-derived',
+	XRP: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -154,7 +155,8 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	ARRR: ['shielded-pools'],
 	DCR: ['csppmix'],
 	SOL: null,
-	ETH: null
+	ETH: null,
+	XRP: null
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

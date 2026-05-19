@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -351,6 +351,33 @@ const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
  *  txid forms (USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
  *  etc).  Asset field disambiguates at order layer. */
 const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
+
+/** XRP address (cp49 — Part 122).  XRPL addresses start with
+ *  'r' followed by 24-34 base58 chars.  XRPL's base58 alphabet
+ *  is technically different from Bitcoin's (some chars are
+ *  swapped) but the Bitcoin charset is a superset.
+ *
+ *  DESTINATION TAGS: XRPL has a unique feature — a 32-bit integer
+ *  destination tag that exchanges use to route XRP to user
+ *  accounts under their omnibus wallet.  Morphit's regex matches
+ *  the ADDRESS PART ONLY; the destination tag rides in the URI
+ *  query string `?dt=N`.  Sending to an exchange-hosted address
+ *  WITHOUT the required tag practically loses funds (recoverable
+ *  via exchange support).
+ *
+ *  RESERVE REQUIREMENT: XRPL accounts need ≥1 XRP base reserve
+ *  to exist.  Sending less to a never-funded address fails.
+ *
+ *  Address-prefix 'r' is unique among Morphit assets — no other
+ *  asset starts with 'r' as its required first character.
+ */
+const XRP_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
+
+/** XRP txid (cp49 — Part 122).  XRPL transaction hashes are 256-
+ *  bit (32 bytes) hex, conventionally uppercase but case-
+ *  insensitive on the chain.  64 hex chars, NO 0x prefix.  Same
+ *  shape as BTC family but XRPL convention is uppercase. */
+const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
 
 
 /** BLURT "address" is actually a Blurt account name — the
@@ -718,6 +745,60 @@ export function jitterEthAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Part 122 cp49 — Amount-jitter for Ripple (XRP).  XRP uses 6
+ *  decimals on the XRP Ledger (1 XRP = 1,000,000 drops).  Same
+ *  smallest-unit precision as USDT/USDC/DAI/ETH-display, but XRP
+ *  is the native token of XRPL, not an ERC-20 stablecoin and
+ *  not a smart-contract-platform native.  A separate function
+ *  (rather than reusing jitterStablecoinAmount or jitterEthAmount)
+ *  provides clarity and future XRP-specific tuning room.
+ *
+ *  Jitter range: 0..999 microXRP (drops).  At cp49-era XRP price
+ *  (~$2.50) that's about $0.0000025 max per jitter event —
+ *  effectively zero financially but full decorrelation against
+ *  exact-amount-matching heuristics on the public XRPL.
+ *
+ *  DESTINATION TAG note: the destination tag is NOT part of the
+ *  amount-jitter.  The destination tag rides separately in the
+ *  URI builder (`ripple:<addr>?amount=N&dt=M`) and on-chain
+ *  transaction header.  Jittering an amount that pairs with a
+ *  required destination tag still works correctly — the exchange
+ *  routing logic processes any amount + the tag.
+ *
+ *  RESERVE REQUIREMENT note: XRPL accounts need ≥1 XRP base
+ *  reserve to exist.  Jitter can never push an order amount
+ *  ABOVE the original — round-UP-only would, but jitterXrpAmount
+ *  ADDS 0..999 drops (max +0.000999 XRP).  An order of "1.000000
+ *  XRP" jitters to "1.000NNN XRP" which is still above the 1.0
+ *  reserve; jitter does not threaten the reserve invariant.
+ *
+ *  Same caveats as the other jitter functions: round-UP-only
+ *  (never underpay — never crosses below reserve), CSPRNG-derived
+ *  (not Math.random), idempotent on caller-side memoization. */
+export function jitterXrpAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterXrpAmount: invalid base amount');
+	}
+	// Parse base into 6-decimal microXRP (drops) representation
+	// (bigint).  1 XRP = 10^6 drops.
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000000').slice(0, 6);
+	const baseDrops = BigInt(whole) * 1_000_000n + BigInt(fracPadded);
+
+	// 0..999 drops jitter, CSPRNG-derived.
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
+	const jitterDrops = BigInt(r % 1000);
+	const totalDrops = baseDrops + jitterDrops;
+
+	// Format back to "W.FFFFFF" with 6-decimal precision.
+	const wholeOut = totalDrops / 1_000_000n;
+	const fracOut = totalDrops % 1_000_000n;
+	const fracStr = fracOut.toString().padStart(6, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
 /** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
  *  a jittered amount appropriate for the asset's smallest-unit
  *  precision.  Every tradable asset is jitter-eligible as of cp30
@@ -738,6 +819,7 @@ export function jitterAmountForAsset(
 	if (asset === 'blurt') return jitterBlurtAmount(base);
 	if (asset === 'sol') return jitterSolAmount(base);
 	if (asset === 'eth') return jitterEthAmount(base);
+	if (asset === 'xrp') return jitterXrpAmount(base);
 	if (asset === 'usdt' || asset === 'usdc' || asset === 'dai') {
 		// Part 122 cp30/cp31 — stablecoins get jitter too.  The
 		// centralization threat (Circle/Tether freeze power for
@@ -827,7 +909,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -1202,6 +1284,25 @@ export function isValidEthTxid(s: string): boolean {
 	return ETH_TXID_RE.test(s);
 }
 
+/** Validate an XRP address shape (cp49 — Part 122).  XRPL
+ *  addresses start with 'r' followed by 24-34 base58 chars.
+ *  Address-prefix 'r' is unique among Morphit assets — no
+ *  cross-asset overlap is expected at this regex.  Destination
+ *  tags are validated separately. */
+export function isValidXrpAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return XRP_RE.test(s);
+}
+
+/** Validate an XRP txid shape (cp49 — Part 122).  XRPL
+ *  transaction hashes are 256-bit hex (64 chars, no prefix).
+ *  Same shape as BTC family hex txids; XRPL convention is
+ *  uppercase but we accept both cases. */
+export function isValidXrpTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return XRP_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -1219,6 +1320,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'dcr') return isValidDcrAddress(addr);
 	if (method === 'sol') return isValidSolAddress(addr);
 	if (method === 'eth') return isValidEthAddress(addr);
+	if (method === 'xrp') return isValidXrpAddress(addr);
 	return false;
 }
 
@@ -1240,6 +1342,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'dcr') return isValidDcrTxid(txid);
 	if (method === 'sol') return isValidSolTxid(txid);
 	if (method === 'eth') return isValidEthTxid(txid);
+	if (method === 'xrp') return isValidXrpTxid(txid);
 	return false;
 }
 
@@ -1270,7 +1373,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'arrr' &&
 		p.method !== 'dcr' &&
 		p.method !== 'sol' &&
-		p.method !== 'eth'
+		p.method !== 'eth' &&
+		p.method !== 'xrp'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1449,7 +1553,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'arrr' &&
 		p.method !== 'dcr' &&
 		p.method !== 'sol' &&
-		p.method !== 'eth'
+		p.method !== 'eth' &&
+		p.method !== 'xrp'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1607,7 +1712,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'arrr' &&
 			o.method !== 'dcr' &&
 			o.method !== 'sol' &&
-			o.method !== 'eth'
+			o.method !== 'eth' &&
+			o.method !== 'xrp'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1640,7 +1746,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'arrr' &&
 			o.method !== 'dcr' &&
 			o.method !== 'sol' &&
-			o.method !== 'eth'
+			o.method !== 'eth' &&
+			o.method !== 'xrp'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -2115,6 +2222,31 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `ethereum:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'xrp') {
+		// Ripple uses the `ripple:` URI scheme (cp49 — Part 122).
+		// There is no Ethereum-style EIP-681 standardization for
+		// XRPL URIs, but `ripple:` is the de facto scheme that
+		// Xaman/Xumm, Crossmark, Bifrost, GemWallet, and Trust
+		// Wallet all parse for native XRP transfers.  Format:
+		// `ripple:<address>?amount=<decimal>&dt=<destination-tag>`.
+		//
+		// DESTINATION TAG: a 32-bit integer that XRPL exchanges
+		// use to route XRP to user accounts under their omnibus
+		// wallet.  When the order's destination requires a tag,
+		// the URI includes `dt=N`; the wallet attaches it to the
+		// transaction header on signing.  Sending to an exchange-
+		// hosted address WITHOUT the required tag practically
+		// loses funds (recoverable via exchange support only) —
+		// users must check whether the recipient requires a tag.
+		// Privacy guide warns × 10 locales.
+		//
+		// Native XRP only — Morphit doesn't generate ripple: URIs
+		// for issued-token (IOU) transfers; those use different
+		// transaction types and are not currently in scope.
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `ripple:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

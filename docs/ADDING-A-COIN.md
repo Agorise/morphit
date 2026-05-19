@@ -36,8 +36,9 @@ icon" mid-implementation.
    FAQ entries, and brag list.  Pirate Chain is real as of cp41
    (see ADR-0032), Decred is real as of cp43
    (see ADR-0033), Solana is real as of cp45
-   (see ADR-0034), and Ethereum is real as of cp47
-   (see ADR-0035); all four were hypothetical examples earlier.
+   (see ADR-0034), Ethereum is real as of cp47
+   (see ADR-0035), and Ripple is real as of cp49
+   (see ADR-0036); all five were hypothetical examples earlier.
    announcements.
 
 3. **One-line description.**  Maximum 120 characters.  Plain
@@ -426,7 +427,7 @@ cannot accidentally leak into the fee path:
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
-coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH) declare `['mainnet']`.
+coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) declare `['mainnet']`.
 Multi-network coins list each network explicitly.  As of Part
 122 cp31 three multi-network assets are shipped:
 

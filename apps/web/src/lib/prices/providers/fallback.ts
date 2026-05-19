@@ -69,7 +69,8 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	ARRR: 0.20,
 	DCR: 20.00,
 	SOL: 150.00,
-	ETH: 2500.00
+	ETH: 2500.00,
+	XRP: 2.50
 };
 
 export const fallbackProvider: PriceProvider = {

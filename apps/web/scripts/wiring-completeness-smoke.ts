@@ -745,6 +745,44 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp49 XRP P2P trading wired ──────────────────────────────────
+	// Ripple addition (cp49 — Part 122).  Sixteenth tradable asset.
+	// Brag entry #288 advertises XRP peer-to-peer trading.
+	{
+		id: 'cp49-xrp-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ripple (XRP) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'XRP'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp49 XRP payment-rail wired (cp32 LL #36) ──────────────────
+	{
+		id: 'cp49-xrp-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ripple (XRP) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_xrp'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp49 XRP explorer URL bundled default ──────────────────────
+	{
+		id: 'cp49-xrp-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ripple (XRP) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_XRP_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

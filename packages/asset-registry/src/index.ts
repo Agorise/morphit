@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH', 'XRP'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -1003,6 +1003,46 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// require a centralized RPC dependency, violating the
 		// distributed-no-SPOF design priority.
 		addressShape: /^0x[a-fA-F0-9]{40}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'XRP',
+		// XRP uses 6 decimals on the XRP Ledger — 1 XRP =
+		// 1,000,000 drops.  Same smallest-unit precision as
+		// USDT/USDC/DAI, but XRP is the NATIVE token of XRPL,
+		// not an ERC-20 token.  Cp49 jitterXrpAmount handles
+		// the 6-decimal arithmetic with a clear separate
+		// function (not reusing jitterStablecoinAmount) for
+		// clarity since XRP is not a stablecoin.
+		decimals: 6,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: XRP is trade-only.  Cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}.  xrp-trade-only-smoke pins this
+		// from the registry side; fee-method-enum-frozen-smoke
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network — XRPL mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// XRPL runs Federated Byzantine Agreement (FBA) consensus
+		// — NOT Proof-of-Work and NOT Proof-of-Stake.  Validators
+		// on a Unique Node List (UNL) reach consensus on
+		// transaction ordering.  Native XRP cannot be frozen by
+		// any central authority — the freeze flag on XRPL applies
+		// only to ISSUED tokens (IOUs), not to native XRP.  No
+		// privacy-warning chip needed for native XRP trading.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'xrp'
+		},
+		// XRP address: starts with 'r' + 24-34 base58 chars.
+		// DESTINATION TAG and RESERVE REQUIREMENT are documented
+		// in privacy.guides.xrp.caveats × 10 locales.
+		addressShape: /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

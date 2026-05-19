@@ -168,6 +168,10 @@
 				<dt>ETH</dt>
 				<dd>{$_('cheat_sheet.section_assets.eth')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>XRP</dt>
+				<dd>{$_('cheat_sheet.section_assets.xrp')}</dd>
+			</div>
 		</dl>
 	</section>
 

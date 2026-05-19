@@ -68,6 +68,13 @@ export const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
  *  field disambiguates at order layer per LL #50. */
 export const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 
+/** XRP txid (Part 122 cp49).  XRPL transaction hashes are 256-bit
+ *  (32 bytes) hex, conventionally uppercase on the chain but the
+ *  regex is case-insensitive.  64 hex chars, NO prefix — same
+ *  shape as the BTC-family hex txids (BTC/BCH/LTC/DASH/DOGE/ZEC/
+ *  ARRR/DCR).  Asset field disambiguates per LL #50. */
+export const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -310,6 +317,35 @@ export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}'
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_ETH_CHAT_LINK_URL. */
 export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
+
+/** XRP chat-link explorer (cp49 — Part 122).  Default uses XRP
+ *  Ledger Foundation's official livenet explorer at
+ *  livenet.xrpl.org — non-profit foundation, project-aligned,
+ *  separate from Ripple Labs Inc. (the for-profit company that
+ *  created XRP).
+ *
+ *  Rationale matches the choices for BUNDLED_ZEC_CHAT_LINK_URL
+ *  (mainnet.zcashexplorer.app), BUNDLED_ARRR_CHAT_LINK_URL
+ *  (explorer.piratechain.com), BUNDLED_DCR_CHAT_LINK_URL
+ *  (dcrdata.decred.org), BUNDLED_SOL_CHAT_LINK_URL
+ *  (explorer.solana.com), BUNDLED_ETH_CHAT_LINK_URL
+ *  (eth.blockscout.com): prefer a project-aligned / non-profit-
+ *  foundation explorer over commercial or exchange-affiliated
+ *  ones.
+ *
+ *  Operator's 5-explorer survey at cp49:
+ *  - livenet.xrpl.org — XRP Ledger Foundation (non-profit).
+ *    CHOSEN as bundled default.
+ *  - xrpscan.com — XRPL-focused, third-party; secondary.
+ *  - bithomp.com — XRPL-focused with token/NFT support; tertiary.
+ *  - blockchair.com/xrp-ledger — multi-chain aggregator;
+ *    quaternary.
+ *  - blockexplorer.one/xrp/mainnet — multi-chain third-party;
+ *    quinary.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_XRP_CHAT_LINK_URL. */
+export const BUNDLED_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who
