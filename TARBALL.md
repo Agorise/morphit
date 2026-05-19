@@ -1,4 +1,85 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 45 — Solana (SOL) as 14th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0034 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW sol-trade-only-smoke (18 scenarios + 14 adversarial inputs); 3 new wiring-completeness CHECK rows; 3 mutation tests passed; 32 adversarial test cases PASS.  35 of 35 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified end-to-end on cp45 work).  NEW `jitterSolAmount` function — 9-decimal lamport precision, unique smallest-unit among Morphit's 14 assets.  NEW `solana:` URI scheme (Solana Pay specification).  NEW SOL_TXID_RE — base58 87-88 chars, DIFFERENT from BTC family's 64-hex txid convention.  23 new cross-asset address-shape overlaps documented (49→72 EXPECTED_OVERLAPS) — SOL's permissive base58 32-44 char range overlaps with BTC/USDT/USDC/BCH/LTC/DASH/DOGE/ZEC-transparent/DCR specimens; asset field disambiguates at order layer per LL #50.  Universal no-favoritism principle from cp39/cp41/cp43 reapplied — Morphit never compares SOL's throughput or privacy posture to other chains.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 46 — Full 94-task deep-deep + security audit on cp45 SOL work + the entire 14-asset registry surfacing **1 NEW MEDIUM coverage-gap class** (asset-payload-precision-parity) closed with a NEW defensive smoke + **4 new mutation tests**.  36 of 36 standalone-runnable smokes PASS (was 35/35 at cp45; +1 from cp46 closure smoke).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke — LL #52 holds across cp46.  No findings closed inline (cp45 work shipped clean — third consecutive checkpoint).  Cp46-O-1 was the load-bearing find: there was no defensive smoke pinning `asset.decimals ↔ jitter function precision`, `URI scheme per asset`, or `txid regex shape per asset`.  Mutation tests M-97 (widen SOL_TXID_RE to {1,200}), M-98 (mutate jitterSolAmount 1e9→1e8 BTC-family precision), M-99 (mutate solana: URI scheme to bogus:) all silently passed against the 35 cp45 smokes.  Cp46 NEW asset-payload-precision-parity-smoke (53 scenarios) pins all three invariants per asset; M-97/M-98/M-99 all now FAIL appropriately.  Also captured the DAI 18-decimal-on-chain vs 6-decimal-jitter design choice from cp31 ADR-0029 as explicit `expectedJitterDecimals: 6` with comment-anchor.  M-100 verifies the EXPECTATIONS table itself is the source of truth — tampering DAI's expectedJitterDecimals from 6 to 18 surfaces as a smoke failure.)
+
+CP46 SCOPE:
+
+Full 94-task deep-deep audit covering cp45 SOL addition work + the entire 14-asset registry.  Categories A-O.  Ken's directive explicitly called out "type errors, test coverage gaps, updated smokes, updated gates and parities, unwired stuff, staleness and orphaned stuff" — Category J ran workspace-typecheck-smoke (LL #52, clean) and Category O surfaced the runtime-arithmetic coverage gap.
+
+CP46 FINDINGS:
+
+**O-1 MEDIUM (cp46 coverage-gap class):** No defensive smoke pinned:
+1. `asset.decimals ↔ jitter function output precision` — mutation jitterSolAmount 1e9→1e8 silently invisible to 35 cp45 smokes.
+2. `URI scheme per asset` — mutation solana: → bogus: silently passes.
+3. `txid regex shape per asset` — mutation SOL_TXID_RE → {1,200} silently passes.
+
+**Severity rationale:** MEDIUM not HIGH because the existing dcr-trade-only / sol-trade-only / etc. smokes pin per-asset address regex AT THE CANONICAL LAYER.  The bug class O-1 surfaces is at the runtime-arithmetic + URI-builder layer in apps/web/src/lib/chat/payload.ts — different layer, no overlap.  A SOL canonical regex looking correct doesn't mean the SOL_TXID_RE in payload.ts has the right shape, and there was no smoke proving the two stay synced.
+
+**Fix:** NEW `apps/web/scripts/asset-payload-precision-parity-smoke.ts` — 53 scenarios pinning all three invariants per asset.  Source-of-truth is an explicit `EXPECTATIONS` table that the smoke author maintains as the design contract; mutations to either the design table or the runtime arithmetic surface as failures.
+
+**Cp46 NOT-A-FINDING discovered + documented (DAI design choice):** Initial smoke design tried to assert `canonical.decimals === jitterOutputDecimals` universally.  This surfaced DAI as a failure: canonical says 18 (ERC-20 on-chain precision), but jitter outputs 6-decimal display precision.  Investigation revealed the cp31 DAI addition comment explicitly documents this as design — "The jitter routine clamps to 6-decimal display precision regardless of the underlying token's decimals, so the user-visible jitter is the same $0.001-magnitude effect across all three stablecoins."  Cp46 smoke captures this design choice as `expectedJitterDecimals: 6` for DAI specifically with comment-anchor pointing back to ADR-0029.
+
+CP46 NEW DEFENSIVE SMOKE (1):
+
+**`apps/web/scripts/asset-payload-precision-parity-smoke.ts`** (cp46 — O-1 closure): 53 scenarios pinning per-asset (1) decimal precision of jitter output, (2) URI scheme, (3) txid regex shape.  Runs in apps/web/ workspace (cwd) so `$lib/...` path-alias imports resolve.  Covers all 14 tradable assets; new assets must add an EXPECTATIONS row same-turn or the canonical-count assertion fails.
+
+CP46 NEW MUTATION TESTS (4 of 4 PASS):
+
+- **M-97**: Widened SOL_TXID_RE to `/^[1-9A-HJ-NP-Za-km-z]{1,200}$/` → smoke FAILED on "SOL txid REJECTS shape-wrong" (the 86-char input is now accepted).  Restored → PASS.
+- **M-98**: Mutated jitterSolAmount precision from 1e9 (9-decimal) to 1e8 (BTC-family 8-decimal) → smoke FAILED on "SOL jitter precision === 9 decimals".  Restored → PASS.  This is the load-bearing case the cp46 deep-deep was looking for: mutation silently invisible to all 35 cp45 smokes because none exercised jitterAmountForAsset output shape.
+- **M-99**: Mutated solana: URI scheme to bogus: → smoke FAILED on "SOL URI scheme === solana:".  Restored → PASS.
+- **M-100**: Tampered EXPECTATIONS table DAI.expectedJitterDecimals from 6 to 18 → smoke FAILED on "DAI jitter precision === 18 decimals".  Confirms the EXPECTATIONS table itself is the source-of-truth and resists drift.  Restored → PASS.
+
+CP46 LL #52 VERIFIED 3RD CONSECUTIVE CHECKPOINT:
+
+cp44 introduced workspace-typecheck-smoke as the structural defense for LL #52 (cp42-J-68 lesson).  cp45 was the first asset-addition checkpoint where LL #52 ran end-to-end on fresh work — shipped clean.  Cp46 deep-deep ran LL #52 against cp45 work — 7/7 workspaces compile-clean.  **No TS errors introduced at cp45.**  Proof the discipline is operational.
+
+CP46 CATEGORY PASS SUMMARY (93 of 94 tasks clean; O-1 closed via new smoke):
+
+- **A (static code, 15):** all 15 clean.  ASSET_TICKERS=14, 4:4 DCR:SOL wire-format gates, isValidAddress+isValidTxid both have SOL, SOL_TXID_RE exported and identical in 2 sites (canonical+payload), EXPLORER_REGISTRY.SOL present, high-value-name has both `solana` (brand) and `sol` (ticker), icon-sol.svg referenced from 2 sites (registry + dev/icons).  13 SOL i18n leaves × 10 locales present.
+- **B (dependencies, 5):** all 5 clean (no new deps for SOL).
+- **C (SQL/DB, 5):** all 5 clean (fee_method CHECK frozen at 4 values per Memory #23; asset col TEXT).
+- **D (HTTP/API, 8):** all 8 clean (5 SOL refs in API.md; 4 wire-format surfaces all have sol field; volume_estimate sample includes SOL).
+- **E (crypto, 4):** all 4 clean (SOL regex identical canonical+frontend+payload; SOL_TXID_RE identical in 2 sites).
+- **F (privacy, 8):** all 8 clean (0 forbidden phrases × 10 locales; SOL optInPrivacyTech null matches XMR convention; amount-jitter wired with NEW jitterSolAmount).
+- **G (operator-trust, 4):** all 4 clean (ops-cli SOL step renders; OPERATIONS+RUN docs mention SOL).
+- **H (frontend, 10):** all 10 clean (text-violet-500 accent uniqueness verified; 14 asset icons + 5 non-asset icons; ASM+FSM have SOL tab).
+- **I (cross-axis, 8):** all 8 clean (payment-rail/price-provider/accent/address-shape-overlap all PASS; SOL→USDT and SOL→USDC overlaps documented in EXPECTED_OVERLAPS 72 entries).
+- **J (build/CI, 5):** all 5 clean (workspace-typecheck-smoke 7/7 PASS).
+- **K (threat modeling, 4):** all 4 clean (cp45 STRIDE rows T-cp45-1/2 + I-cp45-1 + R-cp45-1 present; 72 address-shape-overlap entries).
+- **L (per-subsystem, 10):** all 10 clean (5 indexer SOL files, 33 web src SOL refs, 3 ops-cli SOL files, 1 matrix-bot SOL field, 1 relay SOL ticker in high-value-name).
+- **M (mutation tests, 3+1):** all 4 PASS (M-97/98/99/100 new at cp46).
+- **N (adversarial, 3):** cp45 32/32 cases still PASS.
+- **O (coverage gap matrix, 2):** **1 finding closed** (O-1 MEDIUM via NEW asset-payload-precision-parity-smoke).
+
+CP46 NOT-A-FINDING:
+
+- LL #38 sibling-file walk: 2 DOGE-mentioning files without SOL → both false positives (docblock-context references about DOGE's icon byte-weight and historical "DOGE became valid at cp33" mention).  Same as cp44 finding pattern.
+- Initial smoke design surfaced DAI as a "mismatch" but the cp31 design comment explicitly documents the choice — converted to explicit EXPECTATIONS row.
+
+CP46 STATE METRICS:
+
+| Metric | cp45 | cp46 | Δ |
+|---|---|---|---|
+| Tradable assets | 14 | 14 | — |
+| Locale parity strings | 27,910 | 27,910 | — |
+| FAQ entries | 121 | 121 | — |
+| ADRs | 33 | 33 | — |
+| Brag entries | 286 | 286 | — |
+| **Smoke runners** | 164 | **165** | **+asset-payload-precision-parity** |
+| **Standalone smokes PASS** | 35/35 | **36/36** | **+1** |
+| Workspaces TS-clean | 7/7 | 7/7 | — |
+| Mediakit bytes | 44,143 | 44,143 | — |
+| Native snapshot pairs | 22,936 | 22,936 | — |
+| STRIDE matrix lines | 1,858 | 1,858 | — |
+| address-shape-overlap entries | 72 | 72 | — |
+| Jitter functions | 5 | 5 | — |
+
+CP46 TOTALS:
+
+1 NEW defensive smoke (53 scenarios pinning per-asset jitter precision + URI scheme + txid shape) + 4 NEW mutation tests (M-97/98/99/100 all PASS) + 0 inline-fix findings + 1 design-choice captured (DAI cp31 jitter-clamp documented in EXPECTATIONS) + LL #52 verified 3rd consecutive checkpoint.
+
+**Dominant cp46 signal:** the deep-deep methodology continues to surface bug classes the runtime smoke battery missed.  cp42-J-68 surfaced types; cp44-J-69 surfaced Svelte template errors; cp46-O-1 surfaces runtime arithmetic and per-asset URI/txid shape parity.  Each round adds a structural defense (LL #51→#52→the new asset-payload-precision-parity-smoke).  Pattern: every 2 deep-deeps surfaces one new structural-defense gap.
+
+### CP45 history (sealed 2026-05-19; preserved below for archaeology): (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0034 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW sol-trade-only-smoke (18 scenarios + 14 adversarial inputs); 3 new wiring-completeness CHECK rows; 3 mutation tests passed; 32 adversarial test cases PASS.  35 of 35 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified end-to-end on cp45 work).  NEW `jitterSolAmount` function — 9-decimal lamport precision, unique smallest-unit among Morphit's 14 assets.  NEW `solana:` URI scheme (Solana Pay specification).  NEW SOL_TXID_RE — base58 87-88 chars, DIFFERENT from BTC family's 64-hex txid convention.  23 new cross-asset address-shape overlaps documented (49→72 EXPECTED_OVERLAPS) — SOL's permissive base58 32-44 char range overlaps with BTC/USDT/USDC/BCH/LTC/DASH/DOGE/ZEC-transparent/DCR specimens; asset field disambiguates at order layer per LL #50.  Universal no-favoritism principle from cp39/cp41/cp43 reapplied — Morphit never compares SOL's throughput or privacy posture to other chains.)
 
 CP45 SCOPE:
 
