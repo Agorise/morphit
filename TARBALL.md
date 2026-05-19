@@ -1,4 +1,102 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 40 — Full 94-task deep-deep + security audit on cp39 ZEC work surfacing **2 HIGH** + **3 MEDIUM** + **3 LOW** findings closed inline + **3 mutation tests** + **62 adversarial test cases** + **1 new defensive smoke**.  28 of 28 standalone-runnable smokes PASS.  cp40-I1 was the load-bearing find: the `/privacy/zec` route would have rendered literal i18n key strings ("privacy.opt_in_tech.shielded-pools.name") to users in production because cp39 added the `'shielded-pools'` tech tag to the privacy-features registry but forgot to add the corresponding i18n leaves across all 10 locales.  Cp40-I2 closes the bug class structurally — the privacy-features-registry-smoke now walks every registered tech tag and asserts the i18n keys exist; this guards every future privacy-tech addition from the same class of slip.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 41 — Pirate Chain (ARRR) as 12th tradable asset, fully wired across canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0032 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +3 rows + LL #50 (same-format-different-chain visual collision).  NEW arrr-trade-only-smoke (16 scenarios, 18 adversarial inputs); 3 new wiring-completeness CHECK rows; 2 mutation tests passed; 36 adversarial cases (with 2 test-file bugs documented).  29 of 29 standalone-runnable smokes PASS.  Universal no-favoritism principle from cp39 reapplied — Morphit never compares ARRR's privacy posture to XMR, ZEC, or other privacy chains.)
+
+CP41 SCOPE:
+
+Add Pirate Chain (ARRR) as the twelfth tradable asset on Morphit. ARRR is a proof-of-work cryptocurrency launched in 2018 as a fork of the Zcash codebase, configured so that the Sapling zk-SNARK shielded pool is the only available transaction type — every transfer hides sender, recipient, and amount on chain by construction. No transparent address option (transparent funds were sunset early in the chain's life and forcibly migrated to the shielded pool).
+
+Per Ken's directive: "never compare this privacy coin with xmr or other privacy coins. let all users think their privacy coin is the most private. no favoritism in the wording. we don't want any in-fighting." The universal no-favoritism principle adopted at cp39 (ADR-0031 §5) reapplied at cp41 to all ARRR copy.
+
+CP41 WIRING DELIVERABLES:
+
+1. **Canonical asset-registry** (`packages/asset-registry/src/index.ts`): ASSET_TICKERS extended 11→12; ARRR AssetEntry with decimals=8, canBeTraded=true, canPayListingFee=false (Memory #23 invariant), supportedNetworks=['mainnet'], privacyWarningKey=null, optInPrivacyTech=['shielded-pools'] (same Sapling protocol family as ZEC), privacyGuideKey='arrr', addressShape `/^zs1[02-9ac-hj-np-z]{75}$/` (single format — no t1/t3 transparent, no u1 Unified Address).
+
+2. **Frontend asset-registry** (`apps/web/src/lib/assets/registry.ts`): ARRR_ZS_RE + validateArrr (single regex, no alternations); ARRR AssetMetadata with text-amber-600 accent (gold tone matching brand gradient).
+
+3. **Chat payload** (`apps/web/src/lib/chat/payload.ts`): ChatAssetTicker union widened 11→12; ARRR regex constants + isValidArrr functions; UTXO jitter dispatcher widened (ARRR routes through jitterUtxoAmount, 8-decimal precision); isValidAddress + isValidTxid dispatchers widened; ALL 4 wire-format gates atomically widened (4:4 ZEC:ARRR ratio per cp33 CODE-3 closure pattern); `arrr:` BIP-21-style URI scheme handler.
+
+4. **Explorer URLs**: BUNDLED_ARRR_CHAT_LINK_URL = `https://explorer.piratechain.com/tx/{txid}` (chosen from operator's 3-explorer survey for being the official project explorer); ARRR_TXID_RE exported; ExternalAsset + instanceTplKey + EXPLORER_REGISTRY.ARRR all extended.
+
+5. **4 wire-format surfaces** (cp30-DD-11 closure pattern, all same-turn): instance store (type + initial + data + fallback) + InstanceResponse + indexer-client mirror + matrix-bot ChatLinkUrlsSchema. Pre-existing forward-looking doc examples (`['USDT', 'ARRR']`) updated to note they're now real working syntax.
+
+6. **Indexer config**: frontendArrrChatLinkUrl + Zod schema entry + builder mapping.
+
+7. **Prices**: ARRR in initialState writable + setProvider reset + Coingecko ID 'pirate-chain' + fallback price $0.20.
+
+8. **Payment-rail** (cp32 LL #36): pay_arrr entry + RESERVED_CANONICAL_KEYS extension.
+
+9. **Icon**: Ken's 717 B upload hardened to 795 B (role="img", aria-label="Pirate Chain (ARRR)", title element). Gold-gradient anchor symbol (#b38c30→#f2de98). Lazy-loaded per Priority #4.
+
+10. **i18n × 10 locales**: 14 ARRR keys + asset-enumeration extensions × 10 locales (3 patches each = ~30 total enumeration patches). Native EN/ES/FR/DE for short keys (method, placeholder, invalid, pill, cheat-sheet, one_line); EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK per Memory #29. Locale parity **2,760 × 10 = 27,600 strings** (was 2,746 × 10 = 27,460 in cp40). FAQ_KEYS + FAQ_RELATED registered for `what_is_arrr`. NO inter-coin favoritism wording.
+
+11. **UI components**: AddressShareModal (tab + invalid-msg dispatch + placeholder dispatch); FundsSentModal (tab); ChatMessage (explorer dispatch + canMarkSent gate + 2 pill branches + 2 narrow unions widened); ConversationView (2 narrow unions widened).
+
+12. **Routes**: /post Tooltip + faqKey="what_is_arrr"; /cheat-sheet row; /dev/icons entry; /privacy/arrr auto-renders via dynamic [asset] route.
+
+13. **ops-cli wizard**: DEFAULT_ARRR_CHAT_LINK_URL constant with 3-explorer survey rationale; ChatLinkExplorersResult.arrr field; stepChatLinkExplorers prompt; render.ts emit; init.ts summary; init-smoke fixture; CATEGORY_B_DESCRIPTIONS ARRR entry with no-favoritism framing.
+
+14. **Env example**: MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL block + extended DISABLED_ASSETS examples (4 variants).
+
+15. **Smokes**:
+    - NEW `packages/asset-registry/scripts/arrr-trade-only-smoke.ts` (16 scenarios + 18 adversarial inputs).
+    - Registered in `scripts/run-smokes.sh` after zec-trade-only-smoke.
+    - 3 new wiring-completeness CHECK rows (cp41-arrr-p2p / payment-rail-wired / explorer-bundled-default).
+    - privacy-features-registry-smoke: EXPECTED_ADVICE + EXPECTED_TECH extended with ARRR entries (78 scenarios total).
+    - chat-asset-ticker-narrow-union-parity-smoke: CANONICAL set 11→12; 2 NARROW_BY_DESIGN patterns extended; success message 11→12.
+    - network-icon-coverage-smoke: floor 11→12.
+    - asset-tab-completeness-smoke docblock: 11→12.
+    - disabled-assets-wizard-smoke: catB.length 8→9 + ARRR scenario.
+    - high-value-name policy + 'piratechain' + 'arrr' tickers (allowlist for relay squat-defense).
+    - LL #49 i18n-existence check (added in cp40) automatically covers ARRR's shielded-pools tag.
+
+16. **ADR-0032** (`docs/adr/0032-pirate-chain-addition.md`): NEW — 10 sections covering Category-B trade-only classification, single-network mainnet, single zs1 Sapling address regex, visual collision with ZEC Sapling addresses (cp41-T1 STRIDE row), 3-explorer survey + chosen default rationale, universal no-favoritism principle reaffirmation, `shielded-pools` tech tag reuse, `arrr:` URI scheme, decimals=8, brand color text-amber-600.
+
+17. **Brag list**: 10 edits — headline marquee (Zcash → Zcash / Pirate Chain) + keywords + entry #134 (ADR count 30→31, range 0001-0031→0001-0032) + entries #176/205/207/210/219 asset enumeration extensions + verify-section ADR range update + end-summary 283→284 + NEW entry #284 (Pirate Chain peer-to-peer with chain-level shielded transactions).
+
+18. **Mediakit**: rebuilt at 42,929 bytes (was 42,550 in cp40; +379 bytes from new entry #284 + headline marquee).
+
+19. **Operator docs**: README headline + ADR range; PRE-LAUNCH-CHECKLIST 5 patches + NEW "Decide ARRR chat-link explorer URL" blocking item with 3-explorer survey rationale; SECURITY trade-settlement list; FEES-AND-REWARDS; OPERATIONS DISABLED_ASSETS example; RUN-A-MORPHIT-NODE 4 patches; PRE-LAUNCH-CHECKLIST asset list + integration mention; API.md filter + volume samples 7d/30d/90d + volume_estimate sample extended; GRANDMA header cp39→cp41 + cheat-sheet description with ARRR row mention + locale-row addition annotation; ADDING-A-COIN Pirate Chain example marked as real (was hypothetical).
+
+20. **Module-doc drift sweep**: 15 sibling-file docblock updates (prices/types.ts 11→12; orderbook.ts; rssOrderbook.ts; schema.sql; order.ts JSON example; persona-walkthrough-smoke; ListingFeeAddressPanel docblock; QrPanel URI-scheme list; orders/payload.ts; qrcode.d.ts; /privacy/[asset] comment; PRICE-SOURCES-RESEARCH; ADR-0026 transparent-chain framework comment; fee-method-enum-frozen docblock; llms-full.txt generator).
+
+21. **High-value-name policy**: `apps/relay/src/policy/highValueName.ts` allowlist extended with 'piratechain' + 'arrr' to defend the relay against squat-registration attempts on these brand-tier names.
+
+22. **STRIDE refresh** +3 cp41 rows (T-cp41-1 same-format-different-chain visual collision MEDIUM, I-cp41-1 N/A no transparent leg, T-cp41-2 wallet ecosystem narrower LOW) + LL #50 candidate (same-format-different-chain visual-collision guardrails — generalizes the cp41-T1 lesson).
+
+23. **Snapshot + llms-full.txt**: native-translations snapshot rebuilt (22,900 native pairs, was 22,885 in cp40; +15 from ARRR native pairs in es/fr/de); llms-full.txt regenerated (119 entries with ARRR content, was 118); llms.txt headline updated.
+
+CP41 STATE METRICS:
+
+- **12 tradable assets** (was 11): BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR.
+- **Locale parity: 2,760 × 10 = 27,600 strings** (was 2,746 × 10 = 27,460 in cp40; +140 from 14 ARRR keys × 10 locales).
+- **FAQ entries: 119** (was 118; +1 from what_is_arrr).
+- **ADRs: 31** (counted as actual files; was 30; +1 from ADR-0032 — 0000 template + 0001-0032 minus 0016 reserved = 32 actual ADRs... wait, recounting: was 30 at cp40, +1 = 31 at cp41. With 0000 template the file count is 33).
+- **Brag entries: 284** (was 283; +1 from entry #284).
+- **Smoke runners: 157** (was 156; +1 from arrr-trade-only-smoke).
+- **Standalone-runnable smokes PASS: 29 of 29** (was 28 of 28 in cp40; +1 from arrr-trade-only-smoke).
+- **Mediakit: 42,929 bytes** (was 42,550; +379 bytes).
+- **Native-translation snapshot: 22,900 pairs** (was 22,885; +15 from ARRR native pairs).
+- **STRIDE matrix: 1,800 lines** (was 1,770; +30 from cp41 rows + LL #50).
+- **Schema head: v33** (unchanged — `asset TEXT NOT NULL` accepts ARRR without migration).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+CP41 PATTERN LESSON:
+
+**LL #50 — Same-format-different-chain visual-collision guardrails**: ZEC Sapling and Pirate Chain Sapling addresses are visually identical — same prefix `zs1`, same bech32 alphabet, same length. Distinct chains, incompatible routing, but a user copying an address from one context to another could trigger a wrong-chain attempt. Per-asset tab + placeholder + accent color are the UI-layer disambiguators. **Generalization for future deep-deeps**: when adding a chain with shared protocol lineage, audit (1) distinct tab labels, (2) asset name in placeholder, (3) visual collision documented in caveats × 10 locales, (4) consider a defensive smoke against identical addressShape regexes.
+
+CP41 MUTATION TESTS (2 of 2 PASS):
+
+- **K.1**: Tampered ARRR.canPayListingFee → true (Memory #23 violation) → arrr-trade-only-smoke FAILED with diagnostic. Restored → PASS.
+- **K.2**: Removed pay_arrr entry from `apps/web/src/lib/payments/registry.ts` → wiring-completeness-smoke FAILED on `cp41-arrr-payment-rail-wired` row. Restored → PASS.
+
+CP41 ADVERSARIAL TEST SUITE (36 cases for ARRR validator):
+
+- 34 of 36 passed. The 2 "failures" were bugs in my test FIXTURE (wrong-length bech32 string, missing `false` expected value) NOT in the validator. The validator regex `/^zs1[02-9ac-hj-np-z]{75}$/` is sound. Properly tested classes: SQL injection, XSS, null bytes, whitespace stripping, base58/bech32 alphabet violations (`1`, `b`, `i`, `o`, uppercase chars), prefix variations (zs0/zs2/ZS1/Zs1), length boundaries (74/76 too few/many), case sensitivity, BTC/DASH/LTC/DOGE/XMR/ZEC-transparent/ZEC-u1 cross-chain rejection, 10K/100K-char DoS. Same-format collision with ZEC Sapling: correctly ACCEPTS (this is by design — context disambiguates, not the regex).
+
+CP41 TOTALS:
+
+1 new tradable asset + 14 new i18n leaves × 10 locales + 1 new FAQ × 10 locales + 1 new ADR + 1 new brag entry + 1 new smoke (16 scenarios) + 3 new wiring-completeness CHECK rows + 0 favoritism cleanups (cp41 ARRR copy never used favoritism wording — clean from the start per the universal principle adopted at cp39) + 15 docblock drift sweeps + 3 STRIDE rows + 1 LL pattern lesson (#50) + 2 mutation tests + 36 adversarial cases. Dominant cp41 signal: clean addition of a privacy-coin asset using the cp39 ZEC template without re-introducing the favoritism residue that cp39 had to clean up retroactively — proof the universal principle is now load-bearing.
+
+### CP40 history (sealed 2026-05-19; preserved below for archaeology):
 
 CP40 SCOPE:
 

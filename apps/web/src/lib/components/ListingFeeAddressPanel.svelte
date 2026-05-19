@@ -100,7 +100,7 @@
 
 	/** Payload for QrPanel.  AddressPayload's `method` accepts the
 	 *  full ChatAssetTicker union ('btc' | 'xmr' | 'blurt' | 'usdt'
-	 *  | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' — see
+	 *  | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' — see
 	 *  apps/web/src/lib/chat/payload.ts as the canonical source)
 	 *  — but listing fees can only be paid in BTC/XMR/BLURT per
 	 *  the Memory #23 fee_method-frozen invariant.  We only ever

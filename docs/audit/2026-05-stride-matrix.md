@@ -1768,3 +1768,33 @@ Zcash and Dash both have opt-in privacy (Sapling/Orchard pools for ZEC, PrivateS
 - **ZEC**: privacy is *per-address* — the recipient picks t-addr or z/u-addr at address-generation time, and the chosen type binds the privacy posture for any payment to that address.
 
 This means `privacy.guides.zec.caveats` documents shielded/transparent/mixed transaction types as user-choice axes, while `privacy.guides.dash.caveats` documents pre-mix-round count and timing as user-choice axes. Future privacy-coin additions should ask "is the privacy choice an address property, a transaction property, or a wallet-workflow property?" before designing the guide content. Each shape requires different user education.
+
+---
+
+## CP41 — Pirate Chain (ARRR) addition threat rows (2026-05-19)
+
+### T-cp41-1 — Same-format-different-chain visual collision (spoofing class, MEDIUM)
+
+Pirate Chain `zs1` Sapling shielded addresses use the same bech32 alphabet and same `zs1` prefix as Zcash Sapling shielded addresses. Both chains forked from the Zcash codebase and inherited the Sapling protocol's HRP (`zs1`). Visually, a `zs1...` address from ARRR is indistinguishable from a `zs1...` address from ZEC. **Threat:** a user selects the wrong tab in the address-share modal (ARRR when they meant ZEC, or vice versa) and pastes an address — the address is published against the wrong chain. Chain-level routing rejects the actual transfer (cross-chain sends fail at the wallet/RPC layer), but the on-chain trace of the published address against the wrong asset is recorded permanently. Counterparties seeing the wrong-chain address may attempt the trade with confusion. **Mitigation:** per-asset tab labels are prominently displayed ("ARRR" vs "ZEC" in distinct accent colors — amber-600 vs yellow-400); per-asset placeholder text includes the asset name (`Your ARRR address (zs1...)` vs `Your ZEC address (zs1...)`); privacy-guide pages at `/privacy/arrr` and `/privacy/zec` both call out the visual collision in their caveats. **Residual risk:** user inattention; mitigated through UI prominence but not eliminable.
+
+### I-cp41-1 — N/A no transparent leg
+
+The t→z→t correlation threat documented for ZEC (I-cp39-1) does NOT apply to ARRR. Pirate Chain has no transparent address option — every transfer goes through the Sapling shielded pool by construction. There's no way to construct a mixed-shielded/transparent transaction that would correlate addresses across the pool boundary. Documenting as N/A for completeness.
+
+### T-cp41-2 — Wallet ecosystem narrower than ZEC (denial of service class, LOW)
+
+Pirate Chain wallet ecosystem is smaller than Zcash's: the main supported wallets are Treasure Chest (mobile), Pirate.Black, and the Verus-integrated Pirate wallet. A user attempting an ARRR trade may discover their preferred wallet doesn't support Pirate Chain. **Mitigation:** `privacy.guides.arrr.caveats` explicitly names supported wallets; FAQ entry `what_is_arrr` repeats the wallet list. **Residual risk:** ecosystem may shift over time; the list in static guide content may become stale.
+
+### Pattern lesson — LL #50: Same-format-different-chain visual-collision guardrails
+
+ZEC Sapling and Pirate Chain Sapling addresses are visually identical — same prefix (`zs1`), same bech32 alphabet, same length. They are distinct chains with incompatible transfer routing, but a user copying an address from one context to another could trigger a wrong-chain attempt. The per-asset tab and placeholder are the only thing keeping users from confusing them at the UI layer.
+
+**Class generalization:** any future asset addition with shared protocol lineage will inherit this class of risk. Forks of forks (Pirate Chain → Zcash → Bitcoin) inherit address-format conventions and may share visual prefixes with their ancestors or siblings.
+
+**Guidance for future deep-deeps:** when adding a chain whose address format shares a prefix or visual shape with an existing Morphit-supported chain, audit:
+1. The per-asset tab labels are distinct (different accent colors, different text).
+2. The per-asset placeholder includes the asset name (not just the prefix example).
+3. The privacy-guide page explicitly documents the visual collision in caveats × 10 locales.
+4. Smoke coverage: a defensive smoke could check that no two assets share an exact-equal addressShape regex (this would catch accidental cross-asset regex collisions that aren't caught by chain-routing alone).
+
+**LL #50 candidate for cp42 deep-deep:** consider adding a "no two assets share an identical addressShape" smoke scenario to `asset-registry-smoke.ts`. ZEC and ARRR currently both accept `/^zs1[02-9ac-hj-np-z]{75}$/` as one of their formats (ZEC: as one of three alternations; ARRR: as the only format) — the smoke would need to detect overlap, not equality.

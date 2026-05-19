@@ -496,7 +496,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		// Part 122 cp33 — DOGE single-network chat-link.
 		`MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.doge)}`,
 		// Part 122 cp39 — ZEC single-network chat-link.
-		`MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.zec)}`
+		`MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.zec)}`,
+		`MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.arrr)}`
 	);
 	// Part 122 cp30-DD-11 — USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's

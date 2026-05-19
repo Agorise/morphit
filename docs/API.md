@@ -225,7 +225,7 @@ Query parameters (all optional):
 
 | Param            | Type    | Description |
 |---|---|---|
-| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, or `ZEC` |
+| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, or `ARRR` |
 | `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon` |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217 e.g. `USD`, `EUR` |
@@ -562,9 +562,9 @@ Aggregate trading-activity stats for the Morphit instance.
 
 ```json
 {
-  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6, "USDC": 4, "DAI": 3, "BCH": 3, "LTC": 5, "DASH": 2, "DOGE": 4, "ZEC": 2 },
-  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24, "USDC": 17, "DAI": 13, "BCH": 11, "LTC": 18, "DASH": 9, "DOGE": 15, "ZEC": 8 },
-  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72, "USDC": 51, "DAI": 38, "BCH": 28, "LTC": 47, "DASH": 22, "DOGE": 41, "ZEC": 24 },
+  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6, "USDC": 4, "DAI": 3, "BCH": 3, "LTC": 5, "DASH": 2, "DOGE": 4, "ZEC": 2, "ARRR": 1 },
+  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24, "USDC": 17, "DAI": 13, "BCH": 11, "LTC": 18, "DASH": 9, "DOGE": 15, "ZEC": 8, "ARRR": 4 },
+  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72, "USDC": 51, "DAI": 38, "BCH": 28, "LTC": 47, "DASH": 22, "DOGE": 41, "ZEC": 24, "ARRR": 11 },
   "volume_estimate_by_asset_30d": {
     "BTC": "0.42",
     "XMR": "23.0",

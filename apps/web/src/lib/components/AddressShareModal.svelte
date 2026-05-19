@@ -278,6 +278,7 @@
 		if (method === 'dash') return 'chat.address.address_invalid_dash';
 		if (method === 'doge') return 'chat.address.address_invalid_doge';
 		if (method === 'zec') return 'chat.address.address_invalid_zec';
+		if (method === 'arrr') return 'chat.address.address_invalid_arrr';
 		return 'chat.address.address_invalid_blurt';
 	});
 
@@ -553,6 +554,18 @@
 			>
 				{$_('chat.address.method_zec')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'arrr'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'arrr'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('arrr')}
+			>
+				{$_('chat.address.method_arrr')}
+			</button>
 		</div>
 
 		<!-- Part 121 — USDT privacy warning + network picker.
@@ -637,7 +650,9 @@
 													? ($_('chat.address.address_placeholder_doge') as string)
 													: method === 'zec'
 														? ($_('chat.address.address_placeholder_zec') as string)
-														: ($_('chat.address.address_placeholder_blurt') as string)}
+														: method === 'arrr'
+															? ($_('chat.address.address_placeholder_arrr') as string)
+															: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

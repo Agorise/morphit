@@ -43,6 +43,12 @@ export const DOGE_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  and shareable. */
 export const ZEC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** ARRR txid (Part 122 cp41).  64 hex chars — Pirate Chain
+ *  Sapling shielded transactions surface a canonical 64-char
+ *  hex txid even though sender/recipient/amount are hidden
+ *  inside the shielded payload. */
+export const ARRR_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -164,6 +170,28 @@ export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/trans
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
 export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/transactions/{txid}';
+
+/** ARRR chat-link explorer (cp41 — Part 122).  Default uses
+ *  Pirate Chain's official project explorer at
+ *  explorer.piratechain.com — project-aligned, no third-party
+ *  tracking, supports shielded-transaction lookups by txid.
+ *  Privacy/decentralization rationale matches the choices for
+ *  BUNDLED_ZEC_CHAT_LINK_URL (mainnet.zcashexplorer.app) and
+ *  BUNDLED_BTC_CHAT_LINK_URL (blockstream.info): prefer a
+ *  project-aligned explorer over third-party aggregators or
+ *  exchange-affiliated services.
+ *
+ *  Operator's 3-explorer survey at cp41:
+ *  - explorer.piratechain.com — official project explorer.
+ *    CHOSEN as bundled default.
+ *  - pirate.explorer.dexstats.info — community-run, supports
+ *    Komodo-ecosystem coins including ARRR; secondary.
+ *  - blockchain.com/explorer/assets/arrr — third-party
+ *    aggregator; multi-asset; tertiary.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL. */
+export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

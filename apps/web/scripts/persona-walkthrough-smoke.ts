@@ -385,7 +385,7 @@ const SCENARIOS: readonly Scenario[] = [
 			'ariaLabel="What is XMR?"'
 		],
 		// Part 122 cp6 F7: broaden coverage beyond the three literals
-		// above.  Any future asset (USDT, LTC, DOGE, ZEC, ...) added with a
+		// above.  Any future asset (USDT, LTC, DOGE, ZEC, ARRR, ...) added with a
 		// hardcoded `ariaLabel="What is X?"` Tooltip prop pattern would
 		// regress S-12 without firing the literal list.  The regex
 		// catches every `ariaLabel="..."` Svelte prop with a literal

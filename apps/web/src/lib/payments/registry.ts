@@ -243,6 +243,27 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'ZEC'
 	},
+	{
+		// Part 122 cp41 — Pirate Chain as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC: when the
+		// trade's traded asset is ARRR, "pay with ARRR" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, ARRR appears as a selectable payment-rail chip.
+		// Single-network mainnet.  The `arrr:` URI (BIP-21-style)
+		// handles the single address format: zs1 Sapling shielded
+		// (bech32) — Pirate Chain has no transparent option, every
+		// transaction goes through the shielded pool by construction.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp41 ships ARRR with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE in cp33 and ZEC in cp39.
+		key: 'pay_arrr',
+		name: 'Pirate Chain (ARRR)',
+		url: 'https://piratechain.com',
+		category: 'crypto',
+		assetExclusion: 'ARRR'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

@@ -178,6 +178,7 @@ const sampleAnswers: WizardAnswers = {
 		dash: 'https://insight.dash.org/insight/tx/{txid}',
 		doge: 'https://blockchair.com/dogecoin/transaction/{txid}',
 		zec: 'https://mainnet.zcashexplorer.app/transactions/{txid}',
+		arrr: 'https://explorer.piratechain.com/tx/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',

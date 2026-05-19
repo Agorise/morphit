@@ -733,6 +733,7 @@ export interface InstanceResponse {
 		 *  mainnet.zcashexplorer.app.  Optional for back-compat
 		 *  with pre-cp39 indexers. */
 		readonly zec?: string | null;
+		readonly arrr?: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (pre-Part-121)
 		 *  omit this field, in which case the frontend uses its
@@ -775,7 +776,8 @@ export interface InstanceResponse {
 	/** Trade-only assets this instance has DISABLED via the
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
 	 *  Wire format: array of uppercase asset tickers (e.g.
-	 *  `['USDT']` or `['USDT', 'ARRR']`).  Empty array = this
+	 *  `['USDT']` or `['USDT', 'ARRR']` — both are real working
+	 *  ticker values as of cp41).  Empty array = this
 	 *  instance accepts every asset in the canonical registry.
 	 *
 	 *  Optional in the response — older indexer builds

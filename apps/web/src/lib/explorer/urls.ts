@@ -32,6 +32,7 @@ import {
 	DASH_TXID_RE,
 	DOGE_TXID_RE,
 	ZEC_TXID_RE,
+	ARRR_TXID_RE,
 	BLURT_TRXID_RE,
 	ACCOUNT_NAME_RE,
 	BUNDLED_BTC_CHAT_LINK_URL,
@@ -41,6 +42,7 @@ import {
 	BUNDLED_DASH_CHAT_LINK_URL,
 	BUNDLED_DOGE_CHAT_LINK_URL,
 	BUNDLED_ZEC_CHAT_LINK_URL,
+	BUNDLED_ARRR_CHAT_LINK_URL,
 	substituteTxidIntoTemplate,
 	isValidChatLinkTemplate
 } from './urlsCore';
@@ -66,13 +68,14 @@ export {
 	BUNDLED_LTC_CHAT_LINK_URL,
 	BUNDLED_DASH_CHAT_LINK_URL,
 	BUNDLED_DOGE_CHAT_LINK_URL,
-	BUNDLED_ZEC_CHAT_LINK_URL
+	BUNDLED_ZEC_CHAT_LINK_URL,
+	BUNDLED_ARRR_CHAT_LINK_URL
 } from './urlsCore';
 
 /** External (non-BLURT) asset tickers Morphit knows how to build
  *  explorer URLs for.  Uppercase to match the canonical asset
  *  registry's `AssetTicker` spelling. */
-export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'ZEC';
+export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'ZEC' | 'ARRR';
 
 /** Registry-driven dispatch for external-explorer URL building.
  *  Each entry pairs an asset's txid validator with the keys used
@@ -91,7 +94,7 @@ export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'Z
  *  explorer-URL builder serves that path. */
 interface ExplorerEntry {
 	readonly txidRe: RegExp;
-	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec';
+	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr';
 	readonly bundledDefault: string;
 }
 const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object.freeze({
@@ -129,6 +132,11 @@ const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object
 		txidRe: ZEC_TXID_RE,
 		instanceTplKey: 'zec',
 		bundledDefault: BUNDLED_ZEC_CHAT_LINK_URL
+	}),
+	ARRR: Object.freeze({
+		txidRe: ARRR_TXID_RE,
+		instanceTplKey: 'arrr',
+		bundledDefault: BUNDLED_ARRR_CHAT_LINK_URL
 	})
 });
 

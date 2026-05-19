@@ -25,7 +25,7 @@
  * Sentinel-grep against `apps/indexer/src/indexer/handlers/order.ts`:
  *  - The `fee_method` type union must appear exactly as the
  *    frozen 4-member set.
- *  - No string-literal `'usdt'`, `'ltc'`, `'doge'`, `'zec'`, `'arrr'`,
+ *  - No string-literal `'usdt'`, `'ltc'`, `'doge'`, `'zec'`, `'arrr'` (the 'arrr' sentinel was a forward guard in cp30; it stays now that ARRR is a real asset at cp41 — both invariants (ARRR is a valid tradable; ARRR is NOT a valid fee_method) coexist on different axes),
  *    etc. on a `fee_method` line.
  *
  * Usage:

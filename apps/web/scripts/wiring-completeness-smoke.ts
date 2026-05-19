@@ -565,6 +565,57 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp41 ARRR P2P trading wired ─────────────────────────────────
+	// Pirate Chain addition (cp41 — Part 122).  Twelfth tradable asset.
+	// Brag list (new entry) advertises ARRR peer-to-peer trading.
+	// Anchor: canonical registry must contain a ticker entry for ARRR.
+	// If ARRR ever loses its registry slot the brag claim drifts
+	// into vaporware and this CHECK row fires.
+	{
+		id: 'cp41-arrr-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Pirate Chain (ARRR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'ARRR'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp41 ARRR payment-rail wired (cp32 LL #36) ──────────────────
+	// Cp32 LL #36: every tradable asset must also be wired as a
+	// payment rail.  Cp41 ships ARRR with both axes same-turn per
+	// the pattern established for DOGE at cp33 and ZEC at cp39.
+	// Anchor: payments/registry.ts must contain pay_arrr.
+	{
+		id: 'cp41-arrr-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Pirate Chain (ARRR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_arrr'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp41 ARRR explorer URL bundled default ──────────────────────
+	// explorer.piratechain.com chosen from Ken's 3-explorer survey
+	// as the official project pointer, project-aligned, free of
+	// third-party tracking.  Anchor on the constant; a renamed/
+	// removed constant means the frontend has lost its fallback
+	// default and operators see a broken explorer link when no
+	// override is configured.
+	{
+		id: 'cp41-arrr-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Pirate Chain (ARRR) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_ARRR_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

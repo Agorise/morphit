@@ -243,6 +243,7 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  DASH chat-link URL:   ${answers.chatLinkExplorers.dash}`);
 	console.log(`  DOGE chat-link URL:   ${answers.chatLinkExplorers.doge}`);
 	console.log(`  ZEC chat-link URL:    ${answers.chatLinkExplorers.zec}`);
+	console.log(`  ARRR chat-link URL:   ${answers.chatLinkExplorers.arrr}`);
 	// Part 122 cp30-DD — multi-network chat-link URLs.  Each
 	// asset spans 4 chains; summarize as "all defaults" if every
 	// URL matches its bundled default, otherwise "customized".

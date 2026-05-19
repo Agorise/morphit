@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -722,6 +722,67 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// (we use [02-9ac-hj-np-z] for the bech32 data portion,
 		// matching the LTC MWEB pattern).
 		addressShape: /^(t[13][1-9A-HJ-NP-Za-km-z]{33}|zs1[02-9ac-hj-np-z]{75}|u1[02-9ac-hj-np-z]{30,300})$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'ARRR',
+		// Pirate Chain uses 8 decimals — same smallest-unit semantics
+		// as the BTC family.  Confirmed via Pirate Chain protocol
+		// (forked from Zcash's Sapling codebase which inherited
+		// Bitcoin's 8-decimal convention).
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: ARRR is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; arrr-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side (already lists 'arrr' as a
+		// FORBIDDEN_TICKER for the fee_method axis).
+		canPayListingFee: false,
+		// Single-network coin.  Pirate Chain runs one mainnet
+		// canonical chain.  No network picker shown.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Pirate Chain runs PoW (Equihash variant inherited from
+		// Zcash); addresses cannot be frozen by an issuer.  The
+		// chain operates on a default-shielded model: every
+		// transaction goes through the Sapling shielded pool via
+		// zk-SNARK proofs.  Sender, recipient, and amount are
+		// hidden on-chain by construction.  No transparent
+		// address type — only Sapling shielded (`zs1`-prefixed
+		// bech32 addresses, 78 chars total).  No warning chip
+		// needed; the chain is decentralized.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// Sapling addresses derive from HD seeds in modern
+			// Pirate Chain wallets.  Standard "fresh address per
+			// trade" advice applies — using a new HD-derived
+			// shielded address per trade defeats wallet-side
+			// linkability that survives chain-level shielding
+			// (the on-chain payload is private; what users SHARE
+			// off-chain is what links trades together).
+			freshAddressAdvice: 'hd-derived',
+			// Pirate Chain's shielded pool is chain-level by
+			// default (not opt-in like Zcash's), but the
+			// underlying tech is the same Sapling zk-SNARK pool.
+			// Per the privacy framework, `shielded-pools` is the
+			// canonical tech tag for the Sapling protocol family.
+			// (ARRR's default-shielded posture is reflected in
+			// the per-asset guide content, not in the tech-tag
+			// taxonomy.)
+			optInPrivacyTech: ['shielded-pools'],
+			privacyGuideKey: 'arrr'
+		},
+		// Pirate Chain Sapling address format:
+		//   - `zs1` prefix + 75 bech32 data chars = 78 chars total
+		// Same shape as Zcash Sapling addresses (visually
+		// indistinguishable — context from the order/asset field
+		// disambiguates).  Bech32 alphabet excludes `1`, `b`,
+		// `i`, `o` to avoid visual ambiguity (we use
+		// [02-9ac-hj-np-z] for the data portion, matching the
+		// LTC MWEB and Zcash Sapling patterns).
+		addressShape: /^zs1[02-9ac-hj-np-z]{75}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

@@ -33,6 +33,8 @@ icon" mid-implementation.
 
 2. **Full name.**  How the coin is known in prose ("Bitcoin",
    "Monero", "Pirate Chain").  Used in pickers, tooltips,
+   FAQ entries, and brag list.  Pirate Chain is real as of cp41
+   (see ADR-0032); was a hypothetical example before that.
    announcements.
 
 3. **One-line description.**  Maximum 120 characters.  Plain
@@ -421,7 +423,7 @@ cannot accidentally leak into the fee path:
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
-coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC) declare `['mainnet']`.
+coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR) declare `['mainnet']`.
 Multi-network coins list each network explicitly.  As of Part
 122 cp31 three multi-network assets are shipped:
 

@@ -803,7 +803,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Why does Morphit randomize my transfer amount?",
-				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
+				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
 			},
 			"feedback_immutable": {
 				"q": "Il feedback può essere modificato o cancellato?",
@@ -1187,7 +1187,7 @@
 			},
 			"why_usdc_warning": {
 				"q": "Why does Morphit show a privacy warning when I trade USDC?",
-				"a": "USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer."
+				"a": "USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer."
 			},
 			"which_usdt_network": {
 				"q": "Quale rete USDT scegliere — ERC-20, TRC-20, SPL o BEP-20?",
@@ -1220,6 +1220,10 @@
 			"what_is_zec": {
 				"q": "What is ZEC on Morphit?",
 				"a": "ZEC is Zcash — a proof-of-work chain launched in 2016. It was the first practical implementation of zero-knowledge proofs in a cryptocurrency. The chain supports two address families that coexist on the same protocol: transparent (t1/t3, base58 addresses similar in shape to Bitcoin's legacy format) where transaction amounts and parties are publicly visible, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) where zk-SNARKs hide sender, recipient, and amount on chain. Per-trade, you and your counterparty pick the address type that fits the trade's posture.\n\nOn Morphit, ZEC is **trade-only** — you can buy or sell ZEC in P2P trades, but you can't pay Morphit's listing fees in ZEC (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC), so the rule is uniform.\n\n**Address formats**: t1… (transparent P2PKH, the most common transparent type), t3… (transparent P2SH, multi-sig), zs1… (Sapling shielded, bech32, 78 chars total), u1… (Unified Address bundling Orchard + optional Sapling/transparent receivers, bech32m, variable length typically 90–300 chars).\n\n**Wallets that work well**: Zashi (official mobile wallet from the Electric Coin Co, Sapling + Orchard support), Zecwallet (desktop, legacy Sapling), Nighthawk Wallet (mobile, Sapling). Verify your counterparty's wallet handles the address type you plan to publish — newer wallets support Unified Addresses (u1) and older wallets may only support Sapling (zs1) or transparent."
+			},
+			"what_is_arrr": {
+				"q": "What is Pirate Chain (ARRR), and why is it on Morphit?",
+				"a": "Pirate Chain (ARRR) is a proof-of-work cryptocurrency that runs the Sapling zk-SNARK shielded pool as its only transaction type — every transfer hides sender, recipient, and amount on chain by construction. There's no transparent address option on Pirate Chain; the transparent pool was sunset early in the chain's life and all funds migrated to the shielded pool.\n\nOn Morphit, ARRR is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in ARRR. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nAddresses use a single format: `zs1` Sapling shielded (bech32, 78 chars). Visually identical to Zcash Sapling addresses — Morphit's per-asset tab and placeholder disambiguate which chain the address belongs to. Use a Pirate Chain wallet like Treasure Chest (mobile), Pirate.Black, or the Verus-integrated Pirate wallet to generate addresses and receive funds.\n\nOperators can refuse ARRR trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"ARRR\"`; the federated marketplace keeps trading ARRR regardless of any single operator's stance."
 			}
 		},
 		"share_link": "Condividi link",
@@ -1590,7 +1594,8 @@
 				"usdc": "USD Coin (USDC) — a stablecoin pegged 1:1 to USD, issued by Circle. Centrally controlled — Circle can freeze any address. Trade-only on Morphit: cannot pay listing fees.",
 				"dai": "DAI is a USD-pegged stablecoin by MakerDAO. More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module. Trade-only on Morphit.",
 				"doge": "Dogecoin (DOGE). Launched 2013 as a fair-launch fork of Lucky Coin (itself a Litecoin fork). Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Merge-mined with Litecoin since 2014 (auxiliary proof-of-work).",
-				"zec": "Zcash (ZEC). Launched 2016 as the first practical deployment of zero-knowledge proofs in a cryptocurrency. Transparent and shielded address types coexist on the same chain — t1/t3 addresses are publicly visible like Bitcoin's legacy addresses, while zs1 (Sapling) and u1 (Unified Address with Orchard receivers) use zk-SNARKs to hide sender, recipient, and amount. Choose the address type that matches your trade's privacy posture. Trade-only — cannot pay listing fees."
+				"zec": "Zcash (ZEC). Launched 2016 as the first practical deployment of zero-knowledge proofs in a cryptocurrency. Transparent and shielded address types coexist on the same chain — t1/t3 addresses are publicly visible like Bitcoin's legacy addresses, while zs1 (Sapling) and u1 (Unified Address with Orchard receivers) use zk-SNARKs to hide sender, recipient, and amount. Choose the address type that matches your trade's privacy posture. Trade-only — cannot pay listing fees.",
+				"arrr": "Pirate Chain (ARRR) — chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer is private by construction. Single address format (zs1 Sapling, bech32, 78 chars). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
 			},
 			"waiver_fiat_hint": "💡 BLURT è scambiato poco sugli exchange centralizzati, quindi la maggior parte degli scambi BLURT-per-fiat su Morphit avviene con utenti attivi della rete social Blurt, operatori esistenti o tramite baratto. Suggerimento: scegli una valuta fiat che la tua rete locale usa (USD, EUR, MXN, ecc.), o controlla il metodo di pagamento In persona → Baratto (beni) al passo 3 se vuoi offrire qualcos'altro di valore. Il libro ordini è piccolo per ora — il tuo ordine d'acquisto aiuta a costruirlo.",
 			"waiver_benefits_heading": "Cosa sblocca il tuo acquisto:",
@@ -2392,7 +2397,11 @@
 			"method_zec": "Zcash",
 			"address_placeholder_zec": "t1… t3… zs1… or u1…",
 			"address_invalid_zec": "That doesn't look like a valid Zcash address.",
-			"pill_method_zec": "Zcash address"
+			"pill_method_zec": "Zcash address",
+			"method_arrr": "ARRR",
+			"address_placeholder_arrr": "Your ARRR address (zs1...)",
+			"address_invalid_arrr": "Not a valid Pirate Chain address.  Expected `zs1` prefix + 75 bech32 data chars (78 chars total).",
+			"pill_method_arrr": "Pirate Chain (ARRR)"
 		},
 		"funds_sent": {
 			"button": "Segna fondi inviati",
@@ -2442,7 +2451,8 @@
 			"txid_invalid_dai": "Not a valid DAI txid shape (expected 64-hex with optional 0x prefix).",
 			"pill_title_dai": "DAI {network} payment sent",
 			"pill_title_doge": "Dogecoin sent",
-			"pill_title_zec": "Zcash sent"
+			"pill_title_zec": "Zcash sent",
+			"pill_title_arrr": "ARRR sent"
 		},
 		"unknown_version": "Questo messaggio usa un protocollo più recente. Aggiorna Morphit per leggerlo.",
 		"pay_blurt": {
@@ -3141,6 +3151,9 @@
 		"request_missing_no_contact": "Non vedi quello che ti serve? Questa istanza non ha pubblicato un canale di contatto — prova un'altra istanza Morphit, o apri un issue su git.agorise.net/agorise/morphit.",
 		"pay_zec": {
 			"description": "Zcash: launched 2016, zk-SNARK shielded transactions (Sapling + Orchard pools) plus transparent addresses (t1/t3, like Bitcoin). Fair-launched with a founders-reward halving schedule. Per-trade, recipients pick the address type that matches their posture. Trade-only on Morphit — cannot pay listing fees."
+		},
+		"pay_arrr": {
+			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
 		}
 	},
 	"feedback_reminder": {
@@ -3543,7 +3556,8 @@
 			"usdc": "USD Coin stablecoin. Centralized — Circle can freeze any address. Trade-only.",
 			"dai": "DAI — MakerDAO USD-pegged stablecoin. Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM). Trade-only. Partly USDC-backed.",
 			"doge": "DOGE — Dogecoin, transparent proof-of-work chain (since 2013), merge-mined with Litecoin. Trade-only on Morphit. Use a Dogecoin wallet (Dogecoin Core, MyDoge, hardware wallets); accepts D… P2PKH and 9…/A… P2SH addresses. No native privacy upgrade —",
-			"zec": "ZEC — Zcash, proof-of-work chain with optional zero-knowledge shielded transactions (Sapling + Orchard pools). Supports both transparent (t1/t3, base58, similar to Bitcoin's legacy addresses) and shielded (zs1/u1, bech32, hides sender/recipient/amount) addresses. Trade-only — cannot pay listing fees."
+			"zec": "ZEC — Zcash, proof-of-work chain with optional zero-knowledge shielded transactions (Sapling + Orchard pools). Supports both transparent (t1/t3, base58, similar to Bitcoin's legacy addresses) and shielded (zs1/u1, bech32, hides sender/recipient/amount) addresses. Trade-only — cannot pay listing fees.",
+			"arrr": "ARRR — Pirate Chain.  Proof-of-work cryptocurrency with chain-level shielded transactions via the Sapling zk-SNARK pool (every transaction is private by construction).  Trade-only on Morphit.  Use a Pirate Chain wallet (Treasure Chest, Pirate.Black, Verus); only one address format exists (zs1 Sapling shielded, 78 chars — visually identical to Zcash Sapling)."
 		},
 		"section_recovery": {
 			"heading": "Se qualcosa va storto",
@@ -3673,7 +3687,7 @@
 		"index_title": "Privacy practices — Morphit",
 		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
 		"index_heading": "Privacy practices on Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
 		"page_title": "Privacy for {asset} trades — Morphit",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",
@@ -3788,6 +3802,12 @@
 				"intro": "Zcash launched in 2016 as the first deployment of zk-SNARK-based shielded transactions in a cryptocurrency. The chain supports two address families: transparent (t1/t3) which behave like Bitcoin's legacy addresses with publicly visible amounts, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) which use zero-knowledge proofs to hide sender, recipient, and amount on chain. Per-trade, the recipient picks the address type that matches their preferred posture. Both are first-class on the protocol.",
 				"meta_description": "Privacy practices for Zcash trades on Morphit: choosing between transparent and shielded addresses (t-addr, z-addr, u-addr), wallet recommendations, and what each privacy pool does.",
 				"caveats": "Shielded-to-shielded transactions hide sender, recipient, and amount on chain. Mixed transactions (shielded-to-transparent or transparent-to-shielded) reveal one side. Transparent-to-transparent reveals both. If your goal is to minimize linkability, use a shielded address (zs1 or u1) and ask the counterparty to send from a shielded address. Wallet support varies: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk (mobile, Sapling) — not every wallet supports every address type, so verify your counterparty's wallet handles the address type you publish before sharing it."
+			},
+			"arrr": {
+				"one_line": "Chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer hides sender, recipient, and amount by construction.",
+				"intro": "Pirate Chain (ARRR) launched in 2018 as a fork of the Zcash codebase, configured so that the Sapling shielded pool is the only available transaction type.  Every transfer goes through zero-knowledge proofs (zk-SNARKs) that hide sender, recipient, and amount on chain.  Pirate Chain sunsetted the transparent pool early in the chain's life and forcibly migrated all transparent balances to shielded — there is no transparent address option.  Addresses use the `zs1` Sapling format (bech32, 78 chars total), visually identical to Zcash Sapling addresses.\n\nThe practices below cover wallet-side hygiene that survives even chain-level shielding — the on-chain payload is private, but what you share off-chain (which addresses you publish, which counterparties you transact with) is what links your Morphit trades together over time.",
+				"meta_description": "Privacy practices for Pirate Chain trades on Morphit: chain-level shielded transactions, fresh-address hygiene, and wallet compatibility.",
+				"caveats": "Pirate Chain's chain-level shielding hides sender, recipient, and amount on chain — but it does not erase off-chain linkability.\n\n- **Share fresh addresses per trade.**  Using the same `zs1` address across multiple Morphit listings lets observers correlate your orders even though the chain itself reveals nothing.  Generate a fresh receive address per trade (Pirate Chain wallets derive these from your HD seed).\n- **Wallet compatibility.**  Not every wallet supports Pirate Chain (the major options are Treasure Chest, Pirate.Black, and Verus-integrated Pirate).  Confirm your counterparty has a compatible wallet before agreeing to a price.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Visual collision with Zcash Sapling addresses.**  Pirate Chain `zs1` addresses look exactly like Zcash `zs1` addresses.  Morphit's per-asset tab and placeholder disambiguate, but if you copy an address from a different context, confirm it belongs to the chain you intend to send on."
 			}
 		}
 	}
