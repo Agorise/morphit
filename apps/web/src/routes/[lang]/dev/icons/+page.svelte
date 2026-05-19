@@ -10,7 +10,8 @@
 	Grouped by purpose:
 
 	  1. Brand (mark + wordmark)
-	  2. Asset icons (BTC, XMR, BLURT, YubiKey)
+	  2. Asset icons (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC,
+	     DASH, DOGE, YubiKey)
 	  3. Alt-network icons (Tor, Lokinet, I2P, Nostr, Blurt)
 	  4. App store glyphs (F-Droid, Aptoide, etc.)
 	  5. UI icon components (in-context samples)

@@ -417,13 +417,13 @@ cannot accidentally leak into the fee path:
   user's first BLURT buy still gets the waiver even if they
   pay their counterparty in USDT.
 
-### Multi-network coins (USDT, USDC; possible future ETH, ARRR, etc.)
+### Multi-network coins (USDT, USDC, DAI; possible future ETH, ARRR, etc.)
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
-coins (BTC, XMR, BLURT, BCH, LTC, DASH) declare `['mainnet']`.
+coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE) declare `['mainnet']`.
 Multi-network coins list each network explicitly.  As of Part
-122 cp30 two multi-network assets are shipped:
+122 cp31 three multi-network assets are shipped:
 
 1. **USDT** (Part 121 cp3) — `supportedNetworks: ['erc20',
    'trc20', 'spl', 'bep20']`.  Each network has a visually
@@ -443,9 +443,22 @@ Multi-network coins list each network explicitly.  As of Part
    on USDT for this reason; the per-message cross-network
    warning in `ChatMessage.svelte` reflects this.  See ADR-0028
    §"Why surface the EVM identical-address warning so prominently?".
+3. **DAI** (Part 122 cp31) — `supportedNetworks: ['erc20',
+   'polygon', 'base', 'arbitrum']`.  EVEN MORE DANGEROUS than
+   USDC for cross-network confusion: ALL FOUR DAI networks
+   share the EVM `0x[40 hex]` format (no Solana SPL variant
+   for DAI — SPL/TRC-20/BEP-20 versions of DAI are bridged/
+   wrapped, not Maker-native, and Morphit intentionally excludes
+   them per ADR-0029 §1).  DAI is the highest cross-network
+   address-confusion surface on Morphit; the network picker
+   carries the strongest warning.  Unlike USDT/USDC, DAI's
+   token contract has no admin freeze function (MakerDAO can't
+   blacklist), but is partly USDC-backed via the Peg Stability
+   Module — distinct `dai_partly_centralized` privacy-warning
+   class (vs `usdt_centralized` / `usdc_centralized`).
 
-The **canonical reference** is the actual USDT and USDC entries
-at `packages/asset-registry/src/index.ts`.  USDT:
+The **canonical reference** is the actual USDT, USDC, and DAI
+entries at `packages/asset-registry/src/index.ts`.  USDT:
 
 ```ts
 {

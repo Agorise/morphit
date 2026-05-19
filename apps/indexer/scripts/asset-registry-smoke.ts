@@ -31,9 +31,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (BTC, XMR, BLURT, USDT)', () => {
+scenario('all current assets registered (10 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['blurt', 'btc', 'usdt', 'xmr'];
+	const expected = ['bch', 'blurt', 'btc', 'dai', 'dash', 'doge', 'ltc', 'usdc', 'usdt', 'xmr'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}

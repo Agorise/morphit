@@ -3,8 +3,8 @@
  *
  * Verifies:
  *   1. Category-B filter returns exactly the trade-only tickers
- *      from the canonical registry (currently USDT + BCH + LTC +
- *      DASH).
+ *      from the canonical registry (currently USDT + USDC + DAI +
+ *      BCH + LTC + DASH + DOGE).
  *   2. `stepDisabledAssets()` returns a DisabledAssetsResult
  *      whose disabledTickers is empty when the operator says
  *      "enable everything" (default posture per Memory #25).
@@ -28,7 +28,7 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns USDT + USDC + BCH + LTC + DASH from canonical registry',
+		name: 'Category-B filter returns USDT + USDC + DAI + BCH + LTC + DASH + DOGE from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
 				(a) => a.ticker
@@ -36,10 +36,12 @@ const scenarios: Scenario[] = [
 			return (
 				catB.includes('USDT') &&
 				catB.includes('USDC') &&
+				catB.includes('DAI') &&
 				catB.includes('BCH') &&
 				catB.includes('LTC') &&
 				catB.includes('DASH') &&
-				catB.length === 5
+				catB.includes('DOGE') &&
+				catB.length === 7
 			);
 		}
 	},
@@ -81,6 +83,20 @@ const scenarios: Scenario[] = [
 		}
 	},
 	{
+		name: 'USDC is canPayListingFee:false (Category B invariant)',
+		check: () => {
+			const usdc = ASSETS.find((a) => a.ticker === 'USDC');
+			return usdc !== undefined && usdc.canPayListingFee === false;
+		}
+	},
+	{
+		name: 'DAI is canPayListingFee:false (Category B invariant)',
+		check: () => {
+			const dai = ASSETS.find((a) => a.ticker === 'DAI');
+			return dai !== undefined && dai.canPayListingFee === false;
+		}
+	},
+	{
 		name: 'BCH is canPayListingFee:false (Category B invariant)',
 		check: () => {
 			const bch = ASSETS.find((a) => a.ticker === 'BCH');
@@ -92,6 +108,20 @@ const scenarios: Scenario[] = [
 		check: () => {
 			const ltc = ASSETS.find((a) => a.ticker === 'LTC');
 			return ltc !== undefined && ltc.canPayListingFee === false;
+		}
+	},
+	{
+		name: 'DASH is canPayListingFee:false (Category B invariant)',
+		check: () => {
+			const dash = ASSETS.find((a) => a.ticker === 'DASH');
+			return dash !== undefined && dash.canPayListingFee === false;
+		}
+	},
+	{
+		name: 'DOGE is canPayListingFee:false (Category B invariant)',
+		check: () => {
+			const doge = ASSETS.find((a) => a.ticker === 'DOGE');
+			return doge !== undefined && doge.canPayListingFee === false;
 		}
 	},
 	{

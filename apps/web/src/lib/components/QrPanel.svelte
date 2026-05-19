@@ -12,11 +12,14 @@
 	 *   - BCH:  CashAddr (`bitcoincash:q...?amount=0.5`)
 	 *   - LTC:  BIP-21 derivative (`litecoin:ltc1...?amount=0.5`)
 	 *   - DASH: BIP-21 derivative (`dash:X...?amount=0.5`)
+	 *   - DOGE: BIP-21 derivative (`dogecoin:D...?amount=0.5`)
 	 *   - BLURT: bare account name (no widely-supported scheme)
-	 *   - USDT: no widely-supported single URI scheme across the four
-	 *          networks Morphit ships (ERC-20/TRC-20/SPL/BEP-20); the
-	 *          QR encodes the bare address and the network is
-	 *          conveyed out-of-band in the chat-side network pill.
+	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
+	 *          the multiple EVM/Solana/Tron networks each asset ships
+	 *          (USDT: ERC-20/TRC-20/SPL/BEP-20; USDC: ERC-20/SPL/Base/
+	 *          Polygon; DAI: ERC-20/Polygon/Base/Arbitrum); the QR
+	 *          encodes the bare address and the network is conveyed
+	 *          out-of-band in the chat-side network pill.
 	 *
 	 * Canonical reference for the per-asset URI shape is
 	 * `buildPaymentUri` in `apps/web/src/lib/chat/payload.ts` —

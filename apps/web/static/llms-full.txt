@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -133,7 +133,7 @@ A note on the spam-deterrent escalation: post a lot of orders quickly (4+ in a 2
 
 **FAQ key:** `trade_goods_services`
 
-Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, BLURT, USDT, USDC, BCH, LTC, or DASH) on one side, and something else on the other side**. The "something else" can be:
+Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) on one side, and something else on the other side**. The "something else" can be:
 
 • A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)
 • A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)
@@ -143,7 +143,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City."`
 
-**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, BLURT, USDT, USDC, BCH, LTC, or DASH) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.
+**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.
 
 **Why this constraint?** Three reasons:
 
@@ -475,7 +475,7 @@ We publish these mechanics openly because deterrence works best when attackers c
 
 Morphit settles its on-chain coordination on a public ledger called Blurt. The ledger's native unit is also called BLURT — every block, every signature, every fee transfer flows through it. You can think of BLURT as the gas token for the coordination layer, the same way ETH is gas for Ethereum, but smaller and quieter.
 
-You don't have to interact with BLURT to trade BTC, XMR, USDT, USDC, BCH, LTC, or DASH on Morphit. If your operator accepts BTC or XMR for the network fee (most do), you can list orders, message counterparties, and complete trades without ever touching BLURT.
+You don't have to interact with BLURT to trade BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE on Morphit. If your operator accepts BTC or XMR for the network fee (most do), you can list orders, message counterparties, and complete trades without ever touching BLURT.
 
 Why does it come up at all? Three reasons:
 
@@ -493,7 +493,7 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the seven assets traded here, alongside BTC, XMR, USDT, USDC, BCH, LTC, and DASH. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
+**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the ten assets traded here, alongside BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, and DOGE. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first BLURT buy — see "Is my first order really free?" for details. So your first BLURT acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 
@@ -542,7 +542,7 @@ There are actually three welcome rewards on Morphit, and they fire at different 
 
 Why the staggered design: handing out the full bonus at signup would be farmed by Sybil accounts in minutes. The 1 BP welcome on first paid fee is a small enough amount that Sybil farming is unprofitable ($0.125 cost per attacker per 1 BP), and the larger 10 BLURT liquid + 10 BLURT Power requires real trade evidence (counterparty feedback). Both add up to meaningful staking weight for honest users.
 
-If you trade exclusively in non-BLURT assets (BTC, XMR, USDT, USDC, BCH, LTC, or DASH) and never pay a BLURT listing fee, you'll receive the 10 BLURT liquid + 10 BLURT Power from your first completed trade but not the 1 BP first-fee welcome (which is BLURT-fee-gated). The BLURT bonus is harmless to receive and ignore — it can sit in your account indefinitely or cover future network fees.
+If you trade exclusively in non-BLURT assets (BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) and never pay a BLURT listing fee, you'll receive the 10 BLURT liquid + 10 BLURT Power from your first completed trade but not the 1 BP first-fee welcome (which is BLURT-fee-gated). The BLURT bonus is harmless to receive and ignore — it can sit in your account indefinitely or cover future network fees.
 
 The rewards arrive as `delegate_vesting_shares` and `transfer` ops from @morphit-relay in your account history.
 
@@ -1855,7 +1855,7 @@ USDC (USD Coin) is a stablecoin issued by Circle, a US-based financial-services 
 
 **FAQ key:** `why_usdt_warning`
 
-USDT is the most-traded stablecoin in the world, and millions of traders rely on its dollar-stability and broad acceptance every day. When Morphit lists an asset, we tell our users about the technical properties of that asset honestly, so they can make an informed choice for each trade. For USDT, two facts worth knowing: (1) USDT is issued and administered by Tether Inc., and Tether has the technical ability to freeze addresses on the host chain — they have used this ability in the past, mostly in response to law-enforcement requests. (2) USDT transactions on every supported host chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly visible on those chains; this is a property of the chain, not unique to USDT. Different traders weigh these differently. If you want maximum on-chain privacy, XMR is the right tool. If you want maximum decentralization-from-any-single-issuer with transparent chains, BTC, BLURT, BCH, LTC, or DASH are the right tools. If you want dollar-denominated stability and a market that's liquid almost anywhere, USDT is the right tool. The Morphit chip is information, not a verdict — pick the asset that fits the trade you're making.
+USDT is the most-traded stablecoin in the world, and millions of traders rely on its dollar-stability and broad acceptance every day. When Morphit lists an asset, we tell our users about the technical properties of that asset honestly, so they can make an informed choice for each trade. For USDT, two facts worth knowing: (1) USDT is issued and administered by Tether Inc., and Tether has the technical ability to freeze addresses on the host chain — they have used this ability in the past, mostly in response to law-enforcement requests. (2) USDT transactions on every supported host chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly visible on those chains; this is a property of the chain, not unique to USDT. Different traders weigh these differently. If you want maximum on-chain privacy, XMR is the right tool. If you want maximum decentralization-from-any-single-issuer with transparent chains, BTC, BLURT, BCH, LTC, DASH, or DOGE are the right tools. If you want dollar-denominated stability and a market that's liquid almost anywhere, USDT is the right tool. The Morphit chip is information, not a verdict — pick the asset that fits the trade you're making.
 
 ---
 
@@ -1915,9 +1915,25 @@ Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, 
 
 ---
 
+## What is DOGE on Morphit?
+
+**FAQ key:** `what_is_doge`
+
+DOGE is Dogecoin — a proof-of-work chain launched in 2013 as a fair-launched fork of Lucky Coin (itself a Litecoin fork). It's transparent at the base layer like Bitcoin: every transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze your addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.
+
+On Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, but you can't pay Morphit's listing fees in DOGE (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE), so the rule is uniform.
+
+**Privacy posture**: DOGE has no native privacy upgrade. No PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish links to its on-chain history forever. Use a fresh HD-derived address per trade (your wallet usually does this automatically). For Morphit's strongest privacy posture, use XMR.
+
+**Address formats**: D… (P2PKH, most common), 9… or A… (P2SH, multi-sig, rare on DOGE). No bech32 — Dogecoin Core has not activated segwit.
+
+**Wallets that work well**: Dogecoin Core (official, full node), MyDoge, Trezor + Ledger (hardware), Electrum-DOGE for desktop.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 116
+Total FAQ entries: 117
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit
