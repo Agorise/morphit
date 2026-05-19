@@ -1,3 +1,59 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 38 — Verification-pass deep-deep on cp37 work yielding 1 LOW hygiene fix + comprehensive validation that cp37 is solid; 19 of 19 standalone-runnable smokes PASS (cp37 was 18 of 18 — the new native-translations-floor-smoke contributed +1 to the standalone runnable count); 3 LL #46-class mutation tests passed including a "going up doesn't trigger" no-false-positive check; pre-launch-checklist sweep confirms zero code-side items remain unchecked.)
+
+CP38 SCOPE:
+
+Recursive deep-deep on cp37 work — scrutinize my own newly-shipped smoke code, snapshot data, rebuild script, and meta-doc entries for bugs and inconsistencies before deploy ceremony begins.
+
+CP38 METHODOLOGY:
+
+1. Cross-tool determinism check: does the TS rebuild script produce byte-identical output to the Python-generated snapshot that shipped in cp37?
+2. Snapshot data anomaly scan: non-string leaves, empty-string leaves, key-parity drift between locale files.
+3. Smoke path-resolution check: does the smoke work when invoked from any CWD, not just `apps/web`?
+4. Run-smokes.sh integration: confirm the runner discovers the new smoke with the registered path convention.
+5. Three-scenario mutation test: single-key regression + multi-key multi-locale regression + "going up" non-regression to catch false-positive class.
+6. Full standalone smoke battery: 19 individually-runnable smokes (excludes the 3 known pre-existing failures from cp32-cp35 sandbox limitations).
+7. Numeric consistency sweep across TARBALL.md / REVISIT-LIST.md / AUDIT-2026-05.md for 2,730 / 22,861 / 154→155 / 41,865.
+8. PRE-LAUNCH-CHECKLIST.md unchecked-items sweep — confirm no code-side items remain (all unchecked are operator-side execution).
+
+CP38 FINDINGS:
+
+**CP38-1 (LOW, fixed inline)**: TS rebuild script `native-translations-snapshot-rebuild.ts` produced non-byte-identical `_meta.description` and `_meta.baseline_taken_at` text compared to the Python-generator output that shipped in cp37. Data (the `natives` key with all 22,861 pairs) was byte-identical; only the meta-field wording differed. If operator ran the rebuild script on cp37 they'd see surprising diff. Reconciled by committing the TS-rebuild-canonical version of the snapshot in cp38. Verified idempotent: running rebuild twice produces zero diff. Acknowledged hygiene quirk: the `baseline_taken_at` field uses `new Date().toISOString().slice(0,10)` so every rebuild bumps the date — that's honest about what the field captures (when the rebuild ran) but produces noisy diffs across days; accepted, documented.
+
+**CP38-2 (NOT-A-BUG, scan clean)**: Non-string leaf scan — zero non-string leaves in EN. One empty-string leaf (`feedback_reminder.row_intro = ''`) — verified ALL 10 locales have the same empty string, so this key is not in any locale's snapshot (correctly), and the smoke's strict-equality check handles empty-string EN correctly.
+
+**CP38-3 (NOT-A-BUG, scan clean)**: Key-parity scan — every locale has exactly the same key set as EN (no orphan keys, no missing keys). This is what `i18n-locale-parity-smoke` enforces, verified independently here.
+
+**CP38-4 (NOT-A-BUG, scan clean)**: CWD-agnosticism check — the smoke uses `__dirname`-relative path resolution and works correctly when invoked from `apps/web/`, repo root, `/`, or `/tmp`. tsx ESM-resolver handles `fileURLToPath(import.meta.url)` correctly.
+
+**CP38-5 (NOT-A-BUG, scan clean)**: Mutation test 2 (multi-key, multi-locale) — tampered 2 keys × 3 locales (`es`, `de`, `pl`) with EN-text overwrites; smoke correctly identified 4 actual regressions per locale (some test pairs were already EN-allowed via the chronic-debt allow-list and so weren't snapshot natives) + total-count floor breach. Per-locale failure messages named exact regressed keys. Restore → PASS.
+
+**CP38-6 (NOT-A-BUG, scan clean)**: Mutation test 3 (going up) — picked a fallback key (`settings.endpoints.add_placeholder` was EN-identical in `zh-CN` at baseline), set it to a non-EN value (i.e., translator adds a native translation). Smoke PASSED (correctly: going up is unrestricted). Confirms the smoke doesn't false-positive on improvements.
+
+**CP38-7 (NOT-A-BUG, snapshot data shape healthy)**: Snapshot anomaly inspection — 2,428 keys are universally translated across all 9 non-EN locales; only 5 keys are "mostly fallback" (translated in ≤ 2 of 9 locales: `assets.usdc.price_subline.live`, `assets.usdt.network.bep20.displayName`, `explorer.block.witness_label`, `footer.contact_operator_matrix_label`, `glossary.permlink.title`). The mostly-fallback shape matches the audit-history expectation (asset additions in cp30-cp33 generated EN-fallback in 6 of 9 locales per Memory #29 policy).
+
+**CP38-8 (NOT-A-BUG, no code-side launch work remaining)**: PRE-LAUNCH-CHECKLIST.md sweep — 25 unchecked items remain, ALL are operator-side execution: generate Blurt accounts (@morphit, @morphit-relay, @morphit-fees), generate BTC/XMR treasury addresses, fund accounts, mint first ACT batch, set MORPHIT_INSTANCE_OPERATOR_TAG, broadcast first operator-registration ops, run setup wizard, decide per-asset chat-link explorer URLs (operator preference), VAPID keypair for push notifications. Zero code-side items remain unchecked.
+
+CP38 STATE METRICS:
+
+- 10 tradable assets (unchanged).
+- Locale parity: 2,730 leaf keys × 10 = 27,300 strings (unchanged).
+- FAQ entries: 117 (unchanged).
+- ADRs: 30 (unchanged).
+- Brag entries: 282 (unchanged).
+- Schema head: v33 (unchanged).
+- Smoke runners: 155 (unchanged from cp37).
+- Standalone-runnable smokes verified PASS: 19 of 19 in cp38 (was 18 of 18 in cp37 — the new native-translations-floor-smoke joined the standalone-runnable count).
+- Pre-existing chronic failures unchanged (i18n-translation-completeness 1,150 EN-fallback debt; sally-walkthrough L13 XMR-jitter; i18n-formatters needs npm install).
+- Native-translation snapshot: 22,861 pairs (unchanged data; meta-field text reconciled).
+- Mediakit: 41,865 bytes (unchanged).
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+CP38 TOTALS:
+
+1 LOW hygiene fix closed inline (snapshot meta-field reconciliation) + 7 NOT-A-BUG documented clean findings + 3 mutation tests passed + 1 PRE-LAUNCH-CHECKLIST sweep confirming zero remaining code-side work. The dominant signal is verification: cp37 is solid; no surprises emerged from scrutinizing my own newly-shipped infrastructure.
+
+### CP37 history (sealed 2026-05-19; preserved below for archaeology):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 37 — Three-persona deeper walk catching 2 minor walk findings (1 LOW ADR wording + 1 Memory-rule violation cluster in 3 smoke comments) + LL #46 defensive smoke shipped end-to-end with mutation-tested regression value.  Closes the bug class I introduced and self-caught in cp36.)
 
 CP37 SCOPE:
