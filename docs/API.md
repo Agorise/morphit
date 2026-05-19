@@ -575,7 +575,9 @@ Aggregate trading-activity stats for the Morphit instance.
     "BCH": "1.8",
     "LTC": "8.5",
     "DASH": "3.2",
-    "DOGE": "1200"
+    "DOGE": "1200",
+    "ZEC": "85.5",
+    "ARRR": "12.4"
   }
 }
 ```

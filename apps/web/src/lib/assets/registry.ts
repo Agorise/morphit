@@ -367,7 +367,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// USDT amber-400, USDC blue-500, BLURT emerald, etc.  The
 		// privacy-warning chip stays as a separate channel; the
 		// accent isn't the warning surface.
-		accentClass: 'text-orange-500',
+		accentClass: 'text-yellow-600',
 		// EVM-standard 18 decimals — different from USDT/USDC's 6.
 		// Affects the underlying token's smallest-unit math but
 		// not the user-visible amount-jitter resolution (the
