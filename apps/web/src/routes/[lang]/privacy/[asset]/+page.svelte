@@ -4,7 +4,7 @@
 	 *  Registry-driven: pulls `privacyFeatures` from the canonical
 	 *  asset registry for the URL-param asset, then renders shared
 	 *  + asset-specific guidance.  Future asset additions (Dash,
-	 *  DOGE, ZEC, ARRR, DCR, SOL, ETH, etc.) get a privacy guide for free by populating
+	 *  DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, etc.) get a privacy guide for free by populating
 	 *  their `privacyFeatures` field in the registry.
 	 *
 	 *  URL: `/[lang]/privacy/{asset}` where `{asset}` is the lower-

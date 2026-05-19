@@ -143,6 +143,7 @@ export const FAQ_KEYS = [
 	'what_is_dcr',
 	'what_is_sol',
 	'what_is_eth',
+	'what_is_xrp',
 	'arbitrage_morphit_vs_exchanges'
 ] as const;
 
@@ -512,6 +513,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	what_is_dcr: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_sol: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_eth: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
+	what_is_xrp: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
 };
 

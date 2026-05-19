@@ -124,6 +124,7 @@ export interface InstanceResponse {
 		dcr: string | null;
 		sol: string | null;
 		eth: string | null;
+		xrp: string | null;
 		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (pre-cp30 — yes, this includes every prior build of
@@ -250,6 +251,7 @@ export function instanceRoute(config: Config): Hono {
 				dcr: config.frontendDcrChatLinkUrl ?? null,
 				sol: config.frontendSolChatLinkUrl ?? null,
 				eth: config.frontendEthChatLinkUrl ?? null,
+				xrp: config.frontendXrpChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,

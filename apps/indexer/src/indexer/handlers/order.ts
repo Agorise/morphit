@@ -5,7 +5,7 @@
  *   {
  *     "permlink": string (1..32, blurt permlink charset),
  *     "side": "buy" | "sell",
- *     "asset": "BTC" | "XMR" | "BLURT" | "USDT" | "USDC" | "DAI" | "BCH" | "LTC" | "DASH" | "DOGE" | "ZEC" | "ARRR" | "DCR" | "SOL" | "ETH",
+ *     "asset": "BTC" | "XMR" | "BLURT" | "USDT" | "USDC" | "DAI" | "BCH" | "LTC" | "DASH" | "DOGE" | "ZEC" | "ARRR" | "DCR" | "SOL" | "ETH" | "XRP",
  *     "fiat_currency": string (1..8, ISO-4217-ish),
  *     "amount_min"?: number | null,
  *     "amount_max"?: number | null,

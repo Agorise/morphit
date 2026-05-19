@@ -6,7 +6,7 @@
  * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher);
  * extended in cp30 to cover the stablecoin variant
  * (jitterStablecoinAmount via jitterAmountForAsset routing); cp31
- * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics); cp43 added DCR (ninth — hybrid PoW/PoS, UTXO-model); cp45 added SOL (NOT routed through this function — Solana has 9-decimal lamport precision and uses a NEW jitterSolAmount); cp47 added ETH (NOT routed through this function — ETH is 18-decimal on-chain and uses a NEW jitterEthAmount with 6-decimal display-clamp matching the DAI cp31 design).
+ * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics); cp43 added DCR (ninth — hybrid PoW/PoS, UTXO-model); cp45 added SOL (NOT routed through this function — Solana has 9-decimal lamport precision and uses a NEW jitterSolAmount); cp47 added ETH (NOT routed through this function — ETH is 18-decimal on-chain and uses a NEW jitterEthAmount with 6-decimal display-clamp matching the DAI cp31 design); cp49 added XRP (NOT routed through this function — XRPL uses 6-decimal drops natively and uses a NEW jitterXrpAmount).
  *
  * The XMR jitter is already covered by older payload smokes; this
  * sentinel covers:

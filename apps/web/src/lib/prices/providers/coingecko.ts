@@ -87,7 +87,8 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	ARRR: 'pirate-chain',
 	DCR: 'decred',
 	SOL: 'solana',
-	ETH: 'ethereum'
+	ETH: 'ethereum',
+	XRP: 'ripple'
 };
 
 /** Max response body size from CoinGecko. Real responses are

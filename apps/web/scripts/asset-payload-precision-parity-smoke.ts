@@ -202,6 +202,20 @@ const EXPECTATIONS: AssetExpectation[] = [
 		expectedUriScheme: 'ethereum:',
 		txidShapeAcceptable: '0x' + 'a'.repeat(64),
 		txidShapeUnacceptable: 'a'.repeat(63)
+	},
+	{
+		ticker: 'XRP',
+		chatTicker: 'xrp',
+		// XRP uses 6 decimals on the XRP Ledger (drops; 1 XRP =
+		// 10^6 drops).  Same smallest-unit precision as USDT/USDC/
+		// DAI/ETH-display, but XRP is the native token of XRPL,
+		// not an ERC-20 stablecoin.  jitterXrpAmount provides
+		// 6-decimal arithmetic with a clear separate function
+		// for clarity and future XRP-specific tuning room.
+		expectedJitterDecimals: 6,
+		expectedUriScheme: 'ripple:',
+		txidShapeAcceptable: 'a'.repeat(64),
+		txidShapeUnacceptable: 'a'.repeat(63)
 	}
 ];
 
@@ -286,7 +300,8 @@ for (const exp of EXPECTATIONS) {
 			ARRR: 'zs1' + 'q'.repeat(75),
 			DCR: 'Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d',
 			SOL: 'So11111111111111111111111111111111111111112',
-			ETH: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
+			ETH: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+			XRP: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh'
 		};
 		const addr = sampleAddrs[exp.ticker];
 		if (!addr) {

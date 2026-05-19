@@ -25,6 +25,11 @@
  *   - ETH: BIP-21-compatible (`ethereum:0xd8da...?amount=1.5`)
  *     — 20-byte hex addresses on Ethereum mainnet, EIP-681
  *     simplified form parsed by MetaMask/Rabby/Frame/Rainbow
+ *   - XRP: de facto `ripple:` URI scheme (`ripple:rHb9...?
+ *     amount=10&dt=42`) — r-prefixed base58 24-34 char
+ *     addresses on XRP Ledger mainnet, with optional `?dt=N`
+ *     destination tag query param for exchange-hosted addresses;
+ *     parsed by Xaman/Xumm, Crossmark, Bifrost, GemWallet
 	 *   - BLURT: bare account name (no widely-supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships

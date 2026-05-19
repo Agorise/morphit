@@ -443,6 +443,21 @@ export interface Config {
 	 *  regular tx lookups). */
 	readonly frontendEthChatLinkUrl: string | undefined;
 
+	/** XRP (Ripple) chat-link explorer URL template (Part 122
+	 *  cp49).  When set, the frontend uses this template instead
+	 *  of the bundled `livenet.xrpl.org/transactions/{txid}`
+	 *  default.  Must contain `{txid}` placeholder; checked at
+	 *  config load.
+	 *
+	 *  Operator's 5-explorer survey at addition time
+	 *  (2026-05-19): livenet.xrpl.org (chosen as bundled
+	 *  default — XRP Ledger Foundation non-profit, project-
+	 *  aligned), xrpscan.com (XRPL-focused third-party),
+	 *  bithomp.com (third-party with token/NFT support),
+	 *  blockchair.com/xrp-ledger (multi-chain aggregator),
+	 *  blockexplorer.one/xrp/mainnet (multi-chain third-party). */
+	readonly frontendXrpChatLinkUrl: string | undefined;
+
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
@@ -1019,6 +1034,17 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp49 — XRP (Ripple) chat-link explorer URL
+	// override.  Single-network XRPL mainnet.  When unset,
+	// falls back to the bundled livenet.xrpl.org default.
+	MORPHIT_FRONTEND_XRP_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since Part 121 cp3 so the
 	// public-API per-network override never worked.  Frontend
@@ -1305,6 +1331,7 @@ export function loadConfig(): Config {
 		frontendDcrChatLinkUrl: e.MORPHIT_FRONTEND_DCR_CHAT_LINK_URL,
 		frontendSolChatLinkUrl: e.MORPHIT_FRONTEND_SOL_CHAT_LINK_URL,
 		frontendEthChatLinkUrl: e.MORPHIT_FRONTEND_ETH_CHAT_LINK_URL,
+		frontendXrpChatLinkUrl: e.MORPHIT_FRONTEND_XRP_CHAT_LINK_URL,
 		// Part 122 cp30 — multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

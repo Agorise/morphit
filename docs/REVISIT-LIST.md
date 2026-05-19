@@ -1,3 +1,37 @@
+# Morphit pre-launch revisit list
+
+**Last touched:** Part 122 cp49 — 2026-05-19.
+
+## Memory facts re-confirmed at top of cp49
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp49 XRP addition does NOT extend this enum. XRP ships `canPayListingFee: false`.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** every new asset's i18n strings ship native EN/ES/FR/DE + EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK. Applied per turn.
+- **Memory #4:** every text edit translated to all 10 supported locales same-turn.
+- **Memory #13 STOP MISSING THINGS:** deep-deeps comprehensive in ONE pass. cp49 deep-deep found A-1 (missing 'xrp' short ticker), A-2 CRITICAL (cp47-A1 recurring class still recurring in vitest scope), J-1 (sibling test gap).
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## CP49 STRUCTURAL DEFENSES — 4 OPERATIONAL
+
+1. **cp44 LL #52** workspace-typecheck-smoke — 6th consecutive checkpoint clean
+2. **cp46 asset-payload-precision-parity-smoke** — 4th consecutive checkpoint; extended 57→61 scenarios at cp49
+3. **cp48 stand-in meta-assertion** (UNKNOWN_STANDIN in asset-registry-smoke.ts) — 2nd consecutive checkpoint clean
+4. **cp49 LL #53 / O-2** handler-test-stand-in-meta-assertion-smoke — NEW at cp49; extends cp48 scope to vitest test files (60 files walked)
+
+**Cadence: ONE new structural defense per 2 deep-deeps.** Cp48 added one (standalone smoke scope); cp49 added one (vitest test scope). Cp50 expected to add another — pattern likely related to a sibling category not yet defended.
+
+## CP49 LESSON LEARNED — MUTATION TEST PROCESS
+
+`git checkout <path>` is UNSAFE for mutation-test rollback when uncommitted work is in flight. The mutation test sequence at cp49 reverted 3 files (canonical registry, frontend registry, payment-rail registry) to cp48 state, destroying ~3 hours of cp49 wiring. Recovered by re-applying all edits + verifying full smoke battery.
+
+**Future mutation-test process:** `cp <file> <file>.bak` before mutation, mutate, run smoke (expect failure), `cp <file>.bak <file>` to restore. NEVER use `git checkout` on uncommitted work.
+
+## Two parked external blockers (unchanged through cp42→cp49)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
 # Morphit — revisit list
 
 **Last maintained:** 2026-05-19 (Part 122 cp48 — Full 94-task deep-deep + security audit on cp47 ETH work + entire 15-asset registry surfacing **1 NEW STRUCTURAL DEFENSE CLOSURE** (Ken cp47-A1 recurring "unknown stand-in becomes valid" bug class — 3 of 8 asset additions hit cp33/cp39/cp47; closed permanently via synthetic non-ticker `__unknown__` + meta-assertion `ASSET_TICKERS_SET.has(UNKNOWN_STANDIN.toUpperCase())` at smoke startup) + **2 LOW docblock-drift findings closed inline** (L-1 network-icon-coverage "10 asset icons" stale since cp32 → 15; L-2 amount-jitter-utxo "12 tradable assets" stale since cp33 → 15) + **5 mutation tests all PASS** (M-106 icon delete catches via network-icon-coverage / M-107 stand-in-valid-ticker confirms recurring class / M-108 ETH overlap removal / M-109 cp46 EXPECTATIONS drift / M-110 cp48 structural defense FIRES on tampered UNKNOWN_STANDIN).  37 of 37 standalone-runnable smokes PASS (unchanged from cp47).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified **5th consecutive checkpoint clean**).  Cp46 asset-payload-precision-parity-smoke verified **3rd consecutive checkpoint clean** (57/57 PASS including 4 ETH-specific from cp47).  Cp48 fix permanently closes the recurring stand-in trap — even if a future contributor swaps to a real ticker by accident, the meta-assertion catches it at smoke-run time.  This is now the 3rd structural-defense in Morphit (cp44 LL #52, cp46 asset-payload-precision-parity, cp48 stand-in meta-assertion).  Two parked external-blockers unchanged.  Smoke runners 166 (unchanged).  Standalone smokes PASS 37/37 (unchanged).  Locale parity 28,050 (unchanged).  FAQ 122 / ADR 34 / Brag 287 (unchanged).  Structural defenses operational: 3 (was 2; +cp48-O1).)

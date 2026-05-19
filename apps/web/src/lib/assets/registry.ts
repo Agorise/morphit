@@ -281,6 +281,14 @@ const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const validateEth: AddressValidator = (s) => ETH_RE.test(s);
 
+// XRP address regex (cp49 — Part 122).  XRPL addresses start with
+// 'r' followed by 24-34 base58 chars.  DESTINATION TAGS ride
+// separately in URI `?dt=N` (NOT in the regex).  RESERVE
+// REQUIREMENT: XRPL accounts need ≥1 XRP base reserve to exist.
+const XRP_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
+
+const validateXrp: AddressValidator = (s) => XRP_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -737,6 +745,25 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// Ethereum is decentralized via Proof-of-Stake (post-
 		// Merge, September 2022).  No central freeze authority.
 		// Transparent base layer; no warning chip needed.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'xrp',
+		displayTicker: 'XRP',
+		displayName: 'Ripple (XRP)',
+		oneLineDescription:
+			'Ripple (XRP) — Federated Byzantine Agreement cryptocurrency.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-xrp.svg',
+		accentClass: 'text-cyan-600',
+		decimals: 6,
+		supportsMemo: false,
+		addressValidator: validateXrp,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Native XRP cannot be frozen by any central authority
+		// (freeze flag applies only to issued tokens/IOUs).
 		privacyWarningKey: null
 	}
 ] as const;

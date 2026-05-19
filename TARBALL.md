@@ -1,3 +1,25 @@
+# Tarball history
+
+## cp49 — Ripple (XRP) addition + 94-task deep-deep + cp49-O2 structural defense (2026-05-19)
+
+**Tarball:** `morphit-audit-2026-05-122-cp49-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,819 × 10 = 28,190 · 39/39 standalone smokes PASS · 7/7 workspaces TS-clean · STRIDE 1,945 lines · address-shape-overlap 87 entries · 7 jitter functions (+jitterXrpAmount) · 4 structural defenses operational · mediakit 45,769 B.
+
+**Wiring:** 22-phase XRP template (canonical + frontend registries, NEW jitterXrpAmount 6-decimal drops, ripple: URI with ?dt=N destination tag support, 4 wire-format gates atomically widened, 4 wire-format surfaces extended, ops-cli wizard, 7 docs + 18 module-doc patches, ADR-0036, brag #288, FAQ what_is_xrp, privacy guide xrp × 10 locales).
+
+**Deep-deep findings closed inline:**
+- A-1 HIGH: 'xrp' short ticker missing from high-value-name registry.
+- A-2 CRITICAL: cp47-A1 recurring class still recurring — vitest tests broken silently since cp47 because cp48-O1 structural defense scope didn't include vitest. Fixed inline + cp49-O2 structural defense added.
+- J-1 LOW: symmetric test gap in highValueName.test.ts (sibling LL #38).
+
+**Structural defenses operational: 4** (was 3 at cp48). New cp49-O2 `handler-test-stand-in-meta-assertion-smoke` walks all 60 vitest test files repo-wide and detects any real-ticker stand-in in `asset_invalid`/`unknown asset` context. M-111 mutation verified.
+
+**Universal no-favoritism (cp39 ADR-0031 §5):** 6th consecutive checkpoint clean. XRP framed factually as FBA chain on XRPL with documented UNL composition + destination tag UX + reserve requirement.
+
+**LL #52:** 7/7 workspaces TS-clean, 6th consecutive checkpoint.
+
+---
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 48 — Full 94-task deep-deep + security audit on cp47 ETH work + the entire 15-asset registry surfacing **1 NEW structural-defense closure** (cp48-O-1 closes Ken's cp47-A1 recurring "unknown stand-in becomes valid" bug class permanently) + **2 LOW docblock-drift findings closed inline** + **5 mutation tests**.  37 of 37 standalone-runnable smokes PASS (unchanged from cp47).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified **5th consecutive checkpoint**).  Cp46 asset-payload-precision-parity-smoke verified 3rd consecutive checkpoint clean (57/57 scenarios PASS including the 4 ETH-specific from cp47).  Cp42 address-shape-overlap-smoke holds at 81 entries (no drift).  Cp42 asset-accent-class-uniqueness-smoke holds (text-indigo-500 distinct from all 14 others).  Cp48 finding L-1 LOW: network-icon-coverage-smoke docblock said "10 asset icons" but cp47 has 15 (stale by 5 — DOGE/ZEC/ARRR/DCR/SOL/ETH all added since cp32 without updating).  Cp48 finding L-2 LOW: amount-jitter-utxo-smoke docblock said "all 12 tradable assets" but cp47 has 15 (stale by 3 — cp43/cp45/cp47 didn't refresh).  Cp48 finding O-1 STRUCTURAL CLOSURE: indexer asset-registry-smoke now uses synthetic non-ticker `'__unknown__'` (underscores reject from canonical regex → mathematically cannot become valid) + meta-assertion `ASSET_TICKERS_SET.has(UNKNOWN_STANDIN.toUpperCase())` at smoke top.  Closes the cp33/cp39/cp47 recurring trap permanently — even if a future contributor swaps the stand-in to a real ticker by accident, the meta-assertion catches it at smoke-run time.)
 
 CP48 SCOPE:

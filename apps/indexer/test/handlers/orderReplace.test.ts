@@ -151,11 +151,15 @@ describe('orderReplace handler', () => {
 
 	it('validates payload before touching the DB', async () => {
 		// Malformed payload should short-circuit before the SELECT.
+		// Part 122 cp49 deep-deep A-2: synthetic non-ticker
+		// '__UNKNOWN__' (formerly 'ETH').  See order.test.ts for
+		// rationale on why we don't hard-code a real ticker as
+		// the unknown stand-in.
 		const mock = makeMockClient();
 		const r = await handler(
 			makeCtx({
 				signer: 'alice',
-				payload: { ...validPayload(), asset: 'ETH' }
+				payload: { ...validPayload(), asset: '__UNKNOWN__' }
 			}),
 			mock.client
 		);

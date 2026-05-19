@@ -247,6 +247,7 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  DCR chat-link URL:    ${answers.chatLinkExplorers.dcr}`);
 	console.log(`  SOL chat-link URL:    ${answers.chatLinkExplorers.sol}`);
 	console.log(`  ETH chat-link URL:    ${answers.chatLinkExplorers.eth}`);
+	console.log(`  XRP chat-link URL:    ${answers.chatLinkExplorers.xrp}`);
 	// Part 122 cp30-DD — multi-network chat-link URLs.  Each
 	// asset spans 4 chains; summarize as "all defaults" if every
 	// URL matches its bundled default, otherwise "customized".

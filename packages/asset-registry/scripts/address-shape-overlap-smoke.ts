@@ -61,7 +61,8 @@ const SPECIMENS: Record<string, string[]> = {
 	ARRR: ['zs1' + 'q'.repeat(75)],
 	DCR: ['Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d', 'DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N'],
 	SOL: ['So11111111111111111111111111111111111111112', '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM'],
-	ETH: ['0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', '0x742d35Cc6634C0532925a3b844Bc454e4438f44e']
+	ETH: ['0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'],
+	XRP: ['rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh', 'rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv']
 };
 
 // Documented intentional overlaps as (A_owner, addr_class, B_acceptors).
@@ -141,6 +142,12 @@ const EXPECTED_OVERLAPS: Set<string> = new Set([
 	'USDT-Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB->USDC',
 	'USDT-TRwBdHwgaTtSGyhz8XmFmcv8VspbXP7AwL->SOL',
 	'USDT-TRwBdHwgaTtSGyhz8XmFmcv8VspbXP7AwL->USDC',
+	'XRP-rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv->SOL',
+	'XRP-rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv->USDC',
+	'XRP-rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv->USDT',
+	'XRP-rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh->SOL',
+	'XRP-rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh->USDC',
+	'XRP-rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh->USDT',
 	'ZEC-t1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA->SOL',
 	'ZEC-t1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA->USDC',
 	'ZEC-t1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA->USDT',

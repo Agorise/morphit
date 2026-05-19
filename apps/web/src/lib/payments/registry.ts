@@ -327,6 +327,16 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'ETH'
 	},
+	{
+		// Part 122 cp49 — Ripple as a payment method.  Cp32 LL #36
+		// invariant: every tradable asset MUST also be wired as a
+		// payment rail.
+		key: 'pay_xrp',
+		name: 'Ripple (XRP)',
+		url: 'https://xrpl.org',
+		category: 'crypto',
+		assetExclusion: 'XRP'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

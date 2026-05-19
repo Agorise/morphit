@@ -40,6 +40,10 @@ describe('classifyHighValueName', () => {
 		it('flags crypto-tier vocabulary', () => {
 			expect(classifyHighValueName('bitcoin')).toBe('dictionary_brand');
 			expect(classifyHighValueName('ethereum')).toBe('dictionary_brand');
+			// Part 122 cp49 deep-deep J-1: symmetric coverage for
+			// 'ripple' + 'xrp' (cp49 high-value-name additions).
+			expect(classifyHighValueName('ripple')).toBe('dictionary_brand');
+			expect(classifyHighValueName('xrp')).toBe('dictionary_brand');
 			expect(classifyHighValueName('monero')).toBe('dictionary_brand');
 		});
 		it('does not flag a similar-but-different name', () => {

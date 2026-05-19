@@ -500,7 +500,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		`MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.arrr)}`,
 		`MORPHIT_FRONTEND_DCR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dcr)}`,
 		`MORPHIT_FRONTEND_SOL_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.sol)}`,
-		`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.eth)}`
+		`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.eth)}`,
+		`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xrp)}`
 	);
 	// Part 122 cp30-DD-11 — USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's
