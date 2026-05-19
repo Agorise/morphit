@@ -791,7 +791,7 @@
 			},
 			"trade_goods_services": {
 				"q": "آیا می‌توانم در Morphit کالا یا خدمات معامله کنم، مثل درختان میوه یا صفحه‌های وینیل؟",
-				"a": "بله — با شکل خاصی. مدل سفارش همیشه **یک دارایی قابل معامله (BTC، XMR، BLURT، USDT، USDC، BCH، LTC یا DASH) در یک طرف، و چیز دیگری در طرف دیگر** است. «چیز دیگر» می‌تواند یک ارز فیات، یک رمزارز دیگر، یا از طریق روش پرداخت `Barter (goods)` کالا/خدمات باشد. برای درختان پرتقال در ازای XMR: `asset=XMR`، `payment_methods=[Barter (goods)]` پست کنید و جزئیات را در فیلد `terms` بنویسید. تهاتر خالص (کالا در ازای کالا بدون کریپتو) قابل مدل‌سازی نیست — یک طرف باید همیشه BTC، XMR، BLURT، USDT، USDC، BCH، LTC یا DASH باشد. توضیح کامل در FAQ انگلیسی."
+				"a": "بله — با شکل خاصی. مدل سفارش همیشه **یک دارایی قابل معامله (BTC، XMR، BLURT، USDT، USDC، DAI، BCH، LTC، DASH یا DOGE) در یک طرف، و چیز دیگری در طرف دیگر** است. «چیز دیگر» می‌تواند یک ارز فیات، یک رمزارز دیگر، یا از طریق روش پرداخت `Barter (goods)` کالا/خدمات باشد. برای درختان پرتقال در ازای XMR: `asset=XMR`، `payment_methods=[Barter (goods)]` پست کنید و جزئیات را در فیلد `terms` بنویسید. تهاتر خالص (کالا در ازای کالا بدون کریپتو) قابل مدل‌سازی نیست — یک طرف باید همیشه BTC، XMR، BLURT، USDT، USDC، BCH، LTC یا DASH باشد. توضیح کامل در FAQ انگلیسی."
 			},
 			"order_timeouts": {
 				"q": "سفارش‌ها چقدر باز می‌مانند؟",
@@ -887,7 +887,7 @@
 			},
 			"where_to_buy_blurt": {
 				"q": "BLURT را برای استفاده به عنوان کارمزد شبکه از کجا بخرم؟",
-				"a": "**در خود Morphit بخر — این کل هدف است.** Morphit یک بازار همتا-به-همتا است؛ BLURT یکی از هفت دارایی است که در اینجا معامله می‌شود، در کنار BTC، XMR، USDT، USDC، BCH، LTC و DASH. به /orderbook برو، سفارش‌های فروش BLURT را فیلتر کن، و به یک طرف معامله پیام بده. تو با هر روش فیات که می‌پذیرد به او پرداخت می‌کنی؛ او BLURT را به حساب Blurt تو می‌فرستد. تمام.\n\n**اولین سفارش تو رایگان است.** کاربران جدید یک معافیت یکباره دریافت می‌کنند که کارمزد فهرست‌سازی اولین خرید BLURT را پوشش می‌دهد. پس اولین خرید BLURT تو می‌تواند اولین معامله‌ات در Morphit نیز باشد، بدون حساب صرافی، بدون کارت، بدون KYC. معافیت به طور خودکار ارائه می‌شود.\n\n**جایگزین آخرین چاره:** اگر واقعاً نمی‌توانی در کتاب سفارش Morphit طرف معامله‌ای پیدا کنی (در برخی مناطق کتاب کوچک است)، Klingex.io یک جفت معاملاتی BLURT/USDT را به عنوان پشتیبان متمرکز اجرا می‌کند. ما برای کامل بودن آن را ذکر می‌کنیم اما به عنوان گزینه اضطراری در نظر می‌گیریم — هر BLURT خریداری شده از طریق Klingex معامله‌ای است که Morphit دریافت نکرد، و هدف پروژه رشد کتاب همتا-به-همتا است، نه فرستادن کاربران به جای دیگر. اگر این مسیر را بروی، صفحه معاملات https://klingex.io/trade/BLURT-USDT است — باید USDT واریز کنی تا با BLURT تعویض کنی. بلافاصله به کیف‌پول Blurt خودت برداشت کن.\n\n**وقتی BLURT در کیف‌پولت داشتی**، پرداخت کارمزد فهرست‌سازی Morphit خودکار است — \"پرداخت با BLURT\" را انتخاب کن."
+				"a": "**در خود Morphit بخر — این کل هدف است.** Morphit یک بازار همتا-به-همتا است؛ BLURT یکی از ده دارایی است که در اینجا معامله می‌شود، در کنار BTC، XMR، USDT، USDC، DAI، BCH، LTC، DASH و DOGE. به /orderbook برو، سفارش‌های فروش BLURT را فیلتر کن، و به یک طرف معامله پیام بده. تو با هر روش فیات که می‌پذیرد به او پرداخت می‌کنی؛ او BLURT را به حساب Blurt تو می‌فرستد. تمام.\n\n**اولین سفارش تو رایگان است.** کاربران جدید یک معافیت یکباره دریافت می‌کنند که کارمزد فهرست‌سازی اولین خرید BLURT را پوشش می‌دهد. پس اولین خرید BLURT تو می‌تواند اولین معامله‌ات در Morphit نیز باشد، بدون حساب صرافی، بدون کارت، بدون KYC. معافیت به طور خودکار ارائه می‌شود.\n\n**جایگزین آخرین چاره:** اگر واقعاً نمی‌توانی در کتاب سفارش Morphit طرف معامله‌ای پیدا کنی (در برخی مناطق کتاب کوچک است)، Klingex.io یک جفت معاملاتی BLURT/USDT را به عنوان پشتیبان متمرکز اجرا می‌کند. ما برای کامل بودن آن را ذکر می‌کنیم اما به عنوان گزینه اضطراری در نظر می‌گیریم — هر BLURT خریداری شده از طریق Klingex معامله‌ای است که Morphit دریافت نکرد، و هدف پروژه رشد کتاب همتا-به-همتا است، نه فرستادن کاربران به جای دیگر. اگر این مسیر را بروی، صفحه معاملات https://klingex.io/trade/BLURT-USDT است — باید USDT واریز کنی تا با BLURT تعویض کنی. بلافاصله به کیف‌پول Blurt خودت برداشت کن.\n\n**وقتی BLURT در کیف‌پولت داشتی**، پرداخت کارمزد فهرست‌سازی Morphit خودکار است — \"پرداخت با BLURT\" را انتخاب کن."
 			},
 			"first_order_free": {
 				"q": "آیا اولین سفارش من واقعاً رایگان است؟",
@@ -1216,6 +1216,10 @@
 			"arbitrage_morphit_vs_exchanges": {
 				"q": "آربیتراژ بین Morphit و صرافی‌های متمرکز/غیرمتمرکز چگونه کار می‌کند؟",
 				"a": "Morphit طوری ساخته شده که آربیتراژ آسان باشد. کارمزدهای ثبت آگهی کسری از یک دلار است، کارمزد تیکر وجود ندارد، کارمزد برداشت روی خود معامله وجود ندارد، محدودیت برداشت وجود ندارد و دوره انتظار وجود ندارد. معامله‌گری که شکاف قیمتی بین بازار P2P Morphit و یک CEX (کوین‌بیس، کراکن، بایننس) یا DEX (یونی‌سواپ، THORChain) می‌بیند، می‌تواند یک سفارش Morphit با اسپرد نازک در هر دو طرف ثبت کند و اجازه دهد دفتر سفارش پر شود. انتخابگر مدل قیمت اجازه می‌دهد `spread: 0.5%` را نسبت به قیمت میانگین زنده CoinGecko پین کنید تا سفارش شما به‌طور خودکار از بازار پیروی کند — بدون قیمت‌گذاری مجدد دستی هنگام حرکت قیمت جهانی. هرچه معامله‌گران بیشتری از Morphit استفاده کنند، آربیتراژورها به‌طور طبیعی قیمت‌های P2P را با بازار گسترده‌تر هماهنگ می‌کنند، که برای همه خوب است: اسپردهای محکم‌تر، پر شدن بهتر، اجرای قابل پیش‌بینی‌تر. چند نکته عملی: تسویه به ازای معامله در Morphit آن چیزی است که شما از آن می‌سازید — کیف پول به کیف پول مستقیم برای جفت‌های کریپتو-vs-کریپتو (XMR در ازای USDT، BTC در ازای USDT) یا از طریق ریل بانکی/فیات مورد نظر شما برای کریپتو-vs-فیات. برای آربیتراژ با فرکانس بالا، ساختار کارمزد Sybil-tier هزینه ثبت آگهی را افزایش می‌دهد اگر سفارش‌های زیادی را سریع از یک حساب ثبت کنید؛ این زیرساخت ضد اسپم است، نه ضد آربیتراژ — اکثر آربیتراژورها یک حساب در هر جهت اجرا می‌کنند و هرگز به آستانه tier-2 نمی‌رسند."
+			},
+			"what_is_doge": {
+				"q": "What is DOGE on Morphit?",
+				"a": "DOGE is Dogecoin — a proof-of-work chain launched in 2013 as a fair-launched fork of Lucky Coin (itself a Litecoin fork). It's transparent at the base layer like Bitcoin: every transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze your addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.\n\nOn Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, but you can't pay Morphit's listing fees in DOGE (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE), so the rule is uniform.\n\n**Privacy posture**: DOGE has no native privacy upgrade. No PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish links to its on-chain history forever. Use a fresh HD-derived address per trade (your wallet usually does this automatically). For Morphit's strongest privacy posture, use XMR.\n\n**Address formats**: D… (P2PKH, most common), 9… or A… (P2SH, multi-sig, rare on DOGE). No bech32 — Dogecoin Core has not activated segwit.\n\n**Wallets that work well**: Dogecoin Core (official, full node), MyDoge, Trezor + Ledger (hardware), Electrum-DOGE for desktop."
 			}
 		},
 		"related_label": "مرتبط",
@@ -1580,7 +1584,8 @@
 				"ltc": "لایت‌کوین (LTC). فورک بیت‌کوین در ۲۰۱۱ با بلوک‌های سریع‌تر (۲٫۵ دقیقه) و استخراج Scrypt. شفاف مانند بیت‌کوین — هر تراکنش به‌طور عمومی روی زنجیره قابل مشاهده است. بدون صادرکننده مرکزی؛ هیچ‌کس نمی‌تواند آدرس‌های شما را مسدود کند.",
 				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy.",
 				"usdc": "USD Coin (USDC) — a stablecoin pegged 1:1 to USD, issued by Circle. Centrally controlled — Circle can freeze any address. Trade-only on Morphit: cannot pay listing fees.",
-				"dai": "DAI is a USD-pegged stablecoin by MakerDAO.  More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module.  Trade-only on Morphit."
+				"dai": "DAI is a USD-pegged stablecoin by MakerDAO.  More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module.  Trade-only on Morphit.",
+				"doge": "Dogecoin (DOGE). Launched 2013 as a fair-launch fork of Lucky Coin (itself a Litecoin fork). Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Merge-mined with Litecoin since 2014 (auxiliary proof-of-work)."
 			},
 			"waiver_fiat_hint": "💡 BLURT در صرافی‌های متمرکز کم معامله می‌شود، بنابراین بیشتر معاملات BLURT-در-ازای-فیات در Morphit با کاربران فعال شبکه اجتماعی Blurt، اپراتورهای موجود، یا از طریق تهاتر انجام می‌شود. نکته: یک ارز فیات که شبکه محلی‌ات استفاده می‌کند انتخاب کن (USD، EUR، MXN و غیره)، یا روش پرداخت حضوری → تهاتر (کالا) در مرحله ۳ را بررسی کن اگر می‌خواهی چیز دیگری با ارزش پیشنهاد دهی. دفتر سفارشات فعلاً کوچک است — سفارش خرید تو به ساختن آن کمک می‌کند.",
 			"waiver_benefits_heading": "خرید تو چه چیزی را باز می‌کند:",
@@ -2374,7 +2379,11 @@
 			"method_dai": "DAI",
 			"address_invalid_dai": "Not a valid DAI address shape (expected EVM 0x[40 hex]).",
 			"address_placeholder_dai": "0x... (EVM-format DAI address)",
-			"pill_method_dai": "DAI {network}"
+			"pill_method_dai": "DAI {network}",
+			"method_doge": "Dogecoin",
+			"address_placeholder_doge": "D… 9… or A…",
+			"address_invalid_doge": "That doesn't look like a valid Dogecoin address.",
+			"pill_method_doge": "Dogecoin address"
 		},
 		"funds_sent": {
 			"button": "علامت‌گذاری وجوه ارسالی",
@@ -2422,7 +2431,8 @@
 			"txid_invalid_usdc": "This txid doesn't match the USDC network you picked. Cross-network txid mismatches usually mean the wrong chain was used for the send.",
 			"pill_title_usdc": "USDC sent",
 			"txid_invalid_dai": "Not a valid DAI txid shape (expected 64-hex with optional 0x prefix).",
-			"pill_title_dai": "DAI {network} payment sent"
+			"pill_title_dai": "DAI {network} payment sent",
+			"pill_title_doge": "Dogecoin sent"
 		},
 		"unknown_version": "این پیام از پروتکل جدیدتری استفاده می‌کند. برای خواندن آن، Morphit را به‌روزرسانی کنید.",
 		"pay_blurt": {
@@ -2987,6 +2997,9 @@
 		"pay_dash": {
 			"description": "Pay with Dash"
 		},
+		"pay_doge": {
+			"description": "Dogecoin: fair-launched 2013 PoW chain, transparent base layer, merge-mined with Litecoin."
+		},
 		"barter_goods": {
 			"description": "کالاها را مستقیم با دارایی مبادله کن — در فیلد شرایط سفارش بنویس چه ارائه می‌دهی یا می‌خواهی (مثلاً «درخت پرتقال»، «دوچرخه دست دوم»، «سیر خانگی»)."
 		},
@@ -3515,7 +3528,8 @@
 			"ltc": "LTC — لایت‌کوین، فورک سریع و کم‌هزینه بیت‌کوین (از ۲۰۱۱). فقط برای معامله در مورفیت. از کیف پول لایت‌کوین (Electrum-LTC، Litewallet، کیف پول‌های سخت‌افزاری) استفاده کنید؛ آدرس‌های …L قدیمی، …M P2SH مدرن، و …ltc1 SegWit را می‌پذیرد.",
 			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy.",
 			"usdc": "USD Coin stablecoin. Centralized — Circle can freeze any address. Trade-only.",
-			"dai": "DAI — MakerDAO USD-pegged stablecoin.  Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM).  Trade-only.  Partly USDC-backed."
+			"dai": "DAI — MakerDAO USD-pegged stablecoin.  Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM).  Trade-only.  Partly USDC-backed.",
+			"doge": "DOGE — Dogecoin, transparent proof-of-work chain (since 2013), merge-mined with Litecoin. Trade-only on Morphit. Use a Dogecoin wallet (Dogecoin Core, MyDoge, hardware wallets); accepts D… P2PKH and 9…/A… P2SH addresses. No native privacy upgrade — for maximum privacy on Morphit, use XMR instead."
 		},
 		"section_recovery": {
 			"heading": "اگر چیزی اشتباه پیش رفت",
@@ -3744,6 +3758,12 @@
 				"one_line": "DAI — USD-pegged stablecoin governed by MakerDAO.  No admin freeze on the token, but partly backed by USDC.",
 				"meta_description": "Honest privacy notes for trading DAI on Morphit: more decentralized than USDT/USDC at the contract level, partly backed by USDC via the Peg Stability Module.",
 				"intro": "DAI is MakerDAO's USD-pegged stablecoin, deployed on Ethereum and several other EVM chains.  It's the most-decentralized US-dollar-pegged asset Morphit supports — but \"decentralized\" doesn't mean \"freeze-immune\" or \"fully crypto-backed\" anymore.  This page is the honest picture so you can choose with eyes open."
+			},
+			"doge": {
+				"one_line": "Transparent base layer, decentralized via PoW, no native privacy upgrade.",
+				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
+				"meta_description": "Privacy practices for Dogecoin trades on Morphit: fresh addresses, avoiding chain heuristics, and what tradeoffs to expect.",
+				"caveats": "Dogecoin has no native privacy upgrade — no PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish on Morphit can be linked to its on-chain history forever. Use a fresh HD-derived address for every trade (your wallet usually does this automatically). For the strongest privacy on Morphit, use XMR instead — its anonymity is chain-level and mandatory rather than absent."
 			}
 		}
 	}

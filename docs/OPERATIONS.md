@@ -8033,11 +8033,11 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, Part 122 cp31 DAI, Part 122 cp33 DOGE, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH) and multi-network trade-only assets (USDT, USDC) and multi-network
+single-network trade-only assets (BCH, LTC, DASH, DOGE) and multi-network trade-only assets (USDT, USDC, DAI) and multi-network
 ones (USDT).
 
 ### How to set this (two paths)

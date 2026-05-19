@@ -278,7 +278,7 @@ file in the same turn.
       `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
       covers ~18 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
-      URLs (BTC + XMR + BCH + LTC + DASH; USDT and USDC have per-network explorers configured separately) with live health-checks,
+      URLs (BTC + XMR + BCH + LTC + DASH + DOGE; USDT, USDC, DAI have per-network explorers configured separately) with live health-checks,
       plus the trade-only asset policy step.  (Exact
       count drifts as we add operator-config surface;
       see `apps/ops-cli/src/init/steps.ts` for the
@@ -345,7 +345,7 @@ file in the same turn.
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
       stance.  The canonical morphit.io ships USDT, BCH, LTC,
-      AND DASH enabled by default; alternative instances may
+      AND DASH AND DOGE enabled by default; alternative instances may
       want to disable one or more instance-wide on
       philosophical (centralization, fork preference),
       regulatory, or audience-specialization grounds.

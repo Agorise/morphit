@@ -186,6 +186,22 @@ const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
 const DASH_TXID_RE = /^[0-9a-f]{64}$/;
 
 
+/** DOGE address (cp33 — Part 122).  Two formats:
+ *  - P2PKH (overwhelmingly common): `D` + 33 base58 chars
+ *    (version byte 0x1E).
+ *  - P2SH (multi-sig, rare on DOGE): `9` or `A` + 33 base58 chars
+ *    (version byte 0x16).
+ *  No bech32 — Dogecoin Core has not activated segwit as of
+ *  2026-05; the chain stayed on pre-segwit legacy semantics.
+ *  Permissive shape check — not a checksum (recipient wallet
+ *  does chain-binding on receive). */
+const DOGE_P2PKH_RE = /^D[1-9A-HJ-NP-Za-km-z]{33}$/;
+const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
+
+/** DOGE txid: 64 lowercase hex chars (sha256d, same as BTC family). */
+const DOGE_TXID_RE = /^[0-9a-f]{64}$/;
+
+
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
  *  account-name regex as the rest of Morphit (post chat-audit
@@ -466,7 +482,7 @@ export function jitterAmountForAsset(
 	base: string
 ): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash') {
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge') {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -559,7 +575,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -823,6 +839,23 @@ export function isValidDashTxid(s: string): boolean {
 	return DASH_TXID_RE.test(s);
 }
 
+/** Validate a DOGE address shape (cp33 — Part 122).  Accepts both
+ *  P2PKH (`D...`, 34 chars) and P2SH (`9.../A...`, 34 chars).
+ *  Permissive shape check; the receiving wallet does checksum
+ *  and chain-binding validation.  Dogecoin has no bech32/segwit
+ *  support as of 2026-05; only legacy base58 addresses exist. */
+export function isValidDogeAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
+}
+
+/** Validate a DOGE txid shape.  Same 64-char lowercase hex
+ *  format as the rest of the BTC family. */
+export function isValidDogeTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return DOGE_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -834,6 +867,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'bch') return isValidBchAddress(addr);
 	if (method === 'ltc') return isValidLtcAddress(addr);
 	if (method === 'dash') return isValidDashAddress(addr);
+	if (method === 'doge') return isValidDogeAddress(addr);
 	return false;
 }
 
@@ -849,6 +883,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'bch') return isValidBchTxid(txid);
 	if (method === 'ltc') return isValidLtcTxid(txid);
 	if (method === 'dash') return isValidDashTxid(txid);
+	if (method === 'doge') return isValidDogeTxid(txid);
 	return false;
 }
 
@@ -870,9 +905,11 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
 		p.method !== 'usdc' &&
+		p.method !== 'dai' &&
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
-		p.method !== 'dash'
+		p.method !== 'dash' &&
+		p.method !== 'doge'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1042,9 +1079,11 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'blurt' &&
 		p.method !== 'usdt' &&
 		p.method !== 'usdc' &&
+		p.method !== 'dai' &&
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
-		p.method !== 'dash'
+		p.method !== 'dash' &&
+		p.method !== 'doge'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1193,9 +1232,11 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
 			o.method !== 'usdc' &&
+			o.method !== 'dai' &&
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
-			o.method !== 'dash'
+			o.method !== 'dash' &&
+			o.method !== 'doge'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1219,9 +1260,11 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'blurt' &&
 			o.method !== 'usdt' &&
 			o.method !== 'usdc' &&
+			o.method !== 'dai' &&
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
-			o.method !== 'dash'
+			o.method !== 'dash' &&
+			o.method !== 'doge'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1611,6 +1654,23 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `dash:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'doge') {
+		// Dogecoin uses the `dogecoin:` URI scheme — BIP-21
+		// conformant (cp33 — Part 122).  Same shape as BTC's
+		// `bitcoin:` scheme; Dogecoin inherited Bitcoin's URI
+		// conventions from the 2013 Litecoin fork (which itself
+		// inherited from Bitcoin).  `amount` parameter is
+		// decimal DOGE, BIP-21 standard.  DOGE addresses are
+		// unambiguous within the URI scheme (D-prefix P2PKH and
+		// 9/A-prefix P2SH; no bech32-equivalent because segwit
+		// has never activated on Dogecoin).
+		// Reference: https://github.com/dogecoin/dogecoin (the
+		// `dogecoin:` URI is documented in Dogecoin Core
+		// wallet/qt source).
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `dogecoin:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

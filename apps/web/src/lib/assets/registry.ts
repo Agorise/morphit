@@ -195,6 +195,16 @@ const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
 const validateDash: AddressValidator = (s) =>
 	DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
 
+// DOGE address regex (cp33).  P2PKH starts with `D`, P2SH starts
+// with `9` or `A` (multi-sig variants).  No bech32 — Dogecoin
+// Core has not activated segwit as of 2026-05.  Length is 34
+// chars total (33 after the version-byte prefix).
+const DOGE_P2PKH_RE = /^D[1-9A-HJ-NP-Za-km-z]{33}$/;
+const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
+
+const validateDoge: AddressValidator = (s) =>
+	DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -294,7 +304,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateUsdc,
 		// MEMORY #23 INVARIANT: USDC cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/DAI/BCH/LTC/DASH.
+		// Trade-only Category B asset alongside USDT/DAI/BCH/LTC/DASH/DOGE.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC
@@ -343,7 +353,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateDai,
 		// MEMORY #23 INVARIANT: DAI cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH.
+		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH/DOGE.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20 (native), Polygon (PoS), Base,
@@ -456,6 +466,41 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// seeking strongest privacy posture should use XMR, and
 		// users who want transparent + opt-in mixing can pre-mix
 		// via PrivateSend before sharing the address on Morphit.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'doge',
+		displayTicker: 'DOGE',
+		displayName: 'Dogecoin',
+		oneLineDescription:
+			'Dogecoin — transparent PoW chain with fair launch, merge-mined with Litecoin since 2014.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-doge.svg',
+		// DOGE brand gold (#C2A633).  text-yellow-500 reads as
+		// Dogecoin gold without colliding with BCH lime-500, LTC
+		// slate-400, DASH sky-500, BTC amber-500, USDT amber-400,
+		// XMR orange-500, BLURT morphit-emerald, USDC blue-500,
+		// or DAI orange-500.
+		accentClass: 'text-yellow-500',
+		decimals: 8, // Same as BTC — shibatoshi == satoshi
+		supportsMemo: false, // DOGE transactions don't carry memos (same as BTC)
+		addressValidator: validateDoge,
+		// MEMORY #23 INVARIANT: DOGE cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.  Dogecoin has no L2
+		// with formal community endorsement.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// DOGE is transparent at the base layer (like BTC/BCH/LTC)
+		// and fully decentralized — no issuer can freeze
+		// addresses.  Same posture as BTC: no privacy warning chip.
+		// DOGE has no native privacy upgrade (no PrivateSend
+		// equivalent); users seeking strongest privacy posture
+		// should use XMR.  The chain's social posture — fair
+		// launch, no premine after the initial year, no
+		// foundation-controlled supply — gives it strong
+		// decentralization credentials.
 		privacyWarningKey: null
 	}
 ] as const;

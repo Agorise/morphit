@@ -238,7 +238,7 @@ This is what makes Morphit non-custodial:
   Wise, Cash App, etc.  Goes directly between the two parties.
   Morphit cannot see this, cannot intervene, cannot pause it.
 - **The crypto leg of the trade** (BTC, XMR, BLURT, USDT, USDC,
-  DAI, BCH, LTC, or DASH moving from seller's wallet to buyer's
+  DAI, BCH, LTC, DASH, or DOGE moving from seller's wallet to buyer's
   wallet): also direct.  Morphit doesn't proxy the transaction
   or see the keys.
 

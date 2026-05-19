@@ -492,7 +492,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		`MORPHIT_FRONTEND_LTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ltc)}`
 	);
 	lines.push(
-		`MORPHIT_FRONTEND_DASH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dash)}`
+		`MORPHIT_FRONTEND_DASH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dash)}`,
+		// Part 122 cp33 — DOGE single-network chat-link.
+		`MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.doge)}`
 	);
 	// Part 122 cp30-DD-11 — USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's

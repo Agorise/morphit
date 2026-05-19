@@ -1539,6 +1539,8 @@
 							<Tooltip textKey="post_order.form.asset_explainer.ltc" />
 						{:else if a === 'DASH'}
 							<Tooltip textKey="post_order.form.asset_explainer.dash" />
+						{:else if a === 'DOGE'}
+							<Tooltip textKey="post_order.form.asset_explainer.doge" faqKey="what_is_doge" />
 						{/if}
 					</div>
 				{/each}
