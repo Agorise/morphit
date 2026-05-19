@@ -84,12 +84,12 @@ scenario('registry source readable', () => {
 	}
 });
 
-scenario('at least 9 crypto + 3 in-person + 30 online payment methods (sanity)', () => {
-	// Currently shipped: 9 crypto (btc/xmr/blurt/usdt/usdc/dai/bch/ltc/dash)
+scenario('at least 10 crypto + 3 in-person + 30 online payment methods (sanity)', () => {
+	// Currently shipped: 10 crypto (btc/xmr/blurt/usdt/usdc/dai/bch/ltc/dash/doge)
 	// + 3 in-person (barter/cash/precious_metals) + ~30 online rails.
 	if (registryKeys.size < 40) {
 		throw new Error(
-			`expected ≥40 registry entries (cp32 baseline), found ${registryKeys.size}`
+			`expected ≥40 registry entries (cp33 baseline), found ${registryKeys.size}`
 		);
 	}
 });

@@ -101,11 +101,12 @@ interface ValidatedOrder {
 	 *  fee verifier to confirm the payment without holding the
 	 *  treasury's view key. */
 	readonly tx_proof: string | null;
-	/** Part 121 / cp30 — sub-network identifier for multi-network
-	 *  assets.  Non-null when asset is multi-network: for USDT
-	 *  one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
-	 *  'erc20'|'spl'|'base'|'polygon'.  Null for single-network
-	 *  assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pinned at post
+	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	 *  network assets.  Non-null when asset is multi-network: for
+	 *  USDT one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
+	 *  'erc20'|'spl'|'base'|'polygon'; for DAI one of 'erc20'|
+	 *  'polygon'|'base'|'arbitrum'.  Null for single-network assets
+	 *  (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE).  Pinned at post
 	 *  time so cross-network sends are impossible. */
 	readonly asset_network: string | null;
 }

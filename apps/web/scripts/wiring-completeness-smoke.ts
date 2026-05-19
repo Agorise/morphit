@@ -410,7 +410,7 @@ const CHECKS: readonly Check[] = [
 	{
 		id: 'cp30-dd-11-usdt-per-network-override-wired',
 		claim_source: 'brag_list',
-		claim_phrase: 'Tether (USDT) peer-to-peer across four networks',
+		claim_phrase: 'USDT (Tether) peer-to-peer across four networks',
 		anchor: {
 			kind: 'grep',
 			pattern: 'frontendUsdtErc20ChatLinkUrl',
@@ -512,6 +512,60 @@ const CHECKS: readonly Check[] = [
 			kind: 'grep',
 			pattern: 'BUNDLED_DOGE_CHAT_LINK_URL',
 			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
+	// Cp31 added DAI to the canonical registry + chat surfaces but
+	// MISSED the post page's DaiNetworkPicker mount + daiNetwork
+	// state.  DAI orders silently failed cp31→cp34 because the
+	// indexer requires asset_network for DAI and the form never
+	// supplied one.  This CHECK pins that DaiNetworkPicker is
+	// actually mounted in the post page; removing it again would
+	// reproduce the I-1 bug.
+	{
+		id: 'cp34-i1-dai-post-page-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dai (DAI) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: '<DaiNetworkPicker',
+			paths: ['apps/web/src/routes/[lang]/post/+page.svelte']
+		},
+		status: 'live'
+	},
+	// ─── cp34 I-3 closure — orderbook DAI network chip rendered ───────
+	// Cp30 (USDC) + cp31 (DAI) added the canonical registry entry +
+	// per-network address shapes but the orderbook page never
+	// rendered a network chip for non-USDT multi-network rows.  A
+	// USDC-ERC-20 order looked identical to USDC-Solana on the list;
+	// a DAI-ERC-20 looked identical to DAI-Arbitrum.  CP34 closure
+	// adds the chips with matching i18n keys.  This CHECK pins that
+	// the DAI chip is in place.
+	{
+		id: 'cp34-i3-orderbook-dai-chip-rendered',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dai (DAI) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'daiRowNetwork',
+			paths: ['apps/web/src/routes/[lang]/orderbook/+page.svelte']
+		},
+		status: 'live'
+	},
+	// ─── cp34 H-1 closure — cheat-sheet DAI + DOGE rows rendered ──────
+	// Cp31 (DAI) + cp33 (DOGE) added per-asset i18n strings under
+	// cheat_sheet.section_assets but the cheat-sheet page never
+	// rendered <dd> for those new assets.  Strings existed in 10
+	// locales but were orphaned.  CP34 closure adds both rows.
+	{
+		id: 'cp34-h1-cheat-sheet-doge-rendered',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dogecoin (DOGE) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'cheat_sheet.section_assets.doge',
+			paths: ['apps/web/src/routes/[lang]/cheat-sheet/+page.svelte']
 		},
 		status: 'live'
 	}

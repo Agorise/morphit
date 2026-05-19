@@ -137,7 +137,8 @@ export interface OrderRecord {
 	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.  For
 	 *  DAI: one of 'erc20'|'polygon'|'base'|'arbitrum' when
 	 *  `asset === 'DAI'`.  Null otherwise (pre-Part-121 rows and
-	 *  orders with single-network assets BTC/XMR/BLURT/BCH/LTC/DASH). */
+	 *  orders with single-network assets BTC/XMR/BLURT/BCH/LTC/DASH/
+	 *  DOGE). */
 	readonly asset_network?: string | null;
 	/** Number of feedback rows this account has received.
 	 *  Proxy for "completed trades." Zero on accounts with no

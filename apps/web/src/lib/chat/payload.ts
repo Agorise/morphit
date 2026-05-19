@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -597,7 +597,8 @@ export interface AddressPayload {
 	 *  'bep20'), when method === 'usdc' (one of 'erc20'|'spl'|
 	 *  'base'|'polygon'), and when method === 'dai' (one of
 	 *  'erc20'|'polygon'|'base'|'arbitrum').  Undefined for
-	 *  single-network assets (btc, xmr, blurt, bch, ltc, dash).
+	 *  single-network assets (btc, xmr, blurt, bch, ltc, dash,
+	 *  doge).
 	 *  Per Part 121/cp30/cp31: USDT, USDC, and DAI addresses on
 	 *  different network families have INCOMPATIBLE formats —
 	 *  sending USDT-ERC20 to a TRC-20 address loses funds; sending

@@ -1,4 +1,63 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 33 — Dogecoin (DOGE) addition as 10th tradable asset / 7th Category-B + BEP-20 network icon swap (Ken-supplied improved) + 94-task deep-deep yielding 5 HIGH-severity inline closures (CODE-3/4/5/6/7) + 6 drift closures + STRIDE refresh (+5 rows) + 1 new smoke + 3 pattern lessons (LL #38-40).  Per Ken's three asks: (1) swap improved BEP-20 icon; (2) add DOGE FULLY wired with "as many privacy things as we have done with the others" + Ken's 9-explorer survey; (3) full deep-deep on the cp33 work.
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 34 — meta-deep-deep on cp33's deep-deep, yielding 12+ findings closed inline including 1 CRITICAL preexisting from cp31 (DAI post-page never-wired), 1 HIGH preexisting from cp30/cp31 (orderbook page never rendered USDC/DAI network chips), 1 HIGH stale wiring-completeness smoke phrase, 1 MEDIUM cheat-sheet under-rendering of cp31/cp33 assets, 8+ docblock drifts, + 1 new defensive smoke + 3 new wiring-completeness CHECK rows + STRIDE refresh (+3 rows) + 3 LL pattern lessons (LL #41-43).
+
+CP34 SCOPE:
+
+**Meta-audit applying cp33 LL #38 to cp33's own work.**  Ken's prompt: "time for another 94-task deep deep on all that recent work. FULL security and code audits.  look for drift, gates and parities, unwired stuff, staleness and orphaned stuff in all files too."  This audit tests whether cp33's deep-deep (which found 5 HIGH-severity preexisting bugs CODE-3/4/5/6/7) had ITSELF missed sibling-file drift.  Per cp33 LL #38 the answer is: yes, in 6+ places.
+
+CRITICAL CP34 FINDING — I-1: **DAI ORDER POSTING WAS END-TO-END BROKEN cp31→cp34 (~1 day).**  Cp31 added DAI to the canonical registry, payment-method registry, chat surfaces, indexer order + replace handlers, indexer-client mirror, 10-locale i18n + privacy guides, AND shipped DaiNetworkPicker.svelte as a working component.  But the post page (`apps/web/src/routes/[lang]/post/+page.svelte`) was MISSED: no daiNetwork state variable, no canSubmit gate for DAI, no DaiNetworkPicker mount, no asset-change reset, no assetNetwork dispatch.  Result: DAI orders posted via the form went out without `asset_network` and the indexer rejected them with `'asset_network_required_for_dai'`.  None of cp31's deep-deep, cp32's deep-deep, or cp33's deep-deep caught this — all three audited the files-changed-this-cp, not sibling routes that DEPEND ON the new infrastructure.  Severity demoted to LOW post-closure since Morphit is pre-launch (Memory #6) so production-user impact is zero — but cp31-cp34 demonstrates the SIBLING-ROUTE-DRIFT class.  CP34 LL #41 codifies this.
+
+CP34 FINDINGS BY CATEGORY:
+
+**A — Static code / Docblock parity:**
+- A-1 (LOW): ListingFeeAddressPanel.svelte ChatAssetTicker docblock stale since cp24 (missing LTC/DASH/USDC/DAI/DOGE).
+- A-2 (LOW): payment-method-i18n-parity-smoke comment bumped "9 crypto" → "10 crypto".
+- A-3 (LOW): payload.ts:600 single-network asset docblock missing DOGE.
+
+**H — Frontend rendering:**
+- H-1 (MEDIUM): cheat-sheet page rendered asset roster missing DAI row (cp31 drift) AND DOGE row (cp33 drift).  Strings existed in 10 locales but the page had no `<dd>` rendering them.  Closed.
+
+**I — Wire-format / Schema parity:**
+- I-1 (CRITICAL → LOW): DAI post-page never wired (described above).
+- I-2 (LOW): orders/payload.ts asset_network docblock missing DAI/DOGE.
+- I-3 (HIGH): orderbook page missing USDC + DAI network chips (cp30 + cp31 drift).  Closed: usdcRowNetwork + daiRowNetwork derivations + sky-blue (Circle) and yellow (MakerDAO) chip styles + locale-aware network-hint tooltips.
+
+**J — Build/CI:**
+- J-1 (HIGH): wiring-completeness smoke phrase "Tether (USDT) peer-to-peer" stale vs actual brag "USDT (Tether) peer-to-peer".  Smoke silently failing on the missing-claim assertion.  Closed by aligning smoke claim_phrase to brag.
+
+**K — Threat modeling / Defensive smokes:**
+- K-1: NEW DEFENSIVE SMOKE `chat-asset-ticker-narrow-union-parity-smoke.ts` (126 lines, tamper-tested, registered in run-smokes.sh).  Scans all .ts/.svelte under apps/web/src for narrow ChatAssetTicker unions; asserts each covers the canonical 10-asset set OR matches a documented NARROW_BY_DESIGN allow-list entry (fee_method, ListingFeeAddressPanel, urls.ts instanceTplKey, non-BLURT chat-mark-sent).  Would have caught cp33 CODE-6 (4 narrow type-union sites missing DAI).
+
+**L — Per-subsystem docblock drift (8 sites):**
+- L-1 indexer-client docblock single-network list missing DOGE.
+- L-2 ConversationView Q5 docblock missing DOGE.
+- L-3 networks.ts header "USDT and USDC" missing DAI.
+- L-4 order.ts asset_network docblock missing DAI/DOGE.
+- L-5 networks.ts module-doc missing DAI.
+- L-6 (bulk) 9 doc sites — payload.ts header, post page Tooltip docblock, API.md filter list + 3 sample volume rows, OPERATIONS.md disabled-asset variant, GRANDMA-FRIENDLY tooltip + cheat-sheet narrative paragraphs — all extended for DAI+DOGE.
+
+CP34 NEW INFRASTRUCTURE:
+
+- 1 new defensive smoke (chat-asset-ticker-narrow-union-parity-smoke.ts).
+- 3 new wiring-completeness CHECK rows (35 → 38):
+  - cp34-i1-dai-post-page-wired (anchors `<DaiNetworkPicker` in post page source)
+  - cp34-i3-orderbook-dai-chip-rendered (anchors `daiRowNetwork` derivation)
+  - cp34-h1-cheat-sheet-doge-rendered (anchors `cheat_sheet.section_assets.doge` consumer)
+
+CP34 PATTERN LESSONS (LL #41-43):
+
+- **LL #41**: Asset-addition deep-deep must walk SIBLING ROUTES, not just sibling files.  Sibling routes that mount components depending on multi-network asset infrastructure can be incomplete for the new asset even when their direct file-level siblings are fine.
+- **LL #42**: Wiring-completeness CHECK rows must anchor on EXACT brag-list strings.  Smoke-vs-brag phrase drift silently regresses the smoke without regressing production.  Brag edits must update CHECK rows same-turn.
+- **LL #43**: Build a defensive smoke immediately after closing the bug class it would have caught.  Cp34's narrow-union-parity smoke at cp34 closes the cp33 CODE-6 class forever.
+
+CP34 TOTALS: 12+ findings closed inline + 1 new defensive smoke + 3 new wiring-completeness CHECK rows + STRIDE +3 rows + 3 LL pattern lessons.  Locale parity unchanged at 2,730 × 10 = 27,300.  FAQ 117.  ADR 30.  Brag 282 (cp34 closures were internal smoke + bug closures, no new user-facing wins per Memory #15).  All smokes green: 42 + 14 + 38 + new narrow-union-parity.  Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+PATTERN OUTCOME: cp34 confirms that RECURSIVE deep-deep iteration finds further bugs prior deep-deeps missed — each pass walks one more layer of sibling structure outward.  Cp33 found 5 HIGH bugs cp31/cp32 missed; cp34 found 1 CRITICAL (DAI post-page) + 1 HIGH (orderbook chips) + 1 HIGH (smoke phrase) + 1 MEDIUM (cheat-sheet) + 8 docblock drifts cp33 missed.  No reason to believe cp35 wouldn't find more.
+
+---
+
+### CP33 history (sealed 2026-05-19; preserved below for archaeology):
+
+# CP33 — Dogecoin (DOGE) addition as 10th tradable asset / 7th Category-B + BEP-20 network icon swap (Ken-supplied improved) + 94-task deep-deep yielding 5 HIGH-severity inline closures (CODE-3/4/5/6/7) + 6 drift closures + STRIDE refresh (+5 rows) + 1 new smoke + 3 pattern lessons (LL #38-40).  Per Ken's three asks: (1) swap improved BEP-20 icon; (2) add DOGE FULLY wired with "as many privacy things as we have done with the others" + Ken's 9-explorer survey; (3) full deep-deep on the cp33 work.
 
 CP33 SCOPE:
 

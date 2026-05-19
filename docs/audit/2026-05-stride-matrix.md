@@ -1618,3 +1618,124 @@ strengthening the "same-turn discipline" lessons LL #35/#36/#37
 from cp32 with mechanical enforcement (a new smoke or extension
 of an existing one) for narrow-union-literal parity.  This is
 the cp33 LL #38 candidate.
+
+---
+
+## CP34 STRIDE refresh (2026-05-19)
+
+Cp34 scope: 94-task deep-deep on cp33 work itself — meta-audit
+testing whether cp33's own deep-deep introduced or missed
+sibling-file drift.  Per cp33 LL #38 (asset-addition deep-deep
+must walk SIBLING files of every touched-file) — cp34 applies
+LL #38 to cp33's own work and finds the answer is "no, cp33's
+deep-deep missed the sibling-file pattern in 6+ places."
+
+### Spoofing — 0 rows
+No new spoofing surface in cp34.
+
+### Tampering — 2 rows
+
+**T-cp34-1 (CRITICAL → demoted to LOW post-closure).**  Per-asset
+network discriminator wiring class — cp31 added DAI to the
+canonical registry, payment-method registry, chat surfaces,
+indexer order/replace handlers, indexer-client mirror, and 10
+locales of i18n + privacy guides.  cp31 ALSO added a
+`DaiNetworkPicker.svelte` component.  But the post page
+(`apps/web/src/routes/[lang]/post/+page.svelte`) was MISSED:
+no daiNetwork state variable, no canSubmit gate for DAI,
+no DaiNetworkPicker mount, no asset-change reset, no
+assetNetwork dispatch.  Result: **DAI order posting was end-to-
+end broken cp31→cp34** — the form let users post DAI orders
+that arrived at the indexer without an `asset_network` field,
+which the indexer rejected with `'asset_network_required_for_dai'`.
+The user-facing UX was "click Post Order, see generic error,
+have no idea why."  **None of cp31's deep-deep, cp32's deep-
+deep, or cp33's deep-deep caught this** — all three audits
+focused on the component-files-changed-this-cp, not on the
+unchanged-but-now-incomplete sibling pages.  CP34 LL #41:
+"asset-addition deep-deep must walk SIBLING ROUTES too, not
+just sibling files."  Mitigation shipped: wiring-completeness
+CHECK row `cp34-i1-dai-post-page-wired` pins
+`<DaiNetworkPicker` in the post-page source forever.
+
+**T-cp34-2 (LOW).**  Same class as T-cp34-1 but smaller blast
+radius: the orderbook page never rendered network chips for
+USDC orders (cp30) or DAI orders (cp31).  USDC-ERC-20 and
+USDC-Solana looked visually identical on the orderbook list
+even though their address shapes are completely different;
+DAI-ERC-20 / DAI-Polygon / DAI-Base / DAI-Arbitrum all share
+the EVM 0x format and were indistinguishable.  Bug class is
+"discoverability friction" not "functionally broken" — buyers
+could still click into the order detail to see the network —
+but on the listing this is the worst cross-network-confusion
+surface in the app for DAI.  Mitigation shipped:
+wiring-completeness CHECK row `cp34-i3-orderbook-dai-chip-rendered`
+pins `daiRowNetwork` derivation in the orderbook page.
+
+### Repudiation — 0 rows
+No repudiation surface in cp34.
+
+### Information Disclosure — 1 row
+
+**I-cp34-1 (LOW).**  The cheat-sheet page rendered an asset-
+roster table missing DAI (cp31) and DOGE (cp33).  Information
+disclosure direction: the page UNDER-disclosed — users
+expecting a complete asset reference got an incomplete one,
+potentially missing that DAI/DOGE are supported and concluding
+"this platform doesn't trade those."  Closure: H-1.  Future
+mitigation already in place — wiring-completeness CHECK row
+`cp34-h1-cheat-sheet-doge-rendered`.
+
+### Denial of Service — 0 rows
+No DoS surface in cp34.
+
+### Elevation of Privilege — 0 rows
+No EoP surface in cp34.
+
+### Summary
+
+| Category | New rows | Pre-existing rows still in force |
+|----------|----------|----------------------------------|
+| Spoofing | 0 | S-cp33-1 + S-cp32-* + S-cp31-* + S-cp30-* + S1-S7 |
+| Tampering | 2 (T-cp34-1, T-cp34-2) | T-cp33-* + T-cp32-* + T-cp31-* + T-cp30-* + T1-T7 |
+| Repudiation | 0 | R-cp31-1 + R-cp30-1 + R1-R4 |
+| Information disclosure | 1 (I-cp34-1) | I-cp33-1 + I-cp32-* + I-cp31-* + I-cp30-* + I1-I8 |
+| Denial of service | 0 | D-cp33-1 + D-cp32-* + D-cp31-* + D-cp30-* + D1-D7 |
+| Elevation of privilege | 0 | E-cp31-* + E-cp30-* + E1-E4 |
+
+**Net new threats:** 3 across 2 categories.  One CRITICAL
+(T-cp34-1) demoted to LOW post-closure — the production-impact
+of a broken DAI form during the cp31→cp34 window is zero
+because Morphit is pre-launch (Memory #6).
+
+**Highest-impact lesson (T-cp34-1):**  Cp33 LL #38 said "walk
+SIBLING FILES."  Cp34 strengthens it to "walk SIBLING ROUTES
+too" — sibling routes that depend on a multi-network asset's
+infrastructure but weren't touched by the asset-addition turn
+remain at high risk for missed wiring.  Mitigation shipped:
+new defensive smoke
+`apps/web/scripts/chat-asset-ticker-narrow-union-parity-smoke.ts`
+mechanically enforces canonical ChatAssetTicker coverage across
+all narrow unions in apps/web/src — with a documented
+NARROW_BY_DESIGN allow-list for intentionally narrow surfaces
+(fee_method, listing-fee panel, single-network explorer
+template targets, non-BLURT chat-mark-sent).
+
+### CP34 LL #41-43 candidates (for AUDIT-2026-05.md cp34 entry)
+
+- **LL #41**: Asset-addition deep-deep must walk SIBLING ROUTES
+  too, not just sibling files.  Routes that mount components
+  depending on multi-network asset infrastructure may need
+  picker/state/gate/reset additions in the route file itself.
+- **LL #42**: Wiring-completeness CHECK rows must anchor on
+  exact strings appearing in the brag list.  Smoke-vs-brag
+  phrase drift (cp34 J-1) is a silent regression of the smoke,
+  not of the production code.  Brag list edits MUST grep the
+  wiring-completeness smoke source for the changed phrase and
+  update the CHECK row in the same turn.
+- **LL #43**: A defensive smoke is best built immediately after
+  closing the bug class it would have caught.  CP34's new
+  chat-asset-ticker-narrow-union-parity-smoke would have
+  caught cp33 CODE-6 (4 narrow type-union sites missing DAI).
+  Building it AT cp34 rather than at cp33+1 means future
+  asset additions can never regress the cp33 closure.

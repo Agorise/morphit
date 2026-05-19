@@ -38,7 +38,7 @@
 	import OrderExpiryChip from '$components/OrderExpiryChip.svelte';
 	import RatingChip from '$components/RatingChip.svelte';
 	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
-	import { isUsdtNetwork } from '$lib/assets/networks';
+	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
@@ -854,6 +854,14 @@
 						o.asset === 'USDT' && o.asset_network && isUsdtNetwork(o.asset_network)
 							? o.asset_network
 							: null}
+					{@const usdcRowNetwork =
+						o.asset === 'USDC' && o.asset_network && isUsdcNetwork(o.asset_network)
+							? o.asset_network
+							: null}
+					{@const daiRowNetwork =
+						o.asset === 'DAI' && o.asset_network && isDaiNetwork(o.asset_network)
+							? o.asset_network
+							: null}
 					<li
 						class="card-interactive animate-fade-up {accountIsHidden || accountIsBlocked
 							? 'opacity-50'
@@ -882,6 +890,42 @@
 											}) as string}
 										>
 											{$_(`assets.usdt.network.${usdtRowNetwork}.displayName`)}
+										</span>
+									{/if}
+									{#if usdcRowNetwork !== null}
+										<!-- Part 122 cp30 / cp34 closure — USDC
+										     network chip.  Same shape as USDT;
+										     three of USDC's four networks share
+										     EVM 0x format so chip disambiguates
+										     ERC-20/Base/Polygon on orderbook row.
+										     Sky-blue (Circle brand) so USDT/USDC
+										     are visually distinguishable. -->
+										<span
+											class="rounded-md border border-sky-400/30 bg-sky-400/5 px-2 py-0.5 text-xs font-semibold text-sky-300"
+											title={$_('assets.usdc.order_row.network_hint', {
+												values: {
+													network: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`)
+												}
+											}) as string}
+										>
+											{$_(`assets.usdc.network.${usdcRowNetwork}.displayName`)}
+										</span>
+									{/if}
+									{#if daiRowNetwork !== null}
+										<!-- Part 122 cp31 / cp34 closure — DAI
+										     network chip.  ALL FOUR DAI networks
+										     share EVM 0x format, so chip is the
+										     ONLY thing telling a reader which
+										     chain.  Yellow (MakerDAO brand). -->
+										<span
+											class="rounded-md border border-yellow-400/30 bg-yellow-400/5 px-2 py-0.5 text-xs font-semibold text-yellow-300"
+											title={$_('assets.dai.order_row.network_hint', {
+												values: {
+													network: $_(`assets.dai.network.${daiRowNetwork}.displayName`)
+												}
+											}) as string}
+										>
+											{$_(`assets.dai.network.${daiRowNetwork}.displayName`)}
 										</span>
 									{/if}
 									<span class="text-sm text-ink-600 dark:text-ink-300">
