@@ -141,8 +141,12 @@ for (const slug of [...networkSet].sort()) {
 
 // CP32 EXTENSION — also pin every per-asset icon at /icons/icon-<ticker>.svg.
 // Per-icon ceiling: 64 KB (asset icons may carry detailed brand
-// artwork — Shibu Inu DOGE etc).  Total budget for 10 asset icons
-// at present + headroom = 128 KB.
+// artwork — Shibu Inu DOGE etc).  Total budget for 15 asset icons
+// at present (cp47 — Part 122) + headroom = 128 KB.  Last verified
+// cp48 deep-deep finding L-1 (was "10 asset icons" stale since
+// cp32; asset additions at cp33 DOGE, cp39 ZEC, cp41 ARRR, cp43
+// DCR, cp45 SOL, cp47 ETH brought the total to 15 without
+// updating this comment).
 const ASSET_ICONS_DIR = resolve(REPO_ROOT, 'apps/web/static/icons');
 const PER_ASSET_ICON_BUDGET = TOTAL_ASSET_ICONS_BUDGET;
 
