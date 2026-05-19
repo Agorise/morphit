@@ -100,10 +100,12 @@
 
 	/** Payload for QrPanel.  AddressPayload's `method` accepts the
 	 *  full ChatAssetTicker union ('btc' | 'xmr' | 'blurt' | 'usdt'
-	 *  | 'bch') — but listing fees can only be paid in BTC/XMR/
-	 *  BLURT per the Memory #23 fee_method-frozen invariant.  We
-	 *  only ever produce method ∈ {'btc', 'xmr'} from this panel
-	 *  (BLURT goes through a separate Pay-Now flow). */
+	 *  | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' — see
+	 *  apps/web/src/lib/chat/payload.ts as the canonical source)
+	 *  — but listing fees can only be paid in BTC/XMR/BLURT per
+	 *  the Memory #23 fee_method-frozen invariant.  We only ever
+	 *  produce method ∈ {'btc', 'xmr'} from this panel (BLURT
+	 *  goes through a separate Pay-Now flow). */
 	const qrPayload = $derived.by((): AddressPayload | null => {
 		if (resolved === null) return null;
 		// AddressPayload has slightly more shape than we strictly

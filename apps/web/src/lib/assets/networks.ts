@@ -1,7 +1,7 @@
 /**
- * Per-network metadata for multi-network assets.  Today USDT
- * and USDC both exercise this surface (each is the same asset
- * on multiple underlying chains — same ticker, different
+ * Per-network metadata for multi-network assets.  Today USDT,
+ * USDC, and DAI all exercise this surface (each is the same
+ * asset on multiple underlying chains — same ticker, different
  * chains, INCOMPATIBLE address formats across chain families).
  *
  * Why a separate module:

@@ -46,7 +46,8 @@
 	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
-	import { type UsdtNetwork, type UsdcNetwork } from '$lib/assets/networks';
+	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
+	import { type UsdtNetwork, type UsdcNetwork, type DaiNetwork } from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import { getInstanceSnapshot } from '$lib/stores/instance';
 
@@ -98,6 +99,15 @@
 	// address shape — the picker is the only thing telling the
 	// sender's wallet which chain to broadcast on.
 	let usdcNetwork = $state<UsdcNetwork | null>(null);
+	// Part 122 cp31 — DAI network discriminator.  When asset=DAI
+	// the user MUST pick a network (ERC-20/Polygon/Base/Arbitrum)
+	// before the form can submit.  All four DAI networks share
+	// the EVM 0x[40 hex] address shape, so the picker is the only
+	// thing telling the sender's wallet which chain to broadcast
+	// on.  CP34 closure: this state + the gate + the reset + the
+	// dispatch + the picker render block were all MISSING since
+	// cp31 ship; DAI order posting was silently broken cp31→cp34.
+	let daiNetwork = $state<DaiNetwork | null>(null);
 
 	// ─── Form state (step 2) ───────────────────────────────────────
 	let fiat = $state('');
@@ -814,7 +824,8 @@
 		side !== null &&
 			asset !== null &&
 			(asset !== 'USDT' || usdtNetwork !== null) &&
-			(asset !== 'USDC' || usdcNetwork !== null)
+			(asset !== 'USDC' || usdcNetwork !== null) &&
+			(asset !== 'DAI' || daiNetwork !== null)
 	);
 
 	const fiatError = $derived.by(() => {
@@ -1085,16 +1096,25 @@
 			// Part 108++ — XMR per-payment proof.  Required for
 			// fee_method=xmr; ignored for everything else.
 			txProof: feeMethodChoice === 'xmr' ? txProof.trim() : undefined,
-			// Part 121 / cp30 — sub-network for multi-network assets.
-			// USDT and USDC both carry a network discriminator;
-			// single-network assets pass undefined and the payload
-			// builder omits the field.
+			// Part 121 / cp30 / cp31 — sub-network for multi-network
+			// assets.  USDT, USDC, and DAI all carry a network
+			// discriminator; single-network assets (BTC/XMR/BLURT/BCH/
+			// LTC/DASH/DOGE) pass undefined and the payload builder
+			// omits the field.  CP34 closure: cp31 added DAI to the
+			// registry + payment_method + chat surfaces but MISSED
+			// this assetNetwork dispatch — meaning DAI orders posted
+			// via the form went out without an asset_network field
+			// and the indexer's order handler rejected them with
+			// 'asset_network_required_for_dai'.  DAI order posting
+			// was silently broken cp31→cp34 (~1 day).
 			assetNetwork:
 				asset === 'USDT' && usdtNetwork !== null
 					? usdtNetwork
 					: asset === 'USDC' && usdcNetwork !== null
 						? usdcNetwork
-						: undefined,
+						: asset === 'DAI' && daiNetwork !== null
+							? daiNetwork
+							: undefined,
 			// REVISIT-LIST item 5 — pull the configured operator
 			// tag from the instance store (synchronous accessor;
 			// store hydrates on +layout mount, by the time the
@@ -1502,12 +1522,13 @@
 							title={disabled ? ($_('post_order.form.waiver_asset_locked_title') as string) : ''}
 							onclick={() => {
 								asset = a as Asset;
-								// Part 121 / cp30: reset network when leaving
-								// a multi-network asset, so a re-pick later
-								// forces a fresh explicit choice (no stale
-								// network value).
+								// Part 121 / cp30 / cp31: reset network when
+								// leaving a multi-network asset, so a re-pick
+								// later forces a fresh explicit choice (no
+								// stale network value).
 								if (a !== 'USDT') usdtNetwork = null;
 								if (a !== 'USDC') usdcNetwork = null;
+								if (a !== 'DAI') daiNetwork = null;
 							}}
 							class="rounded-xl border-2 px-4 py-2 font-mono font-semibold transition active:scale-[0.98] {asset ===
 							a
@@ -1550,7 +1571,7 @@
 			     Renders only when the chosen asset has a non-null
 			     privacyWarningKey in the canonical registry.  USDT
 			     and USDC are the two stablecoin assets that surface
-			     here; BTC/XMR/BLURT/BCH/LTC/DASH all carry null and
+			     here; BTC/XMR/BLURT/BCH/LTC/DASH/DOGE all carry null and
 			     skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
@@ -1570,6 +1591,23 @@
 				     is the only thing disambiguating which chain. -->
 				<div class="mt-3">
 					<UsdcNetworkPicker bind:network={usdcNetwork} />
+				</div>
+			{/if}
+			{#if asset === 'DAI'}
+				<PrivacyWarningChip privacyWarningKey="dai_partly_centralized" />
+				<!-- Part 122 cp31 — DAI 4 EVM networks (ERC-20 /
+				     Polygon / Base / Arbitrum).  ALL FOUR share the
+				     EVM 0x[40 hex] address format — DAI is the
+				     highest cross-network address-confusion surface
+				     on Morphit; picker is the only thing telling
+				     the sender's wallet which chain to broadcast
+				     on.  CP34 closure: this render block was
+				     MISSING since cp31 ship — DaiNetworkPicker
+				     existed in the components dir but was never
+				     mounted from the post page.  canSubmit gates
+				     on daiNetwork !== null above. -->
+				<div class="mt-3">
+					<DaiNetworkPicker bind:network={daiNetwork} />
 				</div>
 			{/if}
 		</section>

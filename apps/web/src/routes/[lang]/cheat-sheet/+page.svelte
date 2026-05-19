@@ -129,6 +129,10 @@
 				<dd>{$_('cheat_sheet.section_assets.usdc')}</dd>
 			</div>
 			<div class="cheat-row">
+				<dt>DAI</dt>
+				<dd>{$_('cheat_sheet.section_assets.dai')}</dd>
+			</div>
+			<div class="cheat-row">
 				<dt>BCH</dt>
 				<dd>{$_('cheat_sheet.section_assets.bch')}</dd>
 			</div>
@@ -139,6 +143,10 @@
 			<div class="cheat-row">
 				<dt>DASH</dt>
 				<dd>{$_('cheat_sheet.section_assets.dash')}</dd>
+			</div>
+			<div class="cheat-row">
+				<dt>DOGE</dt>
+				<dd>{$_('cheat_sheet.section_assets.doge')}</dd>
 			</div>
 		</dl>
 	</section>

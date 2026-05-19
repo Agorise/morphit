@@ -99,14 +99,16 @@ export interface OrderPayload {
 	 *  paid this address this amount" — nothing else about the
 	 *  user's wallet or other payments to the treasury. */
 	readonly tx_proof?: string;
-	/** Part 121 / cp30 — sub-network identifier for multi-network
-	 *  assets.  REQUIRED when asset === 'USDT' (one of 'erc20',
-	 *  'trc20', 'spl', 'bep20') OR when asset === 'USDC' (one of
-	 *  'erc20', 'spl', 'base', 'polygon').  Omitted for single-
-	 *  network assets (BTC, XMR, BLURT, BCH, LTC, DASH).  Pins the
-	 *  network on the order row so buyers know which chain to
-	 *  settle on; cross-network sends lose funds permanently and
-	 *  must be surfaced as a hint on the order row. */
+	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	 *  network assets.  REQUIRED when asset === 'USDT' (one of
+	 *  'erc20', 'trc20', 'spl', 'bep20'), when asset === 'USDC'
+	 *  (one of 'erc20', 'spl', 'base', 'polygon'), or when
+	 *  asset === 'DAI' (one of 'erc20', 'polygon', 'base',
+	 *  'arbitrum').  Omitted for single-network assets (BTC,
+	 *  XMR, BLURT, BCH, LTC, DASH, DOGE).  Pins the network on
+	 *  the order row so buyers know which chain to settle on;
+	 *  cross-network sends lose funds permanently and must be
+	 *  surfaced as a hint on the order row. */
 	readonly asset_network?: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When present,
 	 *  the indexer credits the operator who registered this tag
@@ -146,12 +148,14 @@ export interface OrderFormInput {
 	 *  this amount" — nothing else about the user's wallet,
 	 *  other treasury payments, or future inflows. */
 	readonly txProof?: string;
-	/** Part 121 / cp30 — sub-network identifier for multi-network
-	 *  assets.  REQUIRED when asset === 'USDT' or asset === 'USDC'.
-	 *  Omitted for single-network assets.  Form layer validates
-	 *  this is one of the asset-appropriate values (USDT:
-	 *  'erc20'|'trc20'|'spl'|'bep20'; USDC: 'erc20'|'spl'|'base'|
-	 *  'polygon') before invoking buildOrderPayload. */
+	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	 *  network assets.  REQUIRED when asset === 'USDT', asset ===
+	 *  'USDC', or asset === 'DAI'.  Omitted for single-network
+	 *  assets.  Form layer validates this is one of the asset-
+	 *  appropriate values (USDT: 'erc20'|'trc20'|'spl'|'bep20';
+	 *  USDC: 'erc20'|'spl'|'base'|'polygon'; DAI: 'erc20'|
+	 *  'polygon'|'base'|'arbitrum') before invoking
+	 *  buildOrderPayload. */
 	readonly assetNetwork?: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When non-empty,
 	 *  the post-order form passes this in.  Form layer reads it

@@ -8108,7 +8108,7 @@ MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 # Refuse all three Bitcoin-fork variants (BTC + XMR + BLURT only,
 # possibly with USDT)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH"
-# Refuse both stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH only)
+# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE only)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC"
 
 # Refuse everything that isn't BLURT + XMR + BTC

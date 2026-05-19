@@ -140,6 +140,7 @@ SMOKES=(
 	"apps/web:persona-walkthrough-smoke"
 	"apps/web:mediakit-freshness-smoke"
 	"apps/web:wiring-completeness-smoke"
+	"apps/web:chat-asset-ticker-narrow-union-parity-smoke"
 	"apps/web:network-icon-coverage-smoke"
 	"apps/web:payment-method-i18n-parity-smoke"
 	"apps/web:web-push-wiring-smoke"
