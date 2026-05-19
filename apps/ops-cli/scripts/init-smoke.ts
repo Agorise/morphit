@@ -177,6 +177,7 @@ const sampleAnswers: WizardAnswers = {
 		ltc: 'https://litecoinspace.org/tx/{txid}',
 		dash: 'https://insight.dash.org/insight/tx/{txid}',
 		doge: 'https://blockchair.com/dogecoin/transaction/{txid}',
+		zec: 'https://mainnet.zcashexplorer.app/transactions/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',
@@ -206,6 +207,13 @@ const sampleAnswers: WizardAnswers = {
 	seo: { title: null, description: null, keywords: null },
 	backup: { enabled: false, backupDir: null, retainDays: null },
 	operatorTag: { tag: 'morphit' },
+	// Part 122 cp39 — disabledAssets fixture field.  The sampleAnswers
+	// fixture had been missing `disabledAssets` since the wizard
+	// step was added in cp30; every writeWizardOutput-based scenario
+	// hit a TypeError until cp39 added it.  Empty list = baseline
+	// "accept all assets" instance.  Per-scenario overrides exercise
+	// the populated paths.
+	disabledAssets: { disabledTickers: [] },
 	// Part 121 cp9 — both Matrix surfaces opted-out in the
 	// baseline fixture.  Per-scenario overrides exercise the
 	// populated paths.

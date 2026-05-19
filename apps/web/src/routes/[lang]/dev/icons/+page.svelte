@@ -64,6 +64,7 @@
 		{ key: 'ltc', path: '/icons/icon-ltc.svg' },
 		{ key: 'dash', path: '/icons/icon-dash.svg' },
 		{ key: 'doge', path: '/icons/icon-doge.svg' },
+		{ key: 'zec', path: '/icons/icon-zec.svg' },
 		{ key: 'yubikey', path: '/icons/icon-yubikey.svg' }
 	] as const;
 

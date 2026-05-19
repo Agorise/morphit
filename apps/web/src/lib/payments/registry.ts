@@ -221,6 +221,28 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'DOGE'
 	},
+	{
+		// Part 122 cp39 — Zcash as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH/DOGE: when the trade's
+		// traded asset is ZEC, "pay with ZEC" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, ZEC appears as a selectable payment-rail chip.
+		// Single-network mainnet.  The `zcash:` URI (ZIP-321)
+		// handles all four address types: t1/t3 transparent
+		// (base58), zs1 Sapling shielded (bech32), u1 Unified
+		// Address (bech32m) — recipients pick the address type
+		// that matches their preferred privacy posture.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp39 ships ZEC with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE in cp33.
+		key: 'pay_zec',
+		name: 'Zcash (ZEC)',
+		url: 'https://z.cash',
+		category: 'crypto',
+		assetExclusion: 'ZEC'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

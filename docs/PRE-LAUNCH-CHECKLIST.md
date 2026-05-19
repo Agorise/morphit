@@ -278,7 +278,7 @@ file in the same turn.
       `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
       covers ~18 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
-      URLs (BTC + XMR + BCH + LTC + DASH + DOGE; USDT, USDC, DAI have per-network explorers configured separately) with live health-checks,
+      URLs (BTC + XMR + BCH + LTC + DASH + DOGE + ZEC; USDT, USDC, DAI have per-network explorers configured separately) with live health-checks,
       plus the trade-only asset policy step.  (Exact
       count drifts as we add operator-config surface;
       see `apps/ops-cli/src/init/steps.ts` for the
@@ -319,7 +319,7 @@ file in the same turn.
       the scenario count is a moving lower bound that ticks up
       as smokes are added each release; baseline-source-of-truth
       is the cp27 floor of 3,327, with cp30 USDC, cp31 DAI, cp32
-      icon-coverage + payment-method-i18n-parity, cp33 DOGE, and
+      icon-coverage + payment-method-i18n-parity, cp33 DOGE, cp39 ZEC, and
       cp34 narrow-union-parity adding scenarios on top.  The
       exact current total is whatever `run-smokes.sh` prints
       against the repo state you're running; what you're verifying
@@ -351,7 +351,7 @@ file in the same turn.
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
       stance.  The canonical morphit.io ships USDT, USDC, DAI,
-      BCH, LTC, DASH, and DOGE enabled by default; alternative
+      BCH, LTC, DASH, DOGE, and ZEC enabled by default; alternative
       instances may want to disable one or more instance-wide
       on philosophical (centralization, fork preference),
       regulatory, or audience-specialization grounds.
@@ -383,7 +383,7 @@ file in the same turn.
       8. Refuse DOGE — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"`.
       9. Refuse multiple —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE"`.
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see
@@ -395,12 +395,12 @@ file in the same turn.
       (default-on + operator override for new assets),
       ADR-0023 (USDT), ADR-0024 (BCH), ADR-0025 (LTC),
       ADR-0027 (DASH), ADR-0028 (USDC), ADR-0029 (DAI),
-      ADR-0030 (DOGE), and Part 122 cp22 (wizard step) explain
+      ADR-0030 (DOGE), ADR-0031 (ZEC), and Part 122 cp22 (wizard step) explain
       the design.  *(Origin: Part 121 cp3 USDT integration,
       Part 122 cp21 BCH integration, Part 122 cp22 wizard
       step, Part 122 cp24 LTC integration, Part 122 cp27 DASH
       integration, Part 122 cp30 USDC integration, Part 122
-      cp31 DAI integration, Part 122 cp33 DOGE integration.)*
+      cp31 DAI integration, Part 122 cp33 DOGE integration, Part 122 cp39 ZEC integration.)*
 
 - [ ] **[blocking]** Decide BCH chat-link explorer URL.
       Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`
@@ -437,6 +437,15 @@ file in the same turn.
       `https://dogechain.info/tx/{txid}`, or a self-hosted
       Iquidus instance).  *(Origin: Part 122 cp33 DOGE integration;
       ADR-0030.)*
+
+- [ ] **[blocking]** Decide ZEC chat-link explorer URL.
+      Override `MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL` if you prefer a
+      different default from the bundled `mainnet.zcashexplorer.app`.
+      Operator's 7-explorer survey at cp39 (mainnet.zcashexplorer.app,
+      blockchair.com/zcash, zcashinfo.com, 3xpl.com/zcash,
+      blockexplorer.one/zcash/mainnet, zcash.tokenview.io,
+      cipherscan.app) is documented in ADR-0031.  *(Origin: Part 122
+      cp39 ZEC integration; ADR-0031.)*
 
 - [ ] **[recommended, non-blocking]** **VAPID keypair for
       Web Push notifications** (Part 122 cp13).  Without

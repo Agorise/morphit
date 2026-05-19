@@ -4,7 +4,7 @@
  * Verifies:
  *   1. Category-B filter returns exactly the trade-only tickers
  *      from the canonical registry (currently USDT + USDC + DAI +
- *      BCH + LTC + DASH + DOGE).
+ *      BCH + LTC + DASH + DOGE + ZEC).
  *   2. `stepDisabledAssets()` returns a DisabledAssetsResult
  *      whose disabledTickers is empty when the operator says
  *      "enable everything" (default posture per Memory #25).
@@ -28,7 +28,7 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns USDT + USDC + DAI + BCH + LTC + DASH + DOGE from canonical registry',
+		name: 'Category-B filter returns USDT + USDC + DAI + BCH + LTC + DASH + DOGE + ZEC from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
 				(a) => a.ticker
@@ -41,7 +41,8 @@ const scenarios: Scenario[] = [
 				catB.includes('LTC') &&
 				catB.includes('DASH') &&
 				catB.includes('DOGE') &&
-				catB.length === 7
+				catB.includes('ZEC') &&
+				catB.length === 8
 			);
 		}
 	},

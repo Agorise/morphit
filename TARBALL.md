@@ -1,4 +1,111 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 38 — Verification-pass deep-deep on cp37 work yielding 1 LOW hygiene fix + comprehensive validation that cp37 is solid; 19 of 19 standalone-runnable smokes PASS (cp37 was 18 of 18 — the new native-translations-floor-smoke contributed +1 to the standalone runnable count); 3 LL #46-class mutation tests passed including a "going up doesn't trigger" no-false-positive check; pre-launch-checklist sweep confirms zero code-side items remain unchecked.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 39 — Zcash (ZEC) as 11th tradable asset, fully wired across canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0031 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + LL #48 + universal no-favoritism principle adopted at cp39 and applied across canonical/frontend registries + 4 privacy-guide leaves × 10 locales + DOGE smoke docblock + brag entry #282 + cheat-sheet section_assets × 7 locales + LTC/DASH/DOGE registry comments.  20 of 20 standalone-runnable smokes PASS including new zec-trade-only-smoke (13 scenarios); 2 mutation tests passed; pre-existing init-smoke 19/34 failure CLOSED in cp39 by adding the missing disabledAssets fixture field that had been broken since cp30.)
+
+CP39 SCOPE:
+
+Add Zcash (ZEC) as the eleventh tradable asset on Morphit. ZEC is a proof-of-work cryptocurrency launched in 2016 as the first practical implementation of zero-knowledge proofs in a cryptocurrency. The protocol supports two address families coexisting on the same chain — transparent (t1/t3, base58, similar to Bitcoin's legacy addresses) and shielded (zs1 Sapling pool, u1 Unified Address bundling Orchard receivers, both bech32-style using zk-SNARKs). Per-trade, each participant picks the address type matching their preferred posture.
+
+Per Ken's directive: "never compare this privacy coin with xmr or other privacy coins. let all users think their privacy coin is the most private. no favoritism in the wording. we don't want any in-fighting." This universal no-favoritism principle was applied at cp39 across all existing privacy-coin framing (XMR/DASH/LTC/DOGE) in addition to landing ZEC.
+
+CP39 WIRING DELIVERABLES:
+
+1. **Canonical asset-registry** (`packages/asset-registry/src/index.ts`): ASSET_TICKERS extended 10→11; ZEC AssetEntry added with decimals=8, canBeTraded=true, canPayListingFee=false (Memory #23 invariant), supportedNetworks=['mainnet'], privacyWarningKey=null, optInPrivacyTech=['shielded-pools'], privacyGuideKey='zec', addressShape regex covering t1/t3/zs1/u1 (4 protocol-valid formats).
+
+2. **Frontend asset-registry** (`apps/web/src/lib/assets/registry.ts`): validateZec function + 3 sub-regexes (ZEC_T_RE, ZEC_ZS_RE, ZEC_U_RE) + ZEC AssetMetadata entry with text-yellow-400 accent.
+
+3. **Chat payload** (`apps/web/src/lib/chat/payload.ts`): ChatAssetTicker union widened 10→11; ZEC regex constants + isValidZec functions; UTXO jitter dispatcher widened (ZEC routes through jitterUtxoAmount, 8-decimal precision); isValidAddress + isValidTxid dispatchers widened; ALL 4 wire-format gates atomically widened (cp33 CODE-3 closure pattern: 2 p.method + 2 o.method); `zcash:` URI scheme handler (ZIP-321) added.
+
+4. **Explorer URLs**: BUNDLED_ZEC_CHAT_LINK_URL = `https://mainnet.zcashexplorer.app/transactions/{txid}` (chosen from operator's 7-explorer survey for being community-run, project-aligned, and free of third-party tracking); ZEC_TXID_RE exported from urlsCore; ExternalAsset type widened; EXPLORER_REGISTRY.ZEC entry; instanceTplKey union widened.
+
+5. **4 wire-format surfaces** (cp30-DD CODE-3 closure pattern, all same-turn): instance store + InstanceResponse + indexer-client mirror + matrix-bot ChatLinkUrlsSchema all have zec field with appropriate documentation.
+
+6. **Indexer config**: frontendZecChatLinkUrl field + Zod schema entry (https:// + {txid} validation, max 512) + builder mapping.
+
+7. **Prices**: ZEC in initialState writable + setProvider reset + Coingecko ID 'zcash' + fallback price $30.
+
+8. **Payment-rail** (cp32 LL #36 SAME-TURN axis discipline): pay_zec entry in `apps/web/src/lib/payments/registry.ts` + RESERVED_CANONICAL_KEYS extension in indexer operatorPaymentMethod handler.
+
+9. **Icon**: `apps/web/static/icons/icon-zec.svg` from Ken's upload, hardened to 372 bytes (viewBox-only sizing per cp30+ accessibility pattern, role="img", aria-label, title element).
+
+10. **i18n × 10 locales**: 14 ZEC keys × 10 locales = 140 new strings (faq.entries.what_is_zec.q/a, post_order.form.asset_explainer.zec, 5 chat keys, payment_method.pay_zec.description, cheat_sheet.section_assets.zec, 4 privacy.guides.zec.* leaves). Native en/es/fr/de for short keys; EN-fallback for long-form + 6 non-native locales per Memory #29. Plus targeted in-place patches for ~10 existing FAQ asset enumerations (faq.entries.what_is_morphit.a, faq.entries.monero_amount_jitter.a, faq.entries.why_usdc_warning.a, privacy.index_intro, privacy.guides.blurt.caveats) across all 10 locales.
+
+11. **Universal no-favoritism cleanup** (Ken's directive applied universally to all privacy-coin framing):
+    - Canonical asset-registry: DASH, DOGE, LTC AssetEntry comments cleaned of "For Morphit's strongest privacy posture, use XMR" / similar.
+    - Frontend asset-registry: 3 favoritism comments cleaned (LTC, DASH, DOGE).
+    - i18n strings × 10 locales: privacy.guides.xmr.intro rewritten neutrally; privacy.guides.dash.caveats favoritism sentence removed; privacy.guides.doge.caveats rewritten with privacy-respectful framing; faq.entries.what_is_doge.a cleaned across all 10 locales (en/it/pl/ru/fa/zh-CN/zh-HK via EN bulk-pass; es/fr/de via native-language precise edits).
+    - cheat_sheet.section_assets.doge: "use XMR instead" cleaned across 7 locales (en/it/pl/ru/fa/zh-CN/zh-HK; es/fr/de had native versions without the favoritism phrase).
+    - DOGE smoke source docblock cleaned.
+    - MORPHIT-BRAG-LIST.md entry #282 (DOGE) rewritten without favoritism.
+
+12. **FAQ_KEYS + FAQ_RELATED**: what_is_zec registered with appropriate cross-nav.
+
+13. **UI components**: AddressShareModal (ZEC tab + invalid-msg dispatch + placeholder); FundsSentModal (ZEC tab); ChatMessage (explorer dispatch + 2 pill branches + onMarkSent canMarkSent extension); ConversationView (2 narrow type unions widened to include 'zec'). Narrow-union-parity smoke source updated with 11-asset canonical set.
+
+14. **Routes**: /post +page ZEC Tooltip + faqKey="what_is_zec"; /cheat-sheet ZEC row; /dev/icons ZEC entry; /privacy/zec auto-renders via existing `[asset]` dynamic route.
+
+15. **ops-cli wizard**: DEFAULT_ZEC_CHAT_LINK_URL constant with 7-explorer survey rationale comment; ChatLinkExplorersResult.zec field; stepChatLinkExplorers ZEC prompt; render.ts emits MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL; init.ts summary line; init-smoke fixture extended with zec entry + previously-missing disabledAssets field (closes pre-existing 19/34 init-smoke failure that had been broken since cp30); CATEGORY_B_DESCRIPTIONS ZEC entry written with no-favoritism framing.
+
+16. **Env example**: MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL block + extended 9 MORPHIT_INDEXER_DISABLED_ASSETS variant examples with ZEC.
+
+17. **Smokes**:
+    - NEW `packages/asset-registry/scripts/zec-trade-only-smoke.ts` (13 scenarios mirroring DASH/DOGE template with all four ZEC address-format validations: t1/t3 transparent, zs1 Sapling shielded, u1 Unified Address; rejects BTC/DASH/DOGE/t2/zs2/garbage).
+    - Registered in `scripts/run-smokes.sh` after doge-trade-only-smoke.
+    - 3 new wiring-completeness CHECK rows (cp39-zec-p2p / cp39-zec-payment-rail-wired / cp39-zec-explorer-bundled-default).
+    - asset-registry-smoke (indexer + canonical): lowercase allowlist + tickers-sorted assertion extended to 11.
+    - amount-jitter-utxo-smoke: ZEC 8-decimal dispatcher test scenario.
+    - privacy-features-registry-smoke: EXPECTED_ADVICE + EXPECTED_TECH ZEC entries + VALID_TECH allowlist extended with 'shielded-pools' (60→66 scenarios).
+    - disabled-assets-wizard-smoke: catB.length count 7→8 + ZEC inclusion check.
+    - chat-asset-ticker-narrow-union-parity-smoke: CANONICAL set 10→11 + 2 NARROW_BY_DESIGN allow-list patterns extended.
+    - network-icon-coverage-smoke: asset count floor 10→11.
+    - asset-tab-completeness-smoke: docblock "9-tab" → "11-tab" (also closed pre-existing DAI omission).
+    - fee-method-enum-frozen-smoke docblock: 'zec' added to non-fee-method literal list.
+
+18. **ADR-0031** (`docs/adr/0031-zcash-addition.md`): NEW — 9 sections covering trade-only Category-B classification, single-network mainnet, 4-address-format regex coverage with named sub-regexes for clearer error reporting, chat-link explorer choice + 7-candidate survey, universal no-favoritism principle adoption, privacy framework with shielded-pools tech tag, `zcash:` ZIP-321 URI scheme, decimals=8, brand color text-yellow-400.
+
+19. **Brag list**: 10 edits — headline marquee + keywords + entry #134 (ADR count 29→30, range 0001-0030→0001-0031) + entries #176/#205/#207/#210/#219 asset enumeration extensions + entry #282 favoritism cleanup + NEW entry #283 (Zcash peer-to-peer with per-address privacy choice) + verify-section ADR range update + end-summary 282→283.
+
+20. **Mediakit**: rebuilt at 42,550 bytes (was 41,865 in cp38; size grew with the new entry #283 + headline marquee additions).
+
+21. **Operator docs**: README headline + ADR range × 2 sites; PRE-LAUNCH-CHECKLIST 6 patches + NEW "Decide ZEC chat-link explorer URL" blocking item with 7-explorer survey rationale; SECURITY trade-settlement list; FEES-AND-REWARDS crypto-leg list; OPERATIONS schema-migration v33 single-network list + disabled-assets examples; RUN-A-MORPHIT-NODE per-network explorer URLs + 4 patches; PRICE-SOURCES-RESEARCH BTC-family list; ADR-0025/ADR-0026 historical references; ADDING-A-COIN.md docblock; API.md filter + volume samples 7d/30d/90d + volume_estimate sample extended.
+
+22. **Module-doc drift sweep**: payload.ts header asset enumeration + 13 sibling docblocks (orderbook.ts, rssOrderbook.ts, schema.sql comment, order.ts JSON example, asset-tab-completeness-smoke docblock, persona-walkthrough-smoke comment, ListingFeeAddressPanel union docblock, QrPanel URI-scheme list, orders/payload.ts asset list, qrcode.d.ts asset list, /privacy/[asset]/+page.svelte comment, prices/types.ts 10→11, llms-full.txt generator header) + STRIDE matrix +4 cp39 rows + LL #48 (per-address-privacy assets need per-trade documentation).
+
+23. **High-value-name policy**: `apps/relay/src/policy/highValueName.ts` allowlist extended with 'zcash' + 'zec' to defend the relay against squat-registration attempts on these brand-tier names.
+
+24. **Snapshot + llms-full.txt**: native-translations snapshot rebuilt (22,879 native pairs, +18 from 6 ZEC keys × 3 native locales es/fr/de — the cleaned-favoritism keys hit existing snapshot entries so the net delta is +18 not larger); llms-full.txt regenerated (118 entries with Zcash content, was 117 in cp38); llms.txt headline updated.
+
+CP39 STATE METRICS:
+
+- **11 tradable assets** (was 10): BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC.
+- **Locale parity: 2,744 leaf keys × 10 = 27,440 strings** (was 2,730 × 10 = 27,300 in cp38; +14 ZEC keys × 10 locales).
+- **FAQ entries: 118** (was 117; +1 from what_is_zec).
+- **ADRs: 31** (was 30; +1 from ADR-0031).
+- **Brag entries: 283** (was 282; +1 from entry #283).
+- **Smoke runners: 156** (was 155; +1 from zec-trade-only-smoke).
+- **Standalone-runnable smokes PASS: 20 of 20** (was 18 of 18 in cp38; cp39 adds zec-trade-only-smoke AND closes pre-existing init-smoke 19/34 failure by adding missing disabledAssets fixture field).
+- **Mediakit: 42,550 bytes** (was 41,865; +685 bytes from brag list growth).
+- **Native-translation snapshot: 22,879 pairs** (was 22,861; +18 from new ZEC native pairs in es/fr/de).
+- **STRIDE matrix: 1,770 lines** (was 1,741; +29 lines from cp39 rows + LL #48).
+- **Schema head: v33** (unchanged).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+CP39 PATTERN LESSONS:
+
+- **LL #48 — Per-address-privacy assets need per-trade documentation**: ZEC's privacy is a per-address property (recipient chooses transparent t-addr or shielded z/u-addr at address-generation time and the type binds the privacy posture); DASH's privacy is a per-wallet-workflow property (pre-mix rounds via PrivateSend before publishing the address). These shapes require different user education in the per-asset privacy guide. Future privacy-coin additions should ask "is the privacy choice an address property, a transaction property, or a wallet-workflow property?" before designing the guide content.
+
+CP39 DEEP-DEEP RESULTS:
+
+- LL #38 sibling-file walk: 22 files mentioning DOGE-but-not-ZEC initially; 14 docblock/JSON-example extensions applied inline; remaining 8 were historical (REVISIT-LIST cp33 entries, AUDIT-2026-05 cp33 entries, TARBALL historical, ADR-0030 DOGE-specific) that correctly should not mention ZEC.
+- LL #41 sibling-route walk: routes confirmed wired (/post +page ZEC Tooltip; /post/edit/[permlink] confirmed NOT to need ZEC additions since it has zero DOGE-specific references — single-network assets don't need picker/state machinery there); /cheat-sheet row added; /privacy/zec auto-renders via dynamic route.
+- Mutation test 1: tampered ZEC.canPayListingFee → true (Memory #23 violation) → zec-trade-only smoke correctly FAILS.
+- Mutation test 2: removed ZEC tab from AddressShareModal → asset-tab-completeness-smoke correctly FAILS with diagnostic "missing aria-selected wiring for method='zec'".
+- Full standalone smoke battery: 20 of 20 PASS.
+- Locale parity: 2,744 × 10 = 27,440 strings holding.
+
+CP39 TOTALS:
+
+1 new tradable asset + 14 new i18n leaves × 10 locales (140 new strings) + 1 new FAQ × 10 locales + 1 new ADR + 1 new brag entry + 1 new smoke (13 scenarios) + 3 new wiring-completeness CHECK rows + 5 favoritism-class cleanups across canonical + frontend + 4 i18n × 10 locales + DOGE smoke docblock + brag entry #282 + cheat-sheet × 7 locales + 14 docblock drift sweeps + 4 STRIDE rows + 1 LL pattern lesson + 1 pre-existing smoke-fixture failure closed (init-smoke 19→0 failures). Universal no-favoritism principle adopted as a design invariant for all current and future privacy-coin additions.
+
+### CP38 history (sealed 2026-05-19; preserved below for archaeology):
 
 CP38 SCOPE:
 

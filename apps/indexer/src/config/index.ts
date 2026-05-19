@@ -368,6 +368,22 @@ export interface Config {
 	 *  (exchange-adjacent; declined). */
 	readonly frontendDogeChatLinkUrl: string | undefined;
 
+	/** Per-instance ZEC chat-link explorer URL template (Part 122
+	 *  cp39).  Same shape as BTC/XMR/BCH/LTC/DASH/DOGE (single
+	 *  field, single-network mainnet).  When unset, the frontend
+	 *  uses the bundled default `mainnet.zcashexplorer.app`.
+	 *  Validation: https:// scheme, contains `{txid}` placeholder,
+	 *  parses as URL after substitution.  Privacy/decentralization
+	 *  rationale: community-run/project-aligned explorers preferred
+	 *  over third-party aggregators or exchange-affiliated
+	 *  services.  Candidates Ken surveyed at addition time
+	 *  (2026-05-19): mainnet.zcashexplorer.app (chosen as bundled
+	 *  default — community-run, official-style pointer),
+	 *  blockchair.com/zcash, zcashinfo.com, 3xpl.com/zcash,
+	 *  blockexplorer.one/zcash/mainnet, zcash.tokenview.io,
+	 *  cipherscan.app. */
+	readonly frontendZecChatLinkUrl: string | undefined;
+
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
@@ -885,6 +901,17 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp39 — ZEC chat-link explorer URL override.
+	// Single-network like BTC/XMR/BCH/LTC/DASH/DOGE.  When unset,
+	// falls back to the bundled mainnet.zcashexplorer.app default.
+	MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since Part 121 cp3 so the
 	// public-API per-network override never worked.  Frontend
@@ -1166,6 +1193,7 @@ export function loadConfig(): Config {
 		frontendLtcChatLinkUrl: e.MORPHIT_FRONTEND_LTC_CHAT_LINK_URL,
 		frontendDashChatLinkUrl: e.MORPHIT_FRONTEND_DASH_CHAT_LINK_URL,
 		frontendDogeChatLinkUrl: e.MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL,
+		frontendZecChatLinkUrl: e.MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL,
 		// Part 122 cp30 — multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

@@ -421,7 +421,7 @@ cannot accidentally leak into the fee path:
 
 A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
-coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE) declare `['mainnet']`.
+coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC) declare `['mainnet']`.
 Multi-network coins list each network explicitly.  As of Part
 122 cp31 three multi-network assets are shipped:
 

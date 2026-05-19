@@ -13,6 +13,9 @@
 	 *   - LTC:  BIP-21 derivative (`litecoin:ltc1...?amount=0.5`)
 	 *   - DASH: BIP-21 derivative (`dash:X...?amount=0.5`)
 	 *   - DOGE: BIP-21 derivative (`dogecoin:D...?amount=0.5`)
+ *   - ZEC: ZIP-321 URI (`zcash:t1...?amount=0.5` for transparent;
+ *     `zcash:zs1...?amount=0.5` for shielded; `zcash:u1...?amount=0.5`
+ *     for Unified Address)
 	 *   - BLURT: bare account name (no widely-supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships

@@ -9,7 +9,7 @@
  * WHY THIS SMOKE EXISTS (Part 122 cp36 Bob-1 + Bob-2 finding):
  *
  * AddressShareModal.svelte and FundsSentModal.svelte each shipped
- * with a 9-tab tablist (BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH/DOGE)
+ * with an 11-tab tablist (BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC)
  * that silently omitted the DAI tab when cp31 added DAI as the 9th
  * tradable asset. Every OTHER DAI hook (validator, placeholder,
  * invalid-msg dispatch, picker block, payload field) was wired

@@ -845,6 +845,24 @@ export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{
 // MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL.
 export const DEFAULT_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
 
+// Part 122 cp39 — ZEC chat-link explorer URL bundled default.
+// mainnet.zcashexplorer.app chosen from Ken's 7-explorer survey
+// (2026-05-19) as the community-run, project-aligned default with
+// no third-party tracking, supports both transparent (t1/t3) and
+// shielded (zs1/u1) tx lookups by txid.  Same privacy/decentralization
+// rationale as insight.dash.org for DASH and blockstream.info for
+// BTC: prefer a project-aligned or community-run explorer over
+// third-party aggregators or exchange-affiliated services.  Other
+// candidates surveyed: blockchair.com/zcash (third-party aggregator,
+// already used for DOGE so the operator would get two chains on
+// one CSP origin if they preferred), zcashinfo.com (community-run,
+// lower traffic), 3xpl.com/zcash (third-party aggregator),
+// blockexplorer.one/zcash/mainnet (generic aggregator),
+// zcash.tokenview.io (Tokenview multi-chain), cipherscan.app
+// (newer privacy-focused explorer).  Operators wanting different
+// default override via MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL.
+export const DEFAULT_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/transactions/{txid}';
+
 // Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1053,6 +1071,11 @@ export interface ChatLinkExplorersResult {
 	 *  as btc/xmr/bch/ltc/dash.  Operator-tunable via the wizard
 	 *  or by setting MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL directly. */
 	readonly doge: string;
+	/** Part 122 cp39 — ZEC chat-link explorer URL.  Same shape
+	 *  as btc/xmr/bch/ltc/dash/doge (single-network mainnet).
+	 *  Operator-tunable via the wizard or by setting
+	 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL directly. */
+	readonly zec: string;
 	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1178,6 +1201,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── DOGE chat-link URL ──\n');
 	const doge = await editChatLinkUrl('DOGE chat-link URL', DEFAULT_DOGE_CHAT_LINK_URL);
 
+	// ─── ZEC (Part 122 cp39) ──
+	console.log('\n  ── ZEC chat-link URL ──\n');
+	const zec = await editChatLinkUrl('ZEC chat-link URL', DEFAULT_ZEC_CHAT_LINK_URL);
+
 	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
 	// Solana / BNB Smart Chain); each chain has its own explorer
@@ -1291,7 +1318,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
 		};
 
-	return { btc, xmr, bch, ltc, dash, doge, usdt, usdc, dai };
+	return { btc, xmr, bch, ltc, dash, doge, zec, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -1381,7 +1408,8 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.',
 	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.',
 	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.',
-	DOGE: 'Dogecoin — single-network mainnet.  Fair-launched 2013, merge-mined\n    with Litecoin since 2014 (auxiliary proof-of-work).  Transparent at\n    base layer like BTC; no native privacy upgrade (no PrivateSend\n    equivalent, no confidential transactions, no segwit-enabled mixing).\n    No central issuer.'
+	DOGE: 'Dogecoin — single-network mainnet.  Fair-launched 2013, merge-mined\n    with Litecoin since 2014 (auxiliary proof-of-work).  Transparent at\n    base layer like BTC; no native privacy upgrade (no PrivateSend\n    equivalent, no confidential transactions, no segwit-enabled mixing).\n    No central issuer.',
+	ZEC: 'Zcash — single-network mainnet.  Launched 2016.  Supports both\n    transparent addresses (t1/t3, base58, like BTC) and shielded\n    addresses (zs1 Sapling, u1 Unified Address) using zero-knowledge\n    proofs to hide sender, recipient, and amount.  Per-trade, recipients\n    pick the address type that fits their posture.  No central issuer.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {

@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -117,9 +117,9 @@ Three things to know:
 1. Morphit never takes a cut of your trade itself. The price you and your counterparty agree on is the price you receive — nothing is skimmed. Morphit isn't an escrow and doesn't touch your funds.
 
 2. Posting an order costs a small network fee:
-   • **$0.25 USD-equivalent** if you pay in BTC or XMR (full price)
-   • **$0.125 USD-equivalent** if you pay in BLURT (a deliberate 50% discount)
-   The discount exists because Morphit's coordination layer runs on Blurt, and we want the BLURT economy to thrive. Paying in BLURT is the default option, costs half as much, and counts toward loyalty-milestone Blurt Power rewards (see "How loyalty rewards work"). The compose screen shows the exact amount in your chosen currency before you sign — no surprises.
+ • **$0.25 USD-equivalent** if you pay in BTC or XMR (full price)
+ • **$0.125 USD-equivalent** if you pay in BLURT (a deliberate 50% discount)
+ The discount exists because Morphit's coordination layer runs on Blurt, and we want the BLURT economy to thrive. Paying in BLURT is the default option, costs half as much, and counts toward loyalty-milestone Blurt Power rewards (see "How loyalty rewards work"). The compose screen shows the exact amount in your chosen currency before you sign — no surprises.
 
 3. Your very first buy order is free. We waive the network fee on your first-ever buy — a small welcome gift so new traders can try Morphit risk-free. See "Is my first order really free?" for the details.
 
@@ -155,7 +155,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. "Bitso transfer for moringa trees" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.
 
-**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
+**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
 
 • Buy/sell BTC for USD via PayPal
 • Buy/sell XMR for cash in person
@@ -212,7 +212,7 @@ These are standard, well-audited primitives (from libsodium). The protocol is a 
 
 **FAQ key:** `monero_amount_jitter`
 
-Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture.
+Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture.
 
 ---
 
@@ -493,7 +493,7 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the ten assets traded here, alongside BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, and DOGE. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
+**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; BLURT is one of the ten assets traded here, alongside BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, and ZEC. Visit /orderbook, filter for BLURT sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send BLURT to your Blurt account. Done.
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first BLURT buy — see "Is my first order really free?" for details. So your first BLURT acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 
@@ -555,7 +555,7 @@ The rewards arrive as `delegate_vesting_shares` and `transfer` ops from @morphit
 Every time you pay a listing fee in BLURT, your cumulative lifetime spending with Morphit is tracked. When you cross certain thresholds, Morphit sends you a Blurt Power (BP) delegation as a thank-you. Four tiers:
 
 • 100 BLURT paid cumulatively → 10 BP delegated
-• 500 BLURT paid cumulatively → 50 BP delegated  
+• 500 BLURT paid cumulatively → 50 BP delegated 
 • 2,000 BLURT paid cumulatively → 200 BP delegated
 • 10,000 BLURT paid cumulatively → 1,000 BP delegated
 
@@ -1014,13 +1014,13 @@ The registration op is signed by your posting key, so only you control your tag.
 
 **FAQ key:** `operator_payouts_timing`
 
-Effectively immediately, per attribution.  When an order's BLURT listing fee is verified, the same indexer transaction that records the attribution enqueues your 90% share as a pending transfer.  The relay's drainer picks it up on its next cycle (~a few seconds) and broadcasts a `transfer` op to your operator account.  Total wall-clock from the user's "Post" click to BLURT landing in your wallet is typically 10-15 seconds.
+Effectively immediately, per attribution. When an order's BLURT listing fee is verified, the same indexer transaction that records the attribution enqueues your 90% share as a pending transfer. The relay's drainer picks it up on its next cycle (~a few seconds) and broadcasts a `transfer` op to your operator account. Total wall-clock from the user's "Post" click to BLURT landing in your wallet is typically 10-15 seconds.
 
-There is no batching, no weekly payout cycle, no "minimum threshold to withdraw."  Each verified BLURT-paid order produces its own payout transfer.
+There is no batching, no weekly payout cycle, no "minimum threshold to withdraw." Each verified BLURT-paid order produces its own payout transfer.
 
-**Important: operators earn from BLURT-paid fees only.**  BTC- and XMR-paid listing fees go 100% to the Morphit treasury (`@morphit-fees`) — see the "How do operators earn?" entry for the full rationale of why the BLURT split is 90/10 (heavily operator-favored) while the BTC/XMR path is 100/0 (treasury-only).  In short: BLURT splits atomically on-chain, BTC/XMR would require off-chain custodial bookkeeping that breaks Morphit's non-custodial design.
+**Important: operators earn from BLURT-paid fees only.** BTC- and XMR-paid listing fees go 100% to the Morphit treasury (`@morphit-fees`) — see the "How do operators earn?" entry for the full rationale of why the BLURT split is 90/10 (heavily operator-favored) while the BTC/XMR path is 100/0 (treasury-only). In short: BLURT splits atomically on-chain, BTC/XMR would require off-chain custodial bookkeeping that breaks Morphit's non-custodial design.
 
-This is one of the clearest non-custodial advantages over traditional exchange partnerships.  You never wait for a "payout schedule," and Morphit the project never holds your earnings at any point — it's indexer-and-relay-to-you, deterministic, no human involvement, fully auditable from chain history.
+This is one of the clearest non-custodial advantages over traditional exchange partnerships. You never wait for a "payout schedule," and Morphit the project never holds your earnings at any point — it's indexer-and-relay-to-you, deterministic, no human involvement, fully auditable from chain history.
 
 ---
 
@@ -1629,39 +1629,39 @@ The size of your Mana bar is roughly proportional to how much BLURT you're holdi
 
 **FAQ key:** `node_minimum_requirements`
 
-Surprisingly modest.  Morphit is built to run on hardware most people already own.  Three categories of setups people are using:
+Surprisingly modest. Morphit is built to run on hardware most people already own. Three categories of setups people are using:
 
-**Hobbyist tier — Raspberry Pi 4 / 5 (4 GB).**  Runs the indexer, relay, and frontend together comfortably.  Use a USB-3 SSD instead of an SD card; SD cards die under database write load.  Power draw is around 5–7 W, so a small UPS or solar setup handles it for hours.  Suitable for serving a personal community of a few dozen active users.
+**Hobbyist tier — Raspberry Pi 4 / 5 (4 GB).** Runs the indexer, relay, and frontend together comfortably. Use a USB-3 SSD instead of an SD card; SD cards die under database write load. Power draw is around 5–7 W, so a small UPS or solar setup handles it for hours. Suitable for serving a personal community of a few dozen active users.
 
-**Serious tier — small mini-PC (Beelink, Intel NUC, generic 2nd-hand).**  An Intel N100 / Ryzen 3xxx with 8 GB RAM and any modern SSD is overkill for the indexer and runs every Morphit service at the same time without thinking about it.  Power draw 6–10 W idle, 15–20 W under load.  $150–250 used.  Comfortable for an instance serving hundreds of active users.
+**Serious tier — small mini-PC (Beelink, Intel NUC, generic 2nd-hand).** An Intel N100 / Ryzen 3xxx with 8 GB RAM and any modern SSD is overkill for the indexer and runs every Morphit service at the same time without thinking about it. Power draw 6–10 W idle, 15–20 W under load. $150–250 used. Comfortable for an instance serving hundreds of active users.
 
-**Spare-laptop tier — anything that still boots Linux.**  An old ThinkPad or any laptop from the last decade with at least 4 GB RAM and a working SSD is plenty.  Bonus: built-in UPS (the laptop battery).  Some operators leave a closed laptop on a shelf running Morphit on a wired Ethernet connection — works great.
+**Spare-laptop tier — anything that still boots Linux.** An old ThinkPad or any laptop from the last decade with at least 4 GB RAM and a working SSD is plenty. Bonus: built-in UPS (the laptop battery). Some operators leave a closed laptop on a shelf running Morphit on a wired Ethernet connection — works great.
 
 **Concrete minimums (any architecture: x86-64, ARM64, or Apple silicon under Asahi):**
 
-• **CPU:** 2 cores at 1 GHz or faster.  Indexer is mostly I/O-bound; relay is mostly idle.  No GPU needed, ever.
+• **CPU:** 2 cores at 1 GHz or faster. Indexer is mostly I/O-bound; relay is mostly idle. No GPU needed, ever.
 
-• **RAM:** 2 GB minimum, 4 GB comfortable.  Postgres fits inside that with the default config; tuning Postgres `shared_buffers` to 256 MB on a 2 GB system avoids paging.
+• **RAM:** 2 GB minimum, 4 GB comfortable. Postgres fits inside that with the default config; tuning Postgres `shared_buffers` to 256 MB on a 2 GB system avoids paging.
 
-• **Disk:** 20 GB free, on an SSD.  HDDs technically work but Postgres will be slow and SD cards will die from write amplification.  The indexer's database grows slowly — measured in low-MB per month for typical activity — so 20 GB lasts years.  Plan for backups, though.
+• **Disk:** 20 GB free, on an SSD. HDDs technically work but Postgres will be slow and SD cards will die from write amplification. The indexer's database grows slowly — measured in low-MB per month for typical activity — so 20 GB lasts years. Plan for backups, though.
 
-• **Network:** 1 Mbit/s up and down is enough.  An average page load is around 100 KB.  A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap.  Static IP is nice but not required — dynamic-DNS works fine.
+• **Network:** 1 Mbit/s up and down is enough. An average page load is around 100 KB. A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap. Static IP is nice but not required — dynamic-DNS works fine.
 
-• **Operating system:** Any modern Linux (Debian 12, Ubuntu 22.04+, Arch, Alpine, NixOS — we test on Debian).  FreeBSD works with minor adjustments.  macOS works for development but isn't recommended for a public instance.
+• **Operating system:** Any modern Linux (Debian 12, Ubuntu 22.04+, Arch, Alpine, NixOS — we test on Debian). FreeBSD works with minor adjustments. macOS works for development but isn't recommended for a public instance.
 
-• **Uptime expectation:** 95% is a reasonable target.  Morphit is federated by design — when your instance is down, users fall back to other operators' instances and back to you when you return.  The chain holds the data; your instance is just one of many windows into it.
+• **Uptime expectation:** 95% is a reasonable target. Morphit is federated by design — when your instance is down, users fall back to other operators' instances and back to you when you return. The chain holds the data; your instance is just one of many windows into it.
 
 **What you do NOT need:**
 
-• A Blurt blockchain node.  Morphit talks to public Blurt RPC endpoints over HTTPS.
+• A Blurt blockchain node. Morphit talks to public Blurt RPC endpoints over HTTPS.
 
-• A static IP.  Use Caddy or Cloudflare Tunnel (or, for this project's privacy values, a reverse proxy plus DDNS) to expose port 443.  See the operator handbook for non-Cloudflare options.
+• A static IP. Use Caddy or Cloudflare Tunnel (or, for this project's privacy values, a reverse proxy plus DDNS) to expose port 443. See the operator handbook for non-Cloudflare options.
 
-• A domain name.  You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address only.
+• A domain name. You can run a private instance on `https://morphit.local` for your friends, or expose a `.onion` / `.loki` / `.b32.i2p` address only.
 
-• A datacenter VPS.  Operators running on residential connections work fine, especially with alt-network reachability so users don't need your home IP.
+• A datacenter VPS. Operators running on residential connections work fine, especially with alt-network reachability so users don't need your home IP.
 
-The operator-earnings split is sized so that even a Pi-tier instance covers its hosting cost and your time at modest activity levels.  Run one because you want a Morphit that exists in your community, not because it pays well — but the math doesn't lose money.
+The operator-earnings split is sized so that even a Pi-tier instance covers its hosting cost and your time at modest activity levels. Run one because you want a Morphit that exists in your community, not because it pays well — but the math doesn't lose money.
 
 ---
 
@@ -1709,22 +1709,22 @@ Yes — visit /explorer to look up any Blurt account, transaction, or block. The
 
 **Yes — this is supported, encouraged, and free.**
 
-Every Morphit instance exposes a documented public HTTP API at `/v1/*`.  Same contract on every operator's box — different hostname, identical shape.  The endpoints are read-only, no authentication required, no API key, no signup.  Just hit the URL.
+Every Morphit instance exposes a documented public HTTP API at `/v1/*`. Same contract on every operator's box — different hostname, identical shape. The endpoints are read-only, no authentication required, no API key, no signup. Just hit the URL.
 
-**Documented contract.** The full reference is at `docs/API.md` in the source repo.  Endpoints we promise stable shape for: `/v1/orderbook`, `/v1/orderbook/stream` (SSE), `/v1/orderbook/featured`, `/v1/orders/:account`, `/v1/accounts/:account`, `/v1/accounts/:account/feedback`, `/v1/accounts/:account/feedback-given`, `/v1/instances`, `/v1/instances/stream`, `/v1/operators`, `/v1/health`, `/v1/instance`, `/v1/listing-fee`, `/v1/chain-fee`, `/v1/release`, plus three RSS endpoints (`/rss/orderbook.xml`, `/rss/orderbook/by-asset/*`, `/rss/orderbook/by-account/*`).
+**Documented contract.** The full reference is at `docs/API.md` in the source repo. Endpoints we promise stable shape for: `/v1/orderbook`, `/v1/orderbook/stream` (SSE), `/v1/orderbook/featured`, `/v1/orders/:account`, `/v1/accounts/:account`, `/v1/accounts/:account/feedback`, `/v1/accounts/:account/feedback-given`, `/v1/instances`, `/v1/instances/stream`, `/v1/operators`, `/v1/health`, `/v1/instance`, `/v1/listing-fee`, `/v1/chain-fee`, `/v1/release`, plus three RSS endpoints (`/rss/orderbook.xml`, `/rss/orderbook/by-asset/*`, `/rss/orderbook/by-account/*`).
 
-**Response shapes are versioned.** Anything documented under `/v1/*` won't have fields renamed or removed without a `/v2/*` version bump.  Adding new fields is non-breaking and you should ignore unknown fields.  Versioning policy in detail at `docs/API.md`.
+**Response shapes are versioned.** Anything documented under `/v1/*` won't have fields renamed or removed without a `/v2/*` version bump. Adding new fields is non-breaking and you should ignore unknown fields. Versioning policy in detail at `docs/API.md`.
 
-**Rate limits.** 120 req/min for list endpoints, 600 req/min for single-record lookups, per-IP per-minute, operator-tunable.  If you need higher throughput, run your own indexer — see `RUN-A-MORPHIT-NODE.md`.  Self-hosting gives you no rate limits and faster response times for your application.
+**Rate limits.** 120 req/min for list endpoints, 600 req/min for single-record lookups, per-IP per-minute, operator-tunable. If you need higher throughput, run your own indexer — see `RUN-A-MORPHIT-NODE.md`. Self-hosting gives you no rate limits and faster response times for your application.
 
-**Why this design makes sense.** Morphit's whole architecture is built on the idea that data lives on the public Blurt chain and any indexer can recompute it.  A locked-down API would be security theater because the underlying chain ops are already public — anyone scraping Blurt directly can build their own Morphit indexer in a weekend.  Documenting the existing endpoints just makes the same data accessible to people who don't want to build their own chain indexer first.
+**Why this design makes sense.** Morphit's whole architecture is built on the idea that data lives on the public Blurt chain and any indexer can recompute it. A locked-down API would be security theater because the underlying chain ops are already public — anyone scraping Blurt directly can build their own Morphit indexer in a weekend. Documenting the existing endpoints just makes the same data accessible to people who don't want to build their own chain indexer first.
 
 **What CAN'T you do via this API:**
 
-- Write data.  Writes happen via signed `custom_json` ops broadcast to a Blurt RPC node.  See `apps/web/src/lib/blurt/sign.ts` for the pattern.
-- Read encrypted chat content.  Chat ciphertext is on-chain (visible to anyone) but only the two participants have the keys.
+- Write data. Writes happen via signed `custom_json` ops broadcast to a Blurt RPC node. See `apps/web/src/lib/blurt/sign.ts` for the pattern.
+- Read encrypted chat content. Chat ciphertext is on-chain (visible to anyone) but only the two participants have the keys.
 - Read private order metrics (e.g. per-order viewcount is gated to the order owner).
-- Bypass the operator's rate limits.  Run your own instance instead.
+- Bypass the operator's rate limits. Run your own instance instead.
 
 **Examples of what people build with this:**
 
@@ -1738,7 +1738,7 @@ Every Morphit instance exposes a documented public HTTP API at `/v1/*`.  Same co
 
 If you're building something interesting on the API, drop a note on the operators' Matrix channel — we'll add your project to a curated list of API consumers and link it from the operator handbook.
 
-**Self-hosting as a first-class path.** If your aggregator is going to be high-volume, the right answer is run your own indexer.  ~$5/month VPS, 30-minute setup (see `RUN-A-MORPHIT-NODE.md`), full speed-of-light access to the data.  No rate limits, no operator-availability dependency, no aggregator-vs-instance fragility.  This is the path serious projects should take.
+**Self-hosting as a first-class path.** If your aggregator is going to be high-volume, the right answer is run your own indexer. ~$5/month VPS, 30-minute setup (see `RUN-A-MORPHIT-NODE.md`), full speed-of-light access to the data. No rate limits, no operator-availability dependency, no aggregator-vs-instance fragility. This is the path serious projects should take.
 
 ---
 
@@ -1746,18 +1746,18 @@ If you're building something interesting on the API, drop a note on the operator
 
 **FAQ key:** `what_is_featured_slot`
 
-Featured slots are the top **5 highest-paying** orders that appear at the top of the orderbook page in a special highlighted section.  They get more visibility than the regular orderbook list — useful when you want a fast trade and are willing to pay a small fee to be seen first.
+Featured slots are the top **5 highest-paying** orders that appear at the top of the orderbook page in a special highlighted section. They get more visibility than the regular orderbook list — useful when you want a fast trade and are willing to pay a small fee to be seen first.
 
-**How bidding works.** You bid by paying BLURT into the Morphit fee account along with a `morphit_feature_bid_v1` op naming your order and the number of hours you want featured time.  The rate you pay (BLURT per hour) determines your rank: the 5 highest-rate active bids are visible at any moment.
+**How bidding works.** You bid by paying BLURT into the Morphit fee account along with a `morphit_feature_bid_v1` op naming your order and the number of hours you want featured time. The rate you pay (BLURT per hour) determines your rank: the 5 highest-rate active bids are visible at any moment.
 
 **Bid rules:**
-• **Minimum bid duration:** 6 hours.  Prevents one-hour cheap-shots from displacing serious multi-day bidders.
+• **Minimum bid duration:** 6 hours. Prevents one-hour cheap-shots from displacing serious multi-day bidders.
 • **Maximum bid duration:** 1 week (168 hours) per bid.
-• **Min-bid increment:** if your bid would displace someone currently visible, you must beat them by at least `max(1 BLURT/hour, 5%)`.  Prevents penny-war bidding spam.
+• **Min-bid increment:** if your bid would displace someone currently visible, you must beat them by at least `max(1 BLURT/hour, 5%)`. Prevents penny-war bidding spam.
 
-**What you pay:** rate × hours, in BLURT, transferred to the Morphit fee account when you submit the bid.  The fee is non-refundable — see the **What happens if I get outbid?** entry for what "non-refundable" means in practice.
+**What you pay:** rate × hours, in BLURT, transferred to the Morphit fee account when you submit the bid. The fee is non-refundable — see the **What happens if I get outbid?** entry for what "non-refundable" means in practice.
 
-**Who sees featured slots:** every visitor to the orderbook page on every Morphit instance.  Featured-slot rendering is part of the standard orderbook view, not opt-in.
+**Who sees featured slots:** every visitor to the orderbook page on every Morphit instance. Featured-slot rendering is part of the standard orderbook view, not opt-in.
 
 ---
 
@@ -1767,20 +1767,20 @@ Featured slots are the top **5 highest-paying** orders that appear at the top of
 
 Your bid stays alive — you don't lose your money — but you lose visibility until the higher bidder's slot ends or you're un-displaced.
 
-**Concretely:** Morphit shows the top 5 highest-paying active bids.  If a 6th bidder posts a meaningfully higher rate (max of 1 BLURT/hour or 5% above the current 5th-place bid — small increments are rejected to prevent grief-displacement), you drop to position 6 and become invisible in the featured section.  Your bid record stays in the indexer.  When any of the bids above you expires (their hours run out), you bubble up.  If you eventually rise back into the top 5 before your own hours expire, you become visible again.
+**Concretely:** Morphit shows the top 5 highest-paying active bids. If a 6th bidder posts a meaningfully higher rate (max of 1 BLURT/hour or 5% above the current 5th-place bid — small increments are rejected to prevent grief-displacement), you drop to position 6 and become invisible in the featured section. Your bid record stays in the indexer. When any of the bids above you expires (their hours run out), you bubble up. If you eventually rise back into the top 5 before your own hours expire, you become visible again.
 
-**No refund for displaced minutes.** This is deliberate.  Refunds would require re-broadcasting transfer ops on every displacement — operationally messy and would create a perverse incentive (bid high, get displaced, get refunded, repeat).  The simple rule is: you paid for N hours of *eligibility for the featured slot*, not N hours of *guaranteed visibility*.
+**No refund for displaced minutes.** This is deliberate. Refunds would require re-broadcasting transfer ops on every displacement — operationally messy and would create a perverse incentive (bid high, get displaced, get refunded, repeat). The simple rule is: you paid for N hours of *eligibility for the featured slot*, not N hours of *guaranteed visibility*.
 
 **How to avoid being displaced:**
-• Watch the current top-5 rates before bidding.  If the lowest visible rate is 10 BLURT/hour, bidding 8 BLURT/hour means you're queued, not visible.
-• Bid for shorter durations.  6 hours of guaranteed-visible time is often more useful than 24 hours of "might get displaced midway."
-• Bid during low-traffic times.  Featured-slot competition is higher when more traders are posting.
+• Watch the current top-5 rates before bidding. If the lowest visible rate is 10 BLURT/hour, bidding 8 BLURT/hour means you're queued, not visible.
+• Bid for shorter durations. 6 hours of guaranteed-visible time is often more useful than 24 hours of "might get displaced midway."
+• Bid during low-traffic times. Featured-slot competition is higher when more traders are posting.
 
 **Two protections built into the platform:**
 
-• **Outbid push notifications.**  If you've subscribed to Web Push (Settings → Notifications), Morphit sends a notification the moment you drop out of the top 5, with a deep-link to the affected order in `/my/orders`.  You'll know within seconds — you don't have to refresh the orderbook manually.
+• **Outbid push notifications.** If you've subscribed to Web Push (Settings → Notifications), Morphit sends a notification the moment you drop out of the top 5, with a deep-link to the affected order in `/my/orders`. You'll know within seconds — you don't have to refresh the orderbook manually.
 
-• **Anti-snipe soft-close.**  A late bidder can't insta-displace you at T-2 seconds: when a new bid arrives within 5 minutes of an expiring top-5 bid's deadline, that deadline auto-extends by 5 minutes.  The extension can fire up to 6 times per bid (30 minutes total drag), giving you real time to counter.  Your bid history shows an "Extended ×N" chip when anti-snipe has fired on one of your bids.
+• **Anti-snipe soft-close.** A late bidder can't insta-displace you at T-2 seconds: when a new bid arrives within 5 minutes of an expiring top-5 bid's deadline, that deadline auto-extends by 5 minutes. The extension can fire up to 6 times per bid (30 minutes total drag), giving you real time to counter. Your bid history shows an "Extended ×N" chip when anti-snipe has fired on one of your bids.
 
 **Recap:** outbid = you stay queued, no refund, you get a push notification if subscribed, anti-snipe gives you time to counter, and you reappear when slots above you expire.
 
@@ -1847,7 +1847,7 @@ USDT is a stablecoin issued by Tether Inc., designed to maintain a 1:1 peg with 
 
 **FAQ key:** `what_is_usdc`
 
-USDC (USD Coin) is a stablecoin issued by Circle, a US-based financial-services company, designed to maintain a 1:1 peg with the US dollar. It's the second-most-traded stablecoin in the world after USDT, and many active traders prefer it because Circle publishes monthly attestation reports on the reserves backing each token and is regulated under New York DFS oversight. On Morphit you can buy and sell USDC peer-to-peer across four networks: Ethereum (ERC-20), Solana (SPL), Base, and Polygon. Pick whichever network you and your counterparty both support; the picker on the order form makes you commit to a specific network up front so a cross-network send can't accidentally lose your funds. USDC is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR.  See also the per-asset privacy guide at `/privacy/usdc` for the honest trade-offs.
+USDC (USD Coin) is a stablecoin issued by Circle, a US-based financial-services company, designed to maintain a 1:1 peg with the US dollar. It's the second-most-traded stablecoin in the world after USDT, and many active traders prefer it because Circle publishes monthly attestation reports on the reserves backing each token and is regulated under New York DFS oversight. On Morphit you can buy and sell USDC peer-to-peer across four networks: Ethereum (ERC-20), Solana (SPL), Base, and Polygon. Pick whichever network you and your counterparty both support; the picker on the order form makes you commit to a specific network up front so a cross-network send can't accidentally lose your funds. USDC is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR. See also the per-asset privacy guide at `/privacy/usdc` for the honest trade-offs.
 
 ---
 
@@ -1863,7 +1863,7 @@ USDT is the most-traded stablecoin in the world, and millions of traders rely on
 
 **FAQ key:** `why_usdc_warning`
 
-USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
+USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
 
 ---
 
@@ -1879,7 +1879,7 @@ It depends on what you and your counterparty already hold and what fees you can 
 
 **FAQ key:** `which_usdc_network`
 
-It depends on what you and your counterparty already hold and what fees you can stomach. **Solana (SPL)** is the cheapest of the four — fees are usually a fraction of a cent — but requires both parties to have a Solana wallet (Phantom, Solflare, etc.).  **Base** is a layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.) Base is often the right pick.  **Polygon (PoS)** is similar territory to Base with slightly different wallet support; many exchanges withdraw USDC on Polygon natively.  **Ethereum (ERC-20)** is the most universally accepted: every exchange, every wallet, every smart-contract platform supports it; but mainnet fees can be $5-20 a transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20.  Critical foot-gun: three of the four (ERC-20, Base, Polygon) all use the same `0x[40 hex]` Ethereum-format address.  An address that's valid on Polygon is also a valid address on Ethereum and Base — but each chain holds its own separate USDC balance for that address.  If you send USDC on Polygon to an address your counterparty gave you for Base, the funds will arrive on Polygon, not Base, and the counterparty's Base wallet won't show them.  Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time so the chat message header tells the receiver which chain to expect.
+It depends on what you and your counterparty already hold and what fees you can stomach. **Solana (SPL)** is the cheapest of the four — fees are usually a fraction of a cent — but requires both parties to have a Solana wallet (Phantom, Solflare, etc.). **Base** is a layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.) Base is often the right pick. **Polygon (PoS)** is similar territory to Base with slightly different wallet support; many exchanges withdraw USDC on Polygon natively. **Ethereum (ERC-20)** is the most universally accepted: every exchange, every wallet, every smart-contract platform supports it; but mainnet fees can be $5-20 a transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20. Critical foot-gun: three of the four (ERC-20, Base, Polygon) all use the same `0x[40 hex]` Ethereum-format address. An address that's valid on Polygon is also a valid address on Ethereum and Base — but each chain holds its own separate USDC balance for that address. If you send USDC on Polygon to an address your counterparty gave you for Base, the funds will arrive on Polygon, not Base, and the counterparty's Base wallet won't show them. Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time so the chat message header tells the receiver which chain to expect.
 
 ---
 
@@ -1887,7 +1887,7 @@ It depends on what you and your counterparty already hold and what fees you can 
 
 **FAQ key:** `what_is_dai`
 
-DAI is a USD-pegged stablecoin issued by the MakerDAO protocol on Ethereum.  Unlike USDT (Tether Inc.) and USDC (Circle), DAI is not issued by a single corporate entity — it's governed by holders of the MKR token through on-chain votes, and the DAI token contract itself has no admin-controlled freeze function.  Many traders prefer DAI for that reason.  Honest nuance: since 2020, MakerDAO's Peg Stability Module (PSM) holds USDC as collateral to dampen peg deviations, so when DAI's peg is supported by USDC, Circle's freeze power over USDC indirectly affects DAI's redeemability.  DAI is also upgradeable in principle through MKR governance, though no freeze mechanism has been deployed in practice.  On Morphit you can buy and sell DAI peer-to-peer across four networks: Ethereum (ERC-20, native), Polygon, Base, and Arbitrum One.  Pick whichever network you and your counterparty both support; the network picker locks this in at post-time so a cross-network send can't accidentally lose your funds.  DAI is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR.  See also the per-asset privacy guide at `/privacy/dai`.
+DAI is a USD-pegged stablecoin issued by the MakerDAO protocol on Ethereum. Unlike USDT (Tether Inc.) and USDC (Circle), DAI is not issued by a single corporate entity — it's governed by holders of the MKR token through on-chain votes, and the DAI token contract itself has no admin-controlled freeze function. Many traders prefer DAI for that reason. Honest nuance: since 2020, MakerDAO's Peg Stability Module (PSM) holds USDC as collateral to dampen peg deviations, so when DAI's peg is supported by USDC, Circle's freeze power over USDC indirectly affects DAI's redeemability. DAI is also upgradeable in principle through MKR governance, though no freeze mechanism has been deployed in practice. On Morphit you can buy and sell DAI peer-to-peer across four networks: Ethereum (ERC-20, native), Polygon, Base, and Arbitrum One. Pick whichever network you and your counterparty both support; the network picker locks this in at post-time so a cross-network send can't accidentally lose your funds. DAI is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR. See also the per-asset privacy guide at `/privacy/dai`.
 
 ---
 
@@ -1895,7 +1895,7 @@ DAI is a USD-pegged stablecoin issued by the MakerDAO protocol on Ethereum.  Unl
 
 **FAQ key:** `why_dai_warning`
 
-DAI's warning is more nuanced than USDT's or USDC's because DAI is genuinely more decentralized — but not freeze-immune.  Three things to know: (1) The Dai token contract has NO admin-controlled freeze function.  MakerDAO can't blacklist your address and stop transfers, the way Tether or Circle can on their stablecoins.  This is a real advantage that DAI supporters rightly point to.  (2) The Peg Stability Module (PSM) holds significant USDC reserves as collateral to dampen peg deviation.  When DAI's peg is partly supported by USDC, Circle's freeze power over USDC transitively affects DAI's redemption mechanics — if Circle were to freeze the PSM's USDC, the peg-arbitrage path closes for that portion of the supply.  (3) MakerDAO governance (MKR token holders) could theoretically deploy a contract upgrade that adds freeze or pause mechanisms.  This hasn't happened in practice, but it's possible.  Bottom line: DAI's decentralization story is real but partial — better than fully centralized stablecoins on the freeze-immunity axis, less so than truly decentralized assets like BTC/XMR.  Like all stablecoins on Morphit, DAI transactions are publicly visible on each supported network — there is no on-chain privacy.  The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed.  Operators can disable DAI instance-wide if they prefer to keep their instance free of stablecoins entirely.
+DAI's warning is more nuanced than USDT's or USDC's because DAI is genuinely more decentralized — but not freeze-immune. Three things to know: (1) The Dai token contract has NO admin-controlled freeze function. MakerDAO can't blacklist your address and stop transfers, the way Tether or Circle can on their stablecoins. This is a real advantage that DAI supporters rightly point to. (2) The Peg Stability Module (PSM) holds significant USDC reserves as collateral to dampen peg deviation. When DAI's peg is partly supported by USDC, Circle's freeze power over USDC transitively affects DAI's redemption mechanics — if Circle were to freeze the PSM's USDC, the peg-arbitrage path closes for that portion of the supply. (3) MakerDAO governance (MKR token holders) could theoretically deploy a contract upgrade that adds freeze or pause mechanisms. This hasn't happened in practice, but it's possible. Bottom line: DAI's decentralization story is real but partial — better than fully centralized stablecoins on the freeze-immunity axis, less so than truly decentralized assets like BTC/XMR. Like all stablecoins on Morphit, DAI transactions are publicly visible on each supported network — there is no on-chain privacy. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable DAI instance-wide if they prefer to keep their instance free of stablecoins entirely.
 
 ---
 
@@ -1903,7 +1903,7 @@ DAI's warning is more nuanced than USDT's or USDC's because DAI is genuinely mor
 
 **FAQ key:** `which_dai_network`
 
-DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (PoS), Base, and Arbitrum One.  All four are EVM-family with `0x[40 hex]` addresses — they look IDENTICAL.  An address that's valid on Polygon is also a valid-format address on Ethereum, Base, AND Arbitrum, but each chain holds its own separate DAI balance for that address.  The network picker on the order form locks the network in at post-time so the chat message header tells the receiver which chain to expect.  This is the highest cross-network address-confusion surface on Morphit — be especially careful.  **Ethereum (ERC-20)** is the most universal — every exchange, wallet, and smart-contract platform supports it — but mainnet fees can be $5-20 per transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20.  **Polygon (PoS)** is much cheaper (cents per transaction); many exchanges withdraw DAI on Polygon natively.  **Base** is Coinbase's layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.), Base is often the right pick.  **Arbitrum One** is similar territory to Base — another major Ethereum layer-2 with very low fees.  Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time.
+DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (PoS), Base, and Arbitrum One. All four are EVM-family with `0x[40 hex]` addresses — they look IDENTICAL. An address that's valid on Polygon is also a valid-format address on Ethereum, Base, AND Arbitrum, but each chain holds its own separate DAI balance for that address. The network picker on the order form locks the network in at post-time so the chat message header tells the receiver which chain to expect. This is the highest cross-network address-confusion surface on Morphit — be especially careful. **Ethereum (ERC-20)** is the most universal — every exchange, wallet, and smart-contract platform supports it — but mainnet fees can be $5-20 per transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20. **Polygon (PoS)** is much cheaper (cents per transaction); many exchanges withdraw DAI on Polygon natively. **Base** is Coinbase's layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.), Base is often the right pick. **Arbitrum One** is similar territory to Base — another major Ethereum layer-2 with very low fees. Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time.
 
 ---
 
@@ -1921,9 +1921,9 @@ Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, 
 
 DOGE is Dogecoin — a proof-of-work chain launched in 2013 as a fair-launched fork of Lucky Coin (itself a Litecoin fork). It's transparent at the base layer like Bitcoin: every transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze your addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.
 
-On Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, but you can't pay Morphit's listing fees in DOGE (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE), so the rule is uniform.
+On Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, but you can't pay Morphit's listing fees in DOGE (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC), so the rule is uniform.
 
-**Privacy posture**: DOGE has no native privacy upgrade. No PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish links to its on-chain history forever. Use a fresh HD-derived address per trade (your wallet usually does this automatically). For Morphit's strongest privacy posture, use XMR.
+**Privacy posture**: DOGE has no native privacy upgrade. No PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish links to its on-chain history forever. Use a fresh HD-derived address per trade (your wallet usually does this automatically). 
 
 **Address formats**: D… (P2PKH, most common), 9… or A… (P2SH, multi-sig, rare on DOGE). No bech32 — Dogecoin Core has not activated segwit.
 
@@ -1931,9 +1931,23 @@ On Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, b
 
 ---
 
+## What is ZEC on Morphit?
+
+**FAQ key:** `what_is_zec`
+
+ZEC is Zcash — a proof-of-work chain launched in 2016. It was the first practical implementation of zero-knowledge proofs in a cryptocurrency. The chain supports two address families that coexist on the same protocol: transparent (t1/t3, base58 addresses similar in shape to Bitcoin's legacy format) where transaction amounts and parties are publicly visible, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) where zk-SNARKs hide sender, recipient, and amount on chain. Per-trade, you and your counterparty pick the address type that fits the trade's posture.
+
+On Morphit, ZEC is **trade-only** — you can buy or sell ZEC in P2P trades, but you can't pay Morphit's listing fees in ZEC (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC), so the rule is uniform.
+
+**Address formats**: t1… (transparent P2PKH, the most common transparent type), t3… (transparent P2SH, multi-sig), zs1… (Sapling shielded, bech32, 78 chars total), u1… (Unified Address bundling Orchard + optional Sapling/transparent receivers, bech32m, variable length typically 90–300 chars).
+
+**Wallets that work well**: Zashi (official mobile wallet from the Electric Coin Co, Sapling + Orchard support), Zecwallet (desktop, legacy Sapling), Nighthawk Wallet (mobile, Sapling). Verify your counterparty's wallet handles the address type you plan to publish — newer wallets support Unified Addresses (u1) and older wallets may only support Sapling (zs1) or transparent.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 117
+Total FAQ entries: 118
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -200,6 +200,38 @@ const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
 
 /** DOGE txid: 64 lowercase hex chars (sha256d, same as BTC family). */
 const DOGE_TXID_RE = /^[0-9a-f]{64}$/;
+
+/** ZEC address (cp39 — Part 122).  Four formats coexist:
+ *
+ *  - t1 (transparent P2PKH): base58, `t1` prefix + 33 base58 chars
+ *    = 35 chars total.  Looks like a Bitcoin legacy address.
+ *  - t3 (transparent P2SH, multi-sig): base58, `t3` prefix + 33
+ *    base58 chars = 35 chars total.
+ *  - zs1 (Sapling shielded): bech32, `zs1` prefix + 75 bech32
+ *    data chars = 78 chars total.  Uses zero-knowledge proofs to
+ *    hide sender/recipient/amount.
+ *  - u1 (Unified Address, bundles Orchard receivers + optional
+ *    Sapling/transparent): bech32m, `u1` prefix + variable
+ *    length, typically 90–300 chars depending on what's bundled.
+ *
+ *  Per-address privacy: senders and receivers pick the address
+ *  type that matches their preferred posture.  All four are
+ *  first-class on the protocol.  Permissive shape check;
+ *  chain-binding happens on the receiving wallet side.
+ *
+ *  Bech32 alphabet excludes `1`, `b`, `i`, `o` to avoid visual
+ *  ambiguity (we use [02-9ac-hj-np-z] for the bech32 data
+ *  portion, matching the LTC MWEB pattern).
+ */
+const ZEC_T_RE = /^t[13][1-9A-HJ-NP-Za-km-z]{33}$/;
+const ZEC_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
+
+/** ZEC txid: 64 lowercase hex chars.  Both transparent and
+ *  shielded transactions surface a 64-char hex txid on chain;
+ *  shielded inputs/outputs are hidden inside the tx but the
+ *  txid itself is canonical and shareable. */
+const ZEC_TXID_RE = /^[0-9a-f]{64}$/;
 
 
 /** BLURT "address" is actually a Blurt account name — the
@@ -482,7 +514,7 @@ export function jitterAmountForAsset(
 	base: string
 ): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge') {
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec') {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -575,7 +607,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -857,6 +889,25 @@ export function isValidDogeTxid(s: string): boolean {
 	return DOGE_TXID_RE.test(s);
 }
 
+/** Validate a ZEC address shape (cp39 — Part 122).  Accepts all
+ *  four formats: t1/t3 transparent (base58), zs1 Sapling shielded
+ *  (bech32, exactly 78 chars), u1 Unified Address (bech32m,
+ *  variable length).  See ZEC_T_RE / ZEC_ZS_RE / ZEC_U_RE
+ *  docblocks above for the per-format rationale. */
+export function isValidZecAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ZEC_T_RE.test(s) || ZEC_ZS_RE.test(s) || ZEC_U_RE.test(s);
+}
+
+/** Validate a ZEC txid shape.  Same 64-char lowercase hex
+ *  for both transparent and shielded transactions — the
+ *  shielded inputs/outputs are hidden inside the tx, but
+ *  the txid itself is canonical and shareable. */
+export function isValidZecTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ZEC_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -869,6 +920,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'ltc') return isValidLtcAddress(addr);
 	if (method === 'dash') return isValidDashAddress(addr);
 	if (method === 'doge') return isValidDogeAddress(addr);
+	if (method === 'zec') return isValidZecAddress(addr);
 	return false;
 }
 
@@ -885,6 +937,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'ltc') return isValidLtcTxid(txid);
 	if (method === 'dash') return isValidDashTxid(txid);
 	if (method === 'doge') return isValidDogeTxid(txid);
+	if (method === 'zec') return isValidZecTxid(txid);
 	return false;
 }
 
@@ -910,7 +963,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
 		p.method !== 'dash' &&
-		p.method !== 'doge'
+		p.method !== 'doge' &&
+		p.method !== 'zec'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1084,7 +1138,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'bch' &&
 		p.method !== 'ltc' &&
 		p.method !== 'dash' &&
-		p.method !== 'doge'
+		p.method !== 'doge' &&
+		p.method !== 'zec'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1237,7 +1292,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
 			o.method !== 'dash' &&
-			o.method !== 'doge'
+			o.method !== 'doge' &&
+			o.method !== 'zec'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1265,7 +1321,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'bch' &&
 			o.method !== 'ltc' &&
 			o.method !== 'dash' &&
-			o.method !== 'doge'
+			o.method !== 'doge' &&
+			o.method !== 'zec'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1672,6 +1729,20 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `dogecoin:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'zec') {
+		// Zcash uses the `zcash:` URI scheme — ZIP-321 conformant
+		// (cp39 — Part 122).  Same BIP-21-style shape as BTC's
+		// `bitcoin:` scheme with `amount` as decimal ZEC.  ZEC
+		// addresses are unambiguous within the URI scheme: t1/t3
+		// prefixes are base58 (transparent), zs1 is bech32
+		// (Sapling shielded), u1 is bech32m (Unified Address).
+		// All four are valid wallet-recognizable shapes.
+		// Reference: https://zips.z.cash/zip-0321 (Payment Request
+		// URI specification).
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `zcash:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

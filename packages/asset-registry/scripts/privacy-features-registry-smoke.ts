@@ -13,7 +13,7 @@
  *    protocol names
  *  - `privacyGuideKey` is a non-empty lowercase string
  *  - Per-ticker invariants: XMR uses 'subaddress', BLURT uses
- *    'account-reuse', BTC/BCH/LTC/DASH/DOGE/USDT/USDC/DAI use
+ *    'account-reuse', BTC/BCH/LTC/DASH/DOGE/USDT/USDC/DAI/ZEC use
  *    'hd-derived'
  *  - XMR has no opt-in tech (already private at chain level)
  *  - USDT/USDC/DAI have no opt-in tech (centralization is the
@@ -42,7 +42,7 @@ function fail(name: string, detail: string): void {
 console.log('\n── privacy-features-registry smoke ───────────────────\n');
 
 const VALID_ADVICE = new Set(['subaddress', 'hd-derived', 'account-reuse']);
-const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin', 'privatesend']);
+const VALID_TECH = new Set(['mweb', 'cashfusion', 'coinjoin', 'payjoin', 'privatesend', 'shielded-pools']);
 
 // ── Scenario 1 — every asset has privacyFeatures populated ────
 for (const a of ASSETS) {
@@ -114,7 +114,8 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	BCH: 'hd-derived',
 	LTC: 'hd-derived',
 	DASH: 'hd-derived',
-	DOGE: 'hd-derived'
+	DOGE: 'hd-derived',
+	ZEC: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -144,7 +145,8 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	BCH: ['cashfusion'],
 	LTC: ['mweb'],
 	DASH: ['privatesend'],
-	DOGE: null
+	DOGE: null,
+	ZEC: ['shielded-pools']
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

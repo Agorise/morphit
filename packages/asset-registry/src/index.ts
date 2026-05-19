@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -540,10 +540,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// LTC is transparent (like BTC), but the chain is fully
 		// decentralized and LTC addresses cannot be frozen by an
 		// issuer.  Same posture as BTC and BCH: no warning chip
-		// needed.  (LTC has an opt-in privacy upgrade — MWEB —
-		// but it's wallet-side and per-transaction, not a chain
-		// property; users who want Morphit's strongest privacy
-		// posture should use XMR.)
+		// needed.  LTC ships an opt-in privacy upgrade — MWEB —
+		// at the wallet level on a per-transaction basis.
 		privacyWarningKey: null,
 		privacyFeatures: {
 			freshAddressAdvice: 'hd-derived',
@@ -597,10 +595,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// PrivateSend before sending get meaningful unlinkability
 		// at moderate trade-off (extra rounds = stronger anonymity
 		// set + higher fee).  No warning chip needed; same posture
-		// as BTC/BCH/LTC.  For Morphit's strongest privacy
-		// posture, use XMR; for transparent + opt-in, DASH is the
-		// only Morphit-supported chain with chain-level masternode-
-		// coordinated mixing.
+		// as BTC/BCH/LTC.
 		privacyWarningKey: null,
 		privacyFeatures: {
 			freshAddressAdvice: 'hd-derived',
@@ -650,7 +645,6 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// emitted in the first year, then settled at a fixed
 		// 5 billion DOGE/year tail emission for security funding.
 		// No warning chip needed; same posture as BTC/BCH/LTC.
-		// For Morphit's strongest privacy posture, use XMR.
 		privacyWarningKey: null,
 		privacyFeatures: {
 			freshAddressAdvice: 'hd-derived',
@@ -670,6 +664,64 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// Permissive shape check; chain-binding happens on the
 		// receiving wallet side.
 		addressShape: /^[D9A][1-9A-HJ-NP-Za-km-z]{33}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'ZEC',
+		// Zcash uses 8 decimals — "zatoshi" is Zcash's smallest
+		// unit, satoshi-scale.  1 ZEC = 100_000_000 zatoshi.
+		// Confirmed via Zcash protocol specification.
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: ZEC is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; zec-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  No network picker needed in the
+		// post-order form or address-share modal — defaults to
+		// mainnet and stays there.  (Zcash has testnet and
+		// regtest networks for development but the only canonical
+		// home for ZEC the asset is mainnet.)
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Zcash is fully decentralized via PoW (Equihash variant,
+		// halving schedule matching Bitcoin's), and addresses
+		// cannot be frozen by an issuer.  Zcash supports both
+		// transparent addresses (t1/t3, base58-encoded, similar
+		// shape to Bitcoin's legacy addresses) and shielded
+		// addresses using zero-knowledge proofs — Sapling pool
+		// (zs1, bech32, ~78 chars) and Unified addresses (u1,
+		// variable length, bundling Orchard + optional Sapling +
+		// transparent receivers).  Per-address privacy: senders
+		// and receivers can pick t-addr for transparent visibility
+		// or z/u-addr for shielded transactions.  Both are
+		// first-class on the protocol.  No warning chip needed;
+		// the chain is decentralized and the privacy choice is
+		// the user's per address.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: ['shielded-pools'],
+			privacyGuideKey: 'zec'
+		},
+		// ZEC address formats:
+		//   - t1 (transparent P2PKH): base58, ~35 chars total.
+		//   - t3 (transparent P2SH, multisig): base58, ~35 chars.
+		//   - zs1 (Sapling shielded): bech32, 78 chars total (zs1
+		//     prefix + 75 bech32 data chars).
+		//   - u1 (Unified Address bundling Orchard + optional
+		//     Sapling/transparent receivers): bech32m, variable
+		//     length (typically 90–300 chars depending on what's
+		//     bundled).
+		// Permissive shape check covering all four; chain-binding
+		// happens on the receiving wallet side.  Bech32 alphabet
+		// excludes `1`, `b`, `i`, `o` to avoid visual ambiguity
+		// (we use [02-9ac-hj-np-z] for the bech32 data portion,
+		// matching the LTC MWEB pattern).
+		addressShape: /^(t[13][1-9A-HJ-NP-Za-km-z]{33}|zs1[02-9ac-hj-np-z]{75}|u1[02-9ac-hj-np-z]{30,300})$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

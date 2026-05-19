@@ -515,6 +515,56 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp39 ZEC P2P trading wired ───────────────────────────────────
+	// Zcash addition (cp39 — Part 122).  Eleventh tradable asset.
+	// Brag list (entry #283) advertises ZEC peer-to-peer trading.
+	// Anchor: canonical registry must contain a ticker entry for ZEC.
+	// If ZEC ever loses its registry slot the brag claim drifts
+	// into vaporware and this CHECK row fires.
+	{
+		id: 'cp39-zec-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Zcash (ZEC) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'ZEC'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp39 ZEC payment-rail wired (cp32 LL #36) ────────────────────
+	// Cp32 LL #36: every tradable asset must also be wired as a
+	// payment rail.  Cp39 ships ZEC with both axes same-turn per
+	// the pattern established in cp33 for DOGE.  Anchor:
+	// payments/registry.ts must contain pay_zec.
+	{
+		id: 'cp39-zec-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Zcash (ZEC) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_zec'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp39 ZEC explorer URL bundled default ────────────────────────
+	// mainnet.zcashexplorer.app chosen from Ken's 7-explorer survey
+	// as the community-run, project-aligned default.  Anchor on the
+	// constant; a renamed/removed constant means the frontend has
+	// lost its fallback default and operators see a broken explorer
+	// link when no override is configured.
+	{
+		id: 'cp39-zec-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Zcash (ZEC) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_ZEC_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

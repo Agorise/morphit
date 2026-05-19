@@ -22,10 +22,9 @@
  * defaultNetwork: 'mainnet' (no picker shown), and
  * privacyWarningKey: null (DOGE is transparent at the base
  * layer like BTC but decentralized — no issuer-freeze risk.
- * Unlike DASH it has no opt-in privacy upgrade — no PrivateSend
+ * DOGE has no native privacy upgrade — no PrivateSend
  * equivalent, no confidential transactions, no segwit-enabled
- * mixing.  For Morphit's strongest privacy posture, users
- * should use XMR instead.).
+ * mixing.).
  */
 
 import { ASSETS as CANONICAL } from '../src/index';
