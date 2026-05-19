@@ -26,7 +26,7 @@
  * `aria-selected={method === '<asset>'}` pattern; assert every
  * required asset appears. Lightweight: text-based, no transpile.
  *
- * Adding a new tradable asset is then a 2-step ratchet:
+ * Adding a new tradable asset is then a 2-step gate:
  *
  *   1. Edit packages/asset-registry/src/index.ts ASSET_TICKERS
  *   2. Run smokes — this smoke fails until every registered

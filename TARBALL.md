@@ -1,3 +1,71 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 37 — Three-persona deeper walk catching 2 minor walk findings (1 LOW ADR wording + 1 Memory-rule violation cluster in 3 smoke comments) + LL #46 defensive smoke shipped end-to-end with mutation-tested regression value.  Closes the bug class I introduced and self-caught in cp36.)
+
+CP37 SCOPE:
+
+Per Ken's "Walk the remaining persona surfaces. One focused cp37 turn for LL #46 hardening. Do those in whatever order you feel is best." — walked first to surface findings, then closed walk findings + LL #46 smoke in one fix batch.
+
+CP37 METHODOLOGY:
+
+1. Persona surfaces NOT exercised by cp36's walk: full onboarding flow (3 pages), /orderbook from Sally-user view, feedback round-trip flow (/my/orders → PendingFeedbackReminderBanner → LeaveFeedbackForm → morphit_feedback_v1 → indexer → profile → feedbackResponse_v1), Bob reputation/profile/feature-bid surfaces, operator daily-ops vs deploy-ops, /about-this-instance, /operators, /instances, /plan, /compare, /security, /support, /glossary, /backup-keys.
+2. Mechanical scans for stale enumeration patterns: 4+ asset enumerations in non-FAQ i18n strings, stale "N tradable / N assets / N supported" count claims, narrow type unions missing newer assets, Forgejo/Gitea policy compliance, Matrix `@user:server` (DM) vs `#room:server` (room) notation policy.
+3. Built LL #46 defensive smoke that mechanically catches the regression class I created and self-caught in cp36.
+4. Mutation-tested LL #46 smoke against the cp37 tree (overwrite a snapshot-listed native translation with EN → smoke must fail; restore → smoke must pass).
+
+CP37 FINDINGS:
+
+**Walk findings (closed inline):**
+
+- **CP37-1 (LOW)**: `docs/adr/0026-transparent-chain-privacy-framework.md:218-219` — cp35's status-update footnote claimed cp26 ship state was "seven assets supported then (XMR/BTC/BLURT/USDT/BCH/LTC plus the framework's own data shape)" — actually 6 trade assets (XMR/BTC/BLURT/USDT/BCH/LTC).  The awkward "plus the framework's own data shape" hedge suggests counting the framework itself as the 7th, which is confusing.  Fixed to "six trade assets supported then (XMR, BTC, BLURT, USDT, BCH, LTC)".
+
+- **CP37-2 (LOW, cluster of 3)**: Memory rule "NEVER mention 'ratchet' anywhere in the repo EXCEPT the brag-list claim explicitly framing why we don't use one" violated by colloquial "N-step ratchet" phrasing in 3 smoke source-comment docblocks: `apps/web/scripts/asset-tab-completeness-smoke.ts:29` (my cp36 file), `apps/web/scripts/post-edit-multi-network-wired-smoke.ts:27` (my cp36 file), `apps/web/scripts/network-icon-coverage-smoke.ts:19` (pre-existing cp32 file).  All 3 closed by replacing "ratchet" with "gate" (same semantic — "step-by-step process that only advances in one direction"; no impact on smoke behavior).
+
+- **CP37-3 (NOT-A-BUG, documented exception)**: 4th `ratchet` mention found in `apps/web/src/lib/chat/fingerprint.ts:291` — incidental English word inside the canonical PGP Word List (Patrick Juola & William Beverly 1995, public-domain wordlist used verbatim for chat-fingerprint generation, frozen by spec).  Not a Memory-rule violation in spirit — the rule is about not endorsing/using "ratchet" as a Morphit design concept; an incidental word in a frozen reference wordlist isn't that.  Modifying the wordlist would break the wordlist's frozen-by-design invariant and PGP Word List spec-compliance.  Left as-is, documented exception.
+
+- **CP37-4 (NOT-A-BUG, clean)**: Stale count-claim scan — every "N tradable / N assets / N supported" reference in apps/, packages/, docs/, README, MORPHIT-BRAG-LIST.md is current at 10.  REVISIT-LIST.md and AUDIT-2026-05.md history entries preserve cp33-and-earlier counts in their historical context, which is the right place for them.
+
+- **CP37-5 (NOT-A-BUG, clean)**: Narrow type-union scan — every narrow ChatAssetTicker-style union found is intentionally narrow per documented design (explorer/urls.ts:91 covers single-network external assets only; ConversationView.svelte:273/391 covers non-BLURT mark-sent flow; ListingFeeAddressPanel.svelte:51 covers BTC/XMR-only listing-fee panel per fee_method enum frozen at BLURT/BTC/XMR — Memory #23).  `chat-asset-ticker-narrow-union-parity-smoke` confirms clean.
+
+- **CP37-6 (NOT-A-BUG, clean)**: Forgejo-policy compliance — no "Gitea" mentions in repo outside the allow-listed historical/meta files (TARBALL.md, REVISIT-LIST.md, run-smokes.sh per the smoke's documented allow-list).  Cp36 audit entry I wrote initially enumerated `forgejo-not-gitea` as a smoke name, which was a substring match on "gitea" outside the allow-list — rewrote without the literal substring.
+
+- **CP37-7 (NOT-A-BUG, clean)**: Matrix notation policy — every `@user:matrix.org` is in DM context (security disclosure CTAs), every `#room:matrix.org` is in public-room context (community discussion CTAs).  Policy held across all 10 locales.
+
+CP37 NEW INFRASTRUCTURE (LL #46 defensive smoke):
+
+- **`apps/web/scripts/native-translations-floor-smoke.ts`** (11 scenarios): for every (key, locale) pair in the baseline snapshot where the locale value was non-EN-identical at snapshot time, asserts the current value is STILL non-EN-identical.  Per-locale scenarios (one each for es/fr/de/it/pl/ru/fa/zh-CN/zh-HK) emit clear per-locale failure messages naming the specific regressed keys.  Plus a global total-count floor scenario that catches the case where per-locale scenarios pass individually because the regression happened on keys NOT in the snapshot (e.g. a sneaky EN-overwrite on a key the snapshot considered EN-fallback at baseline that had since become natively translated — the total native-pair count would drop).  Plus a snapshot-integrity scenario that catches accidental regeneration against a corrupted tree (asserts every locale has ≥100 natives).
+
+- **`apps/web/scripts/native-translations-snapshot.json`** (baseline): captures every (key, locale) pair where the locale value differs from English at cp37 baseline.  EN total leaves: 2,730.  Per-locale native counts: es 2,619 / fr 2,603 / de 2,594 / it 2,478 / pl 2,492 / ru 2,508 / fa 2,521 / zh-CN 2,523 / zh-HK 2,523.  Total native pairs: 22,861.  Note: this implies ~93% native coverage averaged across non-EN locales, which is higher than the cp32-cp33-cp35 raw EN-fallback impressions suggested.  The i18n-translation-completeness-smoke's 1,150 chronic EN-fallback count is a SUBSET (it filters via short-loanword allow-list); the snapshot here is the broader floor.
+
+- **`apps/web/scripts/native-translations-snapshot-rebuild.ts`** (deliberate-action regen): byte-deterministic rebuild script that scans current locales and writes a fresh snapshot.  NOT registered in run-smokes.sh — manual tool only.  Used when shipping intentional new native translations (translator pass, per-locale revamp, etc.) so the smoke recognizes the new floor.
+
+- Registered `native-translations-floor-smoke` in `scripts/run-smokes.sh` after the cp36 entries.  Smoke runner count: 154 → 155.
+
+**LL #46 mutation test (passed):**
+
+Tampered: overwrote `it.faq.entries.what_is_morphit.a` value with EN-text (the exact cp36 mistake class).  Ran smoke → 2 scenarios FAIL with diagnostic "1 key(s) regressed from native to EN-fallback: faq.entries.what_is_morphit.a" + total-count floor breach (22,860 < 22,861).  Restored → smoke PASS.  The regression class I created and self-caught in cp36 is now mechanically detected forever.
+
+CP37 PATTERN LESSON (LL #47):
+
+**LL #47 — Snapshot-based floors are stronger than per-rule allow-lists for chronic-debt smokes.**  `i18n-translation-completeness-smoke` uses an allow-list of short-loanword (key, locale) pairs and flags everything else — at 1,150 entries this allow-list is no longer realistic to maintain manually (allow-list mechanism only fits short-loanword cases, doesn't scale to multi-sentence EN-fallback strings per cp36 audit observation).  The native-translations-floor approach instead captures the ENTIRE current native-pair set as a baseline and only flags REGRESSIONS from that baseline.  Going up (adding new natives) is unrestricted; going down (overwriting a native with EN) is what the smoke catches.  This is a cheaper-to-maintain shape for chronic-debt invariants where the "good" set is large and changes slowly: snapshot the good set, assert no regressions against it.
+
+CP37 TOTALS:
+
+2 walk findings closed (1 LOW + 1 LOW-cluster of 3 site fixes) + 1 documented exception filed (PGP wordlist) + 1 new defensive smoke (11 scenarios + 22,861-pair baseline snapshot + companion deliberate-action regen script) + 1 cp36 audit-entry self-correction (forgejo-substring outside allow-list) + 1 new LL pattern lesson.
+
+CP37 STATE METRICS:
+
+- 10 tradable assets (unchanged).
+- Locale parity: 2,730 leaf keys × 10 = 27,300 strings (unchanged — no new keys, no value changes that affected parity).
+- FAQ entries: 117 (unchanged).
+- ADRs: 30 files / 29 substantive (unchanged; ADR-0026 line edit only).
+- Brag entries: 282 (unchanged — cp37 closures internal per Memory #15).
+- Schema head: v33 (unchanged).
+- Smoke runners: 154 → 155 (+1 from native-translations-floor-smoke).
+- Native-translation snapshot: 22,861 (key, locale) pairs across 9 non-EN locales (~93% native coverage).
+- Mediakit: 41,865 bytes (unchanged — brag list unchanged); mediakit-freshness smoke 6/6 PASS.
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+### CP36 history (sealed 2026-05-19; preserved below for archaeology):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 36 — Three-persona walk (Bob multi-login chat + paired-readonly desktop + Sally-user no-crypto onboarding + Sally-operator node deploy) catching 11 walk-surfaced findings (4 HIGH/CRITICAL + 4 HIGH + 3 MEDIUM/LOW) on top of 4 pre-existing drift findings, all closed inline; + 2 new defensive smokes (asset-tab-completeness + post-edit-multi-network-wired) registered in run-smokes.sh; + LL #45 (persona-walk catches what asset-coverage-map audits miss) + LL #46 (when updating long-lived FAQ entries, check whether each locale was native vs EN-fallback before overwriting).
 
 CP36 SCOPE:

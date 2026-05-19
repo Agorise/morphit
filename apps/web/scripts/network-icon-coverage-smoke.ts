@@ -16,7 +16,7 @@
  *
  * The smoke is intentionally LIGHT: it walks the registry source as
  * text (no transpile, no runtime) and `fs.existsSync()`s each
- * expected file.  Adding a new network is then a 2-step ratchet:
+ * expected file.  Adding a new network is then a 2-step gate:
  *
  *   1. Edit packages/asset-registry/src/index.ts supportedNetworks
  *   2. Run smokes — this smoke fails until the icon SVG is added
