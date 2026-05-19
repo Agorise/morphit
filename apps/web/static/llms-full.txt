@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -155,7 +155,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. "Bitso transfer for moringa trees" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.
 
-**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
+**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
 
 • Buy/sell BTC for USD via PayPal
 • Buy/sell XMR for cash in person
@@ -212,7 +212,7 @@ These are standard, well-audited primitives (from libsodium). The protocol is a 
 
 **FAQ key:** `monero_amount_jitter`
 
-Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture.
+Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture.
 
 ---
 
@@ -1863,7 +1863,7 @@ USDT is the most-traded stablecoin in the world, and millions of traders rely on
 
 **FAQ key:** `why_usdc_warning`
 
-USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
+USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
 
 ---
 
@@ -1989,9 +1989,27 @@ Operators can refuse SOL trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSET
 
 ---
 
+## What is Ethereum (ETH), and why is it on Morphit?
+
+**FAQ key:** `what_is_eth`
+
+Ethereum (ETH) is a Proof-of-Stake cryptocurrency launched in 2015. It transitioned from Proof-of-Work to Proof-of-Stake in September 2022 ("The Merge"). Validators stake ETH and process blocks in rotation; no central freeze authority controls the chain.
+
+On Morphit, ETH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in ETH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).
+
+Ethereum addresses are 20-byte hex with a `0x` prefix — exactly 42 characters total. Both lowercase and EIP-55 mixed-case checksum forms are accepted. Use an Ethereum wallet like MetaMask, Rabby, Frame, Rainbow, or Trust Wallet to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, and amount visible on chain). Ethereum has no native protocol-level mixing; wallet-side address rotation is the user's primary privacy lever.
+
+Note: Ethereum addresses look IDENTICAL to USDT-ERC20, USDC-ERC20, DAI-ERC20, and any EVM token-account address on Base, Polygon, Arbitrum, or BSC. The asset field on the order (and the network field for multi-network assets) disambiguates — Morphit shows you which asset you're sending so wallet confusion is avoided.
+
+ETH can also be sent to a smart-contract address that may not accept it (no payable receive/fallback function); modern wallets warn before sending to contracts. ENS names (alice.eth) are NOT resolved by Morphit — paste raw 0x addresses to avoid centralized RPC dependency for name resolution.
+
+Operators can refuse ETH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="ETH"`; the federated marketplace keeps trading ETH regardless of any single operator's stance.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 121
+Total FAQ entries: 122
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

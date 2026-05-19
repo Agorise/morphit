@@ -189,6 +189,19 @@ const EXPECTATIONS: AssetExpectation[] = [
 		expectedUriScheme: 'solana:',
 		txidShapeAcceptable: '1'.repeat(87),
 		txidShapeUnacceptable: '1'.repeat(86)
+	},
+	{
+		ticker: 'ETH',
+		chatTicker: 'eth',
+		// ETH is 18-decimal on-chain (wei) but jitter clamps to
+		// 6-decimal display precision per cp47 design (matching
+		// DAI's cp31 ADR-0029 rationale).  At $2500/ETH a 0-999
+		// microether jitter range is ~$0.0025 max — the same
+		// $0.001-magnitude jitter UX the stablecoins use.
+		expectedJitterDecimals: 6,
+		expectedUriScheme: 'ethereum:',
+		txidShapeAcceptable: '0x' + 'a'.repeat(64),
+		txidShapeUnacceptable: 'a'.repeat(63)
 	}
 ];
 
@@ -272,7 +285,8 @@ for (const exp of EXPECTATIONS) {
 			ZEC: 't1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA',
 			ARRR: 'zs1' + 'q'.repeat(75),
 			DCR: 'Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d',
-			SOL: 'So11111111111111111111111111111111111111112'
+			SOL: 'So11111111111111111111111111111111111111112',
+			ETH: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
 		};
 		const addr = sampleAddrs[exp.ticker];
 		if (!addr) {

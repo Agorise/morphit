@@ -1,4 +1,85 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 46 — Full 94-task deep-deep + security audit on cp45 SOL work + the entire 14-asset registry surfacing **1 NEW MEDIUM coverage-gap class** (asset-payload-precision-parity) closed with a NEW defensive smoke + **4 new mutation tests**.  36 of 36 standalone-runnable smokes PASS (was 35/35 at cp45; +1 from cp46 closure smoke).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke — LL #52 holds across cp46.  No findings closed inline (cp45 work shipped clean — third consecutive checkpoint).  Cp46-O-1 was the load-bearing find: there was no defensive smoke pinning `asset.decimals ↔ jitter function precision`, `URI scheme per asset`, or `txid regex shape per asset`.  Mutation tests M-97 (widen SOL_TXID_RE to {1,200}), M-98 (mutate jitterSolAmount 1e9→1e8 BTC-family precision), M-99 (mutate solana: URI scheme to bogus:) all silently passed against the 35 cp45 smokes.  Cp46 NEW asset-payload-precision-parity-smoke (53 scenarios) pins all three invariants per asset; M-97/M-98/M-99 all now FAIL appropriately.  Also captured the DAI 18-decimal-on-chain vs 6-decimal-jitter design choice from cp31 ADR-0029 as explicit `expectedJitterDecimals: 6` with comment-anchor.  M-100 verifies the EXPECTATIONS table itself is the source of truth — tampering DAI's expectedJitterDecimals from 6 to 18 surfaces as a smoke failure.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 47 — Ethereum (ETH) as 15th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0035 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW eth-trade-only-smoke (18 scenarios + 20 adversarial including ENS rejection); 3 new wiring-completeness CHECK rows; 5 mutation tests passed; 34 adversarial test cases PASS.  37 of 37 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified 4th consecutive checkpoint, holds on cp47 work).  Cp46 asset-payload-precision-parity-smoke extended with ETH row (57 scenarios total, was 53 at cp46).  NEW `jitterEthAmount` function — 18-decimal on-chain wei clamped to 6-decimal display precision (matching cp31 DAI ADR-0029 design rationale; at $2500/ETH max jitter ~$0.0025).  NEW `ethereum:` URI scheme (BIP-21-compatible EIP-681 simplified form).  NEW `ETH_TXID_RE` — 0x+64hex, same shape as EVM stablecoin txids.  9 new cross-asset address-shape overlaps documented (72→81 EXPECTED_OVERLAPS) — ETH↔USDT-ERC20/USDC-ERC20/DAI-ERC20 by LL #50 design.  Universal no-favoritism principle from cp39/cp41/cp43/cp45 reapplied 5th consecutive checkpoint — no comparative language anywhere in ETH copy.  Cp47 deep-deep found 1 inline-fix (A-1 LOW): indexer asset-registry-smoke's unknown-ticker test used 'eth' as stand-in; swapped to 'trx' (Tron native — not on roadmap).  Architectural decisions: ENS NOT resolved (out-of-scope to preserve distributed-no-SPOF design), contract-destination wallet UX warnings, Layer-2 networks treated as separate chains.)
+
+CP47 SCOPE:
+
+Add Ethereum (ETH) as the fifteenth tradable asset.  Post-Merge Proof-of-Stake consensus (since September 2022); transparent base layer; no native protocol-level mixing.  Per Ken's directive: "implement as many of our privacy things with this as we have done with the others so far (jitter, etc)."  Universal no-favoritism principle from cp39 applied — 5th consecutive checkpoint clean (cp41, cp43, cp45, cp47 all shipped without retroactive favoritism cleanup).
+
+CP47 KEY DESIGN DECISIONS:
+
+- **Address regex** `/^0x[a-fA-F0-9]{40}$/` — 20-byte addresses, hex-encoded with 0x prefix.  Both lowercase and EIP-55 mixed-case forms accepted.  SAME shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base, USDC-Polygon, USDC-Arbitrum, DAI-Polygon, DAI-Arbitrum, DAI-Base — every EVM token-account address (LL #50 by design, asset+network fields disambiguate).
+- **`optInPrivacyTech: null`** — Ethereum has no native protocol-level mixing.  Tornado Cash existed externally but is sanctioned in many jurisdictions; Morphit doesn't advertise it.  Matches XMR/SOL convention.
+- **NEW `jitterEthAmount`** — 18-decimal on-chain (wei) clamped to 6-decimal display precision per cp31 DAI ADR-0029 design rationale.  At $2500/ETH max jitter is ~$0.0025 — same $0.001-magnitude jitter UX as stablecoins.  Separate function (not reusing jitterStablecoinAmount) for clarity since ETH is not a stablecoin.
+- **NEW `ethereum:` BIP-21-compatible URI scheme** — EIP-681 simplified form.  All major wallets (MetaMask, Rabby, Frame, Rainbow, Trust Wallet) parse this for native ETH transfers.
+- **NEW `ETH_TXID_RE`** — 0x+64hex, same shape as EVM stablecoin txids.
+- **`text-indigo-500` accent** — matches Ethereum brand #627EEA; verified distinct via cp42 asset-accent-class-uniqueness-smoke.
+- **`eth.blockscout.com`** chosen as bundled chat-link from 9-explorer survey — open-source Blockscout instance, project-aligned with Ethereum's transparency ethos.  Etherscan is more popular but third-party closed-source; Blockscout's open-source code is what Ethereum L2s like Optimism and Base run.  Operator's 9-explorer survey at cp47 (eth.blockscout.com, etherscan.io, blockchair.com/ethereum, ethplorer.io, oklink.com/ethereum, blockchain.com/explorer/assets/eth, blockexplorer.one/ethereum/mainnet, routescan.io, beaconcha.in — consensus-layer-only) documented in ADR-0035.
+- **Coingecko ID `'ethereum'`**, fallback price $2500.00.
+- **ENS NOT resolved** — Morphit requires raw 0x addresses to avoid centralized RPC dependency for ENS resolution.  Trade-off: UX friction (users must paste 0x not alice.eth) accepted in service of distributed-no-SPOF design priority.  Documented in privacy.guides.eth.caveats × 10 locales + FAQ what_is_eth + ADR-0035.
+- **Contract-destination caveats** — `0x[a-fA-F0-9]{40}` matches both EOAs and smart contracts; Morphit accepts the shape and the receiver-side wallet warns about contract destinations.  Documented in privacy.guides.eth.caveats.
+- **Layer-2 networks** (Arbitrum, Optimism, Base) treated as SEPARATE chains — Morphit doesn't treat ETH-on-Arbitrum as ETH-on-mainnet.  If L2 ETH is ever added, ships as multi-network expansion.
+
+CP47 NEW i18n KEYS (14 × 10 = 140 leaves):
+
+faq.entries.what_is_eth.{q,a}, post_order.form.asset_explainer.eth, chat.address.{method_eth, address_placeholder_eth, address_invalid_eth, pill_method_eth}, chat.funds_sent.pill_title_eth, payment_method.pay_eth.description, cheat_sheet.section_assets.eth, privacy.guides.eth.{one_line, intro, caveats, meta_description}. NO new tech-tag leaves (ETH uses no opt-in tech).  Native EN/ES/FR/DE; EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK per Memory #29.
+
+CP47 MUTATION TESTS (5 of 5 PASS):
+
+- **M-101**: ETH.canPayListingFee → true → eth-trade-only-smoke FAILED ("canonical ETH.canPayListingFee === false (memory #23)").  Restored → PASS.
+- **M-102**: pay_eth removed → wiring-completeness FAILED on cp47-eth-payment-rail-wired.  Restored → PASS.
+- **M-103**: ETH accent collided to text-orange-500 (XMR) → asset-accent-class-uniqueness-smoke FAILED ("COLLISION: text-orange-500 used by xmr, eth").  Restored → PASS.
+- **M-104**: jitterEthAmount precision 6→8 (also affects jitterStablecoinAmount which shares the pattern) → asset-payload-precision-parity smoke FAILED on USDT first (alphabetical order) but mutation correctly surfaces.  Restored → PASS.
+- **M-105**: ethereum: URI → telegram: → asset-payload-precision-parity FAILED ("ETH URI scheme === ethereum:").  Restored → PASS.
+
+CP47 ADVERSARIAL TEST SUITE (34 of 34 PASS):
+
+Both ETH_RE (addresses) and ETH_TXID_RE (signatures) covered.  Classes: ENS rejection (alice.eth, vitalik.eth correctly rejected), missing prefix, wrong-case prefix (0X), non-hex chars (g/z), length boundaries (39/40/41 for addresses, 63/64/65 for txids), cross-asset rejection (BTC P2PKH, XMR address, SOL base58 87-char all correctly rejected), SQL injection, XSS, null bytes, whitespace, 1M-char DoS, type tests.
+
+CP47 CATEGORY-B no-favoritism FRAMING:
+
+ETH canonical entry / frontend metadata / brag entry #287 / ADR-0035 / privacy guide × 10 locales / CATEGORY_B_DESCRIPTIONS all describe ETH factually:
+- Post-Merge Proof-of-Stake consensus (since September 2022).
+- Transparent base layer; wallet-side address rotation as privacy lever.
+- Same address shape as every EVM token-account (factual; asset+network disambiguate).
+- Native ETH only — WETH is for DEX interoperability.
+- ENS not resolved (factual rationale: distributed-no-SPOF design priority).
+- Contract destinations may revert if no payable receive/fallback (factual).
+
+NO inter-coin comparisons.  NO "fastest" / "most secure" / "best smart-contract platform" framings.
+
+CP47 STATE METRICS:
+
+| Metric | cp46 | cp47 | Δ |
+|---|---|---|---|
+| Tradable assets | 14 | **15** | +ETH |
+| Locale parity strings | 27,910 | **28,050** | +140 |
+| FAQ entries | 121 | **122** | +1 |
+| ADRs | 33 | **34** | +ADR-0035 |
+| Brag entries | 286 | **287** | +#287 |
+| Smoke runners | 165 | **166** | +eth-trade-only |
+| Standalone smokes PASS | 36/36 | **37/37** | +1 |
+| Workspaces TS-clean | 7/7 | **7/7** | — |
+| Mediakit bytes | 44,143 | **44,900** | +757 |
+| Native snapshot pairs | 22,936 | **22,951** | +15 |
+| STRIDE matrix lines | 1,858 | **1,894** | +36 |
+| address-shape-overlap entries | 72 | **81** | +9 (ETH↔EVM-stablecoin specimens) |
+| Jitter functions | 5 | **6** | +jitterEthAmount (6-decimal display-clamp) |
+| Privacy tech tags | 7 | 7 | — (ETH has no opt-in tech) |
+
+CP47 TOTALS:
+
+1 new tradable asset + 14 new ETH i18n leaves × 10 + 1 new FAQ × 10 + 1 new ADR + 1 new brag entry + 1 new smoke (18 + 14) + 3 new wiring-completeness CHECK rows + 1 cp46 EXPECTATIONS row + 0 favoritism cleanups + 18 docblock drift sweeps + 4 STRIDE rows + 5 mutation tests + 34 adversarial cases + 1 NEW jitter function (jitterEthAmount, 6-decimal display-clamp on 18-decimal on-chain) + 1 NEW URI scheme (ethereum:) + 1 NEW txid regex (ETH_TXID_RE, 0x+64hex shared with EVM stablecoins).
+
+CP47 DEEP-DEEP RESULT — 1 inline-fix (A-1 LOW):
+
+**A-1 LOW**: `apps/indexer/scripts/asset-registry-smoke.ts` used `'eth'` as the unknown-ticker stand-in.  Cp33 made `'doge'` valid, cp39 made `'zec'` valid, cp47 made `'eth'` valid.  Each addition needed the stand-in swapped.  Fixed inline by swapping to `'trx'` (Tron native — Morphit has USDT-TRC20 but not native TRX; not on roadmap).  **Bug class:** "unknown stand-in becomes valid".  **Frequency:** observed at cp33, cp39, cp47 — 3 of 8 asset additions caught the same trap.  **Structural defense candidate:** could pin the unknown stand-in via a registry-driven smoke that asserts the stand-in is NOT in ASSET_TICKERS, but the manual review at deep-deep time has been catching this consistently; deferring structural defense to cp48 deep-deep if pattern repeats.
+
+CP47 LL #52 + CP46 ASSET-PAYLOAD-PRECISION-PARITY VERIFIED 4TH/2ND CONSECUTIVE CHECKPOINT:
+
+- cp44 introduced workspace-typecheck-smoke; cp45/cp46/cp47 all confirm 7/7 workspaces compile-clean on fresh work.
+- cp46 introduced asset-payload-precision-parity-smoke; cp47 confirms 57/57 scenarios pass (extended from 53 with 4 ETH-specific scenarios).
+- Pattern lesson holds: structural defenses introduced at deep-deeps continue to pay off on subsequent asset-addition checkpoints.
+
+### CP46 history (sealed 2026-05-19; preserved below for archaeology): surfacing **1 NEW MEDIUM coverage-gap class** (asset-payload-precision-parity) closed with a NEW defensive smoke + **4 new mutation tests**.  36 of 36 standalone-runnable smokes PASS (was 35/35 at cp45; +1 from cp46 closure smoke).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke — LL #52 holds across cp46.  No findings closed inline (cp45 work shipped clean — third consecutive checkpoint).  Cp46-O-1 was the load-bearing find: there was no defensive smoke pinning `asset.decimals ↔ jitter function precision`, `URI scheme per asset`, or `txid regex shape per asset`.  Mutation tests M-97 (widen SOL_TXID_RE to {1,200}), M-98 (mutate jitterSolAmount 1e9→1e8 BTC-family precision), M-99 (mutate solana: URI scheme to bogus:) all silently passed against the 35 cp45 smokes.  Cp46 NEW asset-payload-precision-parity-smoke (53 scenarios) pins all three invariants per asset; M-97/M-98/M-99 all now FAIL appropriately.  Also captured the DAI 18-decimal-on-chain vs 6-decimal-jitter design choice from cp31 ADR-0029 as explicit `expectedJitterDecimals: 6` with comment-anchor.  M-100 verifies the EXPECTATIONS table itself is the source of truth — tampering DAI's expectedJitterDecimals from 6 to 18 surfaces as a smoke failure.)
 
 CP46 SCOPE:
 

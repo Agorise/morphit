@@ -257,6 +257,30 @@ const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const validateSol: AddressValidator = (s) => SOL_RE.test(s);
 
+// ETH address regex (cp47 — Part 122).  Ethereum addresses are
+// 20-byte hex with 0x prefix — exactly 42 chars total.  Both
+// lowercase and EIP-55 mixed-case checksum forms accepted.
+//
+// SAME shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every
+// EVM token-account address on Base/Polygon/Arbitrum/BSC.
+// Context disambiguates at the order layer (asset field +
+// network field for multi-network assets) per LL #50.  cp47
+// extends address-shape-overlap-smoke with ETH specimens.
+//
+// CONTRACT ADDRESSES match this regex but are smart-contract
+// accounts not EOAs.  Sending ETH to a contract that doesn't
+// implement a receive() / fallback() function may revert.
+// Morphit accepts the shape; receiver-side wallet UX is
+// responsible for contract-destination warnings.
+//
+// ENS NAMES (alice.eth) are NOT accepted by this regex — Morphit
+// requires raw 0x addresses to avoid centralized RPC dependency
+// on ENS resolution (violates the distributed-no-SPOF design
+// priority).
+const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
+
+const validateEth: AddressValidator = (s) => ETH_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -684,6 +708,35 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// with Proof-of-History sequencing.  No central freeze
 		// authority.  Transparent base layer.  No warning chip
 		// needed.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'eth',
+		displayTicker: 'ETH',
+		displayName: 'Ethereum',
+		oneLineDescription:
+			'Ethereum — Proof-of-Stake cryptocurrency.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-eth.svg',
+		// Ethereum brand color is #627EEA (a blue-purple).
+		// text-indigo-500 lands a clean indigo accent distinct
+		// from every existing assignment.  Verified at cp47 via
+		// cp42 asset-accent-class-uniqueness-smoke.
+		accentClass: 'text-indigo-500',
+		decimals: 18, // 1 ETH = 10^18 wei
+		supportsMemo: false,
+		addressValidator: validateEth,
+		// MEMORY #23 INVARIANT: ETH cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.  Layer-2 networks are
+		// SEPARATE chains and would be added as multi-network if
+		// ever shipped.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Ethereum is decentralized via Proof-of-Stake (post-
+		// Merge, September 2022).  No central freeze authority.
+		// Transparent base layer; no warning chip needed.
 		privacyWarningKey: null
 	}
 ] as const;

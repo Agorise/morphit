@@ -1592,6 +1592,8 @@
 							<Tooltip textKey="post_order.form.asset_explainer.dcr" faqKey="what_is_dcr" />
 						{:else if a === 'SOL'}
 							<Tooltip textKey="post_order.form.asset_explainer.sol" faqKey="what_is_sol" />
+						{:else if a === 'ETH'}
+							<Tooltip textKey="post_order.form.asset_explainer.eth" faqKey="what_is_eth" />
 						{/if}
 					</div>
 				{/each}
@@ -1601,7 +1603,7 @@
 			     Renders only when the chosen asset has a non-null
 			     privacyWarningKey in the canonical registry.  USDT
 			     and USDC are the two stablecoin assets that surface
-			     here; BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL all carry
+			     here; BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH all carry
 			     null and skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />

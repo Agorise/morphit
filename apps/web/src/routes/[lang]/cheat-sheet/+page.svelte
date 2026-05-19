@@ -164,6 +164,10 @@
 				<dt>SOL</dt>
 				<dd>{$_('cheat_sheet.section_assets.sol')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>ETH</dt>
+				<dd>{$_('cheat_sheet.section_assets.eth')}</dd>
+			</div>
 		</dl>
 	</section>
 

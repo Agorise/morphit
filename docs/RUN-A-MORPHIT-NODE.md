@@ -1865,9 +1865,9 @@ double-spend, halved abuse defenses), see
 
 ---
 
-## Trade-only assets: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, and your operator stance (Part 121, Part 122 cp21, cp24, cp27, cp30, cp31, cp33)
+## Trade-only assets: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and your operator stance (Part 121, Part 122 cp21, cp24, cp27, cp30, cp31, cp33)
 
-Morphit ships with **USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, and SOL enabled by default**
+Morphit ships with **USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, and ETH enabled by default**
 as trade-only assets on a new node.  Users can buy/sell USDT
 against any of the four supported networks (ERC-20, TRC-20,
 SPL, BEP-20), and can buy/sell BCH (Bitcoin Cash, single-network
@@ -1893,7 +1893,7 @@ the env var directly.  Both paths write the same line.
 
 Reasonable positions for an operator:
 
-1. **Accept USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, and SOL** (default) — the canonical
+1. **Accept USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, and ETH** (default) — the canonical
    morphit.io posture.  Users have asked for stablecoin trading
    and for wider Bitcoin-fork rails.  Pick the default "Y" at
    each prompt; the wizard emits
@@ -1952,6 +1952,8 @@ MORPHIT_INDEXER_DISABLED_ASSETS="ARRR"
 MORPHIT_INDEXER_DISABLED_ASSETS="DCR"
 # Refuse only SOL trades (cp45):
 MORPHIT_INDEXER_DISABLED_ASSETS="SOL"
+# Refuse only ETH trades (cp47):
+MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
    ```
 
    You'll still see those orders from peer instances in your
@@ -2033,7 +2035,7 @@ chains can override per-network in the frontend env (see
 
 ### Single-network explorer URLs
 
-BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, and SOL are single-network (mainnet only), so
+BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, and ETH are single-network (mainnet only), so
 each has just one chat-link explorer URL:
 
 | Asset | Bundled default explorer |

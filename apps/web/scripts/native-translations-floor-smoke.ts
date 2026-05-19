@@ -9,7 +9,7 @@
  * WHY THIS SMOKE EXISTS (Part 122 cp37 LL #46 closure):
  *
  * Cp36 surfaced LL #46 the hard way: while updating
- * `faq.entries.what_is_morphit.a` × 10 locales to include DAI + DOGE + ZEC + ARRR + DCR + SOL
+ * `faq.entries.what_is_morphit.a` × 10 locales to include DAI + DOGE + ZEC + ARRR + DCR + SOL + ETH
  * in the asset enumeration, the initial pass applied the same
  * "native en/es/fr/de + EN-fallback for the other 6" strategy
  * Memory #29 documents for NEW asset i18n strings. That strategy is

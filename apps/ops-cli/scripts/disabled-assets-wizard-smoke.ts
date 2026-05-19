@@ -45,7 +45,8 @@ const scenarios: Scenario[] = [
 				catB.includes('ARRR') &&
 				catB.includes('DCR') &&
 				catB.includes('SOL') &&
-				catB.length === 11
+				catB.includes('ETH') &&
+				catB.length === 12
 			);
 		}
 	},

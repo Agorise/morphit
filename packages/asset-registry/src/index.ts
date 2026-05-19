@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -912,6 +912,97 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// at the regex layer; receiver-side wallet UX is
 		// responsible for warning about PDA destinations.
 		addressShape: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'ETH',
+		// Ethereum uses 18 decimals on-chain — 1 ETH = 10^18 wei.
+		// SAME on-chain precision as DAI (both are EVM-native).
+		// However, the cp31 DAI design choice (ADR-0029) clamps
+		// jitter to 6-decimal display precision regardless of
+		// the underlying token's decimals.  Cp47 jitterEthAmount
+		// applies the same 6-decimal clamp: at $2500/ETH a 0-999
+		// microether jitter range is $0.0025 max — the same
+		// $0.001-magnitude jitter UX the stablecoins use.  This
+		// is verified at cp46 asset-payload-precision-parity-
+		// smoke with expectedJitterDecimals: 6 for ETH.
+		decimals: 18,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: ETH is trade-only.  Cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}.  eth-trade-only-smoke pins this
+		// from the registry side; fee-method-enum-frozen-smoke
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  Ethereum has multiple testnets
+		// (Sepolia, Holesky) but Morphit trades only on mainnet.
+		// Layer-2 networks (Arbitrum, Optimism, Base) are SEPARATE
+		// chains — Morphit doesn't treat ETH-on-Arbitrum as the
+		// same asset as ETH-on-mainnet because the receive
+		// address chain context differs.  If we later add L2
+		// ETH, that ships as a multi-network expansion (similar
+		// to USDT-on-{ERC20,TRC20,SPL,BEP-20}).
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Ethereum runs Proof-of-Stake consensus (post-Merge,
+		// September 2022).  Validators stake ETH and are rotated;
+		// no central freeze authority.  The chain is transparent
+		// at the base layer (sender, recipient, and amount visible
+		// on chain).  No native mixing protocol — Ethereum's
+		// privacy story is at the wallet/contract layer (fresh
+		// addresses, off-chain coordination), not at the protocol
+		// layer.  Tornado Cash was a notable mixer contract but
+		// is sanctioned in many jurisdictions; Morphit doesn't
+		// recommend or rely on it.  No warning chip needed;
+		// chain is decentralized.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// Ethereum addresses derive from HD seeds in modern
+			// wallets (MetaMask, Rabby, Frame, Trust Wallet,
+			// Rainbow).  Standard "fresh address per trade"
+			// advice applies — transparent base layer means
+			// address reuse is directly visible on chain.
+			freshAddressAdvice: 'hd-derived',
+			// Ethereum has no native opt-in mixing protocol.
+			// Wallet-side address rotation is the user's primary
+			// privacy lever.  Same convention as XMR and SOL —
+			// `null` for "no opt-in protocol tech available".
+			// Tornado Cash existed as an external contract-level
+			// mixer but is sanctioned; Morphit doesn't advertise
+			// it.
+			optInPrivacyTech: null,
+			privacyGuideKey: 'eth'
+		},
+		// Ethereum address format:
+		//   - 20 bytes, hex-encoded with `0x` prefix
+		//   - Exactly 42 chars including the `0x`
+		//   - Hex chars are case-insensitive at the protocol
+		//     layer; EIP-55 defines a mixed-case checksum
+		//     scheme that wallet UX uses to detect typos
+		//   - Morphit accepts both lowercase and mixed-case
+		//     (EIP-55 checksum), since both round-trip identically
+		//     to the same on-chain address
+		// MAJOR LL #50 OVERLAP: ETH addresses share their shape
+		// with USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
+		// USDC-Polygon, USDC-Arbitrum, DAI-Polygon, DAI-Arbitrum,
+		// DAI-Base — every EVM token-account address.  Context
+		// disambiguates at the order layer via the asset field
+		// (and for multi-network assets, the network field).
+		// Cp42 address-shape-overlap-smoke extended with ETH
+		// specimens at cp47 — many new EXPECTED_OVERLAPS entries.
+		// CONTRACT-ADDRESS DESTINATIONS: ETH can be sent to a
+		// smart contract address that may not implement an ETH-
+		// receive function (or implements one that rejects).
+		// The 0x-40-hex regex doesn't distinguish externally-
+		// owned-accounts (EOAs) from contracts; Morphit accepts
+		// the shape and the wallet UX warns about contract
+		// destinations.
+		// ENS NAMES (alice.eth): NOT resolved by Morphit.  Users
+		// must paste raw 0x addresses.  Resolving ENS would
+		// require a centralized RPC dependency, violating the
+		// distributed-no-SPOF design priority.
+		addressShape: /^0x[a-fA-F0-9]{40}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 
