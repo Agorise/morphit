@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -289,6 +289,39 @@ const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
  *  inherited the SHA-256 32-byte txid convention. */
 const DCR_TXID_RE = /^[0-9a-f]{64}$/;
 
+/** SOL address (cp45 — Part 122).  Solana public keys are 32
+ *  bytes encoded as base58, surfacing as 32-44 character strings
+ *  (most addresses are exactly 44 chars but length varies based
+ *  on leading-zero byte count of the key material).
+ *
+ *  Same character class as USDT and USDC SPL token-account
+ *  addresses — context disambiguates at the order layer via the
+ *  asset field (LL #50 same-format-different-chain pattern,
+ *  covered by cp42 address-shape-overlap-smoke; cp45 adds SOL
+ *  specimens to that smoke's allowlist).
+ *
+ *  PROGRAM-DERIVED ADDRESSES (PDAs) match this regex but are
+ *  off-curve — they have no associated private key and can only
+ *  be controlled by the owning on-chain program.  Sending SOL to
+ *  a PDA generally works at the protocol level but the recipient
+ *  cannot move funds out unless the program has a withdraw
+ *  instruction.  Morphit accepts the shape; receiver-side wallet
+ *  UX is responsible for PDA-destination warnings.
+ *
+ *  WRAPPED SOL (wSOL) addresses use the mint
+ *  `So11111111111111111111111111111111111111112` — those are
+ *  SPL-token forms for DEX interoperability, not regular receive
+ *  addresses.  Morphit users trade native SOL.
+ */
+const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** SOL txid (cp45 — Part 122).  Solana transaction signatures
+ *  are 64 bytes encoded as base58, surfacing as 87-88 char
+ *  strings.  Notably DIFFERENT from the BTC family's 64-hex
+ *  format — Solana uses base58 throughout (addresses,
+ *  signatures, mint addresses). */
+const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
+
 
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
@@ -556,6 +589,55 @@ export function jitterBlurtAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Part 122 cp45 — Amount-jitter for Solana.  Solana uses 9
+ *  decimals (1 SOL = 1,000,000,000 lamports) — unique smallest-
+ *  unit precision among Morphit's 14 assets.  BTC family is 8
+ *  decimals, USDT/USDC/DAI is 6, BLURT is 3, XMR is 12.  SOL
+ *  needs its own jitter calibration because no existing function
+ *  has 9-decimal arithmetic.
+ *
+ *  Why this exists for SOL: same rationale as the other
+ *  transparent chains.  Every order Morphit posts has an exact
+ *  amount derived from the fiat-amount + market-price
+ *  calculation.  When that exact amount appears on the public
+ *  Solana ledger a few seconds after the order was posted, any
+ *  chain observer can trivially correlate the order to the
+ *  on-chain payment.  Small random jitter breaks that
+ *  exact-match correlation.
+ *
+ *  Jitter range: up to 999 lamports.  At cp45-era SOL price
+ *  (~$150) that's about $0.00015 — tiny enough to be an
+ *  implicit tip the seller absorbs, large enough to fully
+ *  decorrelate against amount-matching heuristics.
+ *
+ *  Same caveats as the BTC-family version: round-UP-only (never
+ *  underpay), CSPRNG-derived (not Math.random), idempotent on
+ *  caller-side memoization. */
+export function jitterSolAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterSolAmount: invalid base amount');
+	}
+	// Parse base into integer-lamport representation (bigint).
+	// 1 SOL = 10^9 lamports.
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000000000').slice(0, 9);
+	const baseLamports = BigInt(whole) * 1_000_000_000n + BigInt(fracPadded);
+
+	// Generate 2 random bytes, fold into 0..(1000 - 1).  Modulo
+	// bias is negligible at this scale.
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
+	const jitterLamports = BigInt(r % 1000);
+	const totalLamports = baseLamports + jitterLamports;
+
+	// Format back to "W.FFFFFFFFF" with 9-decimal precision.
+	const wholeOut = totalLamports / 1_000_000_000n;
+	const fracOut = totalLamports % 1_000_000_000n;
+	const fracStr = fracOut.toString().padStart(9, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
 /** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
  *  a jittered amount appropriate for the asset's smallest-unit
  *  precision.  Every tradable asset is jitter-eligible as of cp30
@@ -574,6 +656,7 @@ export function jitterAmountForAsset(
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
+	if (asset === 'sol') return jitterSolAmount(base);
 	if (asset === 'usdt' || asset === 'usdc' || asset === 'dai') {
 		// Part 122 cp30/cp31 — stablecoins get jitter too.  The
 		// centralization threat (Circle/Tether freeze power for
@@ -663,7 +746,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -1001,6 +1084,25 @@ export function isValidDcrTxid(s: string): boolean {
 	return DCR_TXID_RE.test(s);
 }
 
+/** Validate a SOL address shape (cp45 — Part 122).  Solana
+ *  public keys are 32 bytes base58-encoded (32-44 chars).  Same
+ *  shape as USDT/USDC SPL token-account addresses; context
+ *  disambiguates at the order layer (LL #50 same-format-
+ *  different-chain pattern). */
+export function isValidSolAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return SOL_RE.test(s);
+}
+
+/** Validate a SOL txid shape (cp45 — Part 122).  Solana
+ *  transaction signatures are 64 bytes base58-encoded (87-88
+ *  chars).  Different format from the BTC family's 64-hex
+ *  convention. */
+export function isValidSolTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return SOL_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -1016,6 +1118,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'zec') return isValidZecAddress(addr);
 	if (method === 'arrr') return isValidArrrAddress(addr);
 	if (method === 'dcr') return isValidDcrAddress(addr);
+	if (method === 'sol') return isValidSolAddress(addr);
 	return false;
 }
 
@@ -1035,6 +1138,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'zec') return isValidZecTxid(txid);
 	if (method === 'arrr') return isValidArrrTxid(txid);
 	if (method === 'dcr') return isValidDcrTxid(txid);
+	if (method === 'sol') return isValidSolTxid(txid);
 	return false;
 }
 
@@ -1063,7 +1167,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'doge' &&
 		p.method !== 'zec' &&
 		p.method !== 'arrr' &&
-		p.method !== 'dcr'
+		p.method !== 'dcr' &&
+		p.method !== 'sol'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1240,7 +1345,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'doge' &&
 		p.method !== 'zec' &&
 		p.method !== 'arrr' &&
-		p.method !== 'dcr'
+		p.method !== 'dcr' &&
+		p.method !== 'sol'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1396,7 +1502,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'doge' &&
 			o.method !== 'zec' &&
 			o.method !== 'arrr' &&
-			o.method !== 'dcr'
+			o.method !== 'dcr' &&
+			o.method !== 'sol'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1427,7 +1534,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'doge' &&
 			o.method !== 'zec' &&
 			o.method !== 'arrr' &&
-			o.method !== 'dcr'
+			o.method !== 'dcr' &&
+			o.method !== 'sol'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1874,6 +1982,19 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `decred:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'sol') {
+		// Solana uses the `solana:` URI scheme — the Solana Pay
+		// specification (cp45 — Part 122).  Same BIP-21-style
+		// shape as `bitcoin:` with `amount` as decimal SOL.
+		// Phantom, Solflare, Cake Wallet for SOL, and Trust
+		// Wallet all recognize `solana:` URIs.  Native SOL
+		// transfer only — Morphit doesn't generate Solana Pay
+		// URIs for SPL token transfers (USDT/USDC SPL transfers
+		// use their own per-asset URI builders).
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `solana:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

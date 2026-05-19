@@ -105,7 +105,7 @@ export interface OrderPayload {
 	 *  (one of 'erc20', 'spl', 'base', 'polygon'), or when
 	 *  asset === 'DAI' (one of 'erc20', 'polygon', 'base',
 	 *  'arbitrum').  Omitted for single-network assets (BTC,
-	 *  XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR).  Pins the network on
+	 *  XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL).  Pins the network on
 	 *  the order row so buyers know which chain to settle on;
 	 *  cross-network sends lose funds permanently and must be
 	 *  surfaced as a hint on the order row. */

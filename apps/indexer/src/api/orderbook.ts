@@ -119,7 +119,7 @@ interface OrderRow {
 	asset: AssetTicker;
 	/** Part 121 / cp30 / cp31 — sub-network for multi-network
 	 *  assets.  Null for single-network assets (BTC/XMR/BLURT/
-	 *  BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) and for pre-Part-121 rows.  One of
+	 *  BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL) and for pre-Part-121 rows.  One of
 	 *  'erc20'|'trc20'|'spl'|'bep20' for USDT; one of 'erc20'|
 	 *  'spl'|'base'|'polygon' for USDC; one of 'erc20'|'polygon'|
 	 *  'base'|'arbitrum' for DAI. */

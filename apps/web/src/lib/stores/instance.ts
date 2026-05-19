@@ -96,6 +96,7 @@ export interface InstanceState {
 		readonly zec: string | null;
 		readonly arrr: string | null;
 		readonly dcr: string | null;
+		readonly sol: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -189,6 +190,7 @@ const FALLBACK: InstanceState = {
 		zec: null,
 		arrr: null,
 		dcr: null,
+		sol: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 		usdc: { erc20: null, spl: null, base: null, polygon: null },
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
@@ -276,6 +278,7 @@ export function initInstance(): Promise<void> {
 								zec: result.data.chat_link_urls.zec ?? null,
 								arrr: result.data.chat_link_urls.arrr ?? null,
 								dcr: result.data.chat_link_urls.dcr ?? null,
+								sol: result.data.chat_link_urls.sol ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -305,6 +308,7 @@ export function initInstance(): Promise<void> {
 								zec: null,
 								arrr: null,
 								dcr: null,
+								sol: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 								usdc: { erc20: null, spl: null, base: null, polygon: null },
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }

@@ -160,6 +160,10 @@
 				<dt>DCR</dt>
 				<dd>{$_('cheat_sheet.section_assets.dcr')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>SOL</dt>
+				<dd>{$_('cheat_sheet.section_assets.sol')}</dd>
+			</div>
 		</dl>
 	</section>
 

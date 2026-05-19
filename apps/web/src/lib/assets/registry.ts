@@ -244,6 +244,19 @@ const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
 
 const validateDcr: AddressValidator = (s) => DCR_RE.test(s);
 
+// SOL address regex (cp45 — Part 122).  Solana public keys are
+// 32 bytes encoded as base58 (32-44 chars, most are 44).  Same
+// character class as USDT/USDC SPL addresses — context (the
+// asset field) disambiguates at the order layer per LL #50.
+//
+// PROGRAM-DERIVED ADDRESSES (PDAs) match this regex but are
+// off-curve — funds sent to a PDA require the owning program to
+// implement a withdraw path.  Morphit accepts the shape; wallet
+// UX on the receiver side is responsible for PDA warnings.
+const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+const validateSol: AddressValidator = (s) => SOL_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -639,6 +652,38 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// on-chain governance lets stakeholders propose and
 		// ratify protocol changes.  Addresses cannot be frozen
 		// by an issuer.  No warning chip needed.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'sol',
+		displayTicker: 'SOL',
+		displayName: 'Solana',
+		oneLineDescription:
+			'Solana — high-throughput Proof-of-Stake cryptocurrency.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-sol.svg',
+		// Solana brand gradient runs purple (#9945ff) to green
+		// (#19fb9b).  text-violet-500 lands a clean violet accent
+		// distinct from every existing assignment: BTC amber-500,
+		// USDT amber-400, USDC blue-500, DAI yellow-600, BCH
+		// lime-500, LTC slate-400, DASH sky-500, DOGE yellow-500,
+		// ZEC yellow-400, ARRR amber-600, XMR orange-500, DCR
+		// teal-500.  Verified at cp45 via cp42 asset-accent-class-
+		// uniqueness-smoke.
+		accentClass: 'text-violet-500',
+		decimals: 9, // 1 SOL = 1,000,000,000 lamports
+		supportsMemo: false,
+		addressValidator: validateSol,
+		// MEMORY #23 INVARIANT: SOL cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Solana is decentralized via delegated Proof-of-Stake
+		// with Proof-of-History sequencing.  No central freeze
+		// authority.  Transparent base layer.  No warning chip
+		// needed.
 		privacyWarningKey: null
 	}
 ] as const;

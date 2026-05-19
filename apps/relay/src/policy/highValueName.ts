@@ -163,6 +163,7 @@ const DICTIONARY_BRANDS: ReadonlySet<string> = new Set([
 	'zec',
 	'arrr',
 	'dcr',
+	'sol',
 	// Apparel / consumer brands
 	'nike',
 	'adidas',

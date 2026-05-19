@@ -85,7 +85,8 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// the privacy guide page, not the price feed.
 	ZEC: 'zcash',
 	ARRR: 'pirate-chain',
-	DCR: 'decred'
+	DCR: 'decred',
+	SOL: 'solana'
 };
 
 /** Max response body size from CoinGecko. Real responses are

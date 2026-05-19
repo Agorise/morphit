@@ -1822,3 +1822,37 @@ Decred's Politeia governance system records every proposal, vote, and discussion
 The cp42 `address-shape-overlap-smoke` was extended at cp43 with DCR specimens. 4 new overlaps observed (DCR-Ds and DCR-Dc both accepted by USDT and USDC's permissive SPL base58 pattern) — same documented class as DOGE/DASH/BCH-legacy overlaps. Added to EXPECTED_OVERLAPS allowlist; smoke now passes with 49 documented overlaps (was 45 at cp42).
 
 **No new threat class from cp43.** Decred's opt-in mixing posture is similar in shape to DASH's PrivateSend or BTC's coinjoin — already covered by the LL #38 / LL #41 / LL #49 / LL #50 framework.
+
+---
+
+## CP45 — Solana (SOL) addition threat rows (2026-05-19)
+
+### T-cp45-1 — Wrapped SOL confusion (info-disclosure / fund-loss class, LOW)
+
+Solana has both NATIVE SOL (the chain's gas/payment token, transferred via system program) and WRAPPED SOL (wSOL — an SPL-token form using mint `So11111111111111111111111111111111111111112`). Users coming from DeFi might be holding wSOL in a token account and try to send that to a SOL receive address Morphit displays. The recipient sees no incoming native SOL transaction; the wSOL transfer lands at the recipient's associated token account for wSOL (which may or may not exist).
+
+**Mitigation:** `privacy.guides.sol.caveats` × 10 locales explicitly call out: "Send native SOL, not wrapped SOL. Wrapped SOL (wSOL) uses the SPL-token form for DEX interoperability... Morphit trades use NATIVE SOL transfers". Wallet UX on the sender side (Phantom, Solflare) shows "unwrap before sending" prompts when wSOL is detected. **Residual risk:** wallet-side; outside Morphit's reach.
+
+### T-cp45-2 — Program-Derived Address (PDA) destination (fund-loss class, LOW)
+
+A SOL receive address shared on Morphit could match a PDA (off-curve address controlled by an on-chain program, no private key). Sending SOL to a PDA generally completes at the protocol level, but the recipient cannot move funds out unless the owning program has a withdraw instruction.
+
+**Mitigation:** `privacy.guides.sol.caveats` warns about PDAs. Modern Solana wallets show PDA-destination warnings before transaction signing. The Morphit address regex `/^[1-9A-HJ-NP-Za-km-z]{32,44}$/` accepts the shape (PDAs are valid 32-byte base58 strings); receiver-side wallet UX bears the runtime check. **Residual risk:** non-zero but contained — a malicious counterparty COULD share a PDA address to receive payment that the buyer can't recover; the protocol-level cryptographic finality means refund requires the recipient's cooperation off-chain. This is the same class as the BLURT account-name DoS (sending to a non-existent account loses funds at the chain level); covered by counterparty reputation system + dispute escalation.
+
+### I-cp45-1 — Same-format address visual collision SOL/USDT-Solana/USDC-Solana (info-disclosure class, by design)
+
+SOL addresses are visually IDENTICAL to USDT-Solana and USDC-Solana SPL token-account addresses — same 32-44 base58 character format. A user copying a counterparty's "SOL address" might accidentally send USDT-Solana or USDC-Solana to it, or vice versa.
+
+**Mitigation:** asset field on the order disambiguates at the order layer. Morphit's AddressShareModal asset tab makes the asset explicit. Wallet UX on the sender side displays the asset type before signing. The cp42 `address-shape-overlap-smoke` (extended at cp45 to 72 documented entries, +23 SOL-related) pins this as INTENTIONAL allowlist — any new SAME-SHAPE asset addition extends the allowlist same-turn. **Residual risk:** user inattention; mitigated through UX disambiguation at three layers (Morphit asset tab, order asset field, wallet signing prompt).
+
+### R-cp45-1 — RPC provider correlation (information-disclosure class, MEDIUM advisory)
+
+User wallets talk to a Solana RPC endpoint (Helius, QuickNode, Triton, public mainnet-beta) to read state and broadcast transactions. That RPC provider sees every transaction the user signs, every account they query, and the IP source of each request. This is a Morphit-adjacent privacy concern: a user trading SOL on Morphit reveals their address activity to whichever RPC they're using.
+
+**Mitigation:** `privacy.guides.sol.caveats` × 10 locales advises self-hosting an RPC node or rotating between providers. The advisory is informational; the chain-level threat is not Morphit-specific (any Solana user has this exposure). **Residual risk:** acknowledged-and-disclosed; users are informed.
+
+### CP45 + LL #50 status
+
+The cp42 `address-shape-overlap-smoke` was extended at cp45 with SOL specimens. 23 new overlaps observed — BTC-1A1zP1eP... → SOL, USDT-various → SOL, USDC-EPjFW... → SOL, BCH/LTC/DASH/DOGE/ZEC/DCR specimens → SOL, and SOL specimens → USDT/USDC. ALL by design — Solana addresses ARE base58 32-byte public keys regardless of which asset they hold (native SOL or any SPL token). Added to EXPECTED_OVERLAPS allowlist; smoke now passes with **72 documented overlaps** (was 49 at cp44).
+
+**No new threat class from cp45.** Solana's transparent base layer + opt-out-of-protocol privacy posture is similar in shape to BTC (different consensus, similar privacy story). Already covered by the LL #38 / LL #41 / LL #49 / LL #50 / LL #52 framework.

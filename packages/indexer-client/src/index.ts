@@ -735,6 +735,7 @@ export interface InstanceResponse {
 		readonly zec?: string | null;
 		readonly arrr?: string | null;
 		readonly dcr?: string | null;
+		readonly sol?: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (pre-Part-121)
 		 *  omit this field, in which case the frontend uses its

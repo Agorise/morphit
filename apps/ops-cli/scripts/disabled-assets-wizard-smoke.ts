@@ -44,7 +44,8 @@ const scenarios: Scenario[] = [
 				catB.includes('ZEC') &&
 				catB.includes('ARRR') &&
 				catB.includes('DCR') &&
-				catB.length === 10
+				catB.includes('SOL') &&
+				catB.length === 11
 			);
 		}
 	},
