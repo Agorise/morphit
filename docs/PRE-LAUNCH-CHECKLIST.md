@@ -315,9 +315,15 @@ file in the same turn.
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
       `Total: 3,327+ scenarios passed, 0 runners failed`
-      (baseline ticks up as smokes are added each release;
-      Part 122 cp27 baseline is 3,327 = cp26-DD 3,306 + 13 new dash-trade-only + 1 new DASH scenario in disabled-assets-wizard + 6 new DASH scenarios in privacy-features-registry + 1 new cp27-dash-p2p check in wiring-completeness.  cp26-DD = cp26 3,301 + 5 new wiring-completeness CHECK rows added by the cp26 DD-8 closure (amount-jitter-generalized, address-reuse-detection, payjoin-bip78, privacy-guide-pages, no-wallet-recommendation-policy).  cp26 = cp24 3,231 + 36 privacy-features-registry + 12 address-history-helper + 13 amount-jitter-utxo + 9 payjoin-uri-wire-shape (cp25 added no new scenarios since it was a content/audit-only checkpoint); cp24 = cp22 3,217 + 13 new ltc-trade-only + 1 new LTC scenario in disabled-assets-wizard; cp22 was 3,200 + 17 new
-      disabled-assets-wizard scenarios).
+      (the "0 runners failed" is the load-bearing assertion —
+      the scenario count is a moving lower bound that ticks up
+      as smokes are added each release; baseline-source-of-truth
+      is the cp27 floor of 3,327, with cp30 USDC, cp31 DAI, cp32
+      icon-coverage + payment-method-i18n-parity, cp33 DOGE, and
+      cp34 narrow-union-parity adding scenarios on top.  The
+      exact current total is whatever `run-smokes.sh` prints
+      against the repo state you're running; what you're verifying
+      is that the count is ≥ 3,327 AND that zero runners failed).
 
       If you see several runners fail with
       `ERR_MODULE_NOT_FOUND` errors all referencing a
@@ -344,10 +350,10 @@ file in the same turn.
       Part 108++.)*
 
 - [ ] **[blocking]** Decide your trade-only-asset operator
-      stance.  The canonical morphit.io ships USDT, BCH, LTC,
-      AND DASH AND DOGE enabled by default; alternative instances may
-      want to disable one or more instance-wide on
-      philosophical (centralization, fork preference),
+      stance.  The canonical morphit.io ships USDT, USDC, DAI,
+      BCH, LTC, DASH, and DOGE enabled by default; alternative
+      instances may want to disable one or more instance-wide
+      on philosophical (centralization, fork preference),
       regulatory, or audience-specialization grounds.
 
       **The wizard handles this for you.**  `morphit-ops init`
@@ -364,14 +370,20 @@ file in the same turn.
       1. Accept everything (default — no config change).
       2. Refuse USDT — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`.
-      3. Refuse BCH — set
+      3. Refuse USDC — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDC"`.
+      4. Refuse DAI — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="DAI"`.
+      5. Refuse BCH — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`.
-      4. Refuse LTC — set
+      6. Refuse LTC — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`.
-      5. Refuse DASH — set
+      7. Refuse DASH — set
          `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`.
-      6. Refuse multiple —
-         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,BCH,LTC,DASH"`.
+      8. Refuse DOGE — set
+         `MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"`.
+      9. Refuse multiple —
+         `MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE"`.
 
       Federation note: disabling an asset means your own
       users cannot POST orders for it; you'll still see
@@ -382,11 +394,13 @@ file in the same turn.
       users know what your instance offers.  Memory #25
       (default-on + operator override for new assets),
       ADR-0023 (USDT), ADR-0024 (BCH), ADR-0025 (LTC),
-      ADR-0027 (DASH), and Part 122 cp22 (wizard step) explain
+      ADR-0027 (DASH), ADR-0028 (USDC), ADR-0029 (DAI),
+      ADR-0030 (DOGE), and Part 122 cp22 (wizard step) explain
       the design.  *(Origin: Part 121 cp3 USDT integration,
       Part 122 cp21 BCH integration, Part 122 cp22 wizard
       step, Part 122 cp24 LTC integration, Part 122 cp27 DASH
-      integration.)*
+      integration, Part 122 cp30 USDC integration, Part 122
+      cp31 DAI integration, Part 122 cp33 DOGE integration.)*
 
 - [ ] **[blocking]** Decide BCH chat-link explorer URL.
       Default `https://blockchair.com/bitcoin-cash/transaction/{txid}`
@@ -414,6 +428,15 @@ file in the same turn.
       `docs/OPERATIONS.md` §"DASH chat-link explorer URL
       override" for the 9 alternatives surveyed at cp27
       addition time.  *(Origin: Part 122 cp27 DASH integration.)*
+
+- [ ] **[blocking]** Decide DOGE chat-link explorer URL.
+      Default `https://blockchair.com/dogecoin/transaction/{txid}`
+      is fine for most operators.  Override via
+      `MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL` if you prefer a
+      different explorer or run your own (e.g.
+      `https://dogechain.info/tx/{txid}`, or a self-hosted
+      Iquidus instance).  *(Origin: Part 122 cp33 DOGE integration;
+      ADR-0030.)*
 
 - [ ] **[recommended, non-blocking]** **VAPID keypair for
       Web Push notifications** (Part 122 cp13).  Without

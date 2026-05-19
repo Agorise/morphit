@@ -751,7 +751,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "What is Morphit?",
-				"a": "Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, Bitcoin Cash, Litecoin, Dash, and USD Coin (USDC)) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank."
+				"a": "Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, and Dogecoin) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank."
 			},
 			"is_it_safe": {
 				"q": "Is it safe?",
@@ -803,7 +803,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Why does Morphit randomize my transfer amount?",
-				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp30 extends it to stablecoins too — USDT and USDC now also get amount-jitter. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
+				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
 			},
 			"feedback_immutable": {
 				"q": "Can feedback be edited or deleted?",
@@ -1187,7 +1187,7 @@
 			},
 			"why_usdc_warning": {
 				"q": "Why does Morphit show a privacy warning when I trade USDC?",
-				"a": "USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer."
+				"a": "USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer."
 			},
 			"which_usdt_network": {
 				"q": "Which USDT network should I pick — ERC-20, TRC-20, SPL, or BEP-20?",
@@ -3659,7 +3659,7 @@
 		"index_title": "Privacy practices — Morphit",
 		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
 		"index_heading": "Privacy practices on Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, BLURT, USDT, USDC) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
 		"page_title": "Privacy for {asset} trades — Morphit",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",

@@ -1,3 +1,85 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 36 — Three-persona walk (Bob multi-login chat + paired-readonly desktop + Sally-user no-crypto onboarding + Sally-operator node deploy) catching 11 walk-surfaced findings (4 HIGH/CRITICAL + 4 HIGH + 3 MEDIUM/LOW) on top of 4 pre-existing drift findings, all closed inline; + 2 new defensive smokes (asset-tab-completeness + post-edit-multi-network-wired) registered in run-smokes.sh; + LL #45 (persona-walk catches what asset-coverage-map audits miss) + LL #46 (when updating long-lived FAQ entries, check whether each locale was native vs EN-fallback before overwriting).
+
+CP36 SCOPE:
+
+Memory #28's STANDING WALK-THRU at the top of every major session called for "3 personas end-to-end: Bob/Blurt multi-login, Sally-user/no-crypto, Sally-operator/node-from-any-.md."  Cp35's 530-file asset-coverage map was thorough on declaration sites but did not exercise route-level UI completeness or per-route picker mounts.  Cp36's persona walk caught 3 HIGH/CRITICAL findings in routes that cp35's coverage map marked as "covered."  Validates Memory #13 STOP MISSING THINGS + Memory #28 STANDING WALK-THRU as non-redundant standing checks.
+
+CP36 METHODOLOGY:
+
+1. Bob persona walk: opened ChatComposer + ConversationView + AddressShareModal + FundsSentModal + /post + /post/edit + /my/orders relistOrder + WriteBlockedReadOnly variants, exercised every multi-network-asset code path inline.  Verified the cp34 LL #41 sibling-route discipline by checking BOTH /post AND /post/edit; verified the cp34 LL #43 defensive-smoke discipline by writing 2 new smokes that catch what was found.
+2. Sally-user persona walk: read cheat-sheet, /post asset chip list, /privacy index_intro, every FAQ entry with 4+ asset tickers via JSON scan (caught 4 entries with stale enumerations).
+3. Sally-operator persona walk: read PRE-LAUNCH-CHECKLIST.md, RUN-A-MORPHIT-NODE.md, OPERATIONS.md, API.md straight through, looking for ADR-count drift, asset-list drift, disabled-asset env-edit example completeness.
+4. Mutation-tested the two new smokes against the cp35 baseline tree (copied into a writable shadow at /tmp/cp35-shadow); confirmed 2 + 15 scenarios FAIL there, proving real regression-test value (not vacuous).
+
+CP36 FINDINGS BY CATEGORY:
+
+**Bob-walk (chat + order flows for multi-network assets):**
+
+- **Bob-1 (HIGH/CRITICAL)**: `AddressShareModal.svelte` tablist had 9 tabs (BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH/DOGE) and silently omitted the DAI tab.  Every other DAI hook (validator, placeholder, invalid-msg dispatch, picker block, payload field) was correctly wired since cp31 — only the user-facing tab button was missing.  `selectMethod('dai')` was never called from any onclick; DAI was unreachable through this modal UI.  Cp31 sibling-route miss class.  Pre-launch user-impact zero (Memory #6); v1.0.0-beta.1 ship-blocker.  Fixed by inserting the DAI tab between USDC and BCH.
+- **Bob-2 (HIGH)**: `FundsSentModal.svelte` had the identical bug.  9 tabs, no DAI tab.  Could be reached via `initialMethod='dai'` from a pinned address pill, but couldn't switch into/out of DAI through the tablist.  Fixed same way as Bob-1.
+- **Bob-3 (HIGH/CRITICAL)**: `/post/edit/[permlink]/+page.svelte` had ZERO multi-network wiring.  No UsdtNetworkPicker / UsdcNetworkPicker / DaiNetworkPicker imports, no usdtNetwork / usdcNetwork / daiNetwork state, no `assetNetwork` field in the OrderFormInput built at the broadcast call site.  Indexer's `orderReplace.ts:217-243` REQUIRES asset_network on USDT/USDC/DAI replaces — so editing one of those orders broadcast a payload that gets rejected with `asset_network_required_for_<asset>`.  Same severity as cp34's I-1 (cp34 closed /post but the sibling /post/edit was never walked at the same time).  Fixed: imports + state + load-hydration from `order.asset_network` with defensive typeguards + asset-change reset + canSave gate + 3 picker mounts + `assetNetwork` branch on OrderFormInput.
+- **Bob-4 (HIGH)**: 2-site fix.  `/my/orders` `relistOrder` built a prefill payload without `o.asset_network`; `/post` prefill consumer's Partial type didn't declare `assetNetwork` and didn't hydrate it.  Relisting a USDT/USDC/DAI order landed on /post with empty network picker.  Smaller UX hit than Bob-3 (works after re-pick) but same drift class.  Fixed both sites: relistOrder includes `assetNetwork: o.asset_network ?? null`; /post Partial type extended; /post hydrates the matching picker via isUsdtNetwork / isUsdcNetwork / isDaiNetwork typeguards.
+
+**Sally-user-walk (no-crypto user reading public copy):**
+
+- **Sally-1 (HIGH)**: `privacy.index_intro` × 10 locales listed "BTC, BCH, LTC, DASH, BLURT, USDT, USDC" — missing DAI (cp31) + DOGE (cp33).  4-checkpoint drift class.  Fixed × 10 locales: native translations for en/es/fr/de (per Memory #29), EN-fallback for it/pl/ru/fa/zh-CN/zh-HK.
+- **Sally-2 (HIGH)**: `faq.entries.what_is_morphit.a` × 10 locales — same drift.  Native translations preserved for it/pl/ru/fa/zh-CN/zh-HK (which were already native pre-cp36 — see LL #46 below).
+- **Sally-3 (HIGH)**: `faq.entries.monero_amount_jitter.a` × 10 locales — DAI missing from stablecoin sentence, DOGE missing from UTXO jitter range list; chronology missing cp27 DASH + cp31 DAI + cp33 DOGE.  Fixed.
+- **Sally-6 (HIGH)**: `faq.entries.why_usdc_warning.a` × 10 locales — no-issuer-freeze list "(BTC, XMR, BLURT, BCH, LTC, DASH)" missing DOGE.  DAI intentionally omitted (partly-decentralized per ADR-0029 + faq.why_dai_warning).  Fixed with surgical patch preserving every non-EN-fallback native translation.
+
+**Sally-operator-walk (operator deploying a node):**
+
+- **Op-1 (LOW)**: OPERATIONS.md §"Schema migration v32" single-network list missing DOGE; multi-network list missing DAI; per-asset network value lists incomplete (only USDT shown).  Fixed.
+- **Op-2 (MEDIUM)**: API.md `volume_estimate_by_asset_30d` sample missing DAI + DOGE entries; rollup-note prose "USDT and USDC are each reported as a single rollup" missing DAI.  Fixed.
+- **Op-3 (LOW) + Op-4 (HIGH)**: PRE-LAUNCH-CHECKLIST.md "trade-only-asset operator stance" item — opening sentence missing USDC + DAI; ADR-list reference missing ADR-0028/0029/0030; Origin line missing cp30/cp31/cp33; per-asset env-edit examples had only 5 (now 8: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, plus multi-asset).  Fixed.
+- **Op-5 (MEDIUM)**: PRE-LAUNCH-CHECKLIST.md missing "Decide DOGE chat-link explorer URL" item; cp33 added the DOGE explorer (blockchair.com/dogecoin/transaction/{txid}) and ADR-0030 but this checklist wasn't updated.  Added.
+- **Op-6 (MEDIUM)**: RUN-A-MORPHIT-NODE.md single-Refuse env examples covered USDT/USDC/BCH/LTC/DASH — missing DAI + DOGE.  Added both.
+- **Op-7 (LOW)**: OPERATIONS.md disabled-assets single-asset examples covered USDT/BCH/LTC — missing DASH/USDC/DAI/DOGE.  Added.
+
+**Pre-existing drift (4 items I'd flagged when starting cp36):**
+
+- **README L34 + L53**: ADR range "0001-…0028-…" → "0001-…0030-…" (2 sites).  Fixed.
+- **MORPHIT-BRAG-LIST entry #134**: "28 ADRs / 0001-0029" → "29 ADRs / 0001-0030", ADR-0030 added to examples.  Fixed.
+- **Smoke-count drift across 4 sites** (README:46, MORPHIT-BRAG-LIST.md:76, MORPHIT-BRAG-LIST.md:457, PRE-LAUNCH-CHECKLIST.md:317): replaced pinned scenario counts ("3,340+", "3,355+", "3,327+") with stable phrasing per cp22 LL ("stable phrasing > pinned numbers").  PRE-LAUNCH-CHECKLIST.md keeps the 3,327 floor as a verifiable lower bound but reframes around the load-bearing "0 runners failed" assertion.  Runner-count "145+ runners" → "~150 runners" (actual: 152).
+
+**Self-caught regression during the cp36 fix sweep (recorded as LL #46):**
+
+While applying Sally-2 (what_is_morphit), my initial pass replaced the value across all 10 locales with the same EN-text update strategy I used for Sally-1 and Sally-3.  This was correct for Sally-1 and Sally-3 (those entries were already EN-fallback in it/pl/ru/fa/zh-CN/zh-HK) but it WAS NOT correct for what_is_morphit — that FAQ entry was old enough that it/pl/ru/fa/zh-CN/zh-HK had FULL native translations, which my pass overwrote with EN-fallback.  Verified via running i18n-translation-completeness-smoke and seeing 1,150 → 1,156 EN-byte-identical entries (+6, exactly matching the 6 fallback-language overwrites).  Restored 6 native translations per locale, all properly extended with "Dai" + "Dogecoin" in locale-appropriate position and conjunction.  Smoke baseline back to exactly 1,150 (zero cp36-induced delta on this smoke).
+
+CP36 NEW INFRASTRUCTURE (2 defensive smokes, both registered + verified):
+
+- **asset-tab-completeness-smoke.ts** (23 scenarios): for every component registered in COMPONENTS, asserts the asset tablist contains a button for every ASSET_TICKERS member minus per-component exclusions (BLURT excluded from FundsSentModal since BLURT funds-sent flows through PayBlurtModal).  Verifies both `aria-selected={method === '<asset>'}` AND `selectMethod('<asset>')` literals present.  Also anti-orphan check: every dispatch branch matches a registered ticker.  Mutation-tested against cp35: 2 scenarios FAIL (Bob-1, Bob-2 detected).
+- **post-edit-multi-network-wired-smoke.ts** (29 scenarios): for every route in ORDER_ROUTES (currently /post + /post/edit), asserts every MULTI_NETWORK_ASSETS member (USDT/USDC/DAI) has its picker imported + mounted + state-var declared + submit gate + payload-emit branch.  Plus cross-route consistency: any picker mounted in one route must be mounted in all (catches asymmetric future additions like cp34's /post fix without /post/edit parallel).  Mutation-tested against cp35: 15 scenarios FAIL (Bob-3 detected across all 3 multi-network assets + asymmetric mount).
+
+Both smokes use the lightweight text-grep pattern from network-icon-coverage-smoke (no transpile, no runtime); both emit canonical `✓ all N <name> scenarios passed` matching run-smokes.sh's `^✓ all` grep pattern.
+
+CP36 PATTERN LESSONS (LL #45 + LL #46):
+
+**LL #45 — Persona walks catch what asset-coverage-map audits miss.**  Cp35's 530-file asset-coverage map walked every file mentioning any of the 10 tickers and bucketed by coverage count.  It saw `/post/edit/[permlink]/+page.svelte` as "covered" because it imports `AssetTicker` and references asset values — but ZERO multi-network picker mounts.  Similarly `AddressShareModal.svelte` and `FundsSentModal.svelte` had every DAI hook EXCEPT the user-facing tab button (invisible to symbol-counting audits).  Standing rule: persona walks at every major session, in addition to coverage-map audits — they're non-redundant.  Memory #28's existing STANDING WALK-THRU instruction stands; cp36 just demonstrated empirically why it matters.
+
+**LL #46 — Long-lived FAQ entries may have native translations even in "fallback" locales.**  Memory #29 documents that NEW asset-related i18n strings get native translations for en/es/fr/de and EN-fallback for it/pl/ru/fa/zh-CN/zh-HK — but that's a policy for NEW keys.  Long-lived FAQ entries (added before the Memory #29 EN-fallback policy was codified) may already have FULL native translations across all 10 locales.  When updating a long-lived FAQ entry, ALWAYS read each locale's current value before overwriting; preserve native translations and extend them in-place rather than replacing with EN-fallback.  Caught by self-running i18n-translation-completeness-smoke and noticing the +6 EN-byte-identical delta.
+
+CP36 TOTALS:
+
+15 findings closed inline (4 HIGH/CRITICAL + 4 HIGH + 3 MEDIUM + 4 LOW) + 4 pre-existing drift items closed + 2 new defensive smokes (52 new scenarios) + 1 self-caught regression with restore + 2 new LL pattern lessons.
+
+CP36 STATE METRICS:
+
+- 10 tradable assets (unchanged).
+- Locale parity: 2,730 leaf keys × 10 = 27,300 strings (verified via Python leaf-counter post-fix).
+- FAQ entries: 117 (unchanged — all edits were value updates, no new keys).
+- ADRs: 30 files / 29 substantive (unchanged).
+- Brag entries: 282 (unchanged — internal closures, no new user-facing wins per Memory #15).
+- Schema head: v33 (unchanged).
+- Smoke runners: 152 → 154 (+2 from this turn).
+- Smoke standalone-runnable check: 15/18 PASS, 3/18 FAIL — all 3 failures are pre-existing in cp35, NOT cp36-induced (i18n-translation-completeness chronic EN-fallback debt, sally-walkthrough L13 XMR-jitter check, i18n-formatters needs npm-install which sandbox can't complete due to better-sqlite3 → nodejs.org-headers 403 limitation also documented at cp32-cp35).
+- Two new smokes verified PASS against cp36 tree AND FAIL against cp35 tree.
+- Full-suite via run-smokes.sh: 2,660 standalone scenarios pass; 34 runners blocked by sandbox npm-install limitation (operator fix is `npm install`, not a code regression — exactly the case documented in PRE-LAUNCH-CHECKLIST.md L322-334).
+- Mediakit rebuilt: 41,865 bytes (was 41,716 pre-cp36; +149 bytes from brag list ADR-0030 mention growth).  mediakit-freshness smoke: 6/6 checks pass.
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+### CP35 history (sealed 2026-05-19; preserved below for archaeology):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 35 — Truly comprehensive deep-deep applying memory #13's new STOP MISSING THINGS discipline, yielding 25 findings closed inline + 30 i18n string replacements + LL #44 + every documented file current).
 
 CP35 SCOPE:

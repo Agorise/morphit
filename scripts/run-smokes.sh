@@ -107,6 +107,8 @@ SMOKES=(
 	"apps/web:desktop-pairing-crypto-smoke"
 	"apps/web:paired-readonly-lifecycle-smoke"
 	"apps/web:paired-readonly-affordance-surfaces-smoke"
+	"apps/web:asset-tab-completeness-smoke"
+	"apps/web:post-edit-multi-network-wired-smoke"
 	"apps/web:i18n-key-coverage-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"

@@ -1917,6 +1917,12 @@ Reasonable positions for an operator:
    # avoid a Circle-custodial stablecoin while keeping USDT)
    MORPHIT_INDEXER_DISABLED_ASSETS="USDC"
 
+   # Refuse DAI only (Part 122 cp31 — operators preferring to
+   # keep stablecoin exposure to USDT/USDC and skip the
+   # partly-decentralized DAI option; see ADR-0029 for the
+   # full decentralization-trade-off discussion)
+   MORPHIT_INDEXER_DISABLED_ASSETS="DAI"
+
    # Refuse BOTH stablecoins (operators going privacy-pure)
    MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC"
 
@@ -1932,6 +1938,12 @@ Reasonable positions for an operator:
    # surface to Bitcoin-family chains without masternode-
    # coordinated coins)
    MORPHIT_INDEXER_DISABLED_ASSETS="DASH"
+
+   # Refuse DOGE only (Part 122 cp33 — operators specializing in
+   # serious-money trading who'd rather not surface a meme-origin
+   # coin to their users; DOGE itself is technically sound, this
+   # is a brand/audience choice; see ADR-0030)
+   MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"
    ```
 
    You'll still see those orders from peer instances in your

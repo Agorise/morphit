@@ -31,7 +31,7 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
 | `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config` |
-| `docs/` | ADRs (`docs/adr/0001-…` through `0028-…`), audit logs, operator runbooks |
+| `docs/` | ADRs (`docs/adr/0001-…` through `0030-…`), audit logs, operator runbooks |
 | `ops/` | Ansible role, systemd units, env templates, nginx/Caddy snippets, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
 
@@ -43,14 +43,14 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 2. `git clone` this repo (or extract a signed release tarball — see `docs/UPGRADING.md`).
 3. `npm ci` from the repo root (workspace install — must be run from the root).
 4. `npx morphit-ops init` to walk the setup wizard (~18 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
-5. `bash scripts/run-smokes.sh` to confirm the 3,340+ self-checks pass against your environment.
+5. `bash scripts/run-smokes.sh` to confirm the self-checks (~150 runners, several thousand scenarios) pass against your environment.
 6. Follow **[`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md)** and **[`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md)** before opening to traffic.
 
 ## For developers
 
 - Architecture overview: `docs/ARCHITECTURE.md`
 - API reference: `docs/API.md`
-- ADR index: `docs/adr/0001-…` through `docs/adr/0028-…`
+- ADR index: `docs/adr/0001-…` through `docs/adr/0030-…`
 - Audit log: `docs/AUDIT-2026-05.md`
 - Per-language translation guide: `docs/CONTRIBUTING-TRANSLATIONS.md`
 
