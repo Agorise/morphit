@@ -88,6 +88,12 @@ export interface InstanceState {
 		 *  bundled blockchair.com/dogecoin default via
 		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
 		readonly doge: string | null;
+		/** Part 122 cp39 — ZEC chat-link explorer override.
+		 *  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE (no
+		 *  per-network sub-map).  Operator can override the
+		 *  bundled mainnet.zcashexplorer.app default via
+		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
+		readonly zec: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -178,6 +184,7 @@ const FALLBACK: InstanceState = {
 		ltc: null,
 		dash: null,
 		doge: null,
+		zec: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 		usdc: { erc20: null, spl: null, base: null, polygon: null },
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
@@ -262,6 +269,7 @@ export function initInstance(): Promise<void> {
 								ltc: result.data.chat_link_urls.ltc ?? null,
 								dash: result.data.chat_link_urls.dash ?? null,
 								doge: result.data.chat_link_urls.doge ?? null,
+								zec: result.data.chat_link_urls.zec ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -288,6 +296,7 @@ export function initInstance(): Promise<void> {
 								ltc: null,
 								dash: null,
 								doge: null,
+								zec: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 								usdc: { erc20: null, spl: null, base: null, polygon: null },
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }

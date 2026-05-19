@@ -205,6 +205,20 @@ const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
 const validateDoge: AddressValidator = (s) =>
 	DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
 
+// ZEC address regex (cp39).  Zcash supports both transparent
+// (base58, t1/t3 prefixes, ~35 chars total) and shielded
+// (bech32/bech32m, zs1 Sapling pool or u1 Unified Address) formats.
+// All four are first-class on the protocol; Morphit accepts any
+// valid shape so recipients can pick the address type that
+// matches their preferred privacy posture.  See payload.ts and
+// the canonical asset-registry entry for the full rationale.
+const ZEC_T_RE = /^t[13][1-9A-HJ-NP-Za-km-z]{33}$/;
+const ZEC_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
+
+const validateZec: AddressValidator = (s) =>
+	ZEC_T_RE.test(s) || ZEC_ZS_RE.test(s) || ZEC_U_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -430,9 +444,8 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		defaultNetwork: 'mainnet',
 		// LTC is transparent (like BTC and BCH) but decentralized —
 		// no issuer can freeze addresses.  Same posture as BTC: no
-		// privacy warning chip.  (LTC has MWEB opt-in privacy but
-		// it's wallet-side and per-tx, not a chain property; users
-		// seeking strongest privacy posture should use XMR.)
+		// privacy warning chip.  LTC ships MWEB opt-in privacy at
+		// the wallet level on a per-tx basis.
 		privacyWarningKey: null
 	},
 	{
@@ -460,12 +473,11 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// DASH is transparent at the base layer (like BTC/BCH/LTC)
 		// and fully decentralized — no issuer can freeze
 		// addresses.  Same posture as BTC: no privacy warning chip.
-		// DASH does ship an opt-in privacy upgrade — PrivateSend,
-		// a masternode-coordinated CoinJoin variant — but it's
-		// wallet-side and per-tx, not a chain property; users
-		// seeking strongest privacy posture should use XMR, and
-		// users who want transparent + opt-in mixing can pre-mix
-		// via PrivateSend before sharing the address on Morphit.
+		// DASH ships an opt-in privacy upgrade — PrivateSend, a
+		// masternode-coordinated CoinJoin variant — at the wallet
+		// level on a per-tx basis.  Users who want transparent +
+		// opt-in mixing can pre-mix via PrivateSend before sharing
+		// the address on Morphit.
 		privacyWarningKey: null
 	},
 	{
@@ -496,11 +508,48 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// and fully decentralized — no issuer can freeze
 		// addresses.  Same posture as BTC: no privacy warning chip.
 		// DOGE has no native privacy upgrade (no PrivateSend
-		// equivalent); users seeking strongest privacy posture
-		// should use XMR.  The chain's social posture — fair
-		// launch, no premine after the initial year, no
-		// foundation-controlled supply — gives it strong
-		// decentralization credentials.
+		// equivalent).  The chain's social posture — fair launch,
+		// no premine after the initial year, no foundation-
+		// controlled supply — gives it strong decentralization
+		// credentials.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'zec',
+		displayTicker: 'ZEC',
+		displayName: 'Zcash',
+		oneLineDescription:
+			'Zcash — transparent + shielded transactions via zk-SNARKs; recipients pick t-addr or z/u-addr.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-zec.svg',
+		// ZEC brand gold-yellow (#F2B525).  text-amber-400 reads
+		// as the Zcash brand color and stays distinct from BCH
+		// lime-500, LTC slate-400, DASH sky-500, BTC amber-500,
+		// USDT amber-400 — wait, USDT is also amber-400.  Use
+		// text-yellow-400 instead to land at the Zcash gold tone
+		// while staying distinct from the existing 10.  (DOGE
+		// uses yellow-500 already, so 400 vs 500 gives the
+		// distinction.)
+		accentClass: 'text-yellow-400',
+		decimals: 8, // Same as BTC — zatoshi == satoshi
+		supportsMemo: false, // Memo content travels inside the shielded payload, not the address
+		addressValidator: validateZec,
+		// MEMORY #23 INVARIANT: ZEC cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Zcash is fully decentralized via PoW and addresses
+		// cannot be frozen by an issuer.  The chain supports both
+		// transparent addresses (t1/t3, base58, similar shape to
+		// Bitcoin's legacy addresses) and shielded addresses using
+		// zero-knowledge proofs (zs1 Sapling and u1 Unified
+		// Address bundling Orchard receivers).  Per-address
+		// privacy: recipients pick t-addr for transparent
+		// visibility or z/u-addr for shielded transactions; both
+		// are first-class on the protocol.  No warning chip
+		// needed.
 		privacyWarningKey: null
 	}
 ] as const;

@@ -25,7 +25,7 @@
  * Sentinel-grep against `apps/indexer/src/indexer/handlers/order.ts`:
  *  - The `fee_method` type union must appear exactly as the
  *    frozen 4-member set.
- *  - No string-literal `'usdt'`, `'ltc'`, `'doge'`, `'arrr'`,
+ *  - No string-literal `'usdt'`, `'ltc'`, `'doge'`, `'zec'`, `'arrr'`,
  *    etc. on a `fee_method` line.
  *
  * Usage:

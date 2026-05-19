@@ -60,7 +60,12 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// fallbacks: rough order-of-magnitude only.  Approximate live
 	// DOGE/USD at cp33 ship time (DOGE typically trades in the
 	// sub-dollar range; cents-scale is its natural domain).
-	DOGE: 0.1
+	DOGE: 0.1,
+	// Part 122 cp39 — Zcash.  Same posture as the other fallbacks:
+	// rough order-of-magnitude only, used when live providers
+	// have all failed.  Approximate live ZEC/USD at cp39 ship time
+	// (ZEC has trended in the $20–$50 range across 2024–2026).
+	ZEC: 30
 };
 
 export const fallbackProvider: PriceProvider = {

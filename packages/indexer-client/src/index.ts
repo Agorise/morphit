@@ -727,6 +727,12 @@ export interface InstanceResponse {
 		 *  Bundled default: blockchair.com/dogecoin.  Optional
 		 *  for back-compat with pre-cp33 indexers. */
 		readonly doge?: string | null;
+		/** Part 122 cp39 — ZEC chat-link explorer URL override.
+		 *  Same pattern as BCH/LTC/DASH/DOGE (single-network
+		 *  mainnet).  Bundled default:
+		 *  mainnet.zcashexplorer.app.  Optional for back-compat
+		 *  with pre-cp39 indexers. */
+		readonly zec?: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (pre-Part-121)
 		 *  omit this field, in which case the frontend uses its

@@ -1739,3 +1739,32 @@ template targets, non-BLURT chat-mark-sent).
   caught cp33 CODE-6 (4 narrow type-union sites missing DAI).
   Building it AT cp34 rather than at cp33+1 means future
   asset additions can never regress the cp33 closure.
+
+---
+
+## CP39 — Zcash (ZEC) addition threat rows (2026-05-19)
+
+### T-cp39-1 — Address-type ambiguity (spoofing class, MEDIUM)
+
+Zcash supports four address formats coexisting on one chain (t1 transparent P2PKH, t3 transparent P2SH, zs1 Sapling shielded, u1 Unified Address). A user receiving ZEC for the first time may publish a transparent t-addr when they intended a shielded z-addr (or vice versa), revealing on-chain history when they wanted privacy or losing the chance to use shielded addresses they had ready. **Mitigation:** address-share modal's per-asset placeholder shows all four prefix examples (`t1… t3… zs1… or u1…`); privacy-guide page at `/privacy/zec` documents the differences between shielded-to-shielded, mixed, and transparent-to-transparent transactions; per-trade choice respected (Morphit never forces or rejects an address type). **Residual risk:** user education — a brand-new ZEC user may not realize address choice is the privacy posture; mitigated through guide language but not eliminable.
+
+### I-cp39-1 — t→z→t correlation (information disclosure class, MEDIUM)
+
+Mixed shielded/transparent transactions (sending FROM a transparent address TO a shielded address, or vice versa) reveal one side of the transfer on chain. A pattern of t→z→t flows can correlate a Morphit user's transparent receive address with their transparent send address across the shielded pool boundary, breaking the shielded leg's intended unlinkability. **Mitigation:** `privacy.guides.zec.caveats` explicitly documents this — shielded-to-shielded transactions hide both sides; mixed transactions reveal one side; transparent-to-transparent reveals both. User chooses with informed consent. **Residual risk:** chain-analysis tools can correlate flows even when one side is shielded if the transparent counterparty leaks information through other means; not Morphit's problem to solve, but documented in guide.
+
+### I-cp39-2 — Dust attack on transparent t-addresses (information disclosure class, LOW)
+
+Same threat class as BTC and other UTXO chains: a hostile observer can send small "dust" amounts to a published t-addr to mark it for downstream tracking. If the recipient later spends that dust as an input to another transaction, the chain-analysis graph extends to that next address. **Mitigation:** same as BTC family — amount-jitter routes ZEC through `jitterUtxoAmount` (8-decimal precision) for the trade itself, but post-trade dust mitigation requires wallet-side coin-control (recipient marks dust inputs as "do-not-spend"). Documented in privacy guide. **Residual risk:** common to all transparent UTXO chains; users with strong dust-attack concern should receive at shielded addresses (zs1/u1) where the threat doesn't apply.
+
+### T-cp39-2 — Sapling vs Unified Address wallet-compatibility (denial of service class, LOW)
+
+A recipient publishes a `u1` Unified Address bundling Orchard receivers, but the counterparty's wallet only supports Sapling (`zs1`). The send fails or falls back to a transparent leg. **Mitigation:** `faq.entries.what_is_zec.a` and `privacy.guides.zec.caveats` both name specific wallets (Zashi, Zecwallet, Nighthawk) and note that Unified Addresses are a newer format not yet universal. **Residual risk:** ecosystem evolution — over time `u1` support broadens; this is a transient risk class that diminishes as wallet ecosystems modernize.
+
+### Pattern lesson — LL #48: Per-address-privacy assets need per-trade documentation
+
+Zcash and Dash both have opt-in privacy (Sapling/Orchard pools for ZEC, PrivateSend for DASH) but the granularity differs:
+
+- **DASH**: privacy is a *wallet-side workflow* (pre-mix N rounds via masternode coordination, then publish the mixed address) applied to a single transparent address space.
+- **ZEC**: privacy is *per-address* — the recipient picks t-addr or z/u-addr at address-generation time, and the chosen type binds the privacy posture for any payment to that address.
+
+This means `privacy.guides.zec.caveats` documents shielded/transparent/mixed transaction types as user-choice axes, while `privacy.guides.dash.caveats` documents pre-mix-round count and timing as user-choice axes. Future privacy-coin additions should ask "is the privacy choice an address property, a transaction property, or a wallet-workflow property?" before designing the guide content. Each shape requires different user education.

@@ -148,6 +148,10 @@
 				<dt>DOGE</dt>
 				<dd>{$_('cheat_sheet.section_assets.doge')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>ZEC</dt>
+				<dd>{$_('cheat_sheet.section_assets.zec')}</dd>
+			</div>
 		</dl>
 	</section>
 

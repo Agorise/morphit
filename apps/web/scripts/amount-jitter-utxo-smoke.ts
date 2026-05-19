@@ -21,7 +21,7 @@
  *    reversed in cp30 because the amount-correlation linkability
  *    threat is independent of the centralization concern.
  *  - jitterAmountForAsset dispatcher: per-asset routing across
- *    all 10 tradable assets
+ *    all 11 tradable assets
  *  - input validation throws on garbage
  */
 
@@ -140,6 +140,10 @@ console.log('\n── amount-jitter-utxo smoke ───────────
 	const doge = jitterAmountForAsset('doge', '0.5');
 	if (/^\d+\.\d{8}$/.test(doge)) pass('dispatcher routes DOGE to 8-decimal (cp33)');
 	else fail('dispatcher routes DOGE to 8-decimal (cp33)', `got "${doge}"`);
+	// ZEC: 8-decimal (cp39 — UTXO family, zatoshi scale)
+	const zec = jitterAmountForAsset('zec', '0.5');
+	if (/^\d+\.\d{8}$/.test(zec)) pass('dispatcher routes ZEC to 8-decimal (cp39)');
+	else fail('dispatcher routes ZEC to 8-decimal (cp39)', `got "${zec}"`);
 	// BLURT: 3-decimal
 	const blurt = jitterAmountForAsset('blurt', '10');
 	if (/^\d+\.\d{3}$/.test(blurt)) pass('dispatcher routes BLURT to 3-decimal');

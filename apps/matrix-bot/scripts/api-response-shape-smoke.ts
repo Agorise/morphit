@@ -170,6 +170,9 @@ const ChatLinkUrlsSchema = z.object({
 	// Part 122 cp33 — DOGE chat-link URL override.  Optional for
 	// back-compat with pre-cp33 indexer builds.
 	doge: z.string().nullable().optional(),
+	// Part 122 cp39 — ZEC chat-link URL override.  Optional for
+	// back-compat with pre-cp39 indexer builds.
+	zec: z.string().nullable().optional(),
 	usdt: z
 		.object({
 			erc20: z.string().nullable(),

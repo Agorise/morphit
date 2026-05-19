@@ -77,7 +77,13 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// live DOGE/USD.  Transparent asset at base layer, no privacy
 	// warning chip, single-network mainnet, no native privacy
 	// upgrade (DOGE has no PrivateSend equivalent).
-	DOGE: 'dogecoin'
+	DOGE: 'dogecoin',
+	// Part 122 cp39 — Zcash.  Coingecko's `zcash` ID returns
+	// live ZEC/USD.  Single-network mainnet, no privacy-warning
+	// chip; ZEC supports both transparent (t-addr) and shielded
+	// (z/u-addr) transactions per recipient choice — surfaced via
+	// the privacy guide page, not the price feed.
+	ZEC: 'zcash'
 };
 
 /** Max response body size from CoinGecko. Real responses are

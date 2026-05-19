@@ -33,7 +33,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 
 // Canonical source of truth — must match ChatAssetTicker in payload.ts.
 const CANONICAL = new Set([
-	'btc', 'xmr', 'blurt', 'usdt', 'usdc', 'dai', 'bch', 'ltc', 'dash', 'doge'
+	'btc', 'xmr', 'blurt', 'usdt', 'usdc', 'dai', 'bch', 'ltc', 'dash', 'doge', 'zec'
 ]);
 
 // Unions allow-listed as INTENTIONALLY narrow.  Each entry is a
@@ -53,11 +53,11 @@ const NARROW_BY_DESIGN: Array<{ pattern: string; reason: string }> = [
 		reason: 'ListingFeeAddressPanel — fee-paying methods only (BTC + XMR)'
 	},
 	{
-		pattern: "'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge'",
+		pattern: "'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec'",
 		reason: 'urls.ts instanceTplKey — single-network explorer template targets only'
 	},
 	{
-		pattern: "'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge'",
+		pattern: "'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec'",
 		reason: 'onMarkSent / chat-funds-sent — non-BLURT external-send methods (BLURT routes through PayBlurtModal, not chat-mark-sent)'
 	}
 ];
@@ -150,7 +150,7 @@ console.log(`Scanned ${totalUnionsScanned} candidate narrow unions across`);
 console.log(`${SCAN_DIRS.length} directories.\n`);
 
 if (findings.length === 0) {
-	console.log('  ✓ all narrow unions cover the full canonical 10-asset set');
+	console.log('  ✓ all narrow unions cover the full canonical 11-asset set');
 	console.log('  ✓ or are documented in NARROW_BY_DESIGN allow-list');
 	console.log(`\n✓ chat-asset-ticker-narrow-union-parity smoke PASSED`);
 	process.exit(0);

@@ -31,7 +31,7 @@ We can't make transparent chains private at the protocol level
 
 The cp23-DD-class lesson applies here too: whatever framework
 we build must be registry-driven, so future asset additions
-(Dash, DOGE, etc.) get privacy infrastructure automatically
+(Dash, DOGE, ZEC, etc.) get privacy infrastructure automatically
 rather than per-asset bolt-ons.
 
 ## Decision

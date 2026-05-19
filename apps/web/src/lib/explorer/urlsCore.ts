@@ -37,6 +37,12 @@ export const LTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 export const DASH_TXID_RE = /^[0-9a-fA-F]{64}$/;
 export const DOGE_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** ZEC txid (Part 122 cp39).  64 hex chars — same shape for
+ *  transparent and shielded transactions; the shielded payload
+ *  is hidden inside the tx, but the txid itself is canonical
+ *  and shareable. */
+export const ZEC_TXID_RE = /^[0-9a-fA-F]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -131,6 +137,33 @@ export const BUNDLED_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
 export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
+
+/** ZEC chat-link explorer (cp39 — Part 122).  Default uses
+ *  Zcash's community-run mainnet explorer at
+ *  mainnet.zcashexplorer.app — official project pointer,
+ *  no third-party tracking, supports both transparent and
+ *  shielded tx lookups by txid.  Privacy/decentralization
+ *  rationale matches the BUNDLED_DASH_CHAT_LINK_URL
+ *  (insight.dash.org) and BUNDLED_BTC_CHAT_LINK_URL
+ *  (blockstream.info) choices: prefer a project-aligned or
+ *  community-run explorer over third-party aggregators.
+ *
+ *  Operator's 7-explorer survey at cp39:
+ *  - mainnet.zcashexplorer.app — community-run, official-style
+ *    pointer.  CHOSEN as bundled default.
+ *  - blockchair.com/zcash — third-party multi-chain aggregator;
+ *    we already use blockchair for DOGE, but ZEC has a
+ *    community-run option so prefer that.
+ *  - zcashinfo.com — community-run; lower traffic; secondary.
+ *  - 3xpl.com/zcash — third-party aggregator; less focused.
+ *  - blockexplorer.one/zcash/mainnet — generic aggregator.
+ *  - zcash.tokenview.io — Tokenview multi-chain; vendor-hosted.
+ *  - cipherscan.app — newer privacy-focused explorer; smaller
+ *    community footprint at launch.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
+export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/transactions/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

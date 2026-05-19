@@ -113,6 +113,13 @@ export interface InstanceResponse {
 		 *  back to the bundled blockchair.com/dogecoin default
 		 *  when null. */
 		doge: string | null;
+		/** Part 122 cp39 — ZEC chat-link explorer URL override.
+		 *  Same pattern as BTC/XMR/BCH/LTC/DASH/DOGE (single-network,
+		 *  single field).  Operator sets via
+		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL; frontend falls
+		 *  back to the bundled mainnet.zcashexplorer.app default
+		 *  when null. */
+		zec: string | null;
 		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (pre-cp30 — yes, this includes every prior build of
@@ -232,6 +239,7 @@ export function instanceRoute(config: Config): Hono {
 				ltc: config.frontendLtcChatLinkUrl ?? null,
 				dash: config.frontendDashChatLinkUrl ?? null,
 				doge: config.frontendDogeChatLinkUrl ?? null,
+				zec: config.frontendZecChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,
