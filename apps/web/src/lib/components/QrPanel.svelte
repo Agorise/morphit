@@ -22,6 +22,9 @@
  *     both Ds P2PKH and Dc P2SH formats on Decred
  *   - SOL: Solana Pay URI (`solana:9wzd...?amount=1.5`) —
  *     base58 32-byte public keys on Solana mainnet-beta
+ *   - ETH: BIP-21-compatible (`ethereum:0xd8da...?amount=1.5`)
+ *     — 20-byte hex addresses on Ethereum mainnet, EIP-681
+ *     simplified form parsed by MetaMask/Rabby/Frame/Rainbow
 	 *   - BLURT: bare account name (no widely-supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships

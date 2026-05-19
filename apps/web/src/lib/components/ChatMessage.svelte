@@ -81,7 +81,7 @@
 		 *  one of the seven listed above (BLURT excluded —
 		 *  BLURT transfers are single-tx and don't go through
 		 *  the mark-sent reconciliation flow). */
-		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol'; amount?: string; orderPermlink?: string; network?: string }) => void;
+		onMarkSent?: (args: { method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth'; amount?: string; orderPermlink?: string; network?: string }) => void;
 	}
 
 	let { message, me, peer, onRetry, onPayNow, onMarkSent }: Props = $props();
@@ -201,6 +201,7 @@
 		if (method === 'arrr') return externalExplorerUrl('ARRR', txid);
 		if (method === 'dcr') return externalExplorerUrl('DCR', txid);
 		if (method === 'sol') return externalExplorerUrl('SOL', txid);
+		if (method === 'eth') return externalExplorerUrl('ETH', txid);
 		if (method === 'usdt') {
 			// Per-network USDT explorer URL.  Without a network we
 			// can't pick the right template — older clients sending
@@ -442,7 +443,7 @@
 					!Number.isNaN(parsedAmount) &&
 					parsedAmount > 0}
 				{@const canMarkSent =
-					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash' || p.method === 'doge' || p.method === 'zec' || p.method === 'arrr' || p.method === 'dcr' || p.method === 'sol') && isIncoming}
+					onMarkSent !== undefined && (p.method === 'btc' || p.method === 'xmr' || p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai' || p.method === 'bch' || p.method === 'ltc' || p.method === 'dash' || p.method === 'doge' || p.method === 'zec' || p.method === 'arrr' || p.method === 'dcr' || p.method === 'sol' || p.method === 'eth') && isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
 				{@const usdtNetworkValid = p.method === 'usdt' && p.network !== undefined && isUsdtNetwork(p.network)}
 				{@const usdcNetworkValid = p.method === 'usdc' && p.network !== undefined && isUsdcNetwork(p.network)}
@@ -471,6 +472,8 @@
 							{$_('chat.address.pill_method_dcr')}
 						{:else if p.method === 'sol'}
 							{$_('chat.address.pill_method_sol')}
+						{:else if p.method === 'eth'}
+							{$_('chat.address.pill_method_eth')}
 						{:else if p.method === 'usdt'}
 							<!-- Part 121 — USDT pill header carries the
 							     network as a BOLD prefix so the buyer
@@ -676,7 +679,7 @@
 								class="hover:bg-morphit-emerald-dark rounded-md border-2 border-morphit-emerald bg-morphit-emerald px-3 py-1 text-xs font-semibold text-white"
 								onclick={() =>
 									onMarkSent?.({
-										method: p.method as 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol',
+										method: p.method as 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth',
 										amount: p.amount,
 										orderPermlink: p.orderPermlink,
 										// cp26 DD-7 fix + cp30 — propagate the network
@@ -736,6 +739,8 @@
 							{$_('chat.funds_sent.pill_title_dcr')}
 						{:else if p.method === 'sol'}
 							{$_('chat.funds_sent.pill_title_sol')}
+						{:else if p.method === 'eth'}
+							{$_('chat.funds_sent.pill_title_eth')}
 						{:else if p.method === 'usdt'}
 							{#if usdtFundsNetworkValid}
 								<span class="rounded-md bg-amber-400/20 px-2 py-0.5 font-bold text-amber-300">

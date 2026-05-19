@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -322,6 +322,36 @@ const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  *  signatures, mint addresses). */
 const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
+/** ETH address (cp47 — Part 122).  Ethereum addresses are
+ *  20-byte hex with 0x prefix — exactly 42 chars total.  Both
+ *  lowercase and EIP-55 mixed-case checksum forms accepted.
+ *
+ *  SAME shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
+ *  USDC-Polygon, USDC-Arbitrum, DAI-Polygon, DAI-Arbitrum,
+ *  DAI-Base — every EVM token-account address.  Cp42
+ *  address-shape-overlap-smoke extended at cp47 with ETH
+ *  specimens; the asset field (and network field for multi-
+ *  network assets) disambiguates per LL #50.
+ *
+ *  CONTRACT-ADDRESS DESTINATIONS match this regex but are
+ *  smart-contract accounts not EOAs.  Sending ETH to a contract
+ *  without a payable receive()/fallback() function may revert.
+ *  Morphit accepts the shape; receiver-side wallet UX is
+ *  responsible for contract-destination warnings.
+ *
+ *  ENS NAMES (alice.eth) NOT accepted — Morphit requires raw
+ *  0x addresses to avoid centralized RPC dependency for ENS
+ *  resolution (violates distributed-no-SPOF design priority).
+ */
+const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/** ETH txid (cp47 — Part 122).  Ethereum transaction hashes are
+ *  32 bytes hex with 0x prefix — exactly 66 chars (or 64 hex
+ *  chars without prefix).  SAME shape as the EVM stablecoin
+ *  txid forms (USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
+ *  etc).  Asset field disambiguates at order layer. */
+const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
+
 
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
@@ -638,6 +668,56 @@ export function jitterSolAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Part 122 cp47 — Amount-jitter for Ethereum.  ETH uses 18
+ *  decimals on-chain (1 ETH = 10^18 wei) — the EVM-standard
+ *  ERC-20 precision.  Same on-chain precision as DAI, but ETH
+ *  is not a stablecoin so a separate function is provided for
+ *  clarity (and future ETH-specific tuning — e.g. EIP-1559
+ *  base-fee aware jitter).
+ *
+ *  Why a 6-decimal display clamp: the cp31 DAI design rationale
+ *  (ADR-0029) applies here too — clamp to a sensible user-visible
+ *  precision rather than emit microscopic wei-level jitter.  At
+ *  cp47-era ETH price (~$2500) a 0-999 microether jitter range
+ *  is ~$0.0025 max — the same $0.001-magnitude jitter effect
+ *  the stablecoins use.  The wallet UX converts the 6-decimal
+ *  display amount to 18-decimal wei when constructing the
+ *  actual transaction.  Cp46 asset-payload-precision-parity-
+ *  smoke captures `expectedJitterDecimals: 6` for ETH with
+ *  comment-anchor matching this rationale.
+ *
+ *  Same caveats as the other jitter functions: round-UP-only
+ *  (never underpay), CSPRNG-derived (not Math.random),
+ *  idempotent on caller-side memoization. */
+export function jitterEthAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterEthAmount: invalid base amount');
+	}
+	// Parse base into 6-decimal microether representation (bigint).
+	// The 18-decimal wei conversion happens at wallet-construction
+	// time downstream; Morphit's jitter operates at display
+	// precision.
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000000').slice(0, 6);
+	const baseMicro = BigInt(whole) * 1_000_000n + BigInt(fracPadded);
+
+	// 0..999 microether jitter, CSPRNG-derived.  At $2500/ETH the
+	// max effect is $0.0025; at $5000/ETH it's $0.005.  Negligible
+	// financially, substantial in terms of breaking amount-match
+	// correlation against exact order amounts.
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
+	const jitterMicro = BigInt(r % 1000);
+	const totalMicro = baseMicro + jitterMicro;
+
+	// Format back to "W.FFFFFF" with 6-decimal display precision.
+	const wholeOut = totalMicro / 1_000_000n;
+	const fracOut = totalMicro % 1_000_000n;
+	const fracStr = fracOut.toString().padStart(6, '0');
+	return `${wholeOut.toString()}.${fracStr}`;
+}
+
 /** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
  *  a jittered amount appropriate for the asset's smallest-unit
  *  precision.  Every tradable asset is jitter-eligible as of cp30
@@ -657,6 +737,7 @@ export function jitterAmountForAsset(
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
 	if (asset === 'sol') return jitterSolAmount(base);
+	if (asset === 'eth') return jitterEthAmount(base);
 	if (asset === 'usdt' || asset === 'usdc' || asset === 'dai') {
 		// Part 122 cp30/cp31 — stablecoins get jitter too.  The
 		// centralization threat (Circle/Tether freeze power for
@@ -746,7 +827,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -1103,6 +1184,24 @@ export function isValidSolTxid(s: string): boolean {
 	return SOL_TXID_RE.test(s);
 }
 
+/** Validate an ETH address shape (cp47 — Part 122).  Ethereum
+ *  addresses are 20-byte hex with 0x prefix — exactly 42 chars.
+ *  Both lowercase and EIP-55 mixed-case checksum accepted.
+ *  Same shape as every EVM token-account address; context
+ *  disambiguates at the order layer per LL #50. */
+export function isValidEthAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ETH_RE.test(s);
+}
+
+/** Validate an ETH txid shape (cp47 — Part 122).  Ethereum
+ *  transaction hashes are 32 bytes hex with optional 0x prefix.
+ *  Same shape as the EVM stablecoin txid forms. */
+export function isValidEthTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ETH_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -1119,6 +1218,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'arrr') return isValidArrrAddress(addr);
 	if (method === 'dcr') return isValidDcrAddress(addr);
 	if (method === 'sol') return isValidSolAddress(addr);
+	if (method === 'eth') return isValidEthAddress(addr);
 	return false;
 }
 
@@ -1139,6 +1239,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'arrr') return isValidArrrTxid(txid);
 	if (method === 'dcr') return isValidDcrTxid(txid);
 	if (method === 'sol') return isValidSolTxid(txid);
+	if (method === 'eth') return isValidEthTxid(txid);
 	return false;
 }
 
@@ -1168,7 +1269,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'zec' &&
 		p.method !== 'arrr' &&
 		p.method !== 'dcr' &&
-		p.method !== 'sol'
+		p.method !== 'sol' &&
+		p.method !== 'eth'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1346,7 +1448,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'zec' &&
 		p.method !== 'arrr' &&
 		p.method !== 'dcr' &&
-		p.method !== 'sol'
+		p.method !== 'sol' &&
+		p.method !== 'eth'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1503,7 +1606,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'zec' &&
 			o.method !== 'arrr' &&
 			o.method !== 'dcr' &&
-			o.method !== 'sol'
+			o.method !== 'sol' &&
+			o.method !== 'eth'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1535,7 +1639,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'zec' &&
 			o.method !== 'arrr' &&
 			o.method !== 'dcr' &&
-			o.method !== 'sol'
+			o.method !== 'sol' &&
+			o.method !== 'eth'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1995,6 +2100,21 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `solana:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'eth') {
+		// Ethereum uses the `ethereum:` URI scheme (cp47 — Part
+		// 122).  EIP-681 defines a richer form (with @chainId,
+		// /transfer for tokens, value in wei), but Morphit emits
+		// the simpler BIP-21-compatible shape `ethereum:<addr>
+		// ?amount=<decimal>` that all major wallets (MetaMask,
+		// Rabby, Frame, Rainbow, Trust Wallet) parse correctly
+		// for native ETH transfers.  Native ETH transfer only —
+		// Morphit doesn't generate ethereum: URIs for ERC-20
+		// transfers (USDT/USDC/DAI ERC-20 transfers use their
+		// own per-asset URI builders).
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `ethereum:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that

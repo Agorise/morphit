@@ -31,9 +31,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (14 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL)', () => {
+scenario('all current assets registered (15 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['arrr', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'zec'];
+	const expected = ['arrr', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'zec'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -48,8 +48,13 @@ scenario('XMR is first in display order (audience priority)', () => {
 scenario('getAsset throws on unknown ticker', () => {
 	let threw = false;
 	try {
+		// cp47-A1: 'eth' became a valid asset; before that 'zec' (cp39),
+		// 'doge' (cp33).  Use 'trx' (Tron native) as the unknown stand-
+		// in.  Morphit has USDT-TRC20 (a token on Tron) but not native
+		// TRX — adding native TRX is not on the roadmap.  If ever added,
+		// swap this stand-in.
 		// @ts-expect-error -- testing runtime behavior
-		getAsset('eth');
+		getAsset('trx');
 	} catch (err) {
 		threw = true;
 		if (!(err instanceof Error) || !err.message.includes('not in registry')) {
@@ -138,7 +143,8 @@ scenario('lower-case tickers match payload union', () => {
 		'zec',
 		'arrr',
 		'dcr',
-		'sol'
+		'sol',
+		'eth'
 	]);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {

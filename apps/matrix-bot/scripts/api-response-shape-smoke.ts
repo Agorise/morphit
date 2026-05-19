@@ -176,6 +176,7 @@ const ChatLinkUrlsSchema = z.object({
 	arrr: z.string().nullable().optional(),
 	dcr: z.string().nullable().optional(),
 	sol: z.string().nullable().optional(),
+	eth: z.string().nullable().optional(),
 	usdt: z
 		.object({
 			erc20: z.string().nullable(),

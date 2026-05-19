@@ -426,6 +426,23 @@ export interface Config {
 	 *  solana.fm (community-run, unreachable at survey time). */
 	readonly frontendSolChatLinkUrl: string | undefined;
 
+	/** ETH (Ethereum) chat-link explorer URL template (Part 122
+	 *  cp47).  When set, the frontend uses this template instead
+	 *  of the bundled `eth.blockscout.com/tx/{txid}` default.
+	 *  Must contain `{txid}` placeholder; checked at config load.
+	 *
+	 *  Operator's 9-explorer survey at addition time
+	 *  (2026-05-19): eth.blockscout.com (chosen as bundled
+	 *  default — open-source Blockscout instance, project-aligned),
+	 *  etherscan.io (most popular but third-party closed-source),
+	 *  blockchair.com/ethereum, ethplorer.io,
+	 *  oklink.com/ethereum (OKX-affiliated),
+	 *  blockchain.com/explorer/assets/eth (multi-asset),
+	 *  blockexplorer.one/ethereum/mainnet, routescan.io,
+	 *  beaconcha.in (consensus-layer only, not suitable for
+	 *  regular tx lookups). */
+	readonly frontendEthChatLinkUrl: string | undefined;
+
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
@@ -990,6 +1007,18 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp47 — ETH (Ethereum) chat-link explorer URL
+	// override.  Single-network like all the other tradable
+	// assets.  When unset, falls back to the bundled
+	// eth.blockscout.com default.
+	MORPHIT_FRONTEND_ETH_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since Part 121 cp3 so the
 	// public-API per-network override never worked.  Frontend
@@ -1275,6 +1304,7 @@ export function loadConfig(): Config {
 		frontendArrrChatLinkUrl: e.MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL,
 		frontendDcrChatLinkUrl: e.MORPHIT_FRONTEND_DCR_CHAT_LINK_URL,
 		frontendSolChatLinkUrl: e.MORPHIT_FRONTEND_SOL_CHAT_LINK_URL,
+		frontendEthChatLinkUrl: e.MORPHIT_FRONTEND_ETH_CHAT_LINK_URL,
 		// Part 122 cp30 — multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

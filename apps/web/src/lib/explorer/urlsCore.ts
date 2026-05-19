@@ -61,6 +61,13 @@ export const DCR_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  addresses, signatures, and mint addresses. */
 export const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
+/** ETH txid (Part 122 cp47).  Ethereum transaction hashes are
+ *  32 bytes hex with optional 0x prefix — 64 hex chars (or 66
+ *  with prefix).  Same shape as the EVM stablecoin txid forms
+ *  (USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base, etc).  Asset
+ *  field disambiguates at order layer per LL #50. */
+export const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -257,6 +264,52 @@ export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_SOL_CHAT_LINK_URL. */
 export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}';
+
+/** ETH chat-link explorer (cp47 — Part 122).  Default uses
+ *  Blockscout's official Ethereum mainnet instance at
+ *  eth.blockscout.com — open-source explorer, project-aligned
+ *  with Ethereum's transparency ethos, frequently used by
+ *  Ethereum L2s (Optimism, Base, Gnosis Chain all run Blockscout
+ *  instances), self-hostable.
+ *
+ *  Rationale matches the choices for BUNDLED_ZEC_CHAT_LINK_URL
+ *  (mainnet.zcashexplorer.app), BUNDLED_ARRR_CHAT_LINK_URL
+ *  (explorer.piratechain.com), BUNDLED_DCR_CHAT_LINK_URL
+ *  (dcrdata.decred.org), BUNDLED_SOL_CHAT_LINK_URL
+ *  (explorer.solana.com): prefer an open-source / project-
+ *  aligned explorer over third-party aggregators or exchange-
+ *  affiliated services.
+ *
+ *  NOTE: unlike Solana (Solana Labs runs the official explorer)
+ *  or Decred (Decred project runs dcrdata), there is no single
+ *  Ethereum-Foundation-blessed explorer.  Etherscan is the de
+ *  facto popular choice but is third-party (Etherscan Inc),
+ *  closed-source, and has historically been the target of
+ *  AML/compliance pressure.  Blockscout is the most aligned
+ *  with Ethereum's open-source ethos.
+ *
+ *  Operator's 9-explorer survey at cp47:
+ *  - eth.blockscout.com — open-source Blockscout.
+ *    CHOSEN as bundled default.
+ *  - etherscan.io — most popular by traffic; third-party,
+ *    closed-source; secondary.
+ *  - blockchair.com/ethereum — multi-chain aggregator;
+ *    tertiary.
+ *  - ethplorer.io — token-focused; quaternary.
+ *  - www.oklink.com/ethereum — OKX-affiliated, third-party;
+ *    quinary.
+ *  - www.blockchain.com/explorer/assets/eth — multi-asset
+ *    exchange-affiliated; senary.
+ *  - blockexplorer.one/ethereum/mainnet — multi-chain;
+ *    septenary.
+ *  - routescan.io — multi-chain aggregator; octonary.
+ *  - beaconcha.in — consensus-layer (beacon chain) explorer,
+ *    NOT suitable for regular transaction lookups; surveyed
+ *    for completeness, not chosen.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_ETH_CHAT_LINK_URL. */
+export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

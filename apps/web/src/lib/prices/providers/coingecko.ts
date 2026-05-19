@@ -86,7 +86,8 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	ZEC: 'zcash',
 	ARRR: 'pirate-chain',
 	DCR: 'decred',
-	SOL: 'solana'
+	SOL: 'solana',
+	ETH: 'ethereum'
 };
 
 /** Max response body size from CoinGecko. Real responses are

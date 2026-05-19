@@ -1856,3 +1856,39 @@ User wallets talk to a Solana RPC endpoint (Helius, QuickNode, Triton, public ma
 The cp42 `address-shape-overlap-smoke` was extended at cp45 with SOL specimens. 23 new overlaps observed — BTC-1A1zP1eP... → SOL, USDT-various → SOL, USDC-EPjFW... → SOL, BCH/LTC/DASH/DOGE/ZEC/DCR specimens → SOL, and SOL specimens → USDT/USDC. ALL by design — Solana addresses ARE base58 32-byte public keys regardless of which asset they hold (native SOL or any SPL token). Added to EXPECTED_OVERLAPS allowlist; smoke now passes with **72 documented overlaps** (was 49 at cp44).
 
 **No new threat class from cp45.** Solana's transparent base layer + opt-out-of-protocol privacy posture is similar in shape to BTC (different consensus, similar privacy story). Already covered by the LL #38 / LL #41 / LL #49 / LL #50 / LL #52 framework.
+
+---
+
+## CP47 — Ethereum (ETH) addition threat rows (2026-05-19)
+
+### T-cp47-1 — ETH/USDT-ERC20/USDC/DAI visual address collision (info-disclosure class, by design)
+
+ETH addresses are visually IDENTICAL to every EVM token-account address — USDT-ERC20, USDC-ERC20, USDC-Base, USDC-Polygon, USDC-Arbitrum, DAI-ERC20, DAI-Polygon, DAI-Arbitrum, DAI-Base. Same 0x-prefixed 40-hex format. A user copying a counterparty's "ETH address" might accidentally send a USDC-Base or DAI-Polygon token to it, or vice versa.
+
+**Mitigation:** asset field (and network field for multi-network assets) on the order disambiguates at the order layer. Morphit's AddressShareModal asset tab makes the asset explicit. Wallet UX on the sender side displays the asset type before signing. The cp42 `address-shape-overlap-smoke` (extended at cp47 to 81 documented entries, +9 ETH-related) pins this as INTENTIONAL allowlist. **Residual risk:** user inattention; mitigated through UX disambiguation at three layers (Morphit asset tab + network selector, order asset field, wallet signing prompt).
+
+### T-cp47-2 — Smart-contract destination receiving ETH (fund-loss class, LOW)
+
+ETH receive addresses can be externally-owned accounts (EOAs, controlled by private keys) OR smart contracts. Sending ETH to a contract without a `payable receive()` or `fallback()` function reverts on-chain — the funds aren't lost (the transaction fails) but the buyer pays gas with no settlement. A malicious counterparty COULD share a contract address intentionally designed to revert, draining the buyer's gas budget over repeated attempts.
+
+**Mitigation:** `privacy.guides.eth.caveats` × 10 locales warns about contract destinations. Modern Ethereum wallets (MetaMask, Rabby, Rainbow) show "Sending to a contract" warnings before signing. The Morphit address regex `/^0x[a-fA-F0-9]{40}$/` accepts the shape (contracts ARE valid 20-byte hex strings); receiver-side wallet UX bears the runtime check. **Residual risk:** non-zero but contained — covered by counterparty reputation system + dispute escalation.
+
+### T-cp47-3 — ENS name (alice.eth) not resolved by Morphit (UX class, accepted by design)
+
+Users coming from MetaMask are accustomed to ENS resolution — typing `alice.eth` resolves to a 0x address via on-chain lookup. Morphit's address regex `/^0x[a-fA-F0-9]{40}$/` explicitly rejects ENS names. The address-invalid error tells users to paste a raw 0x address.
+
+**Design rationale:** resolving ENS would require a centralized RPC dependency (Infura, Alchemy, or self-hosted node) for the on-chain lookup. This violates the distributed-no-SPOF design priority — Morphit instances shouldn't be unable to function because an RPC provider is down or refusing service.
+
+**Trade-off accepted:** users must paste raw 0x addresses. The wallet UX on the counterparty's side resolves ENS for them at send time (they type `morphit-trade-counterparty.eth` in MetaMask and MetaMask handles the lookup); Morphit just stores and displays the raw address. **Residual risk:** UX friction; documented in `privacy.guides.eth.caveats` and FAQ `what_is_eth`.
+
+### R-cp47-1 — Ethereum RPC provider correlation (information-disclosure class, MEDIUM advisory)
+
+User wallets talk to an Ethereum RPC endpoint (Infura, Alchemy, QuickNode, public mainnet) to read state and broadcast transactions. That RPC provider sees every transaction the user signs, every account they query, and the IP source of each request. This is a Morphit-adjacent privacy concern: a user trading ETH on Morphit reveals their address activity to whichever RPC they're using.
+
+**Mitigation:** `privacy.guides.eth.caveats` × 10 locales advises self-hosting an Ethereum node or rotating between providers. The advisory is informational; the chain-level threat is not Morphit-specific (any Ethereum user has this exposure). **Residual risk:** acknowledged-and-disclosed; users are informed. SAME class as R-cp45-1 (Solana RPC correlation).
+
+### CP47 + LL #50 status
+
+The cp42 `address-shape-overlap-smoke` was extended at cp47 with ETH specimens. 9 new overlaps observed — USDT-ERC20 → ETH, USDC-ERC20 → ETH, DAI-ERC20 → ETH, and ETH specimens → USDT/USDC/DAI. ALL by design — Ethereum 0x-addresses ARE 20-byte hex regardless of which asset they hold (native ETH or any ERC-20 token on any EVM chain). Added to EXPECTED_OVERLAPS allowlist; smoke now passes with **81 documented overlaps** (was 72 at cp46).
+
+**No new threat class from cp47.** Ethereum's transparent base layer + opt-out-of-protocol privacy posture is similar in shape to BTC and SOL (different consensus, similar privacy story). Already covered by the LL #38 / LL #41 / LL #49 / LL #50 / LL #52 / cp46-O-1 framework.

@@ -281,6 +281,7 @@
 		if (method === 'arrr') return 'chat.address.address_invalid_arrr';
 		if (method === 'dcr') return 'chat.address.address_invalid_dcr';
 		if (method === 'sol') return 'chat.address.address_invalid_sol';
+		if (method === 'eth') return 'chat.address.address_invalid_eth';
 		return 'chat.address.address_invalid_blurt';
 	});
 
@@ -592,6 +593,18 @@
 			>
 				{$_('chat.address.method_sol')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'eth'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'eth'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('eth')}
+			>
+				{$_('chat.address.method_eth')}
+			</button>
 		</div>
 
 		<!-- Part 121 — USDT privacy warning + network picker.
@@ -682,7 +695,9 @@
 																? ($_('chat.address.address_placeholder_dcr') as string)
 																: method === 'sol'
 																	? ($_('chat.address.address_placeholder_sol') as string)
-																	: ($_('chat.address.address_placeholder_blurt') as string)}
+																	: method === 'eth'
+																		? ($_('chat.address.address_placeholder_eth') as string)
+																		: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

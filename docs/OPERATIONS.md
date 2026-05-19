@@ -8037,7 +8037,7 @@ of demand.
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL) and multi-network trade-only assets (USDT, USDC, DAI) and multi-network
+single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH) and multi-network trade-only assets (USDT, USDC, DAI) and multi-network
 ones (USDT).
 
 ### How to set this (two paths)
@@ -8119,6 +8119,8 @@ MORPHIT_INDEXER_DISABLED_ASSETS="ARRR"
 MORPHIT_INDEXER_DISABLED_ASSETS="DCR"
 # Refuse only SOL trades (cp45):
 MORPHIT_INDEXER_DISABLED_ASSETS="SOL"
+# Refuse only ETH trades (cp47):
+MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
 
 # Refuse two assets (any future stablecoin additions)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
@@ -8132,7 +8134,7 @@ MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 # Refuse all four Bitcoin-fork variants (BTC + XMR + BLURT + stablecoins only,
 # possibly with USDT)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH,DOGE"
-# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL only)
+# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH only)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI"
 
 # Refuse everything that isn't BLURT + XMR + BTC
@@ -8374,7 +8376,7 @@ has no effect on your instance.
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH
 all single-network; USDT, USDC, DAI multi-network; all
 single-network assets write NULL).
 USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`;

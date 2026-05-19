@@ -707,6 +707,44 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp47 ETH P2P trading wired ──────────────────────────────────
+	// Ethereum addition (cp47 — Part 122).  Fifteenth tradable asset.
+	// Brag entry #287 advertises ETH peer-to-peer trading.
+	{
+		id: 'cp47-eth-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ethereum (ETH) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'ETH'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp47 ETH payment-rail wired (cp32 LL #36) ──────────────────
+	{
+		id: 'cp47-eth-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ethereum (ETH) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_eth'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp47 ETH explorer URL bundled default ──────────────────────
+	{
+		id: 'cp47-eth-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Ethereum (ETH) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_ETH_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

@@ -306,6 +306,27 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'SOL'
 	},
+	{
+		// Part 122 cp47 — Ethereum as a payment method.  Same
+		// Category-B semantics as the other trade-only assets:
+		// when the trade's traded asset is ETH, "pay with ETH"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, ETH appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `ethereum:`
+		// URI (BIP-21-compatible EIP-681 simplified form)
+		// handles native ETH transfers.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp47 ships ETH with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// ARRR at cp41, DCR at cp43, SOL at cp45.
+		key: 'pay_eth',
+		name: 'Ethereum (ETH)',
+		url: 'https://ethereum.org',
+		category: 'crypto',
+		assetExclusion: 'ETH'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

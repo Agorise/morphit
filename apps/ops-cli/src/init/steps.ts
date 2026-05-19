@@ -894,6 +894,19 @@ export const DEFAULT_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
 // different default override via MORPHIT_FRONTEND_SOL_CHAT_LINK_URL.
 export const DEFAULT_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}';
 
+// Part 122 cp47 — Ethereum (ETH) chat-link explorer URL bundled
+// default.  Operator's 9-explorer survey at cp47:
+// eth.blockscout.com (chosen as bundled default — open-source
+// Blockscout instance, project-aligned with Ethereum's transparency
+// ethos), etherscan.io (most popular but third-party closed-source),
+// blockchair.com/ethereum, ethplorer.io, oklink.com/ethereum (OKX-
+// affiliated), blockchain.com/explorer/assets/eth (exchange-affiliated),
+// blockexplorer.one/ethereum/mainnet, routescan.io, beaconcha.in
+// (consensus-layer only, not suitable for regular tx lookups).
+// Operators wanting different default override via
+// MORPHIT_FRONTEND_ETH_CHAT_LINK_URL.
+export const DEFAULT_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
+
 // Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1110,6 +1123,7 @@ export interface ChatLinkExplorersResult {
 	readonly arrr: string;
 	readonly dcr: string;
 	readonly sol: string;
+	readonly eth: string;
 	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1251,6 +1265,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── SOL chat-link URL ──\n');
 	const sol = await editChatLinkUrl('SOL chat-link URL', DEFAULT_SOL_CHAT_LINK_URL);
 
+	// ─── ETH (Part 122 cp47) ──
+	console.log('\n  ── ETH chat-link URL ──\n');
+	const eth = await editChatLinkUrl('ETH chat-link URL', DEFAULT_ETH_CHAT_LINK_URL);
+
 	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
 	// Solana / BNB Smart Chain); each chain has its own explorer
@@ -1364,7 +1382,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
 		};
 
-	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, usdt, usdc, dai };
+	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -1458,6 +1476,7 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	ZEC: 'Zcash — single-network mainnet.  Launched 2016.  Supports both\n    transparent addresses (t1/t3, base58, like BTC) and shielded\n    addresses (zs1 Sapling, u1 Unified Address) using zero-knowledge\n    proofs to hide sender, recipient, and amount.  Per-trade, recipients\n    pick the address type that fits their posture.  No central issuer.',
 	ARRR: 'Pirate Chain — single-network mainnet.  Launched 2018 as a fork of\n    the Zcash codebase, configured so that the Sapling zk-SNARK shielded\n    pool is the only available transaction type — every transfer hides\n    sender, recipient, and amount on chain by construction.  No\n    transparent address option (transparent funds were sunset early in\n    the chain).  Single address format (zs1 Sapling, bech32, 78 chars).\n    No central issuer.',
 	DCR: 'Decred — single-network mainnet.  Launched 2016.  Hybrid Proof-of-Work\n    + Proof-of-Stake consensus: every block is mined by PoW miners AND\n    voted on by 5 PoS ticket-holders chosen pseudo-randomly from the\n    staking pool.  On-chain governance via Politeia lets stakeholders\n    propose and ratify protocol changes.  Two receive-address formats\n    (Ds P2PKH and Dc P2SH, 35 chars each, base58).  Opt-in CoinShuffle++\n    (CSPP) mixing integrated into dcrwallet for wallet-side transaction-\n    level privacy.  No central issuer.',
+	ETH: 'Ethereum — single-network mainnet.  Launched 2015 with Proof-of-Work,\n    transitioned to Proof-of-Stake in September 2022 ("The Merge").  Validators\n    stake ETH and process blocks in rotation; no central freeze authority.\n    Addresses are 20-byte hex with 0x prefix (42 chars total) — SAME shape as\n    every EVM token-account address on Base, Polygon, Arbitrum, BSC.  Asset\n    field (and network field for multi-network assets) disambiguates.  ENS\n    names are NOT resolved by Morphit (avoids centralized RPC dependency).\n    Smart-contract destinations may revert if the contract lacks a payable\n    receive() or fallback() function — wallet UX warns before sending.\n    Transparent base layer with no native protocol-level mixing; wallet-side\n    address rotation is the privacy lever.  No central issuer.',
 	SOL: 'Solana — single-network mainnet-beta.  Launched 2020.  Delegated\n    Proof-of-Stake consensus with Proof-of-History sequencing for high\n    transaction throughput.  Validators stake SOL and process blocks in\n    rotation; no central freeze authority.  Addresses are 32-byte public\n    keys base58-encoded (32-44 chars, most are 44).  Same address format\n    as USDT-Solana and USDC-Solana SPL token-accounts — asset field on\n    the order disambiguates.  Transparent base layer with no native\n    protocol-level mixing; wallet-side address rotation is the privacy\n    lever.  No central issuer.'
 });
 

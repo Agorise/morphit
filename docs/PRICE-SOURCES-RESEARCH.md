@@ -120,7 +120,7 @@ only if they narrow a real gap in the existing chain.
 ### Blockchair — NOT APPLICABLE
 
 - **Supported chains:** ~48 blockchains as of 2025,
-  covering Bitcoin family (BTC, LTC, BCH, DOGE, DASH, ZEC, ARRR, DCR, SOL,
+  covering Bitcoin family (BTC, LTC, BCH, DOGE, DASH, ZEC, ARRR, DCR, SOL, ETH,
   DGB, XEC, GRS), Ethereum family, Solana, TRON, Polygon,
   and similar account-model / UTXO chains.
 - **Graphene-family chains (BLURT, Hive, Steem) are NOT
