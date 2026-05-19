@@ -83,7 +83,8 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// chip; ZEC supports both transparent (t-addr) and shielded
 	// (z/u-addr) transactions per recipient choice — surfaced via
 	// the privacy guide page, not the price feed.
-	ZEC: 'zcash'
+	ZEC: 'zcash',
+	ARRR: 'pirate-chain'
 };
 
 /** Max response body size from CoinGecko. Real responses are

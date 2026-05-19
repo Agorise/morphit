@@ -152,6 +152,10 @@
 				<dt>ZEC</dt>
 				<dd>{$_('cheat_sheet.section_assets.zec')}</dd>
 			</div>
+			<div class="cheat-row">
+				<dt>ARRR</dt>
+				<dd>{$_('cheat_sheet.section_assets.arrr')}</dd>
+			</div>
 		</dl>
 	</section>
 

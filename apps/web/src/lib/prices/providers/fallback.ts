@@ -65,7 +65,8 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// rough order-of-magnitude only, used when live providers
 	// have all failed.  Approximate live ZEC/USD at cp39 ship time
 	// (ZEC has trended in the $20–$50 range across 2024–2026).
-	ZEC: 30
+	ZEC: 30,
+	ARRR: 0.20
 };
 
 export const fallbackProvider: PriceProvider = {

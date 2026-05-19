@@ -42,7 +42,8 @@ const scenarios: Scenario[] = [
 				catB.includes('DASH') &&
 				catB.includes('DOGE') &&
 				catB.includes('ZEC') &&
-				catB.length === 8
+				catB.includes('ARRR') &&
+				catB.length === 9
 			);
 		}
 	},

@@ -120,6 +120,7 @@ export interface InstanceResponse {
 		 *  back to the bundled mainnet.zcashexplorer.app default
 		 *  when null. */
 		zec: string | null;
+		arrr: string | null;
 		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (pre-cp30 — yes, this includes every prior build of
@@ -163,7 +164,9 @@ export interface InstanceResponse {
 	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
 	 *  every new asset ships default-ON instance-wide with
 	 *  operator override).  Wire format: array of uppercase
-	 *  asset tickers (e.g. `['USDT']` or `['USDT', 'ARRR']`).
+	 *  asset tickers (e.g. `['USDT']` or `['USDT', 'ARRR']`).  Cp41:
+	 *  ARRR is now a real tradable ticker, so the example is
+	 *  live working syntax.
 	 *  Empty array = this instance accepts every asset in the
 	 *  canonical registry.
 	 *
@@ -240,6 +243,7 @@ export function instanceRoute(config: Config): Hono {
 				dash: config.frontendDashChatLinkUrl ?? null,
 				doge: config.frontendDogeChatLinkUrl ?? null,
 				zec: config.frontendZecChatLinkUrl ?? null,
+				arrr: config.frontendArrrChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,

@@ -219,6 +219,18 @@ const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
 const validateZec: AddressValidator = (s) =>
 	ZEC_T_RE.test(s) || ZEC_ZS_RE.test(s) || ZEC_U_RE.test(s);
 
+// ARRR address regex (cp41 — Part 122).  Pirate Chain ships
+// chain-level default-shielded transactions via the Sapling zk-SNARK
+// pool.  Only one address format: `zs1` Sapling shielded
+// (bech32, 78 chars total — same shape as Zcash Sapling addresses).
+// No transparent addresses — Pirate Chain forcibly migrated all
+// transparent funds to the shielded pool early in the chain's
+// life.  No Unified Address (`u1`) format — Pirate Chain does
+// not implement Zcash's NU5/Orchard pool.
+const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+
+const validateArrr: AddressValidator = (s) => ARRR_ZS_RE.test(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -550,6 +562,38 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		// visibility or z/u-addr for shielded transactions; both
 		// are first-class on the protocol.  No warning chip
 		// needed.
+		privacyWarningKey: null
+	},
+	{
+		ticker: 'arrr',
+		displayTicker: 'ARRR',
+		displayName: 'Pirate Chain',
+		oneLineDescription:
+			'Pirate Chain — chain-level shielded transactions via zk-SNARK Sapling pool; every transaction is private by construction.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-arrr.svg',
+		// ARRR brand gold gradient (#b38c30 → #f2de98).  Distinct
+		// from existing assignments: USDT amber-400, DOGE yellow-500,
+		// ZEC yellow-400, BTC amber-500 — wait, BTC is amber-500.
+		// Use text-amber-600 to land a richer/warmer gold tone
+		// (closer to the b38c30 dark stop) while staying distinct
+		// from BTC's brighter amber-500 and the other 10.
+		accentClass: 'text-amber-600',
+		decimals: 8, // Same as BTC — Sapling inherited the 8-decimal smallest-unit convention from Bitcoin
+		supportsMemo: false, // Memo content travels inside the shielded payload, not the address
+		addressValidator: validateArrr,
+		// MEMORY #23 INVARIANT: ARRR cannot pay listing fees.
+		// Trade-only Category B coin.
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		// Single-network — mainnet only.
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Pirate Chain is decentralized via PoW (Equihash variant
+		// inherited from Zcash); addresses cannot be frozen by an
+		// issuer.  Every transaction goes through the Sapling
+		// shielded pool — there's no transparent address option.
+		// The chain hides sender, recipient, and amount by
+		// construction.  No warning chip needed.
 		privacyWarningKey: null
 	}
 ] as const;

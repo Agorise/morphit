@@ -6,7 +6,7 @@
  * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher);
  * extended in cp30 to cover the stablecoin variant
  * (jitterStablecoinAmount via jitterAmountForAsset routing); cp31
- * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO).
+ * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics).
  *
  * The XMR jitter is already covered by older payload smokes; this
  * sentinel covers:
@@ -21,7 +21,7 @@
  *    reversed in cp30 because the amount-correlation linkability
  *    threat is independent of the centralization concern.
  *  - jitterAmountForAsset dispatcher: per-asset routing across
- *    all 11 tradable assets
+ *    all 12 tradable assets
  *  - input validation throws on garbage
  */
 

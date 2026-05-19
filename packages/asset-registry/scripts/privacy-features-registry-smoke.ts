@@ -115,7 +115,8 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	LTC: 'hd-derived',
 	DASH: 'hd-derived',
 	DOGE: 'hd-derived',
-	ZEC: 'hd-derived'
+	ZEC: 'hd-derived',
+	ARRR: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -146,7 +147,8 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	LTC: ['mweb'],
 	DASH: ['privatesend'],
 	DOGE: null,
-	ZEC: ['shielded-pools']
+	ZEC: ['shielded-pools'],
+	ARRR: ['shielded-pools']
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

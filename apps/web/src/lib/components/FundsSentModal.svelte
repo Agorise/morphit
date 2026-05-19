@@ -402,6 +402,18 @@
 			>
 				{$_('chat.address.method_zec')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'arrr'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'arrr'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('arrr')}
+			>
+				{$_('chat.address.method_arrr')}
+			</button>
 		</div>
 
 		<!-- Part 121 — USDT network picker.  When the parent

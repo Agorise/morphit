@@ -65,6 +65,7 @@
 		{ key: 'dash', path: '/icons/icon-dash.svg' },
 		{ key: 'doge', path: '/icons/icon-doge.svg' },
 		{ key: 'zec', path: '/icons/icon-zec.svg' },
+		{ key: 'arrr', path: '/icons/icon-arrr.svg' },
 		{ key: 'yubikey', path: '/icons/icon-yubikey.svg' }
 	] as const;
 

@@ -270,7 +270,7 @@
 	 *  button (with prefill) share the modal but supply
 	 *  different starting state. */
 	let markSentArgs = $state<{
-		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec';
+		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr';
 		amount?: string;
 		orderPermlink?: string;
 		// cp26 DD-7 fix + cp30 — pill's "Mark as sent" button now
@@ -388,7 +388,7 @@
 	 *  their own wallet (scanning the QR / pasting the address),
 	 *  then comes back to this modal with the txid in hand. */
 	function handleMarkSentClick(args: {
-		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec';
+		method: 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr';
 		amount?: string;
 		orderPermlink?: string;
 		network?: string;

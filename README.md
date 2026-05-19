@@ -1,6 +1,6 @@
 # Morphit
 
-**A federated, non-custodial, no-KYC peer-to-peer marketplace for trading fiat against Bitcoin, Monero, BLURT, USDT, USDC, DAI, Bitcoin Cash, Litecoin, Dash, Dogecoin, and Zcash.**
+**A federated, non-custodial, no-KYC peer-to-peer marketplace for trading fiat against Bitcoin, Monero, BLURT, USDT, USDC, DAI, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, and Pirate Chain.**
 
 You hold your own keys. There are no deposits to make and no withdrawals to wait for; trades settle directly between counterparty wallets. There is no central server to subpoena and no central database to leak — the orderbook lives on the public Blurt blockchain, and any operator running a Morphit indexer sees the same data. If one operator goes dark, another's URL still works and the federation continues.
 
@@ -15,7 +15,7 @@ Approaching `v1.0.0-beta.1` (~2026-05-22). The canonical public instance is **mo
 - **Federated orderbook.** Orders are signed by the user's posting key and broadcast as custom-JSON ops on the Blurt chain. Every Morphit indexer in the federation reads the same chain and surfaces the same orderbook.
 - **Non-custodial.** Trade settlement is wallet-to-wallet. There is no on-platform balance for an operator to mismanage. Listing fees are paid on-chain (BLURT, BTC, or XMR) directly to the operator's treasury.
 - **No KYC.** Signup is a cryptographic public key and a username. The system has no place to store an ID even if a regulator demanded one.
-- **Privacy first.** No cookies, no analytics, no IP logging. XMR support hardens with subaddresses and per-payment view-key proofs (the operator's private view key never reaches the network). On every transparent chain Morphit trades (BTC, BCH, LTC, DASH, DOGE, ZEC, BLURT, XMR), the address-share modal offers default-ON amount randomization and address-reuse warnings; BTC also gets optional PayJoin (BIP-78) endpoint propagation; DASH gets a wallet-side PrivateSend pre-mix workflow explained in the per-asset guide.  Stablecoin trades (USDT, USDC, DAI) get the same amount-randomization defense at 6-decimal precision (cp30 reversal of the cp26 USDT pass-through decision — Circle/Tether freeze power is a separate, independently-real threat documented in each per-asset privacy guide). Per-asset privacy guides live at `/[lang]/privacy/{asset}`.
+- **Privacy first.** No cookies, no analytics, no IP logging. XMR support hardens with subaddresses and per-payment view-key proofs (the operator's private view key never reaches the network). On every transparent chain Morphit trades (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, BLURT, XMR), the address-share modal offers default-ON amount randomization and address-reuse warnings; BTC also gets optional PayJoin (BIP-78) endpoint propagation; DASH gets a wallet-side PrivateSend pre-mix workflow explained in the per-asset guide.  Stablecoin trades (USDT, USDC, DAI) get the same amount-randomization defense at 6-decimal precision (cp30 reversal of the cp26 USDT pass-through decision — Circle/Tether freeze power is a separate, independently-real threat documented in each per-asset privacy guide). Per-asset privacy guides live at `/[lang]/privacy/{asset}`.
 - **Encrypted chat.** Per-message ECIES (X25519 + ChaCha20-Poly1305-IETF) with sender ephemerals, stored on-chain as ciphertext — see `docs/adr/0015-chat-crypto.md`.
 - **Reach.** Public hostname, Tor `.onion`, I2P `.b32`, Lokinet, and Nostr-relay channels are all first-class operator-config surfaces.
 
@@ -31,7 +31,7 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
 | `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config` |
-| `docs/` | ADRs (`docs/adr/0001-…` through `0031-…`), audit logs, operator runbooks |
+| `docs/` | ADRs (`docs/adr/0001-…` through `0032-…`), audit logs, operator runbooks |
 | `ops/` | Ansible role, systemd units, env templates, nginx/Caddy snippets, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
 
@@ -50,7 +50,7 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 
 - Architecture overview: `docs/ARCHITECTURE.md`
 - API reference: `docs/API.md`
-- ADR index: `docs/adr/0001-…` through `docs/adr/0031-…`
+- ADR index: `docs/adr/0001-…` through `docs/adr/0032-…`
 - Audit log: `docs/AUDIT-2026-05.md`
 - Per-language translation guide: `docs/CONTRIBUTING-TRANSLATIONS.md`
 

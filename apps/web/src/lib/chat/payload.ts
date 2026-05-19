@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -232,6 +232,36 @@ const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
  *  shielded inputs/outputs are hidden inside the tx but the
  *  txid itself is canonical and shareable. */
 const ZEC_TXID_RE = /^[0-9a-f]{64}$/;
+
+/** ARRR address (cp41 — Part 122).  Pirate Chain forked from
+ *  the Zcash codebase and ships chain-level default-shielded
+ *  transactions via the Sapling zk-SNARK pool.  Only one
+ *  address format exists:
+ *
+ *  - `zs1` (Sapling shielded): bech32, `zs1` prefix + 75 bech32
+ *    data chars = 78 chars total.
+ *
+ *  No transparent (t1/t3) format — Pirate Chain forcibly
+ *  migrated all transparent funds to the shielded pool early
+ *  in the chain's life.  No Unified Address (u1) format —
+ *  Pirate Chain does not implement Zcash's NU5/Orchard pool.
+ *
+ *  Visually indistinguishable from Zcash Sapling addresses.
+ *  Context (order asset field, instance config) disambiguates
+ *  which chain receives the transaction.
+ *
+ *  Permissive shape check; chain-binding happens on the
+ *  receiving wallet side.  Bech32 alphabet excludes `1`, `b`,
+ *  `i`, `o` to avoid visual ambiguity (we use [02-9ac-hj-np-z]
+ *  for the data portion, matching the LTC MWEB / ZEC Sapling
+ *  patterns).
+ */
+const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+
+/** ARRR txid: 64 lowercase hex chars.  Same shape as ZEC and
+ *  the BTC family on the wire; shielded payload is hidden inside
+ *  the tx but the txid itself is canonical and shareable. */
+const ARRR_TXID_RE = /^[0-9a-f]{64}$/;
 
 
 /** BLURT "address" is actually a Blurt account name — the
@@ -514,7 +544,7 @@ export function jitterAmountForAsset(
 	base: string
 ): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec') {
+	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec' || asset === 'arrr') {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -607,7 +637,7 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec';
+export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -908,6 +938,26 @@ export function isValidZecTxid(s: string): boolean {
 	return ZEC_TXID_RE.test(s);
 }
 
+/** Validate a ARRR address shape (cp41 — Part 122).  Pirate
+ *  Chain has only one address format: `zs1` Sapling shielded
+ *  (bech32, exactly 78 chars).  No transparent (t1/t3) — all
+ *  Pirate Chain transactions go through the Sapling shielded
+ *  pool.  No Unified Address (u1) — Pirate Chain doesn't
+ *  implement Zcash's Orchard pool. */
+export function isValidArrrAddress(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ARRR_ZS_RE.test(s);
+}
+
+/** Validate an ARRR txid shape.  Same 64-char lowercase hex
+ *  as ZEC and the BTC family on the wire; shielded inputs and
+ *  outputs are hidden inside the tx but the txid itself is
+ *  canonical and shareable. */
+export function isValidArrrTxid(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return ARRR_TXID_RE.test(s);
+}
+
 /** Dispatch by method. */
 export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'btc') return isValidBtcAddress(addr);
@@ -921,6 +971,7 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'dash') return isValidDashAddress(addr);
 	if (method === 'doge') return isValidDogeAddress(addr);
 	if (method === 'zec') return isValidZecAddress(addr);
+	if (method === 'arrr') return isValidArrrAddress(addr);
 	return false;
 }
 
@@ -938,6 +989,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'dash') return isValidDashTxid(txid);
 	if (method === 'doge') return isValidDogeTxid(txid);
 	if (method === 'zec') return isValidZecTxid(txid);
+	if (method === 'arrr') return isValidArrrTxid(txid);
 	return false;
 }
 
@@ -964,7 +1016,8 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		p.method !== 'ltc' &&
 		p.method !== 'dash' &&
 		p.method !== 'doge' &&
-		p.method !== 'zec'
+		p.method !== 'zec' &&
+		p.method !== 'arrr'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1139,7 +1192,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		p.method !== 'ltc' &&
 		p.method !== 'dash' &&
 		p.method !== 'doge' &&
-		p.method !== 'zec'
+		p.method !== 'zec' &&
+		p.method !== 'arrr'
 	) {
 		throw new Error('payload: invalid method');
 	}
@@ -1293,7 +1347,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'ltc' &&
 			o.method !== 'dash' &&
 			o.method !== 'doge' &&
-			o.method !== 'zec'
+			o.method !== 'zec' &&
+			o.method !== 'arrr'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
@@ -1322,7 +1377,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 			o.method !== 'ltc' &&
 			o.method !== 'dash' &&
 			o.method !== 'doge' &&
-			o.method !== 'zec'
+			o.method !== 'zec' &&
+			o.method !== 'arrr'
 		)
 			return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
@@ -1743,6 +1799,20 @@ export function buildPaymentUri(p: AddressPayload): string {
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
 		return `zcash:${p.address}${qs ? `?${qs}` : ''}`;
+	}
+	if (p.method === 'arrr') {
+		// Pirate Chain uses the `arrr:` URI scheme — BIP-21-style
+		// shape (cp41 — Part 122).  Same form as BTC's `bitcoin:`
+		// scheme with `amount` as decimal ARRR.  ARRR addresses
+		// are unambiguous within the URI scheme: only one format
+		// exists (zs1 Sapling shielded, bech32, 78 chars).
+		// Pirate Chain wallets (Treasure Chest / Pirate.Black /
+		// Verus) recognize the `arrr:` scheme; the shape mirrors
+		// Zcash's ZIP-321 URI conventions since Pirate Chain
+		// forked from the Zcash codebase.
+		if (p.amount !== undefined) params.set('amount', p.amount);
+		const qs = params.toString();
+		return `arrr:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'blurt') {
 		// No URI scheme; bare account name.  Mobile wallets that
