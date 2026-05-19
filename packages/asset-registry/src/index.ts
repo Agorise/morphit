@@ -163,7 +163,7 @@ export interface AssetEntry {
 	readonly privacyFeatures: {
 		readonly freshAddressAdvice: 'subaddress' | 'hd-derived' | 'account-reuse';
 		readonly optInPrivacyTech:
-			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend')[]
+			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend' | 'shielded-pools')[]
 			| null;
 		readonly privacyGuideKey: string;
 	};

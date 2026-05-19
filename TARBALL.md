@@ -1,4 +1,87 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 41 — Pirate Chain (ARRR) as 12th tradable asset, fully wired across canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0032 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +3 rows + LL #50 (same-format-different-chain visual collision).  NEW arrr-trade-only-smoke (16 scenarios, 18 adversarial inputs); 3 new wiring-completeness CHECK rows; 2 mutation tests passed; 36 adversarial cases (with 2 test-file bugs documented).  29 of 29 standalone-runnable smokes PASS.  Universal no-favoritism principle from cp39 reapplied — Morphit never compares ARRR's privacy posture to XMR, ZEC, or other privacy chains.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 42 — Full 94-task deep-deep + security audit on cp41 ARRR work surfacing **1 HIGH** + **3 LOW** findings closed inline + **4 new defensive smokes** + **3 mutation tests** + **19 adversarial test cases**.  33 of 33 standalone-runnable smokes PASS.  Cp42-J-68 was the load-bearing find: the `optInPrivacyTech` type union in the canonical asset-registry never had `'shielded-pools'` added when ZEC shipped at cp39 — this means cp39 ZEC AND cp41 ARRR both shipped with TypeScript compile errors in their privacyFeatures entries that no smoke caught.  The runtime tolerated it because TS is structurally typed, but `tsc --noEmit` would have caught it.  Cp42-J-68 fix widens the union to include `'shielded-pools'`.  Cp42-H-55 was pre-existing accent-class collision (XMR + DAI both used `text-orange-500` since cp31 DAI addition); fixed inline.  Cp42-D-32 and cp42-D-33 were small drift fixes from the cp41 work itself.  Cp42 ships 4 new defensive smokes that pin invariants the cp41 deep-deep was unable to verify structurally: accent-class uniqueness, payment-rail coverage parity (LL #36 structural pin), address-shape overlap registry (LL #50 closure), and price-provider coverage parity.)
+
+CP42 SCOPE:
+
+Full 94-task deep-deep audit covering cp41 ARRR addition work + pre-existing drift that surfaced during the audit pass. Categories A-O (static code, deps, SQL/DB, HTTP/API, crypto, privacy, operator-trust, frontend, contracts/cross-axis invariants, build/CI, threat modeling, per-subsystem deep dives, mutation tests, adversarial expansion, test coverage gap matrix).
+
+CP42 FINDINGS:
+
+**J-68 HIGH (pre-existing since cp39 ZEC addition; load-bearing):** `packages/asset-registry/src/index.ts` `optInPrivacyTech` type union did not include `'shielded-pools'`. Both ZEC's and ARRR's privacyFeatures entries hit `Type '"shielded-pools"' is not assignable to type '"mweb" | "cashfusion" | "coinjoin" | "payjoin" | "privatesend"'` under `tsc --noEmit`. Cp39 and cp41 both shipped with this type error. Runtime tolerated it because TS is structurally typed at the entry-level (Object.freeze<AssetEntry>(...)), and no smoke caught it because none of the smokes ran the actual TypeScript compiler. **Fix:** widened the union to include `'shielded-pools'`. **Defense-in-depth:** consider adding a CI step that runs `tsc --noEmit` against each workspace package (currently CI runs typecheck via `svelte-check` on the frontend but not workspace-wide).
+
+**H-55 LOW (pre-existing since cp31 DAI addition; user-visible):** `apps/web/src/lib/assets/registry.ts` had XMR and DAI both using `accentClass: 'text-orange-500'`. The accent class is the primary visual disambiguator between asset tabs in AddressShareModal, FundsSentModal, and ChatMessage pills; collision causes lookalike asset chips (same threat class as LL #50 same-format-different-chain). **Fix:** DAI reassigned to `text-yellow-600` (matches DAI's golden-yellow brand color, distinct from BTC amber-500/USDT amber-400/DOGE yellow-500/ZEC yellow-400/ARRR amber-600).
+
+**D-32 LOW (cp41 drift):** `docs/API.md` `volume_estimate` sample stopped at DOGE — missing ZEC AND ARRR even though my cp41 patch claimed to extend it. The patch was no-op because it looked for `"ZEC": "85.5"` as the anchor and ZEC was never in the sample (cp39 missed it too). **Fix:** added both ZEC and ARRR entries to the volume_estimate sample.
+
+**D-33 LOW (cp41 docblock drift):** `apps/indexer/src/api/rssOrderbook.ts` docblock said the per-asset RSS feed set is "enumerable — ten of them". With ARRR addition the count is now twelve. **Fix:** "ten" → "twelve". The RSS handler's actual asset whitelist (`apps/indexer/src/api/rssOrderbookHandlers.ts`) correctly imports `ASSET_TICKERS` so the runtime behaviour was already right; only the docblock was stale.
+
+CP42 NEW DEFENSIVE SMOKES (4):
+
+1. **`packages/asset-registry/scripts/asset-accent-class-uniqueness-smoke.ts`** (cp42-H-55 closure): asserts no two registered assets share an `accentClass`. Catches the class of bug that put XMR + DAI on `text-orange-500` for 11 checkpoints. Same threat class as LL #50 same-format-different-chain. Mutation test M-88: collide DAI accent back to `text-orange-500` → smoke FAILS. Restored → PASS.
+
+2. **`packages/asset-registry/scripts/payment-rail-coverage-parity-smoke.ts`** (cp42-I-62 / LL #36 structural pin): asserts every asset with `canBeTraded: true` in the canonical registry has a corresponding `pay_<ticker>` entry in `apps/web/src/lib/payments/registry.ts`. Twin smoke to `wiring-completeness-smoke`'s `cp41-arrr-payment-rail-wired` CHECK row (which pins ARRR specifically); this smoke pins the INVARIANT across all 12 assets in one shot. Also asserts canonical canBeTraded set == frontend canBeTraded set. 2 scenarios PASS.
+
+3. **`packages/asset-registry/scripts/address-shape-overlap-smoke.ts`** (cp41 LL #50 closure): the cp41 deep-deep proposed adding a defensive smoke against identical addressShape regexes across assets. Cp42 implements it — but the actual analysis revealed 45 cross-asset address-shape overlaps, not just the documented ZEC↔ARRR Sapling pair. Most overlaps come from USDT/USDC's intentionally permissive SPL base58 pattern `[1-9A-HJ-NP-Za-km-z]{32,44}` which accepts almost every base58 address from other chains (DOGE/DASH/BCH-legacy/LTC/ZEC-transparent etc.). This is a design choice: SPL Token Account addresses have no fixed prefix, and the disambiguator lives at the order layer (`asset_network` field). The smoke bakes the observed 45-overlap set as documented intentional state via `EXPECTED_OVERLAPS`, and any UNDOCUMENTED overlap fails. Mutation test M-89: loosen DOGE's addressShape to accept DASH's X-prefix → smoke FAILS with "UNEXPECTED overlaps". Restored → PASS.
+
+4. **`packages/asset-registry/scripts/price-provider-coverage-parity-smoke.ts`** (cp42-O-93 coverage gap closure): asserts every `ASSET_TICKERS` entry has matching coverage in (a) `apps/web/src/lib/prices/index.ts` `initialState`, (b) `apps/web/src/lib/prices/providers/coingecko.ts` `COIN_ID` map, (c) `apps/web/src/lib/prices/providers/fallback.ts` `FALLBACK_USD` map. Catches typo'd Coingecko slugs (e.g. `'pirate-chain'` typo) and missing fallback prices that would silently return `null` in production. 3 scenarios PASS.
+
+CP42 MUTATION TESTS (3 of 3 PASS):
+
+- **M-87**: Flipped ARRR.canBeTraded → false → arrr-trade-only-smoke FAILED with diagnostic "canonical ARRR.canBeTraded === true". Restored → PASS.
+- **M-88**: Re-collided DAI accent to `text-orange-500` → asset-accent-class-uniqueness-smoke FAILED with diagnostic "COLLISION: text-orange-500 used by xmr, dai". Restored → PASS.
+- **M-89**: Loosened DOGE addressShape to accept X-prefix → address-shape-overlap-smoke FAILED with diagnostic "UNEXPECTED overlaps: DASH-...->DOGE". Restored → PASS.
+
+CP42 ADVERSARIAL TEST SUITE (19 of 19 PASS):
+
+`/tmp/cp42-adversarial.ts` exercised URI builder hardening (arrr: scheme with edge inputs), JSON parsing on InstanceResponse.chat_link_urls.arrr (null/missing/template-string cases), cross-asset disambiguation (zs1 address accepted by BOTH ARRR and ZEC validators — by design, context disambiguates per LL #50), and validator boundary inputs (undefined/number/object/array/boolean/null + length boundaries 77/78/79).
+
+CP42 STATE METRICS:
+
+- **12 tradable assets** (unchanged from cp41).
+- **Locale parity 2,760 × 10 = 27,600 strings** (unchanged from cp41; no new i18n leaves added — cp42 is a deep-deep audit not an asset addition).
+- **FAQ entries: 119** (unchanged).
+- **ADRs: 31** (unchanged).
+- **Brag entries: 284** (unchanged).
+- **Smoke runners: 161** (was 157 in cp41; +4 new defensive smokes).
+- **Standalone-runnable smokes PASS: 33 of 33** (was 29/29 in cp41; +4 new smokes all PASS).
+- **Mediakit: 42,929 bytes** (unchanged — no brag changes).
+- **Native snapshot: 22,900 pairs** (unchanged).
+- **STRIDE matrix: 1,800 lines** (unchanged — no new threat classes; the 45-overlap finding is documented design choice not a new threat).
+- **Schema head: v33** (unchanged).
+- **Two parked external-blockers unchanged.**
+
+CP42 CATEGORY PASS SUMMARY (90 of 94 tasks clean):
+
+- **A (static code, 15):** 1 LOW (H-55 surfaced here as duplicate of cross-axis check; closed inline). 14 clean.
+- **B (dependencies, 5):** all 5 clean (no new deps for ARRR; package-lock fresh; vendored deps unchanged).
+- **C (SQL/DB, 5):** all 5 clean (fee_method CHECK constraint frozen at 4 values per Memory #23; asset column TEXT no-enum; schema v33 unchanged).
+- **D (HTTP/API, 8):** 2 LOW (D-32, D-33; closed inline). 6 clean.
+- **E (crypto, 4):** all 4 clean (regex sources of truth identical canonical↔frontend; no view-key/secret leakage; case-sensitivity differences between payload/explorer regex are intentional per established pattern).
+- **F (privacy, 8):** all 8 clean (privacy guides 4 leaves × 10 locales; shielded-pools i18n keys present × 10 per LL #49; **NO favoritism wording** in any locale string when scanned with full forbidden-phrase patterns).
+- **G (operator-trust, 4):** all 4 clean.
+- **H (frontend, 10):** 1 LOW (H-55; closed inline). 9 clean.
+- **I (cross-axis invariants, 8):** all 8 clean (canonical↔frontend decimals parity, canPayListingFee↔canBeUsedForListingFee parity, Memory #23 fee-payers = {BLURT,BTC,XMR}, every tradable asset has payment-rail entry, every Category-B asset has CATEGORY_B_DESCRIPTIONS entry, all 12 assets in price provider maps, high-value-name policy includes piratechain+arrr).
+- **J (build/CI, 5):** 1 HIGH (J-68; closed inline). 4 clean.
+- **K (threat modeling, 4):** all 4 clean (cp41 STRIDE rows + LL #50 present; cp42 work doesn't add new threats; LL #50 closed structurally via address-shape-overlap-smoke).
+- **L (per-subsystem deep dives, 10):** all 10 clean.
+- **M (mutation tests, 3):** all 3 PASS.
+- **N (adversarial, 3):** all 19 individual cases PASS (19 cases across 3 categories).
+- **O (test coverage gap matrix, 2):** documented 11 deliverables without direct smoke coverage; closed 1 via new price-provider-coverage-parity-smoke; rest are TS-typed/manual-content/documentation-only and acceptable to leave.
+
+CP42 NOT-A-FINDING (verified clean despite initial alarm):
+
+- **A-1** "11 trad" match in PHASE-F-AUDIT.md → false positive ("9 trade_status keys").
+- **A-14** "11th tradable" / "10th tradable" matches → all in historical context paragraphs (correct historical sequence: ZEC was the 11th at cp39, DOGE was the 10th at cp33).
+- **A-15** "doc-only orphan" candidates → all 14 false positives (my code-pattern regex was too narrow; actual wiring uses lowercase tickers, my grep was uppercase).
+- **F-44** METADATA-LEAK-CATALOG no ARRR mention → not drift; that doc is asset-agnostic (documents leak surfaces, not per-asset surfaces).
+- **F-45** PRIVACY framework docs no ARRR → N/A; per-asset privacy lives in i18n `privacy.guides.<ticker>`, not separate top-level docs.
+- **I-64 first attempt** showed XMR in "Category-B missing description" and USDT as "extra" → both false positives from my regex being too greedy across multi-line entries; correct line-anchored parse confirmed Memory #23 holds (BTC+XMR+BLURT are Category-A fee-payers; USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR are Category-B trade-only) and all 9 Category-B assets have descriptions.
+- **K-76** "most private" matches in 7 locale strings → all 7 were about Morphit features (session-lock mode, payment mode, push notifications) NOT inter-coin comparison.
+
+CP42 TOTALS:
+
+4 new defensive smokes + 4 findings closed inline (1 HIGH J-68, 3 LOW: D-32 D-33 H-55) + 3 mutation tests + 19 adversarial test cases + 1 TS type widening (optInPrivacyTech includes shielded-pools). Dominant cp42 signal: the J-68 finding proves that even with 2 prior 94-task deep-deeps (cp40 on cp39 ZEC work, cp41 on cp41 ARRR work), a load-bearing type-system bug can survive if no smoke runs the actual compiler. This is the cp42 pattern lesson candidate (LL #51): defensive smokes should include workspace-wide `tsc --noEmit` runs, not just runtime-behaviour smokes.
+
+### CP41 history (sealed 2026-05-19; preserved below for archaeology):
 
 CP41 SCOPE:
 
