@@ -20,6 +20,8 @@
  *     single Sapling shielded format on Pirate Chain
  *   - DCR: BIP-21-style URI (`decred:Ds...?amount=1.5`) —
  *     both Ds P2PKH and Dc P2SH formats on Decred
+ *   - SOL: Solana Pay URI (`solana:9wzd...?amount=1.5`) —
+ *     base58 32-byte public keys on Solana mainnet-beta
 	 *   - BLURT: bare account name (no widely-supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships

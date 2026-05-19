@@ -662,6 +662,51 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── cp45 SOL P2P trading wired ──────────────────────────────────
+	// Solana addition (cp45 — Part 122).  Fourteenth tradable asset.
+	// Brag entry #286 advertises SOL peer-to-peer trading.  Anchor on
+	// canonical registry SOL ticker entry.
+	{
+		id: 'cp45-sol-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'Solana (SOL) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'SOL'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp45 SOL payment-rail wired (cp32 LL #36) ──────────────────
+	// Every tradable asset MUST also be wired as a payment rail.  Cp45
+	// ships SOL with both axes same-turn per the pattern established
+	// for DOGE/cp33, ZEC/cp39, ARRR/cp41, DCR/cp43.
+	{
+		id: 'cp45-sol-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Solana (SOL) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_sol'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp45 SOL explorer URL bundled default ──────────────────────
+	// explorer.solana.com chosen from Ken's 5-explorer survey as the
+	// official project explorer.  Anchor on the constant; renamed or
+	// removed means the frontend has lost its fallback default.
+	{
+		id: 'cp45-sol-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Solana (SOL) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_SOL_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
 	// Cp31 added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

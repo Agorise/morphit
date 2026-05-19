@@ -163,6 +163,7 @@ SMOKES=(
 	"packages/asset-registry:zec-trade-only-smoke"
 	"packages/asset-registry:arrr-trade-only-smoke"
 	"packages/asset-registry:dcr-trade-only-smoke"
+	"packages/asset-registry:sol-trade-only-smoke"
 	"workspace-typecheck-smoke"
 	"packages/asset-registry:asset-accent-class-uniqueness-smoke"
 	"packages/asset-registry:payment-rail-coverage-parity-smoke"

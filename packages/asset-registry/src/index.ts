@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -846,6 +846,72 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// privkey, `De` Edwards) but are NOT used for receiving
 		// regular payments — Morphit rejects them.
 		addressShape: /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'SOL',
+		// Solana uses 9 decimals — 1 SOL = 1,000,000,000 lamports.
+		// Unique smallest-unit precision among Morphit's 14 assets
+		// (BTC family is 8, USDT/USDC/DAI is 6, BLURT is 3, XMR is
+		// 12).  A new jitterSolAmount handles 9-decimal precision
+		// (see apps/web/src/lib/chat/payload.ts).
+		decimals: 9,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: SOL is trade-only.  Cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}.  sol-trade-only-smoke pins this from
+		// the registry side; fee-method-enum-frozen-smoke from the
+		// wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  Solana has devnet/testnet but
+		// Morphit trades only on mainnet-beta (consistent with
+		// every other single-network asset).
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// Solana runs delegated Proof-of-Stake consensus with
+		// high-throughput Proof-of-History sequencing.  Validators
+		// stake SOL and are rotated; no central freeze authority.
+		// The chain is transparent at the base layer (sender,
+		// recipient, and amount visible on chain).  No native
+		// mixing protocol — Solana's privacy story is at the
+		// network layer (wallet UX and address rotation), not at
+		// the protocol layer.  No warning chip needed; chain is
+		// decentralized.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// Solana addresses derive from HD seeds in modern
+			// wallets (Phantom, Solflare, Cake Wallet for SOL,
+			// Trust Wallet).  Standard "fresh address per trade"
+			// advice applies — transparent base layer means
+			// address reuse is directly visible on chain.
+			freshAddressAdvice: 'hd-derived',
+			// Solana has no native opt-in mixing protocol.
+			// Wallet-side address rotation is the user's primary
+			// privacy lever.  Convention is `null` (not empty
+			// array) for "no opt-in protocol tech available" —
+			// matches XMR's pattern.  Type union accepts `null`
+			// or non-empty readonly array; privacy-features-
+			// registry-smoke rejects empty arrays.
+			optInPrivacyTech: null,
+			privacyGuideKey: 'sol'
+		},
+		// Solana address format:
+		//   - Public keys are 32 bytes, encoded as base58
+		//   - 32-44 base58 chars (most are exactly 44 chars)
+		//   - Base58 alphabet excludes `0`, `O`, `I`, `l`
+		//   - Same character class as USDT-Solana and
+		//     USDC-Solana addresses (the LL #50 same-format-
+		//     different-chain class; context disambiguates at
+		//     the order layer via the asset field)
+		// PROGRAM-DERIVED ADDRESSES (PDAs) are also 32 bytes
+		// base58 but are OFF-CURVE (no private key) — sending
+		// SOL to a PDA generally works at the protocol level
+		// but recipients can't move funds out unless the program
+		// has a withdraw instruction.  Morphit accepts the shape
+		// at the regex layer; receiver-side wallet UX is
+		// responsible for warning about PDA destinations.
+		addressShape: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

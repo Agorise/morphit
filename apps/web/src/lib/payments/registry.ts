@@ -285,6 +285,27 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'crypto',
 		assetExclusion: 'DCR'
 	},
+	{
+		// Part 122 cp45 — Solana as a payment method.  Same
+		// Category-B semantics as the other trade-only assets:
+		// when the trade's traded asset is SOL, "pay with SOL"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, SOL appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `solana:`
+		// URI (Solana Pay specification) handles native SOL
+		// transfers.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp45 ships SOL with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// ARRR at cp41, and DCR at cp43.
+		key: 'pay_sol',
+		name: 'Solana (SOL)',
+		url: 'https://solana.com',
+		category: 'crypto',
+		assetExclusion: 'SOL'
+	},
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of

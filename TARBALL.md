@@ -1,4 +1,71 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 44 — Full 94-task deep-deep + security audit on cp43 DCR work surfacing **1 MEDIUM** + **4 LOW** findings closed inline + **1 new defensive smoke** + **1 new mutation test** + closure of LL #51 with the NEW LL #52 discipline.  35 of 35 standalone-runnable smokes PASS.  Cp44-J-69 was the load-bearing find: `<svelte:head>` was nested inside `{#if asset}` in `/privacy/[asset]/+page.svelte`, which Svelte 5 rejects at compile time — meaning all 13 asset privacy guide pages (BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) shipped without `<title>` or `<meta description>` tags for ~3 checkpoints.  SEO regression that no runtime smoke caught.  Cp44-J-70/71/72 were 3 additional pre-existing strict-mode bugs surfaced by workspace-wide svelte-check: jitter functions accessing `buf[0]`/`buf[1]` without undefined-guard (cp26-era), addressHistory.ts iterating `all[i]` without undefined-guard + null/undefined return-type mismatch, push.ts applicationServerKey overload mismatch.  All 4 closed inline.  Cp44 ships 1 NEW defensive smoke that closes the bug class structurally: **workspace-typecheck-smoke** runs `tsc --noEmit` across all 6 server-side workspaces + `svelte-check` on apps/web — would have caught J-68, J-69, J-70, J-71, J-72 at the checkpoint they were introduced.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 45 — Solana (SOL) as 14th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0034 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW sol-trade-only-smoke (18 scenarios + 14 adversarial inputs); 3 new wiring-completeness CHECK rows; 3 mutation tests passed; 32 adversarial test cases PASS.  35 of 35 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified end-to-end on cp45 work).  NEW `jitterSolAmount` function — 9-decimal lamport precision, unique smallest-unit among Morphit's 14 assets.  NEW `solana:` URI scheme (Solana Pay specification).  NEW SOL_TXID_RE — base58 87-88 chars, DIFFERENT from BTC family's 64-hex txid convention.  23 new cross-asset address-shape overlaps documented (49→72 EXPECTED_OVERLAPS) — SOL's permissive base58 32-44 char range overlaps with BTC/USDT/USDC/BCH/LTC/DASH/DOGE/ZEC-transparent/DCR specimens; asset field disambiguates at order layer per LL #50.  Universal no-favoritism principle from cp39/cp41/cp43 reapplied — Morphit never compares SOL's throughput or privacy posture to other chains.)
+
+CP45 SCOPE:
+
+Add Solana (SOL) as the fourteenth tradable asset.  Delegated PoS + Proof-of-History sequencing; transparent base layer; no native protocol-level mixing.  Per Ken's directive: "never compare this privacy coin with xmr or other privacy coins. let all users think their privacy coin is the most private. no favoritism in the wording."  Universal no-favoritism principle from cp39 applied — third consecutive checkpoint clean (cp41, cp43, cp45 all shipped without retroactive favoritism cleanup).
+
+CP45 KEY DESIGN DECISIONS:
+
+- **Address regex** `/^[1-9A-HJ-NP-Za-km-z]{32,44}$/` — base58 32-byte public keys; SAME shape as USDT-Solana and USDC-Solana SPL token-account addresses (LL #50 by design, asset field disambiguates).
+- **`optInPrivacyTech: null`** — Solana has no native protocol-level mixing.  Matches XMR's convention (use `null` for "no opt-in protocol tech").  Cp45 deep-deep surfaced this: initial draft used `[]` but privacy-features-registry-smoke pinned `null` as the convention; fixed inline.
+- **NEW `jitterSolAmount`** — 9-decimal lamport precision (unique among Morphit's 14 assets); ~999-lamport jitter range = ~$0.00015 at SOL=$150.
+- **NEW `solana:` BIP-21-style URI** (Solana Pay specification) for Phantom/Solflare/Cake Wallet for SOL/Trust Wallet.
+- **NEW `SOL_TXID_RE`** — base58 87-88 chars (64-byte signatures encoded base58), DIFFERENT from BTC/ZEC/ARRR/DCR family's 64-hex convention.
+- **`text-violet-500` accent** — matches Solana brand purple #9945ff; verified distinct via cp42 asset-accent-class-uniqueness-smoke.
+- **`explorer.solana.com`** chosen as bundled chat-link from 5-survey (project-aligned, no third-party tracking); operator's 5-survey documented in ADR-0034 (explorer.solana.com chosen, solscan.io/solanabeach.io/oklink.com/solana available, solana.fm not surveyed per Ken's "not working?" note).
+- **Coingecko ID `'solana'`**, fallback price $150.00.
+
+CP45 NEW i18n KEYS (14 × 10 = 140 leaves):
+
+faq.entries.what_is_sol.{q,a}, post_order.form.asset_explainer.sol, chat.address.{method_sol, address_placeholder_sol, address_invalid_sol, pill_method_sol}, chat.funds_sent.pill_title_sol, payment_method.pay_sol.description, cheat_sheet.section_assets.sol, privacy.guides.sol.{one_line, intro, caveats, meta_description}. NO new tech-tag leaves (SOL uses no opt-in tech). Native EN/ES/FR/DE; EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK per Memory #29.
+
+CP45 MUTATION TESTS (3 of 3 PASS):
+
+- **M-94**: SOL.canPayListingFee → true → sol-trade-only-smoke FAILED ("canonical SOL.canPayListingFee === false (memory #23)").  Restored → PASS.
+- **M-95**: pay_sol removed → wiring-completeness FAILED on cp45-sol-payment-rail-wired.  Restored → PASS.
+- **M-96**: SOL accent collided to text-orange-500 (XMR) → asset-accent-class-uniqueness-smoke FAILED ("COLLISION: text-orange-500 used by xmr, sol").  Restored → PASS.
+
+CP45 ADVERSARIAL TEST SUITE (32 of 32 PASS):
+
+Classes covered: SQL injection, XSS, null bytes, whitespace, base58 alphabet violations (0/O/I/l), length boundaries (31/32/44/45 for addresses, 86/87/88/89 for txids), cross-asset rejection (BTC-shape hex 64 chars correctly rejected as SOL txid), 100K-char and 1M-char DoS, type tests (undefined/null/number/object/array). Both SOL_RE (addresses) and SOL_TXID_RE (signatures) covered.
+
+CP45 CATEGORY-B no-favoritism FRAMING:
+
+SOL canonical entry / frontend metadata / brag entry #286 / ADR-0034 / privacy guide × 10 locales / CATEGORY_B_DESCRIPTIONS all describe SOL factually:
+- High-throughput delegated PoS + Proof-of-History sequencing.
+- Transparent base layer; wallet-side address rotation as privacy lever.
+- Same address shape as USDT-Solana and USDC-Solana SPL token-accounts (factual; asset field disambiguates).
+- Native SOL only — wSOL is for DEX interoperability.
+
+NO inter-coin comparisons.  NO "fastest" / "most secure" / "best for trading" framings.  Cp45 shipped clean — no retroactive favoritism cleanup needed.
+
+CP45 STATE METRICS:
+
+| Metric | cp44 | cp45 | Δ |
+|---|---|---|---|
+| Tradable assets | 13 | **14** | +SOL |
+| Locale parity strings | 27,770 | **27,910** | +140 |
+| FAQ entries | 120 | **121** | +1 |
+| ADRs | 32 | **33** | +ADR-0034 |
+| Brag entries | 285 | **286** | +#286 |
+| Smoke runners | 163 | **164** | +sol-trade-only |
+| Standalone smokes PASS | 35/35 | **35/35** | — |
+| Workspaces TS-clean | 7/7 | **7/7** | — |
+| Mediakit bytes | 43,491 | **44,143** | +652 |
+| Native snapshot pairs | 22,921 | **22,936** | +15 |
+| STRIDE matrix lines | 1,824 | **1,858** | +34 |
+| address-shape-overlap entries | 49 | **72** | +23 (SOL specimens × all base58 assets) |
+| Privacy tech tags | 7 | 7 | — (SOL has no opt-in tech) |
+| Jitter functions | 4 (XMR/UTXO/Blurt/Stablecoin) | **5** | +jitterSolAmount (9-decimal) |
+| Two parked external-blockers | unchanged | unchanged | — |
+
+CP45 totals: 1 new tradable asset + 14 new SOL i18n leaves × 10 + 1 new FAQ × 10 + 1 new ADR + 1 new brag entry + 1 new smoke (18 + 14) + 3 new wiring-completeness CHECK rows + 0 favoritism cleanups + 18 docblock drift sweeps + 4 STRIDE rows + 3 mutation tests + 32 adversarial cases + 1 new jitter function (jitterSolAmount, 9-decimal) + 1 new URI scheme (solana:) + 1 new txid regex (SOL_TXID_RE, base58 87-88 chars).
+
+CP45 LL #52 VERIFIED ON FRESH WORK:
+
+The cp44 workspace-typecheck-smoke was the first deep-deep deliverable to run `tsc --noEmit` + `svelte-check` across all 7 workspaces.  Cp45 SOL addition (40+ files touched) shipped with 7/7 workspaces compile-clean — proof that LL #52 is now operational: any TS error introduced during asset addition surfaces immediately at smoke-battery time, not 3 checkpoints later.  This is the cp44 deep-deep paying off on cp45 work.
+
+### CP44 history (sealed 2026-05-19; preserved below for archaeology):  35 of 35 standalone-runnable smokes PASS.  Cp44-J-69 was the load-bearing find: `<svelte:head>` was nested inside `{#if asset}` in `/privacy/[asset]/+page.svelte`, which Svelte 5 rejects at compile time — meaning all 13 asset privacy guide pages (BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) shipped without `<title>` or `<meta description>` tags for ~3 checkpoints.  SEO regression that no runtime smoke caught.  Cp44-J-70/71/72 were 3 additional pre-existing strict-mode bugs surfaced by workspace-wide svelte-check: jitter functions accessing `buf[0]`/`buf[1]` without undefined-guard (cp26-era), addressHistory.ts iterating `all[i]` without undefined-guard + null/undefined return-type mismatch, push.ts applicationServerKey overload mismatch.  All 4 closed inline.  Cp44 ships 1 NEW defensive smoke that closes the bug class structurally: **workspace-typecheck-smoke** runs `tsc --noEmit` across all 6 server-side workspaces + `svelte-check` on apps/web — would have caught J-68, J-69, J-70, J-71, J-72 at the checkpoint they were introduced.)
 
 CP44 SCOPE:
 

@@ -413,6 +413,19 @@ export interface Config {
 	 *  analytics + block explorer). */
 	readonly frontendDcrChatLinkUrl: string | undefined;
 
+	/** SOL (Solana) chat-link explorer URL template (Part 122
+	 *  cp45).  When set, the frontend uses this template instead
+	 *  of the bundled `explorer.solana.com/tx/{txid}` default.
+	 *  Must contain `{txid}` placeholder; checked at config load.
+	 *
+	 *  Operator's 5-explorer survey at addition time
+	 *  (2026-05-19): explorer.solana.com (chosen as bundled
+	 *  default — official project explorer), solscan.io
+	 *  (third-party aggregator, most popular), solanabeach.io
+	 *  (validator-focused), oklink.com/solana (OKX-affiliated),
+	 *  solana.fm (community-run, unreachable at survey time). */
+	readonly frontendSolChatLinkUrl: string | undefined;
+
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
@@ -965,6 +978,18 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
+	// Part 122 cp45 — SOL (Solana) chat-link explorer URL
+	// override.  Single-network like all the other tradable
+	// assets.  When unset, falls back to the bundled
+	// explorer.solana.com default.
+	MORPHIT_FRONTEND_SOL_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https://, contain {txid}, and parse as URL'
+		),
 	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since Part 121 cp3 so the
 	// public-API per-network override never worked.  Frontend
@@ -1249,6 +1274,7 @@ export function loadConfig(): Config {
 		frontendZecChatLinkUrl: e.MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL,
 		frontendArrrChatLinkUrl: e.MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL,
 		frontendDcrChatLinkUrl: e.MORPHIT_FRONTEND_DCR_CHAT_LINK_URL,
+		frontendSolChatLinkUrl: e.MORPHIT_FRONTEND_SOL_CHAT_LINK_URL,
 		// Part 122 cp30 — multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

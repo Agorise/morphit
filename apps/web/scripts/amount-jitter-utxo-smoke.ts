@@ -6,7 +6,7 @@
  * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher);
  * extended in cp30 to cover the stablecoin variant
  * (jitterStablecoinAmount via jitterAmountForAsset routing); cp31
- * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics); cp43 added DCR (ninth — hybrid PoW/PoS, UTXO-model).
+ * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics); cp43 added DCR (ninth — hybrid PoW/PoS, UTXO-model); cp45 added SOL (NOT routed through this function — Solana has 9-decimal lamport precision and uses a NEW jitterSolAmount with its own arithmetic).
  *
  * The XMR jitter is already covered by older payload smokes; this
  * sentinel covers:

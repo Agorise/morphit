@@ -35,7 +35,7 @@ const lines = [];
 
 lines.push('# Morphit — complete FAQ (English)');
 lines.push('');
-lines.push('> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR marketplace.');
+lines.push('> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL marketplace.');
 lines.push('> No KYC. No custody. No arbitration. Federated, open-source.');
 lines.push('> Translations available at https://morphit.io/faq?lang=<code>');
 lines.push('> where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.');

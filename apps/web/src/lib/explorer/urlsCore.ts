@@ -54,6 +54,13 @@ export const ARRR_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  SHA-256 txid convention. */
 export const DCR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** SOL txid (Part 122 cp45).  Solana transaction signatures
+ *  are 64 bytes encoded as base58, surfacing as 87-88 char
+ *  strings.  Notably DIFFERENT from the BTC/ZEC/ARRR/DCR family's
+ *  64-hex-char convention — Solana uses base58 throughout for
+ *  addresses, signatures, and mint addresses. */
+export const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -222,6 +229,34 @@ export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_DCR_CHAT_LINK_URL. */
 export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
+
+/** SOL chat-link explorer (cp45 — Part 122).  Default uses
+ *  Solana's official project explorer at explorer.solana.com —
+ *  project-aligned, run by Solana Labs, no third-party tracking,
+ *  supports SPL token transfers and native SOL transfers, full
+ *  validator/staking visibility.
+ *
+ *  Privacy/decentralization rationale matches the choices for
+ *  BUNDLED_ZEC_CHAT_LINK_URL (mainnet.zcashexplorer.app),
+ *  BUNDLED_ARRR_CHAT_LINK_URL (explorer.piratechain.com), and
+ *  BUNDLED_DCR_CHAT_LINK_URL (dcrdata.decred.org): prefer a
+ *  project-aligned explorer over third-party aggregators or
+ *  exchange-affiliated services.
+ *
+ *  Operator's 5-explorer survey at cp45:
+ *  - explorer.solana.com — official project explorer.
+ *    CHOSEN as bundled default.
+ *  - solscan.io — third-party aggregator; most popular by
+ *    traffic; rich UI; secondary.
+ *  - solanabeach.io — validator-focused explorer; tertiary.
+ *  - www.oklink.com/solana — OKX-affiliated, third-party;
+ *    quaternary.
+ *  - solana.fm — community-run; was unreachable at cp45 survey
+ *    time (per Ken's note "not working?"); not surveyed.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_SOL_CHAT_LINK_URL. */
+export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who
