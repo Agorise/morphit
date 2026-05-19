@@ -21,7 +21,9 @@
  *    reversed in cp30 because the amount-correlation linkability
  *    threat is independent of the centralization concern.
  *  - jitterAmountForAsset dispatcher: per-asset routing across
- *    all 12 tradable assets
+ *    all 15 tradable assets (cp48 — was "12" stale since cp33;
+ *    cp39 ZEC + cp41 ARRR + cp43 DCR + cp45 SOL + cp47 ETH all
+ *    brought us to 15 without updating this comment)
  *  - input validation throws on garbage
  */
 

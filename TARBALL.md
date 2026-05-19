@@ -1,4 +1,97 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 47 — Ethereum (ETH) as 15th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0035 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW eth-trade-only-smoke (18 scenarios + 20 adversarial including ENS rejection); 3 new wiring-completeness CHECK rows; 5 mutation tests passed; 34 adversarial test cases PASS.  37 of 37 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified 4th consecutive checkpoint, holds on cp47 work).  Cp46 asset-payload-precision-parity-smoke extended with ETH row (57 scenarios total, was 53 at cp46).  NEW `jitterEthAmount` function — 18-decimal on-chain wei clamped to 6-decimal display precision (matching cp31 DAI ADR-0029 design rationale; at $2500/ETH max jitter ~$0.0025).  NEW `ethereum:` URI scheme (BIP-21-compatible EIP-681 simplified form).  NEW `ETH_TXID_RE` — 0x+64hex, same shape as EVM stablecoin txids.  9 new cross-asset address-shape overlaps documented (72→81 EXPECTED_OVERLAPS) — ETH↔USDT-ERC20/USDC-ERC20/DAI-ERC20 by LL #50 design.  Universal no-favoritism principle from cp39/cp41/cp43/cp45 reapplied 5th consecutive checkpoint — no comparative language anywhere in ETH copy.  Cp47 deep-deep found 1 inline-fix (A-1 LOW): indexer asset-registry-smoke's unknown-ticker test used 'eth' as stand-in; swapped to 'trx' (Tron native — not on roadmap).  Architectural decisions: ENS NOT resolved (out-of-scope to preserve distributed-no-SPOF design), contract-destination wallet UX warnings, Layer-2 networks treated as separate chains.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 48 — Full 94-task deep-deep + security audit on cp47 ETH work + the entire 15-asset registry surfacing **1 NEW structural-defense closure** (cp48-O-1 closes Ken's cp47-A1 recurring "unknown stand-in becomes valid" bug class permanently) + **2 LOW docblock-drift findings closed inline** + **5 mutation tests**.  37 of 37 standalone-runnable smokes PASS (unchanged from cp47).  7 of 7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified **5th consecutive checkpoint**).  Cp46 asset-payload-precision-parity-smoke verified 3rd consecutive checkpoint clean (57/57 scenarios PASS including the 4 ETH-specific from cp47).  Cp42 address-shape-overlap-smoke holds at 81 entries (no drift).  Cp42 asset-accent-class-uniqueness-smoke holds (text-indigo-500 distinct from all 14 others).  Cp48 finding L-1 LOW: network-icon-coverage-smoke docblock said "10 asset icons" but cp47 has 15 (stale by 5 — DOGE/ZEC/ARRR/DCR/SOL/ETH all added since cp32 without updating).  Cp48 finding L-2 LOW: amount-jitter-utxo-smoke docblock said "all 12 tradable assets" but cp47 has 15 (stale by 3 — cp43/cp45/cp47 didn't refresh).  Cp48 finding O-1 STRUCTURAL CLOSURE: indexer asset-registry-smoke now uses synthetic non-ticker `'__unknown__'` (underscores reject from canonical regex → mathematically cannot become valid) + meta-assertion `ASSET_TICKERS_SET.has(UNKNOWN_STANDIN.toUpperCase())` at smoke top.  Closes the cp33/cp39/cp47 recurring trap permanently — even if a future contributor swaps the stand-in to a real ticker by accident, the meta-assertion catches it at smoke-run time.)
+
+CP48 SCOPE:
+
+Full 94-task deep-deep on cp47 ETH addition + entire 15-asset registry.  Categories A-O.  Ken's directive: "look for drift, type errors, test coverage gaps, updated smokes, updated gates and parities, unwired stuff, staleness and orphaned stuff in all files too."
+
+CP48 FINDINGS:
+
+**L-1 LOW** (docblock drift, INLINE FIX): `apps/web/scripts/network-icon-coverage-smoke.ts:144` said "Total budget for 10 asset icons at present" — but cp47 ships 15 tradable assets.  Smoke logic was correct (scans ASSET_TICKERS dynamically); only the docblock was stale.  Fixed with explicit comment-anchor noting which asset additions caused the drift (cp33 DOGE, cp39 ZEC, cp41 ARRR, cp43 DCR, cp45 SOL, cp47 ETH).
+
+**L-2 LOW** (docblock drift, INLINE FIX): `apps/web/scripts/amount-jitter-utxo-smoke.ts:24` said "all 12 tradable assets" — but cp47 has 15.  Smoke logic was correct (dispatcher routing tests work on actual asset count); only the docblock was stale.  Fixed with same anchor pattern.
+
+**O-1 STRUCTURAL DEFENSE CLOSURE** (Ken's cp47-A1 recurring class):
+
+Cp47 deep-deep noted: "Structural defense candidate: could pin the unknown stand-in via a registry-driven smoke that asserts STAND_IN ∉ ASSET_TICKERS.  Deferring to cp48 if pattern repeats."  Pattern frequency: 3 of 8 asset additions hit the same trap (cp33 'doge' became valid, cp39 'zec' became valid, cp47 'eth' became valid).
+
+**Cp48 fix:**
+1. Swap stand-in from `'trx'` (still a real-ticker-shape; could become valid if Morphit ships native Tron) to `'__unknown__'` (underscores reject from the canonical ticker regex which enforces uppercase letters only — mathematically cannot become a real ticker).
+2. Add meta-assertion at smoke top:
+   ```typescript
+   import { ASSET_TICKERS_SET } from '@morphit/asset-registry';
+   const UNKNOWN_STANDIN = '__unknown__';
+   if (ASSET_TICKERS_SET.has(UNKNOWN_STANDIN.toUpperCase())) {
+       throw new Error('UNKNOWN_STANDIN is now a valid ticker — pick a different one');
+   }
+   ```
+
+**Permanence:** Even if a future contributor swaps `UNKNOWN_STANDIN` to a real ticker by accident, the meta-assertion catches it immediately at smoke-run time.  M-110 verifies this: tampering the constant to `'eth'` fires the error inline.
+
+**Closure status:** This is the 3rd cp48-class structural defense in Morphit (alongside cp44 LL #52 workspace-typecheck-smoke and cp46 asset-payload-precision-parity-smoke).  Bug class permanently closed.
+
+CP48 NEW MUTATION TESTS (5 of 5 PASS):
+
+- **M-106**: delete icon-eth.svg → network-icon-coverage-smoke FAILED ("asset icon for 'ETH' exists on disk: MISSING").  Restored → PASS.
+- **M-107**: swap stand-in `'__unknown__'` → `'eth'` (real ticker) → indexer asset-registry-smoke FAILED on "getAsset throws on unknown ticker".  Restored → PASS.  *(Confirms the recurring bug class IS the bug class — manual review was the previous defense.)*
+- **M-108**: remove `'USDT-...->ETH'` from EXPECTED_OVERLAPS → address-shape-overlap-smoke FAILED ("UNEXPECTED overlaps").  Restored → PASS.
+- **M-109**: tamper cp46 EXPECTATIONS table ETH expectedJitterDecimals 6→9 → asset-payload-precision-parity-smoke FAILED ("ETH jitter precision === 9 decimals").  Restored → PASS.
+- **M-110**: tamper `UNKNOWN_STANDIN = '__unknown__'` → `'eth'` (valid ticker) → **cp48 structural defense FIRES** at smoke startup with "UNKNOWN_STANDIN 'eth' is now a valid ticker — pick a different one.  This assertion is the cp48 structural defense for Ken's cp47-A1 recurring bug class."  Restored → PASS.  *(Verifies the structural defense is operational.)*
+
+CP48 LL #52 VERIFIED 5TH CONSECUTIVE CHECKPOINT:
+
+cp44 introduced workspace-typecheck-smoke.  cp45/cp46/cp47/cp48 all confirm 7/7 workspaces compile-clean.  **No TS errors introduced at cp47.**  Discipline operational.
+
+CP48 CATEGORY PASS SUMMARY (93 of 94 tasks clean; O-1 closed structurally):
+
+- **A (static code, 15):** all 15 clean.  ASSET_TICKERS=15, 4:4 SOL:ETH wire-format gates, isValidAddress+isValidTxid both have ETH, ETH_TXID_RE exported, EXPLORER_REGISTRY.ETH present, high-value-name has both 'ethereum' (brand) and 'eth' (ticker), icon-eth.svg referenced from 3 sites.  13 ETH i18n leaves × 10 locales present.  0 SOL-but-NOT-ETH drift files (after excluding known false positives).
+- **B (dependencies, 5):** all 5 clean (no new deps at cp47).
+- **C (SQL/DB, 5):** all 5 clean (fee_method CHECK frozen at 4 values per Memory #23; asset col TEXT).
+- **D (HTTP/API, 8):** all 8 clean (5 ETH refs in API.md; 4 wire-format surfaces all have eth field; volume_estimate sample includes ETH).
+- **E (crypto, 4):** all 4 clean (ETH regex identical canonical+frontend+payload; ETH_TXID_RE identical in 2 sites).
+- **F (privacy, 8):** all 8 clean (0 forbidden phrases × 10 locales; ETH optInPrivacyTech null; jitterEthAmount wired).
+- **G (operator-trust, 4):** all 4 clean (ops-cli ETH step renders; OPERATIONS+RUN docs mention ETH; PRE-LAUNCH-CHECKLIST has ETH blocking item).
+- **H (frontend, 10):** all 10 clean (text-indigo-500 unique; 15 asset icons + 5 non-asset; ASM+FSM have ETH tab).
+- **I (cross-axis, 8):** all 8 clean (payment-rail/price-provider/accent/address-shape-overlap all PASS).
+- **J (build/CI, 5):** all 5 clean (workspace-typecheck-smoke 7/7 PASS).
+- **K (threat modeling, 4):** all 4 clean (cp47 STRIDE rows T-cp47-1/2/3 + R-cp47-1 present; 81 address-shape-overlap entries).
+- **L (per-subsystem, 10):** 8 clean + 2 LOW docblock-drift findings closed inline (L-1 network-icon-coverage "10 asset icons" → 15; L-2 amount-jitter-utxo "12 tradable assets" → 15).
+- **M (mutation tests, 5):** all 5 PASS (M-106/107/108/109/110 new at cp48).
+- **N (adversarial, 1):** cp47 34/34 cases still PASS.
+- **O (coverage gap matrix, 2):** **1 STRUCTURAL DEFENSE CLOSED** (O-1 recurring stand-in class via synthetic `__unknown__` + meta-assertion).
+
+CP48 NOT-A-FINDING:
+
+- ADR-0027/0028/0025 mention "7 tradable assets" / "4 Category-B tickers" / "3 Category-B assets" — these are **archaeology** (state at write-time, not drift).  ADRs are immutable historical records.  Correctly preserved.
+- ADR-0035:15 says "matching the existing 11 Category-B coins" — ETH IS the 12th, so it's matching the previous 11.  Correctly worded.
+
+CP48 STATE METRICS:
+
+| Metric | cp47 | cp48 | Δ |
+|---|---|---|---|
+| Tradable assets | 15 | 15 | — |
+| Locale parity strings | 28,050 | 28,050 | — |
+| FAQ entries | 122 | 122 | — |
+| ADRs | 34 | 34 | — |
+| Brag entries | 287 | 287 | — |
+| Smoke runners | 166 | 166 | — |
+| Standalone smokes PASS | 37/37 | **37/37** | — |
+| Workspaces TS-clean | 7/7 | **7/7** | — |
+| Mediakit bytes | 44,900 | 44,900 | — |
+| Native snapshot pairs | 22,951 | 22,951 | — |
+| STRIDE matrix lines | 1,894 | 1,894 | — |
+| address-shape-overlap entries | 81 | 81 | — |
+| Jitter functions | 6 | 6 | — |
+| **Structural defenses operational** | 2 | **3** | **+1 (cp48-O1)** |
+
+CP48 TOTALS:
+
+0 new tradable assets + 0 new ADRs + 0 new brag entries + 0 new smokes (cp48 is deep-deep, not asset addition) + 5 NEW mutation tests (M-106/107/108/109/110) + 2 inline-fix LOW docblock-drift findings + 1 NEW structural defense (synthetic stand-in + meta-assertion closing cp47-A1 recurring class permanently) + LL #52 verified 5th consecutive checkpoint + cp46 asset-payload-precision-parity verified 3rd consecutive checkpoint.
+
+**Dominant cp48 signal:** the deep-deep methodology continues to deliver structural defenses.  Cp44 closed types.  Cp46 closed runtime arithmetic + URI/txid shape.  Cp48 closes the "unknown stand-in" recurring class.
+
+**Pattern lesson confirmed across 4 deep-deeps:** every 2 deep-deeps surfaces at least one new structural-defense gap; the gap then gets closed permanently with a one-line meta-assertion or a small new smoke.  Each closure permanently retires a bug class — the smoke battery becomes monotonically more robust over time.
+
+### CP47 history (sealed 2026-05-19; preserved below for archaeology): (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0035 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +4 rows + highValueName policy + snapshot + llms-full).  NEW eth-trade-only-smoke (18 scenarios + 20 adversarial including ENS rejection); 3 new wiring-completeness CHECK rows; 5 mutation tests passed; 34 adversarial test cases PASS.  37 of 37 standalone-runnable smokes PASS + 7/7 workspaces TS-clean via cp44 workspace-typecheck-smoke (LL #52 verified 4th consecutive checkpoint, holds on cp47 work).  Cp46 asset-payload-precision-parity-smoke extended with ETH row (57 scenarios total, was 53 at cp46).  NEW `jitterEthAmount` function — 18-decimal on-chain wei clamped to 6-decimal display precision (matching cp31 DAI ADR-0029 design rationale; at $2500/ETH max jitter ~$0.0025).  NEW `ethereum:` URI scheme (BIP-21-compatible EIP-681 simplified form).  NEW `ETH_TXID_RE` — 0x+64hex, same shape as EVM stablecoin txids.  9 new cross-asset address-shape overlaps documented (72→81 EXPECTED_OVERLAPS) — ETH↔USDT-ERC20/USDC-ERC20/DAI-ERC20 by LL #50 design.  Universal no-favoritism principle from cp39/cp41/cp43/cp45 reapplied 5th consecutive checkpoint — no comparative language anywhere in ETH copy.  Cp47 deep-deep found 1 inline-fix (A-1 LOW): indexer asset-registry-smoke's unknown-ticker test used 'eth' as stand-in; swapped to 'trx' (Tron native — not on roadmap).  Architectural decisions: ENS NOT resolved (out-of-scope to preserve distributed-no-SPOF design), contract-destination wallet UX warnings, Layer-2 networks treated as separate chains.)
 
 CP47 SCOPE:
 

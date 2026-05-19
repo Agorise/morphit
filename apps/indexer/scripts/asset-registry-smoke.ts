@@ -45,16 +45,43 @@ scenario('XMR is first in display order (audience priority)', () => {
 	}
 });
 
+// CP48 STRUCTURAL DEFENSE — Ken's cp47-A1 finding flagged this as
+// a recurring bug class.  3 of 8 asset additions hit the same trap:
+// cp33 'doge' became valid, cp39 'zec' became valid, cp47 'eth'
+// became valid.  Each required a manual stand-in swap.
+//
+// The structural fix: assert at runtime that the chosen stand-in
+// is NOT in ASSET_TICKERS_SET.  If a future contributor either
+// (a) adds a new asset whose ticker matches the stand-in, or
+// (b) uses a real ticker as stand-in by accident, this assertion
+// surfaces it immediately at smoke-run time — not 3 checkpoints
+// later when the bug is finally noticed.
+//
+// Also: the stand-in itself is chosen to be a string mathematically
+// unable to be a real ticker (4-letter all-uppercase TRX is at
+// risk; using lower-case '__unknown__' with underscores is impossible
+// because ASSET_TICKERS regex-enforces all-caps tickers).
+import { ASSET_TICKERS_SET } from '@morphit/asset-registry';
+const UNKNOWN_STANDIN = '__unknown__';
+if (ASSET_TICKERS_SET.has(UNKNOWN_STANDIN.toUpperCase())) {
+	throw new Error(
+		`UNKNOWN_STANDIN '${UNKNOWN_STANDIN}' is now a valid ticker — ` +
+			`pick a different one.  This assertion is the cp48 structural ` +
+			`defense for Ken's cp47-A1 recurring bug class.`
+	);
+}
+
 scenario('getAsset throws on unknown ticker', () => {
 	let threw = false;
 	try {
-		// cp47-A1: 'eth' became a valid asset; before that 'zec' (cp39),
-		// 'doge' (cp33).  Use 'trx' (Tron native) as the unknown stand-
-		// in.  Morphit has USDT-TRC20 (a token on Tron) but not native
-		// TRX — adding native TRX is not on the roadmap.  If ever added,
-		// swap this stand-in.
-		// @ts-expect-error -- testing runtime behavior
-		getAsset('trx');
+		// CP48 structural fix: use a synthetic non-ticker that
+		// cannot become a real asset.  Underscores are not allowed
+		// in ticker symbols (canonical regex enforces uppercase
+		// letters only).  Replaces the previous cp47-A1 swap to
+		// 'trx' which was still at risk of becoming valid if
+		// Morphit ever ships native Tron support.
+		// @ts-expect-error -- testing runtime behavior with synthetic non-ticker
+		getAsset(UNKNOWN_STANDIN);
 	} catch (err) {
 		threw = true;
 		if (!(err instanceof Error) || !err.message.includes('not in registry')) {
