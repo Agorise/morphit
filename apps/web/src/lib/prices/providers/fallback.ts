@@ -55,7 +55,12 @@ const FALLBACK_USD: Record<PricedSymbol, number> = {
 	// Part 122 cp27 — Dash.  Same posture as the other fallbacks:
 	// rough order-of-magnitude only, used when live providers
 	// have all failed.  Approximate live DASH/USD at cp27 ship time.
-	DASH: 30
+	DASH: 30,
+	// Part 122 cp33 — Dogecoin.  Same posture as the other
+	// fallbacks: rough order-of-magnitude only.  Approximate live
+	// DOGE/USD at cp33 ship time (DOGE typically trades in the
+	// sub-dollar range; cents-scale is its natural domain).
+	DOGE: 0.1
 };
 
 export const fallbackProvider: PriceProvider = {

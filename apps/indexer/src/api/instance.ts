@@ -106,6 +106,13 @@ export interface InstanceResponse {
 		 *  back to the bundled insight.dash.org default when
 		 *  null. */
 		dash: string | null;
+		/** Part 122 cp33 — DOGE chat-link explorer URL override.
+		 *  Same pattern as BTC/XMR/BCH/LTC/DASH (single-network,
+		 *  single field).  Operator sets via
+		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL; frontend falls
+		 *  back to the bundled blockchair.com/dogecoin default
+		 *  when null. */
+		doge: string | null;
 		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (pre-cp30 — yes, this includes every prior build of
@@ -224,6 +231,7 @@ export function instanceRoute(config: Config): Hono {
 				bch: config.frontendBchChatLinkUrl ?? null,
 				ltc: config.frontendLtcChatLinkUrl ?? null,
 				dash: config.frontendDashChatLinkUrl ?? null,
+				doge: config.frontendDogeChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,

@@ -72,7 +72,12 @@ const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	// DASH/USD.  Transparent asset at base layer, no privacy-warning
 	// chip, single-network mainnet, PrivateSend is wallet-side
 	// opt-in (not surfaced via price).
-	DASH: 'dash'
+	DASH: 'dash',
+	// Part 122 cp33 — Dogecoin.  Coingecko's `dogecoin` ID returns
+	// live DOGE/USD.  Transparent asset at base layer, no privacy
+	// warning chip, single-network mainnet, no native privacy
+	// upgrade (DOGE has no PrivateSend equivalent).
+	DOGE: 'dogecoin'
 };
 
 /** Max response body size from CoinGecko. Real responses are

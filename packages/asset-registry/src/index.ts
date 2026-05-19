@@ -44,7 +44,7 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH'] as const;
+export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE'] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -337,7 +337,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// MEMORY #23 INVARIANT: USDC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
-		// USDT/DAI/BCH/LTC/DASH as Category-B trade-only assets.
+		// USDT/DAI/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
 		canPayListingFee: false,
 		// Networks shipped at launch.  Native USDC only — bridged
 		// variants (USDC.e on Avalanche / Optimism / Arbitrum,
@@ -407,7 +407,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// MEMORY #23 INVARIANT: DAI is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; DAI joins
-		// USDT/USDC/BCH/LTC/DASH as Category-B trade-only assets.
+		// USDT/USDC/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
 		// See ADR-0029 §4 for the rationale.
 		canPayListingFee: false,
 		// Networks shipped at launch: Ethereum, Polygon (PoS), Base,
@@ -618,6 +618,58 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// Permissive shape check; chain-binding happens on the
 		// receiving wallet side.
 		addressShape: /^[X7][1-9A-HJ-NP-Za-km-z]{33}$/
+	}),
+	Object.freeze<AssetEntry>({
+		ticker: 'DOGE',
+		// Dogecoin uses 8 decimals — "shibatoshi" (joke name, but
+		// canonical) is Dogecoin's smallest unit, satoshi-scale.
+		// 1 DOGE = 100_000_000 shibatoshi.  Confirmed via Dogecoin
+		// Core protocol docs.
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// MEMORY #23 INVARIANT: DOGE is trade-only.  It cannot pay
+		// listing fees, cold-message fees, or featured-slot bids.
+		// The fee_method enum stays frozen at {blurt, btc, xmr,
+		// waived_first_buy}; doge-trade-only-smoke pins this from
+		// the registry side, fee-method-enum-frozen-smoke pins it
+		// from the wire-format side.
+		canPayListingFee: false,
+		// Single-network coin.  No network picker needed in the
+		// post-order form or address-share modal — defaults to
+		// mainnet and stays there.  (Dogecoin has no L2s with
+		// formal community endorsement; the chain itself is the
+		// only canonical home for DOGE the asset.)
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// DOGE is transparent at the base layer (like BTC/BCH/LTC),
+		// fully decentralized via PoW (auxiliary-PoW merge-mined
+		// with Litecoin since 2014), and addresses cannot be
+		// frozen by an issuer.  No issuer at all — fair-launched,
+		// no premine after the initial 100 billion coins were
+		// emitted in the first year, then settled at a fixed
+		// 5 billion DOGE/year tail emission for security funding.
+		// No warning chip needed; same posture as BTC/BCH/LTC.
+		// For Morphit's strongest privacy posture, use XMR.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: [],
+			privacyGuideKey: 'doge'
+		},
+		// DOGE address formats:
+		//   - P2PKH (overwhelmingly common): starts with `D`,
+		//     base58, 34 chars total (33 after the D prefix).
+		//     Version byte 0x1E.
+		//   - P2SH (multisig, rare in DOGE): starts with `9` or
+		//     `A`, base58, 34 chars total.  Version byte 0x16.
+		// All three share the same length + base58 alphabet; the
+		// version byte differs.  No bech32 / segwit support —
+		// Dogecoin Core has never activated segwit (still on
+		// pre-segwit legacy chain semantics as of 2026-05).
+		// Permissive shape check; chain-binding happens on the
+		// receiving wallet side.
+		addressShape: /^[D9A][1-9A-HJ-NP-Za-km-z]{33}$/
 	})
 ] as const) as ReadonlyArray<AssetEntry>;
 

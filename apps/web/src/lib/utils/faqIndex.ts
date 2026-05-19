@@ -137,6 +137,7 @@ export const FAQ_KEYS = [
 	'what_is_dai',
 	'why_dai_warning',
 	'which_dai_network',
+	'what_is_doge',
 	'arbitrage_morphit_vs_exchanges'
 ] as const;
 
@@ -500,6 +501,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	what_is_dai: ['why_dai_warning', 'which_dai_network', 'what_is_usdt', 'what_is_usdc', 'fees', 'how_to_buy'],
 	why_dai_warning: ['what_is_dai', 'which_dai_network', 'why_usdt_warning', 'why_usdc_warning', 'how_morphit_protects_me', 'privacy_practices'],
 	which_dai_network: ['what_is_dai', 'why_dai_warning', 'which_usdc_network', 'which_usdt_network', 'fees', 'how_to_buy'],
+	what_is_doge: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
 };
 

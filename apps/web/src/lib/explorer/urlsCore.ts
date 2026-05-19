@@ -35,6 +35,7 @@ export const LTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
  *  the whole BTC family — DASH forked from Litecoin which forked
  *  from Bitcoin, preserving the hash structure). */
 export const DASH_TXID_RE = /^[0-9a-fA-F]{64}$/;
+export const DOGE_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
@@ -103,6 +104,33 @@ export const BUNDLED_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
 export const BUNDLED_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
+
+/** DOGE chat-link explorer default (cp33 — Part 122).
+ *  blockchair.com chosen from Ken's 9-explorer survey for
+ *  predictable URL format, multi-chain support (already used as
+ *  BCH default — operator gets one origin in their CSP allowlist
+ *  for two chains), uptime track record, no aggressive
+ *  fingerprinting, and HTTPS-only.
+ *
+ *  Full survey (Ken-provided 2026-05-19):
+ *  - dogechain.info — community-favored historical default;
+ *    occasional uptime issues and sketchy ad inventory.
+ *  - blockchair.com/dogecoin — clean URL pattern, multi-chain,
+ *    no JS tracking by default (chosen as bundled default).
+ *  - bitinfocharts.com/dogecoin — aggregator, ad-heavy.
+ *  - live.blockcypher.com/doge/ — BlockCypher infra, free tier
+ *    rate-limited.
+ *  - blockexplorer.one/dogecoin/mainnet — multi-chain aggregator.
+ *  - blockchain.com/explorer/assets/doge — Blockchain.com
+ *    exchange-affiliated; conflicts with priority #2
+ *    (decentralization — no exchange chokepoint).
+ *  - sochain.com/DOGE, chain.so/DOGE — older "SoChain" service,
+ *    same vendor; uptime variable.
+ *  - oklink.com — OKLink (OKX-affiliated); exchange-adjacent.
+ *
+ *  Operators wanting different defaults override via
+ *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
+export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
 
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who

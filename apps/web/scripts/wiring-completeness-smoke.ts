@@ -467,15 +467,51 @@ const CHECKS: readonly Check[] = [
 	// USDT/USDC).  Brag claims DAI gets the more-nuanced
 	// `dai_partly_centralized` warning rather than the
 	// freeze-power-implying `*_centralized` class.  Anchor on the
-	// canonical registry where the warning key is declared.
+	// ─── cp33 DOGE P2P ────────────────────────────────────────────────
+	// New brag entry #282 claims DOGE is wired as a 7th Category-B
+	// trade-only asset.  Anchor on the canonical registry entry —
+	// if DOGE ever loses its registry slot the brag claim drifts
+	// into vaporware and this CHECK row fires.
 	{
-		id: 'cp31-dai-partly-centralized-warning-class',
+		id: 'cp33-doge-p2p',
 		claim_source: 'brag_list',
-		claim_phrase: 'Dai (DAI) peer-to-peer',
+		claim_phrase: 'Dogecoin (DOGE) peer-to-peer',
 		anchor: {
 			kind: 'grep',
-			pattern: "privacyWarningKey: 'dai_partly_centralized'",
+			pattern: "ticker: 'DOGE'",
 			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp33 DOGE payment-rail wired (cp32 LL #36) ───────────────────
+	// Cp32 LL #36: every tradable asset must also be wired as a
+	// payment rail.  Cp31 missed this for DAI (closed in cp32
+	// CODE-1); cp33 ships DOGE with both axes same-turn.  Anchor:
+	// payments/registry.ts must contain pay_doge.
+	{
+		id: 'cp33-doge-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dogecoin (DOGE) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_doge'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	// ─── cp33 DOGE explorer URL bundled default ───────────────────────
+	// blockchair.com/dogecoin chosen from Ken's 9-explorer survey.
+	// Anchor on the constant; a renamed/removed constant means the
+	// frontend has lost its fallback default and operators see a
+	// broken explorer link when no override is configured.
+	{
+		id: 'cp33-doge-explorer-bundled-default',
+		claim_source: 'brag_list',
+		claim_phrase: 'Dogecoin (DOGE) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: 'BUNDLED_DOGE_CHAT_LINK_URL',
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
 		},
 		status: 'live'
 	}

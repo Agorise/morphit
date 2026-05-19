@@ -217,9 +217,9 @@ for (const a of ASSETS) {
 	let mutated = false;
 	// Capture the original length BEFORE attempting mutation;
 	// hardcoded counts (the prior literal `4` was from a 4-asset
-	// era; pre-USDC cp30 had 7, cp30 had 8, cp31 has 9) drift every
-	// asset addition.  Dynamic capture per cp30-DD-DD LL #25 — never
-	// hardcode an asset count in a smoke.
+	// era; pre-USDC cp30 had 7, cp30 had 8, cp31 had 9, cp33 has
+	// 10) drift every asset addition.  Dynamic capture per cp30-
+	// DD-DD LL #25 — never hardcode an asset count in a smoke.
 	const originalLength = ASSETS.length;
 	try {
 		(ASSETS as AssetEntry[]).push({

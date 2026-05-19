@@ -176,6 +176,7 @@ const sampleAnswers: WizardAnswers = {
 		bch: 'https://blockchair.com/bitcoin-cash/transaction/{txid}',
 		ltc: 'https://litecoinspace.org/tx/{txid}',
 		dash: 'https://insight.dash.org/insight/tx/{txid}',
+		doge: 'https://blockchair.com/dogecoin/transaction/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',

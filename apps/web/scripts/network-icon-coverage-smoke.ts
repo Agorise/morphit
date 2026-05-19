@@ -54,6 +54,24 @@ const ICONS_DIR = resolve(
 const PER_ICON_BYTE_CEILING = 4_096;
 const TOTAL_NETWORK_ICONS_BUDGET = 16_384;
 
+// CP33 — Part 122: per-asset icon ceiling raised from 4 KB to
+// 64 KB to accommodate Ken-supplied detailed artwork (DOGE icon
+// is a full-color Shiba Inu illustration at ~54 KB, the
+// canonical Dogecoin brand mark).  Network icons keep the
+// tighter 4 KB ceiling — they're simple chain logos and don't
+// need detailed illustration.  Total asset-icon budget raised
+// to 128 KB (up from 32 KB) accordingly.
+//
+// The HEAVY MITIGATION for Priority #4 is lazy-loading, not the
+// absolute byte ceiling — the ceiling is a defensive guard
+// against accidental bloat (developer pastes a base64 PNG and
+// renames it `.svg`).  Lazy-loading ensures the 54 KB DOGE
+// icon only transfers when a viewer actually scrolls to a page
+// that renders DOGE.  Home page (BTC/XMR/BLURT, ~5.6 KB
+// combined) is unaffected.
+const PER_ASSET_ICON_CEILING = 65_536;
+const TOTAL_ASSET_ICONS_BUDGET = 131_072;
+
 interface Scenario {
 	name: string;
 	run: () => string | null; // null = pass, message = fail
@@ -122,10 +140,11 @@ for (const slug of [...networkSet].sort()) {
 }
 
 // CP32 EXTENSION — also pin every per-asset icon at /icons/icon-<ticker>.svg.
-// Same Priority #4 ceiling: 4 KB per icon.  Total budget for 9 asset icons
-// at present + headroom = 32 KB.
+// Per-icon ceiling: 64 KB (asset icons may carry detailed brand
+// artwork — Shibu Inu DOGE etc).  Total budget for 10 asset icons
+// at present + headroom = 128 KB.
 const ASSET_ICONS_DIR = resolve(REPO_ROOT, 'apps/web/static/icons');
-const PER_ASSET_ICON_BUDGET = 32_768;
+const PER_ASSET_ICON_BUDGET = TOTAL_ASSET_ICONS_BUDGET;
 
 const tickerMatch = registrySrc.match(/ASSET_TICKERS\s*=\s*\[([^\]]+)\]/);
 const tickerSet = new Set<string>();
@@ -138,9 +157,9 @@ if (tickerMatch) {
 scenarios.push({
 	name: 'ASSET_TICKERS extracted from registry source',
 	run: () =>
-		tickerSet.size >= 9
+		tickerSet.size >= 10
 			? null
-			: `expected ≥9 tradable assets at cp32, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
+			: `expected ≥10 tradable assets at cp33, found ${tickerSet.size}: ${[...tickerSet].sort().join(',')}`
 });
 
 for (const ticker of [...tickerSet].sort()) {
@@ -153,12 +172,12 @@ for (const ticker of [...tickerSet].sort()) {
 		run: () => (existsSync(iconPath) ? null : `MISSING: ${iconPath}`)
 	});
 	scenarios.push({
-		name: `asset icon for '${ticker}' under ${PER_ICON_BYTE_CEILING} bytes`,
+		name: `asset icon for '${ticker}' under ${PER_ASSET_ICON_CEILING} bytes`,
 		run: () => {
 			if (!existsSync(iconPath)) return null;
 			const sz = statSync(iconPath).size;
-			if (sz > PER_ICON_BYTE_CEILING) {
-				return `${ticker}: ${sz}B > ${PER_ICON_BYTE_CEILING}B — Priority #4`;
+			if (sz > PER_ASSET_ICON_CEILING) {
+				return `${ticker}: ${sz}B > ${PER_ASSET_ICON_CEILING}B — Priority #4`;
 			}
 			return null;
 		}

@@ -699,6 +699,33 @@ export interface InstanceResponse {
 		 *  template (operator override) or null (use bundled
 		 *  blockchair.com/bitcoin-cash default). */
 		readonly bch?: string | null;
+		/** Part 122 cp24 — LTC chat-link explorer URL override.
+		 *  Same pattern as BCH.  Bundled default:
+		 *  litecoinspace.org.  Optional for back-compat with pre-
+		 *  cp24 indexers.
+		 *
+		 *  CP33 NOTE: this field was MISSING from the indexer-
+		 *  client mirror until cp33 — cp24 shipped the indexer-
+		 *  side InstanceResponse with `ltc: string | null` but
+		 *  never extended this mirror.  cp31-DD's "4 canonical
+		 *  wire-format surface" sweep caught the USDT analog
+		 *  (cp30-DD CODE-3) but didn't notice LTC.  Closed in
+		 *  cp33 as CODE-4. */
+		readonly ltc?: string | null;
+		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		 *  Same pattern as BCH/LTC.  Bundled default:
+		 *  insight.dash.org.  Optional for back-compat with
+		 *  pre-cp27 indexers.
+		 *
+		 *  CP33 NOTE: same wire-format-asymmetry as LTC above —
+		 *  cp27 shipped the indexer side without extending this
+		 *  mirror.  Closed in cp33 as CODE-4. */
+		readonly dash?: string | null;
+		/** Part 122 cp33 — DOGE chat-link explorer URL override.
+		 *  Same pattern as BCH/LTC/DASH (single-network mainnet).
+		 *  Bundled default: blockchair.com/dogecoin.  Optional
+		 *  for back-compat with pre-cp33 indexers. */
+		readonly doge?: string | null;
 		/** Part 121 — USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (pre-Part-121)
 		 *  omit this field, in which case the frontend uses its

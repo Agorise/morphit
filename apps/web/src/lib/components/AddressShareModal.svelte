@@ -2,7 +2,7 @@
 	/**
 	 * AddressShareModal — share a receiving address through the
 	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, USDC,
-	 * DAI, BCH, LTC, DASH).
+	 * DAI, BCH, LTC, DASH, DOGE).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
 	 * sends it through the same chat-send path as a normal text
@@ -276,6 +276,7 @@
 		if (method === 'bch') return 'chat.address.address_invalid_bch';
 		if (method === 'ltc') return 'chat.address.address_invalid_ltc';
 		if (method === 'dash') return 'chat.address.address_invalid_dash';
+		if (method === 'doge') return 'chat.address.address_invalid_doge';
 		return 'chat.address.address_invalid_blurt';
 	});
 
@@ -515,6 +516,18 @@
 			>
 				{$_('chat.address.method_dash')}
 			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={method === 'doge'}
+				class="flex-1 rounded-lg border-2 px-3 py-2 text-sm font-semibold transition {method ===
+				'doge'
+					? 'border-morphit-emerald bg-morphit-emerald/10 text-morphit-emerald'
+					: 'border-ink-200 hover:border-ink-300 dark:border-ink-700 dark:hover:border-ink-600'}"
+				onclick={() => selectMethod('doge')}
+			>
+				{$_('chat.address.method_doge')}
+			</button>
 		</div>
 
 		<!-- Part 121 — USDT privacy warning + network picker.
@@ -587,13 +600,17 @@
 							? ($_('chat.address.address_placeholder_usdt') as string)
 							: method === 'usdc'
 								? ($_('chat.address.address_placeholder_usdc') as string)
-								: method === 'bch'
-									? ($_('chat.address.address_placeholder_bch') as string)
-									: method === 'ltc'
-										? ($_('chat.address.address_placeholder_ltc') as string)
-										: method === 'dash'
-											? ($_('chat.address.address_placeholder_dash') as string)
-											: ($_('chat.address.address_placeholder_blurt') as string)}
+								: method === 'dai'
+									? ($_('chat.address.address_placeholder_dai') as string)
+									: method === 'bch'
+										? ($_('chat.address.address_placeholder_bch') as string)
+										: method === 'ltc'
+											? ($_('chat.address.address_placeholder_ltc') as string)
+											: method === 'dash'
+												? ($_('chat.address.address_placeholder_dash') as string)
+												: method === 'doge'
+													? ($_('chat.address.address_placeholder_doge') as string)
+													: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

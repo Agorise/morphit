@@ -1865,16 +1865,16 @@ double-spend, halved abuse defenses), see
 
 ---
 
-## Trade-only assets: USDT, BCH, LTC, DASH, and your operator stance (Part 121, Part 122 cp21, cp24, cp27)
+## Trade-only assets: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, and your operator stance (Part 121, Part 122 cp21, cp24, cp27, cp30, cp31, cp33)
 
-Morphit ships with **USDT, BCH, LTC, and DASH enabled by default**
+Morphit ships with **USDT, USDC, DAI, BCH, LTC, DASH, and DOGE enabled by default**
 as trade-only assets on a new node.  Users can buy/sell USDT
 against any of the four supported networks (ERC-20, TRC-20,
 SPL, BEP-20), and can buy/sell BCH (Bitcoin Cash, single-network
 mainnet only), LTC (Litecoin, single-network mainnet only), and
 DASH (Dash, single-network mainnet only, with optional wallet-side
 PrivateSend mixing).  All listing fees are paid in BLURT, BTC, or
-XMR — never USDT, never BCH, never LTC, never DASH (the
+XMR — never USDT, never USDC, never DAI, never BCH, never LTC, never DASH, never DOGE (the
 `fee_method` enum is wire-format-frozen at BLURT/BTC/XMR per
 memory #23 and ADR-0011).
 
@@ -1893,7 +1893,7 @@ the env var directly.  Both paths write the same line.
 
 Reasonable positions for an operator:
 
-1. **Accept USDT, USDC, BCH, LTC, and DASH** (default) — the canonical
+1. **Accept USDT, USDC, DAI, BCH, LTC, DASH, and DOGE** (default) — the canonical
    morphit.io posture.  Users have asked for stablecoin trading
    and for wider Bitcoin-fork rails.  Pick the default "Y" at
    each prompt; the wizard emits

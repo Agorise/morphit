@@ -133,7 +133,8 @@ scenario('lower-case tickers match payload union', () => {
 		'dai',
 		'bch',
 		'ltc',
-		'dash'
+		'dash',
+		'doge'
 	]);
 	for (const a of ASSETS) {
 		if (!valid.has(a.ticker)) {

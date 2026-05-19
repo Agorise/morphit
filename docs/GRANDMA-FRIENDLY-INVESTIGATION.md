@@ -2,7 +2,7 @@
 
 **Status:** Investigation, not yet a roadmap. Item 13 of Batch M.
 **Author:** Agorise
-**Last updated:** 2026-05-18 (Part 122 cp32 — 7 network icons swapped (Ken-supplied: ERC-20, SPL, TRC-20, Polygon, BEP-20, Base, Arbitrum), Priority #4 "TINY FOOTPRINT" introduced, lazy-loading retrofit applied across 41 below-the-fold image sites; prior cp31 — DAI tooltip + cheat-sheet row added; asset enumerations through this doc extended to all 9 tradable assets; preceding cp28 route-path drift fixes and cp27-DD2 status updates remain).
+**Last updated:** 2026-05-19 (Part 122 cp33 — Dogecoin (DOGE) addition as 10th tradable asset / 7th Category-B; BEP-20 network icon swap (Ken-supplied improved version); cp32 — 7 network icons swapped (Ken-supplied: ERC-20, SPL, TRC-20, Polygon, BEP-20, Base, Arbitrum), Priority #4 "TINY FOOTPRINT" introduced, lazy-loading retrofit applied across 41 below-the-fold image sites; prior cp31 — DAI tooltip + cheat-sheet row added; asset enumerations through this doc extended to all 10 tradable assets; preceding cp28 route-path drift fixes and cp27-DD2 status updates remain).
 
 This document is a survey of friction points a complete crypto-naive user (the canonical "grandma") would hit on Morphit today, organized into severity tiers. Each gap names the specific friction, where it surfaces, and a sketch of what a fix could look like. Nothing here is committed work — it's a triage list to reference when planning Batch N.
 

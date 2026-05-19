@@ -110,7 +110,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// is USDT, "pay with USDT" doesn't make sense, so hide
 		// this option in the payment-methods picker.  When the
 		// trade's asset is BTC, XMR, BLURT, USDC, DAI, BCH, LTC,
-		// or DASH, USDT is a valid payment rail and shows up as a
+		// DASH, or DOGE, USDT is a valid payment rail and shows up as a
 		// selectable chip.  The specific network (ERC-20 / TRC-20
 		// / SPL / BEP-20) is pinned at chat-time via
 		// AddressShareModal's USDT tab; the picker itself doesn't
@@ -198,6 +198,28 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		url: 'https://dash.org',
 		category: 'crypto',
 		assetExclusion: 'DASH'
+	},
+	{
+		// Part 122 cp33 — Dogecoin as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH: when the trade's
+		// traded asset is DOGE, "pay with DOGE" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, DOGE appears as a selectable payment-rail chip.
+		// Single-network mainnet (no L2 support — Dogecoin has
+		// not activated segwit, so no native bech32 or rollup
+		// integrations).  The `dogecoin:` URI handles both
+		// D-prefix P2PKH and 9/A-prefix P2SH via the BIP-21
+		// derivative scheme.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp31 missed this for DAI
+		// (closed in cp32 CODE-1); cp33 ships DOGE with the
+		// payment-rail axis as a same-turn deliverable.
+		key: 'pay_doge',
+		name: 'Dogecoin (DOGE)',
+		url: 'https://dogecoin.com',
+		category: 'crypto',
+		assetExclusion: 'DOGE'
 	},
 
 	// ─── In Person ──────────────────────────────────────────────

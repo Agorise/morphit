@@ -1509,3 +1509,112 @@ No EoP surface in cp32.
 malicious or accidental bloat in future swaps.  Performance budgets
 double as DoS mitigations when they're enforced rather than
 aspirational.
+
+---
+
+## CP33 STRIDE refresh (2026-05-19)
+
+Cp33 scope: Dogecoin (DOGE) addition as 10th tradable asset + 7th
+Category-B + BEP-20 network icon swap + 94-task deep-deep that
+surfaced 5 HIGH-severity preexisting bugs (CODE-3/4/5/6/7) and
+several drift findings.
+
+### Spoofing — 1 row
+
+**S-cp33-1 (LOW).**  DOGE legacy P2SH addresses use `9...` or
+`A...` prefixes, both within the standard base58-shape of the
+BTC/BCH legacy P2SH families and adjacent to DASH multisig
+(`7...`).  A user sharing a DOGE P2SH address could in theory
+copy-paste it into a DASH or BCH context.  Mitigation: receiving
+wallet chain-binding (the recipient's wallet rejects wrong-chain
+sends); cross-network warnings; the canonical chain prefix
+character is checked at the registry-validator layer (DOGE's
+`/^[D9A][...]{33}/` accepts only D/9/A, rejects X/7/1/3).
+Same mitigation pattern as the cp24 LTC `3...` P2SH overlap with
+BTC (ADR-0025 §4).
+
+### Tampering — 2 rows
+
+**T-cp33-1 (LOW).**  Ken-supplied DOGE icon SVG is 53,842 bytes
+(13× cp32-conservative per-icon ceiling).  Bypassing the ceiling
+without justification would be a tampering vector — future
+contributors could justify any icon-bloat by pointing at the
+DOGE precedent.  Mitigation: cp33 raises per-asset-icon ceiling
+to 64 KB (from 4 KB) and total budget to 128 KB (from 32 KB)
+with DOCUMENTED RATIONALE in both ADR-0030 §8 and the smoke
+source comments — the raise is explicitly framed as "bloat-by-
+design for canonical brand artwork, not policy".  Network icons
+keep tighter 4 KB caps because they don't need detailed
+illustration.  The smoke is the trip-wire; the ADR is the why.
+
+**T-cp33-2 (MEDIUM).**  Five HIGH-severity preexisting bugs
+silently shipping in production (CODE-3 DAI wire-format gates
+broken since cp31, CODE-4 indexer-client mirror missing LTC+DASH
+since cp24+cp27, CODE-5 DAI placeholder dispatch broken since
+cp31, CODE-6 type-union narrowing missing DAI since cp31,
+CODE-7 FAQ asset enumerations stale across 10 locales) all
+shared a common mechanism: the canonical type union or wire-
+format declaration WAS extended, but a SIBLING file using a
+narrower hand-written union or duplicated comment WAS NOT.
+This is the structural tampering surface — silent drift between
+canonical and sibling.  Mitigation already partial via existing
+wiring-completeness CHECK rows and the cp32 LL #36 invariant
+SAME-TURN discipline.  Stronger mitigation FILED AS REVISIT:
+add a smoke that finds every narrow-method-union-literal in
+.svelte/.ts and asserts each matches the canonical
+ChatAssetTicker order.
+
+### Repudiation — 0 rows
+
+No repudiation surface in cp33.
+
+### Information Disclosure — 1 row
+
+**I-cp33-1 (LOW).**  DOGE has NO native privacy upgrade (no
+PrivateSend equivalent, no confidential transactions, no
+segwit-enabled mixing).  A naive user sharing the same DOGE
+address across multiple Morphit trades builds a public on-chain
+fingerprint of their P2P activity.  Mitigation: privacy guide
+copy in `privacy.guides.doge` × 10 locales tells users to use a
+fresh HD-derived address per trade; the FAQ `what_is_doge`
+states this plainly without spin.  This is honest disclosure
+per Memory #29 — DOGE's posture is what it is.  Strongest
+privacy path remains XMR.
+
+### Denial of Service — 1 row
+
+**D-cp33-1 (LOW).**  Memorability of `dogecoin:` URI scheme
+(versus `bitcoin:`, `litecoin:`, `dash:`).  A malicious link in
+chat could substitute a near-misspelling (`d0gecoin:`,
+`dogecoinurl:`) to defeat wallet handling and produce a click-
+that-goes-nowhere.  Mitigation: `buildPaymentUri` controls the
+emission side (always `dogecoin:` lowercase), and the chat
+payload decoder requires the address to validate against
+DOGE's regex before rendering a clickable URI.  Attacker
+cannot inject arbitrary URI schemes through the wire payload
+unless they also produce a valid DOGE address shape.
+
+### Elevation of Privilege — 0 rows
+
+No EoP surface in cp33.
+
+### Summary
+
+| Category | New rows | Pre-existing rows still in force |
+|----------|----------|----------------------------------|
+| Spoofing | 1 (S-cp33-1) | S-cp32-* + S-cp31-* + S-cp30-* + S1-S7 |
+| Tampering | 2 (T-cp33-1, T-cp33-2) | T-cp32-* + T-cp31-* + T-cp30-* + T1-T7 |
+| Repudiation | 0 | R-cp31-1 + R-cp30-1 + R1-R4 |
+| Information disclosure | 1 (I-cp33-1) | I-cp32-* + I-cp31-* + I-cp30-* + I1-I8 |
+| Denial of service | 1 (D-cp33-1) | D-cp32-* + D-cp31-* + D-cp30-* + D1-D7 |
+| Elevation of privilege | 0 | E-cp31-* + E-cp30-* + E1-E4 |
+
+**Net new threats:** 5 across 4 categories.  No criticals.
+
+**Highest-impact lesson (T-cp33-2):**  The 5 preexisting HIGH-
+severity bugs surfaced by the cp33 deep-deep all share the same
+SIBLING-FILE-DRIFT mechanism.  The structural mitigation is
+strengthening the "same-turn discipline" lessons LL #35/#36/#37
+from cp32 with mechanical enforcement (a new smoke or extension
+of an existing one) for narrow-union-literal parity.  This is
+the cp33 LL #38 candidate.

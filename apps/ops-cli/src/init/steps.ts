@@ -828,6 +828,23 @@ export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 // MORPHIT_FRONTEND_DASH_CHAT_LINK_URL.
 export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
 
+// Part 122 cp33 — DOGE chat-link explorer URL bundled default.
+// blockchair.com/dogecoin chosen from Ken's 9-explorer survey
+// (2026-05-19) for predictable URL format, multi-chain support
+// (already used as BCH default — operator gets one origin in
+// their CSP allowlist for two chains), uptime track record, no
+// aggressive fingerprinting, and HTTPS-only.  Other candidates
+// surveyed: dogechain.info (community-favored historical default,
+// uptime + ad-inventory issues), bitinfocharts.com/dogecoin
+// (aggregator, ad-heavy), live.blockcypher.com/doge/ (BlockCypher
+// infra, free-tier rate-limited), blockexplorer.one/dogecoin/mainnet,
+// blockchain.com/explorer/assets/doge (exchange-affiliated;
+// declined), sochain.com/DOGE + chain.so/DOGE (older SoChain
+// service; uptime variable), oklink.com (OKX-affiliated, exchange-
+// adjacent).  Operators wanting different default override via
+// MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL.
+export const DEFAULT_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
+
 // Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1032,6 +1049,10 @@ export interface ChatLinkExplorersResult {
 	 *  as btc/xmr/bch/ltc.  Operator-tunable via the wizard or
 	 *  by setting MORPHIT_FRONTEND_DASH_CHAT_LINK_URL directly. */
 	readonly dash: string;
+	/** Part 122 cp33 — DOGE chat-link explorer URL.  Same shape
+	 *  as btc/xmr/bch/ltc/dash.  Operator-tunable via the wizard
+	 *  or by setting MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL directly. */
+	readonly doge: string;
 	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1153,6 +1174,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── DASH chat-link URL ──\n');
 	const dash = await editChatLinkUrl('DASH chat-link URL', DEFAULT_DASH_CHAT_LINK_URL);
 
+	// ─── DOGE (Part 122 cp33) ──
+	console.log('\n  ── DOGE chat-link URL ──\n');
+	const doge = await editChatLinkUrl('DOGE chat-link URL', DEFAULT_DOGE_CHAT_LINK_URL);
+
 	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
 	// Solana / BNB Smart Chain); each chain has its own explorer
@@ -1266,7 +1291,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
 		};
 
-	return { btc, xmr, bch, ltc, dash, usdt, usdc, dai };
+	return { btc, xmr, bch, ltc, dash, doge, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
