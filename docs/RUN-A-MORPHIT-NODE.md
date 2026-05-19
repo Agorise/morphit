@@ -1945,18 +1945,20 @@ Reasonable positions for an operator:
    Equivalent post-deploy env-file edit:
 
    ```bash
-   # Refuse BCH + LTC (BTC + XMR + BLURT + USDT + USDC + DASH only)
+   # Refuse BCH + LTC (BTC + XMR + BLURT + USDT + USDC + DAI + DASH + DOGE only)
    MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC"
 
-   # Refuse all five Category-B (BTC + XMR + BLURT only)
-   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DASH,LTC,USDC,USDT"
+   # Refuse all seven Category-B trade-only assets (BTC + XMR + BLURT only)
+   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DAI,DASH,DOGE,LTC,USDC,USDT"
 
    # Future-compat with assets not yet in the registry
-   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,BCH,LTC,DASH,DAI"
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,FUTUREASSET"
    ```
 
-   (`DAI` isn't currently in the canonical registry; the env
-   var is forward-compatible for future trade-only additions.)
+   (Unknown tickers are accepted in the env var for forward-
+   compatibility — the indexer ignores tickers it doesn't
+   recognize, which lets operators set the var preemptively
+   for assets not yet in the registry.)
 
 **Your users will see your stance directly.**  Whatever you
 set above is published through your indexer's `/v1/instance`
@@ -1971,12 +1973,14 @@ side; just set the env var and restart the indexer service.
 Browsers see the change at most 5 minutes after restart
 (`/v1/instance` carries a 5-minute Cache-Control header).
 
-### Per-network explorer URLs
+### Per-network explorer URLs (multi-network assets)
 
-USDT exists on four networks; each has a bundled-default
-explorer URL.  When a user shares a USDT txid in chat, the
-frontend renders a clickable link via the appropriate
-explorer:
+Three multi-network assets (USDT, USDC, DAI) each have bundled-
+default explorer URLs per network.  When a user shares a txid
+in chat for any of these, the frontend renders a clickable link
+via the appropriate explorer:
+
+**USDT (4 networks):**
 
 | Network | Bundled default explorer |
 |---------|--------------------------|
@@ -1985,22 +1989,51 @@ explorer:
 | SPL (Solana) | `https://solscan.io/tx/{txid}` |
 | BEP-20 (BNB Smart Chain) | `https://bscscan.com/tx/{txid}` |
 
+**USDC (4 networks):**
+
+| Network | Bundled default explorer |
+|---------|--------------------------|
+| ERC-20 (Ethereum) | `https://etherscan.io/tx/{txid}` |
+| SPL (Solana) | `https://solscan.io/tx/{txid}` |
+| Base | `https://basescan.org/tx/{txid}` |
+| Polygon | `https://polygonscan.com/tx/{txid}` |
+
+**DAI (4 EVM networks):**
+
+| Network | Bundled default explorer |
+|---------|--------------------------|
+| ERC-20 (Ethereum) | `https://etherscan.io/tx/{txid}` |
+| Polygon | `https://polygonscan.com/tx/{txid}` |
+| Base | `https://basescan.org/tx/{txid}` |
+| Arbitrum One | `https://arbiscan.io/tx/{txid}` |
+
 Operators running self-hosted explorers for any of these
 chains can override per-network in the frontend env (see
 `docs/OPERATIONS.md` §"Per-network explorer URL overrides").
 
-BCH is single-network (mainnet only), so there's just one
-chat-link explorer URL:
+### Single-network explorer URLs
+
+BCH, LTC, DASH, and DOGE are single-network (mainnet only), so
+each has just one chat-link explorer URL:
 
 | Asset | Bundled default explorer |
 |-------|--------------------------|
 | BCH (mainnet) | `https://blockchair.com/bitcoin-cash/transaction/{txid}` |
+| LTC (mainnet) | `https://litecoinspace.org/tx/{txid}` |
+| DASH (mainnet) | `https://insight.dash.org/insight/tx/{txid}` |
+| DOGE (mainnet) | `https://blockchair.com/dogecoin/transaction/{txid}` |
 
-Override with `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL` (same shape
-contract as `MORPHIT_FRONTEND_BTC_CHAT_LINK_URL` and
-`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL`: `https://`, must contain
-`{txid}`, must parse as a URL).  See `docs/OPERATIONS.md`
-§"BCH chat-link explorer URL override" for alternatives.
+Override each via the matching env var:
+- `MORPHIT_FRONTEND_BCH_CHAT_LINK_URL`
+- `MORPHIT_FRONTEND_LTC_CHAT_LINK_URL`
+- `MORPHIT_FRONTEND_DASH_CHAT_LINK_URL`
+- `MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL`
+
+Same shape contract as `MORPHIT_FRONTEND_BTC_CHAT_LINK_URL` and
+`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL`: must start with `https://`,
+must contain `{txid}`, must parse as a URL.  See
+`docs/OPERATIONS.md` §"Single-network explorer URL overrides"
+for alternatives.
 
 ### What trade-only assets cannot do on your node
 

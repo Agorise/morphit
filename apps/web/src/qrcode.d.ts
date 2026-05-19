@@ -3,9 +3,9 @@
  *
  * Morphit uses qrcode lazy-loaded inside the QrPanel component
  * to render per-asset payment URIs as scannable QR codes (BTC,
- * XMR, BLURT, USDT, USDC, BCH, LTC, DASH — see `buildPaymentUri` in
- * `apps/web/src/lib/chat/payload.ts` for the canonical per-asset
- * URI shape).  We declare only the API surface we actually call — the package
+ * XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE — see
+ * `buildPaymentUri` in `apps/web/src/lib/chat/payload.ts` for the
+ * canonical per-asset URI shape).  We declare only the API surface we actually call — the package
  * is not installed in development sandboxes, so without these
  * stubs tsc would fail to resolve the import even though the
  * import is dynamic.

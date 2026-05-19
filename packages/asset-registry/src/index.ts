@@ -654,7 +654,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		privacyWarningKey: null,
 		privacyFeatures: {
 			freshAddressAdvice: 'hd-derived',
-			optInPrivacyTech: [],
+			optInPrivacyTech: null,
 			privacyGuideKey: 'doge'
 		},
 		// DOGE address formats:

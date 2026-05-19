@@ -212,3 +212,41 @@ both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
   field if a future asset has unusual wallet requirements (e.g.
   "this asset requires a wallet that supports stealth-address
   output detection"). Not needed today.
+
+## Subsequent additions (CP35 status update — 2026-05-19)
+
+The per-asset table in §2 was current at cp26 ship and listed
+the seven assets supported then (XMR/BTC/BLURT/USDT/BCH/LTC plus
+the framework's own data shape).  Subsequent checkpoints added
+more assets that plug into this framework without changing the
+framework itself; for reader convenience the current full table
+is:
+
+| Asset | freshAddressAdvice | optInPrivacyTech       | privacyGuideKey |
+|-------|--------------------|------------------------|-----------------|
+| XMR   | subaddress         | null                   | xmr             |
+| BTC   | hd-derived         | [coinjoin, payjoin]    | btc             |
+| BLURT | account-reuse      | null                   | blurt           |
+| USDT  | hd-derived         | null                   | usdt            |
+| BCH   | hd-derived         | [cashfusion]           | bch             |
+| LTC   | hd-derived         | [mweb]                 | ltc             |
+| DASH  | hd-derived         | [privatesend]          | dash            |
+| USDC  | hd-derived         | null                   | usdc            |
+| DAI   | hd-derived         | null                   | dai             |
+| DOGE  | hd-derived         | null                   | doge            |
+
+Added after this ADR's ship date:
+- **DASH** (Part 122 cp27) — opt-in PrivateSend mixing via
+  masternodes; otherwise transparent at base layer.
+- **USDC** (Part 122 cp30) — second stablecoin; `usdc_centralized`
+  privacy-warning class (Circle has freeze power).
+- **DAI** (Part 122 cp31) — third stablecoin; distinct
+  `dai_partly_centralized` class (MakerDAO has no freeze, but
+  Peg Stability Module USDC backing transitively affects).
+- **DOGE** (Part 122 cp33) — fair-launched, merge-mined with
+  LTC, no native privacy upgrade.
+
+**Canonical reference** remains `packages/asset-registry/src/index.ts`.
+This footnote is a convenience snapshot; the registry is
+authoritative.  No changes to the framework decision itself —
+all additions used the framework as designed.

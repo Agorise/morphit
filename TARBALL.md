@@ -1,3 +1,82 @@
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 35 — Truly comprehensive deep-deep applying memory #13's new STOP MISSING THINGS discipline, yielding 25 findings closed inline + 30 i18n string replacements + LL #44 + every documented file current).
+
+CP35 SCOPE:
+
+**Application of memory #13's STOP MISSING THINGS discipline.**  Ken's prompt after multiple recursive deep-deeps each finding more drift: "i am so tired of you missing things!!!!! commit this to memory: STOP MISSING THINGS!!!! you have all the time in the world to do this right the first time, i do not care how many turns or sessions it takes."  Memory #13 updated to require comprehensive single-pass deep-deeps walking every sibling file + sibling route + dispatch site + docblock + narrow union + i18n consumer + doc mention before declaring done.
+
+This is the first cp35-style "plow until concentric rings outward return zero drift" pass.
+
+CP35 METHODOLOGY:
+
+1. Built comprehensive map of every file in repo mentioning ANY of the 10 tradable asset tickers (530 files identified).
+2. Bucketed by per-file asset coverage count (10/10, 9/10, 8/10, 7/10, 6/10, 5/10, 4/10).
+3. Investigated EVERY file with 7+ asset coverage as drift candidate.
+4. Distinguished real drift bugs from intentional narrow scope (e.g. fee_method enum frozen at BLURT/BTC/XMR per Memory #23; faqIndex what_is_X FAQs only for non-obvious assets; rss BLURT-payjoin docblock about transparent chains only).
+5. Walked OUTER rings outward: brag list enumerations, ADRs, smokes, ops-cli wizard, env example, llms.txt files, mediakit zip, every .md doc.
+6. Re-ran every tsx-runnable smoke standalone to catch silently-failing assertions.
+
+CP35 FINDINGS BY CATEGORY:
+
+**Code drift in smokes that had been silently failing for multiple checkpoints:**
+
+- **CP35-14 (HIGH, silent failure since cp21)**: asset-registry-smoke scenario "all current assets registered (BTC, XMR, BLURT, USDT)" asserted EXACTLY those 4 tickers — silently failing through BCH cp21, LTC cp24, DASH cp27, USDC cp30, DAI cp31, DOGE cp33 (5 checkpoints of asset additions). Nobody ever ran the smoke standalone after cp21. Fixed to assert all 10.
+- **CP35-2 (HIGH, silently failing since cp31)**: disabled-assets-wizard-smoke Category-B assertion `catB.length === 5` with hardcoded older 5 tickers — would FAIL with DAI (cp31) + DOGE (cp33) making Category-B = 7. Smoke had silently failed since cp31. Bumped + per-asset Category-B scenarios added for USDC/DAI/DASH/DOGE.
+
+**Real code/config drift bugs:**
+
+- **CP35-1 (LOW)**: schema.sql v32 migration comment listing single-network assets missing DOGE + multi-network missing DAI.
+- **CP35-3 (HIGH)**: CATEGORY_B_DESCRIPTIONS in ops-cli missing DAI + DOGE entries; wizard wouldn't describe them.
+- **CP35-4 (HIGH)**: amount-jitter-utxo-smoke dispatcher tests covered 8 assets; missing DOGE + DAI test scenarios. Stablecoin jitter iteration missing DAI.
+- **CP35-7 (HIGH)**: privacy-features-registry-smoke EXPECTED_ADVICE + EXPECTED_TECH maps missing USDC + DAI + DOGE; smoke went from incomplete to 60/60 covering all 10 assets. DOGE registry `optInPrivacyTech: []` normalized to `null` for consistency with BLURT/USDT/USDC/DAI no-opt-in pattern.
+
+**Documentation drift in user-facing files:**
+
+- **CP35-10 (HIGH)**: README.md headline missing DAI + DOGE; transparent-chain list missing DOGE; stablecoin list missing DAI. RUN-A-MORPHIT-NODE.md disabled-asset example missing DAI + DOGE.
+- **CP35-11 (HIGH)**: morphit-mediakit.zip was 472 lines stale vs current brag list. Memory #11 says rebuild every time brag changes. Rebuilt + verified zero-diff.
+- **CP35-12 (HIGH)**: MORPHIT-BRAG-LIST.md headline missing USDC/DAI/Dash/Dogecoin in marquee; keywords list missing USDC/DAI/DOGE; entry #176 missing DOGE; entry #210 (barter examples) missing USDC/DAI/DOGE + DASH duplication. All 4 sites fixed; mediakit re-rebuilt.
+- **CP35-13 (HIGH)**: build-llms-full.mjs generator header MISSING DAI + DOGE. Plus 3 FAQ entries (blurt_benefits, welcome_bonus, why_usdt_warning) had stale asset enumerations in all 10 locales = **30 i18n string replacements** with locale-native conjunctions ('o' es, 'oder' de, 'lub' pl, 'или' ru, 'یا' fa, '或' zh, etc.). llms-full.txt regenerated.
+- **CP35-25 (HIGH)**: RUN-A-MORPHIT-NODE.md per-network explorer URLs section missing entire USDC + DAI multi-network tables (cp30/cp31) AND LTC + DASH + DOGE single-network tables (cp24/cp27/cp33). Section extended with all current assets.
+
+**Docblock drift (10+ sites):**
+
+- **CP35-15 to CP35-24**: order.ts header JSON example, rssOrderbook feed-paths comment, orderbook.ts asset_network docblock, prices/types.ts module-doc, dev/icons header, ops-cli steps.ts wizard intro + env-render docblock + Category-A introduction, OPERATIONS.md 4 disabled-asset example lines.
+
+**ADR/doc updates that don't qualify as drift bugs:**
+
+- **CP35-5/CP35-6 (LOW)**: qrcode.d.ts + QrPanel.svelte docblocks brought current with DAI + DOGE.
+- **CP35-8 (LOW)**: ADDING-A-COIN.md multi-network section extended with DAI as third example.
+- **CP35-9 (LOW)**: ADR-0026 transparent-chain-privacy-framework appended "Subsequent additions (CP35 status update)" footnote with current 10-asset table + post-cp26 addition log (DASH cp27, USDC cp30, DAI cp31, DOGE cp33). Historical decision text preserved.
+
+CP35 PATTERN LESSON (LL #44):
+
+**LL #44 — Smoke registration must include "run standalone, observe pass" at least once after every related code change.**  Cp35 Finding 14 was a smoke that had been silently failing since cp21 — through 5 checkpoints of asset additions — because nobody ever ran it. The smoke registration in run-smokes.sh is necessary but not sufficient; the registration only guarantees future CI captures the smoke, not that the smoke was passing the day it was registered. Mitigation: every checkpoint's smoke-related work must include `bash scripts/run-smokes.sh 2>&1 | grep -i fail` as a final verification step, or the equivalent standalone runs for environments where the full runner can't execute.
+
+CP35 TOTALS:
+
+- 25 findings closed inline
+- 30 i18n string replacements across 10 locales (preserving locale-native conjunctions)
+- 1 new pattern lesson (LL #44)
+- 2 smokes that had been silently failing for multiple checkpoints — fixed (asset-registry-smoke since cp21; disabled-assets-wizard-smoke since cp31)
+- ALL 18 tsx-runnable smokes ✓ post-cp35
+- Mediakit zip rebuilt + verified zero-diff
+- llms-full.txt regenerated
+- Every documented file current
+
+CP35 STATE METRICS:
+
+- 10 tradable assets (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE)
+- Locale parity 2,730 × 10 = 27,300 strings (unchanged)
+- FAQ entries: 117 (unchanged)
+- ADRs: 30 (ADR-0026 extended with footnote, no new ADR)
+- Brag entries: 282 (entries #176/#210 amended, no new entries — cp35 closures were internal per Memory #15)
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+PATTERN OUTCOME: cp35 demonstrates that comprehensive single-pass deep-deeps DO find drift that prior recursive passes missed — the asset-coverage map approach (530 files, bucketed by coverage count) surfaced 14 substantive drift bugs cp33/cp34 deep-deeps had missed, plus 2 smokes silently failing for 5+ checkpoints. The recursive-iteration anti-pattern (each pass finding bugs prior passes missed) ends when the methodology shifts from "audit files changed this checkpoint" to "audit every file in the repo by asset-coverage delta against canonical".
+
+---
+
+### CP34 history (sealed 2026-05-19; preserved below for archaeology):
+
 # TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 34 — meta-deep-deep on cp33's deep-deep, yielding 12+ findings closed inline including 1 CRITICAL preexisting from cp31 (DAI post-page never-wired), 1 HIGH preexisting from cp30/cp31 (orderbook page never rendered USDC/DAI network chips), 1 HIGH stale wiring-completeness smoke phrase, 1 MEDIUM cheat-sheet under-rendering of cp31/cp33 assets, 8+ docblock drifts, + 1 new defensive smoke + 3 new wiring-completeness CHECK rows + STRIDE refresh (+3 rows) + 3 LL pattern lessons (LL #41-43).
 
 CP34 SCOPE:

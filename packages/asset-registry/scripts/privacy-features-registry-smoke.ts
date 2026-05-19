@@ -13,11 +13,15 @@
  *    protocol names
  *  - `privacyGuideKey` is a non-empty lowercase string
  *  - Per-ticker invariants: XMR uses 'subaddress', BLURT uses
- *    'account-reuse', BTC/BCH/LTC/USDT use 'hd-derived'
+ *    'account-reuse', BTC/BCH/LTC/DASH/DOGE/USDT/USDC/DAI use
+ *    'hd-derived'
  *  - XMR has no opt-in tech (already private at chain level)
- *  - USDT has no opt-in tech (centralization is its real issue)
- *  - LTC has 'mweb'; BCH has 'cashfusion'; BTC has both
- *    'coinjoin' and 'payjoin'; BLURT has no opt-in tech
+ *  - USDT/USDC/DAI have no opt-in tech (centralization is the
+ *    real issue, not chain-level linkability)
+ *  - BLURT has no opt-in tech; DOGE has no opt-in tech (no
+ *    native privacy upgrade)
+ *  - LTC has 'mweb'; BCH has 'cashfusion'; DASH has
+ *    'privatesend'; BTC has both 'coinjoin' and 'payjoin'
  */
 
 import { ASSETS } from '../src/index';
@@ -105,9 +109,12 @@ const EXPECTED_ADVICE: Readonly<Record<string, string>> = {
 	BTC: 'hd-derived',
 	BLURT: 'account-reuse',
 	USDT: 'hd-derived',
+	USDC: 'hd-derived',
+	DAI: 'hd-derived',
 	BCH: 'hd-derived',
 	LTC: 'hd-derived',
-	DASH: 'hd-derived'
+	DASH: 'hd-derived',
+	DOGE: 'hd-derived'
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_ADVICE)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);
@@ -132,9 +139,12 @@ const EXPECTED_TECH: Readonly<Record<string, readonly string[] | null>> = {
 	BTC: ['coinjoin', 'payjoin'],
 	BLURT: null,
 	USDT: null,
+	USDC: null,
+	DAI: null,
 	BCH: ['cashfusion'],
 	LTC: ['mweb'],
-	DASH: ['privatesend']
+	DASH: ['privatesend'],
+	DOGE: null
 };
 for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	const a = ASSETS.find((x) => x.ticker === ticker);

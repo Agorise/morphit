@@ -117,10 +117,12 @@ interface OrderRow {
 	permlink: string;
 	side: 'buy' | 'sell';
 	asset: AssetTicker;
-	/** Part 121 — sub-network for multi-network assets.  Null
-	 *  for single-network assets (BTC/XMR/BLURT) and for
-	 *  pre-Part-121 rows.  One of 'erc20'|'trc20'|'spl'|'bep20'
-	 *  for USDT. */
+	/** Part 121 / cp30 / cp31 — sub-network for multi-network
+	 *  assets.  Null for single-network assets (BTC/XMR/BLURT/
+	 *  BCH/LTC/DASH/DOGE) and for pre-Part-121 rows.  One of
+	 *  'erc20'|'trc20'|'spl'|'bep20' for USDT; one of 'erc20'|
+	 *  'spl'|'base'|'polygon' for USDC; one of 'erc20'|'polygon'|
+	 *  'base'|'arbitrum' for DAI. */
 	asset_network: string | null;
 	fiat_currency: string;
 	amount_min: string | null; // NUMERIC returns as string from pg

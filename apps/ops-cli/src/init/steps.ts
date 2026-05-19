@@ -1337,8 +1337,8 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
  * `MORPHIT_INDEXER_DISABLED_ASSETS` in morphit.config.env.
  *
  * Category-B = `canBeTraded && !canPayListingFee` from the
- * canonical asset registry.  Currently: USDT, BCH.  Any future
- * trade-only addition (Dash, Litecoin, etc.) will surface here
+ * canonical asset registry.  Currently: USDT, USDC, DAI, BCH, LTC,
+ * DASH, DOGE.  Any future trade-only addition will surface here
  * automatically — the step iterates the registry filtered by
  * the Category-B predicate, so no per-asset wizard code is
  * needed when new tickers ship.
@@ -1355,7 +1355,8 @@ export interface DisabledAssetsResult {
 	/** Uppercase tickers the operator has chosen to disable on
 	 *  this instance.  Empty means accept every trade-only
 	 *  asset (the default).  Renders into
-	 *  `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"` (alphabetized
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DAI,DOGE,USDC,USDT"`
+	 *  (alphabetized
 	 *  for stable env-file output). */
 	readonly disabledTickers: readonly string[];
 }
@@ -1376,9 +1377,11 @@ async function getCategoryBTickers(): Promise<readonly string[]> {
 const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze({
 	USDT: 'Tether stablecoin across 4 networks (ERC-20, TRC-20, SPL, BEP-20).\n    Most-traded stablecoin; centrally issued and freezable by Tether Inc.',
 	USDC: 'USD Coin stablecoin across 4 networks (ERC-20, SPL, Base, Polygon).\n    Issued by Circle; centrally controllable like USDT — Circle can\n    freeze addresses on regulatory request.  No BEP-20 (Binance-Peg\n    wrapper would add a second custodian) and no TRC-20 (Circle does\n    not natively issue on Tron).',
+	DAI: 'Dai stablecoin across 4 EVM networks (ERC-20, Polygon, Base, Arbitrum).\n    Issued by the MakerDAO protocol — no admin-controlled freeze\n    function, so unlike USDT/USDC the Dai contract cannot blacklist\n    addresses.  Honest nuance: partially USDC-backed via the Peg\n    Stability Module, so Circle freeze power transitively affects\n    redemption mechanics.  No SPL/TRC-20/BEP-20 (those variants are\n    bridged/wrapped, not Maker-native).',
 	BCH: 'Bitcoin Cash — single-network mainnet.  Forked from BTC in 2017;\n    bigger blocks, lower fees, transparent like BTC, no central issuer.',
 	LTC: 'Litecoin — single-network mainnet.  Forked from BTC in 2011;\n    faster blocks (2.5 min), Scrypt mining, transparent like BTC, no central issuer.',
-	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.'
+	DASH: 'Dash — single-network mainnet.  Forked from Litecoin in 2014;\n    fast-confirmation (~2.5 min) with optional InstantSend; opt-in\n    PrivateSend mixing via masternodes; transparent at base layer.',
+	DOGE: 'Dogecoin — single-network mainnet.  Fair-launched 2013, merge-mined\n    with Litecoin since 2014 (auxiliary proof-of-work).  Transparent at\n    base layer like BTC; no native privacy upgrade (no PrivateSend\n    equivalent, no confidential transactions, no segwit-enabled mixing).\n    No central issuer.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
