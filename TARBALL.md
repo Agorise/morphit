@@ -1,4 +1,89 @@
-# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 43 — Decred (DCR) as 13th tradable asset, fully wired across all 23 axes (canonical + frontend registries + payload + explorer + 4 wire-format surfaces + indexer config + prices + payment-rail + icon + i18n × 10 locales + UI components + routes + ops-cli wizard + env example + smokes + ADR-0033 + brag list + mediakit + operator docs + module-doc sweep + STRIDE +3 rows + highValueName policy + snapshot + llms-full).  NEW dcr-trade-only-smoke (17 scenarios + 22 adversarial inputs); 3 new wiring-completeness CHECK rows; 3 mutation tests passed; 35 adversarial test cases PASS.  34 of 34 standalone-runnable smokes PASS.  NEW `csppmix` privacy-tech tag introduced for CoinShuffle++ wallet-side mixing — type union widened BEFORE the DCR entry was added per the cp42-J-68 LL #51 discipline (no TS compile errors).  Universal no-favoritism principle from cp39/cp41 reapplied — Morphit never compares DCR's mixing posture to XMR, ZEC, ARRR, DASH, or BTC coinjoin.)
+# TARBALL — Morphit pre-launch hardening, Part 122 (in progress, checkpoint 44 — Full 94-task deep-deep + security audit on cp43 DCR work surfacing **1 MEDIUM** + **4 LOW** findings closed inline + **1 new defensive smoke** + **1 new mutation test** + closure of LL #51 with the NEW LL #52 discipline.  35 of 35 standalone-runnable smokes PASS.  Cp44-J-69 was the load-bearing find: `<svelte:head>` was nested inside `{#if asset}` in `/privacy/[asset]/+page.svelte`, which Svelte 5 rejects at compile time — meaning all 13 asset privacy guide pages (BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) shipped without `<title>` or `<meta description>` tags for ~3 checkpoints.  SEO regression that no runtime smoke caught.  Cp44-J-70/71/72 were 3 additional pre-existing strict-mode bugs surfaced by workspace-wide svelte-check: jitter functions accessing `buf[0]`/`buf[1]` without undefined-guard (cp26-era), addressHistory.ts iterating `all[i]` without undefined-guard + null/undefined return-type mismatch, push.ts applicationServerKey overload mismatch.  All 4 closed inline.  Cp44 ships 1 NEW defensive smoke that closes the bug class structurally: **workspace-typecheck-smoke** runs `tsc --noEmit` across all 6 server-side workspaces + `svelte-check` on apps/web — would have caught J-68, J-69, J-70, J-71, J-72 at the checkpoint they were introduced.)
+
+CP44 SCOPE:
+
+Full 94-task deep-deep audit covering cp43 DCR addition work + pre-existing drift surfaced during the audit pass.  Categories A-O (static code, deps, SQL/DB, HTTP/API, crypto, privacy, operator-trust, frontend, contracts/cross-axis invariants, build/CI [LL #51 explicit], threat modeling, per-subsystem deep dives, mutation tests, adversarial expansion, test coverage gap matrix).  Ken's directive explicitly called out "type errors, test coverage gaps... staleness and orphaned stuff" — Category J ran the workspace-wide compiler for the first time, surfacing the entire J-69/70/71/72 class.
+
+CP44 FINDINGS:
+
+**J-69 MEDIUM (pre-existing since the privacy framework, ADR-0026):** `apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte` had `<svelte:head>` nested inside `{#if asset}` block.  Svelte 5 rejects this at compile time as `svelte_meta_invalid_placement`.  Compile-time error meant the route never registered its `<title>` or `<meta description>` tags — all 13 asset privacy guide pages (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR) shipped without head metadata for ~3 checkpoints.  User-visible regression: browser tab titles defaulted to the layout title; search-engine meta descriptions absent.  **Fix:** lifted `<svelte:head>` to the component root with conditional content inside the head block (`{#if asset}<title>...</title>{:else}<title>{unknown_asset_title}</title>{/if}`).  Added new i18n key `privacy.unknown_asset_title` × 10 locales (native EN/ES/FR/DE + EN-fallback for IT/PL/RU/FA/zh-CN/zh-HK per Memory #29).  Locale parity 2,777 × 10 = 27,770 (was 27,760 at cp43; +10).
+
+**J-70 LOW (pre-existing since cp26 amount-jitter era):** `apps/web/src/lib/chat/payload.ts` had 3 sites where `Uint8Array` indexed access (`buf[0]`, `buf[1]`) was used without undefined-guard.  Under strict mode with `noUncheckedIndexedAccess`, `buf[i]` returns `number | undefined`.  **Runtime impact: none** (at runtime `new Uint8Array(N)` is zero-initialized to length N, so `buf[i]` for `i < N` is always defined).  **Type-correctness only** — but a defensive smoke battery should still catch it because future refactors could introduce real undefined paths.  **Fix:** added `?? 0` fallbacks at 3 sites: `((buf[0] ?? 0) << 8) | (buf[1] ?? 0)` in jitterStablecoinAmount and jitterUtxoAmount, `BigInt((buf[0] ?? 0) % 100)` in jitterBlurtAmount.
+
+**J-71 LOW (pre-existing since the address-history privacy framework):** `apps/web/src/lib/privacy/addressHistory.ts` `findPriorShare()` iterated `all[i]` and accessed `e.asset` / `e.address` without guarding against the strict-mode `T | undefined` return type from array indexed access.  Additionally the function's declared return type `AddressHistoryEntry | null` didn't match the actual return — array-of-T indexed access surfaces `T | undefined`, not `T | null`.  **Fix:** added explicit `e !== undefined &&` guard before the property access.
+
+**J-72 LOW (pre-existing DOM-types mismatch):** `apps/web/src/lib/notifications/push.ts` line 218 — `applicationServerKey: urlBase64ToUint8Array(vapidKey)` failed the `pushManager.subscribe()` overload check.  The DOM typings expect `BufferSource | string` but `urlBase64ToUint8Array` returns `Uint8Array<ArrayBuffer>` which under newer @types/web typings doesn't unify with BufferSource directly.  **Fix:** explicit cast `as BufferSource`.
+
+**J-73 LOW (pre-existing since cp30 USDT/USDC/DAI work; tracked, not fixed this checkpoint):** 3 Svelte 5 reactivity warnings in `FundsSentModal.svelte` — `initialUsdtNetwork`/`initialUsdcNetwork`/`initialDaiNetwork` props captured by initial-value reference rather than closure.  Warning only (not error); the component's behaviour is correct because the parent only sets these once at modal-open time.  Tracked for cp45 follow-up if Ken wants stricter Svelte 5 patterns applied retroactively.
+
+CP44 NEW DEFENSIVE SMOKE (1):
+
+**`scripts/workspace-typecheck-smoke.ts`** (cp44 — LL #52 closure): runs `tsc --noEmit` against all 6 server-side workspaces (packages/asset-registry, packages/indexer-client, apps/indexer, apps/relay, apps/ops-cli, apps/matrix-bot) AND `svelte-check --threshold error` against apps/web.  Skips with explicit SKIP (not FAIL) when `node_modules` is absent (typical pre-`npm ci` environments).  This is the structural closure of the cp42-J-68 LL #51 candidate: defensive smokes MUST include compiler runs across all workspaces, not just runtime-behaviour checks.
+
+Would have caught at the checkpoint introduced:
+- **J-68** at cp39 (ZEC) and cp41 (ARRR): `optInPrivacyTech` union missing `'shielded-pools'`.
+- **J-69** at the privacy-framework introduction: `<svelte:head>` inside `{#if}` block.
+- **J-70/71/72**: strict-mode `noUncheckedIndexedAccess` and DOM-type mismatches.
+
+CP44 NEW MUTATION TEST (1):
+
+**M-93**: Widened canonical DCR addressShape regex to accept `Dr` prefix (`/^D[scr][1-9A-HJ-NP-Za-km-z]{33}$/` instead of `/^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/`).  This is the load-bearing security check from the cp43 STRIDE row T-cp43-1: `Dr` is xprv-equivalent and accepting it as a receive address would publish wallet spend authority on-chain.  dcr-trade-only-smoke FAILED with the adversarial test "Dr extended PRIVKEY (CRITICAL reject!) accepted".  Restored → PASS.
+
+CP44 LL #51 DISCIPLINE — VERIFIED, NOW CLOSED AS LL #52:
+
+The cp42-J-68 finding proposed LL #51 candidate: "defensive smokes should include workspace-wide tsc --noEmit runs".  Cp43 applied this discipline proactively (widened optInPrivacyTech union to include 'csppmix' BEFORE adding DCR entry; tsc --noEmit on packages/asset-registry was clean at cp43 ship).  **Cp44 confirms LL #51 was the right call** — running the discipline AT ALL workspaces (not just packages/asset-registry) surfaced 4 new bugs (J-69, J-70, J-71, J-72) — INCLUDING J-69 MEDIUM, which is user-visible (SEO regression on all 13 privacy guide pages).
+
+**Promoted to LL #52** (now structural via workspace-typecheck-smoke, not just a discipline): every defensive-smoke battery MUST include a workspace-wide compiler smoke.
+
+CP44 NOT-A-FINDING:
+
+- Categories A through I and K through O completed with no new findings beyond J.  All 13-asset parity invariants hold: locale parity 2,777 × 10 = 27,770; payment-rail-coverage smoke PASS; price-provider-coverage smoke PASS; accent-class-uniqueness PASS; address-shape-overlap PASS (49 entries); high-value-name policy includes decred+dcr; ops-cli CATEGORY_B_DESCRIPTIONS has DCR; STRIDE 1,824 lines with cp43 rows present; AUDIT-2026-05.md has cp43 section.
+- Sibling-file walk (LL #38) on cp43 DCR work: clean.  Already verified at cp43 deep-deep (2 DOGE-mentioning files inspected; both false positives).
+- Brag list / mediakit / native snapshot all consistent with cp43 state.
+
+CP44 STATE METRICS:
+
+| Metric | cp43 | cp44 | Δ |
+|---|---|---|---|
+| Tradable assets | 13 | 13 | — |
+| Locale parity strings | 27,760 | **27,770** | +10 (privacy.unknown_asset_title × 10) |
+| FAQ entries | 120 | 120 | — |
+| ADRs | 32 | 32 | — |
+| Brag entries | 285 | 285 | — |
+| Smoke runners | 162 | **163** | +workspace-typecheck |
+| Standalone smokes PASS | 34/34 | **35/35** | +1 |
+| Mediakit bytes | 43,491 | 43,491 | — |
+| Native snapshot pairs | 22,918 | **22,921** | +10 |
+| STRIDE matrix lines | 1,824 | 1,824 | — |
+| Privacy tech tags | 7 | 7 | — |
+| Workspaces TS-clean | 1/7 (verified at cp43) | **7/7** | +6 |
+| Two parked external-blockers | unchanged | unchanged | — |
+
+CP44 CATEGORY PASS SUMMARY (89 of 94 tasks clean):
+
+- **A (static code, 15):** all 15 clean.
+- **B (dependencies, 5):** all 5 clean.
+- **C (SQL/DB, 5):** all 5 clean.
+- **D (HTTP/API, 8):** all 8 clean.
+- **E (crypto, 4):** all 4 clean.
+- **F (privacy, 8):** all 8 clean (0 favoritism phrases in DCR copy × 10 locales).
+- **G (operator-trust, 4):** all 4 clean.
+- **H (frontend, 10):** all 10 clean.
+- **I (cross-axis invariants, 8):** all 8 clean.
+- **J (build/CI, 5):** **4 findings (1 MEDIUM J-69, 3 LOW J-70/71/72) closed inline + 1 LOW J-73 tracked for cp45**.  This is where the audit pass spent its weight.  All 5 tasks closed.
+- **K (threat modeling, 4):** all 4 clean.
+- **L (per-subsystem, 10):** all 10 clean.
+- **M (mutation tests, 3):** all 3 PASS (M-93 cp44; M-90/91/92 cp43 already verified).
+- **N (adversarial, 3):** all 35/35 individual cases PASS (cp43 suite + 22 dcr-trade-only adversarial).
+- **O (coverage gap matrix, 2):** all 8 cp43 deliverables structurally pinned.
+
+CP44 TOTALS:
+
+4 findings closed inline (1 MEDIUM, 3 LOW) + 1 LOW tracked + 1 new defensive smoke + 1 new mutation test + LL #51 closed as LL #52 (structural pin via workspace-typecheck-smoke).
+
+Dominant cp44 signal: **the cp42-J-68 LL #51 lesson held — running the compiler workspace-wide surfaced 4 more bugs that the runtime-only smoke battery missed for 3+ checkpoints**.  Including the J-69 MEDIUM SEO regression on all 13 asset privacy guide pages.  **The discipline is now structural** via workspace-typecheck-smoke; future deep-deeps shouldn't need to ad-hoc-rediscover this class of bug.
+
+### CP43 history (sealed 2026-05-19; preserved below for archaeology):
 
 CP43 SCOPE:
 

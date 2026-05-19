@@ -44,15 +44,31 @@
 	const techs = $derived(asset?.privacyFeatures.optInPrivacyTech ?? null);
 </script>
 
-{#if asset}
-	<svelte:head>
+<!--
+	cp44-J-69 fix: <svelte:head> must NOT live inside any block; Svelte 5
+	rejects it as svelte_meta_invalid_placement at compile time.  Pre-cp44
+	this was inside the {#if asset} block, which meant the privacy guides
+	for BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR all
+	shipped without <title> or <meta description> for that route — SEO
+	regression for all 13 asset privacy pages.  Now lifted to the
+	component root with conditional content inside the head block.  When
+	`asset` is null (unknown asset slug, rare) the {#if asset} below the
+	head renders the unknown-asset message in the body; the head still
+	emits a sane default title.
+-->
+<svelte:head>
+	{#if asset}
 		<title>{$_('privacy.page_title', { values: { asset: asset.ticker } })}</title>
 		<meta
 			name="description"
 			content={$_(`privacy.guides.${guideKey}.meta_description`) as string}
 		/>
-	</svelte:head>
+	{:else}
+		<title>{$_('privacy.unknown_asset_title')}</title>
+	{/if}
+</svelte:head>
 
+{#if asset}
 	<article class="mx-auto max-w-3xl px-4 py-8">
 		<nav class="mb-4 text-sm">
 			<a href={`/${page.params.lang ?? 'en'}/privacy`} class="text-morphit-emerald hover:underline">

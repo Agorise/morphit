@@ -3833,6 +3833,7 @@
 				"meta_description": "Privacy practices for Decred trades on Morphit: hybrid PoW/PoS chain, on-chain governance, opt-in CoinShuffle++ wallet mixing, and fresh-address hygiene.",
 				"caveats": "Decred is transparent at the base layer; mixing is opt-in and wallet-side.\n\n- **Share fresh addresses per trade.**  Using the same `Ds` or `Dc` address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade (Decred wallets derive these from your HD seed).\n- **Use CSPP mixing if you want transaction-level privacy.**  In dcrwallet enable the \"Mix Account\" option; deposits flow through CoinShuffle++ rounds with other participants before becoming spendable from your mixed account.  Mixing rounds happen approximately every 20 minutes on mainnet.\n- **Wallet compatibility.**  The official wallets are dcrwallet (CLI/headless), Decrediton (GUI), and Cake Wallet (mobile, DCR mode).  Some other wallets support DCR send/receive but not CSPP mixing.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Politeia treasury proposals are public.**  Decred's on-chain governance system shows every proposal, vote, and discussion publicly.  This isn't a Morphit-trading concern, but worth knowing if you participate in DCR governance."
 			}
-		}
+		},
+		"unknown_asset_title": "Unknown asset · Morphit privacy guides"
 	}
 }
