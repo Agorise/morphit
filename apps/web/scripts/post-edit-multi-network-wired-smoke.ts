@@ -24,7 +24,7 @@
  * required picker import + mount + payload-field shape. The
  * smoke is text-based; no transpile, no runtime.
  *
- * Adding a new multi-network asset is then a 3-step ratchet:
+ * Adding a new multi-network asset is then a 3-step gate:
  *
  *   1. Add the asset to ASSET_TICKERS in asset-registry.
  *   2. Add MULTI_NETWORK_ASSETS entry below.

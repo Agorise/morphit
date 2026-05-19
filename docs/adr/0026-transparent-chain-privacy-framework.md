@@ -216,8 +216,8 @@ both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
 ## Subsequent additions (CP35 status update — 2026-05-19)
 
 The per-asset table in §2 was current at cp26 ship and listed
-the seven assets supported then (XMR/BTC/BLURT/USDT/BCH/LTC plus
-the framework's own data shape).  Subsequent checkpoints added
+the six trade assets supported then (XMR, BTC, BLURT, USDT, BCH,
+LTC).  Subsequent checkpoints added
 more assets that plug into this framework without changing the
 framework itself; for reader convenience the current full table
 is:
