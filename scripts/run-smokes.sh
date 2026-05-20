@@ -125,6 +125,8 @@ SMOKES=(
 	"apps/web:non-zod-env-example-consumer-parity-smoke"
 	"apps/web:bunkerweb-cidr-cross-reference-smoke"
 	"apps/web:cross-document-value-invariants-smoke"
+	"apps/web:operator-doc-section-length-smoke"
+	"apps/web:ansible-idempotency-discipline-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"

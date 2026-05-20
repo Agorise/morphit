@@ -18,18 +18,23 @@
  * and a list of CONSUMER files (each with its own regex/group).
  * Drift in any consumer fires the smoke.
  *
- * Registered invariants (cp67):
- *   1. postgres_db_name           (init.sql → env.examples → ansible/group_vars)
- *   2. postgres_user_name         (init.sql → env.examples → ansible/group_vars)
- *   3. postgres_port              (ansible/group_vars → env.examples DATABASE_URL)
- *   4. treasury_fee_account       (indexer config default → operator-facing docs
- *                                  that name the default by string)
- *   5. indexer_bind_port          (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_2)
- *   6. relay_bind_port            (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_1)
- *   7. bunkerweb_net_name         (canonical compose → ansible role template +
- *                                  ansible verification task)
- *   8. relay_listen_port_default  (relay config Zod default → env.example + nginx)
- *   9. indexer_listen_port_default (indexer config Zod default → env.example + nginx)
+ * Registered invariants (cp69):
+ *   1. postgres_db_name             (init.sql → env.examples → ansible/group_vars)
+ *   2. postgres_user_name           (init.sql → env.examples → ansible/group_vars)
+ *   3. postgres_port                (ansible/group_vars → env.examples DATABASE_URL)
+ *   4. treasury_fee_account         (indexer config default → operator-facing docs
+ *                                    that name the default by string)
+ *   5. indexer_bind_port            (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_2)
+ *   6. relay_bind_port              (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_1)
+ *   7. bunkerweb_net_name           (canonical compose → ansible role template +
+ *                                    ansible verification task)
+ *   8. relay_listen_port_default    (relay config Zod default → env.example + nginx)
+ *   9. indexer_listen_port_default  (indexer config Zod default → env.example + nginx)
+ *  10. matrix_bot_healthcheck_port  (matrix-bot config Zod default → env.example +
+ *                                    ansible role env template)  [cp69]
+ *  11. bunkerweb_cidr               (canonical compose subnet → ansible default
+ *                                    trusted_proxy_ips)  [cp69; slim cousin of
+ *                                    cp61-O14, which also checks docs]
  *
  * NOTE: 5-6 are the BunkerWeb-fronted bind ports (4000/4001); 8-9 are the
  * BARE-METAL nginx-fronted listen ports (8080/8081).  Both are deploy-mode
@@ -37,6 +42,16 @@
  * default depending on whether they `docker compose up` from ops/bunkerweb/
  * or `apt install nginx` from ops/nginx/.  Each set MUST be internally
  * consistent.
+ *
+ * NOTE on bunkerweb_cidr (#11): cp61-O14 (bunkerweb-cidr-cross-reference-smoke)
+ * has richer doc-aware behavior — it checks PRE-LAUNCH-CHECKLIST, OPERATIONS,
+ * RUN-A-MORPHIT-NODE, BRAG-LIST, and ansible role templates for the canonical
+ * CIDR with proximity-to-keyword scoping.  We add a slim invariant here to
+ * give the registry pattern uniform coverage; if drift happens, BOTH defenses
+ * fire — cp61-O14 with the rich diagnostic, cp66-O16 with the registry-shaped
+ * one.  Keeping both is intentional: cp61-O14 is doc-aware (catches drift in
+ * operator-facing prose); cp66-O16 is config-aware (catches drift in ansible
+ * default).  Different failure modes, complementary signals.
  *
  * Bug class this catches at pre-launch: an operator running a fresh
  * `ops-cli init` followed by importing values from operator docs OR
@@ -326,6 +341,56 @@ const INVARIANTS: Invariant[] = [
 				file: 'ops/nginx/indexer.conf',
 				regex: /server\s+127\.0\.0\.1:(\d+);/,
 				context: 'nginx indexer.conf upstream server port',
+			},
+		],
+	},
+	{
+		name: 'matrix_bot_healthcheck_port',
+		description:
+			"matrix-bot systemd healthcheck loopback port — defined by apps/matrix-bot/src/config.ts Zod default; consumed by env.example default-value comments + ansible role env template. If they drift, the operator's healthcheck wrapper hits the wrong port → false-down alarms even though the bot is fine. Loopback-only; no security surface, but operator trust depends on the healthcheck being accurate.",
+		source: {
+			file: 'apps/matrix-bot/src/config.ts',
+			regex: /MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT:\s*z\.coerce[\s\S]*?\.default\((\d+)\)/,
+			context: 'matrix-bot config Zod default',
+		},
+		consumers: [
+			{
+				// Env example references the default in TWO places: the inline
+				// "Default: 9876." prose comment AND the commented-out
+				// `# MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT=9876` line. The
+				// commented line is the canonical operator-facing value, so
+				// that's what we match.
+				file: 'ops/env/matrix-bot.env.example',
+				regex: /^#\s*MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT=(\d+)/m,
+				context: 'matrix-bot env.example default value',
+			},
+			{
+				// Ansible role template references the variable but its value
+				// flows through `matrix_bot_healthcheck_port` in group_vars
+				// (which is unset → defaults to whatever the Zod schema picks).
+				// We assert the inline comment matches, since that's what an
+				// operator reading the template sees as the "default the bot
+				// uses today".
+				file: 'ops/ansible/roles/matrix_bot/templates/matrix-bot.env.j2',
+				regex: /Override the default healthcheck loopback port \((\d+)\)/,
+				context: 'ansible matrix-bot role env template comment',
+			},
+		],
+	},
+	{
+		name: 'bunkerweb_cidr',
+		description:
+			"BunkerWeb Docker network CIDR — defined by canonical compose's `subnet:` line; consumed by ansible group_vars's `morphit_relay_trusted_proxy_ips` (operator's default trusted-proxy chain). This is the SLIM cousin of cp61-O14 (bunkerweb-cidr-cross-reference-smoke), which ALSO checks docs + READMEs + PRE-LAUNCH-CHECKLIST. We keep both: cp61-O14 has doc-aware behavior with proximity-to-keyword scoping; cp66-O16 catches the same canonical→ansible-default mismatch with a registry-shaped diagnostic. If both fire on the same drift, the operator gets two helpful signals; if only the slim version fires (because doc references were sparse), cp61-O14's doc check still surfaces in cp66-O16.",
+		source: {
+			file: 'ops/bunkerweb/docker-compose.yml',
+			regex: /subnet:\s*([\d./]+)/,
+			context: 'canonical compose subnet',
+		},
+		consumers: [
+			{
+				file: 'ops/ansible/group_vars/all.yml',
+				regex: /^morphit_relay_trusted_proxy_ips:\s*"([^"]+)"/m,
+				context: 'ansible default trusted_proxy_ips',
 			},
 		],
 	},
