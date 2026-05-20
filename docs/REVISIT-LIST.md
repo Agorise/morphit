@@ -1,5 +1,69 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp67 — 2026-05-20.  **18 STRUCTURAL DEFENSES · BATTERY 3892/0 TRIPLE-PULSE STABLE · cp66-O16 REGISTRY NOW HAS 9 INVARIANTS.**
+
+## Memory facts re-confirmed at top of cp67
+
+- **Memory #5 SAME-WORK-UNIT**: when adding invariants to cp66-O16, the smoke's header docstring MUST be updated to list them. Otherwise future maintainers think the registry has 5 when it has 8. Same-turn discipline.
+- **Memory: registry-driven structural defenses are "data, not code"** — cp67 validates this. Three new invariants shipped with zero runner-logic changes.
+
+## STRUCTURAL DEFENSES — 18 OPERATIONAL (unchanged; O-16 widened in-place)
+
+| # | Defense | Status |
+|---|---|---|
+| 1 | cp44 LL #52 workspace-typecheck | 24th consec at cp67 |
+| 2-7 | cp46-cp51 per-asset coverage smokes | held |
+| 8 | cp52-O6 ansible-env-template-required-vars | held |
+| 9 | cp53-O7 operator-doc-per-asset-coverage | held |
+| 10 | cp54-O8 what-is-asset-faq-native-locale-floor | held |
+| 11 | cp55-O9 per-asset-key-family-native-locale-floor | held |
+| 12 | cp56-O10 operator-doc-per-asset-config-example-coverage | held |
+| 13 | cp57-O11 env-example-schema-parity | held |
+| 14 | cp60-O12 brag-list-kiss-budget | held |
+| 15 | cp60-O13 faq-keys-themed-section | held |
+| 16 | cp61-O14 bunkerweb-cidr-cross-reference | held |
+| 17 | cp61-O15 non-zod-env-example-consumer-parity | held |
+| 18 | cp66-O16 cross-document-value-invariants | **WIDENED cp67** (5 → 8 invariants) |
+
+## BATTERY STATE — clean and stable
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3892 | up from 3886 (cp66); +6 from 3 new invariants × 2 consumers |
+| Runners FAILED | 0 | clean since cp65 |
+| Workspaces TS-clean (LL #52) | 7/7 | 24th consecutive |
+| Triple-pulse stable | ✓ | 3892/0 × 3 |
+| O-16 registry size | 9 invariants | up from 6 (cp66) |
+
+## CP67 LESSONS
+
+### Lesson #1 — Registry pattern scales as promised
+cp66 designed cp66-O16 to take new invariants as data with 6 entries. cp67 added 3 more (→ 9 total) with zero runner-logic changes — just data entries in the INVARIANTS array. This validates the brag claim from cp66 in the NEXT checkpoint, not just in the design.
+
+### Lesson #2 — Different deploy modes can share invariant SHAPES but with different VALUES
+BunkerWeb-fronted: 4000/4001 (`indexer_bind_port`, `relay_bind_port`). Bare-metal nginx: 8080/8081 (`indexer_listen_port_default`, `relay_listen_port_default`). Each set has its own source-of-truth + consumers and is internally consistent. The registry handles N independent invariants cleanly.
+
+### Lesson #3 — Header docstring is part of the smoke's contract
+Adding registry entries without updating the smoke's "Registered invariants (cpNN)" header list is a Memory #5 violation. The header is what a maintainer reads first; if it says "5 invariants" but the array has 8, they're misled. Update together.
+
+## CP68+ predicted hunting ground
+
+- **More invariants for the cp66-O16 registry** — relay healthcheck port, matrix-bot listener port, possible absorption of cp61-O14 (CIDR) and cp61-O15 (env-example-consumer parity) into the registry pattern. Each adds 1-2 minutes of work.
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+- **Forgejo runner standup** to unblock v1.0.0-beta.1 release ceremony
+
+## Two parked external blockers (unchanged through cp42→cp67)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp66 — 2026-05-20.  **18 STRUCTURAL DEFENSES OPERATIONAL · BATTERY 3886/0 TRIPLE-PULSE STABLE.**
 
 ## Memory facts re-confirmed at top of cp66

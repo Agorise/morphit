@@ -1,5 +1,88 @@
 # Tarball history
 
+## cp67 — cp66-O16 registry extended to 9 invariants (cp66 had 6: not 5) (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp67-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · **293 brag entries** (unchanged; #232 widened in-place) · locale parity 2,825 × 10 = 28,250 · **3892 scenarios pass / 0 runners failed** (was 3886/0 at cp66, +6 from 3 new invariants × 2 consumers) · **7/7 workspaces TS-clean (LL #52 24th consecutive)** · **18 structural defenses operational** (unchanged; cp66-O16 widened in place) · TRIPLE-PULSE STABLE.
+
+**cp67 origin:** cp66 shipped cp66-O16 with 5 invariants. The registry was designed so new invariants slot in as data. cp67 exercises that — adds 3 more to reach 8 total, validating the registry-scaling claim while raising mutation coverage.
+
+### Three new invariants added
+
+**6. `bunkerweb_net_name`** (`bunkerweb_net`)
+- Source of truth: `ops/bunkerweb/docker-compose.yml` `networks: bunkerweb_net: name: bunkerweb_net`
+- Consumers:
+  - `ops/ansible/roles/bunkerweb/templates/docker-compose.yml.j2` — must define the SAME network with the SAME name
+  - `ops/ansible/roles/bunkerweb/tasks/main.yml` — `docker network inspect bunkerweb_net` verification step
+- Drift class: rename the network in the canonical compose, forget the ansible task → `docker network inspect` fails with "no such network", deploy aborts mid-playbook.
+
+**7. `relay_listen_port_default`** (`8080`)
+- Source of truth: `apps/relay/src/config/index.ts` `MORPHIT_RELAY_LISTEN_PORT: z.coerce.number().int().positive().default(8080)`
+- Consumers:
+  - `ops/env/relay.env.example` `MORPHIT_RELAY_LISTEN_PORT=8080`
+  - `ops/nginx/relay.conf` `proxy_pass http://127.0.0.1:8080;`
+- Drift class: change the Zod default but leave the env example or nginx config → bare-metal nginx deploy 502s the relay.
+- **NOTE**: distinct from `relay_bind_port` (4001) which is the BunkerWeb-fronted port. Bare-metal and BunkerWeb deploys use different defaults; each set must be internally consistent.
+
+**8. `indexer_listen_port_default`** (`8081`)
+- Source of truth: `apps/indexer/src/config/index.ts` `MORPHIT_INDEXER_LISTEN_PORT: ... .default(8081)`
+- Consumers:
+  - `ops/env/indexer.env.example` `MORPHIT_INDEXER_LISTEN_PORT=8081`
+  - `ops/nginx/indexer.conf` `server 127.0.0.1:8081;`
+- Drift class: symmetric to relay_listen_port_default. Distinct from `indexer_bind_port` (4000) for the BunkerWeb fronted deploy.
+
+### Mutation tests (3 new)
+
+- **M-134** drift bunkerweb_net name in ansible role template → fires "consumer ops/ansible/roles/bunkerweb/templates/docker-compose.yml.j2 matches canonical".
+- **M-135** drift relay listen port in env example → fires "consumer ops/env/relay.env.example matches canonical".
+- **M-136** drift indexer nginx upstream port → fires "consumer ops/nginx/indexer.conf matches canonical".
+
+All three restore cleanly to 18 passed / 0 failed.
+
+### Why this checkpoint matters
+
+cp66-O16 was a NEW DEFENSE. cp67 validates that the **registry pattern actually scales** — adding three new invariants required:
+- ~80 lines of data (the new registry entries)
+- 3 mutation tests
+- Zero runner-logic changes
+- Zero refactoring
+
+This is the "adding new invariants is data, not code" claim from cp66's brag entry, demonstrated in the next checkpoint after the design ships. If the next 3 invariants had each required runner changes, the brag claim would have been over-stated. They didn't, so it isn't.
+
+### Final cp67 state metrics
+
+- 16 tradable assets / 35 ADRs / 293 brag entries (unchanged)
+- **3892 scenarios pass / 0 runners failed** (was 3886/0)
+- 7/7 workspaces TS-clean (LL #52 24th consecutive)
+- 18 structural defenses operational (unchanged; cp66-O16 widened in-place)
+- 3 new invariants added to cp66-O16's registry: bunkerweb_net_name, relay_listen_port_default, indexer_listen_port_default
+- 3 new mutation tests (M-134, M-135, M-136)
+- brag entry #232 rewritten in-place ("5 ship" → "8 ship"), still within K.I.S.S. budget
+- Mediakit regen (93,853 bytes)
+- TRIPLE-PULSE STABLE (3892/0 × 3)
+
+### Lessons
+
+1. **Registry-pattern scaling validated.** cp66 designed cp66-O16 to take new invariants as data. cp67's 3 additions required zero runner-logic changes. The pattern delivered on its promise.
+2. **Different deploy modes can share invariant SHAPES but with different VALUES.** BunkerWeb-fronted deploys use 4000/4001; bare-metal nginx-fronted deploys use 8080/8081. Each set needs internal consistency, captured by separate invariants (5,6 vs 8,9). The registry handles this cleanly; one invariant per source-of-truth, not one per deploy mode.
+3. **Update the smoke's header docstring when adding invariants.** The header lists registered invariants explicitly — without the update, future maintainers reading the smoke see "5 invariants" but the code has 8. Documented + code MUST move together (Memory #5 SAME-WORK-UNIT).
+
+### Campaign-arc summary (cp61 → cp67)
+
+| Checkpoint | Battery | Defenses | Note |
+|---|---|---|---|
+| cp61 baseline (curated subset) | 52/52 hid 15 | 17 | Loop ran 52 of 183 |
+| cp62 honest accounting | 3611 / 8 chronic | 17 | 7 format + 1 path fix |
+| cp63 \$lib unblock | 3848 / 2 chronic | 17 | Unified tsconfig + 3 real bugs |
+| cp64 chronic-scope reduction | 3870 / 1 (130 findings) | 17 | Sally L13 + Memory #29 split + 99 invariants |
+| cp65 chronic closure | 3874 / 0 | 17 | 130 native translations to es/fr/de |
+| cp66 new defense | 3886 / 0 | **18** | Cross-document value-invariants registry, 6 invariants |
+| **cp67 registry scaling** | **3892 / 0** | **18** | +3 invariants (8 total), zero runner changes |
+
+---
+
+# Tarball history
+
 ## cp66 — NEW DEFENSE O-16: cross-document value-invariants registry (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp66-FULL-STATE.tar.gz`
