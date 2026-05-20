@@ -1,5 +1,60 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp56 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp56
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp56 used the fee_method invariant as the explanation for why `post_order.fee_method.fee_address_<heading|amount>_<asset>` is intentionally a 2-member family (BTC/XMR).
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** confirmed clean at cp56 entry (cp54+cp55 closed all known drift).
+- **Memory #13 VERIFY:** carried into cp56. Investigated each partial-coverage family by cross-checking actual code consumers (home page only renders 3 hero chips; not iterating asset registry) instead of assuming drift.
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 12 OPERATIONAL (was 11 at cp55)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **13th consecutive** checkpoint clean
+2. **cp46** asset-payload-precision-parity — 11th consecutive
+3. **cp48-O1** stand-in meta-assertion — 9th consecutive
+4. **cp49-O2** handler-test-stand-in — 8th consecutive
+5. **cp50-O3** per-asset-rss-feed-parity — 7th consecutive
+6. **cp51-O4** category-b-descriptions-parity — 6th consecutive
+7. **cp51-O5** faq-per-tradable-asset-parity — 6th consecutive
+8. **cp52-O6** ansible-env-template-required-vars — 5th consecutive
+9. **cp53-O7** operator-doc-per-asset-coverage ("totally absent") — 4th consecutive
+10. **cp54-O8** what-is-asset-faq-native-locale-floor — 3rd consecutive
+11. **cp55-O9** per-asset-key-family-native-locale-floor (registry) — 2nd consecutive
+12. **cp56-O10** operator-doc-per-asset-config-example-coverage ("shallow mention") — NEW at cp56
+
+## CP56 LESSONS
+
+### Lesson #1 — Partial-coverage families are not always drift
+The cp54 lesson ("policy at addition time invisible to snapshot floors") doesn't generalize to ALL partial-coverage families. Sometimes a 3-asset family really is a 3-asset family by design (home.asset_subtitles renders 3 hero chips; not iterating across registry). Memory #13 "verify in code/repo" before claiming drift caught this — partial-coverage surveys MUST cross-check the consumer code to distinguish intentional from drift.
+
+### Lesson #2 — Drift floors layer
+cp53-O7 floor: "ticker totally absent" → catches doc that never mentions an asset.
+cp56-O10 floor: "ticker not in config examples" → catches doc that mentions an asset but only as headline.
+
+Both floors needed. cp53-O7 by itself can't catch shallow mentions (because the asset IS present, just not deeply). cp56-O10 by itself doesn't catch totally-absent (because the regex won't find ANY examples). Layered = both floors.
+
+### Lesson #3 — Regex test against actual markdown context first
+First version of cp56-O10 had a regex bug that didn't match markdown-inline-code-fenced examples (`` `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"` ``). The smoke reported "0 examples scanned" on PRE-LAUNCH-CHECKLIST, which has 8 examples. Fixed by relaxing the lookahead constraint to also accept backtick as terminator. Lesson: when writing a regex against documentation content, test it against the ACTUAL markdown formatting before trusting the matches.
+
+## CP57+ predicted hunting ground
+
+- **Ansible env-var full surface expansion** — 71 OPTIONAL canonical indexer env vars + ~17 OPTIONAL relay env vars not surfaced in group_vars/all.yml. Surface as group_vars with sensible defaults so operators can override any setting via one file.
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog; currently EN-fallback per Memory #29).
+- **Other per-asset key families** that emerge in cp57+ — add to cp55-O9 FAMILIES registry.
+- **Ansible playbook idempotency claims** — README claims idempotency; verify by running playbook twice and checking for unintended changes (needs hardware test).
+- **Fresh-VM Ansible dry-run** — still parked as hardware blocker.
+
+## Two parked external blockers (unchanged through cp42→cp56)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp55 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp55

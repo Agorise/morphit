@@ -1,5 +1,56 @@
 # Tarball history
 
+## cp56 — Continuation hunt: deeper per-asset operator-doc coverage + cp56-O10 STRUCTURAL DEFENSE; 3 cleanliness verifications (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp56-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **47/47** standalone smokes PASS (+1 cp56-O10) · **7/7 workspaces TS-clean (LL #52 13th consecutive)** · **12 structural defenses operational** (was 11 at cp55).
+
+**cp56 origin:** continuation hunt working through cp55's predicted hunting ground.
+
+### Walked + confirmed clean
+
+- **home.asset_subtitles.<asset>** — 3-member partial-coverage family (BLURT/BTC/XMR). Cross-checked code at `apps/web/src/routes/[lang]/+page.svelte:193,202,211` — the home page hero renders EXACTLY 3 asset chips (Category-A fee-payable triad), not iterating any asset registry. **Intentional 3-asset hero design, NOT drift.**
+- **chat.funds_sent.txid_invalid_<asset>** — 3-member family (DAI/USDC/USDT). Multi-network EVM asset txid-format errors. Intentional scoping; non-multi-network assets share a generic txid_invalid path.
+- **post_order.fee_method.fee_address_<heading|amount>_<asset>** — 2-member families (BTC/XMR). Memory #23 fee_method enum frozen at {blurt,btc,xmr,waived_first_buy}; BLURT goes through chain-native transfer with no fee-address UI. Only BTC/XMR need the explicit fee-address surfaces. **Intentional per fee enum freeze.**
+- **ansible-lint in CI** — VERIFIED already present in `.forgejo/workflows/ci.yml:63-87` with `--offline --strict` mode + `ansible-galaxy collection install -r requirements.yml` for required collections (community.general, community.postgresql, community.docker). Not a cp56 add; ✓ verified the cp55-predicted "ansible-lint in CI" backlog item was actually already shipped.
+
+### NEW STRUCTURAL DEFENSE cp56-O10
+
+`operator-doc-per-asset-config-example-coverage-smoke` (LL #60): deepens cp53-O7 from "ticker totally absent" to "ticker absent from CONFIG EXAMPLES". Catches the shallow-mention failure mode where an asset is mentioned once in a headline but skipped in the per-asset config example — the exact pattern cp53 surfaced manually in OPERATIONS.md ("Refuse everything that isn't BLURT+XMR+BTC" claim with 7-of-13-ticker value).
+
+**Requirement enforced**: each Category-B tradable asset MUST appear at least once inside a `MORPHIT_INDEXER_DISABLED_ASSETS=...` env example in EACH of the 3 scoped operator docs (PRE-LAUNCH-CHECKLIST, OPERATIONS, RUN-A-MORPHIT-NODE).
+
+**Regex robustness**: handles three markdown contexts the regex spans: bare code block, markdown inline-code-fenced (\`...\`), and unquoted value forms. First version of the regex had a `lookahead requires whitespace` bug that mis-counted the markdown-inline-code form as 0 examples; fixed inline before commit.
+
+**M-124 verified**: stripping every XRP mention from OPERATIONS.md's DISABLED_ASSETS examples fires the smoke with "1 tickers absent from every DISABLED_ASSETS config example: [XRP].  32 examples scanned."
+
+**Layered with cp53-O7:**
+- cp53-O7 catches "totally absent" (asset never mentioned in doc)
+- cp56-O10 catches "shallow mention" (mentioned but not in DISABLED_ASSETS example)
+
+Together they pin both drift floors.
+
+**Recurring class scope progression (10 defenses across 9 checkpoints):**
+1. cp48-O1 standalone smoke scripts
+2. cp49-O2 vitest unit tests
+3. cp50-O3 HTTP route handler regex
+4. cp51-O4 ops-cli per-ticker tables
+5. cp51-O5 per-asset i18n FAQ key coverage
+6. cp52-O6 Ansible env-template required-vars
+7. cp53-O7 operator doc per-asset coverage ("totally absent")
+8. cp54-O8 what_is_<asset> FAQ native-locale floor
+9. cp55-O9 multi-family per-asset native-locale floor (registry)
+10. **cp56-O10 operator doc per-asset CONFIG EXAMPLE coverage — NEW**
+
+### Deferred to cp57+
+
+- **Ansible playbook full env-var surface** — survey found 71 OPTIONAL canonical indexer env vars not surfaced in Ansible group_vars/all.yml. Operators wanting to tune these have to manually edit the .env on the host post-deploy. cp57+ work item: surface them as group_vars with sensible defaults from the Zod schema. 71 entries × ~3 lines each = substantial scope; defer for now.
+- it/pl/ru/fa/zh-CN/zh-HK community native translations (long-term backlog per Memory #29 policy).
+
+---
+
+# Tarball history
+
 ## cp55 — Memory #29 closure generalized across multi-family per-asset i18n surface + cp55-O9 STRUCTURAL DEFENSE (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp55-FULL-STATE.tar.gz`
