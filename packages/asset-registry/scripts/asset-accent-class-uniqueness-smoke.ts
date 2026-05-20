@@ -48,3 +48,4 @@ if (failed > 0) {
 	console.error('\nasset-accent-class-uniqueness smoke FAILED');
 	process.exit(1);
 }
+console.log(`✓ all ${passed} asset-accent-class-uniqueness scenarios passed`);

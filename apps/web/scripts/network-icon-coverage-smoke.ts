@@ -269,3 +269,4 @@ if (failed > 0) {
 	process.exit(1);
 }
 console.log(`  ✓ all ${scenarios.length} scenarios passed`);
+console.log(`✓ all ${scenarios.length} network-icon-coverage scenarios passed`);

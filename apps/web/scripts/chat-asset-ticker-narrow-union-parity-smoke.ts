@@ -153,6 +153,7 @@ if (findings.length === 0) {
 	console.log('  ✓ all narrow unions cover the full canonical 16-asset set');
 	console.log('  ✓ or are documented in NARROW_BY_DESIGN allow-list');
 	console.log(`\n✓ chat-asset-ticker-narrow-union-parity smoke PASSED`);
+	console.log(`✓ all 2 chat-asset-ticker-narrow-union-parity scenarios passed`);
 	process.exit(0);
 }
 

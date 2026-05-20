@@ -79,3 +79,4 @@ if (failed > 0) {
 	console.error('\nprice-provider coverage parity smoke FAILED');
 	process.exit(1);
 }
+console.log(`✓ all ${passed} price-provider-coverage-parity scenarios passed`);
