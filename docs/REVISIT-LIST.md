@@ -1,5 +1,130 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp61 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp61
+
+- **Memory #13 NEVER ASSUME, ALWAYS VERIFY** — applied to consumption mechanism for non-Zod env-examples. Initial assumption was "every var has a colocated consumer file" — verification showed bunkerweb's consumer is the BunkerWeb runtime itself (external), accessed via `env_file:` directive in docker-compose. Different parity model than backup's shell-script-sourcing.
+- **Memory #5 SAME-WORK-UNIT rule** carried into cp61 — meta-docs touched in same commit, full battery + LL #52 + mediakit freshness all green before commit.
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (was 15 at cp60; +2 from two parallel cp61 sessions)
+
+1. **cp44 LL #52** workspace-typecheck — **18th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 16th consecutive
+3. cp48-O1 stand-in meta-assertion — 14th consecutive
+4. cp49-O2 handler-test-stand-in — 13th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 12th consecutive
+6. cp51-O4 category-b-descriptions-parity — 11th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 11th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 10th consecutive
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 9th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 8th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 7th consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 6th consecutive
+13. cp57-O11 env-example-schema-parity (Zod-backed, bidirectional) — 5th consecutive
+14. cp60-O12 brag-list-kiss-budget (K.I.S.S. anti-recurrence) — 2nd consecutive
+15. cp60-O13 faq-keys-themed-section (ordering anti-recurrence) — 2nd consecutive
+16. **cp61-O14 bunkerweb-cidr-cross-reference (value-cross-reference parity-model class, parallel-session) — NEW**
+17. **cp61-O15 non-zod-env-example-consumer-parity (env_file: + shell-sourcing parity-model class, this session) — NEW**
+
+## CP61 LESSONS
+
+### Lesson #0 — Parallel-session reconciliation
+Two cp61 sessions ran concurrently and both produced an `cp61-O14 / LL #64` structural defense. Both passed mutation tests; both are valuable. Reconciliation: the first-committed defense keeps the lower number (cp61-O14 for bunkerweb-CIDR), the second renumbers up (cp61-O15 for non-Zod env-example). Going forward: before claiming a new `O-N` number, `git log --oneline | head` to check the current high-water mark.
+
+
+
+### Lesson #1 — Different services have different parity models
+cp57-O11 worked for Zod-backed services (canonical schema to diff against). For non-Zod services, the parity is at the directive/reference level. One generalized smoke design wouldn't have fit all three mechanisms; cp61-O14 keeps the mechanism per-service in a registry.
+
+### Lesson #2 — Workspace contamination check before commit
+Mid-cp61 a nested `morphit-cp60/` directory appeared inside the cp61 working tree (artifact of how the branch was prepared) and the `forgejo-not-gitea-smoke` correctly flagged "gitea" mentions inside the nested copy. Going forward: check `ls /home/claude/morphit-cp<N>/` for nested checkpoint copies BEFORE running smokes.
+
+### Lesson #3 — Mutation tightness via fired-failure
+M-128's first attempt didn't fire (presence-only check); tightened to EXACT count after the partial-removal mutation didn't fail. Recurring cp60 lesson: "if a mutation doesn't fire, tighten until it fires."
+
+## CP62+ predicted hunting ground
+
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs are MEANT to be detailed, but might have entries that are overstuffed even for that audience
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub in canonical example, but systemd unit's LoadCredential= mechanism is nuanced
+- **OPERATIONS.md vs canonical example invariants** — every var that OPERATIONS.md REQUIRES operators to set must appear in the canonical example with that requirement framing (audit + smoke pattern)
+- **`ops/postgres/init.sql` CHANGE_ME placeholder rotation** — Memory: "standing pre-launch operator action" still open; cp62 could pin a smoke for this
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+
+## Two parked external blockers (unchanged through cp42→cp61)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
+**Last touched:** Part 122 cp61 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp61
+
+- **Memory #5 same-work-unit rule** carried into cp61 — brag list entry #231 updated, mediakit regenerated, OPERATIONS.md §32 updated, all in same commit.
+- **Memory #13 VERIFY** — applied to the bunkerweb CIDR finding. Verified by reading group_vars/all.yml + the bunkerweb role's docker-compose template + the playbook's role inclusion to confirm the bug existed in the DEFAULT deploy path (not just one corner case).
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (was 15 at cp60; +2 from two parallel cp61 sessions)
+
+1. **cp44 LL #52** workspace-typecheck — **18th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 16th consecutive
+3. cp48-O1 stand-in meta-assertion — 14th consecutive
+4. cp49-O2 handler-test-stand-in — 13th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 12th consecutive
+6. cp51-O4 category-b-descriptions-parity — 11th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 11th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 10th consecutive
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 9th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 8th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 7th consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 6th consecutive
+13. cp57-O11 env-example-schema-parity (bidirectional) — 5th consecutive
+14. cp60-O12 brag-list-kiss-budget — 2nd consecutive
+15. cp60-O13 faq-keys-themed-section — 2nd consecutive
+16. **cp61-O14 bunkerweb-cidr-cross-reference — NEW**
+
+## CP61 LESSONS
+
+### Lesson #0 — Parallel-session reconciliation
+Two cp61 sessions ran concurrently and both produced an `cp61-O14 / LL #64` structural defense. Both passed mutation tests; both are valuable. Reconciliation: the first-committed defense keeps the lower number (cp61-O14 for bunkerweb-CIDR), the second renumbers up (cp61-O15 for non-Zod env-example). Going forward: before claiming a new `O-N` number, `git log --oneline | head` to check the current high-water mark.
+
+
+
+### Lesson #1 — Value-cross-reference is a new parity-model class
+cp52-O6 and cp57-O11 both check schema completeness. cp61-O14 checks VALUE agreement across multiple surfaces — a fundamentally different parity model. There are likely other cross-reference invariants in the codebase that should get similar treatment:
+- BLURT/BTC/XMR fee_method enum values (frozen via the cp51 fee_method-enum-frozen-smoke; already protected)
+- The pre-mining recipient address invariant (across release ops, audit catalog, brag list)
+- Postgres init.sql DB name = backup script DB_NAME = Zod schema default
+- Relay/indexer port numbers (across bunkerweb env, Ansible group_vars, systemd unit files)
+
+### Lesson #2 — Hunt for pre-launch bugs in DEFAULT deploy paths
+cp61-D1 was hidden in plain sight: the group_vars default was 172.18.0.0/16 with a "typical compose" comment, and the bunkerweb role used 172.20.0.0/16. Each file looked fine in isolation. The bug only surfaces when you compose them together — the canonical "run ansible-playbook" path. Future audits: walk the DEFAULT user/operator paths end-to-end, not just individual file content.
+
+### Lesson #3 — Cross-reference smokes read SOURCE OF TRUTH dynamically
+cp61-O14 doesn't hardcode `172.20.0.0/16`. It reads the canonical compose's subnet line at runtime and enforces "all 8 surfaces agree with whatever that says." If the canonical changes, all 8 surfaces must change in lockstep. The smoke automatically follows.
+
+## CP62+ predicted hunting ground
+
+- **Postgres init.sql ↔ backup script ↔ Zod schema DB name parity** — different surfaces of the same DB name
+- **Relay/indexer port number cross-reference** — across bunkerweb env, Ansible group_vars, systemd unit files, Zod schema defaults
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs are MEANT to be detailed; might still have entries that are overstuffed
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (needs hardware)
+
+## Two parked external blockers (unchanged through cp42→cp61)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp60 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp60

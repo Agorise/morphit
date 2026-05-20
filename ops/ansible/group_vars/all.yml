@@ -120,9 +120,18 @@ morphit_relay_sequential_window_ms: 86400000
 morphit_relay_sequential_min_prefix: 3
 
 # Trusted-proxy IPs (§32 CRITICAL).  Set to the IP/CIDR that
-# BunkerWeb runs on.  For BunkerWeb co-located in a Docker network
-# on this host, this is the Docker bridge CIDR — typically
-# 172.18.0.0/16 for a user-defined compose network.  Verify with:
+# BunkerWeb runs on.  For the canonical BunkerWeb shipped with
+# the morphit Ansible playbook (roles/bunkerweb/), the Docker
+# network CIDR is PINNED at 172.20.0.0/16 (see
+# roles/bunkerweb/templates/docker-compose.yml.j2:60).  This
+# default matches that pinned CIDR — DO NOT change unless you
+# also change the bunkerweb role's docker-compose subnet, or you
+# will silently break per-IP rate limiting (relay rejects
+# X-Forwarded-For from BunkerWeb because it's on an untrusted
+# CIDR, falls back to peer IP which is the BunkerWeb container's
+# IP, and all users bucket into one rate-limit slot).
+#
+# Verify the live deploy with:
 #   docker network inspect bunkerweb_net --format \
 #     '{{ "{{" }}range .IPAM.Config{{ "}}" }}{{ "{{" }}.Subnet{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
 #
@@ -130,7 +139,7 @@ morphit_relay_sequential_min_prefix: 3
 # CRITICAL: too narrow = X-Forwarded-For ignored = users share
 # one rate-limit bucket.  Too wide (e.g. 0.0.0.0/0) = any user can
 # forge X-Forwarded-For = rate limits bypassed.  Both are bad.
-morphit_relay_trusted_proxy_ips: "172.18.0.0/16"
+morphit_relay_trusted_proxy_ips: "172.20.0.0/16"
 
 
 # ─── Indexer environment (§18, §23) ──────────────────────────────

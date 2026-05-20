@@ -1,5 +1,156 @@
 # Tarball history
 
+## cp61 reconciliation — TWO structural defenses landed: cp61-O14 (bunkerweb CIDR cross-reference, parallel-session) + cp61-O15 (non-Zod env-example consumer-parity, this session) (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp61-FULL-STATE.tar.gz` (post-reconciliation; supersedes the earlier same-name tarball)
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **52/52** standalone smokes PASS (+2 cp61-O14 + cp61-O15) · **7/7 workspaces TS-clean (LL #52 18th consecutive)** · **17 structural defenses operational** (was 15 at cp60; +2).
+
+### Two cp61 sessions converged on the same checkpoint
+
+A parallel cp61 session ran concurrently and committed `cp61-O14 bunkerweb-cidr-cross-reference-smoke` to the branch BEFORE this session's commit. Both initially claimed "cp61-O14 / LL #64." Reconciliation: the parallel-session smoke keeps cp61-O14 (committed first; its work was a real pre-launch bug fix); this session's smoke renumbered to cp61-O15 / LL #65.
+
+#### cp61-O14 (parallel session) — bunkerweb CIDR cross-reference smoke
+
+**The bug it caught:** `ops/ansible/group_vars/all.yml` defaulted `morphit_relay_trusted_proxy_ips` to `172.18.0.0/16`, but `ops/bunkerweb/docker-compose.yml` pins the bunkerweb network at `172.20.0.0/16`. Default Ansible deploy (bunkerweb role runs by default) → BunkerWeb container starts on 172.20, relay trusts only 172.18 → relay rejects every `X-Forwarded-For` from BunkerWeb → all signups bucket into ONE rate-limit slot (BunkerWeb container IP). §32 CRITICAL failure mode silent.
+
+**The smoke:** reads `bunkerweb_net` subnet dynamically from `ops/bunkerweb/docker-compose.yml` as SOURCE OF TRUTH, then enforces that 7 cross-reference surfaces (bunkerweb README + bunkerweb.env.example + Ansible bunkerweb.env.j2 + Ansible group_vars default + OPERATIONS.md + RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md + brag list entry #231) mention the canonical CIDR. If the canonical changes, all surfaces must update in lockstep.
+
+**M-128 (parallel session)**: reverting group_vars to `172.18.0.0/16` fires the smoke with "§32 CRITICAL — getting the trusted-proxy CIDR wrong silently breaks per-IP rate limiting."
+
+**Parity-model class:** value cross-reference (a single VALUE must agree across N documents).
+
+#### cp61-O15 (this session) — non-Zod env-example consumer parity smoke
+
+(Original cp61-O14 / LL #64 in this session's docs; renumbered to cp61-O15 / LL #65 post-reconciliation.)
+
+## cp61 — Non-Zod env-example consumer-parity smoke (cp61-O15) closes the cp57-O11 generalization gap (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp61-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **51/51** standalone smokes PASS (+1 cp61-O14) · **7/7 workspaces TS-clean (LL #52 18th consecutive)** · **16 structural defenses operational** (was 15 at cp60; +1).
+
+**cp61 origin:** cp57-O11 covers env-example files backed by a Zod schema (indexer, relay, matrix-bot — three services with `loadConfig()` parsers). Two remaining env-example files in the repo aren't Zod-backed:
+
+- `ops/bunkerweb/bunkerweb.env.example` (33 vars) — consumed by the BunkerWeb container via `env_file:` directive in `docker-compose.yml`. BunkerWeb's runtime parses the vars into its nginx + ModSecurity config; the consumer is the container, not a colocated TypeScript file.
+- `ops/backup/backup.env.example` (4 vars) — consumed by `morphit-backup.sh` via shell-script `. "$BACKUP_ENV"` sourcing. Vars referenced in the script with `$VAR` / `${VAR}` expansion.
+
+Both files are CURRENTLY clean — cp61-O14 is a preventive smoke that catches the next drift attempt.
+
+### NEW STRUCTURAL DEFENSE cp61-O15 — non-Zod env-example consumer parity
+
+`apps/web/scripts/non-zod-env-example-consumer-parity-smoke.ts` (LL #65; was LL #64 pre-reconciliation). Two parity mechanisms, one per service type:
+
+**env_file_directive mechanism** (bunkerweb):
+- Verify `docker-compose.yml` has the `env_file: ./<example-filename-without-.example>` directive
+- Pin EXACT occurrence count (bunkerweb compose has 2 services that both need the env vars: `bunkerweb` for the WAF runtime + `bunkerweb-scheduler` for the config agent)
+
+**shell_script_sourcing mechanism** (backup):
+- Parse vars from env-example
+- Parse `$VAR` / `${VAR}` references from consumer scripts
+- Verify every example var is referenced in at least one consumer script
+- Reverse-direction check skipped (script has locals + shell builtins that wouldn't be in the env-example, e.g. `$BACKUP_ENV` is the sourced filename, not a configurable knob)
+
+### Mutation tests
+
+**M-128**: remove ONE `env_file:` directive from `ops/bunkerweb/docker-compose.yml` (leaving the sibling service's intact).
+- First attempt with presence-only check: smoke didn't fire (the second occurrence still matched).
+- Tightened to EXACT-occurrence-count: smoke now fires with "expected 2 occurrence(s) of 'env_file: ... bunkerweb.env', found 1 in ops/bunkerweb/docker-compose.yml. … without it the corresponding container silently uses defaults instead of the configured env vars."
+
+**M-129**: add `PHANTOM_VAR=test` to `ops/backup/backup.env.example`.
+- Smoke fires: "backup: 1 phantom var(s): PHANTOM_VAR. Either the var is no longer used (remove from example) or the script reference was deleted (restore it)."
+
+### Lessons
+
+**Lesson #1 — Smoke tightness via mutation testing (recurring cp60 lesson)**. M-128's first attempt was too lenient (presence-only); tightened to EXACT count after the mutation didn't fire. The cp60 lesson "if a mutation doesn't fire, tighten until it fires" applied again here.
+
+**Lesson #2 — Different services have different parity models**. cp57-O11 worked for Zod-backed services because there's a canonical schema to diff against. For BunkerWeb (external runtime parses the env file), the parity is at the `env_file:` directive level. For shell-script consumers, the parity is at the `$VAR` reference level. One generalized smoke design wouldn't have fit all three; cp61-O14 keeps the mechanism per-service in a registry.
+
+**Lesson #3 — Workspace contamination check before commit**. Mid-cp61 the `forgejo-not-gitea-smoke` failed because a nested `morphit-cp60/` directory appeared inside the cp61 working tree (artifact of how the cp61 branch was prepared). The smoke correctly flagged "gitea" mentions inside the nested copy. Fix: `rm -rf` the nested directory before running the battery. Going forward: check `ls /home/claude/morphit-cp<N>/` for nested checkpoint copies before running smokes.
+
+### Final cp61 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- 51/51 standalone smokes PASS (+1 cp61-O14)
+- 31 vitest unit tests (cp50 carryover)
+- 7/7 workspaces TS-clean (LL #52 18th consecutive)
+- Locale parity 2,825 × 10 = 28,250 (unchanged)
+- **16 structural defenses operational** (was 15 at cp60; +cp61-O14)
+
+### Recurring class scope progression (16 defenses across 14 checkpoints):
+1. cp48-O1 through cp60-O13 (as listed)
+2. cp61-O14: bunkerweb CIDR cross-reference (parallel session)
+2. cp61-O15: non-Zod env-example consumer parity (THIS) — closes cp57-O11 gap for env_file: + shell-sourcing consumers — closes the cp57-O11 gap for `env_file:` + shell-sourcing consumers
+
+---
+
+# Tarball history
+
+## cp61 — bunkerweb CIDR cross-reference parity smoke + Ansible default fix (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp61-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries (#231 K.I.S.S.-tightened) · locale parity 2,825 × 10 = 28,250 · **51/51** standalone smokes PASS (+1 cp61-O14) · **7/7 workspaces TS-clean (LL #52 18th consecutive)** · **16 structural defenses operational** (was 15 at cp60; +1) · **1 PRE-LAUNCH BUG FIXED** (cp61-D1).
+
+**cp61 origin:** Continued cp60+ predicted hunting ground — audit `ops/bunkerweb/bunkerweb.env.example` + `ops/backup/backup.env.example` (the two .env.example files with no Zod schema, requiring a different parity model than cp52-O6 / cp57-O11).
+
+Backup parity audit: clean. `morphit-backup.sh` reads 4 operator-tunable vars (BACKUP_DIR, RETAIN_DAYS, DB_NAME, DB_USER); the .env.example declares all 4. Move on.
+
+Bunkerweb audit surfaced a **real pre-launch bug** (cp61-D1) and motivated cp61-O14.
+
+### cp61-D1 — Ansible default trusted_proxy_ips inconsistent with bunkerweb role CIDR
+
+**Bug:** `ops/ansible/group_vars/all.yml` defaulted `morphit_relay_trusted_proxy_ips: "172.18.0.0/16"` (with a comment claiming "typical user-defined compose CIDR"). But the bunkerweb role's docker-compose template pins subnet at `172.20.0.0/16` (deliberately chosen to avoid Docker defaults). The bunkerweb role runs by default (`enable_bunkerweb | default(true)`).
+
+**Failure mode:** An operator running the default `ansible-playbook playbook.yml` gets BunkerWeb on `172.20.0.0/16` but the relay configured to trust only `172.18.0.0/16`. The relay rejects BunkerWeb's `X-Forwarded-For` header (it's not on a trusted CIDR), falls back to peer IP (which is BunkerWeb's container IP), and **all user signups bucket into a single rate-limit slot** — exactly the §32 CRITICAL failure mode.
+
+**Severity:** Operators following the documented default-deploy path would silently launch with broken per-IP rate limiting. The first signup-drain attack would saturate that one bucket and lock out legitimate users until daily reset.
+
+**Fix at cp61:**
+1. Updated `group_vars/all.yml` default to `morphit_relay_trusted_proxy_ips: "172.20.0.0/16"` to match the bunkerweb role's CIDR.
+2. Rewrote the surrounding comment block to explain the coupling: "DO NOT change unless you also change the bunkerweb role's docker-compose subnet, or you will silently break per-IP rate limiting."
+3. Added a callout to `docs/OPERATIONS.md` §32 distinguishing the canonical-bunkerweb-compose case (use `172.20.0.0/16`) from the BYO-compose case (find your CIDR with `docker network inspect`).
+4. Updated `MORPHIT-BRAG-LIST.md` entry #231 to reference the cp61-O14 enforcement.
+
+### NEW STRUCTURAL DEFENSE cp61-O14 — bunkerweb CIDR cross-reference parity
+
+`apps/web/scripts/bunkerweb-cidr-cross-reference-smoke.ts` (LL #64).
+
+**Enforcement model** (different from cp52-O6 Ansible-required-vars and cp57-O11 schema-example):
+1. **SOURCE OF TRUTH**: `ops/bunkerweb/docker-compose.yml`'s `bunkerweb_net` subnet line — whatever CIDR is pinned there is canonical.
+2. The Ansible bunkerweb role's `docker-compose.yml.j2` MUST pin the same CIDR.
+3. The Ansible `group_vars/all.yml` default for `morphit_relay_trusted_proxy_ips` MUST match the canonical CIDR.
+4. Operator-facing documentation files (READMEs, env examples, OPERATIONS.md, RUN-A-MORPHIT-NODE.md, PRE-LAUNCH-CHECKLIST.md, MORPHIT-BRAG-LIST.md) MUST mention the canonical CIDR.
+
+**Reads canonical CIDR dynamically** (not hardcoded `172.20.0.0/16`): if the canonical compose's subnet ever changes, the smoke automatically follows. The smoke just enforces "all 8 surfaces agree with the SOURCE OF TRUTH."
+
+**M-128 verified**: reverting `group_vars/all.yml` to the pre-cp61 broken state (`172.18.0.0/16`) fires the smoke with "Ansible default trusted_proxy_ips '172.18.0.0/16' does not include canonical bunkerweb CIDR '172.20.0.0/16'. §32 CRITICAL..."
+
+**Differentiation:**
+- cp52-O6: Ansible required-vars (every Zod-required schema var present in Ansible template)
+- cp57-O11: env-example ↔ Zod-schema (bidirectional parity for indexer/relay/matrix-bot)
+- **cp61-O14: VALUE cross-reference (the same operator-relevant CIDR must agree across 8 surfaces)**
+
+This third parity model fills the gap for cross-document invariant VALUES, not schema completeness.
+
+### Same-work-unit propagation done in cp61
+
+- MORPHIT-BRAG-LIST.md entry #231 rewritten (still under K.I.S.S. budget: 4s / 91w, verified by cp60-O12)
+- Mediakit regenerated
+- OPERATIONS.md §32 canonical-bunkerweb callout added
+- TARBALL.md + REVISIT-LIST.md + AUDIT-2026-05.md updated
+
+### Final cp61 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (#231 K.I.S.S.-tightened)
+- 51/51 standalone smokes PASS (+1 cp61-O14)
+- 31 vitest unit tests
+- 7/7 workspaces TS-clean (LL #52 18th consecutive)
+- Locale parity 2,825 × 10 = 28,250 (unchanged)
+- 16 structural defenses operational (was 15; +1)
+- **1 PRE-LAUNCH BUG FIXED** (cp61-D1: Ansible default trusted_proxy_ips drift)
+
+---
+
+# Tarball history
+
 ## cp60 — Anti-recurrence structural defenses for K.I.S.S. + FAQ ordering (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp60-FULL-STATE.tar.gz`
