@@ -1,5 +1,62 @@
 # Tarball history
 
+## cp55 — Memory #29 closure generalized across multi-family per-asset i18n surface + cp55-O9 STRUCTURAL DEFENSE (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp55-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **46/46** standalone smokes PASS (+1 cp55-O9) · **7/7 workspaces TS-clean (LL #52 12th consecutive)** · **11 structural defenses operational** (was 10 at cp54) · 31 jitter unit tests.
+
+**cp55 origin:** continuation hunt from cp54. cp54 closed Memory #29 drift for the `what_is_<asset>` FAQ family (60 native translations). cp55 extends the same lesson — that snapshot-floor defenses are blind to policy-at-addition-time — to OTHER per-asset i18n key families that had analogous drift.
+
+### cp55-D1 MEDIUM finding — multi-family per-asset Memory #29 drift
+
+Survey of 7 full-coverage per-asset i18n families revealed drift across 4 surfaces:
+
+- **`chat.address.address_invalid_<asset>`**: 1 fallback (DAI) × 3 locales = 3 strings missing
+- **`chat.address.address_placeholder_<asset>`**: 1 fallback (DAI) × 3 locales = 3 strings missing
+- **`chat.funds_sent.pill_title_<asset>`**: 1 fallback (DAI) × 3 locales = 3 strings missing
+- **`cheat_sheet.section_assets.<asset>`**: 1 fallback (DAI) × 3 locales = 3 strings missing
+- **`post_order.form.asset_explainer.<asset>`**: 7 fallbacks (DAI/ZEC/ARRR/DCR/SOL/ETH/XRP) × 3 locales = 21 strings missing
+
+Total drift: **33 missing native ES/FR/DE translations** across 4 distinct UX surfaces. Pattern matches the cp54 finding (cp31+ asset additions skipped Memory #29 native-locale policy).
+
+**Two families intentionally OUT of scope** as proper-noun byte-identical (not drift):
+- `chat.address.method_<asset>` (just the cryptocurrency name — same in all languages)
+- `chat.address.pill_method_<asset>` for cp31+ assets (uses "Name (TICKER)" pattern which is proper-noun preservation; cp30-and-earlier assets there use translatable "X address" pattern and ARE native)
+
+### CLOSURE: 33 native ES/FR/DE strings written inline
+
+Each follows the EN template faithfully — UX-context-appropriate translations matching the existing native USDT/USDC/DOGE pattern (formal-neutral register, locale-appropriate crypto terminology, faithful to EN factual content).
+
+Native-translations-snapshot rebuilt (23,026 → 23,059 native pairs, +33).
+llms-full.txt regenerated.
+
+### NEW STRUCTURAL DEFENSE cp55-O9
+
+`per-asset-key-family-native-locale-floor-smoke` (LL #59): generalizes cp54-O8 (which was scoped only to `what_is_<asset>`) to a registry of 5 per-asset i18n families. For each family, every ticker × every native locale (es/fr/de) is checked for native (non-EN-byte-identical) value. The smoke registry IS the policy gate — adding a new per-asset family with native-locale policy implications is one entry in `FAMILIES`.
+
+**Field-checks per run:** 16 tickers × 3 locales × 5 families = 240 individual native-vs-EN checks.
+
+**M-123 verified**: reverting es.json's `post_order.form.asset_explainer.xrp` to EN-fallback fires the smoke with "1 EN-byte-identical: [es/XRP]" scoped to the asset_explainer family.
+
+**Recurring class scope progression (9 defenses across 8 checkpoints):**
+1. cp48-O1: standalone smoke scripts
+2. cp49-O2: vitest unit tests
+3. cp50-O3: HTTP route handler regex
+4. cp51-O4: ops-cli per-ticker tables
+5. cp51-O5: per-asset i18n FAQ key coverage
+6. cp52-O6: Ansible env-template required-vars
+7. cp53-O7: operator doc per-asset coverage
+8. cp54-O8: what_is_<asset> FAQ native-locale floor
+9. **cp55-O9: multi-family per-asset native-locale floor — NEW**
+
+### Lesson — policy-gate registry beats one-family-one-smoke
+
+cp54-O8 was scoped to a single FAQ family. cp55-O9 generalizes to a REGISTRY. Adding a new per-asset key family that needs native-locale gating is now a one-line addition to `FAMILIES[]` in the smoke. Future per-asset surfaces that emerge (privacy_warnings.<ticker>, post_order errors per asset, etc.) can be added without writing a new smoke each time.
+
+---
+
+# Tarball history
+
 ## cp54 — Memory #29 native-locale closure across the what_is_<asset> FAQ family + cp54-O8 STRUCTURAL DEFENSE (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp54-FULL-STATE.tar.gz`

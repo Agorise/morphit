@@ -1,5 +1,56 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp55 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp55
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. Cp55 doesn't touch this.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** native EN/ES/FR/DE for new keys. **cp55 closed 33 strings of multi-family drift** (DAI singletons + asset_explainer 7-asset drift). Combined with cp54's 60-string closure, the total Memory #29 catch-up across cp54+cp55 is **93 native translations** spanning 5 UX surfaces.
+- **Memory #13 VERIFY:** carried into cp55. Survey caught the pattern by inspecting actual JSON values rather than trusting prior assertions.
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 11 OPERATIONAL (was 10 at cp54)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **12th consecutive** checkpoint clean
+2. **cp46 asset-payload-precision-parity-smoke** — 10th consecutive
+3. **cp48-O1** stand-in meta-assertion — 8th consecutive
+4. **cp49-O2** handler-test-stand-in — 7th consecutive
+5. **cp50-O3** per-asset-rss-feed-parity — 6th consecutive
+6. **cp51-O4** category-b-descriptions-parity — 5th consecutive
+7. **cp51-O5** faq-per-tradable-asset-parity — 5th consecutive
+8. **cp52-O6** ansible-env-template-required-vars — 4th consecutive
+9. **cp53-O7** operator-doc-per-asset-coverage — 3rd consecutive
+10. **cp54-O8** what-is-asset-faq-native-locale-floor — 2nd consecutive
+11. **cp55-O9** per-asset-key-family-native-locale-floor — NEW at cp55
+
+## CP55 LESSON LEARNED — POLICY-GATE REGISTRY BEATS ONE-FAMILY-ONE-SMOKE
+
+cp54-O8 was scoped to a single FAQ family (`what_is_<asset>`). cp55-O9 generalizes to a REGISTRY: a `FAMILIES` array where each entry is one per-asset key family that needs native-locale gating. Adding a new family is now a one-line addition.
+
+**Why this matters:** When cp54 surfaced the Memory #29 drift in the FAQ family, the natural next thought was "what about other per-asset families?" — answered at cp55 with a comprehensive survey. The registry-based smoke means future per-asset surfaces that emerge (privacy_warnings.<ticker>, asset_chip_label.<ticker>, etc.) can be added without writing a new smoke each time.
+
+## CP55 PROGRESS ON CP54 PREDICTIONS
+
+cp54 predicted: "analogous policy-gate smokes for other per-asset key families (privacy_warnings.<ticker>, asset_explainer.<ticker>) — to catch the same drift mechanism on those surfaces". **cp55 delivered exactly this.** Surveyed 7 full-coverage families, found drift in 4, fixed 33 strings, generalized the cp54 smoke to a 5-family registry.
+
+## Cp56+ predicted hunting ground
+
+- **DEEPER per-asset doc coverage smoke** (cp53-O7 catches "totally absent" only; cp56+ could enrich to catch SHALLOW mentions: e.g. asset mentioned once in headline but skipped in config example)
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog — currently EN-fallback per Memory #29 policy)
+- **Ansible playbook full env-var surface** (not just required), idempotency claims, fresh-VM dry-run
+- **ansible-lint in CI**
+- **Other per-asset key families** that emerge in cp56+ — add to cp55-O9 FAMILIES registry
+- `home.asset_subtitles.<asset>` partial-coverage family (only BLURT/BTC/XMR) — is that incomplete or intentional? Investigate.
+
+## Two parked external blockers (unchanged through cp42→cp55)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp54 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp54
