@@ -1,5 +1,72 @@
 # Tarball history
 
+## cp57 — Env-example ↔ Zod-schema parity audit + Memory #13 over-fix catch + cp57-O11 STRUCTURAL DEFENSE (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp57-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **48/48** standalone smokes PASS (+1 cp57-O11) · **7/7 workspaces TS-clean (LL #52 14th consecutive)** · **13 structural defenses operational** (was 12 at cp56).
+
+**cp57 origin:** carrying forward the cp56 deferred item — Ansible env-var full surface expansion. The cp52 work made the Ansible template minimal-and-correct for REQUIRED vars; cp57 audits the canonical example (`ops/env/<service>.env.example`) against the Zod schema (source of truth) for FULL-SURFACE parity.
+
+### Memory #13 catch — initial 30-entry over-fix avoided
+
+First-pass parity survey said "13 indexer + 17 relay = 30 missing entries". The parity script's regex was `^#?(MORPHIT_[A-Z_]+)=` which matched `#MORPHIT_X=` (no space) but NOT `# MORPHIT_X=` (space after `#`). The canonical examples use the **space-after-`#`** convention for commented stubs, so the original existing stubs were invisible to the survey.
+
+After correcting the regex to `^#?\s*(MORPHIT_[A-Z_]+)\s*=`, the **true drift was 9 entries**, not 30:
+- **Indexer (1):** `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` — operator alert routing override
+- **Relay (8):** `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`, `MORPHIT_RELAY_TRUSTED_PROXY_IPS` (§32 CRITICAL — reverse-proxy posture), `MORPHIT_RELAY_HIGHVALUE_NAME_POLICY`, `MORPHIT_RELAY_HIGHVALUE_SHORT_NAME_THRESHOLD`, `MORPHIT_RELAY_SEQUENTIAL_DETECTOR_ENABLED`, `MORPHIT_RELAY_SEQUENTIAL_THRESHOLD`, `MORPHIT_RELAY_SEQUENTIAL_WINDOW_MS`, `MORPHIT_RELAY_SEQUENTIAL_MIN_PREFIX`
+
+These are squatter-defense diamond-preset knobs (§38.7) + trusted-proxy IP config (§32 CRITICAL for BunkerWeb integration) that operators genuinely couldn't discover without reading the Zod schema source. The VAPID Web Push keys + PUSH_* tuning + SIGNUP_CEILING_PERSIST_PATH that the BUGGY survey claimed were missing were actually ALREADY documented as commented stubs.
+
+**Lesson:** when surveying a documentation file against a source of truth, the regex must match the documentation file's conventions. The cp57 over-fix would have created 30 duplicate entries in canonical examples (one cp57 addition shadowing each existing stub). Memory #13 ("verify in code/repo before claiming") caught this when the M-125 mutation test didn't fire on the FIRST attempt — debugging that revealed the regex bug.
+
+### cp57-D1 MEDIUM (indexer) + cp57-D2 HIGH (relay)
+
+Added 9 missing entries with full documentation:
+- **OPERATOR_MATRIX_ROOM** in indexer.env.example near the operator-alert section
+- **TRUSTED_PROXY_IPS** in relay.env.example as its own §32 CRITICAL section with explicit explanation of the mis-setting risks
+- **SEQUENTIAL_* + HIGHVALUE_*** (6 entries) extending the existing squatter-defense section after SIGNUP_DAILY_CEILING
+- **ACCOUNT_CREATION_FEE_BLURT** in relay.env.example near the WEEKLY_ACT_COUNT entry (cross-config knob)
+
+### cp57-D3 NOT-A-BUG verified (Memory #13)
+
+Initial survey flagged `MORPHIT_RELAY_WEEKLY_ACT_COUNT` as "in example but not in Zod schema (phantom)". Memory #13 verification: grep traced it to `apps/relay/scripts/mint-acts.ts:64` (`process.env.MORPHIT_RELAY_WEEKLY_ACT_COUNT`) — script-consumed, not server-consumed. Legitimate non-schema env var. Smoke must allow script-consumed vars; Direction B check now scans `apps/<service>/scripts/*.ts` for `process.env.MORPHIT_*` references and allows any match. `MORPHIT_RELAY_PASSPHRASE_FILE` is also script-consumed (mint-acts.ts line 104).
+
+### NEW STRUCTURAL DEFENSE cp57-O11
+
+`env-example-schema-parity-smoke` (LL #61): bidirectional parity check.
+
+**Direction A** (schema → example): every MORPHIT_* var in the Zod schema MUST appear in the canonical example.
+**Direction B** (example → schema): every MORPHIT_* var in the canonical example MUST be either in the Zod schema OR consumed by a sibling script (apps/<service>/scripts/*.ts).
+
+Different surface from cp52-O6 (which checks REQUIRED-only Zod → Ansible TEMPLATE parity). cp57-O11 is FULL-SURFACE Zod → canonical EXAMPLE. Both needed: cp52-O6 catches REQUIRED gap in Ansible template, cp57-O11 catches OPTIONAL gap in operator docs.
+
+**M-125 verified**: removing `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` from indexer.env.example fires the smoke with `"1 schema var(s) missing from canonical example: MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM"`. The M-125 first-attempt didn't fire — that's what revealed the original regex bug — and led to the cp57 over-fix prevention.
+
+**Recurring class scope progression (11 defenses across 10 checkpoints):**
+1. cp48-O1: standalone smoke scripts
+2. cp49-O2: vitest unit tests
+3. cp50-O3: HTTP route handler regex
+4. cp51-O4: ops-cli per-ticker tables
+5. cp51-O5: per-asset i18n FAQ key coverage
+6. cp52-O6: Ansible env-template REQUIRED-vars (different surface)
+7. cp53-O7: operator doc per-asset coverage ("totally absent")
+8. cp54-O8: what_is_<asset> FAQ native-locale floor
+9. cp55-O9: multi-family per-asset native-locale floor (registry)
+10. cp56-O10: operator doc per-asset CONFIG EXAMPLE coverage (shallow)
+11. **cp57-O11: env-example ↔ schema parity (bidirectional)** — NEW
+
+### cp57 lesson — canonical-example parity is bidirectional
+
+Schema → example catches "new knob added but never documented". Example → schema catches "phantom var documented but never consumed" (with script-consumed exception). The smoke must understand both directions AND allow legitimate script-consumed vars. The cp52-O6 was REQUIRED-only Zod → Ansible-template; cp57-O11 is FULL-SURFACE Zod → canonical-example bidirectional. Different surfaces, different scopes; both needed.
+
+### Operator impact
+
+After cp57, operators reading `ops/env/indexer.env.example` or `ops/env/relay.env.example` see every available knob — including the SECURITY-CRITICAL TRUSTED_PROXY_IPS and the squatter-defense SEQUENTIAL_* + HIGHVALUE_* knobs that previously required reading the Zod schema source. Significant operator-UX improvement.
+
+---
+
+# Tarball history
+
 ## cp56 — Continuation hunt: deeper per-asset operator-doc coverage + cp56-O10 STRUCTURAL DEFENSE; 3 cleanliness verifications (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp56-FULL-STATE.tar.gz`

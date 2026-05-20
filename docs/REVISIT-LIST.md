@@ -1,5 +1,61 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp57 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp57
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp57 didn't touch this.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** confirmed clean (cp54+cp55 closed all known drift).
+- **Memory #13 VERIFY:** **load-bearing at cp57**. The initial parity survey claimed 30 missing entries; Memory #13 verification via M-125 mutation test caught that the survey regex was buggy (didn't match space-after-`#` form). True drift was 9 entries. Without Memory #13 the cp57 work would have shipped 30 duplicate entries shadowing existing stubs.
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 13 OPERATIONAL (was 12 at cp56)
+
+1. **cp44 LL #52** workspace-typecheck — **14th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 12th consecutive
+3. cp48-O1 stand-in meta-assertion — 10th consecutive
+4. cp49-O2 handler-test-stand-in — 9th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 8th consecutive
+6. cp51-O4 category-b-descriptions-parity — 7th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 7th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 6th consecutive
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 5th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 4th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 3rd consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 2nd consecutive
+13. **cp57-O11 env-example-schema-parity (bidirectional) — NEW at cp57**
+
+## CP57 LESSONS
+
+### Lesson #1 — When surveying docs against source-of-truth, regex must match doc conventions
+The cp57 parity survey was buggy: `^#?(MORPHIT_[A-Z_]+)=` matched `#MORPHIT_X=` but not `# MORPHIT_X=` (space after `#`). The canonical examples use the **space-after-`#`** convention for commented stubs. The buggy regex would have caused 30 duplicate entries to be added before Memory #13 verification caught it.
+
+**Generalization:** every documentation-vs-source-of-truth audit needs a regex test against actual content samples BEFORE trusting the diff. Run a small grep + diff to verify the parser actually sees what the writer intended.
+
+### Lesson #2 — Bidirectional parity is the right framing
+Schema → example: catches "new knob never documented". Example → schema: catches "phantom var" (with script-consumed exception). One-direction parity (which cp52-O6 was) is insufficient.
+
+### Lesson #3 — Mutation tests catch bugs the implementer might miss
+M-125's first attempt at firing the smoke didn't fail — debugging that revealed the regex bug that would have caused the over-fix. **Always run the mutation test; if it doesn't fire, the smoke isn't doing what you think.**
+
+## CP58+ predicted hunting ground
+
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog; currently EN-fallback per Memory #29)
+- **Other per-asset key families** that emerge — add to cp55-O9 FAMILIES registry
+- **Ansible playbook idempotency claims** — README claims idempotency; verify by running playbook twice (needs hardware)
+- **Fresh-VM Ansible dry-run** — still parked as hardware blocker
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently mentioned in canonical example as a commented stub, but the systemd unit's LoadCredential= mechanism is more nuanced. Consider expanding the docs.
+- **Other Zod-schema vars in the relay** that have non-trivial validation logic might warrant additional commented examples in canonical example (e.g. SCRYPT iteration counts, HMAC algorithm choices). Survey opportunity.
+
+## Two parked external blockers (unchanged through cp42→cp57)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp56 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp56
