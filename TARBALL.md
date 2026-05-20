@@ -1,5 +1,109 @@
 # Tarball history
 
+## cp69 — HUNTING-GROUND SWEEP: 2 new structural defenses + Forgejo runner runbook + more translations (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp69-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 295 brag entries (was 293) · locale parity 2,825 × 10 = 28,250 · **3900 scenarios pass / 0 runners failed** (was 3892 at cp68) · **7/7 workspaces TS-clean (LL #52 26th consecutive)** · **20 structural defenses operational** (was 18; +2 new at cp69) · TRIPLE-PULSE STABLE.
+
+**cp69 origin:** Ken pointed out (rightly) that cp68's translation push omitted the rest of the cp68 hunting-ground list. cp69 is the catch-up sweep: 2 new structural defenses (O-17, O-18), cp66-O16 registry extended to 11 invariants, `MORPHIT_RELAY_PASSPHRASE_FILE` env-example fully documented, Forgejo runner standup runbook authored, and 10 more long-form keys translated to all 6 backlog locales.
+
+### cp69 work — what shipped this turn
+
+**Item #1 (matrix-bot healthcheck port → cp66-O16 invariant #10):**
+- Source: `apps/matrix-bot/src/config.ts` Zod default `9876`
+- Consumers: `ops/env/matrix-bot.env.example` (commented `# MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT=9876` line) + `ops/ansible/roles/matrix_bot/templates/matrix-bot.env.j2` (inline comment "Override the default healthcheck loopback port (9876)")
+- M-137 verified: drift the env example value → smoke fires
+
+**Item #2 (BunkerWeb CIDR → cp66-O16 invariant #11, slim cousin of cp61-O14):**
+- Source: `ops/bunkerweb/docker-compose.yml` `subnet:` line
+- Consumer: `ops/ansible/group_vars/all.yml` `morphit_relay_trusted_proxy_ips`
+- M-138 verified: drift the ansible default → smoke fires
+- Decision documented in smoke header: keep BOTH cp61-O14 (doc-aware, proximity-to-keyword scoping) AND cp66-O16's slim version (registry-shaped diagnostic). cp61-O14 catches doc drift; cp66-O16 catches config-default drift. Complementary, not duplicative.
+
+**Item #3 (MORPHIT_RELAY_PASSPHRASE_FILE documentation depth):**
+- Expanded `ops/env/relay.env.example` from a 4-line commented stub to a self-contained explainer with three deploy-mode paths (systemd LoadCredential, Docker Compose secret, interactive)
+- Cross-referenced the systemd unit (`ops/systemd/morphit-relay-mint-acts.service`) and the OPERATIONS.md "not-yet-implemented for Compose" caveat
+
+**Item #4 (operator-doc length audit → cp69-O17 NEW DEFENSE):**
+- `apps/web/scripts/operator-doc-section-length-smoke.ts`
+- Per-doc thresholds: OPERATIONS.md 600 lines/section, RUN-A-MORPHIT-NODE.md 400, PRE-LAUNCH-CHECKLIST.md 300, ADRs 1000 lines
+- Caught 7 pre-existing oversize sections (5 in OPERATIONS, 1 in RUN-A-NODE, 1 in PRE-LAUNCH) + 1 oversize ADR — allow-listed with documented split-plan intent
+- M-140 verified: append 700-line dummy section to RUN-A-NODE.md → smoke fires
+
+**Item #5 (translation progress, 10 more long-form keys done):**
+- Batch 5: 10 unique keys × 6 backlog locales = 60 translations
+- Keys translated: privacy.guides.{blurt,dash,doge,dai}.caveats, privacy.guides.{ltc,usdt,dai}.intro, assets.usdc.network.picker.crossNetworkWarning, privacy.opt_in_tech.coinjoin.explain, payment_method.pay_zec.description, assets.privacy_warnings.usdc_centralized
+- **Remaining: 39 long-form keys** (was 49 at cp68; down 20% in one bite)
+
+**Item #6 (Ansible idempotency claims → cp69-O18 NEW DEFENSE):**
+- `apps/web/scripts/ansible-idempotency-discipline-smoke.ts`
+- Walks ops/ansible/, finds every command/shell/raw task, checks for an idempotency guard (creates/removes/changed_when/when/check_mode at task level, or creates/removes inside the module block)
+- Found 15 such tasks; all 15 had proper guards. No allow-list entries needed at cp69 launch.
+- M-141 verified: introduce unguarded `command:` task → smoke fires
+
+**Item #7 (Forgejo runner standup):**
+- Authored `docs/FORGEJO-RUNNER-STANDUP.md` — full operator runbook
+- Covers: threat model, prerequisites, registration, install, configuration, systemd unit, smoke-test workflow, troubleshooting
+- Hardware-blocked (needs an actual VPS to execute), but the runbook is now ready; maintainer can execute when hardware available, unblocking v1.0.0-beta.1 release ceremony steps 8/9/10
+
+### Structural defenses — now 20 operational (was 18)
+
+| # | Defense | Status |
+|---|---|---|
+| 1 | cp44 LL #52 workspace-typecheck | 26th consec at cp69 |
+| 2-7 | cp46-cp51 per-asset coverage smokes | held |
+| 8 | cp52-O6 ansible-env-template-required-vars | held |
+| 9 | cp53-O7 operator-doc-per-asset-coverage | held |
+| 10 | cp54-O8 what-is-asset-faq-native-locale-floor | held |
+| 11 | cp55-O9 per-asset-key-family-native-locale-floor | held |
+| 12 | cp56-O10 operator-doc-per-asset-config-example-coverage | held |
+| 13 | cp57-O11 env-example-schema-parity | held |
+| 14 | cp60-O12 brag-list-kiss-budget | held |
+| 15 | cp60-O13 faq-keys-themed-section | held |
+| 16 | cp61-O14 bunkerweb-cidr-cross-reference | held (doc-aware) |
+| 17 | cp61-O15 non-zod-env-example-consumer-parity | held |
+| 18 | cp66-O16 cross-document-value-invariants | **WIDENED cp69** (9 → 11 invariants) |
+| 19 | **cp69-O17 operator-doc-section-length** | **NEW cp69** |
+| 20 | **cp69-O18 ansible-idempotency-discipline** | **NEW cp69** |
+
+### Final cp69 state metrics
+
+- 16 tradable assets / 35 ADRs / **295 brag entries** (+2 from cp68's 293)
+- **3900 scenarios pass / 0 runners failed** (+8 from cp68's 3892)
+- 7/7 workspaces TS-clean (LL #52 26th consecutive)
+- **20 structural defenses operational** (was 18; cp69-O17 + cp69-O18 added)
+- cp66-O16 registry: **11 invariants** (was 9)
+- **60 more translations applied** to all 6 backlog locales (39 long-form keys remain for cp70+)
+- 1 new operator runbook: `docs/FORGEJO-RUNNER-STANDUP.md`
+- 1 expanded env-example: `ops/env/relay.env.example` PASSPHRASE_FILE section
+- 4 new mutation tests verified: M-137, M-138, M-140, M-141
+- Triple-pulse stable
+
+### Lessons
+
+1. **A "hunting-ground list" item is not done when the work is queued; it's done when the work is shipped.** cp68 listed 7 items, did item #5 (translations), and silently dropped the other 6. cp69 swept up the other 6 plus added more translations.
+2. **YAML parser heuristics for ansible idempotency need care.** A `shell:` field inside `ansible.builtin.user` (setting login shell) is NOT a task-level `shell:` action. The smoke distinguishes by indent: task-level keys are at the `currentTaskIndent + 2` column; module-property keys are deeper. Also, `creates:` and `removes:` can appear as MODULE arguments under `ansible.builtin.shell:` — the smoke walks the full task block, not just the top key, to find guards.
+3. **Two structural defenses on the same drift class can be intentionally complementary.** cp61-O14 (doc-aware bunkerweb-CIDR smoke) and cp66-O16's bunkerweb_cidr invariant both check the same value but with different richness. Keeping both gives the operator two helpful signals on drift, with non-overlapping failure modes. The cp66-O16 smoke header documents this explicitly so future maintainers don't "consolidate" them.
+4. **Per-doc length thresholds beat one-size-fits-all.** OPERATIONS.md and ADRs are SUPPOSED to be detailed; PRE-LAUNCH-CHECKLIST.md is supposed to be tight. The cp69-O17 smoke uses per-doc thresholds (600/400/300/1000 for ADRs).
+
+### Campaign-arc summary (cp61 → cp69)
+
+| Checkpoint | Battery | Defenses | Note |
+|---|---|---|---|
+| cp61 baseline (curated subset) | 52/52 hid 15 | 17 | Loop ran 52 of 183 |
+| cp62 honest accounting | 3611 / 8 chronic | 17 | 7 format + 1 path fix |
+| cp63 \$lib unblock | 3848 / 2 chronic | 17 | Unified tsconfig + 3 real bugs |
+| cp64 chronic-scope reduction | 3870 / 1 (130 findings) | 17 | Sally L13 + Memory #29 split |
+| cp65 chronic closure | 3874 / 0 | 17 | 130 native translations to es/fr/de |
+| cp66 NEW DEFENSE | 3886 / 0 | 18 | Cross-document value-invariants registry (6 inv.) |
+| cp67 registry scaling | 3892 / 0 | 18 | +3 invariants (→9 total) |
+| cp68 translations push | 3892 / 0 | 18 | 211/260 backlog keys → 49 remaining |
+| **cp69 hunting-ground sweep** | **3900 / 0** | **20** | +2 invariants (→11), +2 defenses (O-17, O-18), +60 translations (→39 remaining), Forgejo runner runbook, PASSPHRASE_FILE doc |
+
+---
+
+# Tarball history
+
 ## cp67 — cp66-O16 registry extended to 9 invariants (cp66 had 6: not 5) (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp67-FULL-STATE.tar.gz`

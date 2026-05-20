@@ -3202,7 +3202,7 @@
 		"request_missing_link": "話我哋知",
 		"request_missing_no_contact": "冇睇到你需要嘅？呢個實例未發布聯繫渠道——試吓另一個 Morphit 實例，或喺 git.agorise.net/agorise/morphit 上提交問題。",
 		"pay_zec": {
-			"description": "Zcash: launched 2016, zk-SNARK shielded transactions (Sapling + Orchard pools) plus transparent addresses (t1/t3, like Bitcoin). Fair-launched with a founders-reward halving schedule. Per-trade, recipients pick the address type that matches their posture. Trade-only on Morphit — cannot pay listing fees."
+			"description": "Zcash：2016 年推出，zk-SNARK shielded 交易（Sapling + Orchard 池）以及透明地址（t1/t3，像 Bitcoin）。公平啟動，founder reward 減半時間表。每次交易接收者選擇與其立場匹配的地址類型。僅在 Morphit 上交易——不能支付掛單費用。"
 		},
 		"pay_arrr": {
 			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
@@ -3642,7 +3642,7 @@
 	"assets": {
 		"privacy_warnings": {
 			"usdt_centralized": "交易 USDT 之前要知嘅兩件事：Tether 公司發行同管理 USDT，並有凍結地址嘅技術能力（而且曾經用過）。交易喺每條支持嘅網絡（以太坊、波場、索拉納、BNB 智能鏈）上面都係公開可見嘅 — 呢個係嗰啲鏈嘅特性。揀啱你交易嘅資產。",
-			"usdc_centralized": "Two things to know about USDC before trading: Circle issues and administers USDC and has the technical ability to freeze addresses (and has used it). Transactions are publicly visible on each supported network (Ethereum, Solana, Base, Polygon) — a property of those chains. Pick the asset that fits your trade.",
+			"usdc_centralized": "在交易 USDC 前需要知道的兩件事：Circle 發行和保管 USDC，可以在沒有通知或追索的情況下凍結任何 USDC 地址。這已經發生在被制裁的地址和與黑客攻擊相關的地址。每個支持的網絡（Ethereum、Polygon、Base、Solana）上的鏈上私隱都有限——交易像任何透明鏈一樣公開可見。如果去中心化很重要，請考慮 DAI 或非穩定幣資產。",
 			"dai_partly_centralized": "在交易 DAI 前需要知道的三件事：(1) 與 USDT 和 USDC 不同，DAI 代幣合約沒有由管理員控制的凍結功能——MakerDAO 不能將你的地址列入黑名單。這是真正的去中心化優勢。(2) DAI 通過 Peg Stability Module 部分由 USDC 支持，因此當 PSM 持有 USDC 時，Circle 對 USDC 的凍結權限會間接影響 DAI 的贖回。(3) 與所有穩定幣一樣，DAI 交易在每個支持的網絡（Ethereum、Polygon、Base、Arbitrum）上都公開可見——這是這些鏈的屬性，沒有鏈上私隱。選擇適合你交易的資產。"
 		},
 		"usdt": {
@@ -3701,7 +3701,7 @@
 				"picker": {
 					"label": "使用哪個 USDC 網絡？",
 					"requiredHint": "必填——沒有默認網絡。每次 USDC 交易都必須選擇一個。",
-					"crossNetworkWarning": "Cross-network sends lose your funds permanently. Sending USDC on Ethereum to a Solana address (or vice versa) is unrecoverable. Note that Ethereum, Base, and Polygon addresses look identical (all start with 0x) — the network choice is what tells your wallet which chain to broadcast on."
+					"crossNetworkWarning": "跨網絡發送會永久丟失你的資金。將 USDC 發送到與對方使用的網絡不同的網絡意味著資金落在對方無法看到或花費的鏈上。四個 USDC 網絡（Ethereum、Polygon、Base、Solana）是獨立的——餘額不在它們之間同步。雙方必須在發送前就網絡達成一致。"
 				}
 			},
 			"address_share": {
@@ -3782,7 +3782,7 @@
 			},
 			"coinjoin": {
 				"name": "CoinJoin",
-				"explain": "A family of protocols where multiple participants pool inputs and outputs into a single transaction, breaking the common-input-ownership heuristic that links coins to one owner. Multiple implementations exist with different trust models — choose carefully and read the implementation's threat model."
+				"explain": "一系列協議，其中多個參與者將輸入合併為單個 multi-input/multi-output 交易，打破鏈分析師使用的 common-input-ownership 啟發式。實現包括 Wasabi (Bitcoin)、JoinMarket (Bitcoin) 和 Whirlpool/Samourai (Bitcoin，現已退出)。按交易選擇；輪次協調員通常是服務器（中度中心化）。"
 			},
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
@@ -3827,12 +3827,12 @@
 			"blurt": {
 				"one_line": "協調鏈——透明且基於賬戶。Morphit 上私隱最低。",
 				"intro": "BLURT 是 Morphit 用於發布訂單和管理聯邦的協調鏈。它是 Steem/Hive 類型的區塊鏈——基於賬戶、透明、由 witness 投票和 staking 治理。每個操作都公開可見，包括交易訂單和費用支付。BLURT 級別的私隱在 Morphit 上是所有資產中最低的，按設計如此——它是協調層，不是資產層。",
-				"caveats": "BLURT is structurally the least private asset on Morphit. Your account name is your address; you cannot rotate it. For trades where on-chain privacy matters more than speed and cost, prefer XMR, BTC (with PayJoin), BCH (with CashFusion), LTC (with MWEB), or DASH (with PrivateSend).",
+				"caveats": "BLURT 在結構上是 Morphit 上私隱性最低的資產。你的賬戶名稱就是你的身份，每個操作（發布訂單、witness 投票、claim_account、費用轉賬）對任何查詢 Blurt 節點的人都永久可見。如果私隱對你的交易活動很重要，請將你的 BLURT 賬戶與你的敏感身份分開，或使用專用於交易的賬戶。",
 				"meta_description": "Morphit 上 BLURT 交易的私隱考量：基於賬戶的鏈，按設計透明。"
 			},
 			"usdt": {
 				"one_line": "中心化——Tether 可凍結任何地址。在每條鏈上都透明。",
-				"intro": "USDT's privacy issue is structurally different from the other transparent assets: it's centralized. Tether Inc. can freeze any USDT address on any host chain, and they have used this ability in the past. No amount of address rotation or transaction obfuscation changes Tether's freeze capability.",
+				"intro": "USDT 的私隱問題在結構上不同於 Morphit 上的其他透明資產：USDT 是中心化的。Tether Limited 可以在沒有通知的情況下凍結任何 USDT 地址。這已經發生在被制裁的地址、與黑客攻擊相關的地址，以及有時 Tether 自己認為可疑的地址。在 Morphit 上交易 USDT 意味著接受 BTC/XMR/BLURT 中不存在的凍結風險。",
 				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
 				"meta_description": "Morphit 上 USDT 交易的私隱考量：中心化風險與宿主鏈透明性。"
 			},
@@ -3843,14 +3843,14 @@
 			},
 			"ltc": {
 				"one_line": "透明、去中心化——MWEB 提供鏈級可選私隱。",
-				"intro": "Litecoin shares Bitcoin's transparency at the base layer, but adds MWEB (MimbleWimble Extension Blocks) — a chain-level opt-in privacy feature that hides amounts and breaks address linkability for transfers that opt in. This is the closest a Bitcoin-family chain comes to native privacy.",
+				"intro": "Litecoin 在基礎層與 Bitcoin 共享透明性，但自 2022 年 5 月起支持 MimbleWimble Extension Blocks (MWEB)——在透明主網旁的鏈級 shielded 交易池。將 LTC 從透明地址轉移到 MWEB 地址以獲得鏈上私隱；轉回透明地址以恢復到透明池。錢包中的 MWEB 支持各不相同。",
 				"meta_description": "Morphit 上 Litecoin 交易的私隱實踐：新地址、MWEB 以及應避免的事項。"
 			},
 			"dash": {
 				"one_line": "透明基礎層，去中心化——PrivateSend 提供主節點協調的可選混合。",
 				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
 				"meta_description": "Morphit 上 Dash 交易的私隱實踐：新地址、PrivateSend 預混合以及應避免的事項。",
-				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern."
+				"caveats": "PrivateSend 的匿名集取決於同時參與混合的參與者。在低流量時段，混合會話可能以更少的參與者運行——更少的混合意味著更小的匿名集。在 Morphit 交易之前提前進行預混合，不要在需要時才做：預混合讓你有時間獲得所需的匿名集，並將混合時間與公開交易時間分開。"
 			},
 			"usdc": {
 				"one_line": "中心化——Circle 可凍結任何地址。在每條鏈上都透明。",
@@ -3861,13 +3861,13 @@
 			"dai": {
 				"one_line": "DAI — 由 MakerDAO 治理的錨定美元穩定幣。代幣無管理員凍結，但部分由 USDC 支持。",
 				"meta_description": "在 Morphit 上交易 DAI 的誠實私隱說明：在合約層面比 USDT/USDC 更去中心化，通過 Peg Stability Module 部分由 USDC 支持。",
-				"intro": "DAI is MakerDAO's USD-pegged stablecoin, deployed on Ethereum and several other EVM chains. It's the most-decentralized US-dollar-pegged asset Morphit supports — but \"decentralized\" doesn't mean \"freeze-immune\" or \"fully crypto-backed\" anymore. This page is the honest picture so you can choose with eyes open."
+				"intro": "DAI 是 MakerDAO 的錨定美元穩定幣，部署在以太坊和其他幾個 EVM 鏈上。它是 Morphit 支持的最去中心化的錨定美元資產——但\"去中心化\"不再意味著\"免疫凍結\"或\"完全由加密貨幣支持\"。本頁面是誠實的描述，讓你可以睜開眼睛做出選擇。"
 			},
 			"doge": {
 				"one_line": "透明基礎層，通過 PoW 去中心化，無原生私隱升級。",
 				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
 				"meta_description": "Morphit 上 Dogecoin 交易的私隱實踐：新地址、避免鏈啟發式分析以及預期的權衡。",
-				"caveats": "Dogecoin has no native privacy upgrade — no PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish on Morphit can be linked to its on-chain history forever. Use a fresh HD-derived address for every trade (your wallet usually does this automatically)."
+				"caveats": "Dogecoin 沒有原生私隱升級——沒有 PrivateSend 等效物，沒有 MWEB，沒有可選池。與 Litecoin 的合併挖礦可防禦 51% 攻擊，但對交易私隱沒有幫助。你最好的槓桿是：每次交易使用新地址、避免在交易之間重複使用同一地址，並考慮鏈由分析師觀察，他們對交易所及其輸出流進行編目。"
 			},
 			"zec": {
 				"one_line": "透明與 shielded 地址類型共存；接收方按地址選擇。",

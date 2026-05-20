@@ -1,5 +1,61 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp69 — 2026-05-20.  **20 STRUCTURAL DEFENSES · BATTERY 3900/0 TRIPLE-PULSE STABLE · HUNTING-GROUND SWEPT (6 of 7 items shipped this turn).**
+
+## Memory facts re-confirmed at top of cp69
+
+- **Hunting-ground items must ship, not just be listed.** cp68 listed 7 items, did item #5 only, silently dropped the rest. cp69 caught up all 6 remaining items plus more translations. Future: do not enumerate a hunting-ground at cp-end without an explicit "what I'll do next turn" plan; if a list grows, that's a sign the next checkpoint should be a sweep not a deep-dive.
+
+## STRUCTURAL DEFENSES — 20 OPERATIONAL
+
+cp69 added 2 new defenses:
+- cp69-O17 operator-doc-section-length — per-doc thresholds (OPERATIONS 600, RUN-A-NODE 400, PRE-LAUNCH 300, ADRs 1000)
+- cp69-O18 ansible-idempotency-discipline — every command/shell/raw ansible task must have a guard
+
+cp66-O16 widened in-place from 9 → 11 invariants (added matrix_bot_healthcheck_port and bunkerweb_cidr).
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3900 | +8 from cp68 (cp66-O16: +4 from 2 new invariants × 2 consumers; cp69-O17: +5; cp69-O18: +1) |
+| Runners FAILED | 0 | clean since cp65 |
+| Workspaces TS-clean (LL #52) | 7/7 | 26th consecutive |
+| Triple-pulse stable | ✓ | 3900/0 × 3 |
+| O-16 registry size | 11 invariants | was 9 |
+| Backlog translations remaining | 39 | was 49 at cp68 |
+| Brag entries | 295 | was 293 |
+
+## CP69 LESSONS
+
+### Lesson #1 — Hunting-ground items must ship in the NEXT checkpoint or move to a "deferred" list
+A 7-item hunting-ground enumerated at cp-end implies they'll be addressed in cp+1. If cp+1 only does 1 of them, that's a 6-item silent drop. Explicit acknowledgement of what's deferred is the discipline.
+
+### Lesson #2 — YAML parser heuristics need module-vs-task-key distinction
+A task-level `shell:` (the action) at indent N+2 differs from a `shell:` field (user's login shell) inside `ansible.builtin.user:` at indent N+6. Same key, opposite semantic. The cp69-O18 smoke uses indent-based scoping to disambiguate.
+
+### Lesson #3 — Two defenses on the same drift class can be intentionally complementary
+cp61-O14 catches CIDR drift in docs (proximity-to-keyword); cp66-O16 catches CIDR drift in ansible defaults (registry-shape). Keeping both means operators get two helpful signals with non-overlapping failure modes. Smoke header documents the design so future maintainers don't try to "consolidate" them.
+
+### Lesson #4 — Per-doc thresholds beat one-size-fits-all
+OPERATIONS.md (8,680 lines) is supposed to be a tome; PRE-LAUNCH-CHECKLIST.md (759 lines) is supposed to be a punch-list. Section-length thresholds match the doc's purpose.
+
+## CP70+ predicted hunting ground (explicit, not implicit)
+
+- **Translate remaining 39 long-form keys** to all 6 backlog locales (~36,500 EN chars × 6 = ~219k chars of careful prose). Priority: FAQ answers (highest user-facing impact, ~17 keys), then privacy guide caveats/intros.
+- **More invariants for cp66-O16 registry**: HSTS preload window, Tor onion mirror domain, BLURT witness vote URLs (if any are config-referenced)
+- **Brag-list discipline**: cp68's "Eleven invariants" rewrite of #232 could lose readability if more get added → consider splitting into "registry of N invariants" + "specifically these 11" with the count as data
+- **Hardware-blocked tasks**: live ansible deploy on Ubuntu 24.04 VM, Forgejo runner execution (now documented; just needs VPS)
+
+## Two parked external blockers (unchanged through cp42→cp69)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — **NOW unblocked from documentation; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`**
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp67 — 2026-05-20.  **18 STRUCTURAL DEFENSES · BATTERY 3892/0 TRIPLE-PULSE STABLE · cp66-O16 REGISTRY NOW HAS 9 INVARIANTS.**
 
 ## Memory facts re-confirmed at top of cp67

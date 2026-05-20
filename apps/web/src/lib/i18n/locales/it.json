@@ -3202,7 +3202,7 @@
 		"request_missing_link": "Faccelo sapere",
 		"request_missing_no_contact": "Non vedi quello che ti serve? Questa istanza non ha pubblicato un canale di contatto — prova un'altra istanza Morphit, o apri un issue su git.agorise.net/agorise/morphit.",
 		"pay_zec": {
-			"description": "Zcash: launched 2016, zk-SNARK shielded transactions (Sapling + Orchard pools) plus transparent addresses (t1/t3, like Bitcoin). Fair-launched with a founders-reward halving schedule. Per-trade, recipients pick the address type that matches their posture. Trade-only on Morphit — cannot pay listing fees."
+			"description": "Zcash: lanciato nel 2016, transazioni shielded zk-SNARK (pool Sapling + Orchard) accanto agli indirizzi trasparenti (t1/t3, come Bitcoin). Lancio equo con un calendario di halving della founder reward. Per scambio, i destinatari scelgono il tipo di indirizzo che corrisponde alla loro postura. Solo trading su Morphit — non può pagare le commissioni di pubblicazione."
 		},
 		"pay_arrr": {
 			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
@@ -3642,7 +3642,7 @@
 	"assets": {
 		"privacy_warnings": {
 			"usdt_centralized": "Due cose da sapere su USDT prima di tradare: Tether Inc. emette e amministra USDT e ha la capacità tecnica di congelare indirizzi (e l'ha usata). Le transazioni sono pubblicamente visibili su ogni rete supportata (Ethereum, Tron, Solana, BNB Smart Chain) — una proprietà di quelle chain. Scegli l'asset adatto alla tua operazione.",
-			"usdc_centralized": "Two things to know about USDC before trading: Circle issues and administers USDC and has the technical ability to freeze addresses (and has used it). Transactions are publicly visible on each supported network (Ethereum, Solana, Base, Polygon) — a property of those chains. Pick the asset that fits your trade.",
+			"usdc_centralized": "Due cose da sapere su USDC prima di operare: Circle emette e custodisce USDC e può congelare qualsiasi indirizzo USDC senza preavviso o ricorso. Questo è successo a indirizzi sanzionati e a indirizzi associati a hack. La privacy on-chain è limitata su ogni rete supportata (Ethereum, Polygon, Base, Solana) — le transazioni sono pubblicamente visibili come su qualsiasi chain trasparente. Se la decentralizzazione è importante, considera DAI o asset non-stablecoin.",
 			"dai_partly_centralized": "Tre cose da sapere su DAI prima di operare: (1) A differenza di USDT e USDC, il contratto del token DAI non ha una funzione di freeze controllata da admin — MakerDAO non può mettere il tuo indirizzo in una blacklist. È un vero vantaggio di decentralizzazione. (2) DAI è parzialmente garantito da USDC tramite il Peg Stability Module, quindi il potere di freeze di Circle su USDC influisce indirettamente sul riscatto di DAI quando il PSM detiene USDC. (3) Come tutte le stablecoin, le transazioni DAI sono pubblicamente visibili su ogni rete supportata (Ethereum, Polygon, Base, Arbitrum) — una proprietà di quelle chain, nessuna privacy on-chain. Scegli l'asset che si adatta al tuo scambio."
 		},
 		"usdt": {
@@ -3701,7 +3701,7 @@
 				"picker": {
 					"label": "Quale rete USDC?",
 					"requiredHint": "Obbligatorio — non c'è una rete predefinita. Devi sceglierne una per ogni scambio USDC.",
-					"crossNetworkWarning": "Cross-network sends lose your funds permanently. Sending USDC on Ethereum to a Solana address (or vice versa) is unrecoverable. Note that Ethereum, Base, and Polygon addresses look identical (all start with 0x) — the network choice is what tells your wallet which chain to broadcast on."
+					"crossNetworkWarning": "Invii cross-network perdono i tuoi fondi permanentemente. Inviare USDC su una rete diversa da quella che la contraparte sta usando significa che i fondi atterrano su una chain dove la contraparte non li può vedere o spendere. Le quattro reti USDC (Ethereum, Polygon, Base, Solana) sono indipendenti — i saldi non si sincronizzano tra di loro. Entrambe le parti DEVONO accordarsi sulla rete prima dell'invio."
 				}
 			},
 			"address_share": {
@@ -3782,7 +3782,7 @@
 			},
 			"coinjoin": {
 				"name": "CoinJoin",
-				"explain": "A family of protocols where multiple participants pool inputs and outputs into a single transaction, breaking the common-input-ownership heuristic that links coins to one owner. Multiple implementations exist with different trust models — choose carefully and read the implementation's threat model."
+				"explain": "Una famiglia di protocolli in cui più partecipanti raggruppano gli input in una singola transazione multi-input/multi-output, rompendo l'euristica del common-input-ownership usata dagli analisti di chain. Implementazioni includono Wasabi (Bitcoin), JoinMarket (Bitcoin) e Whirlpool/Samourai (Bitcoin, ora retired). Opt-in per transazione; il coordinatore del round è di solito un server (centralizzazione moderata)."
 			},
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
@@ -3827,12 +3827,12 @@
 			"blurt": {
 				"one_line": "Chain di coordinamento — trasparente e account-based. La più bassa privacy su Morphit.",
 				"intro": "BLURT è la chain di coordinamento che Morphit usa per pubblicare ordini e gestire la federazione. È una blockchain di tipo Steem/Hive — account-based, trasparente, governata dal voto di witness e dallo staking. Ogni operazione è pubblicamente visibile, inclusi gli ordini di trading e i pagamenti delle commissioni. La privacy a livello di BLURT è la più bassa di qualsiasi asset su Morphit, per design — è il livello di coordinamento, non il livello di asset.",
-				"caveats": "BLURT is structurally the least private asset on Morphit. Your account name is your address; you cannot rotate it. For trades where on-chain privacy matters more than speed and cost, prefer XMR, BTC (with PayJoin), BCH (with CashFusion), LTC (with MWEB), or DASH (with PrivateSend).",
+				"caveats": "BLURT è strutturalmente l'asset meno privato su Morphit. Il tuo nome account è la tua identità, e ogni operazione (post di ordini, voti di witness, claim_account, transfer di commissioni) è permanentemente visibile a chiunque interroghi un nodo Blurt. Se la privacy importa per la tua attività di trading, mantieni il tuo account BLURT lontano dalle tue identità sensibili o usa un account dedicato unicamente al trading.",
 				"meta_description": "Considerazioni sulla privacy per gli scambi BLURT su Morphit: chain account-based, trasparente per design."
 			},
 			"usdt": {
 				"one_line": "Centralizzata — Tether può congelare qualsiasi indirizzo. Trasparente su ogni chain.",
-				"intro": "USDT's privacy issue is structurally different from the other transparent assets: it's centralized. Tether Inc. can freeze any USDT address on any host chain, and they have used this ability in the past. No amount of address rotation or transaction obfuscation changes Tether's freeze capability.",
+				"intro": "Il problema di privacy di USDT è strutturalmente diverso dagli altri asset trasparenti su Morphit: USDT è centralizzato. Tether Limited può congelare qualsiasi indirizzo USDT senza preavviso. Questo è già successo a indirizzi sanzionati, indirizzi associati a hack, e talvolta indirizzi che Tether stessa considerava sospetti. Operare USDT su Morphit significa accettare un rischio di congelazione che non esiste con BTC/XMR/BLURT.",
 				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
 				"meta_description": "Considerazioni sulla privacy per gli scambi USDT su Morphit: rischio di centralizzazione e trasparenza della chain ospitante."
 			},
@@ -3843,14 +3843,14 @@
 			},
 			"ltc": {
 				"one_line": "Trasparente, decentralizzato — MWEB fornisce privacy opt-in a livello di chain.",
-				"intro": "Litecoin shares Bitcoin's transparency at the base layer, but adds MWEB (MimbleWimble Extension Blocks) — a chain-level opt-in privacy feature that hides amounts and breaks address linkability for transfers that opt in. This is the closest a Bitcoin-family chain comes to native privacy.",
+				"intro": "Litecoin condivide la trasparenza di Bitcoin al base layer, ma da maggio 2022 supporta MimbleWimble Extension Blocks (MWEB) — un pool di transazioni shielded a livello di chain accanto al mainnet trasparente. Trasferisci LTC da indirizzo trasparente a indirizzo MWEB per ottenere privacy on-chain; trasferisci indietro a un indirizzo trasparente per riportarlo al pool trasparente. Il supporto MWEB nei wallet varia.",
 				"meta_description": "Pratiche di privacy per gli scambi Litecoin su Morphit: indirizzi nuovi, MWEB e cosa evitare."
 			},
 			"dash": {
 				"one_line": "Base layer trasparente, decentralizzato — PrivateSend fornisce mixing opt-in coordinato dai masternode.",
 				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
 				"meta_description": "Pratiche di privacy per gli scambi Dash su Morphit: indirizzi nuovi, pre-mixing PrivateSend e cosa evitare.",
-				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern."
+				"caveats": "Il set di anonimato di PrivateSend dipende da partecipanti al mixing simultanei. Nelle ore di traffico ridotto, le sessioni di mixing potrebbero girare con meno partecipanti — meno mix significa minor anonymity set. Pre-mixa BENE PRIMA di un trade su Morphit, non al momento del bisogno: il pre-mixing ti dà tempo per ottenere il set di anonimato che desideri, e disaccoppia il timing del mix dal timing del tuo trade pubblico."
 			},
 			"usdc": {
 				"one_line": "Centralizzata — Circle può congelare qualsiasi indirizzo. Trasparente su ogni chain.",
@@ -3861,13 +3861,13 @@
 			"dai": {
 				"one_line": "DAI — stablecoin ancorata al USD governata da MakerDAO. Nessun freeze admin sul token, ma parzialmente garantita da USDC.",
 				"meta_description": "Note oneste sulla privacy per operare con DAI su Morphit: più decentralizzato di USDT/USDC a livello di contratto, parzialmente garantito da USDC tramite il Peg Stability Module.",
-				"intro": "DAI is MakerDAO's USD-pegged stablecoin, deployed on Ethereum and several other EVM chains. It's the most-decentralized US-dollar-pegged asset Morphit supports — but \"decentralized\" doesn't mean \"freeze-immune\" or \"fully crypto-backed\" anymore. This page is the honest picture so you can choose with eyes open."
+				"intro": "DAI è la stablecoin ancorata al USD di MakerDAO, deployed su Ethereum e diverse altre chain EVM. È l'asset USD-pegged più decentralizzato che Morphit supporta — ma \"decentralizzato\" non significa più \"immune da freeze\" o \"completamente garantito da cripto\". Questa pagina è il quadro onesto per scegliere con gli occhi aperti."
 			},
 			"doge": {
 				"one_line": "Base layer trasparente, decentralizzato via PoW, nessun aggiornamento di privacy nativo.",
 				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
 				"meta_description": "Pratiche di privacy per gli scambi Dogecoin su Morphit: indirizzi nuovi, evitare le euristiche di chain e quali compromessi aspettarsi.",
-				"caveats": "Dogecoin has no native privacy upgrade — no PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish on Morphit can be linked to its on-chain history forever. Use a fresh HD-derived address for every trade (your wallet usually does this automatically)."
+				"caveats": "Dogecoin non ha aggiornamenti di privacy nativi — nessun equivalente PrivateSend, nessun MWEB, nessuna riserva opt-in. Il merge-mining con Litecoin protegge contro attacchi del 51% ma non aiuta la privacy delle transazioni. Le tue migliori leve sono: usare indirizzi nuovi per ogni trade, evitare di riusare lo stesso indirizzo tra trade, e considerare che la chain è osservata da analisti che catalogano gli scambi e i loro flussi di output."
 			},
 			"zec": {
 				"one_line": "Tipi di indirizzo trasparenti e shielded coesistono; il destinatario sceglie per indirizzo.",
