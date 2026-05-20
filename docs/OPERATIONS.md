@@ -4976,7 +4976,17 @@ Out of the box, the relay only trusts `X-Forwarded-For` headers from loopback ad
 | BunkerWeb on a separate host from the relay | BunkerWeb's host IP (e.g., `10.0.0.5`) | Same — every user shares one bucket |
 | BunkerWeb in front of nginx (Option B) on same host | Loopback (nginx is the trusted hop) | OK — nginx already trusted; X-Forwarded-For chain works |
 
-To fix the Docker-compose case, set `MORPHIT_RELAY_TRUSTED_PROXY_IPS` to the Docker bridge CIDR. The default Docker bridge networks are typically `172.17.0.0/16` (the default `bridge` network) and `172.18.0.0/16` through `172.31.0.0/16` for user-defined networks. For a typical compose-managed deployment, `172.18.0.0/16` covers it. To find YOUR bridge network's CIDR:
+To fix the Docker-compose case, set `MORPHIT_RELAY_TRUSTED_PROXY_IPS` to the Docker bridge CIDR.
+
+**If you deploy the canonical morphit-shipped BunkerWeb compose** (`ops/bunkerweb/docker-compose.yml`, also deployed by the Ansible `bunkerweb` role), the CIDR is **PINNED at `172.20.0.0/16`** — set:
+
+```
+MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
+```
+
+The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds.
+
+**If you deploy your OWN compose** with a different network CIDR, the default Docker bridge networks are typically `172.17.0.0/16` (the default `bridge` network) and `172.18.0.0/16` through `172.31.0.0/16` for user-defined networks. To find YOUR bridge network's CIDR:
 
 ```sh
 docker network inspect <your-compose-network> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
