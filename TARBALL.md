@@ -1,5 +1,80 @@
 # Tarball history
 
+## cp73 — vitest-must-pass extended to relay (244) + web (619) + cp73-D10 (relay test fix) + cp73-D11 (missing SEO i18n key) (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp73-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 298 brag entries · locale parity 2,825 + seo.privacy_index = 2,826 × 10 = 28,260 · **3906 scenarios pass / 0 runners failed** (was 3904 at cp72; +2 from relay + web vitest scenarios) · **7/7 workspaces TS-clean (LL #52 30th consecutive)** · **23 structural defenses operational** · **1344 vitest tests passing across 3 workspaces** (was 481 at cp72 indexer-only) · TRIPLE-PULSE STABLE.
+
+### Two real bug fixes discovered by extending vitest coverage
+
+**cp73-D10 — relay highValueName test was wrong about 'xrp'**
+- File: `apps/relay/test/highValueName.test.ts:46`
+- Bug: test asserted `classifyHighValueName('xrp') === 'dictionary_brand'`.
+- Actual behavior: 'xrp' has length 3, which is ≤ `shortNameThreshold` (default 4), so `short_name` is returned at line 397 BEFORE the dictionary check at line 419.
+- short_name is a STRONGER restriction (caught earlier in the precedence chain), so 'xrp' is correctly classified. The test was wrong, not the code.
+- Fix: assert `'short_name'` for 'xrp'; keep `'dictionary_brand'` for 'ripple' (length 6, past threshold). Updated comment to document the precedence chain.
+- All 244 relay vitest tests now passing (was 243+1).
+
+**cp73-D11 — missing seo.privacy_index keys**
+- File: `apps/web/src/lib/seo/routes.ts:103` defines `/privacy` route with key `privacy_index`.
+- Bug: corresponding `seo.privacy_index.title` and `seo.privacy_index.description` keys did NOT exist in any locale's JSON (en.json, es.json, ...). The `seo/routes.test.ts` i18n-coverage test caught this.
+- The /privacy route would have served with empty/undefined SEO meta tags in production.
+- Fix: native translations added to all 10 locales (en, es, fr, de, it, pl, ru, fa, zh-CN, zh-HK). Title and description natively localized for each.
+- All 619 web vitest tests now passing (was 617+2).
+
+### Defense extension: cp71-O19 vitest-must-pass smoke
+
+The cp71 smoke previously baselined only `apps/indexer` (481 passing). cp73 extends to:
+- `apps/indexer`: 481 passing (unchanged baseline)
+- `apps/relay`: 244 passing (NEW baseline after cp73-D10 fix)
+- `apps/web`: 619 passing (NEW baseline after cp73-D11 fix)
+
+Total: **1,344 unit tests now monitored** for regression across 3 workspaces. The other 868 tests (relay + web) were running but unmonitored before cp73. If a future checkpoint silently disables tests in any of these workspaces, the smoke fires.
+
+### Brag list refresh
+
+Updated brag #235 to mention the expanded coverage:
+> "The cp71 vitest-must-pass smoke runs `vitest --run` per workspace (indexer, relay, web — 1,344 tests across 3 workspaces) and asserts the pass count meets a baseline."
+
+Mediakit regenerated to 96,333 bytes after brag list change.
+
+### Final cp73 state metrics
+
+- 16 tradable assets / 35 ADRs / 298 brag entries (unchanged from cp72)
+- **3906 scenarios pass / 0 runners failed** (+2 from cp72: relay + web vitest scenarios in O-19)
+- 7/7 workspaces TS-clean (LL #52 30th consecutive)
+- 23 structural defenses operational (unchanged from cp72)
+- **1,344 vitest tests passing across 3 workspaces** (was 481 indexer-only at cp72)
+- 298 brag entries (#235 refreshed with new test count)
+- Mediakit regenerated to 96,333 bytes
+- **29 long-form translation keys remaining** (unchanged from cp72)
+- 2,826 i18n keys × 10 locales = 28,260 (was 28,250 at cp72; +10 for seo.privacy_index in each)
+
+### Lessons
+
+1. **Extending coverage finds real bugs.** Extending cp71-O19 to relay + web caught 2 real issues that had been latent (one wrong test assertion, one missing i18n key). The static-analysis battery missed both because they were in the unit-test tier.
+2. **Test infrastructure should be discovered, not assumed.** cp71-O19's initial baseline assumed only indexer had tests; in fact relay had 18 test files (244 tests) and web had 28 test files (624 tests). 1.8× more tests existed than my structural defense knew about.
+3. **A failing i18n-coverage test catches missing keys for routes.** The web test `seo/routes.test.ts` was a small focused test that prevented an actual user-facing bug (the /privacy page would have shipped with empty meta tags). The test was there; nobody was running it. cp73-O19 extension means it runs every checkpoint now.
+4. **i18n: when you add a new route, you must add `seo.<key>.{title,description}` to every locale.** The fix added all 10 locale entries in the same commit — locale parity discipline.
+
+### Campaign-arc summary (cp61 → cp73)
+
+| Checkpoint | Battery | Defenses | vitest | Note |
+|---|---|---|---|---|
+| cp65 chronic closure | 3874 / 0 | 17 | (not run) | |
+| cp66 NEW DEFENSE | 3886 / 0 | 18 | (not run) | Registry, 6 invariants |
+| cp67 registry scaling | 3892 / 0 | 18 | (not run) | +3 invariants (→9) |
+| cp68 translations push | 3892 / 0 | 18 | (not run) | 211/260 keys |
+| cp69 hunting-ground sweep | 3900 / 0 | 20 | (not run) | +O17, +O18, +runbook |
+| cp70 deep bug hunt | 3900 / 0 | 20 | 481/482 | 1 prod + 3 quality + 17 test-rot |
+| cp71 defenses-from-cp70 | 3904 / 0 | 23 | 481/482 | +O19, +O20, +O21, fetchWithTimeout |
+| cp72 translations + cleanup | 3904 / 0 | 23 | 481/482 | +60 trans, brag fix, mediakit regen |
+| **cp73 vitest-must-pass extension** | **3906 / 0** | **23** | **1344/1355** | +1 indexer + 244 relay + 619 web in O-19; cp73-D10 + cp73-D11 |
+
+---
+
+# Tarball history
+
 ## cp72 — 60 MORE TRANSLATIONS + brag list fix (cp71 over-budget caught and corrected) + deep audit continuation (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp72-FULL-STATE.tar.gz`

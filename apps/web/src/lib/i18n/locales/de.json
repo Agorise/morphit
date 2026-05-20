@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Morphit-Spickzettel",
 			"description": "Drucken Sie eine einseitige Referenz für die Nutzung von Morphit: Kontoname vs Seed-Phrase, Inseratgebühr vs Netzwerkgebühr, die unterstützten handelbaren Assets im Überblick, und was zu tun ist, wenn etwas schiefgeht."
+		},
+		"privacy_index": {
+			"title": "Privatsphäre auf Morphit — Leitfäden je Asset",
+			"description": "Privatsphäre-Leitfäden für jedes von Morphit unterstützte Asset. Die meisten Chains sind transparent; konkrete Schritte machen deine Trades deutlich schwerer zu verknüpfen, zu profilieren oder zu überwachen."
 		}
 	},
 	"prices": {

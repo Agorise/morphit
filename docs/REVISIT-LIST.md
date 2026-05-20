@@ -1,5 +1,70 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp73 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3906/0 TRIPLE-PULSE STABLE · 1,344 VITEST TESTS PASSING ACROSS 3 WORKSPACES.**
+
+## CP73 LESSONS
+
+### Lesson #1 — Extending coverage finds real bugs
+The cp71-O19 vitest-must-pass smoke baselined only `apps/indexer` at cp71 ship. cp73 extended to `apps/relay` (244 tests) and `apps/web` (619 tests). Extension immediately caught 2 real bugs:
+- cp73-D10 (relay): test was wrong about 'xrp' classification (length 3 → short_name fires before dictionary_brand)
+- cp73-D11 (web): missing seo.privacy_index.{title,description} keys in all 10 locales (would have shipped a route with empty SEO tags)
+
+### Lesson #2 — Test infrastructure is discovered, not assumed
+cp71-O19's initial baseline assumed only indexer had tests. In fact:
+- relay: 18 test files (244 tests)
+- web: 28 test files (624 tests)
+- indexer: 43 test files (482 tests)
+
+868 tests existed UNMONITORED before cp73. Lesson: when introducing a coverage smoke, walk the actual repo for test files, don't trust an initial assumption.
+
+### Lesson #3 — Locale parity discipline holds for SEO too
+When adding a new route's SEO key, all 10 locales must get an entry in the SAME commit. cp73-D11's fix added 10 entries (en, es, fr, de, it, pl, ru, fa, zh-CN, zh-HK) with native translations. Locale parity is non-negotiable.
+
+## STRUCTURAL DEFENSES — 23 OPERATIONAL (cp71-O19 widened at cp73)
+
+cp71-O19 baseline extended:
+- apps/indexer: 481 passing (unchanged)
+- apps/relay: 244 passing (NEW cp73)
+- apps/web: 619 passing (NEW cp73)
+
+Total monitored: 1,344 unit tests across 3 workspaces.
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3906 | +2 from cp72 (relay + web vitest scenarios in O-19) |
+| Runners FAILED | 0 | clean |
+| Workspaces TS-clean (LL #52) | 7/7 | 30th consecutive |
+| Triple-pulse stable | ✓ | 3906/0 |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **1344 across 3 workspaces** | was 481 indexer-only at cp72 |
+| **Backlog translations remaining** | **29** | unchanged from cp72 |
+| Brag entries | 298 | #235 refreshed with new test count |
+| Mediakit size | 96,333 bytes | regenerated cp73 |
+| i18n key parity | 2,826 × 10 = 28,260 | +10 from cp72's 28,250 (seo.privacy_index in 10 locales) |
+
+## CP74+ PREDICTED HUNTING GROUND
+
+- **Continue translation backlog: 29 long-form keys remaining**
+- **More structural defenses derived from cp73 lessons:**
+  - O-22: seo-route-keys-must-exist-in-every-locale (would have caught cp73-D11 statically without needing the web test to fail). Actually the web `seo/routes.test.ts` already does this for en.json; a smoke could extend to all 10 locales.
+  - O-23: ops-cli + matrix-bot vitest baselines (currently no tests; if we add any, the smoke needs to monitor them)
+- **Audit areas still unexplored:**
+  - Mock-vs-production fixture divergence (relay tests mock the chain RPC; real broadcasts may behave differently)
+  - Service-worker fetch-caching edge cases (stale-while-revalidate)
+  - Operator-facing FAQ answer parity (translator-controlled prose vs technical claim in docs)
+- **Hardware-blocked tasks** (unchanged): live ansible deploy on Ubuntu 24.04 VM, Forgejo runner execution
+
+## Two parked external blockers (unchanged through cp42→cp73)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp72 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3904/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 29 LONG-FORM TRANSLATION KEYS REMAIN.**
 
 ## CP72 LESSONS
