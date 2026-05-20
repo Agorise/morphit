@@ -130,6 +130,7 @@ SMOKES=(
 	"apps/web:vitest-must-pass-smoke"
 	"apps/web:untrusted-parseint-safety-smoke"
 	"apps/web:fetch-must-have-timeout-smoke"
+	"apps/web:seo-routes-i18n-all-locales-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"

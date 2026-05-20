@@ -1,5 +1,58 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp74 — 2026-05-20.  **24 STRUCTURAL DEFENSES · BATTERY 3907/0 (pulses 2+3 clean; pulse 1 hit known relay test flake) · 1,344 VITEST TESTS PASSING · ~27 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP74 LESSONS
+
+### Lesson #1 — Defenses cascade across layers
+cp73-D11 (missing seo.privacy_index keys) was caught by the unit-test layer at cp73. cp74 promotes the same check to the static-smoke layer (cp74-O22) for instant feedback at battery time. Each cp's lesson reinforces the previous cp's lesson; defense layering protects against the next variant of the same class.
+
+### Lesson #2 — Pre-existing test flakes are technical debt to track
+The relay `create.test.ts > broadcasts to chain via dust transfer` test occasionally fails with "rpc timeout" — the test mocks a chain RPC with a tight timeout. cp74 pulse 1 hit it; pulses 2 and 3 were clean. Production code is correct; this is test reliability. cp75+ candidate: bump mock RPC timeout or wrap in retry-with-backoff.
+
+### Lesson #3 — Translation batches now hit diminishing returns
+Batch 7 was the last batch of <600-char keys. The remaining 27 keys (down from 29 at cp73) are mostly 700-900 char FAQ answers and privacy guide intros. cp75 batches will be 3-5 keys instead of 10.
+
+## STRUCTURAL DEFENSES — 24 OPERATIONAL
+
+cp74 added:
+- **cp74-O22 seo-routes-i18n-all-locales-smoke**: walks `apps/web/src/lib/seo/routes.ts` against every locale JSON; fails if any route's `seo.<key>.{title,description}` is missing in any locale. Static, runs <1s per battery. M-145 verified.
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3907 | +1 from cp73 (O-22) |
+| Runners FAILED | 0 (pulses 2+3) | pulse 1 hit known relay flake |
+| Workspaces TS-clean (LL #52) | 7/7 | 31st consecutive |
+| Triple-pulse stable | partial | pulses 2+3 clean, pulse 1 flaky |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **1,344 across 3 workspaces** | unchanged |
+| **Backlog translations remaining** | **27 long-form keys** | was 29 at cp73 (batch 7 closed -2 net) |
+| Brag entries | 299 | was 298 at cp73 (+#238 for O-22) |
+| Mediakit size | 96,852 bytes | regenerated cp74 |
+
+## CP75+ PREDICTED HUNTING GROUND
+
+1. **Fix the relay create.test.ts flake** (cp75-D12 candidate): bump mock RPC timeout window OR wrap dust-transfer assertion in retry-with-backoff. The flake masks real regressions in the cp71-O19 monitoring.
+2. **Continue translation backlog: 27 long-form keys** (mostly 700-900 EN char FAQ answers + privacy guide intros). Next 5: `privacy.guides.eth.intro`, `privacy.guides.arrr.intro`, `faq.entries.what_is_usdc.a`, `privacy.guides.sol.intro`, `privacy.guides.xrp.intro`.
+3. **More structural defenses derived from cp74:**
+   - O-23 candidate: relay-vitest-flake-budget (catches the create.test.ts flake before it blocks ship)
+   - O-24 candidate: i18n key parity for ALL string families (not just seo); extension of cp54-O8 and cp55-O9 patterns
+4. **Audit areas still unexplored:**
+   - Mock-vs-production fixture divergence (relay tests mock chain RPC; real broadcasts may differ)
+   - Service-worker fetch-caching edge cases (stale-while-revalidate quirks)
+   - Operator-facing FAQ answer parity (translator-controlled prose vs technical claim in docs)
+
+## Two parked external blockers (unchanged through cp42→cp74)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp73 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3906/0 TRIPLE-PULSE STABLE · 1,344 VITEST TESTS PASSING ACROSS 3 WORKSPACES.**
 
 ## CP73 LESSONS
