@@ -1,5 +1,43 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp64 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp64
+
+- **Memory #29 NATIVE-LOCALE policy** (native en/es/fr/de for new keys; EN-fallback OK for it/pl/ru/fa/zh-CN/zh-HK as community backlog) is now **encoded in the smoke** at `apps/web/scripts/i18n-translation-completeness-smoke.ts` via `POLICY_FALLBACK_LOCALES`. Future sessions don't need to re-derive it from memory.
+- **K.I.S.S. for substring assertions**: sally-walkthrough's L13 bug was a 2-line comment break that the indexOf-based smoke couldn't span. Keeping marker phrases like "Sally finding L13" on a single line is the convention going forward.
+- **Memory #13 NEVER ASSUME** — caught a TypeScript template-literal `${price}` being interpreted at JS runtime instead of as literal text in the smoke's `reason` field. Escape backtick-literal `${` content as `\${`.
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (unchanged from cp61-63)
+
+cp64 didn't add a defense. It encoded existing policy (Memory #29) into the existing smoke.
+
+## BATTERY STATE — 1 chronic with vastly reduced scope
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3870 | up from 3848 (cp63, +22 from sally-walkthrough now 22/22) |
+| Runners chronic | 1 | i18n-translation-completeness flagging 130 real prose misses in es/fr/de (was 1,807 across all 9 non-EN locales) |
+| Workspaces TS-clean (LL #52) | 7/7 | 21st consecutive |
+
+## CP65+ predicted hunting ground
+
+- **Native-translate the 130 remaining prose misses to es/fr/de** — the cleanest end-state for i18n-translation-completeness. Bounded work (~44 unique keys × 3 locales). Focused multi-checkpoint pass: one asset's i18n at a time (Pirate Chain, Decred, Ethereum, Solana, Ripple, Zcash, Dai).
+- **Value-cross-reference invariant hunt** (cp61-O14's parity-model class, deferred from cp62-cp64) — port numbers, DB names, recipient addresses, docker network names beyond CIDR
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries
+- **\`MORPHIT_RELAY_PASSPHRASE_FILE\` documentation depth** — currently a commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog per Memory #29)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+
+## Two parked external blockers (unchanged through cp42→cp64)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp63 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp63

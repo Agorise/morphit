@@ -1,5 +1,77 @@
 # Tarball history
 
+## cp64 — Sally L13 cleared + Memory #29 policy split + 99 invariants allow-listed (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp64-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **3870 scenarios pass / 1 runner chronic-but-scoped-down** (was 3848/2 at cp63) · **7/7 workspaces TS-clean (LL #52 21st consecutive)** · **17 structural defenses operational** (unchanged).
+
+**cp64 origin:** cp63 left 2 chronic failures: sally-walkthrough L13 (XMR-jitter doc gap) and i18n-translation-completeness (1,807 EN-byte-identical findings). cp64 closes sally L13 and substantially scopes down the i18n chronic from 1,807 to 130 findings via two complementary moves.
+
+### Closure #1 — Sally L13 (one-line comment reflow)
+
+The smoke at `apps/web/scripts/sally-walkthrough-smoke.ts` expected the substring `'Sally finding L13'` to appear in `apps/web/src/lib/components/AddressShareModal.svelte`. The text WAS in the source but broken across two comment lines:
+
+```
+this in cp3 with deep Monero-specific copy (Sally finding
+L13 — Part 68 — explicit ON/OFF state copy).
+```
+
+The smoke does `indexOf(substring)`, which can't span a line boundary. Fix: reflowed the comment so "Sally finding L13" stays on one line.
+
+Result: sally-walkthrough 22/22 ✓ (was 21/22 since cp32).
+
+### Closure #2 — i18n-translation-completeness Memory #29 policy split
+
+Pre-cp64 state: smoke flagged 1,807 EN-byte-identical strings across 9 non-EN locales. The distribution:
+- it/pl/ru: 264 each
+- zh-CN/zh-HK: 262 each
+- fa: 261
+- es/fr/de: 76-77 each
+
+Memory #29 policy is clear: **native EN/ES/FR/DE for new keys; EN-fallback acceptable for it/pl/ru/fa/zh-CN/zh-HK (community-translation backlog)**. The smoke was treating all 9 non-EN locales identically, flagging the documented backlog as drift.
+
+**Fix:** added `POLICY_FALLBACK_LOCALES = new Set(['fa', 'it', 'pl', 'ru', 'zh-CN', 'zh-HK'])` to the smoke with a documented Memory #29 rationale block. The byte-identical check now skips those 6 locales (they're allowed EN-fallback per policy) and only enforces native translation for es/fr/de (which Memory #29 says MUST be native).
+
+Drop: 1,807 → 229 findings (all in es/fr/de).
+
+### Closure #3 — 99 per-asset invariants added to ALLOW_LIST
+
+Of the 229 es/fr/de findings, ~31 unique keys are pure invariants — ticker symbols (DAI, ETH, SOL, USDC, XRP, DCR), proper brand names (Bitcoin Cash, Dogecoin, Litecoin, Decred, Solana, Arbitrum One, Polygon, CashFusion, CoinJoin, PayJoin, PrivateSend), protocol identifiers (Ethereum (ERC-20), Solana (SPL), MWEB), and placeholder-only strings (DAI {network}, 1 DAI = ${price}).
+
+Added 31 × 3 = 93 entries to ALLOW_LIST. Then also added entries for chat.address.pill_method_dai, assets.dai.network.picker.label, and a few related — total 99 invariant entries shipped with `reason: '(c) <documented justification>'`.
+
+Drop: 229 → 130 findings.
+
+### Remaining: 130 findings = ~44 unique prose keys × 3 locales
+
+The 130 remaining findings are LEGITIMATE Memory #29 violations — actual prose strings in es/fr/de that have no native translation. Examples:
+
+- `payment_method.pay_X.description` for ARRR/DCR/ETH/SOL/XRP/ZEC (6 keys × 3 locales = 18)
+- `privacy.guides.X.{intro, caveats, meta_description}` for ARRR/DCR/ETH/SOL/XRP/ZEC + DAI (21 keys × 3 = 63)
+- DAI-specific FAQ + warnings + network picker prose (~17 keys × 3 = 51)
+
+These are real translation misses that should be addressed via a focused native-translation pass — that's cp65+ scope. The work is bounded (~130 strings) and language-mechanical, but is its own multi-hour effort.
+
+### Final cp64 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- **3870 scenarios pass** / 1 runner chronic-but-scoped-down (was 3848/2)
+- The 1 remaining: i18n-translation-completeness flagging 130 prose findings (was 1,807)
+- 7/7 workspaces TS-clean (LL #52 21st consecutive)
+- 17 structural defenses operational (unchanged)
+- 3 fixes inline (sally L13 reflow + Memory #29 policy split + 99 invariant ALLOW_LIST entries)
+- Mediakit unchanged
+
+### Lessons
+
+1. **Substring assertions don't span line boundaries.** The Sally L13 bug shipped because the smoke does `indexOf` and the phrase wrapped. Either keep marker phrases on one line, OR have smokes normalize whitespace before substring search. cp64 chose the former (simpler, less smoke complexity).
+2. **Encode policy in smoke logic, not just in Memory.** Memory #29's policy that fa/it/pl/ru/zh-CN/zh-HK can be EN-fallback was documented for ~10 checkpoints (cp36+) but the smoke didn't know about it. Smokes are the executable spec; policy lives in them, not just in commit messages.
+3. **Template literals (backticks) in TS source need `\${...}` escaping when the literal contains `${...}` as content.** My first invariant injection batch crashed because `reason: \`(c) "1 DAI = ${price}"\`` was interpreted as a template substitution. Escaped to `\${price}`.
+
+---
+
+# Tarball history
+
 ## cp63 — \$lib alias resolved + 3 real bugs caught by full battery (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp63-FULL-STATE.tar.gz`

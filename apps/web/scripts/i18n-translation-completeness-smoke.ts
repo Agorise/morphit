@@ -686,6 +686,107 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'chat.address.method_usdt', locale: 'ru', reason: '(c) "USDT" is a universal acronym' },
 	{ key: 'chat.address.method_usdt', locale: 'zh-CN', reason: '(c) "USDT" is a universal acronym' },
 	{ key: 'chat.address.method_usdt', locale: 'zh-HK', reason: '(c) "USDT" is a universal acronym' },
+
+	// ─── (c) cp64: per-asset invariants (proper nouns / acronyms / protocol identifiers) — Memory #29 native-locale policy ───
+	{ key: 'chat.address.method_arrr', locale: 'es', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_arrr', locale: 'fr', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_arrr', locale: 'de', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_bch', locale: 'es', reason: `(c) "Bitcoin Cash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_bch', locale: 'fr', reason: `(c) "Bitcoin Cash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_bch', locale: 'de', reason: `(c) "Bitcoin Cash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_dai', locale: 'es', reason: `(c) "DAI" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_dai', locale: 'fr', reason: `(c) "DAI" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_dai', locale: 'de', reason: `(c) "DAI" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_dash', locale: 'es', reason: `(c) "Dash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_dash', locale: 'fr', reason: `(c) "Dash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_dash', locale: 'de', reason: `(c) "Dash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_dcr', locale: 'es', reason: `(c) "DCR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_dcr', locale: 'fr', reason: `(c) "DCR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_dcr', locale: 'de', reason: `(c) "DCR" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_doge', locale: 'es', reason: `(c) "Dogecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_doge', locale: 'fr', reason: `(c) "Dogecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_doge', locale: 'de', reason: `(c) "Dogecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_eth', locale: 'es', reason: `(c) "ETH" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_eth', locale: 'fr', reason: `(c) "ETH" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_eth', locale: 'de', reason: `(c) "ETH" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_ltc', locale: 'es', reason: `(c) "Litecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_ltc', locale: 'fr', reason: `(c) "Litecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_ltc', locale: 'de', reason: `(c) "Litecoin" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_sol', locale: 'es', reason: `(c) "SOL" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_sol', locale: 'fr', reason: `(c) "SOL" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_sol', locale: 'de', reason: `(c) "SOL" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_usdc', locale: 'es', reason: `(c) "USDC" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_usdc', locale: 'fr', reason: `(c) "USDC" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_usdc', locale: 'de', reason: `(c) "USDC" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_xrp', locale: 'es', reason: `(c) "XRP" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_xrp', locale: 'fr', reason: `(c) "XRP" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_xrp', locale: 'de', reason: `(c) "XRP" is the universal ticker symbol; no translation` },
+	{ key: 'chat.address.method_zec', locale: 'es', reason: `(c) "Zcash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_zec', locale: 'fr', reason: `(c) "Zcash" is the proper brand name; no translation` },
+	{ key: 'chat.address.method_zec', locale: 'de', reason: `(c) "Zcash" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_arrr', locale: 'es', reason: `(c) "Pirate Chain (ARRR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_arrr', locale: 'fr', reason: `(c) "Pirate Chain (ARRR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_arrr', locale: 'de', reason: `(c) "Pirate Chain (ARRR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_dai', locale: 'es', reason: `(c) "DAI {network}" — DAI is the brand; {network} is a placeholder` },
+	{ key: 'chat.address.pill_method_dai', locale: 'fr', reason: `(c) "DAI {network}" — DAI is the brand; {network} is a placeholder` },
+	{ key: 'chat.address.pill_method_dai', locale: 'de', reason: `(c) "DAI {network}" — DAI is the brand; {network} is a placeholder` },
+	{ key: 'chat.address.pill_method_dcr', locale: 'es', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_dcr', locale: 'fr', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_dcr', locale: 'de', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_eth', locale: 'es', reason: `(c) "Ethereum (ETH)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_eth', locale: 'fr', reason: `(c) "Ethereum (ETH)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_eth', locale: 'de', reason: `(c) "Ethereum (ETH)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_sol', locale: 'es', reason: `(c) "Solana (SOL)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_sol', locale: 'fr', reason: `(c) "Solana (SOL)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_sol', locale: 'de', reason: `(c) "Solana (SOL)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_xrp', locale: 'es', reason: `(c) "Ripple (XRP)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_xrp', locale: 'fr', reason: `(c) "Ripple (XRP)" is the proper brand name; no translation` },
+	{ key: 'chat.address.pill_method_xrp', locale: 'de', reason: `(c) "Ripple (XRP)" is the proper brand name; no translation` },
+	{ key: 'assets.dai.network.arbitrum.displayName', locale: 'es', reason: `(c) "Arbitrum One" is the proper network/brand name` },
+	{ key: 'assets.dai.network.arbitrum.displayName', locale: 'fr', reason: `(c) "Arbitrum One" is the proper network/brand name` },
+	{ key: 'assets.dai.network.arbitrum.displayName', locale: 'de', reason: `(c) "Arbitrum One" is the proper network/brand name` },
+	{ key: 'assets.dai.network.base.displayName', locale: 'es', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.dai.network.base.displayName', locale: 'fr', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.dai.network.base.displayName', locale: 'de', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.dai.network.erc20.displayName', locale: 'es', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.dai.network.erc20.displayName', locale: 'fr', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.dai.network.erc20.displayName', locale: 'de', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.dai.network.polygon.displayName', locale: 'es', reason: `(c) "Polygon (PoS)" is the proper network name + protocol designation` },
+	{ key: 'assets.dai.network.polygon.displayName', locale: 'fr', reason: `(c) "Polygon (PoS)" is the proper network name + protocol designation` },
+	{ key: 'assets.dai.network.polygon.displayName', locale: 'de', reason: `(c) "Polygon (PoS)" is the proper network name + protocol designation` },
+	{ key: 'assets.usdc.network.base.displayName', locale: 'es', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.usdc.network.base.displayName', locale: 'fr', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.usdc.network.base.displayName', locale: 'de', reason: `(c) "Base" is the proper network/brand name (Coinbase L2)` },
+	{ key: 'assets.usdc.network.erc20.displayName', locale: 'es', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.usdc.network.erc20.displayName', locale: 'fr', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.usdc.network.erc20.displayName', locale: 'de', reason: `(c) "Ethereum (ERC-20)" is the protocol identifier` },
+	{ key: 'assets.usdc.network.polygon.displayName', locale: 'es', reason: `(c) "Polygon" is the proper network/brand name` },
+	{ key: 'assets.usdc.network.polygon.displayName', locale: 'fr', reason: `(c) "Polygon" is the proper network/brand name` },
+	{ key: 'assets.usdc.network.polygon.displayName', locale: 'de', reason: `(c) "Polygon" is the proper network/brand name` },
+	{ key: 'assets.usdc.network.spl.displayName', locale: 'es', reason: `(c) "Solana (SPL)" is the protocol identifier` },
+	{ key: 'assets.usdc.network.spl.displayName', locale: 'fr', reason: `(c) "Solana (SPL)" is the protocol identifier` },
+	{ key: 'assets.usdc.network.spl.displayName', locale: 'de', reason: `(c) "Solana (SPL)" is the protocol identifier` },
+	{ key: 'privacy.opt_in_tech.cashfusion.name', locale: 'es', reason: `(c) "CashFusion" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.cashfusion.name', locale: 'fr', reason: `(c) "CashFusion" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.cashfusion.name', locale: 'de', reason: `(c) "CashFusion" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.coinjoin.name', locale: 'es', reason: `(c) "CoinJoin" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.coinjoin.name', locale: 'fr', reason: `(c) "CoinJoin" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.coinjoin.name', locale: 'de', reason: `(c) "CoinJoin" is the proper protocol name; no translation` },
+	{ key: 'privacy.opt_in_tech.mweb.name', locale: 'es', reason: `(c) "MWEB (MimbleWimble Extension Blocks)" is the proper protocol name` },
+	{ key: 'privacy.opt_in_tech.mweb.name', locale: 'fr', reason: `(c) "MWEB (MimbleWimble Extension Blocks)" is the proper protocol name` },
+	{ key: 'privacy.opt_in_tech.mweb.name', locale: 'de', reason: `(c) "MWEB (MimbleWimble Extension Blocks)" is the proper protocol name` },
+	{ key: 'privacy.opt_in_tech.payjoin.name', locale: 'es', reason: `(c) "PayJoin (BIP-78)" is the proper protocol name + BIP designation` },
+	{ key: 'privacy.opt_in_tech.payjoin.name', locale: 'fr', reason: `(c) "PayJoin (BIP-78)" is the proper protocol name + BIP designation` },
+	{ key: 'privacy.opt_in_tech.payjoin.name', locale: 'de', reason: `(c) "PayJoin (BIP-78)" is the proper protocol name + BIP designation` },
+	{ key: 'privacy.opt_in_tech.privatesend.name', locale: 'es', reason: `(c) "PrivateSend" is the proper protocol name (Dash); no translation` },
+	{ key: 'privacy.opt_in_tech.privatesend.name', locale: 'fr', reason: `(c) "PrivateSend" is the proper protocol name (Dash); no translation` },
+	{ key: 'privacy.opt_in_tech.privatesend.name', locale: 'de', reason: `(c) "PrivateSend" is the proper protocol name (Dash); no translation` },
+	{ key: 'assets.dai.price_subline.live', locale: 'es', reason: `(c) "1 DAI = \${price}" — DAI brand + placeholder, no prose` },
+	{ key: 'assets.dai.price_subline.live', locale: 'fr', reason: `(c) "1 DAI = \${price}" — DAI brand + placeholder, no prose` },
+	{ key: 'assets.dai.price_subline.live', locale: 'de', reason: `(c) "1 DAI = \${price}" — DAI brand + placeholder, no prose` },
+	{ key: 'assets.dai.network.picker.label', locale: 'es', reason: `(c) "DAI network" — DAI brand; "network" treated as invariant in tight UI label` },
+	{ key: 'assets.dai.network.picker.label', locale: 'fr', reason: `(c) "DAI network" — DAI brand; "network" treated as invariant in tight UI label` },
+	{ key: 'assets.dai.network.picker.label', locale: 'de', reason: `(c) "DAI network" — DAI brand; "network" treated as invariant in tight UI label` },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));
@@ -700,11 +801,28 @@ const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));
 interface Finding { key: string; locale: string; value: string }
 const findings: Finding[] = [];
 
+// Memory #29 policy on locale-translation requirements:
+//   - en/es/fr/de: MUST be natively translated for new keys
+//     (the "native-translation locales").
+//   - fa/it/pl/ru/zh-CN/zh-HK: EN-fallback acceptable as
+//     community-translation backlog (the "policy-fallback
+//     locales").  Each EN-identical string in these locales is
+//     the documented Memory #29 backlog state, NOT a translation
+//     miss.  This smoke skips the byte-identical check for them.
+//
+// The native-translations-floor-smoke (LL #47) covers the
+// orthogonal regression case — "going down" from a previously-
+// native string back to EN-fallback — for ALL 9 non-EN locales.
+// This smoke handles the "must be native per policy" forward
+// gate for es/fr/de only.
+const POLICY_FALLBACK_LOCALES = new Set(['fa', 'it', 'pl', 'ru', 'zh-CN', 'zh-HK']);
+
 for (const [k, enV] of en) {
 	if (!enV || enV.trim() === '') continue;
 	// Skip strings that are pure format/identifiers (no alpha chars).
 	if (![...enV].some((c) => /[a-zA-Z]/.test(c))) continue;
 	for (const l of nonEn) {
+		if (POLICY_FALLBACK_LOCALES.has(l)) continue; // Memory #29 backlog
 		const lV = data.get(l)!.get(k);
 		if (lV === undefined) continue; // structural drift caught by parity smoke
 		if (lV !== enV) continue; // translated, fine
