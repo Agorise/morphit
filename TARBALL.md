@@ -1,5 +1,76 @@
 # Tarball history
 
+## cp65 — 0 RUNNERS FAILED: 130 prose strings natively translated to es/fr/de (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp65-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **3874 scenarios pass / 0 runners failed** (was 3870/1 at cp64) · **7/7 workspaces TS-clean (LL #52 22nd consecutive)** · **17 structural defenses operational** (unchanged) · **TRIPLE-PULSE STABLE** (3874/0 across 3 runs).
+
+**cp65 origin:** cp64 left 1 chronic failure: i18n-translation-completeness flagging 130 prose findings in es/fr/de (legitimate Memory #29 violations needing native translation). cp65 closes it: all 130 prose strings natively translated.
+
+### The work
+
+44 unique prose keys translated to es, fr, and de:
+
+**Per-asset payment_method descriptions** (6 keys × 3 locales = 18):
+- pay_arrr (Pirate Chain), pay_dcr (Decred), pay_eth (Ethereum), pay_sol (Solana), pay_xrp (Ripple), pay_zec (Zcash)
+
+**Per-asset privacy guides** (7 assets × 3 sub-keys × 3 locales = 63):
+- arrr, dcr, eth, sol, xrp, zec — intro / caveats / meta_description each
+- dai — intro / meta_description / one_line
+
+**DAI-specific UX prose** (~17 keys × 3 locales = 51, with one de-only):
+- assets.dai.address_share.warning, assets.dai.network.{arbitrum,base,erc20,polygon}.feeHint, assets.dai.network.picker.{label,crossNetworkWarning,requiredHint}, assets.dai.order_row.network_hint, assets.dai.price_subline.unavailable, assets.privacy_warnings.dai_partly_centralized
+- assets.usdc.price_subline.live (de only — "live" → "aktuell")
+- chat.funds_sent.txid_invalid_dai
+- faq.entries.{which_dai_network,why_dai_warning}.{q,a} — 4 keys (including the two 1,000+ char detailed answers)
+- privacy.opt_in_tech.csppmix.explain
+
+**Application**: a single Python script (`translations.py`) defined `T = {key: {es: ..., fr: ..., de: ...}}` and updated each locale JSON file in place via path-walked dict assignment. 43 entries applied to es, 43 to fr, 44 to de (de has one extra: usdc.price_subline.live).
+
+**Quality**: natively-translated, technically accurate, preserves markdown (**bold**, \n\n paragraphs), preserves placeholders ({network}, \${price}, code-spans like `zs1`, `0x`), preserves invariant brand names (Pirate Chain, MakerDAO, Tornado Cash, dcrwallet, etc.) in the bodies. Tone matches existing es/fr/de translations sampled from payment_method.pay_btc, pay_xmr, assets.usdt.address_share.warning.
+
+### Final battery state — clean across the board
+
+**3874 scenarios pass / 0 runners failed.** TRIPLE-PULSE STABLE (3874/0 across 3 consecutive runs).
+
+This is the FIRST clean battery in the audit campaign — every checkpoint from cp32 through cp64 had at least the i18n-translation-completeness chronic flagging EN-fallback debt. cp64 narrowed it to 130 prose strings; cp65 closed it.
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3874 | up from 3870 (cp64), +4 from i18n-translation-completeness now 4/4 instead of 3/4 |
+| Runners FAILED | **0** | first time in the campaign |
+| Workspaces TS-clean (LL #52) | 7/7 | 22nd consecutive |
+| Triple-pulse stable | ✓ | 3874/0 × 3 |
+
+### Lessons
+
+1. **Bounded prose-translation work is tractable in one session.** 44 unique keys × 3 locales = 130-ish strings (with some keys having very long content — privacy.guides.eth.caveats was 2,345 chars). Doing it as a single comprehensive Python dict + JSON update pass is faster than going asset-by-asset.
+2. **Natives must preserve placeholders + markdown EXACTLY.** {network}, \${price}, `zs1`, **bold**, \n\n — any drift breaks the rendering, not just the translation. The Python dict approach kept the structural tokens intact.
+3. **Re-running install after a long session is sometimes needed.** Mid-cp65 the smoke battery showed 25 spurious failures because @morphit/* workspace symlinks had been cleared. `npm ci --ignore-scripts` re-created them, and the battery returned to 3874/0. Future: if a battery suddenly regresses, suspect node_modules state before suspecting code.
+
+### Final cp65 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- **3874 scenarios pass / 0 runners failed (FIRST CLEAN BATTERY)**
+- 7/7 workspaces TS-clean (LL #52 22nd consecutive)
+- 17 structural defenses operational (unchanged)
+- 130 native translations applied across es/fr/de
+- Triple-pulse stable
+
+### Campaign-arc summary (cp61 → cp65)
+
+| Checkpoint | Scenarios pass | Runners failed | Notes |
+|---|---|---|---|
+| cp61 baseline (curated subset) | 52/52 | hidden 15 | Loop ran 52 of 183 smokes |
+| cp62 honest accounting | 3611 | 8 | 7 format + 1 path fix |
+| cp63 \$lib unblock | 3848 | 2 chronic | unified tsconfig + 3 real bugs fixed |
+| cp64 chronic-scope reduction | 3870 | 1 (130 findings vs 1,807) | Sally L13 + Memory #29 split + 99 invariants |
+| **cp65 chronic closure** | **3874** | **0** | 130 native translations to es/fr/de |
+
+---
+
+# Tarball history
+
 ## cp64 — Sally L13 cleared + Memory #29 policy split + 99 invariants allow-listed (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp64-FULL-STATE.tar.gz`

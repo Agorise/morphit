@@ -1,5 +1,57 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp65 — 2026-05-20.  **FIRST CLEAN BATTERY (3874/0) IN THE AUDIT CAMPAIGN.**
+
+## Memory facts re-confirmed at top of cp65
+
+- **Memory #29 NATIVE-LOCALE policy** is now fully satisfied for es/fr/de: every prose key has a native translation. fa/it/pl/ru/zh-CN/zh-HK retain EN-fallback per documented community-backlog (skipped by the smoke via POLICY_FALLBACK_LOCALES, cp64).
+- **K.I.S.S. for translation editing**: Python `{key: {es, fr, de}}` dict + path-walked JSON assignment is the right shape for bulk locale edits. ~130 strings updated in seconds; preserves placeholders and markdown intact.
+- **Memory #13 NEVER ASSUME** — when the battery suddenly went from 3870/1 to 3266/25 mid-session, suspected my edits FIRST, but actual cause was workspace symlinks cleared (caught via `ls node_modules/@morphit/`). Re-installing restored everything. The translations were already correct.
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (unchanged from cp61-64)
+
+cp65 didn't add a defense; it cleared the last chronic failure that was preventing a clean battery baseline.
+
+## BATTERY STATE — FIRST CLEAN BASELINE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3874 | up from 3870 (cp64); i18n-translation-completeness now 4/4 |
+| Runners FAILED | **0** | first time in the campaign |
+| Workspaces TS-clean (LL #52) | 7/7 | 22nd consecutive |
+| Triple-pulse stable | ✓ | 3874/0 × 3 consecutive runs |
+
+## CP65 LESSONS
+
+### Lesson #1 — Bounded prose-translation work is tractable in one session
+~44 unique keys × 3 locales = 130 native translations across es/fr/de. Some keys had 2,345-char bodies (privacy.guides.eth.caveats). One comprehensive Python dict + JSON update pass is faster than iterative per-asset rounds.
+
+### Lesson #2 — Natives must preserve placeholders + markdown EXACTLY
+{network}, ${price}, `zs1`, **bold**, \n\n paragraphs, code-spans — any drift breaks rendering, not just translation quality. The Python dict approach kept structural tokens intact.
+
+### Lesson #3 — When a clean battery suddenly regresses, suspect node_modules
+Mid-cp65 the battery went from 3870/1 to 3266/25. First suspicion: my edits broke something. Actual cause: workspace @morphit/* symlinks cleared between install and run. `npm ci --ignore-scripts` re-created them, battery returned to clean state. Diagnostic order: (1) re-install, (2) re-run, (3) if STILL regressed, suspect code.
+
+## CP66+ predicted hunting ground
+
+With the battery clean, the next-most-valuable work shifts to:
+
+- **Value-cross-reference invariant hunt** (cp61-O14's parity-model class, deferred through cp62-65) — port numbers, DB names, recipient addresses, docker network names beyond CIDR. Generalizing cp61-O14's discovery into a registry-backed cross-document parity smoke.
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog per Memory #29 — does NOT block clean battery, but would extend Memory #29 native compliance to all 9 non-EN locales)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+- **Forgejo runner standup** to unblock v1.0.0-beta.1 release ceremony steps 8/9/10
+
+## Two parked external blockers (unchanged through cp42→cp65)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp64 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp64
