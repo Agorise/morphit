@@ -311,6 +311,46 @@ file in the same turn.
       walkthrough showed how easily a relay-env gap can
       hide.)*
 
+- [ ] **[blocking if running behind a reverse proxy]** Verify
+      `MORPHIT_RELAY_TRUSTED_PROXY_IPS` in `/etc/morphit/relay.env`
+      matches your actual reverse-proxy posture.  §32 CRITICAL:
+      mis-setting this is the difference between functional
+      per-IP rate limiting and trivially-spoofable signups.
+      - If you run BunkerWeb colocated on the same host (the
+        canonical `ops/bunkerweb/` deploy), set to the
+        Docker bridge subnet `172.20.0.0/16` (or whatever the
+        compose pins as the BunkerWeb network).
+      - If you run nginx/Caddy/another proxy on the same host,
+        set to `127.0.0.1` (loopback only).
+      - If your relay is internet-facing (no proxy), leave UNSET
+        (default empty — uses socket peer IP directly).
+      Verify by sending a request with a forged `X-Forwarded-For:
+      1.2.3.4` header from a NON-trusted IP: the relay must
+      ignore the header and use the actual peer IP.  *(Origin:
+      Part 122 cp57 audit surfaced that this knob was in the
+      Zod schema but missing from the canonical `relay.env.example`;
+      the canonical example now documents it explicitly with
+      the misconfiguration risks.)*
+
+- [ ] **[recommended for production deploys]** Review the squatter-
+      defense diamond preset settings if you expect any meaningful
+      signup volume.  In `/etc/morphit/relay.env`:
+       - `MORPHIT_RELAY_SIGNUP_DAILY_CEILING=50` (default; raise
+         only if you've measured legitimate signup rate above this)
+       - `MORPHIT_RELAY_CREATE_RATE_PER_HOUR=5` (per-IP)
+       - `MORPHIT_RELAY_CREATE_RATE_PER_DAY=2` (per-IP)
+       - `MORPHIT_RELAY_CREATE_SPACING_MINUTES=60` (per-IP)
+       - `MORPHIT_RELAY_HIGHVALUE_NAME_POLICY=strict` (or `flag`/`off`)
+       - `MORPHIT_RELAY_HIGHVALUE_SHORT_NAME_THRESHOLD=4`
+       - `MORPHIT_RELAY_SEQUENTIAL_DETECTOR_ENABLED=true`
+      See `docs/OPERATIONS.md §38.7` for the diamond-hardened
+      preset rationale and `docs/RUN-A-MORPHIT-NODE.md §"Diamond-
+      hardened squatter defense"` for the tactical guide.  Every
+      successful squatter signup costs the relay ~100 BLURT — the
+      tightened defaults are worth their friction.  *(Origin: Part
+      122 cp57 audit; these knobs were already in the Zod schema
+      but operators needed them surfaced as a pre-launch decision.)*
+
 - [ ] **[blocking]** Run the static smoke suite and
       confirm it returns clean.  From the repo root:
       `bash scripts/run-smokes.sh`.  Expected output:
@@ -328,7 +368,15 @@ file in the same turn.
       rss-feed-parity + 31 jitter unit tests, cp51-O4 category-b-
       descriptions-parity + cp51-O5 faq-per-tradable-asset-parity
       + 3 backfilled FAQs × 10 locales, cp52-O6 ansible-env-
-      template-required-vars.  The
+      template-required-vars, cp53-O7 operator-doc-per-asset-coverage
+      + 14 doc-drift inline fixes, cp54-O8 what-is-asset-faq-native-
+      locale-floor + 60 native ES/FR/DE translations, cp55-O9 per-
+      asset-key-family-native-locale-floor registry + 33 more native
+      translations (93 total Memory #29 catch-up), cp56-O10 operator-
+      doc-per-asset-config-example-coverage (shallow-mention floor),
+      cp57-O11 env-example-schema-parity (bidirectional) + 9 indexer/
+      relay knob-doc additions (incl. TRUSTED_PROXY_IPS and squatter-
+      defense diamond preset).  The
       exact current total is whatever `run-smokes.sh` prints
       against the repo state you're running; what you're verifying
       is that the count is ≥ 3,327 AND that zero runners failed).

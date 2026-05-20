@@ -1,5 +1,61 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp58 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp58
+
+- **Memory #5 SAME-WORK-UNIT rule violated across cp54-cp57** — Ken pushback "that's it?" triggered the audit. Brag list, mediakit, PRE-LAUNCH-CHECKLIST never updated for cp54-cp57. cp58 makes good.
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp58 doesn't touch this.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** confirmed clean (cp54+cp55 closed all known drift).
+- **Memory #13 VERIFY:** carried into cp58 — when checking RUN-A-MORPHIT-NODE.md for squatter-coverage gap, cross-checked the actual doc content (line 1665 has "Diamond-hardened squatter defense" section) rather than assuming it was missing.
+- **Memory #16 FORGEJO not Gitea:** confirmed clean. Also: matrix-bot canonical example explicitly flags the MXID-vs-room-alias safety issue (sending alerts to a public room leaks security telemetry).
+
+## STRUCTURAL DEFENSES — 13 OPERATIONAL (unchanged count; cp52-O6 + cp57-O11 extended scope)
+
+1. **cp44 LL #52** workspace-typecheck — **15th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 13th consecutive
+3. cp48-O1 stand-in meta-assertion — 11th consecutive
+4. cp49-O2 handler-test-stand-in — 10th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 9th consecutive
+6. cp51-O4 category-b-descriptions-parity — 8th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 8th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 7th consecutive (cp58: SUBSYSTEMS extended +matrix-bot)
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 6th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 5th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 4th consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 3rd consecutive
+13. cp57-O11 env-example-schema-parity (bidirectional) — 2nd consecutive (cp58: SERVICES extended +matrix-bot, SCHEMA-name regex added)
+
+## CP58 LESSON — same-work-unit rule needs explicit propagation checklist
+
+The cp54-cp57 sessions each focused on the *target* work (Memory #29 closure, then doc-coverage smoke, then env-parity smoke) and treated brag list / mediakit / pre-launch updates as "follow-up." But the standing rule explicitly says **NEVER a follow-up — same work unit as code changes.**
+
+**Mitigation for future checkpoints:** before declaring a checkpoint shipped, walk the "Workflow discipline" checklist explicitly:
+- [ ] OPERATIONS.md + RUN-A-MORPHIT-NODE.md updated for operator-facing changes
+- [ ] PRE-LAUNCH-CHECKLIST.md updated if a new pre-launch verification is needed
+- [ ] FAQ + brag list + ADRs + ALL docs updated for the checkpoint's work
+- [ ] Mediakit regenerated if brag list changed
+- [ ] All 10 locales touched (no English-only edits)
+- [ ] Smoke + LL #52 + typecheck all pass
+
+## CP59+ predicted hunting ground
+
+- **Other Ansible roles** beyond morphit/matrix_bot — check if there are bunkerweb, postgres, host-monitor roles that have their own .env templates with potential drift.
+- **`ops/bunkerweb/bunkerweb.env.example` + `ops/backup/backup.env.example`** parity audits. cp57-O11 only covers schema-backed services (indexer/relay/matrix-bot). The other two example files have no Zod schema to check against; would need a different parity model.
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub in canonical example, but the systemd unit's LoadCredential= mechanism is nuanced. Could be expanded.
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog).
+- **Ansible playbook idempotency claims** verification (needs hardware).
+- **Other per-asset key families** that emerge — add to cp55-O9 FAMILIES registry.
+
+## Two parked external blockers (unchanged through cp42→cp58)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp57 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp57

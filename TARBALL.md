@@ -1,5 +1,64 @@
 # Tarball history
 
+## cp58 — Make-good on cp54-cp57 propagation misses + matrix-bot canonical example (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp58-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · **292 brag entries** (was 288 at cp57; +4 cp54-cp57 wins) · locale parity 2,825 × 10 = 28,250 · **48/48** standalone smokes PASS · **7/7 workspaces TS-clean (LL #52 15th consecutive)** · **13 structural defenses operational** (cp52-O6 + cp57-O11 both extended to cover matrix-bot — same defenses, wider scope).
+
+**cp58 origin:** Ken pushback "that's it?" after cp57. Audit of cp54-cp57 propagation revealed **6 standing-rule violations** that I should have addressed in those checkpoints but skipped:
+
+### Violations identified at cp58 entry
+
+| # | Miss | Standing rule violated |
+|---|---|---|
+| A | Brag list never updated for cp54-cp57 wins | "Always keep FAQs, brag list, ADRs, and ALL docs updated as work proceeds — same work unit as code changes, never a follow-up." |
+| B | Mediakit zip never regenerated | "Regenerate `morphit-mediakit.zip` every time brag list or logos change — same turn." |
+| C | RUN-A-MORPHIT-NODE.md not verified for SEQUENTIAL_*/HIGHVALUE_* coverage | "ALWAYS update OPERATIONS.md AND RUN-A-MORPHIT-NODE.md together for operator-facing changes." |
+| D | PRE-LAUNCH-CHECKLIST.md missing TRUSTED_PROXY_IPS + squatter setup steps | Pre-launch operator actions catalog gap |
+| E | Matrix-bot Zod schema vs canonical example + Ansible template — never audited | Implicit completeness rule: each service gets the same documentation depth |
+| F | cp52-O6 + cp57-O11 only covered indexer + relay — matrix-bot uncovered | Smoke coverage gap |
+
+### Closure (this cp58)
+
+**A — Brag list updated** with 4 new entries in proper themed sections (memory: "concise ~2-4 sentences, public-facing wins only, inserted in proper themed section, not appended to end"):
+- §3 (Security) — per-asset operator-doc two-floor coverage (cp53-O7 + cp56-O10)
+- §11 (Internationalization) — 93 native ES/FR/DE translations, policy-gate registry smoke
+- §18 (Operator setup) — security-critical knobs documented, bidirectional env-example ↔ schema parity smoke
+
+**B — Mediakit regenerated** automatically picks up updated MORPHIT-BRAG-LIST.md.
+
+**C — RUN-A-MORPHIT-NODE.md** verified to ALREADY have "Diamond-hardened squatter defense" section (line 1665) referencing TRUSTED_PROXY_IPS + the squatter-defense layers. **NOT-A-MISS** — was already covered; cp58 verified the assumption.
+
+**D — PRE-LAUNCH-CHECKLIST.md** added two new section-C items:
+- "[blocking if running behind a reverse proxy]" — TRUSTED_PROXY_IPS verification with §32 CRITICAL framing, BunkerWeb/nginx/direct-internet decision tree, X-Forwarded-For forgery test instructions
+- "[recommended for production deploys]" — squatter-defense diamond preset review (SIGNUP_DAILY_CEILING + CREATE_RATE + HIGHVALUE + SEQUENTIAL knobs) with rationale ("Every successful squatter signup costs the relay ~100 BLURT")
+
+Also updated section C's smoke-suite scenario-history paragraph to enumerate cp53-O7 through cp57-O11.
+
+**E — Matrix-bot canonical example created** at `ops/env/matrix-bot.env.example`. Documents all 8 Zod schema vars: 3 required (HOMESERVER, ACCESS_TOKEN, ALERT_MXID) with explicit MXID-vs-room-alias safety framing (Memory #16-adjacent — public-room leak avoidance), 5 optional with defaults (JOURNALCTL_UNITS, STATE_DB, HEALTHCHECK_PORT, DIGEST_SEND_TIME_UTC, DRY_RUN).
+
+Also added the 2 missing optional vars to `roles/matrix_bot/templates/matrix-bot.env.j2`: `MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT` and `MORPHIT_MATRIX_BOT_STATE_DB`, both behind `{% if ... is defined %}` Jinja conditionals.
+
+**F — Smoke coverage extended** to include matrix-bot:
+- `cp52-O6` (ansible-env-template-required-vars-smoke): SUBSYSTEMS array extended with matrix-bot entry. Required-var parity now checked for 2 matrix-bot required vars (ACCESS_TOKEN, ALERT_MXID).
+- `cp57-O11` (env-example-schema-parity-smoke): SERVICES array extended with matrix-bot entry. The schema-detection regex updated to also match `const SCHEMA = z.object({` (matrix-bot uses this naming instead of `envSchema`).
+
+Both smokes pass for all 3 services (indexer + relay + matrix-bot).
+
+### NOT a new structural defense — same defenses, wider scope
+
+cp58 doesn't add a new "O-N" structural defense. It extends two existing defenses (cp52-O6 + cp57-O11) to cover a third service (matrix-bot). The structural-defense count stays at 13.
+
+This is intentional: the cp52-O6 + cp57-O11 designs WERE generalized (registry-based) — adding a service is a one-line addition. Treating matrix-bot coverage as a new defense would inflate the structural-defense count without adding a new defensive idea.
+
+### Lesson — "Same work unit as code changes" is load-bearing across multiple docs
+
+The cp54-cp57 misses all share one root: each checkpoint focused on the code/test work and treated the documentation propagation as "follow-up." But the standing-rule rule explicitly says **NEVER a follow-up — same work unit as code changes.** cp58 had to retroactively touch the brag list (4 entries spanning 4 checkpoints), pre-launch checklist (TRUSTED_PROXY_IPS belongs to cp57 work), and the matrix-bot canonical example (entirely missing). Going forward, each cp<N> commit must include the documentation propagation as part of the same commit.
+
+---
+
+# Tarball history
+
 ## cp57 — Env-example ↔ Zod-schema parity audit + Memory #13 over-fix catch + cp57-O11 STRUCTURAL DEFENSE (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp57-FULL-STATE.tar.gz`

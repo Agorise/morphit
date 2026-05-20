@@ -103,6 +103,15 @@ const SERVICES: Service[] = [
 		schemaPath: 'apps/relay/src/config/index.ts',
 		examplePath: 'ops/env/relay.env.example',
 		scriptsDir: 'apps/relay/scripts'
+	},
+	{
+		// Added cp58 — matrix-bot got a canonical example for the
+		// first time at cp58.  Schema lives in `config.ts` directly
+		// (not under `src/config/`).
+		name: 'matrix-bot',
+		schemaPath: 'apps/matrix-bot/src/config.ts',
+		examplePath: 'ops/env/matrix-bot.env.example',
+		scriptsDir: 'apps/matrix-bot/scripts'
 	}
 ];
 
@@ -113,9 +122,14 @@ const SERVICES: Service[] = [
  */
 function parseSchemaVars(schemaPath: string): Set<string> {
 	const src = readFileSync(join(REPO_ROOT, schemaPath), 'utf-8');
-	const startIdx = src.indexOf('const envSchema = z.object({');
+	// Try multiple conventional schema variable names.  Indexer
+	// and relay use `envSchema`; matrix-bot uses `SCHEMA`.
+	let startIdx = src.indexOf('const envSchema = z.object({');
+	if (startIdx === -1) startIdx = src.indexOf('const SCHEMA = z.object({');
 	if (startIdx === -1) {
-		throw new Error(`No 'const envSchema = z.object({' found in ${schemaPath}`);
+		throw new Error(
+			`No 'const envSchema = z.object({' or 'const SCHEMA = z.object({' found in ${schemaPath}`
+		);
 	}
 	let i = src.indexOf('{', startIdx);
 	let depth = 0;
