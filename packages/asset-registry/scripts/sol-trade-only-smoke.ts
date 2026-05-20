@@ -16,7 +16,7 @@
  * privacyWarningKey: null (decentralized PoS), optInPrivacyTech
  * is empty (Solana has no native protocol-level mixing), 9
  * decimals (lamports — unique smallest-unit precision among
- * Morphit's 14 assets), and addressShape accepts 32-44 base58
+ * Morphit's tradable assets), and addressShape accepts 32-44 base58
  * character strings.
  *
  * Address-validator coverage: 32-char minimum, 44-char maximum

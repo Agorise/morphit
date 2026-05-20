@@ -850,7 +850,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 	Object.freeze<AssetEntry>({
 		ticker: 'SOL',
 		// Solana uses 9 decimals — 1 SOL = 1,000,000,000 lamports.
-		// Unique smallest-unit precision among Morphit's 14 assets
+		// Unique smallest-unit precision among Morphit's tradable assets
 		// (BTC family is 8, USDT/USDC/DAI is 6, BLURT is 3, XMR is
 		// 12).  A new jitterSolAmount handles 9-decimal precision
 		// (see apps/web/src/lib/chat/payload.ts).

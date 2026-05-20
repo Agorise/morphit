@@ -648,7 +648,7 @@ export function jitterBlurtAmount(base: string): string {
 
 /** Part 122 cp45 — Amount-jitter for Solana.  Solana uses 9
  *  decimals (1 SOL = 1,000,000,000 lamports) — unique smallest-
- *  unit precision among Morphit's 14 assets.  BTC family is 8
+ *  unit precision among Morphit's tradable assets.  BTC family is 8
  *  decimals, USDT/USDC/DAI is 6, BLURT is 3, XMR is 12.  SOL
  *  needs its own jitter calibration because no existing function
  *  has 9-decimal arithmetic.
