@@ -1,5 +1,75 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp70 — 2026-05-20.  **20 STRUCTURAL DEFENSES · BATTERY 3900/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 1 REAL BUG + 3 QUALITY FIXES + 17 TEST-ROT FIXES SHIPPED THIS CP.**
+
+## CP70 LESSONS
+
+### Lesson #1 — Test-rot is SILENT decay
+17 unit-test failures had been present since handler evolution between Part 110 and Part 122. The smoke battery (3900 static-analysis scenarios) passed because it didn't run vitest. Categories of drift caught:
+- **chat handler test rot:** added push-notification locale lookup after INSERT → tests expected 4 queries, handler does 5
+- **order handler test rot:** INSERT statement added `v.expires_at` between blockTime and fee_status → tests' `params[13]` should now be `params[14]`
+- **orderReplace handler test rot:** new check `v.asset_network !== target.asset_network` → tests didn't mock `asset_network` on target rows
+
+Candidate cp71-O19: structural defense that runs `vitest --run` and asserts pass count meets baseline.
+
+### Lesson #2 — parseInt() trailing garbage is a footgun
+`parseInt('999000abc', 10) = 999000` silently passes `Number.isFinite()` and `> 0` checks. Rule: when input is untrusted (HTTP headers, query params, env from operator), require `/^\d+$/.test(s)` BEFORE parsing, and prefer `Number()` for stricter semantics.
+
+### Lesson #3 — BigInt + JSON.stringify is a latent crash
+Code currently calls `.toString()` on bigints before logging them, but the SINK should also be defensive. Solution: replacer function that stringifies BigInt, plus try/catch fallback for any other unserializable values.
+
+### Lesson #4 — fetch() without timeout is a hidden hang
+Both `ops-cli/upgrade.ts` and `stores/chainFee.ts` had unbounded `await fetch()` calls. Pattern: `new AbortController() + setTimeout + try/finally clearTimeout`. Already used in 7+ places; these were drift.
+
+## STRUCTURAL DEFENSES — 20 OPERATIONAL (unchanged at cp70)
+
+No new structural defenses at cp70 (deep bug-hunt rather than systemic). cp71+ candidates:
+- O-19: vitest must pass — would have caught cp70-D2/D3/D4 immediately
+- O-20: bigint context value safety check in jsonSink (already shipped at cp70)
+- O-21: untrusted-string-to-number must use strict /^\d+$/ check
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3900 | unchanged from cp69 |
+| Runners FAILED | 0 | clean since cp65 |
+| Workspaces TS-clean (LL #52) | 7/7 | 27th consecutive |
+| Triple-pulse stable | ✓ | 3900/0 × 3 |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **481 pass / 1 skip** | was 462/1 at cp69 (17 unblocked by D2/D3/D4 fixes; 13 new added) |
+| Backlog translations remaining | 39 | unchanged from cp69 |
+| Brag entries | 295 | unchanged from cp69 |
+
+## CP71+ PREDICTED HUNTING GROUND (explicit, not implicit)
+
+- **Translate remaining 39 long-form keys** to all 6 backlog locales (~219k chars of careful prose)
+- **NEW STRUCTURAL DEFENSE candidate O-19: vitest-must-pass** — runs `npm test` per workspace and asserts pass count ≥ baseline. Would catch test-rot the moment a handler evolves.
+- **NEW STRUCTURAL DEFENSE candidate O-20: untrusted-string-to-number safety** — grep for `parseInt(c.req.header(...)...)` or `parseInt(query.X)` or `parseInt(env.X)` and require they be guarded by `/^\d+$/.test()` first
+- **NEW STRUCTURAL DEFENSE candidate O-21: fetch-must-have-timeout** — grep for `await fetch(` and verify same statement has `signal: ` or surrounding `AbortController + setTimeout`
+- **Continue static-analysis deep-deep:** svelte component reactive-state leaks ($state/$derived cleanup), async generator cleanup (return/throw paths), env-vs-runtime config divergence
+- **Hardware-blocked tasks** (unchanged): live ansible deploy on Ubuntu 24.04 VM, Forgejo runner execution
+
+## CP70 BUG-HUNT AUDIT CATALOG (25 classes confirmed CLEAN)
+
+See TARBALL.md cp70 section for the full catalog. Highlights:
+- All 35 DB tables have PRIMARY KEY
+- All 4 INSERT INTO orders sites bind $1 = ctx.signer
+- All 7 fetch sites with AbortController have matching clearTimeout
+- All module-level setInterval calls .unref() to allow graceful shutdown
+- Chat crypto uses random 12-byte nonces with AEAD binding
+- timing-safe comparisons everywhere (altcha, inviteToken, ECDSA at curve)
+- 334 `as X` assertions; only 5 `as any`, all justified at dblurt FFI boundary
+
+## Two parked external blockers (unchanged through cp42→cp70)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp69 — 2026-05-20.  **20 STRUCTURAL DEFENSES · BATTERY 3900/0 TRIPLE-PULSE STABLE · HUNTING-GROUND SWEPT (6 of 7 items shipped this turn).**
 
 ## Memory facts re-confirmed at top of cp69

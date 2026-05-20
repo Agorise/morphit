@@ -57,9 +57,25 @@ export function initChainFee(): Promise<void> {
 	if (initPromise !== null) return initPromise;
 	initPromise = (async () => {
 		try {
-			const res = await fetch('/v1/chain-fee', {
-				headers: { Accept: 'application/json' }
-			});
+			// Bounded wait — chainFee is read at app boot.  Without a
+			// timeout, a slow indexer or hung connection (e.g. behind
+			// a Tor circuit that's still building) would leave the
+			// fee store in 'loading' state indefinitely, blocking
+			// any UI that gates on `chainFee.loaded`.  10s is generous
+			// for a small JSON document; on timeout we fall back to
+			// the same FALLBACK shape used for HTTP errors below, so
+			// the UI just proceeds with conservative defaults.
+			const ac = new AbortController();
+			const timer = setTimeout(() => ac.abort(), 10_000);
+			let res: Response;
+			try {
+				res = await fetch('/v1/chain-fee', {
+					headers: { Accept: 'application/json' },
+					signal: ac.signal
+				});
+			} finally {
+				clearTimeout(timer);
+			}
 			if (!res.ok) {
 				store.set({ ...FALLBACK, loaded: true });
 				return;

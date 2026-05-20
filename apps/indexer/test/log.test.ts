@@ -123,3 +123,63 @@ describe('logger', () => {
 		expect(captured[0]!.context.block).toBe(1234567890n);
 	});
 });
+
+describe('jsonSink', () => {
+	it('serializes bigint context values as strings without throwing (cp70-D7)', async () => {
+		const { jsonSink } = await import('$log');
+		const stream = process.stdout;
+		const lines: string[] = [];
+		const originalWrite = stream.write;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		stream.write = ((chunk: string | Buffer): boolean => {
+			lines.push(typeof chunk === 'string' ? chunk : chunk.toString());
+			return true;
+		}) as typeof stream.write;
+		try {
+			jsonSink({
+				ts: '2026-05-20T00:00:00.000Z',
+				level: 'info',
+				module: 't',
+				event: 'fee_verified',
+				context: { amount_piconero: 781250000000n, count: 5 }
+			});
+		} finally {
+			stream.write = originalWrite;
+		}
+		expect(lines).toHaveLength(1);
+		const parsed = JSON.parse(lines[0]!);
+		expect(parsed.context.amount_piconero).toBe('781250000000');
+		expect(parsed.context.count).toBe(5);
+	});
+
+	it('survives unserialisable values (cyclic refs) without crashing the host', async () => {
+		const { jsonSink } = await import('$log');
+		const stream = process.stderr;
+		const lines: string[] = [];
+		const originalWrite = stream.write;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		stream.write = ((chunk: string | Buffer): boolean => {
+			lines.push(typeof chunk === 'string' ? chunk : chunk.toString());
+			return true;
+		}) as typeof stream.write;
+		const cyclic: Record<string, unknown> = {};
+		cyclic.self = cyclic;
+		try {
+			jsonSink({
+				ts: '2026-05-20T00:00:00.000Z',
+				level: 'error',
+				module: 't',
+				event: 'something',
+				context: cyclic
+			});
+		} finally {
+			stream.write = originalWrite;
+		}
+		expect(lines).toHaveLength(1);
+		// The fallback degraded line is a valid JSON object with a
+		// 'log_serialization_failed' message.  The aggregator keeps
+		// parsing the stream.
+		const parsed = JSON.parse(lines[0]!);
+		expect(parsed.msg).toBe('log_serialization_failed');
+	});
+});
