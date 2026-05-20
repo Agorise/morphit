@@ -1,5 +1,54 @@
 # Tarball history
 
+## cp54 — Memory #29 native-locale closure across the what_is_<asset> FAQ family + cp54-O8 STRUCTURAL DEFENSE (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp54-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **45/45** standalone smokes PASS (+1 cp54-O8) · **7/7 workspaces TS-clean (LL #52 11th consecutive)** · **10 structural defenses operational** (was 9 at cp53) · 31 jitter unit tests.
+
+**cp54 origin:** continuation hunt following cp53. Walked the cp51/cp52/cp53-predicted hunting grounds in order: matrix-bot per-asset surface, indexer Prometheus per-asset metric labels, sitemap.xml + robots.txt ticker enumeration, locale-native EN-fallback coverage.
+
+**Findings:**
+
+### Walked + confirmed clean
+- **Matrix bot per-asset surface** — `apps/matrix-bot/src/` has zero per-asset commands or per-asset routing. The bot's classifier is severity-based (CRITICAL/WARN/INFO) and asset-agnostic. ✓
+- **Indexer Prometheus per-asset metric labels** — no per-asset metric labels in `apps/indexer/src/`; metrics are global (rpc_calls_total, chain_lag_seconds, etc.) without per-ticker breakdown. ✓
+- **Sitemap.xml ticker enumeration** — verified per-asset `/privacy/<asset>` routes are deliberately NOT enumerated per `routes.ts:99-102` design decision (search engines discover via the `/privacy` index page's internal links). Not-a-bug. ✓
+- **robots.txt** — entirely asset-agnostic; just allow/disallow paths plus a search-engine allowlist. ✓
+
+### cp54-D1 MEDIUM — Memory #29 native-locale drift across the what_is_<asset> FAQ family
+
+**Discovered drift:** of the 10 `what_is_<asset>` FAQs added since cp4, only **3 had native es/fr/de translations** (USDT cp4, USDC cp30, DOGE cp33). The other **7 were silently EN-fallback in es/fr/de** (DAI cp31, ZEC cp39, ARRR cp41, DCR cp43, SOL cp45, ETH cp47, XRP cp49). PLUS the 3 cp51-backfill FAQs (BCH/LTC/DASH) were also EN-fallback in es/fr/de.
+
+**Total drift:** 10 FAQs × 3 native locales × 2 fields (q+a) = **60 missing native translations** spanning 7+ checkpoints.
+
+**Per Memory #29:** new keys MUST be native in en/es/fr/de and may be EN-fallback in it/pl/ru/fa/zh-CN/zh-HK. The policy was followed for USDT/USDC/DOGE but skipped from DAI onward.
+
+**Closure (this cp54):** wrote all 60 native translations inline. Each follows the same template as the EN source — definition, consensus model, address format, Morphit-specific status, privacy posture, operator override option. Quality matches existing native USDT/USDC/DOGE translations (formal-neutral register, locale-appropriate crypto terminology, faithful to EN factual content, community-respectful framing per Memory).
+
+**Native-translations-snapshot rebuilt** to capture the new natives as the baseline floor going forward.
+
+### NEW STRUCTURAL DEFENSE cp54-O8
+
+`what-is-asset-faq-native-locale-floor-smoke` (LL #58): walks every Category-A-tradable + Category-B `what_is_<asset>` FAQ (14 assets, excluding BTC/XMR which don't have dedicated FAQs per cp53 doc fix) and asserts that the value in each native locale (es/fr/de) is NOT byte-identical to the EN value — byte-identical = EN-fallback smuggled in.
+
+**M-122 verified**: reverting `es.json`'s `what_is_xrp` to EN-fallback fires the smoke with "2 EN-fallback smuggled in: [es/what_is_xrp/q, es/what_is_xrp/a]".
+
+**Recurring class scope progression (8 defenses across 7 checkpoints):**
+1. cp48-O1: standalone smoke scripts
+2. cp49-O2: vitest unit tests
+3. cp50-O3: HTTP route handler regex
+4. cp51-O4: ops-cli per-ticker hardcoded tables
+5. cp51-O5: per-asset i18n FAQ key coverage
+6. cp52-O6: Ansible env-template required-var parity
+7. cp53-O7: operator doc per-asset coverage
+8. **cp54-O8: per-asset FAQ native-locale floor — NEW**
+
+**Lesson:** Memory #29 drift was invisible because no smoke compared native-locale values vs EN-baseline at the per-asset FAQ family level. The cp37 snapshot floor exists but only captures what's ALREADY native — newly-added EN-fallback values silently joined the snapshot as "native" because nothing said "these specific keys must be non-EN-byte-identical in es/fr/de". cp54-O8 closes that gap for the what_is_<asset> family specifically. Analogous floors for other per-asset key families (privacy_warnings.<ticker>, asset_explainer.<ticker>, etc.) could be added in cp55+ if drift surfaces there.
+
+---
+
+# Tarball history
+
 ## cp53 — Operator doc top-to-bottom audit (per Ken directive); 14 inline fixes + 1 code fix + cp53-O7 STRUCTURAL DEFENSE (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp53-FULL-STATE.tar.gz`

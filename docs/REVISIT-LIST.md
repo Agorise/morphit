@@ -1,5 +1,58 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp54 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp54
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp54 doesn't touch this.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** native EN/ES/FR/DE for new keys + EN-fallback for it/pl/ru/fa/zh-CN/zh-HK. **cp54 closed 7+ checkpoints of drift in this rule** for the what_is_<asset> FAQ family. 60 native translations added (DAI/ZEC/ARRR/DCR/SOL/ETH/XRP + the cp51-backfill BCH/LTC/DASH × 3 native locales × q+a fields).
+- **Memory #13 VERIFY:** carried into cp54. Cross-checked initial cp54 native-locale assertion against actual JSON content; found Memory #29 violation immediately.
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 10 OPERATIONAL (was 9 at cp53)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **11th consecutive** checkpoint clean
+2. **cp46 asset-payload-precision-parity-smoke** — 9th consecutive (61 scenarios)
+3. **cp48-O1** stand-in meta-assertion — 7th consecutive
+4. **cp49-O2** handler-test-stand-in — 6th consecutive
+5. **cp50-O3** per-asset-rss-feed-parity — 5th consecutive
+6. **cp51-O4** category-b-descriptions-parity — 4th consecutive
+7. **cp51-O5** faq-per-tradable-asset-parity — 4th consecutive
+8. **cp52-O6** ansible-env-template-required-vars — 3rd consecutive
+9. **cp53-O7** operator-doc-per-asset-coverage — 2nd consecutive
+10. **cp54-O8** what-is-asset-faq-native-locale-floor — NEW at cp54
+
+## CP54 LESSON LEARNED — POLICY DRIFT INVISIBLE TO SNAPSHOT FLOORS
+
+The `native-translations-floor-smoke` (cp37) holds a SNAPSHOT of native pairs and asserts they stay native. But that doesn't catch the *new* keys that should be native — those silently join the snapshot as whatever they ARE at first run (which for cp31+ was EN-fallback because Memory #29 wasn't being followed at addition time).
+
+**Generalization:** snapshot-floor defenses are good at "don't regress" but blind to "didn't follow policy at addition time". The cp54-O8 smoke is a "policy gate" — it checks the policy directly (native locales must not be EN-byte-identical for this specific key family) regardless of whether the snapshot was updated correctly.
+
+**Future protection:** when adding any new per-asset key family that has native-locale policy implications (privacy_warnings.<ticker>, asset_explainer.<ticker>, etc.), add a parallel "policy floor" smoke that asserts the rule directly.
+
+## CP54 PROGRESS ON CP51/52/53 PREDICTIONS
+
+cp51/52/53 carried these hunting grounds forward: matrix-bot per-asset commands; indexer Prometheus per-asset metric labels; generated artifacts (sitemap/robots) ticker enumeration; **locale-native EN-fallback coverage for cp51-backfilled FAQs**.
+
+**cp54 walked all four.** First three confirmed clean. The fourth surfaced a much bigger finding than expected: not just the 3 cp51-backfill FAQs, but 10 FAQs spanning cp31-cp49 — all closed in this turn.
+
+## Cp55+ predicted hunting ground
+
+- Analogous policy-floor smokes for other per-asset key families (privacy_warnings.<ticker>, asset_explainer.<ticker>, post_order.form.asset_explainer.<ticker>) — to catch the same drift mechanism on those surfaces
+- it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations (currently EN-fallback per Memory #29; over time these would become natives via translation contributors)
+- DEEPER per-asset doc coverage smoke catching SHALLOW mentions (cp53-O7 catches "totally absent" only)
+- Ansible playbook full env-var surface (not just required), idempotency claims, fresh-VM dry-run
+- ansible-lint in CI
+
+## Two parked external blockers (unchanged through cp42→cp54)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp53 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp53
