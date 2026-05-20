@@ -30,7 +30,22 @@ export function bodyCap(maxBytes: number): MiddlewareHandler {
 		const lengthHeader = c.req.header('content-length');
 
 		if (lengthHeader) {
-			const length = parseInt(lengthHeader, 10);
+			// Strict numeric parse: parseInt() silently accepts trailing
+			// garbage ("999000abc" → 999000), which could let a hostile
+			// client smuggle a misdeclared Content-Length past the cap.
+			// Require pure-digits before parsing.  Empty string and
+			// whitespace are also rejected.
+			if (!/^\d+$/.test(lengthHeader)) {
+				return c.json(
+					{
+						status: 'error',
+						code: 'bad_request',
+						message: 'Malformed Content-Length header'
+					},
+					400
+				);
+			}
+			const length = Number(lengthHeader);
 			if (!Number.isFinite(length) || length < 0) {
 				return c.json(
 					{

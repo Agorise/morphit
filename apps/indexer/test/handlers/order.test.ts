@@ -238,8 +238,8 @@ describe('order handler — fee verification', () => {
 		);
 		expect(r).toEqual({ ok: true });
 		expect(mock.queries).toHaveLength(1);
-		// fee_status is the 14th parameter of the INSERT.
-		expect(mock.queries[0]!.params[13]).toBe('missing');
+		// fee_status is the 15th parameter (1-indexed param[14]); v.expires_at was inserted between blockTime and fee_status of the INSERT.
+		expect(mock.queries[0]!.params[14]).toBe('missing');
 	});
 
 	it('sets fee_status=verified on exact matching transfer', async () => {
@@ -260,7 +260,7 @@ describe('order handler — fee verification', () => {
 		);
 		expect(r).toEqual({ ok: true });
 		expect(mock.queries).toHaveLength(2);
-		expect(mock.queries[1]!.params[13]).toBe('verified');
+		expect(mock.queries[1]!.params[14]).toBe('verified');
 	});
 
 	it('accepts a transfer 0.5% below expected (within tolerance)', async () => {
@@ -279,7 +279,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[1]!.params[13]).toBe('verified');
+		expect(mock.queries[1]!.params[14]).toBe('verified');
 	});
 
 	it('sets fee_status=underpaid when transfer is >1% below expected', async () => {
@@ -298,7 +298,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[1]!.params[13]).toBe('underpaid');
+		expect(mock.queries[1]!.params[14]).toBe('underpaid');
 	});
 
 	it('ignores transfer from a different sender', async () => {
@@ -316,7 +316,7 @@ describe('order handler — fee verification', () => {
 		);
 		expect(r).toEqual({ ok: true });
 		expect(mock.queries).toHaveLength(1);
-		expect(mock.queries[0]!.params[13]).toBe('missing');
+		expect(mock.queries[0]!.params[14]).toBe('missing');
 	});
 
 	it('ignores transfer with wrong permlink in memo', async () => {
@@ -333,7 +333,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[0]!.params[13]).toBe('missing');
+		expect(mock.queries[0]!.params[14]).toBe('missing');
 	});
 
 	it('ignores transfer to wrong recipient account', async () => {
@@ -348,7 +348,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[0]!.params[13]).toBe('missing');
+		expect(mock.queries[0]!.params[14]).toBe('missing');
 	});
 
 	it('uses escalated fee when signer has 3 existing orders', async () => {
@@ -368,7 +368,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[1]!.params[13]).toBe('verified');
+		expect(mock.queries[1]!.params[14]).toBe('verified');
 	});
 
 	it('rejects tier-1 fee when signer is actually at tier 4', async () => {
@@ -389,7 +389,7 @@ describe('order handler — fee verification', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries[1]!.params[13]).toBe('underpaid');
+		expect(mock.queries[1]!.params[14]).toBe('underpaid');
 	});
 });
 

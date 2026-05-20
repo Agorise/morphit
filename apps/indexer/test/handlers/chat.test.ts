@@ -114,12 +114,18 @@ describe('chat handler — layer 1 block-list gate', () => {
 				match: 'unique_fan_in',
 				rows: [{ unique_fan_in: '1', per_pair_count: null }]
 			},
-			{ match: 'INSERT INTO chat_messages' }
+			{ match: 'INSERT INTO chat_messages', rows: [{ id: '1' }] },
+			// Post-insert push-localization lookup. Returns no rows
+			// so the push-enqueue branch is skipped (the recipient
+			// has no active push subscription).
+			{ match: 'FROM push_subscriptions', rows: [] }
 		]);
 		const r = await handler(makeCtx({ signer: 'alice', payload: goodPayload() }), mock.client);
 		expect(r).toEqual({ ok: true });
-		// All four queries ran in order: block / admission / rate-limit / INSERT.
-		expect(mock.queries).toHaveLength(4);
+		// Five queries ran in order: block / admission / rate-limit /
+		// INSERT / push-locale-lookup. The push-locale lookup
+		// returns no rows so the enqueue is correctly skipped.
+		expect(mock.queries).toHaveLength(5);
 	});
 });
 
@@ -148,11 +154,12 @@ describe('chat handler — layer 2 stranger-fee admission gate', () => {
 				match: 'unique_fan_in',
 				rows: [{ unique_fan_in: '1', per_pair_count: null }]
 			},
-			{ match: 'INSERT INTO chat_messages' }
+			{ match: 'INSERT INTO chat_messages', rows: [{ id: '1' }] },
+			{ match: 'FROM push_subscriptions', rows: [] }
 		]);
 		const r = await handler(makeCtx({ signer: 'alice', payload: goodPayload() }), mock.client);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(4);
+		expect(mock.queries).toHaveLength(5);
 	});
 });
 

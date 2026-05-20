@@ -9,6 +9,7 @@ function validPayload() {
 		permlink: 'sell-btc-eur-2026-04',
 		side: 'sell',
 		asset: 'BTC',
+		asset_network: null,
 		fiat_currency: 'EUR',
 		amount_min: 50,
 		amount_max: 5000,
@@ -32,6 +33,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'sell',
 						asset: 'BTC',
+						asset_network: null,
 						fiat_currency: 'EUR',
 						fee_method: 'blurt'
 					}
@@ -65,6 +67,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'sell',
 						asset: 'BTC',
+						asset_network: null,
 						fiat_currency: 'EUR',
 						fee_method: 'blurt'
 					}
@@ -97,6 +100,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'sell',
 						asset: 'BTC',
+						asset_network: null,
 						fiat_currency: 'EUR',
 						fee_method: 'blurt'
 					}
@@ -231,6 +235,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'buy',
 						asset: 'BLURT',
+						asset_network: null,
 						fiat_currency: 'USD',
 						fee_method: 'waived_first_buy'
 					}
@@ -245,6 +250,7 @@ describe('orderReplace handler', () => {
 					permlink: 'first-buy-blurt-2026-05',
 					side: 'buy',
 					asset: 'BLURT',
+					asset_network: null,
 					fiat_currency: 'USD',
 					amount_min: 1, // ← below 500-BLURT floor
 					amount_max: 500,
@@ -271,6 +277,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'buy',
 						asset: 'BLURT',
+						asset_network: null,
 						fiat_currency: 'USD',
 						fee_method: 'waived_first_buy'
 					}
@@ -286,6 +293,7 @@ describe('orderReplace handler', () => {
 					permlink: 'first-buy-blurt-2026-05',
 					side: 'buy',
 					asset: 'BLURT',
+					asset_network: null,
 					fiat_currency: 'USD',
 					amount_min: 500, // ← at the floor
 					amount_max: 1000,
@@ -311,6 +319,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'buy',
 						asset: 'BLURT',
+						asset_network: null,
 						fiat_currency: 'USD',
 						fee_method: 'waived_first_buy'
 					}
@@ -325,6 +334,7 @@ describe('orderReplace handler', () => {
 					permlink: 'first-buy-blurt-2026-05',
 					side: 'buy',
 					asset: 'BLURT',
+					asset_network: null,
 					fiat_currency: 'USD',
 					amount_min: null,
 					amount_max: 1000,
@@ -351,6 +361,7 @@ describe('orderReplace handler', () => {
 						created_at: createdAt,
 						side: 'sell',
 						asset: 'BTC',
+						asset_network: null,
 						fiat_currency: 'EUR',
 						fee_method: 'blurt'
 					}

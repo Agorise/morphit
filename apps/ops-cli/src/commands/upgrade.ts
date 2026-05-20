@@ -323,26 +323,49 @@ function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
 	}
 }
 
+/** Timeout for network calls in the upgrade flow.  The upgrade
+ *  command is interactive — operators run it manually — but if
+ *  `git.agorise.net` hangs (DNS issue, captive portal, slow
+ *  mirror) we want a bounded wait, not an indefinite block.
+ *  Conservative 30s; release-archive downloads are typically a
+ *  few hundred KB and complete in under a second. */
+const UPGRADE_FETCH_TIMEOUT_MS = 30_000;
+
 async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRelease> {
 	const url = `https://${host}/api/v1/repos/${repo}/releases/latest`;
-	const res = await fetch(url, { headers: { Accept: 'application/json' } });
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status} from ${url}`);
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
+	try {
+		const res = await fetch(url, {
+			headers: { Accept: 'application/json' },
+			signal: controller.signal
+		});
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status} from ${url}`);
+		}
+		const body = (await res.json()) as ForgejoRelease;
+		if (typeof body.tag_name !== 'string') {
+			throw new Error(`Forgejo API response missing tag_name field`);
+		}
+		return body;
+	} finally {
+		clearTimeout(timer);
 	}
-	const body = (await res.json()) as ForgejoRelease;
-	if (typeof body.tag_name !== 'string') {
-		throw new Error(`Forgejo API response missing tag_name field`);
-	}
-	return body;
 }
 
 async function downloadTo(url: string, dest: string): Promise<void> {
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status} from ${url}`);
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
+	try {
+		const res = await fetch(url, { signal: controller.signal });
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status} from ${url}`);
+		}
+		const buf = Buffer.from(await res.arrayBuffer());
+		writeFileSync(dest, buf);
+	} finally {
+		clearTimeout(timer);
 	}
-	const buf = Buffer.from(await res.arrayBuffer());
-	writeFileSync(dest, buf);
 }
 
 function parseShaFile(path: string): string {

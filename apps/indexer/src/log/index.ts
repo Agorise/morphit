@@ -77,10 +77,43 @@ export const textSink: LogSink = (r) => {
  * JSON-line sink for production. One record per line. Every
  * record has the same shape, so log aggregators (loki, vector,
  * etc.) can parse without any pattern config.
+ *
+ * BigInt safety: JSON.stringify throws on BigInt values by
+ * default ("TypeError: Do not know how to serialize a BigInt").
+ * The indexer has bigint fields (xmrFeePiconero, monero amounts)
+ * and downstream code is generally careful to .toString() before
+ * logging — but defense-in-depth: a future caller forgetting that
+ * shouldn't crash a request handler.  We use a replacer that
+ * stringifies any BigInt it encounters.
+ *
+ * cp70-D7: previously this throw was unguarded; a single
+ * `log.info('foo', { amount: someBigint })` would crash the
+ * handler that called it.  No production crashes observed
+ * (everyone happens to .toString() at the call site), but the
+ * latent fault is real.
  */
+function bigintSafeReplacer(_key: string, value: unknown): unknown {
+	return typeof value === 'bigint' ? value.toString() : value;
+}
+
 export const jsonSink: LogSink = (r) => {
 	const stream = r.level === 'error' || r.level === 'warn' ? process.stderr : process.stdout;
-	stream.write(JSON.stringify(r) + '\n');
+	try {
+		stream.write(JSON.stringify(r, bigintSafeReplacer) + '\n');
+	} catch (err) {
+		// Last-resort fallback so a log-serialization failure
+		// (cyclic refs, exotic objects) doesn't crash the host.
+		// Write a degraded but valid JSON line so the aggregator
+		// keeps parsing the stream.
+		stream.write(
+			JSON.stringify({
+				ts: r.ts,
+				level: 'error',
+				msg: 'log_serialization_failed',
+				err: String((err as Error)?.message ?? err)
+			}) + '\n'
+		);
+	}
 };
 
 /** Format a context value for the text sink. */
