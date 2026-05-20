@@ -80,12 +80,27 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	// OTHER asset is being traded (e.g. "buy BTC, pay with USDT").
 	// `assetExclusion` hides the method when the order's traded
 	// asset matches.  Alphabetized by display name.
-	{
+		{
 		key: 'pay_btc',
 		name: 'Bitcoin (BTC)',
 		url: 'https://bitcoin.org',
 		category: 'crypto',
 		assetExclusion: 'BTC'
+	},
+	{
+		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment
+		// method.  Same Category-B semantics as USDT: when the
+		// trade's traded asset is BCH, "pay with BCH" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, BCH appears as a selectable payment-rail chip.
+		// Single-network mainnet, so no per-network picker —
+		// CashAddr URI handles both bare and prefixed forms via
+		// `buildPaymentUri` in chat/payload.ts.
+		key: 'pay_bch',
+		name: 'Bitcoin Cash (BCH)',
+		url: 'https://bitcoincash.org',
+		category: 'crypto',
+		assetExclusion: 'BCH'
 	},
 	{
 		key: 'pay_blurt',
@@ -95,11 +110,179 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'BLURT'
 	},
 	{
+		// Part 122 cp31 — Dai as a payment method.  Same Category-B
+		// semantics as USDT/USDC: when the trade's traded asset is
+		// DAI, "pay with DAI" is hidden (assetExclusion); when the
+		// traded asset is something else, DAI appears as a
+		// selectable payment-rail chip.  The specific network
+		// (ERC-20 / Polygon / Base / Arbitrum — all 4 EVM) is
+		// pinned at chat-time via AddressShareModal's DAI tab; the
+		// picker itself doesn't disambiguate network.
+		//
+		// Part 122 cp32 — this entry was MISSING from cp31 and
+		// surfaced as CODE-1 (HIGH) finding in the cp32 deep-deep:
+		// DAI was wired as a tradable asset but not as a payment
+		// rail.  Without this entry, a seller posting a BTC order
+		// who wanted to accept DAI as payment had no way to pick
+		// DAI from the payment-methods picker.  Closed inline.
+		key: 'pay_dai',
+		name: 'Dai (DAI)',
+		url: 'https://makerdao.com',
+		category: 'crypto',
+		assetExclusion: 'DAI'
+	},
+	{
+		// Part 122 cp27 — Dash as a payment method.  Same
+		// Category-B semantics as BCH/LTC: when the trade's
+		// traded asset is DASH, "pay with DASH" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, DASH appears as a selectable payment-rail chip.
+		// Single-network mainnet, so no per-network picker —
+		// the `dash:` URI handles both X-prefix P2PKH and
+		// 7-prefix P2SH via the BIP-21 derivative scheme.
+		key: 'pay_dash',
+		name: 'Dash (DASH)',
+		url: 'https://dash.org',
+		category: 'crypto',
+		assetExclusion: 'DASH'
+	},
+	{
+		// Part 122 cp43 — Decred as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC/ARRR:
+		// when the trade's traded asset is DCR, "pay with DCR"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, DCR appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `decred:`
+		// URI (BIP-21-style) handles both receive-address
+		// formats (Ds P2PKH-Secp256k1 and Dc P2SH).
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp43 ships DCR with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// and ARRR at cp41.
+		key: 'pay_dcr',
+		name: 'Decred (DCR)',
+		url: 'https://decred.org',
+		category: 'crypto',
+		assetExclusion: 'DCR'
+	},
+	{
+		// Part 122 cp33 — Dogecoin as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH: when the trade's
+		// traded asset is DOGE, "pay with DOGE" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, DOGE appears as a selectable payment-rail chip.
+		// Single-network mainnet (no L2 support — Dogecoin has
+		// not activated segwit, so no native bech32 or rollup
+		// integrations).  The `dogecoin:` URI handles both
+		// D-prefix P2PKH and 9/A-prefix P2SH via the BIP-21
+		// derivative scheme.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp31 missed this for DAI
+		// (closed in cp32 CODE-1); cp33 ships DOGE with the
+		// payment-rail axis as a same-turn deliverable.
+		key: 'pay_doge',
+		name: 'Dogecoin (DOGE)',
+		url: 'https://dogecoin.com',
+		category: 'crypto',
+		assetExclusion: 'DOGE'
+	},
+	{
+		// Part 122 cp47 — Ethereum as a payment method.  Same
+		// Category-B semantics as the other trade-only assets:
+		// when the trade's traded asset is ETH, "pay with ETH"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, ETH appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `ethereum:`
+		// URI (BIP-21-compatible EIP-681 simplified form)
+		// handles native ETH transfers.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp47 ships ETH with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// ARRR at cp41, DCR at cp43, SOL at cp45.
+		key: 'pay_eth',
+		name: 'Ethereum (ETH)',
+		url: 'https://ethereum.org',
+		category: 'crypto',
+		assetExclusion: 'ETH'
+	},
+	{
+		// Part 122 cp24 — Litecoin as a payment method.  Same
+		// Category-B semantics as BCH: when the trade's traded
+		// asset is LTC, "pay with LTC" is hidden (assetExclusion);
+		// when the traded asset is something else, LTC appears as
+		// a selectable payment-rail chip.  Single-network mainnet,
+		// so no per-network picker — litecoin: URI handles all
+		// address forms (L.../M.../3.../ltc1...) via the BIP-21
+		// derivative scheme.
+		key: 'pay_ltc',
+		name: 'Litecoin (LTC)',
+		url: 'https://litecoin.org',
+		category: 'crypto',
+		assetExclusion: 'LTC'
+	},
+	{
 		key: 'pay_xmr',
 		name: 'Monero (XMR)',
 		url: 'https://www.getmonero.org',
 		category: 'crypto',
 		assetExclusion: 'XMR'
+	},
+	{
+		// Part 122 cp41 — Pirate Chain as a payment method.  Same
+		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC: when the
+		// trade's traded asset is ARRR, "pay with ARRR" is hidden
+		// (assetExclusion); when the traded asset is something
+		// else, ARRR appears as a selectable payment-rail chip.
+		// Single-network mainnet.  The `arrr:` URI (BIP-21-style)
+		// handles the single address format: zs1 Sapling shielded
+		// (bech32) — Pirate Chain has no transparent option, every
+		// transaction goes through the shielded pool by construction.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp41 ships ARRR with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE in cp33 and ZEC in cp39.
+		key: 'pay_arrr',
+		name: 'Pirate Chain (ARRR)',
+		url: 'https://piratechain.com',
+		category: 'crypto',
+		assetExclusion: 'ARRR'
+	},
+	{
+		// Part 122 cp49 — Ripple as a payment method.  Cp32 LL #36
+		// invariant: every tradable asset MUST also be wired as a
+		// payment rail.
+		key: 'pay_xrp',
+		name: 'Ripple (XRP)',
+		url: 'https://xrpl.org',
+		category: 'crypto',
+		assetExclusion: 'XRP'
+	},
+	{
+		// Part 122 cp45 — Solana as a payment method.  Same
+		// Category-B semantics as the other trade-only assets:
+		// when the trade's traded asset is SOL, "pay with SOL"
+		// is hidden (assetExclusion); when the traded asset is
+		// something else, SOL appears as a selectable payment-
+		// rail chip.  Single-network mainnet.  The `solana:`
+		// URI (Solana Pay specification) handles native SOL
+		// transfers.
+		//
+		// CP32 LL #36 INVARIANT: every tradable asset MUST also
+		// be wired as a payment rail.  Cp45 ships SOL with the
+		// payment-rail axis as a same-turn deliverable per the
+		// pattern established for DOGE at cp33, ZEC at cp39,
+		// ARRR at cp41, and DCR at cp43.
+		key: 'pay_sol',
+		name: 'Solana (SOL)',
+		url: 'https://solana.com',
+		category: 'crypto',
+		assetExclusion: 'SOL'
 	},
 	{
 		key: 'pay_usdt',
@@ -133,95 +316,6 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'USDC'
 	},
 	{
-		// Part 122 cp31 — Dai as a payment method.  Same Category-B
-		// semantics as USDT/USDC: when the trade's traded asset is
-		// DAI, "pay with DAI" is hidden (assetExclusion); when the
-		// traded asset is something else, DAI appears as a
-		// selectable payment-rail chip.  The specific network
-		// (ERC-20 / Polygon / Base / Arbitrum — all 4 EVM) is
-		// pinned at chat-time via AddressShareModal's DAI tab; the
-		// picker itself doesn't disambiguate network.
-		//
-		// Part 122 cp32 — this entry was MISSING from cp31 and
-		// surfaced as CODE-1 (HIGH) finding in the cp32 deep-deep:
-		// DAI was wired as a tradable asset but not as a payment
-		// rail.  Without this entry, a seller posting a BTC order
-		// who wanted to accept DAI as payment had no way to pick
-		// DAI from the payment-methods picker.  Closed inline.
-		key: 'pay_dai',
-		name: 'Dai (DAI)',
-		url: 'https://makerdao.com',
-		category: 'crypto',
-		assetExclusion: 'DAI'
-	},
-	{
-		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment
-		// method.  Same Category-B semantics as USDT: when the
-		// trade's traded asset is BCH, "pay with BCH" is hidden
-		// (assetExclusion); when the traded asset is something
-		// else, BCH appears as a selectable payment-rail chip.
-		// Single-network mainnet, so no per-network picker —
-		// CashAddr URI handles both bare and prefixed forms via
-		// `buildPaymentUri` in chat/payload.ts.
-		key: 'pay_bch',
-		name: 'Bitcoin Cash (BCH)',
-		url: 'https://bitcoincash.org',
-		category: 'crypto',
-		assetExclusion: 'BCH'
-	},
-	{
-		// Part 122 cp24 — Litecoin as a payment method.  Same
-		// Category-B semantics as BCH: when the trade's traded
-		// asset is LTC, "pay with LTC" is hidden (assetExclusion);
-		// when the traded asset is something else, LTC appears as
-		// a selectable payment-rail chip.  Single-network mainnet,
-		// so no per-network picker — litecoin: URI handles all
-		// address forms (L.../M.../3.../ltc1...) via the BIP-21
-		// derivative scheme.
-		key: 'pay_ltc',
-		name: 'Litecoin (LTC)',
-		url: 'https://litecoin.org',
-		category: 'crypto',
-		assetExclusion: 'LTC'
-	},
-	{
-		// Part 122 cp27 — Dash as a payment method.  Same
-		// Category-B semantics as BCH/LTC: when the trade's
-		// traded asset is DASH, "pay with DASH" is hidden
-		// (assetExclusion); when the traded asset is something
-		// else, DASH appears as a selectable payment-rail chip.
-		// Single-network mainnet, so no per-network picker —
-		// the `dash:` URI handles both X-prefix P2PKH and
-		// 7-prefix P2SH via the BIP-21 derivative scheme.
-		key: 'pay_dash',
-		name: 'Dash (DASH)',
-		url: 'https://dash.org',
-		category: 'crypto',
-		assetExclusion: 'DASH'
-	},
-	{
-		// Part 122 cp33 — Dogecoin as a payment method.  Same
-		// Category-B semantics as BCH/LTC/DASH: when the trade's
-		// traded asset is DOGE, "pay with DOGE" is hidden
-		// (assetExclusion); when the traded asset is something
-		// else, DOGE appears as a selectable payment-rail chip.
-		// Single-network mainnet (no L2 support — Dogecoin has
-		// not activated segwit, so no native bech32 or rollup
-		// integrations).  The `dogecoin:` URI handles both
-		// D-prefix P2PKH and 9/A-prefix P2SH via the BIP-21
-		// derivative scheme.
-		//
-		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp31 missed this for DAI
-		// (closed in cp32 CODE-1); cp33 ships DOGE with the
-		// payment-rail axis as a same-turn deliverable.
-		key: 'pay_doge',
-		name: 'Dogecoin (DOGE)',
-		url: 'https://dogecoin.com',
-		category: 'crypto',
-		assetExclusion: 'DOGE'
-	},
-	{
 		// Part 122 cp39 — Zcash as a payment method.  Same
 		// Category-B semantics as BCH/LTC/DASH/DOGE: when the trade's
 		// traded asset is ZEC, "pay with ZEC" is hidden
@@ -242,100 +336,6 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		url: 'https://z.cash',
 		category: 'crypto',
 		assetExclusion: 'ZEC'
-	},
-	{
-		// Part 122 cp41 — Pirate Chain as a payment method.  Same
-		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC: when the
-		// trade's traded asset is ARRR, "pay with ARRR" is hidden
-		// (assetExclusion); when the traded asset is something
-		// else, ARRR appears as a selectable payment-rail chip.
-		// Single-network mainnet.  The `arrr:` URI (BIP-21-style)
-		// handles the single address format: zs1 Sapling shielded
-		// (bech32) — Pirate Chain has no transparent option, every
-		// transaction goes through the shielded pool by construction.
-		//
-		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp41 ships ARRR with the
-		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE in cp33 and ZEC in cp39.
-		key: 'pay_arrr',
-		name: 'Pirate Chain (ARRR)',
-		url: 'https://piratechain.com',
-		category: 'crypto',
-		assetExclusion: 'ARRR'
-	},
-	{
-		// Part 122 cp43 — Decred as a payment method.  Same
-		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC/ARRR:
-		// when the trade's traded asset is DCR, "pay with DCR"
-		// is hidden (assetExclusion); when the traded asset is
-		// something else, DCR appears as a selectable payment-
-		// rail chip.  Single-network mainnet.  The `decred:`
-		// URI (BIP-21-style) handles both receive-address
-		// formats (Ds P2PKH-Secp256k1 and Dc P2SH).
-		//
-		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp43 ships DCR with the
-		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// and ARRR at cp41.
-		key: 'pay_dcr',
-		name: 'Decred (DCR)',
-		url: 'https://decred.org',
-		category: 'crypto',
-		assetExclusion: 'DCR'
-	},
-	{
-		// Part 122 cp45 — Solana as a payment method.  Same
-		// Category-B semantics as the other trade-only assets:
-		// when the trade's traded asset is SOL, "pay with SOL"
-		// is hidden (assetExclusion); when the traded asset is
-		// something else, SOL appears as a selectable payment-
-		// rail chip.  Single-network mainnet.  The `solana:`
-		// URI (Solana Pay specification) handles native SOL
-		// transfers.
-		//
-		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp45 ships SOL with the
-		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// ARRR at cp41, and DCR at cp43.
-		key: 'pay_sol',
-		name: 'Solana (SOL)',
-		url: 'https://solana.com',
-		category: 'crypto',
-		assetExclusion: 'SOL'
-	},
-	{
-		// Part 122 cp47 — Ethereum as a payment method.  Same
-		// Category-B semantics as the other trade-only assets:
-		// when the trade's traded asset is ETH, "pay with ETH"
-		// is hidden (assetExclusion); when the traded asset is
-		// something else, ETH appears as a selectable payment-
-		// rail chip.  Single-network mainnet.  The `ethereum:`
-		// URI (BIP-21-compatible EIP-681 simplified form)
-		// handles native ETH transfers.
-		//
-		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp47 ships ETH with the
-		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// ARRR at cp41, DCR at cp43, SOL at cp45.
-		key: 'pay_eth',
-		name: 'Ethereum (ETH)',
-		url: 'https://ethereum.org',
-		category: 'crypto',
-		assetExclusion: 'ETH'
-	},
-	{
-		// Part 122 cp49 — Ripple as a payment method.  Cp32 LL #36
-		// invariant: every tradable asset MUST also be wired as a
-		// payment rail.
-		key: 'pay_xrp',
-		name: 'Ripple (XRP)',
-		url: 'https://xrpl.org',
-		category: 'crypto',
-		assetExclusion: 'XRP'
 	},
 
 	// ─── In Person ──────────────────────────────────────────────

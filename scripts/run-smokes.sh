@@ -220,7 +220,17 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		continue
 	fi
-	if (cd "$repo/$dir" && "$TSX" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+	# Unified smoke tsconfig (cp63 LL #66) — merges path aliases from
+	# apps/web ($lib, $components, ...) and apps/indexer ($api, $config, ...)
+	# so cross-workspace smoke imports (e.g. indexer-tree smokes importing
+	# from apps/web/src/lib/) resolve.  Smokes that don't use any path
+	# alias don't care; tsx ignores the paths block when not needed.
+	if [ -f "$repo/tsconfig.smoke.json" ]; then
+		TSX_ARGS=(--tsconfig "$repo/tsconfig.smoke.json")
+	else
+		TSX_ARGS=()
+	fi
+	if (cd "$repo/$dir" && "$TSX" "${TSX_ARGS[@]}" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
 		# Smokes MUST emit a canonical `✓ all N ...` line so this runner
 		# can tally scenarios.  Without that line, the smoke is treated as
 		# a runner failure rather than silently counted as 0 — see J-1
