@@ -1,5 +1,55 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp63 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp63
+
+- **Memory #13 NEVER ASSUME, ALWAYS VERIFY**: my first crypto-registry parser dropped 6 entries silently because apostrophes inside `//` comments confused string-handling. Caught by sanity-checking entry count. Re-fixed with comment-aware parser. Re-confirmed: always verify entry counts after a text-edit operation.
+- **K.I.S.S. for grandma**: alphabetizing crypto entries makes the picker scannable end-to-end. In_person and online categories were already alphabetical; crypto had drifted to launch chronology. Now aligned with the documented invariant.
+- **Memory #29 NATIVE-LOCALE backlog (1,150 EN-fallback strings)** remains the chronic open item. cp63 didn't address it; documented in PRE-LAUNCH-CHECKLIST + community-translation pipeline.
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (unchanged from cp61-62)
+
+(See cp61 entry for the full list.) cp63 didn't add a defense; it unblocked 6 previously-env-blocked smokes via `tsconfig.smoke.json` so they actually run in CI and sandbox alike.
+
+## BATTERY STATE — clean
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3848 | up from 3611 (cp62), 3541 (cp62 fresh) |
+| Runners chronic-only | 2 | i18n-translation-completeness (Memory #29 backlog), sally-walkthrough L13 (XMR-jitter doc gap) |
+| Workspaces TS-clean (LL #52) | 7/7 | 20th consecutive |
+
+## CP63 LESSONS
+
+### Lesson #1 — Env-blocked smokes hide real bugs
+6 `$lib`-blocked smokes were silently "passing" (the runner just couldn't run them) for many checkpoints. Unblocking found 3 real bugs hidden behind the env-block. Going forward: env-blocked is not "fine, ignore"; it's "fix the env first, THEN see what the smoke actually does."
+
+### Lesson #2 — Documented invariants are truth
+payments-smoke's "alphabetized by name" was a documented invariant in the smoke source. The registry drifted away from it across multiple asset additions. The smoke didn't lie — env-block hid it. Going forward: every smoke assertion is part of the spec; don't dismiss a failing smoke as "the smoke is wrong" without proving it.
+
+### Lesson #3 — TypeScript text parsing requires comment-awareness
+My first crypto-registry parser silently dropped 6 of 16 entries because apostrophes inside `//` comments ("the trade's", "doesn't") were treated as string-literal delimiters. Sanity-checking entry count caught the drop. Comment-aware parsing is the floor for any source-editing pass.
+
+## CP64+ predicted hunting ground
+
+- **Value-cross-reference invariant hunt** (cp61-O14's parity-model class) — port numbers, DB names, recipient addresses, docker network names beyond CIDR — deferred from cp62
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub
+- **i18n-translation-completeness Memory #29 native-locale push** — chronic 1,150 EN-fallback debt; bigger lift, multi-session
+- **sally-walkthrough L13** — XMR-jitter "explicit guidance in BOTH on/off states" doc finding; small fix once located
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog per Memory #29)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+
+## Two parked external blockers (unchanged through cp42→cp63)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp62 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp62

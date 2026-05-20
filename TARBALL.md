@@ -1,5 +1,72 @@
 # Tarball history
 
+## cp63 — \$lib alias resolved + 3 real bugs caught by full battery (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp63-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **3848 scenarios pass / 2 runners chronic-only** (was 3611/8 at cp62, was 3541/15 fresh) · **7/7 workspaces TS-clean (LL #52 20th consecutive)** · **17 structural defenses operational** (unchanged) · 1 new infrastructure file (`tsconfig.smoke.json`) · 3 real-bug fixes inline.
+
+**cp63 origin:** Continuation of cp62's honest-accounting work. cp62 fixed 7 format-issue smokes + 1 path bug; 8 runners remained as 2 chronic + 6 env-blocked. The 6 env-blocked were all `$lib` SvelteKit alias not resolved by tsx. cp63 closes that.
+
+### Infrastructure: `tsconfig.smoke.json` at repo root
+
+Created a unified tsconfig that merges path aliases from both apps/web (`$lib`, `$components`, `$crypto`, `$i18n`, `$stores`, `$utils`, `$net`) and apps/indexer (`$config`, `$db`, `$blurt`, `$indexer`, `$api`, `$log`). Cross-workspace smoke imports (e.g. indexer-tree smokes importing from apps/web/src/lib/) now resolve through a single tsconfig.
+
+`scripts/run-smokes.sh` updated to pass `--tsconfig "$repo/tsconfig.smoke.json"` to every tsx invocation. Smokes that don't use any path alias don't care; tsx ignores the paths block when not needed.
+
+### 3 real bugs caught by the unblock
+
+With `$lib` resolved, 6 previously-env-blocked smokes ran for real for the first time. 3 passed cleanly; 3 surfaced actual bugs hidden by the env-block:
+
+**Bug #1 — payments-smoke: crypto entries not alphabetized**
+
+`PAYMENT_METHODS` in apps/web/src/lib/payments/registry.ts had 16 crypto entries in launch-chronology order (BTC, BLURT, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP). The smoke asserts "within each category, entries alphabetized by name" — a documented invariant for grandma-scannable picker UX. The in_person + online categories were alphabetical; only crypto had drifted to chronology.
+
+**Fix:** reordered the 16 crypto entries alphabetically by name (Bitcoin, Bitcoin Cash, BLURT, Dai, Dash, Decred, Dogecoin, Ethereum, Litecoin, Monero, Pirate Chain, Ripple, Solana, Tether, USD Coin, Zcash). UI picker now scans alphabetically end-to-end. Memory K.I.S.S.-for-grandma satisfied.
+
+The fix required a comment-aware top-level brace parser to identify entries — naive brace-matching tripped on apostrophes inside `//` comments ("the trade's", "doesn't"). Lesson re-confirmed: parsing TypeScript text requires understanding string literals + line comments + block comments.
+
+**Bug #2 — rss-orderbook-smoke: 'eth.xml' no longer unknown**
+
+`per-asset feed rejects unknown asset with 400` scenario was using `'eth.xml'` as the unknown-asset stand-in. When cp47 added ETH as tradable, that stopped being unknown — the smoke kept passing because env-block hid the real assertion.
+
+**Fix:** changed test to `'fake.xml'` (a ticker that will never be a tradable asset).
+
+**Bug #3 — payjoin-uri-wire-shape-smoke scenario 9: TRC-20 txid shape wrong**
+
+The smoke's USDT TRC-20 funds-sent test data used `'0x' + 'a'.repeat(64)` — EVM (ERC-20 / BEP-20) shape. TRC-20 (Tron) txids are 64 hex chars WITHOUT a `0x` prefix; `validateUsdtTxid` correctly rejected the test data, crashing the smoke. Env-block hid this since the smoke never reached scenario 9 before.
+
+**Fix:** changed test data to `'a'.repeat(64)` (no 0x prefix, valid TRC-20 shape).
+
+### Final battery state
+
+`Total: 3848 scenarios passed, 2 runners failed`
+
+The 2 remaining are the pre-existing chronic ones documented since cp32-cp35:
+- `i18n-translation-completeness-smoke` (Memory #29 EN-fallback debt for it/pl/ru/fa/zh-CN/zh-HK — community-supplied backlog)
+- `sally-walkthrough-smoke` L13 (XMR-jitter doc-gap — pre-launch L13 doc finding hasn't been written into source-of-truth doc yet)
+
+Neither is a regression. Both are accepted backlog with clear owners (community translators, doc author respectively).
+
+### Lessons
+
+1. **Env-blocked smokes hide real bugs.** The 6 `$lib`-blocked smokes were silently green for many checkpoints. Unblocking surfaced 3 real bugs — one per 2 unblocked. Future smokes that depend on env-specific path resolution should be made tsx-runnable.
+2. **Documented invariants in smokes are the truth.** payments-smoke's "alphabetized by name" assertion was the spec; the registry drifted. The smoke didn't lie — env-block hid it.
+3. **TypeScript text parsing requires comment-awareness.** Apostrophes in JSDoc / `//` line comments crashed my first naive parser. Comment handling is mandatory before any source-editing pass.
+
+### Final cp63 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- **3848 scenarios pass** / 2 runners chronic-only (was 3611/8)
+- 7/7 workspaces TS-clean (LL #52 20th consecutive)
+- 17 structural defenses operational (unchanged)
+- 1 new infra file: `tsconfig.smoke.json`
+- 1 runner update: `scripts/run-smokes.sh` uses unified tsconfig
+- 3 real-bug fixes inline (registry alphabetize, rss eth→fake, payjoin TRC-20 txid)
+
+---
+
+# Tarball history
+
 ## cp62 — Honest battery accounting + 7 format-issue smokes fixed (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp62-FULL-STATE.tar.gz`

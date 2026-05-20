@@ -191,7 +191,7 @@ await scenario('per-asset feed accepts blurt.xml and queries with BLURT', async 
 
 await scenario('per-asset feed rejects unknown asset with 400', async () => {
 	const mock = makeMockDb([]);
-	const r = await perAssetFeedHandler('eth.xml', mock.db, FAKE_CONFIG);
+	const r = await perAssetFeedHandler('fake.xml', mock.db, FAKE_CONFIG);
 	assertEqual(r.status, 400, 'status');
 	assertEqual(mock.queries.length, 0, 'no DB query for invalid asset');
 });

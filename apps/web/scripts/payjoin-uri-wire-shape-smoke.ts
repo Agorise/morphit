@@ -185,7 +185,11 @@ console.log('\n── payjoin-uri-wire-shape smoke ─────────�
 		v: 1 as const,
 		kind: 'morphit_funds_sent' as const,
 		method: 'usdt' as const,
-		txid: '0x' + 'a'.repeat(64),
+		// TRC-20 txids are 64 hex chars WITHOUT a 0x prefix (Tron
+		// convention); the EVM '0x'+64-hex shape is only for erc20
+		// / bep20.  Using EVM shape here would fail validateUsdtTxid
+		// and crash the smoke before reaching the roundtrip check.
+		txid: 'a'.repeat(64),
 		network: 'trc20'
 	};
 	const wire = encodeFundsSentPayload(payload);
