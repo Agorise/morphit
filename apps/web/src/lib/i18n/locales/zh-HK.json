@@ -3205,7 +3205,7 @@
 			"description": "Zcash：2016 年推出，zk-SNARK shielded 交易（Sapling + Orchard 池）以及透明地址（t1/t3，像 Bitcoin）。公平啟動，founder reward 減半時間表。每次交易接收者選擇與其立場匹配的地址類型。僅在 Morphit 上交易——不能支付掛單費用。"
 		},
 		"pay_arrr": {
-			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
+			"description": "使用 Pirate Chain (ARRR) 付款。Pirate Chain 是一種工作量證明加密貨幣，通過 Sapling zk-SNARK 池提供鏈級 shielded 交易——發送方、接收方和金額在鏈上默認隱藏。單一地址格式（zs1 Sapling shielded）。使用 Pirate Chain 錢包，如 Treasure Chest、Pirate.Black 或 Verus 集成的 Pirate 錢包。"
 		},
 		"pay_dcr": {
 			"description": "使用 Decred (DCR) 付款。Decred 是一種具有鏈上治理的混合 Proof-of-Work + Proof-of-Stake 加密貨幣。鏈在基礎層是透明的；可選的 CoinShuffle++ 混合（通過 dcrwallet）為啟用它的用戶打破交易圖。使用 Decred 錢包，如 dcrwallet 或 Decrediton。"
@@ -3755,7 +3755,7 @@
 		"index_title": "私隱實踐 — Morphit",
 		"index_meta_description": "如何在透明鏈和私密鏈上使你的交易更私密。每種資產的指南，涵蓋新地址、可選私隱技術和常見陷阱。",
 		"index_heading": "Morphit 的私隱實踐",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "在 Morphit 上交易的大多數資產（BTC、BCH、LTC、DASH、DOGE、ZEC、ARRR、DCR、SOL、ETH、XRP、BLURT、USDT、USDC、DAI）都在透明鏈上——任何觀察者都可以讀取鏈歷史。你可以採取具體步驟，使你的交易更難被關聯、畫像或監控。這是註冊表驅動的：Morphit 添加的下一個資產會自動獲得指南。",
 		"page_title": "{asset} 交易的私隱 — Morphit",
 		"guide_heading": "{asset} 交易的私隱實踐",
 		"back_to_index": "所有資產",
@@ -3786,11 +3786,11 @@
 			},
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
-				"explain": "A two-party cooperative transaction protocol. Sender and receiver both contribute inputs, so chain observers cannot apply the standard \"all inputs come from the same wallet\" heuristic. Morphit's address-share modal includes an optional PayJoin endpoint field — if both wallets support BIP-78, the trade automatically uses PayJoin."
+				"explain": "一種兩方協作交易協議。發送方和接收方都貢獻輸入，因此鏈觀察者無法應用標準的\"所有輸入來自同一錢包\"啟發式。Morphit 的地址分享模態框包括一個可選的 PayJoin 端點字段——如果兩個錢包都支持 BIP-78，交易會自動使用 PayJoin。"
 			},
 			"privatesend": {
 				"name": "PrivateSend",
-				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
+				"explain": "Dash 的原生 CoinJoin 變體。使用面額化的輸入/輸出金額和主節點協調，在多個參與者之間混合硬幣，打破鏈上發送方和接收方之間的鏈接。運行多輪混合（更多輪 = 更大的匿名集 = 更高的費用）。在分享地址之前在 Dash 錢包中預混合——當資金到達 Morphit 時已經混合完畢。"
 			},
 			"shielded-pools": {
 				"name": "Shielded pools (Sapling + Orchard)",
@@ -3798,7 +3798,7 @@
 			},
 			"csppmix": {
 				"name": "CoinShuffle++ (CSPP) 混合",
-				"explain": "A wallet-side mixing protocol that bundles your transaction inputs with other participants in a single multi-party round.  After mixing, your outputs are no longer linkable to your original inputs on chain.  Integrated into dcrwallet for Decred — enable the \"Mix Account\" option.  Opt-in (you choose when to mix); off-protocol (mixing rounds aren't enforced by consensus)."
+				"explain": "一種錢包側混合協議，在單個多方輪次中將你的交易輸入與其他參與者捆綁。混合後，你的輸出在鏈上不再與你的原始輸入關聯。集成到 Decred 的 dcrwallet 中——啟用\"Mix Account\"選項。可選（你選擇何時混合）；off-protocol（混合輪次不由共識強制執行）。"
 			}
 		},
 		"common_practices": {
@@ -3833,7 +3833,7 @@
 			"usdt": {
 				"one_line": "中心化——Tether 可凍結任何地址。在每條鏈上都透明。",
 				"intro": "USDT 的私隱問題在結構上不同於 Morphit 上的其他透明資產：USDT 是中心化的。Tether Limited 可以在沒有通知的情況下凍結任何 USDT 地址。這已經發生在被制裁的地址、與黑客攻擊相關的地址，以及有時 Tether 自己認為可疑的地址。在 Morphit 上交易 USDT 意味著接受 BTC/XMR/BLURT 中不存在的凍結風險。",
-				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
+				"caveats": "即使採用完善的鏈上私隱實踐，USDT 仍可被中心化凍結。在 USDT 主機鏈（Ethereum、Tron、Solana、BSC）上的實際鏈上私隱與任何透明 EVM/UTXO/account 鏈相同——你的私隱取決於主機鏈的可選私隱生態系統（ETH 上的 Tornado Cash 等），我們不在此背書或進一步描述。",
 				"meta_description": "Morphit 上 USDT 交易的私隱考量：中心化風險與宿主鏈透明性。"
 			},
 			"bch": {
@@ -3848,14 +3848,14 @@
 			},
 			"dash": {
 				"one_line": "透明基礎層，去中心化——PrivateSend 提供主節點協調的可選混合。",
-				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
+				"intro": "Dash 於 2014 年從 Litecoin 分叉，共享同一透明基礎層——每個地址餘額和交易都公開可見。鏈完全去中心化；沒有發行方可以凍結地址。Dash 添加了 PrivateSend，一種由主節點網絡協調的 CoinJoin 變體，在錢包級別提供可選混合。在分享接收地址之前預混合多輪是 Dash 上最強的私隱實踐。",
 				"meta_description": "Morphit 上 Dash 交易的私隱實踐：新地址、PrivateSend 預混合以及應避免的事項。",
 				"caveats": "PrivateSend 的匿名集取決於同時參與混合的參與者。在低流量時段，混合會話可能以更少的參與者運行——更少的混合意味著更小的匿名集。在 Morphit 交易之前提前進行預混合，不要在需要時才做：預混合讓你有時間獲得所需的匿名集，並將混合時間與公開交易時間分開。"
 			},
 			"usdc": {
 				"one_line": "中心化——Circle 可凍結任何地址。在每條鏈上都透明。",
-				"intro": "USDC's privacy posture mirrors USDT's: it's centralized. Circle (USDC's issuer) can freeze any USDC address on any host chain, and has done so on regulatory request. No amount of address rotation or transaction obfuscation changes Circle's freeze capability. The amount-correlation defense (jitter) IS active for USDC trades — see /{lang}/faq#monero_amount_jitter — but jitter addresses a different threat than centralization.",
-				"caveats": "Even with perfect on-chain privacy practices, USDC remains centrally freezable. Practical on-chain privacy on USDC host chains (Ethereum, Solana, Base, Polygon) is the same as on any transparent EVM/account chain — your privacy depends on the host chain's opt-in privacy ecosystem, which we do not endorse or describe further here. BEP-20 USDC on BNB Chain is intentionally NOT supported: that variant is Binance-Peg (Binance-custodied wrapper of Circle-issued USDC), adding a second custodian to the existing one.",
+				"intro": "USDC 的私隱態勢與 USDT 類似：它是中心化的。Circle（USDC 的發行者）可以凍結任何主機鏈上的任何 USDC 地址，並且已根據監管要求這樣做。任何數量的地址輪換或交易混淆都不會改變 Circle 的凍結能力。金額關聯防禦（jitter）對 USDC 交易處於激活狀態——參見 /{lang}/faq#monero_amount_jitter——但 jitter 解決的是與中心化不同的威脅。",
+				"caveats": "即使採用完善的鏈上私隱實踐，USDC 仍可被中心化凍結。在 USDC 主機鏈（Ethereum、Solana、Base、Polygon）上的實際鏈上私隱與任何透明 EVM/account 鏈相同——你的私隱取決於主機鏈的可選私隱生態系統，我們不在此背書或進一步描述。BNB Chain 上的 BEP-20 USDC 故意不被支持：該變體是 Binance-Peg（Binance 托管的 Circle 發行 USDC 的包裝），在現有托管者之上增加了第二個托管者。",
 				"meta_description": "Morphit 上 USDC 交易的私隱考量：中心化風險、宿主鏈透明性以及金額隨機化防禦。"
 			},
 			"dai": {
@@ -3865,7 +3865,7 @@
 			},
 			"doge": {
 				"one_line": "透明基礎層，通過 PoW 去中心化，無原生私隱升級。",
-				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
+				"intro": "Dogecoin 於 2013 年作為早期 Litecoin 變體的公平啟動分叉發布。與 Bitcoin 一樣，每個地址餘額和交易在鏈上公開可見。鏈完全去中心化；沒有發行方或基金會可以凍結地址。自 2014 年以來，它與 Litecoin 合併挖礦（輔助工作量證明），繼承 Litecoin 的哈希率安全性而不與之競爭。",
 				"meta_description": "Morphit 上 Dogecoin 交易的私隱實踐：新地址、避免鏈啟發式分析以及預期的權衡。",
 				"caveats": "Dogecoin 沒有原生私隱升級——沒有 PrivateSend 等效物，沒有 MWEB，沒有可選池。與 Litecoin 的合併挖礦可防禦 51% 攻擊，但對交易私隱沒有幫助。你最好的槓桿是：每次交易使用新地址、避免在交易之間重複使用同一地址，並考慮鏈由分析師觀察，他們對交易所及其輸出流進行編目。"
 			},
