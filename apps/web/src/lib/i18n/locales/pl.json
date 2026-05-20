@@ -802,7 +802,7 @@
 				"a": "Treść twojego czatu jest w pełni prywatna — szyfrowana end-to-end między tobą a twoim rozmówcą. Tylko wasze dwa urządzenia mają klucze do odszyfrowania. Co jest prywatne:\n• Tekst wiadomości\n• Wszelkie szczegóły płatności, adresy lub negocjacje Co nie jest prywatne (metadane, widoczne w łańcuchu):\n• Nazwa konta rozmówcy\n• Znaczniki czasu każdej wiadomości\n• Przybliżony rozmiar wiadomości Użyta kryptografia:\n• Wymiana kluczy X25519 (Diffie-Hellman krzywej eliptycznej)\n• Szyfrowanie uwierzytelnione ChaCha20-Poly1305\n• Świeży klucz efemeryczny na wiadomość To standardowe, dobrze zaudytowane prymitywy (z libsodium). Protokół to prosty projekt ECIES udokumentowany w ADR-0015 — nie protokół jak Signala. Jeśli twój model zagrożeń wymaga silniejszych właściwości jak forward secrecy, użyj dedykowanego bezpiecznego komunikatora — dobre opcje to **Matrix/Element**, **Session**, **Keybase** i **Signal**."
 			},
 			"monero_amount_jitter": {
-				"q": "Why does Morphit randomize my transfer amount?",
+				"q": "Dlaczego Morphit losuje moją kwotę przelewu?",
 				"a": "Identical amounts on a public chain create a fingerprint linking your orderbook post to the on-chain transfer. Morphit adds a tiny random tail (well under a cent at typical prices) to every transfer to defeat this. Shipped for XMR originally; cp26 generalized to BTC/BCH/LTC/BLURT; cp27 extends to DASH; cp30 extends to stablecoins — USDT and USDC now get amount-jitter; cp31 extends to DAI; cp33 extends to DOGE. Per-asset jitter range: up to 999,999 piconero (~$0.0002) for XMR, up to 999 satoshi for BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP (~$0.001 to $0.50), up to 99 milliblurt for BLURT (fractions of a cent), up to 999 micro-units of USDT/USDC/DAI (under a tenth of a cent). The seller is always paid slightly MORE than asked, never less — verification still passes. Default ON; toggle visible right under the amount field in the address-share modal. Jitter addresses the amount-correlation linkability threat; it does NOT address the separate centralization threat for stablecoins (Circle/Tether can freeze addresses regardless of amount). The per-asset privacy guide at /privacy/{asset} covers each chain's full privacy posture."
 			},
 			"feedback_immutable": {
@@ -1178,7 +1178,7 @@
 				"a": "USDT to stablecoin wydany przez Tether Inc., zaprojektowany do utrzymywania parytetu 1:1 z dolarem amerykańskim. Aktywni traderzy używają go do tymczasowego parkowania wartości bez konwersji na fiat — np. między transakcjami, lub aby uniknąć zmienności BTC/XMR w oczekiwaniu na lepszy moment wejścia. Na Morphit możesz kupować i sprzedawać USDT peer-to-peer w czterech sieciach: Ethereum (ERC-20), Tron (TRC-20), Solana (SPL) i BNB Smart Chain (BEP-20). USDT na Morphit jest **tylko do handlu** — nigdy nie możesz nim płacić opłat za wystawianie, opłat za zimne wiadomości ani ofert na wyróżnione miejsca. To zawsze kosztuje BLURT, BTC lub XMR. Niezmiennik opłat jest zamrożony w formacie kablowym i egzekwowany przez sentinel-smokes w CI."
 			},
 			"what_is_usdc": {
-				"q": "What is USDC?",
+				"q": "Czym jest USDC?",
 				"a": "USDC (USD Coin) is a stablecoin issued by Circle, a US-based financial-services company, designed to maintain a 1:1 peg with the US dollar. It's the second-most-traded stablecoin in the world after USDT, and many active traders prefer it because Circle publishes monthly attestation reports on the reserves backing each token and is regulated under New York DFS oversight. On Morphit you can buy and sell USDC peer-to-peer across four networks: Ethereum (ERC-20), Solana (SPL), Base, and Polygon. Pick whichever network you and your counterparty both support; the picker on the order form makes you commit to a specific network up front so a cross-network send can't accidentally lose your funds. USDC is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR. See also the per-asset privacy guide at `/privacy/usdc` for the honest trade-offs."
 			},
 			"why_usdt_warning": {
@@ -1186,7 +1186,7 @@
 				"a": "USDT to najczęściej handlowany stablecoin na świecie, a miliony traderów polegają na jego stabilności wobec dolara i szerokiej akceptowalności każdego dnia. Gdy Morphit listuje aktywo, informujemy naszych użytkowników uczciwie o jego właściwościach technicznych, aby mogli podjąć świadomą decyzję dla każdej transakcji. Dla USDT, dwa fakty warte poznania: (1) USDT jest emitowany i administrowany przez Tether Inc., a Tether ma techniczną możliwość zamrażania adresów w łańcuchu hostującym — używali tej możliwości w przeszłości, głównie w odpowiedzi na żądania organów ścigania. (2) Transakcje USDT na każdym wspieranym łańcuchu hostującym (Ethereum, Tron, Solana, BNB Smart Chain) są publicznie widoczne w tych łańcuchach; jest to właściwość łańcucha, a nie unikalna dla USDT. Różni traderzy oceniają to różnie. Jeśli chcesz maksymalnej prywatności on-chain, XMR to właściwe narzędzie. Jeśli chcesz maksymalnej decentralizacji-od-każdego-pojedynczego-emitenta, BTC, BLURT, BCH, LTC, DASH lub DOGE to właściwe narzędzia. Jeśli chcesz stabilności denominowanej w dolarach i rynku płynnego niemal wszędzie, USDT to właściwe narzędzie. Informacja Morphit to informacja, nie werdykt — wybierz aktywo pasujące do transakcji, którą wykonujesz."
 			},
 			"why_usdc_warning": {
-				"q": "Why does Morphit show a privacy warning when I trade USDC?",
+				"q": "Dlaczego Morphit pokazuje ostrzeżenie o prywatności, gdy handluję USDC?",
 				"a": "USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer."
 			},
 			"which_usdt_network": {
@@ -1194,19 +1194,19 @@
 				"a": "To zależy od tego, co masz ty i twój kontrahent oraz jakie opłaty możesz tolerować. **TRC-20 (Tron)** jest najczęstszy w handlu P2P, bo opłaty sieciowe wynoszą około $1 — przewidywalne i tanie. **ERC-20 (Ethereum)** jest najpowszechniej akceptowany: każda giełda, każdy portfel, każda platforma smart contractów go obsługuje; opłaty $5-20 i wolniejsze, ale jeśli twój handel rozlicza się w aplikacji po stronie Ethereum, to jest to właściwa sieć. **SPL (Solana)** ma najniższe opłaty (poniżej $0.01) i jest szybki, ale mniej powszechnie akceptowany; wybierz to, jeśli ty i twój kontrahent używacie portfeli Solana. **BEP-20 (BNB Smart Chain)** ma opłaty około $0.30, szybki, ale mniej powszechny — przydatny przy przesyłaniu USDT między Binance a innym kontrahentem używającym BSC. **Nie ma domyślnej** sieci na Morphit — każdy handel USDT wymaga jawnego wyboru sieci, bo wysłania międzysieciowe są nieodwracalne. Jeśli wyślesz USDT-ERC20 na adres TRC-20 (lub odwrotnie), środki znikają na zawsze. Selektor sieci w formularzu zamówienia nie pozwoli ci wysłać, dopóki nie wybierzesz."
 			},
 			"which_usdc_network": {
-				"q": "Which USDC network should I use?",
+				"q": "Której sieci USDC powinienem użyć?",
 				"a": "It depends on what you and your counterparty already hold and what fees you can stomach. **Solana (SPL)** is the cheapest of the four — fees are usually a fraction of a cent — but requires both parties to have a Solana wallet (Phantom, Solflare, etc.). **Base** is a layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.) Base is often the right pick. **Polygon (PoS)** is similar territory to Base with slightly different wallet support; many exchanges withdraw USDC on Polygon natively. **Ethereum (ERC-20)** is the most universally accepted: every exchange, every wallet, every smart-contract platform supports it; but mainnet fees can be $5-20 a transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20. Critical foot-gun: three of the four (ERC-20, Base, Polygon) all use the same `0x[40 hex]` Ethereum-format address. An address that's valid on Polygon is also a valid address on Ethereum and Base — but each chain holds its own separate USDC balance for that address. If you send USDC on Polygon to an address your counterparty gave you for Base, the funds will arrive on Polygon, not Base, and the counterparty's Base wallet won't show them. Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time so the chat message header tells the receiver which chain to expect."
 			},
 			"what_is_dai": {
-				"q": "What is DAI?",
+				"q": "Czym jest DAI?",
 				"a": "DAI is a USD-pegged stablecoin issued by the MakerDAO protocol on Ethereum. Unlike USDT (Tether Inc.) and USDC (Circle), DAI is not issued by a single corporate entity — it's governed by holders of the MKR token through on-chain votes, and the DAI token contract itself has no admin-controlled freeze function. Many traders prefer DAI for that reason. Honest nuance: since 2020, MakerDAO's Peg Stability Module (PSM) holds USDC as collateral to dampen peg deviations, so when DAI's peg is supported by USDC, Circle's freeze power over USDC indirectly affects DAI's redeemability. DAI is also upgradeable in principle through MKR governance, though no freeze mechanism has been deployed in practice. On Morphit you can buy and sell DAI peer-to-peer across four networks: Ethereum (ERC-20, native), Polygon, Base, and Arbitrum One. Pick whichever network you and your counterparty both support; the network picker locks this in at post-time so a cross-network send can't accidentally lose your funds. DAI is a tradable asset only — listing fees on Morphit stay in BLURT, BTC, or XMR. See also the per-asset privacy guide at `/privacy/dai`."
 			},
 			"why_dai_warning": {
-				"q": "Why does Morphit show a privacy warning when I trade DAI?",
+				"q": "Dlaczego Morphit pokazuje ostrzeżenie o prywatności, gdy handluję DAI?",
 				"a": "DAI's warning is more nuanced than USDT's or USDC's because DAI is genuinely more decentralized — but not freeze-immune. Three things to know: (1) The Dai token contract has NO admin-controlled freeze function. MakerDAO can't blacklist your address and stop transfers, the way Tether or Circle can on their stablecoins. This is a real advantage that DAI supporters rightly point to. (2) The Peg Stability Module (PSM) holds significant USDC reserves as collateral to dampen peg deviation. When DAI's peg is partly supported by USDC, Circle's freeze power over USDC transitively affects DAI's redemption mechanics — if Circle were to freeze the PSM's USDC, the peg-arbitrage path closes for that portion of the supply. (3) MakerDAO governance (MKR token holders) could theoretically deploy a contract upgrade that adds freeze or pause mechanisms. This hasn't happened in practice, but it's possible. Bottom line: DAI's decentralization story is real but partial — better than fully centralized stablecoins on the freeze-immunity axis, less so than truly decentralized assets like BTC/XMR. Like all stablecoins on Morphit, DAI transactions are publicly visible on each supported network — there is no on-chain privacy. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable DAI instance-wide if they prefer to keep their instance free of stablecoins entirely."
 			},
 			"which_dai_network": {
-				"q": "Which DAI network should I use?",
+				"q": "Której sieci DAI powinienem użyć?",
 				"a": "DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (PoS), Base, and Arbitrum One. All four are EVM-family with `0x[40 hex]` addresses — they look IDENTICAL. An address that's valid on Polygon is also a valid-format address on Ethereum, Base, AND Arbitrum, but each chain holds its own separate DAI balance for that address. The network picker on the order form locks the network in at post-time so the chat message header tells the receiver which chain to expect. This is the highest cross-network address-confusion surface on Morphit — be especially careful. **Ethereum (ERC-20)** is the most universal — every exchange, wallet, and smart-contract platform supports it — but mainnet fees can be $5-20 per transaction, so it's rarely the right pick for a P2P trade unless one of you is sending FROM or TO a service that only supports ERC-20. **Polygon (PoS)** is much cheaper (cents per transaction); many exchanges withdraw DAI on Polygon natively. **Base** is Coinbase's layer-2 on Ethereum and offers fees around $0.01-0.10; if you both have an EVM wallet (MetaMask, Rabby, etc.), Base is often the right pick. **Arbitrum One** is similar territory to Base — another major Ethereum layer-2 with very low fees. Both parties should explicitly confirm which network before sending; the order form's network picker locks this in at post-time."
 			},
 			"arbitrage_morphit_vs_exchanges": {
@@ -1214,43 +1214,43 @@
 				"a": "Morphit jest zbudowany tak, aby arbitraż był łatwy. Opłaty za wystawianie to ułamek dolara, nie ma opłaty taker, nie ma opłaty za wypłatę na samej transakcji, nie ma limitu wypłat, nie ma okresu oczekiwania. Trader, który widzi różnicę cen między rynkiem P2P Morphit a CEX (Coinbase, Kraken, Binance) lub DEX (Uniswap, THORChain), może wystawić zlecenie Morphit z cienkim spreadem po obu stronach i pozwolić, żeby orderbook się wypełnił. Selektor modelu cenowego pozwala przypiąć `spread: 0.5%` względem aktualnej średniej ceny CoinGecko, więc twoje zlecenie podąża za rynkiem automatycznie — bez ręcznej zmiany cen przy ruchach cen globalnych. W miarę jak coraz więcej traderów używa Morphit, arbitrażyści naturalnie wyrównują ceny P2P z szerszym rynkiem, co jest dobre dla wszystkich: węższe spready, lepsze realizacje, bardziej przewidywalne wykonanie. Kilka uwag praktycznych: rozliczenie per-transakcja w Morphit jest tym, co z niego zrobisz — bezpośrednio wallet-do-wallet dla par krypto-vs-krypto (XMR za USDT, BTC za USDT) lub przez wybrany bank/rail fiat dla krypto-vs-fiat. Dla arbitrażu wysokiej częstotliwości struktura opłat Sybil-tier skaluje koszt wystawiania, jeśli wystawiasz wiele zleceń szybko z tego samego konta; to infrastruktura anty-spam, nie anty-arbitraż — większość arbitrażystów używa jednego konta na kierunek i nigdy nie osiąga progu tier-2."
 			},
 			"what_is_doge": {
-				"q": "What is DOGE on Morphit?",
+				"q": "Czym jest DOGE na Morphit?",
 				"a": "DOGE is Dogecoin — a proof-of-work chain launched in 2013 as a fair-launched fork of Lucky Coin (itself a Litecoin fork). It's transparent at the base layer like Bitcoin: every transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze your addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.\n\nOn Morphit, DOGE is **trade-only** — you can buy or sell DOGE in P2P trades, but you can't pay Morphit's listing fees in DOGE (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC), so the rule is uniform.\n\n**Privacy posture**: DOGE has no native privacy upgrade. No PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish links to its on-chain history forever. Use a fresh HD-derived address per trade (your wallet usually does this automatically). \n\n**Address formats**: D… (P2PKH, most common), 9… or A… (P2SH, multi-sig, rare on DOGE). No bech32 — Dogecoin Core has not activated segwit.\n\n**Wallets that work well**: Dogecoin Core (official, full node), MyDoge, Trezor + Ledger (hardware), Electrum-DOGE for desktop."
 			},
 			"what_is_zec": {
-				"q": "What is ZEC on Morphit?",
+				"q": "Czym jest ZEC na Morphit?",
 				"a": "ZEC is Zcash — a proof-of-work chain launched in 2016. It was the first practical implementation of zero-knowledge proofs in a cryptocurrency. The chain supports two address families that coexist on the same protocol: transparent (t1/t3, base58 addresses similar in shape to Bitcoin's legacy format) where transaction amounts and parties are publicly visible, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) where zk-SNARKs hide sender, recipient, and amount on chain. Per-trade, you and your counterparty pick the address type that fits the trade's posture.\n\nOn Morphit, ZEC is **trade-only** — you can buy or sell ZEC in P2P trades, but you can't pay Morphit's listing fees in ZEC (those stay BLURT/BTC/XMR). The same fee_method enum applies to every Category-B asset (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC), so the rule is uniform.\n\n**Address formats**: t1… (transparent P2PKH, the most common transparent type), t3… (transparent P2SH, multi-sig), zs1… (Sapling shielded, bech32, 78 chars total), u1… (Unified Address bundling Orchard + optional Sapling/transparent receivers, bech32m, variable length typically 90–300 chars).\n\n**Wallets that work well**: Zashi (official mobile wallet from the Electric Coin Co, Sapling + Orchard support), Zecwallet (desktop, legacy Sapling), Nighthawk Wallet (mobile, Sapling). Verify your counterparty's wallet handles the address type you plan to publish — newer wallets support Unified Addresses (u1) and older wallets may only support Sapling (zs1) or transparent."
 			},
 			"what_is_arrr": {
-				"q": "What is Pirate Chain (ARRR), and why is it on Morphit?",
+				"q": "Czym jest Pirate Chain (ARRR) i dlaczego jest na Morphit?",
 				"a": "Pirate Chain (ARRR) is a proof-of-work cryptocurrency that runs the Sapling zk-SNARK shielded pool as its only transaction type — every transfer hides sender, recipient, and amount on chain by construction. There's no transparent address option on Pirate Chain; the transparent pool was sunset early in the chain's life and all funds migrated to the shielded pool.\n\nOn Morphit, ARRR is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in ARRR. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nAddresses use a single format: `zs1` Sapling shielded (bech32, 78 chars). Visually identical to Zcash Sapling addresses — Morphit's per-asset tab and placeholder disambiguate which chain the address belongs to. Use a Pirate Chain wallet like Treasure Chest (mobile), Pirate.Black, or the Verus-integrated Pirate wallet to generate addresses and receive funds.\n\nOperators can refuse ARRR trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"ARRR\"`; the federated marketplace keeps trading ARRR regardless of any single operator's stance."
 			},
 			"what_is_dcr": {
-				"q": "What is Decred (DCR), and why is it on Morphit?",
+				"q": "Czym jest Decred (DCR) i dlaczego jest na Morphit?",
 				"a": "Decred (DCR) is a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency launched in 2016. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders chosen pseudo-randomly from the staking pool — this dual consensus means neither miners nor stakers alone can change protocol rules. On-chain governance via Politeia lets stakeholders propose, debate, and ratify protocol changes; treasury funds flow through community vote.\n\nOn Morphit, DCR is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in DCR. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nAddresses use two formats: `Ds` P2PKH-Secp256k1 (most common receive format) and `Dc` P2SH (multisig/escrow scripts) — both 35 chars, base58. Use a Decred wallet like dcrwallet, Decrediton, or Cake Wallet for DCR to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, amount visible on chain), but offers an opt-in CoinShuffle++ (CSPP) mixing protocol integrated into dcrwallet for users who want transaction-level privacy.\n\nOperators can refuse DCR trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"DCR\"`; the federated marketplace keeps trading DCR regardless of any single operator's stance."
 			},
 			"what_is_sol": {
-				"q": "What is Solana (SOL), and why is it on Morphit?",
+				"q": "Czym jest Solana (SOL) i dlaczego jest na Morphit?",
 				"a": "Solana (SOL) is a Proof-of-Stake cryptocurrency launched in 2020. It uses delegated PoS consensus combined with Proof-of-History sequencing to achieve high transaction throughput. Validators stake SOL and process blocks in rotation; no central freeze authority controls the chain.\n\nOn Morphit, SOL is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in SOL. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nSolana addresses are 32-byte public keys encoded as base58 — 32-44 characters (most are exactly 44). Use a Solana wallet like Phantom, Solflare, Cake Wallet for SOL, or Trust Wallet to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, and amount visible on chain). Solana has no native protocol-level mixing; wallet-side address rotation is the user's primary privacy lever.\n\nNote: Solana addresses look identical to USDT-on-Solana and USDC-on-Solana SPL token-account addresses. The asset field on the order disambiguates — Morphit shows you which asset you're sending so wallet confusion is avoided.\n\nOperators can refuse SOL trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"SOL\"`; the federated marketplace keeps trading SOL regardless of any single operator's stance."
 			},
 			"what_is_eth": {
-				"q": "What is Ethereum (ETH), and why is it on Morphit?",
+				"q": "Czym jest Ethereum (ETH) i dlaczego jest na Morphit?",
 				"a": "Ethereum (ETH) is a Proof-of-Stake cryptocurrency launched in 2015. It transitioned from Proof-of-Work to Proof-of-Stake in September 2022 (\"The Merge\"). Validators stake ETH and process blocks in rotation; no central freeze authority controls the chain.\n\nOn Morphit, ETH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in ETH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nEthereum addresses are 20-byte hex with a `0x` prefix — exactly 42 characters total. Both lowercase and EIP-55 mixed-case checksum forms are accepted. Use an Ethereum wallet like MetaMask, Rabby, Frame, Rainbow, or Trust Wallet to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, and amount visible on chain). Ethereum has no native protocol-level mixing; wallet-side address rotation is the user's primary privacy lever.\n\nNote: Ethereum addresses look IDENTICAL to USDT-ERC20, USDC-ERC20, DAI-ERC20, and any EVM token-account address on Base, Polygon, Arbitrum, or BSC. The asset field on the order (and the network field for multi-network assets) disambiguates — Morphit shows you which asset you're sending so wallet confusion is avoided.\n\nETH can also be sent to a smart-contract address that may not accept it (no payable receive/fallback function); modern wallets warn before sending to contracts. ENS names (alice.eth) are NOT resolved by Morphit — paste raw 0x addresses to avoid centralized RPC dependency for name resolution.\n\nOperators can refuse ETH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"ETH\"`; the federated marketplace keeps trading ETH regardless of any single operator's stance."
 			},
 			"what_is_xrp": {
-				"q": "What is Ripple (XRP), and why is it on Morphit?",
+				"q": "Czym jest Ripple (XRP) i dlaczego jest na Morphit?",
 				"a": "Ripple (XRP) is the native digital asset of the XRP Ledger (XRPL), launched in 2012. XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering. The default UNL is published by the XRP Ledger Foundation (a non-profit), with the for-profit Ripple Labs Inc. historically influencing validator selection.\n\nOn Morphit, XRP is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment method on the other side), but you cannot pay listing fees in XRP. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nXRPL addresses start with `r` followed by 24-34 base58 characters. Use an XRPL wallet like Xaman (formerly Xumm), Crossmark, Bifrost, GemWallet, or Trust Wallet to generate addresses and receive funds. The chain is transparent at the base layer (sender, recipient, and amount visible on chain). XRPL has no native protocol-level mixing; wallet-side address rotation is the user's primary privacy lever.\n\nTwo XRPL-specific UX gotchas to be aware of:\n\n**1. Destination tags.** XRPL has a unique feature — a 32-bit integer destination tag that exchanges use to route XRP to user accounts under their omnibus wallet. When sending XRP to an exchange-hosted address (Binance, Bitstamp, Kraken, etc.), you MUST include the destination tag specified by the exchange — otherwise the transaction succeeds on-chain but the funds land in the exchange's general pool and don't credit your account. Recovery requires opening a support ticket. For peer-to-peer trades on Morphit, your counterparty is typically NOT an exchange and a destination tag is not required, but always check whether the recipient address needs one.\n\n**2. Reserve requirement.** XRPL accounts need a minimum XRP balance (currently 1 XRP base reserve) to exist on the ledger. Sending less than 1 XRP to a never-funded address fails on-chain. For your first XRP receive, ask your counterparty to send at least 1 XRP (or fund the address yourself first from an existing XRPL account).\n\nXRP can also have its IOU (issued token) variants frozen by the issuer — but this applies ONLY to issued tokens, NOT to native XRP. Native XRP cannot be frozen by any central authority.\n\nOperators can refuse XRP trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"XRP\"`; the federated marketplace keeps trading XRP regardless of any single operator's stance."
 			},
 			"what_is_bch": {
-				"q": "What is Bitcoin Cash (BCH), and why is it on Morphit?",
+				"q": "Czym jest Bitcoin Cash (BCH) i dlaczego jest na Morphit?",
 				"a": "Bitcoin Cash (BCH) is a fork of Bitcoin that activated in August 2017, prioritizing larger block sizes and lower on-chain fees for everyday-payment-style usage. The chain shares Bitcoin's UTXO model and Proof-of-Work consensus but operates with substantially larger blocks (32 MB+) and a separate difficulty adjustment.\n\nOn Morphit, BCH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in BCH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nBCH supports two address formats: legacy base58 (starts with `1` or `3`, same shape as BTC addresses — asset field disambiguates) and CashAddr bech32 (starts with `bitcoincash:q` or `bitcoincash:p`). Morphit accepts both. The chain is transparent at the base layer like Bitcoin; wallet-side address rotation is the user's primary privacy lever.\n\nOperators can refuse BCH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"BCH\"`; the federated marketplace keeps trading BCH regardless of any single operator's stance."
 			},
 			"what_is_ltc": {
-				"q": "What is Litecoin (LTC), and why is it on Morphit?",
+				"q": "Czym jest Litecoin (LTC) i dlaczego jest na Morphit?",
 				"a": "Litecoin (LTC) is one of the oldest cryptocurrencies, forked from an early Bitcoin codebase in October 2011. It uses Scrypt-based Proof-of-Work mining (designed at the time to be more memory-hard than Bitcoin's SHA-256) and a faster ~2.5-minute block target.\n\nOn Morphit, LTC is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in LTC. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nLTC addresses come in three formats: legacy P2PKH (starts with `L`), P2SH (starts with `M` or `3`), and bech32 (starts with `ltc1`). Morphit accepts all three. The chain has supported optional MimbleWimble Extension Blocks (MWEB) since 2022 for confidential transactions — but MWEB-side transfers ride alongside transparent transfers; for Morphit P2P trades you can use either, with the same wallet-side address-rotation privacy practices that apply to BTC.\n\nOperators can refuse LTC trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"LTC\"`; the federated marketplace keeps trading LTC regardless of any single operator's stance."
 			},
 			"what_is_dash": {
-				"q": "What is Dash (DASH), and why is it on Morphit?",
+				"q": "Czym jest Dash (DASH) i dlaczego jest na Morphit?",
 				"a": "Dash (DASH) is a cryptocurrency forked from Litecoin in January 2014 (originally as XCoin, then Darkcoin, finally renamed Dash in March 2015). It uses an X11-based Proof-of-Work mining algorithm and a masternode tier: operators stake 1,000 DASH each to run a masternode, which provides services like InstantSend (sub-second locked confirmations) and PrivateSend (opt-in CoinJoin-style mixing through masternodes).\n\nOn Morphit, DASH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in DASH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).\n\nDASH addresses use two formats: legacy P2PKH (starts with `X`) and P2SH (starts with `7`). Morphit accepts both. The base layer is transparent like Bitcoin; PrivateSend mixing is opt-in and wallet-side. Wallet-side address rotation is the user's primary privacy lever for transparent transfers; PrivateSend is available for users wanting an additional mixing pass before sending.\n\nOperators can refuse DASH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS=\"DASH\"`; the federated marketplace keeps trading DASH regardless of any single operator's stance."
 			}
 		},
@@ -1618,16 +1618,16 @@
 				"usdt": "Tether (USDT) — stablecoin powiązany 1:1 z USD. Kontrolowany centralnie — Tether Inc. może zamrozić każdy adres. Tylko handel na Morphit: nie może płacić opłat za wystawianie.",
 				"bch": "Bitcoin Cash (BCH). Forknięty z Bitcoina w 2017 r., aby preferować większe bloki i niższe opłaty transakcyjne ponad dynamikę rynku opłat. Przejrzysty rejestr jak BTC; żaden emitent nie może zamrozić adresów. Tylko do handlu na Morphit — opłaty za wystawienie nadal płacone w BLURT, BTC lub XMR.",
 				"ltc": "Litecoin (LTC). Fork Bitcoina z 2011 r. z szybszymi 2,5-minutowymi blokami i wydobyciem Scrypt. Przezroczysty jak Bitcoin — każda transakcja jest publicznie widoczna w łańcuchu. Brak centralnego emitenta; nikt nie może zamrozić twoich adresów.",
-				"dash": "Dash (DASH). Forked from Litecoin in 2014 with masternode-coordinated services. Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Optional PrivateSend mixing (a CoinJoin variant coordinated by masternodes) provides opt-in privacy.",
-				"usdc": "USD Coin (USDC) — a stablecoin pegged 1:1 to USD, issued by Circle. Centrally controlled — Circle can freeze any address. Trade-only on Morphit: cannot pay listing fees.",
-				"dai": "DAI is a USD-pegged stablecoin by MakerDAO. More decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the Peg Stability Module. Trade-only on Morphit.",
-				"doge": "Dogecoin (DOGE). Launched 2013 as a fair-launch fork of Lucky Coin (itself a Litecoin fork). Transparent at the base layer like Bitcoin — every transaction is publicly visible on the chain. No central issuer; nobody can freeze your addresses. Merge-mined with Litecoin since 2014 (auxiliary proof-of-work).",
-				"zec": "Zcash (ZEC). Launched 2016 as the first practical deployment of zero-knowledge proofs in a cryptocurrency. Transparent and shielded address types coexist on the same chain — t1/t3 addresses are publicly visible like Bitcoin's legacy addresses, while zs1 (Sapling) and u1 (Unified Address with Orchard receivers) use zk-SNARKs to hide sender, recipient, and amount. Choose the address type that matches your trade's privacy posture. Trade-only — cannot pay listing fees.",
-				"arrr": "Pirate Chain (ARRR) — chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer is private by construction. Single address format (zs1 Sapling, bech32, 78 chars). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
-				"dcr": "Decred (DCR) — hybrid PoW/PoS cryptocurrency with on-chain governance (Politeia). Two receive-address formats (Ds P2PKH-Secp256k1 and Dc P2SH, 35 chars each). Opt-in transaction-level privacy via CoinShuffle++ (CSPP) integrated into dcrwallet. Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
-				"sol": "Solana (SOL) — high-throughput Proof-of-Stake cryptocurrency. Native SOL transfer (not wrapped SOL or SPL tokens). 32-44 character base58 addresses (same shape as USDT-Solana and USDC-Solana addresses; asset field disambiguates). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
-				"eth": "Ethereum (ETH) — Proof-of-Stake cryptocurrency. Native ETH transfer (not wrapped ETH or ERC-20 tokens). 42-character 0x-prefixed hex addresses (same shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every EVM token-account address; asset field + network field disambiguate). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
-				"xrp": "Ripple (XRP) — Federated Byzantine Agreement cryptocurrency on the XRP Ledger. 24-34 character base58 addresses starting with `r`. Destination tags (32-bit integers) are required when sending to exchange-hosted addresses — your peer-to-peer counterparty typically does not need one. XRPL accounts need ≥1 XRP base reserve to exist. Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
+				"dash": "Dash — hybrydowa moneta PoW + PoS z masternodes koordynującymi opcjonalne miksowanie PrivateSend. Przejrzysta warstwa bazowa; PrivateSend (gdy używany) łamie graf pochodzenia przed publicznym handlem. Oficjalne portfele: Dash Core, Dash Electrum, mobilny Dash Wallet.",
+				"usdc": "USD Coin (USDC) — stablecoin powiązany 1:1 z USD, wydany przez Circle. Centralnie kontrolowany — Circle może zamrozić każdy adres. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
+				"dai": "DAI — stablecoin powiązany z USD zarządzany przez MakerDAO. Brak freeze admina na tokenie (przewaga nad USDT/USDC), ale częściowo zabezpieczony USDC poprzez PSM. Dostępny na Ethereum, Polygon, Base i Arbitrum. Tylko handel na Morphit.",
+				"doge": "Dogecoin (DOGE) — uczciwie wystartowana moneta PoW z 2013. Przejrzysta warstwa bazowa, zdecentralizowana przez PoW, merge-mined z Litecoinem dla bezpieczeństwa hashów. Brak natywnej aktualizacji prywatności. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
+				"zec": "Zcash (ZEC) — moneta PoW z transakcjami shielded zk-SNARK (pule Sapling + Orchard) obok adresów przejrzystych (t1/t3, jak Bitcoin). Na transakcję odbiorcy wybierają typ adresu pasujący do ich preferowanej postawy. Shielded-do-shielded ukrywa nadawcę, odbiorcę i kwotę on-chain. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
+				"arrr": "Pirate Chain (ARRR) — kryptowaluta proof-of-work z transakcjami shielded na poziomie łańcucha przez pool Sapling zk-SNARK. Nadawca, odbiorca i kwota są ukryte on-chain z założenia. Handel + opłaty za ogłoszenia.",
+				"dcr": "Decred (DCR) — hybrydowy łańcuch PoW + PoS z zarządzaniem on-chain przez Politeia. Przejrzysta warstwa bazowa; opcjonalne miksowanie CoinShuffle++ (CSPP) po stronie portfela przez dcrwallet lub Decrediton. Na Morphit możesz płacić prowizje od ogłoszeń w DCR oraz handlować.",
+				"sol": "Solana — kryptowaluta PoS o wysokiej przepustowości z sekwencjonowaniem Proof-of-History. Przejrzysta warstwa bazowa, brak natywnego protokołu miksowania. Rotacja adresów po stronie portfela to główna dźwignia prywatności. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
+				"eth": "Ethereum (ETH) — platforma smart-kontraktów Proof-of-Stake. Przejrzysta warstwa bazowa; brak natywnego protokołu miksowania. Uważaj na odbiorców kontraktów (wysłanie ETH do kontraktu bez `payable receive()` lub `fallback()` zostanie cofnięte; monety nie są stracone, ale transakcja zawodzi i płacisz gaz). Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń.",
+				"xrp": "Ripple (XRP) — kryptowaluta Federated Byzantine Agreement na XRP Ledger zorientowana na płatności. Przejrzysta warstwa bazowa; brak prywatności na poziomie protokołu. Destination tag to identyfikator (do routingu giełd), nie funkcja prywatności. Rotacja adresów po stronie portfela to główna dźwignia prywatności. Tylko handel na Morphit: nie może opłacać prowizji od ogłoszeń."
 			},
 			"waiver_fiat_hint": "💡 BLURT jest słabo wymieniany na scentralizowanych giełdach, więc większość transakcji BLURT-za-fiat na Morphit odbywa się z aktywnymi użytkownikami sieci społecznościowej Blurt, istniejącymi operatorami lub przez wymianę barterową. Wskazówka: wybierz walutę fiat, której używa twoja lokalna sieć (USD, EUR, MXN itd.), lub sprawdź metodę płatności Osobiście → Wymiana (towary) w kroku 3, jeśli chcesz zaoferować coś innego o wartości. Księga zleceń jest na razie mała — twoje zlecenie kupna pomaga ją zbudować.",
 			"waiver_benefits_heading": "Co odblokowuje twój zakup:",
@@ -2396,59 +2396,59 @@
 			"address_placeholder_ltc": "L… lub M… lub ltc1…",
 			"address_invalid_ltc": "To nie wygląda na prawidłowy adres Litecoin.",
 			"pill_method_ltc": "Adres Litecoin",
-			"amount_jitter_label": "Randomize amount for privacy",
-			"amount_jitter_explain": "Adds a tiny random extra (small enough to be a trivial implicit tip) to defeat amount-correlation between your order and the on-chain transfer. Strongly recommended on transparent chains.",
-			"amount_jitter_will_send": "Your buyer's wallet will send exactly:",
-			"amount_jitter_send_exact_hint": "This precise amount breaks the link between your order book post and the on-chain payment.",
-			"amount_jitter_off_warning_heading": "Amount not randomized",
-			"amount_jitter_off_warning_body": "Anyone watching the chain can match this exact amount to your order. Turn the randomizer on unless you have a specific reason not to.",
-			"reuse_warning_heading": "Address used before",
-			"reuse_warning_body": "You shared this address from this device on {date}. Reusing the same address across trades links them on the public chain. Consider deriving a fresh address from your wallet for this trade.",
-			"reuse_warning_prior_order": "Previously shared for order: {permlink}",
-			"payjoin_summary": "Advanced: PayJoin (BIP-78) endpoint",
-			"payjoin_label": "PayJoin endpoint URL (optional)",
-			"payjoin_explain": "If your wallet supports PayJoin (BIP-78), paste its endpoint URL here. Buyers whose wallets also support PayJoin will use a cooperative transaction that breaks chain-analysis heuristics. No effect on wallets without PayJoin support.",
-			"payjoin_badge": "PayJoin available",
-			"payjoin_badge_tooltip": "The seller's wallet supports PayJoin (BIP-78). If your wallet supports it too, opening this URI will negotiate a cooperative transaction that improves privacy.",
+			"amount_jitter_label": "Losuj kwotę dla prywatności",
+			"amount_jitter_explain": "Dodaje drobny losowy dodatek (na tyle mały, że stanowi trywialny ukryty napiwek), aby pokonać korelację kwoty między Twoim zleceniem a transferem on-chain. Zdecydowanie zalecane na łańcuchach przejrzystych.",
+			"amount_jitter_will_send": "Portfel kupującego wyśle dokładnie:",
+			"amount_jitter_send_exact_hint": "Ta dokładna kwota przerywa powiązanie między Twoim wpisem na książce zleceń a płatnością on-chain.",
+			"amount_jitter_off_warning_heading": "Kwota nie jest losowana",
+			"amount_jitter_off_warning_body": "Każdy obserwujący łańcuch może powiązać tę dokładną kwotę z Twoim zleceniem. Włącz randomizer, chyba że masz konkretny powód, aby tego nie robić.",
+			"reuse_warning_heading": "Adres używany wcześniej",
+			"reuse_warning_body": "Udostępniłeś ten adres z tego urządzenia {date}. Ponowne użycie tego samego adresu w wielu transakcjach łączy je w publicznym łańcuchu. Rozważ wyprowadzenie nowego adresu z portfela dla tej transakcji.",
+			"reuse_warning_prior_order": "Wcześniej udostępniony dla zamówienia: {permlink}",
+			"payjoin_summary": "Zaawansowane: endpoint PayJoin (BIP-78)",
+			"payjoin_label": "URL punktu końcowego PayJoin (opcjonalne)",
+			"payjoin_explain": "PayJoin (BIP-78) to kooperacyjny protokół transakcji Bitcoin: zarówno płatnik, jak i odbiorca dodają wejścia do tej samej transakcji, pokonując heurystykę common-input-ownership, której analitycy łańcucha używają do grupowania UTXO.",
+			"payjoin_badge": "PayJoin dostępny",
+			"payjoin_badge_tooltip": "Portfel sprzedającego obsługuje PayJoin (BIP-78). Jeśli Twój portfel również go obsługuje, otwarcie tego URI wynegocjuje transakcję kooperacyjną, która zwiększa prywatność.",
 			"method_dash": "Dash",
-			"address_placeholder_dash": "X… or 7…",
-			"address_invalid_dash": "That doesn't look like a valid Dash address.",
-			"pill_method_dash": "Dash address",
+			"address_placeholder_dash": "X… lub 7…",
+			"address_invalid_dash": "To nie wygląda na prawidłowy adres Dash.",
+			"pill_method_dash": "Adres Dash",
 			"method_usdc": "USDC",
-			"address_placeholder_usdc": "USD Coin address (matching the network you picked)",
-			"address_invalid_usdc": "This address does not match the USDC network you picked. Double-check before sending — cross-network sends lose your funds. Note that Ethereum, Base, and Polygon addresses all start with 0x and look identical at the format level.",
-			"pill_method_usdc": "USDC address",
+			"address_placeholder_usdc": "Adres USD Coin (zgodny z wybraną siecią)",
+			"address_invalid_usdc": "Nieprawidłowy adres USDC dla wybranej sieci. Sieci EVM: 0x + 40 hex. Solana: 32-44 base58. Sprawdź, czy wybrałeś właściwą sieć w formularzu zlecenia.",
+			"pill_method_usdc": "Adres USDC",
 			"method_dai": "DAI",
-			"address_invalid_dai": "Not a valid DAI address shape (expected EVM 0x[40 hex]).",
-			"address_placeholder_dai": "0x... (EVM-format DAI address)",
+			"address_invalid_dai": "Nieprawidłowy format adresu DAI (oczekiwany EVM 0x[40 hex]).",
+			"address_placeholder_dai": "0x... (adres DAI w formacie EVM)",
 			"pill_method_dai": "DAI {network}",
 			"method_doge": "Dogecoin",
-			"address_placeholder_doge": "D… 9… or A…",
-			"address_invalid_doge": "That doesn't look like a valid Dogecoin address.",
-			"pill_method_doge": "Dogecoin address",
+			"address_placeholder_doge": "D… 9… lub A…",
+			"address_invalid_doge": "To nie wygląda na prawidłowy adres Dogecoin.",
+			"pill_method_doge": "Adres Dogecoin",
 			"method_zec": "Zcash",
-			"address_placeholder_zec": "t1… t3… zs1… or u1…",
-			"address_invalid_zec": "That doesn't look like a valid Zcash address.",
-			"pill_method_zec": "Zcash address",
+			"address_placeholder_zec": "t1… t3… zs1… lub u1…",
+			"address_invalid_zec": "To nie wygląda na prawidłowy adres Zcash.",
+			"pill_method_zec": "Adres Zcash",
 			"method_arrr": "ARRR",
-			"address_placeholder_arrr": "Your ARRR address (zs1...)",
-			"address_invalid_arrr": "Not a valid Pirate Chain address.  Expected `zs1` prefix + 75 bech32 data chars (78 chars total).",
+			"address_placeholder_arrr": "Twój adres ARRR (zs1...)",
+			"address_invalid_arrr": "Nieprawidłowy adres Pirate Chain.  Oczekiwany prefiks `zs1` + 75 znaków bech32 (łącznie 78).",
 			"pill_method_arrr": "Pirate Chain (ARRR)",
 			"method_dcr": "DCR",
-			"address_placeholder_dcr": "Your DCR address (Ds... or Dc...)",
-			"address_invalid_dcr": "Not a valid Decred address.  Expected `Ds` or `Dc` prefix + 33 base58 data chars (35 chars total).",
+			"address_placeholder_dcr": "Twój adres DCR (Ds... lub Dc...)",
+			"address_invalid_dcr": "Nieprawidłowy adres Decred.  Oczekiwany prefiks `Ds` lub `Dc` + 33 znaki base58 (łącznie 35).",
 			"pill_method_dcr": "Decred (DCR)",
 			"method_sol": "SOL",
-			"address_placeholder_sol": "Your SOL address (32-44 base58 chars)",
-			"address_invalid_sol": "Not a valid Solana address.  Expected 32-44 base58 characters (most are 44).",
+			"address_placeholder_sol": "Twój adres SOL (32-44 znaków base58)",
+			"address_invalid_sol": "Nieprawidłowy adres Solana.  Oczekiwane 32-44 znaki base58 (większość ma 44).",
 			"pill_method_sol": "Solana (SOL)",
 			"method_eth": "ETH",
-			"address_placeholder_eth": "Your ETH address (0x + 40 hex chars)",
-			"address_invalid_eth": "Not a valid Ethereum address.  Expected 0x followed by 40 hex characters (42 chars total).",
+			"address_placeholder_eth": "Twój adres ETH (0x + 40 znaków hex)",
+			"address_invalid_eth": "Nieprawidłowy adres Ethereum.  Oczekiwane 0x + 40 znaków hex (łącznie 42).",
 			"pill_method_eth": "Ethereum (ETH)",
 			"method_xrp": "XRP",
-			"address_placeholder_xrp": "Your XRP address (r + 24-34 base58 chars)",
-			"address_invalid_xrp": "Not a valid XRP Ledger address.  Expected an address starting with r followed by 24-34 base58 characters (no destination tag in this field).",
+			"address_placeholder_xrp": "Twój adres XRP (r + 24-34 znaków base58)",
+			"address_invalid_xrp": "Nieprawidłowy adres XRP Ledger.  Oczekiwany adres zaczynający się od r, po którym następuje 24-34 znaków base58 (brak destination tag w tym polu).",
 			"pill_method_xrp": "Ripple (XRP)"
 		},
 		"funds_sent": {
@@ -2493,18 +2493,18 @@
 			"pill_title_usdt": "USDT wysłany",
 			"pill_title_bch": "Bitcoin Cash wysłane",
 			"pill_title_ltc": "Litecoin wysłany",
-			"pill_title_dash": "Dash sent",
-			"txid_invalid_usdc": "This txid doesn't match the USDC network you picked. Cross-network txid mismatches usually mean the wrong chain was used for the send.",
-			"pill_title_usdc": "USDC sent",
-			"txid_invalid_dai": "Not a valid DAI txid shape (expected 64-hex with optional 0x prefix).",
-			"pill_title_dai": "DAI {network} payment sent",
-			"pill_title_doge": "Dogecoin sent",
-			"pill_title_zec": "Zcash sent",
-			"pill_title_arrr": "ARRR sent",
-			"pill_title_dcr": "DCR sent",
-			"pill_title_sol": "SOL sent",
-			"pill_title_eth": "ETH sent",
-			"pill_title_xrp": "XRP sent"
+			"pill_title_dash": "Dash wysłany",
+			"txid_invalid_usdc": "Ten txid nie pasuje do wybranej sieci USDC. Niezgodności txid między sieciami zwykle oznaczają, że do wysłania użyto złego łańcucha.",
+			"pill_title_usdc": "USDC wysłany",
+			"txid_invalid_dai": "Nieprawidłowy format txid DAI (oczekiwane 64-hex z opcjonalnym prefiksem 0x).",
+			"pill_title_dai": "Płatność DAI {network} wysłana",
+			"pill_title_doge": "Dogecoin wysłany",
+			"pill_title_zec": "Zcash wysłany",
+			"pill_title_arrr": "ARRR wysłany",
+			"pill_title_dcr": "DCR wysłany",
+			"pill_title_sol": "SOL wysłany",
+			"pill_title_eth": "ETH wysłany",
+			"pill_title_xrp": "XRP wysłany"
 		},
 		"unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
 		"pay_blurt": {
@@ -3052,13 +3052,13 @@
 			"description": "Monero: kryptowaluta skupiona na prywatności z poufnymi kwotami i adresami."
 		},
 		"pay_usdt": {
-			"description": "Tether: USD-pegged stablecoin available across multiple networks."
+			"description": "Tether: stablecoin powiązany z USD dostępny w wielu sieciach."
 		},
 		"pay_usdc": {
-			"description": "USD Coin: USD-pegged stablecoin issued by Circle."
+			"description": "USD Coin: stablecoin powiązany z USD wydany przez Circle."
 		},
 		"pay_dai": {
-			"description": "Dai: USD-pegged stablecoin on EVM networks."
+			"description": "Dai: stablecoin powiązany z USD w sieciach EVM."
 		},
 		"pay_bch": {
 			"description": "Zapłać Bitcoin Cash"
@@ -3067,10 +3067,10 @@
 			"description": "Zapłać Litecoinem"
 		},
 		"pay_dash": {
-			"description": "Pay with Dash"
+			"description": "Zapłać Dashem"
 		},
 		"pay_doge": {
-			"description": "Dogecoin: fair-launched 2013 PoW chain, transparent base layer, merge-mined with Litecoin."
+			"description": "Dogecoin: uczciwie wystartowany w 2013 łańcuch PoW, przejrzysta warstwa bazowa, merge-mined z Litecoinem."
 		},
 		"barter_goods": {
 			"description": "Wymień towary bezpośrednio na aktywo — opisz co oferujesz lub czego chcesz w warunkach zlecenia (np. „drzewa pomarańczowe\", „używany rower\", „domowy czosnek\")."
@@ -3208,16 +3208,16 @@
 			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
 		},
 		"pay_dcr": {
-			"description": "Pay in Decred (DCR).  Decred is a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency with on-chain governance via Politeia.  Two receive-address formats: Ds (P2PKH) and Dc (P2SH).  Use a Decred wallet like dcrwallet, Decrediton, or Cake Wallet."
+			"description": "Zapłać w Decred (DCR).  Decred to hybrydowa kryptowaluta Proof-of-Work + Proof-of-Stake z zarządzaniem on-chain.  Łańcuch jest przejrzysty na poziomie podstawowym; opcjonalne miksowanie CoinShuffle++ (przez dcrwallet) łamie graf transakcji dla użytkowników, którzy je włączą.  Użyj portfela Decred jak dcrwallet lub Decrediton."
 		},
 		"pay_sol": {
-			"description": "Pay in Solana (SOL).  Solana is a high-throughput Proof-of-Stake cryptocurrency.  Use a Solana wallet like Phantom, Solflare, or Cake Wallet for SOL.  Send native SOL — not wrapped SOL (wSOL) or SPL tokens."
+			"description": "Zapłać w Solana (SOL).  Solana to kryptowaluta Proof-of-Stake o wysokiej przepustowości.  Użyj portfela Solana jak Phantom lub Solflare.  Wysyłaj natywny SOL, nie wrapped SOL ani tokeny SPL. Uważaj na Program-Derived Addresses bez instrukcji wypłaty."
 		},
 		"pay_eth": {
-			"description": "Pay in Ethereum (ETH).  Ethereum is a Proof-of-Stake cryptocurrency.  Use an Ethereum wallet like MetaMask, Rabby, or Rainbow.  Send native ETH — not wrapped ETH (WETH) or ERC-20 tokens."
+			"description": "Zapłać w Ethereum (ETH).  Ethereum to kryptowaluta Proof-of-Stake.  Użyj portfela Ethereum jak MetaMask, Rabby lub Rainbow.  Wysyłaj natywny ETH — nie wrapped ETH (WETH) ani tokenów ERC-20."
 		},
 		"pay_xrp": {
-			"description": "Pay in Ripple (XRP).  XRP is a Federated Byzantine Agreement cryptocurrency on the XRP Ledger.  Use an XRPL wallet like Xaman (formerly Xumm), Crossmark, or Bifrost.  Send native XRP — and check whether the recipient requires a destination tag."
+			"description": "Zapłać w Ripple (XRP).  XRP to kryptowaluta Federated Byzantine Agreement na XRP Ledger.  Użyj portfela XRPL jak Xaman, Crossmark lub Bifrost.  Transakcje są przejrzyste on-chain; brak natywnej prywatności na poziomie protokołu.  Destination tag to identyfikator, nie funkcja prywatności."
 		}
 	},
 	"feedback_reminder": {
@@ -3616,16 +3616,16 @@
 			"usdt": "Stablecoin Tether. Powiązany 1:1 z USD. Handel w czterech sieciach: ERC-20 (Ethereum), TRC-20 (Tron), SPL (Solana), BEP-20 (BNB Smart Chain). Wybierz sieć przed wysłaniem — międzysieciowo to nieodwracalne.",
 			"bch": "BCH — Bitcoin Cash, przejrzysty, zdecentralizowany, większe bloki niż BTC",
 			"ltc": "LTC — Litecoin, szybki fork Bitcoina z niskimi opłatami (od 2011). Tylko handel na Morphit. Użyj portfela Litecoin (Electrum-LTC, Litewallet, portfele sprzętowe); akceptuje adresy L… legacy, M… nowoczesne P2SH oraz ltc1… SegWit.",
-			"dash": "DASH — Dash, fast-confirmation Bitcoin-family chain (since 2014). Trade-only on Morphit. Use a Dash wallet (Dash Core, Dash Electrum, hardware wallets); accepts X… P2PKH and 7… P2SH addresses. Optional PrivateSend mixing via masternodes — pre-mix before sharing the address for stronger privacy.",
-			"usdc": "USD Coin stablecoin. Centralized — Circle can freeze any address. Trade-only.",
-			"dai": "DAI — MakerDAO USD-pegged stablecoin. Multi-network (ERC-20/Polygon/Base/Arbitrum, all EVM). Trade-only. Partly USDC-backed.",
-			"doge": "DOGE — Dogecoin, transparent proof-of-work chain (since 2013), merge-mined with Litecoin. Trade-only on Morphit. Use a Dogecoin wallet (Dogecoin Core, MyDoge, hardware wallets); accepts D… P2PKH and 9…/A… P2SH addresses. No native privacy upgrade —",
-			"zec": "ZEC — Zcash, proof-of-work chain with optional zero-knowledge shielded transactions (Sapling + Orchard pools). Supports both transparent (t1/t3, base58, similar to Bitcoin's legacy addresses) and shielded (zs1/u1, bech32, hides sender/recipient/amount) addresses. Trade-only — cannot pay listing fees.",
-			"arrr": "ARRR — Pirate Chain.  Proof-of-work cryptocurrency with chain-level shielded transactions via the Sapling zk-SNARK pool (every transaction is private by construction).  Trade-only on Morphit.  Use a Pirate Chain wallet (Treasure Chest, Pirate.Black, Verus); only one address format exists (zs1 Sapling shielded, 78 chars — visually identical to Zcash Sapling).",
-			"dcr": "DCR — Decred.  Hybrid Proof-of-Work + Proof-of-Stake cryptocurrency with on-chain governance (Politeia).  Trade-only on Morphit.  Use a Decred wallet (dcrwallet, Decrediton, Cake Wallet); two address formats (Ds P2PKH and Dc P2SH, 35 chars each).  Opt-in CoinShuffle++ mixing available wallet-side for users who want transaction-level privacy.",
-			"sol": "SOL — Solana.  High-throughput Proof-of-Stake cryptocurrency.  Trade-only on Morphit.  Use a Solana wallet (Phantom, Solflare, Cake Wallet for SOL, Trust Wallet); 32-44 character base58 addresses.  Send native SOL — not wrapped SOL or SPL tokens.  No native protocol-level mixing; wallet-side address rotation is the privacy lever.",
-			"eth": "ETH — Ethereum.  Proof-of-Stake cryptocurrency.  Trade-only on Morphit.  Use an Ethereum wallet (MetaMask, Rabby, Frame, Rainbow, Trust Wallet); 42-character 0x-prefixed hex addresses.  Send native ETH — not wrapped ETH (WETH) or ERC-20 tokens.  No native protocol-level mixing; wallet-side address rotation is the privacy lever.  ENS names not resolved — paste raw 0x addresses.",
-			"xrp": "XRP — Ripple.  Federated Byzantine Agreement consensus on the XRP Ledger.  Trade-only on Morphit.  Use an XRPL wallet (Xaman/Xumm, Crossmark, Bifrost, GemWallet, Trust Wallet); 24-34-char base58 addresses starting with `r`.  Destination tags required when sending to exchange-hosted addresses (32-bit integer routing).  Accounts need ≥1 XRP base reserve to exist.  No native protocol-level mixing; wallet-side address rotation is the privacy lever."
+			"dash": "Dash — hybrydowa moneta PoW + PoS pochodząca od Bitcoina z masternodes koordynującymi PrivateSend (opcjonalne miksowanie koordynowane przez masternodes). Przejrzysta warstwa bazowa. Handel + opłaty za ogłoszenia.",
+			"usdc": "Stablecoin USD Coin. Scentralizowany — Circle może zamrozić każdy adres. Tylko handel.",
+			"dai": "DAI — stablecoin MakerDAO powiązany z USD. Wieloplatformowy (ERC-20/Polygon/Base/Arbitrum, wszystkie EVM). Tylko handel. Częściowo zabezpieczony USDC.",
+			"doge": "Dogecoin — uczciwie wystartowana moneta PoW z 2013 roku. Łańcuch przejrzysty, zdecentralizowany, merge-mined z Litecoinem. Tylko handel: nie może opłacać prowizji od ogłoszeń.",
+			"zec": "Zcash — łańcuch PoW z transakcjami shielded zk-SNARK (pule Sapling + Orchard) obok adresów przejrzystych (t1/t3, jak Bitcoin). Na transakcję odbiorcy wybierają typ adresu. Tylko handel: nie może opłacać prowizji od ogłoszeń.",
+			"arrr": "Pirate Chain — moneta PoW z transakcjami shielded na poziomie łańcucha przez pool Sapling zk-SNARK (brak opcji adresu przejrzystego). Nadawca, odbiorca i kwota są ukryte on-chain z założenia. Handel + opłaty za ogłoszenia.",
+			"dcr": "Decred — hybrydowy łańcuch PoW + PoS z zarządzaniem on-chain przez Politeia. Przejrzysta warstwa bazowa; opcjonalne miksowanie CoinShuffle++ (CSPP) po stronie portfela przez dcrwallet. Handel + opłaty za ogłoszenia.",
+			"sol": "Solana — kryptowaluta PoS o wysokiej przepustowości z sekwencjonowaniem Proof-of-History. Przejrzysta warstwa bazowa, zarządzanie fundacja + społeczność walidatorów, ekosystem SPL-token. Tylko handel: nie może opłacać prowizji od ogłoszeń.",
+			"eth": "Ethereum — platforma smart-kontraktów Proof-of-Stake. Przejrzysta warstwa bazowa; brak natywnego protokołu miksowania (miksery firm trzecich są sankcjonowane w wielu jurysdykcjach). Rotacja adresów po stronie portfela to główna dźwignia prywatności. Handel + opłaty za ogłoszenia.",
+			"xrp": "Ripple (XRP) — kryptowaluta Federated Byzantine Agreement na XRP Ledger zorientowana na płatności. Przejrzysta warstwa bazowa; brak prywatności na poziomie protokołu. Destination tag to identyfikator (do routingu giełd), nie funkcja prywatności. Rotacja adresów po stronie portfela to główna dźwignia prywatności. Handel + opłaty za ogłoszenia."
 		},
 		"section_recovery": {
 			"heading": "Jeśli coś pójdzie nie tak",
@@ -3643,7 +3643,7 @@
 		"privacy_warnings": {
 			"usdt_centralized": "Dwie rzeczy do wiedzy o USDT przed handlem: Tether Inc. emituje i administruje USDT i ma techniczną możliwość zamrażania adresów (i jej używał). Transakcje są publicznie widoczne w każdej wspieranej sieci (Ethereum, Tron, Solana, BNB Smart Chain) — to właściwość tych łańcuchów. Wybierz aktywo pasujące do twojej transakcji.",
 			"usdc_centralized": "Two things to know about USDC before trading: Circle issues and administers USDC and has the technical ability to freeze addresses (and has used it). Transactions are publicly visible on each supported network (Ethereum, Solana, Base, Polygon) — a property of those chains. Pick the asset that fits your trade.",
-			"dai_partly_centralized": "Three things to know about DAI before trading: (1) Unlike USDT and USDC, DAI's token contract has no admin-controlled freeze function — MakerDAO can't blacklist your address. This is a real decentralization advantage. (2) DAI is partly backed by USDC via the Peg Stability Module, so Circle's freeze power over USDC indirectly affects DAI redemption when the PSM holds USDC. (3) Like all stablecoins, DAI transactions are publicly visible on each supported network (Ethereum, Polygon, Base, Arbitrum) — a property of those chains, no on-chain privacy. Pick the asset that fits your trade."
+			"dai_partly_centralized": "Trzy rzeczy, które warto wiedzieć o DAI przed handlem: (1) W przeciwieństwie do USDT i USDC, kontrakt tokena DAI nie ma funkcji zamrażania kontrolowanej przez administratora — MakerDAO nie może umieścić Twojego adresu na czarnej liście. To prawdziwa zaleta decentralizacji. (2) DAI jest częściowo zabezpieczony przez USDC poprzez Peg Stability Module, więc moc Circle do zamrażania USDC pośrednio wpływa na wykup DAI, gdy PSM przechowuje USDC. (3) Jak wszystkie stablecoiny, transakcje DAI są publicznie widoczne w każdej obsługiwanej sieci (Ethereum, Polygon, Base, Arbitrum) — to właściwość tych łańcuchów, brak prywatności on-chain. Wybierz aktywo pasujące do Twojej transakcji."
 		},
 		"usdt": {
 			"network": {
@@ -3684,101 +3684,101 @@
 			"network": {
 				"erc20": {
 					"displayName": "Ethereum (ERC-20)",
-					"feeHint": "fee ~$5–20, slow, most widely accepted"
+					"feeHint": "opłata ~$5–20, wolno, najszerzej akceptowany"
 				},
 				"spl": {
 					"displayName": "Solana (SPL)",
-					"feeHint": "fee <$0.01, fast, less universally accepted"
+					"feeHint": "opłata <$0,01, szybko, mniej powszechna akceptacja"
 				},
 				"base": {
 					"displayName": "Base",
-					"feeHint": "fee ~$0.01, fast, growing adoption"
+					"feeHint": "opłata ~$0,01, szybko, rosnąca adopcja"
 				},
 				"polygon": {
 					"displayName": "Polygon",
-					"feeHint": "fee ~$0.01, fast, EVM-compatible"
+					"feeHint": "opłata ~$0,01, szybko, kompatybilny z EVM"
 				},
 				"picker": {
-					"label": "Which USDC network?",
-					"requiredHint": "Required — there is no default network. You must pick one for every USDC trade.",
+					"label": "Która sieć USDC?",
+					"requiredHint": "Wymagane — nie ma sieci domyślnej. Musisz wybrać jedną dla każdej transakcji USDC.",
 					"crossNetworkWarning": "Cross-network sends lose your funds permanently. Sending USDC on Ethereum to a Solana address (or vice versa) is unrecoverable. Note that Ethereum, Base, and Polygon addresses look identical (all start with 0x) — the network choice is what tells your wallet which chain to broadcast on."
 				}
 			},
 			"address_share": {
-				"warning": "Send USDC on {network} only. Sending USDC on any other network to this address loses your funds permanently."
+				"warning": "Wysyłaj USDC tylko w sieci {network}. Wysłanie USDC w innej sieci na ten adres trwale traci Twoje środki."
 			},
 			"order_row": {
-				"network_hint": "You need USDC on {network} for this trade."
+				"network_hint": "Potrzebujesz USDC w sieci {network} dla tej transakcji."
 			},
 			"price_subline": {
-				"live": "1 USDC = ${price} live",
-				"unavailable": "USDC/USD price feed unavailable — last seen {staleness} ago."
+				"live": "1 USDC = ${price} na żywo",
+				"unavailable": "Kanał cen USDC/USD niedostępny — ostatnio widziany {staleness} temu."
 			}
 		},
 		"dai": {
 			"network": {
 				"erc20": {
 					"displayName": "Ethereum (ERC-20)",
-					"feeHint": "High fees ($5-20/tx, slower), most universal"
+					"feeHint": "Wysokie opłaty ($5-20/tx, wolniej), najbardziej uniwersalny"
 				},
 				"polygon": {
 					"displayName": "Polygon (PoS)",
-					"feeHint": "Low fees (~$0.01-0.10), fast, broad wallet support"
+					"feeHint": "Niskie opłaty (~$0,01-0,10), szybko, szerokie wsparcie portfeli"
 				},
 				"base": {
 					"displayName": "Base",
-					"feeHint": "Coinbase L2, low fees (~$0.01-0.10), fast"
+					"feeHint": "Coinbase L2, niskie opłaty (~$0,01-0,10), szybko"
 				},
 				"arbitrum": {
 					"displayName": "Arbitrum One",
-					"feeHint": "Ethereum L2, low fees (~$0.01-0.30), fast"
+					"feeHint": "Ethereum L2, niskie opłaty (~$0,01-0,30), szybko"
 				},
 				"picker": {
-					"label": "DAI network",
-					"requiredHint": "Required. Pick the same network your counterparty uses.",
-					"crossNetworkWarning": "All four DAI networks use the same address format. An address that's valid on Polygon is also valid-format on Ethereum, Base, and Arbitrum — but each chain holds a separate balance. DAI sent on the wrong chain is unrecoverable. Both parties must agree on the network before sending."
+					"label": "Sieć DAI",
+					"requiredHint": "Wymagane. Wybierz tę samą sieć, której używa Twoja kontrahentka.",
+					"crossNetworkWarning": "Wszystkie cztery sieci DAI używają tego samego formatu adresu. Adres prawidłowy w sieci Polygon ma także prawidłowy format w sieci Ethereum, Base i Arbitrum — ale każdy łańcuch przechowuje oddzielne saldo. DAI wysłane na niewłaściwym łańcuchu jest nieodzyskiwalne. Obie strony muszą uzgodnić sieć przed wysłaniem."
 				}
 			},
 			"address_share": {
-				"warning": "Stablecoin trade — DAI is more decentralized than USDT/USDC at the contract level (no admin freeze) but partly backed by USDC via the PSM. Pick a network with both counterparties."
+				"warning": "Wymiana stablecoina — DAI jest bardziej zdecentralizowany niż USDT/USDC na poziomie kontraktu (brak admin freeze), ale częściowo zabezpieczony przez USDC poprzez PSM. Wybierz sieć z obiema kontrahentami."
 			},
 			"order_row": {
-				"network_hint": "DAI on {network}"
+				"network_hint": "DAI w sieci {network}"
 			},
 			"price_subline": {
 				"live": "1 DAI = ${price}",
-				"unavailable": "price unavailable"
+				"unavailable": "cena niedostępna"
 			}
 		}
 	},
 	"privacy": {
-		"index_title": "Privacy practices — Morphit",
-		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
-		"index_heading": "Privacy practices on Morphit",
+		"index_title": "Praktyki prywatności — Morphit",
+		"index_meta_description": "Jak uczynić swoje wymiany bardziej prywatnymi na łańcuchach przejrzystych i prywatnych. Przewodnik per-asset obejmujący nowe adresy, opcjonalne technologie prywatności i typowe pułapki.",
+		"index_heading": "Praktyki prywatności w Morphit",
 		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
-		"page_title": "Privacy for {asset} trades — Morphit",
-		"guide_heading": "Privacy practices for {asset} trades",
-		"back_to_index": "All assets",
-		"section_fresh_addresses": "Use a fresh address every trade",
-		"section_opt_in_tech": "Opt-in privacy technologies",
-		"section_opt_in_tech_intro": "Standards that wallets in this ecosystem may implement. Morphit does NOT recommend specific wallet software — even reputable wallets have been compromised. Search for a wallet that supports these standards and review its trust posture yourself.",
-		"section_common_practices": "Universal practices",
-		"section_what_not_to_do": "What to avoid",
-		"section_caveats": "Caveats specific to this asset",
-		"no_wallet_recommendation": "Morphit does NOT recommend specific wallet software. Even reputable wallets have been compromised or have had hidden flaws. The privacy techniques here are protocol standards, not endorsements — your wallet, your responsibility.",
+		"page_title": "Prywatność dla wymian {asset} — Morphit",
+		"guide_heading": "Praktyki prywatności dla wymian {asset}",
+		"back_to_index": "Wszystkie aktywa",
+		"section_fresh_addresses": "Używaj nowego adresu dla każdej wymiany",
+		"section_opt_in_tech": "Opcjonalne technologie prywatności",
+		"section_opt_in_tech_intro": "Standardy, które portfele w tym ekosystemie mogą implementować, aby poprawić prywatność na poziomie transakcji poza rotacją adresów. Opt-in (włączasz je per transakcja); nie wymuszane przez protokół. Zasięg portfeli się różni — niektóre popularne portfele wcale ich nie implementują.",
+		"section_common_practices": "Uniwersalne praktyki",
+		"section_what_not_to_do": "Czego unikać",
+		"section_caveats": "Ostrzeżenia specyficzne dla tego aktywa",
+		"no_wallet_recommendation": "Morphit nie poleca konkretnych portfeli. Opcje wymienione dla każdego aktywa są tylko znanymi przykładami obsługującymi to aktywo; oceń je samodzielnie (kod open-source? aktywnie rozwijany? dobra reputacja bezpieczeństwa?). Portfel oficjalny lub najczęściej używany niekoniecznie jest najbardziej prywatny.",
 		"fresh_address_advice": {
-			"subaddress": "This chain supports stealth/subaddress technology natively. Your wallet derives a fresh receive address (subaddress) per trade from your view key. The recipient sees a unique address every time; chain observers cannot link multiple trades to the same wallet.",
+			"subaddress": "Monero używa **subadresów** — wyprowadzanych z Twojego głównego klucza, ale nie do połączenia w łańcuchu. Wygeneruj nowy subadres dla każdej wymiany w Cake Wallet, Feather, oficjalnym Monero GUI lub dowolnym nowoczesnym portfelu Monero (subadresy są standardem od ich wprowadzenia w 2018 roku).",
 			"hd-derived": "This chain uses transparent addresses with no native stealth. The standard practice: use a Hierarchical Deterministic (BIP-32) wallet that derives a new receive address per request. Most modern wallets do this automatically. The cost of address reuse is severe — every trade you accept at the same address builds a public record of your activity.",
 			"account-reuse": "This chain is account-based — your account name is your address. Fresh-account-per-trade is not practical (each new account costs chain resources). Accept that this asset has the highest amount-correlation risk on Morphit. For high-value trades, consider using an alt-account dedicated to that trade."
 		},
 		"opt_in_tech": {
 			"mweb": {
 				"name": "MWEB (MimbleWimble Extension Blocks)",
-				"explain": "A native Litecoin protocol-level privacy feature. MWEB hides transaction amounts and breaks the address-to-amount link for transfers that opt in. Per-transaction; not chain-wide. Look for wallets that surface \"MWEB\" or \"Extension Blocks\" as an option when sending."
+				"explain": "**MimbleWimble Extension Blocks (MWEB)** — aktualizacja Litecoina aktywowana w maju 2022, która zapewnia pulę transakcji shielded na poziomie łańcucha obok przejrzystego mainnetu Litecoina. Przenieś LTC z adresu przejrzystego na adres MWEB, aby uzyskać prywatność on-chain; przenieś z powrotem na adres przejrzysty, aby przywrócić je do puli przejrzystej."
 			},
 			"cashfusion": {
 				"name": "CashFusion",
-				"explain": "A Bitcoin Cash CoinJoin variant designed by the BCH community. Mixes inputs and outputs of varying amounts to defeat both common-input-ownership and amount-correlation heuristics. Run from a wallet that supports CashFusion before or after a trade to launder the on-chain history."
+				"explain": "**CashFusion** — kooperacyjny protokół miksowania dla Bitcoin Cash aktywowany w listopadzie 2019 i zintegrowany z Electron Cash. Łączy wiele transakcji użytkowników w pojedyncze transakcje multi-input/multi-output, które łamią heurystykę wspólnego-pochodzenia-wejść, której analitycy łańcucha używają do grupowania UTXO. Opt-in per transakcję, organizowany przez serwer CashFusion (wiele serwerów działa niezależnie)."
 			},
 			"coinjoin": {
 				"name": "CoinJoin",
@@ -3797,115 +3797,115 @@
 				"explain": "Zcash's protocol-level privacy. Shielded transactions (zs1 Sapling, u1 Unified Address) use zero-knowledge proofs (zk-SNARKs) to hide sender, recipient, and amount on chain. Sapling is the established shielded pool (since 2018); Orchard is the newer pool (Network Upgrade 5, 2022) accessed through Unified Addresses. Per-address — recipients pick z/u-addr for shielded transactions or t-addr for transparent. Both transparent and shielded are first-class on the protocol. Wallets that fully support shielded sends: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk Wallet (mobile, Sapling). Older wallets may only support transparent (t-addr) sends, so confirm your counterparty's wallet supports the address type you intend to use."
 			},
 			"csppmix": {
-				"name": "CoinShuffle++ (CSPP) mixing",
+				"name": "Mixing CoinShuffle++ (CSPP)",
 				"explain": "A wallet-side mixing protocol that bundles your transaction inputs with other participants in a single multi-party round.  After mixing, your outputs are no longer linkable to your original inputs on chain.  Integrated into dcrwallet for Decred — enable the \"Mix Account\" option.  Opt-in (you choose when to mix); off-protocol (mixing rounds aren't enforced by consensus)."
 			}
 		},
 		"common_practices": {
-			"fresh_per_trade": "**Use a fresh receive address for every trade.** Your wallet should support this; if it doesn't, look for one that does. Address reuse is the single biggest leak.",
-			"coin_control": "**Practice coin control when spending.** When sending coins later, avoid combining the trade output with coins from another source — that combines their address histories permanently.",
-			"network_layer": "**Broadcast through Tor or your wallet's privacy mode.** Your home IP address sees the transaction first; nodes near your IP can correlate it to you. A Tor-aware wallet broadcasts through Tor by default.",
-			"kyc_touchpoints": "**Avoid sending trade coins to or from KYC exchanges.** Once trade coins touch a KYC exchange, the trade becomes legally identifiable by combining exchange records with chain data. If you need to bridge to fiat, route through a self-custodied intermediate step."
+			"fresh_per_trade": "**Używaj nowego adresu odbiorczego dla każdej wymiany.** Twój portfel powinien to obsługiwać; jeśli nie, poszukaj takiego, który to robi. Ponowne użycie adresu to największa pojedyncza luka.",
+			"coin_control": "**Praktykuj coin control podczas wydawania.** Wysyłając monety później, unikaj łączenia wyniku transakcji z monetami z innego źródła — to permanentnie łączy ich historie adresów.",
+			"network_layer": "**Rozważ prywatność na poziomie sieci.** Transmisja transakcji przez Tor lub integrację VPN/Tor portfela uniemożliwia Twojemu dostawcy Internetu i obserwatorom sieci zobaczenie, jakie transakcje transmitowałeś. Jest to ortogonalne do prywatności on-chain.",
+			"kyc_touchpoints": "**Rozważ historię KYC swoich monet.** Jeśli kupiłeś krypto z giełdy KYC, ta giełda zna Twoje monety i może udostępnić to powiązanie partnerom analizującym łańcuch. Miksowanie przez łańcuch prywatności jak Monero lub używanie znaczącego okresu „cool-down\" zmniejsza to powiązanie."
 		},
 		"what_not_to_do": {
-			"reuse_address": "Do not paste your same receive address into multiple trades.",
-			"exact_amount": "Do not send the exact amount listed on the order — Morphit's amount-randomizer toggle (the \"🔐 Randomize amount\" checkbox in the address-share modal) breaks this; leave it ON.",
-			"combine_utxos": "Do not combine the trade output with coins from a different source when you later spend it.",
-			"clearnet_broadcast": "Do not broadcast from your home IP via a non-private wallet — use Tor."
+			"reuse_address": "Nie wklejaj tego samego adresu odbioru w wielu transakcjach.",
+			"exact_amount": "Nie wysyłaj dokładnej kwoty wpisanej w post zlecenia.",
+			"combine_utxos": "Nie łącz wyniku transakcji z monetami z innego źródła, gdy będziesz je później wydawać.",
+			"clearnet_broadcast": "Nie transmituj ze swojego domowego IP przez nieprywatny portfel — używaj Tora."
 		},
 		"guides": {
 			"btc": {
-				"one_line": "Transparent chain, fully decentralized — opt-in mixing protocols available.",
-				"intro": "Bitcoin is the most-analyzed chain in the world. Every transaction is public; every address can be tracked over time. The privacy practices below dramatically reduce how easily a third party can profile your trades — without requiring you to leave BTC.",
-				"meta_description": "Privacy practices for Bitcoin trades on Morphit: fresh addresses, PayJoin, CoinJoin, and what to avoid."
+				"one_line": "Łańcuch przejrzysty, w pełni zdecentralizowany — dostępne opcjonalne protokoły mixingu.",
+				"intro": "Bitcoin (BTC) to pierwsza i najbardziej zdecentralizowana kryptowaluta. Łańcuch jest w pełni przejrzysty — nadawca, odbiorca i kwota są widoczne on-chain — ale opcjonalne protokoły miksowania (CoinJoin, PayJoin) i staranne praktyki portfela mogą znacznie poprawić prywatność. Poniższe praktyki obejmują podstawową higienę plus opcje opt-in.",
+				"meta_description": "Praktyki prywatności dla wymian Bitcoin na Morphit: nowe adresy, PayJoin, CoinJoin i czego unikać."
 			},
 			"xmr": {
-				"one_line": "Privacy by default — stealth addresses, hidden amounts, ring signatures.",
-				"intro": "Monero's chain-level privacy hides sender, recipient, and amount by default. By default, your address, amount, and counterparty are hidden from third parties. The practices below are minor tightenings; the chain itself does the heavy lifting.",
-				"meta_description": "Privacy practices for Monero trades on Morphit: subaddresses and amount handling."
+				"one_line": "Prywatność z założenia — adresy stealth, ukryte kwoty, podpisy pierścieniowe.",
+				"intro": "Monero (XMR) ma prywatność z założenia na poziomie protokołu. Każda transakcja używa podpisów pierścieniowych (nadawca ukryty w zestawie 16), adresów stealth (odbiorca wyprowadzony unikalnie off-chain dla każdej transakcji) i RingCT (ukryte kwoty). Łańcuch Monero to graf transakcji, w którym żadna krawędź nie jest publicznie obserwowalna — fundamentalnie inny model prywatności niż przejrzyste łańcuchy jak Bitcoin.",
+				"meta_description": "Praktyki prywatności dla wymian Monero na Morphit: subadresy i obsługa kwot."
 			},
 			"blurt": {
-				"one_line": "Coordination chain — transparent and account-based. Lowest privacy on Morphit.",
-				"intro": "BLURT is Morphit's coordination chain — orders, chat ciphertexts, fees, and reputation all live here. The chain is fully public and account-based, meaning every BLURT transfer involving your account is permanently visible to anyone. There is no opt-in privacy technology for BLURT.",
+				"one_line": "Łańcuch koordynacyjny — przejrzysty i oparty na kontach. Najniższa prywatność na Morphit.",
+				"intro": "BLURT to łańcuch koordynacyjny używany przez Morphit do publikowania zleceń i zarządzania federacją. To blockchain typu Steem/Hive — oparty na kontach, przejrzysty, zarządzany przez głosowanie witnesses i staking. Każda operacja jest publicznie widoczna, w tym zlecenia handlowe i płatności prowizji. Prywatność na poziomie BLURT jest najniższa wśród aktywów na Morphit, z założenia — to warstwa koordynacji, nie warstwa aktywa.",
 				"caveats": "BLURT is structurally the least private asset on Morphit. Your account name is your address; you cannot rotate it. For trades where on-chain privacy matters more than speed and cost, prefer XMR, BTC (with PayJoin), BCH (with CashFusion), LTC (with MWEB), or DASH (with PrivateSend).",
-				"meta_description": "Privacy considerations for BLURT trades on Morphit: account-based chain, transparent by design."
+				"meta_description": "Rozważania dotyczące prywatności dla wymian BLURT na Morphit: łańcuch oparty na kontach, przejrzysty z założenia."
 			},
 			"usdt": {
-				"one_line": "Centralized — Tether can freeze any address. Transparent on every chain.",
+				"one_line": "Scentralizowany — Tether może zamrozić każdy adres. Przejrzysty na każdym łańcuchu.",
 				"intro": "USDT's privacy issue is structurally different from the other transparent assets: it's centralized. Tether Inc. can freeze any USDT address on any host chain, and they have used this ability in the past. No amount of address rotation or transaction obfuscation changes Tether's freeze capability.",
 				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
-				"meta_description": "Privacy considerations for USDT trades on Morphit: centralization risk and host-chain transparency."
+				"meta_description": "Rozważania dotyczące prywatności dla wymian USDT na Morphit: ryzyko centralizacji i przejrzystość łańcucha hostującego."
 			},
 			"bch": {
-				"one_line": "Transparent, decentralized — CashFusion provides opt-in mixing.",
-				"intro": "Bitcoin Cash shares Bitcoin's transparency model: every transaction visible on chain, every address linkable. CashFusion (a BCH-community CoinJoin variant with amount-randomization) is the main opt-in privacy technology and is well-integrated into several BCH wallets.",
-				"meta_description": "Privacy practices for Bitcoin Cash trades on Morphit: fresh addresses, CashFusion, and what to avoid."
+				"one_line": "Przejrzysty, zdecentralizowany — CashFusion zapewnia mixing opt-in.",
+				"intro": "Bitcoin Cash (BCH) to fork Bitcoina aktywowany w sierpniu 2017 z większym rozmiarem bloku (zorientowany na płatności). Łańcuch bazowy jest w pełni przejrzysty jak Bitcoin. CashFusion, aktywowany w listopadzie 2019, to opcjonalny protokół wspólnego miksowania (podobny do CoinJoin Bitcoina) zintegrowany z Electron Cash. Dla użytkowników, którzy go włączają, łamie graf on-chain między wejściami a wyjściami.",
+				"meta_description": "Praktyki prywatności dla wymian Bitcoin Cash na Morphit: nowe adresy, CashFusion i czego unikać."
 			},
 			"ltc": {
-				"one_line": "Transparent, decentralized — MWEB provides opt-in chain-level privacy.",
+				"one_line": "Przejrzysty, zdecentralizowany — MWEB zapewnia prywatność opt-in na poziomie łańcucha.",
 				"intro": "Litecoin shares Bitcoin's transparency at the base layer, but adds MWEB (MimbleWimble Extension Blocks) — a chain-level opt-in privacy feature that hides amounts and breaks address linkability for transfers that opt in. This is the closest a Bitcoin-family chain comes to native privacy.",
-				"meta_description": "Privacy practices for Litecoin trades on Morphit: fresh addresses, MWEB, and what to avoid."
+				"meta_description": "Praktyki prywatności dla wymian Litecoin na Morphit: nowe adresy, MWEB i czego unikać."
 			},
 			"dash": {
-				"one_line": "Transparent base layer, decentralized — PrivateSend provides masternode-coordinated opt-in mixing.",
+				"one_line": "Przejrzysta warstwa bazowa, zdecentralizowany — PrivateSend zapewnia mixing opt-in koordynowany przez masternode.",
 				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
-				"meta_description": "Privacy practices for Dash trades on Morphit: fresh addresses, PrivateSend pre-mixing, and what to avoid.",
+				"meta_description": "Praktyki prywatności dla wymian Dash na Morphit: nowe adresy, pre-mixing PrivateSend i czego unikać.",
 				"caveats": "PrivateSend's anonymity set depends on simultaneous mixing participants. Off-peak hours = smaller set = weaker unlinkability. Masternode coordination is a trust trade-off: the protocol is non-custodial (masternodes never hold your coins) but the coordinator sees the mixing pattern."
 			},
 			"usdc": {
-				"one_line": "Centralized — Circle can freeze any address. Transparent on every chain.",
+				"one_line": "Scentralizowany — Circle może zamrozić każdy adres. Przejrzysty na każdym łańcuchu.",
 				"intro": "USDC's privacy posture mirrors USDT's: it's centralized. Circle (USDC's issuer) can freeze any USDC address on any host chain, and has done so on regulatory request. No amount of address rotation or transaction obfuscation changes Circle's freeze capability. The amount-correlation defense (jitter) IS active for USDC trades — see /{lang}/faq#monero_amount_jitter — but jitter addresses a different threat than centralization.",
 				"caveats": "Even with perfect on-chain privacy practices, USDC remains centrally freezable. Practical on-chain privacy on USDC host chains (Ethereum, Solana, Base, Polygon) is the same as on any transparent EVM/account chain — your privacy depends on the host chain's opt-in privacy ecosystem, which we do not endorse or describe further here. BEP-20 USDC on BNB Chain is intentionally NOT supported: that variant is Binance-Peg (Binance-custodied wrapper of Circle-issued USDC), adding a second custodian to the existing one.",
-				"meta_description": "Privacy considerations for USDC trades on Morphit: centralization risk, host-chain transparency, and the amount-jitter defense."
+				"meta_description": "Rozważania prywatności dla wymian USDC na Morphit: ryzyko centralizacji, przejrzystość łańcucha hostującego i obrona amount-jitter."
 			},
 			"dai": {
-				"one_line": "DAI — USD-pegged stablecoin governed by MakerDAO. No admin freeze on the token, but partly backed by USDC.",
-				"meta_description": "Honest privacy notes for trading DAI on Morphit: more decentralized than USDT/USDC at the contract level, partly backed by USDC via the Peg Stability Module.",
+				"one_line": "DAI — stablecoin powiązany z USD zarządzany przez MakerDAO. Brak freeze admina na tokenie, ale częściowo zabezpieczony USDC.",
+				"meta_description": "Uczciwe notatki o prywatności dla handlu DAI na Morphit: bardziej zdecentralizowany niż USDT/USDC na poziomie kontraktu, częściowo zabezpieczony USDC poprzez Peg Stability Module.",
 				"intro": "DAI is MakerDAO's USD-pegged stablecoin, deployed on Ethereum and several other EVM chains. It's the most-decentralized US-dollar-pegged asset Morphit supports — but \"decentralized\" doesn't mean \"freeze-immune\" or \"fully crypto-backed\" anymore. This page is the honest picture so you can choose with eyes open."
 			},
 			"doge": {
-				"one_line": "Transparent base layer, decentralized via PoW, no native privacy upgrade.",
+				"one_line": "Przejrzysta warstwa bazowa, zdecentralizowany via PoW, brak natywnej aktualizacji prywatności.",
 				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
-				"meta_description": "Privacy practices for Dogecoin trades on Morphit: fresh addresses, avoiding chain heuristics, and what tradeoffs to expect.",
+				"meta_description": "Praktyki prywatności dla wymian Dogecoin na Morphit: nowe adresy, unikanie heurystyk łańcucha i jakich kompromisów oczekiwać.",
 				"caveats": "Dogecoin has no native privacy upgrade — no PrivateSend equivalent, no confidential transactions, no segwit-enabled mixing. Every receive address you publish on Morphit can be linked to its on-chain history forever. Use a fresh HD-derived address for every trade (your wallet usually does this automatically)."
 			},
 			"zec": {
-				"one_line": "Transparent and shielded address types coexist; recipients pick per address.",
+				"one_line": "Typy adresów przejrzyste i shielded współistnieją; odbiorca wybiera dla danego adresu.",
 				"intro": "Zcash launched in 2016 as the first deployment of zk-SNARK-based shielded transactions in a cryptocurrency. The chain supports two address families: transparent (t1/t3) which behave like Bitcoin's legacy addresses with publicly visible amounts, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) which use zero-knowledge proofs to hide sender, recipient, and amount on chain. Per-trade, the recipient picks the address type that matches their preferred posture. Both are first-class on the protocol.",
-				"meta_description": "Privacy practices for Zcash trades on Morphit: choosing between transparent and shielded addresses (t-addr, z-addr, u-addr), wallet recommendations, and what each privacy pool does.",
+				"meta_description": "Praktyki prywatności dla wymian Zcash na Morphit: wybór między adresami przejrzystymi i shielded (t-addr, z-addr, u-addr), zalecenia portfeli i co robi każdy pool prywatności.",
 				"caveats": "Shielded-to-shielded transactions hide sender, recipient, and amount on chain. Mixed transactions (shielded-to-transparent or transparent-to-shielded) reveal one side. Transparent-to-transparent reveals both. If your goal is to minimize linkability, use a shielded address (zs1 or u1) and ask the counterparty to send from a shielded address. Wallet support varies: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk (mobile, Sapling) — not every wallet supports every address type, so verify your counterparty's wallet handles the address type you publish before sharing it."
 			},
 			"arrr": {
-				"one_line": "Chain-level shielded transactions via the Sapling zk-SNARK pool; every transfer hides sender, recipient, and amount by construction.",
+				"one_line": "Transakcje shielded na poziomie łańcucha przez pulę zk-SNARK Sapling; każdy transfer ukrywa nadawcę, odbiorcę i kwotę z założenia.",
 				"intro": "Pirate Chain (ARRR) launched in 2018 as a fork of the Zcash codebase, configured so that the Sapling shielded pool is the only available transaction type.  Every transfer goes through zero-knowledge proofs (zk-SNARKs) that hide sender, recipient, and amount on chain.  Pirate Chain sunsetted the transparent pool early in the chain's life and forcibly migrated all transparent balances to shielded — there is no transparent address option.  Addresses use the `zs1` Sapling format (bech32, 78 chars total), visually identical to Zcash Sapling addresses.\n\nThe practices below cover wallet-side hygiene that survives even chain-level shielding — the on-chain payload is private, but what you share off-chain (which addresses you publish, which counterparties you transact with) is what links your Morphit trades together over time.",
-				"meta_description": "Privacy practices for Pirate Chain trades on Morphit: chain-level shielded transactions, fresh-address hygiene, and wallet compatibility.",
+				"meta_description": "Praktyki prywatności dla wymian Pirate Chain na Morphit: transakcje shielded na poziomie łańcucha, higiena nowych adresów i kompatybilność portfeli.",
 				"caveats": "Pirate Chain's chain-level shielding hides sender, recipient, and amount on chain — but it does not erase off-chain linkability.\n\n- **Share fresh addresses per trade.**  Using the same `zs1` address across multiple Morphit listings lets observers correlate your orders even though the chain itself reveals nothing.  Generate a fresh receive address per trade (Pirate Chain wallets derive these from your HD seed).\n- **Wallet compatibility.**  Not every wallet supports Pirate Chain (the major options are Treasure Chest, Pirate.Black, and Verus-integrated Pirate).  Confirm your counterparty has a compatible wallet before agreeing to a price.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Visual collision with Zcash Sapling addresses.**  Pirate Chain `zs1` addresses look exactly like Zcash `zs1` addresses.  Morphit's per-asset tab and placeholder disambiguate, but if you copy an address from a different context, confirm it belongs to the chain you intend to send on."
 			},
 			"dcr": {
-				"one_line": "Hybrid PoW/PoS cryptocurrency with on-chain governance (Politeia) and opt-in CoinShuffle++ (CSPP) wallet-side mixing.",
+				"one_line": "Hybrydowa kryptowaluta PoW/PoS z zarządzaniem on-chain (Politeia) i opcjonalnym miksowaniem CoinShuffle++ (CSPP) po stronie portfela.",
 				"intro": "Decred (DCR) launched in 2016 as a hybrid Proof-of-Work + Proof-of-Stake cryptocurrency with on-chain governance.  Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders chosen pseudo-randomly from the staking pool — neither group can change the protocol rules unilaterally.  On-chain governance via Politeia lets stakeholders propose, debate, and ratify protocol changes; treasury funds (10% of block reward) flow through community vote.\n\nThe chain is transparent at the base layer — sender, recipient, and amount are visible on chain like Bitcoin.  Decred ships an opt-in CoinShuffle++ (CSPP) mixing protocol integrated into dcrwallet: users can enable mixing in their wallet to break the on-chain transaction graph between deposit and withdrawal, similar in posture to Bitcoin coinjoin or Dash PrivateSend.\n\nThe practices below cover wallet-side hygiene to make the most of Decred's privacy features.",
-				"meta_description": "Privacy practices for Decred trades on Morphit: hybrid PoW/PoS chain, on-chain governance, opt-in CoinShuffle++ wallet mixing, and fresh-address hygiene.",
+				"meta_description": "Praktyki prywatności dla wymian Decred na Morphit: hybrydowy łańcuch PoW/PoS, zarządzanie on-chain, opcjonalne miksowanie portfela CoinShuffle++ i higiena nowych adresów.",
 				"caveats": "Decred is transparent at the base layer; mixing is opt-in and wallet-side.\n\n- **Share fresh addresses per trade.**  Using the same `Ds` or `Dc` address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade (Decred wallets derive these from your HD seed).\n- **Use CSPP mixing if you want transaction-level privacy.**  In dcrwallet enable the \"Mix Account\" option; deposits flow through CoinShuffle++ rounds with other participants before becoming spendable from your mixed account.  Mixing rounds happen approximately every 20 minutes on mainnet.\n- **Wallet compatibility.**  The official wallets are dcrwallet (CLI/headless), Decrediton (GUI), and Cake Wallet (mobile, DCR mode).  Some other wallets support DCR send/receive but not CSPP mixing.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Politeia treasury proposals are public.**  Decred's on-chain governance system shows every proposal, vote, and discussion publicly.  This isn't a Morphit-trading concern, but worth knowing if you participate in DCR governance."
 			},
 			"sol": {
-				"one_line": "High-throughput Proof-of-Stake cryptocurrency with Proof-of-History sequencing.  Transparent base layer; wallet-side address rotation is the primary privacy lever.",
+				"one_line": "Kryptowaluta Proof-of-Stake o wysokiej przepustowości z sekwencjonowaniem Proof-of-History.  Przejrzysta warstwa bazowa; rotacja adresów po stronie portfela to główna dźwignia prywatności.",
 				"intro": "Solana (SOL) launched in 2020 as a high-throughput Proof-of-Stake cryptocurrency.  Validators stake SOL and process blocks in rotation under delegated PoS consensus, with Proof-of-History providing a verifiable sequencing oracle that lets validators reach consensus on transaction ordering without coordination overhead.  The combination achieves transaction throughput several orders of magnitude higher than traditional UTXO chains while remaining decentralized — no central freeze authority controls the chain.\n\nThe chain is transparent at the base layer — sender, recipient, and amount are visible on chain like Bitcoin.  Solana has no native protocol-level mixing protocol.  Users wanting transaction-level privacy rely on wallet-side address rotation (deriving a fresh address per trade from their HD seed) and off-chain coordination — the practices below cover what you can control.",
-				"meta_description": "Privacy practices for Solana trades on Morphit: high-throughput PoS chain, transparent base layer, fresh-address hygiene, native vs wrapped SOL, and RPC provider considerations.",
+				"meta_description": "Praktyki prywatności dla wymian Solana na Morphit: łańcuch PoS o wysokiej przepustowości, przejrzysta warstwa bazowa, higiena nowych adresów, natywny vs wrapped SOL i rozważania o dostawcach RPC.",
 				"caveats": "Solana is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same Solana address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern Solana wallets (Phantom, Solflare) derive these from your HD seed and let you create new accounts in seconds.\n- **Send native SOL, not wrapped SOL.**  Wrapped SOL (wSOL) uses the SPL-token form for DEX interoperability; the mint address `So11111111111111111111111111111111111111112` is the famous wSOL identifier.  Morphit trades use NATIVE SOL transfers — sending wSOL to a SOL receive address requires the recipient to unwrap, which may not happen.\n- **Watch for Program-Derived Addresses (PDAs).**  PDAs are off-curve addresses controlled by on-chain programs, not by private keys.  If you send SOL to a PDA, the recipient can't move funds out unless the owning program has a withdraw instruction.  Most wallets show a warning before sending to a PDA; pay attention.\n- **Same address shape as USDT-Solana and USDC-Solana.**  A Solana base58 address could be a native SOL account, a USDT-Solana token account, or a USDC-Solana token account — the format is identical.  Morphit's order asset field tells you which one to send; double-check before signing the transaction in your wallet.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Solana RPC providers can correlate.**  Your wallet talks to an RPC endpoint (Helius, QuickNode, Triton, public mainnet-beta) — that provider sees every transaction you sign.  Self-hosting a Solana RPC node, or rotating between providers, reduces the surface area."
 			},
 			"eth": {
-				"one_line": "Proof-of-Stake cryptocurrency on the Ethereum mainnet.  Transparent base layer; wallet-side address rotation is the primary privacy lever.",
+				"one_line": "Kryptowaluta Proof-of-Stake na mainnecie Ethereum.  Przejrzysta warstwa bazowa; rotacja adresów po stronie portfela to główna dźwignia prywatności.",
 				"intro": "Ethereum (ETH) launched in 2015 as a smart-contract platform.  In September 2022 the chain transitioned from Proof-of-Work to Proof-of-Stake consensus (\"The Merge\") — validators stake ETH and process blocks in rotation, with no central freeze authority controlling the chain.\n\nThe chain is transparent at the base layer — sender, recipient, and amount are visible on chain like Bitcoin.  Ethereum has no native protocol-level mixing protocol.  Tornado Cash was a notable smart-contract mixer but has been sanctioned in many jurisdictions; Morphit does not recommend or rely on it.  Users wanting transaction-level privacy rely on wallet-side address rotation (deriving a fresh address per trade from their HD seed) and off-chain coordination — the practices below cover what you can control.",
-				"meta_description": "Privacy practices for Ethereum trades on Morphit: PoS chain, transparent base layer, fresh-address hygiene, native vs wrapped ETH, contract-destination warnings, ENS limitations, and RPC provider considerations.",
+				"meta_description": "Praktyki prywatności dla wymian Ethereum na Morphit: łańcuch PoS, przejrzysta warstwa bazowa, rotacja adresów po stronie portfela, prywatność gazu i rozważania o dostawcach RPC.",
 				"caveats": "Ethereum is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same Ethereum address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern Ethereum wallets (MetaMask, Rabby, Rainbow) derive these from your HD seed and let you create new accounts in seconds.\n- **Send native ETH, not wrapped ETH.**  Wrapped ETH (WETH) is an ERC-20 token used for DEX interoperability.  Morphit trades use NATIVE ETH transfers — sending WETH to an ETH receive address requires the recipient to unwrap, which may not happen.\n- **Watch for contract destinations.**  Ethereum addresses can be externally-owned accounts (EOAs, controlled by a private key) OR smart contracts.  Sending ETH to a contract without a `payable receive()` or `fallback()` function reverts; the funds aren't lost but the transaction fails and you pay gas.  Most wallets warn before sending to contracts; pay attention.\n- **Same address shape as every EVM token-account.**  An Ethereum 0x-address could be a native ETH EOA, a USDT-ERC20 token-account, a USDC-Base token-account, a DAI-Polygon token-account, or any EVM contract.  The format is identical.  Morphit's order asset field (plus the network field for multi-network assets) tells you which one to send; double-check before signing the transaction in your wallet.\n- **ENS names are not resolved.**  Pasting `alice.eth` will fail Morphit's address validator — paste the raw 0x address.  Resolving ENS would require a centralized RPC dependency that violates Morphit's distributed-no-SPOF design.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **Ethereum RPC providers can correlate.**  Your wallet talks to an RPC endpoint (Infura, Alchemy, QuickNode, public mainnet) — that provider sees every transaction you sign.  Self-hosting an Ethereum node, or rotating between providers, reduces the surface area.\n- **Gas fees can leak timing.**  Ethereum gas prices vary by congestion.  Submitting a transaction during a high-gas window with a higher tip can correlate the tx to a specific time window.  Standard wallet defaults (medium priority) blend with the broader mempool."
 			},
 			"xrp": {
-				"one_line": "Federated Byzantine Agreement cryptocurrency on the XRP Ledger.  Transparent base layer; wallet-side address rotation is the primary privacy lever.",
+				"one_line": "Kryptowaluta Federated Byzantine Agreement na XRP Ledger.  Przejrzysta warstwa bazowa; rotacja adresów po stronie portfela to główna dźwignia prywatności.",
 				"intro": "Ripple (XRP) launched in 2012 as a payment-focused cryptocurrency.  XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering.  The default UNL is published by the XRP Ledger Foundation (non-profit) with the for-profit Ripple Labs Inc. historically influencing validator selection.  Native XRP cannot be frozen by any central authority — the freeze flag on XRPL applies only to issued tokens (IOUs), not to native XRP.\n\nThe chain is transparent at the base layer — sender, recipient, amount, and destination tag (if present) are all visible on chain like Bitcoin.  XRPL has no native protocol-level mixing.  Users wanting transaction-level privacy rely on wallet-side address rotation (deriving a fresh address per trade from their HD seed) and off-chain coordination — the practices below cover what you can control.",
-				"meta_description": "Privacy practices for Ripple (XRP) trades on Morphit: XRPL FBA consensus, transparent base layer, destination tag UX, reserve requirement, and RPC provider considerations.",
+				"meta_description": "Praktyki prywatności dla wymian Ripple (XRP) na Morphit: konsensus FBA XRPL, przejrzysta warstwa bazowa, UX destination tag, wymóg rezerwy i rozważania o dostawcach RPC.",
 				"caveats": "XRPL is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same XRPL address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern XRPL wallets (Xaman, Crossmark, Bifrost) derive these from your HD seed and let you create new accounts in seconds.\n- **Destination tags are not a privacy feature — they're an identifier.**  If your counterparty asks for a destination tag and you supply one, that tag is visible on chain and can be used to correlate transactions.  For peer-to-peer trades the destination tag is typically not needed at all.  Only include a destination tag when the receiving address is an exchange-hosted omnibus wallet that requires one for routing.\n- **Reserve requirement creates account-creation visibility.**  Your first incoming XRP must be ≥1 XRP (the base reserve).  The on-chain `Payment` transaction that funds a new account is publicly visible as account activation, which is a stronger correlation signal than a regular payment to an already-existing account.  If reducing this signal matters, fund the receive address yourself first (from an account that's already mixed/separated) and only then share it.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **XRPL RPC providers can correlate.**  Your wallet talks to an XRPL RPC endpoint (xrplcluster.com, Ripple's, or a self-hosted rippled node) — that provider sees every transaction you sign.  Self-hosting a rippled node, or rotating between providers, reduces the surface area.\n- **Consensus-set concentration is a known property.**  The default UNL (Unique Node List) is published by the XRP Ledger Foundation; running your own validator with a custom UNL is supported but uncommon.  For Morphit's purposes this affects censorship-resistance considerations (a coordinated UNL could refuse to include transactions) more than transaction privacy.  Document and decide based on your threat model.\n- **X-addresses are not currently supported as a receive format.**  XRPL has a newer \"X-address\" format (XLS-5d) that bundles the destination tag into the address itself — Xaman/Xumm, Crossmark, Bifrost, and GemWallet all parse them.  Morphit currently accepts only classic `r`-prefixed addresses; if your counterparty asks for an X-address, share your classic address and the destination tag separately instead.  Adding X-address support is on the post-launch enhancements list."
 			}
 		},
-		"unknown_asset_title": "Unknown asset · Morphit privacy guides"
+		"unknown_asset_title": "Nieznane aktywo · Przewodniki po prywatności Morphit"
 	}
 }
