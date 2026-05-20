@@ -3205,7 +3205,7 @@
 			"description": "Zcash: راه‌اندازی ۲۰۱۶، تراکنش‌های shielded zk-SNARK (pool های Sapling + Orchard) در کنار آدرس‌های شفاف (t1/t3، مانند Bitcoin). راه‌اندازی منصفانه با برنامه halving پاداش بنیان‌گذاران. در هر معامله گیرندگان نوع آدرس مطابق با موضع خود را انتخاب می‌کنند. فقط معامله روی Morphit — نمی‌تواند کارمزدهای انتشار را پرداخت کند."
 		},
 		"pay_arrr": {
-			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
+			"description": "پرداخت با Pirate Chain (ARRR). Pirate Chain یک ارز رمز proof-of-work است که تراکنش‌های shielded در سطح زنجیره را از طریق pool zk-SNARK Sapling فراهم می‌کند — فرستنده، گیرنده و مبلغ به‌طور ذاتی روی زنجیره پنهان هستند. فرمت آدرس واحد (zs1 Sapling shielded). از یک کیف پول Pirate Chain مانند Treasure Chest، Pirate.Black یا کیف پول Pirate یکپارچه با Verus استفاده کنید."
 		},
 		"pay_dcr": {
 			"description": "با Decred (DCR) پرداخت کنید. Decred یک ارز رمزنگاری ترکیبی Proof-of-Work + Proof-of-Stake با حکمرانی روی زنجیره است. زنجیره در سطح پایه شفاف است؛ مخلوط‌سازی اختیاری CoinShuffle++ (از طریق dcrwallet) گراف تراکنش‌ها را برای کاربرانی که آن را فعال می‌کنند می‌شکند. از یک کیف پول Decred مانند dcrwallet یا Decrediton استفاده کنید."
@@ -3755,7 +3755,7 @@
 		"index_title": "شیوه‌های حریم خصوصی — Morphit",
 		"index_meta_description": "چگونه معاملات خود را روی زنجیره‌های شفاف و خصوصی خصوصی‌تر کنید. راهنمای هر دارایی شامل آدرس‌های جدید، فناوری‌های اختیاری حریم خصوصی و دام‌های رایج.",
 		"index_heading": "شیوه‌های حریم خصوصی در Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "بیشتر دارایی‌هایی که در Morphit معامله می‌شوند (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) روی زنجیره‌های شفاف زندگی می‌کنند — هر ناظری می‌تواند تاریخچه زنجیره را بخواند. اقدامات مشخصی وجود دارد که می‌توانید برای دشوارتر کردن پیوند، نمایه‌سازی یا نظارت بر معاملات خود انجام دهید. این مبتنی بر رجیستری است: دارایی بعدی که Morphit اضافه می‌کند به‌طور خودکار راهنما خواهد گرفت.",
 		"page_title": "حریم خصوصی برای معاملات {asset} — Morphit",
 		"guide_heading": "شیوه‌های حریم خصوصی برای معاملات {asset}",
 		"back_to_index": "همه دارایی‌ها",
@@ -3786,11 +3786,11 @@
 			},
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
-				"explain": "A two-party cooperative transaction protocol. Sender and receiver both contribute inputs, so chain observers cannot apply the standard \"all inputs come from the same wallet\" heuristic. Morphit's address-share modal includes an optional PayJoin endpoint field — if both wallets support BIP-78, the trade automatically uses PayJoin."
+				"explain": "یک پروتکل تراکنش همکاری دوطرفه. هم فرستنده و هم گیرنده ورودی‌ها را به اشتراک می‌گذارند، بنابراین ناظران زنجیره نمی‌توانند اکتشاف استاندارد \"همه ورودی‌ها از یک کیف پول می‌آیند\" را اعمال کنند. مدال اشتراک‌گذاری آدرس Morphit شامل یک فیلد اختیاری endpoint PayJoin است — اگر هر دو کیف پول از BIP-78 پشتیبانی کنند، معامله به‌طور خودکار از PayJoin استفاده می‌کند."
 			},
 			"privatesend": {
 				"name": "PrivateSend",
-				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
+				"explain": "نسخه CoinJoin بومی Dash. از مقادیر ورودی/خروجی نام‌گذاری‌شده و هماهنگی masternode برای مخلوط کردن سکه‌ها در میان چندین شرکت‌کننده استفاده می‌کند و پیوند بین فرستنده و گیرنده روی زنجیره را می‌شکند. چندین round مخلوط‌سازی اجرا کنید (round های بیشتر = مجموعه ناشناسی بزرگ‌تر = کارمزد بالاتر). قبل از به اشتراک گذاشتن آدرس، در کیف پول Dash خود از قبل مخلوط‌سازی کنید — تا زمانی که وجوه به Morphit برسد، از قبل مخلوط شده‌اند."
 			},
 			"shielded-pools": {
 				"name": "Shielded pools (Sapling + Orchard)",
@@ -3798,7 +3798,7 @@
 			},
 			"csppmix": {
 				"name": "مخلوط‌سازی CoinShuffle++ (CSPP)",
-				"explain": "A wallet-side mixing protocol that bundles your transaction inputs with other participants in a single multi-party round.  After mixing, your outputs are no longer linkable to your original inputs on chain.  Integrated into dcrwallet for Decred — enable the \"Mix Account\" option.  Opt-in (you choose when to mix); off-protocol (mixing rounds aren't enforced by consensus)."
+				"explain": "یک پروتکل مخلوط‌سازی سمت کیف پول که ورودی‌های تراکنش شما را با شرکت‌کنندگان دیگر در یک round چندطرفه ادغام می‌کند. پس از مخلوط‌سازی، خروجی‌های شما دیگر به ورودی‌های اصلی شما روی زنجیره مرتبط نیستند. در dcrwallet برای Decred یکپارچه شده است — گزینه \"Mix Account\" را فعال کنید. اختیاری (شما زمان مخلوط‌سازی را انتخاب می‌کنید)؛ off-protocol (round های مخلوط‌سازی توسط اجماع اعمال نمی‌شوند)."
 			}
 		},
 		"common_practices": {
@@ -3833,7 +3833,7 @@
 			"usdt": {
 				"one_line": "متمرکز — Tether می‌تواند هر آدرسی را مسدود کند. شفاف روی هر زنجیره.",
 				"intro": "مسئله حریم خصوصی USDT از لحاظ ساختاری متفاوت از سایر دارایی‌های شفاف روی Morphit است: USDT متمرکز است. Tether Limited می‌تواند هر آدرس USDT را بدون اطلاع قبلی مسدود کند. این قبلاً برای آدرس‌های تحت تحریم، آدرس‌های مرتبط با هک‌ها و گاهی آدرس‌هایی که Tether خودش مشکوک می‌دانست اتفاق افتاده است. معامله USDT روی Morphit به معنای پذیرش ریسک مسدودسازی است که در BTC/XMR/BLURT وجود ندارد.",
-				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
+				"caveats": "حتی با شیوه‌های کامل حریم خصوصی روی زنجیره، USDT همچنان به‌طور متمرکز قابل مسدودسازی است. حریم خصوصی عملی روی زنجیره در زنجیره‌های میزبان USDT (اتریوم، ترون، سولانا، BSC) همانند هر زنجیره شفاف EVM/UTXO/account است — حریم خصوصی شما به اکوسیستم اختیاری حریم خصوصی زنجیره میزبان بستگی دارد (Tornado Cash روی ETH و غیره) که ما تأیید یا بیشتر توصیف نمی‌کنیم.",
 				"meta_description": "ملاحظات حریم خصوصی برای معاملات USDT روی Morphit: ریسک تمرکز و شفافیت زنجیره میزبان."
 			},
 			"bch": {
@@ -3848,14 +3848,14 @@
 			},
 			"dash": {
 				"one_line": "لایه پایه شفاف، غیرمتمرکز — PrivateSend مخلوط‌سازی اختیاری هماهنگ‌شده توسط masternode ارائه می‌دهد.",
-				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
+				"intro": "Dash در سال ۲۰۱۴ از Litecoin جدا شد و همان لایه پایه شفاف را به اشتراک می‌گذارد — هر موجودی آدرس و تراکنش به‌طور عمومی قابل مشاهده است. زنجیره کاملاً غیرمتمرکز است؛ هیچ ناشری نمی‌تواند آدرس‌ها را مسدود کند. Dash PrivateSend را اضافه می‌کند، یک نسخه CoinJoin که توسط شبکه masternode هماهنگ می‌شود و مخلوط‌سازی اختیاری در سطح کیف پول را فراهم می‌کند. پیش‌مخلوط‌سازی چندین round قبل از به اشتراک گذاشتن آدرس دریافت، قوی‌ترین رویه حریم خصوصی روی Dash است.",
 				"meta_description": "شیوه‌های حریم خصوصی برای معاملات Dash روی Morphit: آدرس‌های جدید، پیش‌مخلوط‌سازی PrivateSend و چه چیزی را پرهیز کنیم.",
 				"caveats": "مجموعه ناشناسی PrivateSend به شرکت‌کنندگان همزمان مخلوط‌سازی بستگی دارد. در ساعات کم‌ترافیک، جلسات مخلوط‌سازی ممکن است با شرکت‌کنندگان کمتری اجرا شوند — مخلوط‌سازی کمتر یعنی مجموعه ناشناسی کوچک‌تر. پیش از معامله در Morphit از قبل پیش‌مخلوط‌سازی کنید، نه در لحظه نیاز: پیش‌مخلوط‌سازی به شما وقت می‌دهد مجموعه ناشناسی مطلوب را به دست آورید و زمان‌بندی مخلوط را از زمان‌بندی معامله عمومی جدا می‌کند."
 			},
 			"usdc": {
 				"one_line": "متمرکز — Circle می‌تواند هر آدرسی را مسدود کند. شفاف روی هر زنجیره.",
-				"intro": "USDC's privacy posture mirrors USDT's: it's centralized. Circle (USDC's issuer) can freeze any USDC address on any host chain, and has done so on regulatory request. No amount of address rotation or transaction obfuscation changes Circle's freeze capability. The amount-correlation defense (jitter) IS active for USDC trades — see /{lang}/faq#monero_amount_jitter — but jitter addresses a different threat than centralization.",
-				"caveats": "Even with perfect on-chain privacy practices, USDC remains centrally freezable. Practical on-chain privacy on USDC host chains (Ethereum, Solana, Base, Polygon) is the same as on any transparent EVM/account chain — your privacy depends on the host chain's opt-in privacy ecosystem, which we do not endorse or describe further here. BEP-20 USDC on BNB Chain is intentionally NOT supported: that variant is Binance-Peg (Binance-custodied wrapper of Circle-issued USDC), adding a second custodian to the existing one.",
+				"intro": "موضع حریم خصوصی USDC منعکس‌کننده USDT است: متمرکز است. Circle (ناشر USDC) می‌تواند هر آدرس USDC را در هر زنجیره میزبان مسدود کند، و این کار را به درخواست نظارتی انجام داده است. هیچ مقدار چرخش آدرس یا مبهم‌سازی تراکنش توانایی Circle برای مسدودسازی را تغییر نمی‌دهد. دفاع همبستگی مبلغ (jitter) برای معاملات USDC فعال است — به /{lang}/faq#monero_amount_jitter مراجعه کنید — اما jitter به تهدید متفاوتی نسبت به تمرکز می‌پردازد.",
+				"caveats": "حتی با شیوه‌های کامل حریم خصوصی روی زنجیره، USDC همچنان به‌طور متمرکز قابل مسدودسازی است. حریم خصوصی عملی روی زنجیره در زنجیره‌های میزبان USDC (Ethereum, Solana, Base, Polygon) همانند هر زنجیره شفاف EVM/account است — حریم خصوصی شما به اکوسیستم اختیاری حریم خصوصی زنجیره میزبان بستگی دارد که ما تأیید یا بیشتر توصیف نمی‌کنیم. USDC BEP-20 روی BNB Chain عمداً پشتیبانی نمی‌شود: آن نسخه Binance-Peg است (نگه‌داری توسط Binance از پوشش USDC منتشرشده توسط Circle)، که نگه‌دارنده دومی به نگه‌دارنده موجود اضافه می‌کند.",
 				"meta_description": "ملاحظات حریم خصوصی برای معاملات USDC روی Morphit: ریسک تمرکز، شفافیت زنجیره میزبان و دفاع amount-jitter."
 			},
 			"dai": {
@@ -3865,7 +3865,7 @@
 			},
 			"doge": {
 				"one_line": "لایه پایه شفاف، غیرمتمرکز از طریق PoW، بدون ارتقای حریم خصوصی بومی.",
-				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
+				"intro": "Dogecoin در سال ۲۰۱۳ به‌عنوان فورک با راه‌اندازی منصفانه از یک نسخه قبلی Litecoin راه‌اندازی شد. مانند Bitcoin، هر موجودی آدرس و تراکنش به‌طور عمومی روی زنجیره قابل مشاهده است. زنجیره کاملاً غیرمتمرکز است؛ هیچ ناشر یا بنیادی نمی‌تواند آدرس‌ها را مسدود کند. از سال ۲۰۱۴ با Litecoin استخراج ادغامی شده است (proof-of-work کمکی)، و امنیت hashrate Litecoin را بدون رقابت با آن به ارث برده است.",
 				"meta_description": "شیوه‌های حریم خصوصی برای معاملات Dogecoin روی Morphit: آدرس‌های جدید، پرهیز از اکتشافات زنجیره و چه معاوضاتی را انتظار داشته باشیم.",
 				"caveats": "Dogecoin ارتقاهای حریم خصوصی بومی ندارد — معادل PrivateSend ندارد، MWEB ندارد، pool اختیاری ندارد. استخراج ادغامی با Litecoin در برابر حملات ۵۱٪ محافظت می‌کند اما به حریم خصوصی تراکنش‌ها کمک نمی‌کند. بهترین اهرم‌های شما عبارتند از: استفاده از آدرس‌های جدید برای هر معامله، اجتناب از استفاده مجدد از یک آدرس بین معاملات، و در نظر گرفتن این که زنجیره توسط تحلیلگرانی که صرافی‌ها و جریان‌های خروجی آنها را فهرست می‌کنند مشاهده می‌شود."
 			},

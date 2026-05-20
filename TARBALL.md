@@ -1,5 +1,80 @@
 # Tarball history
 
+## cp72 — 60 MORE TRANSLATIONS + brag list fix (cp71 over-budget caught and corrected) + deep audit continuation (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp72-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 298 brag entries · locale parity 2,825 × 10 = 28,250 · **3904 scenarios pass / 0 runners failed** (unchanged from cp71) · **7/7 workspaces TS-clean (LL #52 29th consecutive)** · **23 structural defenses operational** · **481 vitest tests passing** · TRIPLE-PULSE STABLE.
+
+### What shipped at cp72
+
+**1. 10 more long-form translations applied (60 individual translations)**
+
+Batch 6 — keys translated to all 6 backlog locales (it/pl/ru/fa/zh-CN/zh-HK):
+- privacy.opt_in_tech.payjoin.explain
+- privacy.guides.usdt.caveats
+- payment_method.pay_arrr.description
+- privacy.index_intro
+- privacy.opt_in_tech.csppmix.explain
+- privacy.guides.doge.intro
+- privacy.opt_in_tech.privatesend.explain
+- privacy.guides.usdc.intro
+- privacy.guides.dash.intro
+- privacy.guides.usdc.caveats
+
+**Remaining: 29 long-form keys** (was 39 at cp71; -10 in batch 6; another ~20% knocked off).
+
+**2. cp71-D9 — brag entry #235 over-budget caught and fixed**
+
+cp71 shipped with brag #235 ("Unit-test pass count is locked by CI") at 5 sentences. The cp60-O12 brag-list-kiss-budget smoke caught this on cp72's first battery run.
+
+Honest disclosure: **cp71 tarball SHA `5b4fec74ca9e89c32f01ab55b1c6e664a66a189b49f2ac08d08358dbf5ea0b25` has a failing runner** (the brag smoke). cp72 corrects it. Fix:
+
+> Before (5s): "...The smoke battery (3904 scenarios) is heavy on static-analysis but doesn't run vitest. Test-rot — handlers evolving without their tests being updated — used to go undetected for months. The cp71 vitest-must-pass smoke runs `vitest --run`..."
+
+> After (4s): "The cp71 vitest-must-pass smoke runs `vitest --run` per workspace and asserts the pass count meets a baseline. Test-rot — handlers evolving without their tests being updated — used to go undetected for months because the static-analysis smoke battery doesn't run unit tests. Now a drift incident surfaces immediately as a smoke failure..."
+
+**3. Mediakit regenerated**
+
+After brag list change, `scripts/build-mediakit.sh` was run to update `apps/web/static/morphit-mediakit.zip`. New size: 96,340 bytes.
+
+**4. cp72 deep-audit continuation**
+
+Audited additional bug classes (all CLEAN):
+- **Svelte component timer leaks**: 2 `.svelte` files have onMount + setTimeout, both are fire-once "await sleep" patterns (not leaks)
+- **Store subscribe() leaks**: 2 manual subscribes (OperatorBlockBanner, PendingFeedbackReminderBanner), both return `unsub` from onMount (Svelte handles cleanup)
+- **Async generator / for-await leaks**: NONE found (n/a class)
+- **process.exit() audit**: All in main.ts entry points or migration scripts (appropriate)
+- **CORS / cache-control**: security middleware applies default; per-endpoint overrides where needed
+- **target="_blank" tabnabbing**: All 10+ links have `rel="noopener"` on the following line (grep false-positives only)
+- **bind:innerHTML / dynamic attrs**: NONE found
+
+### Final cp72 state metrics
+
+- 16 tradable assets / 35 ADRs / 298 brag entries (unchanged)
+- 3904 scenarios pass / 0 runners failed
+- 7/7 workspaces TS-clean (LL #52 29th consecutive)
+- 23 structural defenses operational (unchanged)
+- 481 vitest tests passing (unchanged)
+- **29 long-form translation keys remaining** (was 39 at cp71; -10 in batch 6)
+- Mediakit regenerated to 96,340 bytes
+
+### Campaign-arc summary (cp61 → cp72)
+
+| Checkpoint | Battery | Defenses | vitest | Note |
+|---|---|---|---|---|
+| cp65 chronic closure | 3874 / 0 | 17 | (not run) | 130 native translations to es/fr/de |
+| cp66 NEW DEFENSE | 3886 / 0 | 18 | (not run) | Registry, 6 invariants |
+| cp67 registry scaling | 3892 / 0 | 18 | (not run) | +3 invariants (→9 total) |
+| cp68 translations push | 3892 / 0 | 18 | (not run) | 211/260 backlog keys |
+| cp69 hunting-ground sweep | 3900 / 0 | 20 | (not run) | +2 invariants (→11), +O17, +O18, +runbook, +60 translations |
+| cp70 deep bug hunt | 3900 / 0 | 20 | 481/482 | 1 real prod bug + 3 quality + 17 test-rot |
+| cp71 defenses-from-cp70 | 3904 / 0 | 23 | 481/482 | +O19, +O20, +O21, fetchWithTimeout, 13 refactors. (Shipped with brag #235 over-budget — caught at cp72.) |
+| **cp72 translations + cleanup** | **3904 / 0** | **23** | **481/482** | +60 translations (-10 backlog keys → 29 remaining), cp71-D9 brag fix, mediakit regen, deep-audit continuation |
+
+---
+
+# Tarball history
+
 ## cp71 — 3 NEW STRUCTURAL DEFENSES (O-19/O-20/O-21) + centralized fetchWithTimeout helper + 13 fetch refactors + cp71-D8 (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp71-FULL-STATE.tar.gz`

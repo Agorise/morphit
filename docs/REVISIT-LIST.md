@@ -1,5 +1,64 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp72 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3904/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 29 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP72 LESSONS
+
+### Lesson #1 — Honest accounting: cp71 shipped with brag #235 over-budget
+The cp60-O12 brag-list-kiss-budget smoke caught this on cp72's first battery run. cp71 tarball SHA `5b4fec74ca9e89c32f01ab55b1c6e664a66a189b49f2ac08d08358dbf5ea0b25` has a failing runner. cp72 corrects it. Lesson: when adding brag entries IN BULK (cp71 added 4 at once), always re-run the brag smoke before committing. The smoke caught the violation in 30 seconds; the cp71 commit predated my running it explicitly post-mutation.
+
+### Lesson #2 — Mediakit regeneration is downstream of brag list AND brand SVG changes
+Brag list edit → mediakit zip stale → mediakit-freshness-smoke fires. Standard cp-end procedure should be:
+  1. Make brag list / brand SVG changes
+  2. `bash scripts/build-mediakit.sh`
+  3. Run battery (catches drift if step 2 was forgotten)
+  4. Commit
+cp72 hit this twice (brag fix + then mediakit) — Memory rule about mediakit regen is honored, just remember to run it.
+
+### Lesson #3 — Many "potential bugs" audit-passes confirm clean state
+cp72 audited 7 more bug classes (svelte timer leaks, store subscribe leaks, async-gen leaks, process.exit, CORS/cache-control, tabnabbing, dynamic HTML attrs). All CLEAN. This is the value of structural defenses: each class confirmed clean is one we can confidently move past.
+
+## STRUCTURAL DEFENSES — 23 OPERATIONAL (unchanged at cp72)
+
+No new defenses at cp72. cp73+ candidates:
+- O-22: mediakit-must-be-rebuilt-after-source-change — would have caught the mediakit-freshness failure pre-commit at cp72
+- O-23: vitest-must-pass coverage extension to relay + web workspaces (currently only indexer has tests)
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3904 | unchanged from cp71 |
+| Runners FAILED | 0 | clean |
+| Workspaces TS-clean (LL #52) | 7/7 | 29th consecutive |
+| Triple-pulse stable | ✓ | 3904/0 |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **481 pass / 1 skip** | unchanged |
+| **Backlog translations remaining** | **29** | was 39 at cp71 (-10 in batch 6) |
+| Brag entries | 298 | unchanged from cp71 |
+| Mediakit size | 96,340 bytes | regenerated cp72 |
+
+## CP73+ PREDICTED HUNTING GROUND
+
+- **Continue translation backlog: 29 long-form keys remaining** (most are 400-800 EN char privacy guides + FAQ answers, batch-able 8-10 at a time)
+- **More structural defenses derived from cp72 lessons:**
+  - O-22 mediakit-must-be-rebuilt-after-source-change (would have caught cp72 first-battery failure)
+  - Vitest-must-pass extension to additional workspaces once they grow tests
+- **Audit areas still unexplored:**
+  - Mock-vs-production fixture divergence (relay tests vs real broadcast)
+  - Service-worker fetch-caching edge cases (stale-while-revalidate quirks)
+  - Operator-facing FAQ answer parity (translator-controlled prose vs technical claim in docs)
+- **Hardware-blocked tasks** (unchanged): live ansible deploy on Ubuntu 24.04 VM, Forgejo runner execution
+
+## Two parked external blockers (unchanged through cp42→cp72)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp71 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3904/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 3 NEW DEFENSES + 13 FETCH REFACTORS + 1 STRICT-PARSEINT FIX SHIPPED THIS CP.**
 
 ## CP71 LESSONS

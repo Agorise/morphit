@@ -3205,7 +3205,7 @@
 			"description": "Zcash: запущен в 2016, shielded-транзакции zk-SNARK (пулы Sapling + Orchard) и прозрачные адреса (t1/t3, как Bitcoin). Честный запуск с графиком халвинга founder-награды. На сделку получатели выбирают тип адреса, соответствующий их позиции. Только торговля на Morphit — не может оплачивать комиссии листинга."
 		},
 		"pay_arrr": {
-			"description": "Pay in Pirate Chain (ARRR).  Pirate Chain is a proof-of-work cryptocurrency that ships chain-level shielded transactions via the Sapling zk-SNARK pool — sender, recipient, and amount are hidden on-chain by construction.  Single address format (zs1 Sapling shielded).  Use a Pirate Chain wallet like Treasure Chest, Pirate.Black, or the Verus-integrated Pirate wallet."
+			"description": "Платите в Pirate Chain (ARRR). Pirate Chain — это proof-of-work криптовалюта, которая поддерживает shielded-транзакции на уровне цепи через zk-SNARK пул Sapling — отправитель, получатель и сумма скрыты в цепи по построению. Единый формат адреса (zs1 Sapling shielded). Используйте кошелёк Pirate Chain, например Treasure Chest, Pirate.Black или кошелёк Pirate, интегрированный с Verus."
 		},
 		"pay_dcr": {
 			"description": "Платите в Decred (DCR).  Decred — это гибридная Proof-of-Work + Proof-of-Stake-криптовалюта с on-chain управлением.  Цепь прозрачна на базовом уровне; опциональное микширование CoinShuffle++ (через dcrwallet) разрывает граф транзакций для тех, кто его включает.  Используйте кошелёк Decred, например dcrwallet или Decrediton."
@@ -3755,7 +3755,7 @@
 		"index_title": "Практики приватности — Morphit",
 		"index_meta_description": "Как сделать ваши сделки более приватными на прозрачных и приватных цепях. Руководство по активам, охватывающее свежие адреса, опциональные технологии приватности и распространённые ловушки.",
 		"index_heading": "Практики приватности на Morphit",
-		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
+		"index_intro": "Большинство активов, торгуемых на Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI), живут в прозрачных цепях — любой наблюдатель может прочитать историю цепи. Есть конкретные шаги, которые вы можете предпринять, чтобы ВАШИ сделки было намного труднее связать, профилировать или контролировать. Это управляется реестром: следующий актив, который Morphit добавит, автоматически получит руководство.",
 		"page_title": "Приватность для торговли {asset} — Morphit",
 		"guide_heading": "Практики приватности для торговли {asset}",
 		"back_to_index": "Все активы",
@@ -3786,11 +3786,11 @@
 			},
 			"payjoin": {
 				"name": "PayJoin (BIP-78)",
-				"explain": "A two-party cooperative transaction protocol. Sender and receiver both contribute inputs, so chain observers cannot apply the standard \"all inputs come from the same wallet\" heuristic. Morphit's address-share modal includes an optional PayJoin endpoint field — if both wallets support BIP-78, the trade automatically uses PayJoin."
+				"explain": "Протокол кооперативной транзакции двух сторон. Как отправитель, так и получатель вносят входы, поэтому наблюдатели цепи не могут применить стандартную эвристику «все входы из одного кошелька». Модальное окно обмена адресами в Morphit включает опциональное поле endpoint-а PayJoin — если оба кошелька поддерживают BIP-78, сделка автоматически использует PayJoin."
 			},
 			"privatesend": {
 				"name": "PrivateSend",
-				"explain": "Dash's native CoinJoin variant. Uses denominated input/output amounts and masternode coordination to mix coins among multiple participants, breaking the link between sender and receiver on-chain. Run multiple mixing rounds (more rounds = larger anonymity set = higher fee). Pre-mix in your Dash wallet BEFORE sharing the address — by the time the funds reach Morphit they're already mixed."
+				"explain": "Нативный вариант CoinJoin от Dash. Использует деноминированные суммы входов/выходов и координацию masternode-ов для микширования монет между несколькими участниками, разрывая связь между отправителем и получателем в цепи. Запустите несколько раундов микширования (больше раундов = больший анонимный набор = выше комиссия). Pre-mix в своём кошельке Dash ДО передачи адреса — к моменту прибытия средств в Morphit они уже смикшированы."
 			},
 			"shielded-pools": {
 				"name": "Shielded pools (Sapling + Orchard)",
@@ -3798,7 +3798,7 @@
 			},
 			"csppmix": {
 				"name": "Микширование CoinShuffle++ (CSPP)",
-				"explain": "A wallet-side mixing protocol that bundles your transaction inputs with other participants in a single multi-party round.  After mixing, your outputs are no longer linkable to your original inputs on chain.  Integrated into dcrwallet for Decred — enable the \"Mix Account\" option.  Opt-in (you choose when to mix); off-protocol (mixing rounds aren't enforced by consensus)."
+				"explain": "Протокол микширования на стороне кошелька, который объединяет ваши входы транзакций с другими участниками в один многосторонний раунд. После микширования ваши выходы больше не связаны с исходными входами в цепи. Интегрирован в dcrwallet для Decred — включите опцию «Mix Account». Опционально (вы выбираете когда микшировать); off-protocol (раунды микширования не обеспечиваются консенсусом)."
 			}
 		},
 		"common_practices": {
@@ -3833,7 +3833,7 @@
 			"usdt": {
 				"one_line": "Централизован — Tether может заморозить любой адрес. Прозрачен на каждой цепи.",
 				"intro": "Проблема приватности USDT структурно отличается от других прозрачных активов на Morphit: USDT централизован. Tether Limited может заморозить любой USDT-адрес без предупреждения. Это уже происходило с санкционированными адресами, адресами связанными со взломами, а иногда и адресами, которые Tether считал подозрительными. Торговля USDT на Morphit означает принятие риска заморозки, которого нет с BTC/XMR/BLURT.",
-				"caveats": "Even with perfect on-chain privacy practices, USDT remains centrally freezable. Practical on-chain privacy on USDT host chains (Ethereum, Tron, Solana, BSC) is the same as on any transparent EVM/UTXO/account chain — your privacy depends on the host chain's opt-in privacy ecosystem (Tornado Cash on ETH, etc.), which we do not endorse or describe further here.",
+				"caveats": "Даже при идеальных практиках on-chain приватности USDT остаётся централизованно замораживаемым. Практическая on-chain приватность в хост-цепях USDT (Ethereum, Tron, Solana, BSC) такая же, как в любой прозрачной EVM/UTXO/account цепи — ваша приватность зависит от опционального экосистемы хост-цепи (Tornado Cash на ETH и т.п.), который мы не одобряем и далее не описываем.",
 				"meta_description": "Соображения приватности для торговли USDT на Morphit: риск централизации и прозрачность цепи-хоста."
 			},
 			"bch": {
@@ -3848,14 +3848,14 @@
 			},
 			"dash": {
 				"one_line": "Прозрачный базовый слой, децентрализован — PrivateSend обеспечивает опциональное микширование с координацией мастернод.",
-				"intro": "Dash forked from Litecoin in 2014 and shares the same transparent base layer — every address balance and transaction is publicly visible. The chain is fully decentralized; no issuer can freeze addresses. Dash adds PrivateSend, a CoinJoin variant coordinated by the masternode network, providing opt-in mixing at the wallet level. Pre-mixing several rounds before sharing your receiving address is the strongest privacy practice on Dash.",
+				"intro": "Dash отделился от Litecoin в 2014 и разделяет тот же прозрачный базовый слой — каждый баланс адреса и транзакция публично видны. Цепь полностью децентрализована; ни один эмитент не может заморозить адреса. Dash добавляет PrivateSend, CoinJoin-вариант координируемый сетью masternode-ов, обеспечивающий опциональное микширование на уровне кошелька. Pre-mix несколько раундов до передачи адреса получения — самая сильная практика приватности в Dash.",
 				"meta_description": "Практики приватности для торговли Dash на Morphit: свежие адреса, предварительное микширование PrivateSend и чего избегать.",
 				"caveats": "Анонимный набор PrivateSend зависит от одновременных участников микширования. В часы низкого трафика сессии могут идти с меньшим числом участников — меньше миксов означает меньший анонимный набор. Делайте pre-mix ЗАРАНЕЕ до сделки на Morphit, не в момент необходимости: pre-mixing даёт время получить желаемый анонимный набор и разделяет тайминг микса и тайминг публичной сделки."
 			},
 			"usdc": {
 				"one_line": "Централизован — Circle может заморозить любой адрес. Прозрачен на каждой цепи.",
-				"intro": "USDC's privacy posture mirrors USDT's: it's centralized. Circle (USDC's issuer) can freeze any USDC address on any host chain, and has done so on regulatory request. No amount of address rotation or transaction obfuscation changes Circle's freeze capability. The amount-correlation defense (jitter) IS active for USDC trades — see /{lang}/faq#monero_amount_jitter — but jitter addresses a different threat than centralization.",
-				"caveats": "Even with perfect on-chain privacy practices, USDC remains centrally freezable. Practical on-chain privacy on USDC host chains (Ethereum, Solana, Base, Polygon) is the same as on any transparent EVM/account chain — your privacy depends on the host chain's opt-in privacy ecosystem, which we do not endorse or describe further here. BEP-20 USDC on BNB Chain is intentionally NOT supported: that variant is Binance-Peg (Binance-custodied wrapper of Circle-issued USDC), adding a second custodian to the existing one.",
+				"intro": "Позиция приватности USDC отражает USDT: централизована. Circle (эмитент USDC) может заморозить любой USDC-адрес в любой хост-цепи и делал это по нормативному запросу. Никакая ротация адресов или обфускация транзакций не изменит способность Circle к замораживанию. Защита от корреляции сумм (jitter) АКТИВНА для USDC-сделок — см. /{lang}/faq#monero_amount_jitter — но jitter адресует другую угрозу, нежели централизация.",
+				"caveats": "Даже при идеальных практиках on-chain приватности USDC остаётся централизованно замораживаемым. Практическая on-chain приватность в хост-цепях USDC (Ethereum, Solana, Base, Polygon) такая же, как в любой прозрачной EVM/account цепи — ваша приватность зависит от опциональной экосистемы хост-цепи, которую мы не одобряем и далее не описываем. BEP-20 USDC в BNB Chain НАМЕРЕННО не поддерживается: этот вариант — Binance-Peg (Binance-кастоди обёртка для USDC, выпущенного Circle), добавляющий второго кастодиана к уже существующему.",
 				"meta_description": "Соображения приватности для торговли USDC на Morphit: риск централизации, прозрачность цепи-хоста и защита через amount-jitter."
 			},
 			"dai": {
@@ -3865,7 +3865,7 @@
 			},
 			"doge": {
 				"one_line": "Прозрачный базовый слой, децентрализован через PoW, без нативного обновления приватности.",
-				"intro": "Dogecoin launched in 2013 as a fair-launched fork of an earlier Litecoin variant. Like Bitcoin, every address balance and transaction is publicly visible on the chain. The chain is fully decentralized; no issuer or foundation can freeze addresses. Since 2014 it has been merge-mined with Litecoin (auxiliary proof-of-work), inheriting Litecoin's hashrate security without competing for it.",
+				"intro": "Dogecoin был запущен в 2013 году как честно стартовавший форк более раннего варианта Litecoin. Как и Bitcoin, каждый баланс адреса и каждая транзакция публично видны в цепи. Цепь полностью децентрализована; ни эмитент, ни фонд не могут заморозить адреса. С 2014 он merge-майнится с Litecoin (вспомогательный proof-of-work), наследуя безопасность хешрейта Litecoin без конкуренции с ним.",
 				"meta_description": "Практики приватности для торговли Dogecoin на Morphit: свежие адреса, избегание эвристик цепи и каких компромиссов ожидать.",
 				"caveats": "У Dogecoin нет нативных обновлений приватности — нет аналога PrivateSend, нет MWEB, нет опционального пула. Merge-майнинг с Litecoin защищает от 51%-атак, но не помогает приватности транзакций. Ваши лучшие рычаги: использовать свежие адреса для каждой сделки, избегать повторного использования адресов между сделками и помнить, что цепь наблюдается аналитиками, каталогизирующими биржи и их выходные потоки."
 			},
