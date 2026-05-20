@@ -19,6 +19,7 @@
  */
 
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import type { OrderViewsResponse } from '@morphit/indexer-client';
 
 /** Fire a view-count increment.  Non-blocking; errors are
@@ -33,7 +34,7 @@ export async function recordOrderView(account: string, permlink: string): Promis
 	try {
 		const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
 		const url = `${origin}/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/view`;
-		await fetch(url, {
+		await fetchWithTimeout(url, {
 			method: 'POST',
 			credentials: 'omit',
 			headers: { Accept: 'application/json' }
@@ -57,7 +58,7 @@ export async function fetchOrderViews(
 	try {
 		const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
 		const url = `${origin}/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/views`;
-		const res = await fetch(url, {
+		const res = await fetchWithTimeout(url, {
 			credentials: 'omit',
 			headers: { Accept: 'application/json' }
 		});

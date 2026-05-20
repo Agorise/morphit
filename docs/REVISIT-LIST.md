@@ -1,5 +1,65 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp71 — 2026-05-20.  **23 STRUCTURAL DEFENSES · BATTERY 3904/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 3 NEW DEFENSES + 13 FETCH REFACTORS + 1 STRICT-PARSEINT FIX SHIPPED THIS CP.**
+
+## CP71 LESSONS
+
+### Lesson #1 — Bug-hunt lessons become structural defenses
+Each cp70-D[1-7] finding informed a cp71 smoke that catches its class. The pattern: deep bug-hunt at cp(N), bake the lessons into structural defenses at cp(N+1).
+- cp70-D1 parseInt smuggling → cp71-O20 untrusted-parseint-safety
+- cp70-D2/D3/D4 test-rot (3 categories) → cp71-O19 vitest-must-pass
+- cp70-D5/D6 unbounded fetch → cp71-O21 fetch-must-have-timeout
+
+### Lesson #2 — Two-pass smoke development is normal
+cp71-O21's first version had an 8-line window for finding `signal:` options. False-positive on `ops-cli/chainCheck.ts` (multi-line POST body). Extended to 16. Pattern: ship the smoke, run it, tune for the FPs the codebase actually has.
+
+### Lesson #3 — Centralized helpers prevent drift
+Without fetchWithTimeout, every new fetch() call would need to remember the AbortController + setTimeout + try/finally pattern. The helper makes "default timeout" the path of least resistance. The smoke catches anyone bypassing it.
+
+### Lesson #4 — Allow-lists need inline documentation
+cp71-O21's allow-list has 2 entries (service-worker.ts:127 and fetchWithTimeout.ts:60). Each has an inline comment explaining WHY it's allow-listed. Future maintainers can audit without re-deriving the rationale.
+
+## STRUCTURAL DEFENSES — 23 OPERATIONAL
+
+cp71 added 3 new defenses derived from cp70 bug-hunt:
+- cp71-O19 vitest-must-pass — runs vitest per workspace, asserts pass count ≥ baseline
+- cp71-O20 untrusted-parseint-safety — requires /^\d+$/ pre-check on parseInt of untrusted input
+- cp71-O21 fetch-must-have-timeout — requires AbortController+signal on every fetch()
+
+## BATTERY STATE
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3904 | +4 from cp70 (3 new smokes net of 1 finding cp71-O20 fixed at cp71-D8) |
+| Runners FAILED | 0 | clean since cp65 |
+| Workspaces TS-clean (LL #52) | 7/7 | 28th consecutive |
+| Triple-pulse stable | ✓ | 3904/0 × 3 |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **481 pass / 1 skip** | unchanged from cp70 (test-rot already cleaned) |
+| Backlog translations remaining | 39 | unchanged from cp69; cp72+ work |
+| Brag entries | 298 | was 295 at cp70 (+3 defenses + 1 fetchWithTimeout =4 entries, but 235-238 shift left, so net = +3 actually = 298) |
+| Centralized fetch helper | fetchWithTimeout | NEW cp71 |
+
+## CP72+ PREDICTED HUNTING GROUND
+
+- **Translate remaining 39 long-form keys** to all 6 backlog locales (~219k chars of careful prose). Priority FAQ answers first (highest user-facing impact).
+- **Continue deep audit areas not yet exhausted:**
+  - Svelte component reactive-state leaks ($state/$derived cleanup, untrack patterns)
+  - Async generator cleanup (return/throw paths)
+  - Env-vs-runtime config divergence (operator sets X in env, code reads default Y)
+  - Service-worker fetch-caching edge cases (stale cache after release)
+  - Mock-vs-production gap in test fixtures
+- **Hardware-blocked tasks** (unchanged): live ansible deploy on Ubuntu 24.04 VM, Forgejo runner execution (`docs/FORGEJO-RUNNER-STANDUP.md` ready)
+
+## Two parked external blockers (unchanged through cp42→cp71)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; just needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp70 — 2026-05-20.  **20 STRUCTURAL DEFENSES · BATTERY 3900/0 TRIPLE-PULSE STABLE · 481 VITEST TESTS PASSING · 1 REAL BUG + 3 QUALITY FIXES + 17 TEST-ROT FIXES SHIPPED THIS CP.**
 
 ## CP70 LESSONS

@@ -350,7 +350,20 @@ function checkSystemd(): Check {
 
 async function checkPostgresReachable(): Promise<Check> {
 	const host = process.env.MORPHIT_OPS_PG_HOST ?? 'localhost';
-	const port = parseInt(process.env.MORPHIT_OPS_PG_PORT ?? '5432', 10);
+	const portRaw = process.env.MORPHIT_OPS_PG_PORT ?? '5432';
+	// Strict numeric parse — parseInt() accepts trailing garbage like
+	// "5432abc"; better to fail-fast with a clear message than connect
+	// to whatever the partial parse landed on.  cp70-D1 lesson.
+	const port = /^\d+$/.test(portRaw) ? Number(portRaw) : NaN;
+	if (!Number.isFinite(port) || port < 1 || port > 65535) {
+		return {
+			name: `Postgres @ ${host}:${portRaw}`,
+			actual: `invalid MORPHIT_OPS_PG_PORT='${portRaw}'`,
+			recommended: 'integer 1..65535',
+			status: 'error',
+			note: 'Set MORPHIT_OPS_PG_PORT to a plain integer port number (e.g. 5432).'
+		};
+	}
 	return new Promise<Check>((resolve) => {
 		const sock = connect({ host, port, timeout: 3000 });
 		const finish = (status: CheckStatus, actual: string, note?: string): void => {

@@ -42,6 +42,8 @@
  * Returns the list of mismatched assets so the UI can name names.
  */
 
+import { fetchWithTimeout } from './fetchWithTimeout';
+
 export interface AssetMismatch {
 	readonly path: string;
 	readonly expected: string;
@@ -110,7 +112,7 @@ async function fetchAndHash(path: string): Promise<string> {
 	// content while the verify probe still hashes our copy.  Strip
 	// any leading scheme/origin from the path.
 	const safePath = path.startsWith('/') ? path : `/${path}`;
-	const res = await fetch(safePath, {
+	const res = await fetchWithTimeout(safePath, {
 		credentials: 'omit'
 	});
 	if (!res.ok) {

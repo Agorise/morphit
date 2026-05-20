@@ -33,6 +33,7 @@
 
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import { fetchWithTimeout } from '$net/fetchWithTimeout';
 	import { goto, beforeNavigate } from '$app/navigation';
 
 	import Head from '$components/Head.svelte';
@@ -142,7 +143,7 @@
 		}
 		availability = { kind: 'checking' };
 		try {
-			const res = await fetch(`${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/availability`, {
+			const res = await fetchWithTimeout(`${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/availability`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: candidate })
