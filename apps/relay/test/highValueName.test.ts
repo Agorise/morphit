@@ -42,8 +42,16 @@ describe('classifyHighValueName', () => {
 			expect(classifyHighValueName('ethereum')).toBe('dictionary_brand');
 			// Part 122 cp49 deep-deep J-1: symmetric coverage for
 			// 'ripple' + 'xrp' (cp49 high-value-name additions).
+			// Note: 'xrp' is length 3, so it's classified as
+			// 'short_name' (length <= 4 threshold) BEFORE the
+			// dictionary check fires.  short_name is a STRONGER
+			// restriction (caught earlier in the precedence chain
+			// at line 397 of highValueName.ts), so 'xrp' is
+			// correctly classified.  Test asserts the actual
+			// behavior: short_name for 'xrp', dictionary_brand for
+			// 'ripple' (length 6, past the threshold).
 			expect(classifyHighValueName('ripple')).toBe('dictionary_brand');
-			expect(classifyHighValueName('xrp')).toBe('dictionary_brand');
+			expect(classifyHighValueName('xrp')).toBe('short_name');
 			expect(classifyHighValueName('monero')).toBe('dictionary_brand');
 		});
 		it('does not flag a similar-but-different name', () => {

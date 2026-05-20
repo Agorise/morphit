@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Morphit 速查表",
 			"description": "打印一页纸的 Morphit 使用参考:账户名 vs 助记词,挂单费 vs 网络费,支持的可交易资产一览,以及出问题时该怎么办。"
+		},
+		"privacy_index": {
+			"title": "Morphit 上的隐私——每个资产的指南",
+			"description": "Morphit 支持的每个资产的隐私指南。大多数链都是透明的；具体步骤使您的交易更难被关联、画像或监控。"
 		}
 	},
 	"prices": {

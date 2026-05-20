@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Ściąga Morphit",
 			"description": "Wydrukuj jednostronicowy przewodnik po używaniu Morphit: nazwa konta vs fraza odzyskiwania, opłata za ogłoszenie vs opłata sieciowa, obsługiwane aktywa handlowe w skrócie, i co zrobić, jeśli coś pójdzie nie tak."
+		},
+		"privacy_index": {
+			"title": "Prywatność na Morphit — przewodniki dla aktywów",
+			"description": "Przewodniki prywatności dla każdego aktywa obsługiwanego przez Morphit. Większość łańcuchów jest przejrzysta; konkretne kroki sprawiają, że Twoje transakcje są znacznie trudniejsze do połączenia, sprofilowania lub nadzorowania."
 		}
 	},
 	"prices": {

@@ -58,9 +58,27 @@ const WORKSPACES: WorkspaceBaseline[] = [
 		// silently shouldn't be a clean smoke.
 		minPassing: 481,
 		notes: 'indexer handler + API tests; baseline locked at cp70 ship'
+	},
+	{
+		path: 'apps/relay',
+		// cp73 ship state: 244 passed.  Lifted from "no vitest yet"
+		// to a real baseline after cp73-D10 fixed the 'xrp' test
+		// expectation in highValueName.test.ts (test was wrong;
+		// 'xrp' is length 3 so short_name fires before
+		// dictionary_brand check).
+		minPassing: 244,
+		notes: 'relay create + queue + policy tests; baseline locked at cp73 ship after cp73-D10 fix'
+	},
+	{
+		path: 'apps/web',
+		// cp73 ship state: 619 passed + 5 skipped.  Lifted from "no
+		// vitest yet" to a real baseline after cp73-D11 added the
+		// missing seo.privacy_index.{title,description} keys to all
+		// 10 locales (the /privacy route's SEO i18n coverage test
+		// was failing because the keys didn't exist).
+		minPassing: 619,
+		notes: 'web store + i18n + indexer-client tests; baseline locked at cp73 ship after cp73-D11 fix'
 	}
-	// apps/relay and apps/web don't have vitest test directories yet;
-	// adding their baselines is a future task once they grow tests.
 ];
 
 let failed = 0;

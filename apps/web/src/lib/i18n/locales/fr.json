@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Aide-mémoire Morphit",
 			"description": "Imprimez une référence d'une page pour utiliser Morphit : nom de compte vs phrase de récupération, frais de publication vs frais de réseau, les actifs négociables pris en charge en un coup d'œil, et que faire en cas de problème."
+		},
+		"privacy_index": {
+			"title": "Confidentialité sur Morphit — guides par actif",
+			"description": "Guides de confidentialité pour chaque actif pris en charge par Morphit. La plupart des chaînes sont transparentes ; des étapes concrètes rendent vos trades beaucoup plus difficiles à relier, profiler ou surveiller."
 		}
 	},
 	"prices": {

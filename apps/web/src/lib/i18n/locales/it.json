@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Foglio di riferimento Morphit",
 			"description": "Stampa un riferimento di una pagina per usare Morphit: nome account vs frase seme, commissione di pubblicazione vs commissione di rete, gli asset negoziabili supportati a colpo d'occhio, e cosa fare se qualcosa va storto."
+		},
+		"privacy_index": {
+			"title": "Privacy su Morphit — guide per asset",
+			"description": "Guide alla privacy per ogni asset supportato da Morphit. La maggior parte delle chain sono trasparenti; passi concreti rendono i tuoi trade molto più difficili da collegare, profilare o sorvegliare."
 		}
 	},
 	"prices": {

@@ -1463,6 +1463,10 @@
 		"cheat_sheet": {
 			"title": "Hoja de referencia de Morphit",
 			"description": "Imprime una referencia de una página para usar Morphit: nombre de cuenta vs frase semilla, tarifa de publicación vs tarifa de red, los activos negociables soportados de un vistazo, y qué hacer si algo sale mal."
+		},
+		"privacy_index": {
+			"title": "Privacidad en Morphit — guías por activo",
+			"description": "Guías de privacidad para cada activo que Morphit admite. La mayoría de las cadenas son transparentes; pasos concretos hacen que tus operaciones sean mucho más difíciles de vincular, perfilar o vigilar."
 		}
 	},
 	"prices": {
