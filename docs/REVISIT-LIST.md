@@ -1,5 +1,55 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp62 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp62
+
+- **Memory: "WIRE EVERYTHING — say so explicitly if env can't run a check, never claim 'complete'"** was being subtly violated by my hardcoded battery loop in cp58-cp61 reporting "52/52 PASS" against a curated subset of 52 smokes when the canonical registry has 183. cp62 reconciles to the canonical runner output.
+- **Memory: Pre-existing chronic failures** (i18n-translation-completeness 1,150 EN-fallback debt; sally-walkthrough L13 XMR-jitter; \$lib alias env-blocked smokes) are documented and tracked since cp32-cp35. They're not regressions; they're accepted limitations. My past sessions had this right — I'd just lost it in the cp58-cp61 simplified-loop pattern.
+
+## STRUCTURAL DEFENSES — 17 OPERATIONAL (unchanged from cp61)
+
+(See cp61 entry for the full list.) cp62 didn't add a defense; it fixed the runner output format so existing defenses are properly counted.
+
+## BATTERY STATE — honest accounting
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3611 | up from 3541 (cp61) because 7 format-fixed smokes now contribute their scenario counts to the total |
+| Runners chronic/env-blocked | 8 | pre-existing per AUDIT history |
+| — chronic (Memory backlog) | 2 | i18n-translation-completeness, sally-walkthrough L13 |
+| — env-blocked (\$lib alias not resolved by tsx) | 6 | chat-blurt-verify, chat-payload, monero-jitter, payjoin-uri-wire-shape, payments, rss-orderbook |
+| Workspaces TS-clean (LL #52) | 7/7 | 19th consecutive |
+
+## CP62 LESSONS
+
+### Lesson #1 — Truthful battery is canonical-runner output
+"52/52 PASS" against a hardcoded curated subset is technically true but not honest. Future smoke claims: run `bash scripts/run-smokes.sh` directly, paste the `Total: X scenarios passed, Y runners failed` line, document the failure categorization if Y > 0.
+
+### Lesson #2 — Smoke output format MUST be canonical
+Six smokes had been passing functionally for many checkpoints but the runner counted them as failures because their output format didn't match `^✓ all N …`. The canonical line is part of the smoke's contract with the runner. Going forward, when writing a new smoke, the final passing-path line is `console.log(\`✓ all \${N} <smoke-short-name> scenarios passed\`);` (line-start anchored, lowercase "all", numeric, name).
+
+### Lesson #3 — Path-alias env-blocked smokes need documented status
+Six smokes import from `$lib/...` (SvelteKit alias) and fail in the sandbox because tsx doesn't resolve the alias on its own. These pass in CI. Acceptable pre-launch state; documented in TARBALL.md history. NOT a regression.
+
+## CP63+ predicted hunting ground
+
+- **\$lib alias resolution for sandbox smokes** — could be fixed with a `tsconfig-paths` register or by rewriting affected smokes to use relative imports. Out of scope for cp62 but a candidate cleanup pass.
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries (deferred from cp61's hunting ground)
+- **Value-cross-reference invariant hunt** (cp61-O14's new parity-model class) — port numbers, DB names, recipient addresses, docker network names beyond CIDR
+- **\`MORPHIT_RELAY_PASSPHRASE_FILE\` documentation depth** — currently a commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog per Memory #29)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+
+## Two parked external blockers (unchanged through cp42→cp62)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp61 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp61

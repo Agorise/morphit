@@ -63,3 +63,4 @@ if (failed > 0) {
 	console.error('\npayment-rail-coverage-parity smoke FAILED');
 	process.exit(1);
 }
+console.log(`✓ all ${passed} payment-rail-coverage-parity scenarios passed`);

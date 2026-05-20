@@ -206,3 +206,4 @@ if (failed > 0) {
 	console.error('\naddress-shape-overlap smoke FAILED');
 	process.exit(1);
 }
+console.log(`✓ all ${passed} address-shape-overlap scenarios passed`);

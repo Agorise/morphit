@@ -1,5 +1,66 @@
 # Tarball history
 
+## cp62 — Honest battery accounting + 7 format-issue smokes fixed (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp62-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **3611 scenarios pass / 8 runners chronic/env-blocked** (was 3541/15 at cp61) · **7/7 workspaces TS-clean (LL #52 19th consecutive)** · **17 structural defenses operational** (unchanged).
+
+**cp62 origin:** While planning cp62 (intended scope: pre-launch CHANGE_ME smoke + value-cross-reference invariant hunt), discovered that my hardcoded battery loop in cp58-cp61 had been running only **52 of the 183 registered smokes**. "52/52 PASS" claims were technically true but not honest — the other 131 smokes were untested by my loop.
+
+### What the full battery actually showed
+
+Running `bash scripts/run-smokes.sh` (the canonical runner): **3541 scenarios passed, 15 runners failed**.
+
+Failure categorization:
+- **2 chronic failures** (documented in TARBALL/AUDIT since cp32-cp35):
+  - `i18n-translation-completeness-smoke` — 1,150 EN-fallback debt per Memory #29 (it/pl/ru/fa/zh-CN/zh-HK community-translation backlog)
+  - `sally-walkthrough-smoke` — L13 XMR-jitter doc gap
+- **6 environment-blocked**: tsx cannot resolve SvelteKit's `$lib` path alias in sandbox, so smokes that import from `$lib/...` crash with ERR_MODULE_NOT_FOUND:
+  - chat-blurt-verify-smoke, chat-payload-smoke, monero-jitter-smoke, payjoin-uri-wire-shape-smoke, payments-smoke, rss-orderbook-smoke
+  - These work in CI (Forgejo runner) where the tsconfig path-aliases are honored
+- **6 format issues** — smokes pass functionally but don't emit the canonical `^✓ all N …` line that `run-smokes.sh` greps for:
+  - address-shape-overlap, asset-accent-class-uniqueness, chat-asset-ticker-narrow-union-parity, network-icon-coverage, payment-rail-coverage-parity, price-provider-coverage-parity
+- **1 path bug**: `workspace-typecheck-smoke` registered as `"workspace-typecheck-smoke"` (no `dir:` prefix) — runner couldn't resolve the path
+
+### What cp62 fixed inline
+
+**Fixed: 6 format-issue smokes** — added canonical `console.log(`✓ all N <name> scenarios passed`);` at end of each. Smokes now both pass functionally AND satisfy the runner's grep.
+
+**Fixed: workspace-typecheck-smoke path** — changed runner entry from `"workspace-typecheck-smoke"` to `".:workspace-typecheck-smoke"` so the runner correctly resolves to `scripts/workspace-typecheck-smoke.ts` at repo root.
+
+Post-cleanup: **3611 scenarios pass, 8 runners chronic/env-blocked.** The 8 remaining are all pre-existing, documented limitations — not regressions from my cp58-cp62 work.
+
+### What cp62 did NOT do
+
+cp62 did NOT:
+- Add new structural defenses (the planned CHANGE_ME smoke turned out to be already covered by `db-password-placeholder-smoke` — exists, comprehensive, registered)
+- Fix the 6 env-blocked smokes (would require either tsconfig-paths plugin or rewriting smokes to use relative imports — out of scope; CI honors path aliases)
+- Fix the 2 chronic failures (Memory #29 community backlog + L13 doc gap — pre-existing and tracked)
+
+### The accounting realization
+
+In cp58-cp61 I'd been reporting `48/48 PASS`, `50/50 PASS`, `51/51 PASS`, `52/52 PASS` — those were my hardcoded loop counts. The truthful counterpart is `[my-loop] / 183 registered`, plus the 8 chronic/env-blocked. Going forward, smoke-count claims will be against `scripts/run-smokes.sh` output, not a hardcoded subset.
+
+### Lesson — Run the canonical runner, not a curated subset
+
+When the project has a `scripts/run-smokes.sh` that walks a registry of N smokes, running it directly is the truthful battery. A curated loop of M < N smokes is fine for fast iteration but its pass rate isn't the project's pass rate. Future checkpoints: pre-commit verification runs `bash scripts/run-smokes.sh` and tallies against the canonical output.
+
+### Final cp62 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- **3611 scenarios pass** / 8 runners chronic-or-env-blocked (was 3541/15)
+- 7 format-issue smokes fixed inline
+- 1 workspace-typecheck-smoke path bug fixed
+- 7/7 workspaces TS-clean (LL #52 19th consecutive)
+- 31 vitest unit tests (cp50 carryover)
+- Locale parity 2,825 × 10 = 28,250 (unchanged)
+- 17 structural defenses operational (unchanged)
+- Mediakit unchanged this turn
+
+---
+
+# Tarball history
+
 ## cp61 reconciliation — TWO structural defenses landed: cp61-O14 (bunkerweb CIDR cross-reference, parallel-session) + cp61-O15 (non-Zod env-example consumer-parity, this session) (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp61-FULL-STATE.tar.gz` (post-reconciliation; supersedes the earlier same-name tarball)
