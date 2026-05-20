@@ -1,5 +1,74 @@
 # Tarball history
 
+## cp59 — K.I.S.S. enforcement on brag list + FAQ natural categorized reading order (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp59-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries (unchanged count; **35 entries rewritten** to K.I.S.S. budget) · locale parity 2,825 × 10 = 28,250 · **48/48** standalone smokes PASS · **7/7 workspaces TS-clean (LL #52 16th consecutive)** · 13 structural defenses operational · FAQ entries reordered into 11 themed sections.
+
+**cp59 origin:** Ken pushback on cp58 — items 274 onward (asset additions) had gotten long-winded again, despite Memory rule "BRAG LIST entries: concise (~2-4 sentences), public-facing wins only." Plus Ken called out FAQ ordering: "make sure all FAQ points are in the proper sections of that document too, a natural, categorized, reading order. k.i.s.s. for grandma."
+
+### Task A — Brag list K.I.S.S. comprehensive sweep
+
+Initial audit: **36 entries over the 4-sentence / 80-word budget**, distributed across the file (not just 274+):
+- Truly egregious (>100 words): #19 (215w Double Ratchet), #122 (145w notifications), #134 (175w ADR list), #207 (139w QR codes), #219 (286w asset additions worst), #271 (100w USDT)
+- Asset-addition entries (the 274+ cohort Ken called out): #274-288 — 15 entries averaging ~180w each
+- Borderline 5-sentence with <70w: ~15 entries
+
+Comprehensive rewrite: **35 entries rewritten** to ≤4 sentences, plain language. Word-count drops were dramatic:
+- #19 (Double Ratchet): 215w → 96w
+- #122 (notifications): 145w → 83w
+- #134 (35 ADRs): 175w → 83w
+- #207 (QR codes): 139w → 82w
+- #219 (asset additions): 286w → 110w
+- #281 (DAI explainer): 289w → 66w
+- #287 (ETH explainer): 254w → 39w
+
+Two entries left intentionally as multi-sentence staccato (memory: "k.i.s.s. for grandma" allows rhetorical staccato):
+- #3 "No email required. No phone number or SMS. No identity verification..." — punchy emphasis pattern
+- #186 "No leverage. No margin. No futures. No options." — same pattern
+
+**Smoke-driven safety net**: `wiring-completeness-smoke` initially failed on entry #125 (featured-slot bidding) because the K.I.S.S. rewrite dropped two canonical phrases the smoke verifies as wiring claims ("Bidders see their own recent bids inline", "displaced bidder gets a push notification"). Fix: restored both phrases in the K.I.S.S. rewrite — 4 sentences, still under budget, claims preserved. **The wiring-completeness-smoke caught the regression before commit.**
+
+### Task B — FAQ natural categorized reading order
+
+`apps/web/src/lib/utils/faqIndex.ts:FAQ_KEYS` is the source of FAQ rendering order. Before cp59 it was **126 keys in chronological-accumulation order** — each new entry just appended over many checkpoints.
+
+cp59 reorganized into **11 natural sections with comment dividers** while preserving all 126 keys exactly:
+
+1. Welcome & basics (6 entries)
+2. Sign up & install (9)
+3. How to trade (11)
+4. Fees & economics (10)
+5. Chat & communication (13)
+6. Reputation & feedback (11)
+7. Privacy & key management (15)
+8. Security & anti-abuse (7)
+9. Per-asset — every tradable cryptocurrency (21, sub-divided into stablecoins / Bitcoin family / shielded chains / other major chains / asset-specific advice)
+10. Advanced topics (9)
+11. Run your own node / operators (13)
+
+The FAQ page renders in this order; the search index walks the same constant. Grandma reading top-to-bottom now gets a coherent flow: what is it → how do I join → how do I trade → what does it cost → … → what about each coin → advanced.
+
+**No key added or dropped** — i18n locale-parity smoke still passes (2,825 keys × 10 locales = 28,250).
+
+### Task C — Standing rule applied to cp59 itself
+
+Per cp58 lesson ("same work unit as code changes"), cp59 also handled:
+- **Mediakit regenerated** (brag list changed)
+- **llms-full.txt regenerated** (FAQ ordering changed)
+- **Full battery + LL #52** before commit (caught the #125 phrase regression)
+- **TARBALL.md + REVISIT-LIST.md + AUDIT-2026-05.md** updated
+
+### Lesson worth memory
+
+The brag list long-windedness recurs because each new asset-addition checkpoint feels like it has "more to explain" than the previous one. K.I.S.S. for grandma is the constraint — distill to: **what is it, what's the user benefit, one honest tradeoff, one Morphit-specific framing**. Anything more belongs in the per-asset FAQ or the privacy guide, not the brag list. The cp59 cleanup made every asset entry follow this template.
+
+The wiring-completeness-smoke is a SAFETY NET for K.I.S.S. rewrites — it pins "specific phrases must exist in the brag list" so a rewrite that's too aggressive (drops a claim) fails before commit. Going forward, every K.I.S.S. rewrite goes through this smoke as a gate.
+
+---
+
+# Tarball history
+
 ## cp58 — Make-good on cp54-cp57 propagation misses + matrix-bot canonical example (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp58-FULL-STATE.tar.gz`

@@ -1,5 +1,59 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp59 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp59
+
+- **Memory: BRAG LIST entries concise (~2-4 sentences), public-facing wins only.** Violated across many checkpoints by long-winded asset-addition entries. cp59 comprehensive sweep: 35 entries rewritten. Going forward, each brag entry passes the K.I.S.S. test: ≤4 sentences, plain language, ≤80 words.
+- **Memory #5 same-work-unit rule** carried into cp59 — mediakit regenerated, llms-full.txt regenerated, meta-docs updated as part of the same commit.
+- **Memory #13 VERIFY** applied to FAQ ordering — read the source code (`faqIndex.ts:FAQ_KEYS`) to confirm where order is determined before reordering.
+
+## STRUCTURAL DEFENSES — 13 OPERATIONAL (unchanged)
+
+1. **cp44 LL #52** workspace-typecheck — **16th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 14th consecutive
+3. cp48-O1 stand-in meta-assertion — 12th consecutive
+4. cp49-O2 handler-test-stand-in — 11th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 10th consecutive
+6. cp51-O4 category-b-descriptions-parity — 9th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 9th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 8th consecutive
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 7th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 6th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 5th consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 4th consecutive
+13. cp57-O11 env-example-schema-parity (bidirectional) — 3rd consecutive
+
+## CP59 LESSONS
+
+### Lesson #1 — K.I.S.S. is a recurring discipline issue
+The brag list long-windedness recurs because each new asset-addition checkpoint feels like it has "more to explain." The K.I.S.S. discipline must be re-applied at every checkpoint. Going forward, the K.I.S.S. template for any new brag entry: **what it is, what's the user benefit, one honest tradeoff, one Morphit-specific framing**. Anything more belongs in the FAQ or per-asset privacy guide.
+
+### Lesson #2 — Wiring-completeness-smoke is a K.I.S.S. safety net
+The smoke pins specific phrases that must exist in the brag list. K.I.S.S. rewrites that drop a canonical phrase get caught BEFORE commit (cp59 caught #125 inline). Every K.I.S.S. rewrite goes through this gate.
+
+### Lesson #3 — FAQ ordering matters; chronological accumulation is a smell
+126 FAQ entries had drifted into chronological-addition order over many checkpoints. cp59 reorganized into 11 themed sections with comment dividers. Grandma's reading flow now goes top-to-bottom coherently.
+
+**Mitigation for future checkpoints:** when adding a new FAQ entry, insert it into the appropriate themed section in `FAQ_KEYS`, NOT at the end.
+
+## CP60+ predicted hunting ground
+
+- **Other documentation files** that might have accumulated long-winded entries (OPERATIONS.md, RUN-A-MORPHIT-NODE.md, ADRs)
+- **`ops/bunkerweb/bunkerweb.env.example` + `ops/backup/backup.env.example`** parity audits (no Zod schema to check against; need a different parity model)
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — currently a commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (needs hardware)
+
+## Two parked external blockers (unchanged through cp42→cp59)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp58 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp58
