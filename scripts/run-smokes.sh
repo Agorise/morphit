@@ -118,6 +118,7 @@ SMOKES=(
 	"apps/web:operator-doc-per-asset-coverage-smoke"
 	"apps/web:what-is-asset-faq-native-locale-floor-smoke"
 	"apps/web:per-asset-key-family-native-locale-floor-smoke"
+	"apps/web:operator-doc-per-asset-config-example-coverage-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"
