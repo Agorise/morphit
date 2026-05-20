@@ -138,6 +138,16 @@ export const FAQ_KEYS = [
 	'why_dai_warning',
 	'which_dai_network',
 	'what_is_doge',
+	// Part 122 cp51 deep-deep N-1 closure — these three FAQ keys
+	// were missing despite their assets being trade-only since
+	// cp21 (BCH), cp24 (LTC), cp27 (DASH).  Pre-pattern drift:
+	// the "every new asset gets a what_is_<ticker> FAQ" convention
+	// was established at cp30 USDT, so the three older ones never
+	// got their FAQ.  Closed at cp51 alongside cp51-O5 structural
+	// defense (faq-per-tradable-asset-parity-smoke).
+	'what_is_bch',
+	'what_is_ltc',
+	'what_is_dash',
 	'what_is_zec',
 	'what_is_arrr',
 	'what_is_dcr',
@@ -514,6 +524,10 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	what_is_sol: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_eth: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_xrp: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
+	// Part 122 cp51 deep-deep N-1: BCH/LTC/DASH FAQ_RELATED parity
+	what_is_bch: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
+	what_is_ltc: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
+	what_is_dash: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
 };
 

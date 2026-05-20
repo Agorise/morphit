@@ -1,5 +1,57 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp51 — 2026-05-19.
+
+## Memory facts re-confirmed at top of cp51
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp51 doesn't touch this.
+- **Memory #13 STOP MISSING THINGS:** cp51 hunt of cp50-predicted scopes found cp51-D1 LOW (CATEGORY_B_DESCRIPTIONS lacks smoke) + cp51-N1 MEDIUM (BCH/LTC/DASH missing FAQs since cp21/24/27). Both closed inline.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** 3 new FAQs shipped EN content in all 10 locales as the baseline; non-EN natives can be added via i18n contributor pipeline (matches USDT/USDC/DAI/DOGE/etc. ship pattern).
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 7 OPERATIONAL (was 5 at cp50)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **8th consecutive checkpoint** clean
+2. **cp46 asset-payload-precision-parity-smoke** — 6th consecutive (61/61 scenarios)
+3. **cp48-O1 stand-in meta-assertion** in `asset-registry-smoke.ts` — 4th consecutive
+4. **cp49-O2 handler-test-stand-in-meta-assertion-smoke** — 3rd consecutive
+5. **cp50-O3 per-asset-rss-feed-parity-smoke** — 2nd consecutive
+6. **cp51-O4 category-b-descriptions-parity-smoke** — NEW at cp51 (ops-cli per-ticker table scope)
+7. **cp51-O5 faq-per-tradable-asset-parity-smoke** — NEW at cp51 (i18n FAQ coverage scope)
+
+## CP51 LESSON LEARNED — PRE-PATTERN-DRIFT FROM EARLY ASSET ADDITIONS
+
+The cp51-N1 finding (BCH/LTC/DASH missing FAQs) is **pre-pattern drift**: the convention "every new asset gets a what_is_<ticker> FAQ" was established at cp30 USDT, but the three trade-only assets added BEFORE cp30 never got their FAQ. This was undetectable until cp51's deep-deep walked the FAQ table explicitly.
+
+**Lesson:** when establishing a new convention, walk backwards through PREDECESSOR assets to apply it consistently, not just forwards. cp51-O5 closes this for the FAQ surface at the structural-defense layer.
+
+## CP51 PROGRESS ON CP50 PREDICTION
+
+cp50 predicted 5 untouched scopes for the recurring-class pattern. cp51 walked all 5:
+- **SQL fixtures**: clean
+- **e2e tests**: none in repo
+- **Snapshot generators**: clean (canonical-derived)
+- **ops-cli wizard prompts**: 2 findings, 2 defenses added
+- **env example commentary**: clean (cp49 work was thorough)
+
+## Cp52+ predicted hunting ground
+
+The pattern keeps finding new homes. Untouched scopes for cp52+ deep-deeps:
+- Documentation `.md` files referencing tickers (operator guides, FAQ glossaries) — many are LL #38 sibling-files but no SMOKE pins them
+- Matrix bot intents / commands (if bot has per-asset commands)
+- Indexer Prometheus metrics labels (per-asset metric series)
+- Any other generated artifacts (sitemap, robots.txt) that enumerate tickers
+- Locale-native EN-fallback coverage for the 3 newly-added FAQs (non-EN natives)
+
+## Two parked external blockers (unchanged through cp42→cp51)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp50 — 2026-05-19.
 
 ## Memory facts re-confirmed at top of cp50

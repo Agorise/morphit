@@ -1,5 +1,42 @@
 # Tarball history
 
+## cp51 — 94-task deep-deep continuation: cp51-O4 + cp51-O5 STRUCTURAL DEFENSES + 3 missing FAQs × 10 locales backfilled (2026-05-19)
+
+**Tarball:** `morphit-audit-2026-05-122-cp51-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = **28,250** (+60 from 3 new FAQs × q+a × 10) · **42/42** standalone smokes PASS (+2 new) · **7/7 workspaces TS-clean (LL #52 8th consecutive)** · 7 structural defenses operational · 31 jitter unit tests · STRIDE 1,945 lines · address-shape-overlap 87 · mediakit 45,772 B.
+
+**cp51 hunt scope:** continuing the cp50 prediction "cp51+ should look for [recurring-class pattern] in SQL fixtures, e2e tests, snapshot generators, ops-cli wizard prompts, env example commentary." Walked all five predicted scopes plus broader hunt.
+
+**Hunt results:**
+- SQL surface: clean — `asset TEXT NOT NULL` with app-layer validation, no CHECK/ENUM drift.
+- e2e tests: none in repo.
+- Snapshot generators: native-translations-snapshot is rebuilt from canonical, no hardcoded subset.
+- ops-cli wizard prompts: **2 findings closed inline + 2 structural defenses added.**
+- env example commentary: clean — cp49 work correctly extended all enumerations.
+
+**Findings closed inline:**
+- **cp51-D1 LOW** — `CATEGORY_B_DESCRIPTIONS` in `apps/ops-cli/src/init/steps.ts:1484` had no parity smoke. All 13 Category-B descriptions currently present, but no enforcement. Future asset additions could silently fall through to the generic "Trade-only asset" placeholder. **Closed by cp51-O4 structural defense.**
+- **cp51-N1 MEDIUM** — BCH (cp21), LTC (cp24), DASH (cp27) had **no `what_is_<asset>` FAQ entries** in any of 10 locales. The "every new asset gets a FAQ" pattern was established at cp30 USDT — the three older Category-B assets predated it. **3 FAQs backfilled × 10 locales = 60 new strings; FAQ_KEYS + FAQ_RELATED updated.** **Closed by cp51-O5 structural defense.**
+
+**NEW structural defenses (2 this checkpoint):**
+- **cp51-O4 `category-b-descriptions-parity-smoke`** — pins every canonical Category-B ticker to have a non-trivial description in `CATEGORY_B_DESCRIPTIONS`. M-118 verified.
+- **cp51-O5 `faq-per-tradable-asset-parity-smoke`** — walks all 10 locales + faqIndex.ts; pins `what_is_<ticker>` FAQ presence for every tradable asset except BTC/XMR (which are documented via `what_is_morphit` + privacy framework). M-119 verified.
+
+**Recurring class scope progression (5 defenses across 4 checkpoints):**
+| Defense | Scope | Checkpoint |
+| --- | --- | --- |
+| cp48-O1 | Standalone smoke scripts (stand-in becomes valid) | cp48 |
+| cp49-O2 | Vitest unit tests (asset_invalid stand-in) | cp49 |
+| cp50-O3 | HTTP route handler regex (per-asset RSS feed) | cp50 |
+| **cp51-O4** | **ops-cli per-ticker hardcoded tables** | **cp51** |
+| **cp51-O5** | **per-asset i18n FAQ key coverage** | **cp51** |
+
+cp51 added TWO defenses in one deep-deep — both surfaced by the predicted "ops-cli wizard prompts" scope. Cadence may shift from "1 per 2 deep-deeps" to "as many as the deep-deep surfaces" if a particularly productive checkpoint catches multiple scopes at once.
+
+---
+
+# Tarball history
+
 ## cp50 — 94-task deep-deep on cp49 + cp50-O3 structural defense (RSS-feed scope) + jitter unit test coverage (2026-05-19)
 
 **Tarball:** `morphit-audit-2026-05-122-cp50-FULL-STATE.tar.gz`
