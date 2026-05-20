@@ -863,12 +863,13 @@
 		<!-- Q5 — Amount-jitter toggle.  Defeats amount-correlation
 		     attacks on transparent chains (any 3rd party can match
 		     order book + chain to identify the trade).  XMR shipped
-		     this in cp3 with deep Monero-specific copy (Sally finding
-		     L13 — Part 68 — explicit ON/OFF state copy).  cp26
-		     extended to BTC/BCH/LTC (satoshi precision) and BLURT
-		     (milliblurt precision).  USDT excluded — its privacy
-		     issue is centralization (Tether freeze), not amount-
-		     correlation; jitter doesn't address the actual threat. -->
+		     this in cp3 with deep Monero-specific copy
+		     (Sally finding L13 — Part 68 — explicit ON/OFF state
+		     copy).  cp26 extended to BTC/BCH/LTC (satoshi precision)
+		     and BLURT (milliblurt precision).  USDT excluded — its
+		     privacy issue is centralization (Tether freeze), not
+		     amount-correlation; jitter doesn't address the actual
+		     threat. -->
 		{#if jitterEligible && trimmedAmount.length > 0 && amountLooksValid}
 			{@const unit = method.toUpperCase()}
 			{@const labelKey = method === 'xmr'
