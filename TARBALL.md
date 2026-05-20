@@ -1,5 +1,74 @@
 # Tarball history
 
+## cp66 — NEW DEFENSE O-16: cross-document value-invariants registry (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp66-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · **293 brag entries** (up from 292) · locale parity 2,825 × 10 = 28,250 · **3886 scenarios pass / 0 runners failed** (was 3874/0 at cp65, +12 from new smoke) · **7/7 workspaces TS-clean (LL #52 23rd consecutive)** · **18 structural defenses operational** (up from 17) · TRIPLE-PULSE STABLE.
+
+**cp66 origin:** Battery was clean at cp65. Next-highest-leverage move from the hunting ground was the value-cross-reference invariant hunt deferred from cp62-65 — generalizing cp61-O14's parity-model class into a registry that catches the same bug class across N invariants instead of one.
+
+### What cp66-O16 (cross-document-value-invariants-smoke) checks
+
+Registry-driven: each invariant has a SOURCE OF TRUTH (file + extraction regex) and a list of CONSUMERS (each with its own regex). The runner walks the registry, extracts canonical from source, asserts every consumer matches.
+
+Five invariants ship at launch:
+
+1. **`postgres_db_name`** (`morphit_indexer`) — defined by `ops/postgres/init.sql`'s `CREATE DATABASE`; consumed by both `*.env.example` files' `DATABASE_URL` path + `ops/ansible/group_vars/all.yml`'s `postgres_indexer_db`. Drift class: rename DB in init.sql, forget env examples → fresh deploy fails connection on first boot.
+
+2. **`postgres_user_name`** (`morphit_indexer`) — defined by `init.sql`'s `CREATE ROLE`; consumed by `DATABASE_URL` user component + ansible `postgres_indexer_user`. Drift class: same as above for the role/user name.
+
+3. **`postgres_port`** (`5432`) — defined by `ansible/group_vars/all.yml`'s `postgres_port` (the canonical operator default); consumed by both env.example DATABASE_URLs. Drift class: operator-chose-non-default-port Ansible role with stale env example → connection refused.
+
+4. **`treasury_fee_account`** (`morphit-fees`) — defined by `apps/indexer/src/config/index.ts`'s Zod default for `MORPHIT_INDEXER_FEE_RECIPIENT`; consumed by operator-facing handler docs (`operatorAccountBalanceScanner.ts` treasury-context line, `strangerFee.ts` transfer destination). Drift class: rename treasury account in code but forget docs → operators reading the source for understanding find conflicting names.
+
+5. **`indexer_bind_port`** (`4000`) and **`relay_bind_port`** (`4001`) — defined by ansible/group_vars; consumed by `ops/bunkerweb/bunkerweb.env.example` `REVERSE_PROXY_HOST_X` URLs. Drift class: change Ansible bind port for indexer but leave BunkerWeb env reverse-proxying the old port → 502 Bad Gateway on every request. Exact cp61-O14 sibling case.
+
+### Mutation tests (4)
+
+- **M-130** drift DB name in `indexer.env.example` → smoke fires "consumer ops/env/indexer.env.example matches canonical" with `morphit_other` vs `morphit_indexer`.
+- **M-131** drift `postgres_port` in ansible → both consumer env.examples fire (correct: ONE canonical, TWO drifted consumers).
+- **M-132** drift `treasury_fee_account` default in indexer config → both doc consumers fire.
+- **M-133** drift bunkerweb `REVERSE_PROXY_HOST_2` port → indexer_bind_port consumer fires.
+
+All four restore cleanly to 12 passed / 0 failed.
+
+### Adding new invariants
+
+The smoke is **data-driven**: appending to the `INVARIANTS` array (each entry is a `{ name, description, source: Extraction, consumers: Extraction[] }`) is the only code change required. No runner-logic changes. Future cross-document values (relay healthcheck port, matrix-bot listener port, BunkerWeb network CIDR if cp61-O14 absorbs into this generalized smoke, etc.) slot in as data.
+
+### Final cp66 state metrics
+
+- 16 tradable assets / 35 ADRs / **293 brag entries** (+1)
+- **3886 scenarios pass / 0 runners failed** (was 3874/0; +12 from new smoke's 12 scenarios)
+- 7/7 workspaces TS-clean (LL #52 23rd consecutive)
+- **18 structural defenses operational** (was 17; +1 = cp66-O16)
+- 1 new smoke file: `apps/web/scripts/cross-document-value-invariants-smoke.ts`
+- 1 runner registration in `scripts/run-smokes.sh`
+- 1 new brag entry (#232) within K.I.S.S. budget (≤4 sentences, ≤100 words)
+- Mediakit regen (93,765 bytes)
+- TRIPLE-PULSE STABLE (3886/0 × 3)
+
+### Lessons
+
+1. **Value-cross-reference parity is a recurring bug class deserving a generalized registry.** cp61-O14 caught ONE drift (CIDR); cp66-O16 generalizes the model so the NEXT drift in DB name, port, account name, or any future cross-doc value is caught the same way. The registry pattern scales.
+2. **Each consumer regex must be SCOPED to the right semantic context when the consumer file contains multiple similar values.** Treasury account file mentions `@morphit-relay` AND `@morphit-fees`. Initial regex grabbed the first; tightened to "...typically accumulates" / "to=@..." patterns picks the right one.
+3. **Mutation testing reveals smoke quality.** Before mutation tests the smoke "looked right"; running 4 deliberate-drift mutations confirmed each invariant has a specific firing diagnostic with the right file + value pair named.
+
+### Campaign-arc summary (cp61 → cp66)
+
+| Checkpoint | Battery | Defenses | Note |
+|---|---|---|---|
+| cp61 baseline (curated subset) | 52/52 hidden 15 | 17 | Loop ran 52 of 183 |
+| cp62 honest accounting | 3611 / 8 chronic | 17 | 7 format + 1 path fix |
+| cp63 \$lib unblock | 3848 / 2 chronic | 17 | Unified tsconfig + 3 real bugs |
+| cp64 chronic-scope reduction | 3870 / 1 (130 findings) | 17 | Sally L13 + Memory #29 split + 99 invariants |
+| cp65 chronic closure | 3874 / 0 | 17 | 130 native translations to es/fr/de |
+| **cp66 new defense** | **3886 / 0** | **18** | Cross-document value-invariants registry |
+
+---
+
+# Tarball history
+
 ## cp65 — 0 RUNNERS FAILED: 130 prose strings natively translated to es/fr/de (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp65-FULL-STATE.tar.gz`

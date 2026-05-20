@@ -124,6 +124,7 @@ SMOKES=(
 	"apps/web:faq-keys-themed-section-smoke"
 	"apps/web:non-zod-env-example-consumer-parity-smoke"
 	"apps/web:bunkerweb-cidr-cross-reference-smoke"
+	"apps/web:cross-document-value-invariants-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"

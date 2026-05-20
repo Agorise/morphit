@@ -1,5 +1,69 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp66 — 2026-05-20.  **18 STRUCTURAL DEFENSES OPERATIONAL · BATTERY 3886/0 TRIPLE-PULSE STABLE.**
+
+## Memory facts re-confirmed at top of cp66
+
+- **Memory: K.I.S.S. budget for brag list** (≤4 sentences, ≤100 words) is now enforced including the bolded TITLE counting as one sentence. cp66's new entry had to be compressed from 5 to 4 effective sentences (3 prose + title). Future entries: budget the title.
+- **Memory: WIRE EVERYTHING — register, test, document in same work unit.** cp66's new smoke shipped with: (a) file created, (b) registered in `scripts/run-smokes.sh`, (c) 4 mutation tests verifying it fires correctly, (d) brag-list public-facing entry, (e) mediakit regen. Same-turn discipline maintained.
+
+## STRUCTURAL DEFENSES — 18 OPERATIONAL
+
+| # | Defense | Status |
+|---|---|---|
+| 1 | cp44 LL #52 workspace-typecheck | 23rd consec at cp66 |
+| 2-7 | cp46-cp51 per-asset coverage smokes | held |
+| 8 | cp52-O6 ansible-env-template-required-vars | held |
+| 9 | cp53-O7 operator-doc-per-asset-coverage | held |
+| 10 | cp54-O8 what-is-asset-faq-native-locale-floor | held |
+| 11 | cp55-O9 per-asset-key-family-native-locale-floor | held |
+| 12 | cp56-O10 operator-doc-per-asset-config-example-coverage | held |
+| 13 | cp57-O11 env-example-schema-parity | held |
+| 14 | cp60-O12 brag-list-kiss-budget | held |
+| 15 | cp60-O13 faq-keys-themed-section | held |
+| 16 | cp61-O14 bunkerweb-cidr-cross-reference | held |
+| 17 | cp61-O15 non-zod-env-example-consumer-parity | held |
+| 18 | **cp66-O16 cross-document-value-invariants** | **NEW cp66** |
+
+## BATTERY STATE — clean and stable
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS | 3886 | up from 3874 (cp65); +12 from new smoke |
+| Runners FAILED | 0 | clean since cp65 |
+| Workspaces TS-clean (LL #52) | 7/7 | 23rd consecutive |
+| Triple-pulse stable | ✓ | 3886/0 × 3 |
+| Brag entries | 293 | +1 for cp66-O16 (#232) |
+
+## CP66 LESSONS
+
+### Lesson #1 — Registry-driven structural defenses scale
+cp61-O14 was hardcoded to one CIDR invariant. cp66-O16 generalizes to a registry of N invariants. Next time a cross-document value is added to the system (relay healthcheck port, matrix-bot listener, …), it slots in as data without changing runner logic. The pattern is "find the bug class, encode it as data, write the runner once."
+
+### Lesson #2 — Consumer regex must be context-scoped when a file has multiple similar values
+Treasury account file had both `@morphit-relay` and `@morphit-fees`. Initial naive `@(morphit-\w+)` regex always grabbed the first. Fixed by scoping to semantic context: "typically accumulates" for treasury (which accumulates), "to=@" for fee-transfer destination. Generalizable principle: consumer extraction must be uniquely identifying for THE invariant in question.
+
+### Lesson #3 — Mutation testing is what makes a smoke trustworthy
+4 mutations (M-130 through M-133) before declaring cp66-O16 done. Each one drifts ONE document; smoke must fire on that exact one with the right diagnostic. Without mutation tests, a smoke that says "all pass" might just be missing the failure modes — silently green.
+
+## CP67+ predicted hunting ground
+
+- **More value-cross-reference invariants** — relay healthcheck port (currently a TODO env var), matrix-bot healthcheck port, BunkerWeb network CIDR (cp61-O14 could absorb into cp66-O16's registry), default ops-cli init port hints (5432 in samples should match canonical). Each one extends the registry.
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs MEANT to be detailed but might have overstuffed entries
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth** — commented stub
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (hardware-blocked)
+- **Forgejo runner standup** to unblock v1.0.0-beta.1 release ceremony
+
+## Two parked external blockers (unchanged through cp42→cp66)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp65 — 2026-05-20.  **FIRST CLEAN BATTERY (3874/0) IN THE AUDIT CAMPAIGN.**
 
 ## Memory facts re-confirmed at top of cp65
