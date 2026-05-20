@@ -3772,8 +3772,8 @@
 		"no_wallet_recommendation": "Morphit 不推薦特定的錢包。每種資產列出的選項只是支持該資產的知名示例；請自行評估它們（開源代碼？積極開發？良好的安全聲譽？）。官方錢包或使用最多的錢包不一定是最私密的。",
 		"fresh_address_advice": {
 			"subaddress": "Monero 使用**子地址**——從你的主密鑰派生但在鏈上不可關聯。在 Cake Wallet、Feather、官方 Monero GUI 或任何現代 Monero 錢包中為每次交易生成一個新的子地址（子地址自 2018 年引入以來一直是標準）。",
-			"hd-derived": "This chain uses transparent addresses with no native stealth. The standard practice: use a Hierarchical Deterministic (BIP-32) wallet that derives a new receive address per request. Most modern wallets do this automatically. The cost of address reuse is severe — every trade you accept at the same address builds a public record of your activity.",
-			"account-reuse": "This chain is account-based — your account name is your address. Fresh-account-per-trade is not practical (each new account costs chain resources). Accept that this asset has the highest amount-correlation risk on Morphit. For high-value trades, consider using an alt-account dedicated to that trade."
+			"hd-derived": "此鏈使用沒有原生隱身功能的透明地址。標準做法：使用分層確定性（BIP-32）錢包，每次請求都派生一個新的接收地址。大多數現代錢包會自動執行此操作。地址複用的代價非常嚴重——你在同一地址接受的每筆交易都會建立你活動的公開記錄。",
+			"account-reuse": "此鏈是基於賬戶的——你的賬戶名就是你的地址。每筆交易使用新賬戶不切實際（每個新賬戶都消耗鏈資源）。接受這種資產在 Morphit 上具有最高的金額關聯風險。對於高價值交易，請考慮使用專用於該交易的備用賬戶。"
 		},
 		"opt_in_tech": {
 			"mweb": {
@@ -3798,7 +3798,7 @@
 			},
 			"shielded-pools": {
 				"name": "Shielded pools (Sapling + Orchard)",
-				"explain": "Zcash's protocol-level privacy. Shielded transactions (zs1 Sapling, u1 Unified Address) use zero-knowledge proofs (zk-SNARKs) to hide sender, recipient, and amount on chain. Sapling is the established shielded pool (since 2018); Orchard is the newer pool (Network Upgrade 5, 2022) accessed through Unified Addresses. Per-address — recipients pick z/u-addr for shielded transactions or t-addr for transparent. Both transparent and shielded are first-class on the protocol. Wallets that fully support shielded sends: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk Wallet (mobile, Sapling). Older wallets may only support transparent (t-addr) sends, so confirm your counterparty's wallet supports the address type you intend to use."
+				"explain": "Zcash 的協議級私隱。Shielded 交易（zs1 Sapling、u1 Unified Address）使用零知識證明（zk-SNARKs）在鏈上隱藏發送方、接收方和金額。Sapling 是成熟的 shielded 池（自 2018 年）；Orchard 是較新的池（Network Upgrade 5，2022 年），通過 Unified Addresses 訪問。按地址——接收方為 shielded 交易選擇 z/u-addr，或為透明交易選擇 t-addr。透明和 shielded 在協議中都是一等公民。完全支持 shielded 發送的錢包：Zashi（移動，Electric Coin Co 官方，Sapling + Orchard）、Zecwallet（桌面，Sapling）、Nighthawk Wallet（移動，Sapling）。較舊的錢包可能僅支持透明（t-addr）發送，因此請確認對方的錢包支持你打算使用的地址類型。"
 			},
 			"csppmix": {
 				"name": "CoinShuffle++ (CSPP) 混合",
@@ -3875,9 +3875,9 @@
 			},
 			"zec": {
 				"one_line": "透明與 shielded 地址類型共存；接收方按地址選擇。",
-				"intro": "Zcash launched in 2016 as the first deployment of zk-SNARK-based shielded transactions in a cryptocurrency. The chain supports two address families: transparent (t1/t3) which behave like Bitcoin's legacy addresses with publicly visible amounts, and shielded (zs1 Sapling, u1 Unified Address bundling Orchard receivers) which use zero-knowledge proofs to hide sender, recipient, and amount on chain. Per-trade, the recipient picks the address type that matches their preferred posture. Both are first-class on the protocol.",
+				"intro": "Zcash 於 2016 年發布，是加密貨幣中首次部署基於 zk-SNARK 的 shielded 交易。該鏈支持兩個地址族：透明（t1/t3）的行為類似於 Bitcoin 的舊地址，金額公開可見；shielded（zs1 Sapling、捆綁 Orchard 接收方的 u1 Unified Address）使用零知識證明在鏈上隱藏發送方、接收方和金額。每筆交易中，接收方選擇與其偏好態勢相匹配的地址類型。兩者在協議中都是一等公民。",
 				"meta_description": "Morphit 上 Zcash 交易的私隱實踐：在透明和 shielded 地址之間選擇（t-addr、z-addr、u-addr）、錢包建議以及每個私隱池的作用。",
-				"caveats": "Shielded-to-shielded transactions hide sender, recipient, and amount on chain. Mixed transactions (shielded-to-transparent or transparent-to-shielded) reveal one side. Transparent-to-transparent reveals both. If your goal is to minimize linkability, use a shielded address (zs1 or u1) and ask the counterparty to send from a shielded address. Wallet support varies: Zashi (mobile, official from Electric Coin Co, Sapling + Orchard), Zecwallet (desktop, Sapling), Nighthawk (mobile, Sapling) — not every wallet supports every address type, so verify your counterparty's wallet handles the address type you publish before sharing it."
+				"caveats": "shielded-to-shielded 交易在鏈上隱藏發送方、接收方和金額。混合交易（shielded-to-transparent 或 transparent-to-shielded）暴露一方。Transparent-to-transparent 暴露雙方。如果你的目標是最小化關聯性，請使用 shielded 地址（zs1 或 u1）並要求對方從 shielded 地址發送。錢包支持各不相同：Zashi（移動，Electric Coin Co 官方，Sapling + Orchard）、Zecwallet（桌面，Sapling）、Nighthawk（移動，Sapling）——並非每個錢包都支持每種地址類型，因此在分享你發布的地址之前，請驗證對方的錢包處理你發布的地址類型。"
 			},
 			"arrr": {
 				"one_line": "通過 Sapling zk-SNARK 池實現的鏈級 shielded 交易；每次轉賬按構造隱藏發送者、接收者和金額。",
