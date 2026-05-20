@@ -1,5 +1,72 @@
 # Tarball history
 
+## cp60 — Anti-recurrence structural defenses for K.I.S.S. + FAQ ordering (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp60-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 292 brag entries · locale parity 2,825 × 10 = 28,250 · **50/50** standalone smokes PASS (+2 cp60-O12 + cp60-O13) · **7/7 workspaces TS-clean (LL #52 17th consecutive)** · **15 structural defenses operational** (was 13 at cp59; +2).
+
+**cp60 origin:** cp59 fixed the brag-list long-windedness and FAQ chronological-accumulation drift retroactively. Per the cp59 Lesson #1 ("K.I.S.S. is a recurring discipline issue"), retroactive fixes alone don't prevent recurrence. cp60 adds two structural defenses to fail CI before the same drift accumulates again.
+
+### NEW STRUCTURAL DEFENSE cp60-O12 — brag-list K.I.S.S. budget
+
+`apps/web/scripts/brag-list-kiss-budget-smoke.ts` (LL #62). Enforces the Memory rule "BRAG LIST entries: concise (~2-4 sentences), public-facing wins only" mechanically.
+
+**Budget:**
+- ≤4 sentences (memory: "~2-4 sentences")
+- ≤100 words (chosen as the line where prose becomes essay)
+
+**STACCATO_ALLOWLIST** (3 entries): `#3`, `#12`, `#186` use intentional multi-sentence punchy emphasis ("No leverage. No margin. No futures. No options.") — K.I.S.S. by design, exempt from sentence-count budget but still subject to word-count budget.
+
+**M-126 verified**: appending 200 words of extra prose to entry #5 fires the smoke with "#5: 186w (Send a chat message to a stranger for ~$0.01…)".
+
+### NEW STRUCTURAL DEFENSE cp60-O13 — FAQ themed-section structure
+
+`apps/web/scripts/faq-keys-themed-section-smoke.ts` (LL #63). Enforces that `FAQ_KEYS` retains the cp59 themed-section structure mechanically.
+
+**Enforcement:**
+1. **Exactly 11 section dividers** (opinionated structure pin — adding a section requires updating the smoke, which is a useful forcing function)
+2. **Sequential numbering** (1, 2, 3, ..., 11)
+3. **Every section has at least one key**
+4. **No orphan keys** (every key under a themed section divider)
+
+**M-127 verified**: deleting the section-11 divider line fires "found 10. The file is meant to be exactly 11 themed sections."
+
+### Why prevention smokes matter
+
+The cp59 K.I.S.S. drift accumulated over MANY checkpoints (15 asset-addition entries each over budget). Without a budget gate, each new asset addition added ~200 words of well-intentioned-but-bloated explanatory text. Ken's "REMEMBER, STOP DOING THAT!!!" was the third or fourth time the pattern was called out across many checkpoints.
+
+Structural defenses mechanize the discipline. cp60-O12 says "if you write 100+ words for one brag entry, CI fails and you have to trim it." cp60-O13 says "if you append a new FAQ key without putting it in a themed section, CI fails."
+
+Both smokes were a single mutation test away from being caught at design time — M-127 initially didn't fire because the smoke was too permissive (MIN_SECTIONS = 8 allowed 1-3 sections to be deleted silently). Tightened to EXACTLY-11. **Mutation testing is the load-bearing discipline for smoke design.**
+
+### Final cp60 state metrics
+
+- 16 tradable assets / 35 ADRs / 292 brag entries (unchanged)
+- 50/50 standalone smokes PASS (+2 cp60-O12 + cp60-O13)
+- 31 vitest unit tests (cp50 carryover)
+- 7/7 workspaces TS-clean (LL #52 17th consecutive)
+- Locale parity 2,825 × 10 = 28,250 (unchanged)
+- 15 structural defenses operational (was 13 at cp59; +cp60-O12 + cp60-O13)
+
+### Recurring class scope progression (15 defenses across 13 checkpoints):
+1. cp48-O1: standalone smoke scripts
+2. cp49-O2: vitest unit tests
+3. cp50-O3: HTTP route handler regex
+4. cp51-O4: ops-cli per-ticker tables
+5. cp51-O5: per-asset i18n FAQ key coverage
+6. cp52-O6: Ansible env-template required-vars
+7. cp53-O7: operator doc per-asset coverage (totally absent)
+8. cp54-O8: what_is_<asset> FAQ native-locale floor
+9. cp55-O9: multi-family per-asset native-locale floor (registry)
+10. cp56-O10: operator doc per-asset CONFIG EXAMPLE coverage (shallow)
+11. cp57-O11: env-example ↔ schema parity (bidirectional)
+12. cp60-O12: brag-list K.I.S.S. budget (anti-recurrence)
+13. cp60-O13: FAQ themed-section structure (anti-recurrence)
+
+---
+
+# Tarball history
+
 ## cp59 — K.I.S.S. enforcement on brag list + FAQ natural categorized reading order (2026-05-20)
 
 **Tarball:** `morphit-audit-2026-05-122-cp59-FULL-STATE.tar.gz`

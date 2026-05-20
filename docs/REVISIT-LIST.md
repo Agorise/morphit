@@ -1,5 +1,59 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp60 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp60
+
+- **Memory: K.I.S.S. for grandma applies to brag list and grandma-facing surfaces**. cp60 makes this mechanical via cp60-O12 smoke. FAQ content can be longer (power-user learning), but FAQ KEY ordering is mechanical via cp60-O13.
+- **Memory #5 same-work-unit rule** carried into cp60 — mediakit regenerated in same commit, full battery + LL #52 + meta-docs all touched.
+- **Memory #13 VERIFY** — applied to mutation tests. M-127 initially didn't fire because the smoke's MIN_SECTIONS was too permissive; tightened to EXACTLY-11. **Mutation tests catch implementer-missed bugs.**
+
+## STRUCTURAL DEFENSES — 15 OPERATIONAL (was 13 at cp59; +2)
+
+1. **cp44 LL #52** workspace-typecheck — **17th consecutive** checkpoint clean
+2. cp46 asset-payload-precision-parity — 15th consecutive
+3. cp48-O1 stand-in meta-assertion — 13th consecutive
+4. cp49-O2 handler-test-stand-in — 12th consecutive
+5. cp50-O3 per-asset-rss-feed-parity — 11th consecutive
+6. cp51-O4 category-b-descriptions-parity — 10th consecutive
+7. cp51-O5 faq-per-tradable-asset-parity — 10th consecutive
+8. cp52-O6 ansible-env-template-required-vars — 9th consecutive
+9. cp53-O7 operator-doc-per-asset-coverage (totally absent) — 8th consecutive
+10. cp54-O8 what-is-asset-faq-native-locale-floor — 7th consecutive
+11. cp55-O9 per-asset-key-family-native-locale-floor (registry) — 6th consecutive
+12. cp56-O10 operator-doc-per-asset-config-example-coverage (shallow) — 5th consecutive
+13. cp57-O11 env-example-schema-parity (bidirectional) — 4th consecutive
+14. **cp60-O12 brag-list-kiss-budget — NEW**
+15. **cp60-O13 faq-keys-themed-section — NEW**
+
+## CP60 LESSONS
+
+### Lesson #1 — Retroactive cleanup is not prevention
+cp59 fixed 35 long-winded brag entries + reorganized 126 FAQ keys. Without a mechanical gate, the same drift accumulates again across the next few checkpoints. cp60 adds the gates.
+
+### Lesson #2 — Mutation tests with TIGHT thresholds catch smoke design bugs
+M-127's first attempt didn't fire because MIN_SECTIONS = 8 was too permissive — deleting one of 11 sections still left 10 sections (≥ 8 minimum). Tightened to EXACTLY-11 sections. Lesson: if a mutation test doesn't fire, the smoke is too lenient — tighten the threshold until the mutation fires.
+
+### Lesson #3 — Anti-recurrence smokes change reviewer behavior
+With cp60-O12, when a future checkpoint authors a new brag entry, CI shows "your entry is over budget — trim to ≤4 sentences ≤100 words" BEFORE the author sees the reviewer's pushback. The smoke is the first reader.
+
+## CP61+ predicted hunting ground
+
+- **OPERATIONS.md / RUN-A-MORPHIT-NODE.md / ADR length audit** — operator docs are MEANT to be detailed, but might have entries that are overstuffed even for that audience
+- **`ops/bunkerweb/bunkerweb.env.example` + `ops/backup/backup.env.example`** parity audits (no Zod schema; need different parity model — perhaps a comment-block-presence test)
+- **`MORPHIT_RELAY_PASSPHRASE_FILE` documentation depth**
+- **it/pl/ru/fa/zh-CN/zh-HK community-supplied native translations** (long-term backlog)
+- **Ansible playbook idempotency claims** verification (needs hardware)
+
+## Two parked external blockers (unchanged through cp42→cp60)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp59 — 2026-05-20.
 
 ## Memory facts re-confirmed at top of cp59
