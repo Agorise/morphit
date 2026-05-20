@@ -1,5 +1,59 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp53 — 2026-05-20.
+
+## Memory facts re-confirmed at top of cp53
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp53 doesn't touch this.
+- **Memory #13 NEVER ASSUME, ALWAYS VERIFY:** Ken's explicit directive to "do not assume, VERIFY". Caught self mid-claim about BCH/LTC/DASH FAQ deep-links — went back to the code, verified the tooltip code, found cp51 had added FAQs but NEVER wired the tooltip faqKey. Closed the gap. Memory #13 actively prevented a stale-by-creation claim.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** N/A (cp53 didn't touch i18n).
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 9 OPERATIONAL (was 8 at cp52)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **10th consecutive** checkpoint clean
+2. **cp46 asset-payload-precision-parity-smoke** — 8th consecutive (61 scenarios)
+3. **cp48-O1** stand-in meta-assertion — 6th consecutive
+4. **cp49-O2** handler-test-stand-in — 5th consecutive
+5. **cp50-O3** per-asset-rss-feed-parity — 4th consecutive
+6. **cp51-O4** category-b-descriptions-parity — 3rd consecutive
+7. **cp51-O5** faq-per-tradable-asset-parity — 3rd consecutive
+8. **cp52-O6** ansible-env-template-required-vars — 2nd consecutive
+9. **cp53-O7** operator-doc-per-asset-coverage — NEW at cp53
+
+## CP53 LESSON LEARNED — MULTI-CHECKPOINT WORK LEAVES FOLLOW-ON GAPS
+
+cp51 backfilled 3 missing FAQs but never updated:
+- The tooltip code that would deep-link to those FAQs (cp53-N1 code fix)
+- The GRANDMA-FRIENDLY-INVESTIGATION doc claim about which chips are tooltip-only
+
+The cp51 work was technically complete at the data layer (FAQ entries + FAQ_KEYS + FAQ_RELATED + structural defense smoke), but the USER-VISIBLE consumer (tooltip deep-link) and the DOCUMENTATION (GRANDMA-FRIENDLY status claim) were left in stale state. **Lesson: when backfilling a data layer, walk forward to every CONSUMER of that data layer and verify each one reflects the new state.** Per-asset structural defense smokes for code consumers (cp48-O1 through cp52-O6) didn't catch this because the missing-faqKey case was a "data present, consumer ignores it" pattern — neither smoke layer detected it.
+
+## CP53 PROGRESS ON CP51 + CP52 PREDICTIONS
+
+cp51/cp52 predicted: "documentation .md ticker references (LL #38 sibling-files without smoke pinning)".
+
+**cp53 walked it.** Found 14 doc drift findings + 1 code follow-on. Closed all inline. Added cp53-O7 structural defense closing the per-asset documentation coverage scope.
+
+## Cp54+ predicted hunting ground (carried forward)
+
+- Matrix bot per-asset commands (if bot has any)
+- Indexer Prometheus per-asset metric labels
+- Generated artifacts (sitemap.xml, robots.txt) that enumerate tickers
+- Locale-native EN-fallback coverage for the 3 cp51-backfilled FAQs
+- Ansible playbook full env-var surface (not just required), idempotency claims
+- fresh-VM dry-run validation, ansible-lint in CI
+- DEEPER per-asset doc coverage smoke that catches SHALLOW mentions (e.g. "asset mentioned once in headline but skipped in config example")
+
+## Two parked external blockers (unchanged through cp42→cp53)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp52 — 2026-05-19.
 
 ## Memory facts re-confirmed at top of cp52

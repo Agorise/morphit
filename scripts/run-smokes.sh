@@ -115,6 +115,7 @@ SMOKES=(
 	"apps/web:native-translations-floor-smoke"
 	"apps/web:i18n-key-coverage-smoke"
 	"apps/web:faq-per-tradable-asset-parity-smoke"
+	"apps/web:operator-doc-per-asset-coverage-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"

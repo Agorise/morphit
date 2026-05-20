@@ -1874,7 +1874,7 @@ SPL, BEP-20), and can buy/sell BCH (Bitcoin Cash, single-network
 mainnet only), LTC (Litecoin, single-network mainnet only), and
 DASH (Dash, single-network mainnet only, with optional wallet-side
 PrivateSend mixing).  All listing fees are paid in BLURT, BTC, or
-XMR — never USDT, never USDC, never DAI, never BCH, never LTC, never DASH, never DOGE (the
+XMR — never USDT, never USDC, never DAI, never BCH, never LTC, never DASH, never DOGE, never ZEC, never ARRR, never DCR, never SOL, never ETH, never XRP (the
 `fee_method` enum is wire-format-frozen at BLURT/BTC/XMR per
 memory #23 and ADR-0011).
 
@@ -1903,9 +1903,17 @@ Reasonable positions for an operator:
    that asset at the wizard prompt; the wizard emits e.g.
    `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`,
    `MORPHIT_INDEXER_DISABLED_ASSETS="USDC"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="DAI"`,
    `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`,
-   `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`, or
-   `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="ZEC"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="ARRR"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="DCR"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="SOL"`,
+   `MORPHIT_INDEXER_DISABLED_ASSETS="ETH"`, or
+   `MORPHIT_INDEXER_DISABLED_ASSETS="XRP"`.
 
    Equivalent post-deploy env-file edit:
 
@@ -1964,19 +1972,22 @@ MORPHIT_INDEXER_DISABLED_ASSETS="XRP"
 
 3. **Refuse multiple assets** — pick "n" at multiple wizard
    prompts; the wizard alphabetizes and emits e.g.
-   `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DASH,LTC,USDC,USDT"`.
+   `MORPHIT_INDEXER_DISABLED_ASSETS="ARRR,BCH,DCR,DOGE,ZEC"`
+   (or any subset of the 13 Category-B trade-only tickers).
 
    Equivalent post-deploy env-file edit:
 
    ```bash
-   # Refuse BCH + LTC (BTC + XMR + BLURT + USDT + USDC + DAI + DASH + DOGE only)
+   # Refuse BCH + LTC (keeps BTC + XMR + BLURT + USDT + USDC
+   # + DAI + DASH + DOGE + ZEC + ARRR + DCR + SOL + ETH + XRP)
    MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC"
 
-   # Refuse all seven Category-B trade-only assets (BTC + XMR + BLURT only)
-   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DAI,DASH,DOGE,LTC,USDC,USDT"
+   # Refuse all 13 Category-B trade-only assets (keeps only the
+   # 3 Category-A fee-payable assets: BTC + XMR + BLURT)
+   MORPHIT_INDEXER_DISABLED_ASSETS="ARRR,BCH,DAI,DASH,DCR,DOGE,ETH,LTC,SOL,USDC,USDT,XRP,ZEC"
 
    # Future-compat with assets not yet in the registry
-   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,FUTUREASSET"
+   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,FUTUREASSET"
    ```
 
    (Unknown tickers are accepted in the env var for forward-

@@ -546,33 +546,42 @@ above the address: "Tron (TRC-20) USDT address — send USDT on
 Tron only.  Sending USDT on any other network to this address
 loses your funds permanently."
 
-Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`
-and `docs/adr/0028-usdc-multi-network-trade-only-addition.md`.
+Full architectural rationale: `docs/adr/0023-usdt-multi-network.md`,
+`docs/adr/0028-usdc-multi-network-trade-only-addition.md`, and
+`docs/adr/0029-dai-multi-network-trade-only-addition.md`.
 
 ### Privacy warning chip
 
 A new field `privacyWarningKey: string | null` opts an asset
 into rendering a localized privacy/decentralization warning in
 the post-order form and address-share modal.  `null` means no
-warning (BTC, XMR, BLURT, BCH, LTC, DASH all have null — they're
-either private, decentralized, or transparent-but-non-custodial
-enough that no warning is needed).  Non-null is an i18n key
-looked up under `assets.privacy_warnings.<key>` in the locale
-JSON.
+warning (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR,
+SOL, ETH, XRP all have null — they're either private,
+decentralized, or transparent-but-non-custodial enough that no
+warning is needed).  Non-null is an i18n key looked up under
+`assets.privacy_warnings.<key>` in the locale JSON.
 
-Both stablecoins ship a warning:
+The three stablecoins ship a warning:
 - USDT's warning (Part 121 cp3,
   `assets.privacy_warnings.usdt_centralized`)
 - USDC's warning (Part 122 cp30,
   `assets.privacy_warnings.usdc_centralized`)
+- DAI's warning (Part 122 cp31,
+  `assets.privacy_warnings.dai_partly_decentralized`)
 
-Both explain:
+USDT/USDC explain:
 - The issuer (Tether Inc. for USDT, Circle for USDC) can freeze
   any address on any supported network.
 - Transactions are public on whichever network the user chose
   (no on-chain privacy).
 - Morphit can't make centralized stablecoins private — only XMR
-  has meaningful on-chain privacy.
+  and ARRR have meaningful on-chain privacy by construction.
+
+DAI explains the partial-decentralization nuance: the Maker
+contract has no admin-controlled freeze function, but Dai is
+partly backed by USDC via the Peg Stability Module — so Circle's
+freeze power transitively affects DAI's redemption mechanics
+(documented in ADR-0029 §3).
 
 This warning is required by Memory #19 (privacy is priority
 #1): users must be told when an asset they're considering

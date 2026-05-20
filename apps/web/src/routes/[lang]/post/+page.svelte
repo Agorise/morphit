@@ -1577,11 +1577,11 @@
 						{:else if a === 'DAI'}
 							<Tooltip textKey="post_order.form.asset_explainer.dai" faqKey="what_is_dai" />
 						{:else if a === 'BCH'}
-							<Tooltip textKey="post_order.form.asset_explainer.bch" />
+							<Tooltip textKey="post_order.form.asset_explainer.bch" faqKey="what_is_bch" />
 						{:else if a === 'LTC'}
-							<Tooltip textKey="post_order.form.asset_explainer.ltc" />
+							<Tooltip textKey="post_order.form.asset_explainer.ltc" faqKey="what_is_ltc" />
 						{:else if a === 'DASH'}
-							<Tooltip textKey="post_order.form.asset_explainer.dash" />
+							<Tooltip textKey="post_order.form.asset_explainer.dash" faqKey="what_is_dash" />
 						{:else if a === 'DOGE'}
 							<Tooltip textKey="post_order.form.asset_explainer.doge" faqKey="what_is_doge" />
 						{:else if a === 'ZEC'}

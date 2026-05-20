@@ -1,5 +1,67 @@
 # Tarball history
 
+## cp53 — Operator doc top-to-bottom audit (per Ken directive); 14 inline fixes + 1 code fix + cp53-O7 STRUCTURAL DEFENSE (2026-05-20)
+
+**Tarball:** `morphit-audit-2026-05-122-cp53-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **44/44** standalone smokes PASS (+1 cp53-O7) · **7/7 workspaces TS-clean (LL #52 10th consecutive)** · **9 structural defenses operational** (was 8 at cp52) · 31 jitter unit tests.
+
+**Ken's directive:** "the pre-launch, operations, run a morphit node, and other server setup md files are ALL current as well, right? please read them top to bottom, every word to make sure. do not assume, VERIFY."
+
+**Honest answer:** No — they weren't all current. Audit surfaced 14 distinct drift findings + 1 follow-on code defect. All closed inline.
+
+### FINDINGS CLOSED INLINE (14):
+
+1. **README.md:53 (LOW)** — ADR index range stale "0033" → fixed to "0036".
+2. **PRE-LAUNCH-CHECKLIST.md:3 (LOW)** — "Last refreshed: 2026-05-17 (Part 122 cp30)" → "2026-05-19 (Part 122 cp52)".
+3. **PRE-LAUNCH-CHECKLIST.md:317 (LOW)** — scenario-count narrative ended at cp34 → extended through cp52 with full per-checkpoint enumeration.
+4. **OPERATIONS.md:8036 (MEDIUM)** — section header "Trade-only asset configuration" enumerated cp21-cp33 only → extended through cp49 XRP.
+5. **OPERATIONS.md:8040 (LOW)** — redundant trailing text "and multi-network ones (USDT)" removed.
+6. **OPERATIONS.md:8133 (LOW)** — `# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/USDC/DAI/LTC/DASH/DOGE)` comment missing ZEC/ARRR/DCR/SOL/ETH/XRP → reworded for durability.
+7. **OPERATIONS.md:8136-8138 (LOW)** — `# Refuse all four Bitcoin-fork variants (BTC + XMR + BLURT + stablecoins only, possibly with USDT)` framing stale → rewrote explanatory comment to enumerate what stays enabled.
+8. **OPERATIONS.md:8142-8143 (MEDIUM)** — example labeled "Refuse everything that isn't BLURT + XMR + BTC" but value only listed 7 of 13 Category-B tickers → extended value to all 13 + clarified comment.
+9. **OPERATIONS.md NEW SECTION (MEDIUM)** — added consolidated "Single-network chat-link explorer URL overrides for DOGE / ZEC / ARRR / DCR / SOL / ETH / XRP" section before Schema migration v32. Existing BCH/LTC/DASH had detailed sections (40 lines each); cp33-cp49 additions never got documented in OPERATIONS.md.
+10. **RUN-A-MORPHIT-NODE.md:1877 (LOW)** — "never USDT, never USDC, ..., never DOGE" fee enumeration missing ZEC/ARRR/DCR/SOL/ETH/XRP → extended.
+11. **RUN-A-MORPHIT-NODE.md:1902-1908 (LOW)** — single-asset disable example list stopped at DASH → extended through XRP.
+12. **RUN-A-MORPHIT-NODE.md:1965-1979 (MEDIUM)** — multi-asset example labeled "all seven Category-B trade-only assets" with 7-asset value → corrected to "all 13" with all 13 tickers in value (alphabetized).
+13. **ADDING-A-COIN.md:550 (LOW)** — multi-network ADR reference list stopped at 0028 → extended to include 0029 DAI.
+14. **ADDING-A-COIN.md:557 (LOW)** — `privacyWarningKey: null` examples listed only "BTC, XMR, BLURT, BCH, LTC, DASH" → extended to all 13 transparent-or-private chains. Also extended stablecoin warning section to cover DAI's partial-decentralization nuance.
+15. **GRANDMA-FRIENDLY-INVESTIGATION.md:23 (MEDIUM)** — tooltip status enumerated only USDT/BCH/LTC/USDC/DAI/DASH/DOGE; cp39-cp49 additions silent. ALSO factually wrong that BCH/LTC/DASH chips were "tooltip-only since the FAQ doesn't have dedicated entries for those" — cp51 backfilled those FAQs but never updated this doc.
+16. **LAUNCH-DAY.md:100 (LOW)** — "Part 122 cp27 baseline is 3,327" → reworded to acknowledge floor moves with each checkpoint.
+
+### CODE FOLLOW-ON FIX (1):
+
+**cp53-N1 MEDIUM** — `apps/web/src/routes/[lang]/post/+page.svelte` tooltips for BCH, LTC, DASH lacked `faqKey="what_is_<asset>"` deep-links. cp51 backfilled the FAQs but never wired the tooltip → asset chip tooltip-only with no clickable path to the FAQ. Cp53 wired all three, completing the cp51 work. Verified GRANDMA-FRIENDLY-INVESTIGATION claim by re-checking code first (Memory #13).
+
+### NEW STRUCTURAL DEFENSE cp53-O7
+
+`operator-doc-per-asset-coverage-smoke` (LL #57): walks 3 operator-facing setup docs (PRE-LAUNCH-CHECKLIST, OPERATIONS, RUN-A-MORPHIT-NODE) and verifies every Category-B tradable ticker (13 of them) appears at least once. Catches the "asset added at cp<N>, operator guide silently never updated" failure mode. M-121 mutation test verifies (stripped XRP mentions from OPERATIONS.md → smoke fires).
+
+**Recurring class scope progression (7 defenses across 6 checkpoints):**
+1. cp48-O1 standalone smoke scripts
+2. cp49-O2 vitest unit tests
+3. cp50-O3 HTTP route handler regex
+4. cp51-O4 ops-cli per-ticker hardcoded tables
+5. cp51-O5 per-asset i18n FAQ key coverage
+6. cp52-O6 Ansible env-template required-var parity
+7. **cp53-O7 operator doc per-asset coverage — NEW**
+
+### LIMITATIONS OF cp53-O7
+
+The smoke catches "totally absent" not "shallow mention". An operator doc that mentions XRP once in the headline but skips the per-asset config example still passes. cp53's inline fixes addressed the shallow-mention cases (added explorer subsections, extended example lists). The floor is now: ticker is present + cp53 deep-deep fixes addressed shallow cases.
+
+### Walked but found clean
+
+- SECURITY.md — threat-model doc, asset-agnostic by design ✓
+- LAUNCH-DAY.md — only the scenario baseline narrative needed refresh; otherwise asset-agnostic ✓
+- POST-LAUNCH-WEEK-ONE.md — operational rhythm, asset-agnostic ✓
+- BETA-INCIDENT-RUNBOOK.md — incident triage, asset-agnostic ✓
+- UPGRADING.md — workflow guide, asset-agnostic ✓
+- SWITCHING-NETWORKS.md — testnet/staging workflow, asset-agnostic ✓
+
+---
+
+# Tarball history
+
 ## cp52 — Ansible playbook readiness audit (per Ken directive); 3 findings closed inline + cp52-O6 STRUCTURAL DEFENSE (2026-05-19)
 
 **Tarball:** `morphit-audit-2026-05-122-cp52-FULL-STATE.tar.gz`
