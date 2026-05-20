@@ -74,14 +74,25 @@ const SUBSYSTEMS: SubsystemDef[] = [
 		name: 'relay',
 		configPath: join(__dirname, '..', '..', 'relay', 'src', 'config', 'index.ts'),
 		templatePath: join(__dirname, '..', '..', '..', 'ops', 'ansible', 'roles', 'morphit', 'templates', 'relay.env.j2')
+	},
+	{
+		// Added cp58 — matrix-bot has its own Ansible template under
+		// roles/matrix_bot/ separate from the morphit role.  Its schema
+		// is `const SCHEMA = z.object({` (not `envSchema`); the parser
+		// regex above matches `envSchema|envSchema\s*=` — for matrix-bot
+		// the parser does not match.  Cp58 also makes the regex match
+		// `SCHEMA`-named schemas.
+		name: 'matrix-bot',
+		configPath: join(__dirname, '..', '..', 'matrix-bot', 'src', 'config.ts'),
+		templatePath: join(__dirname, '..', '..', '..', 'ops', 'ansible', 'roles', 'matrix_bot', 'templates', 'matrix-bot.env.j2')
 	}
 ];
 
 function extractRequiredEnvVars(configSrc: string): string[] {
-	// Find the envSchema block start.
-	const schemaIdx = configSrc.search(/(const\s+envSchema|envSchema\s*=)\s*z\.object\(\{/);
+	// Find the envSchema (or SCHEMA — matrix-bot uses this) block start.
+	const schemaIdx = configSrc.search(/(const\s+envSchema|envSchema\s*=|const\s+SCHEMA|SCHEMA\s*=)\s*z\.object\(\{/);
 	if (schemaIdx === -1) {
-		throw new Error('envSchema = z.object({ ... }) not found');
+		throw new Error('envSchema|SCHEMA = z.object({ ... }) not found');
 	}
 	// Walk braces from the first `{` after envSchema to find the
 	// matching `}`.  Comments and strings tracked to avoid
