@@ -18,12 +18,25 @@
  * and a list of CONSUMER files (each with its own regex/group).
  * Drift in any consumer fires the smoke.
  *
- * Registered invariants (cp66):
- *   1. postgres_db_name      (init.sql → env.examples → ansible/group_vars)
- *   2. postgres_user_name    (init.sql → env.examples → ansible/group_vars)
- *   3. postgres_port         (ansible/group_vars → env.examples DATABASE_URL)
- *   4. treasury_fee_account  (indexer config default → operator-facing docs
- *                             that name the default by string)
+ * Registered invariants (cp67):
+ *   1. postgres_db_name           (init.sql → env.examples → ansible/group_vars)
+ *   2. postgres_user_name         (init.sql → env.examples → ansible/group_vars)
+ *   3. postgres_port              (ansible/group_vars → env.examples DATABASE_URL)
+ *   4. treasury_fee_account       (indexer config default → operator-facing docs
+ *                                  that name the default by string)
+ *   5. indexer_bind_port          (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_2)
+ *   6. relay_bind_port            (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_1)
+ *   7. bunkerweb_net_name         (canonical compose → ansible role template +
+ *                                  ansible verification task)
+ *   8. relay_listen_port_default  (relay config Zod default → env.example + nginx)
+ *   9. indexer_listen_port_default (indexer config Zod default → env.example + nginx)
+ *
+ * NOTE: 5-6 are the BunkerWeb-fronted bind ports (4000/4001); 8-9 are the
+ * BARE-METAL nginx-fronted listen ports (8080/8081).  Both are deploy-mode
+ * defaults, and both can drift independently — operators get a different
+ * default depending on whether they `docker compose up` from ops/bunkerweb/
+ * or `apt install nginx` from ops/nginx/.  Each set MUST be internally
+ * consistent.
  *
  * Bug class this catches at pre-launch: an operator running a fresh
  * `ops-cli init` followed by importing values from operator docs OR
@@ -242,6 +255,77 @@ const INVARIANTS: Invariant[] = [
 				file: 'ops/bunkerweb/bunkerweb.env.example',
 				regex: /REVERSE_PROXY_HOST_1=http:\/\/[^:]+:(\d+)/,
 				context: 'bunkerweb REVERSE_PROXY_HOST_1 (relay)',
+			},
+		],
+	},
+	{
+		name: 'bunkerweb_net_name',
+		description:
+			"BunkerWeb Docker network name — defined by ops/bunkerweb/docker-compose.yml; consumed by ansible bunkerweb role's docker-compose template (same network must coexist) AND by ansible task that inspects the network by name (`docker network inspect <name>`). Drift class: rename the network in the canonical compose, forget the inspect task → ansible verification step fails with 'no such network'.",
+		source: {
+			file: 'ops/bunkerweb/docker-compose.yml',
+			// The canonical compose pins the network with both an entry
+			// key under `networks:` AND a `name:` line.  We use the
+			// explicit `name:` so renames detected unambiguously.
+			regex: /^networks:[\s\S]*?^\s+(\w+):\s*\n\s+name:\s+(\w+)/m,
+			group: 2,
+			context: 'canonical compose networks.<key>.name',
+		},
+		consumers: [
+			{
+				file: 'ops/ansible/roles/bunkerweb/templates/docker-compose.yml.j2',
+				regex: /^networks:[\s\S]*?^\s+(\w+):\s*\n\s+name:\s+(\w+)/m,
+				group: 2,
+				context: 'ansible bunkerweb role compose template',
+			},
+			{
+				file: 'ops/ansible/roles/bunkerweb/tasks/main.yml',
+				regex: /docker network inspect (\w+)/,
+				context: 'ansible bunkerweb verification task',
+			},
+		],
+	},
+	{
+		name: 'relay_listen_port_default',
+		description:
+			"Relay HTTP listen port (bare-metal deploy default) — defined by apps/relay/src/config/index.ts Zod default; consumed by env.example default + nginx reverse-proxy upstream. If they drift, the bare-metal nginx deploy 502s. Note: this is DIFFERENT from relay_bind_port (4001) which is the BunkerWeb-fronted port; bare-metal uses 8080.",
+		source: {
+			file: 'apps/relay/src/config/index.ts',
+			regex: /MORPHIT_RELAY_LISTEN_PORT:[^,;\n]*\.default\((\d+)\)/,
+			context: 'relay config Zod default',
+		},
+		consumers: [
+			{
+				file: 'ops/env/relay.env.example',
+				regex: /^MORPHIT_RELAY_LISTEN_PORT=(\d+)/m,
+				context: 'relay env.example default value',
+			},
+			{
+				file: 'ops/nginx/relay.conf',
+				regex: /proxy_pass\s+http:\/\/127\.0\.0\.1:(\d+);/,
+				context: 'nginx relay.conf proxy_pass port',
+			},
+		],
+	},
+	{
+		name: 'indexer_listen_port_default',
+		description:
+			"Indexer HTTP listen port (bare-metal deploy default) — defined by apps/indexer/src/config/index.ts Zod default; consumed by env.example default + nginx upstream server. If they drift, the bare-metal nginx deploy 502s. Note: this is DIFFERENT from indexer_bind_port (4000) which is the BunkerWeb-fronted port; bare-metal uses 8081.",
+		source: {
+			file: 'apps/indexer/src/config/index.ts',
+			regex: /MORPHIT_INDEXER_LISTEN_PORT:[^,;\n]*\.default\((\d+)\)/,
+			context: 'indexer config Zod default',
+		},
+		consumers: [
+			{
+				file: 'ops/env/indexer.env.example',
+				regex: /^MORPHIT_INDEXER_LISTEN_PORT=(\d+)/m,
+				context: 'indexer env.example default value',
+			},
+			{
+				file: 'ops/nginx/indexer.conf',
+				regex: /server\s+127\.0\.0\.1:(\d+);/,
+				context: 'nginx indexer.conf upstream server port',
 			},
 		],
 	},
