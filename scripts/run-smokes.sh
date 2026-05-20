@@ -60,6 +60,7 @@ SMOKES=(
 	"apps/indexer:listener-dispatch-smoke"
 	"apps/indexer:asset-registry-smoke"
 	"apps/indexer:handler-test-stand-in-meta-assertion-smoke"
+	"apps/indexer:per-asset-rss-feed-parity-smoke"
 	"apps/indexer:disabled-assets-parse-smoke"
 	"apps/indexer:order-views-smoke"
 	"apps/indexer:profile-handler-smoke"

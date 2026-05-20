@@ -203,18 +203,37 @@ export async function globalFeedHandler(db: Database, config: Config): Promise<H
 
 /** /rss/orderbook/by-asset/<asset>.xml — `rawSegment` is the
  *  URL path parameter (e.g., "btc.xml"). Validates the asset
- *  is one of the three the site supports; rejects others
- *  with 400 to keep the URL space small and enumerable. */
+ *  is one of the canonical ASSET_TICKERS supported (16 at
+ *  cp49); rejects others with 400 to keep the URL space small
+ *  and enumerable.
+ *
+ *  Cp50 deep-deep D-1 HIGH fix: the regex used to be hardcoded
+ *  `/^(btc|xmr|blurt)\.xml$/` and silently stayed frozen at 3
+ *  assets across 13 subsequent asset additions (cp21 BCH, cp24
+ *  LTC, cp27 DASH, cp30 USDC, cp30 USDT, cp31 DAI, cp33 DOGE,
+ *  cp39 ZEC, cp41 ARRR, cp43 DCR, cp45 SOL, cp47 ETH, cp49 XRP)
+ *  — every per-asset RSS feed except BTC/XMR/BLURT 400'd silently
+ *  for ~14 checkpoints.  Fix derives the allow-set from
+ *  ASSET_TICKERS so future asset additions cannot drift this
+ *  again.  Cp50 NEW per-asset-rss-feed-smoke pins the derivation. */
 export async function perAssetFeedHandler(
 	rawSegment: string,
 	db: Database,
 	config: Config
 ): Promise<HandlerResult> {
-	const m = rawSegment.match(/^(btc|xmr|blurt)\.xml$/);
+	// Derive allow-set from canonical ASSET_TICKERS (lowercased).
+	// LL #38 sibling-file pattern: any future asset addition to
+	// ASSET_TICKERS automatically unlocks its per-asset feed.
+	const m = rawSegment.match(/^([a-z]+)\.xml$/);
 	if (m === null) {
 		return errorJson('invalid_asset', 400);
 	}
-	const asset = m[1]!.toUpperCase() as Asset;
+	const lower = m[1]!;
+	const upper = lower.toUpperCase();
+	if (!(ASSET_TICKERS as readonly string[]).includes(upper)) {
+		return errorJson('invalid_asset', 400);
+	}
+	const asset = upper as Asset;
 	const frontendOrigin = frontendOriginFrom(config);
 
 	const sql = `

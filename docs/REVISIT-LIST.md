@@ -1,5 +1,37 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp50 — 2026-05-19.
+
+## Memory facts re-confirmed at top of cp50
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp50 deep-deep changes nothing here.
+- **Memory #13 STOP MISSING THINGS:** cp50 deep-deep found D-1 HIGH (RSS feed broken for 13 assets across 14 checkpoints), M-1 MEDIUM (no jitter unit tests), N-1 LOW (stale count claims), A-5 INFO (X-address not supported). All closed inline.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** A-5 X-address note added to all 10 locales (native EN/ES/FR/DE + EN-fallback IT/PL/RU/FA/zh-CN/zh-HK).
+- **Memory #16 FORGEJO not Gitea:** confirmed clean by `forgejo-not-gitea-smoke`.
+
+## STRUCTURAL DEFENSES — 5 OPERATIONAL (was 4 at cp49)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **7th consecutive checkpoint** clean
+2. **cp46 asset-payload-precision-parity-smoke** — 5th consecutive (61/61 scenarios)
+3. **cp48-O1 stand-in meta-assertion** in `asset-registry-smoke.ts` — 3rd consecutive
+4. **cp49-O2 handler-test-stand-in-meta-assertion-smoke** — 2nd consecutive
+5. **cp50-O3 per-asset-rss-feed-parity-smoke** — NEW at cp50 (closes HTTP route handler scope)
+
+**Cadence prediction held**: cp49 predicted "cp50 expected to add another structural defense; pattern likely related to a different sibling category not yet defended." Cp50 delivered exactly that — cp48-O1 closed standalone smoke scope, cp49-O2 closed vitest test scope, **cp50-O3 closes HTTP route handler scope**. The recurring class "real-ticker-as-stand-in / hardcoded-ticker-subset" keeps finding new homes. Cp51+ should look for it in: SQL fixtures, e2e tests, snapshot generators, ops-cli wizard prompts, env example commentary.
+
+## CP50 LESSON LEARNED — DRIFT IN STALE CODE PATHS GOES UNDETECTED
+
+The D-1 RSS feed failure shipped at cp36 and stayed broken through 14 checkpoints. Why? Because no smoke exercised `/rss/orderbook/by-asset/<XRP>.xml` — there was only ONE `perAssetFeedHandler` and its tests covered only BTC. Lesson: **smoke battery must exercise per-asset surfaces ACROSS THE FULL CANONICAL SET, not just BTC**. Cp50-O3 closes this at the structural-defense layer; future cp51+ work should also add per-asset feed runtime tests (e2e if possible).
+
+## Two parked external blockers (unchanged through cp42→cp50)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed).
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp49 — 2026-05-19.
 
 ## Memory facts re-confirmed at top of cp49

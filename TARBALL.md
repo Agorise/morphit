@@ -1,5 +1,31 @@
 # Tarball history
 
+## cp50 — 94-task deep-deep on cp49 + cp50-O3 structural defense (RSS-feed scope) + jitter unit test coverage (2026-05-19)
+
+**Tarball:** `morphit-audit-2026-05-122-cp50-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,819 × 10 = 28,190 · **40/40** standalone smokes PASS (+1 cp50-O3) · **7/7 workspaces TS-clean (LL #52 7th consecutive)** · STRIDE 1,945 lines · address-shape-overlap 87 entries · 7 jitter functions · **5 structural defenses operational** · 31 NEW vitest unit tests for jitter functions · mediakit 45,772 B.
+
+**Deep-deep findings closed inline:**
+- **D-1 HIGH** — `/rss/orderbook/by-asset/<asset>.xml` regex hardcoded as `/^(btc|xmr|blurt)\.xml$/` since cp36; **/rss/orderbook/by-asset/{usdt,usdc,dai,bch,ltc,dash,doge,zec,arrr,dcr,sol,eth,xrp}.xml ALL silently 400'd for 14 checkpoints**. Fixed by deriving allow-set from canonical ASSET_TICKERS. Docblock also stale ("the three the site supports" — now 16). M-116 mutation verifies.
+- **M-1 MEDIUM** — Zero vitest unit tests for any of the 7 jitter functions; only structural shape tests existed. Added comprehensive coverage: 31 unit tests covering round-UP-only invariant, jitter range bound, reserve-invariant (XRP-specific), precision preservation, boundary inputs (zero + large), invalid-input rejection, and CSPRNG statistical uniformity.
+- **N-1 LOW** — 4 stale "Morphit's 14 assets" count claims (brag #286, canonical index.ts SOL comment, sol-trade-only smoke docblock, payload.ts jitterSolAmount comment). Replaced with durable phrasing "Morphit's tradable assets" so future asset additions don't drift these.
+- **A-5 INFO** — XRPL X-address (XLS-5d) format not supported by Morphit's classic-r regex. Documented as known limitation in `privacy.guides.xrp.caveats` × 10 locales; post-launch enhancement.
+
+**NEW structural defense cp50-O3 (LL #54)** — `per-asset-rss-feed-parity-smoke` walks indexer API source for hardcoded ticker-subset regex patterns (the D-1 failure mode). Pins ASSET_TICKERS derivation forever; mutation test M-116 verifies. **Closes a NEW recurring-class scope (HTTP route handler enumerations) that cp48-O1 and cp49-O2 didn't reach** — confirming the cadence prediction from cp49.
+
+**Structural defenses operational at cp50: 5** (was 4 at cp48):
+1. cp44 LL #52 workspace-typecheck (7th consecutive)
+2. cp46 asset-payload-precision-parity (5th consecutive; 61/61 scenarios)
+3. cp48-O1 stand-in meta-assertion (standalone smoke scope)
+4. cp49-O2 handler-test-stand-in-meta-assertion (vitest test scope)
+5. **cp50-O3 per-asset-rss-feed-parity (HTTP route handler scope) — NEW**
+
+The cp49 cadence prediction held — one new structural defense per 2 deep-deeps, each closing a scope the prior didn't reach.
+
+---
+
+# Tarball history
+
 ## cp49 — Ripple (XRP) addition + 94-task deep-deep + cp49-O2 structural defense (2026-05-19)
 
 **Tarball:** `morphit-audit-2026-05-122-cp49-FULL-STATE.tar.gz`
