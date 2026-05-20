@@ -63,6 +63,20 @@
     - morphit-backup.timer
   notify: Reload systemd
 
+- name: Ensure morphit-backup.timer drop-in directory exists
+  # Found at cp52 deep-deep on ansible playbook readiness: writing
+  # to /etc/systemd/system/morphit-backup.timer.d/schedule.conf
+  # without first creating the .d/ drop-in directory would cause
+  # the next task's `ansible.builtin.copy` to fail.  Systemd does
+  # NOT auto-create unit drop-in directories — only the unit files
+  # themselves are auto-installed under /etc/systemd/system/.
+  ansible.builtin.file:
+    path: /etc/systemd/system/morphit-backup.timer.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Deploy backup-timer OnCalendar override
   ansible.builtin.copy:
     dest: /etc/systemd/system/morphit-backup.timer.d/schedule.conf

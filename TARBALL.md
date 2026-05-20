@@ -1,5 +1,52 @@
 # Tarball history
 
+## cp52 — Ansible playbook readiness audit (per Ken directive); 3 findings closed inline + cp52-O6 STRUCTURAL DEFENSE (2026-05-19)
+
+**Tarball:** `morphit-audit-2026-05-122-cp52-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 288 brag entries · locale parity 2,825 × 10 = 28,250 · **43/43** standalone smokes PASS (+1 cp52-O6) · **7/7 workspaces TS-clean (LL #52 9th consecutive)** · **8 structural defenses operational** (was 7 at cp51) · 31 jitter unit tests.
+
+**Ken's question:** "how's the ansible playbook looking? is it totally ready for a sysadmin?"
+
+**Honest answer:** No — the audit surfaced 3 real defects in 5 minutes. Closed inline:
+
+### cp52-A1 HIGH — `/etc/systemd/system/morphit-backup.timer.d/` not created before override file written
+`apps/ops/ansible/roles/morphit/tasks/main.yml` wrote `schedule.conf` into a `.d/` drop-in directory that didn't exist. Systemd does NOT auto-create unit drop-in dirs — only the unit files themselves. The playbook would fail on first run at this task. Fixed by adding an explicit `ansible.builtin.file: state: directory` task before the copy.
+
+### cp52-A3 CRITICAL — Indexer Ansible env template missing 2 of 5 required Zod env vars
+Last touched at cp36; canonical `ops/env/indexer.env.example` updated through cp49. The Ansible template is deliberately minimal but missing TWO env vars that are REQUIRED by the indexer's Zod schema (no `.default()`, no `.optional()`):
+- `MORPHIT_INDEXER_PUBLIC_ORIGIN` (required `z.string().url()`)
+- `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` (required BLT-prefixed key)
+
+Without these, the indexer crashes at startup with Zod validation errors on a fresh deploy. **Sysadmin would hit this on Day 1.** Both added to the template with appropriate sourcing from group_vars and the canonical @morphit posting pubkey baked in as the default value.
+
+### cp52-A4 LOW — `morphit-sysadmin-handoff.txt` referenced in README and playbook post_task but never existed
+The README and the playbook's post_task both point sysadmins at `morphit-sysadmin-handoff.txt` for the verification checklist. The file never existed. Created with 3 sections (security verifications, Morphit service verifications, operator handoff) + troubleshooting section.
+
+**NEW structural defense cp52-O6** — `ansible-env-template-required-vars-smoke` parses the indexer + relay Zod schemas, extracts required (non-default, non-optional) env vars, and verifies every one is present in the corresponding Ansible Jinja2 template. M-120 mutation verified.
+
+**Structural defenses operational at cp52: 8** (was 7 at cp51; +cp52-O6):
+1. cp44 LL #52 workspace-typecheck (9th consecutive)
+2. cp46 asset-payload-precision-parity (7th consecutive; 61 scenarios)
+3. cp48-O1 stand-in meta-assertion (standalone smoke scope)
+4. cp49-O2 handler-test-stand-in (vitest scope)
+5. cp50-O3 per-asset-rss-feed-parity (HTTP route scope)
+6. cp51-O4 category-b-descriptions-parity (ops-cli table scope)
+7. cp51-O5 faq-per-tradable-asset-parity (i18n FAQ scope)
+8. **cp52-O6 ansible-env-template-required-vars (Ansible env-template scope) — NEW**
+
+**What's still NOT ready for a sysadmin (deferred to cp53+):**
+- Playbook has never been tested end-to-end on a fresh Ubuntu 24.04 VM (memory: hardware blocker, parked since cp42).
+- BunkerWeb pinned tag may be stale — verify against current BunkerWeb releases before deploy.
+- PostgreSQL major version pinning (template installs Ubuntu's default; PG 17 specifically would need PGDG repo added).
+- Ansible templates expose only the REQUIRED env vars; many OPTIONAL vars (fee thresholds, balance monitoring, etc.) are not surfaced as `group_vars/all.yml` knobs — operator gets the Zod defaults silently.
+- No syntax-check / ansible-lint run in CI (sandbox doesn't have ansible installed).
+
+**Recommendation:** the playbook is now "good enough for a sysadmin to attempt deployment with active debugging support from the maintainer." It is NOT "fire-and-forget deployable." The cp52 work moves it from "blocked at first task" to "starts working with documented troubleshooting."
+
+---
+
+# Tarball history
+
 ## cp51 — 94-task deep-deep continuation: cp51-O4 + cp51-O5 STRUCTURAL DEFENSES + 3 missing FAQs × 10 locales backfilled (2026-05-19)
 
 **Tarball:** `morphit-audit-2026-05-122-cp51-FULL-STATE.tar.gz`

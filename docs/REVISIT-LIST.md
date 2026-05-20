@@ -1,5 +1,62 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp52 — 2026-05-19.
+
+## Memory facts re-confirmed at top of cp52
+
+- **Memory #23 INVARIANT:** `fee_method` enum frozen at `{blurt, btc, xmr, waived_first_buy}`. cp52 doesn't touch this.
+- **Memory #13 STOP MISSING THINGS:** cp52 deep-deep on the Ansible playbook (per Ken's question "is it totally ready for a sysadmin?") found cp52-A1 HIGH (timer.d not created), cp52-A3 CRITICAL (2 required env vars missing from template, 15+ checkpoints stale), cp52-A4 LOW (handoff doc never created). All closed inline.
+- **Memory #29 NATIVE-LOCALE DISCIPLINE:** N/A (cp52 didn't touch i18n).
+- **Memory #16 FORGEJO not Gitea:** confirmed clean.
+
+## STRUCTURAL DEFENSES — 8 OPERATIONAL (was 7 at cp51)
+
+1. **cp44 LL #52** workspace-typecheck-smoke — **9th consecutive** checkpoint clean
+2. **cp46 asset-payload-precision-parity-smoke** — 7th consecutive (61 scenarios)
+3. **cp48-O1 stand-in meta-assertion** in `asset-registry-smoke.ts` — 5th consecutive
+4. **cp49-O2 handler-test-stand-in-meta-assertion-smoke** — 4th consecutive
+5. **cp50-O3 per-asset-rss-feed-parity-smoke** — 3rd consecutive
+6. **cp51-O4 category-b-descriptions-parity-smoke** — 2nd consecutive
+7. **cp51-O5 faq-per-tradable-asset-parity-smoke** — 2nd consecutive
+8. **cp52-O6 ansible-env-template-required-vars-smoke** — NEW at cp52 (closes the "Ansible drift from canonical env schema" class)
+
+## CP52 LESSON LEARNED — DEPLOYMENT ARTIFACTS DRIFT INVISIBLY
+
+The Ansible templates were last touched at cp36 while the canonical env examples updated through cp49. **15+ checkpoints of accumulated drift** with zero CI signal because:
+1. No smoke compared Ansible templates against canonical env examples.
+2. No CI runs ansible-syntax-check or ansible-lint.
+3. No fresh-VM smoke deploys the playbook end-to-end.
+
+The cp52-O6 smoke closes the Zod-required-vars subset. Future cp53+ work could add:
+- ansible-syntax-check in CI (lightweight, just requires ansible-core installed)
+- ansible-lint with the existing `.ansible-lint` config
+- A "would-the-indexer-actually-start" smoke that templates the env file and runs the Zod parser against it
+- Fresh-VM end-to-end deploy in CI (qemu/kvm/Vagrant — heavier)
+
+## CP52 PROGRESS ON CP51 PREDICTION
+
+cp51 predicted hunting grounds for cp52+: documentation `.md` ticker references, Matrix bot per-asset commands, indexer Prometheus per-asset metric labels, generated artifacts, locale-native EN-fallback coverage.
+
+cp52 DIDN'T walk any of those — instead it answered Ken's direct question about the Ansible playbook. The cp51 hunting grounds remain open for cp53+.
+
+## Cp53+ predicted hunting ground (carried from cp51 + cp52 additions)
+
+- Documentation `.md` ticker references (LL #38 sibling-files without smoke pinning)
+- Matrix bot per-asset commands (if bot has any)
+- Indexer Prometheus per-asset metric labels
+- Generated artifacts (sitemap.xml, robots.txt) that enumerate tickers
+- Locale-native EN-fallback coverage for the 3 cp51-backfilled FAQs
+- **NEW from cp52:** Ansible playbook full env-var surface (not just required), idempotency claims, fresh-VM dry-run validation, ansible-lint in CI
+
+## Two parked external blockers (unchanged through cp42→cp52)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed). **Cp52 made the playbook substantially more likely to succeed on first run** but did not test it.
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp51 — 2026-05-19.
 
 ## Memory facts re-confirmed at top of cp51
