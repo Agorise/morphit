@@ -96,8 +96,12 @@ problem has time to surface without crisis pressure.
       bash scripts/run-smokes.sh
       ```
       Expect 3,300+ scenarios passed, 0 runners failed
-      (baseline ticks up as smokes are added each release; Part
-      122 cp27 baseline is 3,327).
+      (baseline ticks up as smokes are added each release;
+      Part 122 cp27 baseline was 3,327; subsequent checkpoints
+      from cp30 through cp52 added scenarios on top — current
+      lower-bound floor is whatever your `run-smokes.sh` prints
+      against the repo state, with 0 runners failed being the
+      load-bearing assertion).
       A failure here means *don't* launch tomorrow.
 
 - [ ] **Take a snapshot of your DB.**  PostgreSQL

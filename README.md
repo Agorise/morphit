@@ -50,7 +50,7 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 
 - Architecture overview: `docs/ARCHITECTURE.md`
 - API reference: `docs/API.md`
-- ADR index: `docs/adr/0001-…` through `docs/adr/0033-…`
+- ADR index: `docs/adr/0001-…` through `docs/adr/0036-…`
 - Audit log: `docs/AUDIT-2026-05.md`
 - Per-language translation guide: `docs/CONTRIBUTING-TRANSLATIONS.md`
 

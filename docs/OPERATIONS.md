@@ -8033,12 +8033,11 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, Part 122 cp31 DAI, Part 122 cp33 DOGE, future additions)
+## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, Part 122 cp31 DAI, Part 122 cp33 DOGE, Part 122 cp39 ZEC, Part 122 cp41 ARRR, Part 122 cp43 DCR, Part 122 cp45 SOL, Part 122 cp47 ETH, Part 122 cp49 XRP, future additions)
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and multi-network trade-only assets (USDT, USDC, DAI) and multi-network
-ones (USDT).
+single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and multi-network trade-only assets (USDT, USDC, DAI).
 
 ### How to set this (two paths)
 
@@ -8130,17 +8129,21 @@ MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"
 # Refuse three or more
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
 
-# Refuse BCH AND USDT (focus on BTC/XMR/BLURT/USDC/DAI/LTC/DASH/DOGE)
+# Refuse BCH AND USDT (focus on every other Category-B asset
+# plus BTC/XMR/BLURT)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
-# Refuse all four Bitcoin-fork variants (BTC + XMR + BLURT + stablecoins only,
-# possibly with USDT)
+# Refuse all four Bitcoin-fork variants (still keeps BTC + XMR
+# + BLURT + USDT + USDC + DAI + ZEC + ARRR + DCR + SOL + ETH +
+# XRP enabled)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH,DOGE"
 # Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP only)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI"
 
-# Refuse everything that isn't BLURT + XMR + BTC
-MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE"
+# Refuse everything that isn't BLURT + XMR + BTC (all 13
+# Category-B trade-only assets disabled — keeps only the three
+# Category-A fee-payable assets)
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -8372,6 +8375,44 @@ probe-reachability check that the others get.
 If you choose to disable DASH instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=DASH`, the chat-link config
 has no effect on your instance.
+
+### Single-network chat-link explorer URL overrides for DOGE / ZEC / ARRR / DCR / SOL / ETH / XRP (Part 122 cp33 / cp39 / cp41 / cp43 / cp45 / cp47 / cp49)
+
+Each of these assets shares the same single-network, single-URL
+shape as the BCH/LTC/DASH sections above.  The pattern is:
+
+```bash
+# Default (bundled — operators don't set anything to get this)
+# MORPHIT_FRONTEND_<TICKER>_CHAT_LINK_URL="<bundled-explorer>/{txid}"
+
+# Override to self-hosted or alternative explorer:
+MORPHIT_FRONTEND_<TICKER>_CHAT_LINK_URL="https://my-explorer.example.org/tx/{txid}"
+```
+
+`{txid}` is the placeholder substituted at render time with the
+lowercased transaction ID.  Validation: must be `https://`, must
+contain literal `{txid}`, must parse as a URL after substitution.
+Invalid templates fail indexer startup with a clear error.
+
+The ops-cli `morphit-ops init` wizard step 12 (Chat-link external
+explorer URLs) walks through all 13 single-network chat-link
+explorer overrides in canonical asset-registry order
+(BTC → XMR → BCH → LTC → DASH → DOGE → ZEC → ARRR → DCR → SOL →
+ETH → XRP), each with the same probe-reachability check.
+
+Bundled defaults + alternative-explorer surveys at addition time:
+
+- **DOGE (cp33)** — bundled `https://blockchair.com/dogecoin/transaction/{txid}` (chosen from a 9-explorer survey: dogechain.info, blockchair.com/dogecoin, bitinfocharts.com/dogecoin, live.blockcypher.com/doge, blockexplorer.one/dogecoin/mainnet, blockchain.com/explorer/assets/doge, sochain.com/DOGE, chain.so/DOGE, oklink.com).  See ADR-0030.
+- **ZEC (cp39)** — bundled `https://zcashblockexplorer.com/transactions/{txid}` (chosen for transparent+shielded coverage; see ADR-0031).  Note: shielded-only transactions don't expose data to ANY explorer by design — the chat link works for transparent payments and shows a privacy-respecting summary for shielded ones.
+- **ARRR (cp41)** — bundled `https://explorer.pirate.black/tx/{txid}` (the official Pirate Chain explorer; all transactions on ARRR are shielded by construction, so the explorer shows only the proof-of-inclusion summary — no amount or recipient info ever leaks).  See ADR-0032.
+- **DCR (cp43)** — bundled `https://explorer.dcrdata.org/tx/{txid}` (the official Decred dcrdata explorer; see ADR-0033).
+- **SOL (cp45)** — bundled `https://explorer.solana.com/tx/{txid}` (the official Solana project explorer; chosen from a 5-explorer survey).  See ADR-0034.
+- **ETH (cp47)** — bundled `https://eth.blockscout.com/tx/{txid}` (chosen for being an open-source non-aggregator project explorer with no SQL trackers; alternatives surveyed: etherscan.io, ethplorer.io, beaconcha.in/block-explorer).  See ADR-0035.
+- **XRP (cp49)** — bundled `https://livenet.xrpl.org/transactions/{txid}` (the official XRP Ledger Foundation explorer — a non-profit organization; chosen for the non-aggregator + non-Ripple-Labs criteria).  See ADR-0036.
+
+If you choose to disable any of these instance-wide via
+`MORPHIT_INDEXER_DISABLED_ASSETS=<TICKER>`, the corresponding
+chat-link config has no effect on your instance.
 
 ### Schema migration v32 (Part 121)
 

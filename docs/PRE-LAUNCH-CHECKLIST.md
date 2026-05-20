@@ -1,6 +1,6 @@
 # PRE-LAUNCH-CHECKLIST.md
 
-**Status:** living document.  Last refreshed: 2026-05-17 (Part 122 cp30).
+**Status:** living document.  Last refreshed: 2026-05-19 (Part 122 cp52).
 
 This is the consolidated, ordered list of operator actions
 required (or recommended) before flipping morphit.io from
@@ -318,9 +318,17 @@ file in the same turn.
       (the "0 runners failed" is the load-bearing assertion —
       the scenario count is a moving lower bound that ticks up
       as smokes are added each release; baseline-source-of-truth
-      is the cp27 floor of 3,327, with cp30 USDC, cp31 DAI, cp32
-      icon-coverage + payment-method-i18n-parity, cp33 DOGE, cp39 ZEC, and
-      cp34 narrow-union-parity adding scenarios on top.  The
+      is the cp27 floor of 3,327, with subsequent checkpoints
+      adding scenarios on top: cp30 USDC, cp31 DAI, cp32 icon-
+      coverage + payment-method-i18n-parity, cp33 DOGE, cp34
+      narrow-union-parity, cp39 ZEC, cp41 ARRR, cp43 DCR, cp44
+      LL #52 workspace-typecheck, cp45 SOL, cp46 asset-payload-
+      precision-parity, cp47 ETH, cp48-O1 stand-in meta-assertion,
+      cp49 XRP + cp49-O2 handler-test-stand-in, cp50-O3 per-asset-
+      rss-feed-parity + 31 jitter unit tests, cp51-O4 category-b-
+      descriptions-parity + cp51-O5 faq-per-tradable-asset-parity
+      + 3 backfilled FAQs × 10 locales, cp52-O6 ansible-env-
+      template-required-vars.  The
       exact current total is whatever `run-smokes.sh` prints
       against the repo state you're running; what you're verifying
       is that the count is ≥ 3,327 AND that zero runners failed).
