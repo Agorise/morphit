@@ -34,6 +34,7 @@
 
 import { get } from 'svelte/store';
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
+import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import { liveIdentity } from '$lib/stores/identity';
 import { PrivateKey, cryptoUtils } from '@beblurt/dblurt';
 
@@ -96,7 +97,7 @@ async function getVapidPublicKey(): Promise<string> {
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/vapid-public-key`;
 	let res: Response;
 	try {
-		res = await fetch(url, { method: 'GET' });
+		res = await fetchWithTimeout(url, { method: 'GET' });
 	} catch {
 		throw 'unreachable' satisfies SubscribeError;
 	}
@@ -248,7 +249,7 @@ export async function subscribe(
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/subscribe`;
 	let res: Response;
 	try {
-		res = await fetch(url, {
+		res = await fetchWithTimeout(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
@@ -324,7 +325,7 @@ export async function unsubscribe(account: string): Promise<UnsubscribeSuccess> 
 	if (endpoint) {
 		const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/unsubscribe`;
 		try {
-			await fetch(url, {
+			await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ account, endpoint })

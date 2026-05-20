@@ -21,6 +21,7 @@
  */
 
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
+import { fetchWithTimeout } from '$net/fetchWithTimeout';
 
 import type { AltchaChallenge, AltchaSolution } from './altchaSolver';
 
@@ -61,7 +62,7 @@ export async function fetchInvite(onProgress: SignupProgress = () => {}): Promis
 
 	let res: Response;
 	try {
-		res = await fetch(baseUrl, {
+		res = await fetchWithTimeout(baseUrl, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: '{}'
@@ -98,7 +99,7 @@ export async function fetchInvite(onProgress: SignupProgress = () => {}): Promis
 		// Retry with the solution.
 		let retryRes: Response;
 		try {
-			retryRes = await fetch(baseUrl, {
+			retryRes = await fetchWithTimeout(baseUrl, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ altcha_solution: solution })
@@ -148,7 +149,7 @@ export async function createAccount(params: {
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/create`;
 	let res: Response;
 	try {
-		res = await fetch(url, {
+		res = await fetchWithTimeout(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({

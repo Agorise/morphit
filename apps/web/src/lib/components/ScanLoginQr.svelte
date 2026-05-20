@@ -47,6 +47,7 @@
 		type PairingQrPayload
 	} from '$lib/auth/desktopPairing';
 	import { isUnlocked } from '$stores/identity';
+	import { fetchWithTimeout } from '$net/fetchWithTimeout';
 	import { goto } from '$app/navigation';
 
 	type Phase =
@@ -202,7 +203,7 @@
 				`/v1/login-pairing/${encodeURIComponent(validatedQr.pid)}/deliver`,
 				validatedQr.relay
 			);
-			const resp = await fetch(url.toString(), {
+			const resp = await fetchWithTimeout(url.toString(), {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(delivery)

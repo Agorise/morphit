@@ -28,6 +28,7 @@
 
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import { fetchWithTimeout } from '$net/fetchWithTimeout';
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
@@ -48,7 +49,7 @@
 	onMount(async () => {
 		origin = window.location.host;
 		try {
-			const res = await fetch('/verify.json', { cache: 'no-cache' });
+			const res = await fetchWithTimeout('/verify.json', { cache: 'no-cache' });
 			if (!res.ok) {
 				loadError = $_('about_this_instance.error.fetch_failed', {
 					values: { status: res.status }
