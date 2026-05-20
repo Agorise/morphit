@@ -2029,9 +2029,51 @@ Operators can refuse XRP trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSET
 
 ---
 
+## What is Bitcoin Cash (BCH), and why is it on Morphit?
+
+**FAQ key:** `what_is_bch`
+
+Bitcoin Cash (BCH) is a fork of Bitcoin that activated in August 2017, prioritizing larger block sizes and lower on-chain fees for everyday-payment-style usage. The chain shares Bitcoin's UTXO model and Proof-of-Work consensus but operates with substantially larger blocks (32 MB+) and a separate difficulty adjustment.
+
+On Morphit, BCH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in BCH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).
+
+BCH supports two address formats: legacy base58 (starts with `1` or `3`, same shape as BTC addresses — asset field disambiguates) and CashAddr bech32 (starts with `bitcoincash:q` or `bitcoincash:p`). Morphit accepts both. The chain is transparent at the base layer like Bitcoin; wallet-side address rotation is the user's primary privacy lever.
+
+Operators can refuse BCH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`; the federated marketplace keeps trading BCH regardless of any single operator's stance.
+
+---
+
+## What is Litecoin (LTC), and why is it on Morphit?
+
+**FAQ key:** `what_is_ltc`
+
+Litecoin (LTC) is one of the oldest cryptocurrencies, forked from an early Bitcoin codebase in October 2011. It uses Scrypt-based Proof-of-Work mining (designed at the time to be more memory-hard than Bitcoin's SHA-256) and a faster ~2.5-minute block target.
+
+On Morphit, LTC is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in LTC. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).
+
+LTC addresses come in three formats: legacy P2PKH (starts with `L`), P2SH (starts with `M` or `3`), and bech32 (starts with `ltc1`). Morphit accepts all three. The chain has supported optional MimbleWimble Extension Blocks (MWEB) since 2022 for confidential transactions — but MWEB-side transfers ride alongside transparent transfers; for Morphit P2P trades you can use either, with the same wallet-side address-rotation privacy practices that apply to BTC.
+
+Operators can refuse LTC trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"`; the federated marketplace keeps trading LTC regardless of any single operator's stance.
+
+---
+
+## What is Dash (DASH), and why is it on Morphit?
+
+**FAQ key:** `what_is_dash`
+
+Dash (DASH) is a cryptocurrency forked from Litecoin in January 2014 (originally as XCoin, then Darkcoin, finally renamed Dash in March 2015). It uses an X11-based Proof-of-Work mining algorithm and a masternode tier: operators stake 1,000 DASH each to run a masternode, which provides services like InstantSend (sub-second locked confirmations) and PrivateSend (opt-in CoinJoin-style mixing through masternodes).
+
+On Morphit, DASH is a **trade-only** asset: you can buy and sell it peer-to-peer (any fiat or in-person payment on the other side), but you cannot pay listing fees in DASH. Listing fees stay BLURT/BTC/XMR (Memory #23 invariant — the fee_method enum is frozen).
+
+DASH addresses use two formats: legacy P2PKH (starts with `X`) and P2SH (starts with `7`). Morphit accepts both. The base layer is transparent like Bitcoin; PrivateSend mixing is opt-in and wallet-side. Wallet-side address rotation is the user's primary privacy lever for transparent transfers; PrivateSend is available for users wanting an additional mixing pass before sending.
+
+Operators can refuse DASH trades per-instance via `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`; the federated marketplace keeps trading DASH regardless of any single operator's stance.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 123
+Total FAQ entries: 126
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit
