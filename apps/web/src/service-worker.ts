@@ -47,6 +47,7 @@
 /// <reference types="@sveltejs/kit" />
 
 import { build, files, prerendered, version } from '$service-worker';
+import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -241,8 +242,26 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
 	const data = event.notification.data as
 		| { clickPath?: unknown }
 		| undefined;
-	const path = typeof data?.clickPath === 'string' ? data.clickPath : '/';
-	const targetUrl = new URL(path, self.location.origin).toString();
+
+	// SECURITY (cp81-D22b): clickPath comes from the push payload,
+	// which the operator's relay generates.  A malicious or
+	// compromised operator could craft `clickPath: '//evil.com/'`
+	// (protocol-relative URL) — `new URL(path, origin)` would then
+	// resolve to a cross-origin URL, and `clients.openWindow()`
+	// would open the user's browser at the attacker URL.
+	// Same risk with `javascript:` schemes, `data:` URLs, etc.
+	//
+	// The sanitizer below resolves the input and rejects anything
+	// not resolving to our own http(s) origin, falling back to '/'.
+	// `WindowClient.navigate()` already enforces same-origin per
+	// spec, but `clients.openWindow()` does not uniformly across
+	// browsers — Chrome will open cross-origin tabs.  This defense
+	// closes the operator-phishing primitive.
+	//
+	// Sanitizer is extracted to $lib/notifications/sanitizeClickPath
+	// so the validation logic can be unit-tested.
+	const safePath = sanitizeClickPath(data?.clickPath, self.location.origin);
+	const targetUrl = new URL(safePath, self.location.origin).toString();
 
 	event.waitUntil(
 		(async () => {

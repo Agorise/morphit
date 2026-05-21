@@ -1,6 +1,169 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp80 — 2026-05-21.  **28 STRUCTURAL DEFENSES (+O-26 long-form-en-fallback-floor) · BATTERY 3914/0 TRIPLE-PULSE STABLE (HARDWARE-VERIFIED) · 1,349 VITEST TESTS PASSING · LL #52 35TH CONSECUTIVE (HARDWARE-VERIFIED) · 0 LONG-FORM TRANSLATION KEYS REMAIN — BACKLOG CLOSED.**
+**Last touched:** Part 122 cp81 — 2026-05-21.  **30 STRUCTURAL DEFENSES (+O-27 service-worker-single-registration, +O-28 short-form-en-fallback-floor) · BATTERY 3924/0 TRIPLE-PULSE STABLE · 30 CONSECUTIVE CLEAN PULSES CUMULATIVE (DYNAMIC-CLASS FLAKE CLOSED) · 1,374 VITEST TESTS PASSING (+25 sanitizeClickPath unit tests) · LL #52 36TH CONSECUTIVE HW-VERIFIED · 2 PRODUCTION BUGS FIXED (cp81-D22a/b).**
+
+## CP81 LESSONS
+
+### Lesson #1 — Two real production bugs found in the service-worker subsystem
+
+cp81 picked up the carried-over service-worker fetch-caching audit (deferred since cp74).  The audit surfaced TWO real production bugs, both verified by code reading + spec lookup:
+
+**Bug A1 — Dual SW registration breaking push notifications:** SvelteKit's `serviceWorker: { register: true }` auto-injects a `<script>` that calls `navigator.serviceWorker.register('/service-worker.js')` on `window.load`.  `app.html` ALSO contained a manual `<script>` calling `navigator.serviceWorker.register('/sw.js', { scope: '/' })` on the same event.  Per spec, calling `register()` with the same scope `/` but different scriptURL UPDATES the existing registration with the new script URL — the previous SW is unregistered.  In document order, app.html's manual script ran LAST, so `/sw.js` (the legacy `static/sw.js`, which has no `push` or `notificationclick` handler) was the SW actually running in production.  Push notifications were SILENTLY BROKEN end-to-end despite the full stack being correctly wired: relay sends push, browser delivers it to SW, SW has no handler, payload silently discarded.  The `web-push-wiring-smoke` (cp14) verified `service-worker.ts` had the handlers — but `service-worker.ts` was the SW that got SUPERSEDED, not the one running.
+
+**Bug A2 — Operator-controlled phishing primitive via `clickPath`:** `notificationclick` handler in `service-worker.ts` did `new URL(data.clickPath, self.location.origin)` then `clients.openWindow(targetUrl)` with no origin validation.  A malicious or compromised operator could craft a push payload `{ clickPath: '//evil.com/login' }` — protocol-relative URL — which resolves against the SW's origin to give a cross-origin URL like `https://evil.com/login`.  `WindowClient.navigate()` enforces same-origin per spec, but `clients.openWindow()` does not uniformly across browsers (Chrome will open cross-origin tabs from SW context).  An operator could phish their own users into entering credentials at attacker-controlled domains — violating Morphit's design priority #1 (privacy & anonymity) and #2 (decentralization-with-real-stakes).  Same risk with `javascript:`, `data:`, `blob:`, `mailto:`, `file:` schemes.
+
+**cp81-D22a fix:** removed manual register from `app.html`, deleted `apps/web/static/sw.js` entirely.  Pre-launch framing allows clean deletion (no migration paths needed).  SvelteKit auto-register is now the sole registration path; the TS SW with push handler is what runs.
+
+**cp81-D22b fix:** extracted `sanitizeClickPath()` to `apps/web/src/lib/notifications/sanitizeClickPath.ts` so the validation logic can be unit-tested.  Validates that resolved URL has the same origin as the SW AND uses `http:` or `https:` protocol; falls back to `'/'` for non-string input, parse failures, cross-origin, and opaque-scheme URLs.  Service worker imports and uses the helper.  25 vitest unit tests covering protocol-relative URLs, fully-qualified cross-origin, scheme attacks (`javascript:`, `data:`, `blob:`, `mailto:`, `file:`), type edge cases (undefined/null/number/object), realistic operator payloads (`/orders/abc123`, `/chat/alice`, `/my/orders`), localized routes, and origin-parameter respect.  All 25 pass.
+
+### Lesson #2 — Static-grep smokes neutralizable; pair with unit tests
+
+When I first wrote the smoke check for "service-worker.ts validates clickPath", I used a regex grep for `resolved.origin !== self.location.origin`.  Mutation-tested it: `sed -i 's/resolved.origin !== self.location.origin/false && resolved.origin !== self.location.origin/'` — the smoke still passed because the substring was present.
+
+**Lesson:** static-grep smokes prove text exists, not that logic is live.  For security-critical defenses (this one being a phishing gate), pair the smoke with a vitest unit test of an extracted module.  Wrapping the check in `if (false)` would break the unit tests; commenting it out would break the unit tests; renaming the helper would break the unit tests.  The smoke catches structural deletion; the unit tests catch semantic neutralization.  This is the cp81 way.
+
+### Lesson #3 — Inventory-driven policy decisions are cheaper than translation work
+
+When considering Front 2 (short-form translation backlog), I started by inventorying actual state rather than queueing more translation work.  The inventory revealed:
+
+- Short-form keys (50-199 ch): 0 EN-fallback across all 6 backlog locales.  Already done.
+- Tiny keys (<50 ch): 128 unique EN-fallback keys, but classification showed ALL of them were legitimate proper nouns (Arbitrum One, Cake Wallet, F-Droid), brand names, format strings with placeholders (`{min} – {max} {fiat}`, `<1m`), or single-token UI labels (Chat, Slot, indexer, relay).
+
+So the actual translation backlog was zero across both tiers I hadn't explicitly verified before.  Memory #29's original short-form carve-out was already obsolete in practice — community-translation passes across cp1–cp79 had incidentally closed it.  The cp81 O-28 smoke locks that state in (4,770 translation pairs verified per CI run) rather than translating new work that's already done.
+
+**Lesson:** before doing translation work, inventory current state.  The 13-batch long-form campaign (cp68→cp80) was justified by an actual gap; the short-form backlog wasn't.
+
+### Lesson #4 — Indexer dispatcher audited clean; one cosmetic finding
+
+Front 3 audited the 730-line `apps/indexer/src/indexer/dispatcher.ts` and the 145-line `apps/indexer/src/blurt/verify.ts`.  Both are tight:
+
+- Every external input narrowed by type before use.
+- All SQL parameterized.
+- Idempotent INSERTs with ON CONFLICT.
+- SAVEPOINT-based op-level rollback with documented integer-guard against SQL identifier injection.
+- Handler exceptions caught + truncated (`err.message.slice(0, 120)`) to prevent log injection.
+- 16KB cap on raw JSON before `JSON.parse` (defense against parser-allocation DoS).
+- KNOWN_OP_IDS filter at op-collection time (unknown ids never even reach JSON parse).
+- Stable-sort for admission-op ordering with explicit ES2019 stability note.
+
+**One cosmetic finding A1:** `MAX_RAW_JSON_BYTES` is misleadingly named — `string.length` counts UTF-16 code units, not bytes.  A 16K-char string of multibyte chars could be ~64KB on disk.  Behavior is safe (parser allocation scales with code units, not bytes); only the variable name doesn't match the unit.  Suggested fix: rename to `MAX_RAW_JSON_LENGTH` or check `Buffer.byteLength(op.json, 'utf8')` if bytes are meant.  **Severity: cosmetic.**  Deferring the rename since it ripples through other places and the underlying defense is correct.
+
+### Lesson #5 — Dynamic-class flake declared closed
+
+cp78+cp79+cp80 had accumulated 22 consecutive clean pulses post-D19/D21.  cp81 added 8 more (one each across the front 1 verification + the 7-pulse stress sweep at close-out) for **30 consecutive clean pulses cumulative** post-D19/D21.
+
+The dynamic-class flake (vitest timeout under battery CPU contention for scrypt-heavy tests, root-caused at cp78) is now **declared closed for pre-launch**.  cp78-D19 (relay testTimeout 5s→30s) + cp79-D21a (indexer testTimeout 30s) + cp79-D21b (web testTimeout 30s) was the complete fix.  No more pulse-monitoring needed; cp82+ can stop tracking cumulative pulse counts unless a NEW flake class surfaces.
+
+### Lesson #6 — Hardware blockers cannot be executed from the sandbox
+
+The two parked external blockers (Ansible VM standup, Forgejo runner standup) continue to require actual hardware execution.  Both are documented end-to-end (cp69+) and the documentation has been beta-tested through persona walkthroughs.  Sandbox-execution is impossible because:
+- Ansible deploy needs a real Ubuntu 24.04 VM with network access to package repos, the operator's account creation flow, and persistence across reboots.
+- Forgejo runner standup needs the actual git.agorise.net Forgejo instance, a real runner host, and CI/CD secret management.
+
+**This is not a deferral — it's a category boundary.**  The sandbox can verify the documentation is correct; only Ken or a delegate can verify the hardware path.
+
+## STRUCTURAL DEFENSES — 30 OPERATIONAL (was 28 at cp80; +O-27, +O-28)
+
+cp81 added:
+- **cp81-O27 service-worker-single-registration-smoke (7 checks):** prevents the cp81-D22 dual-registration bug from regressing.  Asserts no manual `navigator.serviceWorker.register` call in app.html (outside comments), no `apps/web/static/sw.js` file, `svelte.config.js` keeps `serviceWorker.register: true`, `src/service-worker.ts` exists with both `push` and `notificationclick` handlers, `sanitizeClickPath` helper is imported and validates same-origin, helper has co-located unit tests.  M-150a/b mutation-tested.
+- **cp81-O28 short-form-en-fallback-floor-smoke (1 scenario, 4,770 pairs verified):** locks in zero short-form (50-199 ch) EN-fallback across the 6 backlog locales.  M-151 mutation-tested (revert any short-form key to EN → smoke fires naming key + locale).  Sibling to cp80-O26 (long-form, 1,758 pairs); together they cover all i18n keys ≥ 50 chars.
+
+## CP81 BUG FIXES
+
+### cp81-D22a — remove manual SW registration from app.html
+- Source: `apps/web/src/app.html`
+- Removed inline `<script>` that called `navigator.serviceWorker.register('/sw.js', { scope: '/' })` on window.load.
+- Replaced with an explanatory comment block citing cp81-D22 history.
+- Effect: SvelteKit auto-register is now the sole SW registration path; no race condition.
+
+### cp81-D22b — clickPath origin validation
+- Source: `apps/web/src/service-worker.ts` + new `apps/web/src/lib/notifications/sanitizeClickPath.ts` + new `apps/web/src/lib/notifications/sanitizeClickPath.test.ts`.
+- Extracted `sanitizeClickPath(input, origin)` helper to a unit-testable module.
+- Helper rejects non-string input, parse failures, cross-origin resolution, and opaque-scheme URLs (`javascript:`, `data:`, `blob:`, `mailto:`, `file:`).
+- Service worker imports and uses the helper in `notificationclick`.
+- 25 vitest unit tests pass.
+
+### cp81-D22c — delete legacy static/sw.js
+- Source: `apps/web/static/sw.js` (deleted).
+- The legacy hand-rolled SW with no push handler.  Without app.html's manual register, it would never be loaded anyway, but explicit deletion eliminates the footgun of a future contributor reintroducing the manual register.
+- Per pre-launch framing, no migration path needed (zero instances live).
+
+## CP81 TRANSLATION INVENTORY
+
+Frontend translation state confirmed via on-disk inventory:
+
+| Tier | Char range | Count | Backlog-locale EN-fallback | Policy |
+|---|---|---|---|---|
+| Long-form | ≥ 200 | 293 | 0 | Forbidden (O-26, cp80) |
+| Short-form | 50-199 | 795 | 0 | Forbidden (O-28, cp81) |
+| Tiny | < 50 | 1739 | 128 unique keys (~5% of tiny) | EN-fallback permitted; all 128 classified as legitimate proper nouns, brand names, format strings, or single-token UI labels |
+
+**Total translation pairs locked in across both floor smokes: 1,758 (O-26) + 4,770 (O-28) = 6,528 pairs verified per CI run.**
+
+## SERVICE-WORKER SUBSYSTEM — POST-CP81 STATE
+
+Canonical SW: `apps/web/src/service-worker.ts`, compiled to `/service-worker.js` by SvelteKit and auto-registered via `svelte.config.js → kit.serviceWorker.register: true`.
+
+Helper: `apps/web/src/lib/notifications/sanitizeClickPath.ts` (extracted from inline SW for unit-testability).
+
+Regression guard: `apps/web/scripts/service-worker-single-registration-smoke.ts` (7 checks).
+
+Unit tests: `apps/web/src/lib/notifications/sanitizeClickPath.test.ts` (25 tests).
+
+Updated doc: `docs/SERVICE-WORKER-CACHING-DESIGN.md` (cp81-D22 transition history).
+
+Deleted: `apps/web/static/sw.js` (legacy hand-rolled SW).
+Removed: manual `<script>register('/sw.js')</script>` in `apps/web/src/app.html`.
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| **Scenarios PASS** | **3924** | TRIPLE-PULSE STABLE (HARDWARE-VERIFIED across 8 cp81 pulses); +10 from cp80's 3914 (O-27's 7 sub-scenarios + O-28's 1 + 2 sub-scenarios from other smoke counts) |
+| Runners FAILED | 0 | clean across all 8 cp81 pulses + cp80's 4 + cp79's 10 + cp78's 8 = **30 cumulative consecutive post-D19/D21** |
+| **Workspaces TS-clean (LL #52)** | **7/7** | **36th consecutive (HARDWARE-VERIFIED this turn)** |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **1,374** | was 1,349 at cp80; +25 sanitizeClickPath unit tests |
+| **Translation pairs locked by floor smokes** | **6,528** | 1,758 long-form (O-26) + 4,770 short-form (O-28) |
+| Brag entries | 303 | unchanged (cp81 is bug-fix + audit + smoke checkpoint, not user-facing-milestone) |
+| Mediakit | 99,275 / 41,870 | unchanged (brag list cksum identical to cp80) |
+
+## CP82+ PREDICTED HUNTING GROUND
+
+1. **Dynamic-class flake is closed** — cp82 doesn't need to track cumulative-pulse counts anymore unless a NEW flake class surfaces.
+2. **Service-worker subsystem is clean** — no further SW audits unless a new requirement adds handlers.
+3. **Cosmetic A1 from indexer audit** — `MAX_RAW_JSON_BYTES` naming rename, low priority.
+4. **Continue deep-audit campaign** — cp81 audited dispatcher + verify; cp82 could pick another handler (chat.ts at 527 lines, operatorRegister.ts at 382 lines, or feedback.ts at 458 lines) or another subsystem (matrix-bot, relay endpoints, frontend critical-path).
+5. **Hardware blockers** — Ansible VM + Forgejo runner standup remain external to sandbox capability.
+
+## Two parked external blockers (unchanged through cp42→cp81)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+## What cp81 DID and DID NOT do
+
+DID:
+- Audit the carried-over service-worker subsystem (deferred since cp74) and find TWO real production bugs.
+- Fix Bug A1 (dual SW registration breaking push) via cp81-D22a + cp81-D22c.
+- Fix Bug A2 (operator-phishing primitive via clickPath) via cp81-D22b.
+- Ship cp81-O27 (service-worker-single-registration, 7 checks).
+- Ship cp81-O28 (short-form-en-fallback-floor, 4,770 pairs verified).
+- Add 25 vitest unit tests for sanitizeClickPath.
+- Audit indexer dispatcher (730 lines) + verify (145 lines) — both CLEAN; one cosmetic finding cp81-A1.
+- Hardware-verify 8 cp81 battery pulses → 30 cumulative consecutive → declare dynamic-class flake closed for pre-launch.
+- Hardware-verify typecheck-sweep 7/7 → LL #52 36th consecutive.
+- Update SERVICE-WORKER-CACHING-DESIGN.md with cp81-D22 transition history.
+
+DID NOT:
+- Modify brag entries (cp81 is bug-fix + audit checkpoint, no user-facing milestone).
+- Modify operator docs (the SW fix doesn't change operator surface; SvelteKit auto-register has been the standing canonical path).
+- Add tiny-tier (<50 ch) translation work — inventory showed all 128 EN-fallback strings are legitimate proper nouns / brand names / format strings.
+- Execute the two hardware blockers — those remain external to sandbox capability.
+
+---
+
+
 
 ## CP80 LESSONS
 

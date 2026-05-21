@@ -53,14 +53,12 @@ interface WorkspaceBaseline {
 const WORKSPACES: WorkspaceBaseline[] = [
 	{
 		path: 'apps/indexer',
-		// cp70 ship state: 476 passed (not 481 as the cp78 comment
-		// incorrectly stated — the 481 was the old cp71 minPassing
-		// value, not the measured count).  cp78-D20 added 5 tip-height
-		// depth-check tests → verified actual baseline 481.
-		// A future checkpoint should only increase this; losing tests
-		// silently shouldn't be a clean smoke.
-		minPassing: 481,
-		notes: 'indexer handler + API tests; baseline corrected at cp80 (476+5 cp78-D20 tests)'
+		// cp70 ship state: 481 passed + 1 skipped.  cp78-D20 added 5
+		// tip-height depth-check tests (minConfirmations > 1 path) →
+		// new baseline 486.  A future checkpoint should only increase
+		// this; losing tests silently shouldn't be a clean smoke.
+		minPassing: 486,
+		notes: 'indexer handler + API tests; baseline cp70 → cp78 (+5 tip-height tests)'
 	},
 	{
 		path: 'apps/relay',
@@ -93,20 +91,12 @@ function fail(name: string, detail: string): void {
 
 console.log('\n── vitest-must-pass smoke (cp71 LL #71 / O-19) ──\n');
 
-function runVitest(workspacePath: string): {
-	passing: number;
-	failing: number;
-	skipped: number;
-	output: string;
-	/** true when vitest exited non-zero (file-level errors or test failures) */
-	vitestFailed: boolean;
-} {
+function runVitest(workspacePath: string): { passing: number; failing: number; skipped: number; output: string } {
 	const fullPath = join(REPO_ROOT, workspacePath);
 	if (!existsSync(join(fullPath, 'package.json'))) {
 		throw new Error(`workspace missing: ${workspacePath}`);
 	}
 	let output: string;
-	let vitestFailed = false;
 	try {
 		output = execSync('npx vitest run --reporter=basic', {
 			cwd: fullPath,
@@ -124,13 +114,8 @@ function runVitest(workspacePath: string): {
 			}
 		});
 	} catch (e) {
-		// vitest exits non-zero when tests fail OR when a test file fails
-		// to load/compile (file-level error, distinct from a test failure).
-		// In the file-failure case vitest still emits a summary line with
-		// the passing test count and failing=0, so we still parse counts —
-		// but the caller needs to know vitest was unhappy so it can surface
-		// "file-level errors" as the likely reason for a count drop.
-		vitestFailed = true;
+		// vitest exits non-zero when tests fail.  We still want to parse
+		// stdout to learn the counts.
 		const errObj = e as { stdout?: string | Buffer; stderr?: string | Buffer; message?: string };
 		const stdout = errObj.stdout?.toString() ?? '';
 		const stderr = errObj.stderr?.toString() ?? '';
@@ -149,7 +134,7 @@ function runVitest(workspacePath: string): {
 	const failingCount = summaryMatch[1] ? parseInt(summaryMatch[1], 10) : 0;
 	const passingCount = parseInt(summaryMatch[2]!, 10);
 	const skippedCount = summaryMatch[3] ? parseInt(summaryMatch[3], 10) : 0;
-	return { passing: passingCount, failing: failingCount, skipped: skippedCount, output, vitestFailed };
+	return { passing: passingCount, failing: failingCount, skipped: skippedCount, output };
 }
 
 for (const ws of WORKSPACES) {
@@ -200,45 +185,9 @@ for (const ws of WORKSPACES) {
 		continue;
 	}
 	if (result.passing < ws.minPassing) {
-		// Emit diagnostics so the CI log surfaces the root cause without a
-		// follow-up "what did vitest actually output?" chase.
-		//
-		// Two distinct failure modes:
-		//   A. Test file fails to LOAD (compile error, bad import, …)
-		//      → vitest exits non-zero, failing=0, but the passing count is
-		//        lower than expected because that file's tests never ran.
-		//      → "Test Files  N passed | M failed" line will show M > 0.
-		//   B. Tests were removed / skipped / accidentally .skip()d.
-		//      → vitest exits 0, count is genuinely reduced.
-		// eslint-disable-next-line no-control-regex
-		const strippedDiag = result.output.replace(/\x1b\[[0-9;]*m/g, '');
-		const diagLines = strippedDiag.split('\n');
-		const testFilesLine = diagLines.find((l) => /Test\s+Files/.test(l))?.trim() ?? '(not found)';
-		const failFileLines = diagLines
-			.filter((l) => /^\s*(FAIL|ERR)\s+\S/.test(l))
-			.map((l) => l.trim())
-			.slice(0, 10);
-		// Emit the last 12 non-empty raw lines of the vitest output so the
-		// CI log always contains the actual error text (import resolution
-		// failure, syntax error, etc.) regardless of its format.  Earlier
-		// attempts to extract specific patterns produced false positives
-		// from mock error strings inside passing tests.
-		const rawTail = diagLines
-			.filter((l) => l.trim().length > 0)
-			.slice(-12)
-			.map((l) => l.trimEnd());
-		const fileErrorNote =
-			result.vitestFailed && failFileLines.length > 0
-				? `\n      vitest exited non-zero — file-level errors:\n      ${failFileLines.join('\n      ')}` +
-					`\n      vitest tail:\n      ${rawTail.join('\n      ')}`
-				: result.vitestFailed
-					? '\n      vitest exited non-zero (file-level error; check full log for FAIL/ERR lines)'
-					: '';
 		fail(
 			`${ws.path} meets passing-count baseline`,
-			`Only ${result.passing} passing; baseline ≥ ${ws.minPassing}.  Tests were silently removed or disabled; check for accidental .skip() / .todo() / file deletions.` +
-				`\n      Test Files: ${testFilesLine}` +
-				fileErrorNote
+			`Only ${result.passing} passing; baseline ≥ ${ws.minPassing}.  Tests were silently removed or disabled; check for accidental .skip() / .todo() / file deletions.`
 		);
 		continue;
 	}
