@@ -122,7 +122,7 @@ A VPS ("Virtual Private Server") is a small computer that lives in a datacenter 
 
 **What to order:** the smallest "shared CPU" instance that has 2 GB of RAM and 20 GB of disk. That's all you need. The provider's website will list it as something like "Cloud Server 1" or "Cloud Compute 1GB" — pick the second-smallest tier (the smallest is usually only 1 GB RAM, which works but is tight). Spend the extra dollar.
 
-**Operating system:** choose **Ubuntu 24.04 LTS**. This is the only OS the Morphit Ansible playbook (which `morphit-ops install` invokes) currently supports — it hard-fails on anything else, including Debian and earlier Ubuntu LTS releases. Debian and Ubuntu 22.04 will *almost certainly* work in principle (the underlying packages and systemd units are not Ubuntu-24-specific), but you'd be off-piste and would need to fork the playbook. For your first instance, stick with Ubuntu 24.04 LTS. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
+**Operating system:** choose **Ubuntu 24.04 LTS**. This is the only OS the Morphit Ansible playbook (at `ops/ansible/playbook.yml`, invoked via `ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass` — see §13 below) currently supports — it hard-fails on anything else, including Debian and earlier Ubuntu LTS releases. Debian and Ubuntu 22.04 will *almost certainly* work in principle (the underlying packages and systemd units are not Ubuntu-24-specific), but you'd be off-piste and would need to fork the playbook. For your first instance, stick with Ubuntu 24.04 LTS. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
 
 **SSH key vs password:** the provider will ask whether you want to log in with a password or with an "SSH key". **Pick SSH key.** It's safer and easier. We'll cover how to make one in step 5. If you're feeling intimidated by the SSH key step, you can use a password to start and switch later, but plan to do that switch within a week.
 
@@ -1653,7 +1653,7 @@ The relay holds your `@morphit-relay` (or whatever you named it) **active privat
 `OPERATIONS.md` §37.10.1 ("The relay's active key — your single highest-value secret") is a 7-point sysadmin checklist specifically for this key:
 
 1. Verify file mode `0400`, owned by `morphit-relay` user
-2. Use the encrypted-envelope form (`scripts/encrypt-active-key.ts` migrates a bare WIF to a passphrase-encrypted envelope; the relay prompts for the passphrase at first boot and holds it in memory thereafter)
+2. Use the encrypted-envelope form (`apps/relay/scripts/encrypt-active-key.ts` migrates a bare WIF to a passphrase-encrypted envelope; the relay prompts for the passphrase at first boot and holds it in memory thereafter)
 3. Confirm §37.5 systemd hardening is in effect (process memory protection)
 4. Optional but high-value: AppArmor profile (§37.7) confines the relay to JUST the key file + env file + IPC socket — an RCE in the HTTP layer can't read `/etc/passwd`
 5. UFW egress allowlist (§37.13) prevents an attacker with code-execution from `curl`ing the active key out

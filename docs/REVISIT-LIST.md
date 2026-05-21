@@ -1,6 +1,166 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp81 — 2026-05-21.  **30 STRUCTURAL DEFENSES (+O-27 service-worker-single-registration, +O-28 short-form-en-fallback-floor) · BATTERY 3924/0 TRIPLE-PULSE STABLE · 30 CONSECUTIVE CLEAN PULSES CUMULATIVE (DYNAMIC-CLASS FLAKE CLOSED) · 1,374 VITEST TESTS PASSING (+25 sanitizeClickPath unit tests) · LL #52 36TH CONSECUTIVE HW-VERIFIED · 2 PRODUCTION BUGS FIXED (cp81-D22a/b).**
+**Last touched:** Part 122 cp82 — 2026-05-21.  **30 STRUCTURAL DEFENSES · BATTERY 3924/0 TRIPLE-PULSE STABLE · 4 DOC FIXES SHIPPED TO OPERATOR-FACING SURFACE (cp82-A1 Ansible playbook command + cp82-A2/3/4 PRE-LAUNCH-CHECKLIST refresh + cp82-A5 collapsed-schema reality + cp82-A6 encrypt-active-key path) · 1 STALE SENTINEL RE-ANCHORED (cp82-A7 v33 schema head) · 2 BROKEN PUSH CLICK-PATHS FIXED (cp82-B1 chat /[account]/[permlink] + cp82-B2 feedback /[account]#reviews-heading) · 1 COSMETIC RENAME (cp81-A1 MAX_RAW_JSON_BYTES → MAX_RAW_JSON_LENGTH) · 3 HANDLERS DEEP-AUDITED CLEAN (chat, operatorRegister, feedback) · LL #52 37TH CONSECUTIVE HW-VERIFIED · 1,374 VITEST TESTS PASSING.**
+
+## CP82 LESSONS
+
+### Lesson #1 — Operator-doc audit caught 4 real install-blocking bugs
+
+Ken's sysadmin is about to start the Morphit install on the VPS.  cp82 ran a comprehensive sweep of `OPERATIONS.md`, `RUN-A-MORPHIT-NODE.md`, and `PRE-LAUNCH-CHECKLIST.md` against repo reality.  Findings:
+
+- **cp82-A1:** `RUN-A-MORPHIT-NODE.md:125` claimed the Ansible playbook is invoked via `morphit-ops install`.  No such command exists in `apps/ops-cli/src/commands/`.  The real invocation is `ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass` against `ops/ansible/playbook.yml`.  A sysadmin following the stale doc would hit "command not found" and bail.  Fixed.
+
+- **cp82-A2/A3/A4:** `PRE-LAUNCH-CHECKLIST.md` scenario-count cumulative checkpoint listing was last refreshed at cp52; missed cp80-O26, cp81-O27, cp81-O28.  Operator running pre-launch smoke would see a higher count than the doc references and might worry about a regression.  Refreshed timestamp (2026-05-19 → 2026-05-21), added cp82 entry to update history.
+
+- **cp82-A5:** `PRE-LAUNCH-CHECKLIST.md` D-block claimed schema is "currently at v33" — but the May 2026 audit collapsed v1-v27 into a single `version: 1` migration with `subsumesVersions: [2..27]`.  The schema as deployed still contains every v33 feature (push_subscriptions, locale column, push_pending indexes, extension_count, last_extended_at columns) via the collapsed `schema.sql`.  Operator running `SELECT * FROM schema_migrations;` would see only `version=1` and might think the indexer skipped migrations.  Rewrote the doc to reflect collapsed-migration reality + subsumesVersions semantics.
+
+- **cp82-A6:** `OPERATIONS.md` (5 occurrences) + `RUN-A-MORPHIT-NODE.md` (1 occurrence) referenced `scripts/encrypt-active-key.ts` at the repo root — file doesn't exist there.  Actual location is `apps/relay/scripts/encrypt-active-key.ts`.  Operator running the documented `tsx scripts/encrypt-active-key.ts ...` command would hit "file not found."  Fixed all 6 occurrences.
+
+**Lesson:** before EVERY tarball, grep operator-facing docs for command paths, script paths, and file paths; verify each against repo reality.  Memory #24 captured this rule; cp82 found 4 violations of it that had survived multiple prior checkpoints because nobody actually walked through the doc against a fresh tree.  cp82 didn't add a smoke for this directly — the existing per-doc smokes catch some categories — but the pattern of finding 4 unrelated drift cases in one audit suggests a `cp82-O29` smoke candidate: "every fenced `scripts/...` path in operator docs corresponds to a real file."  Deferred for cp83+ if Ken wants it.
+
+### Lesson #2 — Persona-walkthrough D-4 caught my cp82-A5 edit — exactly as designed
+
+When I rewrote the PRE-LAUNCH-CHECKLIST schema-version paragraph to remove the stale "v33 as of Part 122 cp13" framing, the persona-walkthrough smoke's D-4 scenario fired immediately: `mustHave` was anchored on the exact stale string I'd just removed.  This is **exactly** the smoke's job — catch silent doc drift at PR time.  I updated D-4 to anchor on `schema_migrations.version = 1`, `push_subscriptions`, and `extension_count` — single-line strings that exist verbatim in the rewritten paragraph and that any future v34 addition would force a maintainer to update.
+
+**Belt-and-braces with cp82-A7:** while updating D-4, I noticed the P122-CP2-F5 sentinel (the schema.sql canonical-head anchor) was still pinned at `v32 / Part 121` — but schema.sql already contained the `v33 / Part 122 cp13` header.  The sentinel was passing on a stale anchor because schema.sql had BOTH headers; the sentinel checks for the v32 string's PRESENCE, not for the v33 string's ABSENCE.  The drift this sentinel was designed to catch had already started.  Re-anchored at v33 in cp82.
+
+### Lesson #3 — Static-grep smokes can fall behind even when they're load-bearing
+
+cp82-A7 (the F5 sentinel re-anchor) is the same class of issue as cp81's lesson "static-grep smokes prove text exists, not that logic is live."  When a sentinel's anchor is "the canonical head version," and the canonical head moves, the sentinel must move with it.  Otherwise the smoke degrades into "the canonical head used to be v32, and there's still a comment referencing v32 in schema.sql" — which is true but useless.  Bumping the anchor pre-launch costs nothing; bumping it post-launch is harder because the v32-era schema is what's deployed.  cp82 caught this pre-launch.
+
+### Lesson #4 — Three handler deep-audits: chat / operatorRegister / feedback
+
+Comprehensive read-through of three high-traffic handlers per Ken's "deep-deep" discipline (Memory #2).  Total: 1,378 lines audited.
+
+**chat.ts (528 lines): CLEAN with one fix (cp82-B1).**  Layer 1 block-list + Layer 2 stranger-fee admission + Layer 3 fan-in/per-pair rate limits all sound.  Q11 order-permlink bypass correctly skips ONLY layer 2 (not blocks, not rate limits).  Permlink validator is strict charset (`[a-z0-9]+(?:-[a-z0-9]+)*`) so path traversal impossible.  base64 ciphertext shape-checked, MAX_CIPHERTEXT_CHARS budget documented with the worst-case codepoint math.  Single defect: push click_path constructed as `/order/${recipient}/${permlink}` — no such route exists.  Canonical order URL per `apps/web/src/lib/seo/routes.ts:198` is `/[account]/[permlink]`.  Fixed (cp82-B1).  cp81-D22b sanitizeClickPath gate would have caught the cross-origin risk anyway; the user would have landed on a 404.
+
+**operatorRegister.ts (383 lines): CLEAN.**  Exhaustive validation: tag charset + reserved-name + length (post-NFC); display_name pre-NFC length cap (×4 absorbs expansion ratios), post-NFC trim, codepoint-count cap, forbidden-char class, leading-`@` reject (incl. fullwidth U+FF20), impersonatesReservedName homograph skeleton check; contact_url scheme + userinfo + length; origin scheme + userinfo + length + path-fragment-query-forbidden + comprehensive SSRF defense (127.0.0.0/8, RFC 1918, link-local, IPv6 ULA/link-local, mDNS pseudo-TLDs, AWS/GCP IMDS literals).  Defense-in-depth pairs with the DNS-rebinding closure in `federationProbe.ts` (cp3 P122).  UNIQUE constraint on tag for first-come-first-served race-safety.  Audit row in operator_registration_events.  No findings.
+
+**feedback.ts (469 lines): CLEAN with one fix (cp82-B2).**  Three-prong order-permlink check (Finding R17 + Vector A5/B2): EXISTS + account=subject + fee_status='verified' — closes the cheap-fake-citation vector.  NFC-normalize BEFORE codepoint-count to defeat NFD-expanded comments.  Verified-chat-badge computation pinned to ctx.blockTime for replay-determinism with suspicious_reciprocity exclusion.  Welcome-bonus savepoint isolation so a bonus failure doesn't poison feedback INSERT.  Federation-aware operator-tag gate (only the cited-order's instance pays).  Single defect: push click_path `/profile/${subject}#feedback` — neither `/profile/` namespace nor `#feedback` id exists anywhere.  Canonical account-profile page is `/[account]/` with feedback section anchored at `#reviews-heading` (line 672 of `apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte`).  Fixed (cp82-B2).
+
+### Lesson #5 — cp81-A1 cosmetic rename: MAX_RAW_JSON_BYTES → MAX_RAW_JSON_LENGTH
+
+`string.length` in JS counts UTF-16 code units, not bytes.  A 16K-code-unit string of multibyte characters could be ~64KB on disk.  The defense is correct (parser allocation scales with code units), but the name was misleading.
+
+cp82 renamed the canonical export to `MAX_RAW_JSON_LENGTH` with the new naming pinned in the doc-block.  The old name `MAX_RAW_JSON_BYTES` is preserved as a back-compat alias (`export const MAX_RAW_JSON_BYTES = MAX_RAW_JSON_LENGTH`) so no external consumer breaks if any exists; in-repo `parseJsonPayload` updated to use the new name.  Single-source-of-truth value is 16384.
+
+The audit doc `docs/AUDIT-2026-05.md` still contains historical references to `MAX_RAW_JSON_BYTES = 16384`; those are accurate as audit-historical writing and stay as-is.
+
+## CP82 SCENARIO-COUNT MATH (educational note for future sessions)
+
+When pulse 1 returned 3804/1-failed instead of the expected 3924/0, I initially feared regression.  Diagnosis: the harness `total=$((total + n))` line only adds a smoke's scenario count when the smoke EXITS 0.  Persona-walkthrough has 120 scenarios; with persona failing (D-4 anchor missing post-A5 rewrite), the persona scenario count was excluded.  3924 - 120 = 3804.  After fixing D-4's anchor, count returned to 3924.
+
+**Lesson for future sessions:** if scenario count drops by a specific number, check whether that number matches a specific runner's scenario total.  Don't assume regression.
+
+## STRUCTURAL DEFENSES — 30 OPERATIONAL (unchanged from cp81)
+
+cp82 didn't add new structural defenses — it fixed 4 doc bugs, 2 click-path bugs, 1 stale sentinel anchor, 1 cosmetic rename, and audited 3 handlers clean.  All falls under "execution-of-existing-discipline" rather than "new defense surface."
+
+## CP82 BUG + DRIFT FIXES
+
+### cp82-A1 — Ansible playbook command in RUN-A-MORPHIT-NODE.md
+- Source: `docs/RUN-A-MORPHIT-NODE.md:125`
+- Was: `the Morphit Ansible playbook (which morphit-ops install invokes)`
+- Now: `the Morphit Ansible playbook (at ops/ansible/playbook.yml, invoked via ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass — see §13 below)`
+- Impact: sysadmin install command is now real.
+
+### cp82-A2/A3/A4 — PRE-LAUNCH-CHECKLIST.md refresh
+- Source: `docs/PRE-LAUNCH-CHECKLIST.md`
+- Refreshed timestamp 2026-05-19 → 2026-05-21
+- Extended cumulative-checkpoint scenario-count listing to include cp80-O26, cp81-O27, cp81-O28
+- Added cp82 update-history entry documenting the same
+
+### cp82-A5 — Schema version reality
+- Source: `docs/PRE-LAUNCH-CHECKLIST.md` Section D
+- Rewrote the "currently at v33 as of Part 122 cp13" paragraph to reflect collapsed-migration reality: `schema_migrations.version = 1` (which subsumes v1-v27), with v28-v33 features inline in schema.sql.  Listed every v33 feature explicitly with `subsumesVersions` framing.
+
+### cp82-A6 — encrypt-active-key script path
+- Source: `docs/OPERATIONS.md` (5 occurrences at lines 771, 776, 1071, 6446, 7195) + `docs/RUN-A-MORPHIT-NODE.md` (1 occurrence at line 1656)
+- Was: `scripts/encrypt-active-key.ts`
+- Now: `apps/relay/scripts/encrypt-active-key.ts`
+- Impact: operator running the documented command no longer hits file-not-found.
+
+### cp82-A7 — F5 sentinel re-anchor (schema.sql canonical head v33)
+- Source: `apps/web/scripts/persona-walkthrough-smoke.ts:565`
+- Was: `mustHave: ['v32 / Part 121 — multi-network asset support (USDT)']`
+- Now: `mustHave: ['v33 / Part 122 cp13 — Web Push subscription storage + delivery queue']`
+- Impact: sentinel is once again load-bearing against schema drift.
+
+### cp82-B1 — chat.ts push click_path
+- Source: `apps/indexer/src/indexer/handlers/chat.ts:497-500`
+- Was: `/order/${recipient}/${claimedPermlink}` (route doesn't exist)
+- Now: `/${recipient}/${claimedPermlink}` (canonical SEO route per routes.ts:198)
+- Impact: order-signal push notifications now land on the actual order page.
+
+### cp82-B2 — feedback.ts push click_path
+- Source: `apps/indexer/src/indexer/handlers/feedback.ts:300-307`
+- Was: `/profile/${subject}#feedback` (neither route nor fragment id existed)
+- Now: `/${subject}#reviews-heading` (canonical account profile with real id)
+- Impact: feedback push notifications now land on the recipient's profile feedback section.
+
+### cp81-A1 — MAX_RAW_JSON_BYTES → MAX_RAW_JSON_LENGTH (executed in cp82)
+- Source: `apps/indexer/src/blurt/verify.ts:130-156`
+- New canonical name: `MAX_RAW_JSON_LENGTH = 16 * 1024`
+- Back-compat alias kept: `MAX_RAW_JSON_BYTES = MAX_RAW_JSON_LENGTH`
+- `parseJsonPayload` updated to use new name.
+- Impact: future readers see the unit name matches the unit checked (UTF-16 code units, not bytes).
+
+## DEEP-AUDIT FINDINGS — THREE HANDLERS CLEAN
+
+| Handler | Lines | Findings | Action |
+|---|---|---|---|
+| chat.ts | 528 | 1 cp82-B1 click_path | Fixed; otherwise clean |
+| operatorRegister.ts | 383 | 0 | No findings |
+| feedback.ts | 469 | 1 cp82-B2 click_path | Fixed; otherwise clean |
+| **TOTAL** | **1,380** | **2 click_path defects** | **Both fixed cp82** |
+
+The pattern of finding click_path 404s in two of three handlers suggests cp82-B3 (deferred): a smoke that verifies every push_pending `click_path` string emitted by handlers corresponds to a route that exists in `apps/web/src/routes/`.  Would need to either statically parse the handlers OR add a runtime-flag that mocks push and asserts the click_path resolves.  Deferred for cp83+ if Ken wants it.
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| **Scenarios PASS** | **3924** | TRIPLE-PULSE STABLE (HARDWARE-VERIFIED across cp82 pulses; unchanged from cp81 since no new defenses landed) |
+| Runners FAILED | 0 | clean across all 3 cp82 final pulses |
+| **Workspaces TS-clean (LL #52)** | **7/7** | **37th consecutive (HARDWARE-VERIFIED this turn)** |
+| O-16 registry size | 11 invariants | unchanged |
+| vitest tests | 1,374 | unchanged from cp81 |
+| Translation pairs locked | 6,528 | unchanged |
+| Brag entries | 303 | unchanged (cp82 is bug-fix + doc-audit + cosmetic, not user-facing-milestone) |
+| Mediakit | 99,275 / 41,870 | unchanged (brag list cksum identical to cp80/cp81) |
+
+## CP83+ PREDICTED HUNTING GROUND
+
+1. **cp82-O29 candidate**: a smoke that verifies every fenced `scripts/...` path in operator docs corresponds to a real file (caught 6 stale references in cp82-A6 alone).  Static-grep, very cheap.
+2. **cp82-B3 candidate**: smoke that verifies every push_pending `click_path` string emitted by handlers maps to a real route.  Static-parse + route-tree compare.
+3. **Continue handler audit campaign** — cp82 covered chat / operatorRegister / feedback.  Next candidates: order.ts (974 lines, the biggest), orderReplace.ts (434), release.ts (313), strangerFee.ts (216), operatorBlock.ts (224).
+4. **Hardware blockers** — Ansible VM + Forgejo runner standup remain external to sandbox.
+
+## Two parked external blockers (unchanged through cp42→cp82)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed; **Ken's sysadmin starting NOW**)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+## What cp82 DID and DID NOT do
+
+DID:
+- Audit operator-facing docs (OPERATIONS.md, RUN-A-MORPHIT-NODE.md, PRE-LAUNCH-CHECKLIST.md) for sysadmin install readiness; found and fixed 4 stale references.
+- Re-anchor stale F5 sentinel at v33 canonical schema head.
+- Deep-deep audit chat.ts, operatorRegister.ts, feedback.ts handlers; found and fixed 2 click_path 404s.
+- Execute cp81-A1 cosmetic rename `MAX_RAW_JSON_BYTES` → `MAX_RAW_JSON_LENGTH` with back-compat alias.
+- Hardware-verify triple-pulse battery 3924/0/3924/0/3924/0.
+- Hardware-verify typecheck-sweep 7/7 → LL #52 37th consecutive.
+
+DID NOT:
+- Add new structural defenses (cp82 is bug-fix + audit + rename, not new surface).
+- Modify brag entries (cksum identical to cp80/cp81; not a user-facing milestone).
+- Execute the two hardware blockers (external to sandbox; sysadmin install starts NOW).
+- Add the cp82-O29 doc-path smoke or cp82-B3 click-path-route smoke — both would be nice but neither was in the explicit cp82 scope Ken requested; surfaced as cp83+ candidates.
+- Touch the audit-history wording in docs/AUDIT-2026-05.md referencing the old `MAX_RAW_JSON_BYTES` name — those references are historical writing, accurate at the time, and stay as-is.
+
+---
+
+
 
 ## CP81 LESSONS
 

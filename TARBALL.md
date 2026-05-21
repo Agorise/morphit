@@ -1,5 +1,76 @@
 # Tarball history
 
+## cp82 — SYSADMIN-INSTALL-READINESS PASS — 4 stale operator-doc refs fixed (cp82-A1/A6) + 2 push click_path 404s fixed (cp82-B1 chat + cp82-B2 feedback) + 1 stale F5 sentinel re-anchored (cp82-A7) + cosmetic rename MAX_RAW_JSON_BYTES → MAX_RAW_JSON_LENGTH (cp81-A1) + 3 handler deep-audits CLEAN (chat 528 lines + operatorRegister 383 lines + feedback 469 lines = 1,380 lines audited) + triple-pulse 3924/0 + LL#52 37th HW-verified (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp82-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 303 brag entries (unchanged) · locale parity 2,827 × 10 = 28,270 · **3924 scenarios pass / 0 runners failed TRIPLE-PULSE STABLE** (HARDWARE-VERIFIED across 3 cp82 final pulses) · **7/7 workspaces TS-clean (LL #52 37th consecutive HARDWARE-VERIFIED)** · **30 structural defenses operational** (unchanged from cp81) · 1,374 vitest tests passing (unchanged from cp81).
+
+### TL;DR
+
+cp82 is the **sysadmin-install-readiness checkpoint** — Ken's sysadmin starts the Morphit VPS install right after this tarball ships.  The checkpoint did 5 things:
+
+1. Audited operator-facing docs against repo reality (OPERATIONS.md + RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md).  Found and fixed **4 stale references** that would have actually confused the install: a fake `morphit-ops install` command, an out-of-date schema-version framing, a script-path that lives in `apps/relay/scripts/` not `scripts/`, and a stale cumulative-checkpoint listing.
+2. Re-anchored a stale static-grep sentinel (P122-CP2-F5) at the actual canonical schema head v33 — the original v32 anchor was still passing because schema.sql contained BOTH headers, and the drift the sentinel was designed to catch had already started.
+3. Deep-audited three high-traffic indexer handlers (chat / operatorRegister / feedback) per Memory #2 deep-deep discipline.  All three clean on the security/correctness axis — but caught **2 broken push click_path 404s** where notification taps would land on nonexistent routes.  Fixed both at the canonical SEO routes.
+4. Executed the cp81-A1 cosmetic rename `MAX_RAW_JSON_BYTES` → `MAX_RAW_JSON_LENGTH` with a back-compat alias.  Naming now matches the unit it actually checks (UTF-16 code units, not bytes).
+5. Triple-pulse battery 3924/0 + typecheck-sweep 7/7 (LL #52 37th consecutive HW-verified).
+
+### Key cp82 changes — quick reference
+
+| ID | What | Source file(s) | Severity |
+|---|---|---|---|
+| cp82-A1 | Ansible playbook invocation command | `docs/RUN-A-MORPHIT-NODE.md:125` | Install-blocking for sysadmin |
+| cp82-A2/A3/A4 | PRE-LAUNCH-CHECKLIST refresh + scenario-count update | `docs/PRE-LAUNCH-CHECKLIST.md` | Operator-confusion |
+| cp82-A5 | Collapsed-schema reality | `docs/PRE-LAUNCH-CHECKLIST.md` Section D | Operator-confusion |
+| cp82-A6 | `encrypt-active-key.ts` path (6 occurrences) | `docs/OPERATIONS.md` + `docs/RUN-A-MORPHIT-NODE.md` | Operator file-not-found |
+| cp82-A7 | F5 sentinel re-anchor v32 → v33 | `apps/web/scripts/persona-walkthrough-smoke.ts:565` | Sentinel drift |
+| cp82-B1 | chat.ts push click_path | `apps/indexer/src/indexer/handlers/chat.ts:497-500` | UX 404 (push tap) |
+| cp82-B2 | feedback.ts push click_path | `apps/indexer/src/indexer/handlers/feedback.ts:300-307` | UX 404 (push tap) |
+| cp81-A1 | MAX_RAW_JSON_BYTES → MAX_RAW_JSON_LENGTH rename | `apps/indexer/src/blurt/verify.ts` | Cosmetic (back-compat alias kept) |
+
+### Three handler deep-audits — 1,380 lines reviewed CLEAN
+
+| Handler | Lines | Findings | Action |
+|---|---|---|---|
+| chat.ts | 528 | 1 cp82-B1 click_path | Fixed; otherwise clean |
+| operatorRegister.ts | 383 | 0 | No findings |
+| feedback.ts | 469 | 1 cp82-B2 click_path | Fixed; otherwise clean |
+
+The audits walked each handler line-by-line for input validation, SQL injection vectors, idempotency, savepoint isolation, race conditions, privacy leaks, federation drift.  All three handlers were structurally sound — the only defects were the click_path 404s.
+
+### Honest disclosure: scenario-count drop math
+
+After Front 1's PRE-LAUNCH-CHECKLIST rewrite, the first pulse returned `Total: 3804 scenarios passed, 1 runners failed`.  Diagnosis: persona-walkthrough has 120 scenarios; the harness's `total=$((total + n))` line only ADDS a runner's scenario count when the runner EXITS 0.  With persona failing (D-4 anchor missing post-A5 rewrite), the 120 weren't added.  3924 - 120 = 3804.  After fixing D-4's anchor to single-line strings that exist verbatim in the rewritten paragraph (`schema_migrations.version = 1`, `push_subscriptions`, `extension_count`), the count returned to 3924.  Pure math, no regression.
+
+### Verification commands (cp83 fresh-session pickup)
+
+```bash
+tar xzf morphit-audit-2026-05-122-cp82-FULL-STATE.tar.gz
+cd morphit-cp82
+
+# 1. Operator-doc fixes
+grep "ansible-playbook -i inventory" docs/RUN-A-MORPHIT-NODE.md
+grep "schema_migrations.version = 1" docs/PRE-LAUNCH-CHECKLIST.md
+grep -c "apps/relay/scripts/encrypt-active-key.ts" docs/OPERATIONS.md  # 5
+grep -c "apps/relay/scripts/encrypt-active-key.ts" docs/RUN-A-MORPHIT-NODE.md  # 1
+
+# 2. F5 sentinel
+grep "v33 / Part 122 cp13" apps/web/scripts/persona-walkthrough-smoke.ts
+
+# 3. click_path fixes
+grep "subject}#reviews-heading" apps/indexer/src/indexer/handlers/feedback.ts
+
+# 4. Cosmetic rename + alias
+grep -E "MAX_RAW_JSON_(LENGTH|BYTES)" apps/indexer/src/blurt/verify.ts  # 4 hits
+
+# 5. Battery
+npm install --ignore-scripts --no-audit --no-fund
+bash scripts/run-smokes.sh   # 3924 scenarios passed, 0 runners failed
+bash scripts/typecheck-sweep.sh  # 7/7 clean
+```
+
+---
+
 ## cp81 — TWO PRODUCTION BUGS FIXED in service-worker subsystem (D22a/b/c) + NEW STRUCTURAL DEFENSES O-27 (service-worker-single-registration; 7 checks) + O-28 (short-form-en-fallback-floor; 4,770 pairs/CI run) + 25 vitest unit tests for sanitizeClickPath + indexer dispatcher CLEAN audit + 30 cumulative consecutive clean pulses (DYNAMIC-CLASS FLAKE CLOSED for pre-launch) + LL#52 36th HW-verified + battery 3924/0 (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp81-FULL-STATE.tar.gz`

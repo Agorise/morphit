@@ -476,9 +476,27 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// failure: the message is already stored.
 		const isOrderSignal = orderResponseBypass === true && typeof claimedPermlink === 'string';
 		const pushCategory = isOrderSignal ? 'order' : 'chat';
+		// Click-through targets:
+		//   - order signal: canonical order URL is /{account}/{permlink}
+		//     per apps/web/src/routes/[lang]/[x+40][account=account]/
+		//     [permlink=permlink]/+page.svelte (SEO-routes spec line ~198).
+		//     The locale prefix is added on the client side by the
+		//     SvelteKit router resolving the user's `[lang]` segment;
+		//     we emit the locale-less canonical here.
+		//   - plain chat: /chat is the chat-list landing
+		//     (apps/web/src/routes/[lang]/chat/+page.svelte).
+		//
+		// Both flow through sanitizeClickPath in the service worker
+		// (cp81-D22b) before clients.openWindow() is called, so any
+		// malformed path falls back to '/' safely.
+		//
+		// cp82-B1 audit: prior version emitted `/order/${recipient}/
+		// ${permlink}` which had no matching route; the SW gate
+		// sanitized the cross-origin risk but the user landed on a
+		// 404.  Fixed to the canonical SEO-routes pattern.
 		const pushClickPath =
 			isOrderSignal && typeof claimedPermlink === 'string'
-				? `/order/${recipient}/${claimedPermlink}`
+				? `/${recipient}/${claimedPermlink}`
 				: '/chat';
 		try {
 			const localeRow = await client.query<{ locale: string }>(
