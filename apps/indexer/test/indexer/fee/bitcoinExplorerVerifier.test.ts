@@ -408,3 +408,152 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
 		expect(result.kind).toBe('verified');
 	});
 });
+
+/**
+ * cp78-D20: tip-height depth-check coverage.
+ *
+ * cp77 audit (Lesson #5) flagged that no test exercises the
+ * `minConfirmations > 1` path in production code at
+ * `apps/indexer/src/indexer/fee/bitcoinExplorerVerifier.ts:266+`,
+ * which calls `fetchTipHeight()` which in turn calls
+ * `res.text()` (line 446).  The existing `mockFetchJson()` /
+ * `mockFetchByUrl()` helpers don't provide `.text()` because all
+ * other tests use `minConfirmations: 1`, which short-circuits at
+ * line 266 before the `.text()` call.
+ *
+ * This block exercises the path explicitly and proves the mock
+ * contract production needs — closing the coverage gap surfaced
+ * in cp77 audit.
+ */
+describe('BitcoinExplorerFeeVerifier — minConfirmations > 1 depth check', () => {
+	/** Mock that responds to /tx with JSON and /blocks/tip/height with
+	 *  text — matching the production `Response` field-consumption
+	 *  contract.  fetchTipHeight calls `res.text()` at line 446;
+	 *  fetchTx calls `res.json()`. */
+	function mockFetchTxAndTip(
+		txBody: unknown,
+		tipHeightText: string,
+		tipStatus = 200
+	): typeof fetch {
+		return vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+			const url = typeof input === 'string' ? input : input.toString();
+			if (url.includes('/blocks/tip/height')) {
+				return {
+					ok: tipStatus >= 200 && tipStatus < 300,
+					status: tipStatus,
+					text: async () => tipHeightText
+				};
+			}
+			// Default to /tx response shape.
+			return {
+				ok: true,
+				status: 200,
+				json: async () => txBody
+			};
+		}) as unknown as typeof fetch;
+	}
+
+	it('depth ≥ minConfirmations → verified', async () => {
+		// tx mined at block 800_000; tip at 800_005; depth = 5+1-0 = 6.
+		// minConfirmations: 3, so 6 ≥ 3 → verified.
+		const fetchImpl = mockFetchTxAndTip(
+			{
+				txid: VALID_TXID,
+				vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+				status: { confirmed: true, block_height: 800_000 }
+			},
+			'800005'
+		);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ explorerUrls: ['https://blockstream.info/api'], minConfirmations: 3 }),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('verified');
+	});
+
+	it('depth < minConfirmations → pending_external (waits for more confirmations)', async () => {
+		// tx mined at block 800_000; tip at 800_001; depth = 1+1-0 = 2.
+		// minConfirmations: 3, so 2 < 3 → pending_external.
+		const fetchImpl = mockFetchTxAndTip(
+			{
+				txid: VALID_TXID,
+				vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+				status: { confirmed: true, block_height: 800_000 }
+			},
+			'800001'
+		);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ explorerUrls: ['https://blockstream.info/api'], minConfirmations: 3 }),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') {
+			expect(result.reason).toMatch(/depth/);
+		}
+	});
+
+	it('tip-height endpoint 5xx → pending_external (retry later)', async () => {
+		const fetchImpl = mockFetchTxAndTip(
+			{
+				txid: VALID_TXID,
+				vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+				status: { confirmed: true, block_height: 800_000 }
+			},
+			'',
+			503
+		);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ explorerUrls: ['https://blockstream.info/api'], minConfirmations: 3 }),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') {
+			expect(result.reason).toMatch(/tip-height/);
+		}
+	});
+
+	it('tip-height endpoint returns malformed text → pending_external', async () => {
+		const fetchImpl = mockFetchTxAndTip(
+			{
+				txid: VALID_TXID,
+				vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+				status: { confirmed: true, block_height: 800_000 }
+			},
+			'not-a-number'
+		);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ explorerUrls: ['https://blockstream.info/api'], minConfirmations: 3 }),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') {
+			expect(result.reason).toMatch(/tip-height/);
+		}
+	});
+
+	it('confirmed tx missing block_height → pending_external (degenerate explorer response)', async () => {
+		// Same tip-height endpoint shape, but the tx has no block_height
+		// even though confirmed:true.  Production line 272 catches this.
+		const fetchImpl = mockFetchTxAndTip(
+			{
+				txid: VALID_TXID,
+				vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+				status: { confirmed: true } // no block_height
+			},
+			'800005'
+		);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ explorerUrls: ['https://blockstream.info/api'], minConfirmations: 3 }),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') {
+			expect(result.reason).toMatch(/block_height/);
+		}
+	});
+});

@@ -251,14 +251,14 @@ for entry in "${SMOKES[@]}"; do
 		if [ -z "$n" ] || [ "$n" -eq 0 ] 2>/dev/null; then
 			failed=$((failed + 1))
 			echo "  ✗ $name (passed runner but emitted no canonical '^✓ all N …' line — fix the smoke to print it)"
-			tail -10 "$SMOKE_OUT" | sed 's/^/      /'
+			tail -30 "$SMOKE_OUT" | sed 's/^/      /'
 			continue
 		fi
 		total=$((total + n))
 	else
 		failed=$((failed + 1))
 		echo "  ✗ $name"
-		tail -10 "$SMOKE_OUT" | sed 's/^/      /'
+		tail -30 "$SMOKE_OUT" | sed 's/^/      /'
 	fi
 done
 
