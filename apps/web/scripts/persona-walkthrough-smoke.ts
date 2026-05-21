@@ -507,16 +507,26 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['cd /opt/morphit-relay', 'cd /opt/morphit-indexer']
 	},
 	{
-		name: 'D-4 — PRE-LAUNCH reflects schema v33, not v32',
+		name: 'D-4 — PRE-LAUNCH reflects collapsed schema with v33 features',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
 		// Originally pinned v31 (Part 119); bumped to v32 in Part 121
 		// cp3 when orders.asset_network landed; bumped to v33 in Part
-		// 122 cp13 when push_subscriptions + push_pending landed.  If
-		// a future part adds another migration, bump this sentinel +
-		// the doc together.
-		mustHave: ['currently at v33 as of Part 122 cp13'],
-		mustNotHave: ['currently at v29 as of Part 108++']
+		// 122 cp13 when push_subscriptions + push_pending landed.
+		// Part 122 cp82 refactored the wording to reflect the
+		// collapsed-migration reality (MIGRATIONS[] stops at v1 which
+		// subsumes v1-v27; v28-v33 features live inline in schema.sql)
+		// — the anchor now pins both `schema_migrations.version = 1`
+		// (the current MIGRATIONS[] head) AND the v33-feature
+		// inventory phrase that any future v34 addition must update.
+		// If a future part adds another migration, bump BOTH this
+		// sentinel + the doc together.
+		mustHave: [
+			'`schema_migrations.version = 1`',
+			'`push_subscriptions`',
+			'`extension_count`'
+		],
+		mustNotHave: ['currently at v29 as of Part 108++', 'currently at v32 as of']
 	},
 	{
 		// Part 122 cp2 — F5 finding from cp1 audit.
@@ -548,11 +558,19 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'P122-CP2-F5 — schema.sql canonical head version pinned (cp1 F5 fix)',
 		file: 'apps/indexer/src/db/schema.sql',
 		rootRelative: true,
-		// The canonical head is v32 (Part 121).  This line is the last
-		// version-header comment in schema.sql; if it changes the
-		// sentinel fails, forcing the maintainer to either bump the
-		// sentinel (and check D-4) or revert the schema change.
-		mustHave: ['v32 / Part 121 — multi-network asset support (USDT)']
+		// The canonical head is v33 (Part 122 cp13 — push_subscriptions
+		// + push_pending tables, with cp14 adding the `locale` column).
+		// This line is a late version-header comment in schema.sql; if
+		// it changes the sentinel fails, forcing the maintainer to
+		// either bump the sentinel (and check D-4 above) or revert
+		// the schema change.  Part 122 cp82 audit bumped this anchor
+		// from v32 (the original pin) to v33 — the sentinel was
+		// passing on a stale anchor because schema.sql contained
+		// BOTH `v32 / Part 121` AND `v33 / Part 122 cp13` headers
+		// (the inline-without-MIGRATIONS pattern this sentinel was
+		// designed to catch had already started to drift).  cp82
+		// re-anchors at v33 to restore the load-bearing property.
+		mustHave: ['v33 / Part 122 cp13 — Web Push subscription storage + delivery queue']
 	},
 	{
 		// Part 122 cp3 — DNS-rebinding closure in federationProbe.

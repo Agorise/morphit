@@ -768,12 +768,12 @@ KDF derivation step.
 ### Prerequisites (one-time setup)
 
 The key file must be an encrypted envelope produced by
-`scripts/encrypt-active-key.ts`. If you're still running with
+`apps/relay/scripts/encrypt-active-key.ts`. If you're still running with
 a plaintext WIF file (dev / legacy), migrate now:
 
 ```sh
 cd /opt/morphit/apps/relay
-tsx scripts/encrypt-active-key.ts \
+tsx apps/relay/scripts/encrypt-active-key.ts \
   /etc/morphit/keys/relay-active.key \
   /etc/morphit/keys/relay-active.enc
 ```
@@ -1068,7 +1068,7 @@ generated offline.
    # or tmpfs-backed /run if your host has one):
    echo "<new-wif>" > /run/relay-active.tmp
    chmod 0400 /run/relay-active.tmp
-   tsx scripts/encrypt-active-key.ts \
+   tsx apps/relay/scripts/encrypt-active-key.ts \
      /run/relay-active.tmp \
      /etc/morphit/keys/relay-active.enc.new
    sudo shred -u /run/relay-active.tmp
@@ -6443,7 +6443,7 @@ keys are user problems, not operator problems.
 2. **Encrypted-on-disk active key (recommended).**  Per ADR-0010
    §4, the active key file may be a passphrase-encrypted
    envelope rather than a bare WIF.  See `§3` of this doc for
-   the migration script (`scripts/encrypt-active-key.ts`).  An
+   the migration script (`apps/relay/scripts/encrypt-active-key.ts`).  An
    encrypted envelope means a stolen disk image yields nothing
    without the passphrase, which is entered interactively at
    first boot and held in process memory thereafter.
@@ -7192,7 +7192,7 @@ Cover all three legs of the restart story:
 
 - **The hardware** — BIOS / UEFI "AC Power Recovery" set to "Power On" or "Last State" (laptop), or default Pi auto-boot. Verified at install time per `RUN-A-MORPHIT-NODE.md §3a.6`.
 - **The OS services** — `systemctl is-enabled morphit-indexer morphit-relay morphit-backup.timer` should all return `enabled`. If any are `disabled`, run `systemctl enable` for them. Test annually by issuing `sudo reboot` and confirming everything comes back without manual intervention.
-- **The encrypted-key passphrase** — if you're using the encrypted-envelope form for `MORPHIT_RELAY_ACTIVE_KEY_FILE` (`scripts/encrypt-active-key.ts`), the relay prompts for the passphrase on stdin at boot. **A reboot from outside your house — for example, the UPS dying during a long outage — will leave the relay waiting for the passphrase indefinitely.** Two mitigations:
+- **The encrypted-key passphrase** — if you're using the encrypted-envelope form for `MORPHIT_RELAY_ACTIVE_KEY_FILE` (`apps/relay/scripts/encrypt-active-key.ts`), the relay prompts for the passphrase on stdin at boot. **A reboot from outside your house — for example, the UPS dying during a long outage — will leave the relay waiting for the passphrase indefinitely.** Two mitigations:
   1. Configure the relay's systemd unit with `StandardInput=tty-force` AND a wrapper service that emails you when the relay is stuck waiting for input. You then SSH in and supply the passphrase.
   2. OR run the relay with the **plaintext-WIF form** of the key file (mode 0400, owned by the relay user, on an encrypted filesystem volume). This trades passphrase-at-boot for at-rest disk encryption. For a single-operator residential deployment, the disk-encryption-at-rest posture is usually appropriate; the passphrase-at-boot ceremony was designed for VPS deployments where the disk substrate isn't yours.
 

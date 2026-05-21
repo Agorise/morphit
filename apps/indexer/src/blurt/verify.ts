@@ -119,15 +119,31 @@ export function resolveSignerPostingPubkey(
  * Audit 2026-05 finding 3-1: hard length cap on the raw JSON
  * string BEFORE JSON.parse.  Blurt's chain-level custom_json
  * ceiling is currently ~8KB but (a) it has shifted before, (b)
- * a future bump would be silent.  Cap at 16KB — comfortably
- * above any legitimate Morphit payload, well below pathological
- * sizes that exercise stack-depth or parser-allocation issues.
+ * a future bump would be silent.  Cap at 16KB-equivalent —
+ * comfortably above any legitimate Morphit payload, well below
+ * pathological sizes that exercise stack-depth or parser-
+ * allocation issues.
  *
  * Per-handler length caps (e.g. checkJsonbSize at 4KB, profile
  * at 8KB) are downstream of this; this is the universal first
  * gate.
+ *
+ * Naming note (cp81-A1): the name uses LENGTH rather than BYTES
+ * because `string.length` counts UTF-16 code units, not bytes.
+ * A 16K-code-unit multibyte string could be ~64KB on disk.  The
+ * defense is correct (parser allocation scales with code units,
+ * not bytes), but the original name `MAX_RAW_JSON_BYTES` was
+ * misleading.  Renamed to MAX_RAW_JSON_LENGTH in cp82 to match
+ * the unit it actually checks; a back-compat alias is exported
+ * for any external code (none in-repo) still referencing the
+ * old name.
  */
-export const MAX_RAW_JSON_BYTES = 16 * 1024;
+export const MAX_RAW_JSON_LENGTH = 16 * 1024;
+
+/** Back-compat alias.  Will be removed once we've verified no
+ *  external consumer (or audit-document grep) is still hitting
+ *  the old name. */
+export const MAX_RAW_JSON_BYTES = MAX_RAW_JSON_LENGTH;
 
 /**
  * Parse a custom_json op's `json` string safely. On malformed JSON,
@@ -135,7 +151,7 @@ export const MAX_RAW_JSON_BYTES = 16 * 1024;
  */
 export function parseJsonPayload(op: CustomJsonOp): unknown {
 	if (typeof op.json !== 'string') return null;
-	if (op.json.length > MAX_RAW_JSON_BYTES) return null;
+	if (op.json.length > MAX_RAW_JSON_LENGTH) return null;
 	try {
 		return JSON.parse(op.json);
 	} catch {
