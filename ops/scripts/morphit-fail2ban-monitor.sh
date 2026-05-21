@@ -45,8 +45,8 @@ fi
 # `fail2ban-client status` reports "Jail list: jail1, jail2, ..."
 # Returns non-zero if the daemon isn't running.
 status_output=$(fail2ban-client status 2>&1) || {
-    emit error daemon_unreachable \
-         '{"error":"'$(json_str "$status_output")'","hint":"check sudo systemctl status fail2ban"}'
+    _f2b_payload='{"error":"'$(json_str "$status_output")'","hint":"check sudo systemctl status fail2ban"}'
+    emit error daemon_unreachable "$_f2b_payload"
     exit 0
 }
 
