@@ -1,6 +1,98 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp77 — 2026-05-20.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 (4 PULSES: 3 CLEAN + 1 ORCHESTRATION FLAKE, NOT TEST REGRESSION) · 1,344 VITEST TESTS PASSING · LL #52 33RD CONSECUTIVE (HARDWARE-VERIFIED) · 14 LONG-FORM TRANSLATION KEYS REMAIN.**
+**Last touched:** Part 122 cp78 — 2026-05-21.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 TRIPLE-PULSE STABLE (HARDWARE-VERIFIED, 8 CONSECUTIVE CLEAN PULSES POST-D19) · 1,349 VITEST TESTS PASSING (+5 from cp78-D20) · RELAY FLAKE ROOT-CAUSED AS SCRYPT-TIMEOUT-UNDER-CONTENTION, NOT HARNESS ORCHESTRATION (cp77 LESSON #2 WAS WRONG; CORRECTED HERE) · 11 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP78 LESSONS
+
+### Lesson #1 — cp77 Lesson #2 was wrong; correcting the diagnosis
+cp77 documented the recurring vitest-must-pass failure as a "harness orchestration flake" with three candidate fixes (bump per-smoke timeout, add stdout flush, gate on consecutive failures).  cp78 investigated by extending the smoke to extract failing-test names, then ran 4 battery pulses watching for the failure.  The first pulse reproduced it — and revealed a **real** test failure: `passing=243 failing=1 skipped=0` on apps/relay.  Not a harness artifact.  cp77's `tail -10` had chopped the workspace `▸` line and surrounding context, hiding the truth from view; the smoke's "could not extract failing test names from vitest output" follow-up was masked by the same truncation.
+
+**Actual root cause:** the scrypt-heavy relay tests (`unlock.test.ts` 931–1834ms solo durations, `keyEnvelope.test.ts` 464–1422ms) hit vitest's default 5000ms per-test timeout under battery CPU contention from 100+ concurrent tsx processes warming up.
+
+**Fix (cp78-D19):** bumped `apps/relay/vitest.config.ts` `testTimeout` from default 5000ms to 30000ms — 16× headroom over the slowest observed solo duration.  Real hangs would still fail fast within a wall-clock budget.
+
+**Validation:** ran 8 consecutive battery pulses post-D19 (A, B, C, D, E, final-1, final-2, final-3); ALL clean at 3913/0.  Pre-D19 reproduction rate was ~10–20%; post-D19 is 0% across 8 pulses.  Not proof of absence, but strong evidence the timeout was the real cause.
+
+**Meta-lesson:** cp77's Lesson #3 ("audit-first → design-from-findings") was right in spirit but cp77's audit itself was the wrong audit.  cp77 audited mock-vs-production fixture divergence (a static class) and found nothing.  The actual class was timing-under-contention (a dynamic class), which a code-shape audit can't surface.  Dynamic-class flakes require running the system under load.  Future audits should ask "could this fail under timing/contention/concurrency?" alongside "does this match the production interface?"
+
+### Lesson #2 — Failed-smoke output context budgets matter
+The cp77→cp78 misdiagnosis was directly enabled by `run-smokes.sh` truncating failed-smoke output to `tail -10`.  10 lines is enough for trivial smoke failures (a single canonical line) but not for multi-workspace smokes like `vitest-must-pass`, which emit 3-6 lines per workspace.  When the indexer workspace ran first and the relay failed, the `▸ apps/indexer` header + indexer's pass lines + the actual relay failure detail together exceeded 10 lines — and `tail -10` showed only the relay summary and "vitest-must-pass smoke FAILED" footer, leaving the failing-test name out of view.
+
+cp78 bumped `tail -10` to `tail -30` in both code paths (canonical-line-missing path AND smoke-failed path).  30 lines is enough for current multi-workspace smokes.  If new smokes need more, bump again — disk is cheap; debugging context is expensive.
+
+### Lesson #3 — Smokes that aggregate sub-runs need to surface sub-run names
+The original vitest-must-pass-smoke emitted only counts (`passing=243 failing=1`) and a generic "Test-rot or regression; run `cd apps/relay && npx vitest run` to investigate" hint.  Under battery contention this hint was the only diagnostic surface — and it required a developer to manually reproduce the flake to learn anything.
+
+cp78-D18 parses vitest's `× test-name` lines (U+00D7 multiplication-sign marker, the basic-reporter format) and `❯ test/file.test.ts (N test | M failed)` summary lines from captured output, and surfaces up to 5 of each in the `fail()` message.  Future flakes will name themselves in the harness output instead of requiring manual reproduction.
+
+Generalization: any structural defense / smoke that wraps a multi-test runner should surface the failing test names in its fail message, not just counts.
+
+## STRUCTURAL DEFENSES — 27 OPERATIONAL (unchanged from cp77)
+
+No new defenses at cp78.  cp78-D18/D19/D20 are bug fixes + coverage extensions, not structural defenses.  Specifically NOT shipping an O-26 yet — the cp77 audit-first → design-from-findings discipline still holds; the timing-under-contention class is now better-instrumented (D18 + tail -30) so when it next surfaces, the design will be informed by concrete signal.
+
+## CP78 BUG + DRIFT FIXES
+
+- **cp78-D18 (smoke diagnostic surface)**: `apps/web/scripts/vitest-must-pass-smoke.ts` extracts failing-test names from vitest's `× test-name` and `❯ test/file (N test | M failed)` patterns, surfacing up to 5 of each in `fail()` messages.  Also bumped `scripts/run-smokes.sh` from `tail -10` to `tail -30` in both failed-smoke output paths so the failing-test names survive harness truncation.
+- **cp78-D19 (relay flake DEFINITIVELY FIXED)**: `apps/relay/vitest.config.ts` `testTimeout` bumped from vitest's 5000ms default to 30000ms.  Closes the cp77-pulse-3 / cp78-pulse-1 intermittent relay failure where scrypt-heavy tests (`unlock.test.ts`, `keyEnvelope.test.ts`) hit timeout under battery CPU contention.  Hardware-validated: 8 consecutive clean pulses (3913/0 each) post-D19, vs ~10–20% reproduction rate pre-D19.
+- **cp78-D20 (cp77 audit-finding coverage closure)**: `apps/indexer/test/indexer/fee/bitcoinExplorerVerifier.test.ts` gained 5 new tests under a new `describe('minConfirmations > 1 depth check')` block, exercising the previously-untested `fetchTipHeight()` + `res.text()` code path at lines 266/446 of production.  New mock `mockFetchTxAndTip()` provides the `.text()` field on `/blocks/tip/height` URL substring, matching production's Response field-consumption contract.  Indexer vitest baseline bumped 481→486 in vitest-must-pass-smoke (silent test deletion would now fail the smoke).
+
+## CP78 TRANSLATION PROGRESS
+
+Batch 11: 3 long-form FAQ keys × 6 backlog locales = 18 individual translations applied to `apps/web/src/lib/i18n/locales/{it,pl,ru,fa,zh-CN,zh-HK}.json`:
+- `faq.entries.what_is_ltc.a` (1156 EN ch)
+- `faq.entries.what_is_sol.a` (1380 EN ch)
+- `faq.entries.what_is_zec.a` (1531 EN ch)
+
+**Remaining: 11 long-form keys** (was 14 at cp77; -3 from batch 11 closing across all 6 backlog locales).  All 10 locale JSONs validated parseable; locale parity intact (2,827 keys × 10 locales = 28,270 total — fixed metric label; cp77 had said 28,260 from a stale 2,826-per-locale memory but actual was always 2,827).
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| **Scenarios PASS** | **3913** | TRIPLE-PULSE STABLE; pulses final-1+2+3 all 3913/0 |
+| Runners FAILED | 0 | clean across 3 final pulses + 5 earlier verification pulses (8 consecutive) |
+| **Workspaces TS-clean (LL #52)** | **7/7** | HARDWARE-VERIFIED cp77; not re-run cp78 (no .ts code edits outside tests + locale JSONs + vitest config) |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **1,349 across 3 workspaces** | **+5 from cp78-D20** (was 1,344 at cp77; indexer 481→486) |
+| **Backlog translations remaining** | **11 long-form keys** | was 14 at cp77 (batch 11 -3 net) |
+| Brag entries | 302 | unchanged from cp76/77 — cp78 added no brags (D18/D19/D20 are internal hygiene, not user-facing claims per Memory rule) |
+| Mediakit | 1379262708 41654 | unchanged from cp77 (cksum identical; no regen since brag list cksum identical too) |
+
+## CP79+ PREDICTED HUNTING GROUND
+
+1. **Continue translation backlog: 11 long-form keys remaining.**  Next 3-5: `faq.entries.monero_amount_jitter.a` (1144), `faq.entries.what_is_xrp.a` (2454), `faq.entries.which_dai_network.a` (1369), `faq.entries.which_usdc_network.a` (1479), `faq.entries.why_dai_warning.a` (1439).  Larger keys mean batches stay 3-5 per checkpoint.
+2. **Watch for the relay flake to NOT come back.**  cp78-D19's 30s timeout should hold; if it ever flakes again, the cp78-D18 instrumentation will name the test directly and a deeper investigation can take a known starting point.
+3. **Mock-vs-production fixture divergence stays deferred** — cp77's negative-result audit still holds; no defense to ship absent a real finding.
+4. **Service-worker fetch-caching edge cases** (carried through cp74-cp78; still unaudited).
+5. **Hardware-execute the two parked external blockers** (Ansible VM, Forgejo runner standup) — unchanged through cp42→cp78.
+6. **Dynamic-class flake hunting** (cp78 Lesson #1 meta-lesson): when next free, deliberately run battery N times to surface any other timing-under-contention class items beyond the scrypt timeouts.  If repeated pulses stay clean for 30+ runs, log a positive cp79 finding.
+
+## Two parked external blockers (unchanged through cp42→cp78)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+## What cp78 DID and DID NOT do
+
+DID:
+- Diagnose + fix the cp77 mis-diagnosed relay flake (D19 testTimeout bump; 8 consecutive clean pulses).
+- Add failing-test-name extraction to vitest-must-pass-smoke (D18) so future flakes name themselves in harness output.
+- Bump harness `tail -10`→`tail -30` so failed-smoke context survives.
+- Close the cp77 audit-finding coverage gap on bitcoinExplorerVerifier tip-height path (D20; 5 new tests; baseline bumped 481→486).
+- Apply batch 11 translations (18 strings); backlog 14→11.
+- Hardware-verify triple-pulse 3913/0 (3 of 3 final + 5 of 5 earlier = 8 of 8 consecutive).
+- Correct cp77 Lesson #2 misdiagnosis (documented above as cp78 Lesson #1).
+
+DID NOT:
+- Ship cp78-O26 — discipline still holds; no confirmed structural class to defend against beyond the now-fixed timeout case.
+- Add new brag entries — D18/D19/D20 are internal hygiene per standing memory rule ("brag-list discipline: public-facing... no internal plumbing entries").
+- Regenerate mediakit — brag list cksum unchanged, so mediakit cksum is unchanged too.
+- Modify production code outside test config + new tests + a translation batch — cp78 is closely scoped.
+
+---
+
+
 
 ## CP77 LESSONS
 

@@ -53,11 +53,12 @@ interface WorkspaceBaseline {
 const WORKSPACES: WorkspaceBaseline[] = [
 	{
 		path: 'apps/indexer',
-		// cp70 ship state: 481 passed + 1 skipped.  A future
-		// checkpoint should only increase this; losing tests
-		// silently shouldn't be a clean smoke.
-		minPassing: 481,
-		notes: 'indexer handler + API tests; baseline locked at cp70 ship'
+		// cp70 ship state: 481 passed + 1 skipped.  cp78-D20 added 5
+		// tip-height depth-check tests (minConfirmations > 1 path) →
+		// new baseline 486.  A future checkpoint should only increase
+		// this; losing tests silently shouldn't be a clean smoke.
+		minPassing: 486,
+		notes: 'indexer handler + API tests; baseline cp70 → cp78 (+5 tip-height tests)'
 	},
 	{
 		path: 'apps/relay',
@@ -147,9 +148,39 @@ for (const ws of WORKSPACES) {
 	}
 	console.log(`  passing=${result.passing}  failing=${result.failing}  skipped=${result.skipped}`);
 	if (result.failing > 0) {
+		// cp78-D18: when a workspace reports failures, extract the
+		// failing test names from vitest output so the harness's
+		// `tail -30` shows enough context to root-cause the flake.
+		// Previously the smoke just emitted the count, and the
+		// harness chopped the workspace ▸ line and everything before
+		// it — leaving a "1 test(s) failing" message with no name.
+		//
+		// vitest --reporter=basic prints failing tests in two places:
+		//   - "   × test name Xms" (U+00D7 × marker, one per failing test)
+		//     followed by "     → assertion message"
+		//   - " ❯ test/file.test.ts (N test | M failed) Xms" (file summary)
+		// We capture both — the × lines name individual tests; the ❯ lines
+		// confirm test-file boundaries.
+		// eslint-disable-next-line no-control-regex
+		const stripped = result.output.replace(/\x1b\[[0-9;]*m/g, '');
+		const xLines = stripped
+			.split('\n')
+			.filter((l) => /^\s*×\s+\S/.test(l) && !/Test\s+Files/.test(l))
+			.map((l) => l.trim())
+			.slice(0, 5);
+		const fileLines = stripped
+			.split('\n')
+			.filter((l) => /\.test\.ts\s+\(.*failed\s*\)/.test(l))
+			.map((l) => l.trim())
+			.slice(0, 5);
+		const namesList = xLines.length > 0 ? xLines : fileLines;
+		const failNames =
+			namesList.length > 0
+				? ` Failing:\n      ${namesList.join('\n      ')}`
+				: ' (could not extract failing test names from vitest output)';
 		fail(
 			`${ws.path} has no failing tests`,
-			`${result.failing} test(s) failing.  Test-rot or regression; run \`cd ${ws.path} && npx vitest run\` to investigate.`
+			`${result.failing} test(s) failing.  Test-rot or regression; run \`cd ${ws.path} && npx vitest run\` to investigate.${failNames}`
 		);
 		continue;
 	}
