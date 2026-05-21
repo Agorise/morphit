@@ -134,6 +134,7 @@ SMOKES=(
 	"apps/web:fetch-must-have-timeout-smoke"
 	"apps/web:seo-routes-i18n-all-locales-smoke"
 	"apps/web:per-asset-mandatory-family-i18n-parity-smoke"
+	"apps/web:long-form-en-fallback-floor-smoke"
 	"apps/web:i18n-locale-parity-smoke"
 	"apps/web:i18n-locale-registry-smoke"
 	"apps/web:i18n-path-helpers-smoke"
