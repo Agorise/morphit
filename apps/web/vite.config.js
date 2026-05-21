@@ -55,6 +55,15 @@ export default defineConfig({
 		// Default to 'node' so those work.  The 8 files that DO
 		// need DOM are tagged with `// @vitest-environment jsdom`
 		// at the top, per Vitest's per-file override convention.
-		environment: 'node'
+		environment: 'node',
+		// cp79-D21: uniform 30s per-test timeout across all
+		// workspaces.  apps/web's `src/lib/crypto/crypto.test.ts`
+		// runs 52 tests in 5270ms total (~100ms avg), but
+		// libsodium-wrappers-sumo + scrypt-style operations have
+		// long-tail durations that can spike under battery CPU
+		// contention.  Same dynamic-class defense as cp78-D19
+		// applied to relay; preemptively closes the gap before
+		// the next flake surfaces.
+		testTimeout: 30_000
 	}
 });
