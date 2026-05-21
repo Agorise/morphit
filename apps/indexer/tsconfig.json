@@ -25,7 +25,8 @@
       "$blurt/*": ["blurt/*"],
       "$indexer/*": ["indexer/*"],
       "$api/*": ["api/*"],
-      "$log": ["log/index.ts"]
+      "$log": ["log/index.ts"],
+      "$web/*": ["../../web/src/lib/*"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]

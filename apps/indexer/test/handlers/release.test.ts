@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import handler from '$indexer/handlers/release';
 import { fakeConfig, makeCtx, mockBlurt } from '../testutils/context';
 import { makeMockClient } from '../testutils/mockClient';
+// Part 106 parity: frontend validator must agree with indexer on every payload.
+// $web alias resolves to apps/web/src/lib via vitest.config.ts.
+import { validateReleasePayload } from '$web/net/releaseValidate';
 
 const OFFICIAL_PUBKEY = 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9';
 
@@ -242,8 +245,6 @@ describe('release handler', () => {
 // the frontend validator at apps/web/src/lib/net/releaseValidate.ts.
 // Any payload that one accepts the other must accept; any payload
 // one rejects the other must reject with the same reason name.
-
-import { validateReleasePayload } from '../../../web/src/lib/net/releaseValidate';
 
 const VALID_BTC_ADDR = 'bc1q' + 'a'.repeat(38);
 const VALID_XMR_ADDR = '4' + 'A'.repeat(94);
