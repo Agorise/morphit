@@ -1,6 +1,97 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp78 — 2026-05-21.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 TRIPLE-PULSE STABLE (HARDWARE-VERIFIED, 8 CONSECUTIVE CLEAN PULSES POST-D19) · 1,349 VITEST TESTS PASSING (+5 from cp78-D20) · RELAY FLAKE ROOT-CAUSED AS SCRYPT-TIMEOUT-UNDER-CONTENTION, NOT HARNESS ORCHESTRATION (cp77 LESSON #2 WAS WRONG; CORRECTED HERE) · 11 LONG-FORM TRANSLATION KEYS REMAIN.**
+**Last touched:** Part 122 cp79 — 2026-05-21.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 TRIPLE-PULSE STABLE (HARDWARE-VERIFIED, 18 CONSECUTIVE CLEAN PULSES POST-D19/D21 ACROSS CP78+CP79) · 1,349 VITEST TESTS PASSING · LL #52 34TH CONSECUTIVE (HARDWARE-VERIFIED THIS TURN) · 6 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP79 LESSONS
+
+### Lesson #1 — Positive stress-test finding closes cp78 Lesson #1's dynamic-class hunt
+cp78 codified dynamic-class flake hunting as a discipline ("could this fail under timing/contention/concurrency?").  cp79 ran 10 consecutive battery pulses post-D19/D21 — all 3913/0.  Combined with cp78's 8 post-D19 pulses, **18 of 18 consecutive clean pulses cumulative**.  The relay flake reproduction rate pre-D19 was ~10-20%; the expected number of flake observations across 18 trials at 10% incidence is ~1.8 (P(zero) ≈ 0.15); at 20% incidence is ~3.6 (P(zero) ≈ 0.018).  **Strong positive finding: the timing-under-contention class is closed for now under current battery configuration and CPU load.**
+
+Caveat: a positive stress-test finding is empirical, not proof of absence.  If new tests are added in future checkpoints with longer solo durations (>5s solo would have meaningful risk even at 30s ceiling under 6× contention), the class could re-open.  cp79-D18's instrumentation will name any such test directly when it surfaces.
+
+### Lesson #2 — Apply confirmed-class fixes uniformly across analogous instances
+cp78-D19 fixed the relay vitest testTimeout (5s default → 30s) based on a confirmed flake in scrypt-heavy relay tests.  cp79 audited indexer and web vitest configs and found:
+- **apps/indexer**: tests are fast (615ms total for 481 tests, ~1.3ms avg).  Low risk — but config tweak is essentially free.
+- **apps/web**: `src/lib/crypto/crypto.test.ts` runs 52 tests in 5270ms (~100ms avg), with libsodium-wrappers-sumo + scrypt-style operations that have long-tail durations.  **Real risk** under battery CPU contention.
+
+cp79-D21 applied uniform 30s testTimeout to both indexer and web.  This is preemptive but cheap: zero downside for fast tests (their 5ms runs aren't affected by a 30s ceiling), real benefit if any test legitimately spikes past 5s under contention.  Confirmed via 10 of 10 clean stress pulses post-D21.
+
+**Meta:** when a confirmed-class fix lands, audit analogous code locations and apply the same fix.  This is not the same as speculative defense — there's a confirmed class instance and a known-effective fix.  The audit is to find OTHER instances of that class.
+
+### Lesson #3 — Brag list discipline keeps shipping work disconnected from claims
+cp78 set the precedent of zero new brag entries for internal hygiene (D18 smoke diagnostic, D19 testTimeout, D20 coverage tests).  cp79 continues the same: D21 (uniform testTimeout) and batch 12 translations get NO brag entries.
+
+The discipline matters because:
+- Brag list cksum has held bit-identical across cp76→cp77→cp78→cp79 (`1669546682 88849`) — 4 consecutive checkpoints with real shipping work and zero claim inflation.
+- Users / press / press-kit consumers see only the actual claim count (302) and the latest "Last updated" date as a recency proxy.  Internal plumbing improvements happen invisibly to public surface, where they belong.
+- When something IS brag-worthy (next time it is), the dilution from claim inflation isn't there to mute the signal.
+
+## STRUCTURAL DEFENSES — 27 OPERATIONAL (unchanged from cp78)
+
+No new defenses at cp79.  cp79-D21 is a config tweak, not a structural defense.  The cp77 audit-first → design-from-findings discipline still holds; the timing-under-contention class is now closed (D19+D21) and instrumented (D18); no further defense to ship absent a new finding.
+
+## CP79 BUG + DRIFT FIXES
+
+- **cp79-D21a (indexer vitest testTimeout)**: `apps/indexer/vitest.config.ts` `testTimeout: 30_000`.  Preemptive defense vs the dynamic-class flake fixed at cp78-D19 on relay.  Indexer tests are fast today (1.3ms avg) so risk was low, but the cost is zero.
+- **cp79-D21b (web vitest testTimeout)**: `apps/web/vite.config.js` `testTimeout: 30_000`.  Same fix; web's `src/lib/crypto/crypto.test.ts` (52 tests 5270ms total with libsodium-wrappers-sumo workload) had **real risk** under battery CPU contention.  Validated: 10 of 10 clean stress pulses post-D21.
+
+## CP79 TRANSLATION PROGRESS
+
+Batch 12: 5 long-form FAQ keys × 6 backlog locales = 30 individual translations applied to `apps/web/src/lib/i18n/locales/{it,pl,ru,fa,zh-CN,zh-HK}.json`:
+- `faq.entries.monero_amount_jitter.a` (1144 EN ch) — XMR/BTC/BCH/LTC/BLURT/DASH/USDT/USDC/DAI/DOGE amount-jitter ranges
+- `faq.entries.which_dai_network.a` (1369 EN ch) — DAI across Ethereum/Polygon/Base/Arbitrum One
+- `faq.entries.which_usdc_network.a` (1479 EN ch) — USDC across Solana/Base/Polygon/Ethereum
+- `faq.entries.why_dai_warning.a` (1439 EN ch) — DAI freeze-immunity nuance + PSM/USDC dependency disclosure
+- `faq.entries.why_usdc_warning.a` (1110 EN ch) — USDC Circle freeze posture, evenhanded framing
+
+**Remaining: 6 long-form keys** (was 11 at cp78; -5 from batch 12 closing across all 6 backlog locales).  All 10 locale JSONs validated parseable; locale parity intact (2,827 keys × 10 locales = 28,270 total).
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| **Scenarios PASS** | **3913** | TRIPLE-PULSE STABLE; 10 of 10 stress pulses 3913/0 |
+| Runners FAILED | 0 | clean across all 10 cp79 pulses + cp78's 8 = **18 consecutive cumulative** |
+| **Workspaces TS-clean (LL #52)** | **7/7** | **34th consecutive (HARDWARE-VERIFIED this turn via actual tsc --noEmit)** |
+| O-16 registry size | 11 invariants | unchanged |
+| vitest tests | 1,349 across 3 workspaces | unchanged from cp78 (D21 is config-only, doesn't add/remove tests) |
+| **Backlog translations remaining** | **6 long-form keys** | was 11 at cp78 (batch 12 -5 net) |
+| Brag entries | 302 | unchanged from cp76/77/78/79 — claim integrity preserved across 4 consecutive checkpoints |
+| Mediakit | 1379262708 41654 | unchanged from cp77/78 (cksum identical; no regen since brag list cksum identical) |
+
+## CP80+ PREDICTED HUNTING GROUND
+
+1. **Continue translation backlog: 6 long-form keys remaining.**  Final stretch: `privacy.guides.dcr.intro` (920 ch), `privacy.guides.dcr.caveats` (1213 ch), `privacy.guides.eth.caveats` (2345 ch), `privacy.guides.sol.caveats` (1798 ch), `privacy.guides.xrp.caveats` (2616 ch), `faq.entries.what_is_xrp.a` (2454 ch).  Largest keys are 2454 + 2616 ch — single-batch closure should be feasible.
+2. **Stress-test finding monitoring**: if any future checkpoint sees a vitest flake despite 30s testTimeout, that means a test legitimately needs >30s solo (or there's contention >6×).  cp78-D18 instrumentation will name the test directly.
+3. **Mock-vs-production fixture divergence stays deferred** — cp77's negative-result audit holds.  Re-audit on the next NEW class instance, not from memory.
+4. **Service-worker fetch-caching edge cases** (carried through cp74-cp79; still unaudited).
+5. **Hardware-execute the two parked external blockers** (Ansible VM, Forgejo runner standup) — unchanged through cp42→cp79.
+6. **Translation completion as a brag milestone**: when ALL long-form keys translated in all 10 locales (currently 6 keys + 4 fully-translated keys = backlog of 6), THAT'S a legitimate brag entry candidate — "complete FAQ + privacy-guide localization in 10 languages" is user-facing.  Defer the brag entry until the milestone actually lands; per cp79 Lesson #3 discipline.
+
+## Two parked external blockers (unchanged through cp42→cp79)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+## What cp79 DID and DID NOT do
+
+DID:
+- Apply uniform 30s testTimeout across indexer + web vitest configs (D21a/b), mirroring cp78-D19 on relay.  Defensive against dynamic-class flake; closes a real risk in web's crypto.test.ts.
+- Apply batch 12 translations (30 strings); backlog 11 → 6 long-form keys.
+- Hardware-verify typecheck-sweep 7/7 clean (LL #52 34th consecutive — actual tsc --noEmit runs).
+- Hardware-verify battery 3913/0 across 10 consecutive stress pulses (combined with cp78's 8 = 18 cumulative post-D19/D21).
+- Document the positive stress-test finding (cp79 Lesson #1) — empirical evidence that the timing-under-contention class is closed.
+- Confirm brag list cksum bit-identical across cp76/77/78/79 (`1669546682 88849`) — 4 consecutive checkpoints with real shipping work and zero claim inflation.
+
+DID NOT:
+- Add new brag entries — D21 + batch 12 are internal hygiene + backlog progress per standing memory rule.  Discipline held.
+- Regenerate mediakit — brag list cksum identical, mediakit identical.
+- Ship a cp79-O26 — same discipline as cp77/cp78; no new findings to motivate a structural defense.
+- Run vitest counts again post-D21 — D21 changes only timeouts, not test definitions; cp78's 1349 count holds.
+
+---
+
+
 
 ## CP78 LESSONS
 
