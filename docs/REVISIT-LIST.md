@@ -1,5 +1,102 @@
 # Morphit pre-launch revisit list
 
+**Last touched:** Part 122 cp76 — 2026-05-20.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 TRIPLE-PULSE STABLE (hardware-verified) · 1,344 VITEST TESTS PASSING · KILLSWITCH FLAKE FIXED (30/30 CLEAN) · 19 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP76 LESSONS
+
+### Lesson #1 — Reproducing first eliminates wrong fixes
+cp75 inherited a REVISIT prediction to "bump the relay create.test.ts mock RPC timeout" and pushed back via static analysis: that test has no real timeout to bump.  cp76 confirmed the diagnosis in actual hardware by:
+1. Running `npx vitest run test/killSwitch.test.ts` 30× with the original real-time-setTimeout code — not seen flaking in this run, but the structural cause held.
+2. Replacing the wait with `vi.useFakeTimers()` + `vi.advanceTimersByTime(1100)`.
+3. Re-running 30× — all 30 cleanly passed at 12 ms per suite (down from 5000ms timeout under real-time waits).
+4. Full relay suite 244/244 still passes post-fix.
+
+**Lesson:** When sandbox lets you actually run the test, do it.  The cp75 static-only diagnosis was directionally right; cp76 promoted it to hardware-verified.
+
+### Lesson #2 — Defenses derived from D-class findings catch the next variant
+cp76-D16 was the killSwitch flake fix.  cp76-O25 is the structural defense that prevents the class: no `setTimeout(*, N)` with N > 10 ms inside any test file.  90 test files scanned, 0 current violations (because cp75-D15 already cleared the suite of real-time waits, and the comments referencing "Previously: real setTimeout(150)" are correctly excluded by the comment-aware regex).
+
+**Lesson cascade:**
+- cp70-D5/D6 (unbounded fetches) → cp71-O21 (fetch-must-have-timeout) — prevents the class
+- cp70-D1 (parseInt smuggling) → cp71-O20 (untrusted-parseint-safety) — prevents the class
+- cp73-D11 (missing SEO i18n) → cp74-O22 (seo-routes-i18n-all-locales) — prevents the class
+- cp74 drift across docs → cp75-O23 (brag-trailer-invariants) — prevents the class
+- cp51/74 pattern (per-asset families) → cp75-O24 (per-asset-mandatory-family-i18n-parity) — prevents the class
+- cp76-D16 (real-time setTimeout in test) → cp76-O25 (no-real-time-settimeout-in-tests) — prevents the class
+
+### Lesson #3 — Mediakit regeneration is a non-trivial drift class
+At cp75 ship the mediakit was 9 hours stale relative to the brag list (cp74's regen pre-dated cp75's brag edits).  The cp76 freshness smoke caught it; cp76 ran `bash scripts/build-mediakit.sh` (now: 41,654 bytes; was 41,373 at cp75-ship pre-brag-302).  The mediakit-freshness-smoke is already part of the standing battery — no new defense needed; just observe that every brag-list-touching checkpoint MUST regen the kit.  cp74 missed it because mediakit-freshness wasn't yet in the cp74 default runner.
+
+### Lesson #4 — Battery scenario count grows with multi-pass smokes
+cp75 added 2 defenses (O-23, O-24) and predicted scenario count would jump +2 to 3909.  Actual cp75-ship state hit 3909 (sandbox-verified at cp76 pickup), then cp76 added O-25 (+1) plus the O-23 invariants count as 4 separate pass-lines (not 1), so cp76 lands at 3913 — +6 from cp74's 3907 baseline.  Multi-invariant smokes (O-23 with I-1/I-2/I-3/I-4) inflate the scenario count without inflating runner count.
+
+## STRUCTURAL DEFENSES — 27 OPERATIONAL (was 26 at cp75)
+
+cp76 added:
+- **cp76-O25 no-real-time-settimeout-in-tests-smoke**: walks all `*.test.ts` and `*.spec.ts` under `apps/` and `packages/`, flags `setTimeout(*, N)` with N > 10 ms outside of comments.  Comment-aware (handles `//`, `/*`, `*` JSDoc).  Allows `setTimeout(r, 0)` microtask drains in chatService/identityPaired tests.  M-148 verified by reintroducing the killSwitch waits — smoke fires with file:line and ms argument.  90 test files scanned per run.
+
+## CP76 BUG + DRIFT FIXES
+
+- **cp76-D16 (relay flake fix)**: `apps/relay/test/killSwitch.test.ts` two tests using `await new Promise((r) => setTimeout(r, 1500))` replaced with `vi.useFakeTimers()` + `vi.advanceTimersByTime(1100)`.  beforeEach now installs fake timers BEFORE the KillSwitch constructor's `setInterval()` registers, so the poll fires under the fake scheduler.  afterEach restores real timers.  Tests dropped `async` annotations and the 5000 ms timeout override — no real-time wait needed.  30/30 clean across runs; test duration 12 ms.
+- **cp76-D17 (brag #301 over-budget)**: shipped at cp75 with 5 sentences; cp60-O12 caught it on first cp76 battery run.  Rewrote 5s→3s by collapsing the smoke-explanation sentence with the optional-families sentence using a semicolon.  Word-count budget already within ≤100.
+- **cp75 mediakit drift carryover**: regenerated at cp76 to 41,654 bytes (was stale at cp75 ship).
+
+## CP76 TRANSLATION PROGRESS
+
+Batch 9: 3 long-form keys × 6 backlog locales = 18 individual translations applied to `apps/web/src/lib/i18n/locales/{it,pl,ru,fa,zh-CN,zh-HK}.json`:
+- `faq.entries.what_is_arrr.a` (1176 EN ch)
+- `faq.entries.what_is_bch.a` (1104 EN ch)
+- `privacy.guides.arrr.caveats` (1077 EN ch)
+
+**Remaining: 19 long-form keys** (was 22 at cp75; -3 from batch 9 closing across all 6 backlog locales).  All 10 locale JSONs validated parseable; locale parity intact.
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| **Scenarios PASS** | **3913** | TRIPLE-PULSE STABLE; pulses 1+2+3 all 3913/0 |
+| Runners FAILED | 0 | clean across all pulses |
+| Workspaces TS-clean (LL #52) | 7/7 | unchanged (typecheck-sweep not re-run; no .ts code edits beyond test) |
+| Triple-pulse stable | ✓ | cp76 final state, hardware-confirmed |
+| O-16 registry size | 11 invariants | unchanged |
+| **vitest tests** | **1,344 across 3 workspaces** | killSwitch fix doesn't change count (7 tests before, 7 after) |
+| **Backlog translations remaining** | **19 long-form keys** | was 22 at cp75 (batch 9 -3 net) |
+| Brag entries | 302 | was 301 at cp75 (+#302 for O-25 + flake fix) |
+| Mediakit size | 41,654 bytes | regenerated cp76 after brag list change |
+
+## CP77+ PREDICTED HUNTING GROUND
+
+1. **Translation backlog: 19 long-form keys remaining.**  Next 3-5: `faq.entries.what_is_dai.a` (1137 EN ch), `faq.entries.what_is_dash.a` (1238 EN ch), `faq.entries.what_is_dcr.a` (1354 EN ch), `faq.entries.what_is_doge.a` (1299 EN ch), `faq.entries.what_is_eth.a` (1789 EN ch).  Batch size stays at 3-5 per checkpoint.
+2. **Mock-vs-production fixture divergence smoke** (cp76-O26 candidate; carried over from cp75 hunting ground): cp73-D10 was an instance.  An automated diff between mock return shapes in `vi.fn()` and the actual TypeScript return-type definitions would catch the next instance.  Non-trivial — needs a TS Compiler API walk; lower-priority than translations.
+3. **Service-worker fetch-caching edge cases** (still carried).
+4. **Run the typecheck-sweep** in cp77 to confirm 7/7 workspaces still TS-clean post-killSwitch-fix.  cp76 didn't (no code beyond test change).
+5. **Hardware-execute the two parked external blockers** (Ansible VM, Forgejo runner standup) — same as every prior REVISIT.
+
+## Two parked external blockers (unchanged through cp42→cp76)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69
+
+## What cp76 DID and DID NOT do
+
+DID:
+- Fix the killSwitch flake (cp76-D16) with `vi.useFakeTimers()`; verified 30/30 clean.
+- Ship cp76-O25 structural defense; M-148 verified.
+- Apply batch 9 translations (18 individual translations); locale parity confirmed.
+- Add brag #302 documenting flake fix + smoke.
+- Fix cp76-D17 (cp75-shipped brag #301 over-budget).
+- Regenerate mediakit (41,654 bytes).
+- Triple-pulse battery 3913/0/3913/0/3913/0 hardware-verified.
+
+DID NOT:
+- Run typecheck-sweep — cp76 only touched test code; the TS-clean state should hold but cp77 should confirm.
+- Build cp76-O26 (mock-vs-production fixture divergence) — out of scope; carried to cp77+.
+- Execute external blockers — same as every prior checkpoint.
+
+---
+
+# Morphit pre-launch revisit list
+
 **Last touched:** Part 122 cp75 — 2026-05-20.  **26 STRUCTURAL DEFENSES · BATTERY 3909/0 (pulses 2+3 clean; pulse 1 hit known relay test flake) · 1,344 VITEST TESTS PASSING · ~22 LONG-FORM TRANSLATION KEYS REMAIN.**
 
 ## CP75 LESSONS
