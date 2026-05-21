@@ -52,7 +52,7 @@ Inserted after #300, not appended.  Within cp60-O12 budget (≤4 sentences, ≤1
 
 cp75 ship had brag #301 at 5 sentences; cp60-O12 caught it on first cp76 battery run.  Collapsed the smoke-explanation sentence with the optional-families sentence using a semicolon.  Now ≤4s.
 
-**6. Mediakit regenerated** to **41,654 bytes** (was stale relative to cp75 brag edits).  mediakit-freshness-smoke now passes.
+**6. Mediakit regenerated** to **98,711 bytes uncompressed / 41,654 bytes on disk** (was stale relative to cp75 brag edits — grew from cp74's 96,852 uncompressed due to brag entries 300, 301, 302).  mediakit-freshness-smoke now passes.
 
 ### Structural defenses — now 27 operational (was 26 at cp75)
 
@@ -75,7 +75,7 @@ cp75 ship had brag #301 at 5 sentences; cp60-O12 caught it on first cp76 battery
 - 11 invariants in cp66-O16 registry (unchanged)
 - 1,344 vitest tests passing across 3 workspaces (relay 244 with killSwitch flake fixed)
 - **19 long-form translation keys remaining** (was 22 at cp75; -3 from batch 9)
-- **Mediakit: 41,654 bytes** (regenerated cp76)
+- **Mediakit: 98,711 bytes uncompressed / 41,654 bytes on disk** (regenerated cp76; uncompressed is the prior-history-consistent metric)
 - **30/30 killSwitch test reruns clean** at 12 ms per run
 
 ### Lessons

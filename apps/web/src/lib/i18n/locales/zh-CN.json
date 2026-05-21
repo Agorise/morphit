@@ -1223,7 +1223,7 @@
 			},
 			"what_is_arrr": {
 				"q": "Pirate Chain (ARRR) 是什么，为什么在 Morphit 上？",
-				"a": "Pirate Chain (ARRR) 是一种 proof-of-work 加密货币，使用 Sapling zk-SNARK 屏蔽池作为唯一的交易类型——每笔转账在链上结构上都会隐藏发送方、接收方和金额。Pirate Chain 没有透明地址选项；透明池在该链生命周期早期就已关闭，所有资金都已迁移到屏蔽池。\n\n在 Morphit 上，ARRR 是**仅可交易**资产：你可以 peer-to-peer 地买卖 ARRR（另一侧可以是任何法币或线下支付方式），但不能用 ARRR 支付 listing fee。Listing fee 仍以 BLURT/BTC/XMR 支付（Memory #23 不变量——fee_method 枚举已冻结）。\n\n地址只有一种格式：`zs1` Sapling 屏蔽地址（bech32，78 字符）。视觉上与 Zcash Sapling 地址相同——Morphit 的每资产标签和占位符会区分该地址属于哪条链。使用 Pirate Chain 钱包，例如 Treasure Chest（手机端）、Pirate.Black 或 Verus 集成的 Pirate 钱包来生成地址并接收资金。\n\n运营者可以通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"ARRR\"` 在实例级别拒绝 ARRR 交易；联邦化市场不论单个运营者的立场如何，都会继续交易 ARRR。"
+				"a": "Pirate Chain (ARRR) 是一种工作量证明 (Proof-of-Work) 加密货币，使用 Sapling zk-SNARK 屏蔽池 (shielded pool) 作为唯一的交易类型——每笔转账在构造上就隐藏发送方、接收方和金额。Pirate Chain 上没有透明 (transparent) 地址选项；透明池在该链生命周期早期就被关闭，所有资金都迁移到了屏蔽池。\n\n在 Morphit 上，ARRR 是**仅可交易**的资产：你可以 peer-to-peer 买卖它（任何法币或线下支付方式在另一端），但不能用 ARRR 支付 listing fee。Listing fee 仍以 BLURT/BTC/XMR 支付（Memory #23 不变量——fee_method 枚举已冻结）。\n\n地址使用单一格式：`zs1` Sapling shielded（bech32，78 字符）。视觉上与 Zcash Sapling 地址相同——Morphit 的 per-asset 选项卡和 placeholder 会区分该地址属于哪条链。使用 Pirate Chain 钱包，如 Treasure Chest（移动端）、Pirate.Black 或 Verus 集成的 Pirate 钱包来生成地址和接收资金。\n\n运营者可以通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"ARRR\"` 在每个实例上拒绝 ARRR 交易；联邦市场仍会继续交易 ARRR，无论任何单一运营者的立场如何。"
 			},
 			"what_is_dcr": {
 				"q": "Decred (DCR) 是什么，为什么在 Morphit 上？",
@@ -1243,7 +1243,7 @@
 			},
 			"what_is_bch": {
 				"q": "Bitcoin Cash (BCH) 是什么，为什么在 Morphit 上？",
-				"a": "Bitcoin Cash (BCH) 是 Bitcoin 的一个分叉，于 2017 年 8 月激活，优先采用更大的区块尺寸和更低的链上费用，以适合日常支付场景。该链与 Bitcoin 共享 UTXO 模型和 Proof-of-Work 共识，但使用大得多的区块（32 MB 及以上）和单独的难度调整。\n\n在 Morphit 上，BCH 是**仅可交易**资产：你可以 peer-to-peer 地买卖 BCH（另一侧可以是任何法币或线下支付方式），但不能用 BCH 支付 listing fee。Listing fee 仍以 BLURT/BTC/XMR 支付（Memory #23 不变量——fee_method 枚举已冻结）。\n\nBCH 支持两种地址格式：传统 base58（以 `1` 或 `3` 开头，形状与 BTC 地址相同——asset 字段进行区分）和 CashAddr bech32（以 `bitcoincash:q` 或 `bitcoincash:p` 开头）。Morphit 两者都接受。该链在基础层与 Bitcoin 一样透明；用户的主要隐私手段是钱包侧的地址轮换。\n\n运营者可以通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"BCH\"` 在实例级别拒绝 BCH 交易；联邦化市场不论单个运营者的立场如何，都会继续交易 BCH。"
+				"a": "Bitcoin Cash (BCH) 是 Bitcoin 的一个分叉，于 2017 年 8 月激活，优先支持更大的区块大小和更低的链上费用，以适应日常支付式使用。该链共享 Bitcoin 的 UTXO 模型和工作量证明 (Proof-of-Work) 共识，但运行在显著更大的区块（32 MB+）上，并有独立的难度调整。\n\n在 Morphit 上，BCH 是**仅可交易**的资产：你可以 peer-to-peer 买卖它（任何法币或线下支付方式在另一端），但不能用 BCH 支付 listing fee。Listing fee 仍以 BLURT/BTC/XMR 支付（Memory #23 不变量——fee_method 枚举已冻结）。\n\nBCH 支持两种地址格式：legacy base58（以 `1` 或 `3` 开头，与 BTC 地址形状相同——asset 字段会区分）和 CashAddr bech32（以 `bitcoincash:q` 或 `bitcoincash:p` 开头）。Morphit 接受两者。该链在基础层像 Bitcoin 一样透明；钱包侧的地址轮换是用户主要的隐私杠杆。\n\n运营者可以通过 `MORPHIT_INDEXER_DISABLED_ASSETS=\"BCH\"` 在每个实例上拒绝 BCH 交易；联邦市场仍会继续交易 BCH，无论任何单一运营者的立场如何。"
 			},
 			"what_is_ltc": {
 				"q": "Litecoin (LTC) 是什么，为什么在 Morphit 上？",
@@ -3883,7 +3883,7 @@
 				"one_line": "通过 Sapling zk-SNARK 池实现的链级 shielded 交易；每次转账按构造隐藏发送者、接收者和金额。",
 				"intro": "Pirate Chain (ARRR) 于 2018 年作为 Zcash 代码库的分叉推出，配置为只允许 Sapling 屏蔽池 (shielded pool) 一种交易类型。每笔转账都通过零知识证明 (zk-SNARKs)，在链上隐藏发送方、接收方和金额。Pirate Chain 在该链生命周期早期就关闭了透明 (transparent) 池，并强制将所有透明余额迁移到屏蔽池——没有任何透明地址选项。地址使用 Sapling `zs1` 格式（bech32，总长 78 字符），视觉上与 Zcash Sapling 地址相同。\n\n下面的实践涵盖了即便在链级屏蔽下仍然有意义的钱包侧卫生——链上 payload 是隐私的，但你在链下共享的内容（你公开了哪些地址、与哪些对手方交易）才是将你在 Morphit 上的多次交易随时间串联起来的关键。",
 				"meta_description": "Morphit 上 Pirate Chain 交易的隐私实践：链级 shielded 交易、新地址习惯和钱包兼容性。",
-				"caveats": "Pirate Chain 的链级屏蔽在链上隐藏发送方、接收方和金额——但不会消除链下的可关联性。\n\n- **每笔交易共享新的地址。**  在多个 Morphit 订单上重复使用同一个 `zs1` 地址，会让观察者把你的订单关联起来，即便链本身没有泄露任何信息。  为每笔交易生成一个新的接收地址（Pirate Chain 钱包会从你的 HD 种子派生）。\n- **钱包兼容性。**  并非所有钱包都支持 Pirate Chain（主要选项包括 Treasure Chest、Pirate.Black 以及集成在 Verus 中的 Pirate）。  在商定价格之前，请确认对手方拥有兼容的钱包。\n- **网络层隐私仍然重要。**  通过 Tor 或钱包的隐私模式广播，可以避免你的家庭 IP 出现在链对你的“视角”中。\n- **与 Zcash Sapling 地址的视觉冲突。**  Pirate Chain 的 `zs1` 地址在外观上与 Zcash 的 `zs1` 地址完全相同。  Morphit 的每资产标签和占位符会区分，但如果你从其他场景复制了一个地址，请先确认它属于你打算发送的链。"
+				"caveats": "Pirate Chain 的链级屏蔽隐藏发送方、接收方和金额——但它并不消除链下的可关联性。\n\n- **每笔交易共享新鲜地址。**使用同一个 `zs1` 地址在多个 Morphit 上架订单中会让观察者将你的订单关联起来，即便链本身什么都不透露。为每笔交易生成新的接收地址（Pirate Chain 钱包从你的 HD 种子派生这些地址）。\n- **钱包兼容性。**并非每个钱包都支持 Pirate Chain（主要选项是 Treasure Chest、Pirate.Black 和 Verus 集成的 Pirate）。在就价格达成一致之前，确认对手方有兼容的钱包。\n- **网络层隐私仍然重要。**通过 Tor 或钱包的隐私模式广播交易，可以让你的家庭 IP 不出现在链对你的视野中。\n- **与 Zcash Sapling 地址的视觉冲突。**Pirate Chain 的 `zs1` 地址看起来与 Zcash 的 `zs1` 地址完全相同。Morphit 的 per-asset 选项卡和 placeholder 会区分，但如果你从其他场景复制地址，请确认它属于你打算在其上发送的链。"
 			},
 			"dcr": {
 				"one_line": "具有链上治理 (Politeia) 和钱包端可选 CoinShuffle++ (CSPP) 混合的混合 PoW/PoS 加密货币。",

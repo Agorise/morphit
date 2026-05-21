@@ -25,7 +25,7 @@ cp76-D16 was the killSwitch flake fix.  cp76-O25 is the structural defense that 
 - cp76-D16 (real-time setTimeout in test) → cp76-O25 (no-real-time-settimeout-in-tests) — prevents the class
 
 ### Lesson #3 — Mediakit regeneration is a non-trivial drift class
-At cp75 ship the mediakit was 9 hours stale relative to the brag list (cp74's regen pre-dated cp75's brag edits).  The cp76 freshness smoke caught it; cp76 ran `bash scripts/build-mediakit.sh` (now: 41,654 bytes; was 41,373 at cp75-ship pre-brag-302).  The mediakit-freshness-smoke is already part of the standing battery — no new defense needed; just observe that every brag-list-touching checkpoint MUST regen the kit.  cp74 missed it because mediakit-freshness wasn't yet in the cp74 default runner.
+At cp75 ship the mediakit was 9 hours stale relative to the brag list (cp74's regen pre-dated cp75's brag edits).  The cp76 freshness smoke caught it; cp76 ran `bash scripts/build-mediakit.sh` (now: 98,711 bytes uncompressed / 41,654 bytes on disk; was 98,124 / 41,373 at cp75-ship pre-brag-302).  The mediakit-freshness-smoke is already part of the standing battery — no new defense needed; just observe that every brag-list-touching checkpoint MUST regen the kit.  cp74 missed it because mediakit-freshness wasn't yet in the cp74 default runner.  Metric convention: uncompressed bytes (consistent with cp74 entry's 96,852); compressed on-disk size also tracked for completeness.
 
 ### Lesson #4 — Battery scenario count grows with multi-pass smokes
 cp75 added 2 defenses (O-23, O-24) and predicted scenario count would jump +2 to 3909.  Actual cp75-ship state hit 3909 (sandbox-verified at cp76 pickup), then cp76 added O-25 (+1) plus the O-23 invariants count as 4 separate pass-lines (not 1), so cp76 lands at 3913 — +6 from cp74's 3907 baseline.  Multi-invariant smokes (O-23 with I-1/I-2/I-3/I-4) inflate the scenario count without inflating runner count.
@@ -39,7 +39,7 @@ cp76 added:
 
 - **cp76-D16 (relay flake fix)**: `apps/relay/test/killSwitch.test.ts` two tests using `await new Promise((r) => setTimeout(r, 1500))` replaced with `vi.useFakeTimers()` + `vi.advanceTimersByTime(1100)`.  beforeEach now installs fake timers BEFORE the KillSwitch constructor's `setInterval()` registers, so the poll fires under the fake scheduler.  afterEach restores real timers.  Tests dropped `async` annotations and the 5000 ms timeout override — no real-time wait needed.  30/30 clean across runs; test duration 12 ms.
 - **cp76-D17 (brag #301 over-budget)**: shipped at cp75 with 5 sentences; cp60-O12 caught it on first cp76 battery run.  Rewrote 5s→3s by collapsing the smoke-explanation sentence with the optional-families sentence using a semicolon.  Word-count budget already within ≤100.
-- **cp75 mediakit drift carryover**: regenerated at cp76 to 41,654 bytes (was stale at cp75 ship).
+- **cp75 mediakit drift carryover**: regenerated at cp76 to 98,711 bytes uncompressed / 41,654 bytes on disk (was stale at cp75 ship).
 
 ## CP76 TRANSLATION PROGRESS
 
@@ -62,7 +62,7 @@ Batch 9: 3 long-form keys × 6 backlog locales = 18 individual translations appl
 | **vitest tests** | **1,344 across 3 workspaces** | killSwitch fix doesn't change count (7 tests before, 7 after) |
 | **Backlog translations remaining** | **19 long-form keys** | was 22 at cp75 (batch 9 -3 net) |
 | Brag entries | 302 | was 301 at cp75 (+#302 for O-25 + flake fix) |
-| Mediakit size | 41,654 bytes | regenerated cp76 after brag list change |
+| Mediakit size | 98,711 bytes uncompressed / 41,654 on disk | regenerated cp76 after brag list change |
 
 ## CP77+ PREDICTED HUNTING GROUND
 
@@ -85,7 +85,7 @@ DID:
 - Apply batch 9 translations (18 individual translations); locale parity confirmed.
 - Add brag #302 documenting flake fix + smoke.
 - Fix cp76-D17 (cp75-shipped brag #301 over-budget).
-- Regenerate mediakit (41,654 bytes).
+- Regenerate mediakit (98,711 bytes uncompressed / 41,654 on disk).
 - Triple-pulse battery 3913/0/3913/0/3913/0 hardware-verified.
 
 DID NOT:
