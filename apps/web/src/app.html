@@ -166,27 +166,30 @@
 		<div id="svelte" style="display: contents">%sveltekit.body%</div>
 
 		<!--
-			Service worker registration. Ships a cache-first strategy
-			for static assets (fonts, icons, brand) and network-first
-			for everything else. See apps/web/static/sw.js and
-			docs/SERVICE-WORKER-CACHING-DESIGN.md.
+			Service worker registration is handled by SvelteKit's
+			built-in auto-register (svelte.config.js > kit >
+			serviceWorker > register: true).  That injects an inline
+			script at build time that does:
 
-			Registration is deferred until window.load so it doesn't
-			compete with critical-path resources on first visit.
-			Feature-detect for Tor Browser's high security level which
-			disables service workers entirely — we want the page to
-			work fine there, just without the cache benefit.
-			UpdateBanner.svelte picks up the registration asynchronously
-			and watches for 'updatefound' events on it.
+			  if ('serviceWorker' in navigator) {
+			    addEventListener('load', function () {
+			      navigator.serviceWorker.register('/service-worker.js');
+			    });
+			  }
+
+			which registers apps/web/src/service-worker.ts (compiled
+			to /service-worker.js by SvelteKit).  Manual registration
+			of a different SW URL here would race with SvelteKit's
+			and silently replace it (same scope `/`, last register
+			wins), which was a Part 122 cp81 bug: a separate
+			/sw.js was registered manually and superseded the
+			SvelteKit SW, breaking push notifications.  Fixed in
+			cp81-D22.  See docs/SERVICE-WORKER-CACHING-DESIGN.md
+			for the full design.
+
+			UpdateBanner.svelte picks up the registration via
+			navigator.serviceWorker.getRegistration() asynchronously
+			and watches for 'updatefound' events.
 		-->
-		<script>
-			if ('serviceWorker' in navigator) {
-				window.addEventListener('load', function () {
-					navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {
-						// Silent — the rest of the app works without the SW.
-					});
-				});
-			}
-		</script>
 	</body>
 </html>

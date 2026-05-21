@@ -1,9 +1,54 @@
-# Service worker image caching — design note
+# Service worker — design note
 
-**Status:** shipped — see `apps/web/static/sw.js` and registration in `apps/web/src/app.html`
-**Last updated:** 2026-04-22
+**Status:** shipped (canonical SW is `apps/web/src/service-worker.ts`, registered automatically by SvelteKit's `serviceWorker: { register: true }`)
+**Last updated:** 2026-05-21 (cp81-D22)
 
-## Problem
+## History
+
+| When | What |
+|---|---|
+| 2026-04-22 | First SW: `apps/web/static/sw.js`, hybrid cache-first/network-first, manually registered from `app.html` on `window.load`. Pure caching. |
+| Part 122 cp13 | Web Push wired through full stack. Push + notificationclick handlers added to a NEW SW: `apps/web/src/service-worker.ts`, which uses SvelteKit's auto-register. Aggressive precache-everything design with pinned-version security model. The OLD `static/sw.js` was NOT removed at the time — both files coexisted. |
+| Part 122 cp81-D22 | **Bug found and fixed.** The two SWs were both being registered with scope `/`. Per spec, the second `register()` call at the same scope supersedes the first. `app.html`'s manual `register('/sw.js')` ran later in document order than SvelteKit's auto-injected `register('/service-worker.js')`, so the legacy static SW (without push handler) was the one actually running in production — push notifications were silently broken despite the wiring being correct end-to-end.  Fix: removed manual registration from `app.html`, deleted `static/sw.js`, added cp81-O27 smoke to prevent regression, added clickPath origin validation against operator-payload phishing primitive. |
+
+## Current design (cp81+)
+
+**Canonical SW:** `apps/web/src/service-worker.ts`, compiled to `/service-worker.js` by SvelteKit's build pipeline.
+
+**Registration:** SvelteKit auto-registers via `svelte.config.js → kit.serviceWorker.register: true`. No manual `register()` calls anywhere in the app source.
+
+**Caching:** Aggressive precache-everything. At install, `cache.addAll([...build, ...files, ...prerendered])` snapshots the entire build output into a versioned cache. Precached assets are served cache-only; non-precached same-origin GETs go network-first with a 503 fallback for offline. This gives total origin-decoupling after install — a compromised origin can't replace the user's installed bundle silently.
+
+**Update policy:** Pin-on-install, opt-in upgrade. New SW versions wait until the user clicks "Update now" in `UpdateBanner.svelte`, which sends `{ type: 'APPLY_UPDATE' }` → SW calls `skipWaiting()` → page reloads.
+
+**Push notifications:** `push` handler decrypts/parses the payload and calls `showNotification()`. `notificationclick` resolves the clickPath through `sanitizeClickPath()` (extracted to `$lib/notifications/sanitizeClickPath`), which rejects anything not resolving to the SW's own `http(s)` origin. Without this gate, an operator-controlled relay could phish users via `clickPath: '//evil.com/'`.
+
+**Bypass:** `isCacheable()` filters out non-GET, cross-origin, and `/service-worker.js` itself before any cache interaction.
+
+## What this doc replaces
+
+The original hybrid hand-rolled SW (Option 2 of the original recommendation) was workable but smaller in scope. The Part 122 cp13 push integration pushed us toward a more ambitious precache-everything design (closer to the original Option 3 spirit but extended to JS/CSS/HTML, not just static images). The cp81-D22 cleanup consolidates on the new design and removes the leftover code from the prior one.
+
+## What ships today
+
+```
+apps/web/src/service-worker.ts                     ← THE SW
+apps/web/src/lib/notifications/sanitizeClickPath.ts ← clickPath gate
+apps/web/scripts/service-worker-single-registration-smoke.ts  ← cp81-O27
+apps/web/scripts/web-push-wiring-smoke.ts          ← end-to-end push wiring
+```
+
+## What does NOT ship anymore
+
+```
+apps/web/static/sw.js          ← deleted in cp81-D22a
+manual SW register in app.html ← removed in cp81-D22a
+```
+
+The smoke `service-worker-single-registration-smoke.ts` enforces that neither comes back.
+
+## Original problem (kept for reference)
+
 
 Mobile users on slow or metered connections reload Morphit pages and
 re-download the same SVG icons, font files, and small static assets on
