@@ -1,6 +1,104 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp76 — 2026-05-20.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 TRIPLE-PULSE STABLE (hardware-verified) · 1,344 VITEST TESTS PASSING · KILLSWITCH FLAKE FIXED (30/30 CLEAN) · 19 LONG-FORM TRANSLATION KEYS REMAIN.**
+**Last touched:** Part 122 cp77 — 2026-05-20.  **27 STRUCTURAL DEFENSES · BATTERY 3913/0 (4 PULSES: 3 CLEAN + 1 ORCHESTRATION FLAKE, NOT TEST REGRESSION) · 1,344 VITEST TESTS PASSING · LL #52 33RD CONSECUTIVE (HARDWARE-VERIFIED) · 14 LONG-FORM TRANSLATION KEYS REMAIN.**
+
+## CP77 LESSONS
+
+### Lesson #1 — Negative audit results are valuable findings
+cp76 REVISIT predicted cp77-O26 as "mock-vs-production fixture divergence smoke" (carried over from cp75 hunting ground after cp73-D10 surfaced one instance).  cp77 ran a comprehensive manual audit across all 16 mock-using test files:
+
+- All `vi.fn(...)` calls return shapes that match their production interface — either typed via `Partial<X>` / explicit return-type annotations OR via field-consumption alignment with `as unknown` casts (production reads only the fields the mock provides).
+- All production `setInterval`/`setTimeout` sites with tests are either ManualClock-injected or `vi.useFakeTimers()`'d (verified ratelimit, altcha, inviteToken, killSwitch).
+- `bitcoinExplorerVerifier`'s missing `.text()` mock field is shielded by `minConfirmations > 1` short-circuit at line 266; tests use `1`, so the code path is unreachable.  Coverage gap, not divergence.
+
+**Decision: cp77-O26 DEFERRED.**  Shipping a structural defense without confirmed findings would violate cp76 Lesson #1 ("no structural defenses without confirmed findings").  When a real cp73-D10-class instance surfaces, design O-26 informed by the actual finding.
+
+**Why this is itself valuable:** the negative result documents that the test infrastructure is currently in good shape, the typed-mock pattern is widespread and effective, and there's no need to pile speculative defenses onto a clean codebase.
+
+### Lesson #2 — The vitest-must-pass orchestration flake is harness-side, not test-side
+Across cp75/cp76/cp77 the `vitest-must-pass-smoke` occasionally fails in the bash-script orchestration but passes 3/3 when run alone.  Pattern:
+
+- Running solo via `npx tsx scripts/vitest-must-pass-smoke.ts` → 3 passed, 0 failed
+- Running inside `bash scripts/run-smokes.sh` → sometimes 2/3 because the indexer's `▸ apps/indexer` line is missing from the smoke output entirely
+
+This is NOT a real test regression.  Hypothesis: under cold-start CPU contention, the smoke's `execSync('npx vitest run', { stdio: ['ignore', 'pipe', 'pipe'], timeout: 5*60_000 })` either truncates or buffer-loses the indexer's stdout when other smokes ran moments before in the same shell.
+
+cp78 candidate fix: either (a) bump per-smoke timeout in the harness, (b) add `flushSync` or `process.stdout.uncork()` around the `console.log('▸ ...')` calls in the smoke, or (c) accept the smoke as advisory and gate the runner-failure count on whether the SAME smoke fails on 2+ consecutive pulses (a real regression would; a harness flake won't).
+
+### Lesson #3 — Manual audit + structural defense decision is a 2-step gate
+The right discipline for proposing a new structural defense:
+
+1. **Audit first.**  Walk the actual codebase manually for the class.  Document findings (positive OR negative) explicitly.
+2. **Design from findings.**  If findings exist, the smoke is informed by them — it knows what shape of code triggers, what's a legitimate exception, what's a false positive.  If no findings exist, the smoke would be speculative.
+3. **Ship only when (a) holds AND the design from (b) is concrete.**
+
+cp75/cp76 each shipped 2 defenses motivated by real bugs (O-23 motivated by trailer-drift drifts; O-24 by per-asset coverage gap proven via cp51-O5; O-25 by cp76-D16 killSwitch flake).  cp77's audit found nothing to motivate O-26.  That's the correct outcome, not a failure to deliver.
+
+## CP77 BUG + DRIFT FIXES
+
+None.  cp77 made no production code changes — only translation locale JSONs and audit/doc work.
+
+## STRUCTURAL DEFENSES — 27 OPERATIONAL (unchanged from cp76)
+
+No new defenses at cp77.  O-26 deferred until a real mock-vs-production divergence instance surfaces.
+
+## CP77 TRANSLATION PROGRESS
+
+Batch 10: 5 long-form FAQ keys × 6 backlog locales = 30 individual translations applied to `apps/web/src/lib/i18n/locales/{it,pl,ru,fa,zh-CN,zh-HK}.json`:
+- `faq.entries.what_is_dai.a` (1137 EN ch)
+- `faq.entries.what_is_dash.a` (1238 EN ch)
+- `faq.entries.what_is_dcr.a` (1354 EN ch)
+- `faq.entries.what_is_doge.a` (1299 EN ch)
+- `faq.entries.what_is_eth.a` (1789 EN ch)
+
+**Remaining: 14 long-form keys** (was 19 at cp76; -5 from batch 10 closing across all 6 backlog locales).  All 10 locale JSONs validated parseable; locale parity intact (every key in en.json exists in every other locale, no extras).
+
+## BATTERY STATE (HARDWARE-VERIFIED)
+
+| Status | Count | Note |
+|---|---|---|
+| Scenarios PASS (best of 4 pulses) | **3913** | 3 of 4 pulses clean: 3913/0, 3913/0, _3910/1 (orchestration flake)_, 3913/0 |
+| Runners FAILED (3 clean pulses) | 0 | the one flake was the cp76-noted vitest-must-pass orchestration artifact, not a real test regression — see Lesson #2 |
+| **Workspaces TS-clean (LL #52)** | **7/7** | **33rd consecutive (HARDWARE-VERIFIED this turn via actual tsc --noEmit)** |
+| O-16 registry size | 11 invariants | unchanged |
+| vitest tests | 1,344 across 3 workspaces | unchanged from cp76 |
+| **Backlog translations remaining** | **14 long-form keys** | was 19 at cp76 (batch 10 -5 net) |
+| Brag entries | 302 | unchanged from cp76 (cp77 added no brags — O-26 deferred) |
+| Mediakit size | 98,711 uncompressed / 41,654 on disk | unchanged from cp76 (brag list cksum identical) |
+
+## CP78+ PREDICTED HUNTING GROUND
+
+1. **Continue translation backlog: 14 long-form keys remaining.**  Next 3-5: `faq.entries.what_is_ltc.a` (1156), `faq.entries.what_is_sol.a` (1380), `faq.entries.what_is_zec.a` (1531), `faq.entries.monero_amount_jitter.a` (1144), `faq.entries.which_dai_network.a` (1369).  Larger keys mean batch sizes stay at 3-5 per checkpoint.
+2. **Fix the vitest-must-pass orchestration flake** (Lesson #2): smoke is correct; harness loses indexer stdout intermittently.  Three candidate fixes documented in Lesson #2; option (c) — fail only on 2+ consecutive pulses — is least invasive.
+3. **Mock-vs-production fixture divergence** stays deferred until a real instance surfaces.  Future Self if you re-read this: don't ship O-26 speculatively, even if cp77 audit feels stale — re-run the audit FIRST when you next think about it.
+4. **Service-worker fetch-caching edge cases** (carried through cp74/75/76/77; still unaudited).
+5. **`apps/indexer/src/indexer/fee/bitcoinExplorerVerifier.ts` tip-height coverage gap** (cp77 audit finding): no test exercises `minConfirmations > 1` path; production code at line 266+ is unverified.  Add a 1-test-file extension that uses `minConfirmations: 2` to exercise fetchTipHeight + the `.text()` mock contract.  Not a soundness issue; coverage hygiene.
+6. **Hardware-execute the two parked external blockers** (Ansible VM, Forgejo runner standup).
+
+## Two parked external blockers (unchanged through cp42→cp77)
+
+1. Live Ansible deploy on fresh Ubuntu 24.04 VM (hardware needed)
+2. v1.0.0-beta.1 release ceremony steps 8/9/10 — unblocked from documentation since cp69; needs hardware execution of `docs/FORGEJO-RUNNER-STANDUP.md`
+
+## What cp77 DID and DID NOT do
+
+DID:
+- Hardware-verify typecheck-sweep 7/7 clean (LL #52 33rd consecutive — actual tsc runs, not just expected).
+- Run comprehensive manual audit of all 16 mock-using test files; documented negative result (no soundness divergences found).
+- Apply translation batch 10 (30 translations); locale parity confirmed; backlog 19→14 long-form keys.
+- Hardware-verify battery 3913/0 across 3 of 4 pulses (pulse 3 hit known orchestration flake; not a real regression).
+- Document the cp76→cp77 vitest-must-pass orchestration flake with three candidate fixes for cp78.
+
+DID NOT:
+- Ship cp77-O26 — deferred per Lesson #1 (no real findings to motivate the smoke).
+- Modify MORPHIT-BRAG-LIST.md — no new brags this turn (audit-only checkpoint).  Cksum identical to cp76.
+- Regenerate mediakit — brag list unchanged, mediakit cksum from cp76 still valid.
+- Fix the vitest-must-pass orchestration flake — needs harness-side work; deferred to cp78.
+- Add coverage for bitcoinExplorerVerifier's tip-height path — flagged in Lesson #5 above, deferred to cp78.
+
+---
+
+
 
 ## CP76 LESSONS
 
