@@ -129,6 +129,7 @@ SMOKES=(
 	"apps/web:operator-doc-section-length-smoke"
 	"apps/web:ansible-idempotency-discipline-smoke"
 	"apps/web:vitest-must-pass-smoke"
+	"apps/web:no-real-time-settimeout-in-tests-smoke"
 	"apps/web:untrusted-parseint-safety-smoke"
 	"apps/web:fetch-must-have-timeout-smoke"
 	"apps/web:seo-routes-i18n-all-locales-smoke"

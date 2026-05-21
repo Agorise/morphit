@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach, beforeEach } from 'vitest';
+import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import { mkdirSync, writeFileSync, unlinkSync, rmSync, existsSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,15 @@ describe('KillSwitch', () => {
 	let switches: KillSwitch[] = [];
 
 	beforeEach(() => {
+		// cp76-D16: replaced real-time setTimeout(1500) with fake timers
+		// to eliminate the CI-flake class.  The poll interval is 1000ms;
+		// 1500ms real-time wait gave only 500ms margin under CPU contention,
+		// which sometimes vanished on slow runners.  Fake timers advance
+		// the poll deterministically without any real-time sensitivity.
+		//
+		// Fake timers MUST be installed BEFORE `new KillSwitch(...)` runs
+		// so its constructor's `setInterval()` uses the fake scheduler.
+		vi.useFakeTimers();
 		dataDir = mkdtempSync(path.join(tmpdir(), 'morphit-kill-switch-'));
 		switches = [];
 	});
@@ -19,6 +28,9 @@ describe('KillSwitch', () => {
 		for (const s of switches) s.close();
 		switches = [];
 		rmSync(dataDir, { recursive: true, force: true });
+		// Restore real timers so the next test's beforeEach starts clean
+		// and any timer-using test that didn't opt into fakes works.
+		vi.useRealTimers();
 	});
 
 	function create(): KillSwitch {
@@ -46,21 +58,23 @@ describe('KillSwitch', () => {
 		expect(ks.getPath()).toBe(path.join(dataDir, 'SIGNUPS_DISABLED'));
 	});
 
-	it('detects file creation within ~1s poll interval', async () => {
+	it('detects file creation within ~1s poll interval', () => {
 		const ks = create();
 		expect(ks.isActive()).toBe(false);
 
 		// Operator does `touch <file>` mid-flight.
 		writeFileSync(path.join(dataDir, 'SIGNUPS_DISABLED'), '');
 
-		// Wait 1.5s for the next poll cycle.  Polling is on a 1s
-		// interval; the test gives a margin.
-		await new Promise((r) => setTimeout(r, 1500));
+		// Advance the fake clock past the 1s poll interval.  The poll
+		// callback runs synchronously when the timer fires (checkFile()
+		// + assignment), so the assertion below sees the updated state
+		// without any await.  No real-time sensitivity.
+		vi.advanceTimersByTime(1100);
 
 		expect(ks.isActive()).toBe(true);
-	}, 5000);
+	});
 
-	it('detects file removal within ~1s poll interval', async () => {
+	it('detects file removal within ~1s poll interval', () => {
 		const sentinel = path.join(dataDir, 'SIGNUPS_DISABLED');
 		writeFileSync(sentinel, '');
 		const ks = create();
@@ -69,9 +83,9 @@ describe('KillSwitch', () => {
 		// Operator removes the file (signups resume).
 		unlinkSync(sentinel);
 
-		await new Promise((r) => setTimeout(r, 1500));
+		vi.advanceTimersByTime(1100);
 		expect(ks.isActive()).toBe(false);
-	}, 5000);
+	});
 
 	it('close() stops the polling timer', () => {
 		const ks = create();
