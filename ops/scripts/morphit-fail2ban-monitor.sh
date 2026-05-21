@@ -46,7 +46,7 @@ fi
 # Returns non-zero if the daemon isn't running.
 status_output=$(fail2ban-client status 2>&1) || {
     emit error daemon_unreachable \
-         '{"error":"'$(json_str "$status_output")'","hint":"check sudo systemctl status fail2ban"}'
+         "{\"error\":\"$(json_str "$status_output")\",\"hint\":\"check sudo systemctl status fail2ban\"}"
     exit 0
 }
 
