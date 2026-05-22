@@ -1,6 +1,82 @@
 # Tarball history
 
-## cp84 — 5 NEW STRUCTURAL DEFENSES (#31-#35, +486 scenarios) — HIGH-severity false-security-claim closed inline (log redaction implemented) — Part 85 missed-instance flake closed — 8 doc-path drifts closed by Defense #31's first run — release-notes asset-count drift fixed (cp84-A1..A7 + cp84-L1..L4) — MAX_RAW_JSON_BYTES alias removed — cleanup.sh autogen shipped — battery 3924→4410/0 triple-pulse STABLE — LL#52 39th HW-verified — 1,374→1,381 vitest tests — 303→307 brag entries (2026-05-21)
+## cp85 — Defenses #36 + #37 (release-notes asset-count parity + NOW()-in-handler-SQL sentinel, +20 scen) — Handler audit campaign 17/17 deep-walked (~5,266 lines; cp82+cp85 combined) — cp85-A1 closed (featureBid.ts NOW() → ctx.blockTime replay-determinism fix, 6 SQL refs) — Brag-list discipline correction (3 internal-plumbing entries removed: cp84 304/305/307) — battery 4410→4432/0 triple-pulse STABLE — LL#52 40th HW-verified — 1,381 vitest tests unchanged — 307→304 brag entries (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp85-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries (post-cleanup; -3 from cp84's incorrectly-inflated 307) · locale parity 2,827 × 10 = 28,270 (unchanged) · **4432 scenarios pass / 0 runners failed TRIPLE-PULSE STABLE** (HARDWARE-VERIFIED across 3 cp85 final pulses) · **7/7 workspaces TS-clean (LL #52 40th consecutive HARDWARE-VERIFIED)** · **37 structural defenses operational** (+2 from cp84) · 1,381 vitest tests passing (unchanged).
+
+### TL;DR
+
+cp85 advances along three fronts simultaneously: (1) ships defenses #36 (release-notes asset-count parity, from cp84 Lesson #4 #1) and #37 (NOW()-in-handler-SQL sentinel, from cp85 Lesson #1 — promoted in-checkpoint after the originating bug cp85-A1 made the urgency clear); (2) executes the handler audit campaign to completion — **17 of 17 handlers now deep-walked, ~5,266 lines combined across cp82+cp85**; (3) corrects cp84's brag-list discipline lapse by removing 3 internal-plumbing entries that the general public has no reason to care about.  One real finding (cp85-A1) closed inline; no other findings across the full handler corpus.
+
+**Defense #36 — release-notes asset-count parity smoke (+3 scenarios):** `scripts/release-notes-asset-count-parity-smoke.ts` parses `ASSET_TICKERS` from the asset registry, counts `canPayListingFee: true`, then scans `RELEASE-NOTES-*.md` for three claim patterns (tradable / trade-only / fee-eligible) using a count-word↔number map.  Each match's count token is compared against the registry truth-source.  Trial-by-fire confirmed against cp84-A1: reintroducing "Seven tradable assets" trips the smoke with the correct mismatch report.  Registered in `scripts/run-smokes.sh` next to peer cp84 defenses.
+
+**Finding cp85-A1 — featureBid.ts replay determinism (LOW, fixed inline):** 6 `NOW()` references across two SQL queries (anti-snipe extension CTE+UPDATE at lines 350/351/358/362; outbid-notify ROW_NUMBER ranked CTE at lines 427/428) made the handler non-deterministic on indexer replay.  Same file already used `ctx.blockTime` correctly for the displacement-rate query and the bid INSERT — cp17/cp18 additions picked up the wrong pattern.  `strangerFee.ts:148` carries explicit prior-art commentary on the same anti-pattern.  Fix: replaced all 6 with `$N` parameters bound to `ctx.blockTime`; `last_extended_at` column write also bound to block time; explanatory comment added referencing the strangerFee.ts prior art.  Typecheck 7/7 clean post-fix.
+
+**Handler audit campaign — 17 of 17 walked:**
+
+| Handler | Lines | Audit checkpoint | Status |
+|---|---:|---|---|
+| chat.ts | 545 | cp82 | DEEP-AUDITED CLEAN |
+| operatorRegister.ts | 382 | cp82 | DEEP-AUDITED CLEAN |
+| feedback.ts | 468 | cp82 | DEEP-AUDITED CLEAN |
+| order.ts | 974 | cp85 | DEEP-AUDITED CLEAN |
+| orderReplace.ts | 434 | cp85 | DEEP-AUDITED CLEAN (substance-field freeze + waiver-floor re-check verified) |
+| release.ts | 313 | cp85 | DEEP-AUDITED CLEAN (Part 107 view-key invariant verified) |
+| strangerFee.ts | 216 | cp85 | DEEP-AUDITED CLEAN (memo binding + replay-safe pricing) |
+| featureBid.ts | 506 | cp85 | DEEP-AUDITED + cp85-A1 fix |
+| orderCancel.ts | 48 | cp85 | DEEP-AUDITED CLEAN |
+| feeAttest.ts | 213 | cp85 | DEEP-AUDITED CLEAN |
+| operatorBlock.ts | 224 | cp85 | DEEP-AUDITED CLEAN |
+| profile.ts | 162 | cp85 | DEEP-AUDITED CLEAN |
+| operatorPaymentMethod.ts | 278 | cp85 | DEEP-AUDITED CLEAN |
+| chatIdentity.ts | 195 | cp85 | DEEP-AUDITED CLEAN (RFC 7748 §6.1 low-order point blocklist verified) |
+| chatRead.ts | 114 | cp85 | DEEP-AUDITED CLEAN |
+| feedbackResponse.ts | 107 | cp85 | DEEP-AUDITED CLEAN |
+| block.ts | 142 | cp85 | DEEP-AUDITED CLEAN |
+
+Total: 5,266 lines walked, 1 finding (cp85-A1), 0 outstanding.
+
+### Cp85 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `npx tsx scripts/release-notes-asset-count-parity-smoke.ts` | 3/3 pass | Defense #36 green |
+| Defense #36 trial-by-fire (reintroduce "Seven tradable assets") | trips correctly | flags RELEASE-NOTES-v1.0.0-beta.1.md with `Seven` vs registry `sixteen` |
+| `npx tsx scripts/now-in-handler-sql-smoke.ts` | 17/17 pass | Defense #37 green (one scenario per handler file) |
+| Defense #37 trial-by-fire (reintroduce cp85-A1 `NOW()` in featureBid.ts) | trips correctly | flags `apps/indexer/src/indexer/handlers/featureBid.ts:350` with fix suggestion |
+| `bash scripts/typecheck-sweep.sh` | 7/7 clean | LL #52 40th consecutive HW-verified post-cp85-A1 fix |
+| `bash scripts/run-smokes.sh` (pulse 1) | 4432/0 | |
+| `bash scripts/run-smokes.sh` (pulse 2) | 4432/0 | |
+| `bash scripts/run-smokes.sh` (pulse 3) | 4432/0 | TRIPLE-PULSE STABLE |
+| `grep -nE 'NOW\(\)' apps/indexer/src/indexer/handlers/featureBid.ts` (in SQL) | 0 matches | cp85-A1 fix complete; comment-only mentions remain |
+| `grep -nE 'NOW\(\)' apps/indexer/src/indexer/handlers/*.ts` (other handlers, in SQL) | 0 matches | repo-wide clean of the anti-pattern; Defense #37 locks it in |
+| `npx tsx scripts/brag-list-trailer-invariants-smoke.ts` | 4/4 pass | 304 entries match trailer post-cleanup |
+| `npx tsx scripts/brag-list-kiss-budget-smoke.ts` | 2/2 pass | all entries ≤4 sentences ≤100 words |
+| `npx tsx scripts/mediakit-freshness-smoke.ts` | 6/6 pass | mediakit regenerated post-brag-cleanup |
+
+### Cp85 deferred to cp86+
+
+1. **Handler audit campaign** — ~~remaining handlers~~ **CLEARED at cp85**: all 17 of 17 deep-walked (5,266 lines, 1 finding fixed, 0 outstanding).
+2. **30-test CI delta hunt** — carried from cp83/cp84; still sandbox-blocked, needs CI-side `--reporter=json` data.
+3. **Defense-claim-vs-implementation parity smoke** — cp84 Lesson #4 #3; speculative, lower priority.
+4. **Code-dedup refactor for order.ts ↔ orderReplace.ts validation** (cp85 Lesson #2) — soft observation, refactor candidate, not a bug.
+
+### Cp85 file changes summary
+
+New files (2, ~415 lines):
+- `scripts/release-notes-asset-count-parity-smoke.ts` (~225 lines; Defense #36)
+- `scripts/now-in-handler-sql-smoke.ts` (~190 lines; Defense #37)
+
+Modified files:
+- `scripts/run-smokes.sh` — registered Defenses #36 + #37 next to peer cp84 smokes
+- `apps/indexer/src/indexer/handlers/featureBid.ts` — cp85-A1 fix: 6 `NOW()` → `$N` parameter bound to `ctx.blockTime`, plus explanatory comment block referencing strangerFee.ts:148 prior art
+- `docs/REVISIT-LIST.md` — cp85 lessons (3) + state table + fixes section (O36 + O37) + cp86+ hunting-ground rename
+- `MORPHIT-BRAG-LIST.md` — removed 3 internal-plumbing entries (304/305/307), kept #306; trailer 307→304
+- `apps/web/static/morphit-mediakit.zip` — regenerated for the new brag-list state
+- `TARBALL.md` — cp85 entry inserted at top (this entry)
+
+## cp84 — 5 NEW STRUCTURAL DEFENSES (#31-#35, +486 scenarios) — HIGH-severity false-security-claim closed inline (log redaction implemented) — Part 85 missed-instance flake closed — 8 doc-path drifts closed by Defense #31's first run — release-notes asset-count drift fixed (cp84-A1..A7 + cp84-L1..L4) — MAX_RAW_JSON_BYTES alias removed — cleanup.sh autogen shipped — battery 3924→4410/0 triple-pulse STABLE — LL#52 39th HW-verified — 1,374→1,381 vitest tests — 303→307 brag entries (later corrected to 304 at cp85) (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp84-FULL-STATE.tar.gz`
 **State:** 16 tradable assets · 35 ADRs · 307 brag entries (+4 from cp83) · locale parity 2,827 × 10 = 28,270 (unchanged) · **4410 scenarios pass / 0 runners failed TRIPLE-PULSE STABLE** (HARDWARE-VERIFIED across 3 cp84 final pulses) · **7/7 workspaces TS-clean (LL #52 39th consecutive HARDWARE-VERIFIED)** · **35 structural defenses operational** (+5 from cp83) · 1,381 vitest tests passing (+7 from cp83, all in apps/indexer/test/log.test.ts — redaction coverage).

@@ -1,8 +1,92 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp84 — 2026-05-21.  **35 STRUCTURAL DEFENSES (+5 cp84-O31/O32/O33/O34/O35) · BATTERY 4410/0 TRIPLE-PULSE STABLE · LL #52 39TH CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING · 1 HIGH-SEVERITY CLOSED INLINE (false log-redaction security claim → real defense) · 1 PREEXISTING FLAKE CLOSED (Part 85 missed instance in inviteToken.test.ts) · 11 DOC-DRIFT BUGS CLOSED (8 path drifts + 3 ADR-status drifts surfaced by O-31) · LOCALE PARITY 2,827 × 10 = 28,270 STRINGS · RELEASE-NOTES-v1.0.0-beta.1.md NO LONGER STALE · MAX_RAW_JSON_BYTES ALIAS REMOVED · scripts/build-cleanup-script.sh AUTOGEN SHIPPED.**
+**Last touched:** Part 122 cp85 — 2026-05-21.  **37 STRUCTURAL DEFENSES (+2 cp85-O36/O37) · BATTERY 4432/0 TRIPLE-PULSE STABLE · LL #52 40TH CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING · cp85-A1 closed (featureBid.ts NOW() → ctx.blockTime replay-determinism fix) · HANDLER AUDIT CAMPAIGN COMPLETE 17/17 DEEP-WALKED (~5,266 LINES; cp82 + cp85 combined) · 3 INTERNAL-PLUMBING BRAG ENTRIES REMOVED (cp84 304/305/307; trailer 307→304).**
 
-## CP84 LESSONS
+## CP85 LESSONS
+
+### Lesson #1 — Handler audit campaign finds NOW()-in-SQL anti-pattern (cp85-A1)
+
+Walking `featureBid.ts` end-to-end surfaced a replay-determinism bug: anti-snipe-extension and outbid-notification SQL used `NOW()` (wall-clock at execution) instead of `ctx.blockTime` (chain-deterministic block time).  Same file already used `ctx.blockTime` correctly for the displacement-rate query and the bid INSERT; the later-added cp17/cp18 code paths picked up the wrong pattern.
+
+The class is known: `apps/indexer/src/indexer/handlers/strangerFee.ts:148` carries an explicit comment about the same anti-pattern.  But there was no smoke catching new instances.
+
+Fix: replaced all `NOW()` references in `featureBid.ts` SQL with parameterized `$N` bound to `ctx.blockTime`.  Both the anti-snipe extension CTE+UPDATE and the outbid-notify ROW_NUMBER ranked CTE now use chain time.  Includes setting `last_extended_at = $6` (was `NOW()`) so the audit column also reflects block time.
+
+**Mechanism candidate (cp86+):** sentinel-grep smoke that flags any new `NOW()` inside handler SQL.  Same shape as defense #35 — pattern-match in source, exempt with comment marker.  The cp82+cp85 walk found no other occurrences, so the immediate risk is low.
+
+### Lesson #2 — Code duplication between order.ts and orderReplace.ts is a soft observation
+
+The validation functions in `order.ts` (lines 114-466) and `orderReplace.ts` (lines 68-260) are near-identical: same NFC normalization, forbidden-char filter, payment-method dedup, asset_network allowlist, ISO-8601 expires_at parser, price_model shape check.  Divergence between them would mean the replace handler accepts payloads the create handler rejects (or vice versa).  cp30-DD-DD CODE-3 mentions keeping them in sync.
+
+This is NOT a bug — the duplication is intentional (per cp30 comments) to avoid premature abstraction.  But the next time substantial validation work happens, extracting the shared body into a helper module would be worth the cost.  Filed as a soft cp86+ candidate, not a blocking finding.
+
+### Lesson #3 — Handler audit campaign coverage status
+
+**17 of 17 indexer handlers now deep-walked** — full coverage as of cp85.  Cumulative across cp82 + cp85:
+
+| Handler | Lines | Status | Audit checkpoint |
+|---|---:|---|---|
+| chat.ts | 545 | DEEP-AUDITED CLEAN | cp82 |
+| operatorRegister.ts | 382 | DEEP-AUDITED CLEAN | cp82 |
+| feedback.ts | 468 | DEEP-AUDITED CLEAN | cp82 |
+| order.ts | 974 | DEEP-AUDITED CLEAN | cp85 |
+| orderReplace.ts | 434 | DEEP-AUDITED CLEAN | cp85 |
+| release.ts | 313 | DEEP-AUDITED CLEAN | cp85 |
+| strangerFee.ts | 216 | DEEP-AUDITED CLEAN | cp85 |
+| featureBid.ts | 506 | DEEP-AUDITED + cp85-A1 fix | cp85 |
+| orderCancel.ts | 48 | DEEP-AUDITED CLEAN | cp85 |
+| feeAttest.ts | 213 | DEEP-AUDITED CLEAN | cp85 |
+| operatorBlock.ts | 224 | DEEP-AUDITED CLEAN | cp85 |
+| profile.ts | 162 | DEEP-AUDITED CLEAN | cp85 |
+| operatorPaymentMethod.ts | 278 | DEEP-AUDITED CLEAN | cp85 |
+| chatIdentity.ts | 195 | DEEP-AUDITED CLEAN (RFC 7748 §6.1 low-order point blocklist verified) | cp85 |
+| chatRead.ts | 114 | DEEP-AUDITED CLEAN | cp85 |
+| feedbackResponse.ts | 107 | DEEP-AUDITED CLEAN | cp85 |
+| block.ts | 142 | DEEP-AUDITED CLEAN | cp85 |
+
+Total: 5,266 lines walked, 1 finding (cp85-A1), 0 outstanding.
+
+## CP85 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | +22 from cp84 (cp85-O36: +3 release-notes asset-count; cp85-O37: +17 NOW()-in-SQL sentinel; +2 from downstream counter increments) |
+| Runners FAILED | 0 | clean across triple-pulse |
+| Workspaces TS-clean (LL #52) | 7/7 | **40th consecutive HW-verified** |
+| Vitest tests passing | 1,381 | unchanged from cp84 |
+| Triple-pulse stable | ✓ | 4432/0/4432/0/4432/0 hardware-verified |
+| Structural defenses | 37 | +2 from cp84 (O-36 release-notes asset-count parity; O-37 NOW()-in-handler-SQL sentinel) |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | -3 from cp84's incorrect 307 (removed internal-plumbing entries 304/305/307; kept #306 operator-facing security) |
+
+## CP85 FIXES
+
+### cp85-A1 — featureBid.ts replay determinism (LOW severity, fixed inline)
+
+- Source: `apps/indexer/src/indexer/handlers/featureBid.ts`
+- Lines: 350, 351, 358, 362, 427, 428 (six `NOW()` references in two SQL queries)
+- Was: SQL used `NOW()` (Postgres CURRENT_TIMESTAMP at execution) in anti-snipe extension and outbid-notify queries; non-deterministic on indexer replay
+- Now: all `NOW()` replaced with `$N` parameter bound to `ctx.blockTime`; the `last_extended_at` column write also bound to block time
+- Comment block added referencing strangerFee.ts:148 as the prior-known instance of this anti-pattern
+
+### cp85-O36 — release-notes asset-count parity smoke (Defense #36)
+
+- Source: `scripts/release-notes-asset-count-parity-smoke.ts`
+- Catches: `RELEASE-NOTES-*.md` literal asset-count claims that go stale as the asset registry grows (cp84-A1 was caught manually; this smoke would have caught it automatically)
+- Patterns: 3 (tradable-assets, trade-only, fee-eligible) × markdown-aware count-word ↔ number map
+- Truth-sources: `ASSET_TICKERS.length` from `packages/asset-registry/src/index.ts` + count of `canPayListingFee: true`
+- Trial-by-fire confirmed: reintroduce "Seven tradable assets" drift → trips with mismatch report; revert → green
+- 3 scenarios passing; registered in `scripts/run-smokes.sh` next to peer cp84 defenses
+
+### cp85-O37 — NOW()-in-handler-SQL sentinel-grep smoke (Defense #37)
+
+- Source: `scripts/now-in-handler-sql-smoke.ts`
+- Catches: any `NOW()` reference inside backtick-delimited SQL template literals in handler files — the cp85-A1 anti-pattern that breaks indexer replay determinism
+- State machine: tracks per-line template-literal state (counting backticks, skipping line comments) so only true SQL `NOW()` matches are flagged
+- Exemption: `// now-in-handler-sql: SAFE <reason>` on the same line lets genuinely-non-chain-state queries through
+- Promoted from cp86+ Lesson #1 candidate to ship in same cp as the originating bug — light to build, locks the class out permanently
+- Trial-by-fire confirmed: reintroduce cp85-A1's `effective_at <= NOW()` line in featureBid.ts → trips with file:line; revert → green
+- 17 scenarios (one per handler file); registered in `scripts/run-smokes.sh`
 
 ### Lesson #1 — Stale enumeration drift survives across multiple checkpoints when no defense locks it
 
@@ -126,19 +210,19 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
 
-## CP85+ PREDICTED HUNTING GROUND
+## CP86+ PREDICTED HUNTING GROUND
 
-1. **30-test CI delta hunt** (still open from cp83 pickup agenda).  cp84 investigation findings to save cp85 the dead ends:
+1. **30-test CI delta hunt** (still open from cp83 pickup agenda).  cp84 investigation findings to save the next cp the dead ends:
    - `apps/indexer/vitest.config.ts` line 12 excludes `test/integration/**` by default; integration tests are not the delta vector.
    - No `process.env.CI` conditionals in any indexer source or test file.
    - No `describe.skipIf` / `it.skipIf` patterns outside `test/integration/` (where `INTEGRATION_ENABLED` gates the suites).
    - The two 29-test candidate files (`moneroProofVerifier.test.ts`, `orderReplace.test.ts`) both use mocked HTTP via `vi.fn()` and have no external service dependencies; they run identically across environments.
    - Local count is now 493 (was 486 at cp83; +7 from cp84-S1 redaction tests).  Baseline floor stays 456 per cp83-D24.
    - Next step (requires CI access): grab `--reporter=json` output from a Forgejo runner, diff `testResults[].file` against local listing.  Without this, the chase is unobservable.
-2. **Release-notes asset-count parity smoke** (cp84 Lesson #4 #1) — grep-scan `RELEASE-NOTES-*.md` for literal asset-count claims (`"Sixteen tradable assets"`, `"all 16 …"`, etc.) and verify against `ASSET_TICKERS.length`.  cp84-A1 was caught manually; this smoke would have caught it automatically.
-3. ~~**Last-char-tamper anti-pattern grep smoke**~~ (cp84 Lesson #4 #2) — **CLEARED at cp84**: shipped as Defense #35 (`scripts/last-char-tamper-anti-pattern-smoke.ts`), 258 scenarios passing, trial-by-fire confirmed against cp84-F1.
+2. ~~**Release-notes asset-count parity smoke**~~ (cp84 Lesson #4 #1) — **CLEARED at cp85**: shipped as Defense #36 (`scripts/release-notes-asset-count-parity-smoke.ts`), 3 scenarios passing, trial-by-fire confirmed against cp84-A1.
+3. **NOW()-in-handler-SQL sentinel-grep smoke** (cp85 Lesson #1 candidate, may be promoted in same cp) — grep-scan `apps/indexer/src/indexer/handlers/*.ts` for `NOW()` inside string literals and flag any occurrences.  cp85-A1 (featureBid.ts) is the originating bug class; cp85 walk found no other live instances but a smoke would prevent regression.  Light to ship — same shape as Defense #35.
 4. **Defense-claim-vs-implementation parity smoke** (cp84 Lesson #4 #3) — speculative; harder generically.  cp84-S1 (false log-redaction claim) showed the class is real; the mechanism for detection is unclear.  Lower priority.
-5. **Handler audit campaign** — `order.ts` (974), `orderReplace.ts` (434), `release.ts` (313), `strangerFee.ts` (216) — still open from cp83.  Continue the cp82 pattern (chat / operatorRegister / feedback walked clean).
+5. **Handler audit campaign — remaining 5 of 17 handlers** (cp85 Lesson #3 coverage table).  836 lines total: `chatIdentity.ts` (195), `chatRead.ts` (114), `feedbackResponse.ts` (107), `operatorPaymentMethod.ts` (278), `block.ts` (142).  Spot-checks at cp85 surfaced no findings in the 3 quick-skimmed ones (`feeAttest`, `operatorBlock`, `profile`); the deep walk would close them out as DEEP-AUDITED.
 
 ## What cp84 DID and DID NOT do
 

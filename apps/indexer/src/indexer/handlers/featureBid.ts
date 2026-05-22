@@ -342,24 +342,33 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// The CTE picks the current top-MAX_SLOTS by the same
 		// rank predicate as featuredOrderbook.ts; UPDATE...FROM
 		// applies the extension to that subset.
+		//
+		// cp85-A1 — use ctx.blockTime, not NOW().  Same rationale
+		// as strangerFee.ts:148 — handler must be deterministic
+		// on indexer replay.  NOW() at replay time evaluates to
+		// the replay machine's wall-clock, so the set of "top
+		// visible bids" and "expiring within snipe window" would
+		// differ from the original real-time pass, producing
+		// different `extension_count` increments and divergent
+		// state between operators replaying chain history.
 		const extensionResult = await client.query<{ bid_id: string }>(
 			`WITH visible AS (
 				SELECT b.bid_id
 				  FROM featured_slot_bids b
 				 WHERE b.cancelled = FALSE
-				   AND b.effective_at <= NOW()
-				   AND b.expires_at > NOW()
+				   AND b.effective_at <= $6
+				   AND b.expires_at > $6
 				 ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
 				 LIMIT $1
 			)
 			UPDATE featured_slot_bids b
 			   SET expires_at = b.expires_at + ($3 * INTERVAL '1 minute'),
 			       extension_count = b.extension_count + 1,
-			       last_extended_at = NOW()
+			       last_extended_at = $6
 			  FROM visible v
 			 WHERE b.bid_id = v.bid_id
 			   AND b.trx_id <> $5
-			   AND b.expires_at <= NOW() + ($2 * INTERVAL '1 minute')
+			   AND b.expires_at <= $6 + ($2 * INTERVAL '1 minute')
 			   AND b.extension_count < $4
 			RETURNING b.bid_id`,
 			[
@@ -367,7 +376,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				SNIPE_WINDOW_MINUTES,
 				SNIPE_EXTENSION_MINUTES,
 				MAX_EXTENSIONS,
-				ctx.trxId
+				ctx.trxId,
+				ctx.blockTime
 			]
 		);
 		if (extensionResult.rows.length > 0) {
@@ -424,14 +434,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					) AS rank
 				FROM featured_slot_bids b
 				WHERE b.cancelled = FALSE
-				  AND b.effective_at <= NOW()
-				  AND b.expires_at > NOW()
+				  AND b.effective_at <= $3
+				  AND b.expires_at > $3
 			)
 			SELECT bidder, order_permlink, rank::text AS rank
 			  FROM ranked
 			 WHERE rank IN ($1, $2)
 			 ORDER BY rank`,
-			[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1]
+			[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1, ctx.blockTime]
 		);
 
 		// Did our new bid make the top-N?

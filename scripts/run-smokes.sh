@@ -154,6 +154,8 @@ SMOKES=(
 	".:sidecar-shell-quoting-smoke"
 	".:sidecar-envelope-error-path-smoke"
 	".:last-char-tamper-anti-pattern-smoke"
+	".:release-notes-asset-count-parity-smoke"
+	".:now-in-handler-sql-smoke"
 	"apps/web:i18n-hardcoded-english-smoke"
 	"apps/web:i18n-raw-exception-smoke"
 	"apps/web:i18n-html-injection-smoke"
