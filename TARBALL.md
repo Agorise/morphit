@@ -1,5 +1,57 @@
 # Tarball history
 
+## cp86 — Trust-chain extension audit (~3,056 lines of supporting infrastructure) — 13 modules walked clean (10 indexer-aux + 3 relay crypto/policy) — 0 new findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st HW-verified — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp86-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~8,322 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056).
+
+### TL;DR
+
+cp86 extends the audit trust-chain from handlers down into the supporting infrastructure that handlers depend on.  Logic: if a handler is clean but its imports have flaws, the handler inherits the flaws.  Walked 10 indexer-auxiliary modules + 3 relay crypto/policy modules, totaling ~3,056 lines.  0 findings across all 13.  No code changes this checkpoint — pure audit work; tarball captures the audit state and updated doc commentary.
+
+**Indexer auxiliary modules (10, ~2,262 lines):**
+- `permlink.ts` (44) — shared validator; charset + length bounds
+- `payloadSize.ts` (66) — byte-length cap via TextEncoder, Finding L returns serialized
+- `fee.ts` (49) — pure Sybil multiplier
+- `fee-transfer.ts` (31) — Graphene asset string + memo parsers
+- `confusables.ts` (290) — 9 reserved names × regex-compiled equivalences; byte-equality escape
+- `attestorEligibility.ts` (193) — two-phase OR/AND gate; replay-safe `now` param
+- `strangerFeePricing.ts` (134) — explicitly switches `NOW()` ↔ `$3::timestamptz` based on caller path (validates Defense #37's handlers-only scope decision)
+- `operatorEarnings.ts` (420) — 10-scenario black-hat audit verified; Part 111 federation-scope gate; UNIQUE on trx_id catches replays
+- `loyalty.ts` (305) — G6 nested-SAVEPOINT pattern prevents unique-violation transaction-poisoning
+- `dispatcher.ts` (730) — SAVEPOINT integer-only identifier guard; Finding A9 stable-sort (admission ops before consumers); per-op buffer-flush prevents phantom SSE on rollback; handler-throw caught with 120-char truncated reject_reason
+
+**Relay crypto/policy modules (3, ~794 lines):**
+- `inviteToken.ts` (258) — HMAC-SHA256 + timingSafeEqual + length-check-first; IP binding via HMAC (rainbow-resistant for IPv4 space)
+- `altcha.ts` (266) — `crypto.randomInt` (not Math.random — Finding N19); size-capped usedSalts (100k) with insertion-order FIFO eviction documented as cost-prohibitive to exploit
+- `keyEnvelope.ts` (270) — scrypt N≥2^15 floor + r≥8 floor (Audit 2026-05 finding 5-1 prevents tampered-envelope KDF downgrade); GCM AEAD with key.fill(0) hygiene; documented immutable-JS-string limitation
+
+### Cp86 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | 7/7 clean | unchanged from cp85 (no code changes this cp) |
+| `bash scripts/run-smokes.sh` | 4432/0 (verified once this cp) | unchanged from cp85 triple-pulse |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 3,056 | trust-chain extension |
+| Findings this cp | 0 | all 13 modules clean |
+
+### Cp86 deferred to cp87+
+
+1. **API endpoint audit** — `apps/indexer/src/api/*.ts` (~6,777 lines across 30+ files) — public HTTP attack surfaces; next logical layer
+2. **Relay endpoint audit** — `apps/relay/src/api/*.ts` + middleware + remaining policy modules — also large
+3. **30-test CI delta hunt** — still sandbox-blocked
+4. **Defense-claim-vs-implementation parity smoke** — cp84 Lesson #4 #3; speculative
+5. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85
+
+### Cp86 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp86 lessons (3 — trust-chain rationale, NOW()-vs-blockTime validation, coverage table) + state table + fixes section ("none — audit-only checkpoint") + cp87+ hunting-ground update
+- `TARBALL.md` — cp86 entry inserted at top (this entry)
+
+No source code or test files modified — cp86 is a pure audit-trail checkpoint.
+
 ## cp85 — Defenses #36 + #37 (release-notes asset-count parity + NOW()-in-handler-SQL sentinel, +20 scen) — Handler audit campaign 17/17 deep-walked (~5,266 lines; cp82+cp85 combined) — cp85-A1 closed (featureBid.ts NOW() → ctx.blockTime replay-determinism fix, 6 SQL refs) — Brag-list discipline correction (3 internal-plumbing entries removed: cp84 304/305/307) — battery 4410→4432/0 triple-pulse STABLE — LL#52 40th HW-verified — 1,381 vitest tests unchanged — 307→304 brag entries (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp85-FULL-STATE.tar.gz`

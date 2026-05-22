@@ -1,8 +1,53 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp85 — 2026-05-21.  **37 STRUCTURAL DEFENSES (+2 cp85-O36/O37) · BATTERY 4432/0 TRIPLE-PULSE STABLE · LL #52 40TH CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING · cp85-A1 closed (featureBid.ts NOW() → ctx.blockTime replay-determinism fix) · HANDLER AUDIT CAMPAIGN COMPLETE 17/17 DEEP-WALKED (~5,266 LINES; cp82 + cp85 combined) · 3 INTERNAL-PLUMBING BRAG ENTRIES REMOVED (cp84 304/305/307; trailer 307→304).**
+**Last touched:** Part 122 cp86 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged from cp85) · BATTERY 4432/0 (verified once this cp) · LL #52 41ST CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING (unchanged) · TRUST-CHAIN EXTENSION AUDIT COMPLETE: ~3,056 lines of supporting infrastructure walked clean (10 indexer auxiliary modules + 3 relay crypto/policy modules) · 0 NEW FINDINGS · all 17/17 handlers + their supporting modules now audited · CUMULATIVE DEEP-AUDIT COVERAGE: ~8,322 LINES.**
 
-## CP85 LESSONS
+## CP86 LESSONS
+
+### Lesson #1 — Trust-chain extension closes the audit gap that handler-only coverage leaves open
+
+cp85 finished the 17/17 handler audit, but handlers IMPORT helper modules — `permlink`, `payloadSize`, `confusables`, `attestorEligibility`, `strangerFeePricing`, `operatorEarnings`, `loyalty`, `dispatcher`.  If a handler is clean but its imports have flaws, the handler INHERITS the flaws.  cp86 walked the 10 indexer-aux modules + 3 relay crypto/policy modules that handlers rely on.  All clean; the trust chain holds.
+
+### Lesson #2 — Multiple files document the NOW()-vs-blockTime distinction explicitly
+
+cp85 found cp85-A1 in `featureBid.ts` and shipped Defense #37 to catch the class.  cp86's audit of `strangerFeePricing.ts` confirms the pattern: that module CORRECTLY uses `NOW()` when called from the API real-time path (no `now` argument) AND `$3::timestamptz` when called from a handler with explicit `ctx.blockTime`.  This validates Defense #37's scope decision (handlers-only): a smoke that flagged `NOW()` anywhere in `apps/indexer/src/indexer/*.ts` would have a false-positive on `strangerFeePricing.ts` legitimately.  Defense #37's `apps/indexer/src/indexer/handlers/*.ts` scope is correct.
+
+### Lesson #3 — Coverage table for supporting modules
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| permlink.ts | 44 | DEEP-AUDITED CLEAN | shared validator, 2 functions for different length contexts |
+| payloadSize.ts | 66 | DEEP-AUDITED CLEAN | byte-length via TextEncoder (Finding L returns serialized) |
+| fee.ts | 49 | DEEP-AUDITED CLEAN | pure deterministic Sybil multiplier, throws on baseBlurt ≤ 0 |
+| fee-transfer.ts | 31 | DEEP-AUDITED CLEAN | strict regex parsers for Graphene asset string + memo |
+| confusables.ts | 290 | DEEP-AUDITED CLEAN | 9 reserved names with regex-compiled equivalence tables; byte-equality escape |
+| attestorEligibility.ts | 193 | DEEP-AUDITED CLEAN | two-phase OR/AND gate; replay-safe via `now` param |
+| strangerFeePricing.ts | 134 | DEEP-AUDITED CLEAN | NOW() vs `$3::timestamptz` switching per Defense #37 scope discussion |
+| operatorEarnings.ts | 420 | DEEP-AUDITED CLEAN | 10-scenario black-hat audit in header verified; Part 111 federation-scope gate |
+| loyalty.ts | 305 | DEEP-AUDITED CLEAN | G6 nested SAVEPOINT pattern prevents unique-violation transaction-poisoning |
+| dispatcher.ts | 730 | DEEP-AUDITED CLEAN | SAVEPOINT integer-only identifier guard; Finding A9 stable-sort; per-op buffer-flush |
+| relay inviteToken.ts | 258 | DEEP-AUDITED CLEAN | HMAC-SHA256 + timingSafeEqual + length check; IP binding via HMAC (rainbow-resistant) |
+| relay altcha.ts | 266 | DEEP-AUDITED CLEAN | crypto.randomInt (Finding N19); size-capped usedSalts |
+| relay keyEnvelope.ts | 270 | DEEP-AUDITED CLEAN | scrypt N≥2^15 + r≥8 floors prevent envelope-tampered KDF downgrade |
+
+Total cp86: 3,056 lines walked, 0 findings.
+
+## CP86 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp85 (no code changes this cp; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **40th consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~8,322 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) |
+
+## CP86 FIXES
+
+None — cp86 was a pure trust-chain extension audit. 0 findings across 13 modules / 3,056 lines.
 
 ### Lesson #1 — Handler audit campaign finds NOW()-in-SQL anti-pattern (cp85-A1)
 
@@ -209,6 +254,14 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP87+ PREDICTED HUNTING GROUND
+
+1. **API endpoint audit** — `apps/indexer/src/api/*.ts` (~6,777 lines across 30+ files): orderbook, orderbookStream, feedback, loginPairing, chatStream, rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, orders, instancesStreamHelpers, featuredOrderbook, health, featuredBids, profiles, orderViewsLogic, operatorBlocks, chat, release, chainFee, operators, instances, etc.  These are public HTTP attack surfaces — the next logical layer after handler + supporting-module coverage.  Likely candidate for cp87.
+2. **Relay endpoint audit** — `apps/relay/src/api/*.ts` (create.ts at 864 lines is the biggest), plus the rate-limit/origin-enforcement/ip middleware (~750 lines), plus the policy modules not yet walked (highValueName 462, globalDailyCeiling 397, pushSender 280, sequentialDetector 254).  Also large, likely cp88.
+3. **30-test CI delta hunt** — still sandbox-blocked, needs CI-side `--reporter=json` data.
+4. **Defense-claim-vs-implementation parity smoke** — cp84 Lesson #4 #3; speculative, lower priority.
+5. **Code-dedup refactor for order.ts ↔ orderReplace.ts validation** — soft observation from cp85 Lesson #2.
 
 ## CP86+ PREDICTED HUNTING GROUND
 
