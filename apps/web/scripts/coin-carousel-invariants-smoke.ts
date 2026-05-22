@@ -200,8 +200,8 @@ const scenarios: Scenario[] = [
 	{
 		name: 'I-8: barter slot present; icon exists on disk',
 		test: () => {
-			if (!/iconPath:\s*'\/icons\/icon-barter\.png'/.test(src)) {
-				return 'barter slot iconPath does not point at /icons/icon-barter.png';
+			if (!/iconPath:\s*'\/icons\/icon-barter\.svg'/.test(src)) {
+				return 'barter slot iconPath does not point at /icons/icon-barter.svg';
 			}
 			if (!/home\.coin_carousel\.barter\.label/.test(src)) {
 				return 'barter label i18n key not referenced';
@@ -209,7 +209,7 @@ const scenarios: Scenario[] = [
 			if (!/home\.coin_carousel\.barter\.sr/.test(src)) {
 				return 'barter screen-reader i18n key not referenced';
 			}
-			const onDisk = join(STATIC_ROOT, 'icons/icon-barter.png');
+			const onDisk = join(STATIC_ROOT, 'icons/icon-barter.svg');
 			if (!existsSync(onDisk)) {
 				return `barter icon referenced in carousel but missing on disk: ${onDisk}`;
 			}
@@ -230,6 +230,114 @@ const scenarios: Scenario[] = [
 			const adds = src.match(/seenBasenames\.add\(/g) ?? [];
 			if (adds.length < 3) {
 				return `expected ≥3 seenBasenames.add() calls (one per source), found ${adds.length}`;
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-10: icons render at uniform opacity: 0.85 (no color modification)',
+		test: () => {
+			// cp115-cp4: Ken wants the asset ICON ARTWORK shipped full-
+			// color, no SVG modification, no `filter: grayscale`-style
+			// color tampering.  cp115-cp6: but the carousel-item gets
+			// a uniform 0.85 alpha applied at the stacking level so it
+			// sits as a decorative ribbon under the bolder priorities-
+			// cards above without competing for attention.  This smoke
+			// pins the EXACT value so drift in either direction is
+			// caught: removing the dimming (e.g. to 1.0) AND amplifying
+			// it (e.g. to 0.5) both fail this scenario.
+			const styleStart = src.indexOf('<style>');
+			const styleEnd = src.indexOf('</style>');
+			if (styleStart === -1 || styleEnd === -1) {
+				return '<style> block not found';
+			}
+			const styleBlock = src.slice(styleStart, styleEnd);
+			const itemRule = styleBlock.match(
+				/\.coin-carousel-item\s*\{[^}]*\}/
+			);
+			if (!itemRule) {
+				return '.coin-carousel-item style rule not found';
+			}
+			const opacityMatch = itemRule[0].match(/opacity:\s*([^;}\s]+)/);
+			if (!opacityMatch) {
+				return '.coin-carousel-item missing opacity declaration — Ken set it to 0.85; verify this rule still ships';
+			}
+			if (opacityMatch[1] !== '0.85') {
+				return `.coin-carousel-item opacity drifted from 0.85 to ${opacityMatch[1]} — pinned value (cp115-cp6)`;
+			}
+			// Also reject any filter: declaration on the item (would
+			// modify icon color, which violates "don't modify them").
+			const filterMatch = itemRule[0].match(/filter:\s*([^;}]+)/);
+			if (filterMatch && !/^\s*none\s*$/.test(filterMatch[1]!)) {
+				return `carousel-item rule modifies icons via filter: ${filterMatch[1]} — Ken's rule: render icons at full color, no modification`;
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-11: two carousel rows declared (rowA + rowB)',
+		test: () => {
+			// cp115-cp6: Ken asked for two rows so all 22+ slots can be
+			// seen sooner without waiting for a 60-second loop.  Verify
+			// both derived row variables exist in the script section
+			// (not just inline filter() in the template).
+			if (!/const\s+rowA\s*=\s*\$derived/.test(src)) {
+				return 'rowA $derived declaration missing';
+			}
+			if (!/const\s+rowB\s*=\s*\$derived/.test(src)) {
+				return 'rowB $derived declaration missing';
+			}
+			// Verify the template actually renders both, with distinct
+			// CSS classes for the per-track direction.
+			if (!/coin-carousel-track-a/.test(src) || !/coin-carousel-track-b/.test(src)) {
+				return 'Template missing one or both of coin-carousel-track-{a,b} class names';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-12: rows scroll in opposite directions',
+		test: () => {
+			// Row A uses default (normal) animation direction; row B
+			// uses reverse.  This is the "opposite directions" rule —
+			// catches a future regression where someone copy-pastes the
+			// same rule for both tracks.
+			const styleStart = src.indexOf('<style>');
+			const styleEnd = src.indexOf('</style>');
+			const styleBlock = src.slice(styleStart, styleEnd);
+			const aRule = styleBlock.match(
+				/\.coin-carousel-track-a\s*\{[^}]*\}/
+			);
+			const bRule = styleBlock.match(
+				/\.coin-carousel-track-b\s*\{[^}]*\}/
+			);
+			if (!aRule || !bRule) {
+				return 'coin-carousel-track-a or coin-carousel-track-b style rule missing';
+			}
+			const aDir = aRule[0].match(/animation-direction:\s*([^;}\s]+)/);
+			const bDir = bRule[0].match(/animation-direction:\s*([^;}\s]+)/);
+			if (!aDir) return 'track-a missing animation-direction';
+			if (!bDir) return 'track-b missing animation-direction';
+			if (aDir[1] === bDir[1]) {
+				return `both tracks scroll the same direction (${aDir[1]}) — Ken's rule cp115-cp6: opposite directions`;
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-13: row split is balanced (alternating even/odd)',
+		test: () => {
+			// cp115-cp6 rationale: as the registry grows, the split
+			// must stay 50/50.  Alternating is the simplest balanced
+			// strategy (rowA = even-index, rowB = odd-index).  Catches
+			// a future regression to slice(0, N/2) which would put all
+			// the cp3-era coins in one row + all cp21+ additions in
+			// the other.
+			if (!/rowA\s*=\s*\$derived\(visibleSlots\.filter\(\(_,\s*i\)\s*=>\s*i\s*%\s*2\s*===\s*0\)\)/.test(src)) {
+				return 'rowA split is not "i % 2 === 0" alternating — risk of unbalanced rows as catalogue grows';
+			}
+			if (!/rowB\s*=\s*\$derived\(visibleSlots\.filter\(\(_,\s*i\)\s*=>\s*i\s*%\s*2\s*===\s*1\)\)/.test(src)) {
+				return 'rowB split is not "i % 2 === 1" alternating — risk of unbalanced rows as catalogue grows';
 			}
 			return null;
 		}

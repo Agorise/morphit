@@ -148,10 +148,18 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// and the registration in apps/web/static/manifest.webmanifest
 		// for the protocol handler scope.
 		new Set(['deepLink'])
+	],
+	[
+		'apps/web/src/lib/components/PrioritiesSection.svelte',
+		// `faqHref(p.faqKey)` — every faqKey comes from the hardcoded
+		// `PRIORITIES` constant inside the component (7 entries, no
+		// user/operator/peer input).  `faqHref` itself just calls
+		// localePath() (a SAFE_BUILDER) and concatenates a '#' anchor.
+		// The smoke can't trace the chain through the wrapper, but a
+		// reviewer has confirmed safe.  See PrioritiesSection.svelte
+		// module-doc + the PRIORITIES const declaration.
+		new Set(['faqHref(p.faqKey)'])
 	]
-	// IdentityLabel — `validatedBlurtMediaUrl` and `validatedNostrUrl`
-	// are pre-validated derived values handled by the `validated[A-Z]`
-	// identifier rule below (Part 74).  No per-file entry needed.
 ]);
 
 let scenarios = 0;

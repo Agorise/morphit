@@ -489,24 +489,6 @@
 		"hero_body": "Morphit conecta compradores y vendedores directamente. Sin KYC, no custodial, sin cookies, E2EE, sin registros, sin custodia, privado por defecto, código abierto, totalmente distribuido+",
 		"cta_browse": "Ver el libro de órdenes",
 		"cta_start": "Empezar a operar",
-		"points": {
-			"non_custodial": {
-				"title": "Sin custodia",
-				"body": "Tus monedas se mueven directamente entre tú y tu contraparte. Morphit nunca las toca."
-			},
-			"no_kyc": {
-				"title": "Sin ID ni correo",
-				"body": "Un par de claves generado en tu dispositivo es toda tu cuenta. Nada más hace falta."
-			},
-			"uncensorable": {
-				"title": "Imparable",
-				"body": "Accesible en clearnet, Tor, Lokinet e I2P. Ningún servidor central puede apagarlo."
-			},
-			"grandma": {
-				"title": "Hecho para humanos",
-				"body": "Si no se entiende en cinco segundos, no hicimos bien el trabajo. Si te atoras, te lo explicamos."
-			}
-		},
 		"reachable_via": "También accesible vía",
 		"welcome_to_instance": "Bienvenido a {name}",
 		"returning_user_prompt": "¿Ya tienes una cuenta de Blurt o configuraste Morphit en otro dispositivo?",
@@ -537,20 +519,34 @@
 			"heading": "En qué se basa Morphit",
 			"privacy": {
 				"title": "La privacidad primero",
-				"body": "Sin KYC, sin correo electrónico, sin número de teléfono. Las claves se generan en tu dispositivo; nada sobre ti sale de él a menos que tú elijas."
+				"body": "Sin KYC, correo electrónico, teléfono/SMS, cookies, analíticas ni selfies. Elige un nombre de usuario chulo, ya está, en serio."
 			},
-			"decentralization": {
+			"true_p2p": {
+				"title": "P2P de verdad",
+				"body": "Los activos se mueven directamente entre Comprador y Vendedor, sin más. Sin monedero de exchange, ni custodia, ni árbitros, ni intermediarios."
+			},
+			"unstoppable": {
 				"title": "Imparable por diseño",
-				"body": "La federación funciona sobre la cadena pública Blurt. Ningún servidor central puede ser requerido judicialmente. Cualquiera puede ejecutar un nodo."
+				"body": "Accesible en clearnet, Tor, Lokinet, I2P, Nostr y operadores de instancias federadas. Bloquea uno y muchos otros permanecen."
 			},
-			"grandma": {
-				"title": "Apto para la abuela",
-				"body": "Usable por personas que nunca han tocado las criptomonedas. Si un paso no está claro, lo explicamos en línea — sin muros de jerga."
+			"discoverability": {
+				"title": "Descubribilidad",
+				"body": "La federación usa la cadena de bloques de Blurt y RSS para la distribución del libro de órdenes, la finalización de operaciones y la reputación de usuarios."
 			},
-			"tiny_footprint": {
-				"title": "Huella mínima",
-				"body": "Carga rápido en cualquier dispositivo y ancho de banda. Autoalójate un nodo en un VPS de 5 $/mes. Carga diferida, ligero en imágenes, consciente con los bytes."
-			}
+			"encrypted_chat": {
+				"title": "Chat cifrado",
+				"body": "Las conversaciones Comprador/Vendedor son 100 % privadas, E2EE e inmutables para la posteridad por si tienes una disputa futura."
+			},
+			"reputation": {
+				"title": "La reputación lo es todo",
+				"body": "Usa cualquier número de webs distintas y tu buena reputación te seguirá. Tus operaciones personales están siempre ahí."
+			},
+			"trade_anything": {
+				"title": "Comercia con cualquier cosa",
+				"body": "Más de 16 criptos, además de bienes y servicios directos — no solo BTC por USD. Multi-activo, multi-red, multi-medio."
+			},
+			"card_aria_label": "{title} — saber más en nuestras FAQ",
+			"learn_more": "Saber más"
 		}
 	},
 	"onboarding": {

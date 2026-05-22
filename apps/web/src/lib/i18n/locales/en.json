@@ -489,24 +489,6 @@
 		"hero_body": "Morphit connects buyers and sellers directly. No KYC, non-custodial, no cookies, E2EE, no logging, no escrow, private by default, open source, fully-distributed+",
 		"cta_browse": "Browse the orderbook",
 		"cta_start": "Start trading",
-		"points": {
-			"non_custodial": {
-				"title": "Non-custodial",
-				"body": "Your coins move directly between you and your trading partner. Morphit never touches them."
-			},
-			"no_kyc": {
-				"title": "No ID, no email",
-				"body": "A keypair generated on your device is your whole account. Nothing else needed."
-			},
-			"uncensorable": {
-				"title": "Unstoppable",
-				"body": "Reachable on the clearnet, Tor, Lokinet, and I2P. No central server can take it offline."
-			},
-			"grandma": {
-				"title": "Built for humans",
-				"body": "If it isn't clear in five seconds, we didn't do our job. If you get stuck, we explain."
-			}
-		},
 		"reachable_via": "Reachable via",
 		"welcome_to_instance": "Welcome to {name}",
 		"returning_user_prompt": "Already have a Blurt account or set up Morphit on another device?",
@@ -537,20 +519,34 @@
 			"heading": "What Morphit is built around",
 			"privacy": {
 				"title": "Privacy first",
-				"body": "No KYC, no email, no phone number. Keys generated on your device; nothing about you leaves it unless you choose."
+				"body": "No KYC, email, phone/SMS, cookies, analytics or selfies. Pick a cool username, that's it, seriously."
 			},
-			"decentralization": {
+			"true_p2p": {
+				"title": "True P2P",
+				"body": "Assets move directly between Buyer and Seller only. No exchange wallet, escrow, arbitrators or middleman."
+			},
+			"unstoppable": {
 				"title": "Unstoppable by design",
-				"body": "Federation runs over the public Blurt chain. No central server can be subpoenaed. Anyone can run a node."
+				"body": "Reachable on clearnet, Tor, Lokinet, I2P, Nostr and Federated instance runners. Block one and many others remain."
 			},
-			"grandma": {
-				"title": "Grandma-friendly",
-				"body": "Usable by people who have never touched crypto. If a step is unclear, we explain it inline — no jargon walls."
+			"discoverability": {
+				"title": "Discoverability",
+				"body": "Federation uses the Blurt blockchain and RSS for orderbook distribution, trade finalization and user reputation."
 			},
-			"tiny_footprint": {
-				"title": "Tiny footprint",
-				"body": "Loads fast on every device and bandwidth. Self-host a node on a $5/month VPS. Lazy-loaded, image-light, byte-conscious."
-			}
+			"encrypted_chat": {
+				"title": "Encrypted Chat",
+				"body": "Buyer/Seller conversations are 100% private, E2EE and immutable for posterity in case you have a future dispute."
+			},
+			"reputation": {
+				"title": "Reputation is everything",
+				"body": "Use any number of different websites and your good reputation follows you. Your personal trades are always there."
+			},
+			"trade_anything": {
+				"title": "Trade anything",
+				"body": "16+ cryptos plus direct goods and services - not just BTC for USD. Cross-asset, cross-network, cross-medium."
+			},
+			"card_aria_label": "{title} — learn more in our FAQ",
+			"learn_more": "Learn more"
 		}
 	},
 	"onboarding": {

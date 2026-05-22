@@ -160,13 +160,13 @@
 
 		// Source 3 — barter (raster PNG; explicit dimensions so the
 		// browser reserves the box before the lazy load resolves).
-		if (!seenBasenames.has('icon-barter.png')) {
-			seenBasenames.add('icon-barter.png');
+		if (!seenBasenames.has('icon-barter.svg')) {
+			seenBasenames.add('icon-barter.svg');
 			out.push({
 				key: 'barter',
 				label: $_('home.coin_carousel.barter.label'),
 				screenReaderName: $_('home.coin_carousel.barter.sr'),
-				iconPath: '/icons/icon-barter.png',
+				iconPath: '/icons/icon-barter.svg',
 				iconWidth: 40,
 				iconHeight: 40
 			});
@@ -174,6 +174,24 @@
 
 		return out;
 	});
+
+	/** Split visibleSlots ~50/50 into two rows by alternating
+	 *  even-index → rowA and odd-index → rowB.
+	 *
+	 *  Why this strategy: the registry order today is BTC, XMR,
+	 *  BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR,
+	 *  SOL, ETH, XRP, [5 networks], barter.  Alternating means each
+	 *  row sees a mixed-character set instead of one row of "the
+	 *  important originals" + another of "the latest additions";
+	 *  visually pleasant + every row stays representative as the
+	 *  registry grows.  As long as the total count remains evenish,
+	 *  the rows stay balanced ±1.
+	 *
+	 *  Today: 22 slots → rowA has 11, rowB has 11.  When a 23rd asset
+	 *  lands rowA gets 12 and rowB stays 11; still balanced.
+	 */
+	const rowA = $derived(visibleSlots.filter((_, i) => i % 2 === 0));
+	const rowB = $derived(visibleSlots.filter((_, i) => i % 2 === 1));
 
 	onMount(() => {
 		if (typeof window === 'undefined' || !containerEl) return;
@@ -220,12 +238,34 @@
 	<div class="coin-carousel-edge-fade-right" aria-hidden="true"></div>
 
 	{#if mounted}
-		<!-- Marquee track.  Duplicated content so the CSS animation
-		     can scroll from 0 to -50% and seamlessly loop. -->
-		<div class="coin-carousel-track" aria-hidden="true">
+		<!-- Two marquee tracks, scrolling in opposite directions.
+		     Each track is its own row at ~50% the slot count of the
+		     full set.  Both tracks duplicate their content so the
+		     CSS animation can scroll 0 → -50% (or -50% → 0 for the
+		     reverse-direction track) and seamlessly loop. -->
+		<div class="coin-carousel-track coin-carousel-track-a" aria-hidden="true">
 			{#each [0, 1] as copy (copy)}
 				<div class="coin-carousel-row">
-					{#each visibleSlots as slot (`${copy}-${slot.key}`)}
+					{#each rowA as slot (`a-${copy}-${slot.key}`)}
+						<div class="coin-carousel-item">
+							<img
+								src={slot.iconPath}
+								alt=""
+								loading="lazy"
+								decoding="async"
+								width={slot.iconWidth}
+								height={slot.iconHeight}
+							/>
+							<span class="coin-carousel-label">{slot.label}</span>
+						</div>
+					{/each}
+				</div>
+			{/each}
+		</div>
+		<div class="coin-carousel-track coin-carousel-track-b" aria-hidden="true">
+			{#each [0, 1] as copy (copy)}
+				<div class="coin-carousel-row">
+					{#each rowB as slot (`b-${copy}-${slot.key}`)}
 						<div class="coin-carousel-item">
 							<img
 								src={slot.iconPath}
@@ -252,12 +292,19 @@
 	.coin-carousel {
 		position: relative;
 		overflow: hidden;
-		/* Reserve fixed height so layout doesn't jump when content mounts.
-		 * 40px icon + 14px ticker text + 20px vertical padding = ~74px;
-		 * use 80 to give the ticker text room to breathe. */
-		height: 80px;
+		/* cp115-cp6: two rows scrolling opposite directions.  Each row
+		 * is 80px (40px icon + 14px label + 20px padding rounded up to
+		 * 80 for breathing room); two rows = 160px total.  As the
+		 * carousel grows past 22 slots, additional slots remain
+		 * distributed across the two rows (even-index → rowA, odd →
+		 * rowB) so the heights never need to change. */
+		height: 160px;
 		margin-top: 2rem;
 		margin-bottom: 2rem;
+		/* Stack the two tracks vertically with no gap — the per-row
+		 * padding handles spacing. */
+		display: flex;
+		flex-direction: column;
 	}
 
 	.coin-carousel-edge-fade-left,
@@ -285,7 +332,19 @@
 	.coin-carousel-track {
 		display: flex;
 		width: max-content;
+		/* Each row gets equal vertical share (50% of the 160px host). */
+		height: 80px;
 		animation: coin-carousel-scroll 60s linear infinite;
+	}
+	/* Row A scrolls left-to-right (default direction). */
+	.coin-carousel-track-a {
+		animation-direction: normal;
+	}
+	/* Row B scrolls right-to-left.  Reverses the same keyframes so
+	 * the duplicated-track loop trick still works (track is twice as
+	 * wide; reverse goes -50% → 0). */
+	.coin-carousel-track-b {
+		animation-direction: reverse;
 	}
 
 	.coin-carousel-row {
@@ -303,7 +362,15 @@
 		/* Tight enough to fit ~22 items in a desktop hero width, wide
 		 * enough to render "Arbitrum" and "Polygon" without ellipsis.
 		 * Coin tickers (3-5 chars) sit centered within the same width
-		 * for consistent rhythm. */
+		 * for consistent rhythm.
+		 *
+		 * cp115-cp6: opacity 0.85 dims the carousel slightly so it sits
+		 * as a decorative ribbon under the bolder priorities-cards above
+		 * rather than competing for attention.  Icon ARTWORK is shipped
+		 * full-color (Ken's rule cp115-cp4 "don't modify them"); this
+		 * 0.85 is uniform per-item alpha applied at the stacking level,
+		 * not a color modification.  The I-10 smoke pins this exact
+		 * value so future drift gets caught. */
 		min-width: 80px;
 		opacity: 0.85;
 	}
