@@ -4,7 +4,6 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import MorphitMark from '$components/MorphitMark.svelte';
-	import Tooltip from '$components/Tooltip.svelte';
 	import Head from '$components/Head.svelte';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
@@ -13,12 +12,10 @@
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
 
-	const points = [
-		{ key: 'non_custodial', faq: 'what_is_morphit' as const },
-		{ key: 'no_kyc', faq: 'signup_requirements' as const },
-		{ key: 'uncensorable', faq: 'who_runs_it' as const },
-		{ key: 'grandma', faq: 'is_it_safe' as const }
-	];
+	// cp115-cp6: the old 4-card `points` grid (non_custodial / no_kyc /
+	// uncensorable / grandma) was deleted — replaced by the 7-card
+	// PrioritiesSection which covers the same user-facing properties +
+	// 3 more, with FAQ deep-links and hover/click affordances.
 
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
 	// SearchAction unlocking the SERP sitelinks search box).
@@ -118,27 +115,6 @@
 			</p>
 		</div>
 
-		<ul class="mt-20 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			{#each points as point, i (point.key)}
-				<li
-					class="card animate-fade-up border border-ink-100 dark:border-ink-800"
-					style="animation-delay: {300 + i * 90}ms"
-				>
-					<div class="flex items-start justify-between gap-3">
-						<h2 class="font-display text-xl font-bold">
-							{$_(`home.points.${point.key}.title`)}
-						</h2>
-						<Tooltip
-							textKey="home.points.{point.key}.body"
-							faqKey={point.faq}
-							ariaLabel={$_(`home.points.${point.key}.title`)}
-						/>
-					</div>
-					<p class="mt-3 text-ink-600 dark:text-ink-300">{$_(`home.points.${point.key}.body`)}</p>
-				</li>
-			{/each}
-		</ul>
-
 		<!-- Phase 5 item 5: featured slots showcase. Up to 5 orders
 		     users have paid to promote. Self-hides when empty so
 		     a fresh-install site doesn't show an awkward empty
@@ -155,7 +131,7 @@
 					<p class="text-xs font-semibold uppercase tracking-widest text-ink-500">
 						{$_('home.reachable_via')}
 					</p>
-					<h3 class="mt-2 font-display text-2xl font-bold">{$_('home.networks_heading')}</h3>
+					<h2 class="mt-2 font-display text-2xl font-bold">{$_('home.networks_heading')}</h2>
 					<p class="mt-3 text-ink-600 dark:text-ink-300">
 						{$_('home.networks_body')}
 					</p>
@@ -197,10 +173,10 @@
 			</div>
 		</section>
 
-		<!-- Four cards bragging about Morphit's design priorities
-		     (privacy / decentralization / grandma-friendly / tiny
-		     footprint).  Complements the user-facing 4-point grid
-		     above; this surface targets operators + skeptics. -->
+		<!-- Seven cards bragging about Morphit's design priorities,
+		     each hyperlinked to a cross-linked FAQ entry.  Replaces
+		     the old 4-card points grid as the canonical priorities
+		     surface on the home page. -->
 		<PrioritiesSection />
 
 		<!-- Below-the-fold: carousel of supported assets + 5 settlement

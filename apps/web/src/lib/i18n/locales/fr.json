@@ -489,24 +489,6 @@
 		"hero_body": "Morphit connecte acheteurs et vendeurs directement. Sans KYC, non-custodial, sans cookies, E2EE, sans journaux, sans séquestre, privé par défaut, open source, entièrement distribué+",
 		"cta_browse": "Parcourir le carnet",
 		"cta_start": "Commencer à trader",
-		"points": {
-			"non_custodial": {
-				"title": "Sans dépôt",
-				"body": "Vos coins passent directement entre vous et votre contrepartie. Morphit n'y touche jamais."
-			},
-			"no_kyc": {
-				"title": "Sans pièce d'identité, sans e-mail",
-				"body": "Une paire de clés générée sur votre appareil, c'est tout votre compte. Rien d'autre n'est nécessaire."
-			},
-			"uncensorable": {
-				"title": "Inarrêtable",
-				"body": "Accessible sur clearnet, Tor, Lokinet et I2P. Aucun serveur central ne peut le fermer."
-			},
-			"grandma": {
-				"title": "Conçu pour les humains",
-				"body": "Si ce n'est pas clair en cinq secondes, nous avons raté notre travail. Et si vous bloquez, on vous explique."
-			}
-		},
 		"reachable_via": "Accessible aussi via",
 		"welcome_to_instance": "Bienvenue sur {name}",
 		"returning_user_prompt": "Tu as déjà un compte Blurt ou configuré Morphit sur un autre appareil ?",
@@ -537,20 +519,34 @@
 			"heading": "Ce sur quoi Morphit est conçu",
 			"privacy": {
 				"title": "La confidentialité d'abord",
-				"body": "Pas de KYC, pas d'e-mail, pas de numéro de téléphone. Les clés sont générées sur votre appareil ; rien à votre sujet ne le quitte sauf si vous le choisissez."
+				"body": "Pas de KYC, d'e-mail, de téléphone/SMS, de cookies, d'analytique ni de selfies. Choisis un pseudo cool, c'est tout, sérieux."
 			},
-			"decentralization": {
-				"title": "Impossible à arrêter par conception",
-				"body": "La fédération fonctionne sur la chaîne Blurt publique. Aucun serveur central ne peut être assigné à comparaître. N'importe qui peut faire tourner un nœud."
+			"true_p2p": {
+				"title": "P2P véritable",
+				"body": "Les actifs circulent directement entre Acheteur et Vendeur uniquement. Pas de portefeuille d'exchange, ni d'entiercement, ni d'arbitres, ni d'intermédiaire."
 			},
-			"grandma": {
-				"title": "Adapté à grand-mère",
-				"body": "Utilisable par des personnes qui n'ont jamais touché aux cryptos. Si une étape n'est pas claire, nous l'expliquons en ligne — pas de murs de jargon."
+			"unstoppable": {
+				"title": "Inarrêtable par conception",
+				"body": "Accessible via clearnet, Tor, Lokinet, I2P, Nostr et opérateurs d’instances fédérées. Bloque-en un et beaucoup d’autres demeurent."
 			},
-			"tiny_footprint": {
-				"title": "Empreinte minuscule",
-				"body": "Se charge rapidement sur tous les appareils et bandes passantes. Auto-hébergez un nœud sur un VPS à 5 $/mois. Chargement différé, léger en images, conscient des octets."
-			}
+			"discoverability": {
+				"title": "Découvrabilité",
+				"body": "La fédération utilise la blockchain Blurt et le RSS pour la distribution du carnet d'ordres, la finalisation des trades et la réputation des utilisateurs."
+			},
+			"encrypted_chat": {
+				"title": "Chat chiffré",
+				"body": "Les conversations Acheteur/Vendeur sont 100 % privées, chiffrées de bout en bout et immuables pour la postérité au cas où vous auriez un futur litige."
+			},
+			"reputation": {
+				"title": "La réputation est tout",
+				"body": "Utilisez autant de sites différents que vous voulez et votre bonne réputation vous suivra. Vos transactions personnelles sont toujours là."
+			},
+			"trade_anything": {
+				"title": "Échangez n’importe quoi",
+				"body": "Plus de 16 cryptos plus des biens et services directs — pas seulement BTC contre USD. Inter-actifs, inter-réseaux, inter-médias."
+			},
+			"card_aria_label": "{title} — en savoir plus dans notre FAQ",
+			"learn_more": "En savoir plus"
 		}
 	},
 	"onboarding": {

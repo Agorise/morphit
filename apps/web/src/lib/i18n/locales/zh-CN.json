@@ -489,24 +489,6 @@
 		"hero_body": "Morphit 让买家和卖家直接连接。无 KYC、非托管、无 Cookie、端到端加密、无日志、无托管、默认私密、开源、完全分布式+",
 		"cta_browse": "浏览订单簿",
 		"cta_start": "开始交易",
-		"points": {
-			"non_custodial": {
-				"title": "非托管",
-				"body": "你的币直接在你和对手方之间流转,Morphit 一碰不碰。"
-			},
-			"no_kyc": {
-				"title": "无需身份证,无需邮箱",
-				"body": "在你设备上生成的一对密钥,就是你整个账户。不需要别的。"
-			},
-			"uncensorable": {
-				"title": "无法被关停",
-				"body": "在 clearnet、Tor、Lokinet 和 I2P 上均可访问。没有中心服务器能将其关闭。"
-			},
-			"grandma": {
-				"title": "为普通人而设计",
-				"body": "五秒内看不懂,就是我们的失职。真遇到问题,我们会讲清楚。"
-			}
-		},
 		"reachable_via": "也可通过以下方式访问",
 		"welcome_to_instance": "欢迎来到 {name}",
 		"returning_user_prompt": "已有 Blurt 账户或在其他设备上设置了 Morphit?",
@@ -537,20 +519,34 @@
 			"heading": "Morphit 围绕什么构建",
 			"privacy": {
 				"title": "隐私优先",
-				"body": "无 KYC,无电子邮件,无电话号码。密钥在你的设备上生成;除非你选择,关于你的任何信息都不会离开它。"
+				"body": "无 KYC、邮箱、手机/短信、Cookie、分析或自拍。挑一个酷酷的用户名，就这样,真的。"
 			},
-			"decentralization": {
-				"title": "设计上不可阻挡",
-				"body": "联邦在公开的 Blurt 链上运行。没有中央服务器可被传唤。任何人都可以运行节点。"
+			"true_p2p": {
+				"title": "真正的 P2P",
+				"body": "资产仅在买方和卖方之间直接流动。没有交易所钱包、托管、仲裁者或中间人。"
 			},
-			"grandma": {
-				"title": "奶奶友好",
-				"body": "从未接触过加密货币的人也能使用。如果某一步不清晰,我们会就地解释 — 没有术语墙。"
+			"unstoppable": {
+				"title": "设计上无法阻止",
+				"body": "可在明网、Tor、Lokinet、I2P、Nostr 和联邦实例运营者上访问。封锁一个,众多其他仍在。"
 			},
-			"tiny_footprint": {
-				"title": "微小足迹",
-				"body": "在每种设备和带宽上快速加载。在每月 5 美元的 VPS 上自托管节点。延迟加载,图像轻量,字节意识。"
-			}
+			"discoverability": {
+				"title": "可发现性",
+				"body": "联邦使用 Blurt 区块链和 RSS 进行订单簿分发、交易最终确认和用户信誉。"
+			},
+			"encrypted_chat": {
+				"title": "加密聊天",
+				"body": "买卖双方对话 100% 私密、端到端加密,并为后世不可篡改保存,以防你未来发生争议。"
+			},
+			"reputation": {
+				"title": "信誉就是一切",
+				"body": "使用任意数量的不同网站,你的良好信誉都会跟着你。你的个人交易始终都在。"
+			},
+			"trade_anything": {
+				"title": "交易任何东西",
+				"body": "16+ 种加密货币加上直接的商品和服务 — 而不仅仅是 BTC 换 USD。跨资产、跨网络、跨媒介。"
+			},
+			"card_aria_label": "{title} — 在我们的常见问题中了解更多",
+			"learn_more": "了解更多"
 		}
 	},
 	"onboarding": {

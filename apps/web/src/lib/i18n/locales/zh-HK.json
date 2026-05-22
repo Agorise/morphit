@@ -489,24 +489,6 @@
 		"hero_body": "Morphit 讓買家同賣家直接連接。無 KYC、非託管、無 Cookie、端到端加密、無日誌、無託管、預設私密、開源、完全分散式+",
 		"cta_browse": "睇訂單簿",
 		"cta_start": "開始交易",
-		"points": {
-			"non_custodial": {
-				"title": "非託管",
-				"body": "你啲幣直接喺你同對手之間流動,Morphit 完全唔會掂。"
-			},
-			"no_kyc": {
-				"title": "唔使身份證,唔使 email",
-				"body": "喺你部機度整出嚟嘅一對 key,就係你成個戶口。其他嘢都唔使。"
-			},
-			"uncensorable": {
-				"title": "停唔到",
-				"body": "在 clearnet、Tor、Lokinet 和 I2P 上均可存取。沒有中心伺服器能將其關閉。"
-			},
-			"grandma": {
-				"title": "為普通人設計",
-				"body": "五秒之內睇唔明,就係我哋做唔好。如果你卡住咗,我哋會解釋畀你聽。"
-			}
-		},
 		"reachable_via": "亦可以經以下方式上到",
 		"welcome_to_instance": "歡迎來到 {name}",
 		"returning_user_prompt": "已有 Blurt 帳戶或喺其他裝置上設置咗 Morphit?",
@@ -537,20 +519,34 @@
 			"heading": "Morphit 圍繞乜嘢構建",
 			"privacy": {
 				"title": "私隱優先",
-				"body": "無 KYC,無電郵,無電話號碼。密鑰喺你部裝置上生成;除非你揀,關於你嘅任何嘢都唔會離開佢。"
+				"body": "冇 KYC、電郵、電話/短訊、Cookie、分析或自拍。揀個型啲嘅用戶名,就咁,真係。"
 			},
-			"decentralization": {
+			"true_p2p": {
+				"title": "真正嘅 P2P",
+				"body": "資產淨係喺買家同賣家之間直接流動。冇交易所錢包、託管、仲裁人或中介。"
+			},
+			"unstoppable": {
 				"title": "設計上無得停",
-				"body": "聯邦喺公開嘅 Blurt 鏈上運行。冇中央伺服器可以畀人傳召。任何人都可以行一個節點。"
+				"body": "可喺明網、Tor、Lokinet、I2P、Nostr 同聯邦實例運營者上面訪問。封鎖一個,其他好多都仲喺度。"
 			},
-			"grandma": {
-				"title": "婆婆友好",
-				"body": "從未掂過加密貨幣嘅人都用得到。如果一個步驟唔清晰,我哋會就地解釋 — 冇行話牆。"
+			"discoverability": {
+				"title": "可發現性",
+				"body": "聯邦使用 Blurt 區塊鏈同 RSS 嚟做訂單簿分發、交易最終確認同用戶信譽。"
 			},
-			"tiny_footprint": {
-				"title": "微小足跡",
-				"body": "喺每種裝置同頻寬上快速加載。喺每月 5 美元嘅 VPS 上自寄存節點。延遲加載,圖像輕量,字節意識。"
-			}
+			"encrypted_chat": {
+				"title": "加密聊天",
+				"body": "買賣雙方對話 100% 私密、端到端加密,並為後世不可篡改保存,以防你將來有爭議。"
+			},
+			"reputation": {
+				"title": "信譽就係一切",
+				"body": "用任何數量嘅唔同網站,你嘅好信譽都會跟住你。你嘅個人交易永遠都喺度。"
+			},
+			"trade_anything": {
+				"title": "乜都可以交易",
+				"body": "16+ 種加密貨幣加上直接嘅貨品同服務 — 唔係淨係 BTC 換 USD。跨資產、跨網絡、跨媒介。"
+			},
+			"card_aria_label": "{title} — 喺我哋嘅常見問題到了解更多",
+			"learn_more": "了解更多"
 		}
 	},
 	"onboarding": {
