@@ -513,10 +513,44 @@
 		"returning_user_link": "登入",
 		"networks_heading": "四種網絡,一個 Morphit。",
 		"networks_body": "同一個網站,同一份代碼,四種到達方式。一條路被阻斷,仲有其他路。",
-		"asset_subtitles": {
-			"btc": "最大嘅網絡",
-			"xmr": "設計上私密",
-			"blurt": "社交,冇 gas 費"
+		"coin_carousel": {
+			"aria_label": "支援的資產",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Arbitrum 網絡",
+				"base": "Base",
+				"base_sr": "Base 網絡",
+				"bep20": "BEP-20",
+				"bep20_sr": "BEP-20 網絡",
+				"polygon": "Polygon",
+				"polygon_sr": "Polygon 網絡",
+				"trc20": "TRC-20",
+				"trc20_sr": "TRC-20 網絡"
+			},
+			"barter": {
+				"label": "以物易物",
+				"sr": "以物易物（直接嘅貨品或服務）"
+			}
+		},
+		"priorities": {
+			"eyebrow": "我哋嘅優先事項",
+			"heading": "Morphit 圍繞乜嘢構建",
+			"privacy": {
+				"title": "私隱優先",
+				"body": "無 KYC,無電郵,無電話號碼。密鑰喺你部裝置上生成;除非你揀,關於你嘅任何嘢都唔會離開佢。"
+			},
+			"decentralization": {
+				"title": "設計上無得停",
+				"body": "聯邦喺公開嘅 Blurt 鏈上運行。冇中央伺服器可以畀人傳召。任何人都可以行一個節點。"
+			},
+			"grandma": {
+				"title": "婆婆友好",
+				"body": "從未掂過加密貨幣嘅人都用得到。如果一個步驟唔清晰,我哋會就地解釋 — 冇行話牆。"
+			},
+			"tiny_footprint": {
+				"title": "微小足跡",
+				"body": "喺每種裝置同頻寬上快速加載。喺每月 5 美元嘅 VPS 上自寄存節點。延遲加載,圖像輕量,字節意識。"
+			}
 		}
 	},
 	"onboarding": {

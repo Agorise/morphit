@@ -513,10 +513,44 @@
 		"returning_user_link": "Se connecter",
 		"networks_heading": "Quatre réseaux, un seul Morphit.",
 		"networks_body": "Même site, même code, quatre chemins pour y accéder. Si l'un est bloqué, un autre fonctionne.",
-		"asset_subtitles": {
-			"btc": "le plus grand réseau",
-			"xmr": "privé par conception",
-			"blurt": "social, sans frais de gaz"
+		"coin_carousel": {
+			"aria_label": "Actifs pris en charge",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Réseau Arbitrum",
+				"base": "Base",
+				"base_sr": "Réseau Base",
+				"bep20": "BEP-20",
+				"bep20_sr": "Réseau BEP-20",
+				"polygon": "Polygon",
+				"polygon_sr": "Réseau Polygon",
+				"trc20": "TRC-20",
+				"trc20_sr": "Réseau TRC-20"
+			},
+			"barter": {
+				"label": "Troc",
+				"sr": "Troc (biens ou services directs)"
+			}
+		},
+		"priorities": {
+			"eyebrow": "Nos priorités",
+			"heading": "Ce sur quoi Morphit est conçu",
+			"privacy": {
+				"title": "La confidentialité d'abord",
+				"body": "Pas de KYC, pas d'e-mail, pas de numéro de téléphone. Les clés sont générées sur votre appareil ; rien à votre sujet ne le quitte sauf si vous le choisissez."
+			},
+			"decentralization": {
+				"title": "Impossible à arrêter par conception",
+				"body": "La fédération fonctionne sur la chaîne Blurt publique. Aucun serveur central ne peut être assigné à comparaître. N'importe qui peut faire tourner un nœud."
+			},
+			"grandma": {
+				"title": "Adapté à grand-mère",
+				"body": "Utilisable par des personnes qui n'ont jamais touché aux cryptos. Si une étape n'est pas claire, nous l'expliquons en ligne — pas de murs de jargon."
+			},
+			"tiny_footprint": {
+				"title": "Empreinte minuscule",
+				"body": "Se charge rapidement sur tous les appareils et bandes passantes. Auto-hébergez un nœud sur un VPS à 5 $/mois. Chargement différé, léger en images, conscient des octets."
+			}
 		}
 	},
 	"onboarding": {

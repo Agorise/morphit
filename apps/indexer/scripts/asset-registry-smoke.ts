@@ -13,6 +13,13 @@ import {
 	memoCapableAssets,
 	type AssetMetadata
 } from '../../web/src/lib/assets/registry.ts';
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE_DIR, '..', '..', '..');
+const STATIC_ROOT = join(REPO_ROOT, 'apps/web/static');
 
 let failures = 0;
 let scenarios = 0;
@@ -114,27 +121,35 @@ scenario('every entry has all required fields', () => {
 	}
 });
 
-scenario('logo paths are stable + distinct', () => {
+scenario('logo paths are stable + distinct + exist on disk', () => {
 	const paths = ASSETS.map((a) => a.logoSvgPath);
 	const set = new Set(paths);
 	if (set.size !== paths.length) {
 		throw new Error('duplicate logo path');
 	}
-	// cp30-DD-DD CODE-A — pre-existing broken assertion: BCH (cp21),
-	// LTC (cp24), DASH (cp27), USDC (cp30) all live under /icons/
-	// (not /coins/), so the original `startsWith('/coins/')` check
-	// has been broken since cp21.  Accept either prefix; both are
-	// served by SvelteKit's static path resolver and the registry's
-	// `logoSvgPath` is currently only consumed by this smoke
-	// (nothing in the UI reads it — components hardcode their own
-	// path template), so the path-convention split is purely
-	// declarative.  REVISIT to consolidate to one directory.
+	// cp115 — All 16 tradable assets now consistently use the
+	// /icons/icon-<lower-ticker>.svg path convention.  An earlier
+	// /coins/<ticker>.svg path was vestigial (files never shipped to
+	// disk under that path) and has been folded into the canonical
+	// form.  The CoinCarousel component (cp115) is the first real
+	// consumer of `logoSvgPath` outside this smoke, so this assertion
+	// is now load-bearing: a broken path means a broken homepage.
+	//
+	// Defense beyond cp30-CODE-A: also verify each path actually
+	// resolves to a file in apps/web/static.  Catches accidental
+	// rename of an icon file without registry update, and vice versa.
 	for (const p of paths) {
-		if (!p.startsWith('/coins/') && !p.startsWith('/icons/')) {
-			throw new Error(`logo path should start with /coins/ or /icons/: ${p}`);
+		if (!p.startsWith('/icons/')) {
+			throw new Error(`logo path should start with /icons/: ${p}`);
 		}
 		if (!p.endsWith('.svg')) {
 			throw new Error(`logo path should end with .svg: ${p}`);
+		}
+		const onDisk = join(STATIC_ROOT, p.replace(/^\//, ''));
+		if (!existsSync(onDisk)) {
+			throw new Error(
+				`logo path ${p} not found on disk at ${onDisk} — registry references an icon that does not ship`
+			);
 		}
 	}
 });

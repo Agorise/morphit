@@ -513,10 +513,44 @@
 		"returning_user_link": "Zaloguj się",
 		"networks_heading": "Cztery sieci, jeden Morphit.",
 		"networks_body": "Ta sama strona, ten sam kod, cztery sposoby dotarcia. Jeśli jedna droga jest zablokowana, inna działa.",
-		"asset_subtitles": {
-			"btc": "największa sieć",
-			"xmr": "prywatny by design",
-			"blurt": "społeczny, bez opłat gas"
+		"coin_carousel": {
+			"aria_label": "Obsługiwane aktywa",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Sieć Arbitrum",
+				"base": "Base",
+				"base_sr": "Sieć Base",
+				"bep20": "BEP-20",
+				"bep20_sr": "Sieć BEP-20",
+				"polygon": "Polygon",
+				"polygon_sr": "Sieć Polygon",
+				"trc20": "TRC-20",
+				"trc20_sr": "Sieć TRC-20"
+			},
+			"barter": {
+				"label": "Barter",
+				"sr": "Barter (towary lub usługi bezpośrednie)"
+			}
+		},
+		"priorities": {
+			"eyebrow": "Nasze priorytety",
+			"heading": "Na czym opiera się Morphit",
+			"privacy": {
+				"title": "Prywatność na pierwszym miejscu",
+				"body": "Bez KYC, bez e-maila, bez numeru telefonu. Klucze generowane na twoim urządzeniu; nic o tobie go nie opuszcza, chyba że tak zdecydujesz."
+			},
+			"decentralization": {
+				"title": "Nie do zatrzymania z założenia",
+				"body": "Federacja działa na publicznym łańcuchu Blurt. Żaden centralny serwer nie może zostać wezwany sądowo. Każdy może uruchomić węzeł."
+			},
+			"grandma": {
+				"title": "Przyjazny dla babci",
+				"body": "Używany przez osoby, które nigdy nie miały do czynienia z kryptowalutami. Jeśli krok jest niejasny, wyjaśniamy go w linii — bez ścian żargonu."
+			},
+			"tiny_footprint": {
+				"title": "Mały ślad",
+				"body": "Ładuje się szybko na każdym urządzeniu i przy każdej przepustowości. Hostuj węzeł na VPS-ie za 5 $/miesiąc. Leniwie ładowane, oszczędne w obrazach, świadome bajtów."
+			}
 		}
 	},
 	"onboarding": {

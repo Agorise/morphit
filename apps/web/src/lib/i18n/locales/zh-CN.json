@@ -513,10 +513,44 @@
 		"returning_user_link": "登录",
 		"networks_heading": "四种网络,一个 Morphit。",
 		"networks_body": "同一个网站,同一份代码,四种到达方式。一条路被阻断,还有其他路。",
-		"asset_subtitles": {
-			"btc": "最大的网络",
-			"xmr": "设计上私密",
-			"blurt": "社交,无 gas 费"
+		"coin_carousel": {
+			"aria_label": "支持的资产",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Arbitrum 网络",
+				"base": "Base",
+				"base_sr": "Base 网络",
+				"bep20": "BEP-20",
+				"bep20_sr": "BEP-20 网络",
+				"polygon": "Polygon",
+				"polygon_sr": "Polygon 网络",
+				"trc20": "TRC-20",
+				"trc20_sr": "TRC-20 网络"
+			},
+			"barter": {
+				"label": "以物易物",
+				"sr": "以物易物（直接的货物或服务）"
+			}
+		},
+		"priorities": {
+			"eyebrow": "我们的优先事项",
+			"heading": "Morphit 围绕什么构建",
+			"privacy": {
+				"title": "隐私优先",
+				"body": "无 KYC,无电子邮件,无电话号码。密钥在你的设备上生成;除非你选择,关于你的任何信息都不会离开它。"
+			},
+			"decentralization": {
+				"title": "设计上不可阻挡",
+				"body": "联邦在公开的 Blurt 链上运行。没有中央服务器可被传唤。任何人都可以运行节点。"
+			},
+			"grandma": {
+				"title": "奶奶友好",
+				"body": "从未接触过加密货币的人也能使用。如果某一步不清晰,我们会就地解释 — 没有术语墙。"
+			},
+			"tiny_footprint": {
+				"title": "微小足迹",
+				"body": "在每种设备和带宽上快速加载。在每月 5 美元的 VPS 上自托管节点。延迟加载,图像轻量,字节意识。"
+			}
 		}
 	},
 	"onboarding": {

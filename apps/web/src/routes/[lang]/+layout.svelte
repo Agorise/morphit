@@ -11,6 +11,7 @@
 	import OperatorBlockBanner from '$components/OperatorBlockBanner.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import AvatarMenu from '$components/AvatarMenu.svelte';
+	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
 	import PermissionBanner from '$components/PermissionBanner.svelte';
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
 	import PairedReadOnlyBanner from '$components/PairedReadOnlyBanner.svelte';
@@ -218,18 +219,20 @@
 		class="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md dark:border-ink-800 dark:bg-ink-950/80"
 	>
 		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-			<!-- Wide wordmark logo, hyperlinked to home. Subtle hue-rotate animation.
-				 Site is dark-mode-only, so the white-text wordmark works everywhere. -->
+			<!-- Wide wordmark logo + 3-body bling, hyperlinked to home.
+				 The MorphitLogoBling component renders a <canvas> behind
+				 the wordmark with 3 particles drifting under mutual +
+				 centroid gravity, visible at all times.  Honors
+				 prefers-reduced-motion (draws particles statically),
+				 IntersectionObserver-pauses when out-of-viewport, and
+				 caches via the standard Vite hashed-asset pipeline so
+				 it never re-fetches after the first paint. -->
 			<a
 				href="/"
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 				aria-label="Morphit — home"
 			>
-				<img
-					src="/brand/morphit-wordmark.svg"
-					alt="Morphit"
-					class="animate-morphit-hue-shift h-7 w-auto md:h-8"
-				/>
+				<MorphitLogoBling heightPx={32} />
 			</a>
 
 			<nav aria-label="Primary" class="hidden gap-1 md:flex">

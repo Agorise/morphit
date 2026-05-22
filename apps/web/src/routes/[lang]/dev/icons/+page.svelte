@@ -45,19 +45,17 @@
 		'obtainium',
 		'direct'
 	] as const;
-	// cp30-DD-DD CODE-2 — pre-existing drift: list was frozen at the
-	// cp3-pre era (btc/xmr/blurt + yubikey).  Brought up to current
-	// 8-asset reality so the dev visual surface actually exercises
-	// the icons that real users see in the orderbook + chat.  Note
-	// the path-convention split (/coins/ for the cp3-era assets vs
-	// /icons/ for cp21+ additions) — both work, both served by
-	// SvelteKit's static handler.  See asset-registry-smoke.ts
-	// CODE-A comment for the convention rationale.
+	// Asset icon dev surface.  All 16 tradable assets + the
+	// yubikey ancillary icon.  All icons live at
+	// /icons/icon-<lower-ticker>.svg per cp115 convention cleanup;
+	// an earlier /coins/<ticker>.svg path was vestigial (the files
+	// never shipped to disk under that path) and has been folded
+	// into the canonical /icons/ form for all 16 entries.
 	const ASSETS = [
-		{ key: 'btc', path: '/coins/btc.svg' },
-		{ key: 'xmr', path: '/coins/xmr.svg' },
-		{ key: 'blurt', path: '/coins/blurt.svg' },
-		{ key: 'usdt', path: '/coins/usdt.svg' },
+		{ key: 'btc', path: '/icons/icon-btc.svg' },
+		{ key: 'xmr', path: '/icons/icon-xmr.svg' },
+		{ key: 'blurt', path: '/icons/icon-blurt.svg' },
+		{ key: 'usdt', path: '/icons/icon-usdt.svg' },
 		{ key: 'usdc', path: '/icons/icon-usdc.svg' },
 		{ key: 'dai', path: '/icons/icon-dai.svg' },
 		{ key: 'bch', path: '/icons/icon-bch.svg' },
