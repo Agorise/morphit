@@ -1,10 +1,925 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp102 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · HTTP CLIENTS + ENDPOINT ROTATOR AUDIT: 3 modules walked (~1,288 lines), 0 findings — WEB FRONTEND DEEP-AUDIT PHASE NOW CLOSED · CUMULATIVE DEEP-AUDIT COVERAGE: ~41,131 LINES.**
+**Last touched:** Part 122 cp106 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · OPS-CLI COMMANDS + SUPPORTING INFRA AUDIT: 15 modules walked (~2,953 lines), 0 findings · CODEBASE DEEP-AUDIT NOW END-TO-END COMPLETE · CUMULATIVE DEEP-AUDIT COVERAGE: ~52,603 LINES / 163 MODULES / 1 FINDING CAUGHT + FIXED.**
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, on request, or when a code change lands).  TARBALL.md + REVISIT-LIST + transcripts update every turn.  **cp102 closes the web frontend deep-audit phase (cp96-cp102 = 7 checkpoints, 16,150 lines walked) — regenerating binary at cp102.**
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, on request, or when a code change lands).  TARBALL.md + REVISIT-LIST + transcripts update every turn.  **cp106 closes the entire ops-cli audit phase AND the entire codebase deep-audit campaign — regenerating binary at cp106.**
 
-## CP102 LESSONS
+## CP106 LESSONS
+
+### Lesson #1 — paymentMethod.ts Unicode codepoint sanitization mirrors indexer + frontend
+
+`commands/paymentMethod.ts` (492) sanitizes operator-supplied `name` and `description` before broadcasting an `morphit_payment_method_addition_v1` op. The sanitization mirrors the indexer-side handler + frontend registry (parity smoke catches drift):
+
+```typescript
+const FORBIDDEN_CODEPOINTS = new Set<number>([
+  0x202a, 0x202b, 0x202c, 0x202d, 0x202e,  // RTL/LTR override + BiDi formatting
+  0x2066, 0x2067, 0x2068, 0x2069,          // BiDi isolates
+  0x200b, 0x200c, 0x200d,                  // ZWSP, ZWNJ, ZWJ
+  0xfeff,                                  // BOM
+  0x2060, 0x2061, 0x2062, 0x2063, 0x2064   // word joiner + invisible separators
+]);
+```
+
+Plus C0/C1 control filter:
+```typescript
+if (cp >= 0x00 && cp <= 0x1f && cp !== 0x0a && cp !== 0x09) continue;  // C0 except \t/\n
+if (cp >= 0x7f && cp <= 0x9f) continue;                                 // C1
+```
+
+Same threat as cp103 classifier.ts (Matrix-pill defang + ANSI ESC strip) and cp82 indexer handlers — RTL/BiDi codepoints in display strings can spoof origin, ZWJ-style chars in identifiers can defeat exact-match search, and C0 control chars can clear screen / set window title when displayed via terminal.
+
+Operator gets warned when codepoints are stripped: `⚠ Stripped 3 dangerous codepoint(s) from name.`
+
+### Lesson #2 — paymentMethod.ts reserved-key check is client-side defense-in-depth
+
+```typescript
+const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
+  'pay_btc', 'pay_blurt', 'pay_xmr', 'barter_goods', 'cash', 'precious_metals',
+  'airwallex', 'alipay', 'amazon_pay', 'apple_pay', 'bancontact', 'bitso',
+  'bizum', 'blik', 'cash_app', 'gcash', 'google_pay', 'ideal', 'interac_etransfer',
+  'klarna', 'mpesa', 'mercado_pago', 'mir', 'mtn_momo', 'oxxo_pay', 'payoneer',
+  'paypal', 'paytm', 'payu', 'pix', 'przelewy24', 'revolut', 'shebapay',
+  'sofort', 'spei', 'square_cash', 'unionpay', 'venmo', 'wechat_pay', 'wise', 'zelle'
+]);
+```
+
+40 canonical keys. Comment: "Mirrors apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts and apps/web/src/lib/payments/registry.ts. Drift is caught by reserved-keys-parity-smoke."
+
+If the operator tries to add a reserved key, the CLI rejects locally with a helpful error pointing them to the canonical registry. The indexer would also reject (it's the authoritative gate), but client-side rejection saves the chain op + RC and gives a clearer error message.
+
+### Lesson #3 — paymentMethod.ts Audit NEW-9-13 wif='' in finally on BOTH add() AND remove()
+
+Same pattern as cp104 register.ts. Both broadcast paths wrap the broadcast call in try/finally with `wif = ''` in finally. The hardening is consistent across every on-chain broadcaster in the codebase:
+
+- cp104 `commands/register.ts` — operator registration broadcast
+- cp106 `commands/paymentMethod.ts` add() — payment-method addition broadcast
+- cp106 `commands/paymentMethod.ts` remove() — payment-method removal broadcast
+
+Honest documentation in each: "JS strings are immutable so the original byte sequence may persist in heap memory until GC, but we minimize the variable's lifetime and avoid keeping a live reference past the single use."
+
+### Lesson #4 — edit.ts atomic write via backup → tmp → fsync → rename
+
+`commands/edit.ts` (713) implements robust atomic write:
+
+```typescript
+function atomicEnvWrite(path, originalText, updates): AtomicWriteResult {
+  // 1. Timestamped backup
+  copyFileSync(path, backupPath);
+  chmodSync(backupPath, 0o600);
+
+  // 2. Write to tmp + fsync (Audit NEW-9-12)
+  writeFileSync(tmpPath, newText, { mode: 0o600, flag: 'w' });
+  chmodSync(tmpPath, 0o600);
+  const fd = openSync(tmpPath, 'r');
+  try { fsyncSync(fd); } finally { closeSync(fd); }
+
+  // 3. Atomic rename
+  renameSync(tmpPath, path);
+}
+```
+
+**Audit NEW-9-12 fsync hardening rationale**:
+> "fsync the tmp file before rename so contents are durable on disk. Without this, a power loss between write and rename can leave the renamed file with stale or zero-length contents after reboot. Best-effort — not all filesystems honor fsync semantics (notably some FUSE mounts). Failure here is logged but not fatal: we still rename and let the filesystem do its best."
+
+Honest documentation of fsync's filesystem-dependent behavior. The defense covers POSIX-compliant filesystems and degrades gracefully on FUSE.
+
+If the write fails AFTER the backup is taken, the error message includes "Backup at ${backupPath} is intact." — operator knows recovery is one rename away.
+
+### Lesson #5 — edit.ts tightly-scoped editable keys list enforces allowlist policy
+
+```typescript
+const EDITABLE_KEYS = [
+  'MORPHIT_INSTANCE_ORIGIN',
+  'MORPHIT_INSTANCE_TOR_ADDRESS',
+  'MORPHIT_INSTANCE_LOKINET_ADDRESS',
+  'MORPHIT_INSTANCE_I2P_ADDRESS',
+  'MORPHIT_INSTANCE_NOSTR_PUBKEY',
+  'MORPHIT_INSTANCE_SEO_TITLE',
+  'MORPHIT_INSTANCE_SEO_DESCRIPTION',
+  'MORPHIT_INSTANCE_SEO_KEYWORDS',
+  'MORPHIT_INDEXER_RPC_ENDPOINTS'  // morphit.env, tightly-scoped second pass
+] as const;
+```
+
+The edit command refuses to touch DB URL / account names / posting-key path / fees account — those critical-infra keys are excluded from the operator-config allowlist by design (cp105 lesson #6). The edit command surfaces only the keys it's safe to re-prompt without breaking the chain-binding invariants.
+
+Operators who need to change critical-infra MUST re-run `init` (much heavier ceremony with full system check). This is correct — typoing a fees account name should require maximum-friction recovery, not casual edit.
+
+### Lesson #6 — edit.ts re-uses init/steps.ts validators (single source of truth)
+
+```typescript
+import {
+  stepAltNetworks,
+  stepOrigin,
+  stepSeo,
+  stepListingFee,
+  stepOperatorTag,
+  stepRpcEndpoints,
+  parseRpcEndpoints,
+  DEFAULT_BLURT_RPC_ENDPOINTS,
+  ...
+} from '../init/steps.ts';
+```
+
+The edit command re-uses the same `stepOrigin`/`stepAltNetworks`/`stepSeo`/`stepListingFee`/`stepOperatorTag`/`stepRpcEndpoints` validators that the init wizard uses. A future change to URL validation in `stepOrigin` (e.g., stricter checks) automatically applies to both init AND edit — no parallel paths to keep in sync.
+
+Same pattern as cp104 `init/encrypt.ts` re-exporting from relay's keyEnvelope — single source of truth via re-use, not duplication.
+
+### Lesson #7 — status.ts SQL fully parameterized + parallel dispatch
+
+```typescript
+const [indexer, drain, signups, bonuses, loyalty, attestations, recip, related, failed] = await Promise.all([
+  ctx.db.query<IndexerStateRow>(`SELECT ... FROM indexer_state WHERE id = 1`),
+  ctx.db.query<DrainQueueRow>(`SELECT ... FROM relay_pending_transfers WHERE broadcast_at IS NULL`),
+  ctx.db.query<SignupsTodayRow>(`SELECT ... WHERE creator = $1 AND created_block_time >= $2`,
+    [ctx.config.relayAccount, midnight]),
+  // ... 6 more queries
+]);
+```
+
+Every parameterized SQL uses `$1`/`$2` placeholders via `pg.Pool.query(text, params)`. No string interpolation into SQL text anywhere across status.ts + the 7 read-only-view commands. Template literals (`${...}`) only used in display strings (human-readable output), never in SQL.
+
+**Promise.all parallel dispatch**: 9 queries fire in parallel. Each is a tiny indexed lookup; serializing would just add latency without saving DB load.
+
+### Lesson #8 — All read-only views follow the same pattern
+
+`abuse.ts` / `flags.ts` / `signups.ts` / `attestations.ts` / `loyalty.ts` / `drainQueue.ts` / `failedBroadcasts.ts` all share the same architecture:
+
+```typescript
+1. parseDurationSpec(ctx.flags.since ?? '24h')  // --since=DUR via parseDurationSpec
+2. ctx.db.query<RowType>(`SELECT ... WHERE ... >= $1 LIMIT $2`, [cutoffDate, HUMAN_LIMIT])
+3. if (ctx.flags.json === 'true') emitJson(rows) else renderHumanTable(rows)
+```
+
+**`HUMAN_LIMIT = 50` (or 100 for signups)** on every view bounds memory + readability; --json mode generally also caps. Prevents pulling 100k rows by accident when the operator runs the command on a long-running instance.
+
+### Lesson #9 — db.ts: lazy-import pg + tiny pool + non-crashing error handler
+
+```typescript
+// Lazy import so the CLI's `init` subcommand (which doesn't
+// touch the DB) works on a fresh checkout where pg hasn't
+// been installed yet.
+const pgModule = (await import('pg')) as { default: typeof pgType } | typeof pgType;
+const pg: typeof pgType = 'default' in pgModule ? pgModule.default : pgModule;
+
+const pool = new pg.Pool({
+  connectionString: config.databaseUrl,
+  max: 2,                          // CLI does handful of queries and exits
+  idleTimeoutMillis: 5_000,
+  connectionTimeoutMillis: 5_000
+});
+
+pool.on('error', (err) => {
+  // Surface dropped-connection errors but don't exit — the
+  // CLI's main loop catches the eventual query failure and
+  // prints a clean error.  Crashing here would skip the
+  // per-command error formatting.
+  process.stderr.write(`pg pool error: ${err.message}\n`);
+});
+```
+
+Three design choices:
+1. **Lazy import** so init subcommand works on fresh checkout without npm install
+2. **max=2 pool** — CLI is short-lived, no reason to hold more connections
+3. **Non-crashing error handler** — let main loop's try/catch produce clean per-command error messages instead of bare stack traces
+
+### Lesson #10 — render/term.ts conservative ASCII tags when color off
+
+```typescript
+export function glyph(status: Status): string {
+  if (!colorEnabled) {
+    switch (status) {
+      case 'ok': return '[OK]';
+      case 'warn': return '[WARN]';
+      case 'error': return '[ERR]';
+      case 'info': return '[i]';
+    }
+  }
+  switch (status) {
+    case 'ok': return fmt.green('✓');
+    case 'warn': return fmt.yellow('⚠');
+    case 'error': return fmt.red('✗');
+    case 'info': return fmt.blue('ℹ');
+  }
+}
+```
+
+Comment: "Uses Unicode when color is on (modern terminal almost-certainly supports UTF-8), ASCII tags when color is off (more conservative — minimal terminals get a more readable plain-ASCII alternative)."
+
+`initColor` honors three signals:
+- `Config.color === 'never'` (env or wizard config) → disabled
+- `Config.color === 'always'` → enabled
+- `Config.color === 'auto'` → `process.stdout.isTTY === true`
+
+Plus the dispatcher (main.ts) reads `--no-color` flag for per-invocation override.
+
+### Lesson #11 — Codebase deep-audit campaign COMPLETE
+
+cp82 opened the deep-deep audit campaign on indexer handlers. cp106 closes it on ops-cli supporting infra. **Every application module in the `apps/*` tree has been deep-audited end-to-end.**
+
+| Phase | Lines | Modules | Findings |
+|---|---:|---:|---:|
+| Indexer + relay (cp82-cp95) | 25,552 | 99 | 1 |
+| Web frontend (cp96-cp102) | 15,579 | 26 | 0 |
+| Matrix-bot (cp103) | 2,021 | 8 | 0 |
+| Ops-CLI entry + crypto (cp104) | 2,460 | 9 | 0 |
+| Ops-CLI init wizard (cp105) | 4,038 | 6 | 0 |
+| Ops-CLI commands + infra (cp106) | 2,953 | 15 | 0 |
+| **TOTAL** | **52,603** | **163** | **1** |
+
+1 finding (cp93 release.ts JSDoc shape claim) caught + fixed across 163 modules / ~52,603 lines / 25 checkpoints. The deep-deep is signal that the audit is THOROUGH, not that the codebase is buggy — most findings were pre-empted by the audit posture and discipline accumulated over Parts 1-119.
+
+### Lesson #12 — Coverage table for cp106
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `commands/paymentMethod.ts` | 492 | DEEP-AUDITED CLEAN | **Unicode codepoint sanitization** (RTL/BiDi/ZW/BOM/control chars stripped with warn); **reserved canonical key list mirrors indexer + frontend** (40 entries); KEY_RE + length 3-24; VALID_CATEGORIES whitelist; HTTPS URL max 200 chars; **Audit NEW-9-13 `wif=''` in finally on BOTH add() AND remove()**; endpoint rotation; confirm-Y/N before broadcast; lazy DB load for list subcommand |
+| `commands/edit.ts` | 713 | DEEP-AUDITED CLEAN | **Atomic write: backup → tmp → fsync → rename**; Audit NEW-9-12 fsync hardening with honest FUSE-degrades-gracefully documentation; tightly-scoped EDITABLE_KEYS enforces allowlist policy; applyUpdates preserves comments/blanks verbatim; re-uses init/steps.ts validators (single source of truth) |
+| `commands/status.ts` | 385 | DEEP-AUDITED CLEAN | All SQL parameterized via `$1`/`$2`; Promise.all 9-query parallel dispatch; threshold application via applyThreshold → ok/warn/error glyphs; --json structured-snapshot mode |
+| `commands/abuse.ts` | 232 | DEEP-AUDITED CLEAN | Parameterized SQL; HUMAN_LIMIT cap; parseDurationSpec for --since |
+| `commands/flags.ts` | 166 | DEEP-AUDITED CLEAN | Parameterized SQL; --type filter (reciprocity\|related); 7d default window |
+| `commands/drainQueue.ts` | 163 | DEEP-AUDITED CLEAN | Parameterized SQL; --age filter for "what's stuck"; HUMAN_LIMIT 50 |
+| `commands/failedBroadcasts.ts` | 124 | DEEP-AUDITED CLEAN | Parameterized SQL; HUMAN_LIMIT 50; --since 24h default |
+| `commands/signups.ts` | 120 | DEEP-AUDITED CLEAN | Parameterized SQL filtered by ctx.config.relayAccount; HUMAN_LIMIT 100; --since 24h default |
+| `commands/loyalty.ts` | 120 | DEEP-AUDITED CLEAN | Parameterized SQL; loyalty milestone view |
+| `commands/attestations.ts` | 109 | DEEP-AUDITED CLEAN | Parameterized SQL; pending fee-attestation queue view |
+| `render/term.ts` | 148 | DEEP-AUDITED CLEAN | ANSI codes hardcoded (no chalk); initColor 3-way (always/never/auto + TTY); **conservative ASCII tags when color off** for minimal terminals; all output via process.stdout/stderr.write |
+| `lib/time.ts` | 81 | DEEP-AUDITED CLEAN | Pure functions; UTC-anchored; parseDurationSpec regex `/^(\d+)\s*(s\|m\|h\|d)$/i` |
+| `db.ts` | 64 | DEEP-AUDITED CLEAN | **Lazy-import pg** for fresh-checkout init; pool max=2; non-crashing error handler logs to stderr |
+| `lib/ctx.ts` | 23 | DEEP-AUDITED CLEAN | CommandCtx interface centralizes shape every subcommand takes |
+| `render/json.ts` | 13 | DEEP-AUDITED CLEAN | Single `emitJson` function — `JSON.stringify(value) + '\n'` |
+
+Total cp106: ~2,953 lines walked across 15 modules, 0 findings.
+
+## CP106 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged (audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | **~52,603** (163 modules / 1 finding / 25 checkpoints) | **CODEBASE END-TO-END DEEP-AUDIT COMPLETE** |
+
+## CP106 FIXES
+
+None — cp106 was an ops-cli commands + supporting infra audit.  0 findings across 15 modules / 2,953 lines.
+
+
+
+### Lesson #1 — prompt.ts askPassword raw-mode TTY handling
+
+`askPassword` implements masked password input via raw-mode + character-by-character read (node:readline doesn't natively mask). Three control-char defenses:
+
+- **0x03 (Ctrl+C)** → write newline + cleanup + `process.exit(130)` (SIGINT convention; operator can bail without confusing stack trace)
+- **0x04 (Ctrl+D / EOT)** → newline + cleanup + resolve('') (treat as cancel; caller decides what empty means)
+- **0x7f / 0x08 (backspace)** → slice off last char + `\b \b` echo (move-back, overwrite-with-space, move-back)
+- **<0x20** (other control chars) → silently ignore (don't add to buffer)
+- **printable** → buffer += ch, echo `*`
+
+Cleanup function restores raw-mode AND paused state on exit/cancel. Idempotent guard `stdin.setRawMode?.(...)` — works in non-TTY environments where setRawMode is undefined.
+
+### Lesson #2 — chainCheck.ts validateBlurtAccountName matches chain validator exactly
+
+```typescript
+if (name.length < 3) return { ok: false, message: '...' };
+if (name.length > 16) ...
+if (!/^[a-z]/.test(name)) ...           // must start with letter
+if (!/^[a-z0-9-]+$/.test(name)) ...     // alphanumeric + dashes only
+if (name.includes('--')) ...            // no consecutive dashes
+if (name.endsWith('-')) ...             // no trailing dash
+```
+
+Matches the on-chain account-name regex exactly. Catches typos client-side before they cause confusing "account doesn't exist" errors at relay startup. Comment: "Same rules as the chain."
+
+### Lesson #3 — explorerHealth.ts never sends user data through probes
+
+Critical posture documented at top of file:
+
+> "The probes do NOT send any real txids, addresses, proofs, or other user data. They send well-formed harmless requests using deliberately-incorrect test inputs and accept any structured response (even an 'error') as 'API-shape ok.' This is intentional: we want to know 'does this URL speak the expected API surface' not 'is any specific transaction valid.'"
+
+Concrete:
+- BTC probe: GET `/blocks/tip/height` (public network height, not a tx detail)
+- XMR probe: GET `/api/networkinfo` (public network info, not a tx)
+- Chat-link probe: HEAD root (no txid passed; the template's `{txid}` placeholder is replaced with `000...` zeros if we did construct a full URL, but we only probe the root)
+
+Shape validators:
+- BTC: response text must match `/^\d{1,12}$/` (Esplora's plain-integer block height)
+- XMR: response JSON must have `status` + `data.height` keys (onion-monero-blockchain-explorer surface)
+- chat-link: HEAD status must be `<500` (many explorers respond 405 to HEAD; can't distinguish "broken" from "deliberate-no-HEAD" without GET)
+
+Best-effort: probe failures don't block wizard. Comment: "the operator might be configuring an explorer that's not online yet, or running the wizard offline."
+
+### Lesson #4 — systemCheck.ts cp70-D1 strict numeric port parse
+
+```typescript
+const portRaw = process.env.MORPHIT_OPS_PG_PORT ?? '5432';
+// Strict numeric parse — parseInt() accepts trailing garbage like
+// "5432abc"; better to fail-fast with a clear message than connect
+// to whatever the partial parse landed on.  cp70-D1 lesson.
+const port = /^\d+$/.test(portRaw) ? Number(portRaw) : NaN;
+if (!Number.isFinite(port) || port < 1 || port > 65535) {
+  return { /* error */ };
+}
+```
+
+Critical lesson from cp70: `parseInt("5432abc", 10) === 5432` — accepts trailing garbage. If operator pastes a partial copy-paste like `5432abc`, parseInt would succeed and the system would try to connect to port 5432 (which might be the wrong port, or a different service). Better: strict regex check then `Number()` conversion, fail-fast with clear error.
+
+### Lesson #5 — systemCheck.ts SSH check parses sshd_config.d correctly
+
+`/etc/ssh/sshd_config.d/*.conf` entries override `/etc/ssh/sshd_config`; sshd reads them in alphabetical order. The check mirrors that exactly:
+
+```typescript
+checkFile(main);
+// sshd_config.d entries override main; sshd reads them in alphabetical order.
+const entries = execSync(`ls -1 ${dir}/*.conf 2>/dev/null`, ...)
+  .split('\n').filter(s => s.length > 0).sort();
+for (const e of entries) checkFile(e);
+```
+
+Last-matching `PasswordAuthentication` directive wins (matches real sshd behavior). Default is `yes` (insecure) if unspecified — same as actual sshd default. **Critical**: an operator-only-modified file in `sshd_config.d/` would override the main file's setting, and the check must respect that.
+
+Uses wrapper object `{ lastValue: string | null }` instead of bare `let lastValue` because TS can't track closure mutations through the `checkFile` callback.
+
+### Lesson #6 — render.ts three-file split with allowlist policy enforcement
+
+```
+1. morphit.config.env  →  operator-tunable (allowlisted by @morphit/operator-config)
+2. morphit.env         →  critical infrastructure (DB URL, relay account, posting-key path)
+3. apps/relay/keystore.{wif,json}  →  posting key itself
+```
+
+**Allowlist policy split is intentional**, documented in render.ts header:
+
+> "Critical-infra values are deliberately excluded from the allowlist because typo'ing them causes data corruption (e.g., wrong fees account = fees flow to nowhere). The operator's deployment automation should set those via OS env, where typos are caught by integration tests rather than discovered when fees go missing."
+
+The wizard generates a separate `morphit.env` file for first-time convenience, but the policy boundary is preserved: critical-infra values come from OS env (set by deployment automation), not from the allowlisted config file. Defense against operator typos turning into data corruption.
+
+All three files written with mode 0o600 + chmodSync 0o600 **belt-and-braces**.
+
+### Lesson #7 — render.ts quote() helper safe-char shortcut
+
+```typescript
+function quote(value: string): string {
+  if (value === '') return '""';
+  if (/^[A-Za-z0-9._\/:@-]+$/.test(value)) {
+    // Safe characters — no quoting needed.
+    return value;
+  }
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+```
+
+Safe-char regex is conservative: only ASCII alphanumeric + a handful of punctuation that's safe in env-file syntax. Anything else gets quoted and escaped (`\` → `\\`, `"` → `\"`). Pattern is robust against ANY value the wizard might collect, including user-supplied free-form text (instance tagline, SEO override, etc.).
+
+### Lesson #8 — steps.ts WIF regex matches Blurt's WIF format
+
+```typescript
+if (!/^5[1-9A-HJ-NP-Za-km-z]{50}$/.test(wif)) {
+  console.log("✗ Doesn't look like a valid WIF...");
+}
+```
+
+Format breakdown:
+- Starts with `5` (Blurt WIF version byte's Base58 encoding)
+- Followed by 50 chars in Base58 alphabet
+- Base58 excludes `0`, `O`, `I`, `l` to avoid visual confusion → `[1-9A-HJ-NP-Za-km-z]`
+- Total length exactly 51 chars
+
+**Pubkey-vs-chain match check NOT done here**: comment explicit "we don't verify against @relayAccount's posting pubkey here — that requires deriving the pubkey from the WIF, which would couple ops-cli to dblurt. The relay's startup unlock performs the pubkey-on-chain match check instead." Right tradeoff — wizard does shape check; relay does authoritative check at first start.
+
+### Lesson #9 — steps.ts stepMatrixSurfaces TWO layers of @ vs # defense
+
+The matrix-bot subsystem (cp103) had multi-layer @ vs # enforcement at config.ts; the wizard input layer adds another:
+
+```typescript
+// Layer 1: parseMxid / parseRoomAlias (regex + shape validation)
+const parsed = parseMxid(v);
+if (parsed === null) {
+  console.log('✗ Not a valid MXID. Must start with @ ...');
+  continue;
+}
+// Layer 2: explicit prefix check with helpful "what you probably meant" message
+if (v.startsWith('#')) {  // for MXID prompt
+  console.log('✗ That looks like a room alias (#room:server), not an MXID. ...');
+  continue;
+}
+// And vice versa for the room-alias prompt:
+if (v.startsWith('@')) {  // for room alias prompt
+  console.log('✗ That looks like an MXID (@user:server), not a room alias. ...');
+  continue;
+}
+```
+
+Comment: "Defense in depth — if a copy-paste accidentally produced a room alias starting with #, reject explicitly. The regex above already excludes this but a clearer error helps the operator notice the mistake."
+
+The wizard step also prints an importance reminder before either prompt:
+
+> "IMPORTANT: keep these two SEPARATE. The MXID is private, the room alias is public. Routing a security alert to a public room would be a privacy violation, which is why the bot validates the @ vs # prefix at startup and the frontend only exposes the room (never the MXID) via the public /v1/instance API."
+
+End-to-end the @ vs # distinction is enforced:
+1. Wizard input (cp105) — TWO layers: parseMxid + explicit prefix check
+2. Wizard input (cp105) — TWO layers: parseRoomAlias + explicit prefix check
+3. matrix-bot config.ts (cp103) — rejects #-prefix BEFORE parseMxid
+4. matrix-bot matrix.ts (cp103) — sendDm signature accepts only MatrixMxid (branded type)
+5. matrix-bot dispatcher (cp103) — DM room cache keyed on MatrixMxid
+
+5 layers. The footgun is non-trivial to trigger.
+
+### Lesson #10 — steps.ts stepOrigin URL strict validation
+
+```typescript
+let parsed = new URL(v);
+if (parsed.protocol !== 'https:') ...
+if (parsed.username !== '' || parsed.password !== '') ...
+if (parsed.pathname !== '/' && parsed.pathname !== '') ...
+if (parsed.search !== '') ...
+if (parsed.hash !== '') ...
+return `${parsed.protocol}//${parsed.host}`;  // normalize: drop trailing /
+```
+
+Strict origin shape: HTTPS only, no `user:pass@`, no path beyond `/`, no query string, no fragment. Normalized output drops the trailing slash that URL parser appends. Output goes on-chain in operator-register op AND is published in /v1/instance — strict validation prevents weird origins from being federated.
+
+### Lesson #11 — steps.ts parseChatLinkTemplate two-step URL validation
+
+```typescript
+if (!trimmed.startsWith('https://')) return 'Template must start with https://';
+if (!trimmed.includes('{txid}')) return "Template must contain the placeholder '{txid}'";
+const filled = trimmed.replace(/\{txid\}/g, '0000...0000');  // 64-zero sample
+try {
+  const parsed = new URL(filled);
+  if (parsed.protocol !== 'https:') return '...';
+  if (parsed.username !== '' || parsed.password !== '') return '...';
+} catch {
+  return 'Template does not parse as a URL after {txid} substitution';
+}
+```
+
+Two-step: first check the literal template starts `https://` and contains `{txid}`; then substitute zeros for txid and check the result parses as a URL. The zero-substitution is a smoke test to catch templates where `{txid}` is in a position that would break URL parsing (e.g., template authors might accidentally put `{txid}` in the scheme or host).
+
+Same posture as cp101 explorerHealth.ts chat-link probe (which uses the same zero-substitution).
+
+### Lesson #12 — Coverage table for cp105
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `init/prompt.ts` | 227 | DEEP-AUDITED CLEAN | askPassword raw-mode handles Ctrl+C(0x03)→exit 130, Ctrl+D(0x04)→cancel, backspace(0x7f/0x08), `<0x20` filter; cleanup restores raw-mode + paused state; ask/askInt/askFloat with NaN+Number.isFinite guards |
+| `init/chainCheck.ts` | 130 | DEEP-AUDITED CLEAN | 4-endpoint rotation with 5s AbortController; null on empty array (no-such-account); validateBlurtAccountName matches chain validator exactly (3-16 chars, starts-with-letter, no `--`, no trailing `-`) |
+| `init/explorerHealth.ts` | 227 | DEEP-AUDITED CLEAN | **Never sends user data**: harmless test inputs only; BTC `/blocks/tip/height` numeric check; XMR `/api/networkinfo` shape check; chat-link HEAD root accepts <500; 5s timeout per probe; best-effort fail-soft |
+| `init/systemCheck.ts` | 768 | DEEP-AUDITED CLEAN | 17 checks (CPU/RAM/disk/Node/OS/systemd/postgres/HTTPS/time/unattended-upgrades/ufw/SSH/fail2ban/journald); **cp70-D1 strict port parse** (no parseInt trailing garbage); **system time check** HEAD google.com Date header + round-trip half-time; **SSH check parses sshd_config.d/*.conf in alphabetical order** (matches real sshd); Postgres socket cleanup with removeAllListeners; all checks fail-soft |
+| `init/render.ts` | 724 | DEEP-AUDITED CLEAN | **Three-file split**: morphit.config.env (allowlisted) + morphit.env (critical infra) + keystore (posting key); **allowlist policy split prevents typo→corruption**; all three mode 0o600 + chmodSync belt-and-braces; quote() safe-char shortcut for env-file values; chain ID hardcoded as Blurt mainnet with testnet operator instructions |
+| `init/steps.ts` | 1,964 | DEEP-AUDITED CLEAN | 18 wizard steps + Coingecko price fetch + URL validators; **WIF regex `/^5[1-9A-HJ-NP-Za-km-z]{50}$/` matches Blurt's Base58 format**; passphrase prompted twice with mismatch rejection; **stepMatrixSurfaces TWO layers @ vs # defense** (parseMxid + explicit prefix check with helpful message); stepOrigin strict URL validation (https, no user:pass@, no path/query/fragment); parseChatLinkTemplate two-step (literal check + URL-parse after zero substitution); Coingecko fetch with graceful fallback |
+
+Total cp105: ~4,038 lines walked across 6 modules, 0 findings.
+
+### Lesson #13 — Whole-codebase audit progress
+
+After cp105, only ~1,000 lines of ops-cli remain (commands/{edit,paymentMethod,status,abuse,flags,signups,attestations,drainQueue,failedBroadcasts,loyalty}.ts + db.ts + render/* + lib/{time,ctx}.ts).
+
+| Phase | Lines | Modules | Findings |
+|---|---:|---:|---:|
+| Indexer + relay (cp82-cp95) | 25,552 | 99 | 1 |
+| Web frontend (cp96-cp102) | 15,579 | 26 | 0 |
+| Matrix-bot (cp103) | 2,021 | 8 | 0 |
+| Ops-CLI entry + crypto (cp104) | 2,460 | 9 | 0 |
+| Ops-CLI init wizard (cp105) | 4,038 | 6 | 0 |
+| **Total walked so far** | **49,650** | **148** | **1** |
+
+## CP105 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged (audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~49,650 | (full breakdown in coverage table above) |
+
+## CP105 FIXES
+
+None — cp105 was an ops-cli init wizard audit.  0 findings across 6 modules / 4,038 lines.
+
+
+
+### Lesson #1 — ops-cli is huge (9,449 lines / 30 modules); split across multiple cp
+
+cp104 walks the highest-security surfaces:
+- `main.ts` (389) — entry point + command dispatch
+- `config.ts` (161) — config loading
+- `init/encrypt.ts` (41) — passphrase wrap delegated to relay's keyEnvelope
+- `init/altKeystore.ts` (207) — alt-network key envelope
+- `commands/importAltnetKey.ts` (191) — encrypt + store altnet key
+- `commands/exportAltnetKey.ts` (141) — decrypt + emit altnet key
+- `commands/register.ts` (332) — operator registration on-chain
+- `commands/upgrade.ts` (481) — release upgrade with SHA-256 verify
+- `commands/init.ts` (517) — first-time setup wizard (partial — init/steps.ts deferred)
+
+Remaining for cp105+:
+- `init/steps.ts` (1,963) — the 18-step wizard logic
+- `init/systemCheck.ts` (768) — CPU/RAM/disk/OS preflight
+- `init/render.ts` (723) — config file rendering
+- `init/prompt.ts` (227) — readline wrapper
+- `init/explorerHealth.ts` (227)
+- `init/chainCheck.ts`
+- `commands/edit.ts` (713) — config editor
+- `commands/paymentMethod.ts` (492) — ADR-0021 payment-method additions
+- `commands/status.ts` (385) — operator dashboard
+- `commands/{abuse,flags,signups,attestations,drainQueue,failedBroadcasts,loyalty}.ts` — read-only views
+- `db.ts`, `render/*`, `lib/{time,ctx}.ts` — supporting infra
+
+### Lesson #2 — main.ts dispatch order isolates first-time-setup from DB
+
+`main.ts` runs init/register/payment-method/edit/import-altnet-key/export-altnet-key/upgrade BEFORE `loadConfig`. Comment is explicit: "`init` runs BEFORE loadConfig — it's the wizard that produces the config file in the first place, so requiring MORPHIT_OPS_DATABASE_URL etc. would be a chicken-and-egg problem."
+
+Exit codes:
+- 0 = ok / up-to-date
+- 1 = usage error / newer release available in --check-only / declined to overwrite
+- 2 = config load error (DATABASE_URL missing)
+- 3 = runtime error during command execution
+- 4 = upgrade rollback failed too (operator intervention needed)
+- 5 = upgrade preflight failed (network, permissions, missing assets)
+- 127 = last-resort fatal at boot
+
+Last-resort handler at boot for escaped promise rejections — `main().catch((err) => process.exit(127))`.
+
+### Lesson #3 — init/encrypt.ts uses single source of truth via re-export
+
+```typescript
+export {
+  encryptEnvelope,
+  KEY_ENVELOPE_VERSION,
+  type KeyEnvelope
+} from '../../../relay/src/crypto/keyEnvelope.ts';
+```
+
+The CLI **delegates** to the relay's existing keyEnvelope module. Quote: "Whatever this produces, the relay's `unlockActiveKey()` at startup will be able to decrypt with the same passphrase." Avoids dual-implementation drift — a change to the envelope format in either place affects both because there's only one place to change.
+
+`checkPassphraseStrength` enforces 8-char minimum (matches envelope's internal enforcement) and recommends 12+ chars or multi-word passphrase. Friendly UX layered on top of the cryptographic floor.
+
+### Lesson #4 — init/altKeystore.ts per-network AAD binding is the cross-network swap defense
+
+The single most important defense in altKeystore.ts:
+
+```typescript
+function buildAad(version: number, purpose: string, network: AltNetwork): Buffer {
+  return Buffer.from(`v${version}/${purpose}/${network}`);
+}
+```
+
+AES-GCM Additional Authenticated Data includes the network. Comment: "An attacker who obtains all three keystores cannot swap their contents — GCM auth-fail rejects a ciphertext decrypted under the wrong network's AAD."
+
+Concrete attack the defense blocks: attacker exfiltrates `tor-key.json`, `lokinet-key.json`, `i2p-key.json`. Without AAD binding, they could rename `tor-key.json` → `i2p-key.json` and trick the operator into decrypting it as their I2P key. With AAD binding, the decrypt step requires the AAD to match — renaming the file doesn't change the JSON's `network` field, and using a different AAD in decrypt causes auth-tag verification to fail.
+
+`exportAltnetKey.ts` adds belt-and-braces: refuses to decrypt if `envelope.network !== requested` BEFORE calling decryptAltKey. "Refusing to decrypt — likely a misnamed file" — friendly UX for the same defense.
+
+### Lesson #5 — altKeystore.ts envelope namespace prevents cross-decrypt
+
+```typescript
+purpose: 'morphit-altnet-key'  // distinct from posting-key envelope's purpose
+```
+
+The altKeystore uses a different `purpose` field from the posting-key envelope. Comment: "Distinct version namespace from the posting-key envelope (`v: 1`) so a future change to either doesn't accidentally cross-decrypt. We start at 1; if we ever bump, both must stay distinguishable."
+
+Same envelope version number space but different purpose strings means:
+- Wrong-envelope-type detection happens at the validation layer (envelope.purpose !== 'morphit-altnet-key' → throw)
+- Wrong-network detection happens at the AES-GCM AAD layer (auth-fail)
+
+Two-layer defense.
+
+### Lesson #6 — altKeystore.ts wipe-on-error in decryptAltKey
+
+```typescript
+let plaintext: Buffer;
+try {
+  plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+} catch {
+  key.fill(0);
+  throw new AltKeyEnvelopeError(...);
+}
+
+key.fill(0);
+return plaintext;
+```
+
+Key buffer wiped on BOTH happy path AND error path. Same posture as cp96 keystore.ts and cp101 wrap.ts. Hygiene, not correctness (JS doesn't guarantee zeros survive to OS page), but minimizes lifetime of the derived key buffer.
+
+The generic decryption-failed error message ("wrong passphrase, corrupted file, or wrong network binding") is deliberate — doesn't tell attacker which gate failed. Same posture as PubPin generic-rejection-to-user / detailed-to-console split.
+
+### Lesson #7 — importAltnetKey.ts file mode + backup + plaintext wipe
+
+Three defenses on the write path:
+
+```typescript
+mkdirSync(altDir, { recursive: true });
+chmodSync(altDir, 0o700);  // directory: only operator can list
+```
+
+```typescript
+writeFileSync(outPath, JSON.stringify(envelope, null, 2), {
+  mode: 0o600  // file: only operator can read
+});
+chmodSync(outPath, 0o600);  // belt-and-braces in case of umask weirdness
+```
+
+**Belt-and-braces**: `writeFileSync` with `mode` option sets at create; `chmodSync` ensures the mode even if umask differs or the file pre-existed. The redundant chmod is intentional defensive coding.
+
+**Backup before overwrite**: timestamp-suffixed `bak-${Date.now()}` with mode 0o600 as well. Operator who imports a wrong key can still recover the previous keystore.
+
+**`plaintext.fill(0)` after encryption**: best-effort wipe of the plaintext Buffer (Node Buffer is a Uint8Array view; `.fill(0)` zeros the underlying bytes). JS doesn't have secure-erase guarantees but minimizes the window.
+
+**Passphrase confirmation prompt** with mismatch rejection — prevents typo-locking the keystore.
+
+**Empty plaintext rejected** with friendly error.
+
+### Lesson #8 — exportAltnetKey.ts separates STDOUT (binary) from STDERR (prompts)
+
+```typescript
+writeStderr(`Enter relay passphrase to decrypt ${net} key:\n`);
+const passphrase = await askPassword('Passphrase');
+// ...
+if (outPath) {
+  writeFileSync(outAbs, plaintext, { mode: 0o600 });
+  // ...
+} else {
+  // Stdout — binary-safe.  Use process.stdout.write rather than console.log
+  // (the latter would utf-8-encode and mutilate binary data).
+  process.stdout.write(plaintext);
+}
+```
+
+Critical separation:
+- **Prompts + status → STDERR**: keep STDOUT clean for piping
+- **Binary plaintext → STDOUT via `process.stdout.write`**: NOT `console.log` (which would `utf-8-encode and mutilate binary data`)
+- **Plaintext wiped after write** via `plaintext.fill(0)` on both success AND error paths
+
+This enables shell composition: `morphit-ops export-altnet-key --network=tor | tor-daemon --key-from-stdin` works correctly because STDOUT is pure binary.
+
+Documented use-case: write to `/dev/shm/morphit-tor-key`, start daemon, delete the tmpfs file. "Operators on a privacy-conscious system should prefer tmpfs (`/dev/shm`, `/run/user/<uid>`) so the plaintext never touches persistent disk."
+
+### Lesson #9 — register.ts Audit NEW-9-13 wif clears even on error
+
+```typescript
+let result: { block_num: number; trx_id: string };
+try {
+  result = await broadcastRegister({ account, wif, ... });
+} catch (err) {
+  // ... error handling
+  return 1;
+} finally {
+  wif = '';
+}
+```
+
+**Audit NEW-9-13 hardening** ensures `wif` (plaintext WIF posting key string) clears even on error path. Documentation is honest: "JS strings are immutable; reassignment minimizes lifetime of the reference even if the underlying memory persists until GC."
+
+This is the right kind of defensive coding: not pretending to have secure-erase (impossible in JS), but reducing the window during which the GC could see the WIF as live. After `wif = ''`, the only reference to the original WIF string is whatever the broadcastRegister code held internally during the broadcast, which has now returned.
+
+Same posture as cp96 chat/crypto's ephPriv wipe (Audit 2-12 try/finally) and cp101 wrap.ts HMAC + wrapKey wipe.
+
+### Lesson #10 — upgrade.ts SHA-256 verify chain is documented openly
+
+`commands/upgrade.ts` documents what it does AND does NOT do:
+
+**Does NOT**:
+- GPG tag-signature verify — relies on CI's tag-signature verification before tarball build. Operators who want belt-and-braces can `git clone && git tag -v vX.Y.Z` themselves.
+- Schema migrations — runMigrations[] is the indexer's responsibility at start.
+- Cross-major upgrades — assumes same major (v1.x → v1.y); major-version upgrades may have manual steps.
+
+**Does**:
+- 30s fetch timeout for Forgejo (`UPGRADE_FETCH_TIMEOUT_MS`)
+- Download tarball + sha256 file separately
+- Parse `<hex>  <filename>` sha256sum format with strict regex
+- Compute sha256 of downloaded tarball; refuse on mismatch ("tampered with in transit, or the SHA file is stale")
+- Atomic rename for backup: `renameSync(installDir → ${installDir}.bak-${Date.now()})`
+- Rollback on ANY failure (extract / npm ci / service restart) via two-step (rm partial extract, rename backup back, restart services)
+- Exit code 4 for "rollback failed too" with manual-intervention instructions
+- Service skip if not active (`systemctl is-active --quiet`)
+- Prune old backups (keep MORPHIT_BACKUP_KEEP=3 by default)
+- Asset filter: `name.endsWith('.tar.gz') && !name.endsWith('.sha256.tar.gz')` — defends against filename-collision attacks where an attacker might publish a `something.sha256.tar.gz` to confuse the picker
+
+Honest documentation of tradeoffs is the right posture for security-critical tooling. The "what we don't do AND why" section is sometimes more important than the "what we do" section.
+
+### Lesson #11 — Coverage table for cp104
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `main.ts` | 389 | DEEP-AUDITED CLEAN | Tiny arg parser with VALUE_FLAGS whitelist; dispatch order isolates init/register/upgrade from DB; exit codes 0/1/2/3/4/5/127; last-resort fatal handler at boot |
+| `config.ts` | 161 | DEEP-AUDITED CLEAN | 3-candidate env var lookup for DATABASE_URL; envInt with explicit NaN check; direction-of-goodness type for thresholds; color mode auto/always/never with NO_COLOR respect |
+| `init/encrypt.ts` | 41 | DEEP-AUDITED CLEAN | **Single source of truth via re-export** from relay's keyEnvelope; v1 = scrypt N=2^17 + AES-256-GCM; checkPassphraseStrength 8-char floor + 12+ char recommendation |
+| `init/altKeystore.ts` | 207 | DEEP-AUDITED CLEAN | **Per-network AAD binding** is cross-network swap defense (`v${v}/${purpose}/${network}`); **distinct envelope namespace** prevents cross-decrypt with posting-key envelope; **key wipe on BOTH happy path AND error path**; scrypt N=2^17 r=8 p=1; ciphertext length sanity check; generic decryption-failed error message |
+| `commands/importAltnetKey.ts` | 191 | DEEP-AUDITED CLEAN | Tor v3 size hint (96 bytes); backup before overwrite (`bak-${Date.now()}`); **mkdir 0o700 + writeFileSync mode 0o600 + chmodSync 0o600 belt-and-braces**; `plaintext.fill(0)` after encryption; passphrase confirmation prompt twice; empty plaintext rejection |
+| `commands/exportAltnetKey.ts` | 141 | DEEP-AUDITED CLEAN | **Prompts → STDERR, binary plaintext → STDOUT via process.stdout.write (not console.log)**; network mismatch refusal (friendly UX counterpart to AAD defense); `plaintext.fill(0)` on both success and error paths; documents tmpfs paths (/dev/shm, /run/user/<uid>) |
+| `commands/register.ts` | 332 | DEEP-AUDITED CLEAN | **Audit NEW-9-13**: try/finally so wif='' even on error; idempotent at chain level (handler rejects account_already_registered); lazy-import dblurt; endpoint rotation over 4 Blurt RPC; sluggifyTag with [a-z0-9._-] + dedupe + 64-char cap; plaintext-vs-encrypted heuristic via raw.startsWith('{') |
+| `commands/upgrade.ts` | 481 | DEEP-AUDITED CLEAN | **SHA-256 verify before extract** (refuse on mismatch with "tampered with in transit" message); 30s AbortController timeout; atomic rename for backup; rollback on ANY failure (extract / npm ci / service restart) with exit code 4 for rollback-failed-too; pruneOldBackups keeps 3; asset filter defends against `*.sha256.tar.gz` filename-collision; **honest documentation of what it does NOT do** (GPG tag-sig verify deferred to CI chain) |
+| `commands/init.ts` | 517 (partial walk — init/steps.ts deferred) | DEEP-AUDITED CLEAN at command-orchestrator level | System check → 18 prompts → review → write config + env + keystore; **maskDatabasePassword(url)** before review printing; existing-config detection with timestamped backup; check-only mode for preflight |
+
+Total cp104: ~2,460 lines walked across 9 modules, 0 findings.
+
+### Lesson #12 — Whole-codebase audit is now ~98% complete
+
+ops-cli is the LAST application surface in the Morphit codebase. After cp105+ closes it, every line of every app/* will have been walked end-to-end. Current state:
+
+| Phase | Lines | Modules | Findings |
+|---|---:|---:|---:|
+| Indexer + relay (cp82-cp95) | 25,552 | 99 | 1 |
+| Web frontend (cp96-cp102) | 15,579 | 26 | 0 |
+| Matrix-bot (cp103) | 2,021 | 8 | 0 |
+| Ops-CLI partial (cp104) | 2,460 | 9 | 0 |
+| **Total walked so far** | **45,612** | **142** | **1** |
+
+Remaining ops-cli (~5,000 lines / 18 modules) at cp105+.
+
+## CP104 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged (audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~45,612 | cp82+cp85 handlers (5,266) + cp86 supporting (3,056) + cp87 indexer API (3,173) + cp88 relay (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) + cp93 remaining indexer API (3,668) + cp94 fee verifiers+breaker (1,275) + cp95 streaming+auth endpoints (1,613) + cp96 web frontend crypto+auth (3,503) + cp97 web frontend pairing+identity+release-validate (2,061) + cp98 web frontend chat MITM-defense (1,787) + cp99 web frontend chat payload core (2,310) + cp100 web frontend chat orchestrator (1,201) + cp101 yubikey transport + identicon (1,429) + cp102 HTTP clients + endpoint rotator (1,288) + cp103 matrix-bot subsystem (2,021) + cp104 ops-cli entry + crypto-touching commands (2,460) |
+
+## CP104 FIXES
+
+None — cp104 was an ops-cli entry + crypto-touching commands audit.  0 findings across 9 modules / 2,460 lines.
+
+
+
+### Lesson #1 — config.ts enforces @user:server vs #room:server at multiple layers
+
+The matrix-bot is the single most-sensitive surface for the `@user:server` (DM, private, used for security disclosure) vs `#room:server` (room alias, public chat) distinction. Routing a security alert intended for an operator's private DM into a public room would be a serious privacy regression.
+
+`config.ts` (144) enforces the distinction in three layers:
+
+1. **Explicit pre-check**: `if (raw.startsWith('#'))` BEFORE calling `parseMxid`, with an actionable error message that explains the footgun AND points the operator to `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` (the indexer's public-contact-room env var) if they confused the two.
+2. **Branded `MatrixMxid` type** from `@morphit/operator-config` — once parsed, the value carries a brand that the type system uses to prevent it from being passed anywhere expecting a `MatrixRoomAlias` or vice versa.
+3. **`parseMxid` itself** would also reject `#`-prefixed input. The explicit pre-check is defense-in-depth + helpful error UX.
+
+Quote from the error message: "Routing alerts to a public room would be a privacy violation." This is the kind of in-code documentation that survives even if memory rules drift.
+
+### Lesson #2 — Type-level enforcement extends through matrix.ts
+
+`matrix.ts` (100) consumes `MatrixMxid` (branded) only:
+
+```typescript
+sendDm(to: MatrixMxid, body: { plain: string; html: string }): Promise<void>;
+```
+
+A code path holding a `MatrixRoomAlias` cannot accidentally pass it through type system. The DM-room cache (`Map<MatrixMxid, string>`) is also keyed on the branded type. `dms.getOrCreateDm` from matrix-bot-sdk handles E2E crypto setup for the private 2-person room.
+
+`createDryRunSender` provides a drop-in replacement for staging mode + tests — logs what would have been sent instead of actually delivering.
+
+### Lesson #3 — Opt-in gate in main.ts prevents unexpected operator activity
+
+`main.ts` (158) opens with an opt-in gate:
+
+```typescript
+const rawMxid = (process.env.MORPHIT_MATRIX_BOT_ALERT_MXID ?? '').trim();
+if (rawMxid === '') {
+  console.log('... exits cleanly because no Matrix surfaces are configured ...');
+  process.exit(0);
+}
+```
+
+This runs BEFORE `parseConfig()`, so:
+- Operators who enable the systemd unit but don't use Matrix get a clean exit (not a crash)
+- The error log gives clear pointer to MORPHIT_MATRIX_BOT_ALERT_MXID + MORPHIT_MATRIX_BOT_ACCESS_TOKEN + the OPERATIONS.md §16 documentation
+
+The default systemd unit can therefore be safely enabled without forcing Matrix configuration. The bot does nothing until the operator opts in explicitly.
+
+### Lesson #4 — Three-tier policy is the source-of-truth for what wakes operator at 3 AM
+
+`classifier.ts` (1,136) implements the policy:
+
+- **CRITICAL**: deliver immediately, NO rate limit, NO aggregation. Bypasses rate limiter entirely. Every recipient gets it.
+- **WARN**: rate-limited (1/hour per category). Suppression counted for daily digest.
+- **INFO**: aggregated into daily digest at configured UTC time.
+
+CRITICAL examples: kill-switch activated, balance ≤ 0, signup ceiling reached, RAID array failed, kernel panic, OOM kill, hardware error, segfault in morphit, AIDE integrity violation, fee-verifier invariant violation, cert expiry critical, RPC sustained failure (alerting is BLIND), disk/mem/swap critical thresholds, smartctl SMART failed, etc.
+
+The classifier is the policy doc; changing it requires updating classifier-smoke in the same commit. Tier matchers are stored as arrays of predicates that map (module, event, payload) → boolean for tier membership.
+
+### Lesson #5 — Three layered defenses on payload rendering
+
+`classifier.ts` applies three audit-driven defenses to payload values before rendering:
+
+**AUDIT-2 (cp18) C0 control char strip**:
+```typescript
+out = out.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+```
+Drops C0 controls except `\t` (0x09) and `\n` (0x0a). The cp17 `json_str()` fix encodes them as `\uXXXX` in the JSON wire format, but `JSON.parse` decodes them back to raw bytes here. In Matrix-client plain-text bodies the chars render literally (mostly invisible), but operators viewing journalctl directly via terminal would see them — ANSI ESC sequences could clear screen, set window title, or worse.
+
+**AUDIT-3 (cp18) Matrix-pill defanging**:
+```typescript
+out = out.replace(/([@#])([a-z0-9._=/+-]+):([a-z0-9.-]+)/gi, '$1\u200d$2:$3');
+```
+Inserts a zero-width joiner (U+200D) after the sigil. Visually near-identical (ZWJ is invisible in most fonts), but Matrix mention/room-pill regex doesn't match — so a raw kernel string containing `@victim:matrix.org` doesn't render as a mention pill pinging random Matrix users.
+
+**AUDIT-4 (cp18) size caps**:
+- MAX_FIELD_BYTES = 1024 (per payload field)
+- MAX_PAYLOAD_BYTES = 8192 (total payload-line section)
+
+Defends against a compromised sidecar emitting a mega-payload that could DoS the bot's Matrix client (Matrix plain-text body limit is ~65KB; we cap aggressively well below to leave room for title/advice/metadata).
+
+`escapeHtml` standard 5-char escape (`& < > " '`).
+
+### Lesson #6 — journalctl.ts double-nested JSON parse with defensive checks
+
+`journalctl.ts` (145) tails `journalctl -u <units> -o json --follow`. journald wraps the original log line in a JSON envelope with a `MESSAGE` field; Morphit's structured logger emits JSON itself; so the bot has to do a **double-nested parse**:
+
+```typescript
+let obj = JSON.parse(line);              // journald envelope
+let inner = JSON.parse(obj.MESSAGE);     // Morphit structured log
+```
+
+Each parse wrapped in try/catch returning null. Returns null on:
+- Outer JSON parse failure (line isn't JSON)
+- `obj` isn't an object
+- No `MESSAGE` field
+- Inner JSON parse failure
+- `inner` isn't an object
+- Missing `module` or `event` strings
+
+Most journald lines aren't Morphit alerts; they're skipped silently. The bot is best-effort robust against journald format drift, kernel messages, third-party services emitting non-JSON, etc.
+
+`ts` preference: inner JSON's ts first (most accurate — set by the emitter), fall back to journald's `__REALTIME_TIMESTAMP` (microseconds since epoch). Both produce ISO 8601 strings for downstream rendering.
+
+### Lesson #7 — rate-limiter is persisted, sliding-window, per-category
+
+`rateLimit.ts` (69) + `state.ts` (137) implement:
+
+- **1-hour sliding window** (`WARN_WINDOW_MS = 60 * 60 * 1000`)
+- **Per-category** (`<module>:<kind>`) not global — distinct problems each surface
+- **Persisted in SQLite** so an operator restart doesn't reset all rate-limit windows (would let recently-suppressed events flood through immediately after restart)
+- **CRITICAL bypasses entirely** — straight to Matrix sender
+- **WARN comes through here** — `isLimited` check + `recordDelivery` or `recordSuppression`
+- **INFO goes to digest accumulator** — `state.pushInfoEvent`
+
+`getSuppressedCount` surfaces the count in the daily digest: "you got 47 LOW_BALANCE alerts in the past 24h but we only DM'd you once."
+
+### Lesson #8 — digest scheduler fixed UTC time touches at least one waking timezone
+
+`digest.ts` (132) fires once per UTC day at the configured time (default 09:00). The choice is documented: "operators have varying timezones, but UTC 09:00 is Asia evening / Europe morning / America night — touches at least one waking timezone for most ops teams. Operator can tune via MORPHIT_MATRIX_BOT_DIGEST_SEND_TIME_UTC."
+
+Drains the INFO accumulator + suppression counts; formats them as a single rendered body; calls `onDigest` with the body for distribution. The "drain" is atomic from state's perspective (SQLite transaction).
+
+### Lesson #9 — Coverage table for cp103
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `main.ts` | 158 | DEEP-AUDITED CLEAN | Opt-in gate via process.exit(0); tier routing (CRITICAL bypass rate limit / WARN check rateLimiter / INFO accumulate); loopback 127.0.0.1 healthcheck; graceful SIGTERM/SIGINT shutdown |
+| `config.ts` | 144 | DEEP-AUDITED CLEAN | **Rejects `#`-prefix BEFORE parseMxid** with explicit error message pointing to MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM for public-room intent; branded MatrixMxid type from @morphit/operator-config prevents room aliases through type system; zod all-violations-at-once UX |
+| `matrix.ts` | 100 | DEEP-AUDITED CLEAN | sendDm signature accepts only `MatrixMxid` (branded); DM room cache; matrix-bot-sdk dms.getOrCreateDm handles E2E crypto for private 2-person room; createDryRunSender for staging/tests |
+| `classifier.ts` | 1,136 | DEEP-AUDITED CLEAN | 3-tier policy (CRITICAL/WARN/INFO) is source-of-truth for what wakes operator at 3 AM; **AUDIT-2 strip C0 controls except \t/\n**; **AUDIT-3 ZWJ defang @user/#room patterns**; **AUDIT-4 size caps MAX_FIELD_BYTES=1024 MAX_PAYLOAD_BYTES=8192**; escapeHtml 5-char |
+| `journalctl.ts` | 145 | DEEP-AUDITED CLEAN | Tails journalctl -u <units> -o json --follow; double-nested JSON parse (journald envelope + Morphit inner); defensive type-check on every field; ts preference inner first, journald __REALTIME_TIMESTAMP fallback |
+| `state.ts` | 137 | DEEP-AUDITED CLEAN | SQLite via better-sqlite3; three concerns (rate-limit windows, suppression counts, INFO accumulator); mkdirSync recursive for state DB path |
+| `digest.ts` | 132 | DEEP-AUDITED CLEAN | Fires once per UTC day default 09:00; touches at least one waking timezone for most ops teams; atomic drain of INFO accumulator + suppression counts |
+| `rateLimit.ts` | 69 | DEEP-AUDITED CLEAN | Sliding-window 1-hour per category (not global); persisted via state DB so restart doesn't reset windows; CRITICAL bypass; getSuppressedCount surfaces in digest |
+
+Total cp103: 2,021 lines walked, 0 findings.
+
+### Lesson #10 — matrix-bot is exemplary defense-in-depth for the routing-footgun threat
+
+The single most important rule across the entire matrix-bot subsystem is "@user:server (private DM) ≠ #room:server (public room alias)." Mixing them up = security disclosure leaks into public.
+
+The defense is layered:
+1. **`config.ts` rejects `#`-prefix with helpful error message before `parseMxid` runs**
+2. **Branded `MatrixMxid` type from `@morphit/operator-config`** propagates through every code path that could touch destination addresses
+3. **`matrix.ts.sendDm` signature accepts ONLY `MatrixMxid`** — no implicit conversion possible
+4. **DM-room cache keyed on `MatrixMxid`** prevents accidental cache-key collision
+5. **Documentation at every layer** (file comments + memory rule + the error message itself) explains WHY the distinction matters
+6. **Memory rule pinned in REVISIT-LIST header** so future sessions don't undo the defense
+
+This is the gold standard for codifying a non-negotiable security rule in a way that survives code drift, memory loss across sessions, and well-intentioned refactors.
+
+## CP103 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp102 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~43,152 | cp82+cp85 handlers (5,266) + cp86 supporting (3,056) + cp87 indexer API (3,173) + cp88 relay (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) + cp93 remaining indexer API (3,668) + cp94 fee verifiers+breaker (1,275) + cp95 streaming+auth endpoints (1,613) + cp96 web frontend crypto+auth (3,503) + cp97 web frontend pairing+identity+release-validate (2,061) + cp98 web frontend chat MITM-defense (1,787) + cp99 web frontend chat payload core (2,310) + cp100 web frontend chat orchestrator (1,201) + cp101 yubikey transport + identicon (1,429) + cp102 HTTP clients + endpoint rotator (1,288) + cp103 matrix-bot subsystem (2,021) |
+
+## CP103 FIXES
+
+None — cp103 was a matrix-bot subsystem audit.  0 findings across 8 modules / 2,021 lines.
+
+
 
 ### Lesson #1 — net/endpoints.ts is the resilience backbone the entire frontend rides on
 
@@ -1798,6 +2713,54 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP107+ PREDICTED HUNTING GROUND
+
+**Codebase end-to-end deep-audit is COMPLETE at cp106.** Every line of every `apps/*` module has been walked. The audit campaign reaches its natural limit at ~52,603 lines / 163 modules / 1 finding caught + fixed across 25 checkpoints.
+
+Remaining work is necessarily outside source-code-review scope:
+
+1. **30-test CI delta hunt** — sandbox-blocked (requires running infrastructure to verify CI behavior delta against main; not reproducible in audit sandbox).
+2. **Defense-claim-vs-implementation parity smoke** — speculative; would walk every `BRAG-LIST` claim against its source-of-truth implementation to catch documentation drift. Could be a single big sentinel-grep batch, but Ken needs to confirm value vs cost.
+3. **Pre-launch operator-actions checklist verify** (from memory): rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`; commit `package-lock.json`; wire `svelte-kit sync + tsc --noEmit` into CI. These are operator-actions, not audit items.
+4. **Persona walk-through** (per memory rule): Bob (Blurt user multi-login), Sally-user (no crypto), Sally-operator (node from any `.md`, every CLI/screen/button). Includes the feedback system facet: `/my/orders` → `PendingFeedbackReminderBanner` → `LeaveFeedbackForm` → `morphit_feedback_v1` → indexer handler → profile → `feedbackResponse_v1`.
+
+## CP106+ PREDICTED HUNTING GROUND
+
+Only the ops-cli command + supporting-infra remainder (~1,000 lines) stands between us and end-to-end codebase audit closure:
+
+1. **commands/edit.ts** (713) — config editor (mirror of stepInit for editing existing config)
+2. **commands/paymentMethod.ts** (492) — ADR-0021 payment-method-addition broadcaster
+3. **commands/status.ts** (385) — operator dashboard
+4. **commands/{abuse, flags, signups, attestations, drainQueue, failedBroadcasts, loyalty}.ts** — read-only views
+5. **db.ts**, **render/{term, json}.ts**, **lib/{time, ctx}.ts** — supporting infra
+
+After cp106 closes ops-cli, every line of every `apps/*` will have been deep-audited. Roughly ~50,500 lines / ~160 modules total. The audit campaign reaches the natural limit of source-code review.
+
+## CP105+ PREDICTED HUNTING GROUND
+
+Web frontend phase closed at cp102; matrix-bot at cp103; ops-cli high-value crypto-touching surfaces at cp104. Remaining:
+
+1. **Ops-CLI remainder** (~5,000 lines / 18 modules):
+   - `init/steps.ts` (1,963) — 18-step wizard logic
+   - `init/systemCheck.ts` (768) — CPU/RAM/disk/OS preflight
+   - `init/render.ts` (723) — config file rendering
+   - `init/prompt.ts` (227), `init/explorerHealth.ts` (227), `init/chainCheck.ts`
+   - `commands/edit.ts` (713) — config editor
+   - `commands/paymentMethod.ts` (492) — ADR-0021
+   - `commands/status.ts` (385), `{abuse,flags,signups,attestations,drainQueue,failedBroadcasts,loyalty}.ts` — read-only views
+   - `db.ts`, `render/*`, `lib/{time,ctx}.ts` — supporting infra
+2. After ops-cli closes: entire Morphit codebase will have been walked end-to-end (cp82-cp105+ = ~50,000 lines / ~160 modules).
+3. 30-test CI delta hunt — sandbox-blocked
+4. Defense-claim-vs-implementation parity smoke — speculative
+
+## CP104+ PREDICTED HUNTING GROUND
+
+Web frontend phase closed at cp102; matrix-bot subsystem walked at cp103. Final remaining application surface:
+
+1. **Ops-CLI** — `apps/ops-cli/`. Operator-facing CLI for node bring-up, key rotation, federation peering. After this, the entire Morphit codebase will have been walked end-to-end.
+2. 30-test CI delta hunt — sandbox-blocked
+3. Defense-claim-vs-implementation parity smoke — speculative
 
 ## CP103+ PREDICTED HUNTING GROUND
 

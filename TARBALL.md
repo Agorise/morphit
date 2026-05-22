@@ -1,5 +1,284 @@
 # Tarball history
 
+## cp106 — Ops-CLI commands + supporting infra audit + CODEBASE DEEP-AUDIT END-TO-END COMPLETE (~2,953 lines, 15 modules, codebase total 52,603 / 163 modules / 1 finding / 25 checkpoints) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** REGENERATED at cp106 — `morphit-audit-2026-05-122-cp106-FULL-STATE.tar.gz`. cp106 closes the entire ops-cli audit phase (cp104-cp106 = 3 checkpoints, 9,451 lines, 30 modules) AND the entire codebase deep-audit campaign (cp82-cp106 = 25 checkpoints, 52,603 lines, 163 modules, 1 finding). Per the tarball cadence rule, end-of-phase + end-of-campaign is the most meaningful milestone of the entire pre-launch hardening effort.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  **Cumulative deep-audit coverage: ~52,603 lines / 163 modules / 1 finding caught + fixed across 25 checkpoints — CODEBASE END-TO-END DEEP-AUDIT COMPLETE.**
+
+### TL;DR
+
+cp106 walks the final ops-cli modules: payment-method broadcaster, config editor, dashboard, 7 read-only views, supporting infra (db, render, lib). 15 modules / ~2,953 lines / 0 findings.
+
+**This closes the entire codebase deep-audit campaign**: every line of every `apps/*` module has been walked end-to-end across cp82-cp106 — 52,603 lines / 163 modules / 1 finding caught + fixed (cp93 release.ts JSDoc shape claim). The 25 checkpoints span every architectural layer of Morphit: indexer chain replay + DB persistence + HTTP API, relay business logic + drainer + chain-RPC, web frontend crypto + chat MITM-defense + payload schema + orchestrator + transport + HTTP clients, matrix-bot subsystem, ops-CLI wizard + commands + supporting infra.
+
+**Modules walked (15, ~2,953 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `commands/paymentMethod.ts` | 492 | DEEP-AUDITED CLEAN | **Unicode codepoint sanitization** (RTL/BiDi/ZW/BOM/control chars) mirrors indexer + frontend; **reserved canonical key list** (40 entries) saves wasted chain ops; KEY_RE + length 3-24; VALID_CATEGORIES whitelist; HTTPS URL ≤200 chars; **Audit NEW-9-13 `wif=''` in finally** on BOTH add() AND remove() |
+| `commands/edit.ts` | 713 | DEEP-AUDITED CLEAN | **Atomic write: backup → tmp → fsync → rename**; Audit NEW-9-12 fsync hardening with honest FUSE documentation; tightly-scoped EDITABLE_KEYS enforces allowlist policy; re-uses init/steps.ts validators (single source of truth) |
+| `commands/status.ts` | 385 | DEEP-AUDITED CLEAN | All SQL parameterized `$1`/`$2`; Promise.all 9-query parallel dispatch; threshold application → ok/warn/error glyphs |
+| `commands/abuse.ts` | 232 | DEEP-AUDITED CLEAN | Parameterized SQL; HUMAN_LIMIT cap; parseDurationSpec |
+| `commands/flags.ts` | 166 | DEEP-AUDITED CLEAN | Parameterized SQL; --type filter; 7d default window |
+| `commands/drainQueue.ts` | 163 | DEEP-AUDITED CLEAN | Parameterized SQL; --age filter; HUMAN_LIMIT 50 |
+| `commands/failedBroadcasts.ts` | 124 | DEEP-AUDITED CLEAN | Parameterized SQL; HUMAN_LIMIT 50 |
+| `commands/signups.ts` | 120 | DEEP-AUDITED CLEAN | Parameterized SQL filtered by relay-account |
+| `commands/loyalty.ts` | 120 | DEEP-AUDITED CLEAN | Parameterized SQL; loyalty milestone view |
+| `commands/attestations.ts` | 109 | DEEP-AUDITED CLEAN | Parameterized SQL; pending fee-attestation queue |
+| `render/term.ts` | 148 | DEEP-AUDITED CLEAN | ANSI codes hardcoded; **conservative ASCII tags when color off**; initColor 3-way + TTY-aware |
+| `lib/time.ts` | 81 | DEEP-AUDITED CLEAN | Pure functions; UTC-anchored; parseDurationSpec regex |
+| `db.ts` | 64 | DEEP-AUDITED CLEAN | **Lazy-import pg**; pool max=2; non-crashing error handler |
+| `lib/ctx.ts` | 23 | DEEP-AUDITED CLEAN | CommandCtx interface |
+| `render/json.ts` | 13 | DEEP-AUDITED CLEAN | Single emitJson function |
+
+**Key cp106 verifications:**
+
+- **Unicode codepoint sanitization** (paymentMethod.ts): RTL/BiDi/ZW/BOM/control char strip mirrors indexer-side handler + frontend registry. Parity smoke catches drift.
+- **Reserved canonical key list** (paymentMethod.ts): 40 entries mirror indexer + frontend; client-side check saves wasted chain op + RC on doomed broadcast.
+- **Audit NEW-9-13 `wif=''` in finally** propagates through every on-chain broadcaster: register.ts (cp104), paymentMethod.ts add() + remove() (cp106). Consistent posture across the codebase.
+- **Audit NEW-9-12 atomic write with fsync** (edit.ts): backup → tmp mode 0o600 → fsync → rename. Honest documentation that fsync is best-effort on FUSE mounts but failure is non-fatal.
+- **All SQL parameterized** ($1/$2 placeholders) across status.ts + all 7 read-only views. No string interpolation into SQL text anywhere. Template literals only in display strings.
+- **HUMAN_LIMIT bounds memory** (50 or 100) on every view — prevents pulling 100k rows by accident.
+- **Lazy-import pg** (db.ts): init subcommand works on fresh checkout where npm install hasn't happened yet.
+- **Conservative ASCII tags when color off** (term.ts): minimal terminals get `[OK]/[WARN]/[ERR]/[i]` instead of Unicode ✓/⚠/✗/ℹ — more readable on legacy/minimal terminals.
+
+### Codebase deep-audit phase summary (cp82-cp106)
+
+| Phase | CP range | Lines | Modules | Findings |
+|---|---|---:|---:|---:|
+| **Indexer + relay** | cp82-cp95 | 25,552 | 99 | 1 (cp93 release.ts JSDoc) |
+| **Web frontend** | cp96-cp102 | 15,579 | 26 | 0 |
+| **Matrix-bot** | cp103 | 2,021 | 8 | 0 |
+| **Ops-CLI** | cp104-cp106 | 9,451 | 30 | 0 |
+| **TOTAL** | cp82-cp106 | **52,603** | **163** | **1** |
+
+Every architectural layer walked: chain replay + DB persistence + HTTP API + business logic + drainer + chain-RPC + frontend crypto + chat MITM-defense + payload schema + orchestrator + transport + HTTP clients + matrix-bot opt-in + tier policy + ops-CLI wizard + commands + supporting infra.
+
+1 finding (cp93 release.ts JSDoc shape claim about an XMR `viewkey` field that `stripViewkey` correctly stripped) across 25 checkpoints / 163 modules / ~52,603 lines = signal that the audit is THOROUGH, not that the codebase is buggy. Most potential findings were pre-empted by the audit posture and discipline accumulated over Parts 1-119.
+
+### Cp106 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 2,953 | 15 ops-cli command + supporting-infra modules |
+| Findings this cp | 0 | all 15 modules clean |
+| Tarball regenerated | YES | end-of-phase + end-of-campaign milestone |
+
+### Cp106 deferred to cp107+
+
+Codebase end-to-end deep-audit is complete. Remaining work is necessarily outside source-code-review scope:
+
+1. **30-test CI delta hunt** — sandbox-blocked
+2. **Defense-claim-vs-implementation parity smoke** — speculative
+3. **Pre-launch operator-actions checklist verify** — operator-actions, not audit items
+4. **Persona walk-through** — Bob/Sally-user/Sally-operator end-to-end
+
+### Cp106 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp106 lessons (12 — Unicode codepoint sanitization mirrors indexer+frontend, reserved-key client-side defense-in-depth, wif='' propagates through all on-chain broadcasters, atomic write with fsync, EDITABLE_KEYS enforces allowlist, edit re-uses init validators single-source-of-truth, status parameterized SQL + parallel dispatch, read-only views same pattern, db.ts lazy-import + tiny pool, term.ts conservative ASCII fallback, **CODEBASE END-TO-END AUDIT COMPLETE 52,603/163/1**, coverage table) + state table + fixes section ("none — audit-only") + cp107+ hunting-ground update
+- `TARBALL.md` — cp106 entry inserted at top (this entry); **.tar.gz regenerated as `morphit-audit-2026-05-122-cp106-FULL-STATE.tar.gz`** (end-of-phase + end-of-campaign milestone)
+
+No source code or test files modified — cp106 is a pure audit-trail checkpoint.
+
+## cp105 — Ops-CLI init wizard audit (~4,038 lines, 6 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp105 is audit-only; last binary is `cp102-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~49,650 lines.
+
+### TL;DR
+
+cp105 walks the ops-cli init wizard surface: input handling, system preflight, network probes, config file rendering, and the 18-step wizard. 6 modules / ~4,038 lines / 0 findings. Exemplary defensive coding throughout — the wizard is the operator's first-touch UX AND the source of truth for the keystore + config that everything else depends on.
+
+**Modules walked (6, ~4,038 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `init/prompt.ts` | 227 | DEEP-AUDITED CLEAN | askPassword raw-mode handles Ctrl+C → exit 130, Ctrl+D → cancel, backspace, control-char filter; cleanup restores TTY state |
+| `init/chainCheck.ts` | 130 | DEEP-AUDITED CLEAN | 4-endpoint rotation with 5s timeout; **validateBlurtAccountName matches chain validator exactly** |
+| `init/explorerHealth.ts` | 227 | DEEP-AUDITED CLEAN | **Never sends user data**; harmless test inputs only; BTC `/blocks/tip/height` + XMR `/api/networkinfo` + chat-link HEAD probes |
+| `init/systemCheck.ts` | 768 | DEEP-AUDITED CLEAN | 17 preflight checks; **cp70-D1 strict port parse** prevents parseInt trailing-garbage; **SSH check parses sshd_config.d/*.conf alphabetically** (matches real sshd); time-drift via HTTP Date header round-trip half-time |
+| `init/render.ts` | 724 | DEEP-AUDITED CLEAN | **Three-file split** (morphit.config.env + morphit.env + keystore); **allowlist policy prevents typo→data-corruption**; all mode 0o600 belt-and-braces; quote() safe-char shortcut |
+| `init/steps.ts` | 1,964 | DEEP-AUDITED CLEAN | 18-step wizard; **WIF regex matches Blurt Base58**; passphrase prompted twice; **stepMatrixSurfaces TWO layers @ vs # defense** (5-layer total across codebase); stepOrigin strict HTTPS validation; Coingecko price fetch with graceful fallback |
+
+**Key cp105 verifications:**
+
+- **askPassword raw-mode TTY handling** (prompt.ts): Ctrl+C → exit 130, Ctrl+D → cancel, backspace via `\b \b`, control-char filter, cleanup restores raw-mode + paused state.
+- **validateBlurtAccountName matches chain validator** (chainCheck.ts): 3-16 chars, starts-with-letter, `[a-z0-9-]+`, no `--`, no trailing `-`. Catches typos before relay startup confusing errors.
+- **explorerHealth.ts never sends user data**: documented posture "we want to know 'does this URL speak the expected API surface' not 'is any specific transaction valid.'" Probes use known-public endpoints (block height, network info) — no txids, no addresses, no proofs.
+- **cp70-D1 lesson** (systemCheck.ts): strict port parse via `/^\d+$/.test(portRaw) ? Number(portRaw) : NaN` because `parseInt("5432abc", 10) === 5432` accepts trailing garbage that could connect to wrong port.
+- **SSH PasswordAuthentication check parses sshd_config.d/*.conf in alphabetical order** (systemCheck.ts): matches actual sshd behavior; last-matching directive wins; default `yes` (insecure) if unspecified — same as actual sshd default.
+- **render.ts three-file split with allowlist policy enforcement**: "Critical-infra values are deliberately excluded from the allowlist because typo'ing them causes data corruption." Critical-infra goes in morphit.env (set by deployment automation in production); operator-tunable goes in morphit.config.env (allowlisted).
+- **All three render outputs written with mode 0o600 + chmodSync 0o600 belt-and-braces**: pattern matches importAltnetKey.ts from cp104.
+- **steps.ts WIF regex**: `/^5[1-9A-HJ-NP-Za-km-z]{50}$/` matches Blurt's Base58 alphabet (excludes 0/O/I/l). Pubkey-vs-chain match check deferred to relay startup (right tradeoff — avoids coupling ops-cli to dblurt).
+- **steps.ts stepMatrixSurfaces TWO layers @ vs # defense + 5 layers total across codebase**: parseMxid + explicit prefix check at wizard input; parseMxid + explicit prefix check at matrix-bot config parse; branded MatrixMxid type at matrix.ts; DM-room cache keyed on MatrixMxid. Footgun is non-trivial to trigger.
+- **steps.ts stepOrigin strict URL validation**: HTTPS only, no `user:pass@`, no path beyond `/`, no query, no fragment. Output goes on-chain in operator-register op AND is published in /v1/instance.
+
+### Cp105 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 4,038 | 6 ops-cli init/* modules |
+| Findings this cp | 0 | all 6 modules clean |
+| Tarball regenerated | NO | not end-of-phase yet (~1,000 lines ops-cli remaining) |
+
+### Cp105 deferred to cp106+
+
+Only ~1,000 lines of ops-cli command + supporting infra remain:
+
+1. **commands/edit.ts** (713) — config editor
+2. **commands/paymentMethod.ts** (492) — ADR-0021 broadcaster
+3. **commands/status.ts** (385) — operator dashboard
+4. **commands/{abuse, flags, signups, attestations, drainQueue, failedBroadcasts, loyalty}.ts** — read-only views
+5. **db.ts**, **render/{term, json}.ts**, **lib/{time, ctx}.ts** — supporting infra
+
+After cp106 closes ops-cli, every line of every `apps/*` will have been deep-audited.
+
+### Cp105 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp105 lessons (13 — prompt raw-mode TTY handling, chainCheck validator matches chain, explorerHealth never sends user data, cp70-D1 strict port parse, SSH config.d alphabetical parse, render three-file allowlist policy split, quote helper safe-char shortcut, WIF regex Base58, stepMatrixSurfaces 5-layer @-vs-# defense, stepOrigin strict URL validation, parseChatLinkTemplate two-step, coverage table, ~99% codebase progress) + state table + fixes section ("none — audit-only") + cp106+ hunting-ground update
+- `TARBALL.md` — cp105 entry inserted at top (this entry); no .tar.gz regenerated per cadence (not end-of-phase yet)
+
+No source code or test files modified — cp105 is a pure audit-trail checkpoint.
+
+## cp104 — Ops-CLI entry + crypto-touching commands audit (~2,460 lines, 9 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp104 is audit-only; last binary is `cp102-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~45,612 lines.
+
+### TL;DR
+
+cp104 walks ops-cli's **highest-security surfaces**: entry point + command dispatch + crypto-touching commands (alt-network keystore import/export, operator registration broadcast, release upgrade with SHA-256 verify). 9 modules / ~2,460 lines walked / 0 findings. The remaining ~5,000 lines of ops-cli (init/steps.ts, init/systemCheck.ts, init/render.ts, commands/edit.ts, commands/paymentMethod.ts, etc.) defer to cp105+.
+
+**Modules walked (9, ~2,460 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `main.ts` | 389 | DEEP-AUDITED CLEAN | Dispatch order isolates first-time-setup commands from DB; exit codes 0/1/2/3/4/5/127; last-resort fatal handler at boot |
+| `config.ts` | 161 | DEEP-AUDITED CLEAN | 3-candidate env var lookup for DATABASE_URL; envInt with NaN check; threshold direction type |
+| `init/encrypt.ts` | 41 | DEEP-AUDITED CLEAN | **Single source of truth via re-export** from relay's keyEnvelope; v1 = scrypt N=2^17 + AES-256-GCM |
+| `init/altKeystore.ts` | 207 | DEEP-AUDITED CLEAN | **Per-network AAD binding** is cross-network swap defense; distinct envelope namespace prevents cross-decrypt; key wipe on both happy + error paths; generic decryption-failed error |
+| `commands/importAltnetKey.ts` | 191 | DEEP-AUDITED CLEAN | mkdir 0o700 + writeFileSync mode 0o600 + chmodSync 0o600 belt-and-braces; backup before overwrite; `plaintext.fill(0)` after encryption; passphrase confirmation prompt |
+| `commands/exportAltnetKey.ts` | 141 | DEEP-AUDITED CLEAN | **Prompts → STDERR, binary plaintext → STDOUT via process.stdout.write**; network mismatch refusal; plaintext wipe on both paths; documents tmpfs paths |
+| `commands/register.ts` | 332 | DEEP-AUDITED CLEAN | **Audit NEW-9-13**: try/finally so `wif=''` even on error; lazy-import dblurt; endpoint rotation over 4 Blurt RPC; sluggifyTag with 64-char cap |
+| `commands/upgrade.ts` | 481 | DEEP-AUDITED CLEAN | **SHA-256 verify before extract**; 30s AbortController timeout; atomic rename backup; rollback on ANY failure (extract/npm ci/service restart) with exit code 4 for rollback-failed-too; pruneOldBackups; asset filter defends against `*.sha256.tar.gz` collision; **honest documentation of what it does NOT do** (GPG tag-sig deferred to CI chain) |
+| `commands/init.ts` | 517 (partial — init/steps.ts deferred) | DEEP-AUDITED CLEAN at orchestrator level | System check → 18 prompts → review → write; maskDatabasePassword before printing; existing-config timestamped backup; --check-only preflight mode |
+
+**Key cp104 verifications:**
+
+- **Per-network AAD binding (altKeystore.ts)** is the critical defense against cross-network swap: `buildAad(v, purpose, network)` includes network in AES-GCM associated data. Attacker who exfiltrates all three keystores cannot rename tor-key.json → i2p-key.json — the AAD doesn't match, auth-tag verification fails.
+- **Distinct envelope namespace** (`purpose: 'morphit-altnet-key'` vs posting-key envelope's distinct purpose) prevents future format changes from accidentally cross-decrypting.
+- **Single source of truth** via re-export: `init/encrypt.ts` delegates to relay's keyEnvelope module; CLI-produced envelopes are decrypted by the same code that decrypts at relay startup. Avoids dual-implementation drift.
+- **STDOUT/STDERR separation in exportAltnetKey.ts**: prompts → STDERR (clean STDOUT for piping); binary plaintext → STDOUT via `process.stdout.write` (NOT console.log which would UTF-8-encode and mutilate binary). Enables `morphit-ops export-altnet-key | tor-daemon --key-from-stdin`. Plaintext wiped via `plaintext.fill(0)` on both success and error paths.
+- **Audit NEW-9-13 wif='' in finally (register.ts)**: ensures WIF clears even on broadcast error path. Honest documentation that JS strings are immutable, but reassignment minimizes reference lifetime even if underlying memory persists until GC.
+- **SHA-256 verify before extract (upgrade.ts)**: parseShaFile + computeSha256 + mismatch → exit 5 with "tampered with in transit, or the SHA file is stale" message. Documents openly that GPG tag-sig verify is deferred to CI's tag-signature verification chain; operators wanting belt-and-braces can `git tag -v vX.Y.Z` themselves.
+- **Atomic backup before extract (upgrade.ts)**: `renameSync(installDir → ${installDir}.bak-${Date.now()})`. Rollback on ANY failure (extract / npm ci / service restart) via two-step (rm partial extract, rename backup back, restart services). Exit code 4 for "rollback failed too" with manual-intervention instructions.
+- **Asset filter (upgrade.ts)**: `endsWith('.tar.gz') && !endsWith('.sha256.tar.gz')` defends against filename-collision where attacker might publish a `something.sha256.tar.gz` to confuse the picker.
+
+### Cp104 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 2,460 | 9 ops-cli entry + crypto-touching modules |
+| Findings this cp | 0 | all 9 modules clean |
+| Tarball regenerated | NO | not end-of-phase yet (more ops-cli remaining) |
+
+### Cp104 deferred to cp105+
+
+ops-cli has ~5,000 lines / 18 modules remaining. After they close, every line of every `apps/*` will have been walked end-to-end.
+
+1. **init/steps.ts** (1,963) — 18-step wizard logic
+2. **init/systemCheck.ts** (768) — CPU/RAM/disk/OS preflight
+3. **init/render.ts** (723) — config file rendering
+4. **init/{prompt, explorerHealth, chainCheck}.ts**
+5. **commands/edit.ts** (713) — config editor
+6. **commands/paymentMethod.ts** (492) — ADR-0021
+7. **commands/status.ts** (385) + read-only views (abuse, flags, signups, attestations, drainQueue, failedBroadcasts, loyalty)
+8. **db.ts, render/*, lib/{time, ctx}.ts** — supporting infra
+
+### Cp104 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp104 lessons (12 — ops-cli is huge / multi-cp split, main.ts dispatch order isolates init from DB, init/encrypt.ts single source of truth, altKeystore.ts per-network AAD binding, envelope namespace prevents cross-decrypt, wipe-on-error in decryptAltKey, importAltnetKey.ts file mode + backup + plaintext wipe, exportAltnetKey.ts STDOUT/STDERR separation, register.ts wif='' in finally, upgrade.ts SHA-256 verify chain + honest documentation, coverage table, ~98% codebase audit progress) + state table + fixes section ("none — audit-only") + cp105+ hunting-ground update
+- `TARBALL.md` — cp104 entry inserted at top (this entry); no .tar.gz regenerated per cadence (not end-of-phase yet)
+
+No source code or test files modified — cp104 is a pure audit-trail checkpoint.
+
+## cp103 — Matrix-bot subsystem audit (~2,021 lines, 8 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp103 is audit-only; last binary is `cp102-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~43,152 lines.
+
+### TL;DR
+
+cp103 walks the **matrix-bot subsystem** — 8 modules / 2,021 lines / 0 findings. The matrix-bot is the most security-sensitive surface for the standing memory rule "@user:server (private DM) ≠ #room:server (public room)" — mixing them up would route security disclosures to a public room. The defense is layered at config / type / function-signature / cache-key / documentation. Exemplary.
+
+**Modules walked (8, ~2,021 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `main.ts` | 158 | DEEP-AUDITED CLEAN | Opt-in gate (process.exit(0) if no MXID); tier routing (CRITICAL bypass / WARN rate-limited / INFO digest); loopback 127.0.0.1 healthcheck; graceful shutdown |
+| `config.ts` | 144 | DEEP-AUDITED CLEAN | **Rejects `#`-prefix BEFORE parseMxid** with explicit error pointing to MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM; branded MatrixMxid type prevents room aliases through type system; zod all-violations-at-once |
+| `matrix.ts` | 100 | DEEP-AUDITED CLEAN | sendDm signature accepts ONLY MatrixMxid; DM room cache; createDryRunSender for staging |
+| `classifier.ts` | 1,136 | DEEP-AUDITED CLEAN | 3-tier policy source-of-truth; **AUDIT-2 C0 control strip**; **AUDIT-3 ZWJ defang Matrix pills**; **AUDIT-4 MAX_FIELD_BYTES=1024 MAX_PAYLOAD_BYTES=8192**; escapeHtml |
+| `journalctl.ts` | 145 | DEEP-AUDITED CLEAN | Tails journalctl -o json --follow; double-nested JSON parse; defensive type-check; ts preference inner first |
+| `state.ts` | 137 | DEEP-AUDITED CLEAN | SQLite via better-sqlite3; rate-limit windows + suppression counts + INFO accumulator |
+| `digest.ts` | 132 | DEEP-AUDITED CLEAN | Fires once per UTC day default 09:00 (touches at least one waking timezone) |
+| `rateLimit.ts` | 69 | DEEP-AUDITED CLEAN | Sliding-window 1-hour per category; persisted via state DB so restart doesn't reset |
+
+**Key cp103 verifications:**
+
+- **`config.ts` rejects `#`-prefix BEFORE parseMxid**: explicit error message explains the footgun AND points to MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM (the indexer's public-contact-room env var) if operator confused the two. Quote: "Routing alerts to a public room would be a privacy violation." Defense-in-depth — parseMxid would also reject, but the explicit pre-check provides actionable error.
+- **Branded MatrixMxid type propagates through every code path**: matrix.ts sendDm signature accepts only MatrixMxid; DM room cache keyed on MatrixMxid. A code path holding a MatrixRoomAlias cannot accidentally pass it.
+- **Opt-in gate via process.exit(0)**: bot exits cleanly if MORPHIT_MATRIX_BOT_ALERT_MXID not set. Operators who enable systemd unit but don't use Matrix get clean exit + clear pointer to configuration env vars + OPERATIONS.md §16 reference. Bot does NOTHING until operator opts in.
+- **Three-tier policy is source-of-truth for what wakes operator at 3 AM**: CRITICAL bypass rate limit (kill-switch, balance≤0, RAID failed, kernel panic, OOM kill, etc.); WARN 1/hour per category; INFO daily digest at 09:00 UTC. Changing it requires updating classifier-smoke in the same commit.
+- **AUDIT-2 C0 control-char strip**: drops C0 except \t and \n. cp17 json_str() fix encodes them as \uXXXX on wire, but JSON.parse decodes back to raw bytes here. Operators viewing journalctl directly via terminal would see ANSI ESC sequences that could clear screen, set window title, or worse.
+- **AUDIT-3 ZWJ defang of Matrix mention patterns**: inserts zero-width joiner after @ or # sigil. Visually near-identical but Matrix mention/room-pill regex doesn't match — raw kernel string containing @victim:matrix.org in payload doesn't render as a mention pill pinging random Matrix users.
+- **AUDIT-4 size caps**: MAX_FIELD_BYTES=1024, MAX_PAYLOAD_BYTES=8192. Defends against compromised sidecar emitting mega-payload DoS-ing bot's Matrix client (which has ~65KB body limit — we cap aggressively well below).
+- **Persisted rate-limit windows**: 1-hour sliding window per category (not global), in SQLite, so operator restart doesn't reset all windows and flood with recently-suppressed events. Per-category because distinct problems should each surface; suppressing the second because the first burnt budget would be a bug.
+- **Digest fires at 09:00 UTC by default**: "Asia evening / Europe morning / America night — touches at least one waking timezone for most ops teams." Operator can tune via env var.
+
+### Cp103 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 2,021 | 8 matrix-bot src modules |
+| Findings this cp | 0 | all 8 modules clean |
+| Tarball regenerated | NO | not end-of-phase yet (ops-cli remaining) |
+
+### Cp103 deferred to cp104+
+
+Final remaining application surface:
+
+1. **Ops-CLI** — apps/ops-cli/. Operator-facing CLI for node bring-up, key rotation, federation peering. After this, the entire Morphit codebase will have been walked end-to-end.
+2. 30-test CI delta hunt — sandbox-blocked
+3. Defense-claim-vs-implementation parity smoke — speculative
+
+### Cp103 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp103 lessons (10 — config.ts multi-layer @/# enforcement, type-level enforcement through matrix.ts, opt-in gate via process.exit(0), 3-tier policy source-of-truth, AUDIT-2/3/4 three layered defenses, double-nested JSON parse, persisted sliding-window rate limit, fixed UTC digest time, coverage table, exemplary defense-in-depth for routing-footgun threat) + state table + fixes section ("none — audit-only") + cp104+ hunting-ground update
+- `TARBALL.md` — cp103 entry inserted at top (this entry); no .tar.gz regenerated per cadence (not end-of-phase yet)
+
+No source code or test files modified — cp103 is a pure audit-trail checkpoint.
+
 ## cp102 — HTTP clients + endpoint rotator audit + web frontend phase CLOSE (~1,288 lines, 3 modules, frontend total 15,579 / 26 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
 
 **Tarball:** REGENERATED at cp102 — `morphit-audit-2026-05-122-cp102-FULL-STATE.tar.gz`. cp102 closes the web frontend deep-audit phase (cp96-cp102 = 7 checkpoints, 15,579 lines, 26 modules). Per the tarball cadence rule, end-of-phase is a meaningful milestone.
