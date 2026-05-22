@@ -4,19 +4,19 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp115-cp7 — 2026-05-22 (final cp115 state: 7-card FAQ-linked priorities + 2-row opposite-direction carousel + barter SVG + old home.points grid deleted).
+**Last touched:** cp116 — 2026-05-22 (queue execution: A15 mtime→content-hash, operator setup-wizard V1 with asset-disable + payment-method-add CLI emitter).
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (still **2,852 leaves × 10 = 28,520** after cp115-cp7 i18n churn: home.points grid REMOVED (−4×2 = −8 keys), home.coin_carousel ADDED (12), home.priorities expanded to full 7-card shape with shared keys (+19 net incl. card_aria_label + learn_more)).
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp115 have been docs/SEO/UX/CI hardening + 6 new structural defenses, no new audits
-- **43** structural defenses (cp115: logo-bling-invariants #41 with 5 scenarios, coin-carousel-invariants #42 expanded across cp1→cp2→cp6 from 6 → 9 → 13 scenarios, svelte-component-import-coverage #43 with 57 scenarios); **4,966/0** smoke battery (cp115-cp7 final); LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (**2,892 leaves × 10 = 28,920** after cp116 i18n diff: +27 keys per locale for the new operator setup-wizard — 25 `admin.setup_wizard.*` + 2 `seo.admin_setup_wizard.*` — × 10 locales)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp116 have been docs/SEO/UX/CI hardening + 6 new structural defenses + operator setup-wizard V1, no new audits
+- **43** structural defenses (cp116: no new files; og-image-freshness #40 expanded from 6→7 scenarios with content-hash sidecar + builder-source-grep guard); **4,969/0** smoke battery; LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108–cp115 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp115-cp7 final total: 243 new auto-translated strings across 9 non-EN locales: 8 carousel keys + 19 priorities keys × 9 locales, minus 5 network labels × 9 that are invariant and allow-listed)
+1. Native-speaker polish of all auto-translated non-EN content from cp108–cp116 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp116 grand total: ~486 strings across 9 non-EN locales awaiting native review)
 2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
 **Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
@@ -45,6 +45,41 @@
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
 **Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115-cp7 is a clear meaningful milestone (3 new user-facing surfaces complete, old grid retired, 6 new structural-defense scenarios shipped, FAQ deep-linking + hover/click UX, all i18n covered).
+
+---
+
+## cp116 — queue execution: A15 mtime→content-hash sidecar fix + operator setup-wizard V1 (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp116-FULL-STATE.tar.gz` built this turn (Ken's queue: "do all of it that you can, in the order you feel is best").
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity **2,892 × 10 = 28,920** (cp116 net +400 strings via the new setup-wizard) · **4,969/0** local smoke battery · 7/7 TS-clean · **43 defenses** (no new files; #40 og-image-freshness expanded from 6→7 scenarios with content-hash sidecar + builder-source guard) · 1,381 vitest passing.
+
+**What shipped:**
+
+1. **A15 fix** — `apps/web/scripts/og-image-freshness-smoke.ts` I-3 converted from mtime to content-hash sidecar. `scripts/build-og-image-png.sh` now writes `apps/web/static/og-image.png.svg-sha256` at build time. New I-7 scenario verifies builder source still contains both `.svg-sha256` and `sha256sum` patterns. Self-tested by 1-char sidecar corruption — caught.
+
+2. **Operator setup-wizard V1** — new route `apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte`, registered in `apps/web/src/lib/seo/routes.ts` with `indexable: false`. Read-only config-generator: Section 1 emits `MORPHIT_INDEXER_DISABLED_ASSETS=...` env line (BTC/XMR/BLURT locked per core-3 memory rule); Section 2 emits POSIX-safe shell-escaped `morphit-ops payment-method add ...` CLI command (client-side validation mirrors ops-cli RESERVED_KEYS + KEY_PATTERN + https-only URL rules); Section 3 honest-disclosure aside about read_only/no_auth/restart_required limitations. Copy-to-clipboard with 2-second feedback.
+
+3. **i18n diff** — 25 `admin.setup_wizard.*` keys + 2 `seo.admin_setup_wizard.*` keys × 10 locales = 270 new strings. 243 in 9 non-EN locales are auto-translation quality, added to the cp108-cp116 translation-quality flag (grand total ~486 strings awaiting native review).
+
+4. **i18n-translation-completeness allow-list extended** — 3 entries for legitimate same-spelling cases: "Online" (de), "Crypto" (fr), "Description" (fr).
+
+5. **A1/A14 deferred** — source not recoverable from transcripts; filed for Ken to clarify what those cp113 findings were if hardening is still wanted.
+
+6. **SVG sprite-sheet deferred** — honest pushback to Ken: lazy-loading + per-file Vite caching already do most of the work; sprite-sheet regresses cold-visit cost and ages worse than current architecture. Ken's call queued.
+
+**Memory facts (re-confirmed for the new session):**
+- `@agorise:matrix.org` = private DM MXID for security disclosure
+- `#agorise:matrix.org` = public Matrix room alias (advertised in FAQ footer, `/support`, several FAQ answers)
+- Treasury account is `@morphit-fees`; official posting account is `@morphit`
+- BLURT-paid listing fees: 90/10 split (operator/treasury), paid in BLURT directly to operator's payout address
+- BTC- and XMR-paid listing fees: 100% to project treasury, 0% to operators (BLURT splits atomically on-chain; BTC/XMR would require off-chain custodial bookkeeping — design tradeoff)
+- BLURT-paid path is 50% cheaper for users (deliberate incentive)
+- Forgejo, never Gitea — repo at `git.agorise.net/agorise/morphit`
+- Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
+- BTC/XMR/BLURT are non-disableable as a memory rule (federation depends on them); the indexer doesn't enforce this in code, only in the new setup-wizard UI
+
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp116 is a clear meaningful milestone: A15 audit-finding fix shipped + new operator-facing route + 270 new i18n strings + battery green.
 
 ---
 

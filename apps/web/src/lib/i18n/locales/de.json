@@ -1511,6 +1511,10 @@
 		"privacy_asset": {
 			"title": "{asset}-Datenschutzleitfaden — Morphit",
 			"description": "So schützt du deine Privatsphäre beim Peer-to-Peer-Handel mit {asset} auf Morphit. Adressrotation, Betrags-Jitter und chainspezifische Privacy-Techniken."
+		},
+		"admin_setup_wizard": {
+			"title": "Betreiber-Einrichtungsassistent — Morphit",
+			"description": "Generieren Sie Konfigurationszeilen und CLI-Befehle, um diese Morphit-Instanz anzupassen. Nur-Lesen — fügen Sie die Ausgabe in Ihre morphit.env-Datei oder Ihr Terminal ein."
 		}
 	},
 	"prices": {
@@ -3952,6 +3956,54 @@
 				"intro": "Ripple (XRP) startete 2012 als zahlungsorientierte Kryptowährung.  XRPL verwendet Federated-Byzantine-Agreement-Konsens (FBA) — Validierer auf einer Unique Node List (UNL) einigen sich auf die Transaktionsreihenfolge.  Die Standard-UNL wird von der XRP Ledger Foundation (gemeinnützig) veröffentlicht, wobei die gewinnorientierte Ripple Labs Inc. die Validatorenauswahl historisch beeinflusst hat.  Natives XRP kann von keiner zentralen Autorität eingefroren werden — das Freeze-Flag auf XRPL gilt nur für ausgegebene Tokens (IOUs), nicht für natives XRP.\n\nDie Chain ist auf der Basisebene transparent — Sender, Empfänger, Betrag und Destination-Tag (falls vorhanden) sind alle on-chain wie bei Bitcoin sichtbar.  XRPL hat kein natives Mixing auf Protokollebene.  Nutzer, die Privatsphäre auf Transaktionsebene wollen, verlassen sich auf Wallet-seitige Adressrotation (Ableitung einer frischen Adresse pro Trade aus dem HD-Seed) und Off-Chain-Koordination — die nachstehenden Praktiken decken ab, was du kontrollieren kannst.",
 				"meta_description": "Datenschutz-Praktiken für Ripple-(XRP)-Handel auf Morphit: XRPL-FBA-Konsens, transparente Basisebene, Destination-Tag erklärt.",
 				"caveats": "XRPL ist auf der Basisebene transparent ohne natives Mixing-Protokoll.\n\n- **Teile pro Trade frische Adressen.**  Dieselbe XRPL-Adresse über mehrere Morphit-Inserate hinweg zu verwenden, ermöglicht Beobachtern, deine Aufträge auf einer vollständig transparenten Chain zu korrelieren.  Erzeuge pro Trade eine frische Empfängeradresse — moderne XRPL-Wallets (Xaman, Crossmark, Bifrost) leiten diese aus deinem HD-Seed ab und lassen dich neue Konten in Sekunden anlegen.\n- **Destination-Tags sind kein Datenschutzmerkmal — sie sind eine Kennung.**  Wenn deine Gegenpartei nach einem Destination-Tag fragt und du eines lieferst, ist dieses Tag on-chain sichtbar und kann zur Korrelation von Transaktionen verwendet werden.  Für P2P-Trades wird das Destination-Tag in der Regel überhaupt nicht benötigt.  Füge ein Destination-Tag nur dann hinzu, wenn die Empfängeradresse ein von einer Börse gehostetes Omnibus-Wallet ist, das es zur Weiterleitung benötigt.\n- **Die Reserve-Anforderung erzeugt Sichtbarkeit der Kontoerstellung.**  Dein erstes eingehendes XRP muss ≥1 XRP sein (die Basis-Reserve).  Die on-chain `Payment`-Transaktion, die ein neues Konto finanziert, ist öffentlich als Kontoaktivierung sichtbar — ein stärkeres Korrelationssignal als eine reguläre Zahlung an ein bereits bestehendes Konto.  Wenn das Reduzieren dieses Signals wichtig ist, finanziere die Empfängeradresse zuerst selbst (von einem bereits gemischten/getrennten Konto) und teile sie erst danach.\n- **Datenschutz auf Netzwerkebene zählt weiterhin.**  Eine Übertragung über Tor oder den Privacy-Modus deines Wallets hält deine Heim-IP aus der Sicht der Chain heraus.\n- **XRPL-RPC-Anbieter können korrelieren.**  Dein Wallet spricht mit einem XRPL-RPC-Endpunkt (xrplcluster.com, der von Ripple oder ein selbst gehosteter rippled-Node) — dieser Anbieter sieht jede Transaktion, die du signierst.  Das Selbst-Hosting eines rippled-Nodes oder das Rotieren zwischen Anbietern reduziert die Angriffsfläche.\n- **Konsens-Set-Konzentration ist eine bekannte Eigenschaft.**  Die Standard-UNL wird von der XRP Ledger Foundation veröffentlicht; das Betreiben eines eigenen Validators mit einer benutzerdefinierten UNL wird unterstützt, ist aber unüblich.  Für Morphits Zwecke betrifft das Zensurresistenz-Überlegungen (eine koordinierte UNL könnte sich weigern, Transaktionen aufzunehmen) mehr als die Transaktionsprivatsphäre.  Dokumentiere und entscheide nach deinem Threat-Model.\n- **X-Adressen werden derzeit nicht als Empfangsformat unterstützt.**  XRPL hat ein neueres „X-Address\"-Format (XLS-5d), das das Destination-Tag in die Adresse selbst packt — Xaman/Xumm, Crossmark, Bifrost und GemWallet parsen sie alle.  Morphit akzeptiert derzeit nur klassische `r`-präfixierte Adressen; wenn deine Gegenpartei nach einer X-Adresse fragt, teile deine klassische Adresse und das Destination-Tag separat.  Das Hinzufügen von X-Address-Unterstützung steht auf der Post-Launch-Verbesserungsliste."
+			}
+		}
+	},
+	"admin": {
+		"setup_wizard": {
+			"eyebrow": "Betreiber-Einrichtungsassistent",
+			"heading": "Konfigurieren Sie Ihre Instanz",
+			"intro": "Dieser Assistent hilft Ihnen, die Konfigurationszeilen und CLI-Befehle zu generieren, die Sie benötigen, um diese Morphit-Instanz anzupassen. Nichts auf dieser Seite verändert Ihren Server — Sie kopieren die Ausgabe in Ihre morphit.env-Datei oder Ihr Terminal und starten dann Ihre Dienste neu.",
+			"copy_button": "Kopieren",
+			"copy_button_aria": "Generierte Ausgabe in die Zwischenablage kopieren",
+			"copied": "Kopiert",
+			"assets": {
+				"heading": "Gelistete Assets",
+				"intro": "Wählen Sie aus, welche Krypto-Assets Ihre Instanz zum Handel listet. BTC, XMR und BLURT sind immer aktiviert — die Föderation hängt davon ab.",
+				"legend_sr": "Auswahl zum Aktivieren/Deaktivieren handelbarer Assets",
+				"output_heading": "Fügen Sie diese Zeile zu Ihrer morphit.env-Datei hinzu",
+				"output_subtitle": "Starten Sie dann den Indexer-Dienst neu: `docker compose restart indexer`",
+				"locked_label": "Erforderlich",
+				"locked_title": "Die Föderation hängt von diesem Asset ab — Betreiber können es nicht deaktivieren"
+			},
+			"payment": {
+				"heading": "Eine benutzerdefinierte Zahlungsmethode hinzufügen",
+				"intro": "Wenn in Ihrer Region eine Zahlungsmethode verwendet wird, die wir nicht zur kanonischen Liste hinzugefügt haben, können Sie sie als instanzspezifische Ergänzung veröffentlichen. Andere Instanzen sehen sie mit dem Namen dieser Instanz versehen.",
+				"key_label": "Maschinenschlüssel",
+				"key_help": "Nur Kleinbuchstaben, Ziffern und Unterstriche. Maximal 32 Zeichen. Nach dem Senden ist er dauerhaft — Aufträge verweisen für immer darauf.",
+				"key_error_too_long": "Maximal 32 Zeichen",
+				"key_error_format": "Nur Kleinbuchstaben, Ziffern und Unterstriche",
+				"key_error_reserved": "Schlüssel kollidiert mit einer kanonischen Methode — wählen Sie einen anderen",
+				"name_label": "Anzeigename",
+				"name_help": "Der für Nutzer sichtbare Name. Normalerweise ein Markenname — nicht übersetzen.",
+				"description_label": "Beschreibung",
+				"description_help": "Ein oder zwei Sätze. Nutzer sehen das bei der Auswahl von Zahlungsmethoden.",
+				"category_label": "Kategorie",
+				"category_online": "Online",
+				"category_in_person": "Persönlich",
+				"category_crypto": "Krypto",
+				"url_label": "Webseite (optional)",
+				"url_help": "Muss mit https:// beginnen",
+				"url_error_format": "Muss eine https://-URL sein",
+				"output_heading": "Führen Sie diesen Befehl auf Ihrem Server aus",
+				"output_subtitle": "Fügen Sie dies vom Verzeichnis aus, in dem Sie Morphit installiert haben, in Ihr Terminal ein. Sie werden nach dem Pfad zur Posting-Key-Datei gefragt.",
+				"output_pending": "Füllen Sie oben die Felder Schlüssel, Name, Beschreibung und Kategorie aus, um den Befehl zu generieren."
+			},
+			"disclosure": {
+				"heading": "Was dieser Assistent leistet und was nicht",
+				"read_only": "Nur-Lese: Diese Seite generiert Konfigurations- und CLI-Text, verändert aber niemals Ihren Server. Nichts ändert sich, bis Sie die Ausgabe einfügen und selbst anwenden.",
+				"no_auth": "Offener Zugang: Diese Seite erfordert keine Anmeldung, da sie nichts verändert. Jeder kann sie besuchen. Wenn das nicht erwünscht ist, schützen Sie sie hinter der Authentifizierung Ihres Reverse Proxys.",
+				"restart_required": "Dienst-Neustart erforderlich: Nach dem Bearbeiten von morphit.env starten Sie den Indexer-Dienst neu, damit die Änderung wirksam wird. Das Zahlungsmethoden-CLI sendet sofort an die Chain — dafür ist kein Neustart erforderlich."
 			}
 		}
 	}

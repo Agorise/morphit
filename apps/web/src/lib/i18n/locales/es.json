@@ -1511,6 +1511,10 @@
 		"privacy_asset": {
 			"title": "Guía de privacidad de {asset} — Morphit",
 			"description": "Cómo proteger tu privacidad al intercambiar {asset} entre particulares en Morphit. Rotación de direcciones, jitter de cantidades y técnicas de privacidad específicas de cada cadena."
+		},
+		"admin_setup_wizard": {
+			"title": "Asistente de configuración para operadores — Morphit",
+			"description": "Genera líneas de configuración y comandos CLI para personalizar esta instancia de Morphit. Solo lectura — pega la salida en tu archivo morphit.env o terminal."
 		}
 	},
 	"prices": {
@@ -3952,6 +3956,54 @@
 				"intro": "Ripple (XRP) se lanzó en 2012 como una criptomoneda enfocada en pagos.  XRPL usa consenso Federated Byzantine Agreement (FBA) — los validadores en una Unique Node List (UNL) llegan a un acuerdo sobre el ordenamiento de transacciones.  La UNL predeterminada es publicada por la XRP Ledger Foundation (sin fines de lucro) con Ripple Labs Inc. (con fines de lucro) influyendo históricamente en la selección de validadores.  XRP nativo no puede ser congelado por ninguna autoridad central — la bandera freeze en XRPL solo aplica a tokens emitidos (IOUs), no a XRP nativo.\n\nLa cadena es transparente en la capa base — remitente, destinatario, monto y destination tag (si está presente) son todos visibles en cadena como en Bitcoin.  XRPL no tiene mixing nativo a nivel de protocolo.  Los usuarios que quieren privacidad a nivel de transacción dependen de la rotación de direcciones del lado de la cartera (derivando una dirección nueva por operación desde su semilla HD) y de la coordinación fuera de cadena — las prácticas siguientes cubren lo que puedes controlar.",
 				"meta_description": "Prácticas de privacidad para operaciones de Ripple (XRP) en Morphit: consenso FBA de XRPL, capa base transparente, destination tag explicado.",
 				"caveats": "XRPL es transparente en la capa base sin protocolo de mixing nativo.\n\n- **Comparte direcciones nuevas por operación.**  Usar la misma dirección de XRPL en múltiples publicaciones de Morphit permite a los observadores correlacionar tus órdenes en una cadena totalmente transparente.  Genera una dirección de recepción nueva por operación — las carteras modernas de XRPL (Xaman, Crossmark, Bifrost) las derivan de tu semilla HD y te permiten crear nuevas cuentas en segundos.\n- **Los destination tags no son una característica de privacidad — son un identificador.**  Si tu contraparte pide un destination tag y se lo proporcionas, ese tag es visible en cadena y puede usarse para correlacionar transacciones.  Para operaciones P2P, el destination tag normalmente no es necesario en absoluto.  Solo incluye un destination tag cuando la dirección receptora es una cartera omnibus alojada en un exchange que lo requiere para el enrutamiento.\n- **El requisito de reserva crea visibilidad de creación de cuenta.**  Tu primer XRP entrante debe ser ≥1 XRP (la reserva base).  La transacción `Payment` en cadena que financia una cuenta nueva es públicamente visible como activación de cuenta, lo cual es una señal de correlación más fuerte que un pago regular a una cuenta ya existente.  Si reducir esta señal importa, financia la dirección receptora tú mismo primero (desde una cuenta que ya esté mezclada/separada) y solo después compártela.\n- **La privacidad a nivel de red sigue importando.**  Transmitir a través de Tor o del modo de privacidad de tu cartera mantiene tu IP de casa fuera de la vista de la cadena.\n- **Los proveedores de RPC de XRPL pueden correlacionar.**  Tu cartera habla con un endpoint RPC de XRPL (xrplcluster.com, el de Ripple, o un nodo rippled auto-alojado) — ese proveedor ve cada transacción que firmas.  Auto-alojar un nodo rippled, o rotar entre proveedores, reduce la superficie de ataque.\n- **La concentración del conjunto de consenso es una propiedad conocida.**  La UNL predeterminada es publicada por la XRP Ledger Foundation; ejecutar tu propio validador con una UNL personalizada está soportado pero es poco común.  Para los propósitos de Morphit esto afecta las consideraciones de resistencia a la censura (una UNL coordinada podría negarse a incluir transacciones) más que a la privacidad de transacción.  Documenta y decide según tu modelo de amenazas.\n- **Las X-addresses no están actualmente soportadas como formato de recepción.**  XRPL tiene un formato \"X-address\" más nuevo (XLS-5d) que empaqueta el destination tag dentro de la propia dirección — Xaman/Xumm, Crossmark, Bifrost y GemWallet las analizan todas.  Morphit actualmente solo acepta direcciones clásicas con prefijo `r`; si tu contraparte pide una X-address, comparte tu dirección clásica y el destination tag por separado.  Añadir soporte de X-address está en la lista de mejoras post-lanzamiento."
+			}
+		}
+	},
+	"admin": {
+		"setup_wizard": {
+			"eyebrow": "Asistente de configuración para operadores",
+			"heading": "Configura tu instancia",
+			"intro": "Este asistente te ayuda a generar las líneas de configuración y los comandos CLI que necesitas para personalizar esta instancia de Morphit. Nada en esta página modifica tu servidor — copiarás la salida en tu archivo morphit.env o en tu terminal y luego reiniciarás tus servicios.",
+			"copy_button": "Copiar",
+			"copy_button_aria": "Copiar la salida generada al portapapeles",
+			"copied": "Copiado",
+			"assets": {
+				"heading": "Activos listados",
+				"intro": "Elige qué criptoactivos lista tu instancia para operar. BTC, XMR y BLURT están siempre habilitados — la federación depende de ellos.",
+				"legend_sr": "Selección de habilitar/deshabilitar activos negociables",
+				"output_heading": "Añade esta línea a tu archivo morphit.env",
+				"output_subtitle": "Luego reinicia el servicio del indexador: `docker compose restart indexer`",
+				"locked_label": "Requerido",
+				"locked_title": "La federación depende de este activo — los operadores no pueden deshabilitarlo"
+			},
+			"payment": {
+				"heading": "Añadir un método de pago personalizado",
+				"intro": "Si tu región usa un método de pago que no hemos añadido a la lista canónica, puedes publicarlo como una adición específica de la instancia. Otras instancias lo verán etiquetado con el nombre de esta instancia.",
+				"key_label": "Clave de máquina",
+				"key_help": "Solo letras minúsculas, dígitos y guiones bajos. Máximo 32 caracteres. Es permanente una vez emitido — las órdenes lo referenciarán para siempre.",
+				"key_error_too_long": "Máximo 32 caracteres",
+				"key_error_format": "Solo letras minúsculas, dígitos y guiones bajos",
+				"key_error_reserved": "La clave colisiona con un método canónico — elige una diferente",
+				"name_label": "Nombre visible",
+				"name_help": "El nombre que ven los usuarios. Normalmente un nombre de marca — no lo traduzcas.",
+				"description_label": "Descripción",
+				"description_help": "Una o dos frases. Los usuarios la ven al elegir métodos de pago.",
+				"category_label": "Categoría",
+				"category_online": "En línea",
+				"category_in_person": "En persona",
+				"category_crypto": "Cripto",
+				"url_label": "Sitio web (opcional)",
+				"url_help": "Debe empezar por https://",
+				"url_error_format": "Debe ser una URL https://",
+				"output_heading": "Ejecuta este comando en tu servidor",
+				"output_subtitle": "Desde el directorio donde instalaste Morphit, pega esto en tu terminal. Se te pedirá la ruta del archivo de la clave de publicación.",
+				"output_pending": "Rellena los campos de clave, nombre, descripción y categoría para generar el comando."
+			},
+			"disclosure": {
+				"heading": "Lo que este asistente hace y no hace",
+				"read_only": "Solo lectura: esta página genera texto de configuración y CLI pero nunca modifica tu servidor. Nada cambia hasta que tú mismo pegues la salida y la apliques.",
+				"no_auth": "Acceso abierto: esta página no requiere inicio de sesión porque no modifica nada. Cualquiera puede visitarla. Si eso no es lo que quieres, colócala detrás de la autenticación de tu reverse proxy.",
+				"restart_required": "Se requiere reinicio del servicio: después de editar morphit.env, reinicia el servicio del indexador para que el cambio surta efecto. El CLI de método de pago emite a la cadena de inmediato — no se requiere reinicio para eso."
 			}
 		}
 	}

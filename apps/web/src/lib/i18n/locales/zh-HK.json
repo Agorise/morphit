@@ -1511,6 +1511,10 @@
 		"privacy_asset": {
 			"title": "{asset} 私隱指南 — Morphit",
 			"description": "在 Morphit 上點對點交易 {asset} 時如何保護你的私隱。地址輪換、金額抖動以及鏈特定的私隱技術。"
+		},
+		"admin_setup_wizard": {
+			"title": "營運者設置嚮導 — Morphit",
+			"description": "生成配置行同 CLI 命令以自訂呢個 Morphit 實例。只讀 — 將輸出貼到 morphit.env 檔案或終端機。"
 		}
 	},
 	"prices": {
@@ -3952,6 +3956,54 @@
 				"intro": "Ripple (XRP) 於 2012 年作為以支付為中心的加密貨幣推出。XRPL 使用 Federated Byzantine Agreement (FBA) 共識——Unique Node List (UNL) 上的驗證者就交易順序達成一致。預設 UNL 由非營利的 XRP Ledger Foundation 發布，而營利性的 Ripple Labs Inc. 歷史上對驗證者選擇有影響。原生 XRP 無法被任何中央機構凍結——XRPL 上的 freeze 標誌僅適用於發行的代幣 (IOU)，不適用於原生 XRP。\n\n該鏈在基礎層是透明的——發送方、接收方、金額和 destination tag（如有）全部像 Bitcoin 一樣在鏈上可見。XRPL 沒有原生的協議級混幣。需要交易級私隱的用戶依賴錢包側的地址輪換（從自己的 HD 種子為每筆交易派生新地址）和鏈下協調——下面的實踐涵蓋了你可以控制的部分。",
 				"meta_description": "Morphit 上 Ripple (XRP) 交易的私隱實踐：XRPL FBA 共識、透明基礎層、destination tag UX、儲備金要求和 RPC 提供商考量。",
 				"caveats": "XRPL 在基礎層是透明的，沒有原生混幣協議。\n\n- **每筆交易共享新鮮地址。**在多個 Morphit 上架訂單中使用相同的 XRPL 地址會讓觀察者在完全透明的鏈上將你的訂單關聯起來。為每筆交易生成新的接收地址——現代 XRPL 錢包（Xaman、Crossmark、Bifrost）從你的 HD 種子派生這些地址，並讓你在幾秒鐘內創建新帳戶。\n- **目的標籤不是私隱功能——它是一個識別符。**如果對手方要求目的標籤而你提供了，該標籤在鏈上可見，可被用於關聯交易。對於 peer-to-peer 交易，通常根本不需要目的標籤。僅當接收地址是要求目的標籤進行路由的交易所託管 omnibus 錢包時，才包含目的標籤。\n- **儲備要求會產生帳戶創建可見性。**你的首次 XRP 接收必須 ≥1 XRP（基礎儲備）。資助新帳戶的鏈上 `Payment` 交易作為帳戶激活公開可見，這是比對已存在帳戶的常規支付更強的關聯信號。如果減少這個信號很重要，請先自己（從已混幣/分離的帳戶）資助接收地址，然後再分享它。\n- **網絡層私隱仍然重要。**通過 Tor 或錢包的私隱模式廣播交易，可以讓你的家庭 IP 不出現在鏈對你的視野中。\n- **XRPL RPC 提供商可以關聯。**你的錢包與 XRPL RPC 端點（xrplcluster.com、Ripple 的或自託管 rippled 節點）通信——該提供商會看到你簽名的每筆交易。自託管 rippled 節點或在提供商之間輪換可以減少攻擊面。\n- **共識集集中度是已知屬性。**預設的 UNL (Unique Node List) 由 XRP Ledger Foundation 發布；運行自己的驗證者使用自定義 UNL 是支援的但不常見。對 Morphit 的目的而言，這更多影響抗審查考慮（協調的 UNL 可能拒絕包含交易），而非交易私隱。基於你的威脅模型記錄並決定。\n- **X-地址目前不作為接收格式被支援。**XRPL 有一種較新的\"X-address\"格式 (XLS-5d) 將目的標籤捆綁進地址本身——Xaman/Xumm、Crossmark、Bifrost 和 GemWallet 都解析它們。Morphit 目前只接受經典 `r` 前綴地址；如果對手方要求 X-地址，請改為分別分享你的經典地址和目的標籤。添加 X-地址支援在發布後增強列表上。"
+			}
+		}
+	},
+	"admin": {
+		"setup_wizard": {
+			"eyebrow": "營運者設置嚮導",
+			"heading": "配置你嘅實例",
+			"intro": "此嚮導幫你生成自訂呢個 Morphit 實例所需嘅配置行同 CLI 命令。呢頁唔會修改你嘅伺服器 — 你會將輸出複製到 morphit.env 檔案或終端機,然後重啟服務。",
+			"copy_button": "複製",
+			"copy_button_aria": "複製生成嘅輸出去剪貼簿",
+			"copied": "已複製",
+			"assets": {
+				"heading": "已上架資產",
+				"intro": "揀邊啲加密資產喺你嘅實例上架交易。BTC、XMR 同 BLURT 永遠啟用 — 聯邦依賴佢哋。",
+				"legend_sr": "可交易資產啟用/停用選擇",
+				"output_heading": "將呢行加到 morphit.env 檔案",
+				"output_subtitle": "然後重啟索引器服務: `docker compose restart indexer`",
+				"locked_label": "必需",
+				"locked_title": "聯邦依賴呢個資產 — 營運者唔可以停用佢"
+			},
+			"payment": {
+				"heading": "添加自訂付款方式",
+				"intro": "如果你嘅地區使用咗我哋未加入規範清單嘅付款方式,你可以將佢作為實例特定嘅擴展發佈。其他實例會見到佢被標記為呢個實例嘅名。",
+				"key_label": "機器鍵",
+				"key_help": "只有細楷字母、數字同底線。最多 32 個字元。一經廣播即為永久 — 訂單會永遠引用佢。",
+				"key_error_too_long": "最多 32 個字元",
+				"key_error_format": "只有細楷字母、數字同底線",
+				"key_error_reserved": "個鍵同規範方式衝突 — 揀第二個",
+				"name_label": "顯示名稱",
+				"name_help": "用戶可見嘅名。通常係品牌名 — 唔好翻譯。",
+				"description_label": "說明",
+				"description_help": "一到兩句說話。用戶喺揀付款方式嗰陣會見到。",
+				"category_label": "類別",
+				"category_online": "線上",
+				"category_in_person": "當面",
+				"category_crypto": "加密",
+				"url_label": "網站(選填)",
+				"url_help": "必須以 https:// 開始",
+				"url_error_format": "必須係 https:// URL",
+				"output_heading": "喺你嘅伺服器執行呢個命令",
+				"output_subtitle": "喺你裝咗 Morphit 嘅目錄入面,將呢個貼喺終端機。系統會提示你輸入 posting key 檔案路徑。",
+				"output_pending": "填寫上面嘅鍵、名稱、說明同類別欄位嚟生成命令。"
+			},
+			"disclosure": {
+				"heading": "呢個嚮導做乜同唔做乜",
+				"read_only": "只讀: 呢頁生成配置同 CLI 文字,但永遠唔會修改你嘅伺服器。喺你自己貼上同套用輸出之前,冇嘢會改變。",
+				"no_auth": "開放訪問: 呢頁唔需要登入,因為佢冇修改任何嘢。任何人都可以訪問。如果你唔想咁,將佢放喺你嘅反向代理嘅認證後面。",
+				"restart_required": "需要重啟服務: 編輯 morphit.env 後,重啟索引器服務令更改生效。付款方式 CLI 即時廣播到鏈上 — 唔需要重啟。"
 			}
 		}
 	}

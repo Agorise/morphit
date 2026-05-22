@@ -61,4 +61,15 @@ cairosvg.svg2png(
 PY
 
 bytes=$(wc -c <"$PNG" | tr -d ' ')
+
+# cp116 (A15 hardening) — write a sidecar file containing the SHA-256
+# of the SVG source.  The freshness smoke compares this against the
+# CURRENT SVG hash.  This is robust to git checkout (which resets
+# mtimes); content-hash matches iff the PNG was generated from THIS
+# version of the SVG.  See docs/REVISIT-LIST.md CP113 Lesson #3.
+SIDECAR="${PNG}.svg-sha256"
+SVG_HASH="$(sha256sum "$SVG" | awk '{print $1}')"
+echo "$SVG_HASH" >"$SIDECAR"
+
 echo "✓ regenerated ${PNG} (${bytes} bytes)"
+echo "✓ wrote sidecar ${SIDECAR} (svg sha256: ${SVG_HASH:0:16}...)"
