@@ -1008,6 +1008,11 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'assets.usdc.price_subline.live', locale: 'fa', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
 	{ key: 'assets.usdc.price_subline.live', locale: 'zh-CN', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
 	{ key: 'assets.usdc.price_subline.live', locale: 'zh-HK', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
+	// ─── cp116 setup-wizard same-spelling cases: short labels that
+	//     legitimately match English in some locales. ──────────────
+	{ key: 'admin.setup_wizard.payment.category_online', locale: 'de', reason: `(b) "Online" is the same word in German UI conventions; identical to EN by accepted usage` },
+	{ key: 'admin.setup_wizard.payment.category_crypto', locale: 'fr', reason: `(b) "Crypto" is the same word in French UI conventions; identical to EN by accepted usage` },
+	{ key: 'admin.setup_wizard.payment.description_label', locale: 'fr', reason: `(b) "Description" is the same word in French; identical to EN by spelling identity` },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

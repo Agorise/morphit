@@ -1511,6 +1511,10 @@
 		"privacy_asset": {
 			"title": "{asset} privacy guide — Morphit",
 			"description": "How to protect your privacy when trading {asset} peer-to-peer on Morphit. Address rotation, amount jitter, and chain-specific privacy techniques."
+		},
+		"admin_setup_wizard": {
+			"title": "Operator setup wizard — Morphit",
+			"description": "Generate config lines and CLI commands to customize this Morphit instance. Read-only — paste output into your morphit.env file or terminal."
 		}
 	},
 	"prices": {
@@ -3952,6 +3956,54 @@
 				"intro": "Ripple (XRP) launched in 2012 as a payment-focused cryptocurrency.  XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering.  The default UNL is published by the XRP Ledger Foundation (non-profit) with the for-profit Ripple Labs Inc. historically influencing validator selection.  Native XRP cannot be frozen by any central authority — the freeze flag on XRPL applies only to issued tokens (IOUs), not to native XRP.\n\nThe chain is transparent at the base layer — sender, recipient, amount, and destination tag (if present) are all visible on chain like Bitcoin.  XRPL has no native protocol-level mixing.  Users wanting transaction-level privacy rely on wallet-side address rotation (deriving a fresh address per trade from their HD seed) and off-chain coordination — the practices below cover what you can control.",
 				"meta_description": "Privacy practices for Ripple (XRP) trades on Morphit: XRPL FBA consensus, transparent base layer, destination tag UX, reserve requirement, and RPC provider considerations.",
 				"caveats": "XRPL is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same XRPL address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern XRPL wallets (Xaman, Crossmark, Bifrost) derive these from your HD seed and let you create new accounts in seconds.\n- **Destination tags are not a privacy feature — they're an identifier.**  If your counterparty asks for a destination tag and you supply one, that tag is visible on chain and can be used to correlate transactions.  For peer-to-peer trades the destination tag is typically not needed at all.  Only include a destination tag when the receiving address is an exchange-hosted omnibus wallet that requires one for routing.\n- **Reserve requirement creates account-creation visibility.**  Your first incoming XRP must be ≥1 XRP (the base reserve).  The on-chain `Payment` transaction that funds a new account is publicly visible as account activation, which is a stronger correlation signal than a regular payment to an already-existing account.  If reducing this signal matters, fund the receive address yourself first (from an account that's already mixed/separated) and only then share it.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **XRPL RPC providers can correlate.**  Your wallet talks to an XRPL RPC endpoint (xrplcluster.com, Ripple's, or a self-hosted rippled node) — that provider sees every transaction you sign.  Self-hosting a rippled node, or rotating between providers, reduces the surface area.\n- **Consensus-set concentration is a known property.**  The default UNL (Unique Node List) is published by the XRP Ledger Foundation; running your own validator with a custom UNL is supported but uncommon.  For Morphit's purposes this affects censorship-resistance considerations (a coordinated UNL could refuse to include transactions) more than transaction privacy.  Document and decide based on your threat model.\n- **X-addresses are not currently supported as a receive format.**  XRPL has a newer \"X-address\" format (XLS-5d) that bundles the destination tag into the address itself — Xaman/Xumm, Crossmark, Bifrost, and GemWallet all parse them.  Morphit currently accepts only classic `r`-prefixed addresses; if your counterparty asks for an X-address, share your classic address and the destination tag separately instead.  Adding X-address support is on the post-launch enhancements list."
+			}
+		}
+	},
+	"admin": {
+		"setup_wizard": {
+			"eyebrow": "Operator setup wizard",
+			"heading": "Configure your instance",
+			"intro": "This wizard helps you generate the configuration lines and CLI commands you need to customize this Morphit instance. Nothing on this page mutates your server — you'll copy the output into your morphit.env file or your terminal, then restart your services.",
+			"copy_button": "Copy",
+			"copy_button_aria": "Copy generated output to clipboard",
+			"copied": "Copied",
+			"assets": {
+				"heading": "Listed assets",
+				"intro": "Choose which crypto assets your instance lists for trading. BTC, XMR, and BLURT are always enabled — federation depends on them.",
+				"legend_sr": "Tradable asset enable/disable selection",
+				"output_heading": "Add this line to your morphit.env file",
+				"output_subtitle": "Then restart the indexer service: `docker compose restart indexer`",
+				"locked_label": "Required",
+				"locked_title": "Federation depends on this asset — operators cannot disable it"
+			},
+			"payment": {
+				"heading": "Add a custom payment method",
+				"intro": "If your region uses a payment method we haven't added to the canonical list, you can publish it as an instance-specific addition. Other instances will see it labeled with this instance's name.",
+				"key_label": "Machine key",
+				"key_help": "Lowercase letters, digits, underscores only. Maximum 32 characters. This is permanent once broadcast — orders will reference it forever.",
+				"key_error_too_long": "Maximum 32 characters",
+				"key_error_format": "Lowercase letters, digits, and underscores only",
+				"key_error_reserved": "Key collides with a canonical method — pick a different key",
+				"name_label": "Display name",
+				"name_help": "The user-facing name. Usually a brand name — don't translate it.",
+				"description_label": "Description",
+				"description_help": "One or two sentences. Users see this when choosing payment methods.",
+				"category_label": "Category",
+				"category_online": "Online",
+				"category_in_person": "In person",
+				"category_crypto": "Crypto",
+				"url_label": "Website (optional)",
+				"url_help": "Must start with https://",
+				"url_error_format": "Must be an https:// URL",
+				"output_heading": "Run this command on your server",
+				"output_subtitle": "From the directory where you installed Morphit, paste this into your terminal. You'll be prompted for the posting key file path.",
+				"output_pending": "Fill in the key, name, description, and category fields above to generate the command."
+			},
+			"disclosure": {
+				"heading": "What this wizard does and does not do",
+				"read_only": "Read-only: this page generates config and CLI text but never mutates your server. Nothing changes until you paste the output and apply it yourself.",
+				"no_auth": "Open access: this page has no login requirement because it never mutates anything. Anyone can visit it. If that's not what you want, place it behind your reverse proxy's auth.",
+				"restart_required": "Service restart required: after editing morphit.env, restart the indexer service so the change takes effect. The payment-method CLI broadcasts to chain immediately — no restart needed for that."
 			}
 		}
 	}

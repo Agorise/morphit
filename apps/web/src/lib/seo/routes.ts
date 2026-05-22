@@ -143,6 +143,19 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	},
 	{ path: '/chat', key: 'chat_inbox', indexable: false, priority: 0.2, changefreq: 'yearly' },
 
+	// ─── Non-indexable: operator-only admin surfaces ──────────────
+	// Operator-facing config-generators.  Never useful in search
+	// results — operators arrive here from RUN-A-MORPHIT-NODE
+	// docs, not via Google.  Indexable: false keeps them out of
+	// sitemap.xml.
+	{
+		path: '/admin/setup-wizard',
+		key: 'admin_setup_wizard',
+		indexable: false,
+		priority: 0.1,
+		changefreq: 'yearly'
+	},
+
 	// ─── Non-indexable: explorer (data lookups, dynamic + index) ─
 	// The explorer surface is reachable via direct URL but its
 	// pages don't add indexable content (every block / tx / account
