@@ -7,7 +7,7 @@
  * looks up its data here.
  *
  * Adding a new coin to the frontend UI is a single-file change
- * (this file) plus an SVG logo bundled at static/coins/<lower
+ * (this file) plus an SVG logo bundled at static/icons/icon-<lower
  * ticker>.svg.
  *
  * IMPORTANT: this registry exists for UI rendering.  The
@@ -301,7 +301,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		displayTicker: 'XMR',
 		displayName: 'Monero',
 		oneLineDescription: 'Privacy-focused cryptocurrency.  Default and recommended on Morphit.',
-		logoSvgPath: '/coins/xmr.svg',
+		logoSvgPath: '/icons/icon-xmr.svg',
 		accentClass: 'text-orange-500',
 		decimals: 12,
 		supportsMemo: false, // Subaddresses replace payment-IDs in modern XMR
@@ -317,7 +317,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		displayTicker: 'BTC',
 		displayName: 'Bitcoin',
 		oneLineDescription: 'The original cryptocurrency.  Recommend SegWit (bc1...) addresses.',
-		logoSvgPath: '/coins/btc.svg',
+		logoSvgPath: '/icons/icon-btc.svg',
 		accentClass: 'text-amber-500',
 		decimals: 8,
 		supportsMemo: false, // BTC doesn't carry transaction memos
@@ -333,7 +333,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		displayTicker: 'BLURT',
 		displayName: 'Blurt',
 		oneLineDescription: 'The chain Morphit coordinates on.  Used for network fees by default.',
-		logoSvgPath: '/coins/blurt.svg',
+		logoSvgPath: '/icons/icon-blurt.svg',
 		accentClass: 'text-morphit-emerald',
 		decimals: 3,
 		supportsMemo: true, // BLURT transfers carry a plaintext memo field
@@ -350,7 +350,7 @@ export const ASSETS: ReadonlyArray<AssetMetadata> = [
 		displayName: 'Tether',
 		oneLineDescription:
 			'Stablecoin pegged to USD.  Centrally controlled.  Trade-only — cannot pay listing fees.',
-		logoSvgPath: '/coins/usdt.svg',
+		logoSvgPath: '/icons/icon-usdt.svg',
 		// Amber to mirror the privacy-warning chip's visual treatment.
 		// Distinguishes USDT from BTC's amber (BTC is amber-500;
 		// USDT is amber-400 — slightly lighter to read as "warning"

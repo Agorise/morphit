@@ -8,6 +8,8 @@
 	import Head from '$components/Head.svelte';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
+	import CoinCarousel from '$components/CoinCarousel.svelte';
+	import PrioritiesSection from '$components/PrioritiesSection.svelte';
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
 
@@ -195,34 +197,15 @@
 			</div>
 		</section>
 
-		<section class="mt-16 grid gap-4 sm:grid-cols-3">
-			<div
-				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
-			>
-				<img src="/icons/icon-btc.svg" alt="Bitcoin" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
-				<div>
-					<p class="font-display text-lg font-bold">Bitcoin</p>
-					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.btc')}</p>
-				</div>
-			</div>
-			<div
-				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
-			>
-				<img src="/icons/icon-xmr.svg" alt="Monero" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
-				<div>
-					<p class="font-display text-lg font-bold">Monero</p>
-					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.xmr')}</p>
-				</div>
-			</div>
-			<div
-				class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 dark:border-ink-800 dark:bg-ink-900"
-			>
-				<img src="/icons/icon-blurt.svg" alt="Blurt" class="h-12 w-12 flex-none" loading="lazy" decoding="async" />
-				<div>
-					<p class="font-display text-lg font-bold">Blurt</p>
-					<p class="text-sm text-ink-500">{$_('home.asset_subtitles.blurt')}</p>
-				</div>
-			</div>
-		</section>
+		<!-- Four cards bragging about Morphit's design priorities
+		     (privacy / decentralization / grandma-friendly / tiny
+		     footprint).  Complements the user-facing 4-point grid
+		     above; this surface targets operators + skeptics. -->
+		<PrioritiesSection />
+
+		<!-- Below-the-fold: carousel of supported assets + 5 settlement
+		     networks + barter, lazy-mounted via IntersectionObserver,
+		     lazy-loaded images. -->
+		<CoinCarousel />
 	</div>
 </section>

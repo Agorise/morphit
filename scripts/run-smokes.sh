@@ -226,6 +226,9 @@ SMOKES=(
 	".:brag-list-claim-parity-smoke"
 	".:seo-url-consistency-smoke"
 	"apps/web:og-image-freshness-smoke"
+	"apps/web:logo-bling-invariants-smoke"
+	"apps/web:coin-carousel-invariants-smoke"
+	"apps/web:svelte-component-import-coverage-smoke"
 )
 
 total=0

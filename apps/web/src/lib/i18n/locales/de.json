@@ -513,10 +513,44 @@
 		"returning_user_link": "Anmelden",
 		"networks_heading": "Vier Netzwerke, ein Morphit.",
 		"networks_body": "Dieselbe Seite, derselbe Code, vier Wege dorthin. Wenn ein Weg blockiert ist, funktioniert ein anderer.",
-		"asset_subtitles": {
-			"btc": "das größte Netzwerk",
-			"xmr": "privat by design",
-			"blurt": "sozial, ohne Gas-Gebühren"
+		"coin_carousel": {
+			"aria_label": "Unterstützte Werte",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Arbitrum-Netzwerk",
+				"base": "Base",
+				"base_sr": "Base-Netzwerk",
+				"bep20": "BEP-20",
+				"bep20_sr": "BEP-20-Netzwerk",
+				"polygon": "Polygon",
+				"polygon_sr": "Polygon-Netzwerk",
+				"trc20": "TRC-20",
+				"trc20_sr": "TRC-20-Netzwerk"
+			},
+			"barter": {
+				"label": "Tauschhandel",
+				"sr": "Tauschhandel (direkte Waren oder Dienstleistungen)"
+			}
+		},
+		"priorities": {
+			"eyebrow": "Unsere Prioritäten",
+			"heading": "Worauf Morphit aufgebaut ist",
+			"privacy": {
+				"title": "Privatsphäre zuerst",
+				"body": "Kein KYC, keine E-Mail, keine Telefonnummer. Schlüssel werden auf deinem Gerät erzeugt; nichts über dich verlässt es, außer du wählst es so."
+			},
+			"decentralization": {
+				"title": "Aufhaltbar nach Design",
+				"body": "Die Föderation läuft über die öffentliche Blurt-Kette. Kein zentraler Server kann vorgeladen werden. Jeder kann einen Knoten betreiben."
+			},
+			"grandma": {
+				"title": "Oma-tauglich",
+				"body": "Nutzbar von Menschen, die noch nie mit Krypto zu tun hatten. Ist ein Schritt unklar, erklären wir ihn inline — keine Jargon-Mauern."
+			},
+			"tiny_footprint": {
+				"title": "Winziger Fußabdruck",
+				"body": "Lädt schnell auf jedem Gerät und jeder Bandbreite. Selbst-hosten eines Knotens auf einem 5 $/Monat-VPS. Lazy-loaded, bilderarm, bytebewusst."
+			}
 		}
 	},
 	"onboarding": {

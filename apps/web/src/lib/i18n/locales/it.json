@@ -513,10 +513,44 @@
 		"returning_user_link": "Accedi",
 		"networks_heading": "Quattro reti, un solo Morphit.",
 		"networks_body": "Stesso sito, stesso codice, quattro modi per raggiungerlo. Se una via è bloccata, un'altra funziona.",
-		"asset_subtitles": {
-			"btc": "la rete più grande",
-			"xmr": "privato by design",
-			"blurt": "sociale, senza gas fee"
+		"coin_carousel": {
+			"aria_label": "Asset supportati",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Rete Arbitrum",
+				"base": "Base",
+				"base_sr": "Rete Base",
+				"bep20": "BEP-20",
+				"bep20_sr": "Rete BEP-20",
+				"polygon": "Polygon",
+				"polygon_sr": "Rete Polygon",
+				"trc20": "TRC-20",
+				"trc20_sr": "Rete TRC-20"
+			},
+			"barter": {
+				"label": "Baratto",
+				"sr": "Baratto (beni o servizi diretti)"
+			}
+		},
+		"priorities": {
+			"eyebrow": "Le nostre priorità",
+			"heading": "Su cosa è costruito Morphit",
+			"privacy": {
+				"title": "Prima di tutto la privacy",
+				"body": "Niente KYC, niente e-mail, niente numero di telefono. Le chiavi vengono generate sul tuo dispositivo; nulla che ti riguardi lo lascia, a meno che tu non lo decida."
+			},
+			"decentralization": {
+				"title": "Inarrestabile per progettazione",
+				"body": "La federazione opera sulla catena Blurt pubblica. Nessun server centrale può essere citato in giudizio. Chiunque può eseguire un nodo."
+			},
+			"grandma": {
+				"title": "Adatto alla nonna",
+				"body": "Utilizzabile da persone che non hanno mai toccato le criptovalute. Se un passaggio non è chiaro, lo spieghiamo in linea — niente muri di gergo."
+			},
+			"tiny_footprint": {
+				"title": "Impronta minuscola",
+				"body": "Si carica veloce su ogni dispositivo e banda. Auto-ospita un nodo su un VPS da 5 $/mese. Caricamento differito, leggero sulle immagini, attento ai byte."
+			}
 		}
 	},
 	"onboarding": {

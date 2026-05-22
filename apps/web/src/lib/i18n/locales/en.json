@@ -513,10 +513,44 @@
 		"returning_user_link": "Sign in",
 		"networks_heading": "Four networks, one Morphit.",
 		"networks_body": "Same site, same code, four ways to reach it. If one path is blocked, another works.",
-		"asset_subtitles": {
-			"btc": "the largest network",
-			"xmr": "private by design",
-			"blurt": "social, gas-free"
+		"coin_carousel": {
+			"aria_label": "Supported assets",
+			"networks": {
+				"arbitrum": "Arbitrum",
+				"arbitrum_sr": "Arbitrum network",
+				"base": "Base",
+				"base_sr": "Base network",
+				"bep20": "BEP-20",
+				"bep20_sr": "BEP-20 network",
+				"polygon": "Polygon",
+				"polygon_sr": "Polygon network",
+				"trc20": "TRC-20",
+				"trc20_sr": "TRC-20 network"
+			},
+			"barter": {
+				"label": "Barter",
+				"sr": "Barter (direct goods or services)"
+			}
+		},
+		"priorities": {
+			"eyebrow": "Our priorities",
+			"heading": "What Morphit is built around",
+			"privacy": {
+				"title": "Privacy first",
+				"body": "No KYC, no email, no phone number. Keys generated on your device; nothing about you leaves it unless you choose."
+			},
+			"decentralization": {
+				"title": "Unstoppable by design",
+				"body": "Federation runs over the public Blurt chain. No central server can be subpoenaed. Anyone can run a node."
+			},
+			"grandma": {
+				"title": "Grandma-friendly",
+				"body": "Usable by people who have never touched crypto. If a step is unclear, we explain it inline — no jargon walls."
+			},
+			"tiny_footprint": {
+				"title": "Tiny footprint",
+				"body": "Loads fast on every device and bandwidth. Self-host a node on a $5/month VPS. Lazy-loaded, image-light, byte-conscious."
+			}
 		}
 	},
 	"onboarding": {

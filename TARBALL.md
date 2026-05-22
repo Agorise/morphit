@@ -4,19 +4,19 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp114 — 2026-05-22 (cp112-tarball CI surfaced 2 missed cleanups, both fixed same turn).
+**Last touched:** cp115 — 2026-05-22 (logo bling + coin carousel + priorities cards + asset-registry path consolidation).
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (now 2,832 leaves × 10 = 28,320 after cp112 i18n cleanup: -4 orphaned privacy.* keys, +2 new seo.privacy_asset.* keys)
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp112 have been docs/SEO/CI hardening + 3 new structural defenses, no new audits
-- **40** structural defenses (cp111: brag-list-claim-parity-smoke; cp112: seo-url-consistency-smoke + og-image-freshness-smoke); **~4885**/0 smoke battery (cp111 +81; cp112 +366 + 6; last triple-pulsed at cp106 — see cp112 verification matrix; CI will report exact total); LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (now **2,852 leaves × 10 = 28,520** after cp115 i18n diff: −3 orphaned `home.asset_subtitles.*` + 12 new `home.coin_carousel.*` + 11 new `home.priorities.*`)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp115 have been docs/SEO/UX/CI hardening + 6 new structural defenses, no new audits
+- **43** structural defenses (cp115: logo-bling-invariants-smoke #41, coin-carousel-invariants-smoke #42, svelte-component-import-coverage-smoke #43); **4,962/0** smoke battery (cp115 net +14: +5 bling + +9 carousel + +57 import-coverage minus pre-existing runner-count math); LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of the 9 non-EN locale FAQ content added/amended in cp108–cp110 + the new seo.privacy_asset.* strings added in cp112 — see the translation-quality flag entry in `docs/REVISIT-LIST.md`
+1. Native-speaker polish of all auto-translated non-EN content from cp108–cp115 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp115 adds 12 i18n keys × 9 locales = 108 new auto-translated strings: 5 network labels + 5 network SR forms + barter label + barter SR + priorities section)
 2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
 **Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
@@ -25,14 +25,14 @@
 - ~~Wire `svelte-kit sync && tsc --noEmit` into CI~~ — was wired indirectly via `workspace-typecheck-smoke` (Part 70) but the audit-final-report mis-described it as `npm run check`; cp111 added an explicit `web-check` job to `.forgejo/workflows/ci.yml` so the protection is now legible without indirection.
 
 **What the most recent six checkpoints did:**
-- **cp107** — Brag list cleanup (303 → 303 with renumber + Haveno-exploit FAQ entry added across 10 locales after May 20 2026 ~$2.7M fake-arbitrator-ACK exploit)
-- **cp108** — Option B rewrite of brag item 80 fee mechanics + repo-wide fee-mechanics clarity audit (README line 16, 9 non-EN locales' `operator_payouts_timing` brought in line with EN canonical — fixed a real inaccuracy where BTC/XMR fees were claimed to land in operator wallets) + METADATA-LEAK-CATALOG.md rewritten with reassuring framing (272 → 529 lines, all honest content preserved)
-- **cp109** — `wallet_developer_api` FAQ + `how_to_spread_morphit` FAQ + `monero_amount_jitter` rewrite (drop cp* refs, hat-in-parade framing) + `what_is_blurt` augmentation (point #8 about anonymous social reputation chain alignment) + FAQ footer Matrix CTA (room alias `#agorise:matrix.org`, not DM MXID) + brag entry #87 added → 304 total
 - **cp110** — kencode removed from FAQ (reserved-name impersonation protection in `confusables.ts` deliberately preserved); Shaparak (شاپرک) payment method added in all 3 registry surfaces + 10-locale i18n descriptions; monero.bar landed in `docs/OPERATIONS.md §40.4` as a network-health dashboard, NOT in the verification quorum (incompatible — no txprove endpoint)
-- **cp111** — Doc-hygiene + CI-explicitness + new structural defense (#38). Three doc-drift fixes: RELEASE-NOTES v1.0.0-beta.1 "3,924 scenarios" → "several thousand" (un-droppable to drift); AUDIT-2026-05-FINAL-REPORT.md §147–150 rewritten to describe the actual svelte-check wiring (was claiming `npm run check`); TARBALL.md handoff trimmed from 5 "open" items to 2 (3 had been closed). New CI job: `web-check` runs `svelte-kit sync && svelte-check` against apps/web directly so the protection is visible without smoke indirection. New smoke `brag-list-claim-parity-smoke` (81 scenarios) walks every backtick'd file path, custom-JSON op ID, MORPHIT_* env-var, and numeric anchor (asset/locale/ADR/footer counts) in the three marketing-class docs (MORPHIT-BRAG-LIST, README, RELEASE-NOTES) against canonical source-of-truth. Mutation-tested across all 7 drift classes.
-- **cp112** — CI failure fix (brag-list-kiss-budget caught 3 over-budget entries #80/#87/#195 — first two rewritten to ≤4 sentences/≤100 words, #195 added to STACCATO_ALLOWLIST since it's the same "No X. No Y. No Z." rhetorical pattern as #3/#12/#186) + comprehensive SEO sweep. **Real shipped SEO bug fixed:** `hreflangAlternates()` in `apps/web/src/lib/seo/urls.ts` was emitting `?lang=es` query-string URLs while routes are path-based at `/[lang]/...` AND sitemap.xml uses `/{locale}{path}` — Google joins hreflang+canonical+sitemap so emitting two URL shapes is the duplicate-content pattern. Rewritten to mirror the sitemap exactly. **JSON-LD coverage extended:** new `SoftwareApplication` schema on home (rich-result eligibility for "morphit"/"p2p crypto" queries); new `BreadcrumbList` schema for SERP breadcrumb display; new `Article` schema on per-asset privacy guides. **Privacy pages SEO gap closed:** the privacy index + 16 per-asset privacy guides (`/[lang]/privacy/{asset}`) had been emitting only bare `<title>` + `<meta description>` (no canonical, no hreflang, no OG, no JSON-LD) — converted to the full `<Head>` component. **PNG OG image fallback:** generated `og-image.png` (61KB, 1200×630) so Twitter/X/LinkedIn/Slack/Discord share previews work (those clients reject SVG OG images per their card specs); SVG kept as secondary og:image. **RSS auto-discovery:** added `<link rel="alternate" type="application/rss+xml">` on home + orderbook so feed readers and news crawlers find the orderbook feed without spelunking. **i18n cleanup:** -4 orphaned `privacy.*` keys, +2 new `seo.privacy_asset.*` keys (×10 locales = -40+20 strings). **Two new structural defenses:** `seo-url-consistency-smoke` (#39, 366 scenarios verifying canonical/hreflang/sitemap URLs match byte-for-byte; mutation-tested) + `og-image-freshness-smoke` (#40, 6 scenarios catching PNG-older-than-SVG drift). **One new build script:** `scripts/build-og-image-png.sh` (regenerates PNG from SVG via cairosvg).
+- **cp111** — Doc-hygiene + CI-explicitness + new structural defense (#38). New CI job: `web-check` runs `svelte-kit sync && svelte-check` against apps/web directly. New smoke `brag-list-claim-parity-smoke` (81 scenarios) walks every backtick'd file path, custom-JSON op ID, MORPHIT_* env-var, and numeric anchor in the three marketing-class docs against canonical source-of-truth.
+- **cp112** — CI failure fix (brag-list-kiss-budget) + comprehensive SEO sweep: hreflangAlternates URL-shape bug fixed (was `?lang=` query-string, now path-based `/{locale}/{path}` to match sitemap); JSON-LD coverage extended (SoftwareApplication + BreadcrumbList + Article); 17 privacy pages converted to full `<Head>` component; PNG OG image fallback for Twitter/LinkedIn/Slack/Discord (1200×630, 61KB); RSS auto-discovery `<link>` tags on home + orderbook; two new structural defenses (seo-url-consistency #39 with 366 scenarios + og-image-freshness #40 with 6 scenarios).
+- **cp113** — cp112 self-audit: 4 real bugs found+fixed (Organization.logo dims, og:locale region codes, og:locale:alternate missing, $app/state→$app/stores convention on privacy pages) + 7 lesser findings filed for follow-up. Docs updated.
+- **cp114** — Two CI failures fixed: native-translations-floor surgical-prune of 4 orphaned privacy.* keys from snapshot; href-xss-smoke allowlist for `feed.href` + hardened Head.svelte docblock with SECURITY CONSTRAINT note. Full local battery: 4,888/0. **Tarball delivered**: `morphit-audit-2026-05-122-cp114-FULL-STATE.tar.gz` (7.2 MB, SHA-256 a8f1ed64…0c1bff2, 1,392 files).
+- **cp115** — UX surface upgrade. (1) **MorphitLogoBling.svelte**: 3-body gravitational simulation as backdrop sparkle behind the header wordmark — three particles (lime/green/teal brand stops) drift under soft mutual + centroid gravity; RAF loop paused by IntersectionObserver when scrolled out of viewport; `prefers-reduced-motion: reduce` bails to static fallback; caching is implicit via Vite's `Cache-Control: public, max-age=31536000, immutable` on hashed asset filenames. (2) **CoinCarousel.svelte**: below-the-fold infinite-scroll marquee rendering 22 slots — 16 tradable coins (registry-driven, operator-disabled-filtered) + 5 settlement networks (Arbitrum, Base, BEP-20, Polygon, TRC-20) + Barter; IntersectionObserver lazy-mount with `rootMargin: 200px 0px`; every `<img>` `loading="lazy" decoding="async"`; dedupe by icon-file basename spans all 3 sources; CSS marquee animation (no JS); `prefers-reduced-motion` → animation: none; sr-only `<ul>` enumerates each slot via longer `screenReaderName` form. (3) **PrioritiesSection.svelte**: 4 cards bragging about Morphit's design priorities in memory-rule order (privacy / decentralization / grandma-friendly / tiny-footprint); Priority #1 visually anchored with brand-gradient top border; inline SVG icons (padlock, network-nodes, heart-bubble, feather); positioned ABOVE the carousel per Ken's spec. (4) **Asset registry path consolidation**: 4 stale `/coins/*.svg` references in `apps/web/src/lib/assets/registry.ts` migrated to canonical `/icons/icon-*.svg` form (the `/coins/` files never shipped); same fix applied to `apps/web/src/routes/[lang]/dev/icons/+page.svelte` + misleading "both work" comment removed; `asset-registry-smoke` tightened to assert on-disk existence of every `logoSvgPath` (now load-bearing — CoinCarousel is the first real consumer outside the smoke). (5) **Barter icon**: uploaded JPEG converted to honest 80×80 PNG (5,480 bytes), saved as `apps/web/static/icons/icon-barter.png`. (6) **i18n diff across 10 locales**: removed 3 orphaned `home.asset_subtitles.*` keys; added 12 keys/locale for carousel + priorities (locale parity preserved at 2,852 leaves × 10 = 28,520). (7) **Native-translations snapshot surgically pruned** for 3 removed home.asset_subtitles.* keys × 9 non-EN locales. (8) **i18n-completeness allow-list**: 15 invariant-class entries added for 5 network product names × 3 tested locales (de/es/fr). (9) **Three new structural defenses**: logo-bling-invariants (#41, 5 scenarios), coin-carousel-invariants (#42, 9 scenarios), svelte-component-import-coverage (#43, 57 scenarios — catches "PascalCase tag referenced in template but never imported" structurally; self-tested by removing/restoring MorphitLogoBling import). (10) **svelte-check type-error fixed** in CoinCarousel: `containerEl: HTMLDivElement` → `HTMLElement` since bound to `<section>` not `<div>`.
 
-**Translation-quality flag (important):** All FAQ + payment-method content added or amended in cp108–cp110 across the 9 non-EN locales is auto-translation quality. cp112 adds 2 new `seo.privacy_asset.*` strings × 9 non-EN locales (also auto-translation quality, hand-checked for grammar/length but not native-speaker-polished). Worth a single dedicated translation-quality pass before launch covering both batches. Full list of affected i18n keys in REVISIT-LIST.
+**Translation-quality flag (important):** All FAQ + payment-method content added or amended in cp108–cp110 across the 9 non-EN locales is auto-translation quality. cp112 added 2 new `seo.privacy_asset.*` strings × 9 non-EN locales. cp115 adds 12 new keys × 9 non-EN locales (5 network labels are invariant by design, but the 5 network SR forms + barter label + barter SR + 8 priorities strings are auto-translation quality). All three batches should be hand-polished in a single dedicated translation-quality pass before launch. Full list of affected i18n keys in REVISIT-LIST.
 
 **Memory facts (re-confirmed for the new session):**
 - `@agorise:matrix.org` = private DM MXID for security disclosure
@@ -44,7 +44,114 @@
 - Forgejo, never Gitea — repo at `git.agorise.net/agorise/morphit`
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp112 is a candidate meaningful milestone (CI failure fix + 2 new structural defenses + comprehensive SEO sweep + Twitter/LinkedIn share-preview-unlock via PNG OG) — fresh binary will regenerate if Ken asks.
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115 is a clear meaningful milestone (new user-facing surfaces — header bling, asset/network/barter carousel, priorities cards — + 3 new structural defenses + asset-registry path consolidation + 1 new image asset).
+
+---
+
+## cp115 — UX surface upgrade: header 3-body bling + 22-slot carousel (16 coins + 5 networks + barter) + 4 priorities cards above carousel + asset-registry path consolidation + 3 new structural defenses (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp115-FULL-STATE.tar.gz` built this turn (Ken asked: "go!" after reviewing the visual mockup of priorities cards above carousel).
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity **2,852 × 10 = 28,520** (cp115 net +20: −3 orphaned `home.asset_subtitles.*` + 11 new `home.priorities.*` + 12 new `home.coin_carousel.*`) · **4,962/0** local smoke battery · 7/7 TS-clean · **43 defenses** (#41 logo-bling-invariants 5 scenarios, #42 coin-carousel-invariants 9 scenarios, #43 svelte-component-import-coverage 57 scenarios) · 1,381 vitest passing.
+
+**Three new user-facing surfaces:**
+
+### (1) MorphitLogoBling — header logo with 3-body gravitational sparkle
+
+`apps/web/src/lib/components/MorphitLogoBling.svelte` (NEW). Wraps the existing wordmark `<img>` with a `<canvas>` overlay running a 3-body gravitational simulation: three particles (lime #8EEF26 / green #00DA69 / teal #02A6B2 — brand gradient stops) drift under (a) mutual 1/r² attraction softened with `MIN_DIST = 6` to avoid singularities, (b) constant centroid pull toward the wordmark's geometric center, (c) velocity damping `0.998` to prevent runaway, (d) velocity cap `MAX_VELOCITY = 0.9` for runaway-prevention, (e) wall bouncing at the bling-box bounds. Particles painted BEHIND wordmark (`canvas { z-index: 0 } / wordmark { z-index: 1 }`) so they read as backdrop sparkle, not letterform clutter.
+
+Budget discipline: single `<canvas>` at 2× DPR, single RAF loop, `IntersectionObserver` pauses RAF when scrolled out of viewport, `prefers-reduced-motion: reduce` bails to a static fallback (particles drawn once at deterministic starting positions, no RAF). Caching is implicit: the component lives inside the Svelte bundle, Vite fingerprints + emits `Cache-Control: public, max-age=31536000, immutable` for hashed asset filenames — no re-fetch after first paint.
+
+Accessibility: `aria-hidden="true"` on the canvas (decorative); wordmark `<img>` retains its `alt="Morphit"` for unchanged screen-reader output.
+
+Wired into `apps/web/src/routes/[lang]/+layout.svelte` header replacing the prior inline `<img>` (cp115 included the import line that the previous session compaction had missed — caught + closed structurally by the new svelte-component-import-coverage smoke).
+
+### (2) CoinCarousel — 22-slot infinite-scroll marquee below-the-fold
+
+`apps/web/src/lib/components/CoinCarousel.svelte` (NEW). Renders three concatenated sources:
+1. **16 tradable coin assets** from `ASSETS` registry, filtered against `$instance.disabled_assets` (memory rule: never show an operator-disabled coin)
+2. **5 settlement networks**: Arbitrum, Base, BEP-20, Polygon, TRC-20 (NOT ERC-20 or SPL — those are already implicitly represented by ETH and SOL in the coin source)
+3. **Barter** slot (gold-bars PNG, see (5) below)
+
+Dedupe by **icon-file basename** spans the FULL sequence (`Set<string>` shared across all three loops) — any future shared icon (e.g. if BTC ever gets a "btc-network" indicator reusing icon-btc.svg) collapses to one slot. Today no collisions exist, but the rule stays as defensive insurance.
+
+Each slot carries: `key` (unique-per-slot), `label` (the visible text under the icon — "BTC"/"Arbitrum"/"Trueque" depending on slot), `screenReaderName` (the longer SR form — "Bitcoin (BTC)" / "Arbitrum network" / "Barter (direct goods or services)"), `iconPath`, `iconWidth/Height` (intrinsic dimensions so the browser reserves the box before lazy-load resolves — no reflow).
+
+Budget discipline: 
+- `IntersectionObserver` lazy-mount with `rootMargin: '200px 0px'` — a first-time visitor who never scrolls past the hero pays zero bytes for the 22 icons
+- Every `<img>` `loading="lazy" decoding="async"`
+- CSS marquee animation (transform: translateX(-50%) on a duplicated track) — zero JS in the animation loop
+- `prefers-reduced-motion: reduce` → `animation: none`
+- 80 px reserved vertical height with placeholder so the page doesn't reflow when the carousel mounts
+
+Accessibility: `aria-hidden="true"` on the marquee track (decorative), `aria-label="Supported assets"` on the section, sr-only `<ul>` enumerates every slot via the longer `screenReaderName` form.
+
+Wired into `apps/web/src/routes/[lang]/+page.svelte` replacing the prior hardcoded 3-asset block (BTC/XMR/BLURT).
+
+### (3) PrioritiesSection — 4 cards above the carousel
+
+`apps/web/src/lib/components/PrioritiesSection.svelte` (NEW). 4 cards bragging about Morphit's design priorities in canonical memory-rule order:
+
+| Card | Title | Body |
+|------|-------|------|
+| #1 (Privacy) | **Privacy first** | No KYC, no email, no phone number. Keys generated on your device; nothing about you leaves it unless you choose. |
+| #2 (Decentralization) | **Unstoppable by design** | Federation runs over the public Blurt chain. No central server can be subpoenaed. Anyone can run a node. |
+| #3 (Grandma-friendly) | **Grandma-friendly** | Usable by people who have never touched crypto. If a step is unclear, we explain it inline — no jargon walls. |
+| #4 (Tiny footprint) | **Tiny footprint** | Loads fast on every device and bandwidth. Self-host a node on a $5/month VPS. Lazy-loaded, image-light, byte-conscious. |
+
+Priority #1 visually anchored with a brand-gradient top border (lime → green → teal) so a careful reader notices the ordering without it shouting. Each card has an inline SVG icon (padlock / network-nodes / heart-bubble / feather). Responsive grid: 1 column / 2 columns / 4 columns at sm / md / lg breakpoints.
+
+Pure CSS, no JS. All text via i18n (`home.priorities.{eyebrow,heading,<key>.{title,body}}`).
+
+Positioned **above** the carousel per Ken's spec — user-facing priorities cards land first as a value pitch, carousel below brags about asset breadth.
+
+### (4) Asset registry path consolidation
+
+`packages/asset-registry/src/index.ts` had 4 stale `logoSvgPath` references at `/coins/{ticker}.svg` for the cp3-era assets (XMR/BTC/BLURT/USDT) — the `/coins/` files never shipped to disk under that path, but the field had no real consumer outside `asset-registry-smoke` (which had a stale `startsWith('/coins/') || startsWith('/icons/')` allowance covering for the brokenness). cp115 made `CoinCarousel` the first REAL consumer of `logoSvgPath` outside the smoke, which means broken paths would now break the homepage.
+
+Fixed: all 16 `logoSvgPath` values now consistently point at `/icons/icon-{lower-ticker}.svg`. Applied same fix to `apps/web/src/routes/[lang]/dev/icons/+page.svelte` (had its own hardcoded copy of the path list with the same drift + a misleading "both work" comment). Tightened `apps/indexer/scripts/asset-registry-smoke.ts` to (a) require `/icons/` prefix (no more `/coins/` allowance), (b) check `existsSync(STATIC_ROOT/path)` so a future rename of an icon file without a registry update fails the smoke.
+
+### (5) Barter icon
+
+User uploaded `icon-barter.png` was actually JPEG (file-format lie). Converted via PIL Lanczos resize to true PNG at 80×80 (2× retina for the 40 px display size), saved as `apps/web/static/icons/icon-barter.png` (5,480 bytes). Acceptable but raster-soft next to SVG neighbors — flagged in REVISIT for future SVG-conversion if Ken decides the visual contrast is too distracting.
+
+### (6) i18n diff across all 10 locales
+
+Removed: 3 orphaned `home.asset_subtitles.{btc,xmr,blurt}` keys (the prior hardcoded 3-asset block was their only consumer).
+
+Added under `home.coin_carousel`:
+- `aria_label` (1 key)
+- `networks.{arbitrum,base,bep20,polygon,trc20}` (5 labels — invariant product names, byte-identical across all 10 locales)
+- `networks.{arbitrum,base,bep20,polygon,trc20}_sr` (5 SR forms — "Arbitrum network" / "Red de Arbitrum" / "شبکهٔ Arbitrum" / etc.)
+- `barter.{label,sr}` (2 keys per locale)
+
+Added under `home.priorities`:
+- `eyebrow` + `heading` (2 keys)
+- 4 × `{title,body}` (8 keys)
+
+Net per-locale: −3 + 23 = +20 keys. Locale parity preserved at **2,852 × 10 = 28,520** leaves.
+
+### (7) Native-translations snapshot surgical-prune
+
+`apps/web/scripts/native-translations-snapshot.json` had `home.asset_subtitles.{btc,xmr,blurt}` listed as native in 9 non-EN locales at snapshot time; cp115 removed those keys from the locale files, which would have broken `native-translations-floor-smoke`. Applied cp114 lesson #1 (surgical-prune over rebuild) — removed the 3 keys from each of 9 locales' arrays, decremented per-locale counts, added a `_meta.last_surgical_edit` entry citing cp115 reason.
+
+### (8) i18n-completeness allow-list extension
+
+Added 15 invariant-class (reason `c`) entries to `apps/web/scripts/i18n-translation-completeness-smoke.ts` ALLOW_LIST: 5 network product names × 3 tested locales (de/es/fr). Network labels are Latin-script brand/standard names that legitimately do not translate (Arbitrum, Base = registered L2 product names; BEP-20, TRC-20 = technical token-standard identifiers; Polygon = registered L2 product name). The screen-reader form ("Arbitrum network" / "Red de Arbitrum") carries the translation.
+
+### (9) Three new structural defenses
+
+**#41 — logo-bling-invariants-smoke** (5 scenarios). I-1 exactly 3 particles in the simulation; I-2 prefers-reduced-motion matched + drawStaticFallback invoked; I-3 IntersectionObserver pauses RAF on viewport exit; I-4 canvas carries `aria-hidden="true"`; I-5 canvas painted BEHIND wordmark (z-index ordering).
+
+**#42 — coin-carousel-invariants-smoke** (9 scenarios). I-1 visibleSlots derived from ASSETS registry; I-2 operator-disabled-assets filter applied; I-3 dedupe by icon-file basename; I-4 every `<img>` has `loading="lazy" decoding="async"` (template-scoped scan to ignore CSS selectors); I-5 IntersectionObserver lazy-mount with rootMargin; I-6 prefers-reduced-motion disables marquee animation; I-7 exactly 5 network slots with the Ken-specified set, each existing on disk; I-8 barter slot present, PNG exists on disk; I-9 dedupe `Set.has/.add` spans all three sources (≥3 of each).
+
+**#43 — svelte-component-import-coverage-smoke** (57 scenarios). Catches the "PascalCase tag referenced in template but never imported" class structurally — the exact bug class that the cp115 session compaction left in `+layout.svelte` (MorphitLogoBling referenced but import line missing). Strips HTML comments before tag-extraction so self-documenting components don't false-positive on their own usage examples. Accepts default-imports, named imports, type-only imports (`import type { X }`), aliased imports (`as X`), and local declarations (`let X` / `const X`). Self-verified by temporarily removing + restoring the MorphitLogoBling import line.
+
+### (10) svelte-check type-error fixed
+
+`CoinCarousel.svelte` had `let containerEl: HTMLDivElement | null = $state(null)` but the element it's bound to is `<section>`, which is `HTMLElement` not `HTMLDivElement`. Surfaced by `svelte-check apps/web` in the workspace-typecheck smoke. Fixed by relaxing the type to `HTMLElement`.
+
+**Three pre-existing svelte-check WARNINGS in FundsSentModal.svelte (cp30+ era) remain unchanged** — these are non-error closure-state warnings and not cp115's to fix.
 
 ---
 

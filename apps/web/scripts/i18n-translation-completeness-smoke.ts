@@ -83,6 +83,29 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── cp115 network product names: Latin-script brand names that
+	//     legitimately do NOT translate.  Arbitrum, Base, Polygon are
+	//     Layer-2 network product names (registered marks).  BEP-20
+	//     and TRC-20 are technical token-standard identifiers (binance
+	//     / tron equivalents of ERC-20).  All five render identical
+	//     across all 10 locales by design; the screen-reader form
+	//     ("Arbitrum network" / "Red de Arbitrum" / etc.) carries
+	//     the translation. ─────────────────────────────────────────
+	{ key: 'home.coin_carousel.networks.arbitrum', locale: 'de', reason: '(c) Arbitrum is a registered Layer-2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.arbitrum', locale: 'es', reason: '(c) Arbitrum is a registered Layer-2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.arbitrum', locale: 'fr', reason: '(c) Arbitrum is a registered Layer-2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.base', locale: 'de', reason: '(c) Base is the Coinbase L2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.base', locale: 'es', reason: '(c) Base is the Coinbase L2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.base', locale: 'fr', reason: '(c) Base is the Coinbase L2 product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.bep20', locale: 'de', reason: '(c) BEP-20 is a technical token-standard identifier; does not translate' },
+	{ key: 'home.coin_carousel.networks.bep20', locale: 'es', reason: '(c) BEP-20 is a technical token-standard identifier; does not translate' },
+	{ key: 'home.coin_carousel.networks.bep20', locale: 'fr', reason: '(c) BEP-20 is a technical token-standard identifier; does not translate' },
+	{ key: 'home.coin_carousel.networks.polygon', locale: 'de', reason: '(c) Polygon is a registered L2 network product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.polygon', locale: 'es', reason: '(c) Polygon is a registered L2 network product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.polygon', locale: 'fr', reason: '(c) Polygon is a registered L2 network product name; does not translate' },
+	{ key: 'home.coin_carousel.networks.trc20', locale: 'de', reason: '(c) TRC-20 is a technical token-standard identifier; does not translate' },
+	{ key: 'home.coin_carousel.networks.trc20', locale: 'es', reason: '(c) TRC-20 is a technical token-standard identifier; does not translate' },
+	{ key: 'home.coin_carousel.networks.trc20', locale: 'fr', reason: '(c) TRC-20 is a technical token-standard identifier; does not translate' },
 	// ─── (a) same-word: spelling matches in target locale ───
 	{ key: 'feature_bid.history_state_visible', locale: 'es', reason: '(a) "Visible" is also Spanish (same spelling, same meaning)' },
 	{ key: 'feature_bid.history_state_visible', locale: 'fr', reason: '(a) "Visible" is also French (same spelling, same meaning)' },
