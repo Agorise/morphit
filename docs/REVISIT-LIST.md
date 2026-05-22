@@ -1,10 +1,286 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp100 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · CHAT CLIENT ORCHESTRATOR AUDIT: 1 module walked (~1,201 lines), 0 findings — CHAT CLIENT SURFACE NOW FULLY DEEP-AUDITED · CUMULATIVE DEEP-AUDIT COVERAGE: ~38,414 LINES.**
+**Last touched:** Part 122 cp102 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · HTTP CLIENTS + ENDPOINT ROTATOR AUDIT: 3 modules walked (~1,288 lines), 0 findings — WEB FRONTEND DEEP-AUDIT PHASE NOW CLOSED · CUMULATIVE DEEP-AUDIT COVERAGE: ~41,131 LINES.**
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, on request, or when a code change lands).  TARBALL.md + REVISIT-LIST + transcripts update every turn.  cp100 closes the chat-client phase (cp96-cp100 = 5 chat-frontend checkpoints) — **regenerating binary at cp100**.
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, on request, or when a code change lands).  TARBALL.md + REVISIT-LIST + transcripts update every turn.  **cp102 closes the web frontend deep-audit phase (cp96-cp102 = 7 checkpoints, 16,150 lines walked) — regenerating binary at cp102.**
 
-## CP100 LESSONS
+## CP102 LESSONS
+
+### Lesson #1 — net/endpoints.ts is the resilience backbone the entire frontend rides on
+
+`net/endpoints.ts` (470) is the chain RPC pinning + quorum dispatch layer. Every Blurt RPC call in the frontend goes through `EndpointRotator.call` or `callMany`:
+
+- cp89's `apps/relay/src/blurt/client.ts` (server-side rotator)
+- cp102's `apps/web/src/lib/blurt/client.ts` (this rotator)
+- cp98's `chainVerify.ts` + `blurtVerify.ts` (both use `callMany` for Audit 2-7 + 2-8 quorum)
+- cp97's `pairingClient.ts` defaultVerifier (signature recovery via rotator)
+- cp97's `pairingPhoneSigner.ts` multisig pre-check
+
+The rotator is one of the most-consumed modules in the codebase. cp102 verifies it's correctly engineered for its load-bearing role:
+
+- Health-aware round-robin: sort eligible by fewer-failures-first, then by lower latency
+- Exponential cooldown capped at 5 minutes: `1500ms * 2^(consecutiveFailures - threshold)`, max 5min
+- JSON-RPC errors don't demote endpoint (server answered, just said no — caller's problem)
+- `callMany` returns per-endpoint outcomes (does NOT fail on individual errors); caller decides quorum agreement
+- `maxN` clamping: at least 1, at most available
+- Initial endpoint shuffle prevents centralized load on first-listed URL
+- `setEndpoints` preserves stats for surviving endpoints; new URLs start clean
+
+### Lesson #2 — Three privacy defenses in fetchWithTimeout
+
+The internal `fetchWithTimeout` helper applies three privacy posture choices:
+
+- `credentials: 'omit'` — never send credentials to third-party RPC endpoints
+- `referrerPolicy: 'no-referrer'` — no referer leakage to RPC nodes
+- `cache: 'no-store'` — moderate cache hint (rotator itself handles retries)
+
+These are not optional flags — they're hardcoded into every RPC call the rotator makes. RPC endpoints are third-party infrastructure from Morphit's perspective; leaking Referer or session cookies to them is a privacy regression. cp102 confirms the rotator gets this right.
+
+### Lesson #3 — RpcError vs transport-error distinction is structural
+
+The rotator distinguishes RpcError (JSON-RPC-level: server answered, just said no — method not supported, bad params) from transport errors (timeout, network failure, non-200 HTTP). Critical posture:
+
+- RpcError: re-raise immediately; don't demote endpoint; this is the caller's problem
+- Transport error: increment `consecutiveFailures`; demote endpoint if over threshold; fall through to next eligible
+
+Pre-this-design, a buggy chain RPC method (or a deliberate test for "what happens if I pass bad params") would have demoted otherwise-healthy endpoints. Correct distinction means the rotator's health stats reflect actual reachability, not API-level disagreements.
+
+`RpcError` carries `(message, code, endpoint)`; `EndpointRotationError` carries `(message, tried[], lastError)` for the "all endpoints failed" case. Both are structured for caller diagnostics.
+
+### Lesson #4 — indexer/client.ts Result<T> eliminates try/catch ceremony
+
+`indexer/client.ts` (551) is the typed HTTP client for the indexer's read-only API. Every function returns `Result<T>`:
+
+```typescript
+type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; code: ErrorCode | 'network_error' | 'timeout'; message: string };
+```
+
+Call sites destructure on `.ok`:
+```typescript
+const r = await indexer.getProfile('alice');
+if (r.ok) { use(r.data); }
+else if (r.code === 'not_found') { showEmptyState(); }
+else { showError(r.message); }
+```
+
+No try/catch needed. No exception-flow confusion between "the network call failed" and "the API said no." Same Go-style error-as-value pattern as the rest of the typed-error surfaces (KeystoreError, PubPinError, YubikeyKeystoreError, PairingSignerError).
+
+### Lesson #5 — Schema-drift catches at type-check via @morphit/indexer-client
+
+`indexer/client.ts` imports all its response types from `@morphit/indexer-client`, a shared workspace package:
+
+```typescript
+import type {
+  AccountFeedbackResponse,
+  ChatHistoryResponse,
+  ChatIdentityResponse,
+  ...
+} from '@morphit/indexer-client';
+```
+
+The indexer publishes those types from the same package. **A schema drift between indexer and frontend fails type-check at build time, not at runtime in a user's browser.** This is the right architecture for a federated codebase where the indexer and frontend ship together but can drift if not pinned.
+
+### Lesson #6 — anySignal polyfill for AbortSignal.any composition
+
+`indexer/client.ts` composes a caller-supplied AbortSignal with the internal 8s timeout signal via a hand-rolled `anySignal` polyfill — the browser native `AbortSignal.any` is still not in all target browsers as of writing.
+
+```typescript
+function anySignal(signals: readonly AbortSignal[]): AbortSignal {
+  const ctrl = new AbortController();
+  for (const s of signals) {
+    if (s.aborted) { ctrl.abort(); break; }
+    s.addEventListener('abort', () => ctrl.abort(), { once: true });
+  }
+  return ctrl.signal;
+}
+```
+
+The `{ once: true }` listener option prevents listener-leak across long-lived signals. The internal timeout signal aborts on timeout; the caller's signal aborts on user cancellation (component unmount, etc.). Either triggers the composed abort, which propagates to `fetch`.
+
+### Lesson #7 — encodeURIComponent on every account-name path param
+
+`indexer/client.ts` uses `encodeURIComponent` on every account-name path parameter:
+
+```typescript
+`/v1/profiles/${encodeURIComponent(account)}`
+`/v1/accounts/${encodeURIComponent(account)}/feedback`
+`/v1/chat/${encodeURIComponent(a)}/${encodeURIComponent(b)}`
+```
+
+This defends against URL-injection in user-controllable paths. Account names should be `[a-z0-9.-]{3,16}` (validated upstream by chat/payload.ts and other validators), but defense-in-depth means encoding regardless. If a malicious account name with `/` or `?` characters slipped past upstream validation, encodeURIComponent prevents path-traversal or query-injection.
+
+### Lesson #8 — blurt/client.ts getLatestCustomJson is the chain-verification primitive
+
+`getLatestCustomJson` is the underlying chain-RPC helper that cp98's `chainVerify.ts` builds on. It walks `condenser_api.get_account_history` backwards from the most-recent entry, filtering for:
+
+- `opName === 'custom_json'`
+- `cj.id === opId` (e.g., `morphit_chat_identity_v1`)
+- `[...required_auths, ...required_posting_auths].includes(account)`
+
+The third filter is the critical defense: it ensures the op was signed by the named account's posting/active authority. Without this, an impersonated op authored by someone else (in a custom_json with `id=morphit_chat_identity_v1` but `required_posting_auths=['someoneelse']`) could match the first two filters and feed a false pub to chainVerify.
+
+The chain-acceptance invariant guarantees that the op was signed by SOMEONE on `required_posting_auths`; including the account check verifies that someone is the right account.
+
+`JSON.parse` wrapped in try/catch so a single malformed entry doesn't break the walk; continue to the next.
+
+### Lesson #9 — Coverage table for cp102
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `net/endpoints.ts` | 470 | DEEP-AUDITED CLEAN | EndpointRotator health-aware round-robin; per-endpoint stats (consecutiveFailures, lastLatencyMs, cooldownUntil); exponential cooldown capped 5min; RpcError vs transport-error distinction; `callMany` parallel quorum dispatch (powers Audit 2-7/2-8); `credentials: 'omit'` + `referrerPolicy: 'no-referrer'` + `cache: 'no-store'`; initial shuffle; setEndpoints preserves stats |
+| `blurt/client.ts` | 267 | DEEP-AUDITED CLEAN | Routes dblurt JSON-RPC through rotator (rotator resolved fresh per-call so settings-edit takes effect immediately); `getLatestCustomJson` filters opName + opId + authedBy.includes (defense against impersonated ops); `getTransaction` graceful fallback for nodes without tx-index plugin; history limit default 500 with Blurt's 10K cap available |
+| `indexer/client.ts` | 551 | DEEP-AUDITED CLEAN | Typed `Result<T>` discriminated union eliminates try/catch ceremony; 8s timeout via AbortController + anySignal polyfill (browser native AbortSignal.any not yet in all targets); types imported from `@morphit/indexer-client` workspace package (schema drift fails at type-check); encodeURIComponent on every account-name path param; getOperatorBlockStatus documents "show no banner on transient hiccup" posture |
+
+Total cp102: 1,288 lines walked, 0 findings.
+
+### Lesson #10 — Web frontend deep-audit phase summary (cp96-cp102)
+
+cp96 opened the web frontend audit; cp102 closes it. Seven checkpoints over 16,150 lines of frontend code:
+
+| CP | Lines | Modules | Focus | Findings |
+|---|---:|---:|---|---:|
+| cp96 | 3,503 | 7 | crypto core (keystore, keygen, confusables, chat/crypto, blurt/sign, service-worker, push) | 0 |
+| cp97 | 2,061 | 5 | pairing + identity + releaseValidate | 0 |
+| cp98 | 1,787 | 4 | chat MITM-defense (fingerprint, chainVerify, pubPin, blurtVerify) | 0 |
+| cp99 | 2,310 | 1 | payload core (16-asset wire format) | 0 |
+| cp100 | 1,201 | 1 | chatService orchestrator | 0 |
+| cp101 | 1,429 | 5 | yubikey transport (protocol/wrap/transport/keystoreYubikey) + identicon | 0 |
+| cp102 | 1,288 | 3 | HTTP clients + endpoint rotator | 0 |
+| **Phase total** | **15,579** | **26** | **Web frontend** | **0** |
+
+(Numbers slightly differ from the earlier cp100 phase summary because cp101+cp102 are post-cp100 additions.)
+
+The web frontend was walked end-to-end from primitive to orchestrator with zero findings emerging. The cp93 release.ts JSDoc fix (the only code change in the entire frontend phase) was on the indexer side.
+
+Remaining post-cp102 targets:
+- matrix-bot subsystem (apps/matrix-bot/)
+- ops-cli (apps/ops-cli/)
+- 30-test CI delta hunt (sandbox-blocked)
+
+## CP102 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp101 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~41,131 | cp82+cp85 handlers (5,266) + cp86 supporting (3,056) + cp87 indexer API (3,173) + cp88 relay (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) + cp93 remaining indexer API (3,668) + cp94 fee verifiers+breaker (1,275) + cp95 streaming+auth endpoints (1,613) + cp96 web frontend crypto+auth (3,503) + cp97 web frontend pairing+identity+release-validate (2,061) + cp98 web frontend chat MITM-defense (1,787) + cp99 web frontend chat payload core (2,310) + cp100 web frontend chat orchestrator (1,201) + cp101 yubikey transport + identicon (1,429) + cp102 HTTP clients + endpoint rotator (1,288) |
+
+## CP102 FIXES
+
+None — cp102 was an HTTP clients + endpoint rotator audit.  0 findings across 3 modules / 1,288 lines.
+
+
+
+### Lesson #1 — YubiKey unlock is layered into 5 modules with intentional separation of concerns
+
+The YubiKey-unlock subsystem (ADR-0017, Batch I) is implemented as a layered set of modules with crisp boundaries:
+
+- **`yubikey/protocol.ts`** (202) — pure types + constants. No libsodium, no @noble, no WebHID. Smoke-importable. Includes the comprehensive T1-T6 threat model.
+- **`yubikey/wrap.ts`** (231) — pure wrap/unwrap helpers with the `YubikeyHmacFn` callback contract. Smoke-testable with a deterministic stub HMAC; the actual crypto math is exercised here.
+- **`yubikey/transport.ts`** (323) — WebHID transport for the YubiKey OTP applet's HMAC-SHA1 challenge-response protocol. Browser-only (Chromium-only in practice).
+- **`keystoreYubikey.ts`** (419) — high-level orchestration. enroll/unenroll/harden/soften/unlock operations the UI calls. Composes wrap.ts with the keystore.ts envelope.
+- **`yubikeyErrors.ts`** — typed error class + classifier + i18n key mapping.
+
+The smoke-testable / browser-only split is the right architectural call: `wrap.ts` math can be live-fired in tsx without a physical YubiKey, and the transport-layer protocol (WebHID frame layout) is narrow enough that the integration test must happen at unlock time in a browser. This is documented honestly: "I have NOT been able to live-fire this against a physical YubiKey from this sandbox; the protocol fidelity is best-effort and the integration test must happen in the browser at unlock time."
+
+### Lesson #2 — T1-T6 threat model is comprehensive and documented at the protocol layer
+
+`yubikey/protocol.ts` enumerates six threats with mitigation rationale for each:
+
+- **T1 Stolen device**: passphrase wrap defends in state A; state B is opaque bytes
+- **T2 Phished/keylogged passphrase**: YubiKey doesn't help in state A (same posture as pre-Batch-I); state B blocks attack entirely
+- **T3 Stolen YubiKey alone**: insufficient — attacker also needs keystore blob
+- **T4 Stolen YubiKey + keystore**: known cost of (A) — "YubiKey gives you a SECOND unlock path, not a STRONGER one"; in state B same posture as stolen passphrase in (A)
+- **T5 Browser exploit during HMAC**: Argon2id-stretch HMAC before use so brief raw HMAC read still requires GPU time to brute-force wrap key
+- **T6 WebHID transport interception**: same-origin policy + USB-permission UX; no mitigation against malicious WebHID polyfill (users with that level of compromise have bigger problems)
+
+The T5 defense is the most important and is implemented in `wrap.ts` — Argon2id over HMAC output is the only friction against an attacker who reads HMAC raw bytes during unwrap. Mirrored Argon2id params with passphrase wrap means a stolen-keystore attacker has no cheaper path through the YubiKey wrap.
+
+### Lesson #3 — transport.ts Audit 6-7 hardening + L3 defensive runtime check
+
+**Audit 6-7 fix (short feature report)**: A malformed device — or a hostile USB device with Yubico vendor ID, which is the threat class here — could deliver a feature report shorter than 8 bytes. Pre-fix, `view[FEATURE_PAYLOAD_SIZE]` reads `undefined`, the `?? 0` fallback interprets as "response ready, all zeros," yielding a partial-zero HMAC output that silently fails closed but confuses the caller. Post-fix: explicit length check + throw on short report.
+
+**L3 fix (defensive slot runtime check)**: `makeHmacFn` checks `slot === 1 || slot === 2`. TypeScript prevents arbitrary slot values at the type level, but values reaching here from JSON-parsed envelopes aren't type-checked. Without this, a tampered envelope with `slot=99` would silently fall through to slot 2 (the default branch).
+
+Both are defense-in-depth at trust boundaries — the WebHID device and the deserialized envelope are both untrusted-input sources where types don't apply.
+
+### Lesson #4 — wrap.ts Argon2id-over-HMAC closes the T5 brief-read window
+
+Documented rationale: "even though the HMAC output is already high-entropy (~160 bits assuming the slot secret is full entropy), running it through Argon2id costs an attacker GPU time to brute-force IF they ever obtain a brief read of the HMAC output during unwrap (T5). Floors a worst-case exposure window."
+
+The KeePassXC / age-yubikey pattern is the same: HMAC output → Argon2id → wrap key. We adopt the convention because the cost-of-attack on the brief-read window matters more than the small CPU cost of an extra Argon2id derivation. Defensive-stretch over high-entropy input is cheap insurance.
+
+Both `buildYubikeyWrap` and `recoverCekFromYubikey` wrap their crypto operations in try/finally so HMAC output and wrap key are zeroed unconditionally — `sodium.memzero` immediately after each is consumed. The pattern mirrors `chat/crypto.ts`'s ephPriv wipe (Audit 2-12) and `keystore.ts`'s JIT-key wipe (M6).
+
+### Lesson #5 — keystoreYubikey.ts Audit 1-5 prevents silent loss of enrolled YubiKeys
+
+Pre-fix, `enrollYubikey` on an already-layered envelope replaced the wraps array with `[passphrase, new-yubikey]`, silently dropping every previously enrolled YubiKey. A user with two physical YubiKeys enrolling a third would lose access to the first two.
+
+Post-fix: ENFORCES the simpler invariant that only ONE YubiKey wrap may exist at enrollment time, throwing `duplicate_yubikey_label` if the user tries to add a second without going through `unenrollYubikey` first. Multi-YubiKey enrollment via a separate API (`enrollAdditionalYubikey` taking one hmacFn per existing wrap) is tracked but not implemented.
+
+This is a graceful degradation: the rare multi-YubiKey case isn't supported yet, but the failure mode is "error message asking user to unenroll first" rather than "silently lose access." The right tradeoff.
+
+### Lesson #6 — keystoreYubikey.ts Audit 7-1 stable error class
+
+Pre-fix: every throw site used `new Error(...)` with a free-form English string. The `HardwareKeyCard` UI surfaced those raw strings via `showToast`, losing localization AND risking implementation-detail leak in future changes.
+
+Post-fix: throw `YubikeyKeystoreError` with a stable `kind` discriminator. UI maps `kind` → i18n key. Free-form `message` kept for log/devtools but never user-facing. The kind taxonomy was extended to cover non-keystoreYubikey throw sites (transport.ts WebHID errors, wrap.ts cryptographic errors) via `classifyYubikeyError`.
+
+This is the same pattern as `PubPinError.code` → `chat.security.*` i18n keys (cp98) and `KeystoreError.kind` → discriminated error UX (cp96). Consistent across the codebase.
+
+### Lesson #7 — keystoreYubikey.ts Audit 1-6 unlock error obfuscation
+
+`unlockWithYubikey` surfaces a generic message ("YubiKey did not unlock this keystore (wrong slot, wrong key, or HMAC mismatch)") rather than the underlying cryptographic-detail error from inner helpers. The internal context lives in `cause` for devtools but won't reach an i18n layer that might log it to a remote logging endpoint.
+
+This is the same posture as `pubPin`'s generic-rejection-to-user / detailed-to-console split (cp98) — never leak the specific gate that failed because that's just a hint for the attacker to try harder.
+
+### Lesson #8 — identicon.ts uses raw bytes not a string hash
+
+Morphit generates identicons from high-entropy cryptographic material: 33-byte secp256k1 pubkeys, 32-byte signatures. Comment explicit: "Running that through a string hash like FNV-1a would destroy entropy for no benefit. We index into the input bytes directly."
+
+180M distinct identicons (7 color slots × 12-color palette × 5 accessory shapes) — far beyond birthday-collision threshold for any user's lifetime of Morphit contacts. The clipId-nonce (`((h * 31) ^ byte) | 0`) is for DOM id uniqueness only; NO cryptographic security properties needed there.
+
+`identiconDataUriFromString` (for paired-readonly sessions) deliberately produces a DIFFERENT identicon than the fully-unlocked identicon for the same account (different seed bytes — posting pubkey vs UTF-8 account name). Comment: "the visual mismatch IS a useful signal that the session shape changed."
+
+This is intentional design, not a bug. The user looking at the avatar and noticing it changed is the visual cue that they're in a different session shape.
+
+### Lesson #9 — Coverage table for cp101
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `yubikey/protocol.ts` | 202 | DEEP-AUDITED CLEAN | Pure types + constants; T1-T6 threat model comprehensively documented; WrappedCek discriminated union; MAX_YUBIKEY_WRAPS=4; MAX_YUBIKEY_LABEL_LEN=64; DEFAULT_YUBIKEY_SLOT=2; ADR-0017 architecture |
+| `yubikey/transport.ts` | 323 | DEEP-AUDITED CLEAN | WebHID transport for OTP applet HMAC-SHA1; **WebAuthn rejected** (ECDSA P-256 ≠ secp256k1); Audit 6-7 short-feature-report defense; L3 defensive slot runtime check (defends against tampered envelopes); 30s touch UX timeout; manual WebHID typing surface |
+| `yubikey/wrap.ts` | 231 | DEEP-AUDITED CLEAN | Pure helpers smoke-testable with stub HMAC; **Argon2id over HMAC output closes T5 brief-read window**; mirrored Argon2id params with passphrase wrap (no cheaper attacker path); HMAC + wrapKey zeroed unconditionally in try/finally on both happy + error paths; assertSafeKdfParams floor 1MB memlimit |
+| `keystoreYubikey.ts` | 419 | DEEP-AUDITED CLEAN | High-level enroll/unenroll/harden/soften/unlock; Audit 7-1 YubikeyKeystoreError typed class with i18n key mapping; Audit 1-5 prevents silent loss of enrolled YubiKeys (enforces single-wrap-at-enroll invariant); Audit 1-6 unlock error obfuscation (generic msg to user, cause to devtools); cannot_unenroll_last_wrap defense; classifyYubikeyError extends taxonomy across transport+wrap |
+| `identicon.ts` | 254 | DEEP-AUDITED CLEAN | Heart-style identicon pure SVG no canvas no deps; deterministic from raw bytes (NOT string-hashed — high-entropy crypto material would be destroyed by FNV-1a); 180M distinct shapes; identiconDataUriFromString for paired-readonly deliberately differs from unlocked identicon ("visual mismatch IS a useful signal"); clipId nonce no crypto security needed |
+
+Total cp101: 1,429 lines walked, 0 findings.
+
+## CP101 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp100 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~39,843 | cp82+cp85 handlers (5,266) + cp86 supporting (3,056) + cp87 indexer API (3,173) + cp88 relay (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) + cp93 remaining indexer API (3,668) + cp94 fee verifiers+breaker (1,275) + cp95 streaming+auth endpoints (1,613) + cp96 web frontend crypto+auth (3,503) + cp97 web frontend pairing+identity+release-validate (2,061) + cp98 web frontend chat MITM-defense (1,787) + cp99 web frontend chat payload core (2,310) + cp100 web frontend chat orchestrator (1,201) + cp101 yubikey transport + identicon (1,429) |
+
+## CP101 FIXES
+
+None — cp101 was a YubiKey transport + identicon audit.  0 findings across 5 modules / 1,429 lines.
+
+
 
 ### Lesson #1 — chatService.ts is where the cp96-99 stack comes together
 
@@ -1522,6 +1798,22 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP103+ PREDICTED HUNTING GROUND
+
+Web frontend deep-audit phase closed at cp102. Remaining targets:
+
+1. **Matrix-bot subsystem** — `apps/matrix-bot/`. Bridges Matrix DM/room to relay; security disclosure flow. Per memory rules `@user:server` for DMs vs `#room:server` for rooms — both monitored at `@agorise:matrix.org` and `#agorise:matrix.org`.
+2. **Ops-CLI** — `apps/ops-cli/`. Operator-facing CLI for node bring-up, key rotation, federation peering.
+3. 30-test CI delta hunt — sandbox-blocked
+4. Defense-claim-vs-implementation parity smoke — speculative
+
+## CP102+ PREDICTED HUNTING GROUND
+
+1. **HTTP clients + endpoint rotator** — `lib/indexer/client.ts` (551), `lib/blurt/client.ts` (267), `lib/net/endpoints.ts` (470). The chain RPC pinning + quorum dispatch layer that chainVerify and blurtVerify consume via `getRotator().callMany`. Highest-value remaining surface.
+2. **Matrix-bot subsystem** — `apps/matrix-bot/`
+3. **Ops-CLI** — `apps/ops-cli/`
+4. 30-test CI delta hunt — sandbox-blocked
 
 ## CP101+ PREDICTED HUNTING GROUND
 

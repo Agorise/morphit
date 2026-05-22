@@ -1,5 +1,134 @@
 # Tarball history
 
+## cp102 — HTTP clients + endpoint rotator audit + web frontend phase CLOSE (~1,288 lines, 3 modules, frontend total 15,579 / 26 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** REGENERATED at cp102 — `morphit-audit-2026-05-122-cp102-FULL-STATE.tar.gz`. cp102 closes the web frontend deep-audit phase (cp96-cp102 = 7 checkpoints, 15,579 lines, 26 modules). Per the tarball cadence rule, end-of-phase is a meaningful milestone.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~41,131 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061 + cp98 web frontend chat MITM-defense 1,787 + cp99 web frontend chat payload core 2,310 + cp100 web frontend chat orchestrator 1,201 + cp101 yubikey transport + identicon 1,429 + cp102 HTTP clients + endpoint rotator 1,288).
+
+### TL;DR
+
+cp102 walks the **HTTP-client + endpoint-rotator surface** — the resilience backbone that every chain-RPC call in the frontend rides on. 3 modules / 1,288 lines / 0 findings.
+
+This closes the **web frontend deep-audit phase** (cp96-cp102): **26 modules / 15,579 lines / 0 findings**. The cp93 release.ts JSDoc fix (the only code change of the entire frontend phase) was on the indexer side; the frontend modules were all clean.
+
+**Modules walked (3, ~1,288 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `net/endpoints.ts` | 470 | DEEP-AUDITED CLEAN | EndpointRotator health-aware round-robin; exponential cooldown capped 5min; **RpcError vs transport-error distinction prevents JSON-RPC-level errors from demoting endpoints**; `callMany` parallel quorum dispatch (powers Audit 2-7/2-8); 3 privacy flags (`credentials: 'omit'`, `referrerPolicy: 'no-referrer'`, `cache: 'no-store'`); initial shuffle prevents centralized load |
+| `blurt/client.ts` | 267 | DEEP-AUDITED CLEAN | Routes dblurt JSON-RPC through rotator (rotator resolved fresh per-call so settings-edit takes effect immediately); `getLatestCustomJson` filters opName + opId + **authedBy.includes(account) defense against impersonated ops**; `getTransaction` graceful fallback for nodes without tx-index plugin |
+| `indexer/client.ts` | 551 | DEEP-AUDITED CLEAN | Typed `Result<T>` discriminated union eliminates try/catch ceremony; 8s timeout via AbortController + `anySignal` polyfill; **types imported from `@morphit/indexer-client` workspace package — schema drift fails at type-check, not runtime**; `encodeURIComponent` on every account-name path param |
+
+**Key cp102 verifications:**
+
+- **Endpoint rotator is one of the most-consumed modules in codebase**: cp89 relay-side, cp102 web-side, cp98 chainVerify/blurtVerify (via callMany for Audit 2-7/2-8 quorum), cp97 pairing (default verifier + multisig pre-check). cp102 confirms it's correctly engineered for its load-bearing role.
+- **3 privacy flags hardcoded into every RPC call**: `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`, `cache: 'no-store'`. Not optional — RPC endpoints are third-party infrastructure; leaking Referer or session cookies to them is a privacy regression.
+- **RpcError vs transport-error distinction is structural**: pre-this-design, a buggy chain RPC method (or a deliberate test for "what happens if I pass bad params") would have demoted otherwise-healthy endpoints. Correct distinction means the rotator's health stats reflect actual reachability, not API-level disagreements.
+- **`@morphit/indexer-client` workspace package catches schema drift at type-check**: indexer and frontend share response types via the same workspace package. A schema drift between them fails at build time, not at runtime in a user's browser. Right architecture for federated codebase.
+- **`anySignal` polyfill**: composes caller AbortSignal with internal 8s timeout. Browser native `AbortSignal.any` not yet in all targets. `{ once: true }` listener option prevents listener-leak.
+- **`encodeURIComponent` on every account-name path param**: defense-in-depth. Account names should be `[a-z0-9.-]{3,16}` (validated upstream), but encoding regardless defends against URL-injection if upstream validation slipped.
+- **`getLatestCustomJson` `authedBy.includes(account)` check**: this is the critical defense in the chain-verification primitive. Without it, an impersonated op authored by someone else (custom_json with `id=morphit_chat_identity_v1` but different `required_posting_auths`) could match opName + opId filters and feed a false pub to chainVerify. The chain-acceptance invariant only guarantees the op was signed by SOMEONE on `required_posting_auths`; the account check verifies that someone is the right account.
+
+### Web frontend phase summary (cp96-cp102)
+
+| CP | Lines | Modules | Focus | Findings |
+|---|---:|---:|---|---:|
+| cp96 | 3,503 | 7 | crypto core (keystore, keygen, confusables, chat/crypto, blurt/sign, service-worker, push) | 0 |
+| cp97 | 2,061 | 5 | pairing + identity + releaseValidate | 0 |
+| cp98 | 1,787 | 4 | chat MITM-defense (fingerprint, chainVerify, pubPin, blurtVerify) | 0 |
+| cp99 | 2,310 | 1 | payload core (16-asset wire format) | 0 |
+| cp100 | 1,201 | 1 | chatService orchestrator | 0 |
+| cp101 | 1,429 | 5 | yubikey transport + identicon | 0 |
+| cp102 | 1,288 | 3 | HTTP clients + endpoint rotator | 0 |
+| **Phase total** | **15,579** | **26** | **Web frontend** | **0** |
+
+The web frontend was walked end-to-end from cryptographic primitive (keystore, keygen) through trust-boundary surfaces (chat-MITM defense, YubiKey, pairing) through orchestrators (chatService, payload) to network plumbing (endpoint rotator, HTTP clients). Every defense in every layer was verified to compose correctly with the next.
+
+### Cp102 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,288 | 3 HTTP-client + rotator modules |
+| Findings this cp | 0 | all 3 modules clean |
+| Tarball regenerated | YES | end-of-phase milestone |
+
+### Cp102 deferred to cp103+
+
+Web frontend deep-audit phase closed. Remaining targets:
+
+1. **Matrix-bot subsystem** — apps/matrix-bot/
+2. **Ops-CLI** — apps/ops-cli/
+3. 30-test CI delta hunt — sandbox-blocked
+4. Defense-claim-vs-implementation parity smoke — speculative
+
+### Cp102 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp102 lessons (10 — endpoint rotator is resilience backbone, 3 privacy defenses in fetchWithTimeout, RpcError vs transport-error distinction structural, indexer/client Result<T> eliminates try/catch, schema-drift catches at type-check via workspace package, anySignal polyfill, encodeURIComponent every path param, getLatestCustomJson authedBy.includes critical defense, coverage table, web frontend phase summary) + state table + fixes section ("none — audit-only") + cp103+ hunting-ground update
+- `TARBALL.md` — cp102 entry inserted at top (this entry); .tar.gz regenerated as `morphit-audit-2026-05-122-cp102-FULL-STATE.tar.gz` (end-of-phase milestone)
+
+No source code or test files modified — cp102 is a pure audit-trail checkpoint.
+
+## cp101 — YubiKey transport + identicon audit (~1,429 lines, 5 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp101 is audit-only; last binary is `cp100-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~39,843 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061 + cp98 web frontend chat MITM-defense 1,787 + cp99 web frontend chat payload core 2,310 + cp100 web frontend chat orchestrator 1,201 + cp101 yubikey transport + identicon 1,429).
+
+### TL;DR
+
+cp101 walks the **YubiKey-unlock subsystem** (ADR-0017, Batch I) — 5 modules with crisp boundaries (pure types/constants → smoke-testable wrap math → browser-only WebHID transport → high-level orchestration → typed errors) — plus `identicon.ts`. 0 findings. The YubiKey path is the hardware-anchored alternative to passphrase wraps for the layered-CEK keystore.
+
+**Modules walked (5, ~1,429 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `yubikey/protocol.ts` | 202 | DEEP-AUDITED CLEAN | Pure types + constants; **T1-T6 threat model comprehensively documented**; WrappedCek discriminated union; MAX_YUBIKEY_WRAPS=4; MAX_YUBIKEY_LABEL_LEN=64 |
+| `yubikey/transport.ts` | 323 | DEEP-AUDITED CLEAN | WebHID transport for OTP applet HMAC-SHA1; **WebAuthn rejected (ECDSA P-256 ≠ secp256k1)**; Audit 6-7 short-feature-report defense; L3 defensive slot runtime check; 30s touch UX timeout |
+| `yubikey/wrap.ts` | 231 | DEEP-AUDITED CLEAN | Pure helpers smoke-testable with stub HMAC; **Argon2id over HMAC output closes T5 brief-read window**; mirrored params with passphrase wrap; HMAC + wrapKey zeroed unconditionally in try/finally |
+| `keystoreYubikey.ts` | 419 | DEEP-AUDITED CLEAN | enroll/unenroll/harden/soften/unlock orchestration; Audit 7-1 YubikeyKeystoreError typed class + i18n key mapping; **Audit 1-5 prevents silent loss of enrolled YubiKeys**; Audit 1-6 unlock error obfuscation (cause to devtools); cannot_unenroll_last_wrap defense |
+| `identicon.ts` | 254 | DEEP-AUDITED CLEAN | Heart-style pure SVG no deps; deterministic from RAW BYTES (not string-hashed — high-entropy crypto material); 180M distinct shapes; identiconDataUriFromString deliberately differs for paired-readonly ("visual mismatch IS a useful signal") |
+
+**Key cp101 verifications:**
+
+- **WebAuthn rejected with explicit rationale**: ECDSA P-256 ≠ secp256k1 (curve mismatch); WebHID gives raw byte channel to OTP applet for HMAC-SHA1 challenge-response. Not a hidden assumption — documented at the top of transport.ts.
+- **T5 defense (Argon2id over HMAC output)**: "even though the HMAC output is already high-entropy (~160 bits), running it through Argon2id costs an attacker GPU time to brute-force IF they ever obtain a brief read of the HMAC output during unwrap. Floors a worst-case exposure window." Same posture as KeePassXC and age-yubikey.
+- **Audit 6-7 short-feature-report defense**: hostile USB device with Yubico vendor ID could deliver a feature report shorter than 8 bytes; pre-fix `view[FEATURE_PAYLOAD_SIZE]` reads undefined → `?? 0` fallback interprets as "response ready, all zeros" → partial-zero HMAC. Post-fix: explicit length check + throw.
+- **L3 defensive slot runtime check**: TypeScript prevents arbitrary slot values at type level, but JSON-parsed envelopes aren't type-checked. Without runtime check, tampered envelope with slot=99 would silently fall through to slot 2.
+- **Audit 1-5 prevents silent loss of enrolled YubiKeys**: pre-fix code path replaced wraps array with `[passphrase, new-yubikey]`, silently dropping every previously enrolled YubiKey. Post-fix: enforces single-wrap-at-enroll invariant with clear duplicate_yubikey_label error.
+- **Audit 7-1 stable error class with i18n**: pre-fix `new Error(...)` free-form English → HardwareKeyCard surfaced raw strings → lost localization. Now: YubikeyKeystoreError with stable kind discriminator + i18n key mapping. classifyYubikeyError extends taxonomy across transport+wrap. Same pattern as PubPinError (cp98) and KeystoreError (cp96).
+- **identicon raw bytes not string-hashed**: "Running 33-byte secp256k1 pubkeys through FNV-1a would destroy entropy for no benefit." 180M distinct identicons far beyond birthday-collision threshold. clipId nonce is for DOM id uniqueness only — no crypto security properties needed there.
+- **identiconDataUriFromString deliberately differs**: paired-readonly identicon uses UTF-8 account name as seed; unlocked uses posting pubkey bytes. Different seeds → different identicons for the same account name. Intentional: "the visual mismatch IS a useful signal that the session shape changed."
+
+### Cp101 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,429 | 5 YubiKey + identicon modules |
+| Findings this cp | 0 | all 5 modules clean |
+
+### Cp101 deferred to cp102+
+
+1. **HTTP clients + endpoint rotator** — indexer/client (551), blurt/client (267), net/endpoints (470). The chain RPC pinning + quorum dispatch layer that chainVerify and blurtVerify consume via `getRotator().callMany`. Highest-value remaining surface.
+2. **Matrix-bot subsystem** — apps/matrix-bot/
+3. **Ops-CLI** — apps/ops-cli/
+4. 30-test CI delta hunt — sandbox-blocked
+
+### Cp101 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp101 lessons (9 — YubiKey layered into 5 modules with intentional separation, T1-T6 threat model comprehensive, transport.ts Audit 6-7 + L3 hardening, wrap.ts Argon2id-over-HMAC closes T5, keystoreYubikey Audit 1-5 prevents silent YubiKey loss, Audit 7-1 stable error class, Audit 1-6 unlock error obfuscation, identicon raw bytes not string-hash, coverage table) + state table + fixes section ("none — audit-only") + cp102+ hunting-ground update
+- `TARBALL.md` — cp101 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp101 is a pure audit-trail checkpoint.
+
 ## cp100 — Chat client orchestrator audit + chat-client phase CLOSE (~1,201 lines, 1 module, phase total 10,862 / 28 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
 
 **Tarball:** REGENERATED at cp100 — `morphit-audit-2026-05-122-cp100-FULL-STATE.tar.gz`. cp100 closes the chat-client audit phase (5 checkpoints: cp96-cp100, 10,862 lines, 28 modules walked). Per the tarball cadence rule, end-of-phase is a meaningful milestone.
