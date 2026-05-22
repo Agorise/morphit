@@ -1,5 +1,65 @@
 # Tarball history
 
+## cp88 — Relay endpoint + middleware + policy audit (~3,048 lines, 8 modules) — 0 findings — cp87 SSE-cap soft observation CONFIRMED NOT-A-FINDING (already-addressed design choice via P7-1 + main.ts comments + OPERATIONS.md §14.5) — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp88-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~14,543 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048).
+
+### TL;DR
+
+cp88 extends the audit into the **relay's anti-drain stack** — the most security-critical surface in the entire codebase since it directly controls BLURT spending.  Walked the largest single relay file (`create.ts`, 864 lines) end-to-end, plus the central IP-extraction module (`ip.ts`, 382 lines — every defense keys off this), the global daily ceiling (`globalDailyCeiling.ts`, 397 lines — worst-case drain bound), high-value-name policy (`highValueName.ts`, 462 lines), the relay's rate-limit token bucket (`ratelimit.ts`, 218 lines), the invite endpoint (`invite.ts`, 325 lines), the sequential-pattern detector (`sequentialDetector.ts`, 254 lines), and the origin-enforcement middleware (`origin_enforcement.ts`, 146 lines).  3,048 lines total, 0 findings.
+
+Also resolved cp87's SSE-connection-cap soft observation: confirmed NOT-a-finding.  This is an already-addressed design choice (P7-1 in AUDIT-FINDINGS.md, FIXED via doc update to OPERATIONS.md §14.5 with explicit nginx `limit_conn sse_per_ip 20` directive).  main.ts lines 168-173 + 191-197 explicitly state "Per-IP open-connection caps belong at the reverse-proxy layer, not here."  Defense-claim-vs-implementation parity holds: the documented operator obligation IS the implementation contract.
+
+**Relay modules walked (8, ~3,048 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `api/create.ts` | 864 | DEEP-AUDITED CLEAN | 9-layer anti-abuse chain; duplicate-after-retry probe (closes timeout-but-landed race); TOCTOU `already_registered` mapping; removeDedupeEntry on broadcast-fail (Finding N6); out-of-ACTs detection; error message hygiene |
+| `middleware/ip.ts` | 382 | DEEP-AUDITED CLEAN | Finding E (non-loopback peers' forwarded headers IGNORED); safe-by-default loopback; CIDR support for BunkerWeb/Docker; /24+/64 bucketing; canonical IPv6 output guarantees bucket consistency across spelling variants |
+| `policy/globalDailyCeiling.ts` | 397 | DEEP-AUDITED CLEAN | tryReserve/reservedCount TOCTOU closure (N-concurrent overshoot); reservedCount NOT reset at midnight (prevents slot leak for straddling in-flight signups); atomic persist tmp+fsync+rename with 0o600 perms; peakHourCountExcludingCurrent Finding N22 |
+| `policy/highValueName.ts` | 462 | DEEP-AUDITED CLEAN | Pure functional 6-category classifier with l33t-substitution defense; numeric_suffix regex tuned to exempt year-suffixes |
+| `middleware/ratelimit.ts` (relay) | 218 | DEEP-AUDITED CLEAN | peek-vs-commit pattern lets name-iteration NOT burn quota; rejected calls don't push window forward; injectable Clock for tests |
+| `api/invite.ts` | 325 | DEEP-AUDITED CLEAN | Synchronous read+reserve before any await closes concurrent-altcha-bypass TOCTOU; MAX_DAILY_TRACKED_IPS 100k cap (Audit 2026-05 finding 16-B1); releaseReservation against CURRENT value preserves concurrent increments |
+| `policy/sequentialDetector.ts` | 254 | DEEP-AUDITED CLEAN | 3-pattern detection (numeric/alpha/close-similarity); same-bucket isolation; MAX_RECENT_SIGNUPS=5000 cap |
+| `middleware/origin_enforcement.ts` | 146 | DEEP-AUDITED CLEAN | Server-side defense for non-browser clients (CORS is browser-only); 3-case decision; log dedup 5min; allowlist+hint in operator log line |
+
+**Key cp88 verifications:**
+
+- **Two critical TOCTOU closures verified:** (1) globalDailyCeiling tryReserve atomically increments reservedCount, closes N-concurrent-IPs overshoot. (2) invite endpoint synchronously read+reserves priorToday before any await, closes concurrent-altcha-bypass. Both rely on JS event-loop single-threadedness — verified no `await` exists within critical sections.
+- **Reservation lifecycle discipline:** create.ts uses try/finally + `reservationFinalized` flag to enforce exactly-one balance of every tryReserve. Every error path either calls recordSuccess or falls into the finally that auto-releases.
+- **ip.ts is the central pillar:** every rate limit, dedupe, spacing, IP-binding keys off canonicalBucketKey(clientIp(c)). Defense-in-depth check: misconfig dangerous in BOTH directions; safe-by-default (loopback only); operator extends via env var with documented warnings.
+- **Origin enforcement is server-side:** CORS is browser-only; non-browser clients (curl, bots) ignore it. The middleware closes the "someone else's frontend bills my relay" attack vector. Honest disclosure that Origin can still be forged by non-browser clients (this is friction, not bulletproof).
+
+### Cp88 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 3,048 | relay endpoints + middleware + policy |
+| Findings this cp | 0 | all 8 modules clean |
+| Soft observations resolved this cp | 1 | cp87 SSE-cap → not-a-finding (design choice) |
+
+### Cp88 deferred to cp89+
+
+1. **Relay endpoints not yet walked** — `push.ts` (253) + `pushSender.ts` (280) + `health.ts` (178) — could ship together
+2. **Remaining indexer API endpoints** — ~2,500 lines across ~12 smaller endpoints
+3. **Relay `blurt/client.ts`** (791 lines) — chain RPC abstraction; critical path for every broadcast
+4. **Relay `config/index.ts`** (620 lines) — env-var parsing + envelope-decrypt orchestration
+5. 30-test CI delta hunt — still sandbox-blocked
+6. Defense-claim-vs-implementation parity smoke — speculative
+7. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp88 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp88 lessons (4 — SSE-cap not-a-finding resolution, anti-drain TOCTOU closures verified, ip.ts as central pillar, coverage table) + state table + fixes section ("none — audit-only") + cp89+ hunting-ground update
+- `TARBALL.md` — cp88 entry inserted at top (this entry)
+
+No source code or test files modified — cp88 is a pure audit-trail checkpoint.
+
 ## cp87 — Indexer API endpoint audit (~3,173 lines) — 12 endpoints walked (8 deep + 4 spot-checked) — 0 findings — 1 soft observation deferred to cp88+ (per-IP SSE-connection cap) — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp87-FULL-STATE.tar.gz`

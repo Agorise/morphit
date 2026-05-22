@@ -1,8 +1,72 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp87 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged from cp86) · 1,381 VITEST TESTS (unchanged) · INDEXER API ENDPOINT AUDIT: 12 endpoints walked (~3,173 lines) — 8 deep + 4 spot-checked, 0 findings · 1 soft observation flagged for cp88 (SSE-connection caps belong at middleware layer) · CUMULATIVE DEEP-AUDIT COVERAGE: ~11,495 LINES.**
+**Last touched:** Part 122 cp88 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · RELAY ENDPOINT + MIDDLEWARE + POLICY AUDIT: 8 modules walked (~3,048 lines), 0 findings · CP87 SSE-CONNECTION-CAP SOFT OBSERVATION CONFIRMED NOT-A-FINDING (already-addressed design choice via P7-1 / main.ts comments / OPERATIONS.md §14.5) · CUMULATIVE DEEP-AUDIT COVERAGE: ~14,543 LINES.**
 
-## CP87 LESSONS
+## CP88 LESSONS
+
+### Lesson #1 — cp87's SSE-connection-cap soft observation was an already-addressed design choice
+
+cp87 flagged "no per-IP SSE-connection cap visible in endpoint code" as a soft observation. cp88 investigation confirms this is **NOT a finding** — it's a deliberate design choice with documented operator obligation:
+
+- `apps/indexer/src/main.ts` lines 168-173 and 191-197 explicitly state: "Per-IP open-connection caps belong at the reverse-proxy layer, not here."
+- `docs/AUDIT-FINDINGS.md` P7-1 (MEDIUM, FIXED) tracks this. The fix was to add `§14.5 "SSE connection caps (mandatory hardening)"` to OPERATIONS.md with the required nginx config (`limit_conn_zone $binary_remote_addr zone=sse_per_ip:10m;` + `limit_conn sse_per_ip 20;` + `limit_conn_status 429;` + `proxy_read_timeout 5m;` + `proxy_buffering off;`). Caddy alternate guidance also present.
+- The rationale: a per-minute rate limit doesn't model concurrent-connection cost; the right control is at the reverse-proxy layer, where connection counters are natively supported. Adding an in-process counter would override a conscious design decision.
+
+Defense-claim-vs-implementation parity holds: the claim is "operator must configure their reverse proxy"; the implementation IS the documented operator obligation. cp84-S1's lesson (don't document a defense that isn't implemented) applies to in-code defenses, not to operator-runbook defenses where the doc IS the contract.
+
+### Lesson #2 — Relay's anti-drain stack is multi-layered, well-sequenced, and atomic-under-concurrency
+
+The 9-layer anti-abuse chain in `create.ts` is rigorously sequenced (kill-switch → ceiling reservation → per-IP burst → invite verify → shape/name validation → high-value-name → sequential detector → pubkey validation → dedupe → chain availability → broadcast). Two critical TOCTOU closures verified:
+
+- **globalDailyCeiling `tryReserve()`** (cp88 audit): closes the N-concurrent-IPs overshoot race. Pre-fix: N concurrent requests all see canAccept()=true at count=ceiling-1, all proceed, overshoot by N-1. Fix: `count + reservedCount` atomically incremented; (N-1)th caller sees full bucket and is rejected. Reservation MUST be balanced via `recordSuccess()` (on broadcast OK) or `releaseReservation()` (on any failure path). create.ts enforces with try/finally + `reservationFinalized` flag.
+- **inviteEndpoint synchronous-read-then-reserve** (cp88 audit): closes concurrent-altcha-bypass. Pre-fix: requests A and B both await body-parse, both read priorToday=0, both bypass altcha. Fix: read priorToday + increment SYNCHRONOUSLY before any await. With altchaTriggerCount=3, request C now reads priorToday=2 and gets gated.
+
+Both fixes rely on JS's single-threaded event-loop semantics — no preemption between read and write within the same synchronous block. Audit confirmed no `await` exists within the critical sections.
+
+### Lesson #3 — ip.ts is the central pillar; misconfig is dangerous in BOTH directions
+
+Every rate limit, every dedupe, every spacing check, every invite IP-binding is keyed off `canonicalBucketKey(clientIp(c))`. If `ip.ts` is wrong, every defense is wrong. The module's documentation makes this explicit ("CRITICAL: misconfiguring this is dangerous in BOTH directions") and the default (loopback only) is safe.
+
+Key defenses verified:
+- Finding E: non-loopback peers' X-Forwarded-For / X-Real-IP IGNORED. Direct-connection clients use their socket address as bucket key.
+- IPv4 CIDR support for BunkerWeb/Docker bridge networks. IPv6 CIDR explicitly NOT supported (operator passes individual addresses).
+- canonicalBucketKey: IPv4 → /24, IPv6 → /64, IPv4-mapped IPv6 collapses to v4 /24, loopback round-trips unchanged.
+- Canonical IPv6 output: lowercase + leading-zeros-stripped + `::` short-form → guarantees bucket consistency across spelling variants.
+- Header length cap: 64 chars on both X-Forwarded-For first-element and X-Real-IP.
+
+### Lesson #4 — Coverage table for relay modules walked at cp88
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `api/create.ts` | 864 | DEEP-AUDITED CLEAN | 9-layer anti-abuse chain; duplicate-after-retry probe; TOCTOU mapping; removeDedupeEntry on broadcast-fail (Finding N6); error message hygiene |
+| `middleware/ip.ts` | 382 | DEEP-AUDITED CLEAN | Finding E closure; safe-by-default loopback; CIDR support; /24 + /64 bucketing; canonical IPv6 output |
+| `policy/globalDailyCeiling.ts` | 397 | DEEP-AUDITED CLEAN | tryReserve TOCTOU closure; reservedCount NOT reset at midnight (prevents slot leak for straddling signups); atomic file persist 0o600; peakHourCountExcludingCurrent Finding N22 |
+| `policy/highValueName.ts` | 462 | DEEP-AUDITED CLEAN | 6-category classifier with l33t-substitution defense; numeric_suffix regex tuned to exempt year-suffixes |
+| `middleware/ratelimit.ts` | 218 | DEEP-AUDITED CLEAN | peek-vs-commit lets name-iteration not burn quota; rejected calls don't push window forward; injectable Clock |
+| `api/invite.ts` | 325 | DEEP-AUDITED CLEAN | Synchronous read+reserve closes concurrent-altcha-bypass; MAX_DAILY_TRACKED_IPS 100k (Audit 2026-05 finding 16-B1); releaseReservation against CURRENT value |
+| `policy/sequentialDetector.ts` | 254 | DEEP-AUDITED CLEAN | 3-pattern detection (numeric/alpha/close-similarity); same-bucket isolation; MAX_RECENT_SIGNUPS=5000 cap |
+| `middleware/origin_enforcement.ts` | 146 | DEEP-AUDITED CLEAN | Server-side defense for non-browser clients; 3-case decision; helpful operator log message includes allowlist + env-var hint |
+
+Total cp88: 3,048 lines walked, 0 findings.
+
+## CP88 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp87 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~14,543 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) |
+
+## CP88 FIXES
+
+None — cp88 was a relay endpoint + middleware + policy audit.  0 findings across 8 modules / 3,048 lines.  cp87 soft observation (SSE-connection cap) confirmed not-a-finding via P7-1 / OPERATIONS.md §14.5 / main.ts design comment.
+
+
 
 ### Lesson #1 — Indexer API endpoint defenses are consistent across the dozen audited
 
@@ -308,6 +372,16 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP89+ PREDICTED HUNTING GROUND
+
+1. **Relay endpoints not yet walked** — `apps/relay/src/api/push.ts` (253) + `apps/relay/src/policy/pushSender.ts` (280) for web-push notifications, `apps/relay/src/api/health.ts` (178) for relay health.  Lower attack surface (push is opt-in subscribe; health is internal).  Could be combined into one cp.
+2. **Remaining indexer API endpoints** — `apps/indexer/src/api/rssOrderbookHandlers.ts` (317), `instance.ts` (282), `instancesStream.ts` (240), `clearingPriceHistory.ts` (211), `instancesStreamHelpers.ts` (168), `orderViewsLogic.ts` (141), `operatorBlocks.ts` (137), `release.ts` (116), `chainFee.ts` (116), `instances.ts` (109), `featuredBids.ts` (148), `health.ts` (161).  ~2,500 lines.
+3. **Relay blurt/client.ts** (791 lines) — the chain RPC abstraction.  Critical path: every broadcast goes through it.  Big file, careful audit.
+4. **Relay config/index.ts** (620 lines) — env-var parsing + envelope decrypt orchestration.  Has a lot of operator-config surface area.
+5. **30-test CI delta hunt** — still sandbox-blocked.
+6. **Defense-claim-vs-implementation parity smoke** — speculative.
+7. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
 
 ## CP88+ PREDICTED HUNTING GROUND
 
