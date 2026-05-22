@@ -1,5 +1,199 @@
 # Tarball history
 
+## cp93 — Remaining indexer API endpoints audit (~3,668 lines, 28 modules) — **1 FINDING + FIX (release.ts stale viewkey JSDoc)** — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** `morphit-audit-2026-05-122-cp93-FULL-STATE.tar.gz` (regenerated this checkpoint — cp93 carries a real code fix, qualifying as a meaningful milestone per the new cadence rule).  Includes accumulated cp91 + cp92 + cp93 docs and the release.ts JSDoc fix.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~24,664 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API endpoints 3,668).
+
+### TL;DR
+
+cp93 walks **28 remaining indexer API endpoints** (everything left after cp87's larger-endpoint sweep). 3,668 lines, 1 finding caught — the only finding in 11 consecutive checkpoints.
+
+**The finding**: `apps/indexer/src/api/release.ts` line 28's JSDoc response-shape claim listed `xmr: { address: string, viewkey: string, piconero: string }` as the response body shape. The in-code `stripViewkey` function (lines 100-117) correctly strips any viewkey field; the in-code comment (lines 81-89) correctly states "viewkey never surfaces via API"; only the header JSDoc was stale. The code is correct; only the documentation was misleading.
+
+**Fix**: replaced the shape with `xmr: { address: string, piconero: string }` and added a Part 107/108++/109 explanatory paragraph citing per-payment tx_proof verification. Repo-wide sweep confirms this was the ONLY stale viewkey-in-shape claim (all other viewkey references in the codebase are either historical-removal-context or the legitimate Monero proof-mode query parameter in moneroProofVerifier.ts).
+
+**Why this matters**: per Ken's standing memory rule, the XMR view key is NEVER published anywhere — including API contract documentation. A stale JSDoc shape claim is a memory-rule violation even though the code is correct, because a future contributor reading the JSDoc might think viewkey is part of the API contract, or might add a viewkey field thinking it's appropriate. The fix brings the JSDoc into alignment with `docs/OPERATIONS.md` §40.8 which already documents the correct shape.
+
+**Modules walked (28, ~3,668 lines):**
+
+| Module | Lines | Status |
+|---|---:|---|
+| `rssOrderbookHandlers.ts` | 317 | CLEAN |
+| `instance.ts` | 282 | CLEAN |
+| `instancesStream.ts` | 240 | CLEAN |
+| `instancesStreamHelpers.ts` | 168 | CLEAN |
+| `clearingPriceHistory.ts` | 211 | CLEAN |
+| `orderViewsLogic.ts` | 141 | CLEAN |
+| `featuredBids.ts` | 148 | CLEAN |
+| `featuredOrderbook.ts` | 162 | CLEAN |
+| `operatorBlocks.ts` | 137 | CLEAN |
+| `release.ts` | 116 | **FIX APPLIED** (stale JSDoc) |
+| `chainFee.ts` | 116 | CLEAN |
+| `instances.ts` | 109 | CLEAN |
+| `health.ts` (indexer) | 161 | CLEAN |
+| `blocks.ts` | 92 | CLEAN |
+| `conversations.ts` | 90 | CLEAN |
+| `profiles.ts` | 145 | CLEAN |
+| `shared.ts` | 64 | CLEAN |
+| `activity.ts` | 98 | CLEAN |
+| `chatIdentity.ts` | 74 | CLEAN |
+| `orderbookStreamHelpers.ts` | 207 | CLEAN |
+| `operators.ts` | 109 | CLEAN |
+| `chat.ts` | 127 | CLEAN |
+| `attestorEligibility.ts` | 78 | CLEAN |
+| `orderViews.ts` | 32 | CLEAN |
+| `listingFee.ts` + body | 94 | CLEAN |
+| `strangerFeeQuote.ts` + body | 92 | CLEAN |
+| `rssOrderbook.ts` | 95 | CLEAN |
+
+**Other key cp93 verifications:**
+
+- **`instance.ts` `operator_matrix_room` is #-prefixed-room-alias-only** — config loader refuses @-prefixed values and refuses to start. Directly matches Ken's standing memory rule about Matrix DM vs room notation.
+- **`featuredOrderbook` JOIN on (account, permlink)** — not permlink alone (which would let an attacker bid on their order while a victim's matching-permlink order gets the visibility, Finding O27).
+- **`health.ts` NEW-9-8 dual-gate** — verbose mode requires BOTH server-side `MORPHIT_INDEXER_VERBOSE_HEALTH=true` AND request `?verbose=1`. Pre-fix, any caller passing the query param leaked operator-balance state to a drain-attempt timing attacker.
+- **`instancesStream.ts` pollInFlight guard (F-15)** — prevents overlapping poll ticks from race-emitting the same diff twice when the DB is slow.
+- **`rssOrderbookHandlers.ts` xmlEscape correct order** — `&` first to avoid double-escaping the others (`&gt;` → `&amp;gt;` would be a bug).
+- **`shared.ts` ACCOUNT_NAME_RE allows dotted names** — chat audit C-19 close-out (pre-fix the regex disallowed dots, breaking chat for every user with a dotted account name).
+- **Privacy posture is explicit in EVERY public endpoint's header comment** — blocks.ts ("block signal as provocation vector"), chat.ts (X25519 keys per ADR-0015), chatIdentity.ts (source_trx_id for client-side MITM defense), featuredBids.ts (chain-public), attestorEligibility.ts (public on-chain state). Future contributors see WHY no-auth is correct, not just THAT.
+
+### Cp93 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | only doc-comment change, no type-level effect |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | functional behavior unchanged |
+| Code changes this cp | 1 | release.ts JSDoc shape correction (comment-only) |
+| Lines deep-audited this cp | 3,668 | 28 indexer API modules |
+| Findings this cp | 1 | release.ts stale viewkey JSDoc — fixed inline |
+
+### Cp93 deferred to cp94+
+
+1. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` (BitcoinExplorerFeeVerifier, MoneroProofFeeVerifier, CircuitBreaker). Last major non-handler indexer surface; quorum logic + proof verification + breaker degradation all warrant deep walk.
+2. **Remaining larger streaming endpoints** — chatStream.ts (374), orderbookStream.ts (494), loginPairing.ts (401), chatAdmission/chatReadState/chatStreamHelpers/instancePaymentMethods (~340)
+3. 30-test CI delta hunt — sandbox-blocked
+4. Defense-claim-vs-implementation parity smoke — speculative
+5. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp93 file changes summary
+
+Modified files:
+- `apps/indexer/src/api/release.ts` — JSDoc shape claim line 28 corrected (removed stale `viewkey: string` field reference); added Part 107/108++/109 explanatory paragraph
+- `docs/REVISIT-LIST.md` — cp93 lessons (7 — first-finding-in-11-checkpoints summary, RSS XML escaping order, indexer health.ts NEW-9-8 dual-gate, SSE per-connection state isolation, featuredOrderbook O27 fix durability, explicit privacy posture in every endpoint, coverage table) + state table + fixes section + cp94+ hunting-ground update
+- `TARBALL.md` — cp93 entry inserted at top (this entry)
+
+cp93 is a mostly-audit checkpoint with one targeted JSDoc-comment fix. No functional code changes; no test-suite effect; no expected smoke or vitest delta.
+
+## cp92 — Indexer auxiliary scanner audit (~1,645 lines, 6 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** Not regenerated this checkpoint. Per Ken's 2026-05-21 cadence change, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, or on request). cp91 + cp92 together cover ~2,709 lines / 11 modules; binary still catches up at the next real milestone or on request. Last actual binary: `morphit-audit-2026-05-122-cp90-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~20,996 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645).
+
+### TL;DR
+
+cp92 walks the **six indexer auxiliary scanners** — all the background workers that hang off the poller's tick loop without being part of the block-walk itself: treasury chain-pinning resolver, operator-balance alerts, low-balance auto-refill, witness-fee tracking, signup anomaly probe, push-payload localization. 1,645 lines, 0 findings.
+
+**Modules walked (6, ~1,645 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `treasurySource.ts` | 276 | DEEP-AUDITED CLEAN | Part 106 chain-pinning core; chain-pinned > env-var; Part 107 view-key never chain-pinned; Part 109 viewkey field removed entirely (stale rows silently stripped at parse time); 30s cache + inFlight Promise request-coalescing; never throws |
+| `operatorAccountBalanceScanner.ts` | 419 | DEEP-AUDITED CLEAN | Opt-in by default; in-memory hysteresis (above↔below transitions only); discriminated union alerts JSON-serializable; pluggable alertSink; sustained-RPC-failure counter; signup-anomaly probe integration on relay LOW_BALANCE |
+| `lowBalanceScanner.ts` | 278 | DEEP-AUDITED CLEAN | **Part 111 federation-cost closure**: refills only users with orders attributed to THIS instance's operator_tag (pre-Part-111 multiplied treasury spend by federation count); conservative undefined-operator-tag default; atomic check-and-insert via WHERE NOT EXISTS in withTx prevents concurrent-scanner double-queue |
+| `witnessFeePoller.ts` | 270 | DEEP-AUDITED CLEAN | Pure operator telemetry (§F.11 decoupled); fallback 100 BLURT pre-poll; FEE_CHANGED with delta+deltaPct+direction; SUSTAINED_RPC_FAILURE after 3 consecutive; SHAPE_ERROR always alerted; ON CONFLICT idempotent |
+| `signupAnomalyProbe.ts` | 179 | DEEP-AUDITED CLEAN | 5s AbortController timeout; probed=false on any failure path; pure judgeAnomaly testable separately; **Finding N22 closure** uses peak_other_hours (peak excluding current hour) — old peak_hour_count was structurally unreachable once current became the new peak |
+| `pushLocalize.ts` | 223 | DEEP-AUDITED CLEAN | Typecheck-enforced 10×9 translation grid; BCP-47 suffix normalization; pluralization-aware (feedback_body_one vs _many); dependency-free pure TS |
+
+**Key cp92 verifications:**
+
+- **TreasurySource is the single point of truth for "what address?"** — every BTC/XMR fee verifier rebuild references it via `current()`. Privacy invariant enforced structurally: the resolveXmr function literally ignores any `viewkey` field on the chain row (lines 251-274), so even if a historical Part 106 transitional release op carried one, it can never propagate. Matches the standing memory rule that XMR view keys are env-only on operator's box.
+- **lowBalanceScanner's Part 111 closure is the kind of bug that doesn't manifest until federation grows.** Pre-Part-111, with 1 operator the cost was correct; with 5 operators it became 5× treasury spend per user; with 100 operators it became 100× treasury spend per user. The fix (operator_tag JOIN + conservative undefined default) is now wired both into the scanner and into the conservative-default of an unregistered operator paying nothing.
+- **Finding N22's full chain is verified end-to-end across cp91 + cp92**: cp91's health.ts publishes `peak_other_hours`; cp92's signupAnomalyProbe consumes `peak_other_hours`. The old peak_hour_count comparison was structurally unreachable once current became the new peak; both sides now use the correct field.
+- **Hysteresis matters**: an account sitting below threshold for days must NOT fire days of alerts. The above↔below transition tracking gets this right; in-memory state with acceptable "one extra alert on restart" tradeoff is the documented choice (better than persisting stale "already warned" state and missing a real recurrence).
+
+### Cp92 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 1,645 | indexer auxiliary scanners (6 modules) |
+| Findings this cp | 0 | all 6 modules clean |
+
+### Cp92 deferred to cp93+
+
+1. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints (rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, instancesStreamHelpers, orderViewsLogic, operatorBlocks, release, chainFee, instances, featuredBids, indexer health)
+2. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` (BitcoinExplorerFeeVerifier, MoneroProofFeeVerifier, CircuitBreaker)
+3. 30-test CI delta hunt — sandbox-blocked
+4. Defense-claim-vs-implementation parity smoke — speculative
+5. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp92 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp92 lessons (7 — TreasurySource single-point-of-truth + Part 109 viewkey closure, operator-balance scanner hysteresis + opt-in design, lowBalanceScanner Part 111 federation-cost closure, witnessFeePoller §F.11 decoupling, signupAnomalyProbe N22 end-to-end closure, pushLocalize typecheck-enforced grid, coverage table) + state table + fixes section ("none — audit-only") + cp93+ hunting-ground update
+- `TARBALL.md` — cp92 entry inserted at top (this entry); no .tar.gz regenerated per new cadence (last binary: cp90)
+
+No source code or test files modified — cp92 is a pure audit-trail checkpoint.
+
+## cp91 — Web push subsystem audit (~1,064 lines, 5 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** Not regenerated this checkpoint. Per Ken's instruction (2026-05-21), the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of audit phase, or on request).  TARBALL.md + REVISIT-LIST + transcripts updated every turn as usual; the binary catches up at the next real milestone.  Last actual tarball: `morphit-audit-2026-05-122-cp90-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~19,351 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064).
+
+### TL;DR
+
+cp91 walks the **web push subsystem** — the cp14 follow-on to the cp13 push baseline.  Five modules totaling 1,064 lines; 0 findings.
+
+**Modules walked (5, ~1,064 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `api/push.ts` | 253 | DEEP-AUDITED CLEAN | Zod `.strict()` on bodies; ACCOUNT_NAME_RE path validation; per-IP rate limit on subscribe (none on unsubscribe — intentional); signature_required when requireSignedSubscribe=true |
+| `policy/pushSubscribeSig.ts` | 162 | DEEP-AUDITED CLEAN | Three replay defenses (account-bind + endpoint-bind via SHA-256 + timestamp ±5min skew); skew-check BEFORE chain query; pubkey.verify throw caught as mismatch; documented first-key-of-authority limitation |
+| `policy/pushSubscriptions.ts` | 191 | DEEP-AUDITED CLEAN | Parameterized SQL; ON CONFLICT idempotent upsert resets `consecutive_failures` on re-subscribe; 200-char user-agent truncation; only-account-logged-not-endpoint privacy |
+| `policy/pushSender.ts` | 280 | DEEP-AUDITED CLEAN | RFC 8291 payload encryption via web-push lib; never-log-payload + never-log-endpoint-full + never-log-IP contract; FIFO drain by enqueued_at; always-delete-after-fanout prevents duplicates; 404/410 → subscription gone; transient with failure counter |
+| `api/health.ts` (relay) | 178 | DEEP-AUDITED CLEAN | Background poll every 30s (not per-request); MIN_PENDING_CLAIMED_ACCOUNTS=3 TOCTOU buffer; stale-state restrictive; Cache-Control no-store; verbose mode signup_stats includes peak_other_hours (Finding N22) |
+
+**Key cp91 verifications:**
+
+- **Subscribe signature has three independent replay defenses.** Account-binding (sig over the account name) + endpoint-binding (endpoint hashed to SHA-256, hash in canonical message) + timestamp window (±5 min). Capturing a sig from `alice@deviceA` doesn't let an attacker register `alice@deviceB` (endpoint-bind), and doesn't let them register `bob@deviceA` (account-bind), and doesn't work after 5 minutes (timestamp).
+- **Skew check before chain query** is a small but meaningful gas-savings defense — an attacker hammering with stale signatures doesn't burn relay→chain bandwidth before getting rejected.
+- **Privacy contract is explicit in code comments**, not just docs: pushSender.ts header says "never log payload content / never log endpoint URL in full / never log IPs / the push service sees the relay's egress IP, not the user's." Verified in implementation: log.warn at line 259 includes only `account` and `status`, NOT the endpoint URL.
+- **At-most-once-ish push delivery is a documented design choice**, not a missed FOR UPDATE SKIP LOCKED. One push sender per relay process. Always-delete-after-fanout prevents duplicates. Trade-off: a transient failure doesn't retry. Push-fail is annoying, not catastrophic.
+- **MIN_PENDING_CLAIMED_ACCOUNTS=3 TOCTOU buffer** in health.ts is the relay's last-mile ACT safety. Without the 3-ACT cushion, concurrent requests could both pass the canAcceptCreation check at 1 ACT remaining, with the chain rejecting the second.
+
+### Cp91 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 1,064 | web push subsystem |
+| Findings this cp | 0 | all 5 modules clean |
+
+### Cp91 deferred to cp92+
+
+1. **Indexer auxiliary scanners** — operatorAccountBalanceScanner + lowBalanceScanner + **treasurySource (Part 106 chain-pinning, critical)** + witnessFeePoller + signupAnomalyProbe + pushLocalize (~1,645 lines)
+2. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints
+3. **Indexer fee verifiers + circuit breaker** — chain-external BTC/XMR verification
+4. 30-test CI delta hunt — sandbox-blocked
+5. Defense-claim-vs-implementation parity smoke — speculative
+6. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp91 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp91 lessons (5 — three sig replay defenses, push privacy contract, at-most-once-ish design intent, MIN_PENDING_CLAIMED_ACCOUNTS TOCTOU buffer, coverage table) + state table + fixes section ("none — audit-only") + tarball cadence change note + cp92+ hunting-ground update
+- `TARBALL.md` — cp91 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp91 is a pure audit-trail checkpoint.
+
 ## cp90 — Indexer poller + federationProbe + signals audit (~1,830 lines, 3 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp90-FULL-STATE.tar.gz`

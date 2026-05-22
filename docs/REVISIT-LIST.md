@@ -1,8 +1,268 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp90 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · INDEXER POLLER + FEDERATION-PROBE + SIGNALS AUDIT: 3 modules walked (~1,830 lines), 0 findings · CUMULATIVE DEEP-AUDIT COVERAGE: ~18,287 LINES.**
+**Last touched:** Part 122 cp93 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · REMAINING INDEXER API ENDPOINTS AUDIT: 28 modules walked (~3,668 lines), 1 FINDING (release.ts viewkey JSDoc) FIXED INLINE · CUMULATIVE DEEP-AUDIT COVERAGE: ~24,664 LINES.**
 
-## CP90 LESSONS
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints, end of audit phase, on request, or when a code change lands).  TARBALL.md + REVISIT-LIST + transcripts update every turn.  cp93 includes a code fix, so a tarball regenerates this checkpoint.
+
+## CP93 LESSONS
+
+### Lesson #1 — First finding in 11 checkpoints: stale viewkey JSDoc in release.ts (FIXED)
+
+After 10 consecutive clean checkpoints (cp82+cp85→cp92), cp93 surfaces ONE finding: `apps/indexer/src/api/release.ts` line 28's JSDoc response-shape comment listed `xmr: { address: string, viewkey: string, piconero: string }`. The IN-CODE comment (lines 81-89) correctly states "viewkey never surfaces via API," and the `stripViewkey` function (lines 100-117) correctly strips any viewkey field. Only the JSDoc shape claim at line 28 was stale.
+
+This is a documentation bug, not a code-correctness bug — `stripViewkey` is operating correctly. But per the standing memory rule that XMR view keys are NEVER published anywhere (including API contract documentation), the JSDoc had to be brought into alignment with what the code actually does. Fixed inline by replacing the shape with `xmr: { address: string, piconero: string }` and adding an explanatory paragraph citing Part 107/108++/109 enforcement.
+
+**Repo-wide sweep**: grep across all `.ts`/`.md`/`.json` confirmed this was the ONLY stale viewkey-in-shape claim. All other references are appropriate (historical context in handler/treasurySource explaining Part 109 removal, or the moneroProofVerifier's legitimate use of the `viewkey` query parameter in Monero block-explorer proof-mode where the proof string is sent as if it were a viewkey).
+
+`docs/OPERATIONS.md` §40.8 (line 7722) already documented the correct shape ("every response's `treasury.xmr` should have **only `address` and `piconero` fields** — no `viewkey`"). The fix brings release.ts's JSDoc into agreement with the operations doc.
+
+### Lesson #2 — RSS feed XML escaping order matters
+
+`rssOrderbookHandlers.ts` escapes 5 characters: `&`, `<`, `>`, `"`, `'`. **The `&` MUST come first** — escaping it last would double-escape the others (`&gt;` becomes `&amp;gt;`). The function does this correctly. Every user-supplied field (account, permlink, location_region, payment_methods, fiat_currency) passes through `xmlEscape` before XML insertion. Asset validation derived from canonical `ASSET_TICKERS` registry (cp50 D-1 HIGH fix — pre-fix the regex was hardcoded `(btc|xmr|blurt)` and silently 400'd every per-asset RSS feed except those three across 13 subsequent asset additions). Privacy posture: 200-with-empty-feed for unknown account (NOT 404) prevents the endpoint from being an account-existence oracle.
+
+### Lesson #3 — Indexer health.ts NEW-9-8 verbose-mode gating
+
+`apps/indexer/src/api/health.ts` (cp93) line 152: `const verbose = config.verboseHealth && c.req.query('verbose') === '1';` — verbose mode now requires BOTH the server-side `MORPHIT_INDEXER_VERBOSE_HEALTH=true` config flag AND the request `?verbose=1` query param. Pre-fix (Audit 2026-05 finding NEW-9-8), any caller passing `?verbose=1` got the full diagnostics block including operator-account balance state — which leaks below-threshold signal to a public attacker timing a drain attempt. Post-fix, verbose mode is operator-opt-in only; `?verbose=1` alone has no effect when the server-side flag is off.
+
+The diagnostics block (when both gates pass) includes: explorer circuit-breaker state, price source diagnostics, operator-balance scanner state, and SSE subscriber counts (F-1 audit fix).
+
+### Lesson #4 — Stream endpoints have per-connection state isolation + reentrancy guards
+
+`instancesStream.ts` (cp93) demonstrates the SSE-pattern hardening:
+- **Per-connection cursor map** is closure-scoped, NOT shared across connections (avoids cross-connection state leak).
+- **`pollInFlight` guard (F-15 audit fix)** prevents overlapping poll ticks when the DB is slow or the directory is large — without it, two concurrent ticks could race-emit the same diff twice.
+- **`safePush` wraps `controller.enqueue`** and catches "controller closed" (client disconnect) — cleanup runs once.
+- **Transient DB failures keep stream alive** (log + continue) — only structural failures emit error events.
+- **Headers**: `Cache-Control: no-store, no-transform`; `X-Accel-Buffering: no` (disable nginx buffering).
+
+### Lesson #5 — featuredOrderbook Finding O27 fix is now durable
+
+`featuredOrderbook.ts` JOINs winning bids against orders on **(account, permlink)** — NOT permlink alone. Permlinks are NOT unique across accounts; joining on permlink alone could surface the wrong account's order in the featured slot (which would let an attacker bid on their order while a victim's matching-permlink order gets the visibility). The comment explicitly notes that the `featureBid` handler enforces `bidder == order author`, so `b.bidder` is the legitimate target account for any winning bid row. Same fix applies in `featuredBids.ts` and `clearingPriceHistory.ts` — all three modules use the same `(blurt_per_hour DESC, block_time_at ASC)` ordering for visibility consistency.
+
+### Lesson #6 — Privacy posture is explicit in EVERY public endpoint header comment
+
+Every endpoint walked has a privacy-posture paragraph in its header comment:
+- `blocks.ts`: blocked user not notified — "would turn the block signal into a provocation vector"
+- `conversations.ts`: "metadata that is already public on chain" — equivalent to chain data
+- `chat.ts`: ciphertext readable by anyone but only the two participants hold X25519 keys (per ADR-0015)
+- `chatIdentity.ts`: chat pubkeys MUST be public so senders can encrypt; `source_trx_id` surfaced for ADR-0015 §S2 client-side verification against MITM
+- `featuredBids.ts`: bids are chain-public; "reveals nothing the chain doesn't"
+- `attestorEligibility.ts`: "every input the eligibility check uses is public on-chain state"
+- `rssOrderbookHandlers.ts`: per-trader feed warns about timing-correlation; recommends Tor for sensitive cases
+
+This is good discipline — the privacy reasoning is captured at the API surface, not just in design docs. Future contributors reading the endpoint see WHY no-auth is correct, not just THAT no-auth is the choice.
+
+### Lesson #7 — Coverage table for cp93
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `rssOrderbookHandlers.ts` | 317 | DEEP-AUDITED CLEAN | xmlEscape correct order (& first); all user-fields escaped; parameterized SQL; cp50 D-1 HIGH fix derives asset allow-set from canonical registry; 200-with-empty-feed prevents existence oracle |
+| `instance.ts` | 282 | DEEP-AUDITED CLEAN | Pure config-projection; 5-min cache; `operator_matrix_room` is #-prefixed-room-alias-only (config loader refuses @-prefixed values); matches standing memory rule |
+| `instancesStream.ts` | 240 | DEEP-AUDITED CLEAN | Per-connection cursor (closure-scoped); pollInFlight guard (F-15 fix); 5s poll + 25s keepalive; safePush catches controller-closed; transient DB failures keep stream alive |
+| `instancesStreamHelpers.ts` | 168 | DEEP-AUDITED CLEAN | P7-12 fix uses JSON.stringify on tuple for unambiguous signature; legacy i2p suffix-routed or dropped (no broken-link guess) |
+| `clearingPriceHistory.ts` | 211 | DEEP-AUDITED CLEAN | window param allow-list (7/30/90); pure shapeClearingResponse testable separately; generate_series bounded by windowDays≤90; LEFT JOIN for empty days; MAX_SLOTS=5 |
+| `orderViewsLogic.ts` | 141 | DEEP-AUDITED CLEAN | account+permlink regex; parameterized; **privacy: 404 on increment, 200-count-0 on read** (no existence oracle); ON CONFLICT idempotent upsert |
+| `featuredBids.ts` | 148 | DEEP-AUDITED CLEAN | Zod account regex; MAX_RESULTS=30; visibility ordering matches featuredOrderbook (consistent flips); parameterized SQL |
+| `featuredOrderbook.ts` | 162 | DEEP-AUDITED CLEAN | **Finding O27 fix**: JOIN on (account, permlink) not permlink alone; MAX_SLOTS=5; consistent ranking; live+verified-fee filter |
+| `operatorBlocks.ts` | 137 | DEEP-AUDITED CLEAN | isAccountName validation; parameterized; MAX_ROWS=10,000; by-blocked returns `{blocked: false}` rather than 404; chain-public |
+| `release.ts` | 116 | **DEEP-AUDITED + FIX APPLIED** | stripViewkey defense-in-depth Part 107 enforcement; **JSDoc shape claim corrected** — line 28 used to list `viewkey: string`, now lists `address + piconero` only with Part 107/108++/109 explanatory paragraph |
+| `chainFee.ts` | 116 | DEEP-AUDITED CLEAN | 24h TTL cache; inflight promise prevents thundering-herd; falls back to config on RPC failure (never 5xx); source flag exposes chain-vs-fallback |
+| `instances.ts` | 109 | DEEP-AUDITED CLEAN | Status filter allow-list; status ordering (good→quiet→stale→mismatch→unreachable→never); F-24 fix uses rowToEntry helper so REST + SSE stay in lockstep |
+| `health.ts` (indexer) | 161 | DEEP-AUDITED CLEAN | **NEW-9-8 fix**: verbose mode requires BOTH server-side `MORPHIT_INDEXER_VERBOSE_HEALTH=true` AND request `?verbose=1`; F-1 fix exposes SSE subscriber counts |
+| `blocks.ts` | 92 | DEEP-AUDITED CLEAN | Privacy: blocked user not notified — "would turn block into provocation vector"; MAX_ROWS=10,000 |
+| `conversations.ts` | 90 | DEEP-AUDITED CLEAN | CASE expression for canonical peer; BOOL_OR drives "Requests" vs "Messages" split (Finding H layer 2); MAX=200 |
+| `profiles.ts` | 145 | DEEP-AUDITED CLEAN | Two-route (single 404 / batch silent-drop); ANY($1::text[]) parameterized; MAX_BATCH=100; pre-DB validation rejects malformed batch in whole |
+| `shared.ts` | 64 | DEEP-AUDITED CLEAN | ACCOUNT_NAME_RE allows dotted names (chat audit C-19 close-out); escapeLike for SQL LIKE-escape; encodeCursor/decodeCursor via base64url+JSON |
+| `activity.ts` | 98 | DEEP-AUDITED CLEAN | Three windows in parallel via Promise.all; DISTINCT on (subject, order_permlink) — both-party feedback counts ONCE; estimated_volume frontend-labeled |
+| `chatIdentity.ts` | 74 | DEEP-AUDITED CLEAN | source_trx_id surfaced (per ADR-0015 §S2 — clients can verify directly against Blurt RPC to defend against indexer MITM); base64-encoded chat_pub |
+| `orderbookStreamHelpers.ts` | 207 | DEEP-AUDITED CLEAN | BATCH19A-orderbook-1 audit excludes past-expires_at orders; pure rowToWire + buildWhereClauses |
+| `operators.ts` | 109 | DEEP-AUDITED CLEAN | LEFT JOIN preserves zero-earnings operators (no stats); LIMIT 500; stats key omitted when zero (wire-level distinction "never attributed" vs "returned-to-zero") |
+| `chat.ts` | 127 | DEEP-AUDITED CLEAN | Canonicalizes pair order (a<b); rejects self-chat; Zod schema; narrowCursor validates shape + date parseability; LEAST/GREATEST canonical pair lookup; limit+1 with pop for hasMore |
+| `attestorEligibility.ts` | 78 | DEEP-AUDITED CLEAN | Thin route; logic delegated to checkAttestorEligibility; phase param allow-listed |
+| `orderViews.ts` | 32 | DEEP-AUDITED CLEAN | Thin Hono adapter over orderViewsLogic |
+| `listingFee.ts` + `listingFeeBody.ts` | 94 | DEEP-AUDITED CLEAN | Pure builder testable without Hono; USD echo attached only when price source non-null + non-stale + positive |
+| `strangerFeeQuote.ts` + `strangerFeeQuoteBody.ts` | 92 | DEEP-AUDITED CLEAN | isAccountName validation; body builder split for testability |
+| `rssOrderbook.ts` | 95 | DEEP-AUDITED CLEAN | Thin Hono wrapper over rssOrderbookHandlers |
+
+Total cp93: ~3,668 lines walked, 28 modules, 1 finding fixed.
+
+## CP93 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp92 (no functional change — JSDoc fix only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~24,664 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) + cp93 remaining indexer API endpoints (3,668) |
+
+## CP93 FIXES
+
+1. **`apps/indexer/src/api/release.ts` (line 28 JSDoc)** — stale response-shape comment listed `xmr: { address: string, viewkey: string, piconero: string }`. The code (stripViewkey, lines 100-117) correctly strips any viewkey field; the in-code comment (lines 81-89) correctly states "viewkey never surfaces via API"; only the header JSDoc shape was stale. Fixed inline by replacing with `xmr: { address: string, piconero: string }` and adding Part 107/108++/109 explanatory paragraph citing per-payment tx_proof verification. Brings JSDoc into alignment with `docs/OPERATIONS.md` §40.8 which already documents the correct shape. **Repo-wide grep confirms this was the ONLY stale viewkey-in-shape claim**; all other viewkey references are appropriate (historical removal context, or legitimate Monero proof-mode query parameter).
+
+
+
+### Lesson #1 — TreasurySource is the single-point-of-truth for "what address to verify against right now?"
+
+`treasurySource.ts` is the Part 106 chain-pinning module that every earlier audit references when saying "chain-pinned takes precedence over env-var." Critical verifications:
+
+- **Resolution order**: (1) most recent valid `morphit_release_v1` row's `treasury.{btc|xmr}.address` field — chain-pinned canonical; (2) operator's `MORPHIT_INDEXER_{BTC,XMR}_FEE_ADDRESS` env var fallback; (3) `null` (fee method disabled).
+- **Privacy invariant (Part 107)**: chain-pinned treasury carries ONLY `address` + `satoshis`/`piconero` (public info that's already part of every payment). Monero PRIVATE view key is NEVER chain-pinned.
+- **Part 108++ closure**: per-payment proof verification replaced view-key decryption entirely. No Morphit indexer holds a view key, ever.
+- **Part 109 closure**: `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var REMOVED; `viewkey` field on `XmrTreasury` REMOVED; historical Part 106 transitional rows with stale `viewkey` field are silently stripped at parse time and never propagate anywhere (resolveXmr ignores the field — line 251-274). This matches the standing memory rule that the XMR view key is never published.
+- **Cache TTL 30s** with **request-coalescing via inFlight Promise** so concurrent callers share one DB query. Operators see no latency hit.
+- **Never throws** — DB errors → env-only fallback + log. `hasChainPin` boolean surfaced for `/v1/health` diagnostics so operators see "I'm on chain-pin" vs "I'm on env-fallback" at a glance.
+- **Hot-rebuild semantics**: poller checks `current()` per cycle; when canonical address changes, verifier rebuild happens on next tick. No restart needed.
+
+### Lesson #2 — Operator-balance scanner has hysteresis + opt-in defaults + plug-in alert sink
+
+`operatorAccountBalanceScanner.ts` monitors `@morphit-relay` (drains BLURT to fund welcome bonuses + dust refills) and `@morphit-fees` (accumulates, should never drain absent compromise/misconfig).
+
+- **Opt-in by default**: `thresholdBlurt: 0` means "don't monitor." Upgrade-safe — no surprise alerts.
+- **In-memory hysteresis state**: above↔below transitions fire alerts; same-side scans no-op. Process restart loses state → at worst one extra LOW_BALANCE on first scan. Documented choice: "missed alert because we persisted stale 'already warned' would be harmful" — fail-toward-alerting.
+- **Discriminated union alerts**: `LOW_BALANCE` / `RECOVERED` / `SUSTAINED_RPC_FAILURE` / `SHAPE_ERROR`. JSON-serializable for webhook/syslog integration.
+- **Pluggable `alertSink`**: default routes through structured logger (journald-parseable); operators override for Discord/Matrix/email.
+- **Severity routing correct**: LOW_BALANCE→error; RECOVERED→info; SHAPE_ERROR→error; SUSTAINED_RPC_FAILURE→error. Operators filtering by level see what matters.
+- **Signup-anomaly probe integration**: when relay account fires LOW_BALANCE AND a signupAnomalyProbe is configured, the alert carries drain-context. Probe failure → swallow, fire uncontextualized (better than no alert).
+- **Sustained-failure counter** for RPC reachability — alert fires only after `failureAlertThreshold` consecutive failures, so a transient blip doesn't spam.
+
+### Lesson #3 — lowBalanceScanner's Part 111 federation-cost closure is essential pre-launch
+
+`lowBalanceScanner.ts` queues 1-BLURT dust refills for active Morphit users below threshold.
+
+- **Part 111 federation-cost closure**: pre-Part-111, every operator's scanner refilled every user active across the entire federation (operators see federation-wide ops in their `ops` table). Treasury spend was multiplied by the federation count. Now scanner JOINs against `orders.operator_tag = $instanceOperatorTag`, refilling only users whose recent orders were attributed to THIS instance.
+- **Conservative default**: `instanceOperatorTag === undefined` → query returns empty → refills nothing. Unregistered operator pays nothing. Defense-in-depth pre-launch posture.
+- **Atomic check-and-insert via `WHERE NOT EXISTS`**: queueRefill runs inside withTx and re-checks the cooldown filter inside the INSERT. Two concurrent scanners (e.g. HA setup) can't double-queue. The candidate-filter check in selectCandidates catches the common case; this is the race-window backstop.
+- **maxBatch caps damage** if a future bug queues for everyone — bounded blast radius.
+- **Excludes relay account** (`a.name <> $1`) — relay doesn't refill itself.
+- **Unparseable balance / missing account**: log + skip; never explode the loop.
+
+### Lesson #4 — Witness-fee poller is pure operator telemetry now (§F.11)
+
+`witnessFeePoller.ts` no longer feeds the listing-fee formula (BLURT-native fee model decoupled). Retained for Sybil-defense cost monitoring — witness fee is the Blurt account-creation cost, which is the floor on Sybil cost.
+
+- **Hourly throttling** (1h interval default).
+- **Fallback default 100 BLURT** until first chain poll lands. `fromChain: false` flag indicates fallback.
+- **Alert kinds**: FEE_CHANGED (with delta + deltaPct + direction='up'|'down'), SUSTAINED_RPC_FAILURE (after 3 consecutive), SHAPE_ERROR (alerted every time — distinct from network failure).
+- **Division-by-zero guard**: `prev.feeBlurt === 0 ? null : ...` — deltaPct is null when oldBlurt was zero.
+- **History idempotency**: `ON CONFLICT (observed_at) DO NOTHING` on writes.
+- **No write on same value**: only writes history on initial-from-chain OR changed. Same value → just observedAt timestamp refresh, no DB write.
+
+### Lesson #5 — signupAnomalyProbe closes Finding N22 with peak_other_hours
+
+`signupAnomalyProbe.ts` provides the drain-context attached to LOW_BALANCE alerts on the relay account.
+
+- **5s AbortController timeout** prevents hanging the scan loop on a sluggish relay.
+- **probed=false on any failure path** (relay unreachable, missing signup_stats, non-OK response, JSON parse fail) — alert still fires, just without context.
+- **Pure decision logic in `judgeAnomaly`** — testable separately from the HTTP probe.
+- **Two heuristics layered**:
+  1. Current hour ≥ ⌈ceiling/3⌉ (with floor of 5 to avoid trigger on tiny ceilings) — catches "burning 1/3 of daily capacity in one hour."
+  2. Current ≥ 5 AND current ≥ 2 × peakOther — catches spikes that wouldn't trip the ceiling-share threshold.
+- **Finding N22 closure**: uses `peak_other_hours` (peak excluding current hour) from the relay's verbose health endpoint, fallback to `peak_hour_count` for backward-compat on older relays. The old `current ≥ peak_hour_count × 2` comparison was structurally unreachable once current became the new peak. The N22 fix is now wired all the way through — health.ts populates peak_other_hours, probe consumes it.
+
+### Lesson #6 — pushLocalize.ts is a typecheck-enforced 10×9 translation grid
+
+`pushLocalize.ts` is the indexer's notification i18n (separate from the apps/web i18n bundles — kept here to avoid bloating the indexer image with browser strings).
+
+- **TypeScript `Record<IndexerPushLocale, Record<PushStringKey, Template>>`** enforces all 10 locales × all 9 string keys at compile time. Adding a new key without all 10 translations is a build failure.
+- **`normalizeLocale` handles BCP-47 suffixes**: `en-US` → `en`, `zh-Hant-HK` → `zh-HK`. Special Chinese handling: `Hant`/`TW`/`HK` → `zh-HK`; otherwise `zh` → `zh-CN`.
+- **Pluralization-aware**: `feedback_body_one` vs `feedback_body_many` (handler picks based on count).
+- **Templates** are `string | (...args: string[]) => string` — flexible for languages where the sender's name goes mid-sentence vs end (German, Persian, Russian).
+- **Dependency-free** — pure TS table.
+
+### Lesson #7 — Coverage table for cp92
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `treasurySource.ts` | 276 | DEEP-AUDITED CLEAN | Part 106 chain-pinning core; chain-pinned > env-var precedence; Part 107 view-key never chain-pinned; Part 109 viewkey field removed (stale rows silently stripped); 30s cache + inFlight Promise coalescing; never throws (DB errors → env-only fallback) |
+| `operatorAccountBalanceScanner.ts` | 419 | DEEP-AUDITED CLEAN | Opt-in by default (threshold=0 disabled); in-memory hysteresis (transitions fire, same-side no-op); discriminated union alerts JSON-serializable; pluggable alertSink; sustained-RPC-failure counter; signup-anomaly probe attached on relay LOW_BALANCE; severity routing correct |
+| `lowBalanceScanner.ts` | 278 | DEEP-AUDITED CLEAN | Part 111 federation-cost closure (refills only users attributed to THIS instance via operator_tag JOIN); conservative default for unregistered operators (refills nothing); atomic check-and-insert via WHERE NOT EXISTS prevents concurrent-scanner double-queue; maxBatch caps blast radius |
+| `witnessFeePoller.ts` | 270 | DEEP-AUDITED CLEAN | Pure operator telemetry now (§F.11 BLURT-native fee model decoupled); fallback 100 BLURT pre-first-poll; FEE_CHANGED alert with delta+deltaPct+direction; division-by-zero guarded; SUSTAINED_RPC_FAILURE after 3 consecutive; SHAPE_ERROR always alerted; ON CONFLICT idempotent history insert |
+| `signupAnomalyProbe.ts` | 179 | DEEP-AUDITED CLEAN | 5s AbortController timeout; probed=false on any failure path; pure judgeAnomaly testable separately; Finding N22 closure uses peak_other_hours; two heuristics layered (1/3-ceiling-share with floor=5 OR 2× prior peak with ≥5 floor) |
+| `pushLocalize.ts` | 223 | DEEP-AUDITED CLEAN | Typecheck-enforced 10×9 translation grid (Record<Locale, Record<Key, Template>>); BCP-47 suffix normalization (`en-US`→`en`, `zh-Hant-HK`→`zh-HK`); pluralization-aware (feedback_body_one vs _many); templates as string or positional-arg function; dependency-free |
+
+Total cp92: 1,645 lines walked, 0 findings.
+
+## CP92 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp91 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~20,996 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) + cp92 indexer auxiliary scanners (1,645) |
+
+## CP92 FIXES
+
+None — cp92 was an indexer auxiliary scanner audit.  0 findings across 6 modules / 1,645 lines.
+
+
+
+### Lesson #1 — Web push has three replay defenses on the subscribe signature (cp14)
+
+`pushSubscribeSig.ts` verifies a posting-key signature over a canonical message `morphit:push:subscribe:<account>:<endpoint_sha256_hex>:<timestamp>`. Three independent replay defenses:
+
+1. **Account binding**: signature is over the account name, so a captured sig can't be replayed against a different account.
+2. **Endpoint binding via SHA-256**: the endpoint URL is hashed first (fixed-length, comparison-safe), and the hash is in the canonical message. A captured sig can't register a DIFFERENT push endpoint as the same account.
+3. **Timestamp window ±5 min**: cheapest gate; runs BEFORE chain query, bounds replay window.
+
+Skew-check-before-chain-query means an attacker hammering the endpoint with stale signatures doesn't get to burn relay→chain bandwidth. Multi-key posting authority: only first key accepted, documented limitation (Morphit user accounts are single-key in practice). `requireSignedSubscribe=true` is the operator's hardened mode; `false` is cp13-compat where signatures are verified when present but not rejected when absent.
+
+### Lesson #2 — Push privacy contract is explicit and layered
+
+`pushSender.ts` documents and enforces: **(a)** web-push lib encrypts the payload per RFC 8291 (E2E vs push service); **(b)** never log payload content; **(c)** never log endpoint URL in full (only prefix); **(d)** never log IPs. The push service sees the RELAY's egress IP as the source, not the user's — there's no correlation between user IP and push delivery anywhere in the data plane. `pushSubscriptions.ts` similarly limits log payloads to account name (no endpoint URL even at the storage layer).
+
+User-agent strings are truncated to 200 chars at write time — bounds row size and signals "we don't care about full UA fingerprints."
+
+### Lesson #3 — Push sender's at-most-once-ish design is intentional, not a bug
+
+`pushSender.ts` does NOT use FOR UPDATE SKIP LOCKED on the pending-row SELECT (unlike `queue/drainer.ts` which broadcasts to chain). The architectural assumption is one push sender per relay process. If two ever ran in parallel, the worst case is duplicate notifications (annoying, not catastrophic) — vs the queue drainer's worst case which is double-broadcast (unrecoverable). The design choice is "always delete pending row after fan-out" — the indexer enqueued once; we don't retry, even on transient failures. Documented at line 187-188 of pushSender.ts. Acceptable per the documented design model.
+
+If we ever need multi-sender for scale, FOR UPDATE SKIP LOCKED is the upgrade path. Not needed at launch scale.
+
+### Lesson #4 — Health endpoint's TOCTOU buffer (MIN_PENDING_CLAIMED_ACCOUNTS=3) is the relay's last-mile ACT safety
+
+`canAcceptCreation()` returns false when `pending_claimed_accounts < 3` rather than `< 1`. This 3-ACT buffer prevents the race where the health snapshot says "1 ACT left" but two concurrent requests both pass the check before either broadcasts. The chain itself would reject the second, but the buffer avoids the chain-side rejection and the resulting bad UX.
+
+Stale state (before first poll completes, or after refresh failure) → canAcceptCreation returns false. Restrictive default: the chain would reject a no-ACT broadcast anyway, so the user-visible behavior is the same and the round-trip is saved.
+
+### Lesson #5 — Coverage table for cp91
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `api/push.ts` | 253 | DEEP-AUDITED CLEAN | Zod `.strict()` on subscribe + unsubscribe bodies; ACCOUNT_NAME_RE for path validation; per-IP rate limit on subscribe (none on unsubscribe — intentional); signature_required when requireSignedSubscribe=true; chain query only when sig fields present |
+| `policy/pushSubscribeSig.ts` | 162 | DEEP-AUDITED CLEAN | Three replay defenses (account-bind + endpoint-bind via SHA-256 + timestamp ±5min); skew-check before chain query; pubkey.verify throw caught (treated as mismatch); first-key-of-authority documented limitation |
+| `policy/pushSubscriptions.ts` | 191 | DEEP-AUDITED CLEAN | Parameterized SQL; ON CONFLICT idempotent upsert resets failures on re-subscribe; 200-char user-agent truncation; only-account-logged-not-endpoint privacy |
+| `policy/pushSender.ts` | 280 | DEEP-AUDITED CLEAN | RFC 8291 payload encryption via web-push lib; never-log-payload + never-log-endpoint-full + never-log-IP privacy contract; FIFO drain by enqueued_at; always-delete-after-fanout prevents duplicates; 404/410 → subscription gone; transient with failure counter; TTL=4h + urgency=normal documented choices |
+| `api/health.ts` (relay) | 178 | DEEP-AUDITED CLEAN | Background poll every 30s (not per-request); MIN_PENDING_CLAIMED_ACCOUNTS=3 TOCTOU buffer; stale-state restrictive; Cache-Control no-store; verbose mode includes signup_stats with peak_other_hours (Finding N22) |
+
+Total cp91: 1,064 lines walked, 0 findings.
+
+## CP91 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp90 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~19,351 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) + cp91 web push (1,064) |
+
+## CP91 FIXES
+
+None — cp91 was a web push subsystem audit.  0 findings across 5 modules / 1,064 lines.
+
+
 
 ### Lesson #1 — The poller's ADR-0008 irreversible-only application eliminates reorg handling at the design layer
 
@@ -527,6 +787,31 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP94+ PREDICTED HUNTING GROUND
+
+1. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` modules (BitcoinExplorerFeeVerifier, MoneroProofFeeVerifier, CircuitBreaker). Chain-external HTTPS calls to multiple explorers; quorum logic, circuit-breaker degradation, proof verification all warrant a deep walk. This is the **last major non-handler indexer surface**.
+2. **Remaining larger streaming endpoints** — `chatStream.ts` (374), `orderbookStream.ts` (494), `loginPairing.ts` (401), `orderbookStreamHelpers.ts` (already covered), `chatAdmission.ts` (102), `chatReadState.ts` (75), `chatStreamHelpers.ts` (74), `instancePaymentMethods.ts` (93). ~1,200 lines.
+3. **30-test CI delta hunt** — still sandbox-blocked.
+4. **Defense-claim-vs-implementation parity smoke** — speculative.
+5. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
+
+## CP93+ PREDICTED HUNTING GROUND
+
+1. **Remaining indexer API endpoints** — ~2,500 lines across ~12 smaller endpoints (rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, instancesStreamHelpers, orderViewsLogic, operatorBlocks, release, chainFee, instances, featuredBids, indexer health). These are the diff between cp87's audited set and the full indexer API surface.
+2. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` modules — BitcoinExplorerFeeVerifier, MoneroProofFeeVerifier, CircuitBreaker. Chain-external HTTPS calls to multiple explorers; the verifier's quorum logic, circuit-breaker degradation, and proof verification all warrant a deep walk.
+3. **30-test CI delta hunt** — still sandbox-blocked.
+4. **Defense-claim-vs-implementation parity smoke** — speculative.
+5. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
+
+## CP92+ PREDICTED HUNTING GROUND
+
+1. **Indexer auxiliary scanners** — `operatorAccountBalanceScanner.ts` (419), `lowBalanceScanner.ts` (278), `treasurySource.ts` (276 — Part 106 chain-pinning critical), `witnessFeePoller.ts` (270), `signupAnomalyProbe.ts` (179), `pushLocalize.ts` (223) — ~1,645 lines of background workers. treasurySource is the chain-pinning module that gates BTC/XMR fee verifier rebuild; high priority for next walk.
+2. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints (rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, etc.).
+3. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` modules — chain-external BTC/XMR verification.
+4. **30-test CI delta hunt** — still sandbox-blocked.
+5. **Defense-claim-vs-implementation parity smoke** — speculative.
+6. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
 
 ## CP91+ PREDICTED HUNTING GROUND
 
