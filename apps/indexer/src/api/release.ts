@@ -25,10 +25,18 @@
  * When non-null, shape:
  *   {
  *     btc: { address: string, satoshis: number } | null,
- *     xmr: { address: string, viewkey: string, piconero: string } | null
+ *     xmr: { address: string, piconero: string } | null
  *   }
  * Either chain may be null inside the object — operators can
  * pin one chain at a time during ramp-up.
+ *
+ * **Part 107 / 108++ / 109**: the XMR object does NOT include
+ * a `viewkey` field.  Per-payment tx_proof verification
+ * replaced view-key decryption entirely; no Morphit indexer
+ * holds an XMR view key, and the API contract surfaces none.
+ * The `stripViewkey()` helper below is defense-in-depth
+ * against historical Part 106 transitional release-op rows
+ * that may still contain a stale viewkey field.
  */
 
 import { Hono } from 'hono';
