@@ -368,7 +368,8 @@ All feedback received by `:account`.
   detector spec.
 - `has_verified_chat: true` means a real-looking conversation
   preceded the review — see `FEES-AND-REWARDS.md` and
-  `apps/indexer/src/db/schema-v26.sql` for the conformance criteria.
+  `apps/indexer/src/db/schema.sql` (search for the
+  `verified-chat` marker comments) for the conformance criteria.
 
 #### `GET /v1/accounts/:account/feedback-given`
 

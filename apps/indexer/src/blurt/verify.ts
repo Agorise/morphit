@@ -134,16 +134,12 @@ export function resolveSignerPostingPubkey(
  * defense is correct (parser allocation scales with code units,
  * not bytes), but the original name `MAX_RAW_JSON_BYTES` was
  * misleading.  Renamed to MAX_RAW_JSON_LENGTH in cp82 to match
- * the unit it actually checks; a back-compat alias is exported
- * for any external code (none in-repo) still referencing the
- * old name.
+ * the unit it actually checks; the back-compat alias was
+ * removed in cp84 after confirming no external consumer (audit:
+ * repo-wide grep returned only this file + historical changelog
+ * entries in TARBALL.md / REVISIT-LIST.md).
  */
 export const MAX_RAW_JSON_LENGTH = 16 * 1024;
-
-/** Back-compat alias.  Will be removed once we've verified no
- *  external consumer (or audit-document grep) is still hitting
- *  the old name. */
-export const MAX_RAW_JSON_BYTES = MAX_RAW_JSON_LENGTH;
 
 /**
  * Parse a custom_json op's `json` string safely. On malformed JSON,

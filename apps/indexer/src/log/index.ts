@@ -130,6 +130,127 @@ function formatValue(v: unknown): string {
 	}
 }
 
+/** Marker substituted for redacted secret values in log context. */
+export const REDACTED_MARKER = '[REDACTED]';
+
+/**
+ * Whether a log-context key should have its value redacted.
+ *
+ * Triggered for keys whose name signals "this is a secret":
+ *
+ *   - Env-var style: `SOMETHING_KEY`, `SOMETHING_PASSWORD`,
+ *     `SOMETHING_PASSPHRASE`, `SOMETHING_SECRET`, `SOMETHING_TOKEN`,
+ *     `SOMETHING_WIF`, `SOMETHING_MNEMONIC`, `SOMETHING_SEED_PHRASE`.
+ *   - Code-side camelCase: `somethingKey`, `somethingPassword`,
+ *     and similar (must have a preceding lowercase letter to
+ *     avoid matching unrelated words like "monkey").
+ *   - Standalone secret-named keys: `wif`, `mnemonic`,
+ *     `passphrase`, `password`, `secret`, `seed_phrase`.
+ *
+ * Public-identifier patterns (`public_key`, `pubkey`, `publicId`,
+ * keys ending in `PublicKey`) are explicitly exempt — they're
+ * public by name and exposing them in logs is intended.
+ *
+ * Closes the OPERATIONS.md §X redaction claim (was previously
+ * documented but not implemented).
+ */
+export function isSecretContextKey(key: string): boolean {
+	// Normalize: lowercase, drop separators.  `VAPID_PRIVATE_KEY`
+	// and `vapidPrivateKey` both become `vapidprivatekey`, so the
+	// same rule covers env-var and camelCase styles.
+	const norm = key.toLowerCase().replace(/[_-]/g, '');
+
+	// Public-identifier allow-list runs first.  Catches
+	// `public_key`, `publicKey`, `PUBLIC_KEY`, `user_public_key`,
+	// `VAPID_PUBLIC_KEY`, `publicId`, `pubkey`.
+	if (norm.includes('publickey')) return false;
+	if (norm === 'publicid' || norm.endsWith('publicid')) return false;
+	if (norm === 'pubkey' || norm.endsWith('pubkey')) return false;
+
+	// Compound-substring deny-list: tokens whose presence in the
+	// normalized key unambiguously indicates a secret.  Caught
+	// here rather than via word-tokenization because they're
+	// commonly written as a single conceptual unit
+	// (`apiKey` is one idea, not two words).
+	const COMPOUND_SECRETS = [
+		'privatekey',
+		'privkey',
+		'seedphrase',
+		'apikey',
+		'authtoken',
+		'accesstoken',
+		'sessiontoken',
+		'bearertoken',
+		'passphrase',
+		'password',
+		'mnemonic'
+	];
+	for (const c of COMPOUND_SECRETS) {
+		if (norm.includes(c)) return true;
+	}
+
+	// Word-tokenize on case-boundaries + separators.  Then
+	// flag the key as a secret if its LAST word is a known
+	// secret-suffix token.  Last-word-only matching avoids
+	// false positives like `keystore_status` (last word
+	// `status`) or `keyCount` (last word `count`).
+	const words = key
+		.replace(/([a-z])([A-Z])/g, '$1 $2')
+		.replace(/[_-]/g, ' ')
+		.toLowerCase()
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean);
+	if (words.length === 0) return false;
+	const LAST_WORD_SECRETS = new Set([
+		'key',
+		'password',
+		'passphrase',
+		'secret',
+		'token',
+		'wif',
+		'mnemonic',
+		'seed'
+	]);
+	const lastWord = words[words.length - 1]!;
+	if (LAST_WORD_SECRETS.has(lastWord)) return true;
+
+	return false;
+}
+
+/**
+ * Walk a context object and replace any value whose key matches
+ * `isSecretContextKey` with the `[REDACTED]` marker.  Recurses
+ * into nested plain objects; arrays are left untouched (their
+ * indices aren't keys, so the pattern wouldn't fire anyway).
+ *
+ * Non-mutating: returns a new object so the caller's context
+ * (which may still be referenced by tests or other code) is
+ * preserved.
+ */
+export function redactSecrets(
+	ctx: Record<string, unknown>
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(ctx)) {
+		if (isSecretContextKey(k)) {
+			out[k] = REDACTED_MARKER;
+		} else if (
+			v &&
+			typeof v === 'object' &&
+			!Array.isArray(v) &&
+			Object.getPrototypeOf(v) === Object.prototype
+		) {
+			// Recurse into plain objects only.  Class instances,
+			// Date, Buffer, etc. pass through unchanged.
+			out[k] = redactSecrets(v as Record<string, unknown>);
+		} else {
+			out[k] = v;
+		}
+	}
+	return out;
+}
+
 /** Module-level sink; swap via setLogSink() in tests or on boot. */
 let activeSink: LogSink = pickDefaultSink();
 let minLevel: LogLevel = (process.env.MORPHIT_LOG_LEVEL as LogLevel) ?? 'info';
@@ -194,7 +315,11 @@ function emit(
 		level,
 		module,
 		event,
-		context,
+		// Redact secret-named context values before they hit any
+		// sink.  See `isSecretContextKey` for the pattern list and
+		// rationale.  Documented in OPERATIONS.md §35 secret-
+		// handling guidance.
+		context: redactSecrets(context),
 		error: toErrorShape(maybeError)
 	};
 	activeSink(record);

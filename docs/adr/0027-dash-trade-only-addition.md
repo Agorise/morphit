@@ -144,6 +144,20 @@ to 0.6 KB while preserving viewBox.
 > grandma-friendly review re-ran at cp31 and cp32 and remains
 > clean.  Revisit if/when a 10th asset is added.
 
+> **Forward-note (Part 122 cp84, 2026-05-21):** assets 10–16 have
+> since shipped — DOGE (ADR-0030), ZEC (ADR-0031), ARRR (ADR-0032),
+> DCR (ADR-0033), SOL (ADR-0034), ETH (ADR-0035), XRP (ADR-0036).
+> The horizontal-scrolling tab layout still fits — the picker's
+> `overflow-x-auto` scroller absorbs the extra width on narrow
+> viewports and the cheat-sheet uses a registry-driven loop that
+> takes new entries without code edits.  The grandma-friendly
+> review re-ran during each addition and remains clean.  The
+> earlier "revisit if/when an Nth asset is added" cadence is
+> dropped — the framework absorbed 7 more additions without
+> needing a UI redesign, so the trigger is now "if a viewport
+> measurably degrades in grandma-friendly review", not a fixed
+> asset count.
+
 ## Files changed
 
 Canonical asset registry, chat payload (regex + dispatchers +

@@ -32,9 +32,19 @@ describe('InviteTokenService', () => {
 	it('rejects tokens with tampered signature', () => {
 		const s = make();
 		const { token } = s.issue('1.2.3.4');
-		// Flip a character in the signature (after the '.')
+		// Flip the FIRST character in the signature (after the '.').
+		//
+		// Part 85 lesson: tampering the LAST character of a base64url
+		// HMAC is flake-prone — when the encoded payload's bit-length
+		// leaves residual bits in the final base64url digit, flipping
+		// the last char ~6% of the time decodes to the SAME bytes
+		// (different encoded digit, identical decoded value).  The
+		// tampered token's decoded sig equals the original's,
+		// HMAC matches, and the test fails "rejects tampered".
+		// Tampering the FIRST char has no such ambiguity: position 0
+		// always represents the high-order bits unambiguously.
 		const [payload, sig] = token.split('.');
-		const tampered = `${payload}.${sig!.slice(0, -1)}${sig!.at(-1) === 'A' ? 'B' : 'A'}`;
+		const tampered = `${payload}.${sig!.at(0) === 'A' ? 'B' : 'A'}${sig!.slice(1)}`;
 		const result = s.verify(tampered, '1.2.3.4');
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('invite_bad_signature');

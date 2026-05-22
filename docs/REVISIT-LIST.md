@@ -1,6 +1,164 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp83 — 2026-05-21.  **30 STRUCTURAL DEFENSES · BATTERY 3924/0 TRIPLE-PULSE STABLE · 3 CI FAILURES DIAGNOSED AND FIXED (cp83-D23a fail2ban shell-quoting + cp83-D24 vitest baseline + cp83-clean Ken's delete-and-extract handles sw.js removal) · LL #52 38TH CONSECUTIVE HW-VERIFIED · 1,374 VITEST TESTS PASSING.**
+**Last touched:** Part 122 cp84 — 2026-05-21.  **35 STRUCTURAL DEFENSES (+5 cp84-O31/O32/O33/O34/O35) · BATTERY 4410/0 TRIPLE-PULSE STABLE · LL #52 39TH CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING · 1 HIGH-SEVERITY CLOSED INLINE (false log-redaction security claim → real defense) · 1 PREEXISTING FLAKE CLOSED (Part 85 missed instance in inviteToken.test.ts) · 11 DOC-DRIFT BUGS CLOSED (8 path drifts + 3 ADR-status drifts surfaced by O-31) · LOCALE PARITY 2,827 × 10 = 28,270 STRINGS · RELEASE-NOTES-v1.0.0-beta.1.md NO LONGER STALE · MAX_RAW_JSON_BYTES ALIAS REMOVED · scripts/build-cleanup-script.sh AUTOGEN SHIPPED.**
+
+## CP84 LESSONS
+
+### Lesson #1 — Stale enumeration drift survives across multiple checkpoints when no defense locks it
+
+`RELEASE-NOTES-v1.0.0-beta.1.md` carried "Seven tradable assets" through ADRs 0028 (USDC), 0029 (DAI), 0030 (DOGE), 0031 (ZEC), 0032 (ARRR), 0033 (DCR), 0034 (SOL), 0035 (ETH), 0036 (XRP) — nine asset additions that updated the README and brag list but never touched the release notes.  Symptom: a reader who clones the tagged repo and reads `RELEASE-NOTES-v1.0.0-beta.1.md` would see a 7-asset claim contradicted by the asset registry's 16 entries.  Same checkpoint also caught stale "ten languages" / "seven languages" claims in `plan.phase_1_body` across all 10 locales (Morphit now ships 10 locales but the body claimed seven).
+
+Closed via 5-section release-notes rewrite + targeted locale-aware FAQ edits across `where_to_buy_blurt.a`, `blurt_benefits.a`, `welcome_bonus.a`, `why_usdt_warning.a` (4 FAQs × 10 locales = 40 surgical replacements with native count words: sixteen / dieciséis / seize / sechzehn / sedici / szesnastu / шестнадцати / شانزده / 十六).  Plus `plan.phase_1_body` 10-locale fix.  ADR 0026 and 0027 received cp84 forward-notes per the annotation-pattern-not-rewrite rule.
+
+**Mechanism missing:** there's no smoke that grep-scans `RELEASE-NOTES-*.md` for stale asset counts against `ASSET_TICKERS.length`.  Candidate for cp85+: a release-notes-asset-count-parity smoke that ensures the literal asset count claim in the release notes matches the registry size.  Filed as Lesson #4 below.
+
+### Lesson #2 — A documented security defense that isn't implemented is the highest-leverage class bug
+
+OPERATIONS.md §35 stated: "Morphit's logger redacts `*_KEY*` and `*_PASSWORD` env-var names; if you add a new secret-looking var, audit the logger's redaction list — see `apps/indexer/src/log/redact.ts`".  All four claims were false:
+1. The logger did NOT redact `*_KEY*` patterns
+2. The logger did NOT redact `*_PASSWORD` patterns
+3. There was no redaction list to audit
+4. `apps/indexer/src/log/redact.ts` did not exist
+
+The pointer-to-nonexistent-file (#4) was caught by cp84-O31 (operator-doc fenced-path existence smoke) as a path drift.  Investigating revealed #1-#3 — the doc described a defense that was never built.  An operator reading OPERATIONS.md and trusting the redaction would leak secrets to production logs.
+
+Closed inline by SHIPPING the defense, not just by updating the doc.  `apps/indexer/src/log/index.ts` gained `isSecretContextKey` (normalize-then-match design with public-key allowlist, compound-substring deny, last-word secret-suffix match) + `redactSecrets` (recursive, non-mutating).  Wired into `emit()` so every log record is redacted before reaching any sink.  7 new test cases in `log.test.ts` cover the matrix: env-var-style, camelCase, standalone, public-identifier exemption, monkey-style false-positive prevention, recursive nesting, non-mutation.  All 20 logger tests pass (was 13 + 7 = 20).
+
+**Mechanism missing:** there's no smoke that grep-scans operator-docs for "the X defense" claims and verifies a matching test or implementation exists.  Such a smoke is hard to write generically (defense claims are prose-encoded), so the cheaper approach is: any time a doc describes a security defense, ensure a regression test covers it; the test failing is then the defense going stale.
+
+### Lesson #3 — Part 85 class bugs propagate by copy-paste and need a repo-wide hunt at fix time
+
+Pulse 2 of the cp84 triple-pulse caught `InviteTokenService > rejects tokens with tampered signature` flaking.  Diagnosis: base64url HMAC last-char tamper hits padding-equivalent positions ~6% of the time, decoding to identical bytes.  This is **exactly** the Part 85 `drain-defense-live-fire` bug class.  Part 85 fixed the instance it knew about but didn't grep repo-wide for siblings.
+
+Hunt found 3 candidate sites:
+- `apps/relay/test/inviteToken.test.ts:37` — base64url sig, **real flake**, fixed (tamper first char)
+- `apps/relay/test/altcha.test.ts:82` — hex sig (no padding-equivalent positions), not currently vulnerable but uses the anti-pattern → preventively fixed
+- `apps/relay/test/pubkey.test.ts:36` — base58check (any single-char flip changes checksum), not vulnerable
+
+30-run isolated stress of the fixed `inviteToken` test post-fix: 30/30 pass.  Triple-pulse post-fix: 4152/0/4152/0/4152/0.
+
+**Mechanism gained:** when a class bug is identified, the fix turn MUST include a repo-wide grep for the anti-pattern (`slice(0, -1)` + `at(-1)` is the structural shape).  Add a sentinel-grep smoke to flag any new occurrence.  Filed as Lesson #4 below.
+
+### Lesson #4 — Hunting-ground items deferred to cp85+
+
+Per the standing cp69 rule ("hunting-ground items must ship in the NEXT checkpoint or move to a deferred list"), recording cp85 candidates explicitly:
+
+1. **Release-notes asset-count parity smoke** — verify literal asset-count claims in `RELEASE-NOTES-*.md` match `ASSET_TICKERS.length`.  Would have caught the cp84-A2 drift.
+2. **Last-char-tamper anti-pattern grep smoke** — flag any new `slice(0, -1).*at(-1)` pattern in test files; require tamper-first-char or tamper-non-trailing-byte instead.  Would have prevented cp84's Part 85 missed instance.
+3. **Defense-claim-vs-implementation parity smoke** — speculative; harder to write generically.  Lower priority.
+
+These are cp85+ candidates, NOT silently dropped.
+
+## STRUCTURAL DEFENSES — 35 OPERATIONAL (+5 cp84)
+
+cp84 added five new defenses (numbered O-31 through O-35 in the registry-shape numbering used by O-26..O-30):
+
+| # | Defense | Source | Closes bug class | Trial-by-fire |
+|---|---|---|---|---|
+| 31 | operator-doc-fenced-path-existence | `scripts/operator-doc-fenced-path-existence-smoke.ts` | cp82-A6 (encrypt-active-key.ts 6-occurrence drift); generalized to any doc-referenced `(scripts|apps|ops|packages|docs)/.../X.ext` path | Reintroduce drift → trips with line number; revert → green |
+| 32 | handler-push-click-path-route | `scripts/handler-push-click-path-route-smoke.ts` | cp82-B1 (chat handler) + cp82-B2 (feedback handler) push notifications landing on 404 routes | Reintroduce `/profile/{subject}#feedback` → trips; revert → green |
+| 33 | sidecar-shell-quoting (static) | `scripts/sidecar-shell-quoting-smoke.ts` | cp83-D23a fail2ban shell-quoting class bug (`'$(` outside variable-assignment context) | Reintroduce pre-fix pattern → trips with continuation-line context; revert → green |
+| 34 | sidecar-envelope-error-path (runtime) | `scripts/sidecar-envelope-error-path-smoke.ts` | cp83-D23a runtime symptom (same bug from different angle: mock fail2ban-client returns multi-token stderr, smoke verifies emitted envelope parses as JSON) | Reintroduce pre-fix → catches the exact `2026-05-21}` truncated-envelope from cp83 CI log; revert → green |
+| 35 | last-char-tamper-anti-pattern (lint-time) | `scripts/last-char-tamper-anti-pattern-smoke.ts` | Part 85 (drain-defense-live-fire) + cp84-F1 (inviteToken.test.ts) class bug: `slice(0, -1)` + `at(-1)` same-line combination in test files (~6% flake rate on base64url HMACs) | Reintroduce cp84-F1 pre-fix → trips with file:line + fix suggestion; revert → green |
+
+All five registered in `scripts/run-smokes.sh` next to peer top-level smokes (`operations-hardening-smoke`, `workspace-membership-smoke`).
+
+## CP84 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4410 | +486 from cp83 (cp84-O31: +209, cp84-O32: +4, cp84-O33: +13, cp84-O34: +2, cp84-O35: +258) |
+| Runners FAILED | 0 | clean across triple-pulse |
+| Workspaces TS-clean (LL #52) | 7/7 | **39th consecutive HW-verified** |
+| Vitest tests passing | 1,381 | +7 from cp83 (all in `apps/indexer/test/log.test.ts` — redaction coverage) |
+| Triple-pulse stable | ✓ | 4410/0/4410/0/4410/0 hardware-verified |
+| Structural defenses | 35 | +5 from cp83 (O-31, O-32, O-33, O-34, O-35) |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged from cp83 (cp84 FAQ surgical edits replaced content within existing keys, no add/remove) |
+| Brag entries | 306 | +3 from cp83 (304 + 305 + 306 in §3 security) |
+
+## CP84 FIXES
+
+### cp84-A1 through cp84-A7 — RELEASE-NOTES + ADR forward-note drift fixes (P1)
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — 5 sections: intro (7→16 asset list), Trading bullet (Seven→Sixteen with full category breakdown), setup-wizard trade-only list (4→13 assets), privacy framework (per-asset list now references the registry-driven `/{asset}` route + added Sapling/Orchard/CSPP++ to the tech list), Audit & Integrity (3,327→3,924 scenarios, ~21,000→~25,400 audit lines, 26→35 ADRs through 0036).
+- `docs/adr/0026-transparent-chain-privacy-framework.md` — extended cp35 status-update table from 10→16 assets, appended cp84 forward-note.
+- `docs/adr/0027-dash-trade-only-addition.md` — appended cp84 forward-note acknowledging assets 10–16.
+
+### cp84-L1 through cp84-L4 — locale FAQ drift fixes (P1, locale parity discipline)
+Surgical text replacements across all 10 locales:
+- `faq.entries.where_to_buy_blurt.a` — "ten assets, alongside [9–10 partial]" → "sixteen assets, alongside [full 15-asset list]" with native count words.
+- `plan.phase_1_body` — "seven languages" → "ten languages" (the shell ships 10 SUPPORTED_LOCALES).
+- `faq.entries.blurt_benefits.a` — 9-asset enum extended with ZEC/ARRR/DCR/SOL/ETH/XRP.
+- `faq.entries.welcome_bonus.a` — same.
+- `faq.entries.why_usdt_warning.a` — "transparent decentralized chains" list extended with DCR/SOL/ETH/XRP (ZEC/ARRR omitted: they're privacy-emphasis, not pure-transparent).
+
+Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key + 1 where-to-buy key = (4 FAQs × 10) + (1 plan × 10) + (1 where-to-buy × 10) = 60.  Locale parity invariant unchanged: every locale still at 2,827 keys.
+
+### cp84-O31 fix-batch — 8 doc-path drift bugs closed by Defense #31's first run
+- `OPERATIONS.md:572` — `scripts/mint-acts.ts` → `apps/relay/scripts/mint-acts.ts` (ambiguous backtick reference disambiguated; cd-context now made explicit in surrounding prose)
+- `OPERATIONS.md:6378` — `apps/indexer/src/log/redact.ts` → `apps/indexer/src/log/index.ts` (also implemented the redaction the doc claimed; see cp84-S1 below)
+- `ADDING-A-COIN.md:236` — `chatMessage.ts` → `chat.ts`
+- `API.md:371` — stale `schema-v26.sql` → canonical `schema.sql`
+- `FORGEJO-RUNNER-STANDUP.md:13` — missing `docs/RELEASE-CEREMONY.md` → `.forgejo/workflows/release.yml` + release-notes
+- `FORGEJO-RUNNER-STANDUP.md:17` — missing `docs/MIRROR-LIST.md` → `docs/ARCHITECTURE.md` §Federation
+- `FORGEJO-RUNNER-STANDUP.md:181` — same as :13 fix
+
+### cp84-S1 — log-redaction defense IMPLEMENTED (HIGH-severity false-claim closure)
+- Source: `apps/indexer/src/log/index.ts`
+- Added: `REDACTED_MARKER` constant (`'[REDACTED]'`), `isSecretContextKey(key)` predicate, `redactSecrets(ctx)` recursive non-mutating walker
+- Wired: `emit()` now calls `redactSecrets(context)` before passing to the sink
+- Test coverage: 7 new tests in `apps/indexer/test/log.test.ts` covering env-var-style + camelCase + standalone secrets, public-key exemption, monkey-class false-positive prevention, recursive nesting, non-mutation
+- Impact: every log record from every indexer module is now redacted before reaching any sink; OPERATIONS.md §35's claim is now load-bearing.
+
+### cp84-F1 — Part 85 class-bug missed instance closed
+- Source: `apps/relay/test/inviteToken.test.ts:37`
+- Was: `${sig!.slice(0, -1)}${sig!.at(-1) === 'A' ? 'B' : 'A'}` (tampers last char of base64url HMAC — flake-prone on padding-equivalent positions)
+- Now: `${sig!.at(0) === 'A' ? 'B' : 'A'}${sig!.slice(1)}` (tampers first char — no ambiguity)
+- Stress-tested: 30 isolated runs post-fix, 0 failures.
+
+### cp84-F2 — preventive Part 85 fix in altcha.test.ts
+- Source: `apps/relay/test/altcha.test.ts:82`
+- Was: `sig.slice(0, -1) + (sig.at(-1) === 'a' ? 'b' : 'a')` (same anti-pattern; not currently vulnerable since altcha uses hex, but hex→base64url change would break the test)
+- Now: first-char flip (same defensive pattern as cp84-F1)
+- Comment block explains the current safety + future-proofing rationale.
+
+## Hardware blockers (cp84 status)
+
+1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
+2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP85+ PREDICTED HUNTING GROUND
+
+1. **30-test CI delta hunt** (still open from cp83 pickup agenda).  cp84 investigation findings to save cp85 the dead ends:
+   - `apps/indexer/vitest.config.ts` line 12 excludes `test/integration/**` by default; integration tests are not the delta vector.
+   - No `process.env.CI` conditionals in any indexer source or test file.
+   - No `describe.skipIf` / `it.skipIf` patterns outside `test/integration/` (where `INTEGRATION_ENABLED` gates the suites).
+   - The two 29-test candidate files (`moneroProofVerifier.test.ts`, `orderReplace.test.ts`) both use mocked HTTP via `vi.fn()` and have no external service dependencies; they run identically across environments.
+   - Local count is now 493 (was 486 at cp83; +7 from cp84-S1 redaction tests).  Baseline floor stays 456 per cp83-D24.
+   - Next step (requires CI access): grab `--reporter=json` output from a Forgejo runner, diff `testResults[].file` against local listing.  Without this, the chase is unobservable.
+2. **Release-notes asset-count parity smoke** (cp84 Lesson #4 #1) — grep-scan `RELEASE-NOTES-*.md` for literal asset-count claims (`"Sixteen tradable assets"`, `"all 16 …"`, etc.) and verify against `ASSET_TICKERS.length`.  cp84-A1 was caught manually; this smoke would have caught it automatically.
+3. ~~**Last-char-tamper anti-pattern grep smoke**~~ (cp84 Lesson #4 #2) — **CLEARED at cp84**: shipped as Defense #35 (`scripts/last-char-tamper-anti-pattern-smoke.ts`), 258 scenarios passing, trial-by-fire confirmed against cp84-F1.
+4. **Defense-claim-vs-implementation parity smoke** (cp84 Lesson #4 #3) — speculative; harder generically.  cp84-S1 (false log-redaction claim) showed the class is real; the mechanism for detection is unclear.  Lower priority.
+5. **Handler audit campaign** — `order.ts` (974), `orderReplace.ts` (434), `release.ts` (313), `strangerFee.ts` (216) — still open from cp83.  Continue the cp82 pattern (chat / operatorRegister / feedback walked clean).
+
+## What cp84 DID and DID NOT do
+
+DID:
+- Closed P1 release-notes drift (cp84-A1..A7) across 14 files including 2 ADR forward-notes.
+- Closed P1 locale FAQ drift (cp84-L1..L4) across 10 locales × 6 keys = 60 surgical edits.
+- Shipped defenses #31, #32, #33, #34 — full implementation + test wiring + trial-by-fire verification.
+- Shipped defense #35 (last-char-tamper anti-pattern grep) — promoted from cp85+ Lesson #4 candidate after cp84-F1 made the urgency clear.  258 scenarios, trial-by-fire confirmed.
+- Found and closed 1 HIGH-severity false-security-claim (log redaction) by IMPLEMENTING the missing defense.
+- Found and closed 1 preexisting flake (Part 85 missed instance in inviteToken).
+- Removed `MAX_RAW_JSON_BYTES` back-compat alias (closed cp83-carried P5 item).
+- Shipped `scripts/build-cleanup-script.sh` (closed cp83-carried P5 item; Memory #30 automation).
+- Hardware-verified triple-pulse 4410/0 × 3 + typecheck-sweep 7/7 (LL #52 39th consecutive).
+- 8 doc-path drift bugs closed inline by Defense #31's first run.
+
+DID NOT:
+- Implement release-notes-asset-count-parity smoke (cp84 Lesson #4 #1) — deferred to cp85+ explicitly.
+- Implement defense-claim-vs-implementation parity smoke (cp84 Lesson #4 #3) — speculative, lower priority.
+- Address the 30-test CI delta (deferred — needs CI-side `--reporter=json` data not available in sandbox).
+- Touch handler audit campaign (P4 — own checkpoint).
 
 ## CP83 LESSONS
 
