@@ -8,7 +8,7 @@
 	import Head from '$components/Head.svelte';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
-	import { organizationSchema, websiteSchema } from '$seo/jsonld';
+	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
 
 	const points = [
@@ -22,7 +22,15 @@
 	// SearchAction unlocking the SERP sitelinks search box).
 	const jsonLd = $derived([
 		organizationSchema($_('seo.site_name'), $_('app.tagline')),
-		websiteSchema($_('seo.site_name'))
+		websiteSchema($_('seo.site_name')),
+		// cp112: SoftwareApplication schema makes the homepage eligible
+		// for Google's installation-rich-result UI (price/category/OS).
+		// Per-instance SEO description override is respected here so
+		// community operators with custom branding get the right copy.
+		softwareApplicationSchema(
+			$instance.seo?.title || $_('seo.site_name'),
+			$instance.seo?.description || ($_('seo.home.description') as string)
+		)
 	]);
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
@@ -32,7 +40,11 @@
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
-<Head routeKey="home" {jsonLd} />
+<Head
+	routeKey="home"
+	{jsonLd}
+	feeds={[{ title: $_('seo.site_name') + ' — orderbook', href: '/rss/orderbook.xml' }]}
+/>
 
 <section class="relative overflow-hidden">
 	<!-- Background atmosphere: soft brand gradient wash + subtle grid -->

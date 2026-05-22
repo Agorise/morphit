@@ -207,6 +207,20 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		indexable: false,
 		priority: 0.2,
 		changefreq: 'yearly'
+	},
+	// cp112: per-asset privacy guide page (`/privacy/{ticker}`).  Pages
+	// exist for every tradable ticker; not indexable in the sitemap to
+	// avoid coupling the SEO registry to the asset registry, but they
+	// MUST emit a full <Head /> (canonical, hreflang, OG, BreadcrumbList
+	// JSON-LD) for share previews and per-asset rich-result eligibility.
+	// The seo.privacy_asset.title key uses {asset} interpolation; the
+	// caller passes titleValues={{ asset: ticker }}.
+	{
+		path: '/privacy/[asset]',
+		key: 'privacy_asset',
+		indexable: false,
+		priority: 0.5,
+		changefreq: 'monthly'
 	}
 ] as const;
 

@@ -1477,6 +1477,10 @@
 		"privacy_index": {
 			"title": "Privacy on Morphit — per-asset guides",
 			"description": "Privacy guides for every asset Morphit supports. Most chains are transparent; concrete steps make your trades much harder to link, profile, or surveil."
+		},
+		"privacy_asset": {
+			"title": "{asset} privacy guide — Morphit",
+			"description": "How to protect your privacy when trading {asset} peer-to-peer on Morphit. Address rotation, amount jitter, and chain-specific privacy techniques."
 		}
 	},
 	"prices": {
@@ -3769,11 +3773,8 @@
 		}
 	},
 	"privacy": {
-		"index_title": "Privacy practices — Morphit",
-		"index_meta_description": "How to make your trades more private on transparent and private chains. Per-asset guidance covering fresh addresses, opt-in privacy tech, and common pitfalls.",
 		"index_heading": "Privacy practices on Morphit",
 		"index_intro": "Most assets traded on Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) live on transparent chains — any observer can read the chain history. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset Morphit adds will get a guide automatically.",
-		"page_title": "Privacy for {asset} trades — Morphit",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",
 		"section_fresh_addresses": "Use a fresh address every trade",
@@ -3922,7 +3923,6 @@
 				"meta_description": "Privacy practices for Ripple (XRP) trades on Morphit: XRPL FBA consensus, transparent base layer, destination tag UX, reserve requirement, and RPC provider considerations.",
 				"caveats": "XRPL is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same XRPL address across multiple Morphit listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern XRPL wallets (Xaman, Crossmark, Bifrost) derive these from your HD seed and let you create new accounts in seconds.\n- **Destination tags are not a privacy feature — they're an identifier.**  If your counterparty asks for a destination tag and you supply one, that tag is visible on chain and can be used to correlate transactions.  For peer-to-peer trades the destination tag is typically not needed at all.  Only include a destination tag when the receiving address is an exchange-hosted omnibus wallet that requires one for routing.\n- **Reserve requirement creates account-creation visibility.**  Your first incoming XRP must be ≥1 XRP (the base reserve).  The on-chain `Payment` transaction that funds a new account is publicly visible as account activation, which is a stronger correlation signal than a regular payment to an already-existing account.  If reducing this signal matters, fund the receive address yourself first (from an account that's already mixed/separated) and only then share it.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **XRPL RPC providers can correlate.**  Your wallet talks to an XRPL RPC endpoint (xrplcluster.com, Ripple's, or a self-hosted rippled node) — that provider sees every transaction you sign.  Self-hosting a rippled node, or rotating between providers, reduces the surface area.\n- **Consensus-set concentration is a known property.**  The default UNL (Unique Node List) is published by the XRP Ledger Foundation; running your own validator with a custom UNL is supported but uncommon.  For Morphit's purposes this affects censorship-resistance considerations (a coordinated UNL could refuse to include transactions) more than transaction privacy.  Document and decide based on your threat model.\n- **X-addresses are not currently supported as a receive format.**  XRPL has a newer \"X-address\" format (XLS-5d) that bundles the destination tag into the address itself — Xaman/Xumm, Crossmark, Bifrost, and GemWallet all parse them.  Morphit currently accepts only classic `r`-prefixed addresses; if your counterparty asks for an X-address, share your classic address and the destination tag separately instead.  Adding X-address support is on the post-launch enhancements list."
 			}
-		},
-		"unknown_asset_title": "Unknown asset · Morphit privacy guides"
+		}
 	}
 }

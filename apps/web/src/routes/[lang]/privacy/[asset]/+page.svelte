@@ -20,13 +20,25 @@
 	 *
 	 *  Privacy posture: ZERO server-side state.  Page is pure
 	 *  static-rendered + client-hydrated.  Reads no user data;
-	 *  writes no telemetry. */
+	 *  writes no telemetry.
+	 *
+	 *  cp112 SEO: converted from bare <svelte:head> to full <Head />
+	 *  component so canonical URL, hreflang alternates, OG / Twitter
+	 *  cards, robots, and onion-location are emitted on every per-
+	 *  asset privacy guide.  Adds two JSON-LD nodes: BreadcrumbList
+	 *  (SERP breadcrumb display) and Article (rich-result eligibility
+	 *  for the per-asset content). */
 
 	import { page } from '$app/state';
 	import { _ } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
 	import { ASSETS, type AssetTicker } from '@morphit/asset-registry';
+	import Head from '$components/Head.svelte';
+	import { breadcrumbListSchema, type BreadcrumbItem } from '$seo/jsonld';
+	import { localizedUrl, CANONICAL_ORIGIN } from '$seo/urls';
+	import type { LocaleCode } from '$i18n/locales';
 
+	const lang = $derived((page.params.lang ?? 'en') as LocaleCode);
 	const assetParam = $derived((page.params.asset ?? '').toUpperCase() as AssetTicker);
 	const asset = $derived(ASSETS.find((a) => a.ticker === assetParam));
 
@@ -42,31 +54,59 @@
 	const guideKey = $derived(asset?.privacyFeatures.privacyGuideKey ?? '');
 	const adviceKey = $derived(asset?.privacyFeatures.freshAddressAdvice ?? 'hd-derived');
 	const techs = $derived(asset?.privacyFeatures.optInPrivacyTech ?? null);
+
+	/** JSON-LD for the per-asset privacy guide.  Two nodes:
+	 *
+	 *   - BreadcrumbList: site → /privacy → /privacy/{asset}.
+	 *     SERPs show this as a "breadcrumb pill" replacing the
+	 *     raw URL in the result.
+	 *
+	 *   - Article: the page's evergreen content (privacy guidance
+	 *     per chain).  Marking up Article makes the page eligible
+	 *     for Google Discover surfacing and some "Top stories"
+	 *     SERP carousels where applicable.  No dates emitted —
+	 *     these guides are evergreen and stamping them with
+	 *     dates that don't reflect content changes would mislead.
+	 *     Google's Article schema allows omitting dates (only
+	 *     `mainEntityOfPage`, `headline`, `image` are technically
+	 *     required-or-recommended).  Author + publisher cross-
+	 *     reference the Organization node from home. */
+	const jsonLd = $derived.by(() => {
+		if (!asset) return [] as Record<string, unknown>[];
+		const ticker = asset.ticker;
+		const assetPath = `/privacy/${ticker.toLowerCase()}`;
+		const crumbs: BreadcrumbItem[] = [
+			{ name: $_('seo.site_name'), url: localizedUrl(lang, '/') },
+			{ name: $_('privacy.index_heading'), url: localizedUrl(lang, '/privacy') },
+			{
+				name: $_('privacy.guide_heading', { values: { asset: ticker } }) as string,
+				url: localizedUrl(lang, assetPath)
+			}
+		];
+		const articleSchema: Record<string, unknown> = {
+			'@context': 'https://schema.org',
+			'@type': 'Article',
+			headline: $_('privacy.guide_heading', { values: { asset: ticker } }),
+			description: $_(`privacy.guides.${guideKey}.meta_description`),
+			image: `${CANONICAL_ORIGIN}/og-image.png`,
+			inLanguage: lang,
+			mainEntityOfPage: {
+				'@type': 'WebPage',
+				'@id': localizedUrl(lang, assetPath)
+			},
+			author: { '@id': `${CANONICAL_ORIGIN}/#organization` },
+			publisher: { '@id': `${CANONICAL_ORIGIN}/#organization` }
+		};
+		return [breadcrumbListSchema(crumbs), articleSchema];
+	});
 </script>
 
-<!--
-	cp44-J-69 fix: <svelte:head> must NOT live inside any block; Svelte 5
-	rejects it as svelte_meta_invalid_placement at compile time.  Pre-cp44
-	this was inside the {#if asset} block, which meant the privacy guides
-	for BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR all
-	shipped without <title> or <meta description> for that route — SEO
-	regression for all 13 asset privacy pages.  Now lifted to the
-	component root with conditional content inside the head block.  When
-	`asset` is null (unknown asset slug, rare) the {#if asset} below the
-	head renders the unknown-asset message in the body; the head still
-	emits a sane default title.
--->
-<svelte:head>
-	{#if asset}
-		<title>{$_('privacy.page_title', { values: { asset: asset.ticker } })}</title>
-		<meta
-			name="description"
-			content={$_(`privacy.guides.${guideKey}.meta_description`) as string}
-		/>
-	{:else}
-		<title>{$_('privacy.unknown_asset_title')}</title>
-	{/if}
-</svelte:head>
+<Head
+	routeKey="privacy_asset"
+	titleValues={{ asset: assetParam }}
+	descriptionValues={{ asset: assetParam }}
+	{jsonLd}
+/>
 
 {#if asset}
 	<article class="mx-auto max-w-3xl px-4 py-8">

@@ -36,9 +36,29 @@
 		 * Disable indexing on a per-route basis (defaults to indexable).
 		 */
 		noindex?: boolean;
+		/**
+		 * Optional RSS / Atom feeds for `<link rel="alternate" type="...">`
+		 * auto-discovery.  Feed readers (NetNewsWire, Feedly, Inoreader,
+		 * etc.) probe HTML <head> for these tags and surface a "subscribe"
+		 * affordance when present.  Also a documented SEO signal for
+		 * news/blog crawlers.  Pass empty/undefined on pages with no
+		 * matching feed.
+		 *
+		 * Example for the orderbook page:
+		 *   feeds={[{ title: 'Morphit orderbook', href: '/rss/orderbook.xml' }]}
+		 */
+		feeds?: Array<{ title: string; href: string; type?: 'rss' | 'atom' }>;
 	}
 
-	let { routeKey, titleValues, descriptionValues, path, jsonLd, noindex = false }: Props = $props();
+	let {
+		routeKey,
+		titleValues,
+		descriptionValues,
+		path,
+		jsonLd,
+		noindex = false,
+		feeds
+	}: Props = $props();
 
 	const resolvedPath = $derived(path ?? $page.url.pathname ?? '/');
 	const canonical = $derived(canonicalFor(resolvedPath));
@@ -92,10 +112,22 @@
 		return v && v !== keywordsKey ? v : '';
 	});
 
-	/** OG image — static asset, 1200x630. The SVG renders into
-	 *  `/og-image.svg`; Phase 5 adds a PNG fallback for aggregators
-	 *  that don't support SVG OG images (X / Twitter included). */
-	const ogImage = `${CANONICAL_ORIGIN}/og-image.svg`;
+	/** OG image (cp112).
+	 *
+	 *  We emit BOTH the PNG and SVG variants:
+	 *    - PNG is the primary `og:image` and `twitter:image`.  Twitter/X,
+	 *      LinkedIn, Slack, Discord, and several Mastodon link-preview
+	 *      crawlers do not reliably render SVG OG images (Twitter rejects
+	 *      SVG outright per their card spec).
+	 *    - SVG is emitted as a second `og:image` entry — sharp on
+	 *      high-DPI displays for crawlers that DO support it (modern
+	 *      Facebook, Pleroma, ActivityPub-aware tooling).
+	 *
+	 *  Specs followed: 1200×630 (Twitter `summary_large_image` + Facebook
+	 *  OG recommended sizes; same canvas for both).  File size 61 KB —
+	 *  under Twitter's 5 MB cap by three orders of magnitude. */
+	const ogImagePng = `${CANONICAL_ORIGIN}/og-image.png`;
+	const ogImageSvg = `${CANONICAL_ORIGIN}/og-image.svg`;
 	const ogImageAlt = $derived($_('seo.og_image_alt'));
 
 	/** Onion-Location meta tag.  When this instance has a Tor
@@ -166,23 +198,44 @@
 		<link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
 	{/each}
 
+	<!-- RSS / Atom feed auto-discovery (cp112).  Feed readers and
+	     some SEO crawlers probe the head for `rel="alternate"
+	     type="application/rss+xml"` tags.  Only emitted on pages
+	     that pass a `feeds` prop. -->
+	{#if feeds && feeds.length > 0}
+		{#each feeds as feed}
+			<link
+				rel="alternate"
+				type={feed.type === 'atom' ? 'application/atom+xml' : 'application/rss+xml'}
+				title={feed.title}
+				href={feed.href}
+			/>
+		{/each}
+	{/if}
+
 	<!-- Open Graph -->
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content={siteName} />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
 	<meta property="og:url" content={canonical} />
-	<meta property="og:image" content={ogImage} />
-	<meta property="og:image:alt" content={ogImageAlt} />
+	<!-- Primary og:image is PNG (universal compat across X/Twitter,
+	     LinkedIn, Slack, Discord, FB).  SVG fallback emitted as a
+	     secondary og:image for crawlers that prefer vector. -->
+	<meta property="og:image" content={ogImagePng} />
+	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
+	<meta property="og:image:alt" content={ogImageAlt} />
+	<meta property="og:image" content={ogImageSvg} />
+	<meta property="og:image:type" content="image/svg+xml" />
 	<meta property="og:locale" content={$currentLocale.replace('-', '_')} />
 
 	<!-- Twitter Card -->
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
-	<meta name="twitter:image" content={ogImage} />
+	<meta name="twitter:image" content={ogImagePng} />
 	<meta name="twitter:image:alt" content={ogImageAlt} />
 
 	<!-- JSON-LD (one or more nodes).  The `</script>` in the

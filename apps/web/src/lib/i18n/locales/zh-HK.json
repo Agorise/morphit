@@ -1477,6 +1477,10 @@
 		"privacy_index": {
 			"title": "Morphit 上的私隱——每個資產的指南",
 			"description": "Morphit 支援的每個資產的私隱指南。大多數鏈都是透明的；具體步驟使你的交易更難被關聯、畫像或監控。"
+		},
+		"privacy_asset": {
+			"title": "{asset} 私隱指南 — Morphit",
+			"description": "在 Morphit 上點對點交易 {asset} 時如何保護你的私隱。地址輪換、金額抖動以及鏈特定的私隱技術。"
 		}
 	},
 	"prices": {
@@ -3769,11 +3773,8 @@
 		}
 	},
 	"privacy": {
-		"index_title": "私隱實踐 — Morphit",
-		"index_meta_description": "如何在透明鏈和私密鏈上使你的交易更私密。每種資產的指南，涵蓋新地址、可選私隱技術和常見陷阱。",
 		"index_heading": "Morphit 的私隱實踐",
 		"index_intro": "在 Morphit 上交易的大多數資產（BTC、BCH、LTC、DASH、DOGE、ZEC、ARRR、DCR、SOL、ETH、XRP、BLURT、USDT、USDC、DAI）都在透明鏈上——任何觀察者都可以讀取鏈歷史。你可以採取具體步驟，使你的交易更難被關聯、畫像或監控。這是註冊表驅動的：Morphit 添加的下一個資產會自動獲得指南。",
-		"page_title": "{asset} 交易的私隱 — Morphit",
 		"guide_heading": "{asset} 交易的私隱實踐",
 		"back_to_index": "所有資產",
 		"section_fresh_addresses": "每次交易使用新地址",
@@ -3922,7 +3923,6 @@
 				"meta_description": "Morphit 上 Ripple (XRP) 交易的私隱實踐：XRPL FBA 共識、透明基礎層、destination tag UX、儲備金要求和 RPC 提供商考量。",
 				"caveats": "XRPL 在基礎層是透明的，沒有原生混幣協議。\n\n- **每筆交易共享新鮮地址。**在多個 Morphit 上架訂單中使用相同的 XRPL 地址會讓觀察者在完全透明的鏈上將你的訂單關聯起來。為每筆交易生成新的接收地址——現代 XRPL 錢包（Xaman、Crossmark、Bifrost）從你的 HD 種子派生這些地址，並讓你在幾秒鐘內創建新帳戶。\n- **目的標籤不是私隱功能——它是一個識別符。**如果對手方要求目的標籤而你提供了，該標籤在鏈上可見，可被用於關聯交易。對於 peer-to-peer 交易，通常根本不需要目的標籤。僅當接收地址是要求目的標籤進行路由的交易所託管 omnibus 錢包時，才包含目的標籤。\n- **儲備要求會產生帳戶創建可見性。**你的首次 XRP 接收必須 ≥1 XRP（基礎儲備）。資助新帳戶的鏈上 `Payment` 交易作為帳戶激活公開可見，這是比對已存在帳戶的常規支付更強的關聯信號。如果減少這個信號很重要，請先自己（從已混幣/分離的帳戶）資助接收地址，然後再分享它。\n- **網絡層私隱仍然重要。**通過 Tor 或錢包的私隱模式廣播交易，可以讓你的家庭 IP 不出現在鏈對你的視野中。\n- **XRPL RPC 提供商可以關聯。**你的錢包與 XRPL RPC 端點（xrplcluster.com、Ripple 的或自託管 rippled 節點）通信——該提供商會看到你簽名的每筆交易。自託管 rippled 節點或在提供商之間輪換可以減少攻擊面。\n- **共識集集中度是已知屬性。**預設的 UNL (Unique Node List) 由 XRP Ledger Foundation 發布；運行自己的驗證者使用自定義 UNL 是支援的但不常見。對 Morphit 的目的而言，這更多影響抗審查考慮（協調的 UNL 可能拒絕包含交易），而非交易私隱。基於你的威脅模型記錄並決定。\n- **X-地址目前不作為接收格式被支援。**XRPL 有一種較新的\"X-address\"格式 (XLS-5d) 將目的標籤捆綁進地址本身——Xaman/Xumm、Crossmark、Bifrost 和 GemWallet 都解析它們。Morphit 目前只接受經典 `r` 前綴地址；如果對手方要求 X-地址，請改為分別分享你的經典地址和目的標籤。添加 X-地址支援在發布後增強列表上。"
 			}
-		},
-		"unknown_asset_title": "未知資產 · Morphit 私隱指南"
+		}
 	}
 }
