@@ -1,5 +1,61 @@
 # Tarball history
 
+## cp87 — Indexer API endpoint audit (~3,173 lines) — 12 endpoints walked (8 deep + 4 spot-checked) — 0 findings — 1 soft observation deferred to cp88+ (per-IP SSE-connection cap) — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp87-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~11,495 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173).
+
+### TL;DR
+
+cp87 extends the audit one layer up from handlers + supporting modules to the **public HTTP attack surface**: indexer API endpoints.  Walked 12 endpoints across read, SSE-stream, and pairing-broker categories — totaling 3,173 lines.  0 findings.  Every endpoint follows the same defended pattern (Zod schema for query params, isAccountName for path params, parameterized SQL, escapeLike with explicit ESCAPE clause, cursor codec via shared module).  Sock-puppet defenses (Signal A/B/C exclusions) are consistent between summary and per-row contexts (Finding R15 reconciliation verified at runtime).
+
+**Indexer API endpoints (12, ~3,173 lines):**
+
+| Endpoint | Lines | Status | Notes |
+|---|---:|---|---|
+| `orderbook.ts` | 509 | DEEP-AUDITED CLEAN | 3 sort modes; cursor-with-sort-binding (400 on mismatch); sock-puppet exclusions baked into feedback aggregate |
+| `api/shared.ts` | 64 | DEEP-AUDITED CLEAN | `escapeLike`, cursor codec, dot-allowing account-name regex (C-19 audit close-out) |
+| `middleware/ratelimit.ts` | 126 | DEEP-AUDITED CLEAN | Finding B fix (loopback-only header trust); 64-char IP length cap; 5-min janitor |
+| `loginPairing.ts` | 401 | DEEP-AUDITED CLEAN | Indexer-as-dumb-pipe rigorously enforced; single-shot delivery (prevents racing forge); body-pid-match defense; 5 race-conditions handled |
+| `feedback.ts API` | 470 | DEEP-AUDITED CLEAN | Signal A/B/C exclusions consistent across summary + per-row flag (Finding R15) |
+| `orderbookStream.ts` | 494 | DEEP-AUDITED CLEAN | F-5 (subscribe-before-snapshot), F-6 (per-orderId fetch serializer), F-13 (fallback poll re-emit), 3 memory caps |
+| `chatStream.ts` | 374 | DEEP-AUDITED CLEAN | No auth by design — payload is E2E-encrypted X25519 ciphertext per ADR-0015 |
+| `featuredOrderbook.ts` | 162 | DEEP-AUDITED CLEAN | Finding O27 closure: joins on (account, permlink) tuple, not permlink alone |
+| `orders.ts` | 192 | SPOT-CHECKED CLEAN | isAccountName + Zod + cursor + parameterized SQL |
+| `profiles.ts` | 145 | SPOT-CHECKED CLEAN | `ANY($1::text[])` parameterized array for batch lookup |
+| `chat.ts` (read) | 127 | SPOT-CHECKED CLEAN | LEAST/GREATEST canonical conversation pair |
+| `operators.ts` | 109 | SPOT-CHECKED CLEAN | fully static SQL, hardcoded LIMIT 500 |
+
+**Soft observation for cp88+:** No per-IP cap on concurrent SSE connections visible in endpoint code.  The `middleware/ratelimit.ts` token-bucket gates HTTP request rate but doesn't bound long-lived open connections.  An attacker could open 1000 SSE connections under the 120/min "list" tier (10 minutes elapsed) and hold them all open indefinitely (~200 KB per-connection state ≈ 200 MB total).  Need to check if this is enforced in `main.ts`, hono runtime defaults, or nginx/load-balancer config.  Filed as cp88+ HIGH PRIORITY.
+
+### Cp87 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 3,173 | indexer API endpoints |
+| Findings this cp | 0 | all 12 endpoints clean |
+| Soft observations this cp | 1 | SSE-connection cap → cp88+ |
+
+### Cp87 deferred to cp88+
+
+1. **Per-IP SSE-connection cap audit** (cp87 Lesson #2) — HIGH PRIORITY; verify in middleware / main.ts / nginx
+2. **Relay endpoint audit** — `apps/relay/src/api/*.ts` + middleware + remaining policy modules
+3. **Remaining indexer API endpoints** — rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, etc.
+4. **30-test CI delta hunt** — still sandbox-blocked
+5. **Defense-claim-vs-implementation parity smoke** — cp84 Lesson #4 #3; speculative
+6. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85
+
+### Cp87 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp87 lessons (4 — endpoint defense patterns, SSE engineering + soft observation, chat-stream-no-auth rationale, coverage table) + state table + fixes section ("none — audit-only") + cp88+ hunting-ground update
+- `TARBALL.md` — cp87 entry inserted at top (this entry)
+
+No source code or test files modified — cp87 is a pure audit-trail checkpoint.
+
 ## cp86 — Trust-chain extension audit (~3,056 lines of supporting infrastructure) — 13 modules walked clean (10 indexer-aux + 3 relay crypto/policy) — 0 new findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st HW-verified — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp86-FULL-STATE.tar.gz`

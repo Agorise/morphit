@@ -1,8 +1,62 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp86 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged from cp85) · BATTERY 4432/0 (verified once this cp) · LL #52 41ST CONSECUTIVE HW-VERIFIED · 1,381 VITEST TESTS PASSING (unchanged) · TRUST-CHAIN EXTENSION AUDIT COMPLETE: ~3,056 lines of supporting infrastructure walked clean (10 indexer auxiliary modules + 3 relay crypto/policy modules) · 0 NEW FINDINGS · all 17/17 handlers + their supporting modules now audited · CUMULATIVE DEEP-AUDIT COVERAGE: ~8,322 LINES.**
+**Last touched:** Part 122 cp87 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged from cp86) · 1,381 VITEST TESTS (unchanged) · INDEXER API ENDPOINT AUDIT: 12 endpoints walked (~3,173 lines) — 8 deep + 4 spot-checked, 0 findings · 1 soft observation flagged for cp88 (SSE-connection caps belong at middleware layer) · CUMULATIVE DEEP-AUDIT COVERAGE: ~11,495 LINES.**
 
-## CP86 LESSONS
+## CP87 LESSONS
+
+### Lesson #1 — Indexer API endpoint defenses are consistent across the dozen audited
+
+Every endpoint walked follows the same pattern: Zod schema for query parameters, `isAccountName` regex for path params, parameterized `$N` placeholders for all user-derived SQL values, `escapeLike` + explicit `ESCAPE '\\'` for ILIKE prefix-matching, cursor codec via `$api/shared` (opaque base64url JSON, structurally narrowed on decode). No SQL string concatenation of user input anywhere; no LIKE-injection surface; no auth bypass since these are public read endpoints over already-public chain data.
+
+Sock-puppet defenses are CONSISTENT across summary and per-row contexts: `orderbook.ts` feedback aggregate, `feedback.ts` per-row flag query, both exclude Signal A (related_accounts) + Signal B (suspicious_reciprocity) + Signal C (one_way_pile_on). Finding R15 reconciliation (per-row suppression flags mirror summary exclusions) holds across both endpoints.
+
+### Lesson #2 — SSE patterns are well-engineered; one soft observation for cp88+
+
+The two SSE endpoints (`orderbookStream.ts`, `chatStream.ts`) share a tight design: subscribe-to-bus BEFORE snapshot fetch (F-5 race fix), drain pendingDuringSnapshot after push, per-orderId fetch serializer (F-6, orderbookStream only — chat IDs are unique and immutable, no serializer needed), fallback poll re-emits matching rows in 90s window (F-13), three caps for memory bounds (`MAX_TRACKED_ORDERS`, `PENDING_DURING_SNAPSHOT_CAP`, fallback-poll LIMIT), keep-alive every 25s, full cleanup symmetry between `cleanup()` and `cancel()`.
+
+**Soft observation for cp88+:** no per-IP SSE-connection cap is visible in endpoint code; the `middleware/ratelimit.ts` token-bucket gates HTTP request rate but doesn't bound concurrent long-lived connections.  An attacker could open 1000 SSE connections under the 120/min "list" tier limit (10 minutes elapsed) and hold them all open indefinitely, accumulating ~200 KB of per-connection state.  Need to check if this is enforced elsewhere — `main.ts`, hono runtime caps, or nginx/load-balancer config.  Filed for cp88 middleware audit.
+
+### Lesson #3 — chat stream needs no auth because the encryption IS the access control
+
+`chatStream.ts` allows anyone to subscribe to `/v1/chat/:a/:b/stream`. This is correct: chat payloads are stored E2E-encrypted (X25519 per ADR-0015) — the stream serves ciphertext that only the conversation participants can decrypt. The frontend handles decryption locally.  Same threat model as `loginPairing.ts` (indexer is a dumb pipe); same principle: encryption + chain-level signature replace HTTP-level auth for surfaces where the data is already-public-bytes-but-private-content.
+
+### Lesson #4 — Coverage table for indexer API endpoints walked at cp87
+
+| Endpoint | Lines | Status | Notes |
+|---|---:|---|---|
+| orderbook.ts | 509 | DEEP-AUDITED CLEAN | comprehensive sort modes, cursor-with-sort-binding, sock-puppet exclusions baked in |
+| api/shared.ts | 64 | DEEP-AUDITED CLEAN | `escapeLike`, cursor codec, account-name regex (dot-allowing per C-19 audit close-out) |
+| middleware/ratelimit.ts | 126 | DEEP-AUDITED CLEAN | Finding B (loopback-only header trust); 64-char IP cap; 5-min janitor |
+| loginPairing.ts | 401 | DEEP-AUDITED CLEAN | indexer-as-dumb-pipe; single-shot delivery; body-pid-match; 5-race coverage |
+| feedback.ts API | 470 | DEEP-AUDITED CLEAN | Signal A/B/C exclusions consistent across summary + per-row flag (Finding R15) |
+| orderbookStream.ts | 494 | DEEP-AUDITED CLEAN | F-5 (subscribe-before-snapshot), F-6 (per-id serializer), F-13 (poll re-emit), 3 memory caps |
+| chatStream.ts | 374 | DEEP-AUDITED CLEAN | E2E-encrypted ciphertext → no auth required by design |
+| featuredOrderbook.ts | 162 | DEEP-AUDITED CLEAN | O27 closure: joins on (account, permlink) tuple, not permlink alone |
+| orders.ts | 192 | SPOT-CHECKED CLEAN | same pattern: isAccountName + Zod + cursor + parameterized SQL |
+| profiles.ts | 145 | SPOT-CHECKED CLEAN | `ANY($1::text[])` parameterized array for batch lookup |
+| chat.ts (read) | 127 | SPOT-CHECKED CLEAN | LEAST/GREATEST canonical conversation pair |
+| operators.ts | 109 | SPOT-CHECKED CLEAN | fully static SQL, hardcoded LIMIT 500 |
+
+Total cp87: 3,173 lines walked, 0 findings, 1 soft observation deferred to cp88+.
+
+## CP87 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp86 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~11,495 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) |
+
+## CP87 FIXES
+
+None — cp87 was a pure API endpoint audit. 0 findings across 12 endpoints / 3,173 lines.  1 soft observation (SSE-connection cap) filed for cp88+ middleware audit.
+
+
 
 ### Lesson #1 — Trust-chain extension closes the audit gap that handler-only coverage leaves open
 
@@ -254,6 +308,15 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP88+ PREDICTED HUNTING GROUND
+
+1. **Per-IP SSE-connection cap audit** (cp87 Lesson #2 soft observation) — verify `main.ts`, hono runtime defaults, or nginx config bounds concurrent connections.  If unbounded, surface as a real finding and fix.  HIGH PRIORITY for cp88.
+2. **Relay endpoint audit** — `apps/relay/src/api/*.ts` (create.ts 864 lines is largest), plus the ip/origin-enforcement/ratelimit middleware (~750 lines), plus the policy modules not yet walked (highValueName 462, globalDailyCeiling 397, pushSender 280, sequentialDetector 254).
+3. **Remaining indexer API endpoints** — rssOrderbookHandlers (317), instance (282), instancesStream (240), clearingPriceHistory (211), instancesStreamHelpers (168), orderViewsLogic (141), operatorBlocks (137), release (116), chainFee (116), instances (109), featuredBids (148), health (161), profiles-spot already done.
+4. **30-test CI delta hunt** — still sandbox-blocked.
+5. **Defense-claim-vs-implementation parity smoke** — cp84 Lesson #4 #3; speculative.
+6. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
 
 ## CP87+ PREDICTED HUNTING GROUND
 
