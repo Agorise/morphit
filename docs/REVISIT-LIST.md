@@ -1,8 +1,80 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp88 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · RELAY ENDPOINT + MIDDLEWARE + POLICY AUDIT: 8 modules walked (~3,048 lines), 0 findings · CP87 SSE-CONNECTION-CAP SOFT OBSERVATION CONFIRMED NOT-A-FINDING (already-addressed design choice via P7-1 / main.ts comments / OPERATIONS.md §14.5) · CUMULATIVE DEEP-AUDIT COVERAGE: ~14,543 LINES.**
+**Last touched:** Part 122 cp89 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · RELAY CHAIN-RPC + CONFIG + QUEUE-WORKER AUDIT: 4 modules walked (~1,914 lines), 0 findings · CUMULATIVE DEEP-AUDIT COVERAGE: ~16,457 LINES.**
 
-## CP88 LESSONS
+## CP89 LESSONS
+
+### Lesson #1 — Chain-RPC abstraction has two-pass endpoint rotation with transport-vs-RPC discrimination
+
+`blurt/client.ts` is the **single point** every chain broadcast funnels through. Its endpoint rotation is the difference between "one RPC node hiccups and the relay halts" vs "transparently routes to a healthy node." Key verifications:
+
+- **Two-pass pattern**: first pass tries endpoints respecting cooldowns; if all are cooled down, second pass IGNORES cooldowns as last-ditch (so caller gets a CURRENT error, not a stale "cooldown" rejection). The two-pass structure is essential — without it, an operator running through a temporary outage sees the relay fail-fast forever after the first round of cooldowns lands.
+- **Exponential cooldown** per endpoint: 2s → 10s → 60s → 5min. Per-endpoint state, reset on any success.
+- **`isTransportError` discrimination**: ECONNREFUSED / ETIMEDOUT / network / timeout / fetch-failed / 5xx HTTP → transport (rotate to next endpoint); `assert_exception` / `missing_object_exception` → RPC error (chain is telling us something; bubble up immediately without cooling endpoint). Conservative default: when in doubt, treat as transport.
+- **8s timeout per RPC call** — bounded blocking.
+- **convertBpToVests** uses BigInt arithmetic for the core ratio; only the bp-Number → bp-base-units conversion uses `Math.round(bp * 10^scale)`. At realistic milestone BP values (10/50/200/1000), this is exact integer multiplication well within Number's 2^53 safe range. Documented sub-microvests truncation is economically negligible.
+- All broadcast methods validate `amount > 0` BEFORE signing; broadcastDelegation also guards `delegator !== delegatee` self-delegation.
+
+### Lesson #2 — config loader's safe-by-default posture catches operator misconfig at boot
+
+`config/index.ts` enforces fail-loud-at-boot for all misconfig. Critical checks verified:
+
+- **`PLACEHOLDER_DB_PASSWORDS` sentinel rejection** — refuses to boot if `MORPHIT_RELAY_DATABASE_URL` still contains `CHANGEME` / `CHANGE_ME` / `CHANGE_ME_BEFORE_PRODUCTION` / `__SET_BEFORE_DEPLOY__` / `password` / `postgres` as the password component. Directly closes the "operator copied example .env and never edited it" mistake. Memory tie-in: Ken's standing pre-launch action item to rotate the `CHANGE_ME_BEFORE_PRODUCTION` placeholder is enforced HERE — the relay won't even start with that value present.
+- **Active key file permissions check** (`0o077 == 0`) — refuses boot if group/other bits are set, with a helpful `chmod 0400 <path>` error message. Skipped on Windows (stat mode is always lax there) since production is Linux-only.
+- **Envelope detection** at boot via `looksLikeEnvelope`; if envelope, parsed and stored, WIF materialization deferred to main.ts via `unlockActiveKey`.
+- **RPC endpoints must start with `https://`** — refuses plain HTTP. Rules out passive MITM.
+- **Allowed origins must start with `https://` or `http://localhost`** — same posture for the public-frontend allowlist.
+- **`maxRequestBodyBytes = 64 KiB`** — well above the ~4 KiB max signed-tx and small enough to reject large-body abuse before Zod parsing.
+- **`UnlockedConfig` type** enforces "must unlock before use" at compile time — every component that broadcasts (create, drainer, mint script) takes UnlockedConfig, not Config. Type system catches misuse.
+
+### Lesson #3 — Unlock retries only the wrong-passphrase path
+
+`unlock.ts` retries up to MAX_ATTEMPTS=3 ONLY on `KeyEnvelopeError.code === 'decryption_failed'`. Any other envelope error (malformed JSON, unsupported version, weak params) throws immediately — re-prompting won't help. PassphrasePromptError (TTY problems, cancellation, timeout) is also fatal. After returning the unlocked config, `relayActiveKeyEnvelope` is stripped (`undefined`) so no caller is tempted to re-decrypt. Best-effort `passphrase = ''` after each attempt clears the local ref (V8 string immutability prevents true zeroing — same limit as keyEnvelope.ts).
+
+### Lesson #4 — Queue drainer is hardened against poison rows, transient hiccups, and DB-direct-write tampering
+
+`queue/drainer.ts` processes the payout queue (welcome bonuses, loyalty milestones, operator payouts). Defenses verified:
+
+- **`FOR UPDATE SKIP LOCKED`** (Finding N23) → multiple drainers see disjoint row sets; no double-broadcast.
+- **Per-row SAVEPOINT** `row_${row.id}` → poison rows don't block neighbors. ID is integer from DB, safe interpolation.
+- **`broadcast_attempt_at` marker** set BEFORE the chain call → closes the residual double-broadcast window where broadcast lands but post-success UPDATE fails on transient PG hiccup. Next cycle can decide based on the attempt timestamp + exponential backoff.
+- **Exponential backoff with 4h cap**: `LEAST(POWER(2, error_count)::numeric, 240)` minutes. First attempt (error_count=0 AND broadcast_attempt_at NULL) bypasses wait — fresh rows drain immediately.
+- **`error_count >= queueMaxRetries` rows SKIPPED** by drain query → land in operator review queue, no infinite auto-retry.
+- **Defense-in-depth recipient validation** via `ACCOUNT_NAME_RE` — even though upstream writers validate, the drainer re-validates so a future bug or DB-direct-write can't poison the queue.
+- **Defense-in-depth reason validation** via `/^[a-z0-9_:-]{1,64}$/` → prevents control chars from landing in broadcast memo (which would appear in user's wallet history).
+- **Amount caps** (Finding G1.2): MAX_AMOUNT_BLURT=10000, MAX_AMOUNT_BP=10000. Legitimate writers cap at 10 BLURT / 1260 BP; the drainer caps catch wildly-out-of-range without rejecting any legitimate path.
+- **last_error truncated to 500 chars** before UPDATE → prevents table bloat from spammy error messages.
+- **Graceful shutdown** via AbortController; sleep loop honors abort signal so SIGTERM doesn't wait the full poll interval.
+
+### Lesson #5 — Coverage table for cp89
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `blurt/client.ts` | 791 | DEEP-AUDITED CLEAN | Two-pass endpoint rotation; exponential cooldown 2s→5min; transport-vs-RPC error discrimination; BigInt-precise BP→VESTS conversion; 8s timeout; amount-must-be-positive guards |
+| `config/index.ts` | 620 | DEEP-AUDITED CLEAN | PLACEHOLDER_DB_PASSWORDS sentinel rejection; key-file 0o077 perms check; envelope detection; https-only RPC + origins; 64 KiB request body cap; UnlockedConfig type guard |
+| `config/unlock.ts` | 121 | DEEP-AUDITED CLEAN | 3-attempt retry only on decryption_failed; envelope stripped after unlock; passphrase=''  best-effort scrub |
+| `queue/drainer.ts` | 382 | DEEP-AUDITED CLEAN | FOR UPDATE SKIP LOCKED (Finding N23); per-row SAVEPOINT; broadcast_attempt_at marker; exponential backoff 1m→240m cap; recipient+reason+amount defense-in-depth (Finding G1.2); error message 500-char truncation |
+
+Total cp89: 1,914 lines walked, 0 findings.
+
+## CP89 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp88 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~16,457 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) + cp89 relay client+config+drainer (1,914) |
+
+## CP89 FIXES
+
+None — cp89 was a relay chain-RPC + config + queue-worker audit.  0 findings across 4 modules / 1,914 lines.
+
+
 
 ### Lesson #1 — cp87's SSE-connection-cap soft observation was an already-addressed design choice
 
@@ -372,6 +444,16 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP90+ PREDICTED HUNTING GROUND
+
+1. **Web push endpoints** — `apps/relay/src/api/push.ts` (253) + `apps/relay/src/policy/pushSender.ts` (280) + `policy/pushSubscriptions.ts` (191) + `policy/pushSubscribeSig.ts` (162) + `api/health.ts` (relay, 178).  Push is opt-in but has signature-verification surfaces (cp14 work) and a worker process.
+2. **Remaining indexer API endpoints** — `apps/indexer/src/api/rssOrderbookHandlers.ts` (317), `instance.ts` (282), `instancesStream.ts` (240), `clearingPriceHistory.ts` (211), `instancesStreamHelpers.ts` (168), `orderViewsLogic.ts` (141), `operatorBlocks.ts` (137), `release.ts` (116), `chainFee.ts` (116), `instances.ts` (109), `featuredBids.ts` (148), `health.ts` (161).  ~2,500 lines.
+3. **Indexer poller + federationProbe + signals** — `apps/indexer/src/indexer/poller.ts` (690), `federationProbe.ts` (791), `signals.ts` (349) — the block-walk + federation gossip + Signal A/B/C detectors.  ~1,830 lines; ranks as major remaining target.
+4. **Indexer operatorAccountBalanceScanner + lowBalanceScanner + treasurySource + witnessFeePoller + signupAnomalyProbe** — auxiliary background workers, ~1,400 lines total.
+5. **30-test CI delta hunt** — still sandbox-blocked.
+6. **Defense-claim-vs-implementation parity smoke** — speculative.
+7. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
 
 ## CP89+ PREDICTED HUNTING GROUND
 

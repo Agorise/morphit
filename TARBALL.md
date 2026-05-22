@@ -1,5 +1,59 @@
 # Tarball history
 
+## cp89 — Relay chain-RPC + config + queue-worker audit (~1,914 lines, 4 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp89-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~16,457 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914).
+
+### TL;DR
+
+cp89 walks the **three modules every chain operation depends on**: `blurt/client.ts` (the chain RPC abstraction), `config/index.ts`+`config/unlock.ts` (env parsing + envelope-decrypt orchestration), and `queue/drainer.ts` (the payout queue worker that broadcasts welcome bonuses, loyalty milestones, and operator payouts). 1,914 lines total, 0 findings.
+
+**Modules walked (4, ~1,914 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `blurt/client.ts` | 791 | DEEP-AUDITED CLEAN | Two-pass endpoint rotation (cooldown-respecting then last-ditch); exponential cooldown 2s→10s→60s→5min; transport-vs-RPC error discrimination (assert_exception bubbles up; transport errors rotate); BigInt-precise BP→VESTS conversion with documented sub-microvests truncation; 8s timeout; broadcastDelegation self-delegation guard |
+| `config/index.ts` | 620 | DEEP-AUDITED CLEAN | PLACEHOLDER_DB_PASSWORDS sentinel rejection (refuses boot if CHANGEME / CHANGE_ME_BEFORE_PRODUCTION / etc. still present — directly closes Ken's standing pre-launch action item); key-file `(mode & 0o077) == 0` perms check; envelope detection via looksLikeEnvelope; https-only RPC endpoints + allowed origins; 64 KiB request body cap; UnlockedConfig type guards "must unlock before use" at compile time |
+| `config/unlock.ts` | 121 | DEEP-AUDITED CLEAN | 3-attempt retry ONLY on `decryption_failed`; malformed envelope / weak params / TTY failures throw immediately; `relayActiveKeyEnvelope: undefined` stripped on return so no caller can re-decrypt; `passphrase = ''` best-effort scrub after each attempt |
+| `queue/drainer.ts` | 382 | DEEP-AUDITED CLEAN | FOR UPDATE SKIP LOCKED (Finding N23) → disjoint rows across concurrent drainers; per-row SAVEPOINT (integer ID safe interpolation); broadcast_attempt_at marker BEFORE chain call (closes residual N23 double-broadcast window); exponential backoff `LEAST(POWER(2, error_count), 240)` minutes; error_count ≥ queueMaxRetries rows SKIPPED → operator review; recipient+reason+amount defense-in-depth re-validation (Finding G1.2); error message 500-char truncation prevents table bloat |
+
+**Key cp89 verifications:**
+
+- **Two-pass endpoint rotation matters**: without the second-pass-ignoring-cooldowns fallback, an operator running through a temporary outage sees the relay fail-fast forever after all endpoints land in cooldown. The two-pass structure returns a CURRENT error from a live attempt rather than a stale "cooldown" rejection.
+- **PLACEHOLDER_DB_PASSWORDS check directly enforces the standing memory item** (Ken: rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`). The relay literally can't start with that value present, so the action item is enforced at the boot layer rather than relying on operator discipline.
+- **`UnlockedConfig` is a type-system enforcement, not a runtime check** — every component that broadcasts (create endpoint, queue drainer, mint script) takes `UnlockedConfig`, not `Config`. TypeScript catches at compile time any code path that tries to broadcast without unlocking the key first.
+- **`broadcast_attempt_at` marker** closes the subtle residual double-broadcast window where: row gets locked, chain broadcast succeeds, post-success UPDATE fails on transient PG hiccup, next drain cycle sees broadcast_at still NULL. With the marker, the next cycle SEES the attempted-at timestamp and either holds (exponential backoff cooldown) or operator-reviews.
+- **Defense-in-depth reason regex** (`^[a-z0-9_:-]{1,64}$`) prevents control chars from landing in broadcast memo. The memo appears in the user's wallet history — a malicious or buggy writer that snuck `\n\rSomething shady` into the reason field would be visible there. The regex closes this without rejecting any legitimate reason.
+
+### Cp89 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 1,914 | relay chain-RPC + config + queue worker |
+| Findings this cp | 0 | all 4 modules clean |
+
+### Cp89 deferred to cp90+
+
+1. **Web push endpoints** — `push.ts` (253) + `pushSender.ts` (280) + `pushSubscriptions.ts` (191) + `pushSubscribeSig.ts` (162) + relay `health.ts` (178)
+2. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints
+3. **Indexer poller + federationProbe + signals** — `poller.ts` (690), `federationProbe.ts` (791), `signals.ts` (349) — major remaining indexer target
+4. Indexer auxiliary scanners — operatorAccountBalanceScanner, lowBalanceScanner, treasurySource, witnessFeePoller, signupAnomalyProbe (~1,400 lines)
+5. 30-test CI delta hunt — sandbox-blocked
+6. Defense-claim-vs-implementation parity smoke — speculative
+7. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp89 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp89 lessons (5 — chain-RPC two-pass rotation, config safe-by-default posture + PLACEHOLDER_DB_PASSWORDS tie-in, unlock retry semantics, drainer hardening, coverage table) + state table + fixes section ("none — audit-only") + cp90+ hunting-ground update
+- `TARBALL.md` — cp89 entry inserted at top (this entry)
+
+No source code or test files modified — cp89 is a pure audit-trail checkpoint.
+
 ## cp88 — Relay endpoint + middleware + policy audit (~3,048 lines, 8 modules) — 0 findings — cp87 SSE-cap soft observation CONFIRMED NOT-A-FINDING (already-addressed design choice via P7-1 + main.ts comments + OPERATIONS.md §14.5) — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp88-FULL-STATE.tar.gz`
