@@ -72,8 +72,14 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * for rhetorical emphasis.  K.I.S.S. by design (short punchy
  * sentences); exempt from sentence-count budget but still subject
  * to word-count budget.
+ *
+ * cp112 addition: #195 ("No leverage. No margin. No futures. No
+ * options.") is the same "No X. No Y. No Z." rhetorical pattern as
+ * #3 and #12.  Adding to allowlist preserves Ken's punchy style
+ * (also: shortening it would obscure the four-things-Morphit-isn't
+ * claim, which is exactly the claim that needs the visual hammer).
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '186']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '186', '195']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

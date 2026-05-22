@@ -5,6 +5,21 @@
  * servers run on different origins, but the emitted SEO metadata always
  * points at the canonical production URL so that hreflang / canonical /
  * sitemap references remain stable.
+ *
+ * URL shape (post per-locale prerendering, ADR-0003 follow-up):
+ *
+ *   /            — language-detection redirect shell; also x-default
+ *   /en/         — English prerendered
+ *   /es/         — Spanish prerendered
+ *   /zh-CN/      — Simplified Chinese prerendered
+ *   ...etc for every SUPPORTED_LOCALE
+ *
+ * Older revisions of this file used `?lang=<code>` query-string form
+ * for hreflang alternates, which conflicted with both the SvelteKit
+ * routing (which is path-based at `/[lang]/...`) AND the sitemap
+ * (which emits `/{locale}{path}` URLs).  Hreflang must always point
+ * at the canonical URL of each language — `/es/faq`, not `/faq?lang=es`.
+ * Fixed cp112.
  */
 
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n';
@@ -19,29 +34,66 @@ export function canonicalFor(path: string): string {
 }
 
 /**
- * Build the full set of hreflang alternates for a given path. Morphit uses
- * query-string-based locale switching (the active locale lives in
- * client state, not in the URL), so the alternate URL for `es` on `/faq`
- * is `/faq?lang=es` rather than `/es/faq`. This is the second form of
- * hreflang Google's docs call out as valid.
+ * Strip a `/{locale}` prefix off a path, returning the locale (or null)
+ * and the rest of the path.  Used by hreflang to convert
+ * `/es/faq` back to `/faq` before re-prefixing for each alternate.
  *
- * Includes `x-default` pointing at the English root, which Google uses
+ * Exported for the canonical-hreflang-consistency smoke + the
+ * sitemap-style URL generators that mirror this transformation.
+ */
+export function stripLocalePrefix(path: string): {
+	locale: LocaleCode | null;
+	rest: string;
+} {
+	const p = path.startsWith('/') ? path : `/${path}`;
+	const m = p.match(/^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(?:\/(.*))?$/);
+	if (!m) return { locale: null, rest: p };
+	const code = m[1];
+	const known = SUPPORTED_LOCALES.some((l) => l.code === code);
+	if (!known) return { locale: null, rest: p };
+	// rest captures `''` for `/es` and `''` for `/es/`; treat both as root.
+	const rest = m[2] === undefined || m[2] === '' ? '' : `/${m[2]}`;
+	return { locale: code as LocaleCode, rest };
+}
+
+/**
+ * Compose the canonical URL for a (locale, restPath) pair, mirroring the
+ * exact pattern the sitemap emits via `scripts/build-sitemap.mjs`.  Root
+ * paths get a trailing slash (`/en/`); deeper paths don't (`/en/faq`).
+ * Exported for the consistency smoke.
+ */
+export function localizedUrl(locale: LocaleCode, restPath: string): string {
+	const p = restPath.startsWith('/') ? restPath : `/${restPath}`;
+	const suffix = p === '/' || p === '' ? `/${locale}/` : `/${locale}${p}`;
+	return `${CANONICAL_ORIGIN}${suffix}`;
+}
+
+/**
+ * Build the full set of hreflang alternates for a given path.  Morphit
+ * routes are path-based at `/[lang]/...`, so the alternate URL for `es`
+ * on `/en/faq` is `/es/faq` — the same URL the user would see in their
+ * browser bar after switching languages.  Hreflang values must match
+ * the URLs in the sitemap byte-for-byte (Google joins the two signals).
+ *
+ * The caller passes either a localed path (`/es/faq`) or a bare path
+ * (`/faq`) — both work; we strip the prefix and re-emit.
+ *
+ * Includes `x-default` pointing at the bare path (no locale prefix),
+ * which mirrors the sitemap's x-default entries.  Google uses x-default
  * when no other hreflang matches the user's browser language.
  */
 export function hreflangAlternates(path: string): Array<{ hreflang: string; href: string }> {
-	const p = path.startsWith('/') ? path : `/${path}`;
+	const { rest } = stripLocalePrefix(path);
+	const restPath = rest === '' ? '/' : rest;
 	const out: Array<{ hreflang: string; href: string }> = [];
 	for (const loc of SUPPORTED_LOCALES) {
-		// The default locale gets the bare URL; others carry ?lang= so
-		// a user arriving from a localized SERP sees the right language
-		// without a client-side redirect loop.
-		const href =
-			loc.code === DEFAULT_LOCALE
-				? `${CANONICAL_ORIGIN}${p}`
-				: `${CANONICAL_ORIGIN}${p}${p.includes('?') ? '&' : '?'}lang=${loc.code}`;
-		out.push({ hreflang: loc.code, href });
+		out.push({ hreflang: loc.code, href: localizedUrl(loc.code, restPath) });
 	}
-	out.push({ hreflang: 'x-default', href: `${CANONICAL_ORIGIN}${p}` });
+	// x-default — bare path, no locale prefix.  Mirrors sitemap.xml.
+	out.push({
+		hreflang: 'x-default',
+		href: restPath === '/' ? `${CANONICAL_ORIGIN}/` : `${CANONICAL_ORIGIN}${restPath}`
+	});
 	return out;
 }
 

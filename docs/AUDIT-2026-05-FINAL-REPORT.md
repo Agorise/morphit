@@ -145,9 +145,19 @@ records what shipped:
   **CLOSED by Part 70** — `package-lock.json` is committed at
   the repo root for reproducible `npm ci` installs.
 - ~~Wire `svelte-kit sync + tsc --noEmit` into CI.~~
-  **CLOSED by Part 70** — CI runs `npm run check` which
-  invokes svelte-kit sync + svelte-check + tsc across all
-  workspaces.
+  **CLOSED by Part 70 (initial), made explicit Part 122 cp111.**
+  The protection has been in place since Part 70 via the
+  `workspace-typecheck-smoke` script (root-level smoke listed
+  in `scripts/run-smokes.sh`), which runs `npx svelte-kit sync`
+  followed by `npx svelte-check` against apps/web — wired into
+  CI through the `smokes` job that invokes `run-smokes.sh`.
+  cp111 added a dedicated **`web-check`** job in
+  `.forgejo/workflows/ci.yml` that runs the same two binaries
+  directly, so the protection is legible in the CI surface
+  without indirection through the smoke runner; the smoke
+  remains as a defense-in-depth layer that also runs locally
+  via `bash scripts/run-smokes.sh`.  See cp111 entry in
+  `TARBALL.md` for the wiring rationale.
 
 ## REVISIT-LIST highlights (deferred work)
 

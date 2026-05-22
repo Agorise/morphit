@@ -196,7 +196,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 79. **Anyone can run a node.** Pick a domain (or skip the domain), clone the repo, run the setup script, broadcast a `morphit_operator_register_v1` op. You're in the federation. No application, no permission, no central listing.
 
-80. **Operators earn 90% of every BLURT-paid listing fee on their instance, paid in BLURT directly to their payout address.** The remaining 10% goes to the project treasury (@morphit-fees). BTC/XMR-paid listings fund the project treasury 100% — those don't generate operator revenue — but the BLURT-paid path is 50% cheaper for users (deliberate incentive), so most listings naturally choose BLURT, where operator revenue lives. Real revenue stream for serious operators; runs on a $5-10/month VPS. No project skim on the operator's BLURT share.
+80. **Operators earn 90% of every BLURT-paid listing fee on their instance, paid in BLURT directly to their payout address — the other 10% goes to the project treasury (@morphit-fees).** BTC/XMR-paid listings fund the project treasury 100% — those don't generate operator revenue — but the BLURT-paid path is 50% cheaper for users (deliberate incentive), so most listings naturally choose BLURT, where operator revenue lives. Real revenue stream for serious operators on a $5-10/month VPS. No project skim on the operator's BLURT share.
 
 81. **Operator instances are self-branded.** `acme.example.com` running Morphit looks like Acme Corp's marketplace, not like a generic affiliate page.
 
@@ -210,7 +210,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 86. **Indexer cross-verifies via multiple Blurt RPCs.** No single chain provider is a trust anchor.
 
-87. **Wallet developers can embed Morphit's orderbook directly inside their wallet UI.** Morphit publishes a stable public REST + SSE API (`/v1/openapi.json` on any instance) covering the orderbook, profiles, feedback, and chat — the same kind of integration Mycelium famously did with LocalBitcoins years ago. Any wallet that supports any of Morphit's 16 tradable assets can offer a peer-to-peer trading screen to its users without making them leave the wallet they already trust. Federation-aware: the wallet can point at any operator's instance, or a self-hosted one. AGPL-3.0 like the rest of the project; integrators ship under their own license. Every embedding wallet is an additional discovery path for new traders, and every new trader is a counterparty available to existing wallet users — pure network-effect compounding.
+87. **Wallet developers can embed Morphit's orderbook directly inside their wallet UI** — the same kind of integration Mycelium famously did with LocalBitcoins years ago. Morphit publishes a stable public REST + SSE API (`/v1/openapi.json` on any instance) covering the orderbook, profiles, feedback, and chat — federation-aware, so the wallet can point at any operator's instance or a self-hosted one. Any wallet supporting Morphit's 16 tradable assets can offer peer-to-peer trading without making users leave it. AGPL-3.0 like the rest of the project; integrators ship under their own license.
 
 ## 5. Non-custodial, honestly
 

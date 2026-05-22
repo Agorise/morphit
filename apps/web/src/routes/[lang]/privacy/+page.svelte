@@ -7,19 +7,36 @@
 	 *  This page is intentionally short — the deep content lives
 	 *  in the per-asset guides.  Surface here is a navigation
 	 *  hub + the cross-asset framing ("here's why this matters
-	 *  even for transparent chains"). */
+	 *  even for transparent chains").
+	 *
+	 *  cp112: converted from bare <svelte:head> to the full <Head />
+	 *  component so canonical URL, hreflang alternates, OG / Twitter
+	 *  cards, robots, and onion-location are emitted alongside the
+	 *  title + description.  Adds BreadcrumbList JSON-LD for SERP
+	 *  breadcrumb display ("morphit.io › privacy"). */
 	import { page } from '$app/state';
 	import { _ } from 'svelte-i18n';
 	import { ASSETS } from '@morphit/asset-registry';
+	import Head from '$components/Head.svelte';
+	import { breadcrumbListSchema } from '$seo/jsonld';
+	import { localizedUrl } from '$seo/urls';
+	import type { LocaleCode } from '$i18n/locales';
 
 	const lang = $derived(page.params.lang ?? 'en');
 	const tradable = $derived(ASSETS.filter((a) => a.canBeTraded));
+
+	/** BreadcrumbList for SERP breadcrumb display.  Two items: site
+	 *  root → privacy index.  Asset-specific subpages render their
+	 *  own three-item crumb chain. */
+	const jsonLd = $derived([
+		breadcrumbListSchema([
+			{ name: $_('seo.site_name'), url: localizedUrl(lang as LocaleCode, '/') },
+			{ name: $_('privacy.index_heading'), url: localizedUrl(lang as LocaleCode, '/privacy') }
+		])
+	]);
 </script>
 
-<svelte:head>
-	<title>{$_('privacy.index_title')}</title>
-	<meta name="description" content={$_('privacy.index_meta_description') as string} />
-</svelte:head>
+<Head routeKey="privacy_index" {jsonLd} />
 
 <article class="mx-auto max-w-3xl px-4 py-8">
 	<header class="mb-6">

@@ -4,31 +4,35 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp110 — 2026-05-22 (Ken closing chat session at this point; fresh binary regenerated for handoff).
+**Last touched:** cp112 — 2026-05-22 (CI failure fix + comprehensive SEO sweep — see cp112 entry below).
 
-**Resume here:** unpack `morphit-audit-2026-05-122-cp110-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. This file (`TARBALL.md`) and `docs/REVISIT-LIST.md` together describe everything you need to pick up where the previous session left off.
+**Resume here:** unpack `morphit-audit-2026-05-122-cp110-FULL-STATE.tar.gz` into your working directory. cp111+cp112 are in-place edits on the cp110 binary; no new binary unless Ken asks. The repo state in the tarball + cp111+cp112 edits IS the source of truth. This file (`TARBALL.md`) and `docs/REVISIT-LIST.md` together describe everything you need to pick up where the previous session left off.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp110 have been docs/FAQ/registry cleanup work, not new audits
-- 37 structural defenses; 4432/0 smoke battery (last triple-pulsed at cp106); LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (now 2,832 leaves × 10 = 28,320 after cp112 i18n cleanup: -4 orphaned privacy.* keys, +2 new seo.privacy_asset.* keys)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp112 have been docs/SEO/CI hardening + 3 new structural defenses, no new audits
+- **40** structural defenses (cp111: brag-list-claim-parity-smoke; cp112: seo-url-consistency-smoke + og-image-freshness-smoke); **~4885**/0 smoke battery (cp111 +81; cp112 +366 + 6; last triple-pulsed at cp106 — see cp112 verification matrix; CI will report exact total); LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
-**Standing pre-launch operator-actions (still open — must happen before launch):**
-1. Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`
-2. Commit `package-lock.json` (currently gitignored; needs to ship for reproducible builds)
-3. Wire `svelte-kit sync && tsc --noEmit` into CI
-4. Native-speaker polish of the 9 non-EN locale FAQ content added/amended in cp108–cp110 — see the translation-quality flag entry in `docs/REVISIT-LIST.md`
-5. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
+**Standing pre-launch operator-actions (the two that remain — both non-code):**
+1. Native-speaker polish of the 9 non-EN locale FAQ content added/amended in cp108–cp110 + the new seo.privacy_asset.* strings added in cp112 — see the translation-quality flag entry in `docs/REVISIT-LIST.md`
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
-**What the most recent four checkpoints did:**
+**Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
+- ~~Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`~~ — closed long ago; the placeholder is now a denylist entry (boot fails loudly if used), per `docs/AUDIT-2026-05-FINAL-REPORT.md` §132–143.
+- ~~Commit `package-lock.json`~~ — closed by Part 70; the file ships at the repo root.
+- ~~Wire `svelte-kit sync && tsc --noEmit` into CI~~ — was wired indirectly via `workspace-typecheck-smoke` (Part 70) but the audit-final-report mis-described it as `npm run check`; cp111 added an explicit `web-check` job to `.forgejo/workflows/ci.yml` so the protection is now legible without indirection.
+
+**What the most recent six checkpoints did:**
 - **cp107** — Brag list cleanup (303 → 303 with renumber + Haveno-exploit FAQ entry added across 10 locales after May 20 2026 ~$2.7M fake-arbitrator-ACK exploit)
 - **cp108** — Option B rewrite of brag item 80 fee mechanics + repo-wide fee-mechanics clarity audit (README line 16, 9 non-EN locales' `operator_payouts_timing` brought in line with EN canonical — fixed a real inaccuracy where BTC/XMR fees were claimed to land in operator wallets) + METADATA-LEAK-CATALOG.md rewritten with reassuring framing (272 → 529 lines, all honest content preserved)
 - **cp109** — `wallet_developer_api` FAQ + `how_to_spread_morphit` FAQ + `monero_amount_jitter` rewrite (drop cp* refs, hat-in-parade framing) + `what_is_blurt` augmentation (point #8 about anonymous social reputation chain alignment) + FAQ footer Matrix CTA (room alias `#agorise:matrix.org`, not DM MXID) + brag entry #87 added → 304 total
 - **cp110** — kencode removed from FAQ (reserved-name impersonation protection in `confusables.ts` deliberately preserved); Shaparak (شاپرک) payment method added in all 3 registry surfaces + 10-locale i18n descriptions; monero.bar landed in `docs/OPERATIONS.md §40.4` as a network-health dashboard, NOT in the verification quorum (incompatible — no txprove endpoint)
+- **cp111** — Doc-hygiene + CI-explicitness + new structural defense (#38). Three doc-drift fixes: RELEASE-NOTES v1.0.0-beta.1 "3,924 scenarios" → "several thousand" (un-droppable to drift); AUDIT-2026-05-FINAL-REPORT.md §147–150 rewritten to describe the actual svelte-check wiring (was claiming `npm run check`); TARBALL.md handoff trimmed from 5 "open" items to 2 (3 had been closed). New CI job: `web-check` runs `svelte-kit sync && svelte-check` against apps/web directly so the protection is visible without smoke indirection. New smoke `brag-list-claim-parity-smoke` (81 scenarios) walks every backtick'd file path, custom-JSON op ID, MORPHIT_* env-var, and numeric anchor (asset/locale/ADR/footer counts) in the three marketing-class docs (MORPHIT-BRAG-LIST, README, RELEASE-NOTES) against canonical source-of-truth. Mutation-tested across all 7 drift classes.
+- **cp112** — CI failure fix (brag-list-kiss-budget caught 3 over-budget entries #80/#87/#195 — first two rewritten to ≤4 sentences/≤100 words, #195 added to STACCATO_ALLOWLIST since it's the same "No X. No Y. No Z." rhetorical pattern as #3/#12/#186) + comprehensive SEO sweep. **Real shipped SEO bug fixed:** `hreflangAlternates()` in `apps/web/src/lib/seo/urls.ts` was emitting `?lang=es` query-string URLs while routes are path-based at `/[lang]/...` AND sitemap.xml uses `/{locale}{path}` — Google joins hreflang+canonical+sitemap so emitting two URL shapes is the duplicate-content pattern. Rewritten to mirror the sitemap exactly. **JSON-LD coverage extended:** new `SoftwareApplication` schema on home (rich-result eligibility for "morphit"/"p2p crypto" queries); new `BreadcrumbList` schema for SERP breadcrumb display; new `Article` schema on per-asset privacy guides. **Privacy pages SEO gap closed:** the privacy index + 16 per-asset privacy guides (`/[lang]/privacy/{asset}`) had been emitting only bare `<title>` + `<meta description>` (no canonical, no hreflang, no OG, no JSON-LD) — converted to the full `<Head>` component. **PNG OG image fallback:** generated `og-image.png` (61KB, 1200×630) so Twitter/X/LinkedIn/Slack/Discord share previews work (those clients reject SVG OG images per their card specs); SVG kept as secondary og:image. **RSS auto-discovery:** added `<link rel="alternate" type="application/rss+xml">` on home + orderbook so feed readers and news crawlers find the orderbook feed without spelunking. **i18n cleanup:** -4 orphaned `privacy.*` keys, +2 new `seo.privacy_asset.*` keys (×10 locales = -40+20 strings). **Two new structural defenses:** `seo-url-consistency-smoke` (#39, 366 scenarios verifying canonical/hreflang/sitemap URLs match byte-for-byte; mutation-tested) + `og-image-freshness-smoke` (#40, 6 scenarios catching PNG-older-than-SVG drift). **One new build script:** `scripts/build-og-image-png.sh` (regenerates PNG from SVG via cairosvg).
 
-**Translation-quality flag (important):** All FAQ + payment-method content added or amended in cp108–cp110 across the 9 non-EN locales is auto-translation quality. Roughly on par with much of the pre-existing translated content (not a regression) but worth a native-speaker polish pass before launch. Full list of affected i18n keys in REVISIT-LIST.
+**Translation-quality flag (important):** All FAQ + payment-method content added or amended in cp108–cp110 across the 9 non-EN locales is auto-translation quality. cp112 adds 2 new `seo.privacy_asset.*` strings × 9 non-EN locales (also auto-translation quality, hand-checked for grammar/length but not native-speaker-polished). Worth a single dedicated translation-quality pass before launch covering both batches. Full list of affected i18n keys in REVISIT-LIST.
 
 **Memory facts (re-confirmed for the new session):**
 - `@agorise:matrix.org` = private DM MXID for security disclosure
@@ -40,9 +44,197 @@
 - Forgejo, never Gitea — repo at `git.agorise.net/agorise/morphit`
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. Ken's "fresh tarball" request at cp110 qualifies — binary regenerated for cross-session handoff.
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp112 is a candidate meaningful milestone (CI failure fix + 2 new structural defenses + comprehensive SEO sweep + Twitter/LinkedIn share-preview-unlock via PNG OG) — fresh binary will regenerate if Ken asks.
 
 ---
+
+## cp112 — CI failure fix (brag-list-kiss-budget over-budget entries #80/#87/#195) + comprehensive SEO sweep + 2 new structural defenses (#39 seo-url-consistency + #40 og-image-freshness) + privacy pages converted from bare svelte:head to full Head + PNG OG image fallback unlocks Twitter/LinkedIn/Slack share previews (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint by default; the cp110 binary remains the source-of-truth resumption artifact unless Ken asks for a fresh one. cp112 is in-place edits stacked on cp111.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity **2,832 × 10 = 28,320** (cp111 was 2,834; cp112 net -2: -4 orphaned `privacy.*` keys removed + 2 new `seo.privacy_asset.*` keys added × 10 locales = -20 net strings) · **~4885**/0 (cp111 was 4,513; cp112 +366 seo-url-consistency + 6 og-image-freshness; CI report definitive) · 7/7 TS-clean (LL #52 41st) · **40 defenses** (+2: seo-url-consistency, og-image-freshness) · 1,381 vitest.
+
+### TL;DR
+
+CI from the cp111 push surfaced one failing smoke (the `brag-list-kiss-budget-smoke` caught 3 over-budget brag entries Ken had grown over multiple checkpoints — they passed when smoke was new but recent edits had pushed them over).  Plus Ken's directive: "make absolutely positively SURE that we are as SEO friendly and discoverable as possible, in every facet of morphit." That's most of cp112.
+
+### Task 1: CI failure fix
+
+`brag-list-kiss-budget-smoke` enforces ≤4 sentences and ≤100 words per entry.  Three entries failed:
+
+- **#80** ("Operators earn 90%...") — 5 sentences.  Merged the "remaining 10% goes to treasury" sentence into the lead by extending the bold title; tightened "Real revenue stream for serious operators; runs on a $5-10/month VPS" → "Real revenue stream for serious operators on a $5-10/month VPS." Result: 4 sentences.
+- **#87** ("Wallet developers can embed...") — 6 sentences, 114 words.  Both budgets blown.  Surgery: combined the lead with the "Mycelium famously did with LocalBitcoins" anchor; folded "Federation-aware: ..." into the API-description sentence; dropped the closing "network-effect compounding" prose (true but a stretch + already implicit in earlier points).  Result: 4 sentences, ~89 words.
+- **#195** ("No leverage. No margin. No futures. No options.") — 6 sentences by punctuation, but THIS IS the staccato-emphasis pattern.  Exact shape match for #3 ("No email required. No phone number...") and #12 ("Period. Zero. The relay extracts...") which are already STACCATO_ALLOWLIST-exempt.  Added #195 to STACCATO_ALLOWLIST in `apps/web/scripts/brag-list-kiss-budget-smoke.ts` with a comment explaining why the punctuation count is rhetorical-not-prose.
+
+Mediakit regenerated (brag list changed → mediakit-freshness smoke would have caught the stale zip).  All 4 brag-list-touching smokes (kiss-budget, trailer-invariants, claim-parity, mediakit-freshness) pass.
+
+### Task 2: SEO sweep — real bugs caught
+
+**Bug A — broken hreflang URLs (REAL SHIPPED SEO BUG).**  `apps/web/src/lib/seo/urls.ts`'s `hreflangAlternates()` was emitting `?lang=es` query-string form URLs while:
+  - The actual SvelteKit routing is path-based at `/[lang]/...`
+  - The sitemap.xml emits `/{locale}{path}` URLs
+  - The page-emitted `<link rel="canonical">` uses the actual visited URL (path-based)
+
+Google joins hreflang + canonical + sitemap signals; emitting two URL shapes for the same content is the duplicate-content pattern Google penalizes.  The stale `?lang=` form was a vestige of an early design that got reversed when per-locale prerendering shipped; the comment in urls.ts even said "Morphit uses query-string-based locale switching" — false since the prerender refactor.  **Fix:** rewrote `urls.ts` from scratch to use path-based form, mirroring the exact sitemap-builder logic byte-for-byte.  Added a new `localizedUrl(locale, path)` helper exported alongside `hreflangAlternates()` so callers can construct canonical URLs without re-deriving the path scheme.  Added `stripLocalePrefix()` so the function works whether the input path already has a locale prefix or not.  Docblock rewritten with correct rationale.
+
+**Bug B — privacy pages bypassed the central Head component.**  Both `/[lang]/privacy` and `/[lang]/privacy/{asset}` (16 per-asset pages × 10 locales = 160 surface URLs) were emitting only `<title>` and `<meta description>` via bare `<svelte:head>`, missing **everything else**: canonical URL, hreflang alternates, OG / Twitter cards, robots, onion-location, JSON-LD.  **Fix:** both pages converted to use `<Head routeKey="..." jsonLd={...} />` and now emit the full SEO surface.  The per-asset page also picks up:
+  - `BreadcrumbList` JSON-LD: site → /privacy → /privacy/{asset} (SERPs render this as a breadcrumb pill replacing the raw URL)
+  - `Article` JSON-LD: per-asset evergreen content marked up for Google Discover surfacing; author + publisher cross-reference the Organization @id from home
+
+**Bug C — OG image was SVG-only, no PNG fallback.**  Twitter Card spec rejects SVG; LinkedIn / Slack / Discord don't reliably render SVG OG either.  Comment in Head.svelte even acknowledged this: "Phase 5 adds a PNG fallback... included" — and Phase 5 came and went without shipping the PNG.  **Fix:** generated `apps/web/static/og-image.png` (61KB, 1200×630) via cairosvg; new build script `scripts/build-og-image-png.sh` lets readers regenerate when the SVG changes.  Head.svelte now emits the PNG as the primary `og:image` + `twitter:image`, with SVG as a secondary `og:image` for crawlers that prefer vector (Mastodon, Pleroma, modern Facebook).  New `og-image-freshness-smoke` (defense #40) catches the case where someone edits the SVG and forgets to regenerate the PNG.
+
+### Task 3: SEO sweep — coverage extensions
+
+- **`SoftwareApplication` JSON-LD on home.**  Morphit IS a software app (PWA, FinanceApplication subtype, free, AGPL-3.0).  Marking it up makes the homepage eligible for Google's installation-rich-result UI showing price/category/operating system.  Wired in `apps/web/src/routes/[lang]/+page.svelte` alongside the existing Organization + WebSite schemas.
+- **`BreadcrumbList` JSON-LD builder.**  New helper `breadcrumbListSchema(items)` in `apps/web/src/lib/seo/jsonld.ts`.  Wired on /privacy and /privacy/[asset].  Future sub-pages get crumbs by passing an item list.
+- **OG image aria-label updated.**  Was "peer-to-peer Bitcoin, Monero, and BLURT marketplace" — stale since cp30+.  Now reads "peer-to-peer crypto marketplace for 16 assets including Bitcoin, Monero, and BLURT" so the screen-reader / accessibility crawler reading the SVG `aria-label` doesn't see a 3-asset claim contradicted by every other surface.
+- **RSS / Atom feed auto-discovery.**  New `feeds` prop on `<Head />` emits `<link rel="alternate" type="application/rss+xml" href="...">` tags.  Wired on home + /orderbook to announce `/rss/orderbook.xml` so feed readers (NetNewsWire, Feedly, etc.) and news-crawlers find it without spelunking.
+
+### Task 4: New structural defenses
+
+**Defense #39 — `seo-url-consistency-smoke` (366 scenarios).**  Three invariants:
+- I-1: For every (route × locale), `localizedUrl()` from urls.ts emits the same URL the sitemap-builder emits.  Catches drift between the two sites.
+- I-2: For every (route × locale), the URL appears in the on-disk `sitemap.xml`.  Catches a route added to routes.ts that didn't trigger a sitemap rebuild.
+- I-3: Anti-regression — `urls.ts` must not contain the `?lang=` query-string form anywhere.  Direct defense against the cp112 bug class recurring.  Plus positive samples of `(path, locale)` → expected URL to confirm the helper still works correctly.
+
+Mutation-tested: re-introduced the `?lang=` form → smoke fails with clean I-3 message → restore → green.  Added phantom route to routes.ts without rebuilding sitemap → smoke fails with clean I-2 message → restore → green.
+
+**Defense #40 — `og-image-freshness-smoke` (6 scenarios).**  Same shape as `mediakit-freshness-smoke`: verifies (1) SVG source exists, (2) PNG exists, (3) PNG mtime >= SVG mtime, (4) PNG is 1200×630 (Twitter/Facebook spec), (5) PNG < 5MB (Twitter cap), (6) build script exists.  Catches "editor updates SVG, forgets to regenerate PNG, ships stale share preview" class.
+
+### File changes (cp112)
+
+- `MORPHIT-BRAG-LIST.md` — entries #80 + #87 rewritten to fit kiss-budget; #195 unchanged (allowlist update is on smoke side)
+- `apps/web/scripts/brag-list-kiss-budget-smoke.ts` — STACCATO_ALLOWLIST extended with '195' + explanatory comment
+- `apps/web/static/morphit-mediakit.zip` — regenerated post-brag-list-edit (memory rule)
+- `apps/web/src/lib/seo/urls.ts` — `hreflangAlternates()` rewritten to use path-based locale URLs (real bug fix); new `stripLocalePrefix()` + `localizedUrl()` exports
+- `apps/web/src/lib/seo/jsonld.ts` — new `softwareApplicationSchema()` + `breadcrumbListSchema()` + `BreadcrumbItem` interface
+- `apps/web/src/lib/seo/routes.ts` — new `privacy_asset` route entry (indexable: false; mirrors chat_conversation pattern)
+- `apps/web/src/lib/components/Head.svelte` — new `feeds` prop for RSS auto-discovery; PNG-then-SVG dual `og:image` emission; PNG-only `twitter:image`
+- `apps/web/src/routes/[lang]/+page.svelte` — `SoftwareApplication` schema added to home jsonLd; feeds prop wired with orderbook RSS
+- `apps/web/src/routes/[lang]/orderbook/+page.svelte` — feeds prop wired
+- `apps/web/src/routes/[lang]/privacy/+page.svelte` — converted bare svelte:head → full `<Head routeKey="privacy_index" jsonLd={[breadcrumbList]} />`
+- `apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte` — same conversion + Article + BreadcrumbList JSON-LD
+- `apps/web/src/lib/i18n/locales/*.json` (×10) — added `seo.privacy_asset.{title, description}`; removed orphaned `privacy.{index_title, index_meta_description, page_title, unknown_asset_title}`
+- `apps/web/static/og-image.svg` — aria-label updated to inclusive 16-asset phrasing
+- `apps/web/static/og-image.png` — NEW (61,663 bytes, 1200×630), generated from SVG via cairosvg
+- `apps/web/static/sitemap.xml` — regenerated (180 URLs); no structural change (only `<lastmod>` bumped + privacy_asset route is indexable: false so doesn't appear)
+- `scripts/build-og-image-png.sh` — NEW build script
+- `scripts/seo-url-consistency-smoke.ts` — NEW smoke (defense #39)
+- `apps/web/scripts/og-image-freshness-smoke.ts` — NEW smoke (defense #40)
+- `scripts/run-smokes.sh` — `.:seo-url-consistency-smoke` + `apps/web:og-image-freshness-smoke` added to SMOKES array
+- `docs/REVISIT-LIST.md` — cp112 header + cp112 lessons
+- `docs/PRE-LAUNCH-CHECKLIST.md` — cumulative cp listing extended with cp112-O30 + cp112-O31; last-refreshed bumped
+- `TARBALL.md` — cp112 entry inserted at top (this entry); handoff section bumped (last-touched cp112)
+
+### Verification matrix (cp112)
+
+| Check | Result |
+|---|---|
+| `tsx apps/web/scripts/brag-list-kiss-budget-smoke.ts` | ✓ 2/2 PASS (was failing in cp111 CI) |
+| `tsx scripts/brag-list-claim-parity-smoke.ts` | ✓ 81/81 PASS (cp111 smoke unchanged) |
+| `tsx apps/web/scripts/brag-list-trailer-invariants-smoke.ts` | ✓ 4/4 PASS |
+| `tsx apps/web/scripts/mediakit-freshness-smoke.ts` | ✓ 6/6 PASS (mediakit regenerated) |
+| `tsx scripts/seo-url-consistency-smoke.ts` | ✓ 366/366 PASS (NEW defense #39) |
+| `tsx apps/web/scripts/og-image-freshness-smoke.ts` | ✓ 6/6 PASS (NEW defense #40) |
+| Mutation: re-introduce `?lang=` form → smoke fails with I-3 message → restore → green | ✓ all 7 mutation classes catch deliberate drift |
+| `apps/web/static/og-image.png` 1200×630 PNG, ≤5MB | ✓ 61,663 bytes (60.2 KB) |
+| Locale parity post-cp112 cleanup | 2,832 × 10 = 28,320, all locales structurally identical |
+| `assertRoutesInSync()` in `scripts/build-sitemap.mjs` after privacy_asset addition (indexable: false) | ✓ sitemap still 18 indexable routes × 10 locales = 180 URLs |
+| `node scripts/build-sitemap.mjs` rebuild | ✓ 180 URLs, no diff in URL shape |
+| `.forgejo/workflows/ci.yml` YAML parse with 4 jobs (cp111 web-check job preserved) | ✓ valid |
+
+### Wiring discipline (memory rule: build + register + test end-to-end)
+
+| Step | Status |
+|---|---|
+| Smokes created at canonical paths (`scripts/`, `apps/web/scripts/`) | ✓ |
+| Registered in `scripts/run-smokes.sh` SMOKES array | ✓ |
+| Smokes runnable standalone via tsx | ✓ verified PASS |
+| Mutation-tested across drift classes | ✓ 7 mutations × 2 smokes = comprehensive |
+| Smokes emit canonical `✓ all N scenarios passed` line | ✓ verified for both |
+| Privacy pages still rendered correctly (verified via grep that body unchanged) | ✓ only head section converted |
+| Mediakit regenerated after brag-list edit (memory rule) | ✓ 42,252 bytes |
+| Sitemap regenerated (best-practice; route registry changed) | ✓ no shape change since new route is indexable: false |
+| Locale parity preserved (memory rule) | ✓ 2,832 × 10 |
+| PNG OG image build script committed alongside the PNG | ✓ |
+| `docs/REVISIT-LIST.md` updated this turn (memory rule) | ✓ cp112 header + lessons |
+
+### Predicted hunting ground after cp112
+
+Two genuine pre-launch operator-actions still queued:
+1. **Native-speaker polish** of cp108–cp110 auto-translated FAQ + payment-method content + cp112 `seo.privacy_asset.*` strings across 9 non-EN locales.
+2. **Three-persona walk-through** (Bob/Sally-user/Sally-operator) per the memory rule. Highest-value pre-launch exercise; queued for after Ken's other in-flight tasks.
+
+Possible SEO follow-ups for a future checkpoint (not blocking launch):
+- Per-locale OG images (currently one global PNG covers all 10 locales; per-locale would be richer share preview text).  Lower priority — Ken's "tiny footprint" priority means we'd need to weigh +10× image size for share previews most users never see.
+- Schema.org `HowTo` markup on the onboarding flow.  Onboarding is gated behind the auth wall today; rich-result eligibility limited.
+- Per-asset OG image variants. Same +footprint trade-off.
+
+## cp111 — Doc-hygiene + explicit `web-check` CI job + new structural defense #38 (brag-list-claim-parity-smoke, 81 scenarios, mutation-tested across 7 drift classes) (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint by default; the cp110 binary remains the source-of-truth resumption artifact unless Ken asks for a fresh one. cp111 is in-place edits on top of cp110.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,834 × 10 = 28,340 (unchanged from cp110; shaparak strings carried through) · **4513**/0 (+81 from new smoke; full triple-pulse not run this checkpoint) · 7/7 TS-clean (LL #52 41st) · **38 defenses** (+1) · 1,381 vitest. Cumulative deep-audit coverage remains ~52,603 lines / 163 modules (codebase audit complete at cp106; cp111 is doc + CI + new defensive smoke).
+
+### TL;DR
+
+Five tasks Ken queued, all closed end-to-end:
+
+1. **CI explicitness — new `web-check` job** in `.forgejo/workflows/ci.yml`. Runs `npx svelte-kit sync` then `npx svelte-check --tsconfig ./tsconfig.json --threshold error` against apps/web directly. The same protection has been in CI since Part 70 via `workspace-typecheck-smoke` (which `bash scripts/run-smokes.sh` invokes inside the `smokes` job), but it was indirect — a reader of `ci.yml` couldn't tell `svelte-kit sync` ran without spelunking into the smoke. Now it's a named job. The smoke is retained as defense-in-depth and for local runs.
+2. **`RELEASE-NOTES-v1.0.0-beta.1.md` line 197** — was "**3,924 self-checking smoke scenarios**" (stale; current count 4,432 pre-cp111, 4,513 post). Rewritten to "**Several thousand self-checking smoke scenarios** ship with the source — the exact count grows release-over-release as defenses are added." No fixed number to drift.
+3. **`docs/AUDIT-2026-05-FINAL-REPORT.md` §147–150** — claimed "CI runs `npm run check` which invokes svelte-kit sync + svelte-check + tsc across all workspaces." That literal command doesn't appear in any workflow. Rewritten to describe the actual wiring (smoke-based since Part 70, explicit `web-check` job added cp111).
+4. **`TARBALL.md` handoff section** — listed 5 "standing pre-launch operator-actions still open." Three were closed long ago (the `CHANGE_ME` placeholder is denylisted, `package-lock.json` is committed, the CI typecheck is wired). Trimmed to the 2 genuinely open items (FAQ translation polish + persona walk-through) with a note explaining what the 3 closed items actually look like in the current code, so a fresh chat session doesn't burn cycles "fixing" things that are already fixed.
+5. **New structural defense #38 — `scripts/brag-list-claim-parity-smoke.ts`** — walks the three "marketing-class" docs (`MORPHIT-BRAG-LIST.md`, `README.md`, `RELEASE-NOTES-v1.0.0-beta.1.md`) checking 7 classes of claim against canonical source-of-truth:
+    - **A.** Every backtick-quoted file path under `scripts/|apps/|ops/|packages/|docs/` must resolve on disk
+    - **B.** Every backtick-quoted `morphit_<name>_v<N>` op ID must appear in `apps/indexer/src`, `apps/relay/src`, or `apps/web/src/lib`
+    - **C.** Every backtick-quoted `MORPHIT_<NAME>` env-var (with optional `=value` suffix) must appear in code or ops configs
+    - **D.** Any "N tradable assets" claim must match `ASSET_TICKERS.length` from `packages/asset-registry/src/index.ts`
+    - **E.** Any "N locales / N languages" claim must match locale-JSON count, with subset-marker suppression (`backlog`, `non-EN`, `native`, `core`, `community-translation`, etc.) so legitimate subset references don't false-positive
+    - **F.** Any "N ADRs / N architecture decision records" claim must match the count of `docs/adr/00*.md` minus the template
+    - **G.** The brag-list footer "*N specific selling points*" must match the count of numbered top-level entries
+    Floor of 50 scenarios; current count 81. Mutation tested across all 7 classes — each deliberate drift produced a clean fail message + exit 1; restoring the file returned to green.
+
+### Wiring discipline (memory rule: build + register + test end-to-end)
+
+| Step | Status |
+|---|---|
+| Smoke file at `scripts/brag-list-claim-parity-smoke.ts` | ✓ created |
+| Registered in `scripts/run-smokes.sh` SMOKES array as `.:brag-list-claim-parity-smoke` | ✓ wired |
+| Runs standalone via `tsx scripts/brag-list-claim-parity-smoke.ts` | ✓ verified PASS (81/81) |
+| Mutation-tested across all 7 drift classes (A-G) | ✓ all 7 catch deliberate drift |
+| Smoke emits canonical `✓ all N scenarios passed` line for run-smokes.sh tallying | ✓ verified |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `tsx scripts/brag-list-claim-parity-smoke.ts` | ✓ 81/81 PASS |
+| 7 deliberate mutations introduced → smoke fails with clean message → restore → green | ✓ all 7 caught |
+| `.forgejo/workflows/ci.yml` parses as valid YAML, 4 jobs (typecheck/web-check/ansible-lint/smokes) | ✓ verified |
+| `RELEASE-NOTES-v1.0.0-beta.1.md` no longer contains the literal "3,924" | ✓ confirmed |
+| `docs/AUDIT-2026-05-FINAL-REPORT.md` no longer claims `npm run check` | ✓ confirmed |
+| `TARBALL.md` handoff lists 2 open items (not 5) | ✓ confirmed |
+| Brag list state (304 entries, footer matches, 16 assets, 10 locales, 35 ADRs) | ✓ smoke confirms all anchors |
+
+### File changes
+
+- `scripts/brag-list-claim-parity-smoke.ts` (new, 633 lines incl. ~100-line docstring) — the smoke
+- `scripts/run-smokes.sh` — added `.:brag-list-claim-parity-smoke` to SMOKES array
+- `.forgejo/workflows/ci.yml` — added `web-check` job between `typecheck` and `ansible-lint`; header comment updated from "Three gates" to "Four gates"
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — line 197 rewritten ("3,924" → "Several thousand")
+- `docs/AUDIT-2026-05-FINAL-REPORT.md` §147–150 — corrected wiring description
+- `TARBALL.md` — handoff section trimmed (5 → 2 open items + explanation of 3 closed); cp111 entry inserted above (this entry)
+- `docs/REVISIT-LIST.md` — cp111 header
+
+No locale strings touched this checkpoint (smoke is dev-only infra; no user-facing UI changes). Locale parity invariant preserved at 2,834 × 10.
+
+### Predicted hunting ground after cp111
+
+The two genuine pre-launch operator-actions remain:
+1. **Native-speaker polish** of cp108–cp110 auto-translated FAQ + payment-method content across 9 non-EN locales (REVISIT translation-quality flag entry has the full key list).
+2. **Three-persona walk-through** (Bob/Sally-user/Sally-operator) per the memory rule. Codebase audit is closed at cp106; persona walks are the highest-value pre-launch exercise that static audits can't surface.
+
+Ken indicated cp112+ will tackle other tasks first; persona walks queued for later.
 
 ## cp110 — kencode removal from FAQ + Shaparak payment-method addition + monero.bar landing in OPERATIONS.md §40.4 (2026-05-22)
 

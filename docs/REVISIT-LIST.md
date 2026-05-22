@@ -1,10 +1,130 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp110 — 2026-05-22.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 304 ENTRIES (unchanged from cp109) · LOCALE PARITY UPDATED (`how_to_spread_morphit` kencode bullet replaced with generic blog-platforms list across 10 locales; +`shaparak` payment-method description in `payment_method` namespace × 10 locales = +10 strings) · PAYMENT REGISTRY +1 ENTRY (`shaparak` between revolut and shebapay; same in indexer RESERVED_CANONICAL_KEYS + ops-cli reservedCanonicalKeys) · OPERATIONS.md §40.4 +1 NOT-API-COMPATIBLE EXPLORER (monero.bar with context noting it's a useful network-health dashboard but NOT a verification-quorum source) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
+**Last touched:** Part 122 cp112 — 2026-05-22.  **40 STRUCTURAL DEFENSES (+2: seo-url-consistency-smoke + og-image-freshness-smoke) · BATTERY ~4885/0 (cp111 was 4513; cp112 +366 + 6 from new smokes; full triple-pulse on CI definitive) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 304 ENTRIES (unchanged; cp112 rewrote bodies of #80/#87 only) · LOCALE PARITY UPDATED (2,832 × 10 = 28,320; -4 orphaned `privacy.*` keys removed + 2 new `seo.privacy_asset.*` keys added) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
 
-**cp109+cp110 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED):** All FAQ content added or amended in cp109 across the 9 non-EN locales (de/es/fa/fr/it/pl/ru/zh-CN/zh-HK) is auto-translation quality — grammatically correct, technically accurate, but with calques, occasional English fragments, and stilted phrasing that a native speaker will spot. Specifically: `faq.entries.wallet_developer_api`, `faq.entries.how_to_spread_morphit` (including the cp110 generic-blogs bullet replacement), `faq.entries.monero_amount_jitter`, `faq.entries.what_is_blurt`, `faq.entries.operator_payouts_timing` (the cp108 fix also auto-translated), plus UI strings `faq.matrix_room_cta`, `faq.matrix_room_blurb`, and the new `payment_method.shaparak.description` added in cp110. Native-speaker polish should happen before launch. Roughly the same quality register as much of the pre-existing translated FAQ content, so not a regression — but worth a dedicated translation-quality pass before going live. Quality concession was explicitly accepted by Ken at cp109 in lieu of the alternatives (English-only with `[Translation pending]` markers; or per-entry `displayLocales: ['en']` gating).
+**cp112 CI failure fix + comprehensive SEO sweep:** cp111 CI surfaced a brag-list-kiss-budget failure (entries #80/#87 over sentence/word budgets, #195 over sentence budget but staccato-style-legit).  Fix shipped + Ken's directive "make absolutely positively SURE that we are as SEO friendly and discoverable as possible, in every facet of morphit" turned into the bulk of the work.  **Real shipped SEO bug fixed:** `hreflangAlternates()` was emitting `?lang=es` query-string URLs while every other surface (routing, sitemap, canonical link) uses path-based `/{locale}{path}` — Google joins these signals and the mismatch was the duplicate-content pattern that triggers ranking penalties.  **JSON-LD coverage extended:** new SoftwareApplication schema on home; new BreadcrumbList schema + Article schema on per-asset privacy guides.  **Privacy pages SEO gap closed:** 17 pages (privacy index + 16 per-asset) had been bypassing the central Head component, emitting only `<title>` + `<meta description>` — converted to full Head with canonical/hreflang/OG/JSON-LD.  **PNG OG image fallback shipped** unlocking Twitter/X/LinkedIn/Slack/Discord share previews (those clients reject SVG OG images).  **RSS auto-discovery** added on home + orderbook.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp110 is a docs/registry cleanup turn (Shaparak adds a payment-method entry; kencode FAQ removal; monero.bar docs landing) and Ken has explicitly requested a fresh binary at cp110 for cross-session handoff — binary regenerated as `morphit-audit-2026-05-122-cp110-FULL-STATE.tar.gz`.
+**cp109+cp110+cp112 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated):** All FAQ content added or amended in cp109 across the 9 non-EN locales (de/es/fa/fr/it/pl/ru/zh-CN/zh-HK) is auto-translation quality — grammatically correct, technically accurate, but with calques, occasional English fragments, and stilted phrasing that a native speaker will spot. Specifically: `faq.entries.wallet_developer_api`, `faq.entries.how_to_spread_morphit` (including the cp110 generic-blogs bullet replacement), `faq.entries.monero_amount_jitter`, `faq.entries.what_is_blurt`, `faq.entries.operator_payouts_timing` (the cp108 fix also auto-translated), plus UI strings `faq.matrix_room_cta`, `faq.matrix_room_blurb`, the new `payment_method.shaparak.description` added in cp110, **and the new `seo.privacy_asset.title` + `seo.privacy_asset.description` strings added in cp112**. Native-speaker polish should happen before launch. Roughly the same quality register as much of the pre-existing translated FAQ content, so not a regression — but worth a dedicated translation-quality pass before going live.
+
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp112 is a candidate meaningful milestone (CI fix + 2 new defenses + comprehensive SEO sweep + PNG OG ship) — fresh binary will regenerate if Ken asks.
+
+## CP112 LESSONS
+
+### Lesson #1 — `?lang=` query-string hreflang was a stale design no smoke caught
+
+The cp112 SEO bug had been shipped for many checkpoints.  Path-based prerendering shipped earlier in the project history and was the correct design; the `urls.ts` `hreflangAlternates()` function was a holdover from before that pivot, still emitting `?lang=es` form URLs.  The comment in the file even said "Morphit uses query-string-based locale switching" — false since the prerender refactor.
+
+No existing smoke caught this because:
+- `routes.test.ts` covers i18n coverage (every route has seo.*.title) and indexability rules, but not URL-shape parity
+- `mediakit-freshness-smoke` covers static asset freshness, not URL emission
+- The sitemap builder has its own `assertRoutesInSync()` but only checks against the routes ARRAY, not the urls.ts HELPERS
+
+cp112's new `seo-url-consistency-smoke` (defense #39) closes this gap permanently by comparing the helper's URL output to the sitemap-builder's URL output byte-for-byte.  366 scenarios; mutation-tested across all 3 invariants.
+
+**Lesson:** any place a derived URL form is computed in two places (helper + builder + page), a parity smoke must exist.  Otherwise the two will drift silently and SEO will pay the price.
+
+### Lesson #2 — Stale module-level doc comments are real liability
+
+The bug in Lesson #1 had been hiding in plain sight: the docblock said "uses query-string-based locale switching" but the code DID emit query-string URLs while the rest of the app used path-based URLs.  A reader of the docblock would conclude "this is correct."  Only an exhaustive end-to-end check (cp112's seo-url-consistency smoke) catches the mismatch.
+
+**Lesson:** when refactoring a module's behavior (e.g. switching from query-string to path-based locales), the docblock MUST be updated in the same commit.  Stale docblocks don't just lie — they actively defend the bug against discovery.
+
+### Lesson #3 — Routes that bypass the central Head component are a structural SEO leak
+
+cp112 found that `/[lang]/privacy/+page.svelte` and `/[lang]/privacy/[asset]/+page.svelte` were emitting only bare `<svelte:head>` with title+description, NOT the full `<Head>` component.  Result: those 17 pages (1 index + 16 per-asset × 10 locales = 170 URLs) shipped without canonical URL, hreflang alternates, OG / Twitter cards, robots meta, onion-location, JSON-LD — missing every SEO signal except the absolute minimum.
+
+The gap was structural: `<Head />` is the canonical way, but the SvelteKit template + Svelte 5 conventions don't enforce it.  Nothing prevents a future contributor from writing `<svelte:head><title>...</title></svelte:head>` and bypassing it again.
+
+Considered options:
+- (a) Lint rule: forbid `<svelte:head>` in routes.  Too brittle; some legitimate uses exist (the dev/yubikey-probe route).
+- (b) Routes-test addition: scan all `+page.svelte` files for `<svelte:head>` without a matching `<Head` import.  Possible but lower-value than (c).
+- (c) Just convert the offenders and document the pattern.
+
+cp112 took (c) — converted the two privacy page surfaces; left the dev/yubikey-probe route alone (dev-only, never indexed).  A future cp could add (b) as a smoke if more drift surfaces.
+
+### Lesson #4 — Twitter Card spec is loud about NOT supporting SVG OG images
+
+The Head.svelte comment had already said "Phase 5 adds a PNG fallback for aggregators that don't support SVG OG images (X / Twitter included)" — Phase 5 came and went without shipping the PNG.  cp112 found the same gap by inspection.
+
+Twitter Card spec explicitly rejects SVG.  LinkedIn rejects it inconsistently (sometimes silent failure, sometimes blank preview).  Slack/Discord/Mastodon are mixed.  PNG is the universal format.  **Lesson:** for any image asset where SVG is the source-of-truth but downstream consumers need PNG, ship the PNG alongside and add a freshness smoke (cp112's defense #40) to keep them in sync.
+
+### Lesson #5 — Orphaned i18n keys accumulate when bare `<svelte:head>` is replaced
+
+cp112's conversion of /privacy and /privacy/[asset] from bare svelte:head to the full Head component meant the old `privacy.index_title`, `privacy.index_meta_description`, `privacy.page_title`, `privacy.unknown_asset_title` keys went orphaned (no consumer left).  All four were removed across all 10 locales in the same checkpoint to keep the i18n tree clean.
+
+**Lesson:** Conversion from inline `<title>` / `<meta>` to the Head component should ALWAYS include a sweep for orphaned i18n keys in the same checkpoint.  Otherwise the locale files accumulate dead weight that confuses future contributors ("which key do I use?").
+
+### Lesson #6 — SEO sweep depth: 4 priorities in tension, but mostly aligned
+
+Ken's design priorities (memory) are: privacy > decentralization > grandma-friendliness > tiny footprint.  How did cp112's SEO sweep navigate them?
+
+- **Privacy**: SEO changes ship no third-party trackers, no fingerprinting, no JS-on-load analytics.  All metadata is static + prerendered.  ✓ untouched.
+- **Decentralization**: SEO doesn't depend on central services.  hreflang / canonical / sitemap are self-contained.  JSON-LD is plain JSON-in-script.  ✓ untouched.
+- **Grandma-friendliness**: SEO is invisible to grandma.  No UX change.  ✓ untouched.
+- **Tiny footprint**: +61 KB PNG OG image is the cost.  Lazy-loaded by crawlers / share-preview-fetchers only; never loaded in normal browsing flow.  Net cost to end-users: 0 bytes for normal usage; +61 KB for share-preview crawlers (cheap relative to the share-preview value).  ✓ acceptable.
+
+All 4 priorities preserved; SEO sweep is a net positive across the board.
+
+
+
+## CP111 LESSONS
+
+### Lesson #1 — TARBALL.md handoff section drift is its own real risk
+
+cp110's handoff section listed 5 "still open" pre-launch operator-actions. Three had been closed for many checkpoints (`CHANGE_ME_BEFORE_PRODUCTION` denylisted, `package-lock.json` committed, svelte-kit-sync wired). A fresh chat starting from that tarball would burn an unknown number of turns "fixing" already-fixed items before noticing.
+
+**Discipline going forward:** every checkpoint's TARBALL.md handoff section must be re-verified against actual code/config, not copy-pasted forward. Memory #5 ("docs always in sync") applies to TARBALL.md too — handoff is a doc.
+
+### Lesson #2 — Indirection-through-smoke is real protection but illegible protection
+
+`workspace-typecheck-smoke` has been running `svelte-kit sync && svelte-check` against apps/web in CI since Part 70. Real protection. But the `.forgejo/workflows/ci.yml` surface reads as "three jobs: typecheck / ansible-lint / smokes" with no mention of svelte. An auditor (or me, in this turn) had to dig two levels deep — open `scripts/run-smokes.sh`, find the workspace-typecheck-smoke entry, open `scripts/workspace-typecheck-smoke.ts`, find the `npx svelte-kit sync` line — to confirm the protection existed.
+
+cp111 added an explicit `web-check` job to the CI workflow. The smoke is retained as defense-in-depth (still useful locally + when ci.yml's web-check is misconfigured), but the CI surface itself is now self-documenting.
+
+**Lesson:** when CI does work the audit log claims it does, the WORKFLOW FILE should say so directly. Smoke indirection is correct protection but misses the "legible from outside" property.
+
+### Lesson #3 — Marketing-class docs need parity smokes just like operator-class docs do
+
+The codebase has had `operator-doc-fenced-path-existence-smoke` since cp84 (catches drift in OPERATIONS.md / RUN-A-MORPHIT-NODE.md / PRE-LAUNCH-CHECKLIST.md / etc). Operators following docs hit file-not-found if a path renames silently.
+
+Marketing-class docs (MORPHIT-BRAG-LIST.md, README.md, RELEASE-NOTES) are arguably MORE drift-sensitive: stale claims here directly damage the trust signal a reader uses to decide whether to engage with the project. Counts that go stale ("3,924 scenarios" → 4,432; "10 tradable" → 16; "Seven languages" → 10) are the exact class of false claim Memory #15 forbids — and yet the existing smoke battery didn't cover them.
+
+cp111's `brag-list-claim-parity-smoke` closes that gap. 7 claim classes (file paths / op IDs / env-vars / 4 numeric anchors), each mutation-tested. Floor of 50 scenarios guards against silent regex-broke-and-passes-zero failures. Subset-marker suppression for locale claims (`backlog`, `non-EN`, `native`, etc.) prevents legitimate subset references from false-positive.
+
+### Lesson #4 — Anchor numeric claims by computing canonical, not by hard-coded constant
+
+The natural way to write the brag-list smoke would be: "assert brag list claims 16 assets, 10 locales, 35 ADRs." But that puts THREE places where the asset/locale/ADR count is hard-coded — the canonical source, the brag list claim, AND the smoke. Add an asset and TWO docs go stale; the smoke goes stale silently.
+
+cp111 smoke computes canonical at run-time:
+- `countAssetTickers()` parses `packages/asset-registry/src/index.ts`
+- `countLocales()` lists `apps/web/src/lib/i18n/locales/*.json`
+- `countAdrs()` lists `docs/adr/00*.md` minus the template
+- `countBragEntries()` regex-counts numbered entries in the brag list
+
+So the smoke can NEVER go stale relative to code state. Only the brag list / README / release notes go stale; the smoke catches that drift before they ship.
+
+**Lesson:** parity smokes should compute their reference value live from canonical, not from a constant in the smoke. Otherwise the smoke itself becomes a drift surface.
+
+### Lesson #5 — Mutation-test EVERY claim class before declaring a smoke ready
+
+I almost shipped cp111's smoke with the env-var check broken: the original regex was `` /`(MORPHIT_[A-Z][A-Z0-9_]*)`/g `` (backticks both sides, only letters between). The brag list actually quotes env vars as `` `MORPHIT_INDEXER_DISABLED_ASSETS=` `` with a trailing `=`, which the regex didn't match. The smoke passed with 80 scenarios, looked clean — but a deliberate-drift mutation (replacing the env-var name) didn't trip it.
+
+Only the mutation test caught this. Broadened regex to allow optional `=value` shell-assignment suffix; smoke went from 80 to 81 scenarios; all 7 mutation classes now fire as expected.
+
+**Lesson:** "regex matches the right thing" and "regex passes when target is intact" are NOT the same check. Mutation testing (deliberately break each claim type and verify smoke fails with a clean message) is the only way to prove the smoke catches what it claims to catch. Run mutation tests for every NEW claim class before declaring done.
+
+### Lesson #6 — Subset markers in prose are real false-positive risk
+
+Naive locale-count check fired on "across all 6 locales" in brag entry 161 because the regex `(\d+)\s+locales?\b` doesn't know "6" referred to the 6-locale translation-backlog subset mentioned earlier in the same sentence.
+
+Three options considered:
+- (a) Hand-allowlist the line — fragile, Memory disagrees with allowlists
+- (b) Reduce smoke strictness ("only count claims that match canonical") — admits drift through the gate
+- (c) Suppress non-canonical claims when the line contains a subset marker (`backlog`, `non-EN`, `native`, `core`, `community-translation`, etc.)
+
+Picked (c). Same N == CANONICAL claim never gets suppressed (an accurate claim is always treated as canonical). Only fires when N != CANONICAL AND the surrounding line has no subset marker. Real-world: catches "We support 10 locales" when actual count is 11; ignores "across all 6 backlog locales" as a subset reference.
+
+
 
 ## CP106 LESSONS
 

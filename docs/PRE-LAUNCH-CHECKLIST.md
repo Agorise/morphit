@@ -1,6 +1,6 @@
 # PRE-LAUNCH-CHECKLIST.md
 
-**Status:** living document.  Last refreshed: 2026-05-21 (Part 122 cp82).
+**Status:** living document.  Last refreshed: 2026-05-22 (Part 122 cp112 — smoke baseline +366 + 6 from new SEO-class smokes).
 
 This is the consolidated, ordered list of operator actions
 required (or recommended) before flipping morphit.io from
@@ -379,7 +379,15 @@ file in the same turn.
       defense diamond preset), cp80-O26 long-form-en-fallback-floor
       (1,758 translation pairs/CI run), cp81-O27 service-worker-single-
       registration (7 checks), cp81-O28 short-form-en-fallback-floor
-      (4,770 translation pairs/CI run).  The
+      (4,770 translation pairs/CI run), cp111-O29 brag-list-claim-
+      parity-smoke (81 scenarios: file paths, op IDs, env-vars, and
+      asset/locale/ADR/brag-footer count anchors across the three
+      marketing-class docs; mutation-tested across all 7 drift
+      classes), cp112-O30 seo-url-consistency-smoke (366 scenarios
+      verifying canonical/hreflang/sitemap URLs match byte-for-byte;
+      catches the cp112 hreflang-form drift class), cp112-O31
+      og-image-freshness-smoke (6 scenarios catching PNG-older-
+      than-SVG drift after the cp112 PNG fallback shipped).  The
       exact current total is whatever `run-smokes.sh` prints
       against the repo state you're running; what you're verifying
       is that the count is ≥ 3,327 AND that zero runners failed).
@@ -758,6 +766,8 @@ block initial launch:
 
 | Part | Date | Change to this file |
 |---|---|---|
+| 122 cp112 | 2026-05-22 | Section C cumulative cp listing extended with cp112-O30 (`seo-url-consistency-smoke`, 366 scenarios — verifies canonical/hreflang URLs from the helper match the sitemap-builder's URLs byte-for-byte across every indexable route × locale; mutation-tested) + cp112-O31 (`og-image-freshness-smoke`, 6 scenarios — verifies the PNG OG image fallback exists, is 1200×630, is under 5 MB, and is no older than its SVG source).  No operator-facing surface changes — both are internal hardening for SEO + share-preview surfaces.  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |
+| 122 cp111 | 2026-05-22 | Section C scenario-count cumulative checkpoint listing extended to include cp111-O29 (`brag-list-claim-parity-smoke`, 81 scenarios across 7 drift classes — file paths, custom-JSON op IDs, MORPHIT_* env-vars, asset/locale/ADR/brag-footer count anchors; mutation-tested across all 7 classes).  No operator-facing surface changes — the smoke is internal hardening for the three marketing-class docs (MORPHIT-BRAG-LIST, README, RELEASE-NOTES).  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |
 | 122 cp82 | 2026-05-21 | Section C scenario-count cumulative checkpoint listing extended to include cp80-O26 (long-form-en-fallback-floor, 1,758 translation pairs/CI run), cp81-O27 (service-worker-single-registration, 7 checks against the cp81-D22 dual-registration regression), and cp81-O28 (short-form-en-fallback-floor, 4,770 translation pairs/CI run).  No new operator action items — cp80/cp81 work is internal hardening + content backlog closure + bug-fix (push notifications were silently broken in production due to dual SW registration; clickPath was an operator-phishing primitive); all fixed without operator-facing surface change.  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |
 | 122 cp20 | 2026-05-17 | Section C smoke baseline bumped from 3,173 → 3,187 to match the new `version-consistency-smoke` (14 scenarios) shipped this turn.  The smoke catches drift between the root `package.json` version, the 9 sub-package versions, the runtime `VERSION`/`INDEXER_VERSION` constants in relay+indexer `/v1/health`, and the example responses in `docs/API.md` + `apps/indexer/README.md` — pre-cp20 those touchpoints had four different version strings, none of them the release tag.  All 14 unified to `1.0.0-beta.1` and the smoke is wired into `scripts/run-smokes.sh`. |
 | 109 | 2026-05-10 | Initial consolidated checklist. Items A-H gathered from Parts 106 + 107 + 108++ + 109 operator-action lists in REVISIT-LIST, OPERATIONS.md §40, RUN-A-MORPHIT-NODE.md, and TARBALL.md.  Section G "explicitly NOT required" reflects operator decision in Part 109 to defer self-hosted explorers. |

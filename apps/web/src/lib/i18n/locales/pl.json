@@ -1477,6 +1477,10 @@
 		"privacy_index": {
 			"title": "Prywatność na Morphit — przewodniki dla aktywów",
 			"description": "Przewodniki prywatności dla każdego aktywa obsługiwanego przez Morphit. Większość łańcuchów jest przejrzysta; konkretne kroki sprawiają, że Twoje transakcje są znacznie trudniejsze do połączenia, sprofilowania lub nadzorowania."
+		},
+		"privacy_asset": {
+			"title": "Przewodnik prywatności {asset} — Morphit",
+			"description": "Jak chronić swoją prywatność podczas handlu {asset} bezpośrednio między użytkownikami na Morphit. Rotacja adresów, jitter kwot i techniki prywatności specyficzne dla danego łańcucha."
 		}
 	},
 	"prices": {
@@ -3769,11 +3773,8 @@
 		}
 	},
 	"privacy": {
-		"index_title": "Praktyki prywatności — Morphit",
-		"index_meta_description": "Jak uczynić swoje wymiany bardziej prywatnymi na łańcuchach przejrzystych i prywatnych. Przewodnik per-asset obejmujący nowe adresy, opcjonalne technologie prywatności i typowe pułapki.",
 		"index_heading": "Praktyki prywatności w Morphit",
 		"index_intro": "Większość aktywów handlowanych na Morphit (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BLURT, USDT, USDC, DAI) żyje na przejrzystych łańcuchach — każdy obserwator może odczytać historię łańcucha. Istnieją konkretne kroki, które możesz podjąć, aby TWOJE transakcje były znacznie trudniejsze do połączenia, sprofilowania lub nadzorowania. Jest to oparte na rejestrze: następny aktyw, który Morphit doda, automatycznie otrzyma przewodnik.",
-		"page_title": "Prywatność dla wymian {asset} — Morphit",
 		"guide_heading": "Praktyki prywatności dla wymian {asset}",
 		"back_to_index": "Wszystkie aktywa",
 		"section_fresh_addresses": "Używaj nowego adresu dla każdej wymiany",
@@ -3922,7 +3923,6 @@
 				"meta_description": "Praktyki prywatności dla wymian Ripple (XRP) na Morphit: konsensus FBA XRPL, przejrzysta warstwa bazowa, UX destination tag, wymóg rezerwy i rozważania o dostawcach RPC.",
 				"caveats": "XRPL jest przejrzysty na warstwie bazowej, bez natywnego protokołu mieszania.\n\n- **Udostępniaj świeże adresy dla każdego trade'u.**  Używanie tego samego adresu XRPL w wielu listingach Morphit pozwala obserwatorom skorelować Twoje zamówienia na całkowicie przejrzystym chainie.  Wygeneruj świeży adres odbiorczy dla każdego trade'u — nowoczesne portfele XRPL (Xaman, Crossmark, Bifrost) wyprowadzają je z Twojego seeda HD i pozwalają tworzyć nowe konta w kilka sekund.\n- **Destination tagi nie są funkcją prywatności — są identyfikatorem.**  Jeśli Twój kontrahent prosi o destination tag i go podajesz, ten tag jest widoczny on-chain i może być użyty do korelacji transakcji.  Dla transakcji peer-to-peer destination tag zwykle w ogóle nie jest potrzebny.  Dołączaj destination tag tylko wtedy, gdy adres odbiorczy to omnibus wallet hostowany przez giełdę, która wymaga go dla routingu.\n- **Wymóg rezerwy tworzy widoczność tworzenia konta.**  Twoje pierwsze przychodzące XRP musi być ≥1 XRP (base reserve).  Transakcja `Payment` on-chain, która finansuje nowe konto, jest publicznie widoczna jako aktywacja konta, co jest silniejszym sygnałem korelacji niż zwykła płatność na już istniejące konto.  Jeśli redukcja tego sygnału ma znaczenie, sfinansuj adres odbiorczy najpierw sam (z konta już zmieszanego/oddzielonego) i dopiero potem go udostępnij.\n- **Prywatność na warstwie sieciowej nadal ma znaczenie.**  Rozsyłanie przez Tor lub tryb prywatności portfela utrzymuje Twój domowy IP poza polem widzenia chaina.\n- **Dostawcy RPC XRPL mogą korelować.**  Twój portfel rozmawia z endpointem RPC XRPL (xrplcluster.com, Ripple, lub self-hostowany węzeł rippled) — ten dostawca widzi każdą transakcję, którą podpisujesz.  Self-hosting węzła rippled lub rotacja między dostawcami zmniejsza powierzchnię ataku.\n- **Koncentracja consensus-set to znana właściwość.**  Domyślna UNL (Unique Node List) jest publikowana przez XRP Ledger Foundation; uruchamianie własnego walidatora z niestandardową UNL jest wspierane, ale rzadkie.  Dla celów Morphit wpływa to bardziej na rozważania odporności na cenzurę (skoordynowana UNL mogłaby odmówić włączenia transakcji) niż na prywatność transakcji.  Udokumentuj i zdecyduj w oparciu o swój model zagrożeń.\n- **X-adresy nie są obecnie wspierane jako format odbiorczy.**  XRPL ma nowszy format \"X-address\" (XLS-5d), który zawiera destination tag wewnątrz samego adresu — Xaman/Xumm, Crossmark, Bifrost i GemWallet wszystkie je parsują.  Morphit obecnie akceptuje tylko klasyczne adresy z prefiksem `r`; jeśli Twój kontrahent prosi o X-address, udostępnij zamiast tego swój klasyczny adres i destination tag osobno.  Dodanie wsparcia X-address jest na liście usprawnień po launchu."
 			}
-		},
-		"unknown_asset_title": "Nieznane aktywo · Przewodniki po prywatności Morphit"
+		}
 	}
 }

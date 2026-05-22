@@ -223,6 +223,9 @@ SMOKES=(
 	"apps/matrix-bot:sse-stream-shape-smoke"
 	"apps/ops-cli:workspace-deps-pin-check"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
+	".:brag-list-claim-parity-smoke"
+	".:seo-url-consistency-smoke"
+	"apps/web:og-image-freshness-smoke"
 )
 
 total=0
