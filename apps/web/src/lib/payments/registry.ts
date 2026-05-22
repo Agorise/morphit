@@ -526,6 +526,12 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'online'
 	},
 	{
+		key: 'shaparak',
+		name: 'Shaparak (شاپرک)',
+		url: 'https://www.cbi.ir/page/16092.aspx',
+		category: 'online'
+	},
+	{
 		key: 'shebapay',
 		name: 'ShebaPay',
 		url: null,

@@ -153,12 +153,14 @@ export const FAQ_KEYS = [
 	'arbitrage_morphit_vs_exchanges',
 	'taxes',
 	'public_api',
+	'wallet_developer_api',
 	'rss_feeds',
 	'no_js',
 	'no_js_limits',
 	'offline_caching',
 	'syndicate_trade_announcement',
 	'notifications_overview',
+	'how_to_spread_morphit',
 
 	// ─── 11. Run your own node / operators ─────────────────────
 	'switching_instances',
@@ -237,7 +239,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'what_is_mana'
 	],
 	where_to_buy_blurt: ['blurt_benefits', 'first_order_free', 'fees'],
-	what_is_blurt: ['blurt_benefits', 'where_to_buy_blurt', 'why_chat_on_chain', 'what_is_mana'],
+	what_is_blurt: ['blurt_benefits', 'where_to_buy_blurt', 'why_chat_on_chain', 'what_is_mana', 'what_is_reputation'],
 	what_is_mana: ['what_is_blurt', 'blurt_benefits', 'welcome_bonus'],
 
 	// Reputation + feedback cluster. The "chat_vs_feedback_visibility"
@@ -315,7 +317,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'forward_secrecy',
 		'monero_amount_jitter'
 	],
-	monero_amount_jitter: ['chat_privacy', 'data_collection'],
+	monero_amount_jitter: ['chat_privacy', 'data_collection', 'why_fresh_addresses', 'privacy_practices'],
 	chat_key_loss: ['chat_identity_key', 'backup_practices'],
 
 	// Chain-anchored TOFU pin (Option 5 / S2 mitigation, ADR-0015):
@@ -404,7 +406,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	how_to_find_good_operator: ['rogue_operator', 'who_runs_it'],
 	rogue_operator: ['how_to_find_good_operator', 'who_runs_it'],
 	who_runs_it: ['run_your_own', 'rogue_operator'],
-	help_make_unstoppable: ['run_your_own', 'how_to_run_node'],
+	help_make_unstoppable: ['run_your_own', 'how_to_run_node', 'how_to_spread_morphit', 'wallet_developer_api'],
 	switching_instances: ['who_runs_it', 'run_your_own', 'how_to_find_good_operator'],
 	operator_moderation: ['rogue_operator', 'how_to_find_good_operator'],
 
@@ -525,7 +527,9 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'forward_secrecy',
 		'how_morphit_protects_me'
 	],
-	public_api: ['run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer'],
+	public_api: ['wallet_developer_api', 'run_your_own', 'how_to_run_node', 'rss_feeds', 'block_explorer'],
+	wallet_developer_api: ['public_api', 'help_make_unstoppable', 'how_to_spread_morphit', 'run_your_own'],
+	how_to_spread_morphit: ['help_make_unstoppable', 'how_operators_earn', 'wallet_developer_api', 'run_your_own'],
 	qr_login: ['lost_keys', 'backup_practices', 'lock_vs_signout', 'how_morphit_protects_me'],
 	what_is_usdt: ['why_usdt_warning', 'which_usdt_network', 'what_is_usdc', 'what_is_dai', 'fees', 'how_to_buy'],
 	why_usdt_warning: ['what_is_usdt', 'which_usdt_network', 'why_usdc_warning', 'why_dai_warning', 'how_morphit_protects_me', 'privacy_practices'],

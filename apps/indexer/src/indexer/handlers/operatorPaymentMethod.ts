@@ -100,6 +100,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'pix',
 	'przelewy24',
 	'revolut',
+	'shaparak',
 	'shebapay',
 	'sofort',
 	'spei',
