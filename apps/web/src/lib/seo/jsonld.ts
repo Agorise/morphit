@@ -36,8 +36,17 @@ export function organizationSchema(siteName: string, tagline: string): Record<st
 			// rather than listing placeholders that could be stale.
 		],
 		logo: {
+			// cp112 audit fix (A4): point at /app-icon.svg which IS
+			// 512×512 (viewBox 0 0 512 512), not the brand mark which
+			// is 41×26 with viewBox 0 0 10.889 7.049 — declaring 512×512
+			// for a non-square asset would make Google fetch the SVG,
+			// see the mismatch, and likely reject the logo for SERP
+			// knowledge-panel use.  app-icon.svg's identity mark is
+			// the same wordless logo (same colors, same shape), just
+			// laid out on a square canvas, so visual identity is
+			// preserved.
 			'@type': 'ImageObject',
-			url: `${CANONICAL_ORIGIN}/brand/morphit-mark.svg`,
+			url: `${CANONICAL_ORIGIN}/app-icon.svg`,
 			width: 512,
 			height: 512
 		}

@@ -111,7 +111,17 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// with `name(`; bare `canonical` looks like a plain identifier).
 		// `alt.href` is similar — `alt` is an element of
 		// `hreflangAlternates(resolvedPath)`'s output.
-		new Set(['canonical', 'alt.href'])
+		//
+		// cp114: `feed.href` allowlisted.  The `feeds` prop on this
+		// component is only ever passed from site-controlled call sites
+		// (currently /[lang]/+page.svelte and /[lang]/orderbook/+page.svelte,
+		// both passing the literal `/rss/orderbook.xml` string).  The prop
+		// is documented in the Head.svelte module-doc as taking only
+		// site-controlled feed metadata.  Any future call site that passes
+		// operator-/peer-published URLs into `feeds` would need to wrap
+		// them through `safeContactUrl()` first; this allowlist entry
+		// covers only the current site-controlled usage.
+		new Set(['canonical', 'alt.href', 'feed.href'])
 	],
 	[
 		'apps/web/src/routes/[lang]/+layout.svelte',

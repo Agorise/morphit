@@ -109,3 +109,50 @@ export function siteUrl(): string {
 export function htmlLang(code: LocaleCode | string | null | undefined): string {
 	return (code as string | null | undefined) ?? DEFAULT_LOCALE;
 }
+
+/**
+ * Map a Morphit locale code → an Open Graph–conformant `language_TERRITORY`
+ * code (cp112 audit fix A10/A11).
+ *
+ * Facebook's OG spec requires `<meta property="og:locale">` to be in
+ * `language_TERRITORY` form (e.g. `en_US`, `zh_CN`).  Emitting bare 2-letter
+ * codes like `en` or `es` causes some scrapers to fall back to default-
+ * locale handling, weakening the share-preview signal.
+ *
+ * For territory-less codes we pick the most-common region pairing
+ * (e.g. `en` → `en_US`, `es` → `es_ES`, `fr` → `fr_FR`).  The Persian
+ * pairing is `fa_IR` (Iran), which is the largest Persian-speaking
+ * population and the de-facto default for the language tag.
+ *
+ * For the two CJK codes we already carry the region (`zh-CN`, `zh-HK`)
+ * so the mapping is the byte-for-byte canonical OG form with hyphen→
+ * underscore.
+ *
+ * Reference: https://developers.facebook.com/docs/internationalization
+ */
+const OG_LOCALE_MAP: Record<string, string> = {
+	en: 'en_US',
+	es: 'es_ES',
+	de: 'de_DE',
+	pl: 'pl_PL',
+	fr: 'fr_FR',
+	it: 'it_IT',
+	ru: 'ru_RU',
+	fa: 'fa_IR',
+	'zh-CN': 'zh_CN',
+	'zh-HK': 'zh_HK'
+};
+export function ogLocale(code: LocaleCode | string | null | undefined): string {
+	const c = (code as string | null | undefined) ?? DEFAULT_LOCALE;
+	return OG_LOCALE_MAP[c] ?? c.replace('-', '_');
+}
+
+/**
+ * Return all OG-conformant locales EXCEPT the current one — used to emit
+ * `<meta property="og:locale:alternate">` tags.  Same shape as
+ * hreflangAlternates() but for the OG signal.
+ */
+export function ogLocaleAlternates(currentCode: LocaleCode | string): string[] {
+	const current = ogLocale(currentCode);
+	return SUPPORTED_LOCALES.map((l) => ogLocale(l.code)).filter((c) => c !== current);
+}

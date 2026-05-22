@@ -29,7 +29,7 @@
 	 *  (SERP breadcrumb display) and Article (rich-result eligibility
 	 *  for the per-asset content). */
 
-	import { page } from '$app/state';
+	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
 	import { ASSETS, type AssetTicker } from '@morphit/asset-registry';
@@ -38,8 +38,8 @@
 	import { localizedUrl, CANONICAL_ORIGIN } from '$seo/urls';
 	import type { LocaleCode } from '$i18n/locales';
 
-	const lang = $derived((page.params.lang ?? 'en') as LocaleCode);
-	const assetParam = $derived((page.params.asset ?? '').toUpperCase() as AssetTicker);
+	const lang = $derived(($page.params.lang ?? 'en') as LocaleCode);
+	const assetParam = $derived(($page.params.asset ?? '').toUpperCase() as AssetTicker);
 	const asset = $derived(ASSETS.find((a) => a.ticker === assetParam));
 
 	$effect(() => {
@@ -47,7 +47,7 @@
 		// alternative (404) loses the user's locale prefix; redirect
 		// preserves it.
 		if (asset === undefined) {
-			goto(`/${page.params.lang ?? 'en'}/privacy`);
+			goto(`/${$page.params.lang ?? 'en'}/privacy`);
 		}
 	});
 
@@ -111,7 +111,7 @@
 {#if asset}
 	<article class="mx-auto max-w-3xl px-4 py-8">
 		<nav class="mb-4 text-sm">
-			<a href={`/${page.params.lang ?? 'en'}/privacy`} class="text-morphit-emerald hover:underline">
+			<a href={`/${$page.params.lang ?? 'en'}/privacy`} class="text-morphit-emerald hover:underline">
 				← {$_('privacy.back_to_index')}
 			</a>
 		</nav>
