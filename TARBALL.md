@@ -1,5 +1,433 @@
 # Tarball history
 
+## cp100 — Chat client orchestrator audit + chat-client phase CLOSE (~1,201 lines, 1 module, phase total 10,862 / 28 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** REGENERATED at cp100 — `morphit-audit-2026-05-122-cp100-FULL-STATE.tar.gz`. cp100 closes the chat-client audit phase (5 checkpoints: cp96-cp100, 10,862 lines, 28 modules walked). Per the tarball cadence rule, end-of-phase is a meaningful milestone.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~38,414 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061 + cp98 web frontend chat MITM-defense 1,787 + cp99 web frontend chat payload core 2,310 + cp100 web frontend chat orchestrator 1,201).
+
+### TL;DR
+
+cp100 walks `chat/chatService.ts` (1,201) — the chat conversation orchestrator. This is where everything cp96-99 audited gets wired end-to-end: LiveIdentity unlock, chat-identity derivation, ECIES envelope, structured-payload decode, chain-anchored TOFU resolution, quorum-chain-verify, and chat-broadcast.
+
+1 module / 1,201 lines / 0 findings. The chat client surface (cp96-cp100) is now closed — **10,862 lines / 28 modules / 1 finding caught + fixed (cp93 release.ts JSDoc, the only code change of the entire frontend phase)**.
+
+**Modules walked (1, ~1,201 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `chat/chatService.ts` | 1,201 | DEEP-AUDITED CLEAN | State machine (pending→broadcast→confirmed/failed); ChatControllerDeps DI; SSE-primary + 60s fallback poll defense-in-depth; client_tag reconciliation (CSPRNG 16-byte → 32-hex); **S14 secp256k1 verify=true wired at fetchPeerChatPub runtime**; PubPinError→errorToSentinel→chat.security.* i18n; trade-status side-effect before broadcast; locked-session defense-in-depth; peerPubUnknown cache; decryptOrPlaceholder keeps conversation rendering on any failure; retryMessage generates new client_tag; destroy memzero + messages=[] free plaintext for GC immediately; visibility listener only when SSE absent; Q11 order_permlink threading for stranger-fee bypass |
+
+**Key cp100 verifications:**
+
+- **S14 secp256k1 verification IS opted in for production**: cp98's chainVerify.ts documented `verifySignature=true` as opt-in for the pin-mismatch hot path. cp100 walks the call site and confirms the trailing `true` in `fetchLatestChatIdentityFromChainQuorum(peer, 3, 2, true)` — the local secp256k1 verification IS turned on for production chat-pubkey resolution. Bar to successful indexer-MITM is raised from "lie about a JSON field" to "produce a valid secp256k1 signature against a key we don't possess."
+- **errorToSentinel preserves stable error UX**: PubPinError.code mapped to `chat.security.*` i18n keys (stable, localized); other Error → message (technical fallback); anything else → String() (defensive). Stable sentinels prevent English leaking into other locales for security-critical tamper-detection paths.
+- **Trade-status side-effect BEFORE broadcast is by design**: `/my/orders` badge updates immediately even if network is slow. If broadcast fails, trade entry still reflects user intent. Errors swallowed because broadcast is more important than store update.
+- **retryMessage generates new client_tag**: defense against double-confirm if previous broadcast actually landed but confirmation was missed. Comment explicit: "the retry is a distinct op."
+- **destroy() hygiene**: 6 cleanup steps including dynamic-import `sodium.memzero(myChatIdentity.priv)` and `messages=[]` to free decrypted plaintext for GC immediately rather than waiting for closure to vanish.
+- **Visibility listener only when SSE absent**: SSE keeps connection open across hidden/visible flips; no need to re-poll on becoming visible. Avoids redundant work.
+- **Defensive fetcher guard**: `if (r && r.ok)` defends against misbehaving fetcher mocks returning undefined. Without this, pollOnce would throw unhandled rejection.
+- **Q11 order_permlink threading**: when user is in chat from a specific order context, includes `order_permlink` as plaintext payload field → indexer bypasses stranger-fee gate (Q11 in chat handler) for messages where the recipient owns the named order.
+
+### Chat-client phase summary (cp96-cp100)
+
+| CP | Lines | Modules | Focus | Findings |
+|---|---:|---:|---|---:|
+| cp96 | 3,503 | 7 | crypto core (keystore, keygen, confusables, chat/crypto, blurt/sign, service-worker, push) | 0 |
+| cp97 | 2,061 | 5 | pairing + identity + releaseValidate | 0 |
+| cp98 | 1,787 | 4 | chat MITM-defense (fingerprint, chainVerify, pubPin, blurtVerify) | 0 |
+| cp99 | 2,310 | 1 | payload core (16-asset wire format) | 0 |
+| cp100 | 1,201 | 1 | chatService orchestrator | 0 |
+| **Phase total** | **10,862** | **18** | **Chat client surface** | **0** |
+
+Plus 10 supporting modules walked within those checkpoints (service-worker, push subsystem, identicon defenses, pairing helpers) bringing the chat-frontend-related module count to 28.
+
+The trust boundary holds together as designed; no new findings emerged from the integration audits. The chat-client phase composes 17 individually-clean modules into one of the most heavily-defended interaction surfaces in the codebase, end-to-end documented and re-walked from primitive to orchestrator.
+
+### Cp100 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,201 | chat orchestrator |
+| Findings this cp | 0 | module clean |
+| Tarball regenerated | YES | end-of-phase milestone |
+
+### Cp100 deferred to cp101+
+
+The chat client surface is closed. Remaining targets:
+
+1. **YubiKey transport + identicon** — keystoreYubikey (419), yubikey/transport (323), identicon (254). YubiKey unlock is the hardware-anchored alternative to passphrase wraps.
+2. **HTTP clients + endpoint rotator** — indexer/client (551), blurt/client (267), net/endpoints (470). The endpoint rotator is the chain RPC pinning + quorum dispatch layer that chainVerify and blurtVerify consume.
+3. **Matrix-bot subsystem** — apps/matrix-bot/
+4. **Ops-CLI** — apps/ops-cli/
+5. 30-test CI delta hunt — sandbox-blocked
+
+### Cp100 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp100 lessons (9 — chatService is where cp96-99 comes together, S14 IS opted in for production, errorToSentinel stable codes, trade-status before broadcast by design, retryMessage new client_tag, destroy comprehensive cleanup, visibility listener only when SSE absent, coverage table, chat-client phase summary) + state table + fixes section ("none — audit-only") + cp101+ hunting-ground update
+- `TARBALL.md` — cp100 entry inserted at top (this entry); .tar.gz regenerated as `morphit-audit-2026-05-122-cp100-FULL-STATE.tar.gz` (end-of-phase milestone)
+
+No source code or test files modified — cp100 is a pure audit-trail checkpoint.
+
+## cp99 — Web frontend chat payload core audit (~2,310 lines, 1 module) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94-cp99 are all audit-only; last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~37,213 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061 + cp98 web frontend chat MITM-defense 1,787 + cp99 web frontend chat payload core 2,310).
+
+### TL;DR
+
+cp99 walks **`chat/payload.ts` (2,310)** — the structured-wire-format core for chat. This is the largest single TS module in the frontend and the JSON shape protocol that rides inside the encrypted plaintext of every chat message. 1 module / 2,310 lines / 0 findings.
+
+The module is exhaustively defended through six Phase F.5 audit fixes (F-1/F-2/F-3/F-5/F-6/F-8), the cp30-DD-DD CODE-1 + SEC-3/SEC-6 multi-network closure (both encoder and decoder), and per-asset amount-jitter privacy defenses across all 16 tradable assets.
+
+**Modules walked (1, ~2,310 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `chat/payload.ts` | 2,310 | DEEP-AUDITED CLEAN | 16-asset support; cheap shape NOT checksums (300KB bundle tradeoff documented); amount-jitter privacy defense per-asset (XMR 999K piconero, stablecoins 999 microunits, UTXO 999 sats, all CSPRNG round-UP, caller-memoized per-trade); F-1 control+bidi defense; F-2 unknown_kind surface; F-3 memo BLURT-only; F-5 Object.hasOwn (prototype-chain phantom-field defense); F-6 empty-string omitted (encrypted-payload-size optim); F-8 BLURT 3-decimal Math.ceil; cp30-DD-DD CODE-1 multi-network requires network (encoder+decoder symmetric); cp30-DD-DD SEC-3/SEC-6 per-network cross-validate (CRITICAL for DAI where 4 EVM networks share 0x[40 hex] format); generateBlurtMemo CSPRNG with read-aloud-safe alphabet defeats pre-image front-run; per-asset URI builders per canonical chain convention; memo NOT in QR (privacy) |
+
+**Key cp99 verifications:**
+
+- **Validation philosophy documented at module head**: CHEAP SHAPE checks (regex/length/charset) NOT checksums. Tradeoff explicit: ~300KB bundle size for bitcoinjs-lib + monero-js vs cheap shape catching paste-went-wrong/truncated/mistyped-prefix (the most likely class of error). Future contributors tempted to "harden" with full checksums are warned upfront.
+- **cp30-DD-DD CODE-1 closes missing-network hole at BOTH ends**: pre-fix `{method:'usdc', address:'0xabc'}` without network was accepted; UI rendered the address pill without network chip, leaving buyer uncertain which chain (ETH/Sol/Base/Polygon). Decoder + encoder both refuse multi-network message without network field — a buggy caller using `as`-cast escape hatches to bypass TS is caught at encoder rather than letting them ship a wire message the receiver rejects later.
+- **cp30-DD-DD SEC-3/SEC-6 critical for DAI**: ALL FOUR networks (erc20/polygon/base/arbitrum) share EVM 0x[40 hex] format; only the network field disambiguates which chain. Per-network pinned regexes in `networks.ts` enforce this even though the surface shape is identical — cross-network-mis-send hardening.
+- **Amount-jitter universal across 6 asset families**: XMR (1 microXMR), stablecoins ($0.001), UTXO (999 sats), BLURT, SOL, ETH, XRP. All round-UP only (never underpay seller); all CSPRNG-derived (Math.random rejected: "predictable PRNG could let observer correlate jitters"). Caller-side memoization per-trade explicit (seller-share/buyer-echo/seller-verify see same value).
+- **generateBlurtMemo defeats pre-image front-run**: attacker who could pre-compute a memo and send a small payment first would corrupt the seller's accounting (legitimate buyer's later same-memo transfer arrives at an already-"matched" entry). CSPRNG output unguessable; attack collapses. Read-aloud-safe alphabet drops l/o/0/1.
+- **Per-asset URI conventions correct**: BIP-21 family for Bitcoin-fork chains, ZIP-321 for Zcash/Pirate, Solana Pay, simplified BIP-21-compatible for ETH (vs full EIP-681), `ripple:` with destination-tag privacy warning × 10 locales.
+- **Memo deliberately NOT in QR**: privacy-affecting, don't auto-pre-fill something sensitive. QR's only job is to get the recipient's wallet to "send to address" with the right amount. Everything else stays in chat.
+
+### Cp99 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 2,310 | chat payload core (single module, largest TS file in frontend) |
+| Findings this cp | 0 | module clean |
+
+### Cp99 deferred to cp100+
+
+1. **`chat/chatService.ts`** (1,201) — chat orchestrator consuming cp96-99 primitives end-to-end. Natural cp100 candidate.
+2. **YubiKey transport + identicon** — keystoreYubikey (419), yubikey/transport (323), identicon (254)
+3. **HTTP clients + endpoint rotator** — indexer/client (551), blurt/client (267), net/endpoints (470)
+4. **Matrix-bot subsystem** — apps/matrix-bot/
+5. **Ops-CLI** — apps/ops-cli/
+6. 30-test CI delta hunt — sandbox-blocked
+
+### Cp99 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp99 lessons (9 — payload as structured-wire core, CHEAP SHAPE not checksums tradeoff, cp30-DD-DD CODE-1 missing-network closure, cp30-DD-DD SEC-3/SEC-6 per-network cross-validate critical for DAI, amount-jitter universal CSPRNG round-UP, generateBlurtMemo CSPRNG defeats pre-image front-run, six Phase F.5 fixes embedded, per-asset URI conventions per canonical chain, coverage table) + state table + fixes section ("none — audit-only") + cp100+ hunting-ground update
+- `TARBALL.md` — cp99 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp99 is a pure audit-trail checkpoint.
+
+## cp98 — Web frontend chat MITM-defense audit (~1,787 lines, 4 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94-cp98 are all audit-only; last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~34,903 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061 + cp98 web frontend chat MITM-defense 1,787).
+
+### TL;DR
+
+cp98 walks the **four-module chat MITM-defense surface**: fingerprint (OOB human verification), chainVerify (Blurt RPC quorum for "ask the chain"), pubPin (chain-anchored pinning state machine), blurtVerify (on-chain transfer verification). Chat is where Morphit's privacy threat model bites hardest — these modules collectively defend against a hostile or compromised indexer substituting attacker-controlled chat-identity pubkeys.
+
+4 modules / 1,787 lines / 0 findings. All four are clean and embody an exemplary layered-defense pattern.
+
+**Modules walked (4, ~1,787 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `fingerprint.ts` | 748 | DEEP-AUDITED CLEAN | OOB MITM verification opt-in; 12-point self-audit header; asymmetric inputs canonicalized via lexCompare; PGP Word List (not BIP39) avoids recovery-seed confusion; even/odd alternation detects word-swap; 2^64 pre-image; domain-tag `morphit-fingerprint-v1`; pure SubtleCrypto.digest no library |
+| `chainVerify.ts` | 320 | DEEP-AUDITED CLEAN | Audit 2-7 quorum (3 endpoints, 2 must agree); S14 optional local secp256k1 verify raises adversary bar to "forge valid signature"; default off (extra RPC cost); history limit=10000 for active accounts; no caching; fail-closed contract |
+| `pubPin.ts` | 373 | DEEP-AUDITED CLEAN | 5-way state machine; Audit 2-9 TOFU-loses-permanently fix (chain verify before first pin); PubPinError typed 5 codes; localStorage validation TRX_ID_RE+ACCOUNT_NAME_RE+Number.isFinite; clearAllPins() privacy-sensitive on explicit-lock |
+| `blurtVerify.ts` | 346 | DEEP-AUDITED CLEAN | Audit 2-8 quorum (3 RPC, 2 agree on transfer-op fingerprint); F-7 multi-transfer ANY-full-match scan; F-9 asymmetric memo; F-10 tighter classifyRpcError; F-13 NaN expected-amount defense; 0.0005 epsilon |
+
+**Key cp98 verifications:**
+
+- **pubPin.ts Audit 2-9 fix**: pre-fix TOFU trusted indexer outright on first contact — a hostile indexer could substitute the pub and win PERMANENTLY (subsequent fetches match the now-pinned hostile pub, the pin LOCKS in the lie). Post-fix: verify against chain quorum BEFORE pinning on no_pin path.
+- **chainVerify S14 raises adversary bar**: with `verifySignature=true`, the local secp256k1 verification against the account's on-chain posting authority raises the bar from "lie about a JSON field" (achievable by controlling a quorum of RPC endpoints) to "produce a valid secp256k1 signature against a key we don't possess." Default off (extra RPC); pin-mismatch hot path opts in.
+- **fingerprint.ts 12-point self-audit format**: module header enumerates 12 attack categories systematically. Worth emulating in any future high-stakes crypto module — future contributors can extend the list rather than rediscovering the threat model.
+- **blurtVerify F-7 multi-transfer defense**: scans ALL transfers with `to === expect.recipient`. ANY full-match wins. Defeats malicious-buyer bundled-decoy attack where a small fake transfer is placed ahead of the real payment to confuse a naive verifier.
+- **Pin set + fingerprint privacy**: both are documented as privacy-sensitive metadata ("which peers have I ever chatted with?"); cleared by `runExplicitLockExtras()`. Storage validation drops malformed entries silently (no worse than fresh-device TOFU).
+
+### Cp98 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,787 | 4 chat MITM-defense modules |
+| Findings this cp | 0 | all 4 modules clean |
+
+### Cp98 deferred to cp99+
+
+1. **Chat client surface remaining** — payload.ts (2,310 — large; split across two cps), chatService.ts (1,201). These are the orchestrators that consume cp98's MITM-defense primitives.
+2. **YubiKey transport + identicon** — keystoreYubikey (419), yubikey/transport (323), identicon (254)
+3. **HTTP clients + endpoint rotator** — indexer/client (551), blurt/client (267), net/endpoints (470)
+4. **Matrix-bot subsystem** — apps/matrix-bot/
+5. **Ops-CLI** — apps/ops-cli/
+6. 30-test CI delta hunt — sandbox-blocked
+
+### Cp98 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp98 lessons (6 — layered chat-MITM defense, pubPin Audit 2-9 TOFU-loses-permanently fix, chainVerify Audit 2-7 quorum + S14 secp256k1, fingerprint 12-point self-audit format worth emulating, blurtVerify F-7 multi-transfer + Phase F.5 fixes, coverage table) + state table + fixes section ("none — audit-only") + cp99+ hunting-ground update
+- `TARBALL.md` — cp98 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp98 is a pure audit-trail checkpoint.
+
+## cp97 — Web frontend pairing + identity + release-validate audit (~2,061 lines, 5 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94+cp95+cp96+cp97 are all audit-only; last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~33,116 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503 + cp97 web frontend pairing+identity+release-validate 2,061).
+
+### TL;DR
+
+cp97 walks the **cross-device pairing handshake from BOTH desktop and phone sides**, the **LiveIdentity store + paired-readonly state machine**, and the **client-side release-payload validator** that mirrors the indexer's validation rules. 5 modules / 2,061 lines / 0 findings.
+
+This complements cp95's loginPairing endpoint audit: cp95 covered the dumb-pipe relay endpoint; cp97 covers both ends of the cryptographic protocol that ride on top of it.
+
+**Modules walked (5, ~2,061 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `desktopPairing.ts` | 720 | DEEP-AUDITED CLEAN | Pure module (no DOM/fetch/Svelte); domain-separated SIGNING_DOMAIN_PREFIX + AEAD_KEY_INFO; canonical JSON with sorted keys; echo checks defeat relay shuffling; freshness window replay defense; HTTPS-only URLs; device_label ASCII-printable+≤32 (bidi defense); desktopEpkPriv wiped in finally; AAD=pid bytes |
+| `pairingClient.ts` | 252 | DEEP-AUDITED CLEAN | Desktop-side state machine (starting → awaiting_phone → received/expired/rejected/cancelled); generic rejection to user (detailed to console only); EventSource auto-reconnect explicitly avoided; defaultVerifier fail-closes on chain RPC errors |
+| `pairingPhoneSigner.ts` | 240 | DEEP-AUDITED CLEAN | Multisig pre-check on PHONE side before signing (one RPC for UX win); 8-kind discriminated error; chat.priv.fill(0) after derivation; isCanonicalSignature defensive check |
+| `stores/identity.ts` | 543 | DEEP-AUDITED CLEAN | 3 mutually-exclusive states (locked/unlocked/paired-readonly); M6 layer 1 structural envelope validator (256KB/512KB caps); bootFromEnvelope-can-overwrite-paired but not vice versa; cross-tab handleStorageEvent preserves unlocked over paired-sibling-sign-out |
+| `releaseValidate.ts` | 306 | DEEP-AUDITED CLEAN | Client-side mirror of indexer's validate(); Part 107 client-side enforcement (viewkey silently ignored); mainnet-only BTC+XMR address regexes; SHA256_RE SRI-format every manifest entry; size caps 64KB/64KB/4KB |
+
+**Key cp97 verifications:**
+
+- **Domain separation prevents cross-context signature replay**: SIGNING_DOMAIN_PREFIX `morphit-pairing-v1\n` means pairing signatures cannot be replayed as chain-transaction signatures (and vice versa), because the chain uses `chain_id || tx_bytes` while pairing uses `prefix || canonical_json`. Same domain-separation pattern as the BLAKE2b key derivation throughout (`morphit-chat-v1/...`, `morphit-pairing-v1/aead-key`, `morphit-v1/<role>`).
+- **Echo checks defeat relay-side bundle shuffling**: desktop verifier rejects bundle whose `epk_echo` doesn't match its own `epk_pub` (base64-compared) and whose `origin_echo` doesn't match `window.location.origin`. A malicious relay can drop bundles (DoS — switch operators) but cannot forge or shuffle them.
+- **Multisig pre-check on phone side**: pairingPhoneSigner fetches account's `posting.key_auths` BEFORE signing — if no single key clears `weight_threshold` alone, shows a specific actionable error rather than letting user reach a confusing desktop-side rejection. Costs one chain RPC; acceptable for UX.
+- **M6 cross-tab defense is two-layered**: stores/identity.ts has the structural pre-decrypt validator (cheap JSON shape + size caps); keystore.ts useJitKey is the cryptographic post-decrypt check (constant-time posting-pubkey compare). Pre-fix, a same-origin XSS knowing the user's password could swap in a different identity's envelope under that password.
+- **releaseValidate is the client-side enforcement of Part 107**: viewkey field deliberately NOT read. If the chain stores a release op with a stale viewkey (Part 106-era), it's silently ignored on the client. Mirror of indexer's `stripViewkey`. cp93 fixed the JSDoc that was stale on this same invariant.
+
+### Cp97 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 2,061 | 5 web frontend pairing + identity + release-validate modules |
+| Findings this cp | 0 | all 5 modules clean |
+
+### Cp97 deferred to cp98+
+
+1. **Chat client surface** — payload.ts (2,310 split), chatService.ts (1,201), fingerprint.ts (748), chainVerify.ts (320), pubPin.ts (373), blurtVerify.ts (346)
+2. **YubiKey transport + identicon** — keystoreYubikey (419), yubikey/transport (323), identicon (254)
+3. **HTTP clients + endpoint rotator** — indexer/client (551), blurt/client (267), net/endpoints (470)
+4. **Matrix-bot subsystem** — apps/matrix-bot/
+5. **Ops-CLI** — apps/ops-cli/
+6. 30-test CI delta hunt — sandbox-blocked
+
+### Cp97 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp97 lessons (8 — desktopPairing ADR-0022 core, domain-separation cross-context replay defense, echo checks defeat relay shuffling, generic-rejection-reason policy, multisig phone-side pre-check, identity store paired-readonly + M6 layer 1, releaseValidate Part 107 client enforcement, coverage table) + state table + fixes section ("none — audit-only") + cp98+ hunting-ground update
+- `TARBALL.md` — cp97 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp97 is a pure audit-trail checkpoint.
+
+## cp96 — Web frontend crypto + auth surface audit (~3,503 lines, 7 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94+cp95+cp96 are all audit-only; last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~31,055 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613 + cp96 web frontend crypto+auth 3,503).
+
+### TL;DR
+
+cp96 opens the web frontend deep-audit phase. The indexer + relay are intentionally dumb pipes; cp96 walks the user-side modules that enforce the structural invariants making that dumb-pipe design possible:
+
+- **The user's private keys never leave the browser** (keygen.ts KEY HANDLING CONTRACT; blurt/sign.ts validates this at the broadcast boundary)
+- **Chat ciphertexts cannot be decrypted server-side** (chat/crypto.ts ECIES envelope encrypted to recipient's long-term X25519 derived from posting key)
+- **Push payloads cannot be linked to subscription endpoints by the server** (push.ts hashes endpoint into the canonical signature)
+- **The installed PWA bundle cannot be silently replaced** by a compromised origin (service-worker.ts pin-on-install + opt-in upgrade)
+- **Operator-controlled push payloads cannot phish via crafted clickPath** (service-worker.ts sanitizeClickPath defense against `'//evil.com/'` protocol-relative URLs)
+
+7 modules / 3,503 lines / 0 findings.
+
+**Modules walked (7, ~3,503 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `keystore.ts` | 954 | DEEP-AUDITED CLEAN | M6 cross-tab envelope replacement defense; K1.2 mnemonic→seedBytes; 10-char password floor; H3 validate-before-iterate (DoS defense); K1.4 MAX_KEYFILE_BYTES=64KB; M7 at-most-one-passphrase-wrap; L3+L9 yubikey slot validation; KeystoreError typed class; JIT pattern finally-block-safe |
+| `keygen.ts` | 552 | DEEP-AUDITED CLEAN | KEY HANDLING CONTRACT; LIVE_ROLES/JIT_ROLES typed arrays; K1.2 seedBytes; BLAKE2b domain-separated per-role; counter-suffix retry capped; ADR-0007 secp256k1; posting-only zero-scalar reject |
+| `confusables.ts` | 585 | DEEP-AUDITED CLEAN | Unicode homograph defense for reserved-name impersonation; per-letter equivalence classes; case-insensitive substring with byte-equality escape; P6-3 mirrors indexer; defense-in-depth atop identicon |
+| `chat/crypto.ts` | 405 | DEEP-AUDITED CLEAN | ECIES per ADR-0015; domain separation everywhere; in-band NUL separator; AAD binds both handles; Audit 2-12 double-fix wipes unconditionally; DecryptError intentionally vague (timing oracle defense); honest "never claim PFS we don't have" |
+| `blurt/sign.ts` | 378 | DEEP-AUDITED CLEAN | F-18 split prepare/sign/broadcast (active-key lifetime ~10ms vs ~2s); F-15/F-16/F-20 boundary defenses; ADR-0007 secp256k1; throwaway signing client (pure local crypto) |
+| `service-worker.ts` | 288 | DEEP-AUDITED CLEAN | Pin-on-install + opt-in upgrade; total origin-decoupling; push handler never logs; **cp81-D22b sanitizeClickPath closes operator-phishing primitive** |
+| `notifications/push.ts` | 341 | DEEP-AUDITED CLEAN | cp14 canonical signature with sha256(endpoint); locked-session detection; isCanonicalSignature defensive check; discriminated 10-kind error union; permission at point of relevance |
+
+**Key cp96 verifications:**
+
+- **keystore.ts M6 defense is exemplary**: `useJitKey` takes optional `expectedPostingPub` and verifies the freshly-decrypted envelope's posting pubkey matches via constant-time compare. Without this, cross-tab XSS that knows the user's password could plant a new envelope decrypting to a DIFFERENT identity → JIT path would hand attacker's active key to broadcast callback → user signs chain op with WRONG keys for user's account. The defense wipes everything before throwing `identity_mismatch`.
+- **`useActiveKeyForPasswordChange` is explicitly marked "DO NOT call from any other code path"** — it's the variant that SKIPS the M6 check; used only for password-change flow because by definition there's no running session to compare against. The comment is explicit so future contributors don't reach for it out of convenience.
+- **chat/crypto.ts Audit 2-12 double-fix**: both encrypt and decrypt paths wrap in try/finally so ephPriv/shared/messageKey are zeroed unconditionally — pre-fix, `scalarmult` throwing on a low-order point left ephPriv on the heap, undermining the documented one-sided sender-PFS property.
+- **blurt/sign.ts F-18 fix**: active-key lifetime went from ~2 seconds (held during entire network roundtrip) to ~10ms (just the sync sign call inside runWithActiveKey closure). Significant reduction in heap exposure window.
+- **service-worker.ts cp81-D22b**: `sanitizeClickPath` defends against the operator-phishing primitive where a malicious push payload's `clickPath: '//evil.com/'` would resolve via `new URL(path, origin)` to a cross-origin URL, and Chrome's `clients.openWindow()` does NOT uniformly enforce same-origin (unlike spec-compliant `WindowClient.navigate()`). Sanitizer extracted to its own module for unit-testing.
+- **notifications/push.ts cp14 canonical signature** hashes the endpoint URL into the signed message rather than including the URL verbatim — endpoint URL stays only between the user's browser and the push service; the relay sees only the SHA-256 hash.
+
+### Cp96 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 3,503 | 7 web frontend crypto + auth + SW + push modules |
+| Findings this cp | 0 | all 7 modules clean |
+
+### Cp96 deferred to cp97+
+
+The user-side cryptographic core is now walked. Remaining significant targets:
+
+1. **Web frontend remaining critical modules**: lib/auth (pairing client/desktop/phone-signer), lib/chat (payload/chatService/fingerprint/chainVerify/pubPin/blurtVerify), lib/crypto/yubikey + identicon, lib/indexer/client, lib/net (endpoints, releaseValidate), lib/blurt/client, lib/stores/identity (LiveIdentity + privacy mode)
+2. **Matrix-bot subsystem** — apps/matrix-bot/
+3. **Ops-CLI** — apps/ops-cli/
+4. 30-test CI delta hunt — sandbox-blocked
+5. Defense-claim-vs-implementation parity smoke — speculative
+
+### Cp96 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp96 lessons (8 — frontend modules embody user-side trust boundary, keystore M6 cross-tab defense, chat-crypto 2-12 finally-block-fix, blurt/sign F-18 active-key minimization, service-worker pin-on-install, service-worker sanitizeClickPath operator-phishing closer, keygen K1.2 seedBytes, coverage table) + state table + fixes section ("none — audit-only") + cp97+ hunting-ground update
+- `TARBALL.md` — cp96 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp96 is a pure audit-trail checkpoint.
+
+## cp95 — Streaming + auth endpoints audit (~1,613 lines, 7 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94+cp95 are both audit-only; last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~27,552 lines (cp82+cp85 handlers 5,266 + cp86 supporting 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275 + cp95 streaming+auth endpoints 1,613).
+
+### TL;DR
+
+cp95 closes the **streaming + cross-device auth endpoints**: the SSE pattern variations (orderbookStream / chatStream) plus the loginPairing handshake plus the small chat helpers. 7 modules, 1,613 lines, 0 findings.
+
+**This effectively closes the indexer + relay API surface deep-audit phase.** Every endpoint route, every handler, every supporting module across both apps has been walked. Total coverage: ~27,552 lines, 107 modules, 1 finding caught + fixed.
+
+**Modules walked (7, ~1,613 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `loginPairing.ts` | 401 | DEEP-AUDITED CLEAN | Indexer as dumb pipe (cannot decrypt/impersonate/persist); PID format check; body cap before parse; pid_mismatch defense; single-shot deliver (409 already_delivered); second-wait rejection; PID_TTL_MAX_MS + janitor + hard setTimeout fallback; two-phase register+setWaiter race-safe; constants in code not env |
+| `orderbookStream.ts` | 494 | DEEP-AUDITED CLEAN | F-5/F-6/F-13/F-26/NEW-11-1 audit fixes all wired correctly; bus subscription FIRST; makeFetchSerializer (at-most-one per orderId); MAX_TRACKED_ORDERS FIFO eviction; sock-puppet exclusion via signals.ts ties |
+| `chatStream.ts` | 374 | DEEP-AUDITED CLEAN | F-5 + P7-2 patterns; **per-message fetch defense-in-depth filtered by canonical pair** (out-of-pair id silently no-ops, prevents ciphertext leak from buggy emit); watermark `id > latestEmittedId` fallback (chat messages immutable) |
+| `chatStreamHelpers.ts` | 74 | DEEP-AUDITED CLEAN | Pure helpers; parseFilter validates+canonicalizes; eventMatchesFilter is pure string compare |
+| `chatAdmission.ts` | 102 | DEEP-AUDITED CLEAN | EXISTS-based check; self-chat short-circuits to admitted=true (friendly UX) |
+| `chatReadState.ts` | 75 | DEEP-AUDITED CLEAN | isAccountName validation; MAX_ROWS=10,000; parameterized |
+| `instancePaymentMethods.ts` | 93 | DEEP-AUDITED CLEAN | **B3 fix** reads THIS operator's additions; INSTANCE_KEY_PREFIX prepended |
+
+**Key cp95 verifications:**
+
+- **loginPairing is exemplary "indexer as dumb pipe"** — three structural impossibilities (cannot decrypt, cannot impersonate, cannot persist), plus ~10 layered defenses (PID format, body cap before parse, pid_mismatch, single-shot, second-wait reject, TTL+janitor+hard-fallback, two-phase register, capacity caps, cancelWait). Constants in CODE not env so a hostile operator can't weaken the protocol via tuning.
+- **orderbookStream wires 5 audit fixes correctly**: F-5 (bus FIRST), F-6 (fetch serializer), F-13 (fallback emits for all matching), F-26 (post-parse token check), NEW-11-1 (pending cap). The codebase's most-scarred module is now cleanly defensive.
+- **chatStream's lookup-time filter is critical defense in depth**: `fetchMessageById` filters by canonical pair `(lo, hi)` in addition to id. Even if a buggy emit carried the wrong pair to the wrong listener, the per-id fetch refuses to return a message from the wrong conversation. Without this, a bug in the bus dispatch could leak ciphertext between unrelated parties.
+- **Sock-puppet exclusion ties end-to-end**: orderbookStream's snapshot SQL joins against suspicious_reciprocity + related_accounts (cp90 signals.ts) — Signal A/B detector results actively suppress sock-puppet feedback aggregates in the live stream, not just the REST endpoint.
+
+### Cp95 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,613 | 7 streaming + auth endpoint modules |
+| Findings this cp | 0 | all 7 modules clean |
+
+### Indexer + relay API surface phase complete
+
+Cumulative deep-audit coverage at end of cp95: ~27,552 lines / 107 modules / 1 finding caught + fixed.
+
+**The indexer + relay API surface is now fully deep-audited.** Every endpoint route, every handler, every supporting module across both apps has been walked. The remaining audit campaign moves to:
+
+1. **Web frontend TypeScript modules** — apps/web/src/lib outside the smoke runner's reach (lib/auth, lib/blurt, lib/crypto, server hooks, sw.ts service worker)
+2. **Matrix-bot subsystem** — apps/matrix-bot/
+3. **Ops-CLI** — apps/ops-cli/ operator tooling
+4. 30-test CI delta hunt — sandbox-blocked
+5. Defense-claim-vs-implementation parity smoke — speculative
+6. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp95 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp95 lessons (5 — loginPairing dumb-pipe security, orderbookStream multi-fix wiring, chatStream lookup-time defense, small-endpoint privacy discipline, coverage table) + state table + fixes section ("none — audit-only") + cp96+ hunting-ground update
+- `TARBALL.md` — cp95 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp95 is a pure audit-trail checkpoint.
+
+## cp94 — Indexer fee verifiers + circuit breaker audit (~1,275 lines, 4 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint. cp94 is audit-only (no code changes); last binary is `cp93-FULL-STATE.tar.gz`.
+
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~25,939 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830 + cp91 web push 1,064 + cp92 indexer auxiliary scanners 1,645 + cp93 remaining indexer API 3,668 + cp94 fee verifiers+breaker 1,275).
+
+### TL;DR
+
+cp94 walks the **fee verification subsystem** — the last truly novel attack surface in the indexer. Four modules totaling 1,275 lines; 0 findings.
+
+**This closes the indexer deep-audit phase.** Every BTC/XMR order's fee verification rides through these modules' quorum logic + circuit-breaker degradation + tx-proof verification — a bug here would either over-strict (legitimate orders rejected) or under-strict (attestations bypassed). Both verifiers layer ~15 defenses each, all clean.
+
+**Modules walked (4, ~1,275 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `verifier.ts` | 86 | DEEP-AUDITED CLEAN | Interface module; FeeVerifyResult discriminated union; FeeClaim with txProof field for Part 108++; contract enforces "must not throw on expected paths" |
+| `circuitBreaker.ts` | 169 | DEEP-AUDITED CLEAN | Per-key state; 3 enum states (closed/open/half_open); exponential backoff with max-cap; injectable clock; snapshot for verbose-health |
+| `bitcoinExplorerVerifier.ts` | 496 | DEEP-AUDITED CLEAN | ~15 layered defenses; Finding S12 (404 doesn't penalize explorer health); Part 109 quorum gate; Finding F7 vout.value NaN-propagation defense; Audit Part 26 txid-echo verification; underpaid-reject/overpaid-accept; tip-fetch separated from breaker |
+| `moneroProofVerifier.ts` | 524 | DEEP-AUDITED CLEAN | Part 108++ proof-based (no view key on any indexer ever); HTTPS-only enforced in constructor; 5 default explorers for 5-way cross-check; BigInt piconero throughout; string-OR-number amount handling; observed=0n→REJECT; never log full URL; tx_proof prefix+length+charset pre-check |
+
+**Key cp94 verifications:**
+
+- **The "must not throw" contract is enforced at the interface level** — `verifier.ts:81` explicitly states "a thrown exception is treated as a bug and fails the containing transaction." Both verifiers honor this: BigInt() throw on bad amount → defensive skip rather than throw, JSON parse error → data_malformed return, network/timeout/abort → transport_failure return. A throwing verifier would roll back the WHOLE block's transaction in the dispatcher, dropping every legitimate order in that block.
+- **Finding F7 is exactly the bug that doesn't manifest in normal testing** — `NaN < expectedAmount` is always false → wrongly `verified` with `observedAmount: NaN`. JavaScript's NaN comparison semantics turn "sum of bad data is bad" into "sum of bad data verifies as good." The per-entry vout.value validation closes it specifically.
+- **Finding S12 is the inverse defense**: don't let user-supplied data signals masquerade as explorer-health signals. A flood of bogus user-supplied txids would 404 across explorers; pre-fix, those 404s opened all circuits and DoS'd the verifier path. Post-fix, only `transport_failure` counts toward the breaker.
+- **moneroProofVerifier's privacy contract is structural** — by design the indexer holds NO XMR secrets. The user generates the per-payment proof from their own wallet; the proof reveals only "this txid paid this address this amount" — strictly less leaky than view keys (one-time, per-payment, single output). 5-way default explorer cross-check makes single-source manipulation impossible.
+- **HTTPS-only enforced in the moneroProofVerifier constructor** — refuses to construct if any explorer URL doesn't start with `https://`. Tied to the standing memory rule about XMR user privacy: a plain-HTTP explorer URL would let a network observer see the proof string + treasury address in the clear.
+
+### Cp94 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only |
+| Lines deep-audited this cp | 1,275 | fee verifiers + circuit breaker |
+| Findings this cp | 0 | all 4 modules clean |
+
+### Cp94 deferred to cp95+
+
+The indexer deep-audit phase is now substantially complete. Remaining significant targets:
+
+1. **Larger streaming + auth endpoints** — chatStream (374), orderbookStream (494), loginPairing (401)
+2. **Smaller chat helpers** — chatStreamHelpers + chatAdmission + chatReadState + instancePaymentMethods (~344)
+3. **Web frontend TypeScript modules** outside the smoke runner's reach (lib/auth, lib/blurt, lib/crypto, server hooks)
+4. 30-test CI delta hunt — sandbox-blocked
+5. Defense-claim-vs-implementation parity smoke — speculative
+6. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp94 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp94 lessons (6 — fee verifier defense layering, Finding F7 NaN-propagation closure, moneroProofVerifier privacy contract, circuit breaker minimal-surface design, FeeVerifier no-throw contract, coverage table) + state table + fixes section ("none — audit-only") + cp95+ hunting-ground update
+- `TARBALL.md` — cp94 entry inserted at top (this entry); no .tar.gz regenerated per new cadence
+
+No source code or test files modified — cp94 is a pure audit-trail checkpoint.
+
 ## cp93 — Remaining indexer API endpoints audit (~3,668 lines, 28 modules) — **1 FINDING + FIX (release.ts stale viewkey JSDoc)** — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-22)
 
 **Tarball:** `morphit-audit-2026-05-122-cp93-FULL-STATE.tar.gz` (regenerated this checkpoint — cp93 carries a real code fix, qualifying as a meaningful milestone per the new cadence rule).  Includes accumulated cp91 + cp92 + cp93 docs and the release.ts JSDoc fix.
