@@ -1,5 +1,57 @@
 # Tarball history
 
+## cp90 — Indexer poller + federationProbe + signals audit (~1,830 lines, 3 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
+
+**Tarball:** `morphit-audit-2026-05-122-cp90-FULL-STATE.tar.gz`
+**State:** 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,827 × 10 = 28,270 · **4432 scenarios pass / 0 runners failed** · **7/7 workspaces TS-clean (LL #52 41st consecutive)** · **37 structural defenses operational** · 1,381 vitest tests passing.  Cumulative deep-audit coverage: ~18,287 lines (cp82+cp85 handlers 5,266 + cp86 supporting modules 3,056 + cp87 indexer API 3,173 + cp88 relay 3,048 + cp89 relay client+config+drainer 1,914 + cp90 poller+federationProbe+signals 1,830).
+
+### TL;DR
+
+cp90 walks the **three biggest indexer auxiliary modules**: `poller.ts` (the block-walk + signal orchestrator), `federationProbe.ts` (cross-instance gossip with sophisticated SSRF defenses), and `signals.ts` (where Signal A/B/C sock-puppet detection actually lives). 1,830 lines total, 0 findings.
+
+**Modules walked (3, ~1,830 lines):**
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `poller.ts` | 690 | DEEP-AUDITED CLEAN | ADR-0008 irreversible-only application eliminates reorg handling; one-block-per-tx prevents WAL bloat on catch-up; Part 106 per-cycle treasury refresh with last-known-good fallback; Part 108++ XMR view-key removal; event-bus emit AFTER withTx commits prevents phantom SSE events; Signal A excludes relay account (Finding N28); abort signal checked in inner catch-up loop |
+| `federationProbe.ts` | 791 | DEEP-AUDITED CLEAN | Three-layer SSRF defense: (1) isPrivateHostname denylist incl. cloud-metadata IP + .local/.localhost/.internal TLDs; (2) resolveAndValidatePublicIp requires ALL DNS records public (closes "return [public, private] gamble"); (3) pinned undici Agent with custom connect.lookup closes TOCTOU vs connect-time DNS (Part 122 cp3 DNS-rebinding closure). Plus redirect:'manual' (finding 5-6), 256 KB body cap two-layer (NEW-9-11), 5s timeout, https-only, MAX_TRACKED_INSTANCES=200, FAILURE_DROP_DAYS=7 |
+| `signals.ts` | 349 | DEEP-AUDITED CLEAN | 3 independent detectors (Signal B reciprocity / Signal A related-creator / Signal C pile-on Part 113); parameterized thresholds; canonical (a < b) ordering dedupes; ON CONFLICT DO NOTHING idempotency; once-flagged-stays-flagged with operator-delete recovery; Signal A excludes relay creator (Finding N28); Signal C tight cluster gating (≥3 reviewers + ≤2 distinct subjects diversity + first_activity_at within 14d) |
+
+**Key cp90 verifications:**
+
+- **The poller's irreversible-only application is the system-level reorg defense.** No chain-walk logic exists because nothing rolled-back ever reached the DB. Every alternative (op-level undo, ephemeral state, fork-tracking) carries enormous complexity that's been engineered away by simply waiting for `last_irreversible_block_num`.
+- **federationProbe is the highest-stakes SSRF surface in the codebase.** Federation discovery means making outbound HTTP fetches to attacker-controlled URLs (registered on-chain by remote operators). The three-layer defense covers (hostname literal denylist) → (DNS-rebinding via all-records-public check) → (TOCTOU closure via pinned undici Agent). All three layers are NECESSARY: layer 1 alone fails on attacker-controlled DNS; layer 2 alone fails on TOCTOU between pre-validation and undici's connect; layer 3 alone fails on literal `https://127.0.0.1/`.
+- **`169.254.169.254` and `metadata.google.internal`** are explicitly in the isPrivateHostname denylist — closes the cloud-metadata IMDS attack vector that would let a malicious instance probe AWS/GCP/Azure metadata services through the indexer.
+- **Signal C activity-cluster gating** prevents false positives: a real coordinated attack has narrow review diversity (each attacker reviewing the target plus maybe one other) AND clustered first_activity_at (attackers emerge in a tight time window). Legitimate critical reviewers with diverse review history don't cluster on both criteria.
+
+### Cp90 verification matrix
+
+| Check | Result | Note |
+|---|---|---|
+| `bash scripts/typecheck-sweep.sh` | (not re-run; cp86 verified 7/7 clean) | no code changes this cp |
+| `bash scripts/run-smokes.sh` | (not re-run; cp86 verified 4432/0) | no code changes this cp |
+| Code changes this cp | 0 | audit-only checkpoint |
+| Lines deep-audited this cp | 1,830 | indexer poller + federationProbe + signals |
+| Findings this cp | 0 | all 3 modules clean |
+
+### Cp90 deferred to cp91+
+
+1. **Web push subsystem** — push.ts + pushSender.ts + pushSubscriptions.ts + pushSubscribeSig.ts + relay health.ts (~1,064 lines)
+2. **Indexer auxiliary scanners** — operatorAccountBalanceScanner + lowBalanceScanner + treasurySource + witnessFeePoller + signupAnomalyProbe + pushLocalize (~1,645 lines)
+3. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints
+4. **Indexer fee verifiers + circuit breaker** — chain-external BTC/XMR verification
+5. 30-test CI delta hunt — sandbox-blocked
+6. Defense-claim-vs-implementation parity smoke — speculative
+7. order.ts ↔ orderReplace.ts validation refactor — soft observation
+
+### Cp90 file changes summary
+
+Modified files:
+- `docs/REVISIT-LIST.md` — cp90 lessons (4 — poller's irreversible-only design defense, federationProbe SSRF three-layer model, signals.ts three-detector design + canonical dedupe, coverage table) + state table + fixes section ("none — audit-only") + cp91+ hunting-ground update
+- `TARBALL.md` — cp90 entry inserted at top (this entry)
+
+No source code or test files modified — cp90 is a pure audit-trail checkpoint.
+
 ## cp89 — Relay chain-RPC + config + queue-worker audit (~1,914 lines, 4 modules) — 0 findings — 0 code changes — battery 4432/0 unchanged — LL#52 41st unchanged — 1,381 vitest unchanged — 304 brag entries unchanged (2026-05-21)
 
 **Tarball:** `morphit-audit-2026-05-122-cp89-FULL-STATE.tar.gz`

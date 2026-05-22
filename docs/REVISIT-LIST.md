@@ -1,8 +1,91 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp89 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · RELAY CHAIN-RPC + CONFIG + QUEUE-WORKER AUDIT: 4 modules walked (~1,914 lines), 0 findings · CUMULATIVE DEEP-AUDIT COVERAGE: ~16,457 LINES.**
+**Last touched:** Part 122 cp90 — 2026-05-21.  **37 STRUCTURAL DEFENSES (unchanged) · BATTERY 4432/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · INDEXER POLLER + FEDERATION-PROBE + SIGNALS AUDIT: 3 modules walked (~1,830 lines), 0 findings · CUMULATIVE DEEP-AUDIT COVERAGE: ~18,287 LINES.**
 
-## CP89 LESSONS
+## CP90 LESSONS
+
+### Lesson #1 — The poller's ADR-0008 irreversible-only application eliminates reorg handling at the design layer
+
+`poller.ts` only applies blocks where `block_num <= last_irreversible_block_num`. No chain-walk-back logic exists because nothing rolled-back ever made it to the DB. This is a system-design defense, not a code-level one — every alternative (chain-walk on reorg, op-level undo, ephemeral state) carries enormous complexity that's been engineered away by simply waiting for irreversibility.
+
+Critical-path verifications:
+
+- **One-block-per-transaction** explicit non-batching: "a long catch-up could otherwise leave the transaction open for minutes, holding locks and bloating WAL." Each block's `applyBlock` + `markApplied` runs in one withTx; either both happen or neither.
+- **Event-bus emit AFTER withTx commits**: `orderbookEventBus.emit()` and `chatEventBus.emit()` fire only after the per-block transaction commits, so SSE subscribers never see phantom events from a rolled-back-on-error block.
+- **Signal failures swallowed** — "advisory and must never halt block processing." Each of detectRelatedAccounts/detectSuspiciousReciprocity/detectOneWayPileOn is in its own try/catch.
+- **Treasury source refresh (Part 106)**: per-cycle TreasurySource.current() with chain-pinned takes precedence over env-var; verifiers rebuilt only when canonical address changes; 30s internal cache amortizes DB cost; errors → use last-known-good.
+- **XMR view-key removal (Part 108++)**: comment confirms "the indexer holds NO xmr secrets at all" — matches standing memory rule (XMR private view key is NEVER published).
+- **Signal A excludes relay account (Finding N28)**: the relay creates the majority of onboarded accounts, so creator-match against it is normal coincidence, not evidence of relation.
+
+### Lesson #2 — federationProbe.ts is exemplary SSRF defense: three layers, no gaps
+
+The federation probe makes outbound HTTP fetches to attacker-controlled origins (URLs registered on-chain by remote operators). Without layered SSRF defenses, a malicious instance could point its origin at internal services (cloud-metadata APIs, internal admin panels, private databases) and use the indexer's network as a proxy.
+
+**Layer 1 — `isPrivateHostname`** literal-hostname denylist:
+- 127.x, 10.x, 192.168.x, 172.16-31.x, 169.254.x (link-local), 0.0.0.0, [::], [::1]
+- `localhost`, `.local`, `.localhost`, `.internal` TLDs
+- **`169.254.169.254` (cloud-metadata IP)** — AWS/GCP/Azure IMDS endpoint
+- **`metadata.google.internal`** — GCP metadata DNS
+- fc00::/8 + fd00::/8 (IPv6 unique-local), fe80::/10 (IPv6 link-local)
+
+**Layer 2 — `resolveAndValidatePublicIp`** DNS-rebinding closure:
+- Resolves hostname; checks EVERY returned address against `isPrivateIp`
+- Rationale: "an attacker controlling DNS can return [203.0.113.1, 127.0.0.1]. If we connect to the first, we hit the public IP — fine. But subsequent reconnects, retries, or a different load-balancer selection could pick the private one. By requiring ALL records to be public, we ensure no fork of the connection can land on an internal address."
+
+**Layer 3 — pinned undici Agent (Part 122 cp3)**: closes the TOCTOU between pre-validation lookup and undici's connect-time lookup. The Agent's `connect.lookup` returns the validated IP for the expected hostname and refuses any other hostname. SNI + cert validation + Host header still use the URL hostname (vhost routing intact).
+
+**Plus defense-in-depth:**
+- `redirect: 'manual'` (finding 5-6) — don't follow redirects
+- `FETCH_TIMEOUT_MS = 5_000` per fetch (15s worst case for 3 fetches)
+- 256 KB body cap (NEW-9-11) two-layer: Content-Length pre-check + stream-and-abort on overrun
+- `https://` only — no plain HTTP
+- `redirect:'manual'` + pinned-hostname check in the lookup callback (defense-in-depth in case redirect:manual fails)
+
+### Lesson #3 — signals.ts has 3 independent detectors with canonical-ordering dedupe + idempotent inserts
+
+The Signal A/B/C detectors back the sock-puppet exclusions seen in every API endpoint (orderbook, feedback). Each:
+
+- Parameterized $N for all thresholds and exclusion arrays
+- Interval literals from TS constants interpolated at compile time (not user-controlled)
+- Canonical (a < b) ordering dedupes mirror-image pairs
+- ON CONFLICT DO NOTHING idempotency — re-runs on same data produce no new rows
+- Once-flagged-stays-flagged; operator-delete is the recovery path (no auto-unflag)
+- Each detector independently advisory (ADR-0009 §5) — UI-visible chip, not dispositive
+
+**Signal B**: 7-day mutual ≥3 reviews each direction, avg rating ≥4.8, BOTH reviewers must have `distinct_subjects = 1` (no third-party feedback from either).
+
+**Signal A**: same-creator + first_activity_at within 5 minutes, `excludeCreators` array parameter (Finding N28).
+
+**Signal C (Part 113)**: ≥3 reviewers low-star (≤2.0) in 7d window, narrow diversity (≤2 distinct subjects in 30d), first_activity_at clustered within 14d. JSONB array on subject row.
+
+### Lesson #4 — Coverage table for cp90
+
+| Module | Lines | Status | Notes |
+|---|---:|---|---|
+| `poller.ts` | 690 | DEEP-AUDITED CLEAN | ADR-0008 irreversible-only eliminates reorgs; one-block-per-tx; Part 106 treasury refresh; Part 108++ XMR view-key-less verifier; event-bus emit AFTER withTx commits; Signal A excludes relay account (Finding N28) |
+| `federationProbe.ts` | 791 | DEEP-AUDITED CLEAN | Three-layer SSRF defense (isPrivateHostname + resolveAndValidatePublicIp + pinned undici Agent); redirect:'manual'; 256 KB body cap two-layer; 5s timeout per fetch; MAX_TRACKED_INSTANCES=200; FAILURE_DROP_DAYS=7 |
+| `signals.ts` | 349 | DEEP-AUDITED CLEAN | 3 independent detectors (A/B/C); canonical ordering dedupe; ON CONFLICT DO NOTHING idempotency; parameterized thresholds; once-flagged-stays-flagged with operator-delete recovery |
+
+Total cp90: 1,830 lines walked, 0 findings.
+
+## CP90 STATE
+
+| Metric | Value | Note |
+|---|---|---|
+| Scenarios PASS | 4432 | unchanged from cp89 (no code changes; audit-only) |
+| Runners FAILED | 0 | unchanged |
+| Workspaces TS-clean (LL #52) | 7/7 | **41st consecutive HW-verified** unchanged |
+| Vitest tests passing | 1,381 | unchanged |
+| Structural defenses | 37 | unchanged |
+| Locale parity | 2,827 × 10 = 28,270 | unchanged |
+| Brag entries | 304 | unchanged |
+| Lines of code deep-audited cumulative | ~18,287 | cp82+cp85 handlers (5,266) + cp86 supporting modules (3,056) + cp87 indexer API (3,173) + cp88 relay endpoints+middleware+policy (3,048) + cp89 relay client+config+drainer (1,914) + cp90 poller+federationProbe+signals (1,830) |
+
+## CP90 FIXES
+
+None — cp90 was an indexer poller + federationProbe + signals audit.  0 findings across 3 modules / 1,830 lines.
+
+
 
 ### Lesson #1 — Chain-RPC abstraction has two-pass endpoint rotation with transport-vs-RPC discrimination
 
@@ -444,6 +527,16 @@ Total: 60 surgical replacements across 10 locales × 5 string keys + 1 plan key 
 
 1. **Live Ansible deploy on fresh Ubuntu 24.04 VM** — Ken's sysadmin in progress (unchanged from cp83).
 2. ~~v1.0.0-beta.1 release ceremony steps 8/9/10~~ — **CLEARED at cp82**.
+
+## CP91+ PREDICTED HUNTING GROUND
+
+1. **Web push subsystem** — `apps/relay/src/api/push.ts` (253) + `apps/relay/src/policy/pushSender.ts` (280) + `policy/pushSubscriptions.ts` (191) + `policy/pushSubscribeSig.ts` (162) + relay `health.ts` (178) — push is opt-in but has signature-verification surfaces (cp14 work).
+2. **Indexer auxiliary scanners** — `operatorAccountBalanceScanner.ts` (419), `lowBalanceScanner.ts` (278), `treasurySource.ts` (276), `witnessFeePoller.ts` (270), `signupAnomalyProbe.ts` (179), `pushLocalize.ts` (223) — ~1,645 lines of background workers.
+3. **Remaining indexer API endpoints** — ~2,500 lines, ~12 smaller endpoints (rssOrderbookHandlers, instance, instancesStream, clearingPriceHistory, etc.).
+4. **Indexer fee verifiers + circuit breaker** — `apps/indexer/src/indexer/fee/*` modules — chain-external verification for BTC/XMR fees.
+5. **30-test CI delta hunt** — still sandbox-blocked.
+6. **Defense-claim-vs-implementation parity smoke** — speculative.
+7. **Code-dedup refactor for order.ts ↔ orderReplace.ts** — soft observation from cp85.
 
 ## CP90+ PREDICTED HUNTING GROUND
 
