@@ -472,8 +472,33 @@
 
 	<footer class="mt-10 text-center text-sm text-ink-500 dark:text-ink-400">
 		<p>{$_('faq.still_need_help')}</p>
-		<button type="button" class="btn-secondary mt-3" onclick={() => goto(lp('/support'))}>
-			{$_('faq.contact_support')}
-		</button>
+		<div class="mt-3 flex flex-wrap items-center justify-center gap-3">
+			<button type="button" class="btn-secondary" onclick={() => goto(lp('/support'))}>
+				{$_('faq.contact_support')}
+			</button>
+			<a
+				class="btn-secondary inline-flex items-center gap-2"
+				href="https://matrix.to/#/#agorise:matrix.org"
+				rel="noopener noreferrer"
+				target="_blank"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+				</svg>
+				<span>{$_('faq.matrix_room_cta')}</span>
+			</a>
+		</div>
+		<p class="mt-2 text-xs">{$_('faq.matrix_room_blurb')}</p>
 	</footer>
 </section>

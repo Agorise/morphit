@@ -7431,6 +7431,15 @@ returning JSON with `status: "success"` and
 - `https://xmrscan.org` — different codebase
 - `https://blockchair.com/monero` — different API
   shape, no `txprove=1` endpoint
+- `https://monero.bar` — lightweight network-health
+  dashboard (block height, difficulty, hashrate, pool
+  distribution, RPC node status); useful for operators
+  eyeballing the state of the Monero network and for
+  spot-checking RPC node availability, but **not** a
+  full block explorer and does NOT expose the
+  `/api/outputs?txprove=1` endpoint.  Do not add to
+  `MORPHIT_INDEXER_XMR_EXPLORER_URLS`.  Bookmark it as
+  a sidebar tool, not a verification source.
 
 **Option 1: Public multi-explorer (default).**  No
 operator setup.  Cross-check among five independent
