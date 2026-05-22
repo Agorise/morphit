@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { building } from '$app/environment';
 	import { currentLocale } from '$i18n';
-	import { canonicalFor, hreflangAlternates, CANONICAL_ORIGIN } from '$lib/seo/urls';
+	import { canonicalFor, hreflangAlternates, ogLocale, ogLocaleAlternates, CANONICAL_ORIGIN } from '$lib/seo/urls';
 	import { computeOnionLocation } from '$lib/seo/onionLocation';
 	import { instance } from '$stores/instance';
 
@@ -43,6 +43,15 @@
 		 * affordance when present.  Also a documented SEO signal for
 		 * news/blog crawlers.  Pass empty/undefined on pages with no
 		 * matching feed.
+		 *
+		 * **SECURITY CONSTRAINT (cp114):** the `href` field MUST be a
+		 * SITE-CONTROLLED URL (literal string or relative path), NEVER
+		 * an operator-published or peer-supplied URL.  The href-xss
+		 * smoke allowlists `feed.href` on this exact basis; any new
+		 * call site that wants to pass operator-/peer-controlled feed
+		 * URLs MUST first wrap them through `safeContactUrl()` from
+		 * `$lib/utils/safeContactUrl` and update the allowlist comment
+		 * to reflect that the constraint has changed.
 		 *
 		 * Example for the orderbook page:
 		 *   feeds={[{ title: 'Morphit orderbook', href: '/rss/orderbook.xml' }]}
@@ -229,7 +238,18 @@
 	<meta property="og:image:alt" content={ogImageAlt} />
 	<meta property="og:image" content={ogImageSvg} />
 	<meta property="og:image:type" content="image/svg+xml" />
-	<meta property="og:locale" content={$currentLocale.replace('-', '_')} />
+	<!-- og:locale (cp112 audit A10): emit Facebook-conformant
+	     `language_TERRITORY` form via ogLocale() rather than the bare
+	     hyphenated locale code, which some scrapers fall back to
+	     default-handling for. -->
+	<meta property="og:locale" content={ogLocale($currentLocale)} />
+	<!-- og:locale:alternate (cp112 audit A11): OG analog of hreflang.
+	     Emits one entry per other locale; helps Facebook/LinkedIn
+	     pick the right preview when a share lands from a non-default
+	     language. -->
+	{#each ogLocaleAlternates($currentLocale) as alt}
+		<meta property="og:locale:alternate" content={alt} />
+	{/each}
 
 	<!-- Twitter Card -->
 	<meta name="twitter:card" content="summary_large_image" />

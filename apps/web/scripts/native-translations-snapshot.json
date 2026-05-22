@@ -1,12 +1,12 @@
 {
 	"_meta": {
 		"description": "Snapshot of (key, locale) pairs where the locale value differs from the canonical English value. Captured as the floor that native-translations-floor-smoke.ts checks against to prevent the LL #46 regression class (overwriting a native translation with EN-fallback).",
-		"baseline_taken_at": "2026-05-20",
+		"baseline_taken_at": "2026-05-22",
 		"en_total_leaves": 2825,
 		"native_pair_counts_per_locale": {
-			"es": 2685,
-			"fr": 2669,
-			"de": 2660,
+			"es": 2681,
+			"fr": 2665,
+			"de": 2656,
 			"it": 2478,
 			"pl": 2492,
 			"ru": 2508,
@@ -15,7 +15,22 @@
 			"zh-HK": 2523
 		},
 		"regenerate_with": "tsx apps/web/scripts/native-translations-snapshot-rebuild.ts (deliberate action; rebuilds this file from the current state of the locales).",
-		"how_smoke_uses_this": "native-translations-floor-smoke loads this snapshot, then for every (locale, key) pair listed under \"natives\" verifies the current locale file still has a value different from EN. Any regression (locale value became EN-identical) FAILS the smoke. Adding new natives is fine — they just need a regenerate when they ship, which is the same discipline as committing the new translations themselves."
+		"how_smoke_uses_this": "native-translations-floor-smoke loads this snapshot, then for every (locale, key) pair listed under \"natives\" verifies the current locale file still has a value different from EN. Any regression (locale value became EN-identical) FAILS the smoke. Adding new natives is fine — they just need a regenerate when they ship, which is the same discipline as committing the new translations themselves.",
+		"last_surgical_edit": {
+			"date": "2026-05-22",
+			"reason": "cp114 — pruned 4 keys deleted in cp112 (privacy.index_title, privacy.index_meta_description, privacy.page_title, privacy.unknown_asset_title). All were orphans (no remaining consumers in source); cp112 should have updated the snapshot in the same turn. Surgical edit chosen over full regenerate to avoid baseline-locking cp108–cp112 auto-translated content as \"native\" when it still needs native-speaker polish (see REVISIT-LIST translation-quality flag).",
+			"keys_removed": [
+				"privacy.index_meta_description",
+				"privacy.index_title",
+				"privacy.page_title",
+				"privacy.unknown_asset_title"
+			],
+			"locales_touched": [
+				"de",
+				"es",
+				"fr"
+			]
+		}
 	},
 	"natives": {
 		"es": [
@@ -1976,8 +1991,6 @@
 			"privacy.guides.zec.one_line",
 			"privacy.index_heading",
 			"privacy.index_intro",
-			"privacy.index_meta_description",
-			"privacy.index_title",
 			"privacy.no_wallet_recommendation",
 			"privacy.opt_in_tech.cashfusion.explain",
 			"privacy.opt_in_tech.coinjoin.explain",
@@ -1987,14 +2000,12 @@
 			"privacy.opt_in_tech.privatesend.explain",
 			"privacy.opt_in_tech.shielded-pools.explain",
 			"privacy.opt_in_tech.shielded-pools.name",
-			"privacy.page_title",
 			"privacy.section_caveats",
 			"privacy.section_common_practices",
 			"privacy.section_fresh_addresses",
 			"privacy.section_opt_in_tech",
 			"privacy.section_opt_in_tech_intro",
 			"privacy.section_what_not_to_do",
-			"privacy.unknown_asset_title",
 			"privacy.what_not_to_do.clearnet_broadcast",
 			"privacy.what_not_to_do.combine_utxos",
 			"privacy.what_not_to_do.exact_amount",
@@ -4650,8 +4661,6 @@
 			"privacy.guides.zec.one_line",
 			"privacy.index_heading",
 			"privacy.index_intro",
-			"privacy.index_meta_description",
-			"privacy.index_title",
 			"privacy.no_wallet_recommendation",
 			"privacy.opt_in_tech.cashfusion.explain",
 			"privacy.opt_in_tech.coinjoin.explain",
@@ -4661,14 +4670,12 @@
 			"privacy.opt_in_tech.privatesend.explain",
 			"privacy.opt_in_tech.shielded-pools.explain",
 			"privacy.opt_in_tech.shielded-pools.name",
-			"privacy.page_title",
 			"privacy.section_caveats",
 			"privacy.section_common_practices",
 			"privacy.section_fresh_addresses",
 			"privacy.section_opt_in_tech",
 			"privacy.section_opt_in_tech_intro",
 			"privacy.section_what_not_to_do",
-			"privacy.unknown_asset_title",
 			"privacy.what_not_to_do.clearnet_broadcast",
 			"privacy.what_not_to_do.combine_utxos",
 			"privacy.what_not_to_do.exact_amount",
@@ -7314,8 +7321,6 @@
 			"privacy.guides.zec.one_line",
 			"privacy.index_heading",
 			"privacy.index_intro",
-			"privacy.index_meta_description",
-			"privacy.index_title",
 			"privacy.no_wallet_recommendation",
 			"privacy.opt_in_tech.cashfusion.explain",
 			"privacy.opt_in_tech.coinjoin.explain",
@@ -7325,14 +7330,12 @@
 			"privacy.opt_in_tech.privatesend.explain",
 			"privacy.opt_in_tech.shielded-pools.explain",
 			"privacy.opt_in_tech.shielded-pools.name",
-			"privacy.page_title",
 			"privacy.section_caveats",
 			"privacy.section_common_practices",
 			"privacy.section_fresh_addresses",
 			"privacy.section_opt_in_tech",
 			"privacy.section_opt_in_tech_intro",
 			"privacy.section_what_not_to_do",
-			"privacy.unknown_asset_title",
 			"privacy.what_not_to_do.clearnet_broadcast",
 			"privacy.what_not_to_do.combine_utxos",
 			"privacy.what_not_to_do.exact_amount",

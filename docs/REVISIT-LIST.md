@@ -1,12 +1,58 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp112 — 2026-05-22.  **40 STRUCTURAL DEFENSES (+2: seo-url-consistency-smoke + og-image-freshness-smoke) · BATTERY ~4885/0 (cp111 was 4513; cp112 +366 + 6 from new smokes; full triple-pulse on CI definitive) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 304 ENTRIES (unchanged; cp112 rewrote bodies of #80/#87 only) · LOCALE PARITY UPDATED (2,832 × 10 = 28,320; -4 orphaned `privacy.*` keys removed + 2 new `seo.privacy_asset.*` keys added) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
+**Last touched:** Part 122 cp114 — 2026-05-22.  **40 STRUCTURAL DEFENSES (unchanged) · BATTERY ~4885/0 (unchanged) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 304 ENTRIES (unchanged) · LOCALE PARITY 2,832 × 10 = 28,320 (unchanged) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
+
+**cp114 CI failure fixes:** cp112's pushed tarball surfaced 2 CI smoke failures (both legitimate "cleanup needs to update the other side" misses).  **(1) native-translations-floor-smoke** — cp112 deleted 4 orphaned i18n keys but didn't prune them from the native-translations snapshot; surgical removal from es/fr/de native arrays + audit-trail entry in snapshot.  **(2) href-xss-smoke** — cp112's new `feeds` prop emitted `<link href={feed.href}>` which the smoke can't tell is site-controlled; added `'feed.href'` to Head.svelte's allowlist + hardened the prop docblock with a SECURITY CONSTRAINT note pointing future contributors at safeContactUrl() for any non-site-controlled future feed source.
+
+**cp113 cp112-self-audit pass:** Ran an audit-eye pass over cp112's own shipped code and found 4 real bugs.  All 4 fixed same turn.  **A4** — Organization.logo declared 512×512 but pointed at the 41×26 brand mark (Google would reject the logo); repointed at `/app-icon.svg` which IS 512×512.  **A10** — og:locale was emitting bare `en` instead of Facebook-conformant `en_US`; new `ogLocale()` helper with full 10-locale map.  **A11** — missing `og:locale:alternate` entries (OG analog of hreflang); new `ogLocaleAlternates()` helper + loop in Head.svelte.  **A12** — both privacy pages I converted in cp112 used `import { page } from '$app/state'` while every other file in the project uses `$app/stores`; fixed both pages (5 reference sites).  7 other findings filed for follow-up or marked as theoretical (A1, A2, A3, A6, A14, A15) or design-decision-for-Ken (A7: should `privacy_asset` flip to `indexable: true`?).
 
 **cp112 CI failure fix + comprehensive SEO sweep:** cp111 CI surfaced a brag-list-kiss-budget failure (entries #80/#87 over sentence/word budgets, #195 over sentence budget but staccato-style-legit).  Fix shipped + Ken's directive "make absolutely positively SURE that we are as SEO friendly and discoverable as possible, in every facet of morphit" turned into the bulk of the work.  **Real shipped SEO bug fixed:** `hreflangAlternates()` was emitting `?lang=es` query-string URLs while every other surface (routing, sitemap, canonical link) uses path-based `/{locale}{path}` — Google joins these signals and the mismatch was the duplicate-content pattern that triggers ranking penalties.  **JSON-LD coverage extended:** new SoftwareApplication schema on home; new BreadcrumbList schema + Article schema on per-asset privacy guides.  **Privacy pages SEO gap closed:** 17 pages (privacy index + 16 per-asset) had been bypassing the central Head component, emitting only `<title>` + `<meta description>` — converted to full Head with canonical/hreflang/OG/JSON-LD.  **PNG OG image fallback shipped** unlocking Twitter/X/LinkedIn/Slack/Discord share previews (those clients reject SVG OG images).  **RSS auto-discovery** added on home + orderbook.
 
 **cp109+cp110+cp112 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated):** All FAQ content added or amended in cp109 across the 9 non-EN locales (de/es/fa/fr/it/pl/ru/zh-CN/zh-HK) is auto-translation quality — grammatically correct, technically accurate, but with calques, occasional English fragments, and stilted phrasing that a native speaker will spot. Specifically: `faq.entries.wallet_developer_api`, `faq.entries.how_to_spread_morphit` (including the cp110 generic-blogs bullet replacement), `faq.entries.monero_amount_jitter`, `faq.entries.what_is_blurt`, `faq.entries.operator_payouts_timing` (the cp108 fix also auto-translated), plus UI strings `faq.matrix_room_cta`, `faq.matrix_room_blurb`, the new `payment_method.shaparak.description` added in cp110, **and the new `seo.privacy_asset.title` + `seo.privacy_asset.description` strings added in cp112**. Native-speaker polish should happen before launch. Roughly the same quality register as much of the pre-existing translated FAQ content, so not a regression — but worth a dedicated translation-quality pass before going live.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp112 is a candidate meaningful milestone (CI fix + 2 new defenses + comprehensive SEO sweep + PNG OG ship) — fresh binary will regenerate if Ken asks.
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp114 regenerates a fresh binary (Ken asked: "re-tarball please" after CI failure).
+
+## CP114 LESSONS
+
+### Lesson #1 — Snapshot files + allowlists are part of "wire everything"
+
+cp112's verification matrix ran the SEO-class smokes I'd touched but NOT the workspace-wide battery.  The snapshot file is owned by `native-translations-floor-smoke` which I didn't think of, and the allowlist is owned by `href-xss-smoke` which I also didn't think of.  Both should have been in cp112's "wire everything" checklist.
+
+**Carry-forward:** every cp that changes i18n keys (add OR delete) is on the hook for `apps/web/scripts/native-translations-snapshot.json`.  Every cp that introduces a new href binding in a `+page.svelte` or `lib/components/*.svelte` file is on the hook for `apps/web/scripts/href-xss-smoke.ts`'s `ALLOWLIST_HREF_EXPR`.  Add both to the standard pre-tarball checklist.
+
+### Lesson #2 — Run the full local smoke battery before tarball
+
+cp112 ran the cp112-touched smokes locally and they all passed; CI caught the two I hadn't thought to run.  The CI catch is fine (that's what CI is for), but the round-trip cost (cp114 fix + fresh tarball) was avoidable.  The full local battery takes ~3-4 minutes; small cost for the certainty.
+
+**Carry-forward:** before tarball — especially comprehensive sweep cps that touch many surfaces — run the full local smoke battery, not just the smokes the cp explicitly touched.
+
+### Lesson #3 — Prefer surgical edits over full regenerates when the regenerate has side effects
+
+The `native-translations-snapshot-rebuild.ts` script would have fixed the failure by regenerating the whole baseline from current state.  But that would have baseline-locked all the cp108–cp112 auto-translated strings as "must stay native" — conflicting with the pre-launch translation-quality flag which says those strings still need native-speaker polish.  Going with surgical removal of just the 4 deleted keys preserved the existing flag's correctness.
+
+**Carry-forward:** when a smoke offers "just regenerate," check whether the regenerate has side effects beyond the immediate fix.  If yes, surgical is better.
+
+## CP113 LESSONS
+
+### Lesson #1 — Audit your own turn before declaring done
+
+The 4 cp113 fixes were bugs **I shipped in cp112** less than an hour earlier.  cp112 felt thorough (mutation tests, comprehensive verification matrix, all smokes green) but the audit-eye pass turned up real issues across 3 of the files I touched most.  Pattern: I trusted my just-written code more than I should have, while distrusting decade-old code (urls.ts as it stood pre-cp112) appropriately.
+
+**Carry-forward:** for any non-trivial cp that touches new design surface, run a self-audit-eye pass at +1 turn before declaring the cp closed.  Memory rule "NEVER ASSUME, ALWAYS VERIFY" extends to verifying my own just-shipped code, not just code from other contributors.
+
+### Lesson #2 — Grep before you import
+
+A12 was the most embarrassing: I wrote `import { page } from '$app/state'` because Svelte 5 docs mention that import path, without checking what **the rest of the project uses**.  The rest of the project uses `$app/stores` consistently across 100+ files.  A single `grep` would have surfaced the convention.
+
+**Carry-forward:** before introducing a new import or pattern, grep the codebase for how similar files do it.  The project has converged on conventions for good reasons (sometimes archaeological, sometimes deliberate); diverging without cause is just creating future cleanup work.
+
+### Lesson #3 — mtime is the wrong tool for git-versioned artifact freshness
+
+A15 surfaced that the og-image-freshness smoke uses mtime, which is reset on git checkout.  The robust check is content-hash + sidecar.  Filed for a future cp; the practical bite-risk is low (smoke runs in CI on every push where mtimes are approximately simultaneous), but the principle generalizes — any "is artifact X derived from source Y" check should hash the source, not check mtimes.
+
+### Lesson #4 — Self-handicaps in SEO registry are still self-handicaps
+
+A7 surfaced that `privacy_asset` was set `indexable: false` to avoid coupling the SEO registry to the asset registry.  That's a valid engineering reason for decoupling, but the SEO cost (160 long-form pages NOT in sitemap) is real.  The coupling cost (1 smoke that enumerates ASSETS → privacy/{ticker} URLs and verifies sitemap presence) is small.  Flipping to `indexable: true` is probably the right call once we decide.  Ken's decision queued.
 
 ## CP112 LESSONS
 

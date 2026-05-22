@@ -4,9 +4,9 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp112 — 2026-05-22 (CI failure fix + comprehensive SEO sweep — see cp112 entry below).
+**Last touched:** cp114 — 2026-05-22 (cp112-tarball CI surfaced 2 missed cleanups, both fixed same turn).
 
-**Resume here:** unpack `morphit-audit-2026-05-122-cp110-FULL-STATE.tar.gz` into your working directory. cp111+cp112 are in-place edits on the cp110 binary; no new binary unless Ken asks. The repo state in the tarball + cp111+cp112 edits IS the source of truth. This file (`TARBALL.md`) and `docs/REVISIT-LIST.md` together describe everything you need to pick up where the previous session left off.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
 - 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (now 2,832 leaves × 10 = 28,320 after cp112 i18n cleanup: -4 orphaned privacy.* keys, +2 new seo.privacy_asset.* keys)
@@ -47,6 +47,141 @@
 **Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp112 is a candidate meaningful milestone (CI failure fix + 2 new structural defenses + comprehensive SEO sweep + Twitter/LinkedIn share-preview-unlock via PNG OG) — fresh binary will regenerate if Ken asks.
 
 ---
+
+## cp114 — cp112-tarball CI surfaced 2 missed cleanups (orphaned-key snapshot prune + new-prop allowlist update), both fixed same turn (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp114-FULL-STATE.tar.gz` built this turn (Ken asked: "now, it seems the last tarball also had some failures in the forgejo runner. see attached log file, fix the failures and re-tarball please").
+
+**State:** Unchanged code/data surface from cp113 — 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,832 × 10 = 28,320 · ~4,885/0 smokes · 7/7 TS-clean · **40 defenses** · 1,381 vitest.  Only changes: snapshot file pruned + allowlist comment extended + Head.svelte docblock hardened.
+
+### TL;DR
+
+cp112's tarball pushed to CI; CI surfaced 2 failures (cp112's own self-verification missed both because they were "cleanup needs to update the OTHER side" failures — the smokes weren't run in the local working-tree before tarball, only the smokes my mental model said were relevant were).  Both fixes are small, local, and don't change any shipped product behavior.
+
+### Failure 1 — `native-translations-floor-smoke`
+
+**Smoke logic:** the snapshot file (`apps/web/scripts/native-translations-snapshot.json`) records every `(locale, key)` pair where the locale value differed from English at baseline time.  For every pair, the smoke verifies the locale STILL has that key with a value different from EN.
+
+**Failure cause:** cp112 deleted 4 orphaned i18n keys (`privacy.index_meta_description`, `privacy.index_title`, `privacy.page_title`, `privacy.unknown_asset_title`) from all 10 locale files.  The snapshot still listed those 4 keys under es/fr/de as natives.  Smoke correctly flagged "4 key(s) removed from locale (was native at snapshot time)" × 3 locales.
+
+**Fix (cp114):** surgical prune of the 4 keys from the es/fr/de native arrays in the snapshot file.  Chose surgical over full regenerate because the regenerate script would have baseline-locked all the cp108–cp112 auto-translated strings as "must stay native," which conflicts with the existing pre-launch translation-quality flag in REVISIT-LIST (those strings still need native-speaker polish).  Also added a `_meta.last_surgical_edit` audit-trail entry to the snapshot documenting the cp114 prune.  Smoke now passes 11/11.
+
+### Failure 2 — `href-xss-smoke`
+
+**Smoke logic:** scans every `+page.svelte` and `lib/components/*.svelte` file for href attribute bindings that aren't safe-builder-wrapped or allowlisted, to catch the LL #38 class (operator/peer-controlled URL flowing into an `<a href={…}>`).
+
+**Failure cause:** cp112's new `feeds` prop on Head.svelte emits `<link href={feed.href}>` for RSS auto-discovery.  Smoke can't tell that `feed.href` comes from site-controlled call sites (current call sites pass the literal `/rss/orderbook.xml`), so it flagged the binding as potentially unsafe.
+
+**Fix (cp114):** added `'feed.href'` to the ALLOWLIST_HREF_EXPR map under the Head.svelte entry, with a comment explaining the site-controlled constraint.  **Plus hardened the contract**: extended Head.svelte's `feeds` prop docblock with an explicit SECURITY CONSTRAINT note — any future call site that wants to pass operator-/peer-controlled feed URLs must wrap them through `safeContactUrl()` first and update the allowlist comment.  Smoke now passes 1/1.
+
+### Lesson — Snapshot files + allowlists are part of the "wire everything" discipline
+
+cp112's verification matrix ran the SEO-class smokes I'd touched but NOT the workspace-wide smoke battery.  The snapshot file is owned by a smoke I didn't think of (native-translations-floor) and the allowlist is owned by a smoke I also didn't think of (href-xss).  Both should have been in cp112's "wire everything" checklist.
+
+**Carry-forward:** every cp that changes i18n keys (add OR delete) is on the hook for native-translations-snapshot.json.  Every cp that introduces a new href binding in a +page.svelte or component is on the hook for href-xss-smoke's ALLOWLIST_HREF_EXPR.  Add both to the standard pre-tarball checklist.
+
+The deeper carry-forward: **before tarball, always run the full local `scripts/run-smokes.sh`** at least once, not just the smokes I think are affected.  cp112 was a comprehensive SEO sweep; running the full battery locally would have caught both failures before push.  The CI catch is fine (that's what CI is for) but the round-trip cost (cp114 fix + fresh tarball) was avoidable.
+
+### File changes (cp114)
+
+- `apps/web/scripts/native-translations-snapshot.json` — pruned 4 orphaned keys from es/fr/de native arrays; updated `_meta.native_pair_counts_per_locale` (es: 2685→2681, fr: 2669→2665, de: 2660→2656); appended `_meta.last_surgical_edit` audit trail; bumped `baseline_taken_at` to 2026-05-22
+- `apps/web/scripts/href-xss-smoke.ts` — added `'feed.href'` to Head.svelte allowlist set with explanatory comment
+- `apps/web/src/lib/components/Head.svelte` — hardened the `feeds` prop docblock with SECURITY CONSTRAINT note pointing future contributors at safeContactUrl()
+- `TARBALL.md` — cp114 entry (this entry); handoff bumped (last-touched cp114)
+- `docs/REVISIT-LIST.md` — CP114 LESSONS section
+
+### Verification matrix (cp114)
+
+| Smoke | Result |
+|---|---|
+| `native-translations-floor` (was failing) | ✓ 11/11 |
+| `href-xss` (was failing) | ✓ 1/1 |
+| `seo-url-consistency` (cp112) | ✓ 366/366 |
+| `og-image-freshness` (cp112) | ✓ 6/6 |
+| `brag-list-claim-parity` (cp111) | ✓ 81/81 |
+| `brag-list-kiss-budget` | ✓ 2/2 |
+| `brag-list-trailer-invariants` | ✓ 4/4 |
+| `mediakit-freshness` | ✓ 6/6 |
+
+## cp113 — cp112 self-audit pass found 4 real bugs in cp112's own shipped code; fixed all 4 same turn (2026-05-22)
+
+**Tarball:** Not regenerated this checkpoint by default; the cp112 binary remains the source-of-truth resumption artifact unless Ken asks for a fresh one. cp113 is in-place edits on cp112.
+
+**State:** Unchanged from cp112 — 16 tradable assets · 35 ADRs · 304 brag entries · locale parity 2,832 × 10 = 28,320 · ~4,885/0 smokes (battery unchanged; the 4 fixes were to shipped code not new smoke surface) · 7/7 TS-clean · **40 defenses** (unchanged) · 1,381 vitest.
+
+### TL;DR
+
+Ken asked for a "careful audit-eye pass over cp112" before moving to the Matrix-notifications feature. That pass turned up 4 real bugs **in code I had just shipped**, plus a handful of theoretical and smoke-internal issues. All 4 real bugs fixed same turn.
+
+### Audit findings (15 total, 4 fixed this turn)
+
+**Fixed cp113:**
+
+- **A4 (MEDIUM)** — `jsonld.ts` Organization.logo claimed dimensions 512×512 pointing at `/brand/morphit-mark.svg`, but that SVG is **41×26** with viewBox `0 0 10.889 7.049`. Google's Logo guidelines require declared dimensions to match the actual file; mismatch = rejected logo or weird SERP rendering. **Fix:** repointed Organization.logo at `/app-icon.svg` which IS genuinely 512×512 (viewBox `0 0 512 512`).
+
+- **A10 (MEDIUM)** — `Head.svelte` emitted `og:locale = $currentLocale.replace('-', '_')` producing bare codes like `en`, `es`, `fr`. Facebook's OG spec requires `language_TERRITORY` form (`en_US`, `es_ES`, `fr_FR`). **Fix:** new `ogLocale()` helper in `urls.ts` with explicit map for the 10 supported locales (incl. `fa → fa_IR` per Persian default-region convention).
+
+- **A11 (MEDIUM)** — Missing `<meta property="og:locale:alternate">` tags. This is the OG analog of hreflang; without it, Facebook/LinkedIn can't pick the right preview when a share lands from a non-default language. **Fix:** new `ogLocaleAlternates()` helper + `{#each ... }` loop in Head.svelte emitting one tag per non-current locale.
+
+- **A12 (HIGH)** — Both cp112-converted privacy pages (`/[lang]/privacy/+page.svelte` + `/[lang]/privacy/[asset]/+page.svelte`) used `import { page } from '$app/state'` (Svelte 5 plain reactive object) while **every other file in the project uses `import { page } from '$app/stores'`** (Svelte store). Both worked at runtime but the pattern divergence was a "never assume, always verify" violation — I should have grepped the codebase for the conventional pattern before writing new code. **Fix:** both pages converted to `$app/stores` with `$page.params.X` access throughout (5 reference sites total).
+
+**Filed for follow-up (not fixed cp113):**
+
+- A1 (MEDIUM): `seo-url-consistency-smoke` doesn't check x-default URL parity between helper and sitemap-builder. Real coverage gap; fix when next touching the smoke.
+- A2 (LOW theoretical): `stripLocalePrefix` regex hard-codes 2-letter language base; will misbehave if someone ever adds a 3-letter locale.
+- A3 (LOW theoretical): unknown 2-letter "locale" prefixes (e.g. `/xy/foo` where `xy` looks like a locale code but isn't supported) silently fall through.
+- A6 (LOW): SoftwareApplication missing `screenshot` field (Google recommends it).
+- A7 (DESIGN — Ken's call): `privacy_asset` is `indexable: false`, meaning the 16 per-asset privacy guides × 10 locales = 160 high-quality long-form pages are NOT in the sitemap. Trade-off: keeping `indexable: false` decouples SEO registry from asset registry, but gives up real SERP impressions for evergreen keyword-rich content. Could flip to `indexable: true` with a smoke that enumerates asset registry → per-asset URLs and verifies sitemap presence.
+- A14 (MEDIUM): `seo-url-consistency-smoke` I-1 re-implements `localizedUrl()` in BOTH urls.ts and sitemap-builder shape, comparing two re-implementations — circular check. Fix would be to import the real functions.
+- A15 (MEDIUM): `og-image-freshness-smoke` uses mtime comparison which is unreliable across git clones (mtimes reset on checkout). Real fix is to hash the SVG content + record the hash in a sidecar file. Currently catches the common case (operator edits SVG, forgets to regenerate PNG, runs tests, fails loudly) but misses the "git pull regenerates both mtimes" edge.
+
+**Pedantic non-issues:**
+
+- A8 / A9 were initially flagged but cleared after deeper inspection (OG ordering of og:image:type IS correct; JSON-LD `</script>` escape IS sound).
+- A13 was a docstring drift too pedantic to fix.
+
+### File changes (cp113)
+
+- `apps/web/src/lib/seo/jsonld.ts` — A4 fix: Organization.logo URL + explanatory comment about why we don't use the brand mark
+- `apps/web/src/lib/seo/urls.ts` — new `ogLocale()` + `ogLocaleAlternates()` exports + 10-entry locale map
+- `apps/web/src/lib/components/Head.svelte` — A10/A11 fix: import + wire ogLocale + ogLocaleAlternates; emit conformant og:locale + og:locale:alternate
+- `apps/web/src/routes/[lang]/privacy/+page.svelte` — A12 fix: `$app/state` → `$app/stores` + `$page.params.lang`
+- `apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte` — A12 fix: same pattern, 5 reference sites
+- `TARBALL.md` — cp113 entry (this entry); handoff bumped
+- `docs/REVISIT-LIST.md` — CP113 LESSONS section
+
+### Verification matrix (cp113)
+
+| Check | Result |
+|---|---|
+| `seo-url-consistency-smoke` | ✓ 366/366 (helper logic refactor preserved URL emission) |
+| `og-image-freshness-smoke` | ✓ 6/6 |
+| `ogLocale('en')` returns `en_US` | ✓ (standalone Node verification) |
+| `ogLocaleAlternates('en')` returns 9 entries excluding `en_US` | ✓ |
+| `ogLocale('zh-CN')` returns `zh_CN` (not `zh-CN`) | ✓ |
+| `ogLocale('fa')` returns `fa_IR` (Persian default region) | ✓ |
+| Privacy pages: 0 bare `page.params` (all `$page.params`) | ✓ via grep |
+| Locale parity still 2,832 × 10 (no string changes) | ✓ (no locale files touched cp113) |
+
+### Lesson #1 — Audit your own turn before declaring done
+
+The 4 cp113 fixes were bugs **I shipped in cp112** less than an hour earlier. The cp112 turn felt thorough — mutation tests, comprehensive verification matrix, all smokes green — but the audit-eye pass turned up real issues across **3 of the files I touched most**. The pattern: I trusted my just-written code more than I should have, while distrusting decade-old code (urls.ts as it stood pre-cp112) appropriately.
+
+**Carry-forward:** for any non-trivial cp that touches new design surface, run a self-audit-eye pass at +1 turn before declaring the cp closed. Memory rule "NEVER ASSUME, ALWAYS VERIFY" extends to verifying my own just-shipped code, not just code from other contributors.
+
+### Lesson #2 — Grep before you import
+
+A12 was the most embarrassing: I wrote `import { page } from '$app/state'` because Svelte 5 docs mention that import path, without checking what **the rest of the project uses**. The rest of the project uses `$app/stores` consistently across 100+ files. A single `grep` would have surfaced the convention.
+
+**Carry-forward:** before introducing a new import or pattern, grep the codebase for how similar files do it. The project has converged on conventions for good reasons (sometimes archaeological, sometimes deliberate); diverging without cause is just creating future cleanup work.
+
+### Lesson #3 — mtime is the wrong tool for git-versioned artifact freshness
+
+A15 surfaced that the og-image-freshness smoke uses mtime, which is reset on git checkout. The robust check is content-hash + sidecar. Filed for a future cp; the practical bite-risk is low (smoke runs in CI on every push where mtimes are approximately simultaneous), but the principle generalizes — any "is artifact X derived from source Y" check should hash the source, not check mtimes.
+
+### Lesson #4 — Self-handicaps in SEO registry are still self-handicaps
+
+A7 surfaced that `privacy_asset` was set `indexable: false` to avoid coupling the SEO registry to the asset registry. That's a valid engineering reason for decoupling, but the SEO cost (160 long-form pages NOT in sitemap) is real. The coupling cost (1 smoke that enumerates ASSETS → privacy/{ticker} URLs and verifies sitemap presence) is small. Flipping to `indexable: true` is probably the right call once we decide. Ken's decision queued.
 
 ## cp112 — CI failure fix (brag-list-kiss-budget over-budget entries #80/#87/#195) + comprehensive SEO sweep + 2 new structural defenses (#39 seo-url-consistency + #40 og-image-freshness) + privacy pages converted from bare svelte:head to full Head + PNG OG image fallback unlocks Twitter/LinkedIn/Slack share previews (2026-05-22)
 

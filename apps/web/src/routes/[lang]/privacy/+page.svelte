@@ -14,7 +14,7 @@
 	 *  cards, robots, and onion-location are emitted alongside the
 	 *  title + description.  Adds BreadcrumbList JSON-LD for SERP
 	 *  breadcrumb display ("morphit.io › privacy"). */
-	import { page } from '$app/state';
+	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import { ASSETS } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
@@ -22,7 +22,7 @@
 	import { localizedUrl } from '$seo/urls';
 	import type { LocaleCode } from '$i18n/locales';
 
-	const lang = $derived(page.params.lang ?? 'en');
+	const lang = $derived($page.params.lang ?? 'en');
 	const tradable = $derived(ASSETS.filter((a) => a.canBeTraded));
 
 	/** BreadcrumbList for SERP breadcrumb display.  Two items: site
