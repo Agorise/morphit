@@ -569,8 +569,8 @@ working BLURT balance stays small.
    ```sh
    npm run mint-acts -- 25
    ```
-   (Equivalent to `npx tsx scripts/mint-acts.ts 25` if you prefer
-   the direct invocation; the npm script wraps it for operators
+   (Equivalent to running `npx tsx apps/relay/scripts/mint-acts.ts 25`
+   from the repo root; the npm script wraps it for operators
    without `tsx` on PATH.)
    Output looks like:
    ```
@@ -6372,10 +6372,18 @@ dropping to the service user).
 
 - Store secrets in `/opt/morphit/.env` (world-readable in a
   default git checkout)
-- Echo secrets to logs (Morphit's logger redacts `*_KEY*` and
-  `*_PASSWORD` env-var names; if you add a new secret-looking
-  var, audit the logger's redaction list — see
-  `apps/indexer/src/log/redact.ts`)
+- Echo secrets to logs (Morphit's logger redacts context-object
+  keys whose name matches a secret-suffix pattern — `*_KEY*`,
+  `*_PASSWORD`, `*_PASSPHRASE`, `*_SECRET`, `*_TOKEN`, `*_WIF`,
+  `*_MNEMONIC`, plus the camelCase variants `apiKey`,
+  `activeKey`, `userPassword`, etc.  Public identifiers like
+  `publicKey` / `VAPID_PUBLIC_KEY` are explicitly exempt.  See
+  `isSecretContextKey` / `redactSecrets` in
+  `apps/indexer/src/log/index.ts` for the canonical list and
+  unit tests in `apps/indexer/test/log.test.ts` for coverage.
+  If you add a new secret-shaped env var with a non-matching
+  name, either rename it to fit the pattern or extend the
+  allow-list)
 - Commit `.env` files to your operator-config repo (use
   `.env.example` with placeholder values, .gitignore the real
   one)

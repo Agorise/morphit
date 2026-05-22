@@ -10,7 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { logger, setLogSink, setLogLevel, type LogRecord, type LogSink } from '$log';
+import { logger, setLogSink, setLogLevel, REDACTED_MARKER, type LogRecord, type LogSink } from '$log';
 
 describe('logger', () => {
 	let captured: LogRecord[];
@@ -181,5 +181,115 @@ describe('jsonSink', () => {
 		// parsing the stream.
 		const parsed = JSON.parse(lines[0]!);
 		expect(parsed.msg).toBe('log_serialization_failed');
+	});
+});
+
+describe('secret redaction (cp84-O31)', () => {
+	let captured: LogRecord[];
+	let restore: () => void;
+
+	beforeEach(() => {
+		captured = [];
+		const sink: LogSink = (r) => captured.push(r);
+		restore = setLogSink(sink);
+		setLogLevel('info');
+		return () => restore();
+	});
+
+	it('redacts env-var-style secret keys (*_KEY, *_PASSWORD, etc.)', () => {
+		const log = logger('test');
+		log.info('event', {
+			VAPID_PRIVATE_KEY: 'should-be-redacted',
+			MORPHIT_RELAY_ACTIVE_KEY: 'should-be-redacted',
+			POSTGRES_PASSWORD: 'should-be-redacted',
+			SOME_TOKEN: 'should-be-redacted',
+			SOMETHING_SECRET: 'should-be-redacted'
+		});
+		const ctx = captured[0]!.context;
+		expect(ctx.VAPID_PRIVATE_KEY).toBe(REDACTED_MARKER);
+		expect(ctx.MORPHIT_RELAY_ACTIVE_KEY).toBe(REDACTED_MARKER);
+		expect(ctx.POSTGRES_PASSWORD).toBe(REDACTED_MARKER);
+		expect(ctx.SOME_TOKEN).toBe(REDACTED_MARKER);
+		expect(ctx.SOMETHING_SECRET).toBe(REDACTED_MARKER);
+	});
+
+	it('redacts camelCase secret-suffixed keys', () => {
+		const log = logger('test');
+		log.info('event', {
+			activeKey: 'redact-me',
+			postingKey: 'redact-me',
+			apiKey: 'redact-me',
+			userPassword: 'redact-me',
+			authToken: 'redact-me'
+		});
+		const ctx = captured[0]!.context;
+		expect(ctx.activeKey).toBe(REDACTED_MARKER);
+		expect(ctx.postingKey).toBe(REDACTED_MARKER);
+		expect(ctx.apiKey).toBe(REDACTED_MARKER);
+		expect(ctx.userPassword).toBe(REDACTED_MARKER);
+		expect(ctx.authToken).toBe(REDACTED_MARKER);
+	});
+
+	it('redacts standalone secret-named keys', () => {
+		const log = logger('test');
+		log.info('event', { wif: 'x', mnemonic: 'y', password: 'z', secret: 'w' });
+		const ctx = captured[0]!.context;
+		expect(ctx.wif).toBe(REDACTED_MARKER);
+		expect(ctx.mnemonic).toBe(REDACTED_MARKER);
+		expect(ctx.password).toBe(REDACTED_MARKER);
+		expect(ctx.secret).toBe(REDACTED_MARKER);
+	});
+
+	it('does NOT redact public-identifier keys', () => {
+		const log = logger('test');
+		log.info('event', {
+			VAPID_PUBLIC_KEY: 'BLT-pubkey-not-secret',
+			publicKey: 'BLT-pubkey',
+			pubkey: 'BLT-pubkey',
+			publicId: 'session-12345',
+			user_public_key: 'BLT-pubkey'
+		});
+		const ctx = captured[0]!.context;
+		expect(ctx.VAPID_PUBLIC_KEY).toBe('BLT-pubkey-not-secret');
+		expect(ctx.publicKey).toBe('BLT-pubkey');
+		expect(ctx.pubkey).toBe('BLT-pubkey');
+		expect(ctx.publicId).toBe('session-12345');
+		expect(ctx.user_public_key).toBe('BLT-pubkey');
+	});
+
+	it('does NOT redact innocent words that contain Key/key substrings', () => {
+		const log = logger('test');
+		log.info('event', {
+			monkey: 'innocent',
+			donkey: 'innocent',
+			keystore_status: 'ok' // contains "key" but as a noun, not as a suffix
+		});
+		const ctx = captured[0]!.context;
+		expect(ctx.monkey).toBe('innocent');
+		expect(ctx.donkey).toBe('innocent');
+		expect(ctx.keystore_status).toBe('ok');
+	});
+
+	it('recurses into nested plain objects', () => {
+		const log = logger('test');
+		log.info('event', {
+			outer: {
+				safeField: 'ok',
+				activeKey: 'redact-me-too',
+				nested: { POSTGRES_PASSWORD: 'redact-deep' }
+			}
+		});
+		const ctx = captured[0]!.context as Record<string, Record<string, unknown>>;
+		expect(ctx.outer!.safeField).toBe('ok');
+		expect(ctx.outer!.activeKey).toBe(REDACTED_MARKER);
+		expect((ctx.outer!.nested as Record<string, unknown>).POSTGRES_PASSWORD).toBe(REDACTED_MARKER);
+	});
+
+	it('does not mutate the original context object', () => {
+		const log = logger('test');
+		const ctx = { activeKey: 'still-here-after-log' };
+		log.info('event', ctx);
+		expect(ctx.activeKey).toBe('still-here-after-log');
+		expect(captured[0]!.context.activeKey).toBe(REDACTED_MARKER);
 	});
 });

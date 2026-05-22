@@ -10,11 +10,11 @@
 
 ## Why this matters
 
-The v1.0.0-beta.1 release ceremony has 10 steps. Steps 1-7 are repo-state and tag-publication actions that the maintainer performs manually (covered in `docs/RELEASE-CEREMONY.md`). Steps 8, 9, and 10 are CI-driven:
+The v1.0.0-beta.1 release ceremony has 10 steps. Steps 1-7 are repo-state and tag-publication actions that the maintainer performs manually (the full step-by-step ceremony lives at the head of `.forgejo/workflows/release.yml` and in the v1.0.0-beta.1 RELEASE-NOTES checklist). Steps 8, 9, and 10 are CI-driven:
 
 - **Step 8** — On `v*` tag push, run the test matrix against a fresh checkout and produce a signed manifest of the tarball SHAs.
 - **Step 9** — On manifest verification, produce the release tarball and attach it to the Forgejo release page.
-- **Step 10** — On tarball attach, mirror to `morphit.io/releases` and the public mirrors listed in `docs/MIRROR-LIST.md`.
+- **Step 10** — On tarball attach, mirror to `morphit.io/releases` and the public mirrors known to the federation directory (see `docs/ARCHITECTURE.md` §Federation for the mirror-discovery model).
 
 None of those steps execute until a Forgejo runner is registered with the `git.agorise.net` instance.
 
@@ -178,7 +178,7 @@ Trigger via the Forgejo UI (`Actions → runner-smoke-test → Run workflow`). E
 
 ## Step 7 — Re-run the v1.0.0-beta.1 release ceremony steps 8/9/10
 
-With the runner registered and smoke-tested, the existing release workflows at `.forgejo/workflows/release.yml` will execute on the next `v*` tag push. See `docs/RELEASE-CEREMONY.md` for the full ceremony.
+With the runner registered and smoke-tested, the existing release workflows at `.forgejo/workflows/release.yml` will execute on the next `v*` tag push. The full ceremony walkthrough lives at the head of that workflow file and in the v1.0.0-beta.1 RELEASE-NOTES checklist.
 
 ## Troubleshooting
 

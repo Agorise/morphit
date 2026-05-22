@@ -233,7 +233,7 @@ Find the `asset:` and `fee_method:` zod schemas.  Add the new
 ticker.  Same for any per-method conditional checks (e.g.
 "externalTxId is required when method is btc/xmr/<new>").
 
-**File:** `apps/indexer/src/indexer/handlers/chatMessage.ts` (if
+**File:** `apps/indexer/src/indexer/handlers/chat.ts` (if
 chat-payload methods extended)
 
 Same — add the new method to validation.

@@ -234,6 +234,12 @@ is:
 | USDC  | hd-derived         | null                   | usdc            |
 | DAI   | hd-derived         | null                   | dai             |
 | DOGE  | hd-derived         | null                   | doge            |
+| ZEC   | hd-derived         | [shielded-pools]       | zec             |
+| ARRR  | hd-derived         | [shielded-pools]       | arrr            |
+| DCR   | hd-derived         | [csppmix]              | dcr             |
+| SOL   | hd-derived         | null                   | sol             |
+| ETH   | hd-derived         | null                   | eth             |
+| XRP   | hd-derived         | null                   | xrp             |
 
 Added after this ADR's ship date:
 - **DASH** (Part 122 cp27) — opt-in PrivateSend mixing via
@@ -245,6 +251,24 @@ Added after this ADR's ship date:
   Peg Stability Module USDC backing transitively affects).
 - **DOGE** (Part 122 cp33) — fair-launched, merge-mined with
   LTC, no native privacy upgrade.
+- **ZEC** (Part 122) — Zcash; transparent (`t1`/`t3`) and shielded
+  (`zs1` Sapling, `u1` Unified Address) addresses coexist on the
+  same chain.  Per-trade privacy posture is the user's choice.
+- **ARRR** (Part 122) — Pirate Chain; shielded-by-construction
+  (Sapling only; no transparent option at the chain layer).
+- **DCR** (Part 122) — Decred; hybrid PoW/PoS chain with opt-in
+  CoinShuffle++ mixing.
+- **SOL** (Part 122) — Solana; high-throughput PoS, transparent.
+- **ETH** (Part 122) — Ethereum; post-Merge PoS, transparent,
+  EIP-55 mixed-case-checksum address validation.
+- **XRP** (Part 122) — XRP Ledger; Federated Byzantine Agreement,
+  transparent, destination-tag-aware.
+
+> **Forward-note (Part 122 cp84, 2026-05-21):** asset count grew
+> from the cp35 snapshot's 10 to the current 16 (ZEC, ARRR, DCR,
+> SOL, ETH, XRP added).  Privacy framework decision is unchanged;
+> all six additions plug in via the registry-driven
+> `privacyFeatures` struct without modifying framework code.
 
 **Canonical reference** remains `packages/asset-registry/src/index.ts`.
 This footnote is a convenience snapshot; the registry is

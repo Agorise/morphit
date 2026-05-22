@@ -77,9 +77,18 @@ describe('AltchaService', () => {
 		const svc = make();
 		const c = svc.issue();
 		const sol = solve(c);
-		// Flip a character in the signature.
+		// Flip the FIRST character of the signature.
+		//
+		// altcha currently encodes sig as hex (4-bit-per-digit, no
+		// padding-equivalent positions), so any single-char flip
+		// changes the decoded bytes — last-char flip works fine
+		// here.  But Part 85 documented the broader anti-pattern
+		// for base64url HMACs, where last-char flips ~6% of the
+		// time decode to the same bytes.  Using first-char flip
+		// here keeps the test resilient if altcha's encoding ever
+		// changes to base64url (no diff to the assertion's intent).
 		const sig = sol.signature;
-		const tamperedSig = sig.slice(0, -1) + (sig.at(-1) === 'a' ? 'b' : 'a');
+		const tamperedSig = (sig.at(0) === 'a' ? 'b' : 'a') + sig.slice(1);
 		const r = svc.verify({ ...sol, signature: tamperedSig });
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.code).toBe('altcha_bad_signature');
