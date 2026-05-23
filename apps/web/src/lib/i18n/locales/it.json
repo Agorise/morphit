@@ -482,7 +482,10 @@
 			"feedback_load_failed": "Non siamo riusciti a caricare i feedback.",
 			"feedback_given_load_failed": "Non siamo riusciti a caricare i feedback dati da questo account.",
 			"orders_load_failed": "Non siamo riusciti a caricare gli ordini."
-		}
+		},
+		"as_buyer": "come acquirente",
+		"as_seller": "come venditore",
+		"last_traded_label": "Ultimo scambio:"
 	},
 	"home": {
 		"hero_title": "Scambia Monero, Bitcoin e altro con valute fiat+ in modo privato",
@@ -1086,6 +1089,10 @@
 			"what_is_reputation": {
 				"q": "Come funziona il sistema di reputazione di Morphit?",
 				"a": "Ogni scambio completato permette a entrambe le parti di lasciare una recensione: una valutazione da 1 a 5 stelle e un commento facoltativo. La recensione viene pubblicata on-chain, quindi è permanente e pubblica — chiunque può leggerla sulla pagina profilo di un trader. Il profilo mostra una valutazione media ponderata, un conteggio delle recensioni e una ripartizione per stelle, così vedi a colpo d'occhio se un trader ha uno storico coerente o qualche eccezione. Non c'è un arbitro centrale; le recensioni della comunità sono il segnale di reputazione.\n\n**Se le persone devono fidarsi di te, la tua reputazione è tutto.**\n\nMorphit non ha arbitri, depositari né storni. L'unica cosa che fa fidare uno sconosciuto del tuo denaro è lo storico visibile che hai costruito. Tratta ogni scambio come se contasse — perché ogni scambio è una voce pubblica e permanente nell'unica reputazione che conta: la tua."
+			},
+			"how_to_build_high_reputation": {
+				"q": "Come costruisco un alto punteggio di reputazione su Morphit?",
+				"a": "La reputazione su Morphit si costruisce **organicamente** — scambiando regolarmente, ricevendo feedback reali da controparti reali, ed evitando schemi che il sistema marca come sospetti. Non c'è scorciatoia.\n\n**Cosa conta per il tuo punteggio** (in ordine di impatto):\n\n1. **Scambi verificati e completati.** Ogni ordine con `fee_status = 'verified'` e un feedback da una controparte conta.\n\n2. **L'attività recente conta più di quella antica.** Morphit usa un'**emivita di 365 giorni** con decadimento esponenziale: oggi = 1.0×, un anno = 0.5×, due anni = 0.25×. **Scambia regolarmente.**\n\n3. **Lato acquirente E venditore.** Il tuo profilo mostra valutazioni separate per lato.\n\n4. **Distintivi di chat verificata.** Una recensione porta un distintivo quando tu e la controparte avete scambiato ≥2 messaggi in ciascuna direzione su ≥15 minuti.\n\n5. **Recenza dell'ultima attività.** Il profilo mostra \"Ultimo scambio: N fa.\"\n\n**Cosa NON gonfia il tuo punteggio** (il sistema filtra questo):\n\n- Auto-recensioni (rifiutate a livello di protocollo)\n- Account sock-puppet (Segnale A)\n- Anelli di reciprocità mutua ad alta stella (Segnale B)\n- Attacchi di concentrazione (Segnale D — ≥80% su un target)\n- Feedback senza ordine citato\n- Valanghe coordinate di 1 stella (Segnale C)\n\n**Cosa DOVRESTI fare:**\n\n1. Completare scambi reali fino alla fine\n2. Pagare la commissione di listing (BLURT 50% in meno)\n3. Reciprocare i feedback\n4. Avere conversazioni di chat reali\n5. Scrivere commenti dettagliati\n6. Scambiare su entrambi i lati\n7. Scambiare con controparti diverse\n8. Rimanere attivo\n\n**Cosa DOVRESTI evitare:**\n\n1. Non creare account alternativi per auto-recensirti\n2. Non coordinare attacchi\n3. Non pagare per recensioni false\n4. Non lasciare recensioni di passaggio\n\n**Verifica — chiunque può controllare il tuo punteggio.** Morphit spedisce una **ricevuta pubblica di reputazione**: `GET /v1/accounts/<tuo-account>/reputation-receipt`. Qualsiasi lettore può ottenere l'insieme completo delle righe di feedback (incluse ED escluse, con la ragione di ogni esclusione), il peso di decadimento, e la formula utilizzata.\n\n**Avvertenze oneste:**\n\n- **I primi scambi sono i più difficili.** Un account nuovo mostra un distintivo `is_new_trader` fino a 4+ scambi verificati.\n- **Le recensioni cattive si recuperano nel tempo ma non vengono cancellate.**\n- **Il sistema NON rileva se lo scambio è effettivamente avvenuto.** Il regolamento è off-chain.\n\n**Il percorso più breve per un'alta reputazione: scambia regolarmente, regola in modo affidabile, conversa con le tue controparti, lascia feedback onesti in entrambe le direzioni, e lascia che il tempo + il filtraggio delle tabelle dei segnali facciano il resto.**"
 			},
 			"how_to_leave_feedback": {
 				"q": "Come lascio una recensione dopo un'operazione?",

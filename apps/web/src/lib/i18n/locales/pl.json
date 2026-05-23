@@ -482,7 +482,10 @@
 			"feedback_load_failed": "Nie udało się załadować opinii.",
 			"feedback_given_load_failed": "Nie udało się załadować opinii wystawionych przez to konto.",
 			"orders_load_failed": "Nie udało się załadować zleceń."
-		}
+		},
+		"as_buyer": "jako kupujący",
+		"as_seller": "jako sprzedający",
+		"last_traded_label": "Ostatnia transakcja:"
 	},
 	"home": {
 		"hero_title": "Handluj prywatnie Monero, Bitcoinem i innymi za waluty fiat+",
@@ -1086,6 +1089,10 @@
 			"what_is_reputation": {
 				"q": "Jak działa system reputacji Morphit?",
 				"a": "Każda zakończona transakcja pozwala obu stronom zostawić opinię: ocenę 1–5 gwiazdek i opcjonalny komentarz. Opinia jest publikowana on-chain, więc jest stała i publiczna — każdy może ją przeczytać na profilu tradera. Profil pokazuje ważoną średnią ocenę, liczbę recenzji i rozkład po gwiazdkach, więc od razu widzisz czy trader ma spójną historię, czy kilka odstających ocen. Nie ma centralnego arbitra; opinie społeczności są sygnałem reputacji.\n\n**Jeśli ludzie mają ci zaufać, twoja reputacja jest wszystkim.**\n\nMorphit nie ma arbitrów, depozytariuszy ani chargebacków. Jedyne, co sprawia, że obcy zaufa ci ze swoimi pieniędzmi, to widoczna historia, którą zbudowałeś. Traktuj każdą transakcję jakby była ważna — bo każda transakcja to publiczny, stały wpis w jedynej reputacji, która się liczy: twojej."
+			},
+			"how_to_build_high_reputation": {
+				"q": "Jak zbudować wysoką reputację na Morphit?",
+				"a": "Reputacja na Morphit budowana jest **organicznie** — przez konsekwentny handel, prawdziwy feedback od prawdziwych kontrahentów, i unikanie wzorców, które system flaguje jako podejrzane. Nie ma skrótu.\n\n**Co liczy się do twojego wyniku** (w kolejności wpływu):\n\n1. **Zweryfikowane, ukończone transakcje.** Każde zlecenie z `fee_status = 'verified'` i feedbackiem od kontrahenta liczy się.\n\n2. **Niedawna aktywność liczy się bardziej niż dawna.** Morphit używa **365-dniowego okresu półtrwania** z eksponencjalnym zanikiem: dziś = 1.0×, rok temu = 0.5×, dwa lata = 0.25×. **Handluj regularnie.**\n\n3. **Obie strony — kupna ORAZ sprzedaży.** Twój profil pokazuje osobne oceny dla każdej strony.\n\n4. **Odznaki zweryfikowanego czatu.** Recenzja niesie odznakę, gdy ty i kontrahent wymienicie ≥2 wiadomości w każdą stronę przez ≥15 minut.\n\n5. **Aktualność ostatniej aktywności.** Profil pokazuje \"Ostatnia transakcja: N temu.\"\n\n**Co NIE zwiększa twojego wyniku** (system to filtruje):\n\n- Samoreceznje (odrzucone na poziomie protokołu)\n- Konta sockpuppet (Sygnał A)\n- Wzajemne pierścienie wysokich gwiazdek (Sygnał B)\n- Ataki koncentracji (Sygnał D — ≥80% skupienia na jednym celu)\n- Feedback bez zacytowanego zlecenia\n- Skoordynowane ataki 1-gwiazdkowe (Sygnał C)\n\n**Co POWINIENEŚ robić:**\n\n1. Realizować prawdziwe transakcje do końca\n2. Płacić opłatę za listing (BLURT 50% taniej)\n3. Odwzajemniać feedback\n4. Prowadzić prawdziwe rozmowy na czacie\n5. Pisać szczegółowe komentarze\n6. Handlować po obu stronach\n7. Handlować z różnymi kontrahentami\n8. Pozostać aktywnym\n\n**Czego POWINIENEŚ unikać:**\n\n1. Nie twórz kont alternatywnych do samooceniania\n2. Nie organizuj skoordynowanych ataków\n3. Nie płać za fałszywe recenzje\n4. Nie zostawiaj recenzji przelotnych\n\n**Weryfikacja — każdy może audytować twój wynik.** Morphit udostępnia **publiczny rachunek reputacji**: `GET /v1/accounts/<twoje-konto>/reputation-receipt`. Każdy może pobrać pełny zestaw wierszy feedbacku (włączonych I wykluczonych, z powodem każdego wykluczenia), wagę zaniku, i użytą formułę.\n\n**Szczere zastrzeżenia:**\n\n- **Pierwsze transakcje są najtrudniejsze.** Nowe konto pokazuje odznakę `is_new_trader` do 4+ zweryfikowanych transakcji.\n- **Złe recenzje regenerują się z czasem, ale nie są kasowane.**\n- **System NIE wykrywa \"czy transakcja faktycznie miała miejsce.\"** Rozliczenie jest off-chain.\n\n**Najkrótsza droga do wysokiej reputacji: handluj konsekwentnie, rozliczaj niezawodnie, rozmawiaj z kontrahentami, zostawiaj uczciwy feedback w obie strony, i pozwól czasowi + filtrowaniu tabeli sygnałów zrobić resztę.**"
 			},
 			"how_to_leave_feedback": {
 				"q": "Jak wystawić opinię po transakcji?",

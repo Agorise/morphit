@@ -48,6 +48,10 @@ function narrowCursor(v: unknown): Cursor | null {
 interface SummaryRow {
 	count: string; // bigint → string
 	weighted_rating: string | null; // NUMERIC → string, null if count=0
+	buy_count: string;
+	buy_weighted_rating: string | null;
+	sell_count: string;
+	sell_weighted_rating: string | null;
 	r1: string;
 	r2: string;
 	r3: string;
@@ -112,8 +116,21 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		// aggregate the user reads as "trader's reputation."
 		const summary = await db.query<SummaryRow>(
 			`WITH non_suppressed AS (
-				SELECT f.rating
+				SELECT f.rating, f.created_at, o.side
 				  FROM feedback f
+				  -- cp124 H5: JOIN to orders so we can classify each
+				  -- feedback row by the cited order's side (buy/sell).
+				  -- The existing intake-time check already guarantees:
+				  --   - order_permlink IS NOT NULL (the WHERE filter)
+				  --   - the cited order exists, belongs to subject,
+				  --     AND has fee_status='verified'
+				  -- so an INNER JOIN is structurally guaranteed to
+				  -- find a row.  Defensive: if we ever loosen that
+				  -- check, INNER JOIN cleanly drops orphan rows from
+				  -- the by_side breakdown without polluting totals.
+				  JOIN orders o
+				    ON o.account = f.subject
+				   AND o.permlink = f.order_permlink
 				 WHERE f.subject = $1
 				   AND f.order_permlink IS NOT NULL
 				   AND NOT EXISTS (
@@ -138,10 +155,52 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				        WHERE owpo.subject = f.subject
 				          AND attacker->>'reviewer' = f.reviewer
 				   )
+				   -- cp123 (Signal D — review concentration): exclude
+				   -- feedback from reviewers flagged for concentrating
+				   -- ≥80% of their reviews on a single subject (closes
+				   -- Part 113 A4 residual).  See signals.ts:
+				   -- detectReviewConcentration.
+				   AND NOT EXISTS (
+				       SELECT 1 FROM review_concentration rc
+				        WHERE rc.reviewer = f.reviewer
+				          AND rc.dominant_subject = f.subject
+				   )
 			)
 			SELECT
 				COUNT(*)::text AS count,
-				CASE WHEN COUNT(*) > 0 THEN ROUND(AVG(rating)::NUMERIC, 2)::text ELSE NULL END AS weighted_rating,
+				-- cp123 H1: time-decay weighted rating with 365-day
+				-- half-life.  See apps/indexer/src/indexer/reputation/decay.ts
+				-- for the rationale.  Empty result → NULL.
+				CASE WHEN COUNT(*) > 0
+				     THEN ROUND(
+				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
+				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
+				            2
+				          )::text
+				     ELSE NULL
+				END AS weighted_rating,
+				-- cp124 H5: same formula, FILTERed by side, for the
+				-- by_side breakdown.  Buyer/seller asymmetry is a
+				-- meaningful trust signal — a trader great as buyer
+				-- but bad as seller deserves to be visible.
+				COUNT(*) FILTER (WHERE side = 'buy')::text AS buy_count,
+				CASE WHEN COUNT(*) FILTER (WHERE side = 'buy') > 0
+				     THEN ROUND(
+				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'buy') /
+				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'buy'), 0),
+				            2
+				          )::text
+				     ELSE NULL
+				END AS buy_weighted_rating,
+				COUNT(*) FILTER (WHERE side = 'sell')::text AS sell_count,
+				CASE WHEN COUNT(*) FILTER (WHERE side = 'sell') > 0
+				     THEN ROUND(
+				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'sell') /
+				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'sell'), 0),
+				            2
+				          )::text
+				     ELSE NULL
+				END AS sell_weighted_rating,
 				SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END)::text AS r1,
 				SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END)::text AS r2,
 				SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END)::text AS r3,
@@ -151,6 +210,28 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			[account]
 		);
 		const s = summary.rows[0]!;
+
+		// ─── cp124 H6: last_traded_at (dormancy signal) ─────────────
+		// Single query — MAX(created_at) across the two activity
+		// sources that matter for a "real" trader:
+		//   1. orders posted with fee_status='verified'
+		//   2. feedback received as subject (someone else completed
+		//      a trade with this account and left a review)
+		// We DON'T include feedback the account LEFT (that's review
+		// activity, not trade activity).
+		// Returns NULL if the account has neither posted a verified
+		// order nor received any feedback.
+		const dormancy = await db.query<{ last_traded_at: Date | null }>(
+			`SELECT GREATEST(
+			          (SELECT MAX(created_at) FROM orders
+			            WHERE account = $1 AND fee_status = 'verified'),
+			          (SELECT MAX(created_at) FROM feedback
+			            WHERE subject = $1)
+			        ) AS last_traded_at`,
+			[account]
+		);
+		const lastTradedAt = dormancy.rows[0]?.last_traded_at ?? null;
+
 		const summaryObj = {
 			count: parseInt(s.count, 10),
 			weighted_rating: s.weighted_rating === null ? 0 : Number(s.weighted_rating),
@@ -160,7 +241,28 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				'3': parseInt(s.r3, 10),
 				'4': parseInt(s.r4, 10),
 				'5': parseInt(s.r5, 10)
-			}
+			},
+			// cp124 H5: side-of-trade distinction.  A trader great as
+			// buyer but bad as seller (or vice versa) deserves to be
+			// visible — readers see "as buyer: 4.92 (50) · as seller:
+			// 3.21 (10)" instead of a single conflated number.
+			// weighted_rating null when count on that side is 0.
+			by_side: {
+				buy: {
+					count: parseInt(s.buy_count, 10),
+					weighted_rating: s.buy_weighted_rating === null ? null : Number(s.buy_weighted_rating)
+				},
+				sell: {
+					count: parseInt(s.sell_count, 10),
+					weighted_rating: s.sell_weighted_rating === null ? null : Number(s.sell_weighted_rating)
+				}
+			},
+			// cp124 H6: dormancy signal.  ISO-8601 string when known,
+			// null when the account has no verified orders + no
+			// feedback (brand-new account).  Readers see "last traded
+			// 3 days ago" vs "last traded 2 years ago" — informs
+			// trust without changing any numeric score.
+			last_traded_at: lastTradedAt === null ? null : lastTradedAt.toISOString()
 		};
 
 		// ─── Feedback page ────────────────────────────────────────

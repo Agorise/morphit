@@ -278,410 +278,418 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 116. **Reputation can't be faked.** Your displayed star average is computed only from on-chain feedback rows whose `reviewer` signed the op AND whose feedback is tethered to a real on-chain order (not free-form). Self-signing isn't possible — the chain rejects ops without a valid signature from the reviewer's posting key — and the indexer further excludes (reviewer, subject) pairs flagged in `suspicious_reciprocity` (sock-puppet pattern) or `related_accounts` (linked-account heuristics). What's left, averaged and rounded to 2 decimals, is what the world sees.
 
-117. **Positive feedback builds your reputation.** Every counterparty who rates you 4 or 5 stars after a real on-chain trade lifts your average. Keep in mind: if you want people to trade with you, your reputation is everything. New accounts show up with an `is_new_trader` flag (fewer than 4 ratings) — and counterparties may be wary of trading with someone whose reputation has yet to be established.
+117. **Recent feedback weighs more than ancient feedback.** Your published rating uses a 365-day exponential half-life — today's review counts 1.0×, a year-old review 0.5×, two-year-old 0.25×. A trader who turned bad can't dilute recent 1-stars with stale 5-stars; raw count stays visible separately so historical context isn't lost. Displayed to 2-decimal precision (4.74, not 4.7).
 
-118. **Sock-puppet detection.** The indexer runs a `suspicious_reciprocity` heuristic that flags pairs who exclusively review each other. Suppressed feedback is excluded from the headline rating but visible in the raw history.
+118. **Public verifiable reputation receipt.** Fetch `GET /v1/accounts/<account>/reputation-receipt` and you get every feedback row about that account (included AND excluded, with the reason for each exclusion), the decay weight applied to each row, and the formula used. Any reader with chain access can independently re-derive the published score — reputation is verify-against-chain, not trust-the-indexer.
 
-119. **Verified-chat badges.** Feedback rows get a "verified chat" badge if the reviewer-subject pair had a real-looking on-chain conversation BEFORE the review: at least 2 messages from each side (bidirectional, not one-shot), at least 15 minutes between first and last message, and the pair isn't flagged in suspicious-reciprocity. Defeats the "fake-trade-fake-review" pattern by requiring evidence of actual interaction.
+119. **Positive feedback builds your reputation.** Every counterparty who rates you 4 or 5 stars after a real on-chain trade lifts your average. Keep in mind: if you want people to trade with you, your reputation is everything. New accounts show up with an `is_new_trader` flag (fewer than 4 ratings) — and counterparties may be wary of trading with someone whose reputation has yet to be established.
 
-120. **Feedback responses are themselves on-chain.** When you reply to feedback you received, the response is signed and attached. No "edit out the bad review" pattern.
+120. **Sock-puppet detection.** The indexer runs a `suspicious_reciprocity` heuristic that flags pairs who exclusively review each other. Suppressed feedback is excluded from the headline rating but visible in the raw history.
 
-121. **Engagement counter** shows how many distinct accounts messaged the order owner about a specific order in the last 24 hours. Tells you if an order is alive or stale.
+121. **Diversification-resistant concentration detector.** Catches reviewers who concentrate ≥80% of their reviews on a single high-star target over a 30-day window — including the smart attacker who reviewed a few throwaway third parties to evade the older sock-puppet detector's stricter mutual-only rule. Flagged feedback is excluded from the published rating but remains visible in raw history.
 
-122. **Loyalty milestones** delegate progressively more BP (10/50/200/1000, totaling 1,260 BP) as you accumulate cumulative BLURT-fee spend. Real reward for sustained good-faith trading.
+122. **Verified-chat badges.** Feedback rows get a "verified chat" badge if the reviewer-subject pair had a real-looking on-chain conversation BEFORE the review: at least 2 messages from each side (bidirectional, not one-shot), at least 15 minutes between first and last message, and the pair isn't flagged in suspicious-reciprocity. Defeats the "fake-trade-fake-review" pattern by requiring evidence of actual interaction.
 
-123. **Welcome bonus on first completed trade: 10 BLURT liquid + 10 BLURT Power (BP).** BP is your own vested, staked BLURT — not a delegation, not borrowed. You own it. Staking earns you curation rewards, empowers your upvotes, and earns you ~2% interest (APR).
+123. **Side-of-trade breakdown + dormancy signal.** Your profile shows separate weighted ratings for buyer-side and seller-side trades — a trader great as buyer but careless as seller is visible to readers. A "Last traded: N ago" chip surfaces freshness (verified-fee order posted OR feedback received) so readers see if an account is dormant without changing the numeric score.
 
-124. **First-fee welcome BP** delegates 1 BP on your first BLURT-paid listing fee, separate from the welcome bonus. Small symbolic stake giving you a foot in the broader Blurt ecosystem.
+124. **Feedback responses are themselves on-chain.** When you reply to feedback you received, the response is signed and attached. No "edit out the bad review" pattern.
 
-125. **Reputation can't be migrated to a competitor's silo.** It's on a public chain. Your reputation is yours, portable across every Morphit instance. If you want to start using a different operator's frontend, your reputation comes with you.
+125. **Engagement counter** shows how many distinct accounts messaged the order owner about a specific order in the last 24 hours. Tells you if an order is alive or stale.
 
-126. **A built-in notifications system with inbox.** Three ambient channels (browser tab title prefix, favicon dot, PWA app-icon badge) never interrupt; three opt-in interactive channels (OS notifications, audio chime, mobile vibration) ask permission at the point of relevance instead of on page-load — roughly 3× the grant rate. Web Push delivers notifications even when the Morphit tab is closed or the phone is locked, using operator-generated VAPID keys (no external service). Settings → Notifications has the full toggle panel; the inbox is at `/notifications` with mark-read, dismiss, and per-channel preferences.
+126. **Loyalty milestones** delegate progressively more BP (10/50/200/1000, totaling 1,260 BP) as you accumulate cumulative BLURT-fee spend. Real reward for sustained good-faith trading.
+
+127. **Welcome bonus on first completed trade: 10 BLURT liquid + 10 BLURT Power (BP).** BP is your own vested, staked BLURT — not a delegation, not borrowed. You own it. Staking earns you curation rewards, empowers your upvotes, and earns you ~2% interest (APR).
+
+128. **First-fee welcome BP** delegates 1 BP on your first BLURT-paid listing fee, separate from the welcome bonus. Small symbolic stake giving you a foot in the broader Blurt ecosystem.
+
+129. **Reputation can't be migrated to a competitor's silo.** It's on a public chain. Your reputation is yours, portable across every Morphit instance. If you want to start using a different operator's frontend, your reputation comes with you.
+
+130. **A built-in notifications system with inbox.** Three ambient channels (browser tab title prefix, favicon dot, PWA app-icon badge) never interrupt; three opt-in interactive channels (OS notifications, audio chime, mobile vibration) ask permission at the point of relevance instead of on page-load — roughly 3× the grant rate. Web Push delivers notifications even when the Morphit tab is closed or the phone is locked, using operator-generated VAPID keys (no external service). Settings → Notifications has the full toggle panel; the inbox is at `/notifications` with mark-read, dismiss, and per-channel preferences.
 ## 9. Anti-spam and anti-Sybil (without surveillance)
 
-127. **Listing fees rise with abuse.** Sybil-tier multiplier scales: 4th order in 24h = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×. Honest traders pay $0.12; spammers pay rapidly-growing tolls.
+131. **Listing fees rise with abuse.** Sybil-tier multiplier scales: 4th order in 24h = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×. Honest traders pay $0.12; spammers pay rapidly-growing tolls.
 
-128. **Cold-message fees** discourage drive-by spam. First-time DM to someone you've never traded with costs ~$0.01 in BLURT, escalating with abuse history.
+132. **Cold-message fees** discourage drive-by spam. First-time DM to someone you've never traded with costs ~$0.01 in BLURT, escalating with abuse history.
 
-129. **Featured-slot bidding is auctioned, with anti-snipe protections and outbid alerts.** Top-of-orderbook placement requires outbidding, but minimum-hours floors prevent micro-bid sniping, bids go to the operator (no project skim), and a soft-close rule extends the deadline of any expiring top-5 bid when a new bidder triggers it in the last 5 minutes (capped at 6 extensions / 30 min). Bidders see their own recent bids inline with the bid form (status chips: Visible / Outranked / Expired / Order ended), so they know what to pay before pressing submit. When a new bid outranks yours, the displaced bidder gets a push notification with one-tap re-bid.
+133. **Featured-slot bidding is auctioned, with anti-snipe protections and outbid alerts.** Top-of-orderbook placement requires outbidding, but minimum-hours floors prevent micro-bid sniping, bids go to the operator (no project skim), and a soft-close rule extends the deadline of any expiring top-5 bid when a new bidder triggers it in the last 5 minutes (capped at 6 extensions / 30 min). Bidders see their own recent bids inline with the bid form (status chips: Visible / Outranked / Expired / Order ended), so they know what to pay before pressing submit. When a new bid outranks yours, the displaced bidder gets a push notification with one-tap re-bid.
 
-130. **Account creation costs the operator 100 BLURT per signup.** That's a real economic gate. Sybil farms attacking a Morphit instance must convince the operator's relay to spend real money on each puppet account, which the operator's daily-ceiling defenses cap.
+134. **Account creation costs the operator 100 BLURT per signup.** That's a real economic gate. Sybil farms attacking a Morphit instance must convince the operator's relay to spend real money on each puppet account, which the operator's daily-ceiling defenses cap.
 
-131. **Per-IP signup spacing.** Multiple invite-token issuance from the same IP triggers an Altcha PoW challenge.
+135. **Per-IP signup spacing.** Multiple invite-token issuance from the same IP triggers an Altcha PoW challenge.
 
-132. **`/v1/health` short-circuits signups when the relay is low on funds.** Drains stop before they become unbounded.
+136. **`/v1/health` short-circuits signups when the relay is low on funds.** Drains stop before they become unbounded.
 
-133. **Drainer has defense-in-depth.** Per-row caps (N BLURT max amount per queued transfer), savepoint isolation per op, idempotency guards.
+137. **Drainer has defense-in-depth.** Per-row caps (N BLURT max amount per queued transfer), savepoint isolation per op, idempotency guards.
 
-134. **No invite is "verified by SMS / phone."** No carrier surveillance. The invite system uses cryptographic proof-of-work, not telecom data.
+138. **No invite is "verified by SMS / phone."** No carrier surveillance. The invite system uses cryptographic proof-of-work, not telecom data.
 
-135. **No CAPTCHA from a third party.** Altcha is self-hosted, doesn't phone home, doesn't track.
+139. **No CAPTCHA from a third party.** Altcha is self-hosted, doesn't phone home, doesn't track.
 
 ## 10. Open source and transparent (with receipts)
 
-136. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
+140. **AGPL-3.0 licensed.** Every operator who modifies Morphit and runs it as a service must publish their modifications. The license is the strongest copyleft in common use; it's chosen deliberately to keep forks honest.
 
-137. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
+141. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-138. **36 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0036 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Topics include key custody (ADR-0010), chat reputation (ADR-0014), chat crypto (ADR-0015), YubiKey unlock (ADR-0017), release trust anchor (ADR-0019), QR pairing (ADR-0022), and one ADR per tradable-asset addition (ADR-0023 through ADR-0036).
+142. **37 ADRs** (Architectural Decision Records) documenting every major design choice, the alternatives considered, and the tradeoff rationale. Read them in `docs/adr/` — files numbered 0001 through 0038 with the 0016 slot intentionally reserved-but-unused (its planned work shipped as ADR-0022 instead). Topics include key custody (ADR-0010), chat reputation (ADR-0014), chat crypto (ADR-0015), YubiKey unlock (ADR-0017), release trust anchor (ADR-0019), QR pairing (ADR-0022), one ADR per tradable-asset addition (ADR-0023 through ADR-0036), cash-by-mail + shipment tracking (ADR-0037), and the reputation hardening campaign (ADR-0038).
 
-139. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
+143. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
-140. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
+144. **PHASE-3a-DESIGN.md, PHASE-3b-DESIGN.md, PHASE-5-PLAN.md** — phase-by-phase honest planning documents. What we're building, when, and what we're explicitly deferring.
 
-141. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
+145. **GRANDMA-FRIENDLY-INVESTIGATION.md.** A document specifically about UX accessibility for non-technical users, treating "can a non-crypto-native person actually use this" as a first-order engineering concern.
 
-142. **METADATA-LEAK-CATALOG.md.** A full inventory of every place metadata could leak — and what we do or don't do about each. Honest disclosure of where we're imperfect.
+146. **METADATA-LEAK-CATALOG.md.** A full inventory of every place metadata could leak — and what we do or don't do about each. Honest disclosure of where we're imperfect.
 
-143. **OPERATOR-TRUST-DESIGN.md.** Explicit threat model treating operators as untrusted by default. Users can verify what an operator is actually serving against the on-chain manifest.
+147. **OPERATOR-TRUST-DESIGN.md.** Explicit threat model treating operators as untrusted by default. Users can verify what an operator is actually serving against the on-chain manifest.
 
-144. **OPERATIONS.md** — full ongoing runbook for operators (currently 27 sections). Covers backups, RPC management, signup-drain defenses, fee-recipient accounts, release signing, and more.
+148. **OPERATIONS.md** — full ongoing runbook for operators (currently 27 sections). Covers backups, RPC management, signup-drain defenses, fee-recipient accounts, release signing, and more.
 
-145. **API.md** — a public, documented HTTP API contract. Stable shape, stable URLs, free, read-only — designed for block explorers, federation aggregators, third-party clients, academic research.
+149. **API.md** — a public, documented HTTP API contract. Stable shape, stable URLs, free, read-only — designed for block explorers, federation aggregators, third-party clients, academic research.
 
-146. **FEES-AND-REWARDS.md.** Single-source-of-truth document for every monetary flow in Morphit, with line-number references back to the source code that defines each figure. Don't trust marketing — verify against the code.
+150. **FEES-AND-REWARDS.md.** Single-source-of-truth document for every monetary flow in Morphit, with line-number references back to the source code that defines each figure. Don't trust marketing — verify against the code.
 
-147. **CHANGELOG kept in releases on Forgejo.** Every release notes what changed, what bugs were fixed, what's deprecated.
+151. **CHANGELOG kept in releases on Forgejo.** Every release notes what changed, what bugs were fixed, what's deprecated.
 
-148. **No proprietary modules.** No "this part is closed-source for security reasons." Every byte of the running system is in the repo.
+152. **No proprietary modules.** No "this part is closed-source for security reasons." Every byte of the running system is in the repo.
 
-149. **No telemetry.** Not even crash reporting. The codebase doesn't phone home.
+153. **No telemetry.** Not even crash reporting. The codebase doesn't phone home.
 
-150. **No dependency on a single vendor.** Postgres, Node.js, nginx — all standard, all open-source, all easily replaceable.
+154. **No dependency on a single vendor.** Postgres, Node.js, nginx — all standard, all open-source, all easily replaceable.
 
-151. **One-click media kit at `/morphit-mediakit.zip`.** A pre-built bundle with the current claims list and brand logos (mark + wordmark, both SVG) — served from every instance, not gated behind asking the project for assets. Press, integrators, and the community can grab everything they need to write about Morphit, integrate with it, or talk about it on a podcast without a back-and-forth permission dance. The bundle is regenerated and re-committed every time its source files change; a CI smoke fails the build if it goes stale.
+155. **One-click media kit at `/morphit-mediakit.zip`.** A pre-built bundle with the current claims list and brand logos (mark + wordmark, both SVG) — served from every instance, not gated behind asking the project for assets. Press, integrators, and the community can grab everything they need to write about Morphit, integrate with it, or talk about it on a podcast without a back-and-forth permission dance. The bundle is regenerated and re-committed every time its source files change; a CI smoke fails the build if it goes stale.
 
-152. **Signed-tag release pipeline with one-command operator upgrade.** Every release tag is GPG-signed by an authorized release-signer (public keys live in `.forgejo/release-signers/` so anyone can verify); CI runs `git verify-tag` before building the tarball, and `morphit-ops upgrade` re-verifies on the operator's side before extracting, with automatic rollback on failure. A `morphit-release-monitor` systemd sidecar polls Forgejo every 6 hours and DMs the operator via matrix-bot when a new release is available — no mailing list to subscribe to, no manual repo-checking needed. Full operator guide at `docs/UPGRADING.md`.
+156. **Signed-tag release pipeline with one-command operator upgrade.** Every release tag is GPG-signed by an authorized release-signer (public keys live in `.forgejo/release-signers/` so anyone can verify); CI runs `git verify-tag` before building the tarball, and `morphit-ops upgrade` re-verifies on the operator's side before extracting, with automatic rollback on failure. A `morphit-release-monitor` systemd sidecar polls Forgejo every 6 hours and DMs the operator via matrix-bot when a new release is available — no mailing list to subscribe to, no manual repo-checking needed. Full operator guide at `docs/UPGRADING.md`.
 
 ## 11. Internationalization done right
 
-153. **10 locales shipped at v0.** English, Spanish, French, German, Italian, Polish, Russian, Persian/Farsi, Mandarin (Simplified), Cantonese (Traditional). Many platforms ship English-only and consider it "global."
+157. **10 locales shipped at v0.** English, Spanish, French, German, Italian, Polish, Russian, Persian/Farsi, Mandarin (Simplified), Cantonese (Traditional). Many platforms ship English-only and consider it "global."
 
-154. **Right-to-left support for Persian.** Layout flips, numerals localize (Persian uses ۱۰ not 10), text flow respects RTL conventions.
+158. **Right-to-left support for Persian.** Layout flips, numerals localize (Persian uses ۱۰ not 10), text flow respects RTL conventions.
 
-155. **Persian numerals tracked separately.** The fee-reward smoke specifically validates Persian-numeral consistency, because "10 BLURT" and "۱۰ BLURT" don't share regex patterns.
+159. **Persian numerals tracked separately.** The fee-reward smoke specifically validates Persian-numeral consistency, because "10 BLURT" and "۱۰ BLURT" don't share regex patterns.
 
-156. **No US-centric defaults assumed.** Currency display, date formatting, payment method names — locale-aware.
+160. **No US-centric defaults assumed.** Currency display, date formatting, payment method names — locale-aware.
 
-157. **Translation isn't an afterthought.** Each locale has full FAQ entries (often 100+ entries), full UI strings, full error messages.
+161. **Translation isn't an afterthought.** Each locale has full FAQ entries (often 100+ entries), full UI strings, full error messages.
 
-158. **Native-speaker QA pending across non-English locales.** The team is honest about which locales were originally digital-translator-assisted and ensuring native-speaker review as a real backlog item, not pretending all 10 locales are equally polished.
+162. **Native-speaker QA pending across non-English locales.** The team is honest about which locales were originally digital-translator-assisted and ensuring native-speaker review as a real backlog item, not pretending all 10 locales are equally polished.
 
-159. **Native ES/FR/DE translations for every per-asset surface.** Across 14 tradable cryptocurrencies, the per-asset FAQ entry (`what_is_<asset>`), the post-order asset-explainer tooltip, the address-format error, the address placeholder, the pill-title in chat, and the cheat-sheet section — every one of these has actual Spanish, French, and German translation pairs, not silent EN-fallback. 93 translation pairs added in cp54+cp55, with a registry-based policy-gate smoke that prevents future per-asset surfaces from skipping native-locale closure.
+163. **Native ES/FR/DE translations for every per-asset surface.** Across 14 tradable cryptocurrencies, the per-asset FAQ entry (`what_is_<asset>`), the post-order asset-explainer tooltip, the address-format error, the address placeholder, the pill-title in chat, and the cheat-sheet section — every one of these has actual Spanish, French, and German translation pairs, not silent EN-fallback. 93 translation pairs added in cp54+cp55, with a registry-based policy-gate smoke that prevents future per-asset surfaces from skipping native-locale closure.
 
-160. **Memory #29 native-locale policy is mechanically enforced.** A `per-asset-key-family-native-locale-floor-smoke` walks a registry of per-asset key families × 3 native locales (es/fr/de) × 16 tickers = 240 field-checks per CI run, refusing any value that's byte-identical to the EN baseline. EN-fallback smuggled into a native locale fails the build; new per-asset key families are one-line additions to the registry.
+164. **Memory #29 native-locale policy is mechanically enforced.** A `per-asset-key-family-native-locale-floor-smoke` walks a registry of per-asset key families × 3 native locales (es/fr/de) × 16 tickers = 240 field-checks per CI run, refusing any value that's byte-identical to the EN baseline. EN-fallback smuggled into a native locale fails the build; new per-asset key families are one-line additions to the registry.
 
-161. **Long-form FAQ + privacy-guide content translated to all 10 languages — mechanically enforced.** Memory #29 originally permitted EN-fallback for 6 community-translation backlog locales (it/pl/ru/fa/zh-CN/zh-HK); 13 batches across cp76-cp80 closed that backlog by translating every key with EN length ≥ 200 chars across all 6 locales. A cp80 smoke walks 293 long-form keys × 6 backlog locales = 1,758 translation pairs per CI run, refusing any byte-identical to EN. Future long-form content additions can't ship with English-only in the backlog locales.
+165. **Long-form FAQ + privacy-guide content translated to all 10 languages — mechanically enforced.** Memory #29 originally permitted EN-fallback for 6 community-translation backlog locales (it/pl/ru/fa/zh-CN/zh-HK); 13 batches across cp76-cp80 closed that backlog by translating every key with EN length ≥ 200 chars across all 6 locales. A cp80 smoke walks 293 long-form keys × 6 backlog locales = 1,758 translation pairs per CI run, refusing any byte-identical to EN. Future long-form content additions can't ship with English-only in the backlog locales.
 
-162. **Every new asset ships its per-asset prose in all 10 locales — mechanically enforced.** When a ticker is added to `packages/asset-registry`, five mandatory i18n families must appear across every locale: the post-order asset explainer, the cheat-sheet entry, and three privacy-guide keys (one-line summary, intro body, and HTML meta description). A cp75 smoke walks the registry × families × locales = 800 key checks per CI run and fails if any one is missing; optional families like "caveats" (where some assets correctly have nothing to caveat) stay opt-in by design. New tickers can't slip through with prose in English only.
+166. **Every new asset ships its per-asset prose in all 10 locales — mechanically enforced.** When a ticker is added to `packages/asset-registry`, five mandatory i18n families must appear across every locale: the post-order asset explainer, the cheat-sheet entry, and three privacy-guide keys (one-line summary, intro body, and HTML meta description). A cp75 smoke walks the registry × families × locales = 800 key checks per CI run and fails if any one is missing; optional families like "caveats" (where some assets correctly have nothing to caveat) stay opt-in by design. New tickers can't slip through with prose in English only.
 
 ## 12. Pro-Monero culture, not just compatibility
 
-163. **No Monero "lite" client logic.** Morphit does NOT try to interpret your Monero wallet. It's a coordination layer; your wallet is your wallet.
+167. **No Monero "lite" client logic.** Morphit does NOT try to interpret your Monero wallet. It's a coordination layer; your wallet is your wallet.
 
-164. **Five independent Monero block explorers in the default config** (xmrchain.net, localmonero.co/blocks, monerohash.com/explorer, exploremonero.com, moneroexplorer.org) — operator-configurable to any list of compatible explorers, including self-hosted instances.
+168. **Five independent Monero block explorers in the default config** (xmrchain.net, localmonero.co/blocks, monerohash.com/explorer, exploremonero.com, moneroexplorer.org) — operator-configurable to any list of compatible explorers, including self-hosted instances.
 
-165. **Trade verification logic is per-asset.** Bitcoin uses one path (multi-explorer cross-check on UTXO confirmation), Monero uses another (TxID + amount-match against the recipient's expected, no view key required) — designed for each chain's actual privacy model.
+169. **Trade verification logic is per-asset.** Bitcoin uses one path (multi-explorer cross-check on UTXO confirmation), Monero uses another (TxID + amount-match against the recipient's expected, no view key required) — designed for each chain's actual privacy model.
 
-166. **Privacy-respecting default for the XMR jitter toggle: ON.** A user has to deliberately turn jitter OFF if they want to send a round amount. Default is the privacy-preserving choice.
+170. **Privacy-respecting default for the XMR jitter toggle: ON.** A user has to deliberately turn jitter OFF if they want to send a round amount. Default is the privacy-preserving choice.
 
-167. **Monero loadout in the asset registry includes piconero precision** (12 decimals). No truncation, no awkward display.
+171. **Monero loadout in the asset registry includes piconero precision** (12 decimals). No truncation, no awkward display.
 
-168. **No "Monero is risky / for criminals" UI text.** Anywhere. We trade XMR; we don't apologize for it.
+172. **No "Monero is risky / for criminals" UI text.** Anywhere. We trade XMR; we don't apologize for it.
 
-169. **No Chainalysis, no on-chain analytics integration, no third-party "compliance" tooling.** Designs treat that as a leak surface, not a feature.
+173. **No Chainalysis, no on-chain analytics integration, no third-party "compliance" tooling.** Designs treat that as a leak surface, not a feature.
 
-170. **Acknowledges privacy is a journey.** The METADATA-LEAK-CATALOG documents what we DON'T solve (e.g., the operator can see (but not log) an IP fetched a specific order list — solved by Tor users, not by Morphit alone). Honesty over PR.
+174. **Acknowledges privacy is a journey.** The METADATA-LEAK-CATALOG documents what we DON'T solve (e.g., the operator can see (but not log) an IP fetched a specific order list — solved by Tor users, not by Morphit alone). Honesty over PR.
 
-171. **Documented in plain English: "Morphit cannot see this."** Throughout the chat-trade flow, the UI explicitly tells users which actions Morphit observes and which it doesn't. No false claims of total privacy where partial privacy is the truth.
+175. **Documented in plain English: "Morphit cannot see this."** Throughout the chat-trade flow, the UI explicitly tells users which actions Morphit observes and which it doesn't. No false claims of total privacy where partial privacy is the truth.
 
-172. **Pro-Monero stance in the welcome bonus.** New users with their first XMR trade get the same welcome bonus (10 BLURT liquid + 10 BLURT Power) as BLURT-fee payers, no second-class treatment.
+176. **Pro-Monero stance in the welcome bonus.** New users with their first XMR trade get the same welcome bonus (10 BLURT liquid + 10 BLURT Power) as BLURT-fee payers, no second-class treatment.
 
 ## 13. Honest comparisons (CEX, fake DEX, P2P)
 
 ### vs. centralized exchanges (Binance, Coinbase, Kraken, etc.)
 
-173. **No KYC.** They require government ID; Morphit asks for nothing.
+177. **No KYC.** They require government ID; Morphit asks for nothing.
 
-174. **No deposits.** They custody your coins; Morphit never touches them.
+178. **No deposits.** They custody your coins; Morphit never touches them.
 
-175. **No frozen accounts.** They can freeze you; Morphit literally lacks the database table to track an account-freeze flag.
+179. **No frozen accounts.** They can freeze you; Morphit literally lacks the database table to track an account-freeze flag.
 
-176. **No insolvency risk.** No exchange to go bankrupt. No custodial pool to lose. No "the bridge got hacked" headline applies to Morphit because there is no bridge — the relay never touches your funds.
+180. **No insolvency risk.** No exchange to go bankrupt. No custodial pool to lose. No "the bridge got hacked" headline applies to Morphit because there is no bridge — the relay never touches your funds.
 
-177. **A smart contract custody escrow is still custody.** Funds sit in code controlled by someone (multisig, governance, admin keys). Morphit's funds NEVER sit anywhere — they go directly between the two parties.
+181. **A smart contract custody escrow is still custody.** Funds sit in code controlled by someone (multisig, governance, admin keys). Morphit's funds NEVER sit anywhere — they go directly between the two parties.
 
-178. **Morphit doesn't have admin keys.** Not in a multisig, not in a timelock, not anywhere.
+182. **Morphit doesn't have admin keys.** Not in a multisig, not in a timelock, not anywhere.
 
-179. **Smart contract bugs have rug-pulled billions.** Morphit's "smart contract" is the Blurt chain — a public ledger maintained by an independent nodes network that nobody can control.
+183. **Smart contract bugs have rug-pulled billions.** Morphit's "smart contract" is the Blurt chain — a public ledger maintained by an independent nodes network that nobody can control.
 
-180. **A "decentralized" exchange that depends on AWS isn't decentralized.** Morphit operators run on Pi 4s, mini-PCs, spare laptops, residential connections, and `.onion` services.
+184. **A "decentralized" exchange that depends on AWS isn't decentralized.** Morphit operators run on Pi 4s, mini-PCs, spare laptops, residential connections, and `.onion` services.
 
 ### vs. LocalBitcoins / Hodl Hodl / LocalCryptos / Bisq / Haveno / OM
 
-181. **LocalBitcoins shut down.** Single-operator failure killed the platform. Morphit is federated; no single shutdown can do this.
+185. **LocalBitcoins shut down.** Single-operator failure killed the platform. Morphit is federated; no single shutdown can do this.
 
-182. **Hodl Hodl uses on-chain Bitcoin escrow.** That's better than CEX custody but still escrow. Morphit is fully no-escrow.
+186. **Hodl Hodl uses on-chain Bitcoin escrow.** That's better than CEX custody but still escrow. Morphit is fully no-escrow.
 
-183. **Bisq has been hacked twice, user funds stolen. They require you to run their desktop app, a Tor node, and provide them with collateral.** Morphit runs in any browser, requires no collateral, and let's the user choose options like Tor, i2p, Lokinet, etc.
+187. **Bisq has been hacked twice, user funds stolen. They require you to run their desktop app, a Tor node, and provide them with collateral.** Morphit runs in any browser, requires no collateral, and let's the user choose options like Tor, i2p, Lokinet, etc.
 
-184. **Haveno/RetoSwap is Monero-only, non-PWA, not Grandma-friendly.** Morphit handles 16 tradable assets, ships as a PWA (no install on iOS, two taps on Android), and is built so non-crypto-native users can trade without reading 40 pages of docs. The Haveno/RetoSwap project does important work for Monero-only; Morphit complements it by being broader and easier.
+188. **Haveno/RetoSwap is Monero-only, non-PWA, not Grandma-friendly.** Morphit handles 16 tradable assets, ships as a PWA (no install on iOS, two taps on Android), and is built so non-crypto-native users can trade without reading 40 pages of docs. The Haveno/RetoSwap project does important work for Monero-only; Morphit complements it by being broader and easier.
 
-185. **Haveno's 2-of-3 multisig escrow was exploited on May 20, 2026 for ~$2.7M.** A forged out-of-order arbitrator ACK message caused the Haveno client to update the arbitrator's node address mid-trade, letting attackers create a compromised multisig wallet before user funds were deposited; RetoSwap halted trading the same day (min client version raised to 2.0.0). Morphit's design has no arbitrator role, no multisig escrow, and no central coordination message Haveno's exploit relied on — so this attack class doesn't apply to our threat model. The tradeoff is real and stated honestly elsewhere on this list: Morphit users carry full self-custody and lean on signed on-chain reputation rather than an arbitrator's safety net.
+189. **Haveno's 2-of-3 multisig escrow was exploited on May 20, 2026 for ~$2.7M.** A forged out-of-order arbitrator ACK message caused the Haveno client to update the arbitrator's node address mid-trade, letting attackers create a compromised multisig wallet before user funds were deposited; RetoSwap halted trading the same day (min client version raised to 2.0.0). Morphit's design has no arbitrator role, no multisig escrow, and no central coordination message Haveno's exploit relied on — so this attack class doesn't apply to our threat model. The tradeoff is real and stated honestly elsewhere on this list: Morphit users carry full self-custody and lean on signed on-chain reputation rather than an arbitrator's safety net.
 
-186. **Some P2P platforms have admin "dispute resolution" that overrides users.** Morphit has no admin role; chat history is the dispute record, and it's signed and immutable.
+190. **Some P2P platforms have admin "dispute resolution" that overrides users.** Morphit has no admin role; chat history is the dispute record, and it's signed and immutable.
 
 ## 14. What Morphit deliberately does NOT do
 
-187. **No token sale.** No ICO. No IDO. No airdrops to manipulate "user count." There's no MORPHIT coin.
+191. **No token sale.** No ICO. No IDO. No airdrops to manipulate "user count." There's no MORPHIT coin.
 
-188. **No "premine."** The project earns by listing fees on its own instance, same as any other operator.
+192. **No "premine."** The project earns by listing fees on its own instance, same as any other operator.
 
-189. **No "governance token."** No proposals you don't care about; no votes you can't participate in.
+193. **No "governance token."** No proposals you don't care about; no votes you can't participate in.
 
-190. **No "DAO."** Architectural decisions are made by the contributors; documented in ADRs; criticizable by anyone via the public issue tracker.
+194. **No "DAO."** Architectural decisions are made by the contributors; documented in ADRs; criticizable by anyone via the public issue tracker.
 
-191. **No marketing partnerships with CEXes.** No referral codes. No yield-aggregator integrations.
+195. **No marketing partnerships with CEXes.** No referral codes. No yield-aggregator integrations.
 
-192. **No "Pro" tier with extra features for paying customers.** The free Morphit IS Morphit.
+196. **No "Pro" tier with extra features for paying customers.** The free Morphit IS Morphit.
 
-193. **No "premium" customer support.** There's no standard support either — if you need help, ask on the operator's Matrix channel or read the FAQ. Honest.
+197. **No "premium" customer support.** There's no standard support either — if you need help, ask on the operator's Matrix channel or read the FAQ. Honest.
 
-194. **No NFT integration.** No "trade BTC for an ape JPEG."
+198. **No NFT integration.** No "trade BTC for an ape JPEG."
 
-195. **No leverage. No margin. No futures. No options.** Morphit is a spot fiat-crypto marketplace, full stop. Defi degens look elsewhere.
+199. **No leverage. No margin. No futures. No options.** Morphit is a spot fiat-crypto marketplace, full stop. Defi degens look elsewhere.
 
-196. **No "AI assistant" trying to sell you a trade.** Just an orderbook.
+200. **No "AI assistant" trying to sell you a trade.** Just an orderbook.
 
-197. **No app-store gatekeepers.** Morphit is a PWA — installs on Android via "Add to Home Screen," installs on iOS via Safari Share → Add to Home Screen. Apple App Store would reject a non-KYC P2P crypto app; we don't pretend otherwise.
+201. **No app-store gatekeepers.** Morphit is a PWA — installs on Android via "Add to Home Screen," installs on iOS via Safari Share → Add to Home Screen. Apple App Store would reject a non-KYC P2P crypto app; we don't pretend otherwise.
 
 ## 15. Reach: every device, every network
 
-198. **Progressive Web App** — installable as a standalone app on Android and iOS without going through Google Play or the Apple App Store.
+202. **Progressive Web App** — installable as a standalone app on Android and iOS without going through Google Play or the Apple App Store.
 
-199. **Service worker caches assets locally** — partial offline capability for previously-loaded pages and static content.
+203. **Service worker caches assets locally** — partial offline capability for previously-loaded pages and static content.
 
-200. **Works in Tor Browser at maximum security level.** Service worker gracefully falls back to normal caching when service workers are disabled.
+204. **Works in Tor Browser at maximum security level.** Service worker gracefully falls back to normal caching when service workers are disabled.
 
-201. **F-Droid distribution path** for Android users who want a true open-source app store experience (placeholder; reproducible-build pipeline planned).
+205. **F-Droid distribution path** for Android users who want a true open-source app store experience (placeholder; reproducible-build pipeline planned).
 
-202. **Aptoide, APKMirror, APKPure listings** for Android users without Google Play.
+206. **Aptoide, APKMirror, APKPure listings** for Android users without Google Play.
 
-203. **GrapheneOS callout** as the recommended privacy-first Android. No Google relationship required.
+207. **GrapheneOS callout** as the recommended privacy-first Android. No Google relationship required.
 
-204. **iPhone PWA install instructions** in the `/download` page, in plain English, in 10 languages.
+208. **iPhone PWA install instructions** in the `/download` page, in plain English, in 10 languages.
 
-205. **No native Apple Store app planned.** Apple's guidelines forbid non-KYC P2P crypto apps; Morphit doesn't pretend otherwise. The PWA path is the lasting answer.
+209. **No native Apple Store app planned.** Apple's guidelines forbid non-KYC P2P crypto apps; Morphit doesn't pretend otherwise. The PWA path is the lasting answer.
 
-206. **Operator section on the `/download` page** shows the run-your-own-node path: source code, releases, setup walkthrough, supported systems, federation directory.
+210. **Operator section on the `/download` page** shows the run-your-own-node path: source code, releases, setup walkthrough, supported systems, federation directory.
 
-207. **RSS feeds for the orderbook** — real-time updates in your existing RSS reader. Asset-filtered, account-filtered, full-orderbook variants.
+211. **RSS feeds for the orderbook** — real-time updates in your existing RSS reader. Asset-filtered, account-filtered, full-orderbook variants.
 
-208. **SSE streams for the orderbook** — live deltas without polling.
+212. **SSE streams for the orderbook** — live deltas without polling.
 
-209. **`no-js` graceful degradation.** The footer link advertises that the static parts of Morphit work without JavaScript, for users on Tor's max-security level or otherwise locked-down browsers.
+213. **`no-js` graceful degradation.** The footer link advertises that the static parts of Morphit work without JavaScript, for users on Tor's max-security level or otherwise locked-down browsers.
 
-210. **Public, free, documented HTTP API.** Anyone can build a block explorer, an aggregator, a CLI client, a price feed, a federation health monitor — without asking permission.
+214. **Public, free, documented HTTP API.** Anyone can build a block explorer, an aggregator, a CLI client, a price feed, a federation health monitor — without asking permission.
 
-211. **API self-hosting recommended at scale.** If you're building something high-volume on the API, the recommended path is to run your own indexer ($5/month VPS) — no negotiation, no allowlist, no rate limits.
+215. **API self-hosting recommended at scale.** If you're building something high-volume on the API, the recommended path is to run your own indexer ($5/month VPS) — no negotiation, no allowlist, no rate limits.
 
-212. **Federation health visible to everyone.** `/instances` shows every known instance and its probe status. Aggregators and end users alike can monitor the federation in real time.
+216. **Federation health visible to everyone.** `/instances` shows every known instance and its probe status. Aggregators and end users alike can monitor the federation in real time.
 
 ## 16. Built-in tools — block explorer, activity stats, payment QR codes
 
-213. **Built-in block explorer at `/explorer`.** Search by Blurt account name, transaction ID, or block number — Morphit ships its own explorer so you don't have to trust a third-party block-explorer site (which sees your IP and search history). The explorer is served by the same indexer that powers the orderbook; same trust model, same operator, no extra service to inspect.
+217. **Built-in block explorer at `/explorer`.** Search by Blurt account name, transaction ID, or block number — Morphit ships its own explorer so you don't have to trust a third-party block-explorer site (which sees your IP and search history). The explorer is served by the same indexer that powers the orderbook; same trust model, same operator, no extra service to inspect.
 
-214. **Trading-activity dashboard at `/explorer/activity`.** Daily fee revenue, top-5 trading pairs, federation-wide order volume — all derived from public chain data, no analytics scripts. Useful for traders deciding which assets are liquid, and for operators showing prospective traders what the marketplace looks like at scale. Same data the project uses internally; nothing hidden.
+218. **Trading-activity dashboard at `/explorer/activity`.** Daily fee revenue, top-5 trading pairs, federation-wide order volume — all derived from public chain data, no analytics scripts. Useful for traders deciding which assets are liquid, and for operators showing prospective traders what the marketplace looks like at scale. Same data the project uses internally; nothing hidden.
 
-215. **Cross-chain explorer links inside chat.** When a counterparty sends you a Bitcoin txid, the chat bubble auto-routes to mempool.space; Monero txid auto-routes to xmrchain.net (or the operator-configured XMR explorer); BLURT txid routes to the in-app `/explorer`. Click → confirm payment landed. No copy-paste-into-a-third-party-site dance.
+219. **Cross-chain explorer links inside chat.** When a counterparty sends you a Bitcoin txid, the chat bubble auto-routes to mempool.space; Monero txid auto-routes to xmrchain.net (or the operator-configured XMR explorer); BLURT txid routes to the in-app `/explorer`. Click → confirm payment landed. No copy-paste-into-a-third-party-site dance.
 
-216. **Display-payment QR codes for receiving addresses.** Share a receive address through the trade flow and Morphit can render it as a QR code on screen, using the right URI scheme per asset (BIP-21 for Bitcoin-family, official Monero URI, ZIP-321 for Zcash, Solana Pay, EIP-681 for EVM, XRPL URI, etc.). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service — the QR library is lazy-loaded so users who never tap "Show QR" don't pay the bytes.
+220. **Display-payment QR codes for receiving addresses.** Share a receive address through the trade flow and Morphit can render it as a QR code on screen, using the right URI scheme per asset (BIP-21 for Bitcoin-family, official Monero URI, ZIP-321 for Zcash, Solana Pay, EIP-681 for EVM, XRPL URI, etc.). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service — the QR library is lazy-loaded so users who never tap "Show QR" don't pay the bytes.
 
-217. **Live BLURT staking APR display** in the balance card. Computed locally from chain DGP — no third-party endpoint, no CoinGecko, no fee-feed dependency. (Current chain inflation is 7.6% as of 2026-05-03; ~75% of new emission goes to BP holders pro-rata, so the real APR per staked BP unit varies with the vesting pool size.)
+221. **Live BLURT staking APR display** in the balance card. Computed locally from chain DGP — no third-party endpoint, no CoinGecko, no fee-feed dependency. (Current chain inflation is 7.6% as of 2026-05-03; ~75% of new emission goes to BP holders pro-rata, so the real APR per staked BP unit varies with the vesting pool size.)
 
 ## 17. Trade anything — barter, cash, precious metals
 
-218. **Curated registry of 40+ payment methods** organized by category: crypto (BTC ↔ XMR, etc.), bank rails (Zelle, Interac e-Transfer, SPEI, Oxxo Pay, SEPA), in-person, and operator-defined extras. Pickers fuzzy-match on the canonical 40-entry list to avoid the "did you mean Cash App or CashApp or Venmo or PayPal" dropdown soup.
+222. **Curated registry of 40+ payment methods** organized by category: crypto (BTC ↔ XMR, etc.), bank rails (Zelle, Interac e-Transfer, SPEI, Oxxo Pay, SEPA), in-person, and operator-defined extras. Pickers fuzzy-match on the canonical 40-entry list to avoid the "did you mean Cash App or CashApp or Venmo or PayPal" dropdown soup.
 
-219. **Barter for goods is a first-class payment method.** Trade crypto for a used bicycle, a vintage typewriter, or a haircut — the chat flow has "Goods or services" as a payment method alongside cash and bank transfer. Photos can be attached (chain-stored, signed). The seller and buyer negotiate; Morphit just provides the orderbook + chat + escrow-free settlement on the asset side.
+223. **Barter for goods is a first-class payment method.** Trade crypto for a used bicycle, a vintage typewriter, or a haircut — the chat flow has "Goods or services" as a payment method alongside cash and bank transfer. Photos can be attached (chain-stored, signed). The seller and buyer negotiate; Morphit just provides the orderbook + chat + escrow-free settlement on the asset side.
 
-220. **Cash + precious metals (gold/silver coins/bars)** also covered as in-person methods. Meet up, exchange, leave on-chain feedback. Morphit's role ends at "facilitating the introduction"; the actual exchange is between two humans.
+224. **Cash + precious metals (gold/silver coins/bars)** also covered as in-person methods. Meet up, exchange, leave on-chain feedback. Morphit's role ends at "facilitating the introduction"; the actual exchange is between two humans.
 
-221. **Cash by mail is its own payment method, with structured proof-of-shipment.** Distinct from "Cash in person" because the operational reality is different: you mail an envelope of paper currency to your counterparty across town or across the world. The chat composer has dedicated "Share mailing address" and "Record shipment" buttons that build structured payloads — recipient sees a 📬 address pill (copy-formatted button) and a 📦 shipped-via pill with a clickable "Track package" link. Both pills stay in end-to-end-encrypted chat only — never written to the indexer, never on-chain, never federation-readable.
+225. **Cash by mail is its own payment method, with structured proof-of-shipment.** Distinct from "Cash in person" because the operational reality is different: you mail an envelope of paper currency to your counterparty across town or across the world. The chat composer has dedicated "Share mailing address" and "Record shipment" buttons that build structured payloads — recipient sees a 📬 address pill (copy-formatted button) and a 📦 shipped-via pill with a clickable "Track package" link. Both pills stay in end-to-end-encrypted chat only — never written to the indexer, never on-chain, never federation-readable.
 
-222. **Top 20 worldwide carriers bundled with clickable tracking links.** The Record-Shipment modal includes a curated dropdown — USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex — covering every supported locale's primary postal service. An "Other (specify carrier)" escape hatch lets users type any carrier name + tracking URL when their service isn't bundled. Tracking number is optional (not required) so users who chose untracked mail can still record the shipment.
+226. **Top 20 worldwide carriers bundled with clickable tracking links.** The Record-Shipment modal includes a curated dropdown — USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex — covering every supported locale's primary postal service. An "Other (specify carrier)" escape hatch lets users type any carrier name + tracking URL when their service isn't bundled. Tracking number is optional (not required) so users who chose untracked mail can still record the shipment.
 
-223. **Operator-defined payment methods.** Per-instance, an operator can add region-specific payment rails their community uses (a local fintech app, a national bank-transfer system) without forking the codebase — the registry is operator-extensible.
+227. **Operator-defined payment methods.** Per-instance, an operator can add region-specific payment rails their community uses (a local fintech app, a national bank-transfer system) without forking the codebase — the registry is operator-extensible.
 
 ## 18. Operator setup — even your grandma can run a node
 
-224. **Beautiful CLI setup wizard.** The wizard walks new operators through everything: pre-flight system check, ELI5-friendly prompts for the basics (instance name, accounts, networks), review-and-confirm screen, write the config. End-to-end in about 15 minutes.
+228. **Beautiful CLI setup wizard.** The wizard walks new operators through everything: pre-flight system check, ELI5-friendly prompts for the basics (instance name, accounts, networks), review-and-confirm screen, write the config. End-to-end in about 15 minutes.
 
-225. **Browser setup-wizard for live config tweaks.** Once your instance is up, visit `/admin/setup-wizard` on your domain to toggle which assets you list and to add or remove per-instance payment methods. The page emits the exact env-var line or CLI command — paste into `morphit.config.env` (then restart the indexer) or into your terminal (no restart). Read-only by design — never mutates your server, no auth-gating attack surface to maintain; full operator UX walkthrough in `docs/RUN-A-MORPHIT-NODE.md`.
+229. **Browser setup-wizard for live config tweaks.** Once your instance is up, visit `/admin/setup-wizard` on your domain to toggle which assets you list and to add or remove per-instance payment methods. The page emits the exact env-var line or CLI command — paste into `morphit.config.env` (then restart the indexer) or into your terminal (no restart). Read-only by design — never mutates your server, no auth-gating attack surface to maintain; full operator UX walkthrough in `docs/RUN-A-MORPHIT-NODE.md`.
 
-226. **The system check tells you what's wrong, not just "ERROR".** Pre-flight verifies CPU, RAM, free disk, OS family, and network reachability — and if any check fails, you get a specific human-readable explanation of what to do next.
+230. **The system check tells you what's wrong, not just "ERROR".** Pre-flight verifies CPU, RAM, free disk, OS family, and network reachability — and if any check fails, you get a specific human-readable explanation of what to do next.
 
-227. **One-command deployment.** Once the config is written, a single command brings up the indexer, relay, and database in one shot.
+231. **One-command deployment.** Once the config is written, a single command brings up the indexer, relay, and database in one shot.
 
-228. **Federation registration is one CLI broadcast.** After setup, a single chain op puts you in the federation directory globally — you show up on every other Morphit instance's `/instances` page within seconds.
+232. **Federation registration is one CLI broadcast.** After setup, a single chain op puts you in the federation directory globally — you show up on every other Morphit instance's `/instances` page within seconds.
 
-229. **Operational runbook with concrete cron snippets.** `OPERATIONS.md` ships copy-pasteable cron snippets for the operational tasks that should be automated (weekly ACT minting, TLS certificate renewal monitoring). Set up once, the runbook walks you through verifying each.
+233. **Operational runbook with concrete cron snippets.** `OPERATIONS.md` ships copy-pasteable cron snippets for the operational tasks that should be automated (weekly ACT minting, TLS certificate renewal monitoring). Set up once, the runbook walks you through verifying each.
 
-230. **Sign in to a strange computer by scanning a QR with your phone.** Posting key never leaves the phone. Your phone shows a confirmation card with the website name so you can spot phishing like `morph1t.io` before tapping "Yes, that was me." See `docs/adr/0022-desktop-qr-pairing.md` for the full protocol and threat model.
+234. **Sign in to a strange computer by scanning a QR with your phone.** Posting key never leaves the phone. Your phone shows a confirmation card with the website name so you can spot phishing like `morph1t.io` before tapping "Yes, that was me." See `docs/adr/0022-desktop-qr-pairing.md` for the full protocol and threat model.
 
-231. **Adding new tradable assets is usually a single day's work.** The canonical asset list lives in one package (`packages/asset-registry/`); add an entry with the right flags (tradable, can-pay-fees, supported-networks), drop a logo, add per-asset translations, register the explorer URL templates. Pre-2026 the same change required edits at 32 separate sites; now it's contained. Currently shipped: 16 assets across BTC, XMR, BLURT, USDT/USDC/DAI (multi-network EVM stablecoins), BCH, LTC, DASH, DOGE (UTXO chains), ZEC, ARRR (shielded chains), DCR (hybrid PoW/PoS), SOL, ETH, XRP.
+235. **Adding new tradable assets is usually a single day's work.** The canonical asset list lives in one package (`packages/asset-registry/`); add an entry with the right flags (tradable, can-pay-fees, supported-networks), drop a logo, add per-asset translations, register the explorer URL templates. Pre-2026 the same change required edits at 32 separate sites; now it's contained. Currently shipped: 16 assets across BTC, XMR, BLURT, USDT/USDC/DAI (multi-network EVM stablecoins), BCH, LTC, DASH, DOGE (UTXO chains), ZEC, ARRR (shielded chains), DCR (hybrid PoW/PoS), SOL, ETH, XRP.
 
-232. **Adding a new language is a single-array edit.** Drop a translation JSON, add the locale code to the supported array. The framework knows the difference between "shipped" and "in progress" — work-in-progress translations don't appear in the language switcher until they're done. Translator workflow is documented for native-speaker contributors.
+236. **Adding a new language is a single-array edit.** Drop a translation JSON, add the locale code to the supported array. The framework knows the difference between "shipped" and "in progress" — work-in-progress translations don't appear in the language switcher until they're done. Translator workflow is documented for native-speaker contributors.
 
-233. **Witness fee alerts carry actionable delta information.** When Blurt's chain account-creation fee changes (the cost an operator's relay pays for each signup), the operator gets an alert with the old value, the new value, the percentage change, and the direction — not just "fee changed."
+237. **Witness fee alerts carry actionable delta information.** When Blurt's chain account-creation fee changes (the cost an operator's relay pays for each signup), the operator gets an alert with the old value, the new value, the percentage change, and the direction — not just "fee changed."
 
-234. **Build from source, with reproducibility as a project goal.** Operators can build the frontend locally and verify the bytes match what the project published; the build emits a SHA-256 manifest of every served file, recorded on chain. No privileged build pipeline — every operator builds the same source.
+238. **Build from source, with reproducibility as a project goal.** Operators can build the frontend locally and verify the bytes match what the project published; the build emits a SHA-256 manifest of every served file, recorded on chain. No privileged build pipeline — every operator builds the same source.
 
-235. **Operators publish two I2P addresses, both render.** Operators with both a long-form `.b32.i2p` (always-resolvable) AND a human-readable `.i2p` alias can publish both. The footer renders both as separate chips; the directory shows both for every operator that publishes them. Backwards-compatible with single-address operators.
+239. **Operators publish two I2P addresses, both render.** Operators with both a long-form `.b32.i2p` (always-resolvable) AND a human-readable `.i2p` alias can publish both. The footer renders both as separate chips; the directory shows both for every operator that publishes them. Backwards-compatible with single-address operators.
 
-236. **Discretionary bug bounty program.** Find a real security bug — privacy leak, signup-drain vulnerability, cryptographic flaw — disclose responsibly via `@agorise:matrix.org`, and the operator may compensate you in BTC, XMR, or BLURT at their discretion. No formal program scope, no rigid payout grid — the operator decides based on severity, novelty, and demonstrability. Honest framing: this isn't HackerOne, it's a thanks-with-money for genuinely good security research.
+240. **Discretionary bug bounty program.** Find a real security bug — privacy leak, signup-drain vulnerability, cryptographic flaw — disclose responsibly via `@agorise:matrix.org`, and the operator may compensate you in BTC, XMR, or BLURT at their discretion. No formal program scope, no rigid payout grid — the operator decides based on severity, novelty, and demonstrability. Honest framing: this isn't HackerOne, it's a thanks-with-money for genuinely good security research.
 
-237. **Weekly automated warrant canary.** Every Monday at 00:00 UTC the canonical operator signs a short statement ("no warrants received this week") and broadcasts it as a chain op. If the signature stops appearing for two consecutive weeks, the chain itself surfaces the missing signal — no operator can be compelled to lie because the silence is the message. Federated instances run their own canaries on their own schedules.
+241. **Weekly automated warrant canary.** Every Monday at 00:00 UTC the canonical operator signs a short statement ("no warrants received this week") and broadcasts it as a chain op. If the signature stops appearing for two consecutive weeks, the chain itself surfaces the missing signal — no operator can be compelled to lie because the silence is the message. Federated instances run their own canaries on their own schedules.
 
-238. **PGP keys link in the footer for canary verification.** Operators publish their release-signing keys as a downloadable `.asc` file. Anyone can import and verify operator-signed canaries and releases. Footer link translated to all 10 locales.
+242. **PGP keys link in the footer for canary verification.** Operators publish their release-signing keys as a downloadable `.asc` file. Anyone can import and verify operator-signed canaries and releases. Footer link translated to all 10 locales.
 
-239. **Server hardening below the application layer is documented in copy-pasteable detail.** SSH, unattended security upgrades, kernel hardening, filesystem mount hardening, systemd unit isolation, Postgres SCRAM-SHA-256, encrypted backups, outbound egress allowlist, alerting — operators can apply as much or as little as fits their threat model. Recommended baseline highlighted explicitly.
+243. **Server hardening below the application layer is documented in copy-pasteable detail.** SSH, unattended security upgrades, kernel hardening, filesystem mount hardening, systemd unit isolation, Postgres SCRAM-SHA-256, encrypted backups, outbound egress allowlist, alerting — operators can apply as much or as little as fits their threat model. Recommended baseline highlighted explicitly.
 
-240. **High-value account names get extra friction.** Short names, obvious brand names, common dictionary words, and enumeration patterns get classified at signup time and handled per the operator's policy. Three policy modes (strict / moderate / off) — operator's call. Legitimate year-suffix names (`bob-1990`, `crypto-noob-2026`) explicitly pass.
+244. **High-value account names get extra friction.** Short names, obvious brand names, common dictionary words, and enumeration patterns get classified at signup time and handled per the operator's policy. Three policy modes (strict / moderate / off) — operator's call. Legitimate year-suffix names (`bob-1990`, `crypto-noob-2026`) explicitly pass.
 
-241. **Sequential signup pattern detection.** Patterns like `account001` / `account002` / `account003` get caught at signup time — operator-tunable, per-IP-bucket isolation so an attacker controlling multiple ranges still hits the threshold separately on each.
+245. **Sequential signup pattern detection.** Patterns like `account001` / `account002` / `account003` get caught at signup time — operator-tunable, per-IP-bucket isolation so an attacker controlling multiple ranges still hits the threshold separately on each.
 
-242. **Trusted-proxy IP allowlist with CIDR support.** Operators running behind a reverse proxy (BunkerWeb in Docker, multi-host nginx, etc.) can correctly preserve client IPs for rate limiting. Without this, a Dockerized reverse proxy would funnel every client through a single rate-limit bucket — one abuser exhausting the daily cap for everyone.
+246. **Trusted-proxy IP allowlist with CIDR support.** Operators running behind a reverse proxy (BunkerWeb in Docker, multi-host nginx, etc.) can correctly preserve client IPs for rate limiting. Without this, a Dockerized reverse proxy would funnel every client through a single rate-limit bucket — one abuser exhausting the daily cap for everyone.
 
-243. **Turnkey BunkerWeb deployment with cross-reference parity enforcement.** The morphit repo ships a tested BunkerWeb config at `ops/bunkerweb/` — docker-compose + env template with OWASP CRS paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly, and a pinned `172.20.0.0/16` Docker network CIDR. A CI smoke (cp61-O14) enforces that the Ansible default for `MORPHIT_RELAY_TRUSTED_PROXY_IPS` matches this CIDR — getting them out of sync (the cp61-D1 bug, fixed at cp61) silently breaks per-IP rate limiting. Operators copy + edit two values + `docker compose up -d` and have a WAF-fronted instance.
+247. **Turnkey BunkerWeb deployment with cross-reference parity enforcement.** The morphit repo ships a tested BunkerWeb config at `ops/bunkerweb/` — docker-compose + env template with OWASP CRS paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly, and a pinned `172.20.0.0/16` Docker network CIDR. A CI smoke (cp61-O14) enforces that the Ansible default for `MORPHIT_RELAY_TRUSTED_PROXY_IPS` matches this CIDR — getting them out of sync (the cp61-D1 bug, fixed at cp61) silently breaks per-IP rate limiting. Operators copy + edit two values + `docker compose up -d` and have a WAF-fronted instance.
 
-244. **Cross-document value-invariant CI gate, registry-driven.** When one value lives in multiple files (DB name, port, account, network name, CIDR) and one file drifts, the deploy breaks silently. The cp66 smoke generalizes cp61-O14 into a registry of invariants — each with a single source-of-truth file and a list of consumer files that must agree. Eleven ship at launch (postgres DB name, postgres user, postgres port, treasury fee-recipient default, indexer and relay BunkerWeb bind ports, bunkerweb_net network name, relay and indexer bare-metal listen-port defaults, matrix-bot healthcheck port, BunkerWeb network CIDR); adding new ones is data, not new runner code, and every drift is mutation-tested.
+248. **Cross-document value-invariant CI gate, registry-driven.** When one value lives in multiple files (DB name, port, account, network name, CIDR) and one file drifts, the deploy breaks silently. The cp66 smoke generalizes cp61-O14 into a registry of invariants — each with a single source-of-truth file and a list of consumer files that must agree. Eleven ship at launch (postgres DB name, postgres user, postgres port, treasury fee-recipient default, indexer and relay BunkerWeb bind ports, bunkerweb_net network name, relay and indexer bare-metal listen-port defaults, matrix-bot healthcheck port, BunkerWeb network CIDR); adding new ones is data, not new runner code, and every drift is mutation-tested.
 
-245. **Operator-doc section length is bounded by CI.** OPERATIONS.md, RUN-A-MORPHIT-NODE.md, PRE-LAUNCH-CHECKLIST.md and ADRs are detailed by design, but a section that grows past its per-doc threshold becomes a small book inside a larger book — search context balloons, readers lose place, edits get scary. The cp69 smoke flags newly-outsize sections so they get split into sub-runbooks instead of growing forever. Existing oversize sections are allow-listed with a documented plan to split.
+249. **Operator-doc section length is bounded by CI.** OPERATIONS.md, RUN-A-MORPHIT-NODE.md, PRE-LAUNCH-CHECKLIST.md and ADRs are detailed by design, but a section that grows past its per-doc threshold becomes a small book inside a larger book — search context balloons, readers lose place, edits get scary. The cp69 smoke flags newly-outsize sections so they get split into sub-runbooks instead of growing forever. Existing oversize sections are allow-listed with a documented plan to split.
 
-246. **Ansible playbook idempotency is enforced by CI.** The README promises "re-running the playbook is a no-op when the system is in the desired state." Tasks using `command:`, `shell:`, or `raw:` execute arbitrary processes — Ansible can't tell whether they changed state, so they need an explicit guard (`creates:`, `removes:`, `changed_when:`, `when:`, `check_mode:`). The cp69 smoke walks every ansible task; an unguarded action surfaces in CI so the playbook stays trustworthy.
+250. **Ansible playbook idempotency is enforced by CI.** The README promises "re-running the playbook is a no-op when the system is in the desired state." Tasks using `command:`, `shell:`, or `raw:` execute arbitrary processes — Ansible can't tell whether they changed state, so they need an explicit guard (`creates:`, `removes:`, `changed_when:`, `when:`, `check_mode:`). The cp69 smoke walks every ansible task; an unguarded action surfaces in CI so the playbook stays trustworthy.
 
-247. **Unit-test pass count is locked by CI.** The cp71 vitest-must-pass smoke runs `vitest --run` per workspace (indexer, relay, web — 1,344 tests across 3 workspaces) and asserts the pass count meets a baseline. Test-rot — handlers evolving without their tests being updated — used to go undetected for months. Now a drift incident surfaces immediately as a smoke failure, so handlers and their tests stay in lock-step.
+251. **Unit-test pass count is locked by CI.** The cp71 vitest-must-pass smoke runs `vitest --run` per workspace (indexer, relay, web — 1,344 tests across 3 workspaces) and asserts the pass count meets a baseline. Test-rot — handlers evolving without their tests being updated — used to go undetected for months. Now a drift incident surfaces immediately as a smoke failure, so handlers and their tests stay in lock-step.
 
-248. **Untrusted-input parseInt is forbidden without a strict pre-check.** `parseInt('999000abc', 10) = 999000` silently accepts trailing garbage. When the input is operator-controlled or user-controlled (HTTP headers, query params, env vars), the partial parse can let malformed values past the validity check. The cp71 smoke greps the codebase for `parseInt`/`parseFloat` on plausibly-untrusted inputs and requires each to be preceded by `/^\d+$/.test(s)` or document-able as trusted in the allow-list.
+252. **Untrusted-input parseInt is forbidden without a strict pre-check.** `parseInt('999000abc', 10) = 999000` silently accepts trailing garbage. When the input is operator-controlled or user-controlled (HTTP headers, query params, env vars), the partial parse can let malformed values past the validity check. The cp71 smoke greps the codebase for `parseInt`/`parseFloat` on plausibly-untrusted inputs and requires each to be preceded by `/^\d+$/.test(s)` or document-able as trusted in the allow-list.
 
-249. **Every fetch() has a timeout.** Without an AbortController + setTimeout, a slow or hung remote endpoint blocks the calling code indefinitely — a UI in 'loading' forever, an ops-cli command that never exits. The cp71 smoke walks all .ts and .svelte source and verifies every fetch() call has a `signal:` from an AbortController nearby (or is allow-listed as a browser-managed exception). 14 unbounded fetches were caught and converted to use a centralized `fetchWithTimeout` helper at cp71 ship time.
+253. **Every fetch() has a timeout.** Without an AbortController + setTimeout, a slow or hung remote endpoint blocks the calling code indefinitely — a UI in 'loading' forever, an ops-cli command that never exits. The cp71 smoke walks all .ts and .svelte source and verifies every fetch() call has a `signal:` from an AbortController nearby (or is allow-listed as a browser-managed exception). 14 unbounded fetches were caught and converted to use a centralized `fetchWithTimeout` helper at cp71 ship time.
 
-250. **Every route's SEO metadata is locale-complete.** When a new route is added to `apps/web/src/lib/seo/routes.ts`, the matching `seo.<key>.title` and `seo.<key>.description` must exist in all 10 locales — or the route ships with empty meta tags in the locales that forgot. The cp74 smoke walks the route registry against every locale JSON and fails CI if any pair is missing. This caught cp73-D11 (missing `seo.privacy_index` in 10 locales) statically, so future routes can't slip through with English-only SEO.
+254. **Every route's SEO metadata is locale-complete.** When a new route is added to `apps/web/src/lib/seo/routes.ts`, the matching `seo.<key>.title` and `seo.<key>.description` must exist in all 10 locales — or the route ships with empty meta tags in the locales that forgot. The cp74 smoke walks the route registry against every locale JSON and fails CI if any pair is missing. This caught cp73-D11 (missing `seo.privacy_index` in 10 locales) statically, so future routes can't slip through with English-only SEO.
 
-251. **Squatter defense operator playbook.** A tactical runbook for operators concerned about name-squatting: env config, log monitoring, attacker-pattern recognition, weekly audit procedure, active-attack incident response, network-layer defenses, and a "diamond-hardened" preset for operators willing to accept moderately higher friction for maximum resistance.
+255. **Squatter defense operator playbook.** A tactical runbook for operators concerned about name-squatting: env config, log monitoring, attacker-pattern recognition, weekly audit procedure, active-attack incident response, network-layer defenses, and a "diamond-hardened" preset for operators willing to accept moderately higher friction for maximum resistance.
 
-252. **Comprehensive threat model with documented attack scenarios.** Every credible attacker behavior across the four primary attack surfaces (frontend, indexer, relay, Blurt chain) is enumerated as a STRIDE row, with the existing in-code mitigation named and cross-referenced. Residual risks stated honestly; open gaps flagged. Regenerated when meaningful new attack surface ships.
+256. **Comprehensive threat model with documented attack scenarios.** Every credible attacker behavior across the four primary attack surfaces (frontend, indexer, relay, Blurt chain) is enumerated as a STRIDE row, with the existing in-code mitigation named and cross-referenced. Residual risks stated honestly; open gaps flagged. Regenerated when meaningful new attack surface ships.
 
-253. **Operator alerts to a private Matrix DM with three-tier routing.** A turnkey sidecar (`apps/matrix-bot/`) tails journalctl, classifies indexer + relay events into CRITICAL (immediate DM, no rate limit), WARN (1/hour per category), and INFO (daily 09:00 UTC digest, skipped on quiet days), and DMs the operator's private MXID end-to-end-encrypted. Branded TypeScript types prevent confusing the private MXID (`@user:server`) with a public room alias (`#room:server`) at compile time — security disclosures never accidentally route to a public channel. Comma-separate multiple MXIDs in `MORPHIT_MATRIX_BOT_ALERT_MXID` for vacation coverage.
+257. **Operator alerts to a private Matrix DM with three-tier routing.** A turnkey sidecar (`apps/matrix-bot/`) tails journalctl, classifies indexer + relay events into CRITICAL (immediate DM, no rate limit), WARN (1/hour per category), and INFO (daily 09:00 UTC digest, skipped on quiet days), and DMs the operator's private MXID end-to-end-encrypted. Branded TypeScript types prevent confusing the private MXID (`@user:server`) with a public room alias (`#room:server`) at compile time — security disclosures never accidentally route to a public channel. Comma-separate multiple MXIDs in `MORPHIT_MATRIX_BOT_ALERT_MXID` for vacation coverage.
 
-254. **Resource alerts that read like advice, not alarms.** A POSIX-sh sidecar polls disk, memory, swap, CPU, and swap-thrashing every 5 minutes; alerts go through the matrix-bot in three tiers with ELI5 advice and the exact debug command ("free space NOW: `sudo journalctl --vacuum-time=7d`, `sudo apt clean`"). Sidecars exit silently on hosts without the things they monitor — safe to enable defensively across operator instances.
+258. **Resource alerts that read like advice, not alarms.** A POSIX-sh sidecar polls disk, memory, swap, CPU, and swap-thrashing every 5 minutes; alerts go through the matrix-bot in three tiers with ELI5 advice and the exact debug command ("free space NOW: `sudo journalctl --vacuum-time=7d`, `sudo apt clean`"). Sidecars exit silently on hosts without the things they monitor — safe to enable defensively across operator instances.
 
-255. **Kernel-log monitoring catches what the resource monitor can't.** A separate sidecar scans the kernel ring buffer every 5 minutes for OOM-killer activations (with the victim process name and PID), kernel oopses and panics, hardware errors (MCE / EDAC / ATA), and morphit-service segfaults. The resource monitor sees memory pressure *building*; the kernel-log monitor sees what got killed when it broke. Cursor-based state means successive runs don't re-alert on old events.
+259. **Kernel-log monitoring catches what the resource monitor can't.** A separate sidecar scans the kernel ring buffer every 5 minutes for OOM-killer activations (with the victim process name and PID), kernel oopses and panics, hardware errors (MCE / EDAC / ATA), and morphit-service segfaults. The resource monitor sees memory pressure *building*; the kernel-log monitor sees what got killed when it broke. Cursor-based state means successive runs don't re-alert on old events.
 
-256. **Disk health and RAID monitored before silent data loss.** SMART self-tests every 6 hours alert on imminent drive failure, reallocated/pending sectors, and high temperature with the exact `smartctl -a /dev/X` command to investigate. Linux software RAID (`/proc/mdstat`) is checked every 15 minutes for degraded or failed arrays. Sidecars exit silently on hosts without SMART/RAID — safe to enable defensively.
+260. **Disk health and RAID monitored before silent data loss.** SMART self-tests every 6 hours alert on imminent drive failure, reallocated/pending sectors, and high temperature with the exact `smartctl -a /dev/X` command to investigate. Linux software RAID (`/proc/mdstat`) is checked every 15 minutes for degraded or failed arrays. Sidecars exit silently on hosts without SMART/RAID — safe to enable defensively.
 
-257. **The "alerting is silently failing" detector — and the silent TLS-renewal-failing detector too.** Most monitoring stacks miss two killer patterns: email alerting that broke silently (smarthost credentials rotated, TLS cert expired) and certbot renewals that stopped working months ago. Morphit's postfix-queue monitor alerts via the matrix-bot when mail queue depth or oldest-message age cross thresholds — alert still arrives when email is dead. The certbot monitor correlates cert expiry against the last successful renewal in `letsencrypt.log` and fires `renewal_stalled` long before the cert actually expires.
+261. **The "alerting is silently failing" detector — and the silent TLS-renewal-failing detector too.** Most monitoring stacks miss two killer patterns: email alerting that broke silently (smarthost credentials rotated, TLS cert expired) and certbot renewals that stopped working months ago. Morphit's postfix-queue monitor alerts via the matrix-bot when mail queue depth or oldest-message age cross thresholds — alert still arrives when email is dead. The certbot monitor correlates cert expiry against the last successful renewal in `letsencrypt.log` and fires `renewal_stalled` long before the cert actually expires.
 
-258. **OS health surfaced through the same channel as everything else.** Pending security updates (`apt list --upgradable` parsed for the `-security` suffix), systemd units in `failed` state (caught by the systemd-monitor since failed-to-start units emit no journal output journalctl-based alerting can route), journal disk growing toward gigabytes (catches "journal silently grew to 8 GB over six months"), and a daily trivy Docker-image CVE rescan against running containers — all DMed with the exact remediation command. Operators don't have to read every CVE advisory or check the motd.
+262. **OS health surfaced through the same channel as everything else.** Pending security updates (`apt list --upgradable` parsed for the `-security` suffix), systemd units in `failed` state (caught by the systemd-monitor since failed-to-start units emit no journal output journalctl-based alerting can route), journal disk growing toward gigabytes (catches "journal silently grew to 8 GB over six months"), and a daily trivy Docker-image CVE rescan against running containers — all DMed with the exact remediation command. Operators don't have to read every CVE advisory or check the motd.
 
-259. **Docker Compose service health, including the silent-unhealthy state.** `docker compose ps --format json` is polled every 5 minutes; `service_unhealthy` fires when the container is running but its declared health-check is failing — the silent-degradation state most operators miss because `docker ps` still shows "up." Restart-loop detection covers services whose `restart: always` policy is masking a real bug.
+263. **Docker Compose service health, including the silent-unhealthy state.** `docker compose ps --format json` is polled every 5 minutes; `service_unhealthy` fires when the container is running but its declared health-check is failing — the silent-degradation state most operators miss because `docker ps` still shows "up." Restart-loop detection covers services whose `restart: always` policy is masking a real bug.
 
-260. **One-command Ansible deployment.** Fill in `group_vars/all.yml` (8 mandatory values: domain, operator account, posting key file, db creds, alert MXID), run `ansible-playbook playbook.yml`, and 25 minutes later you have a fully-configured Morphit instance with BunkerWeb WAF, systemd services, postgres, certbot TLS, matrix-bot alerts, and host monitoring. Idempotent — re-runs only change what drifted. The full playbook source is `ops/ansible/`.
+264. **One-command Ansible deployment.** Fill in `group_vars/all.yml` (8 mandatory values: domain, operator account, posting key file, db creds, alert MXID), run `ansible-playbook playbook.yml`, and 25 minutes later you have a fully-configured Morphit instance with BunkerWeb WAF, systemd services, postgres, certbot TLS, matrix-bot alerts, and host monitoring. Idempotent — re-runs only change what drifted. The full playbook source is `ops/ansible/`.
 
-261. **Native-language translations across every locale, not English fallbacks.** A systematic audit and translator pass closed real translation gaps — strings that had been silently shipping in English because earlier translator passes missed them. Now backed by a regression smoke that flags any same-as-English value outside a documented allow-list, so future translator drift fails CI rather than user-report time.
+265. **Native-language translations across every locale, not English fallbacks.** A systematic audit and translator pass closed real translation gaps — strings that had been silently shipping in English because earlier translator passes missed them. Now backed by a regression smoke that flags any same-as-English value outside a documented allow-list, so future translator drift fails CI rather than user-report time.
 
-262. **Plain-language `/glossary` route.** "Trade-only," "trust score," "orderbook," "escrow-free," "federation" — defined in plain English with a one-sentence example each, not crypto-jargon. No need to keep a browser tab on Wikipedia open while learning Morphit. Linked from every page footer.
+266. **Plain-language `/glossary` route.** "Trade-only," "trust score," "orderbook," "escrow-free," "federation" — defined in plain English with a one-sentence example each, not crypto-jargon. No need to keep a browser tab on Wikipedia open while learning Morphit. Linked from every page footer.
 
-263. **In-context glossary tooltips.** A `<Term>` component surfaces glossary definitions on hover or tap, with a dotted-underline cue on first appearance per route. Restrained by design — callers opt-in word by word rather than auto-detecting across rendered text. Power users get the protection; everyone else sees clean reading flow.
+267. **In-context glossary tooltips.** A `<Term>` component surfaces glossary definitions on hover or tap, with a dotted-underline cue on first appearance per route. Restrained by design — callers opt-in word by word rather than auto-detecting across rendered text. Power users get the protection; everyone else sees clean reading flow.
 
-264. **Onboarding copy softened — same custody truth, less doom-laden framing.** The seed-phrase confirmation reads as a commitment to action ("I'll keep these 12 words safe — I know they're the only way back into my account") rather than a legal disclaimer ("I understand losing this means everything is gone"). Same fact, friendlier voice, in all 10 locales.
+268. **Onboarding copy softened — same custody truth, less doom-laden framing.** The seed-phrase confirmation reads as a commitment to action ("I'll keep these 12 words safe — I know they're the only way back into my account") rather than a legal disclaimer ("I understand losing this means everything is gone"). Same fact, friendlier voice, in all 10 locales.
 
-265. **"Your fee-rejected order silently vanished" cliff closed.** When the relay rejects your listing fee for any reason (wrong amount, wrong fee_method, low operator balance, wrong recipient), you get a chat message explaining exactly which validation step failed and the corrective action. No more "I posted my order three hours ago and it never appeared" mystery.
+269. **"Your fee-rejected order silently vanished" cliff closed.** When the relay rejects your listing fee for any reason (wrong amount, wrong fee_method, low operator balance, wrong recipient), you get a chat message explaining exactly which validation step failed and the corrective action. No more "I posted my order three hours ago and it never appeared" mystery.
 
-266. **Chat composer surfaces a soft proofread reminder before accidentally-public chat goes out.** When you're typing what looks like a private message ("my address is...", "my real name is...", "my bank account is...") into a public chat channel, Morphit shows a soft amber banner: "This channel is public. Did you mean to DM?" One tap to keep typing, one tap to switch to DM. Doesn't block; just nudges.
+270. **Chat composer surfaces a soft proofread reminder before accidentally-public chat goes out.** When you're typing what looks like a private message ("my address is...", "my real name is...", "my bank account is...") into a public chat channel, Morphit shows a soft amber banner: "This channel is public. Did you mean to DM?" One tap to keep typing, one tap to switch to DM. Doesn't block; just nudges.
 
-267. **Printable seed-phrase backup card.** One click in the onboarding flow prints a paper-friendly backup card via the browser's native print dialog — no PDF library, no server round trip, no third-party dependency. Seed phrase never leaves the device. Pick paper or save-as-PDF; the rest of the page is hidden during print.
+271. **Printable seed-phrase backup card.** One click in the onboarding flow prints a paper-friendly backup card via the browser's native print dialog — no PDF library, no server round trip, no third-party dependency. Seed phrase never leaves the device. Pick paper or save-as-PDF; the rest of the page is hidden during print.
 
-268. **First-post starter pack.** First-time posters see a green-tinted card with three safe-default tips (start small, 7-day expiry, pick payment methods you actually accept) and a deep link to the trade-walkthrough FAQ. Self-hides once the user has any prior posting experience. Privacy posture: client-side only.
+272. **First-post starter pack.** First-time posters see a green-tinted card with three safe-default tips (start small, 7-day expiry, pick payment methods you actually accept) and a deep link to the trade-walkthrough FAQ. Self-hides once the user has any prior posting experience. Privacy posture: client-side only.
 
-269. **Centralized locale-aware number/date formatters.** Currency, percent, BLURT amount, count, and date helpers all read the active locale. A German user sees "1.234,56" where a US user sees "1,234.56" — no ad-hoc `.toFixed()` calls drifting across the codebase.
+273. **Centralized locale-aware number/date formatters.** Currency, percent, BLURT amount, count, and date helpers all read the active locale. A German user sees "1.234,56" where a US user sees "1,234.56" — no ad-hoc `.toFixed()` calls drifting across the codebase.
 
-270. **Printable one-page cheat-sheet at `/cheat-sheet`.** A landscape A4 / US Letter sheet with the trade flow on the left, the chat-paste safety rules in the middle, and the per-asset quick-reference table on the right. Fold and put it on your desk; hand it to the grandma you're onboarding. Print-friendly CSS strips colors and reformats for a single black-and-white page.
+274. **Printable one-page cheat-sheet at `/cheat-sheet`.** A landscape A4 / US Letter sheet with the trade flow on the left, the chat-paste safety rules in the middle, and the per-asset quick-reference table on the right. Fold and put it on your desk; hand it to the grandma you're onboarding. Print-friendly CSS strips colors and reformats for a single black-and-white page.
 
-271. **Identity-label policy enforced consistently.** Every place a user account name appears in the UI renders with its identicon, so brand-new Blurt accounts are visually distinguishable. Spoofing attempts like `@morph1t` vs `@morphit` are visually obvious, not just textually different. Backed by a regression smoke catching future raw-render drift at CI time.
+275. **Identity-label policy enforced consistently.** Every place a user account name appears in the UI renders with its identicon, so brand-new Blurt accounts are visually distinguishable. Spoofing attempts like `@morph1t` vs `@morphit` are visually obvious, not just textually different. Backed by a regression smoke catching future raw-render drift at CI time.
 
-272. **Onboarding back-button on the review stage that wipes the just-generated seed before returning to the path picker.** A confirmation modal warns the user they're discarding the 12 words; on confirm, the seed is wiped from memory and the form state resets. Three "discard the unsaved identity" code paths now use the same wipe pattern.
+276. **Onboarding back-button on the review stage that wipes the just-generated seed before returning to the path picker.** A confirmation modal warns the user they're discarding the 12 words; on confirm, the seed is wiped from memory and the form state resets. Three "discard the unsaved identity" code paths now use the same wipe pattern.
 
-273. **`/post` remembers your fiat currency and region across sessions.** Stored in your browser, never sent to any server, never on chain. Clear the preference any time from `/settings`. A "Preferences" section lets you review what's saved.
+277. **`/post` remembers your fiat currency and region across sessions.** Stored in your browser, never sent to any server, never on chain. Clear the preference any time from `/settings`. A "Preferences" section lets you review what's saved.
 
-274. **Route-transition focus management for screen-reader users.** Navigating from page to page moves focus to the main region on every real route change. Screen readers announce the page change; sighted users see no visual disruption. Heading hierarchy is audited and codified as a regression smoke so future drift fails CI.
+278. **Route-transition focus management for screen-reader users.** Navigating from page to page moves focus to the main region on every real route change. Screen readers announce the page change; sighted users see no visual disruption. Heading hierarchy is audited and codified as a regression smoke so future drift fails CI.
 
-275. **Static-source color-contrast smoke.** Every text/background color pairing across the frontend is checked against WCAG AA at the source level — 161 pairs across 96 Svelte files, zero below threshold.
+279. **Static-source color-contrast smoke.** Every text/background color pairing across the frontend is checked against WCAG AA at the source level — 161 pairs across 96 Svelte files, zero below threshold.
 
-276. **Treasury chain-pin closes a real fork-attack vector.** BTC/XMR fee addresses are signed by `@morphit` on chain via the existing release trust anchor. Every federated indexer prefers the chain-pinned address over its own configured value. A hostile fork can only divert fees on its own instance — every other federated indexer marks those orders unverified, and the divergence is itself a defection signal anyone scraping multiple instances can detect.
+280. **Treasury chain-pin closes a real fork-attack vector.** BTC/XMR fee addresses are signed by `@morphit` on chain via the existing release trust anchor. Every federated indexer prefers the chain-pinned address over its own configured value. A hostile fork can only divert fees on its own instance — every other federated indexer marks those orders unverified, and the divergence is itself a defection signal anyone scraping multiple instances can detect.
 
-277. **No Morphit instance — not even canonical morphit.io — holds any user's funds.** Every trade settles peer-to-peer between the two parties' wallets. The operator runs an orderbook + chat relay + fee-collection account, not a custodial pool. If morphit.io shut down tomorrow, every order still settles via any other federated instance — your funds were never on morphit.io to begin with.
+281. **No Morphit instance — not even canonical morphit.io — holds any user's funds.** Every trade settles peer-to-peer between the two parties' wallets. The operator runs an orderbook + chat relay + fee-collection account, not a custodial pool. If morphit.io shut down tomorrow, every order still settles via any other federated instance — your funds were never on morphit.io to begin with.
 
-278. **Per-operator chat-link external explorer URLs.** When a counterparty sends a BTC or XMR transaction ID in chat, Morphit renders it as a clickable link that opens the transaction in an external block explorer. Operators who self-host their own explorers can override per-instance; everyone else inherits the bundled defaults. The override is per-operator (not per-user) — a user who wants different behavior chooses a different Morphit instance.
+282. **Per-operator chat-link external explorer URLs.** When a counterparty sends a BTC or XMR transaction ID in chat, Morphit renders it as a clickable link that opens the transaction in an external block explorer. Operators who self-host their own explorers can override per-instance; everyone else inherits the bundled defaults. The override is per-operator (not per-user) — a user who wants different behavior chooses a different Morphit instance.
 
-279. **Multi-explorer quorum gate on fee verifiers.** Operators can require N-of-M explorer agreement before accepting a fee verdict. Below the threshold, the verifier marks the order pending-external rather than accepting a degraded single-source result. Default is 1 (back-compat with smaller instances); operators with the full 5-explorer default list can set the threshold to 2 or 3 for genuine multi-source cross-check.
+283. **Multi-explorer quorum gate on fee verifiers.** Operators can require N-of-M explorer agreement before accepting a fee verdict. Below the threshold, the verifier marks the order pending-external rather than accepting a degraded single-source result. Default is 1 (back-compat with smaller instances); operators with the full 5-explorer default list can set the threshold to 2 or 3 for genuine multi-source cross-check.
 
-280. **Setup wizard configures explorer URLs with live health probes.** Each URL gets a ✓ / ⚠ / ✗ status indicator with latency on screen. Probes hit each explorer's standard health endpoint — no real transaction IDs or addresses sent. Non-blocking: operators can configure URLs that fail probes (might be configuring an explorer not yet online, or running offline).
+284. **Setup wizard configures explorer URLs with live health probes.** Each URL gets a ✓ / ⚠ / ✗ status indicator with latency on screen. Probes hit each explorer's standard health endpoint — no real transaction IDs or addresses sent. Non-blocking: operators can configure URLs that fail probes (might be configuring an explorer not yet online, or running offline).
 
-281. **Per-operator listing fee USD target with live price recompute.** The operator picks a USD target (default $0.25), the wizard fetches live BTC/USD and XMR/USD prices, computes equivalent amounts, displays them, and asks for accept-or-override. Same step is reachable from the maintenance menu for ongoing tuning.
+285. **Per-operator listing fee USD target with live price recompute.** The operator picks a USD target (default $0.25), the wizard fetches live BTC/USD and XMR/USD prices, computes equivalent amounts, displays them, and asks for accept-or-override. Same step is reachable from the maintenance menu for ongoing tuning.
 
-282. **Pre-launch + day-zero + week-one runbooks: three distinct documents, one continuous operator experience.** Pre-launch checklist → launch-day rehearsal + T-zero procedure + first-hour monitoring + rollback plan → week-one monitoring rolled up daily and weekly. Each doc has clear handoff to the next. Community operators get a wizard that configures the node and runbooks that tell them what to *do* with it.
+286. **Pre-launch + day-zero + week-one runbooks: three distinct documents, one continuous operator experience.** Pre-launch checklist → launch-day rehearsal + T-zero procedure + first-hour monitoring + rollback plan → week-one monitoring rolled up daily and weekly. Each doc has clear handoff to the next. Community operators get a wizard that configures the node and runbooks that tell them what to *do* with it.
 
-283. **Federation cost attribution: each operator's relay pays only for ops that route through their own instance.** Before this fix, every federated indexer would have queued payouts on every op it saw — multiplying treasury spend by the federation count. Now each operator only pays the welcome bonus, refills, and loyalty BP for ops that name their instance tag. The operator getting the 90% fee reward is also the operator obligated for the consequences.
+287. **Federation cost attribution: each operator's relay pays only for ops that route through their own instance.** Before this fix, every federated indexer would have queued payouts on every op it saw — multiplying treasury spend by the federation count. Now each operator only pays the welcome bonus, refills, and loyalty BP for ops that name their instance tag. The operator getting the 90% fee reward is also the operator obligated for the consequences.
 
-284. **Reputation attack-surface audit closed two real gaps.** Untethered "free" feedback citations are now rejected (fake-feedback targets require a real listing fee payment). Coordinated low-rating pile-on detection catches Sybil clusters depressing a real trader's reputation, with strict false-positive guards so a legitimate user reviewing multiple counterparties is never flagged. Flagged reviews stay visible on the subject's profile list but don't drive the numeric rating.
+288. **Reputation attack-surface audit closed two real gaps.** Untethered "free" feedback citations are now rejected (fake-feedback targets require a real listing fee payment). Coordinated low-rating pile-on detection catches Sybil clusters depressing a real trader's reputation, with strict false-positive guards so a legitimate user reviewing multiple counterparties is never flagged. Flagged reviews stay visible on the subject's profile list but don't drive the numeric rating.
 
-285. **QR-pair real sign-in: read-only desktop session.** Pairing your phone establishes a read-only session on the desktop — posting key stays on the phone, all writes route through the phone for signing. WhatsApp-Web mental model — phone is the source of truth, desktop is a window. A clear banner keeps you aware of session shape; "use your phone to sign this" affordances appear on every write surface (post an order, send a chat, leave feedback).
+289. **QR-pair real sign-in: read-only desktop session.** Pairing your phone establishes a read-only session on the desktop — posting key stays on the phone, all writes route through the phone for signing. WhatsApp-Web mental model — phone is the source of truth, desktop is a window. A clear banner keeps you aware of session shape; "use your phone to sign this" affordances appear on every write surface (post an order, send a chat, leave feedback).
 
-286. **Paired-readonly affordance gap sweep.** Every write call site explains why you need your phone, with deep links that preserve context (which order to edit, which peer to message). No more silent disappearances or misleading "session locked, unlock to continue" CTAs that paired users can't satisfy.
+290. **Paired-readonly affordance gap sweep.** Every write call site explains why you need your phone, with deep links that preserve context (which order to edit, which peer to message). No more silent disappearances or misleading "session locked, unlock to continue" CTAs that paired users can't satisfy.
 
-287. **Price-model picker on `/post/edit`.** Change your spread or flat price without cancelling and re-listing. Loses no engagement metrics, no fee status, no prior view counts. Defensively handles legacy and unknown shapes — never silently drops user intent.
+291. **Price-model picker on `/post/edit`.** Change your spread or flat price without cancelling and re-listing. Loses no engagement metrics, no fee status, no prior view counts. Defensively handles legacy and unknown shapes — never silently drops user intent.
 
-288. **Persona walk-throughs as standing engineering discipline.** Three personas run end-to-end at the top of every major session: Bob (existing Blurt user), Sally (never owned crypto), Sally-as-operator (sets up her own node from any of the operator docs). Findings get fixed inline; locale parity across 10 languages holds throughout. Catches UX gaps no backlog list catches.
+292. **Persona walk-throughs as standing engineering discipline.** Three personas run end-to-end at the top of every major session: Bob (existing Blurt user), Sally (never owned crypto), Sally-as-operator (sets up her own node from any of the operator docs). Findings get fixed inline; locale parity across 10 languages holds throughout. Catches UX gaps no backlog list catches.
 
-289. **Operator-doc audit pinned by regression smokes.** Every CLI command, every environment variable, every API field path, every install location named in the operator docs is sentinel-grep checked against the real code. When the docs and the code disagree, CI fails loudly before the operator copy-pastes from a doc that lies.
+293. **Operator-doc audit pinned by regression smokes.** Every CLI command, every environment variable, every API field path, every install location named in the operator docs is sentinel-grep checked against the real code. When the docs and the code disagree, CI fails loudly before the operator copy-pastes from a doc that lies.
 
-290. **USDT (Tether) peer-to-peer across four networks.** Trade USDT on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or BNB Smart Chain (BEP-20) — peer to peer, non-custodial, no KYC. The most-traded stablecoin in the world, with the price stability active traders rely on. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum); operators can disable USDT on their instance with one env var if they prefer to specialize.
+294. **USDT (Tether) peer-to-peer across four networks.** Trade USDT on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or BNB Smart Chain (BEP-20) — peer to peer, non-custodial, no KYC. The most-traded stablecoin in the world, with the price stability active traders rely on. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum); operators can disable USDT on their instance with one env var if they prefer to specialize.
 
-291. **No default USDT network — every USDT trade is an explicit network commit.** Cross-network sends are unrecoverable (USDT-ERC20 to a TRC-20 address loses the funds, period). Morphit's UI refuses to let the user default into that mistake: every USDT trade picks the network deliberately, every USDT address shared in chat carries a bold per-network header and a permanent per-message reminder of which chain it's for, and the post-order form won't submit until the network is chosen. Friction by design — the right kind of friction.
+295. **No default USDT network — every USDT trade is an explicit network commit.** Cross-network sends are unrecoverable (USDT-ERC20 to a TRC-20 address loses the funds, period). Morphit's UI refuses to let the user default into that mistake: every USDT trade picks the network deliberately, every USDT address shared in chat carries a bold per-network header and a permanent per-message reminder of which chain it's for, and the post-order form won't submit until the network is chosen. Friction by design — the right kind of friction.
 
-292. **Arbitrage between Morphit and exchanges is built for, not built against.** Morphit's listing fee is a fraction of a dollar; no taker fee, no withdrawal fee, no withdrawal limit. The price-model picker lets a trader run a thin-spread arbitrage strategy on their own listings (set `spread: 0.5%` and let the orderbook fill at-or-above CoinGecko mid). As liquidity grows, arbitrageurs pull the P2P prices into line with global market — good for everyone.
+296. **Arbitrage between Morphit and exchanges is built for, not built against.** Morphit's listing fee is a fraction of a dollar; no taker fee, no withdrawal fee, no withdrawal limit. The price-model picker lets a trader run a thin-spread arbitrage strategy on their own listings (set `spread: 0.5%` and let the orderbook fill at-or-above CoinGecko mid). As liquidity grows, arbitrageurs pull the P2P prices into line with global market — good for everyone.
 
-293. **Each instance's asset policy is visible up front.** Open `/about-this-instance` on any Morphit and you see which assets that operator accepts at a glance — green for "accepts everything," amber for "accepts most," red for "tight policy." No surprises after you've already posted an order.
+297. **Each instance's asset policy is visible up front.** Open `/about-this-instance` on any Morphit and you see which assets that operator accepts at a glance — green for "accepts everything," amber for "accepts most," red for "tight policy." No surprises after you've already posted an order.
 
-294. **No flash of English content for non-English speakers.** Every page is prerendered per locale — `/de/orderbook` ships German bytes, `/fa/orderbook` ships Persian, `/zh-HK/orderbook` ships Traditional Chinese. No layout flicker, no client-side translation reload — what you see is what you get from the first byte.
+298. **No flash of English content for non-English speakers.** Every page is prerendered per locale — `/de/orderbook` ships German bytes, `/fa/orderbook` ships Persian, `/zh-HK/orderbook` ships Traditional Chinese. No layout flicker, no client-side translation reload — what you see is what you get from the first byte.
 
-295. **Bitcoin Cash (BCH) peer-to-peer.** Trade BCH on Morphit — bigger blocks and lower fees than BTC, transparent and decentralized with no issuer who can freeze addresses. Single mainnet, single CashAddr address format, no bridges. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum).
+299. **Bitcoin Cash (BCH) peer-to-peer.** Trade BCH on Morphit — bigger blocks and lower fees than BTC, transparent and decentralized with no issuer who can freeze addresses. Single mainnet, single CashAddr address format, no bridges. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum).
 
-296. **Setup wizard handles trade-only-asset opt-out — no manual env editing.** Step 13 of `morphit-ops init` walks operators through each tradable asset and asks per-ticker whether to disable. Picks emit the right `MORPHIT_INDEXER_DISABLED_ASSETS=` line automatically. Grandma-friendly: zero shell editing for the most common operator-stance decision.
+300. **Setup wizard handles trade-only-asset opt-out — no manual env editing.** Step 13 of `morphit-ops init` walks operators through each tradable asset and asks per-ticker whether to disable. Picks emit the right `MORPHIT_INDEXER_DISABLED_ASSETS=` line automatically. Grandma-friendly: zero shell editing for the most common operator-stance decision.
 
-297. **Litecoin (LTC) peer-to-peer.** Trade LTC on Morphit — fast 2.5-minute blocks, low transaction fees, transparent and decentralized like Bitcoin with no central issuer. Three address formats accepted (legacy `L`, P2SH `M`/`3`, bech32 `ltc1`). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
+301. **Litecoin (LTC) peer-to-peer.** Trade LTC on Morphit — fast 2.5-minute blocks, low transaction fees, transparent and decentralized like Bitcoin with no central issuer. Three address formats accepted (legacy `L`, P2SH `M`/`3`, bech32 `ltc1`). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
 
-298. **Dash (DASH) peer-to-peer.** Trade DASH on Morphit — fast-confirmation Bitcoin-family chain with optional InstantSend (sub-second confirmations) and opt-in PrivateSend mixing via masternodes. Two address formats accepted (`X` legacy, `7` P2SH). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
+302. **Dash (DASH) peer-to-peer.** Trade DASH on Morphit — fast-confirmation Bitcoin-family chain with optional InstantSend (sub-second confirmations) and opt-in PrivateSend mixing via masternodes. Two address formats accepted (`X` legacy, `7` P2SH). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
 
-299. **USD Coin (USDC) peer-to-peer across four networks.** Trade USDC on Ethereum, Solana, Base, or Polygon — peer to peer, non-custodial, no KYC. Pick whichever network you and your counterparty both support; Morphit's network picker locks it in at post time so a cross-network send can't accidentally lose your funds. Honest disclosure: Circle (the issuer) can freeze any USDC address on demand — exactly why Morphit ships USDC as trade-only and never pays its own listing fees in it.
+303. **USD Coin (USDC) peer-to-peer across four networks.** Trade USDC on Ethereum, Solana, Base, or Polygon — peer to peer, non-custodial, no KYC. Pick whichever network you and your counterparty both support; Morphit's network picker locks it in at post time so a cross-network send can't accidentally lose your funds. Honest disclosure: Circle (the issuer) can freeze any USDC address on demand — exactly why Morphit ships USDC as trade-only and never pays its own listing fees in it.
 
-300. **Dai (DAI) peer-to-peer across four networks — the meaningfully-decentralized stablecoin.** Trade DAI on Ethereum, Polygon, Base, or Arbitrum — peer to peer, non-custodial, no KYC. Unlike USDT and USDC, DAI is not issued by a corporate entity — it's governed by MKR token-holders through on-chain votes, with no admin-freeze function on the token contract itself. Honest nuance: MakerDAO's Peg Stability Module holds USDC as collateral, so Circle's freeze power indirectly affects DAI redeemability — meaningful-but-not-perfect decentralization.
+304. **Dai (DAI) peer-to-peer across four networks — the meaningfully-decentralized stablecoin.** Trade DAI on Ethereum, Polygon, Base, or Arbitrum — peer to peer, non-custodial, no KYC. Unlike USDT and USDC, DAI is not issued by a corporate entity — it's governed by MKR token-holders through on-chain votes, with no admin-freeze function on the token contract itself. Honest nuance: MakerDAO's Peg Stability Module holds USDC as collateral, so Circle's freeze power indirectly affects DAI redeemability — meaningful-but-not-perfect decentralization.
 
-301. **Dogecoin (DOGE) peer-to-peer.** Trade DOGE peer to peer — non-custodial, no KYC. Fair-launched in 2013 with no premine after the first year, merge-mined with Litecoin since 2014 so DOGE inherits LTC's hashrate-security. Transparent base layer; wallet-side address rotation is the privacy lever — trade-only on Morphit.
+305. **Dogecoin (DOGE) peer-to-peer.** Trade DOGE peer to peer — non-custodial, no KYC. Fair-launched in 2013 with no premine after the first year, merge-mined with Litecoin since 2014 so DOGE inherits LTC's hashrate-security. Transparent base layer; wallet-side address rotation is the privacy lever — trade-only on Morphit.
 
-302. **Zcash (ZEC) peer-to-peer with per-address privacy choice.** Trade ZEC peer to peer — non-custodial, no KYC. Two address families coexist on the same chain: transparent (`t1`/`t3`, publicly-visible like Bitcoin legacy) and shielded (`zs1` Sapling, `u1` Unified Address) that hide sender, recipient, and amount via zk-SNARKs. Pick the address type that fits each trade's privacy posture — trade-only on Morphit.
+306. **Zcash (ZEC) peer-to-peer with per-address privacy choice.** Trade ZEC peer to peer — non-custodial, no KYC. Two address families coexist on the same chain: transparent (`t1`/`t3`, publicly-visible like Bitcoin legacy) and shielded (`zs1` Sapling, `u1` Unified Address) that hide sender, recipient, and amount via zk-SNARKs. Pick the address type that fits each trade's privacy posture — trade-only on Morphit.
 
-303. **Pirate Chain (ARRR) peer-to-peer with chain-level shielded transactions.** Trade ARRR peer to peer — non-custodial, no KYC. Pirate Chain runs only the Sapling zk-SNARK shielded pool, so every transfer hides sender, recipient, and amount by construction (no transparent address option at all). Single address format (`zs1` Sapling), trade-only on Morphit.
+307. **Pirate Chain (ARRR) peer-to-peer with chain-level shielded transactions.** Trade ARRR peer to peer — non-custodial, no KYC. Pirate Chain runs only the Sapling zk-SNARK shielded pool, so every transfer hides sender, recipient, and amount by construction (no transparent address option at all). Single address format (`zs1` Sapling), trade-only on Morphit.
 
-304. **Decred (DCR) peer-to-peer with hybrid PoW/PoS consensus and on-chain governance.** Trade DCR peer to peer — non-custodial, no KYC. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders, so neither group alone can change protocol rules. On-chain governance via Politeia lets stakeholders propose, debate, and ratify changes — trade-only on Morphit.
+308. **Decred (DCR) peer-to-peer with hybrid PoW/PoS consensus and on-chain governance.** Trade DCR peer to peer — non-custodial, no KYC. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders, so neither group alone can change protocol rules. On-chain governance via Politeia lets stakeholders propose, debate, and ratify changes — trade-only on Morphit.
 
-305. **Solana (SOL) peer-to-peer with delegated Proof-of-Stake and high-throughput PoH sequencing.** Trade SOL peer to peer — non-custodial, no KYC, no central freeze authority. Solana addresses look identical to USDT/USDC SPL token-account addresses, so the `asset` field on each order disambiguates — Morphit shows you which asset you're sending. Trade-only on Morphit.
+309. **Solana (SOL) peer-to-peer with delegated Proof-of-Stake and high-throughput PoH sequencing.** Trade SOL peer to peer — non-custodial, no KYC, no central freeze authority. Solana addresses look identical to USDT/USDC SPL token-account addresses, so the `asset` field on each order disambiguates — Morphit shows you which asset you're sending. Trade-only on Morphit.
 
-306. **Ethereum (ETH) peer-to-peer with post-Merge Proof-of-Stake.** Trade ETH peer to peer — non-custodial, no KYC, no central freeze authority. EVM addresses look identical across ETH/USDT-ERC20/USDC-ERC20/DAI-ERC20/Base/Polygon/Arbitrum, so Morphit's `asset` + `network` fields disambiguate (and ENS names aren't resolved — no centralized RPC dependency). Trade-only on Morphit.
+310. **Ethereum (ETH) peer-to-peer with post-Merge Proof-of-Stake.** Trade ETH peer to peer — non-custodial, no KYC, no central freeze authority. EVM addresses look identical across ETH/USDT-ERC20/USDC-ERC20/DAI-ERC20/Base/Polygon/Arbitrum, so Morphit's `asset` + `network` fields disambiguate (and ENS names aren't resolved — no centralized RPC dependency). Trade-only on Morphit.
 
-307. **Ripple (XRP) peer-to-peer with Federated Byzantine Agreement consensus.** Trade XRP peer to peer — non-custodial, no KYC. Native XRP cannot be frozen by any central authority (only IOU-token variants on XRPL can; native XRP cannot), and Morphit's post-flow surfaces the two XRPL gotchas — destination tags (required when sending to exchange-hosted addresses) and the 1-XRP base reserve (first receive needs ≥1 XRP). Trade-only on Morphit.
+311. **Ripple (XRP) peer-to-peer with Federated Byzantine Agreement consensus.** Trade XRP peer to peer — non-custodial, no KYC. Native XRP cannot be frozen by any central authority (only IOU-token variants on XRPL can; native XRP cannot), and Morphit's post-flow surfaces the two XRPL gotchas — destination tags (required when sending to exchange-hosted addresses) and the 1-XRP base reserve (first receive needs ≥1 XRP). Trade-only on Morphit.
 
 ## How to verify any of the above
 
@@ -689,7 +697,7 @@ Every claim in this document is verifiable. The repository is at **git.agorise.n
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~150 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0037-*.md` (36 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0038-*.md` (37 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`
@@ -701,4 +709,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*307 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-22.*
+*311 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-22.*

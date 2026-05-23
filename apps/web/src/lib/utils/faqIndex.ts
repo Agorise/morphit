@@ -84,6 +84,7 @@ export const FAQ_KEYS = [
 
 	// ─── 6. Reputation & feedback ──────────────────────────────
 	'what_is_reputation',
+	'how_to_build_high_reputation',
 	'profile_pages',
 	'profile_own_vs_others',
 	'how_to_leave_feedback',
@@ -248,11 +249,19 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// entry bridges to the chat cluster and belongs here from the
 	// feedback side.
 	what_is_reputation: [
+		'how_to_build_high_reputation',
 		'how_to_leave_feedback',
 		'feedback_immutable',
 		'feedback_suppressed',
 		'new_trader_badge',
 		'chat_vs_feedback_visibility'
+	],
+	how_to_build_high_reputation: [
+		'what_is_reputation',
+		'how_to_leave_feedback',
+		'verified_chat_badge',
+		'feedback_suppressed',
+		'sybil_protection'
 	],
 	how_to_leave_feedback: [
 		'what_is_reputation',

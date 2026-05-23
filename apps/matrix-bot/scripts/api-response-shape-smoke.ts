@@ -589,7 +589,14 @@ const sampleOrder = {
 const sampleFeedbackSummary = {
 	count: 42,
 	weighted_rating: 4.75,
-	by_rating: { '1': 0, '2': 1, '3': 1, '4': 5, '5': 35 }
+	by_rating: { '1': 0, '2': 1, '3': 1, '4': 5, '5': 35 },
+	// cp124 H5: by-side breakdown
+	by_side: {
+		buy: { count: 25, weighted_rating: 4.92 },
+		sell: { count: 17, weighted_rating: 4.5 }
+	},
+	// cp124 H6: dormancy signal
+	last_traded_at: '2026-05-15T12:30:00Z'
 } satisfies FeedbackSummary;
 
 const sampleChatAdmission = {

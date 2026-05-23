@@ -482,7 +482,10 @@
 			"feedback_load_failed": "Konnte das Feedback nicht laden.",
 			"feedback_given_load_failed": "Konnte das gegebene Feedback dieses Kontos nicht laden.",
 			"orders_load_failed": "Konnte die Bestellungen nicht laden."
-		}
+		},
+		"as_buyer": "als Käufer",
+		"as_seller": "als Verkäufer",
+		"last_traded_label": "Letzter Handel:"
 	},
 	"home": {
 		"hero_title": "Tausche Monero, Bitcoin und mehr privat gegen Fiat-Währungen+",
@@ -1086,6 +1089,10 @@
 			"what_is_reputation": {
 				"q": "Wie funktioniert das Reputationssystem von Morphit?",
 				"a": "Jeder abgeschlossene Handel erlaubt beiden Seiten, Bewertungen abzugeben: 1 bis 5 Sterne plus ein optionaler Kommentar. Die Bewertung wird on-chain veröffentlicht, ist also permanent und öffentlich — jeder kann sie auf der Profilseite eines Traders lesen. Das Profil zeigt eine gewichtete Durchschnittsbewertung, eine Anzahl der Reviews und eine Aufschlüsselung nach Sternen, sodass du auf einen Blick siehst, ob ein Trader eine konsistente Historie oder ein paar Ausreißer hat. Es gibt keinen zentralen Schiedsrichter; die Community-Reviews sind das Reputationssignal.\n\n**Wenn dir Menschen vertrauen sollen, ist dein Ruf alles.**\n\nMorphit hat keine Schlichter, Treuhänder oder Rückbuchungen. Das Einzige, was einen Fremden dazu bringt, dir sein Geld anzuvertrauen, ist der sichtbare Verlauf, den du aufgebaut hast. Behandle jeden Handel so, als ob er zählt — denn jeder Handel ist ein öffentlicher, permanenter Eintrag in der einzigen Reputation, die zählt: deiner."
+			},
+			"how_to_build_high_reputation": {
+				"q": "Wie baue ich eine hohe Reputation auf Morphit auf?",
+				"a": "Reputation auf Morphit baut sich **organisch** auf — durch konsistenten Handel, echtes Feedback von echten Gegenparteien, und das Vermeiden von Mustern, die das System als verdächtig markiert. Es gibt keine Abkürzung.\n\n**Was zu deiner Punktzahl zählt** (nach Auswirkung geordnet):\n\n1. **Verifizierte, abgeschlossene Handelsgeschäfte.** Jede Order mit `fee_status = 'verified'` und einem Feedback einer Gegenpartei zählt.\n\n2. **Aktuelle Aktivität zählt mehr als alte.** Morphit verwendet eine **365-Tage-Halbwertszeit** mit exponentieller Abklingrate: heute = 1.0×, ein Jahr alt = 0.5×, zwei Jahre = 0.25×. **Handle regelmäßig.**\n\n3. **Sowohl Kauf- ALS AUCH Verkaufsseite.** Dein Profil zeigt separate Bewertungen pro Seite.\n\n4. **Verified-Chat-Abzeichen.** Eine Bewertung trägt das Abzeichen, wenn du und deine Gegenpartei ≥2 Nachrichten in jede Richtung über ≥15 Minuten ausgetauscht habt.\n\n5. **Aktualität der letzten Aktivität.** Profil zeigt \"Letzter Handel: vor N.\"\n\n**Was deine Punktzahl NICHT erhöht** (das System filtert dies):\n\n- Selbst-Bewertungen (auf Protokoll-Ebene abgelehnt)\n- Sock-Puppet-Konten (Signal A)\n- Gegenseitige Hoch-Stern-Reziprozitäts-Ringe (Signal B)\n- Konzentrationsangriffe (Signal D — ≥80% Fokus auf ein Ziel)\n- Feedback ohne zitierte Order\n- Koordinierte 1-Stern-Angriffe (Signal C)\n\n**Was du TUN solltest:**\n\n1. Vollständige Handelsgeschäfte durchführen\n2. Die Listing-Gebühr bezahlen (BLURT ist 50% günstiger)\n3. Feedback erwidern\n4. Echte Chat-Gespräche führen\n5. Detaillierte Kommentare schreiben\n6. Auf beiden Seiten handeln\n7. Mit diversen Gegenparteien handeln\n8. Aktiv bleiben\n\n**Was du VERMEIDEN solltest:**\n\n1. Keine Alt-Konten für Selbstbewertung\n2. Keine koordinierten Angriffe auf Gegenparteien\n3. Keine bezahlten Fake-Bewertungen\n4. Keine Drive-By-Feedbacks\n\n**Verifizierung — jeder kann deine Punktzahl prüfen.** Morphit bietet eine **öffentliche Reputationsquittung**: `GET /v1/accounts/<dein-konto>/reputation-receipt`. Jeder Leser kann alle Feedback-Zeilen abrufen (eingeschlossen UND ausgeschlossen, mit dem Grund jeder Ausschließung), das Abklinggewicht, und die verwendete Formel.\n\n**Ehrliche Einschränkungen:**\n\n- **Die ersten Handelsgeschäfte sind die schwersten.** Ein neues Konto zeigt ein `is_new_trader`-Abzeichen bis 4+ verifizierte Trades.\n- **Schlechte Bewertungen erholen sich mit der Zeit, werden aber nicht gelöscht.**\n- **Das System erkennt NICHT, ob ein Handel tatsächlich stattfand.** Settlement ist off-chain.\n\n**Kürzester Weg zu hoher Reputation: handle konsistent, settle zuverlässig, chatte mit deinen Gegenparteien, hinterlasse ehrliches Feedback in beide Richtungen, und lass Zeit + Signal-Tabellen-Filterung den Rest tun.**"
 			},
 			"how_to_leave_feedback": {
 				"q": "Wie hinterlasse ich eine Bewertung nach einem Handel?",
