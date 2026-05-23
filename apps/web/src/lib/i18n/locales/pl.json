@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "Dodaj przynajmniej jeden sposób, w jaki ludzie mogą Ci zapłacić.",
 			"payment_methods_too_many": "To ponad 12 metod płatności. Wybierz ulubione.",
 			"payment_method_too_long": "Każda metoda płatności powinna być krótka (poniżej 32 znaków).",
-			"waiver_min_usd_required": "Zwolnienie wymaga minimalnego rozmiaru zlecenia. Ustaw kwotę co najmniej na pokazanym wyżej minimum.",
+			"waiver_min_required": "Zwolnienie wymaga minimalnego rozmiaru zlecenia. Ustaw kwotę co najmniej na pokazanym wyżej minimum.",
 			"spread_not_a_number": "Spread musi być liczbą.",
 			"spread_out_of_range": "Spread musi być między -50% a +50%.",
 			"fixed_price_required": "Podaj cenę stałą.",

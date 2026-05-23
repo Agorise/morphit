@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "Ajoutez au moins un moyen de paiement.",
 			"payment_methods_too_many": "Cela fait plus de 12 moyens de paiement. Choisissez vos préférés.",
 			"payment_method_too_long": "Gardez chaque moyen de paiement court (moins de 32 caractères).",
-			"waiver_min_usd_required": "La dispense exige une taille de commande minimale. Réglez le montant au moins au plancher affiché ci-dessus.",
+			"waiver_min_required": "La dispense exige une taille de commande minimale. Réglez le montant au moins au plancher affiché ci-dessus.",
 			"spread_not_a_number": "Le spread doit être un nombre.",
 			"spread_out_of_range": "Le spread doit être entre -50% et +50%.",
 			"fixed_price_required": "Saisis un prix fixe.",

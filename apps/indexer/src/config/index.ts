@@ -260,6 +260,24 @@ export interface Config {
 	 *  stablecoins exist).  See ADR-0040 for the full design. */
 	readonly priceFeedDenominationFiat: string;
 
+	/** ── cp129: Defense F — cross-instance peer price monitor ────
+	 *  Periodically (every priceFeedPeerSampleIntervalMinutes) the
+	 *  indexer queries each federation peer's
+	 *  `/v1/price/morphit-native/receipt` endpoint and records the
+	 *  result.  It then compares the peer median vs its own derived
+	 *  price; sustained disagreement >25% for >4 hours fires an
+	 *  alert.  See ADR-0041 for the full design.
+	 *
+	 *  Default: false (opt-in).  Disabled instances skip the
+	 *  monitor entirely — no peer queries, no DB writes, no
+	 *  comparison.  An operator turns this on once their instance
+	 *  is federated with at least 3 reachable peers (the minimum
+	 *  for meaningful median computation). */
+	readonly priceFeedPeerMonitorEnabled: boolean;
+
+	/** How often to sample peers (minutes).  Default 30. */
+	readonly priceFeedPeerSampleIntervalMinutes: number;
+
 	/** Featured-slot auction: BLURT cost per
 	 *  hour of featured-slot time. Users pay this (× hours
 	 *  requested) to bid on a featured slot. Default 50 BLURT.
@@ -826,6 +844,19 @@ const envSchema = z.object({
 			'must be 3-8 uppercase letters (e.g. USD, EUR, XDR, XAU)'
 		)
 		.default('USD'),
+	// cp129: Defense F — cross-instance peer disagreement detector.
+	// Opt-in (default false).  When enabled, the indexer queries
+	// peer instances' price-receipt endpoint and alerts on
+	// sustained median-vs-self disagreement.  See ADR-0041.
+	MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED: z
+		.string()
+		.transform((s) => s === 'true')
+		.default('false'),
+	MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(30),
 
 	// Featured-slot auction.
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),
@@ -1352,6 +1383,10 @@ export function loadConfig(): Config {
 			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX,
 		// cp128
 		priceFeedDenominationFiat: e.MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT,
+		// cp129
+		priceFeedPeerMonitorEnabled: e.MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED,
+		priceFeedPeerSampleIntervalMinutes:
+			e.MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES,
 
 		featureFeeBlurtPerHour: e.MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR,
 

@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "至少添加一种收款方式。",
 			"payment_methods_too_many": "超过 12 种收款方式了。请挑选最常用的。",
 			"payment_method_too_long": "每种收款方式请保持简短(32 个字符以内)。",
-			"waiver_min_usd_required": "免除需要最低订单规模。将金额设置为至少上面显示的下限。",
+			"waiver_min_required": "免除需要最低订单规模。将金额设置为至少上面显示的下限。",
 			"spread_not_a_number": "价差必须是数字。",
 			"spread_out_of_range": "价差必须在 -50% 和 +50% 之间。",
 			"fixed_price_required": "请输入固定价。",

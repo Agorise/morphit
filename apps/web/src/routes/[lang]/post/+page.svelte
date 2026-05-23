@@ -899,15 +899,23 @@
 			return $_('post_order.errors.amount_min_exceeds_max');
 		}
 		// Phase 3: waiver-path orders must have amount_min set AND
-		// ≥ $1 USD worth of BLURT. Mirrors the indexer's
+		// ≥ WAIVER_MIN_BLURT BLURT. Mirrors the indexer's
 		// `waiver_requires_min_usd` rejection so the user fails the
 		// client-side gate before broadcast.
+		//
+		// cp129 i18n-key rename: the key was `waiver_min_usd_required`
+		// (historical, from when the floor was thought of as a USD
+		// constant).  Renamed to `waiver_min_required` since the
+		// underlying constant is BLURT-denominated and denomination-
+		// independent.  The on-chain indexer rejection code
+		// (`waiver_requires_min_usd`) stays as-is — that's a protocol
+		// constant we shouldn't churn on without consensus.
 		if (feeMethodChoice === 'waived_first_buy') {
 			if (amountMinNum === null) {
-				return $_('post_order.errors.waiver_min_usd_required');
+				return $_('post_order.errors.waiver_min_required');
 			}
 			if (amountMinNum < WAIVER_MIN_BLURT) {
-				return $_('post_order.errors.waiver_min_usd_required');
+				return $_('post_order.errors.waiver_min_required');
 			}
 		}
 		return '';
