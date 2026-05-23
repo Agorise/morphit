@@ -653,3 +653,66 @@ operator/indexer-level compromise (Defense F from cp129). All
 the manipulation surfaces have a defense. Grandma trades against
 a price display backed by 8 specific defenses, none of which
 are visible to her — they just work.
+
+---
+
+## Update — cp130 (item #5: wire morphit_native for BTC/USD + XMR/USD)
+
+### Mostly invisible to grandma, but unlocks future UI
+
+cp130 wires the cp127 morphit_native price source for BTC and
+XMR (it was BLURT-only before). Grandma sees nothing change in
+cp130 itself — there is no UI consumer of BTC/XMR prices yet.
+
+But cp130 makes the receipt endpoint usable for BTC and XMR:
+`GET /v1/price/morphit-native/receipt?asset=BTC` now returns a
+real BTC/USD derivation that operators can inspect, debug, and
+trust. This is foundation work for future grandma-facing
+features (orderbook USD echo for non-BLURT assets, wallet
+displays, etc.) — deferred indefinitely per Ken's "wrap here"
+directive, but the backend is ready when someone picks it back
+up.
+
+### What grandma might one day see (if cp131+ ships)
+
+If a future UI consumer of BTC/USD or XMR/USD prices ever ships
+(e.g. "show USD-equivalent next to BTC orderbook rows"),
+grandma would see something like:
+
+  BTC seller: 0.05 BTC (~$3,250)
+
+— with the "$3,250" coming from cp130's backend derivation. The
+USD framing matches the cp128 denomination configurability, so
+on a EUR-denominated instance she'd see "≈€3,050" instead.
+
+### What's deliberately NOT being added
+
+- **Per-asset denomination override (item #3)** — collapsed into
+  "global denomination applies to all assets." An operator who
+  sets `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=EUR` gets
+  BLURT/EUR, BTC/EUR, XMR/EUR — coherent across the whole
+  instance. The speculative use case (operator wants BTC in
+  USD but BLURT in EUR) has no concrete request. Revisit only
+  if a real operator asks.
+- **EUR-pegged stablecoins (item #2)** — explicitly retired by
+  Ken ("probably never"). Tier 2 (stablecoin-anchored
+  morphit_native) on non-USD denominations effectively stays
+  disabled in practice; documented honestly in ADR-0040.
+- **USD-equivalent orderbook display (item #6)** — explicitly
+  deferred by Ken ("some other day"). The backend is ready;
+  the UI work is deferred indefinitely.
+- **More external sources for BTC/XMR** — Coingecko + native +
+  static is the chain. Kraken, CoinPaprika, Bitstamp are
+  candidates if operators report Coingecko being too narrow,
+  but each adds a privacy surface; defer until concrete demand.
+
+### Why this is good for grandma even though she doesn't see it
+
+The cp127 self-sovereign pricing architecture was always
+designed to support any asset — not just BLURT. cp130 finally
+exercises that generality. When some future operator builds a
+wallet integration or alternate frontend that needs BTC/USD
+prices on Morphit, the backend is already there. Architectural
+debt avoided, not accumulated. Same property as cp128's
+denomination configurability: shipped with no UI consumer at
+the time, used by cp130's per-asset wiring later.

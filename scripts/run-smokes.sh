@@ -240,6 +240,7 @@ SMOKES=(
 	"apps/indexer:morphit-native-fetcher-smoke"
 	"apps/indexer:price-source-hardening-smoke"
 	"apps/indexer:peer-price-monitor-smoke"
+	"apps/indexer:multi-asset-factory-smoke"
 )
 
 total=0

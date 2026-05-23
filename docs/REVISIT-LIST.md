@@ -61,7 +61,62 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp129 is a meaningful milestone (item #1 i18n polish + item #4 Defense F implementation closing the cp127 8-defense table: new module + schema v36 + 2 env vars + ADR-0041 + 28 smoke scenarios + brag entry + 4 docs updates).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp130 is a meaningful milestone (item #5 wires multi-asset morphit_native for BTC + XMR alongside BLURT, with generic asset factory + coingecko vsCurrency generalization + per-asset static-floor config + per-asset peer monitoring + ADR-0042 + 20 smoke scenarios + brag entry + 3 docs updates).
+
+## CP130 LESSONS
+
+### Lesson #1 — Generic factories ship "for free" when the design was always generic
+
+cp127 designed `createMorphitNativeFetcher({ asset, denominationFiat, ... })` as fully generic — any (asset, fiat) pair. cp127 only wired BLURT because that was the immediate use case. cp130 unlocked BTC and XMR with essentially the same wiring pattern — the factory was always ready.
+
+The wiring lift in cp130 was ~150 lines of new code (factory.ts rewrite + per-asset config + main.ts boot + coingeckoFetcher vsCurrency generalization). Compare to the cp127 architectural lift of ~3,000 lines for the original morphit_native design. **Ratio: 5%.** Genericity at design time made cp130's additive work nearly trivial.
+
+**Carry-forward:** when designing an asset-aware module, make the asset parameter explicit from day 1 even if only one asset is wired initially. The marginal complexity of `createX(asset, ...)` vs `createBlurtX(...)` is negligible; the future lift is enormous.
+
+### Lesson #2 — `coingeckoFetcher` was 95% generic, 5% USD-hardcoded — find the small bits
+
+The pre-cp130 coingeckoFetcher was already parameterized on `coinId` (so 'bitcoin' / 'monero' worked). What was hardcoded: `vs_currencies=usd` in the URL, `.usd` access in extractPrice. Two small surfaces.
+
+Generalizing took ~10 lines and exposed a `vsCurrency` parameter. The lesson: when a function is "almost generic," the hardcoded bits are often the smallest possible change to make it truly generic. **Don't reflexively rewrite — surgically generalize.**
+
+**Carry-forward:** before rewriting a "BLURT-specific" helper to be generic, grep the helper for the specific asset/fiat hardcoding. The work is usually 2-3 sites, not a full rewrite.
+
+### Lesson #3 — Item collapsing avoids fake choice surface
+
+Ken's six-bullet list included item #3 (per-asset denomination configurability). I had a choice in cp130:
+
+- (a) Wire per-asset denomination via JSON-map env var or 16 separate env vars
+- (b) Hardcode all assets to use the global `priceFeedDenominationFiat`
+
+I picked (b) and documented "if a concrete use case appears, revisit." The reasoning: option (a) is preemptive complexity — no operator has asked for it, and the speculative scenario ("BTC in USD but BLURT in EUR") is plausible but speculative. Adding the config surface burdens grandma's grandfather the operator with another knob without solving a concrete problem.
+
+The collapse is honest: item #3 wasn't dropped from REVISIT-LIST without thought. It was decided AGAINST after cp130 made the implications concrete. ADR-0042 documents the decision with reversible language ("if a concrete need appears later, revisit; the factory's `denominationFiat` parameter is per-asset already; only the wiring code hardcodes it").
+
+**Carry-forward:** when faced with a feature request, document the collapse path explicitly. Future maintainers should be able to read "we considered per-asset denomination and chose not to because X" rather than "this surface mysteriously isn't generic."
+
+### Lesson #4 — Backwards-compatibility wrappers cost almost nothing
+
+cp130 kept `createPriceSource(config, db)` as a thin wrapper around the new `createAssetPriceSource(config, BLURT_DEFAULTS, db)`. Old call sites (the listing-fee endpoint, etc.) see no API change. New code uses `createMultiAssetPriceSources` for the map.
+
+This pattern — keep the old function as a wrapper, add a new function for the more general case — is cheap. It avoided needing to refactor ~5 call sites in cp130. The wrapper is ~5 lines.
+
+**Carry-forward:** when generalizing a function, ask "what would it cost to keep the old signature working?" Usually nearly nothing. Do it.
+
+### Lesson #5 — Smoke tests need full fakeConfig defaults
+
+cp130's first smoke run had 8 failures all from `Cannot read properties of undefined (reading 'replace')` — the fakeConfig was missing `klingexBaseUrl`, `coingeckoBaseUrl`, and several cp127 native-fetcher defaults. The fakeConfig in `test/testutils/context.ts` had grown organically as fields were added without test exercise.
+
+Fix: pre-emptively add EVERY field the price-source code reads from Config to fakeConfig, with sane defaults. This bloats fakeConfig but makes the next smoke addition friction-free.
+
+**Carry-forward:** when a smoke imports a feature module, eagerly check that fakeConfig has defaults for everything the module reads from Config. Better to bloat fakeConfig than chase undefined-reads scenario by scenario.
+
+### Lesson #6 — Doc-comment markers as regression sentinels (FW-1 catch)
+
+cp130's factory.ts rewrite accidentally dropped the FW-1 smoke's required documenting comment ("morphit_native between coingecko and the static floor"). The rewrite was structurally correct, but the regression sentinel is a TEXT match on the source file.
+
+This caught a real risk: if a future maintainer rewrites factory.ts and reorders the upstream chain, the comment alone tells them the ordering is structural, not incidental. The smoke is a tripwire.
+
+**Carry-forward:** when shipping a structural defense, include a doc-comment marker AND a smoke that greps for it. Code reviews catch most regressions; the smoke catches the rest.
 
 ## CP129 LESSONS
 

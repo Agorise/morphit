@@ -26,8 +26,9 @@ import { runMigrations } from '$db/migrations';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
-import { createPriceSource } from '$indexer/price/factory';
+import { createPriceSource, createMultiAssetPriceSources } from '$indexer/price/factory';
 import { startPeerPriceMonitor } from '$indexer/price/peerPriceMonitor';
+import type { BlurtPriceSource } from '$indexer/price/source';
 
 import { bodyCap } from '$api/middleware/bodyCap';
 import { security } from '$api/middleware/security';
@@ -125,22 +126,54 @@ async function main(): Promise<void> {
 		priceSource.start();
 	}
 
+	// cp130: multi-asset price sources (BLURT + BTC + XMR).  Same
+	// gate as the BLURT-only `priceSource` above — only created when
+	// the operator has opted in to the price feed.  The BLURT source
+	// here is independent from `priceSource` above (different cache,
+	// independent refresh schedule); callers that only need BLURT
+	// pricing (e.g. listing-fee endpoint) keep using `priceSource`.
+	// Callers that want multi-asset (receipt endpoint, per-asset
+	// peer monitor) use `multiAssetSources`.
+	//
+	// Could be unified into a single map (drop the standalone
+	// `priceSource`) but leaving the existing BLURT path
+	// untouched minimizes regression risk for the listing-fee
+	// endpoint, which is hot-path for every order-compose page
+	// load.  cp131+ could consolidate.
+	const multiAssetSources: Map<string, BlurtPriceSource> = config.priceFeedEnabled
+		? createMultiAssetPriceSources(config, db)
+		: new Map();
+	for (const source of multiAssetSources.values()) {
+		source.start();
+	}
+
 	// cp129 — Defense F: cross-instance peer price monitor.  Opt-in
 	// via MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED.  Requires
 	// priceSource to be live (otherwise nothing to compare against),
 	// AND at least 3 federation peers reachable for meaningful
 	// median computation.  See ADR-0041.
-	let stopPeerPriceMonitor: (() => void) | null = null;
-	if (config.priceFeedPeerMonitorEnabled && priceSource !== null) {
-		stopPeerPriceMonitor = startPeerPriceMonitor(
-			{
-				db,
-				priceSource,
-				asset: 'BLURT',
-				denominationFiat: config.priceFeedDenominationFiat
-			},
-			config.priceFeedPeerSampleIntervalMinutes
-		);
+	//
+	// cp130 extension: when multi-asset sources are live, spawn one
+	// monitor instance per (asset, denomination) pair.  Each monitor
+	// independently samples peers for its asset and alerts on
+	// per-asset disagreement.  The schema already supports per-asset
+	// observations (cp129 schema-v36 indexed on asset+denomination);
+	// the wiring change here just calls startPeerPriceMonitor in a
+	// loop.
+	const stopPeerPriceMonitors: Array<() => void> = [];
+	if (config.priceFeedPeerMonitorEnabled && multiAssetSources.size > 0) {
+		for (const [asset, source] of multiAssetSources) {
+			const stop = startPeerPriceMonitor(
+				{
+					db,
+					priceSource: source,
+					asset,
+					denominationFiat: config.priceFeedDenominationFiat
+				},
+				config.priceFeedPeerSampleIntervalMinutes
+			);
+			stopPeerPriceMonitors.push(stop);
+		}
 	}
 
 	// ─── 6. Poller ─────────────────────────────────────────────
@@ -458,11 +491,17 @@ async function main(): Promise<void> {
 			priceSource.stop();
 		}
 
+		// cp130 — Stop all multi-asset price sources.
+		for (const source of multiAssetSources.values()) {
+			source.stop();
+		}
+
 		// cp129 — Stop the peer-price monitor's recurring tick.
 		// Same shape as priceSource.stop(): no in-flight work to
 		// drain, just clear the setInterval handle.
-		if (stopPeerPriceMonitor !== null) {
-			stopPeerPriceMonitor();
+		// cp130 extension: stop all per-asset monitors.
+		for (const stop of stopPeerPriceMonitors) {
+			stop();
 		}
 
 		// Close HTTP next. @hono/node-server exposes close via the

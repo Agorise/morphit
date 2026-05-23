@@ -39,10 +39,17 @@ export interface CoingeckoConfig {
 	/** Optional pro API key. If set, it's sent as x-cg-pro-api-key.
 	 *  If absent, the request uses the free tier's no-auth path. */
 	readonly apiKey?: string;
-	/** Coingecko's internal id for BLURT. Default 'blurt'. Kept
-	 *  configurable so an operator can try alternate ids without
-	 *  a code change if CG renames. */
+	/** Coingecko's internal id for the asset being priced.  For
+	 *  BLURT use 'blurt'; for BTC use 'bitcoin'; for XMR use
+	 *  'monero'; etc.  Operator can override if Coingecko renames. */
 	readonly coinId: string;
+	/** cp130: Coingecko vs_currency (the fiat the price is denominated
+	 *  in).  Default 'usd'.  Coingecko supports many: usd, eur, gbp,
+	 *  jpy, brl, cny, inr, rub, etc.  Must be the lowercase form
+	 *  Coingecko expects in the API.  When the operator's
+	 *  `priceFeedDenominationFiat` is set, the factory lowercases it
+	 *  and passes it here (e.g. USD → 'usd', EUR → 'eur'). */
+	readonly vsCurrency: string;
 	/** Request timeout in ms. */
 	readonly timeoutMs: number;
 	/** fetch injection for tests. */
@@ -51,7 +58,10 @@ export interface CoingeckoConfig {
 
 export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<number | null> {
 	const fetchImpl = config.fetchImpl ?? globalThis.fetch;
-	const url = `${config.baseUrl.replace(/\/+$/, '')}/simple/price?ids=${encodeURIComponent(config.coinId)}&vs_currencies=usd`;
+	// cp130: vs_currencies is now operator-configurable (was hardcoded 'usd'
+	// pre-cp130).  Lowercase per Coingecko API convention.
+	const vsCurrency = config.vsCurrency.toLowerCase();
+	const url = `${config.baseUrl.replace(/\/+$/, '')}/simple/price?ids=${encodeURIComponent(config.coinId)}&vs_currencies=${encodeURIComponent(vsCurrency)}`;
 
 	return async function fetchCoingecko(): Promise<number | null> {
 		const ac = new AbortController();
@@ -78,9 +88,9 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 				return null;
 			}
 			const body = (await res.json()) as unknown;
-			const price = extractPrice(body, config.coinId);
+			const price = extractPrice(body, config.coinId, vsCurrency);
 			if (price === null) {
-				log.warn('unexpected_shape', { url, coin_id: config.coinId });
+				log.warn('unexpected_shape', { url, coin_id: config.coinId, vs_currency: vsCurrency });
 				return null;
 			}
 			return price;
@@ -93,13 +103,17 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 	};
 }
 
-/** Shape: { "blurt": { "usd": 0.00237 } }. */
-function extractPrice(body: unknown, coinId: string): number | null {
+/** Shape: { "<coinId>": { "<vsCurrency>": <number> } }
+ *  e.g. { "blurt": { "usd": 0.00237 } }
+ *  e.g. { "bitcoin": { "usd": 65000 } }
+ *  e.g. { "monero": { "eur": 180 } }
+ */
+function extractPrice(body: unknown, coinId: string, vsCurrency: string): number | null {
 	if (typeof body !== 'object' || body === null) return null;
 	const obj = body as Record<string, unknown>;
 	const inner = obj[coinId];
 	if (typeof inner !== 'object' || inner === null) return null;
-	const usd = (inner as Record<string, unknown>).usd;
-	if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) return null;
-	return usd;
+	const price = (inner as Record<string, unknown>)[vsCurrency];
+	if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return null;
+	return price;
 }

@@ -74,6 +74,20 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		// cp128: default to USD for backwards-compatibility with
 		// existing tests; tests of non-USD denomination override this.
 		priceFeedDenominationFiat: 'USD',
+		// cp130: per-asset static-floor defaults (USD-shaped).
+		priceFeedBtcStaticFloor: 60_000,
+		priceFeedXmrStaticFloor: 200,
+		// cp130 factory needs these — sane defaults for tests.
+		klingexBaseUrl: 'https://klingex.io',
+		coingeckoBaseUrl: 'https://api.coingecko.com/api/v3',
+		coingeckoApiKey: '',
+		priceRefreshIntervalMs: 300_000,
+		// cp127 native fetcher defaults (factory consults when
+		// priceFeedNativeEnabled).
+		priceFeedNativeEnabled: false,
+		priceFeedStablecoinKeys: ['usdt', 'usdc', 'dai'],
+		priceFeedNativePlausibleMin: 0.0001,
+		priceFeedNativePlausibleMax: 0.1,
 		featureFeeBlurtPerHour: 50,
 		verboseHealth: false,
 		// Part 111: default to 'morphit' so existing tests by default

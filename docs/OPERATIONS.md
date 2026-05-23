@@ -1309,6 +1309,24 @@ percentage, peer median, and your own price.  Investigation
 runbook: see "Responding to a peer-price-disagreement alert"
 below.  See ADR-0041.
 
+**cp130 update — multi-asset morphit_native (BTC + XMR added
+alongside BLURT)**: when the price feed is enabled, the indexer
+now creates three independent composite price sources at boot —
+one per asset.  BLURT keeps its 4-tier chain (Klingex →
+Coingecko → morphit_native → static floor); BTC and XMR get a
+3-tier chain (Coingecko → morphit_native → static floor)
+because Klingex doesn't trade BTC/USDT or XMR/USDT at scale.
+Each source has its own cache and refresh schedule.  Two new
+env vars set per-asset static floors:
+`MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 60000) and
+`MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR` (default 200).
+The cp129 peer-price monitor now spawns one instance per asset,
+so disagreement on BTC alerts separately from disagreement on
+BLURT — and each asset is sampled independently from peers.
+Receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC`
+returns a real BTC/USD derivation operators can inspect.
+See ADR-0042.
+
 ### Responding to a peer-price-disagreement alert
 
 If you see a `peer_price_disagreement_alert` event in the

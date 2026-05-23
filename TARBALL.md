@@ -4,30 +4,105 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp129 — 2026-05-23 (item #1: i18n key polish `waiver_min_usd_required` → `waiver_min_required` × 10 locales; item #4: Defense F cross-instance peer disagreement detector — new peerPriceMonitor module + schema v36 `price_peer_observations` table + 2 env vars + ADR-0041 + 28 structural smoke scenarios + brag entry #90 closing the cp127 8-defense table + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 troubleshooting runbook + GRANDMA-FRIENDLY note + 6-lesson CP129 LESSONS).
+**Last touched:** cp130 — 2026-05-23 (item #5: wire morphit_native for BTC/USD + XMR/USD — generic asset factory `createAssetPriceSource` + per-asset defaults `CP130_ASSET_DEFAULTS` + multi-asset map builder `createMultiAssetPriceSources` + coingeckoFetcher generalization on `vsCurrency` + 2 new env vars (BTC + XMR static floors) + main.ts multi-asset boot + per-asset peer monitor wiring + ADR-0042 + 20 structural smoke scenarios + brag entry #91 + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 multi-asset note + GRANDMA cp130 note + 6-lesson CP130 LESSONS).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp129-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **40 ADRs** (+1 cp129: ADR-0041) · **317 brag entries** (+1 cp129: #90 in §4 — Defense F closing cp127's 8-defense table) · locale parity **2,979 × 10 = 29,790** (unchanged — cp129 item #1 was a rename, no new/removed keys)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp129 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay + Defense F
-- **54 structural defenses** (+1 cp129: peer-price-monitor with 28 scenarios)
+- 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: #91 multi-asset pricing in §4) · locale parity **2,979 × 10 = 29,790** (unchanged — cp130 is backend-only, no new translations)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp130 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay + Defense F + multi-asset pricing
+- **55 structural defenses** (+1 cp130: multi-asset-factory with 20 scenarios)
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp129 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp129 grand total: ~1,290+ strings across 9 non-EN locales; cp129 was a rename, no new translations needed)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 17+ cps; cp125 deep-deep covered reputation surface, cp128's deep-deep covered the denomination-rename surface, cp129 was a self-contained backend monitor with no UX surface
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp129 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp129 grand total: ~1,290+ strings; cp130 added zero translation strings, backend-only)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 18+ cps; cp125 deep-deep covered reputation surface, cp128's deep-deep covered the denomination-rename surface, cp129+cp130 were backend-only
 
-**Remaining items from Ken's 6-bullet "do them all" ask (cp129's grandparent context):**
-- ✅ **#1 WAIVER_MIN_BLURT denomination-aware** — shipped in cp129 (item #1)
-- ✅ **#4 Defense F cross-instance peer disagreement** — shipped in cp129 (item #4)
-- ⏳ **#5 Wire morphit_native for BTC/USD + XMR/USD** — cp130
-- ⏳ **#3 Per-asset denomination configurability** — cp130 (bundled with #5; revisit per cp129 LESSONS #6)
-- ⏳ **#6 USD-equivalent orderbook display for 16 assets** — cp131 (big UI work)
-- ⏳ **#2 EUR-pegged stablecoin asset additions** — cp132 (needs design discussion: EURC vs EURT vs EURS)
+**Ken's 6-bullet "do them all" ask — final status:**
+- ✅ **#1 WAIVER_MIN_BLURT denomination-aware** — shipped cp129
+- ✅ **#4 Defense F cross-instance peer disagreement** — shipped cp129
+- ✅ **#5 Wire morphit_native for BTC/USD + XMR/USD** — shipped cp130
+- 🎯 **#3 Per-asset denomination configurability** — COLLAPSED into "global denomination applies to all assets" in cp130 (ADR-0042 documents the decision; revisit only if concrete use case appears)
+- 🚫 **#6 USD-equivalent orderbook display for 16 assets** — RETIRED by Ken ("some other day"); backend ready in cp130 if future maintainer picks it up
+- 🚫 **#2 EUR-pegged stablecoin asset additions** — RETIRED by Ken ("probably never"); no REVISIT entry per Ken's directive
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp129 is a clear meaningful milestone (Defense F closing the cp127 8-defense table represents a full architectural completion + brings forward a deferred ADR).
+**Per Ken's "after that, that's a wrap" directive: pre-launch hardening PAUSED at cp130.** Project state is stable, audited, smoke-tested, documented end-to-end.
+
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp130 is a clear meaningful milestone (closes Ken's 3-bullet "do all" ask + final architectural completion of the cp127 self-sovereign pricing design).
+
+---
+
+## cp130 — Multi-asset morphit_native (BTC + XMR via generic factory) (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` built this turn.
+
+**State:** 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: §4 #91 multi-asset pricing) · locale parity **2,979 × 10 = 29,790** (unchanged — backend-only checkpoint) · **5,476 / 0** local smoke battery target (+27 net vs cp129's 5,449 from 20 new multi-asset-factory scenarios; final triple-pulse pending) · 7/7 TS-clean · **55 structural defenses** (+1 cp130: multi-asset-factory).
+
+**Background — completing Ken's "do all 6" directive:**
+
+After cp129 closed items #1 + #4, Ken directed: "if you think the cp130 should be done as well, go for it. after that, that's a wrap imo. we should pause there. we can do 'USD-equivalent orderbook display for 16 assets' some other day and 'EUR-pegged stablecoin asset additions' probably never. no need for a revisit list entry for that one."
+
+cp130 scope: item #5 only. Items #6 and #2 retired; item #3 collapsed.
+
+**Code shipped — Item #5: wire morphit_native for BTC/USD + XMR/USD**
+
+- `apps/indexer/src/indexer/price/factory.ts` — REWRITTEN (~190 lines). New exports:
+  - `AssetPriceSourceOptions` interface: {asset, coingeckoCoinId, enableKlingex, staticFloor}
+  - `CP130_ASSET_DEFAULTS` record: BLURT (coinId='blurt', enableKlingex=true, floor=0.002), BTC (coinId='bitcoin', enableKlingex=false, floor=60_000), XMR (coinId='monero', enableKlingex=false, floor=200)
+  - `createAssetPriceSource(config, options, db?)` — generic per-asset builder
+  - `createPriceSource(config, db?)` — backwards-compat wrapper calling createAssetPriceSource with BLURT defaults (preserves listing-fee endpoint behavior)
+  - `createMultiAssetPriceSources(config, db?)` — returns Map<string, BlurtPriceSource> for BLURT+BTC+XMR
+  - Per-asset upstream chains: BLURT gets Klingex→Coingecko→morphit_native→static; BTC and XMR get Coingecko→morphit_native→static (Klingex is BLURT-only per its flagship pair BLURT/USDT)
+  - Doc comment preserves "morphit_native slotted between coingecko and the static floor" for FW-1 smoke compliance
+
+- `apps/indexer/src/indexer/price/coingeckoFetcher.ts` — REWRITTEN. `CoingeckoConfig` gains `vsCurrency: string` field. URL uses `vs_currencies=${vsCurrency}` (was hardcoded 'usd'). `extractPrice(body, coinId, vsCurrency)` accesses `body[coinId][vsCurrency]` (was hardcoded `.usd`). Generic on any (coinId, vsCurrency) pair.
+
+- `apps/indexer/src/config/index.ts` — added `priceFeedBtcStaticFloor` + `priceFeedXmrStaticFloor` Config fields + Zod schema env vars `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` (default 60_000) + `MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR` (default 200) + wired to Config object.
+
+- `apps/indexer/src/main.ts` — multi-asset boot. Creates `multiAssetSources: Map<string, BlurtPriceSource>` via createMultiAssetPriceSources when priceFeedEnabled. Starts each. cp129 peer-price monitor wiring extended to iterate over all assets — one monitor instance per (asset, denomination) pair. Graceful shutdown stops all sources + all monitors. Imports: `createMultiAssetPriceSources` from factory; `BlurtPriceSource` type from source.
+
+- `apps/indexer/test/testutils/context.ts` — fakeConfig extended with: klingexBaseUrl, coingeckoBaseUrl, coingeckoApiKey, priceRefreshIntervalMs, priceFeedNativeEnabled, priceFeedStablecoinKeys, priceFeedNativePlausibleMin/Max, priceFeedBtcStaticFloor, priceFeedXmrStaticFloor.
+
+- `apps/indexer/scripts/multi-asset-factory-smoke.ts` — 20 structural scenarios across 10 dimensions: (CP130-1) public surface, (CP130-2) CP130_ASSET_DEFAULTS shape + launch set, (CP130-3) Klingex BLURT-only enforcement, (CP130-4) Coingecko coin-id correctness, (CP130-5) multi-asset map keying + instance distinctness, (CP130-6) backwards-compat wrapper, (CP130-7) per-asset static-floor wiring, (CP130-8) empty-db path, (CP130-9) EUR denomination flows through to all assets, (CP130-10) doc-comment design-pillars manifest. All 20 passing.
+
+- `scripts/run-smokes.sh` — registered `apps/indexer:multi-asset-factory-smoke`.
+
+- `ops/env/indexer.env.example` — documented both new env vars with non-USD-denomination caveat notes.
+
+- ADR-0042 (~250 lines) shipped at `docs/adr/0042-multi-asset-morphit-native.md` — full architecture, per-asset upstream chains table, Coingecko generalization, per-asset static-floor rationale, "Per-asset denomination — NOT added (item #3 collapsed)" decision documented honestly, multi-asset peer monitor wiring explanation, resilience scenarios, honest limitations (per-asset denomination deferred, Klingex BTC/XMR limitation acknowledged, no new external sources without operator demand, no UI consumer yet, no EUR-stablecoin Tier 2 unlock per Ken's retirement).
+
+- `docs/RUN-A-MORPHIT-NODE.md` — added operator callout for `BTC_STATIC_FLOOR` + `XMR_STATIC_FLOOR` adjacent to cp129 peer-monitor callout, plus explanation of per-asset upstream chains and receipt endpoint usability.
+
+- `docs/OPERATIONS.md` §13 — added cp130 update describing multi-asset price source creation at boot, three independent composite price sources, per-asset static-floor env vars, per-asset peer monitor extension, receipt endpoint usability for BTC/XMR.
+
+- `MORPHIT-BRAG-LIST.md` — new brag entry #91 in §4 (decentralization) framing multi-asset self-sovereign pricing; entry #147 ADR count 40 → 41; ADR-range descriptor 0001-0041 → 0001-0042; trailer ADR range updated; STACCATO_ALLOWLIST shifted +1 (cp129's [3,12,195,204] → cp130's [3,12,196,205]); sequential renumber 317 → 318 entries.
+
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — ADR count + range updated.
+
+- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — appended cp130 note (mostly invisible to grandma but unlocks future UI; what grandma might one day see; deliberately-NOT-doing list including the retired items #2 and #6).
+
+- `docs/REVISIT-LIST.md` — 6-lesson CP130 LESSONS section (generic factories ship free, coingeckoFetcher was 95% generic 5% USD-hardcoded, item collapsing avoids fake choice surface, backwards-compatibility wrappers cost almost nothing, smoke tests need full fakeConfig defaults, doc-comment markers as regression sentinels FW-1 catch).
+
+**Mid-stream fixes caught:**
+- fakeConfig was missing klingexBaseUrl + coingeckoBaseUrl + several cp127 native-fetcher defaults — added all required defaults, lesson encoded in CP130 LESSONS #5
+- CP130-10 used CommonJS `require()` in an ESM module — fixed to ESM imports with `fileURLToPath`
+- price-source-hardening-smoke FW-1 broke after factory.ts rewrite (lost the "between coingecko and static floor" marker) — added back to the inline comment block, lesson encoded in CP130 LESSONS #6
+
+**Translation-quality flag:** cp130 was a pure backend-only checkpoint — no new translated strings added. Cumulative cp108-cp130: ~1,290+ strings awaiting native-speaker polish (unchanged from cp129).
+
+**Ken's six-bullet directive — final tally:**
+
+| # | Item | Disposition |
+|---|---|---|
+| 1 | WAIVER_MIN_BLURT i18n key rename | ✅ Shipped cp129 |
+| 4 | Defense F cross-instance peer-disagreement detector | ✅ Shipped cp129 |
+| 5 | Wire morphit_native for BTC/USD + XMR/USD | ✅ Shipped cp130 |
+| 3 | Per-asset denomination configurability | 🎯 COLLAPSED — global denomination applies; revisit only if concrete need appears (ADR-0042 documents reversibility) |
+| 6 | USD-equivalent orderbook display for 16 assets | 🚫 RETIRED — Ken "some other day"; cp130 backend ready for future pickup |
+| 2 | EUR-pegged stablecoin asset additions | 🚫 RETIRED — Ken "probably never"; no REVISIT entry per Ken's directive |
+
+3 shipped, 1 collapsed honestly, 2 retired by Ken explicitly. Project state: PAUSED at cp130 per Ken's "after that, that's a wrap" directive.
 
 ---
 

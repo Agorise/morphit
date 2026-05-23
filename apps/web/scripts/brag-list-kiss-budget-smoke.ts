@@ -86,12 +86,12 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * and #12 are in the brag-list preamble (before the reputation-
  * hardening section) so they're unaffected.
  *
- * cp129 numbering shift: 1 new entry added in §4 (Defense F #90,
- * between denomination #89 and wallet-embed previously #90).
- * Subsequent entries shift +1: old #194 → new #195, old #203 →
- * new #204.
+ * cp130 numbering shift: 1 new entry added in §4 (multi-asset
+ * self-sovereign pricing #91, between Defense F #90 and wallet-
+ * embed previously #91).  Subsequent entries shift +1: old #195
+ * → new #196, old #204 → new #205.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '195', '204']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

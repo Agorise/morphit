@@ -278,6 +278,20 @@ export interface Config {
 	/** How often to sample peers (minutes).  Default 30. */
 	readonly priceFeedPeerSampleIntervalMinutes: number;
 
+	/** ── cp130: per-asset static-floor for the multi-asset price
+	 *  factory.  These are the fallback prices each asset's
+	 *  composite source serves when all live upstreams have failed
+	 *  AND no value has cached successfully since boot.  Display-
+	 *  only; fee verification doesn't consult them.
+	 *
+	 *  Per-asset defaults match the cp130 launch set.  Operators in
+	 *  non-USD denominations should override these to match their
+	 *  unit (e.g. on a EUR-denominated instance, set
+	 *  MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR to a rough
+	 *  BTC/EUR value like 55_000 instead of the USD-shaped 60_000). */
+	readonly priceFeedBtcStaticFloor: number;
+	readonly priceFeedXmrStaticFloor: number;
+
 	/** Featured-slot auction: BLURT cost per
 	 *  hour of featured-slot time. Users pay this (× hours
 	 *  requested) to bid on a featured slot. Default 50 BLURT.
@@ -857,6 +871,14 @@ const envSchema = z.object({
 		.int()
 		.positive()
 		.default(30),
+	// cp130: per-asset static-floor defaults for BTC + XMR.  These
+	// are USD-shaped defaults; operators in non-USD denominations
+	// override to match their unit.  See ADR-0042.
+	MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR: z.coerce
+		.number()
+		.positive()
+		.default(60_000),
+	MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR: z.coerce.number().positive().default(200),
 
 	// Featured-slot auction.
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),
@@ -1387,6 +1409,9 @@ export function loadConfig(): Config {
 		priceFeedPeerMonitorEnabled: e.MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED,
 		priceFeedPeerSampleIntervalMinutes:
 			e.MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES,
+		// cp130
+		priceFeedBtcStaticFloor: e.MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR,
+		priceFeedXmrStaticFloor: e.MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR,
 
 		featureFeeBlurtPerHour: e.MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR,
 
