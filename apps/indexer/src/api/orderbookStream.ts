@@ -115,7 +115,16 @@ const orderbookStreamQuerySchema = z.object({
 
 const FEEDBACK_AGGREGATE_JOIN = `
 	LEFT JOIN (
-	  SELECT subject, COUNT(*)::int AS c, AVG(rating)::numeric AS r
+	  SELECT subject, COUNT(*)::int AS c,
+	         -- cp123 H1: time-decay weighted rating with 365-day
+	         -- half-life.  Mirrors apps/indexer/src/api/orderbook.ts
+	         -- + apps/indexer/src/api/feedback.ts so the SSE stream
+	         -- shows the same numbers as the polled API.
+	         ROUND(
+	           SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
+	           NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
+	           2
+	         )::numeric AS r
 	    FROM feedback fb
 	   WHERE fb.order_permlink IS NOT NULL
 	     AND NOT EXISTS (
@@ -127,6 +136,22 @@ const FEEDBACK_AGGREGATE_JOIN = `
 	       SELECT 1 FROM related_accounts ra
 	        WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
 	          AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
+	   )
+	     -- Signal C exclusion (Part 113): drop rows from coordinated
+	     -- pile-on attackers.  Same filter as orderbook.ts.
+	     AND NOT EXISTS (
+	       SELECT 1 FROM one_way_pile_on owpo,
+	                    jsonb_array_elements(owpo.attacking_reviewers) attacker
+	        WHERE owpo.subject = fb.subject
+	          AND attacker->>'reviewer' = fb.reviewer
+	   )
+	     -- Signal D exclusion (cp123 H2): drop rows from reviewers
+	     -- flagged for concentrating ≥80% of their reviews on a
+	     -- single subject.  See signals.ts: detectReviewConcentration.
+	     AND NOT EXISTS (
+	       SELECT 1 FROM review_concentration rc
+	        WHERE rc.reviewer = fb.reviewer
+	          AND rc.dominant_subject = fb.subject
 	   )
 	   GROUP BY subject
 	) f ON f.subject = o.account

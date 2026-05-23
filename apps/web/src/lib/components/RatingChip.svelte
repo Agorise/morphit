@@ -47,7 +47,10 @@
 	const SAMPLE_CONFIDENCE = 3;
 
 	const muted = $derived(count < SAMPLE_CONFIDENCE);
-	const ratingStr = $derived(rating === null ? '—' : rating.toFixed(1));
+	// cp123: 2-decimal precision (per Ken's reputation-hardening
+	// ask).  Server returns NUMERIC(3,2); displaying `.toFixed(1)`
+	// discards information.  4.74 conveys more than 4.7.
+	const ratingStr = $derived(rating === null ? '—' : rating.toFixed(2));
 </script>
 
 {#if count > 0 && rating !== null}

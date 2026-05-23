@@ -73,13 +73,20 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * sentences); exempt from sentence-count budget but still subject
  * to word-count budget.
  *
- * cp112 addition: #195 ("No leverage. No margin. No futures. No
- * options.") is the same "No X. No Y. No Z." rhetorical pattern as
- * #3 and #12.  Adding to allowlist preserves Ken's punchy style
- * (also: shortening it would obscure the four-things-Morphit-isn't
- * claim, which is exactly the claim that needs the visual hammer).
+ * cp112 addition: "No leverage. No margin. No futures. No options."
+ * (originally #195) is the same "No X. No Y. No Z." rhetorical
+ * pattern as #3 and #12.  Adding to allowlist preserves Ken's
+ * punchy style (also: shortening it would obscure the four-things-
+ * Morphit-isn't claim, which is exactly the claim that needs the
+ * visual hammer).
+ *
+ * cp125 numbering shift: the 4 new reputation-hardening entries
+ * (cp123-cp125 H1/H4 in §8 + Signal D in §8 + H5+H6 in §8) shifted
+ * subsequent entries by +4.  Pre-cp125 #195 is now #199; #186 →
+ * #190.  Entries #3 and #12 are in the brag-list preamble (before
+ * the reputation-hardening section) so they're unaffected.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '186', '195']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '190', '199']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

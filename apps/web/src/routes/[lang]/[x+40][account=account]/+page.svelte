@@ -491,7 +491,7 @@
 				<!-- Big number + stars -->
 				<div class="flex flex-none flex-col items-center sm:items-start">
 					<span class="font-display text-4xl font-extrabold">
-						{feedback.summary.weighted_rating.toFixed(1)}
+						{feedback.summary.weighted_rating.toFixed(2)}
 					</span>
 					<span aria-hidden="true" class="text-morphit-emerald">
 						{starString(Math.round(feedback.summary.weighted_rating) as 1 | 2 | 3 | 4 | 5)}
@@ -524,6 +524,50 @@
 					{/each}
 				</div>
 			</div>
+
+			<!-- cp124 H5: by-side breakdown.  Surfaces buy/sell asymmetry when
+			     either side has trade history.  Hidden when one side has zero
+			     count (avoids visual clutter on new accounts). -->
+			{#if feedback.summary.by_side.buy.count > 0 || feedback.summary.by_side.sell.count > 0}
+				<div class="mt-4 flex flex-wrap gap-3 text-xs">
+					{#if feedback.summary.by_side.buy.count > 0 && feedback.summary.by_side.buy.weighted_rating !== null}
+						<div
+							class="rounded-md border border-ink-200 bg-ink-50 px-3 py-2 dark:border-ink-700 dark:bg-ink-900"
+						>
+							<span class="text-ink-500">{$_('profile.as_buyer')}</span>
+							<span class="ml-2 font-semibold tabular-nums">
+								{feedback.summary.by_side.buy.weighted_rating.toFixed(2)}★
+							</span>
+							<span class="ml-1 text-ink-500">
+								({feedback.summary.by_side.buy.count})
+							</span>
+						</div>
+					{/if}
+					{#if feedback.summary.by_side.sell.count > 0 && feedback.summary.by_side.sell.weighted_rating !== null}
+						<div
+							class="rounded-md border border-ink-200 bg-ink-50 px-3 py-2 dark:border-ink-700 dark:bg-ink-900"
+						>
+							<span class="text-ink-500">{$_('profile.as_seller')}</span>
+							<span class="ml-2 font-semibold tabular-nums">
+								{feedback.summary.by_side.sell.weighted_rating.toFixed(2)}★
+							</span>
+							<span class="ml-1 text-ink-500">
+								({feedback.summary.by_side.sell.count})
+							</span>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- cp124 H6: dormancy signal.  Surface "last traded N ago" so
+			     readers see freshness without changing the score.  Hidden
+			     when null (brand-new account, never traded). -->
+			{#if feedback.summary.last_traded_at !== null}
+				<div class="mt-3 text-xs text-ink-500">
+					<span>{$_('profile.last_traded_label')}</span>
+					<RelativeTime iso={feedback.summary.last_traded_at} format="descriptive" />
+				</div>
+			{/if}
 		{:else}
 			<p class="text-sm text-ink-600 dark:text-ink-300">
 				{$_('profile.no_feedback_yet')}

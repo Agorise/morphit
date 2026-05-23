@@ -49,6 +49,7 @@ import { ordersByAccountRoute } from '$api/orders';
 import { orderViewsRoute } from '$api/orderViews';
 import { profilesRoute } from '$api/profiles';
 import { feedbackByAccountRoute } from '$api/feedback';
+import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
 import { chatRoute } from '$api/chat';
 import { chatStreamRoute } from '$api/chatStream';
@@ -219,6 +220,10 @@ async function main(): Promise<void> {
 	const feedbackApp = new Hono();
 	feedbackApp.use('*', rateLimit('list', config.listRatePerMin));
 	feedbackApp.route('/', feedbackByAccountRoute(db));
+	// cp124 H4: verifiable reputation receipt — same /v1/accounts
+	// mount point; resource-rate-limited rather than list-rate-
+	// limited because the receipt is "one big read" not pagination.
+	feedbackApp.route('/', reputationReceiptRoute(db));
 	app.route('/v1/accounts', feedbackApp);
 
 	const releaseApp = new Hono();

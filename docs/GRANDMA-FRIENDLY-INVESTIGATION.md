@@ -312,3 +312,79 @@ international counterparties. **Estimate:** small (text-only).
   non-custodial; we never hold either side's value. The seller waits
   for the cash, then releases crypto via the existing flow. Adding
   escrow would require trusting Morphit (or some operator) with funds.
+
+---
+
+## Update — cp123-cp125 (reputation hardening: time decay + concentration detector + verifiable receipt + side distinction + dormancy)
+
+The reputation surface gained four new signals across cp123-cp125. Each
+was reviewed against the grandma-friendliness lens before shipping.
+
+### What grandma actually sees on the profile
+
+**Before cp123:** "4.7 ⭐ (23)" + histogram + raw feedback list.
+
+**After cp125:** "4.74 ⭐ (23)" + histogram + (when populated) two side
+chips "as buyer: 4.92 (15)" and "as seller: 3.21 (8)" + "Last traded:
+3 days ago" + raw feedback list.
+
+Net visual additions: 2-3 small chips + 1 one-line dormancy text.
+Hidden gracefully when the data isn't there (brand-new account, etc.).
+
+### Grandma's mental model — what we want her to learn
+
+When grandma sees a profile, she should be able to answer in 3 seconds:
+- "Is this person reliable?" → headline 4.74 with count
+- "Do they have a track record with someone like me?" → buy vs sell
+  chips show if their seller-side rep is the relevant one
+- "Are they active or have they vanished?" → "Last traded N ago" chip
+
+She should NOT need to know:
+- That there's an exponential decay formula
+- That there are signals A/B/C/D filtering some reviews
+- That she can fetch a JSON receipt to verify the score
+
+That's all visible behind a FAQ link, not on the page. The page stays
+calm.
+
+### T2/T3 backlog from cp123-cp125
+
+**T2.1 — Surface excluded count.** Today the headline shows the
+INCLUDED count (post-filter). Could show "(23 included; 2 excluded
+by Sybil filter)" as a small ink-500 line. **Risk:** grandma asks
+"why 2 excluded? did this person do something bad?" — answering this
+in-UI requires careful copy. **Estimate:** medium (needs both data
+flow + careful UX copy). **Priority:** T2.
+
+**T2.2 — Verifiable-receipt button.** Today the receipt is API-only.
+Could add a small "[verify this score]" link near the rating, opening
+a modal showing the receipt rows + decay weights in a table form.
+**Risk:** grandma sees a big table of cryptic data she doesn't
+understand. **Estimate:** medium-high (good UX is hard). **Priority:**
+T3.
+
+**T2.3 — Recency explainer.** Today the headline number reflects
+365-day decay silently. A long-time trader whose score dropped after
+cp123 might wonder why. Could add a hover-tooltip "weighted by
+recency: 365-day half-life — newer reviews count more." **Estimate:**
+low. **Priority:** T2.
+
+**T2.4 — Last-traded chip styling.** Currently displays as plain
+text. Could surface as a colored chip (green if <30 days, yellow
+30-180 days, red >180 days). **Risk:** color signals can mislead
+("red = bad"); dormancy isn't necessarily bad. **Estimate:** low.
+**Priority:** T3 (good idea pending more user feedback).
+
+### What's deliberately NOT being added (per Ken's priorities)
+
+- **EigenTrust-style transitive reputation weighting.** Considered as
+  H3 in the analysis phase; explicitly skipped because newcomer
+  ramp-up costs were judged too high. Brand-new reviewers carry full
+  weight on their reviews; the alternative was an unfair penalty on
+  legitimate new traders.
+- **Reviewer-comment-quality scoring.** No attempt to grade comments
+  for "specificity" or "detail." Subjective, gameable, and incompatible
+  with privacy (would require operator content reading).
+- **Operator-side reputation override.** Operators cannot bump or
+  demote any account's score. Reputation is on-chain; operators choose
+  to display it or not, but cannot change what it says.

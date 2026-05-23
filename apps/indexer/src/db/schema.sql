@@ -2389,3 +2389,35 @@ COMMENT ON TABLE push_pending IS
 -- and cp13→cp15 upgrades (where it WAS) both succeed.
 ALTER TABLE push_pending DROP COLUMN IF EXISTS attempts;
 
+-- ─── v34: review_concentration (cp123 H2, Signal D) ───────────
+-- Closes Part 113 A4 "Signal B evasion via diversification".
+-- Signal B requires distinct_subjects=1 (only reviewed the target).
+-- A smart attacker reviews 2-3 throwaway third parties to evade.
+-- Signal D catches the diversifying attacker:
+--
+--   (reviewer, dominant_subject) is flagged when ≥80% of the
+--   reviewer's recent feedback rows go to the same subject AND
+--   the reviewer has posted ≥5 reviews in the window AND the
+--   subject is also a high-star recipient from this reviewer
+--   AND the pair is mutually reviewing (subject reviews reviewer
+--   back with similar high concentration).
+--
+-- The (reviewer, dominant_subject) pair is the unit of flagging.
+-- The aggregate-exclusion logic in feedback.ts/orderbook.ts/
+-- orderbookStream.ts joins on this to drop those rows from the
+-- weighted_rating computation.
+--
+-- ON CONFLICT DO NOTHING semantics — once flagged, the pair stays
+-- flagged.  False-positive recovery is operator-side (DELETE row).
+CREATE TABLE IF NOT EXISTS review_concentration (
+    reviewer         TEXT NOT NULL,
+    dominant_subject TEXT NOT NULL,
+    detected_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    concentration_pct NUMERIC(5, 2) NOT NULL CHECK (concentration_pct >= 0 AND concentration_pct <= 100),
+    review_count     INTEGER NOT NULL CHECK (review_count >= 0),
+    window_days      INTEGER NOT NULL,
+    PRIMARY KEY (reviewer, dominant_subject)
+);
+CREATE INDEX IF NOT EXISTS review_concentration_subject_idx
+    ON review_concentration (dominant_subject);
+

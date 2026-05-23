@@ -25,7 +25,7 @@ import type { Database } from '$db/pool';
 import { applyBlock } from '$indexer/dispatcher';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
-import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn } from '$indexer/signals';
+import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration } from '$indexer/signals';
 import { WitnessFeePoller } from '$indexer/witnessFeePoller';
 import { LowBalanceScanner } from '$indexer/lowBalanceScanner';
 import { OperatorAccountBalanceScanner } from '$indexer/operatorAccountBalanceScanner';
@@ -656,6 +656,20 @@ export class Poller {
 			}
 		} catch (err) {
 			log.error('signal_c_failed', {}, err);
+		}
+		try {
+			// Signal D — review-concentration detection (cp123 H2).
+			// Closes Part 113 A4 "Signal B evasion via diversification."
+			// Catches reviewers who concentrate ≥80% of their reviews
+			// on a single high-star target across a 30-day window,
+			// even if they also reviewed a few throwaway third parties
+			// to evade Signal B's stricter distinct_subjects=1 filter.
+			const flaggedD = await detectReviewConcentration(this.db);
+			if (flaggedD > 0) {
+				log.info('signal_d_flagged', { new_pairs: flaggedD });
+			}
+		} catch (err) {
+			log.error('signal_d_failed', {}, err);
 		}
 	}
 

@@ -61,7 +61,57 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp122 regenerates a fresh binary (meaningful milestone — cash-by-mail + physical-shipment tracking feature complete end-to-end across cp120-cp122).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp125 regenerates a fresh binary (meaningful milestone — reputation-hardening campaign complete across cp123-cp125: H1 time decay + H2 Signal D + H4 verifiable receipt + H5 side distinction + H6 dormancy).
+
+## CP123-CP125 LESSONS
+
+### Lesson #1 — Always inventory existing defenses before proposing new ones
+
+Ken's cp123 ask ("make sure reputation cannot be spoofed, faked, artificially pumped") could have triggered immediate code-writing.  Instead the right first move was a full inventory: read the feedback handler, the signals module, the API aggregation, the schema, and Part 113's prior 15-vector enumeration.
+
+Result: 11 of the 15 vectors were already DEFENDED.  Of the remaining 4: A6 is structurally undecidable, A10 is out of scope, D1 is a design choice, D3 was deferred.  Only D3 + the residual A4 actually warranted new work.  Without the inventory pass, I'd have proposed redundant defenses or worse — replaced existing ones that were already working.
+
+**Carry-forward:** before adding new defenses to an existing system, exhaustively enumerate what's already there.  Credit the prior work honestly; the inventory itself is part of the deliverable.  "Already in place" is a valid and important finding.
+
+### Lesson #2 — Proposing 8 options + having Ken pick 5 is better than proposing 5
+
+Initial instinct was to propose ~5 hardenings.  Final list was 8 (H1-H8) with explicit pros/cons + my recommended subset.  Ken picked H1+H2+H4+H5+H6, skipping H3 (with explicit reason: too punitive for newcomers) and H7+H8.
+
+The 3 rejected options were valuable EVEN THOUGH rejected: they surfaced tradeoffs Ken would otherwise have wondered about ("why not weight by reviewer credibility?" — answered preemptively in H3's analysis).  Forcing my recommendation to be a SUBSET of a larger menu forces the analysis to be honest about why some defenses aren't worth it.
+
+**Carry-forward:** for design-decision asks, present a broader menu than your recommendation.  Each option carries its own analysis; the rejected ones are still load-bearing context.
+
+### Lesson #3 — A shared JS+SQL formula module pays for itself the first time you need to verify
+
+The cp123 time-decay formula lives in 4 places: 3 SQL aggregation sites (feedback.ts summary, orderbook.ts, orderbookStream.ts) AND the JS implementation in `reputation/decay.ts`.  Having a single module that exports BOTH `reputationDecayWeightSql(col)` (returns the SQL fragment) AND `reputationDecayWeight(ageMs)` (the JS function) made cp124 H4 (verifiable receipt) trivially correct — the JS receipt computation is provably the same formula as the SQL aggregate because they're both derived from the same source-of-truth doc comment.
+
+**Carry-forward:** if a formula needs to run in both SQL and JS contexts, put both implementations in one module with cross-references and a smoke that verifies equivalence (cp123 reputation-decay-smoke has 13 such scenarios).  The cost of having two implementations diverge silently is much higher than the cost of co-locating them.
+
+### Lesson #4 — Provability matters more than perfection
+
+H4 (verifiable receipt) is a deliberate trade: the indexer's score becomes auditable by ANYONE with chain access.  This means a misbehaving operator can't quietly inflate their friends' scores — readers can prove it.  But it also means receipts from two different indexers might disagree (different signal-table state).
+
+The right framing is NOT "the score is perfect" — it's "the score is verifiable AGAINST the chain."  Disagreement between two indexers' receipts surfaces the disagreement explicitly; the chain is the tiebreaker.  Provability is more valuable than asymptotic agreement because it gives readers a clear path to evidence rather than a single number to trust.
+
+**Carry-forward:** when designing for trust, provability beats perfection.  Make the inputs auditable; make the algorithm documented; let the reader verify if they care.
+
+### Lesson #5 — Subtle distinctions can be visible without being noisy (H5+H6)
+
+H5 (buy/sell side breakdown) and H6 (dormancy signal) both add information to the profile page without changing the headline number.  Each surfaces as a small chip hidden when not populated.  Grandma still sees "4.74 ⭐ (23)" as the answer to "is this person reliable" — the new chips are inquiry-time additions for readers who want more depth.
+
+Restraint matters: if every signal got the same visual weight as the headline, the profile becomes overwhelming and grandma can't read it.  Tiered visibility ("headline = simple; chips = depth-on-demand") preserves both audiences.
+
+**Carry-forward:** when adding signals to an existing surface, default them to hidden/small/secondary unless they're truly headline-class.  Information density has a cost; not every signal needs to be loud.
+
+### Lesson #6 — Brag-list discipline pays off when there are 311 entries
+
+Ken's cp125 reminder ("make sure when u do the braglist that the numbering, proper categorization and spacing is done perfectly, all items are actually brag worthy and are not too long winded") forced a more careful insertion than the cp122 batch.
+
+Three new entries went in section 8 (reputation) at precise positions: H1 between #116 and #117, H4 right after H1, H2 right after the existing sock-puppet entry, H5+H6 right after the verified-chat entry.  Each placement was chosen so the section reads as a coherent narrative (anchor → faking-defense → recency → verifiability → motivation → A/B/D signals → real-conversation signal → side+dormancy → responses).  Each entry stays at 2-4 sentences (KISS budget); no jargon walls; concrete enough to verify.
+
+The sequential renumber script (originally from cp122) handled the shift from 307 → 311 entries cleanly, including the STACCATO_ALLOWLIST update to follow the now-shifted #195 → #199 and #186 → #190.
+
+**Carry-forward:** the brag-list discipline rules are load-bearing — section placement, sentence budget, jargon avoidance, and the renumbering pipeline.  Disrespect any of them and the deliverable falls below "brag worthy."
 
 ## CP120-CP122 LESSONS
 

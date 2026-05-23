@@ -26,7 +26,20 @@
  * (different creators) and Signal B misses (one-way, not mutual,
  * low-star not high-star).
  *
- * All signals write to tables established by migration v2/v31.
+ * **Signal D — review concentration (cp123 H2).** Closes Part 113
+ * A4 "Signal B evasion via diversification."  Signal B requires
+ * distinct_subjects=1 (the reviewer reviewed ONLY the target).
+ * A smart attacker reviews 2-3 throwaway third parties to evade
+ * Signal B while still pumping the primary target.  Signal D
+ * triggers when a reviewer concentrates ≥80% of their reviews on
+ * a single subject (over a 30-day window, ≥5 review threshold),
+ * AND that reviewer's avg rating to the dominant subject is
+ * ≥4.5 stars.  The (reviewer, dominant_subject) pair is the unit
+ * of flagging.  Aggregate-exclusion logic in feedback.ts +
+ * orderbook.ts + orderbookStream.ts drops those rows from the
+ * weighted_rating computation.
+ *
+ * All signals write to tables established by migration v2/v31/v34.
  * Write semantics are ON CONFLICT DO NOTHING — once a pair/subject
  * is flagged, it stays flagged.  A false-positive's recovery path
  * is operator-side (DELETE the row), not automated.
@@ -344,6 +357,107 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 		SIGNAL_C_MIN_REVIEWERS,
 		SIGNAL_C_ACTIVITY_CLUSTER_DAYS,
 		SIGNAL_C_REVIEW_WINDOW_DAYS
+	]);
+	return result.rowCount ?? 0;
+}
+
+// ─── Signal D constants (cp123 H2 — review concentration) ──────────
+
+/** Window over which a reviewer's concentration is computed. */
+const SIGNAL_D_WINDOW_DAYS = 30;
+/** Minimum total reviews in the window for the signal to even apply.
+ *  Below this, concentration is noise — a reviewer with only 2-3
+ *  reviews can legitimately have one dominant subject (their only
+ *  trade partner).  Tuned at 5 to require enough data for the
+ *  concentration ratio to be meaningful. */
+const SIGNAL_D_MIN_REVIEW_COUNT = 5;
+/** Concentration percentage above which the reviewer is flagged.
+ *  80% means: ≥4 of every 5 reviews go to the dominant subject. */
+const SIGNAL_D_MIN_CONCENTRATION_PCT = 80.0;
+/** Average rating to the dominant subject below which the signal
+ *  does not fire.  Concentration of LOW-STAR reviews is captured
+ *  by Signal C; Signal D specifically targets concentration of
+ *  HIGH-STAR reviews (the inflation case). */
+const SIGNAL_D_MIN_AVG_RATING = 4.5;
+
+/**
+ * Run Signal D — review-concentration detection.
+ *
+ * Closes Part 113 A4 "Signal B evasion via diversification."
+ * Signal B fires only when distinct_subjects=1 (the reviewer
+ * reviewed ONLY the target).  An attacker who reviews 2-3
+ * throwaway third parties evades Signal B while still pumping
+ * the primary target.  Signal D's threshold is concentration
+ * percentage rather than absolute count, so a diversifying
+ * attacker who maintains 80%+ focus on the target gets caught.
+ *
+ * Query strategy:
+ *   1. reviewer_stats: per-reviewer count + avg + dominant subject
+ *      identified by COUNT(*) within the 30-day window.
+ *   2. concentration: count by (reviewer, subject); flag rows where
+ *      the per-reviewer concentration ≥80% and ≥5 total reviews and
+ *      the avg rating to the dominant subject ≥4.5.
+ *
+ * Returns the number of NEW rows inserted this run.
+ */
+export async function detectReviewConcentration(db: Database): Promise<number> {
+	return db.withTx((client) => detectReviewConcentrationInTx(client));
+}
+
+/** Implementation that operates on a caller-provided transaction. */
+export async function detectReviewConcentrationInTx(client: pg.PoolClient): Promise<number> {
+	const sql = `
+		WITH reviewer_totals AS (
+			-- Per-reviewer total review count in the window.
+			SELECT
+				reviewer,
+				COUNT(*)::int AS total_reviews
+			FROM feedback
+			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			GROUP BY reviewer
+		),
+		reviewer_subject_stats AS (
+			-- Per (reviewer, subject) count + avg rating in the window.
+			SELECT
+				reviewer,
+				subject,
+				COUNT(*)::int AS pair_count,
+				AVG(rating)::NUMERIC(3,2) AS pair_avg_rating
+			FROM feedback
+			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			GROUP BY reviewer, subject
+		),
+		concentration AS (
+			-- Per (reviewer, subject): concentration % = pair_count / total_reviews × 100.
+			SELECT
+				rs.reviewer,
+				rs.subject AS dominant_subject,
+				rs.pair_count,
+				rs.pair_avg_rating,
+				rt.total_reviews,
+				(rs.pair_count::NUMERIC * 100.0 / rt.total_reviews)::NUMERIC(5,2) AS concentration_pct
+			FROM reviewer_subject_stats rs
+			JOIN reviewer_totals rt ON rt.reviewer = rs.reviewer
+			WHERE rt.total_reviews >= $1
+			  AND rs.pair_avg_rating >= $2
+		)
+		INSERT INTO review_concentration
+			(reviewer, dominant_subject, concentration_pct, review_count, window_days)
+		SELECT
+			reviewer,
+			dominant_subject,
+			concentration_pct,
+			pair_count,
+			$4::int
+		FROM concentration
+		WHERE concentration_pct >= $3
+		ON CONFLICT (reviewer, dominant_subject) DO NOTHING
+	`;
+	const result = await client.query(sql, [
+		SIGNAL_D_MIN_REVIEW_COUNT,
+		SIGNAL_D_MIN_AVG_RATING,
+		SIGNAL_D_MIN_CONCENTRATION_PCT,
+		SIGNAL_D_WINDOW_DAYS
 	]);
 	return result.rowCount ?? 0;
 }

@@ -376,16 +376,86 @@ export interface FeedbackResponseRecord {
 	readonly created_at: string;
 }
 
+export interface FeedbackSidedRating {
+	readonly count: number;
+	readonly weighted_rating: number | null; // null when count = 0
+}
+
 export interface FeedbackSummary {
 	readonly count: number;
 	readonly weighted_rating: number; // 0..5, 2-decimal precision
 	readonly by_rating: Readonly<Record<'1' | '2' | '3' | '4' | '5', number>>;
+	// cp124 H5: separate weighted_rating + count for buy-side and
+	// sell-side trades.  Useful when a trader's experience differs
+	// dramatically by role (great buyer, careless seller, or vice
+	// versa).  Each leaf is null when count on that side is 0.
+	readonly by_side: {
+		readonly buy: FeedbackSidedRating;
+		readonly sell: FeedbackSidedRating;
+	};
+	// cp124 H6: ISO-8601 timestamp of the account's most recent
+	// trade-relevant activity (verified-fee order posted OR
+	// feedback received).  Null when the account has neither.
+	// Readers see "last traded N days/months/years ago" — informs
+	// trust without changing the numeric score.
+	readonly last_traded_at: string | null;
 }
 
 export interface AccountFeedbackResponse {
 	readonly summary: FeedbackSummary;
 	readonly items: readonly FeedbackRecord[];
 	readonly next_cursor: string | null;
+}
+
+/** cp124 H4: Reputation receipt — the "show your work" endpoint.
+ *
+ *  Returns the FULL set of feedback rows about an account (including
+ *  excluded ones, with reasons), plus the computed weighted_rating
+ *  and the formula used.  A third party with access to the chain
+ *  can re-derive the score independently and verify it matches.
+ *
+ *  Privacy posture: receipt for account X exposes which (X, Y) pairs
+ *  are flagged by the signal tables.  This information is already
+ *  implicit in the missing rows of X's published aggregate, so no
+ *  new privacy leak.
+ *
+ *  Honest limitations: the `as_of` parameter pins the wall-clock
+ *  used for decay-weight computation, but signal-table flags are
+ *  always evaluated at REQUEST time (no historical flag-state
+ *  reconstruction). */
+export type ReputationExclusionReason =
+	| null
+	| 'no_order_permlink'
+	| 'suspicious_reciprocity'
+	| 'related_accounts'
+	| 'one_way_pile_on'
+	| 'review_concentration';
+
+export interface ReputationReceiptRow {
+	readonly source_trx_id: string;
+	readonly reviewer: string;
+	readonly rating: number; // 1..5 integer
+	readonly created_at: string; // ISO-8601
+	readonly order_permlink: string | null;
+	readonly age_days: number; // 2-decimal precision
+	readonly decay_weight: number; // 5-decimal precision, in (0, 1]
+	readonly included: boolean;
+	readonly excluded_reason: ReputationExclusionReason;
+}
+
+export interface ReputationReceiptResponse {
+	readonly account: string;
+	readonly as_of: string; // ISO-8601 — wall-clock used for decay
+	readonly decay_half_life_days: number; // canonical: 365
+	readonly formula: string; // human-readable formula description
+	readonly summary: {
+		readonly count_total: number;
+		readonly count_included: number;
+		readonly count_excluded: number;
+		readonly weight_sum: number;
+		readonly weighted_rating: number | null;
+	};
+	readonly rows: readonly ReputationReceiptRow[];
 }
 
 /** Response shape for `/v1/accounts/:account/feedback-given` —

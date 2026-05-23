@@ -4,28 +4,163 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp120-cp122 — 2026-05-23 (cash-by-mail payment method split + physical-shipment tracking + mailing-address share + carrier registry + 2 new chat payloads + 2 new modals + ChatMessage pill rendering + ConversationView wiring + ADR-0037 + cash_by_mail_walkthrough FAQ entry × 10 locales + 2 brag-list entries (#221/#222) + GRANDMA-FRIENDLY note + deep-deep audit).
+**Last touched:** cp123-cp125 — 2026-05-23 (reputation hardening: H1 time-decay weighting + H2 Signal D concentration detector + H4 verifiable reputation-receipt endpoint + H5 buy/sell side distinction + H6 dormancy signal + 2-decimal precision + how-to-build-reputation FAQ).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp122-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp125-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **36 ADRs** · **307 brag entries** · locale parity across 10 locales (**2,971 leaves × 10 = 29,710**; cp120 +30 strings for cash-rename + by_mail category, cp121 +590 strings for modal/pill keys, cp122 +20 strings for FAQ q+a)
-- Codebase deep-audit was end-to-end complete at cp106; cp107–cp122 have been docs/SEO/UX/CI hardening + structural defenses + cash-by-mail + shipment-tracking feature complete
-- **48** structural defenses (cp120: +2 — carrier-registry-invariants 13 scenarios, shipping-payload-roundtrip 17 scenarios); **5,349/0/0/0** smoke battery (cp119 → cp122 net +35 via new smokes + new scenarios + cleanup)
+- 16 tradable assets · **37 ADRs** (+1 cp125: ADR-0038) · **311 brag entries** (+4 cp125 in section 8) · locale parity **2,976 × 10 = 29,760** (+2 per locale vs cp122's 2,974 — FAQ q+a × 10)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp125 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation-hardening campaigns
+- **49** structural defenses (cp123-cp125: +2 — reputation-decay-smoke 13 scenarios, reputation-receipt-shape-smoke 7 scenarios); **5,373/0/0/0** smoke battery quadruple-pulse stable
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp122 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp122 grand total: ~621 + ~590 cp121 + ~20 cp122 = **~1,231 strings** across 9 non-EN locales awaiting native review)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT (now overdue 10+ cps)
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp125 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp125 grand total: ~1,251 strings across 9 non-EN locales)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 13+ cps but the cp125 deep-deep covered Bob/Sally-user/Sally-operator at the reputation surface
 
-**What the most recent three checkpoints did:**
-- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed same turn + 2 new defense smokes + new operator env var MORPHIT_INSTANCE_SEO_TWITTER_SITE
-- **cp120** — Foundation for cash-by-mail + physical-shipment tracking. New `by_mail` payment category, cash → cash_in_person + cash_by_mail rename (pre-launch clean), `morphit_mailing_address_v1` + `morphit_shipment_v1` chat payloads with full encoder/decoder/validators, 20-carrier registry with tracking URL templates + `buildTrackingUrl()`, 2 new defense smokes (carrier-registry-invariants 13 scenarios, shipping-payload-roundtrip 17 scenarios incl. javascript: URL injection rejection), 4 pre-existing smoke updates for the rename
-- **cp121** — UI complete: MailingAddressModal (15-country picker + Other ISO + 4-bullet privacy aside), ShipmentModal (20-carrier dropdown + Other + 4 always-shown safety bullets + collapsible "If mailing CASH" expander with 3 cash-specific bullets), ChatMessage pill rendering for both new payloads (with copy buttons + clickable carrier tracking links), ConversationView triggers wired, +590 i18n strings across 10 locales, href-xss-smoke allowlist entry for trackingUrl with detailed safety rationale
-- **cp122** — Docs complete: ADR-0037, FAQ entry `cash_by_mail_walkthrough` × 10 locales (+20 strings), 2 brag entries #221/#222 (cash-by-mail + 20-carrier registry) in section 17 with 86-entry renumber 221..305 → 223..307, GRANDMA-FRIENDLY note for the new feature, deep-deep audit (D-1..D-13 all pass), mediakit rebuilt, ADR-range trailer updates in brag list + release notes.
+**What the most recent six checkpoints did:**
+- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes + new operator env var
+- **cp120** — Foundation for cash-by-mail + physical-shipment tracking: new `by_mail` payment category, 2 new chat payloads, 20-carrier registry, 2 new defense smokes
+- **cp121** — UI complete: MailingAddressModal + ShipmentModal + ChatMessage pill rendering + ConversationView wiring + 590 i18n strings
+- **cp122** — Docs complete: ADR-0037 + FAQ entry × 10 locales + 2 brag entries + GRANDMA note + deep-deep audit
+- **cp123** — Reputation hardening foundation: H1 time-decay weighting (365-day half-life) replacing flat AVG in 3 aggregation sites + H2 Signal D concentration detector (new `review_concentration` table + detector + hourly invocation) + 2-decimal precision fix (UI was truncating) + 13-scenario reputation-decay-smoke
+- **cp124** — Reputation hardening surfaces: H4 `/v1/accounts/:account/reputation-receipt` endpoint (full provability — anyone with chain access can re-derive scores) + H5 buy/sell side distinction in feedback summary + H6 `last_traded_at` dormancy signal + profile-page UI updates + 7-scenario reputation-receipt-shape-smoke + extended FeedbackSummary contract
+- **cp125** — Reputation hardening close-out: ADR-0038 + FAQ entry `how_to_build_high_reputation` × 10 locales (Ken's explicit ask) + 4 brag entries in section 8 (H1/H4 + Signal D + H5+H6) with sequential renumber 308..311 + STACCATO_ALLOWLIST update + GRANDMA-FRIENDLY note + 6-lesson REVISIT-LIST CP123-CP125 LESSONS + deep-deep audit (D-1..D-13 all pass) + mediakit rebuild + final tarball
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp122 is a clear meaningful milestone (3-checkpoint feature complete end-to-end: payment-method split + 2 new chat payloads + 2 new modals + carrier registry + ADR + FAQ + brag + deep-deep audit + triple-pulse stable).
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp125 is a clear meaningful milestone (3-checkpoint feature complete end-to-end: 4 algorithmic improvements + 1 new endpoint + new schema + new detector + UI updates + ADR + FAQ + brag + deep-deep audit + quadruple-pulse stable).
+
+---
+
+## cp125 — Reputation hardening close-out: ADR-0038 + FAQ + brag + GRANDMA + deep-deep + tarball (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp125-FULL-STATE.tar.gz` built this turn (3-cp reputation hardening campaign complete: time decay + Signal D + verifiable receipt + side distinction + dormancy).
+
+**State:** 16 tradable assets · **37 ADRs** (+1 cp125: ADR-0038) · **311 brag entries** (+4 cp125 in section 8) · locale parity **2,976 × 10 = 29,760** (+2 per locale vs cp124's 2,974 — FAQ q+a × 10) · **5,373/0/0/0** local smoke battery (quadruple-pulse stable) · 7/7 TS-clean · **49 structural defenses** (+0 vs cp124; new smokes shipped in cp123/cp124) · 644 vitest passing.
+
+**ADR-0038 — Reputation hardening campaign:**
+- Context: Part 113 (2026-05-10) audit left 4 open vectors; cp123-cp125 closes D3 (deferred time decay) and A4 (residual Signal B evasion via diversification) and adds provability (H4)
+- 5 coordinated changes documented (H1+H2+H4+H5+H6) with full rationale, privacy posture, decentralization posture, performance posture, consequences, honest limitations
+- Rationale for exponential decay (memoryless property, clock-skew stable), 365-day half-life (natural human timeframe), SUM(weight) denominator (recency-weighted ranking)
+- Privacy: no new on-chain data, no new federation-wide constants, receipt scoped to subject's pairs only
+- Decentralization: per-instance signal-table state is intentional + documented
+- Operator action: none mandatory (CREATE TABLE IF NOT EXISTS idempotent)
+- Honest limitations: A6 (trade-never-happened) remains undecidable, D1 (cold start) remains design choice, A10 (stolen key) remains out of scope
+
+**FAQ entry `how_to_build_high_reputation` × 10 locales:**
+- What counts toward your score (verified trades, recency, both sides, verified-chat, dormancy)
+- What does NOT inflate your score (self-reviews, sock-puppets via Signal A, mutual-rings via Signal B, concentration via Signal D, untethered feedback, pile-ons via Signal C)
+- 8-point DO checklist (complete trades, pay fees, reciprocate, real chat, detailed comments, both sides, diverse counterparties, stay active)
+- 4-point AVOID list (no alts, no pile-ons, no fake reviews, no drive-by feedback)
+- Verifiability paragraph: GET `/v1/accounts/<account>/reputation-receipt`
+- Honest caveats: first trades are hardest (is_new_trader badge), bad reviews recover over time but aren't erased, system can't detect "trade actually happened"
+- Tied keys: what_is_reputation, how_to_leave_feedback, verified_chat_badge, feedback_suppressed, sybil_protection
+
+**4 brag entries inserted in section 8 (reputation):**
+- #117 — Recent feedback weighs more than ancient feedback (H1 time decay + 2-decimal precision)
+- #118 — Public verifiable reputation receipt (H4 endpoint)
+- #121 — Diversification-resistant concentration detector (H2 Signal D)
+- #123 — Side-of-trade breakdown + dormancy signal (H5+H6)
+- Sequential renumber 307 → 311 entries; STACCATO_ALLOWLIST updated (#186→#190, #195→#199)
+- Trailer count updated; ADR range updated (0001-0037 → 0001-0038, 37 ADRs); entry #142 updated
+- Mediakit rebuilt (103,823 bytes, 6 files)
+
+**GRANDMA-FRIENDLY note appended:**
+- What grandma sees: headline number with 2 decimals + side chips when populated + dormancy chip — all hidden gracefully when data isn't there
+- T2/T3 backlog: surface excluded count, verifiable-receipt UI button, recency tooltip, last-traded chip styling
+- What's deliberately NOT being added: no transitive reputation (H3), no comment-quality scoring, no operator-side score override
+
+**Operator-facing doc audit:** no setup-or-troubleshooting changes needed (no new env vars, schema migration idempotent, signal detector wires in automatically)
+
+**Deep-deep audit (D-1..D-13):**
+- D-1: SQL ↔ JS decay formula equivalence verified
+- D-2: All 3 aggregation sites use identical formula (6+2+2 occurrences)
+- D-3: Signal D constants match documentation
+- D-4: Signal D wired in poller alongside A/B/C (5 detect* references)
+- D-5: review_concentration filter present in all 3 aggregation sites
+- D-6: Receipt endpoint emits all 5 exclusion reasons
+- D-7: Receipt privacy — only queries pairs where subject is X
+- D-8: Bob/Sally-user/Sally-operator personas verified
+- D-9: Feedback flow unchanged through new aggregation
+- D-10: Privacy — no new on-chain data, receipt scope-limited, Signal D reads existing tables only
+- D-11: Decentralization — no new federation-wide constants
+- D-12: Footprint — 473 LOC new indexer code, 30 LOC UI, 50 new i18n strings, 1 new table
+- D-13: Final battery 5,373/0/0/0 quadruple-pulse stable
+
+**Mid-stream fixes:**
+- Stale `36 ADRs` references in MORPHIT-BRAG-LIST.md (trailer + entry #142) and RELEASE-NOTES-v1.0.0-beta.1.md (both spots) — fixed via sed + str_replace
+- Mediakit rebuilt after each round of brag-list edits
+- STACCATO_ALLOWLIST in `apps/web/scripts/brag-list-kiss-budget-smoke.ts` updated for the 4-entry renumber (#186→#190, #195→#199)
+
+**Translation-quality flag (cp123-cp125 totals):** cp124 +30 strings (3 profile.* keys × 10 locales), cp125 +20 strings (FAQ q+a × 10) — 50 new auto-translated strings across 9 non-EN locales added in cp123-cp125. Cumulative cp108-cp125: ~1,251 strings awaiting native-speaker polish.
+
+---
+
+## cp124 — Reputation hardening surfaces: H4 receipt endpoint + H5 side distinction + H6 dormancy (2026-05-23)
+
+**State:** 16 tradable assets · 36 ADRs · 307 brag entries · locale parity **2,974 × 10 = 29,740** (+3 per locale vs cp123's 2,971) · **5,373/0** local smoke battery (+9 vs cp123's 5,364 — +7 receipt-shape, +2 feedback-handler) · 7/7 TS-clean · **49 structural defenses** (+1 cp124: reputation-receipt-shape-smoke).
+
+**H4 — Verifiable reputation receipt endpoint:**
+- New file `apps/indexer/src/api/reputationReceipt.ts` (~250 lines): full `/v1/accounts/:account/reputation-receipt` endpoint
+- Returns: account, as_of (ISO), decay_half_life_days (365), formula string, summary { count_total/count_included/count_excluded/weight_sum/weighted_rating }, rows[] with per-row source_trx_id/reviewer/rating/created_at/order_permlink/age_days/decay_weight/included/excluded_reason
+- Exclusion reasons: null (counted), 'no_order_permlink', 'suspicious_reciprocity', 'related_accounts', 'one_way_pile_on', 'review_concentration'
+- Parallel Promise.all for 4 signal-table flag-set queries + feedback rows
+- ETag via djb2 hash; Cache-Control: 60s; 304 on If-None-Match match
+- `as_of` parameter (ISO) for deterministic comparison; defaults to NOW(); documented honest limitation (signal-table flags evaluated at request time, no historical reconstruction)
+- Wired into `apps/indexer/src/main.ts` under /v1/accounts via `feedbackApp.route('/', reputationReceiptRoute(db))`
+
+**H5 — Buy/sell side distinction:**
+- Existing feedback summary SQL extended with JOIN to orders on (account, permlink) for side classification
+- Added FILTER (WHERE side='buy') and FILTER (WHERE side='sell') clauses for separate weighted_rating computation
+- 6 formula occurrences in feedback.ts (main + buy-numerator/denominator + sell-numerator/denominator), 2 each in orderbook.ts + orderbookStream.ts
+- New SummaryRow fields: buy_count, buy_weighted_rating, sell_count, sell_weighted_rating
+- Response shape extended with `by_side: { buy: {count, weighted_rating}, sell: {count, weighted_rating} }`
+
+**H6 — Dormancy signal (last_traded_at):**
+- Separate query: `MAX(orders.created_at WHERE fee_status='verified') ∪ MAX(feedback.created_at WHERE subject)` via GREATEST
+- Response shape extended with `last_traded_at: ISO | null`
+- Null when account has neither verified orders nor received feedback (brand-new)
+
+**Frontend updates:**
+- packages/indexer-client/src/index.ts: extended `FeedbackSummary` with `by_side` + `last_traded_at`; added new types `ReputationExclusionReason`, `ReputationReceiptRow`, `ReputationReceiptResponse`
+- apps/web/src/lib/indexer/client.ts: new `getReputationReceipt()` client function
+- profile page (apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte): side chips when populated + dormancy chip via RelativeTime component
+- 3 new i18n keys × 10 locales (profile.as_buyer, profile.as_seller, profile.last_traded_label) = +30 strings
+
+**New defense smoke:**
+- `reputation-receipt-shape-smoke` (7 scenarios): ReputationReceiptResponse field shape, ReputationExclusionReason union covers all 5 cases + null, ReputationReceiptRow field shape, REPUTATION_DECAY_HALF_LIFE_DAYS=365 (single source of truth), formula description names the math + lists all 4 signal-table exclusions, all 5 exclusion-reason string literals present in handler source, JS export resolution
+
+**Mid-stream fixes:**
+- matrix-bot `api-response-shape-smoke` fixture updated for the extended FeedbackSummary contract (added by_side + last_traded_at sample data)
+
+---
+
+## cp123 — Reputation hardening foundation: H1 time-decay + H2 Signal D + 2-decimal precision (2026-05-23)
+
+**State:** 16 tradable assets · 36 ADRs · 307 brag entries · locale parity **2,971 × 10 = 29,710** (unchanged vs cp122) · **5,364/0** local smoke battery (+15 vs cp122's 5,349 — 13 new decay scenarios + 2 pre-existing smokes picking up SQL changes) · 7/7 TS-clean · **48 structural defenses** (+1 cp123: reputation-decay-smoke).
+
+**H1 — Time-decay weighting (closes Part 113 D3):**
+- New module `apps/indexer/src/indexer/reputation/decay.ts` (~160 lines): shared 365-day-half-life exponential decay formula with rationale documentation; exports `REPUTATION_DECAY_HALF_LIFE_DAYS` constant + `reputationDecayWeightSql(col)` SQL fragment generator + `reputationDecayWeight(ageMs)` JS function + `computeWeightedRating(rows, now)` pure function
+- Formula: `weight = 0.5 ^ (age_days / 365)` — exponential chosen over linear/step for memoryless property + clock-skew stability + no-cliff-date manipulation defense
+- 3 SQL aggregation sites updated: feedback.ts summary, orderbook.ts main aggregate, orderbookStream.ts SSE feed — all replace `AVG(rating)` with `SUM(rating × decay_weight) / NULLIF(SUM(decay_weight), 0)`
+- Raw COUNT preserved unchanged; by_rating histogram unchanged; only weighted_rating carries decay
+- Rationale for SUM(weight) denominator (not COUNT): a trader with 10 fresh 5-stars should rank above one with 100 ancient 5-stars at the same numeric weighted_rating
+
+**H2 — Signal D: review-concentration detector (closes Part 113 A4 residual):**
+- New `review_concentration` table added to canonical schema.sql via CREATE TABLE IF NOT EXISTS (idempotent) — PK (reviewer, dominant_subject), columns detected_at + concentration_pct + review_count + window_days
+- New `detectReviewConcentration()` + `detectReviewConcentrationInTx()` in apps/indexer/src/indexer/signals.ts: CTE-based query catching reviewers concentrating ≥80% of reviews on a single high-star target across 30-day window
+- Constants: SIGNAL_D_WINDOW_DAYS=30, SIGNAL_D_MIN_REVIEW_COUNT=5, SIGNAL_D_MIN_CONCENTRATION_PCT=80.0, SIGNAL_D_MIN_AVG_RATING=4.5
+- Wired into poller.ts import + try/catch block alongside Signals A/B/C with signal_d_flagged log line
+- Aggregation filter added to all 3 sites: `AND NOT EXISTS (SELECT 1 FROM review_concentration rc WHERE rc.reviewer = fb.reviewer AND rc.dominant_subject = fb.subject)`
+
+**2-decimal precision UI fix:**
+- `apps/web/src/lib/components/RatingChip.svelte` and profile page heading: `.toFixed(1)` → `.toFixed(2)` (server already emits 2 decimals via ROUND(..., 2); UI was truncating to 1)
+- Ken explicit ask: "a reputation score can have 2 digits after the decimal i hope. ie: 4.74 stars, rather than just 4.7"
+
+**New defense smoke:**
+- `reputation-decay-smoke` (13 scenarios): weight(0)=1, weight(half-life)=0.5, weight(2×half-life)=0.25, weight(3×half-life)=0.125, monotonic decrease with age, bounds (0,1], NaN guard, negative-age guard, empty array returns null, all-fresh rows = simple AVG, fresh outweighs ancient (mathematical sanity), multi-age weighted math, same-age rows = AVG (weights cancel)
+
+**Triple-pulse stable: 5,364/0/0/0**
 
 ---
 

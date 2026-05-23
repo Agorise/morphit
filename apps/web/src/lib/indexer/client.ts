@@ -34,6 +34,7 @@ import type {
 	OrderbookResponse,
 	ProfileResponse,
 	ReleaseResponse,
+	ReputationReceiptResponse,
 	StrangerFeeQuoteResponse,
 	ErrorResponse,
 	ErrorCode
@@ -297,6 +298,28 @@ export function getFeedback(
 		signal: opts.signal,
 		query: params
 	});
+}
+
+/** GET /v1/accounts/:account/reputation-receipt — the "show your
+ *  work" endpoint.  Returns every feedback row about the account
+ *  (including excluded ones with reasons) so a reader can re-derive
+ *  the weighted_rating locally and verify it matches.
+ *
+ *  Optional `asOf` argument pins the wall-clock used for decay-
+ *  weight computation.  Defaults to NOW() server-side. */
+export function getReputationReceipt(
+	account: string,
+	opts: { asOf?: Date; signal?: AbortSignal } = {}
+): Promise<Result<ReputationReceiptResponse>> {
+	const params = new URLSearchParams();
+	if (opts.asOf) params.set('as_of', opts.asOf.toISOString());
+	return request<ReputationReceiptResponse>(
+		`/v1/accounts/${encodeURIComponent(account)}/reputation-receipt`,
+		{
+			signal: opts.signal,
+			query: params
+		}
+	);
 }
 
 /** GET /v1/accounts/:account/feedback-given — feedback the account

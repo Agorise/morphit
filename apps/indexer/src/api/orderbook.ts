@@ -403,7 +403,14 @@ export function orderbookRoute(db: Database, poller: Poller): Hono {
 			   -- catches REPETITIVE pairs; this filter closes the
 			   -- "real human Alice writes vague positive feedback for
 			   -- stranger Bob she never traded with" attack path.
-			   SELECT subject, COUNT(*)::int AS c, AVG(rating)::numeric AS r
+			   SELECT subject, COUNT(*)::int AS c,
+			          -- cp123 H1: time-decay weighted rating with 365-day
+			          -- half-life.  See indexer/reputation/decay.ts.
+			          ROUND(
+			            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
+			            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
+			            2
+			          )::numeric AS r
 			     FROM feedback fb
 			    WHERE fb.order_permlink IS NOT NULL
 			      AND NOT EXISTS (
@@ -424,6 +431,15 @@ export function orderbookRoute(db: Database, poller: Poller): Hono {
 			                     jsonb_array_elements(owpo.attacking_reviewers) attacker
 			         WHERE owpo.subject = fb.subject
 			           AND attacker->>'reviewer' = fb.reviewer
+			    )
+			      -- Signal D exclusion (cp123 H2): drop rows from
+			      -- reviewers flagged for concentrating ≥80% of their
+			      -- reviews on a single subject (closes Part 113 A4
+			      -- residual).  See signals.ts: detectReviewConcentration.
+			      AND NOT EXISTS (
+			        SELECT 1 FROM review_concentration rc
+			         WHERE rc.reviewer = fb.reviewer
+			           AND rc.dominant_subject = fb.subject
 			    )
 			    GROUP BY subject
 			 ) f ON f.subject = o.account

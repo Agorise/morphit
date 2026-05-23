@@ -482,7 +482,10 @@
 			"feedback_load_failed": "Impossible de charger les avis.",
 			"feedback_given_load_failed": "Impossible de charger les avis donnés par ce compte.",
 			"orders_load_failed": "Impossible de charger les commandes."
-		}
+		},
+		"as_buyer": "en tant qu’acheteur",
+		"as_seller": "en tant que vendeur",
+		"last_traded_label": "Dernier échange:"
 	},
 	"home": {
 		"hero_title": "Échangez Monero, Bitcoin et plus avec des monnaies fiat+ en toute confidentialité",
@@ -1086,6 +1089,10 @@
 			"what_is_reputation": {
 				"q": "Comment fonctionne le système de réputation de Morphit ?",
 				"a": "Chaque échange terminé permet aux deux parties de laisser un avis : une note de 1 à 5 étoiles et un commentaire facultatif. L'avis est publié sur la chaîne, il est donc permanent et public — n'importe qui peut le lire sur la page de profil d'un trader. Le profil affiche une note moyenne pondérée, un nombre d'avis et une répartition par étoiles pour voir d'un coup d'œil si un trader a un historique cohérent ou quelques exceptions. Pas d'arbitre central ; les avis de la communauté sont le signal de réputation.\n\n**Si les gens doivent te faire confiance, ta réputation est tout.**\n\nMorphit n'a ni arbitres, ni séquestres, ni rétrofacturations. La seule chose qui fait qu'un inconnu te confie son argent est l'historique visible que tu as construit. Traite chaque échange comme s'il comptait — parce que chaque échange est une entrée publique et permanente dans la seule réputation qui compte : la tienne."
+			},
+			"how_to_build_high_reputation": {
+				"q": "Comment construire une haute réputation sur Morphit ?",
+				"a": "La réputation sur Morphit se construit **organiquement** — en échangeant régulièrement, en recevant de vrais commentaires de vrais partenaires, et en évitant les modèles que le système signale comme suspects. Il n'y a pas de raccourci.\n\n**Ce qui compte pour votre score** (par ordre d'impact) :\n\n1. **Échanges vérifiés et terminés.** Chaque ordre que vous publiez avec `fee_status = 'verified'` et un commentaire d'un partenaire compte.\n\n2. **L'activité récente compte plus que l'ancienne.** Morphit utilise une **demi-vie de 365 jours** avec décroissance exponentielle : aujourd'hui = 1.0×, un an = 0.5×, deux ans = 0.25×. **Échangez régulièrement.**\n\n3. **Côté acheteur ET côté vendeur.** Votre profil affiche des notes séparées par côté.\n\n4. **Badges de chat vérifié.** Un avis porte un badge quand vous et votre partenaire avez échangé ≥2 messages dans chaque direction sur ≥15 minutes.\n\n5. **Récence de la dernière activité.** Le profil affiche \"Dernier échange : il y a N.\"\n\n**Ce qui n'augmente PAS votre score** (le système filtre cela) :\n\n- Auto-évaluations (rejetées au niveau du protocole)\n- Comptes sock-puppet (Signal A)\n- Anneaux de réciprocité mutuelle haute-étoile (Signal B)\n- Attaques de concentration (Signal D — ≥80% sur une cible)\n- Commentaires sans ordre cité\n- Avalanches coordonnées d'1 étoile (Signal C)\n\n**Ce que vous DEVRIEZ faire :**\n\n1. Compléter de vrais échanges\n2. Payer les frais de listing (BLURT 50% moins cher)\n3. Réciproquer les commentaires\n4. Avoir de vraies conversations\n5. Écrire des commentaires détaillés\n6. Échanger des deux côtés\n7. Échanger avec des partenaires divers\n8. Rester actif\n\n**Ce que vous DEVRIEZ éviter :**\n\n1. Ne créez pas de comptes alternatifs pour vous évaluer\n2. Ne coordonnez pas d'attaques\n3. Ne payez pas pour de faux avis\n4. Ne laissez pas d'avis de passage\n\n**Vérification — n'importe qui peut auditer votre score.** Morphit fournit un **reçu public de réputation** : `GET /v1/accounts/<votre-compte>/reputation-receipt`. N'importe quel lecteur peut récupérer l'ensemble complet des lignes de commentaire (incluses ET exclues, avec la raison de chaque exclusion), le poids de décroissance, et la formule utilisée.\n\n**Avertissements honnêtes :**\n\n- **Les premiers échanges sont les plus durs.** Un nouveau compte montre un badge `is_new_trader` jusqu'à 4+ échanges vérifiés.\n- **Les mauvais avis se rétablissent avec le temps mais ne s'effacent pas.**\n- **Le système NE détecte PAS si l'échange a réellement eu lieu.** Le règlement est hors chaîne.\n\n**Le chemin le plus court vers une haute réputation : échangez régulièrement, réglez de manière fiable, conversez avec vos partenaires, laissez des commentaires honnêtes dans les deux sens, et laissez le temps + le filtrage des tables de signaux faire le reste.**"
 			},
 			"how_to_leave_feedback": {
 				"q": "Comment laisser un avis après une transaction ?",

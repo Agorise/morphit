@@ -234,6 +234,8 @@ SMOKES=(
 	"apps/web:privacy-headline-length-smoke"
 	"apps/web:carrier-registry-invariants-smoke"
 	"apps/web:shipping-payload-roundtrip-smoke"
+	"apps/indexer:reputation-decay-smoke"
+	"apps/indexer:reputation-receipt-shape-smoke"
 )
 
 total=0
