@@ -28,6 +28,10 @@ const __dirname = dirname(__filename);
 const STATIC_DIR = resolve(__dirname, '../apps/web/static');
 const OUT_PATH = resolve(STATIC_DIR, 'sitemap.xml');
 const ROUTES_TS_PATH = resolve(__dirname, '../apps/web/src/lib/seo/routes.ts');
+const ASSET_REGISTRY_PATH = resolve(
+	__dirname,
+	'../packages/asset-registry/src/index.ts'
+);
 
 const ORIGIN = 'https://morphit.io';
 const DEFAULT_LOCALE = 'en';
@@ -55,8 +59,73 @@ const ROUTES = [
 	{ path: '/plan', priority: 0.4, changefreq: 'monthly' },
 	{ path: '/glossary', priority: 0.6, changefreq: 'monthly' },
 	{ path: '/cheat-sheet', priority: 0.5, changefreq: 'monthly' },
-	{ path: '/privacy', priority: 0.6, changefreq: 'monthly' }
+	{ path: '/privacy', priority: 0.6, changefreq: 'monthly' },
+	// cp117 A7: dynamic-path entry.  The `[asset]` segment expands to
+	// one URL per tradable ticker at sitemap build time (see expandRoutes).
+	// 16 current tradable tickers × 10 locales = 160 new sitemap URLs.
+	{ path: '/privacy/[asset]', priority: 0.5, changefreq: 'monthly' }
 ];
+
+/**
+ * Read the tradable ASSET_TICKERS array from
+ * `packages/asset-registry/src/index.ts`.  Same dependency-free
+ * parsing strategy as `assertRoutesInSync` — read the file as text,
+ * regex out the export.  The asset registry's ASSET_TICKERS is a
+ * single-line `as const` declaration at the top of the file (line
+ * 47 today), so a tight regex is safe.
+ */
+function readAssetTickers() {
+	const src = readFileSync(ASSET_REGISTRY_PATH, 'utf8');
+	const m = src.match(/export\s+const\s+ASSET_TICKERS\s*=\s*\[([^\]]+)\]\s*as\s+const/);
+	if (!m) {
+		throw new Error(
+			'build-sitemap: ASSET_TICKERS not found in asset-registry. '
+				+ 'The parser may be out of date with the file shape.'
+		);
+	}
+	const tickers = [];
+	const tickerRe = /'([A-Z][A-Z0-9]*)'/g;
+	let tm;
+	while ((tm = tickerRe.exec(m[1])) !== null) {
+		tickers.push(tm[1]);
+	}
+	if (tickers.length === 0) {
+		throw new Error('build-sitemap: zero tickers parsed from ASSET_TICKERS.');
+	}
+	return tickers;
+}
+
+/**
+ * Expand any route with a dynamic segment (e.g. `[asset]`) to a
+ * concrete list of routes — one per registry value for that segment.
+ * Static routes pass through unchanged.
+ *
+ * Today only `[asset]` is expanded.  Future dynamic-segment additions
+ * will need a similar case here.
+ */
+function expandRoutes(routes) {
+	const tickers = readAssetTickers();
+	const out = [];
+	for (const r of routes) {
+		if (r.path.includes('[asset]')) {
+			for (const t of tickers) {
+				out.push({
+					path: r.path.replace('[asset]', t.toLowerCase()),
+					priority: r.priority,
+					changefreq: r.changefreq
+				});
+			}
+		} else if (r.path.includes('[')) {
+			throw new Error(
+				`build-sitemap: unhandled dynamic segment in route ${r.path}. `
+					+ 'Add a case to expandRoutes() for this segment.'
+			);
+		} else {
+			out.push(r);
+		}
+	}
+	return out;
+}
 
 /**
  * Parse routes.ts as text, extract the indexable route set, and
@@ -147,7 +216,11 @@ function buildSitemap() {
 	lines.push('\txmlns="http://www.sitemaps.org/schemas/sitemap/0.9"');
 	lines.push('\txmlns:xhtml="http://www.w3.org/1999/xhtml">');
 
-	for (const route of ROUTES) {
+	// Expand dynamic segments (e.g. `/privacy/[asset]` → one entry
+	// per tradable ticker) before emission.
+	const expanded = expandRoutes(ROUTES);
+
+	for (const route of expanded) {
 		// Emit one <url> per locale × route. Each <url> carries the full
 		// set of alternates (xhtml:link) pointing at every other locale
 		// of the same route, plus x-default pointing at the canonical

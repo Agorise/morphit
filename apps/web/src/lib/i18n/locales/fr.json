@@ -3974,7 +3974,11 @@
 				"output_heading": "Ajoutez cette ligne à votre fichier morphit.env",
 				"output_subtitle": "Redémarrez ensuite le service d'indexeur : `docker compose restart indexer`",
 				"locked_label": "Requis",
-				"locked_title": "La fédération dépend de cet actif — les opérateurs ne peuvent pas le désactiver"
+				"locked_title": "La fédération dépend de cet actif — les opérateurs ne peuvent pas le désactiver",
+				"current_state_label": "Actuellement configuré :",
+				"current_state_loading": "chargement…",
+				"current_state_all_enabled": "Tous les actifs négociables activés",
+				"current_state_count": "({count} désactivés)"
 			},
 			"payment": {
 				"heading": "Ajouter un moyen de paiement personnalisé",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Exécutez cette commande sur votre serveur",
 				"output_subtitle": "Depuis le répertoire où vous avez installé Morphit, collez ceci dans votre terminal. Le chemin du fichier de clé de publication vous sera demandé.",
 				"output_pending": "Remplissez les champs clé, nom, description et catégorie ci-dessus pour générer la commande.",
-				"remove_key_error_canonical": "Les méthodes canoniques ne peuvent pas être supprimées via le mécanisme par instance"
+				"remove_key_error_canonical": "Les méthodes canoniques ne peuvent pas être supprimées via le mécanisme par instance",
+				"current_state_label": "Actuellement configuré sur cette instance :",
+				"current_state_none": "Aucune méthode spécifique à cette instance"
 			},
 			"disclosure": {
 				"heading": "Ce que cet assistant fait et ne fait pas",

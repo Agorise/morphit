@@ -3974,7 +3974,11 @@
 				"output_heading": "Add this line to your morphit.env file",
 				"output_subtitle": "Then restart the indexer service: `docker compose restart indexer`",
 				"locked_label": "Required",
-				"locked_title": "Federation depends on this asset — operators cannot disable it"
+				"locked_title": "Federation depends on this asset — operators cannot disable it",
+				"current_state_label": "Currently configured:",
+				"current_state_loading": "loading…",
+				"current_state_all_enabled": "All tradable assets enabled",
+				"current_state_count": "({count} disabled)"
 			},
 			"payment": {
 				"heading": "Add a custom payment method",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Run this command on your server",
 				"output_subtitle": "From the directory where you installed Morphit, paste this into your terminal. You'll be prompted for the posting key file path.",
 				"output_pending": "Fill in the key, name, description, and category fields above to generate the command.",
-				"remove_key_error_canonical": "Canonical methods can't be removed via the per-instance mechanism"
+				"remove_key_error_canonical": "Canonical methods can't be removed via the per-instance mechanism",
+				"current_state_label": "Currently configured on this instance:",
+				"current_state_none": "No instance-specific methods yet"
 			},
 			"disclosure": {
 				"heading": "What this wizard does and does not do",

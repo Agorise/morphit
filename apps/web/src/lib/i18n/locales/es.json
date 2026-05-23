@@ -3974,7 +3974,11 @@
 				"output_heading": "Añade esta línea a tu archivo morphit.env",
 				"output_subtitle": "Luego reinicia el servicio del indexador: `docker compose restart indexer`",
 				"locked_label": "Requerido",
-				"locked_title": "La federación depende de este activo — los operadores no pueden deshabilitarlo"
+				"locked_title": "La federación depende de este activo — los operadores no pueden deshabilitarlo",
+				"current_state_label": "Configurado actualmente:",
+				"current_state_loading": "cargando…",
+				"current_state_all_enabled": "Todos los activos negociables habilitados",
+				"current_state_count": "({count} deshabilitados)"
 			},
 			"payment": {
 				"heading": "Añadir un método de pago personalizado",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Ejecuta este comando en tu servidor",
 				"output_subtitle": "Desde el directorio donde instalaste Morphit, pega esto en tu terminal. Se te pedirá la ruta del archivo de la clave de publicación.",
 				"output_pending": "Rellena los campos de clave, nombre, descripción y categoría para generar el comando.",
-				"remove_key_error_canonical": "Los métodos canónicos no se pueden eliminar mediante el mecanismo por instancia"
+				"remove_key_error_canonical": "Los métodos canónicos no se pueden eliminar mediante el mecanismo por instancia",
+				"current_state_label": "Configurado actualmente en esta instancia:",
+				"current_state_none": "Aún no hay métodos específicos de esta instancia"
 			},
 			"disclosure": {
 				"heading": "Lo que este asistente hace y no hace",

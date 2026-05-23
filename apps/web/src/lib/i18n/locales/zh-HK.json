@@ -3974,7 +3974,11 @@
 				"output_heading": "將呢行加到 morphit.env 檔案",
 				"output_subtitle": "然後重啟索引器服務: `docker compose restart indexer`",
 				"locked_label": "必需",
-				"locked_title": "聯邦依賴呢個資產 — 營運者唔可以停用佢"
+				"locked_title": "聯邦依賴呢個資產 — 營運者唔可以停用佢",
+				"current_state_label": "當前配置:",
+				"current_state_loading": "載入中…",
+				"current_state_all_enabled": "所有可交易資產已啟用",
+				"current_state_count": "({count} 個已停用)"
 			},
 			"payment": {
 				"heading": "添加自訂付款方式",
@@ -3998,7 +4002,9 @@
 				"output_heading": "喺你嘅伺服器執行呢個命令",
 				"output_subtitle": "喺你裝咗 Morphit 嘅目錄入面,將呢個貼喺終端機。系統會提示你輸入 posting key 檔案路徑。",
 				"output_pending": "填寫上面嘅鍵、名稱、說明同類別欄位嚟生成命令。",
-				"remove_key_error_canonical": "規範方法唔可以通過每實例機制移除"
+				"remove_key_error_canonical": "規範方法唔可以通過每實例機制移除",
+				"current_state_label": "呢個實例當前已配置:",
+				"current_state_none": "仲未有實例特定方式"
 			},
 			"disclosure": {
 				"heading": "呢個嚮導做乜同唔做乜",

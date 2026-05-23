@@ -58,6 +58,51 @@ function parseIndexableRoutes(): Array<{ path: string }> {
 	return out;
 }
 
+// ─── Expand dynamic segments ───────────────────────────────────
+// cp117 A7: indexable routes may contain dynamic segments (e.g.
+// `/privacy/[asset]`).  The sitemap builder expands these to one
+// URL per registry value; this smoke must mirror that logic to
+// produce a comparable URL set.  Today only `[asset]` is supported.
+//
+// IMPORTANT: this expansion mirror MUST stay in sync with the
+// matching block in scripts/build-sitemap.mjs's expandRoutes().
+// If a new dynamic-segment type is added there, add it here too.
+function readAssetTickers(): string[] {
+	const src = readFileSync(
+		join(REPO, 'packages/asset-registry/src/index.ts'),
+		'utf8'
+	);
+	const m = src.match(
+		/export\s+const\s+ASSET_TICKERS\s*=\s*\[([^\]]+)\]\s*as\s+const/
+	);
+	if (!m) throw new Error('seo-url-consistency: ASSET_TICKERS not found');
+	const tickers: string[] = [];
+	const tickerRe = /'([A-Z][A-Z0-9]*)'/g;
+	let tm: RegExpExecArray | null;
+	while ((tm = tickerRe.exec(m[1])) !== null) tickers.push(tm[1]);
+	return tickers;
+}
+
+function expandRoutes(routes: Array<{ path: string }>): Array<{ path: string }> {
+	const tickers = readAssetTickers();
+	const out: Array<{ path: string }> = [];
+	for (const r of routes) {
+		if (r.path.includes('[asset]')) {
+			for (const t of tickers) {
+				out.push({ path: r.path.replace('[asset]', t.toLowerCase()) });
+			}
+		} else if (r.path.includes('[')) {
+			throw new Error(
+				`seo-url-consistency: unhandled dynamic segment in route ${r.path}. ` +
+					'Add a case to expandRoutes() in scripts/seo-url-consistency-smoke.ts.'
+			);
+		} else {
+			out.push(r);
+		}
+	}
+	return out;
+}
+
 // ─── Mirror the sitemap builder's localizedUrl() ─────────────────
 // (Byte-for-byte copy of scripts/build-sitemap.mjs's logic.  If
 // the sitemap builder changes shape, update here too — the smoke
@@ -106,7 +151,13 @@ if (routes.length < 5) {
 	process.exit(1);
 }
 
-console.log(`  parsed ${routes.length} indexable routes × ${LOCALES.length} locales`);
+// cp117 A7: expand dynamic segments (`[asset]` etc.) so the URL
+// comparisons below match the rendered sitemap's expanded URLs.
+const expandedRoutes = expandRoutes(routes);
+
+console.log(
+	`  parsed ${routes.length} indexable routes (${expandedRoutes.length} after dynamic-segment expansion) × ${LOCALES.length} locales`
+);
 
 const sitemap = readSitemap();
 if (!sitemap) {
@@ -114,7 +165,7 @@ if (!sitemap) {
 }
 
 // ─── I-1: helper vs sitemap-builder URL match ────────────────────
-for (const r of routes) {
+for (const r of expandedRoutes) {
 	for (const loc of LOCALES) {
 		const sm = sitemapLocalizedUrl(r.path, loc);
 		const hp = helperLocalizedUrl(r.path, loc);
@@ -131,7 +182,7 @@ for (const r of routes) {
 
 // ─── I-2: sitemap.xml contains each (route × locale) URL ─────────
 if (sitemap) {
-	for (const r of routes) {
+	for (const r of expandedRoutes) {
 		for (const loc of LOCALES) {
 			const expected = sitemapLocalizedUrl(r.path, loc);
 			const sc: Scenario = {

@@ -3974,7 +3974,11 @@
 				"output_heading": "Fügen Sie diese Zeile zu Ihrer morphit.env-Datei hinzu",
 				"output_subtitle": "Starten Sie dann den Indexer-Dienst neu: `docker compose restart indexer`",
 				"locked_label": "Erforderlich",
-				"locked_title": "Die Föderation hängt von diesem Asset ab — Betreiber können es nicht deaktivieren"
+				"locked_title": "Die Föderation hängt von diesem Asset ab — Betreiber können es nicht deaktivieren",
+				"current_state_label": "Derzeit konfiguriert:",
+				"current_state_loading": "wird geladen…",
+				"current_state_all_enabled": "Alle handelbaren Assets aktiviert",
+				"current_state_count": "({count} deaktiviert)"
 			},
 			"payment": {
 				"heading": "Eine benutzerdefinierte Zahlungsmethode hinzufügen",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Führen Sie diesen Befehl auf Ihrem Server aus",
 				"output_subtitle": "Fügen Sie dies vom Verzeichnis aus, in dem Sie Morphit installiert haben, in Ihr Terminal ein. Sie werden nach dem Pfad zur Posting-Key-Datei gefragt.",
 				"output_pending": "Füllen Sie oben die Felder Schlüssel, Name, Beschreibung und Kategorie aus, um den Befehl zu generieren.",
-				"remove_key_error_canonical": "Kanonische Methoden können nicht über den Pro-Instanz-Mechanismus entfernt werden"
+				"remove_key_error_canonical": "Kanonische Methoden können nicht über den Pro-Instanz-Mechanismus entfernt werden",
+				"current_state_label": "Derzeit auf dieser Instanz konfiguriert:",
+				"current_state_none": "Noch keine instanzspezifischen Methoden"
 			},
 			"disclosure": {
 				"heading": "Was dieser Assistent leistet und was nicht",

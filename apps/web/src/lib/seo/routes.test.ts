@@ -87,13 +87,30 @@ describe('seo/routes — indexability rules', () => {
 		}
 	});
 
-	it('no dynamic route pattern is marked indexable', () => {
-		// Paths containing `[` are SvelteKit dynamic route patterns;
-		// their URL space is unbounded so they should never appear
-		// in a sitemap.
+	it('every indexable dynamic route is expandable by the sitemap builder', () => {
+		// SvelteKit dynamic route patterns (path contains `[`) have
+		// an unbounded URL space at SvelteKit level, but the sitemap
+		// builder CAN expand specific segments to concrete values from
+		// a registry.  Today only `[asset]` is supported (expands to
+		// every tradable ticker from packages/asset-registry).
+		//
+		// This test enforces: if a dynamic route is marked indexable,
+		// the sitemap builder MUST know how to expand its segment.
+		// Adding a new dynamic-segment indexable route requires also
+		// adding a case to expandRoutes() in scripts/build-sitemap.mjs
+		// and updating this allowlist.  cp117 A7 added `[asset]`.
+		const EXPANDABLE_SEGMENTS: readonly string[] = ['[asset]'];
+
 		for (const r of ROUTES) {
-			if (r.path.includes('[')) {
-				expect(r.indexable, `dynamic route ${r.path} must not be indexable`).toBe(false);
+			if (!r.path.includes('[')) continue;
+			if (!r.indexable) continue;
+			// Find which dynamic segments this route contains
+			const segments = (r.path.match(/\[[^\]]+\]/g) ?? []);
+			for (const seg of segments) {
+				expect(
+					EXPANDABLE_SEGMENTS.includes(seg),
+					`indexable dynamic route ${r.path} contains segment ${seg} but the sitemap builder doesn't know how to expand it; either flip indexable to false or add an expansion case to scripts/build-sitemap.mjs and to EXPANDABLE_SEGMENTS above`
+				).toBe(true);
 			}
 		}
 	});
