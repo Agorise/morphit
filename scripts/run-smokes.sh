@@ -232,6 +232,8 @@ SMOKES=(
 	"apps/web:privacy-asset-sitemap-parity-smoke"
 	"apps/web:faq-jsonld-no-markdown-smoke"
 	"apps/web:privacy-headline-length-smoke"
+	"apps/web:carrier-registry-invariants-smoke"
+	"apps/web:shipping-payload-roundtrip-smoke"
 )
 
 total=0

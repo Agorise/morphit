@@ -819,6 +819,10 @@
 				"q": "Kann ich Waren oder Dienstleistungen auf Morphit handeln, z. B. Obstbäume oder Schallplatten?",
 				"a": "Ja — mit einer bestimmten Struktur. Das Order-Modell ist immer **ein handelbares Asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH oder DOGE) auf einer Seite und etwas anderes auf der anderen Seite**. Das „andere\" kann eine Fiat-Währung, eine andere Kryptowährung oder über die Zahlungsmethode `Barter (goods)` Waren/Dienstleistungen sein. Für Orangenbäume gegen XMR: Bestelle mit `asset=XMR`, `payment_methods=[Barter (goods)]`, beschreibe die Details im `terms`-Feld. Reine Tausch-Geschäfte (Waren gegen Waren ohne Krypto) sind nicht modellierbar — eine Seite muss immer BTC, XMR, BLURT, USDT, USDC, BCH, LTC oder DASH sein. Vollständige Erklärung in der englischen FAQ."
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "Wie handle ich Bargeld per Post oder versende physische Waren über Morphit?",
+				"a": "Bargeld-per-Post-Geschäfte und versendete Waren funktionieren wie jedes andere Morphit-Geschäft, mit zwei zusätzlichen Chat-Werkzeugen:\n\n**1. Postanschrift teilen.** Im Chat-Compositor tippe auf **\"Postanschrift teilen\"**. Das Formular hat Felder für Land, Straße, Stadt, Postleitzahl, optional Bundesland, optional Empfängername, optional zweite Zeile (Wohnung) und eine optionale Notiz. Deine Adresse bleibt end-to-end-verschlüsselt im Chat — nur du und dein Handelspartner können sie lesen. Sie wird **niemals** in den Indexer geschrieben, niemals auf die Chain, niemals an Stellen, die für die Föderation lesbar sind.\n\n**2. Versand erfassen.** Nach dem Versand des Bargelds oder der Waren tippe auf **\"Versand erfassen\"**. Wähle einen Versanddienst aus dem Dropdown (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, oder **Anderer** mit freitext Name + Tracking-URL), gib die Sendungsnummer von deinem Beleg ein und füge optional eine Notiz hinzu. Dein Partner sieht eine **📦 Versendet via X** Pille im Chat mit einem klickbaren \"Sendung verfolgen\" Link. Die Sendungsnummer ist optional, aber als Versandnachweis empfohlen.\n\n**Sicherheitstipps für jeden physischen Versand**:\n\n- Verwende einen verfolgten, **versicherten** Dienst.\n- Verwende einen **schlichten Umschlag** ohne Hinweise auf wertvolle Inhalte.\n- **Absender-Abwägung**: Weglassen wahrt Anonymität, aber unzustellbare Sendungen werden vernichtet.\n- Sendungsnummer ist optional, aber empfohlen.\n\n**Wenn du BARGELD versendest**:\n\n- **Wickle das Bargeld in Aluminiumfolie ein.** Verhindert, dass jemand den Inhalt durch Gegenlicht sieht.\n- **UPS und FedEx VERBIETEN Bargeldversand in ihren AGB.** Bei Öffnung kann beschlagnahmt werden ohne Anspruch.\n- **International**: lüge nicht in Zollerklärungen. Hochwertiges Bargeld wird ohnehin beschlagnahmt.\n\n**Für Verkäufer, die Sendungsnummern erhalten — auf Fälschung prüfen.** Ein Betrugskäufer könnte irgendeine Zufallsnummer eingeben. Bevor du Krypto sendest, suche die Nummer auf der Carrier-Website und **prüfe, dass die Ziel-PLZ deiner tatsächlichen PLZ entspricht**.\n\n**Einfache Erklärung für Oma:** Du möchtest Monero von jemandem auf Morphit kaufen. Der Verkäufer möchte US-Dollar in bar per Post. Der Verkäufer teilt seine Postfachadresse im Chat. Du gehst zur Post, wickelst das Bargeld in Alufolie, packst es in einen schlichten Umschlag, kaufst Einschreiben mit Versicherung und notierst die Sendungsnummer. Du erfasst sie im Chat. Wenn das Paket ankommt, schickt der Verkäufer dir die Monero und ihr hinterlasst beide positives Feedback.\n\n**Einschränkungen.** Morphit schlichtet keine Streitigkeiten. Wenn dein Bargeld in der Post ohne Versicherung verloren geht, ist das zwischen dir und dem Transporteur."
+			},
 			"order_timeouts": {
 				"q": "Wie lange bleiben Orders offen?",
 				"a": "Aufträge bleiben standardmäßig bis zu 90 Tage sichtbar (1–90 Tage einstellbar). Sobald jemand deinen Auftrag akzeptiert, gibt es ein 5-Tage-Standardfenster zum Zahlen — ausreichend für langsame Banküberweisungen, Wochenenden und Feiertage. Nach dem Posten hast du 15 Minuten, um Tippfehler zu korrigieren; danach ist der Auftrag gesperrt. Du kannst „Nur Geschäftszeiten\" aktivieren, um den Timer am Wochenende anzuhalten. Wenn dein Auftrag ohne Match abläuft, kannst du ihn unter /my/orders mit einem Klick erneut einstellen."
@@ -2621,7 +2625,22 @@
 			"close": "Schließen"
 		},
 		"order_context_label": "Über diese Order",
-		"boot_failed": "Chat konnte nicht geladen werden. Lade die Seite neu."
+		"boot_failed": "Chat konnte nicht geladen werden. Lade die Seite neu.",
+		"mailing_address": {
+			"button": "Postanschrift teilen",
+			"button_aria": "Teile deine Postanschrift mit deinem Handelspartner",
+			"pill_heading": "Postanschrift geteilt",
+			"copy_button": "Adresse kopieren",
+			"for_order": "Zur Bestellung"
+		},
+		"shipment": {
+			"button": "Versand erfassen",
+			"button_aria": "Versanddienst und Sendungsnummer eines Versands erfassen",
+			"pill_heading": "Versendet via {carrier}",
+			"copy_button": "Sendungsnummer kopieren",
+			"track_button": "Sendung verfolgen",
+			"for_order": "Zur Bestellung"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Tausche Waren direkt gegen das Asset — beschreibe in den Auftragsbedingungen, was du anbietest oder willst (z. B. „Orangenbäume\", „gebrauchtes Fahrrad\", „selbst angebauter Knoblauch\")."
 		},
-		"cash": {
-			"description": "Physisches Papiergeld, persönlich getauscht."
+		"cash_by_mail": {
+			"description": "Bargeld per Post oder Kurierdienst versendet. Verwende einen verfolgbaren, versicherten Anbieter; wickle das Bargeld in einem schlichten Umschlag in Alufolie; beachte die Zollvorschriften bei internationalen Sendungen."
+		},
+		"cash_in_person": {
+			"description": "Bargeld persönlich übergeben — triff dich mit deinem Handelspartner an einem öffentlichen, gut beleuchteten Ort, um Bargeld direkt zu übergeben."
 		},
 		"precious_metals": {
 			"description": "Gold- oder Silbermünzen bzw. -barren, persönlich getauscht."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Krypto",
 			"in_person": "Persönlich",
+			"by_mail": "Per Post",
 			"online": "Online",
 			"instance": "Hinzugefügt von dieser Instanz"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Kategorie",
 				"category_online": "Online",
 				"category_in_person": "Persönlich",
+				"category_by_mail": "Per Post",
 				"category_crypto": "Krypto",
 				"url_label": "Webseite (optional)",
 				"url_help": "Muss mit https:// beginnen",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Bestehende Aufträge, die auf diese Methode verweisen, werden nach dem Entfernen weiterhin korrekt angezeigt — der Schlüssel bleibt in der Historie dieser Aufträge bestehen. Entfernen bedeutet nur, dass neue Aufträge sie nicht mehr auswählen können."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Postanschrift teilen",
+		"intro": "Teile eine physische Adresse mit deinem Handelspartner zum Versand von Waren oder Bargeld. Bleibt nur in diesem verschlüsselten Chat.",
+		"privacy_heading": "Vor dem Teilen",
+		"privacy_e2ee": "Diese Adresse ist Ende-zu-Ende-verschlüsselt — nur du und dein Handelspartner können sie lesen.",
+		"privacy_irreversible": "Das Teilen ist unwiderruflich: einmal gesendet, hat dein Partner deine Adresse, auch wenn du die Nachricht später löschst.",
+		"privacy_pobox_tip": "Erwäge ein Postfach, einen Mail-Drop-Dienst oder ein virtuelles Postfach statt deiner Heimadresse.",
+		"privacy_clear_chat": "Nach Abschluss des Handels solltest du den Chatverlauf auf beiden Seiten löschen.",
+		"country_label": "Land",
+		"country_placeholder": "Land wählen…",
+		"country_other": "Andere (ISO-Code eingeben)",
+		"country_iso_placeholder": "z. B. NL, BR, MX",
+		"country_help": "Zweistelliger ISO-Ländercode (z. B. US, DE, JP).",
+		"recipient_label": "Empfängername",
+		"recipient_help": "Name am Briefkasten oder Paket. Leer lassen für anonyme Postfächer.",
+		"street_label": "Straße und Hausnummer",
+		"street2_label": "Wohnung, Etage usw.",
+		"city_label": "Stadt",
+		"state_label": "Bundesland / Region",
+		"postal_label": "Postleitzahl",
+		"note_label": "Notiz für deinen Handelspartner",
+		"note_help": "Lieferanweisungen, Klingelcode usw.",
+		"optional_marker": "(freiwillig)",
+		"share_button": "Adresse teilen",
+		"sending": "Senden…"
+	},
+	"shipment_modal": {
+		"heading": "Versand erfassen",
+		"intro": "Teile deinen Versanddienst + Sendungsnummer, damit dein Handelspartner den Versand prüfen kann.",
+		"safety_heading": "Sicherheitstipps für jede Sendung",
+		"safety_insurance": "Verwende einen verfolgten, VERSICHERTEN Dienst. Bei Verlust oder Diebstahl ist die Versicherung deine einzige Absicherung.",
+		"safety_plain_envelope": "Verwende einen schlichten Umschlag oder Karton ohne Hinweise auf wertvolle Inhalte.",
+		"safety_return_address": "Absender-Abwägung: Weglassen wahrt Anonymität, aber unzustellbare Sendungen werden vernichtet.",
+		"safety_tracking_optional": "Sendungsnummer ist optional, aber als Versandnachweis dringend empfohlen.",
+		"cash_tips_toggle": "Wenn du BARGELD versendest, lies das zuerst",
+		"cash_heading": "Spezifische Tipps für Bargeld per Post",
+		"cash_tinfoil": "Wickle das Bargeld in Aluminiumfolie ein — verhindert, dass Inhalt durch Gegenlicht des Umschlags sichtbar wird.",
+		"cash_ups_fedex_prohibit": "UPS und FedEx VERBIETEN Bargeldversand in ihren AGB. Bei Öffnung kann beschlagnahmt werden ohne Anspruch. Nutze stattdessen einen Postdienst.",
+		"cash_customs": "International: lüge nicht in Zollerklärungen. Hochwertiges Bargeld wird ohnehin beschlagnahmt.",
+		"carrier_label": "Versanddienst",
+		"carrier_placeholder": "Dienst wählen…",
+		"other_heading": "Andere Dienst-Details",
+		"custom_carrier_name_label": "Dienstname",
+		"custom_tracking_url_label": "Tracking-URL",
+		"custom_tracking_url_help": "Vollständige https://-URL, unter der der Empfänger die Sendungsnummer nachverfolgen kann.",
+		"tracking_label": "Sendungsnummer",
+		"tracking_help": "Wie vom Dienst bereitgestellt. Buchstaben, Zahlen, Leerzeichen, Bindestriche zulässig.",
+		"note_label": "Notiz",
+		"optional_marker": "(freiwillig)",
+		"share_button": "Versand teilen",
+		"sending": "Senden…"
 	}
 }

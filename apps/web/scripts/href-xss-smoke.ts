@@ -159,6 +159,30 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// reviewer has confirmed safe.  See PrioritiesSection.svelte
 		// module-doc + the PRIORITIES const declaration.
 		new Set(['faqHref(p.faqKey)'])
+	],
+	[
+		'apps/web/src/lib/components/ChatMessage.svelte',
+		// cp121: `trackingUrl` is one of two values, both site-controlled:
+		//   1. buildTrackingUrl(carrierEntry.trackingUrlTemplate, sh.tracking)
+		//      — where carrierEntry.trackingUrlTemplate comes from the
+		//      hardcoded CARRIERS const in apps/web/src/lib/shipping/carriers.ts.
+		//      The carrier-registry-invariants smoke (cp120) enforces that
+		//      every template starts with `https://` and contains a single
+		//      `{tracking}` placeholder; buildTrackingUrl URL-encodes the
+		//      tracking number before substituting.  No operator/peer input
+		//      reaches the URL template — only the carrier KEY (validated
+		//      against the bundled registry via CARRIERS_LOOKUP).
+		//   2. sh.customTrackingUrl — peer-controlled via the chat
+		//      payload BUT validated through isValidCustomTrackingUrl()
+		//      in apps/web/src/lib/chat/payload.ts, which (a) enforces
+		//      starts-with-https://, (b) round-trips through new URL()
+		//      to confirm well-formed, and (c) rejects any scheme other
+		//      than https: (this rejects javascript:, data:, etc. —
+		//      covered by S-8 in shipping-payload-roundtrip-smoke).
+		// Both the canonical and custom paths are scheme-locked to https://.
+		// Anchor element also carries rel="noopener noreferrer" to suppress
+		// referrer leak + Spectre-style window.opener attacks.
+		new Set(['trackingUrl'])
 	]
 ]);
 

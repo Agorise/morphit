@@ -4,47 +4,208 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp119 — 2026-05-22 (fresh-eye re-audit of cp112 SEO surface; 8 findings A1-A8 all fixed same turn + 2 new defense smokes + new operator env var MORPHIT_INSTANCE_SEO_TWITTER_SITE).
+**Last touched:** cp120-cp122 — 2026-05-23 (cash-by-mail payment method split + physical-shipment tracking + mailing-address share + carrier registry + 2 new chat payloads + 2 new modals + ChatMessage pill rendering + ConversationView wiring + ADR-0037 + cash_by_mail_walkthrough FAQ entry × 10 locales + 2 brag-list entries (#221/#222) + GRANDMA-FRIENDLY note + deep-deep audit).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp122-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 305 brag entries · locale parity across 10 locales (**2,907 leaves × 10 = 29,070**; unchanged in cp119 — no new i18n keys)
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp119 have been docs/SEO/UX/CI hardening + 9 new structural defenses + operator setup-wizard V1+V2+V3#1, no new audits
-- **46** structural defenses (cp119: +2 — faq-jsonld-no-markdown 7 scenarios, privacy-headline-length 10 scenarios); **5,314/0** smoke battery (cp118 → cp119 +19 via the 2 new smokes + 2 new env-example checks for SEO_TWITTER_SITE); LL #52 (41st consecutive HW-verified workspace TS-clean)
-- 1,381 vitest tests passing
+- 16 tradable assets · **36 ADRs** · **307 brag entries** · locale parity across 10 locales (**2,971 leaves × 10 = 29,710**; cp120 +30 strings for cash-rename + by_mail category, cp121 +590 strings for modal/pill keys, cp122 +20 strings for FAQ q+a)
+- Codebase deep-audit was end-to-end complete at cp106; cp107–cp122 have been docs/SEO/UX/CI hardening + structural defenses + cash-by-mail + shipment-tracking feature complete
+- **48** structural defenses (cp120: +2 — carrier-registry-invariants 13 scenarios, shipping-payload-roundtrip 17 scenarios); **5,349/0/0/0** smoke battery (cp119 → cp122 net +35 via new smokes + new scenarios + cleanup)
+- 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108–cp118 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp118 grand total: ~621 strings across 9 non-EN locales awaiting native review; cp118 mechanical spot-audit passed with 0 HIGH findings; **cp119 added no new auto-translated strings**)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp122 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp122 grand total: ~621 + ~590 cp121 + ~20 cp122 = **~1,231 strings** across 9 non-EN locales awaiting native review)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT (now overdue 10+ cps)
 
-**Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
-- ~~Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`~~ — closed long ago; the placeholder is now a denylist entry (boot fails loudly if used), per `docs/AUDIT-2026-05-FINAL-REPORT.md` §132–143.
-- ~~Commit `package-lock.json`~~ — closed by Part 70; the file ships at the repo root.
-- ~~Wire `svelte-kit sync && tsc --noEmit` into CI~~ — was wired indirectly via `workspace-typecheck-smoke` (Part 70) but the audit-final-report mis-described it as `npm run check`; cp111 added an explicit `web-check` job to `.forgejo/workflows/ci.yml` so the protection is now legible without indirection.
+**What the most recent three checkpoints did:**
+- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed same turn + 2 new defense smokes + new operator env var MORPHIT_INSTANCE_SEO_TWITTER_SITE
+- **cp120** — Foundation for cash-by-mail + physical-shipment tracking. New `by_mail` payment category, cash → cash_in_person + cash_by_mail rename (pre-launch clean), `morphit_mailing_address_v1` + `morphit_shipment_v1` chat payloads with full encoder/decoder/validators, 20-carrier registry with tracking URL templates + `buildTrackingUrl()`, 2 new defense smokes (carrier-registry-invariants 13 scenarios, shipping-payload-roundtrip 17 scenarios incl. javascript: URL injection rejection), 4 pre-existing smoke updates for the rename
+- **cp121** — UI complete: MailingAddressModal (15-country picker + Other ISO + 4-bullet privacy aside), ShipmentModal (20-carrier dropdown + Other + 4 always-shown safety bullets + collapsible "If mailing CASH" expander with 3 cash-specific bullets), ChatMessage pill rendering for both new payloads (with copy buttons + clickable carrier tracking links), ConversationView triggers wired, +590 i18n strings across 10 locales, href-xss-smoke allowlist entry for trackingUrl with detailed safety rationale
+- **cp122** — Docs complete: ADR-0037, FAQ entry `cash_by_mail_walkthrough` × 10 locales (+20 strings), 2 brag entries #221/#222 (cash-by-mail + 20-carrier registry) in section 17 with 86-entry renumber 221..305 → 223..307, GRANDMA-FRIENDLY note for the new feature, deep-deep audit (D-1..D-13 all pass), mediakit rebuilt, ADR-range trailer updates in brag list + release notes.
 
-**What the most recent six checkpoints did:**
-- **cp110** — kencode removed from FAQ (reserved-name impersonation protection in `confusables.ts` deliberately preserved); Shaparak (شاپرک) payment method added in all 3 registry surfaces + 10-locale i18n descriptions; monero.bar landed in `docs/OPERATIONS.md §40.4` as a network-health dashboard, NOT in the verification quorum (incompatible — no txprove endpoint)
-- **cp111** — Doc-hygiene + CI-explicitness + new structural defense (#38). New CI job: `web-check` runs `svelte-kit sync && svelte-check` against apps/web directly. New smoke `brag-list-claim-parity-smoke` (81 scenarios) walks every backtick'd file path, custom-JSON op ID, MORPHIT_* env-var, and numeric anchor in the three marketing-class docs against canonical source-of-truth.
-- **cp112** — CI failure fix (brag-list-kiss-budget) + comprehensive SEO sweep: hreflangAlternates URL-shape bug fixed (was `?lang=` query-string, now path-based `/{locale}/{path}` to match sitemap); JSON-LD coverage extended (SoftwareApplication + BreadcrumbList + Article); 17 privacy pages converted to full `<Head>` component; PNG OG image fallback for Twitter/LinkedIn/Slack/Discord (1200×630, 61KB); RSS auto-discovery `<link>` tags on home + orderbook; two new structural defenses (seo-url-consistency #39 with 366 scenarios + og-image-freshness #40 with 6 scenarios).
-- **cp113** — cp112 self-audit: 4 real bugs found+fixed (Organization.logo dims, og:locale region codes, og:locale:alternate missing, $app/state→$app/stores convention on privacy pages) + 7 lesser findings filed for follow-up. Docs updated.
-- **cp114** — Two CI failures fixed: native-translations-floor surgical-prune of 4 orphaned privacy.* keys from snapshot; href-xss-smoke allowlist for `feed.href` + hardened Head.svelte docblock with SECURITY CONSTRAINT note. Full local battery: 4,888/0. **Tarball delivered**: `morphit-audit-2026-05-122-cp114-FULL-STATE.tar.gz` (7.2 MB, SHA-256 a8f1ed64…0c1bff2, 1,392 files).
-- **cp115** (cp1→cp7 final) — UX surface upgrade. **(1) MorphitLogoBling.svelte**: 3-body gravitational simulation backdrop behind the header wordmark — RAF + canvas + IntersectionObserver pause + reduced-motion fallback + Vite immutable caching. **(2) CoinCarousel.svelte**: 22-slot below-the-fold marquee (16 coins + 5 networks Arbitrum/Base/BEP-20/Polygon/TRC-20 + Barter). cp1 single-row; cp6 split into TWO rows scrolling OPPOSITE directions (rowA normal, rowB reverse, alternating even/odd split for balance as catalogue grows). 0.85 opacity pinned by smoke I-10. Icons render at authored full color, unmodified. IntersectionObserver lazy-mount + per-img lazy-load + reduced-motion disable + sr-only enumeration. **(3) PrioritiesSection.svelte**: cp1 4-card → cp5 7-card → cp6 each card is a real `<a href>` deep-link to a high-cross-link-density FAQ entry (privacy_practices / no_escrow_arbitration / help_make_unstoppable / what_is_blurt / chat_privacy / what_is_reputation / trade_goods_services). Hover/focus/active affordances: 2 px lift + intensified border + 3 px arrow nudge + brand-emerald CTA tint, 180 ms ease-out; focus-visible 2 px brand ring; active drops to baseline at 60 ms; reduced-motion disables transitions. Card #1 (Privacy first) anchored with brand-gradient top border. Card text Ken-canonical (cp5), 7 cards in fixed order, do-not-paraphrase rule. **(4) Asset registry path consolidation**: 4 stale `/coins/*.svg` → `/icons/icon-*.svg` (vestigial since cp21). `asset-registry-smoke` tightened to `existsSync()` every path. **(5) Barter icon**: cp1 was uploaded JPEG → converted to 80×80 PNG → cp7 replaced by Ken-uploaded SVG (10.9 KB gold-bars-on-black-circle artwork, do-not-modify rule). **(6) Old home.points grid REMOVED** (cp6): 4-card Tooltip-based grid deleted; 80 `home.points.*` locale keys removed; native-translations-snapshot surgically pruned 72 native pairs with audit trail. **(7) Networks-panel heading h3→h2** (cp6): cascading hierarchy fix after points-grid `<h2>`s removed. **(8) href-xss allowlist extended** for `faqHref(p.faqKey)`. **(9) i18n-completeness allow-list**: 15 invariant-class entries (5 network names × 3 tested locales). **(10) Six structural-defense expansions/additions**: #41 logo-bling-invariants (5), #42 coin-carousel-invariants (6→9→13 scenarios across cp1→cp2→cp6), #43 svelte-component-import-coverage (57; caught a session-compaction-class bug). **(11) svelte-check type-error fixed**: `HTMLDivElement` → `HTMLElement` in CoinCarousel.
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp122 is a clear meaningful milestone (3-checkpoint feature complete end-to-end: payment-method split + 2 new chat payloads + 2 new modals + carrier registry + ADR + FAQ + brag + deep-deep audit + triple-pulse stable).
 
-**Translation-quality flag (cp115-cp7 final):** All FAQ + payment-method content added or amended in cp108–cp110 across the 9 non-EN locales is auto-translation quality. cp112 added 2 new `seo.privacy_asset.*` strings × 9 non-EN locales. cp115-cp7 final: 8 carousel keys + 19 priorities keys × 9 non-EN locales = 243 new auto-translated strings (minus 5 network labels × 9 = 45 that are invariant brand/standard names and allow-listed). All batches should be hand-polished in a single dedicated translation-quality pass before launch. Full list in REVISIT-LIST.
+---
 
-**Memory facts (re-confirmed for the new session):**
-- `@agorise:matrix.org` = private DM MXID for security disclosure
-- `#agorise:matrix.org` = public Matrix room alias (advertised in FAQ footer, `/support`, several FAQ answers)
-- Treasury account is `@morphit-fees`; official posting account is `@morphit`
-- BLURT-paid listing fees: 90/10 split (operator/treasury), paid in BLURT directly to operator's payout address
-- BTC- and XMR-paid listing fees: 100% to project treasury, 0% to operators (BLURT splits atomically on-chain; BTC/XMR would require off-chain custodial bookkeeping — design tradeoff)
-- BLURT-paid path is 50% cheaper for users (deliberate incentive)
-- Forgejo, never Gitea — repo at `git.agorise.net/agorise/morphit`
-- Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
+## cp122 — Docs + FAQ + ADR + brag-list + GRANDMA-FRIENDLY + deep-deep audit close-out (2026-05-23)
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115-cp7 is a clear meaningful milestone (3 new user-facing surfaces complete, old grid retired, 6 new structural-defense scenarios shipped, FAQ deep-linking + hover/click UX, all i18n covered).
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp122-FULL-STATE.tar.gz` built this turn (3-cp feature complete: cash-by-mail + physical-shipment tracking + mailing-address share).
+
+**State:** 16 tradable assets · **36 ADRs** (+1 cp122: ADR-0037) · **307 brag entries** (+2 cp122 in section 17) · locale parity **2,971 × 10 = 29,710** (+20 vs cp121's 2,969 — FAQ q+a × 10) · **5,349/0/0/0** local smoke battery (triple-pulse stable) · 7/7 TS-clean · **48 defenses** (unchanged vs cp121) · 644 vitest passing.
+
+**ADR-0037 — Physical-shipment tracking & mailing-address share (cp120–cp121):**
+- Rationale for splitting `cash` → `cash_in_person` + `cash_by_mail` (operational reality differs; face-to-face vs. third-party carrier with days of latency)
+- Rationale for adding `by_mail` payment category (currently 1 method; future-proof for postal money orders etc.)
+- Rationale for two distinct chat payloads (vs. extending `morphit_funds_sent` — funds_sent is crypto-specific with txid + asset method; physical shipment carries different metadata)
+- 5-point privacy posture: (1) both payloads never leave E2E chat, (2) tracking-link click is the only external touchpoint, (3) mailing-address recipient is the destination — already knows, (4) shipment safety aside is contextual (always-shown + collapsible cash-specific expander), (5) tracking-number spoofing is documented soft attack with user-education mitigation
+- Wire-format examples for both payloads (incl. 'other' carrier variant)
+- Consequences: positive (generic by design — works for cash, Barbie dolls, sourdough starters), negative/accepted (carrier URLs are best-effort; not operator-configurable; carrier list bundled at 20 + Other escape hatch)
+
+**FAQ entry `cash_by_mail_walkthrough` × 10 locales:**
+- 2-button walkthrough (Share mailing address + Record shipment) — what each button does, what the recipient sees
+- Always-shown safety tips: insurance, plain envelope, return-address tradeoff, tracking-optional
+- If-you're-mailing-CASH tips: tinfoil-wrap (defeats envelope-fishers), UPS/FedEx prohibit cash, customs honesty
+- Tracking-spoofing seller defense: verify destination ZIP matches your actual ZIP
+- ELI5 walkthrough for grandma (post office → tinfoil → priority mail with insurance → tracking number)
+- Honest limitations disclosure (Morphit doesn't arbitrate disputes; no escrow recovery)
+- Tied keys: `trade_goods_services`, `in_person_vs_online`, `chat_privacy` (cross-linked back from `trade_goods_services`)
+
+**Brag list entries #221/#222:**
+- #221 — Cash by mail is its own payment method with structured proof-of-shipment
+- #222 — Top 20 worldwide carriers bundled with clickable tracking links
+- Full 86-entry renumber 221..305 → 223..307 (sequential discipline per memory rule)
+- Trailer count updated 305 → 307 entries; ADR range updated 0001-0036 → 0001-0037 (36 ADRs)
+- Mediakit rebuilt (102,234 bytes, 6 files)
+
+**GRANDMA-FRIENDLY note appended to `docs/GRANDMA-FRIENDLY-INVESTIGATION.md`:**
+- What was shipped (2-button UX, country picker simplification, safety aside content tiering)
+- T2/T3 backlog: modal-trigger discovery hint, tracking-spoofing detection nudge, carrier URL freshness, international shipping cost estimation
+- What's deliberately NOT being added: no postal-API verification (privacy leak), no escrow (custodial)
+
+**Operator-facing doc audit:**
+- No stale `cash` references in operator docs (by_mail is frontend-only; no operator config flags added)
+- `docs/RUN-A-MORPHIT-NODE.md`, `docs/OPERATIONS.md`, `docs/PRE-LAUNCH-CHECKLIST.md` all clean for cp120-122
+
+**Deep-deep audit (D-1..D-13):**
+- D-1/D-2/D-3: zero indexer/relay/db references to new payloads (server-side never sees them ✓)
+- D-4: 24/24 + 24/24 i18n keys match modal consumers
+- D-5: zero missing i18n keys in EN locale
+- D-6: zero stale `payment_method.cash.description` entries in native snapshot
+- D-7: payload-roundtrip + carrier-registry smokes pass clean
+- D-8: Bob/Sally-user/Sally-operator personas verified (Bob's cash-by-mail order, Sally-user's Barbie-for-XMR via barter_goods, Sally-operator's frontend-only category)
+- D-9: feedback-system flow unchanged (cash-by-mail trades route through standard flow)
+- D-10/D-10b: complete reference inventory — 7 files all in `apps/web/`, zero in indexer/relay/db/packages ✓
+- D-11: decentralization preserved (no new federation-wide constants/chokepoints; carrier registry intentionally bundled-not-operator-configurable)
+- D-12: tiny footprint (~28KB source across 3 new files; tree-shakes; only loads when chat is open)
+- D-13: triple-pulse battery 5,349/0/0/0 stable
+
+**Mid-stream fixes:**
+- 2 stale `35 ADRs`/`35 architecture decision records` references in MORPHIT-BRAG-LIST.md + RELEASE-NOTES-v1.0.0-beta.1.md — fixed via sed + manual str_replace for the long-form text
+- Mediakit re-rebuilt after the 35→36 ADR text fix touched the brag list
+
+**Translation-quality flag (cp120-cp122 totals):** cp120 +30 strings (cash rename + by_mail category × 10), cp121 +590 strings (modal + pill keys × 10), cp122 +20 strings (FAQ q+a × 10) — 640 new auto-translated strings across 9 non-EN locales added in cp120-cp122. Cumulative cp108-cp122: ~1,231 strings awaiting native-speaker polish.
+
+---
+
+## cp121 — UI complete: modals + ChatMessage pills + ConversationView wiring + 590 i18n strings (2026-05-23)
+
+**State:** 16 tradable assets · 35 ADRs · 305 brag entries · locale parity **2,969 × 10 = 29,690** (+59 per locale vs cp120's 2,910) · **5,349/0** local smoke battery (+2 vs cp120's 5,347 — href-xss allowlist gains 1 scenario, balance from i18n smokes picking up new keys) · 7/7 TS-clean · **48 defenses** (unchanged) · 644 vitest passing.
+
+**MailingAddressModal.svelte (~280 lines):**
+- Country picker: 15-country dropdown (AU, CA, CN, DE, ES, FR, GB, HK, IN, IR, IT, JP, PL, RU, US) covering Morphit's 10 locales' primary jurisdictions + "Other (type ISO code)" with 2-char uppercase input
+- Form fields: recipient name (optional), street, street2 (optional), city, state/province (optional), postal/ZIP code, note (optional)
+- Privacy aside at top with 4 explicit warnings: (1) E2EE chat only, (2) sharing is irreversible, (3) consider P.O. box / mail-drop / virtual mailbox, (4) consider clearing chat history after trade
+- Full inline validation: country code shape (ISO 3166-1 alpha-2), street length ≤200, city ≤100, postal 1-20, all optional fields bounded
+- Error display with role="alert"
+- Mobile-friendly modal layout (95vh max, sticks-to-bottom on mobile, centered on desktop)
+- 24 i18n keys, all wired
+
+**ShipmentModal.svelte (~250 lines):**
+- Carrier dropdown reads from `CARRIERS` const — 20 canonical + "Other (specify carrier)" last
+- When carrier === 'other', reveals customCarrierName + customTrackingUrl inputs (https-only validation)
+- Tracking number input with monospace font, 5-50 char range, permissive char set (alphanumeric + space + dash + slash)
+- Always-shown safety aside (4 bullets): insurance, plain envelope, return-address tradeoff, tracking-optional
+- Collapsible "If you're mailing CASH" expander (▶/▼ arrow, aria-expanded, aria-controls): tinfoil-wrap, UPS/FedEx prohibition, customs warning — defaults to collapsed
+- Note field (optional, ≤500 chars)
+- 24 i18n keys, all wired
+
+**ChatMessage.svelte pill rendering:**
+- Imports `CARRIERS` + `buildTrackingUrl` + builds `CARRIERS_LOOKUP` Map at module top (O(1) lookup)
+- Two new branches in decode-dispatch before `unknown_version`:
+  - **mailing_address pill**: ✉️ heading, multi-line address (recipient/street/street2/city,state/postal/country lines), 📋 Copy formatted-address button, optional orderPermlink display
+  - **shipment pill**: 📦 heading with `{carrier}` interpolation (from CARRIERS_LOOKUP.name or sh.customCarrierName), monospace tracking line, 📋 Copy tracking button, 🔗 "Track package" link (target=_blank rel=noopener noreferrer) using buildTrackingUrl(template) OR sh.customTrackingUrl for 'other' carrier, optional note, optional orderPermlink
+
+**ConversationView.svelte:**
+- Imports MailingAddressModal + ShipmentModal
+- State: `showMailingAddressModal` + `showShipmentModal`
+- 2 new composer buttons next to existing ones (with appropriate aria-labels)
+- 2 new handlers: `handleMailingAddressShare` + `handleShipmentShare` (mirror existing handleAddressShare pattern — sendMessage + tick + scroll + close)
+- 2 new modal mounts at end of file (after FundsSentModal)
+
+**i18n (~590 new strings):**
+- mailing_address_modal.* (22 keys × 10 locales = 220)
+- shipment_modal.* (24 keys × 10 locales = 240)
+- chat.mailing_address.* (5 keys × 10 locales = 50)
+- chat.shipment.* (5 keys × 10 locales = 50)
+- common.cancel already exists; verified
+- Locale parity: 2,910 → 2,969 (+59 per locale = +590 strings total)
+
+**Mid-stream fixes:**
+- href-xss-smoke flagged the new `href={trackingUrl}` binding in ChatMessage; added allowlist entry with detailed safety rationale explaining the two-path validation (canonical template lockdown by carrier-registry-invariants-smoke + custom URL validation by isValidCustomTrackingUrl)
+- 3 EN-byte-identical leaks caught + fixed: de `optional_marker` × 2 ("(optional)" → "(freiwillig)"), fr `shipment_modal.note_label` ("Note" → "Remarque")
+
+---
+
+## cp120 — Foundation: payment-method split + 2 chat payloads + 20-carrier registry + 2 new smokes (2026-05-23)
+
+**State:** 16 tradable assets · 35 ADRs · 305 brag entries · locale parity **2,910 × 10 = 29,100** (+3 per locale vs cp119's 2,907) · **5,347/0** local smoke battery (+33 vs cp119's 5,314) · 7/7 TS-clean · **48 defenses** (+2 cp120: carrier-registry-invariants 13 scenarios, shipping-payload-roundtrip 17 scenarios) · 644 vitest passing.
+
+**Payment method registry changes:**
+- New 4th category `by_mail` added to `PaymentCategory` type (after `in_person`, before `online`)
+- `PAYMENT_CATEGORIES_ORDERED` reflects UX flow: crypto → in_person → by_mail → online (same-machine → same-room → same-country → anywhere)
+- `cash` (in_person) REMOVED; replaced with TWO new entries:
+  - `cash_in_person` (in_person) — face-to-face cash exchange
+  - `cash_by_mail` (by_mail) — asynchronous mail-based cash payment
+- Pre-launch clean rename — no migration debt; zero instances live
+
+**Indexer + setup-wizard updates:**
+- `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` — RESERVED_CANONICAL_KEYS updated (cash → cash_in_person, +cash_by_mail in new "By Mail" section)
+- `apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte` — RESERVED_KEYS updated, category type widened to include 'by_mail', dropdown shows "By mail" option
+- `apps/web/src/lib/components/PaymentMethodsPicker.svelte` — collapsed state extended with `by_mail: false`
+
+**Carrier registry (`apps/web/src/lib/shipping/carriers.ts`):**
+- Top 20 worldwide carriers alphabetically: aramex, australia_post, canada_post, china_post_ems, correos, deutsche_post, dhl_express, fedex, hongkong_post, india_post, iran_post, japan_post, la_poste, pochta_rossii, poczta_polska, poste_italiane, royal_mail, sf_express, ups, usps
+- "other" entry last (free-text caller-supplied name + URL)
+- Each carrier: key (lowercase alphanumeric+underscore 2-32 chars), name (display), region (locale relevance hint), trackingUrlTemplate (https URL with literal `{tracking}` placeholder; null only for 'other')
+- `CARRIER_KEYS` Set for O(1) validation
+- `getCarrier(key)` lookup; `buildTrackingUrl(template, tracking)` substitutes with URL-encoded value (URL-encodes spaces, slashes, special chars)
+- Best-effort doc comment at top — carrier URLs occasionally change; bundled list is starting point + "Other" escape hatch
+
+**Two new chat payloads in `apps/web/src/lib/chat/payload.ts`:**
+
+*MailingAddressPayload (`morphit_mailing_address_v1`):*
+- Required: v=1, kind, country (ISO 3166-1 alpha-2), street, city, postalCode
+- Optional: street2, state, recipientName, note, orderPermlink
+- MAILING_ADDRESS_LIMITS: street ≤200, city ≤100, state ≤100, postalCode 1-20, recipientName ≤100, note ≤500
+- ISO_COUNTRY_RE: /^[A-Z]{2}$/
+- isValidCountryCode() validator
+
+*ShipmentPayload (`morphit_shipment_v1`):*
+- Required: v=1, kind, carrier (canonical key OR 'other'), tracking
+- Optional: customCarrierName (only when carrier === 'other'), customTrackingUrl (only when carrier === 'other'), note, orderPermlink
+- SHIPMENT_LIMITS: tracking 5-50, customCarrierName ≤100, customTrackingUrl ≤500, note ≤500
+- TRACKING_NUMBER_RE: /^[A-Za-z0-9 \-/]+$/
+- isValidTrackingNumber() validator
+- **isValidCustomTrackingUrl() — REJECTS non-https schemes**: (a) requires `https://` prefix, (b) round-trips through `new URL()` to confirm well-formedness, (c) explicit protocol check rejects javascript:, data:, file:, etc.
+
+*Full encoders + decoders + validators:*
+- `encodeMailingAddressPayload(p)` — throws on invalid input
+- `encodeShipmentPayload(p)` — throws on invalid input
+- decodePayload extended with two new branches before unknown_kind fall-through
+- DecodeResult union extended with `'mailing_address'` + `'shipment'` variants
+- `optionalFieldsMailingAddress()` + `optionalFieldsShipment()` helpers after `optionalFieldsFundsSent`
+
+**Two new defense smokes:**
+- `carrier-registry-invariants-smoke` — 13 scenarios: total count (20 canonical + 1 other), key shape regex, name/region non-empty bounded, every canonical has https template with {tracking}, 'other' template null, no duplicates, alphabetical order (canonical, 'other' last), buildTrackingUrl substitution, buildTrackingUrl URL-encoding, locale coverage (each Morphit locale has ≥1 region-relevant carrier), getCarrier known-key lookup, getCarrier unknown-key undefined
+- `shipping-payload-roundtrip-smoke` — 17 scenarios: minimum-fields + full-fields mailing-address roundtrips, encoder rejections (invalid country, empty street, oversize street), decoder rejections (empty postal, oversize note via wire), USPS canonical + 'other' carrier roundtrips, shipment encoder rejections (uppercase carrier, too-short tracking, too-long tracking, non-https customTrackingUrl), **S-8 javascript: URL injection rejection via decoder**
+
+**4 pre-existing smokes updated for the rename:**
+- `reserved-keys-parity-smoke` (passive — picked up the rename via canonical registry)
+- `payments-smoke` — resolveLegacy + resolveLegacyMany cash test cases updated; category invariant set updated to include 'by_mail'; PAYMENT_CATEGORIES_ORDERED scenario changed from "alphabetical" to "UX-display order"
+- `operator-payment-method-handler-smoke` — rejects-reserved-key test now covers both cash_in_person + cash_by_mail
+- `native-translations-floor-smoke` — snapshot surgical-prune of `payment_method.cash.description` × 9 locales (10 entries removed; meta counts updated)
+
+**i18n:**
+- payment_method.cash → REPLACED with payment_method.cash_in_person.description + payment_method.cash_by_mail.description × 10 locales
+- payment_method.category.by_mail added × 10 locales (categoryLabel function in PaymentMethodsPicker reads from this path)
+- admin.setup_wizard.payment.category_by_mail added × 10 locales
+- Locale parity: 2,907 → 2,910 (+3 per locale = +30 strings total)
+
+**Mid-stream fixes (caught + fixed in same turn):**
+- Alphabetical-order violation in carrier registry: `pochta_rossii` came after `poczta_polska` — caught by C-8 in carrier-registry-invariants-smoke first run; fixed by swapping order
+- Accidental `decodePayload` function header deletion: my str_replace ate the function header line — caught by transform error in shipping-payload-roundtrip-smoke; restored
 
 ---
 

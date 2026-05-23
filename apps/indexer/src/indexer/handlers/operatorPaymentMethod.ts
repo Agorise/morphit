@@ -71,8 +71,10 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'pay_xrp',
 	// In Person
 	'barter_goods',
-	'cash',
+	'cash_in_person',
 	'precious_metals',
+	// By Mail (cp120)
+	'cash_by_mail',
 	// Online
 	'airwallex',
 	'alipay',

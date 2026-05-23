@@ -165,10 +165,20 @@ await scenario('rejects reserved canonical key (zelle)', async () => {
 	assertEqual(r, { ok: false, reason: 'key_reserved' }, 'result');
 });
 
-await scenario('rejects reserved canonical key (cash)', async () => {
+await scenario('rejects reserved canonical key (cash_in_person)', async () => {
+	// cp120: 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
 	const mock = makeMockClient();
 	const r = await handler(
-		makeCtx({ signer: 'morphit', payload: { ...validAdd, key: 'cash' } }),
+		makeCtx({ signer: 'morphit', payload: { ...validAdd, key: 'cash_in_person' } }),
+		mock.client
+	);
+	assertEqual(r, { ok: false, reason: 'key_reserved' }, 'result');
+});
+
+await scenario('rejects reserved canonical key (cash_by_mail)', async () => {
+	const mock = makeMockClient();
+	const r = await handler(
+		makeCtx({ signer: 'morphit', payload: { ...validAdd, key: 'cash_by_mail' } }),
 		mock.client
 	);
 	assertEqual(r, { ok: false, reason: 'key_reserved' }, 'result');

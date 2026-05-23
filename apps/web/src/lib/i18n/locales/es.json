@@ -819,6 +819,10 @@
 				"q": "¿Puedo comerciar bienes o servicios en Morphit, como árboles frutales o discos de vinilo?",
 				"a": "Sí — con una forma específica. El modelo de orden siempre es **un activo negociable (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH o DOGE) en un lado, y algo más en el otro lado**. Lo \"otro\" puede ser una moneda fiat, otra criptomoneda, o vía el método de pago `Barter (goods)`, bienes/servicios. Para árboles de naranjo por XMR: publica `asset=XMR`, `payment_methods=[Barter (goods)]`, describe los detalles en el campo `terms`. Trueques puros (bienes por bienes sin cripto) no son modelables — un lado siempre debe ser BTC, XMR, BLURT, USDT, USDC, BCH, LTC o DASH. Explicación completa en la FAQ en inglés."
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "¿Cómo intercambio dinero en efectivo por correo o envío bienes físicos a través de Morphit?",
+				"a": "Las operaciones de efectivo por correo y bienes enviados funcionan como cualquier otra operación de Morphit, con dos herramientas adicionales en el chat:\n\n**1. Compartir dirección postal.** En el compositor de chat, toca **\"Compartir dirección postal\"**. El formulario tiene campos para país, calle, ciudad, código postal, estado/provincia (opcional), nombre del destinatario (opcional), segunda línea (opcional, para apto/suite) y una nota opcional. Tu dirección permanece cifrada de extremo a extremo en el chat — solo tú y tu contraparte pueden leerla. **Nunca** se escribe en el indexador, ni en cadena, ni en ningún lugar legible por la federación.\n\n**2. Registrar envío.** Después de enviar el efectivo o los bienes, toca **\"Registrar envío\"** en el compositor. Elige un transportista del menú desplegable (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, u **Otro** con nombre y URL de seguimiento libres), ingresa el número de seguimiento de tu recibo y opcionalmente agrega una nota. Tu contraparte ve una píldora **📦 Enviado vía X** en el chat con un enlace clicable \"Rastrear paquete\". El número de seguimiento es opcional pero recomendado como prueba de envío.\n\n**Consejos de seguridad para cualquier envío físico**:\n\n- Usa un servicio rastreado y **asegurado**. Si el paquete se pierde o lo roban, el seguro es tu único recurso.\n- Usa un sobre o caja **sin marcas** que sugieran objetos de valor.\n- **Compromiso de la dirección de remitente**: omitirla preserva el anonimato pero el correo no entregable se destruye.\n- El número de seguimiento es opcional pero muy recomendable.\n\n**Si vas a enviar EFECTIVO**:\n\n- **Envuelve el efectivo en papel de aluminio dentro del sobre.** Esto evita que alguien vea el contenido al sostener el sobre a contraluz.\n- **UPS y FedEx PROHÍBEN el envío de efectivo en sus términos de servicio.** Si lo abren, pueden confiscarlo sin recurso. Usa un servicio postal en su lugar.\n- **Internacional**: no mientas en las declaraciones aduaneras. El efectivo de alto valor será confiscado de todos modos.\n\n**Para vendedores que reciben números de seguimiento — verifica falsificación.** Un comprador estafador podría pegar cualquier número aleatorio. Antes de enviar criptomonedas, busca el número en el sitio del transportista y **verifica que el código postal de destino coincida con tu código postal real**.\n\n**Explicación sencilla para tu abuela:** Quieres comprar Monero a alguien en Morphit. El vendedor quiere dólares en efectivo enviados por correo. El vendedor comparte su apartado postal en el chat. Tú vas al correo, envuelves el efectivo en papel aluminio, lo metes en un sobre simple con tu apartado postal de destino, contratas el correo certificado con seguro, y anotas el número de seguimiento del recibo. Lo registras en el chat de Morphit. El vendedor lo verifica. Cuando llega el paquete, el vendedor envía los Monero a tu cartera y ambos dejan comentarios positivos.\n\n**Limitaciones.** Morphit no arbitra disputas. Si tu efectivo se pierde en el correo sin seguro, eso es entre tú y el transportista — Morphit no puede recuperarlo."
+			},
 			"order_timeouts": {
 				"q": "¿Cuánto tiempo están abiertas las órdenes?",
 				"a": "Los anuncios permanecen visibles hasta 90 días por defecto (puedes cambiarlo entre 1 y 90 días). Una vez que alguien acepte tu anuncio, hay una ventana predeterminada de 5 días para completar el pago — suficiente para transferencias bancarias lentas, fines de semana y festivos. Tienes 15 minutos tras publicar para corregir un anuncio por errores tipográficos; después queda bloqueado. Puedes activar 'solo en horario laboral' para pausar el temporizador los fines de semana. Si tu anuncio expira sin coincidencia, puedes volver a publicarlo desde /my/orders con un clic."
@@ -2621,7 +2625,22 @@
 			"close": "Cerrar"
 		},
 		"order_context_label": "Sobre esta orden",
-		"boot_failed": "No se pudo cargar el chat. Intenta refrescar la página."
+		"boot_failed": "No se pudo cargar el chat. Intenta refrescar la página.",
+		"mailing_address": {
+			"button": "Compartir dirección postal",
+			"button_aria": "Comparte tu dirección postal con tu contraparte",
+			"pill_heading": "Dirección postal compartida",
+			"copy_button": "Copiar dirección",
+			"for_order": "Para el pedido"
+		},
+		"shipment": {
+			"button": "Registrar envío",
+			"button_aria": "Registrar transportista y número de seguimiento de un envío",
+			"pill_heading": "Enviado vía {carrier}",
+			"copy_button": "Copiar seguimiento",
+			"track_button": "Rastrear paquete",
+			"for_order": "Para el pedido"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Intercambia bienes directamente por el activo — describe qué ofreces o quieres en los términos del anuncio (p. ej., \"árboles de naranja\", \"bicicleta usada\", \"ajo casero\")."
 		},
-		"cash": {
-			"description": "Moneda física en papel intercambiada en persona."
+		"cash_by_mail": {
+			"description": "Dinero en efectivo enviado por correo postal o servicio de mensajería. Usa un transportista con seguimiento y seguro; envuelve el efectivo en papel de aluminio dentro de un sobre simple; considera las normas aduaneras para envíos internacionales."
+		},
+		"cash_in_person": {
+			"description": "Dinero en efectivo intercambiado en persona — encuéntrate con tu contraparte en un lugar público y bien iluminado para entregar el efectivo directamente."
 		},
 		"precious_metals": {
 			"description": "Monedas o lingotes de oro o plata intercambiados en persona."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Cripto",
 			"in_person": "En persona",
+			"by_mail": "Por correo",
 			"online": "En línea",
 			"instance": "Añadidos por esta instancia"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Categoría",
 				"category_online": "En línea",
 				"category_in_person": "En persona",
+				"category_by_mail": "Por correo",
 				"category_crypto": "Cripto",
 				"url_label": "Sitio web (opcional)",
 				"url_help": "Debe empezar por https://",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Las órdenes existentes que hacen referencia a este método siguen mostrándose correctamente tras la eliminación — la clave persiste en el historial de esas órdenes. Eliminar significa solo que las nuevas órdenes no pueden elegirla."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Comparte tu dirección postal",
+		"intro": "Comparte una dirección física con tu contraparte para enviar mercancías o efectivo. Permanece solo en este chat cifrado.",
+		"privacy_heading": "Antes de compartir",
+		"privacy_e2ee": "Esta dirección está cifrada de extremo a extremo — solo tú y tu contraparte pueden leerla.",
+		"privacy_irreversible": "Compartir es irreversible: una vez enviada, tu contraparte la tiene aunque borres el mensaje.",
+		"privacy_pobox_tip": "Considera usar un apartado postal, servicio de mailbox o casilla virtual en lugar de tu dirección personal.",
+		"privacy_clear_chat": "Después de completar la operación, considera borrar el historial de esta conversación en ambos extremos.",
+		"country_label": "País",
+		"country_placeholder": "Elige país…",
+		"country_other": "Otro (escribe código ISO)",
+		"country_iso_placeholder": "ej. NL, BR, MX",
+		"country_help": "Código ISO de país de dos letras (ej. US, DE, JP).",
+		"recipient_label": "Nombre del destinatario",
+		"recipient_help": "Nombre en el buzón o paquete. Deja vacío para apartados anónimos.",
+		"street_label": "Dirección",
+		"street2_label": "Apartamento, suite, etc.",
+		"city_label": "Ciudad",
+		"state_label": "Estado / provincia",
+		"postal_label": "Código postal",
+		"note_label": "Nota para tu contraparte",
+		"note_help": "Instrucciones de entrega, código de timbre, etc.",
+		"optional_marker": "(opcional)",
+		"share_button": "Compartir dirección",
+		"sending": "Enviando…"
+	},
+	"shipment_modal": {
+		"heading": "Registrar un envío",
+		"intro": "Comparte tu transportista + número de seguimiento para que tu contraparte pueda verificar el envío.",
+		"safety_heading": "Consejos de seguridad para cualquier envío físico",
+		"safety_insurance": "Usa un servicio rastreado y CON SEGURO. Si el paquete se pierde o lo roban, el seguro es tu único recurso.",
+		"safety_plain_envelope": "Usa un sobre o caja sin marcas que sugieran objetos de valor en el interior.",
+		"safety_return_address": "Compromiso de la dirección de remitente: omitirla preserva el anonimato pero el correo no entregable se destruye.",
+		"safety_tracking_optional": "El número de seguimiento es opcional pero muy recomendable como prueba de envío.",
+		"cash_tips_toggle": "Si vas a enviar EFECTIVO, lee esto primero",
+		"cash_heading": "Consejos específicos para efectivo por correo",
+		"cash_tinfoil": "Envuelve el efectivo en papel de aluminio dentro del sobre — evita que alguien vea el contenido al sostener el sobre a contraluz.",
+		"cash_ups_fedex_prohibit": "UPS y FedEx PROHÍBEN el envío de efectivo en sus términos de servicio. Si lo abren, pueden confiscarlo sin recurso. Usa un servicio postal en su lugar.",
+		"cash_customs": "Internacional: no mientas en las declaraciones aduaneras. El efectivo de alto valor será confiscado de todos modos.",
+		"carrier_label": "Transportista",
+		"carrier_placeholder": "Elige transportista…",
+		"other_heading": "Detalles del otro transportista",
+		"custom_carrier_name_label": "Nombre del transportista",
+		"custom_tracking_url_label": "URL de la página de seguimiento",
+		"custom_tracking_url_help": "URL completa https:// donde el destinatario puede consultar el número de seguimiento.",
+		"tracking_label": "Número de seguimiento",
+		"tracking_help": "Tal como lo proporciona el transportista. Se aceptan letras, números, espacios y guiones.",
+		"note_label": "Nota",
+		"optional_marker": "(opcional)",
+		"share_button": "Compartir envío",
+		"sending": "Enviando…"
 	}
 }

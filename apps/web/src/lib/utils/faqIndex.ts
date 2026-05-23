@@ -47,6 +47,7 @@ export const FAQ_KEYS = [
 	'how_to_trade_walkthrough',
 	'in_person_vs_online',
 	'trade_goods_services',
+	'cash_by_mail_walkthrough',
 	'trade_size_limits',
 	'order_timeouts',
 	'order_editing',
@@ -214,7 +215,8 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	],
 	first_order_free: ['fees', 'welcome_bonus'],
 	welcome_bonus: ['first_order_free', 'loyalty_milestones', 'blurt_benefits', 'signup_stuck'],
-	trade_goods_services: ['fees', 'in_person_vs_online'],
+	trade_goods_services: ['fees', 'in_person_vs_online', 'cash_by_mail_walkthrough'],
+	cash_by_mail_walkthrough: ['trade_goods_services', 'in_person_vs_online', 'chat_privacy'],
 
 	// Signup audit (Findings N1, N3, N6, N7, N14, N19, N22, N23,
 	// N27, N28).  Catch-all explainer for relay-side errors a

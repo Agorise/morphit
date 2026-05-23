@@ -819,6 +819,10 @@
 				"q": "Czy mogę handlować towarami lub usługami na Morphit, takimi jak drzewa owocowe lub płyty winylowe?",
 				"a": "Tak — z określoną strukturą. Model zlecenia to zawsze **aktywo handlowe (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH lub DOGE) po jednej stronie, a coś innego po drugiej stronie**. „Coś innego\" może być walutą fiat, inną kryptowalutą lub poprzez metodę płatności `Barter (goods)` — towary/usługi. Dla drzew pomarańczowych za XMR: opublikuj `asset=XMR`, `payment_methods=[Barter (goods)]`, opisz szczegóły w polu `terms`. Czyste wymiany (towar za towar bez krypto) nie są modelowalne — jedna strona zawsze musi być BTC, XMR, BLURT, USDT, USDC, BCH, LTC lub DASH. Pełne wyjaśnienie w angielskiej FAQ."
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "Jak handluję gotówką pocztą lub wysyłam fizyczne towary przez Morphit?",
+				"a": "Transakcje gotówką pocztą i wysyłką towarów działają jak każda inna transakcja Morphit, z dwoma dodatkowymi narzędziami w czacie:\n\n**1. Udostępnienie adresu pocztowego.** W kompozytorze czatu naciśnij **\"Udostępnij adres pocztowy\"**. Formularz ma pola: kraj, ulica, miasto, kod pocztowy, opcjonalnie województwo, opcjonalnie nazwa odbiorcy, opcjonalnie drugi wiersz (mieszkanie) i opcjonalna notatka. Twój adres pozostaje zaszyfrowany end-to-end w czacie. **Nigdy** nie jest zapisywany do indexera, na łańcuch ani federacji.\n\n**2. Zarejestrowanie przesyłki.** Po wysłaniu gotówki lub towarów naciśnij **\"Zarejestruj przesyłkę\"**. Wybierz przewoźnika (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, lub **Inny** z dowolną nazwą i URL śledzenia). Twój partner zobaczy pigułkę **📦 Wysłane przez X** z klikalnym linkiem \"Śledź paczkę\".\n\n**Wskazówki bezpieczeństwa**:\n\n- Użyj śledzonej, **ubezpieczonej** usługi.\n- Użyj **zwykłej koperty** bez oznaczeń sugerujących wartościową zawartość.\n- **Kompromis adresu zwrotnego**: pominięcie zachowuje anonimowość, ale niedoręczalna poczta jest niszczona.\n- Numer przesyłki jest opcjonalny, ale zalecany.\n\n**Jeśli wysyłasz GOTÓWKĘ**:\n\n- **Owiń gotówkę w folię aluminiową wewnątrz koperty.**\n- **UPS i FedEx ZABRANIAJĄ wysyłki gotówki w swoich regulaminach.**\n- **Międzynarodowe**: nie kłam w deklaracjach celnych.\n\n**Dla sprzedawców otrzymujących numery przesyłki — sprawdź pod kątem fałszerstwa.** Przed wysłaniem krypto wyszukaj numer na stronie przewoźnika i **sprawdź, czy docelowy kod pocztowy odpowiada Twojemu rzeczywistemu kodowi pocztowemu**.\n\n**Wyjaśnienie dla babci:** Chcesz kupić Monero. Sprzedawca chce gotówkę USD pocztą. Sprzedawca udostępnia adres skrytki pocztowej. Idziesz na pocztę, owijasz gotówkę w folię, kupujesz list polecony z ubezpieczeniem, zapisujesz numer przesyłki, rejestrujesz go w czacie. Gdy paczka dotrze, sprzedawca wysyła Monero.\n\n**Ograniczenia.** Morphit nie arbitrażuje sporów."
+			},
 			"order_timeouts": {
 				"q": "Jak długo zlecenia pozostają otwarte?",
 				"a": "Zlecenia są widoczne domyślnie do 90 dni (możesz zmienić w zakresie 1–90 dni). Gdy ktoś zaakceptuje twoje zlecenie, masz domyślnie 5-dniowe okno na zakończenie płatności — wystarczy na wolne przelewy bankowe, weekendy i święta. Masz 15 minut po opublikowaniu na zastąpienie zlecenia w razie literówki; potem jest zablokowane. Możesz włączyć „tylko godziny pracy\", by zatrzymać licznik w weekendy. Jeśli zlecenie wygaśnie bez dopasowania, możesz ponownie je opublikować z /my/orders jednym kliknięciem."
@@ -2621,7 +2625,22 @@
 			"close": "Zamknij"
 		},
 		"order_context_label": "O tym zleceniu",
-		"boot_failed": "Nie udało się załadować czatu. Spróbuj odświeżyć stronę."
+		"boot_failed": "Nie udało się załadować czatu. Spróbuj odświeżyć stronę.",
+		"mailing_address": {
+			"button": "Udostępnij adres pocztowy",
+			"button_aria": "Udostępnij adres pocztowy partnerowi transakcji",
+			"pill_heading": "Adres pocztowy udostępniony",
+			"copy_button": "Kopiuj adres",
+			"for_order": "Do zamówienia"
+		},
+		"shipment": {
+			"button": "Zarejestruj przesyłkę",
+			"button_aria": "Zarejestruj przewoźnika i numer przesyłki",
+			"pill_heading": "Wysłane przez {carrier}",
+			"copy_button": "Kopiuj numer",
+			"track_button": "Śledź paczkę",
+			"for_order": "Do zamówienia"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Wymień towary bezpośrednio na aktywo — opisz co oferujesz lub czego chcesz w warunkach zlecenia (np. „drzewa pomarańczowe\", „używany rower\", „domowy czosnek\")."
 		},
-		"cash": {
-			"description": "Fizyczna gotówka papierowa wymieniana osobiście."
+		"cash_by_mail": {
+			"description": "Gotówka wysyłana pocztą lub kurierem. Użyj śledzonego, ubezpieczonego przewoźnika; zawiń gotówkę w folię w zwykłej kopercie; uwzględnij przepisy celne przy przesyłkach międzynarodowych."
+		},
+		"cash_in_person": {
+			"description": "Gotówka wymieniana osobiście — spotkaj się z partnerem transakcji w publicznym, dobrze oświetlonym miejscu, aby przekazać gotówkę bezpośrednio."
 		},
 		"precious_metals": {
 			"description": "Złote lub srebrne monety lub sztabki wymieniane osobiście."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Krypto",
 			"in_person": "Osobiście",
+			"by_mail": "Pocztą",
 			"online": "Online",
 			"instance": "Dodane przez tę instancję"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Kategoria",
 				"category_online": "Online",
 				"category_in_person": "Osobiście",
+				"category_by_mail": "Pocztą",
 				"category_crypto": "Krypto",
 				"url_label": "Strona internetowa (opcjonalnie)",
 				"url_help": "Musi zaczynać się od https://",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Istniejące zlecenia odnoszące się do tej metody nadal wyświetlają się poprawnie po usunięciu — klucz pozostaje w historii tych zleceń. Usunięcie oznacza tylko, że nowe zlecenia nie mogą jej wybrać."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Udostępnij adres pocztowy",
+		"intro": "Udostępnij fizyczny adres partnerowi transakcji do wysyłki towarów lub gotówki. Pozostaje tylko w tym zaszyfrowanym czacie.",
+		"privacy_heading": "Przed udostępnieniem",
+		"privacy_e2ee": "Ten adres jest szyfrowany end-to-end — tylko ty i twój partner możecie go odczytać.",
+		"privacy_irreversible": "Udostępnienie jest nieodwracalne: po wysłaniu twój partner ma adres, nawet jeśli usuniesz wiadomość.",
+		"privacy_pobox_tip": "Rozważ użycie skrytki pocztowej, mail-dropu lub wirtualnej skrzynki zamiast adresu domowego.",
+		"privacy_clear_chat": "Po zakończeniu transakcji rozważ wyczyszczenie historii rozmowy po obu stronach.",
+		"country_label": "Kraj",
+		"country_placeholder": "Wybierz kraj…",
+		"country_other": "Inny (wpisz kod ISO)",
+		"country_iso_placeholder": "np. NL, BR, MX",
+		"country_help": "Dwuliterowy kod ISO kraju (np. US, DE, JP).",
+		"recipient_label": "Nazwa odbiorcy",
+		"recipient_help": "Nazwa na skrzynce lub paczce. Zostaw puste dla anonimowych skrytek.",
+		"street_label": "Ulica i numer",
+		"street2_label": "Mieszkanie, piętro itp.",
+		"city_label": "Miasto",
+		"state_label": "Województwo / region",
+		"postal_label": "Kod pocztowy",
+		"note_label": "Notatka dla partnera",
+		"note_help": "Instrukcje dostawy, kod domofonu itp.",
+		"optional_marker": "(opcjonalne)",
+		"share_button": "Udostępnij adres",
+		"sending": "Wysyłanie…"
+	},
+	"shipment_modal": {
+		"heading": "Zarejestruj przesyłkę",
+		"intro": "Udostępnij przewoźnika + numer przesyłki, aby partner mógł zweryfikować wysyłkę.",
+		"safety_heading": "Wskazówki bezpieczeństwa dla każdej fizycznej przesyłki",
+		"safety_insurance": "Użyj śledzonej, UBEZPIECZONEJ usługi. Jeśli paczka zaginie lub zostanie skradziona, ubezpieczenie to twoja jedyna ochrona.",
+		"safety_plain_envelope": "Użyj zwykłej koperty lub pudełka bez oznaczeń sugerujących wartościową zawartość.",
+		"safety_return_address": "Kompromis adresu zwrotnego: pominięcie zachowuje anonimowość, ale niedoręczalna poczta jest niszczona.",
+		"safety_tracking_optional": "Numer przesyłki jest opcjonalny, ale zdecydowanie zalecany jako dowód wysyłki.",
+		"cash_tips_toggle": "Jeśli wysyłasz GOTÓWKĘ, przeczytaj to najpierw",
+		"cash_heading": "Specyficzne wskazówki dla gotówki pocztą",
+		"cash_tinfoil": "Owiń gotówkę w folię aluminiową wewnątrz koperty — uniemożliwia podejrzenie zawartości pod światło.",
+		"cash_ups_fedex_prohibit": "UPS i FedEx ZABRANIAJĄ wysyłki gotówki w swoich regulaminach. Po otwarciu mogą skonfiskować bez prawa do odzyskania. Użyj usługi pocztowej.",
+		"cash_customs": "Międzynarodowe: nie kłam w deklaracjach celnych. Wartościowa gotówka zostanie skonfiskowana niezależnie.",
+		"carrier_label": "Przewoźnik",
+		"carrier_placeholder": "Wybierz przewoźnika…",
+		"other_heading": "Szczegóły innego przewoźnika",
+		"custom_carrier_name_label": "Nazwa przewoźnika",
+		"custom_tracking_url_label": "URL strony śledzenia",
+		"custom_tracking_url_help": "Pełny URL https://, gdzie odbiorca może sprawdzić numer przesyłki.",
+		"tracking_label": "Numer przesyłki",
+		"tracking_help": "Tak jak podany przez przewoźnika. Akceptowane są litery, cyfry, spacje i myślniki.",
+		"note_label": "Notatka",
+		"optional_marker": "(opcjonalne)",
+		"share_button": "Udostępnij przesyłkę",
+		"sending": "Wysyłanie…"
 	}
 }

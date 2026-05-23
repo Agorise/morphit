@@ -61,7 +61,75 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp119 regenerates a fresh binary (clear meaningful milestone — 8 cp119 SEO findings fixed end-to-end + 2 new defense smokes + new operator env var).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp122 regenerates a fresh binary (meaningful milestone — cash-by-mail + physical-shipment tracking feature complete end-to-end across cp120-cp122).
+
+## CP120-CP122 LESSONS
+
+### Lesson #1 — When a user's request brushes against priority #1 (privacy), surface concerns AND propose mitigations in the same turn — never just refuse and never just build silently
+
+Ken's cp120 ask ("provide a mail tracking field as basic proof of cash payment") had real privacy implications: tracking numbers can be looked up to reveal origin postmark to anyone with the number, exposing the buyer's general location to the seller.  Two failure modes were available:
+
+1. **Build silently** — ship the feature as requested, no analysis surfaced.  User gets what they asked for but doesn't know the privacy implications.
+2. **Refuse / stall** — overstate the risk, push back hard, lose the feature.
+
+Right answer: lay out the privacy considerations in one paragraph + propose a privacy-preserving design + ask 3 specific go/no-go questions on the design choices.  Ken answered all 3 in his next turn; cp120 plowed through end-to-end.
+
+The pattern: **honest pushback + proposed mitigations + crisp decision questions** is faster than either alternative.  It treats the human as an informed adult who can weigh tradeoffs once they have the information.  It avoids both the "blind agreement" and "paternalistic refusal" failure modes.
+
+**Carry-forward:** when a request touches a Morphit priority (privacy especially), the first response should be (a) what's at stake, (b) what I'd build by default, (c) explicit decisions for the user to make.  Not 8 questions; not 0 questions; the minimum set that captures the real ambiguity.
+
+### Lesson #2 — The right time to generalize is BEFORE the second use case ships, not after
+
+Ken's cp120 request started narrow ("tracking for cash by mail").  In his cp120 reply, the related-thought generalization landed naturally: "what if someone wants to buy a barbie doll with monero?"
+
+If I'd built cp120 as "cash-by-mail tracking" specifically (e.g. a `morphit_cash_mailed_v1` payload tied to the cash_by_mail payment method), the Barbie case would have required a cp124-or-later refactor: rename the payload, rebuild the modals, re-translate.
+
+Instead, the payload is `morphit_shipment_v1` and the carrier registry is `apps/web/src/lib/shipping/carriers.ts` (note: `shipping`, not `cash`).  Both the cash-by-mail and goods-by-mail flows already use the same modal + payload.  The Barbie-for-Monero case works today with zero additional code, because barter_goods orders unlock the same in-chat "Record shipment" affordance.
+
+**Carry-forward:** if a user's narrow ask becomes broader within the same conversation, that's the signal to widen the design BEFORE shipping cp.  The cost of refactoring "specific to general" after shipping is much higher than the cost of designing "general from the start" once you know two use cases.  Two use cases is also the right number — designing for hypothetical future use cases ("what about a haircut by remote?") gets speculative.
+
+### Lesson #3 — Bundled-data invariants are cheap defenses; an alphabetized 20-item list with structural smokes caught a typo before any user saw it
+
+cp120's carrier registry has 13 structural-invariant scenarios.  The first battery run after I wrote it caught a real bug: `pochta_rossii` came after `poczta_polska` in my list, violating alphabetical order.  Pre-bundled-invariants, that bug ships and no one notices for months (it's UX-cosmetic — the picker just shows in a slightly-wrong order).
+
+Total cost of the smoke: ~150 lines of code that runs in 100ms.  Total benefit: caught a bug instantly + every future carrier addition gets the same check automatically.
+
+The same pattern caught the second self-introduced bug: my str_replace ate the `function decodePayload(...)` declaration line by accident.  The payload-roundtrip smoke surfaced this immediately with a parse error pointing to the right line.
+
+**Carry-forward:** any new bundled dataset (>10 items) should ship with an invariants smoke.  Cheap (~minutes to write).  Catches mid-stream self-inflicted errors as well as future-additions errors.  The pattern is well-established (carrier-registry-invariants-smoke is the 4th of its kind in Morphit) — copy from a sibling and adapt.
+
+### Lesson #4 — `cash` → `cash_in_person` + `cash_by_mail` rename was clean BECAUSE it happened pre-launch
+
+Pre-launch posture (memory rule: "Zero instances live anywhere.  No prior shipments.") let cp120 do a clean rename across the registry + indexer + 10 locale JSONs + 4 smokes.  No migration path needed.  No deprecated-alias compatibility layer.  No "old `cash` key resolves to `cash_in_person`" complexity.
+
+If this same rename happened post-launch:
+- Existing orders with payment_method `cash` would need either chain-side migration (impossible — Blurt ops are immutable) or a resolver shim that maps the legacy key.
+- Locale snapshots would need version-stamped entries to support both pre- and post-rename clients.
+- The cleanup cp would take 5x as long.
+
+**Carry-forward:** pre-launch is the time to make all the registry/payload schema changes you'd ever want to make.  Resist the post-launch reflex to "preserve compatibility" before there's anything live to preserve compatibility WITH.  Memory rule: "Bugs found pre-launch are bugs prevented, not bugs that hurt anyone."
+
+### Lesson #5 — A 20-carrier list with tracking URL templates is best-effort, not source-of-truth — and the doc comment should say so loudly
+
+Carrier tracking URLs occasionally change (carriers restructure their URL parameter schemes for SEO reasons every few years).  Today's URL works; in 18 months, USPS might change `qtc_tLabels1=` to `qtc_tLabels=` and break our links.
+
+Two design alternatives considered:
+- **Strict source-of-truth posture**: smoke-test that every tracking URL actually resolves at battery time.  Network-dependent, fragile, exposes Morphit to rate limits.  Rejected.
+- **Best-effort + escape hatch**: the registry has its 20 canonical templates, AND every shipment payload's recipient sees a `📋 Copy tracking` button so they can fall back to manual lookup if the bundled URL is stale.
+
+Picked the second.  The doc comment at the top of `carriers.ts` names this loudly ("Best-effort URL templates.") so future maintainers understand the maintenance cadence (refresh when broken, not preemptively).
+
+**Carry-forward:** for data we ship as "convenience pointers to third-party services," explicit best-effort labeling beats both pretending to be authoritative and refusing to bundle the data at all.  The `📋 Copy` escape hatch is the safety net.
+
+### Lesson #6 — Privacy aside content should match user mental load: 4 bullets for non-cash, 3 collapsible bullets for cash
+
+Initial design draft had ALL safety tips visible in the ShipmentModal (insurance, plain envelope, return address, tracking optional, tinfoil-wrap, UPS/FedEx prohibition, customs warning).  That's 7 bullets — too much for grandma.
+
+Right answer: the always-shown set (4 bullets) covers any physical shipment; the cash-specific set (3 bullets) lives in a collapsible "If you're mailing CASH" expander.  The user opens the expander only when they're shipping cash, and gets the relevant info exactly when they need it.
+
+The cost of the expander: ~10 lines of state + UI.  The benefit: grandma shipping a Barbie doll doesn't get cash-specific advice that doesn't apply to her trade.
+
+**Carry-forward:** privacy/safety aside content can be tiered by context.  Show universal advice; collapse case-specific advice behind a labeled disclosure.  Don't dump everything on the user unconditionally — that's a "responsibility tax" that makes the safer choice harder to find.
 
 ## CP119 LESSONS
 

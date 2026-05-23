@@ -819,6 +819,10 @@
 				"q": "Puis-je échanger des biens ou des services sur Morphit, comme des arbres fruitiers ou des disques vinyles ?",
 				"a": "Oui — avec une forme spécifique. Le modèle d'ordre est toujours **un actif négociable (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH ou DOGE) d'un côté, et autre chose de l'autre côté**. L'« autre chose » peut être une monnaie fiat, une autre cryptomonnaie, ou via la méthode de paiement `Barter (goods)`, des biens/services. Pour des orangers contre XMR : postez `asset=XMR`, `payment_methods=[Barter (goods)]`, décrivez les détails dans le champ `terms`. Les trocs purs (biens contre biens sans crypto) ne sont pas modélisables — un côté doit toujours être BTC, XMR, BLURT, USDT, USDC, BCH, LTC ou DASH. Explication complète dans la FAQ anglaise."
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "Comment échanger de l'argent liquide par courrier ou expédier des biens physiques via Morphit ?",
+				"a": "Les opérations en espèces par courrier et marchandises expédiées fonctionnent comme toute autre opération Morphit, avec deux outils supplémentaires dans le chat :\n\n**1. Partage d'adresse postale.** Dans le compositeur de chat, touchez **\"Partager adresse postale\"**. Le formulaire a des champs : pays, rue, ville, code postal, état/province optionnel, nom du destinataire optionnel, deuxième ligne optionnelle (appartement), et une note optionnelle. Votre adresse reste chiffrée de bout en bout dans le chat. Elle n'est **jamais** écrite dans l'indexeur, sur la chaîne, ou dans un endroit lisible par la fédération.\n\n**2. Enregistrer un envoi.** Après expédition de l'argent ou des biens, touchez **\"Enregistrer envoi\"**. Choisissez un transporteur (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, ou **Autre** avec nom libre et URL de suivi). Votre partenaire voit une pastille **📦 Expédié via X** avec un lien cliquable \"Suivre le colis\".\n\n**Conseils de sécurité** :\n\n- Utilisez un service suivi et **assuré**.\n- Utilisez une **enveloppe ordinaire** sans marquage suggérant des objets de valeur.\n- **Compromis sur l'adresse de retour** : l'omettre préserve l'anonymat mais le courrier non distribuable est détruit.\n- Le numéro de suivi est optionnel mais recommandé.\n\n**Si vous envoyez de l'ARGENT LIQUIDE** :\n\n- **Enveloppez l'argent dans du papier aluminium à l'intérieur de l'enveloppe.**\n- **UPS et FedEx INTERDISENT l'envoi d'argent dans leurs conditions.**\n- **International** : ne mentez pas sur les déclarations douanières.\n\n**Pour les vendeurs recevant des numéros de suivi — vérifiez la falsification.** Avant d'envoyer la crypto, recherchez le numéro sur le site du transporteur et **vérifiez que le code postal de destination correspond à votre code postal réel**.\n\n**Explication simple pour grand-mère :** Vous voulez acheter du Monero. Le vendeur veut des dollars américains en espèces par courrier. Le vendeur partage son adresse de boîte postale. Vous allez à la poste, enveloppez l'argent dans du papier aluminium, achetez un envoi suivi avec assurance, notez le numéro de suivi, l'enregistrez dans le chat. Quand le paquet arrive, le vendeur envoie les Monero.\n\n**Limitations.** Morphit n'arbitre pas les litiges."
+			},
 			"order_timeouts": {
 				"q": "Combien de temps les ordres restent-ils ouverts ?",
 				"a": "Les annonces restent visibles jusqu'à 90 jours par défaut (tu peux changer entre 1 et 90 jours). Une fois qu'une personne accepte ton annonce, il y a une fenêtre par défaut de 5 jours pour compléter le paiement — assez pour les virements lents, les week-ends et les jours fériés. Tu as 15 minutes après publication pour remplacer une annonce en cas de faute de frappe ; ensuite, elle est verrouillée. Tu peux activer « heures de bureau uniquement » pour mettre en pause le minuteur les week-ends. Si ton annonce expire sans correspondance, tu peux la republier depuis /my/orders en un clic."
@@ -2621,7 +2625,22 @@
 			"close": "Fermer"
 		},
 		"order_context_label": "À propos de cette commande",
-		"boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page."
+		"boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page.",
+		"mailing_address": {
+			"button": "Partager adresse postale",
+			"button_aria": "Partager votre adresse postale avec votre partenaire",
+			"pill_heading": "Adresse postale partagée",
+			"copy_button": "Copier l'adresse",
+			"for_order": "Pour la commande"
+		},
+		"shipment": {
+			"button": "Enregistrer envoi",
+			"button_aria": "Enregistrer transporteur et numéro de suivi d'un envoi",
+			"pill_heading": "Expédié via {carrier}",
+			"copy_button": "Copier le suivi",
+			"track_button": "Suivre le colis",
+			"for_order": "Pour la commande"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Échange de biens directement contre l'actif — décris ce que tu offres ou ce que tu veux dans le champ « conditions » de l'annonce (p. ex. « orangers », « vélo d'occasion », « ail maison »)."
 		},
-		"cash": {
-			"description": "Monnaie papier physique échangée en personne."
+		"cash_by_mail": {
+			"description": "Espèces envoyées par la poste ou un service de messagerie. Utilisez un transporteur suivi et assuré ; enveloppez les espèces dans du papier aluminium à l'intérieur d'une enveloppe ordinaire ; tenez compte des règles douanières pour les envois internationaux."
+		},
+		"cash_in_person": {
+			"description": "Espèces échangées en personne — rencontrez votre partenaire dans un lieu public et bien éclairé pour remettre les espèces directement."
 		},
 		"precious_metals": {
 			"description": "Pièces ou lingots d'or ou d'argent échangés en personne."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Crypto",
 			"in_person": "En personne",
+			"by_mail": "Par courrier",
 			"online": "En ligne",
 			"instance": "Ajoutés par cette instance"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Catégorie",
 				"category_online": "En ligne",
 				"category_in_person": "En personne",
+				"category_by_mail": "Par courrier",
 				"category_crypto": "Crypto",
 				"url_label": "Site web (optionnel)",
 				"url_help": "Doit commencer par https://",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Les ordres existants qui font référence à cette méthode continuent de s'afficher correctement après la suppression — la clé persiste dans l'historique de ces ordres. Supprimer signifie simplement que les nouveaux ordres ne peuvent plus la choisir."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Partager votre adresse postale",
+		"intro": "Partagez une adresse physique avec votre partenaire pour expédier des marchandises ou de l'argent liquide. Reste uniquement dans ce chat chiffré.",
+		"privacy_heading": "Avant de partager",
+		"privacy_e2ee": "Cette adresse est chiffrée de bout en bout — seuls vous et votre partenaire pouvez la lire.",
+		"privacy_irreversible": "Le partage est irréversible : une fois envoyée, votre partenaire a votre adresse même si vous effacez le message plus tard.",
+		"privacy_pobox_tip": "Pensez à utiliser une boîte postale, un service de relais courrier ou une boîte virtuelle plutôt que votre adresse personnelle.",
+		"privacy_clear_chat": "Après la transaction, envisagez d'effacer l'historique de cette conversation des deux côtés.",
+		"country_label": "Pays",
+		"country_placeholder": "Choisir pays…",
+		"country_other": "Autre (saisir code ISO)",
+		"country_iso_placeholder": "ex. NL, BR, MX",
+		"country_help": "Code ISO pays à deux lettres (ex. US, DE, JP).",
+		"recipient_label": "Nom du destinataire",
+		"recipient_help": "Nom sur la boîte aux lettres ou le colis. Laisser vide pour les boîtes postales anonymes.",
+		"street_label": "Adresse",
+		"street2_label": "Appartement, étage, etc.",
+		"city_label": "Ville",
+		"state_label": "État / région",
+		"postal_label": "Code postal",
+		"note_label": "Note pour votre partenaire",
+		"note_help": "Instructions de livraison, code d'interphone, etc.",
+		"optional_marker": "(optionnel)",
+		"share_button": "Partager l'adresse",
+		"sending": "Envoi…"
+	},
+	"shipment_modal": {
+		"heading": "Enregistrer un envoi",
+		"intro": "Partagez votre transporteur + numéro de suivi pour que votre partenaire puisse vérifier l'envoi.",
+		"safety_heading": "Conseils de sécurité pour tout envoi physique",
+		"safety_insurance": "Utilisez un service suivi et ASSURÉ. En cas de perte ou vol, l'assurance est votre seul recours.",
+		"safety_plain_envelope": "Utilisez une enveloppe ou boîte ordinaire sans marquage suggérant des objets de valeur.",
+		"safety_return_address": "Compromis sur l'adresse de retour : l'omettre préserve l'anonymat mais le courrier non distribuable est détruit.",
+		"safety_tracking_optional": "Le numéro de suivi est optionnel mais fortement recommandé comme preuve d'expédition.",
+		"cash_tips_toggle": "Si vous envoyez de l'ARGENT LIQUIDE, lisez d'abord ceci",
+		"cash_heading": "Conseils spécifiques pour l'argent par courrier",
+		"cash_tinfoil": "Enveloppez l'argent dans du papier aluminium à l'intérieur de l'enveloppe — empêche de voir le contenu en tenant l'enveloppe à contre-jour.",
+		"cash_ups_fedex_prohibit": "UPS et FedEx INTERDISENT l'envoi d'argent dans leurs conditions. Si ouvert, peut être confisqué sans recours. Utilisez plutôt un service postal.",
+		"cash_customs": "International : ne mentez pas sur les déclarations douanières. L'argent de grande valeur sera saisi de toute façon.",
+		"carrier_label": "Transporteur",
+		"carrier_placeholder": "Choisir transporteur…",
+		"other_heading": "Détails autre transporteur",
+		"custom_carrier_name_label": "Nom du transporteur",
+		"custom_tracking_url_label": "URL de la page de suivi",
+		"custom_tracking_url_help": "URL complète https:// où le destinataire peut consulter le numéro de suivi.",
+		"tracking_label": "Numéro de suivi",
+		"tracking_help": "Tel que fourni par le transporteur. Lettres, chiffres, espaces et tirets acceptés.",
+		"note_label": "Remarque",
+		"optional_marker": "(optionnel)",
+		"share_button": "Partager l'envoi",
+		"sending": "Envoi…"
 	}
 }

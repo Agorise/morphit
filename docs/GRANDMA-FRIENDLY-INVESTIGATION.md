@@ -229,3 +229,86 @@ A few things grandmas might think they want but Morphit deliberately does not pr
 - **"Reverse my trade."** No, trades are between two humans off-platform. Morphit can't reverse what it never touched.
 
 These are honest limitations, not friction to remove. The grandma-friendly answer here is **clear messaging upfront** that those things don't exist, and why — not adding fake versions of them.
+
+---
+
+## Update — cp120–cp122 (cash-by-mail & physical-shipment tracking)
+
+A new class of grandma-friction surfaced with the cash-by-mail feature.
+Audit notes below.
+
+### Grandma's mental model
+
+"I want to buy some Monero with cash, but I don't live near anyone who
+sells it in person. So I mail the cash. How do I prove I sent it?"
+
+Morphit's answer needs to be **two clicks**, not a manual.
+
+### What was shipped (cp121)
+
+In the chat composer, two new buttons next to the existing
+"Share address" / "I sent it" buttons:
+
+- **Share mailing address** — opens a form. Country picker has the 15
+  most-common countries in a dropdown (US, UK, DE, CN, JP, etc.); a 16th
+  "Other" option reveals a 2-char ISO code input for everyone else.
+  Street, city, postal-code required; state, recipient name, apt-line,
+  note all optional. **Privacy aside at the top** with 4 plain-language
+  warnings (E2EE-only / irreversible / P.O.-box tip / clear-chat-after).
+
+- **Record shipment** — opens a form. Carrier dropdown of 20 worldwide
+  services + "Other (specify carrier)" with free-text name + URL.
+  Tracking number required (5–50 chars), optional note. **Safety aside
+  at the top** with 4 always-shown tips; a collapsible "If you're
+  mailing CASH" expander reveals 3 cash-specific tips (tinfoil-wrap,
+  UPS/FedEx prohibit cash, customs warning).
+
+The recipient sees two new pill types in chat:
+
+- 📬 **Mailing address shared** — formatted address with 📋 Copy button.
+- 📦 **Shipped via X** — carrier name + monospace tracking + 📋 Copy
+  button + 🔗 "Track package" link (opens carrier site in new tab).
+
+### Where this still has grandma friction (T2/T3 backlog)
+
+**T2.1 — Modal trigger discovery.** Buttons are surfaced next to existing
+ones; chat-flow users will find them. New users posting their first
+cash-by-mail order may not realize the in-chat buttons exist. Future
+work: surface a hint in the order-detail page ("Your trade uses Cash by
+mail — when you're ready, share your mailing address from chat") when
+the order's payment_method matches by_mail. **Estimate:** small —
+one-line conditional banner. **Priority:** T2.
+
+**T2.2 — Tracking spoofing detection.** Sellers must manually verify the
+destination ZIP matches their actual ZIP. Documented in FAQ
+(`cash_by_mail_walkthrough`) but a built-in nudge in the shipment-pill
+UI could help. Future: when a seller's mailing-address-share carries a
+ZIP, and a subsequent shipment pill arrives in the same conversation,
+auto-show a "Verify on carrier site that destination ZIP matches the
+ZIP you shared" reminder. **Estimate:** medium — needs pill-pair
+detection logic. **Priority:** T2.
+
+**T3.1 — Carrier tracking URL freshness.** Carriers occasionally
+restructure their tracking-page URL structure. When that happens, the
+"Track package" link 404s. Today: user falls back to copy-and-paste.
+Future: periodic carrier-URL probe (out-of-band, not at runtime;
+maintainer task). **Estimate:** low ongoing maintenance. **Priority:**
+T3.
+
+**T3.2 — International shipment cost estimation.** Grandma doesn't know
+that a USPS envelope to Russia costs differently than to Mexico.
+Future: surface a brief "estimate shipping cost at your post office
+before agreeing to a trade" tip on the order-detail page for
+international counterparties. **Estimate:** small (text-only).
+**Priority:** T3.
+
+### What's NOT being added (deliberate)
+
+- **"Verify the address is real" check.** No third-party postal-API
+  integration. We don't ping commercial address-verification APIs —
+  that's a privacy leak (the verifier learns the recipient's address)
+  and a chokepoint.
+- **"Hold the crypto until package arrives" escrow.** No. Morphit is
+  non-custodial; we never hold either side's value. The seller waits
+  for the cash, then releases crypto via the existing flow. Adding
+  escrow would require trusting Morphit (or some operator) with funds.

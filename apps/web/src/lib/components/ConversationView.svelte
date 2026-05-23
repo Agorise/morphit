@@ -48,6 +48,8 @@
 	import StrangerFeeModal from '$components/StrangerFeeModal.svelte';
 	import AddressShareModal from '$components/AddressShareModal.svelte';
 	import FundsSentModal from '$components/FundsSentModal.svelte';
+	import MailingAddressModal from '$components/MailingAddressModal.svelte';
+	import ShipmentModal from '$components/ShipmentModal.svelte';
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
 	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
 	import {
@@ -263,6 +265,10 @@
 	/** Phase F — address-share + funds-sent modal state. */
 	let showAddressShareModal = $state(false);
 	let showFundsSentModal = $state(false);
+	/** cp121 — physical-shipment + mailing-address modal state.
+	 *  Generic across cash-by-mail and goods-by-mail flows. */
+	let showMailingAddressModal = $state(false);
+	let showShipmentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
 	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
@@ -353,6 +359,26 @@
 		scrollToBottom(true);
 		showFundsSentModal = false;
 		markSentArgs = null;
+	}
+
+	// cp121: handlers for the two new modal types.  Same shape
+	// as handleAddressShare — sendMessage(payload) routes through
+	// the existing chat-send path (E2E encrypted by the conv
+	// controller before it reaches the relay).
+	async function handleMailingAddressShare(payload: string): Promise<void> {
+		if (!controller) throw new Error('controller_not_ready');
+		await controller.sendMessage(payload);
+		await tick();
+		scrollToBottom(true);
+		showMailingAddressModal = false;
+	}
+
+	async function handleShipmentShare(payload: string): Promise<void> {
+		if (!controller) throw new Error('controller_not_ready');
+		await controller.sendMessage(payload);
+		await tick();
+		scrollToBottom(true);
+		showShipmentModal = false;
 	}
 
 	/** Phase F.3 — Pay-now click on a BLURT address pill.  Stages
@@ -902,7 +928,7 @@
 				<div
 					class="dark:bg-ink-925 flex-none border-t border-ink-200 bg-ink-50 px-4 py-2 dark:border-ink-800"
 				>
-					<div class="mx-auto flex max-w-2xl items-center justify-end gap-2">
+					<div class="mx-auto flex max-w-2xl flex-wrap items-center justify-end gap-2">
 						<button
 							type="button"
 							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
@@ -918,6 +944,28 @@
 							aria-label={$_('chat.funds_sent.button_aria') as string}
 						>
 							{$_('chat.funds_sent.button')}
+						</button>
+						<!-- cp121: physical-shipment + mailing-address pills.
+						     Available in every conversation regardless of
+						     order/payment-method context — users know when
+						     they need to share an address or report a
+						     shipment (same pattern as the crypto-address +
+						     funds-sent buttons above). -->
+						<button
+							type="button"
+							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
+							onclick={() => (showMailingAddressModal = true)}
+							aria-label={$_('chat.mailing_address.button_aria') as string}
+						>
+							{$_('chat.mailing_address.button')}
+						</button>
+						<button
+							type="button"
+							class="rounded-lg border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-morphit-emerald hover:text-morphit-emerald dark:border-ink-700 dark:text-ink-200"
+							onclick={() => (showShipmentModal = true)}
+							aria-label={$_('chat.shipment.button_aria') as string}
+						>
+							{$_('chat.shipment.button')}
 						</button>
 					</div>
 				</div>
@@ -1027,6 +1075,25 @@
 			showFundsSentModal = false;
 			markSentArgs = null;
 		}}
+	/>
+{/if}
+
+<!-- cp121: physical-shipment + mailing-address modals.  See
+     MailingAddressModal.svelte and ShipmentModal.svelte for the
+     privacy + safety asides that surface to the user. -->
+{#if showMailingAddressModal}
+	<MailingAddressModal
+		{orderPermlink}
+		onShare={handleMailingAddressShare}
+		onCancel={() => (showMailingAddressModal = false)}
+	/>
+{/if}
+
+{#if showShipmentModal}
+	<ShipmentModal
+		{orderPermlink}
+		onShare={handleShipmentShare}
+		onCancel={() => (showShipmentModal = false)}
 	/>
 {/if}
 
