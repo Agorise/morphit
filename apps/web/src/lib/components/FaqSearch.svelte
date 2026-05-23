@@ -33,9 +33,15 @@
 	const entriesByKey: Map<FaqKey, FaqEntry> = $derived(new Map($faqEntries.map((e) => [e.key, e])));
 
 	/**
-	 * Handle deep links in two forms:
-	 *   1. /faq#<key>             — legacy hash-based deep link
+	 * Handle deep links in three forms:
+	 *   1. /faq#<key>             — legacy hash-based deep link (matches an entry key)
 	 *   2. /faq?q=<key>&lang=<c>  — admin-share format (locale-aware)
+	 *   3. /faq?q=<query>         — Google sitelinks-search-box format (cp119-A2)
+	 *                                — when ?q= is NOT an entry key, treat as a
+	 *                                free-text search query and populate the search
+	 *                                box.  This makes the WebSite.SearchAction
+	 *                                JSON-LD declaration (urlTemplate: /faq?q=...)
+	 *                                actually functional.
 	 */
 	$effect(() => {
 		if (!browser) return;
@@ -50,20 +56,40 @@
 			void setLocale(lang as LocaleCode);
 		}
 
-		const targetKey = qKey ?? $page.url.hash.replace(/^#/, '');
-		if (!targetKey) return;
+		const target = qKey ?? $page.url.hash.replace(/^#/, '');
+		if (!target) return;
 
-		const found = $faqEntries.find((e) => e.key === targetKey);
-		if (!found) return;
-
-		expanded.add(found.key);
-		expanded = new Set(expanded);
-		queueMicrotask(() => {
-			document.getElementById(`faq-${found.key}`)?.scrollIntoView({
-				behavior: 'smooth',
-				block: 'start'
+		// Form 1 + 2: target matches an FAQ entry key — expand + scroll.
+		const found = $faqEntries.find((e) => e.key === target);
+		if (found) {
+			expanded.add(found.key);
+			expanded = new Set(expanded);
+			queueMicrotask(() => {
+				document.getElementById(`faq-${found.key}`)?.scrollIntoView({
+					behavior: 'smooth',
+					block: 'start'
+				});
 			});
-		});
+			return;
+		}
+
+		// Form 3 (cp119-A2): target is NOT an entry key.  When it
+		// came from ?q= (not from #hash), treat it as a search
+		// query and populate the search box.  This is the Google
+		// sitelinks-search-box workflow — a user types "monero
+		// privacy" in the SERP search box, lands here, sees their
+		// query already in the search input + relevant FAQ
+		// matches surfaced.  We skip this for hash deep-links
+		// since "/faq#unknown-key" is intentionally a no-op.
+		if (qKey) {
+			query = qKey;
+			// Focus the input so the user can refine the query
+			// without having to click it first.  Defer to next
+			// frame so the input is in the DOM.
+			queueMicrotask(() => {
+				inputEl?.focus();
+			});
+		}
 	});
 
 	function toggle(entry: FaqEntry): void {

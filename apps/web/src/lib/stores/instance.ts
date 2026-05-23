@@ -56,6 +56,9 @@ export interface InstanceState {
 		readonly title: string | null;
 		readonly description: string | null;
 		readonly keywords: string | null;
+		/** cp119-A4: optional Twitter/X handle (`@morphit`).
+		 *  Null = omit twitter:site meta tag. */
+		readonly twitter_site: string | null;
 	};
 	/** Per-instance chat-link external explorer URL templates
 	 *  (Part 109).  Each field is either a `https://…/{txid}…`
@@ -181,7 +184,7 @@ const FALLBACK: InstanceState = {
 	fee_recipient: 'morphit-fees',
 	relay_account: 'morphit-relay',
 	operator_tag: null,
-	seo: { title: null, description: null, keywords: null },
+	seo: { title: null, description: null, keywords: null, twitter_site: null },
 	chat_link_urls: {
 		btc: null,
 		xmr: null,
@@ -266,11 +269,21 @@ export function initInstance(): Promise<void> {
 					...result.data,
 					alt_networks: normalizeAltNetworksFromWire(result.data.alt_networks),
 					operator_tag: result.data.operator_tag ?? null,
-					seo: result.data.seo ?? {
-						title: null,
-						description: null,
-						keywords: null
-					},
+					seo: result.data.seo
+						? {
+								title: result.data.seo.title ?? null,
+								description: result.data.seo.description ?? null,
+								keywords: result.data.seo.keywords ?? null,
+								// cp119-A4: tolerate older indexer responses
+								// that don't carry twitter_site yet.
+								twitter_site: result.data.seo.twitter_site ?? null
+							}
+						: {
+								title: null,
+								description: null,
+								keywords: null,
+								twitter_site: null
+							},
 					chat_link_urls: result.data.chat_link_urls
 						? {
 								btc: result.data.chat_link_urls.btc ?? null,

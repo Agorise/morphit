@@ -684,6 +684,10 @@ export interface InstanceResponse {
 		readonly title: string | null;
 		readonly description: string | null;
 		readonly keywords: string | null;
+		/** cp119-A4: optional Twitter/X handle for twitter:site
+		 *  card attribution.  Older indexer builds (pre-cp119) omit
+		 *  the field; frontend treats absence as null. */
+		readonly twitter_site?: string | null;
 	};
 	/** Frontend chat-link URL templates (Part 109).  Optional —
 	 *  older indexer builds (pre-Part-109) omit the field; in that
