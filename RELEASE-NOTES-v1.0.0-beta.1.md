@@ -201,8 +201,8 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 - **Audit log** in `docs/AUDIT-2026-05.md` (~25,400 lines), public
   in the repo, with every finding, every fix, every accepted
   risk documented.
-- **38 architecture decision records** in `docs/adr/0001-…`
-  through `0039-…` (the 0016 slot is reserved-but-unused; its
+- **39 architecture decision records** in `docs/adr/0001-…`
+  through `0040-…` (the 0016 slot is reserved-but-unused; its
   planned work shipped as ADR-0022).
 - **AGPL-3.0-only.**  Operators running modified instances must
   make their source available to their users.

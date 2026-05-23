@@ -920,7 +920,7 @@
 			},
 			"where_does_blurt_price_come_from": {
 				"q": "Morphit 上显示的 BLURT 价格来自哪里?",
-				"a": "您在 Morphit 上看到的列表费旁边的 BLURT/USD 价格(BLURT 金额旁边的「~$0.12」副文本)来自一个分层的价格源链,旨在减少对任何单一外部服务的依赖。\n\n**链,按优先级顺序:**\n\n1. **Klingex.io** — 由 Agorise 运营的 Blurt 生态系统 CEX。\n\n2. **Coingecko** — 聚合多个交易所的 BLURT 价格。\n\n3. **morphit_native** — 来自平台内交易数据的自主主权价格(每个运营商选择启用)。启用时,此 fetcher 查看最近经过验证费用的订单。\n\n4. **静态回退** — 运营商设置的底价(默认 $0.002)。\n\n**为什么是链而不是单一源?** 任何价格 feed 都不能无条件信任。链意味着 BLURT 定价在每种情况下都能继续工作。\n\n**morphit_native 如何工作**(参见 ADR-0039):\n\n- **分层锚点**:Tier 1 直接 BLURT-vs-USD;Tier 2 BLURT-vs-稳定币;Tier 3 组合。\n- **跨稳定币脱钩检测**。\n- **Sybil 抵抗**:每个贡献者必须至少有一次先前已验证费用的交易。\n- **每个交易者贡献上限**:一个账户 = 一票。\n- **订单年龄宽限期**:10 分钟。\n- **平滑上限**。\n- **长期漂移监视器**。\n- **跨源分歧检测器**。\n- **硬编码外部合理性范围**。\n\n**「自己验证」端点**:`GET /v1/price/morphit-native/receipt`。\n\n**重要:morphit_native 并非设计为其他系统的 oracle。** 参见 ADR-0039。\n\n**预发布说明**:在存在足够交易量之前,每个实例都会退回到 Klingex/Coingecko/静态。"
+				"a": "您在 Morphit 上看到的列表费旁边的 BLURT/USD 价格(BLURT 金额旁边的「~$0.12」副文本)来自一个分层的价格源链,旨在减少对任何单一外部服务的依赖。\n\n**链,按优先级顺序:**\n\n1. **Klingex.io** — 由 Agorise 运营的 Blurt 生态系统 CEX。\n\n2. **Coingecko** — 聚合多个交易所的 BLURT 价格。\n\n3. **morphit_native** — 来自平台内交易数据的自主主权价格(每个运营商选择启用)。启用时,此 fetcher 查看最近经过验证费用的订单。\n\n4. **静态回退** — 运营商设置的底价(默认 $0.002)。\n\n**为什么是链而不是单一源?** 任何价格 feed 都不能无条件信任。链意味着 BLURT 定价在每种情况下都能继续工作。\n\n**morphit_native 如何工作**(参见 ADR-0039):\n\n- **分层锚点**:Tier 1 直接 BLURT-vs-USD;Tier 2 BLURT-vs-稳定币;Tier 3 组合。\n- **跨稳定币脱钩检测**。\n- **Sybil 抵抗**:每个贡献者必须至少有一次先前已验证费用的交易。\n- **每个交易者贡献上限**:一个账户 = 一票。\n- **订单年龄宽限期**:10 分钟。\n- **平滑上限**。\n- **长期漂移监视器**。\n- **跨源分歧检测器**。\n- **硬编码外部合理性范围**。\n\n**「自己验证」端点**:`GET /v1/price/morphit-native/receipt`。\n\n**重要:morphit_native 并非设计为其他系统的 oracle。** 参见 ADR-0039。\n\n**预发布说明**:在存在足够交易量之前,每个实例都会退回到 Klingex/Coingecko/静态。\n\n**cp128 更新 — 计价单位可由运营商配置。** 虽然上面的讨论使用 USD 作为示例,但 indexer 显示的单位并非硬编码为 USD。运营商将 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`(默认 `USD`)设置为任何 3-8 字符大写代码 — `EUR`、`GBP`、`JPY`、`BRL`、`CNY`、`INR`、`RUB`、`AED`、`XDR`(IMF 篮子)、`XAU`(黄金盎司,硬通货对冲),或其市场使用的任何其他代码。挂单费响应携带 `denomination_fiat` 字段,告诉前端 `blurt_price_fiat` + `base_fee_fiat` 数字使用的单位。"
 			},
 			"where_to_buy_blurt": {
 				"q": "我在哪里买 BLURT 来支付网络费用？",
@@ -3189,6 +3189,9 @@
 		},
 		"blik": {
 			"description": "波兰非常流行的移动支付系统。"
+		},
+		"brics_pay": {
+			"description": "连接 BRICS+ 国家国家支付系统(Pix、UPI、UnionPay、PayShap、SPFS、CIPS)的跨境支付通道。在俄罗斯试点中;2026 年期间将扩展到印度、巴西、中国、南非、印度尼西亚、沙特阿拉伯。"
 		},
 		"cash_app": {
 			"description": "Block 旗下流行的美国 P2P 和银行应用。"

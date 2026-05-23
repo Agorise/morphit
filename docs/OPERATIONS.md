@@ -1281,6 +1281,19 @@ value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
 (`MORPHIT_INDEXER_BLURT_PRICE_USD`).
 
+**cp128 update — denomination is operator-configurable**: by
+default the BLURT price echo on `/v1/listing-fee` is expressed
+in USD.  Operators serving non-USD markets (or hedging against
+USD erosion / petrodollar collapse) can set
+`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` to any 3-8
+character uppercase ticker — `EUR`, `GBP`, `JPY`, `BRL`, `CNY`,
+`INR`, `RUB`, `AED`, `XDR` (IMF Special Drawing Rights basket),
+`XAU` (gold ounces, hard-currency hedge), etc.  The listing-fee
+endpoint then returns a `denomination_fiat` field telling
+frontends which unit the `blurt_price_fiat` and `base_fee_fiat`
+values are expressed in.  This is purely a display-side change;
+order matching and on-chain fees are unaffected.  See ADR-0040.
+
 **cp127 update — self-sovereign price source (morphit_native)**:
 once your instance has enough on-platform trading volume, you
 can flip on `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` to

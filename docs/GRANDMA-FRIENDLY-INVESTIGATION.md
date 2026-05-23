@@ -468,3 +468,105 @@ screen doesn't suddenly drift to $0.002 (the static fallback). It
 keeps tracking reality based on what's actually traded. Grandma
 won't notice the day Klingex disappears — and that's exactly the
 point.
+
+---
+
+## Update — cp128 (operator-configurable denomination fiat + BRICS Pay payment method)
+
+cp128 added two changes that affect grandma in different ways: a
+backend rename + denomination-configurable display unit (largely
+invisible to her), and a new payment method she might see in
+pickers (BRICS Pay).
+
+### Part 1 — Denomination fiat configurability: invisible if operator keeps USD; minor visible change if not
+
+The listing-fee API rename (`base_fee_usd` → `base_fee_fiat`,
+`blurt_price_usd` → `blurt_price_fiat`, new `denomination_fiat`
+companion field) is purely a backend cleanup. From grandma's
+perspective on a default-USD instance, the UI still shows
+"60 BLURT (~$0.12)" exactly as before.
+
+On a non-USD instance (operator set `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=EUR`,
+for instance), grandma sees "60 BLURT (~€0.11)" instead. The
+symbol changes, the locale-appropriate decimal separator applies,
+the amount is in the configured unit. This is what we want — she
+sees pricing in her market's currency without thinking about it.
+
+### Part 2 — BRICS Pay shows up in payment-method pickers
+
+cp128 added BRICS Pay to the curated payment-method registry. On
+instances serving BRICS+ markets (Brazil, Russia, India, China,
+South Africa, Indonesia, Saudi Arabia, etc.), users will see
+"BRICS Pay" as an option in the same dropdown as PayPal, Alipay,
+Cash App, GCash, etc. The description in their locale explains
+what it is briefly (cross-border payment rail connecting national
+systems like Pix, UPI, UnionPay, PayShap, SPFS, CIPS).
+
+Risk for grandma: she might pick BRICS Pay without knowing what
+it is. Mitigation: the description in the locale string explains
+it in one sentence. Same risk applies to any payment method
+she's unfamiliar with — the mitigation is consistent across the
+registry.
+
+### T2/T3 backlog from cp128
+
+**T2.1 — Per-instance denomination disclosure.** A user on an
+EUR-denominated instance might want to know "wait, why are prices
+in EUR here instead of USD?" Could add a small chip near the
+listing-fee echo: "Pricing displayed in {denomination_fiat}.
+Operator-configured." Risk: extra UI noise for grandma. **Estimate**:
+low. **Priority**: T3 pending user feedback.
+
+**T2.2 — Denomination-aware WAIVER_MIN_BLURT hint.** Today the
+hint says "Minimum for the waiver: 500 BLURT (~$1 USD at current
+price)." On a non-USD instance this mixes units in the user's
+head. Fix: interpolate the operator's `denomination_fiat` into
+the hint. **Estimate**: 30 min — 10 locale strings + one form-
+validation message. **Priority**: T2 (low impact, easy fix, polish
+item — bundle with cp129).
+
+**T2.3 — BRICS Pay onboarding tooltip.** When a user picks BRICS
+Pay for the first time, could show a one-time info modal
+explaining what it is and which BRICS+ countries it works in.
+Risk: yet another modal. **Estimate**: medium. **Priority**: T3 if
+user feedback indicates confusion.
+
+**T2.4 — Cross-instance denomination disagreement awareness.**
+A federation where some instances are USD-denominated and others
+are EUR-denominated means the "same" BLURT amount displays
+differently across instances. Could add a per-instance footer
+showing which denomination this instance uses, helping users
+who hop between instances understand why prices look different.
+**Estimate**: low. **Priority**: T3.
+
+### What's deliberately NOT being added (per Ken's priorities)
+
+- **No automatic denomination conversion in the UI.**  The
+  indexer's `denomination_fiat` is what it is; if you're on an
+  EUR instance and want to see USD, switch to a USD instance.
+  Adding "convert to my preferred fiat" client-side would
+  require a USD/EUR external rate, which defeats the
+  self-sovereignty point.
+- **No "all denominations shown simultaneously" UI.**  Cluttered;
+  defeats the per-operator-sovereignty point.
+- **No BRICS Pay-specific UX flow.**  Treated like any other
+  online payment method.  Operator-extensibility means we don't
+  privilege specific rails.
+
+### Why this is good for grandma even though she barely notices
+
+Operator sovereignty means: when grandma's regional operator decides
+to switch their instance from USD to EUR (or BRL, or XAU during a
+currency crisis), grandma's UI adapts automatically. She doesn't
+have to know what changed; the prices just start showing in the
+unit her operator chose. Same orderbook, same trades, same chat —
+just a different display unit. The operator absorbed the configuration
+work; grandma just sees prices in her market's currency.
+
+For BRICS Pay specifically: grandma in São Paulo or Bangalore or
+Cape Town will increasingly encounter sellers who accept BRICS Pay
+alongside their national payment systems (Pix, UPI, etc.). Having
+it in the registry means picking it is a normal interaction, not
+an "Other" free-text field. The discovery happens through the
+payment-method picker, naturally, with the locale string explaining
+it.

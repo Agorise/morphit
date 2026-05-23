@@ -131,6 +131,13 @@ export interface ListingFeeResult {
 	 *  during an upstream outage are still in the right
 	 *  ballpark.  Default 0.002. */
 	readonly fallbackBlurtPriceUsd: number;
+	/** cp128: denomination fiat the indexer expresses BLURT
+	 *  prices in for display surfaces.  Default 'USD'.
+	 *  Operators in non-USD markets (or hedging against USD
+	 *  collapse) can set EUR, GBP, JPY, BRL, CNY, INR, RUB, XDR
+	 *  (IMF Special Drawing Rights), XAU (gold ounces), or any
+	 *  other 3-8 character uppercase ticker.  See ADR-0040. */
+	readonly denominationFiat: string;
 	/** Where the BTC/XMR amounts came from — 'coingecko' if
 	 *  live-fetched at wizard time, 'manual' if the operator
 	 *  entered them by hand, 'default' if they kept the
@@ -614,6 +621,22 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   morphit-ops edit  →  Listing fee + fallback BLURT price');
 	lines.push(
 		`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=${answers.listingFee.fallbackBlurtPriceUsd}`
+	);
+	lines.push('');
+
+	// cp128 — denomination fiat (operator-chosen unit for the
+	// indexer's BLURT-price echo on display surfaces).
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# cp128 — Denomination fiat (display unit)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# The unit the indexer expresses BLURT prices in on its');
+	lines.push('# own display surfaces (listing-fee fiat echo, receipt');
+	lines.push('# endpoint, etc.).  Default USD.  Set to a different');
+	lines.push('# ticker if your market is non-USD (EUR/GBP/JPY/BRL/CNY/');
+	lines.push('# INR/RUB/AED/...) or you want to hedge against USD');
+	lines.push('# erosion (XDR = IMF basket, XAU = gold ounces).');
+	lines.push(
+		`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=${answers.listingFee.denominationFiat}`
 	);
 	lines.push('');
 

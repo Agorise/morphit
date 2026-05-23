@@ -176,14 +176,18 @@ export interface Config {
 	 *  Default: false. When false, the indexer makes ZERO outbound
 	 *  HTTP calls for pricing; fee verification doesn't need it.
 	 *
-	 *  When true, the price source (Klingex → Coingecko → static
-	 *  floor) is initialized at boot and the /v1/listing-fee endpoint
-	 *  surfaces an optional `base_fee_usd` echo. This is purely a
-	 *  display courtesy for frontends that want to show users an
-	 *  approximate USD equivalent next to BLURT amounts. Disabled
-	 *  by default because most operators don't need it and we'd
-	 *  rather not phone home to third-party price APIs without
-	 *  explicit opt-in. */
+	 *  When true, the price source (Klingex → Coingecko →
+	 *  morphit_native → static floor) is initialized at boot and the
+	 *  /v1/listing-fee endpoint surfaces an optional `base_fee_fiat`
+	 *  + `blurt_price_fiat` + `denomination_fiat` echo. This is
+	 *  purely a display courtesy for frontends that want to show
+	 *  users an approximate fiat equivalent next to BLURT amounts.
+	 *  Disabled by default because most operators don't need it and
+	 *  we'd rather not phone home to third-party price APIs without
+	 *  explicit opt-in. (cp127 added the morphit_native upstream as
+	 *  a self-sovereign alternative; cp128 added denomination-fiat
+	 *  configurability so the echo can be in USD, EUR, XDR, XAU,
+	 *  etc., per operator config.) */
 	readonly priceFeedEnabled: boolean;
 	/** Static floor BLURT/USD price. Only used when
 	 *  `priceFeedEnabled === true` AND every live upstream has failed
@@ -232,6 +236,29 @@ export interface Config {
 	 *  match the BLURT historical range. */
 	readonly priceFeedNativePlausibleMin: number;
 	readonly priceFeedNativePlausibleMax: number;
+
+	/** ── cp128: operator-configurable denomination fiat ──────────
+	 *  The unit the indexer expresses BLURT prices in for its own
+	 *  display surfaces (the USD echo on /v1/listing-fee, the
+	 *  /v1/price/morphit-native/receipt endpoint, the drift
+	 *  baseline + disagreement monitor's per-pair state).  Default
+	 *  'USD' preserves the cp127 behavior.  Operators serving non-
+	 *  USD-native markets (or hedging against USD collapse / petro-
+	 *  dollar erosion) can set this to any 3-8 character uppercase
+	 *  fiat ticker — EUR, GBP, JPY, BRL, CNY, INR, RUB, XDR (IMF
+	 *  Special Drawing Rights), XAU (gold ounces), or any other
+	 *  ticker their market uses.
+	 *
+	 *  IMPORTANT: when this is non-USD, the morphit_native fetcher's
+	 *  Tier 1 (USD-fiat-direct) anchor switches to looking for
+	 *  on-platform orders priced in the operator's chosen fiat.
+	 *  Tier 2 (stablecoin-anchored) assumes the configured
+	 *  stablecoins are pegged to the DENOMINATION fiat, not USD —
+	 *  so an EUR-denominated instance should configure
+	 *  priceFeedStablecoinKeys with EUR-pegged stablecoins (when
+	 *  Morphit's asset registry adds them; today only USD-pegged
+	 *  stablecoins exist).  See ADR-0040 for the full design. */
+	readonly priceFeedDenominationFiat: string;
 
 	/** Featured-slot auction: BLURT cost per
 	 *  hour of featured-slot time. Users pay this (× hours
@@ -787,6 +814,18 @@ const envSchema = z.object({
 		.number()
 		.positive()
 		.default(0.1),
+	// cp128: denomination fiat ticker.  3-8 uppercase chars.  Default
+	// 'USD' preserves cp127 behavior; operators in non-USD markets
+	// (or hedging against USD erosion) can set EUR, GBP, JPY, BRL,
+	// CNY, INR, RUB, XDR, XAU, or any other valid 3-8 char ticker.
+	// See ADR-0040.
+	MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT: z
+		.string()
+		.regex(
+			/^[A-Z]{3,8}$/,
+			'must be 3-8 uppercase letters (e.g. USD, EUR, XDR, XAU)'
+		)
+		.default('USD'),
 
 	// Featured-slot auction.
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),
@@ -1311,6 +1350,8 @@ export function loadConfig(): Config {
 			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN,
 		priceFeedNativePlausibleMax:
 			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX,
+		// cp128
+		priceFeedDenominationFiat: e.MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT,
 
 		featureFeeBlurtPerHour: e.MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR,
 

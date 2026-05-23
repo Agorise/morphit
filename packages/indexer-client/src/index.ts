@@ -35,19 +35,34 @@ export interface HealthResponse {
  *  the indexer verifies the same multiplier when the order op
  *  arrives.
  *
- *  Optional fields `base_fee_usd` and `blurt_price_usd` are
- *  present iff the operator has enabled the BLURT/USD price feed
- *  AND a live (non-stale) value is available.  Used by the UI for
- *  ambient "(~$0.12)" subtext alongside BLURT amounts.  Frontends
- *  that don't see these fields just show BLURT only. */
+ *  Optional fields `base_fee_fiat`, `blurt_price_fiat`, and
+ *  `denomination_fiat` are present iff the operator has enabled the
+ *  BLURT/fiat price feed AND a live (non-stale) value is available.
+ *  Used by the UI for ambient "(~$0.12)" subtext alongside BLURT
+ *  amounts.  Frontends that don't see these fields just show BLURT
+ *  only.
+ *
+ *  The `denomination_fiat` field tells the frontend which fiat the
+ *  numeric values are in — operator-configured (USD, EUR, GBP, JPY,
+ *  BRL, CNY, INR, RUB, AED, XDR, XAU, etc.).  Default USD.  See
+ *  ADR-0040 for the design.
+ *
+ *  cp128 rename: pre-cp128 these were `base_fee_usd` and
+ *  `blurt_price_usd`.  Renamed denomination-agnostic. */
 export interface ListingFeeResponse {
 	readonly base_fee_blurt: number;
 	/** Per-hour BLURT cost for boosting an order to the featured
 	 *  orderbook. */
 	readonly feature_fee_blurt_per_hour: number;
 	readonly quote_ttl_seconds: number;
-	readonly base_fee_usd?: number;
-	readonly blurt_price_usd?: number;
+	readonly base_fee_fiat?: number;
+	readonly blurt_price_fiat?: number;
+	readonly denomination_fiat?: string;
+	/** cp127 defense H — NOT-AN-ORACLE warning string.  Present
+	 *  alongside the `_fiat` fields.  Downstream protocols using
+	 *  these numbers as oracle input do so against this explicit
+	 *  recommendation.  See ADR-0039. */
+	readonly price_warning?: string;
 }
 
 // ─── Order viewcounts (task #14) ───────────────────────────────────

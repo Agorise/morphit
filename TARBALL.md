@@ -4,31 +4,114 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp127 — 2026-05-23 (self-sovereign BLURT pricing: morphit_native fetcher + cross-stablecoin depeg detector + drift monitor + disagreement monitor + receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 locales + 2 brag entries + GRANDMA note + operator-doc updates + 30 new smoke scenarios).
+**Last touched:** cp128 — 2026-05-23 (operator-configurable denomination fiat: env var + Config + factory + receipt + listingFeeBody field rename + frontend `formatFiat` helper + setup-wizard picker step + indexer-client public TS interface + matrix-bot Zod schema + ADR-0040 + 2 brag entries + FAQ paragraph × 10 locales + GRANDMA note + REVISIT-LIST CP128 LESSONS + API.md update + SECURITY.md update; plus BRICS Pay payment method live across registry + indexer reserved + descriptions × 10 locales).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp127-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp128-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **39 ADRs** (+1 cp127: ADR-0039) · **314 brag entries** (+2 cp127 in §4) · locale parity **2,978 × 10 = 29,780** (+2 per locale vs cp126's 2,976 — FAQ q+a × 10)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp127 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing
-- **53 structural defenses** (+3 cp127: stablecoin-depeg-detector 6 scenarios, morphit-native-fetcher 10 scenarios, price-source-hardening 14 scenarios); **5,411/0/0/0** local smoke battery quadruple-pulse stable
+- 16 tradable assets · **39 ADRs** (+1 cp128: ADR-0040) · **316 brag entries** (+2 cp128: #89 denomination config in §4, #226 BRICS Pay in §17) · locale parity **2,979 × 10 = 29,790** (+10 vs cp127's 2,978 × 10 = 29,780 — one new key per locale: `payment_method.brics_pay.description`; the FAQ denomination paragraph appends to an existing string, no new keys)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp128 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay
+- **53 structural defenses** (unchanged from cp127; cp128 was config + rename, no new defense modules)
+- **5,419 / 0 / 0 / 0** local smoke battery (triple-pulse-pending stable; +8 net vs cp127's 5,411 from cp128's EUR + XAU + formatFiat coverage scenarios)
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp127 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp127 grand total: ~1,271+ strings across 9 non-EN locales)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 15+ cps; cp125 deep-deep covered reputation surface
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp128 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp128 grand total: ~1,290+ strings across 9 non-EN locales)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 16+ cps; cp125 deep-deep covered reputation surface; cp128's deep-deep covered the denomination-rename surface
 
-**What the most recent eight checkpoints did:**
+**What the most recent nine checkpoints did:**
 - **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes
 - **cp120-cp122** — cash-by-mail + physical-shipment tracking feature complete (foundation/UI/docs)
-- **cp123-cp125** — Reputation hardening campaign: H1 time-decay + H2 Signal D + H4 verifiable receipt + H5 buy/sell side distinction + H6 dormancy signal + ADR-0038 + FAQ × 10 + 4 brag entries
+- **cp123-cp125** — Reputation hardening campaign: H1 time-decay + H2 Signal D + H4 verifiable receipt + H5 buy/sell side distinction + H6 dormancy + ADR-0038 + FAQ × 10 + 4 brag entries
 - **cp126** — OpenMonero coverage correction: 1 new brag entry + FAQ vs_others paragraph × 10 locales
-- **cp127** — Self-sovereign pricing: morphit_native fetcher (tiered anchor architecture with USD-direct primary + stablecoin supplement + hybrid combined) + cross-stablecoin depeg detector + drift monitor + disagreement monitor + price-derivation receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 locales + 2 brag entries + GRANDMA-FRIENDLY note + operator docs + 5-lesson REVISIT-LIST CP127 LESSONS
+- **cp127** — Self-sovereign pricing: morphit_native fetcher (tiered anchors) + cross-stablecoin depeg detector + drift monitor + disagreement monitor + price-derivation receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 + 2 brag entries
+- **cp128** — Operator-configurable denomination fiat (env var + factory wiring + receipt + listing-fee API field rename + frontend `formatFiat` helper + wizard picker + indexer-client public type + matrix-bot schema + ADR-0040 + FAQ paragraph × 10 + 2 brag entries + 6-lesson CP128 LESSONS + GRANDMA note) + BRICS Pay payment method (registry + indexer reserved + descriptions × 10 locales)
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp127 is a clear meaningful milestone (substantial new architecture: 4 new modules totaling ~1,200 LOC + new schema table + new endpoint + 8 specific defenses + 30 new smoke scenarios + new ADR + FAQ × 10 + brag + GRANDMA).
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp128 is a clear meaningful milestone (substantial new architecture: operator-configurable denomination coordinated across backend + frontend + wizard + indexer-client + matrix-bot + 5 docs; plus BRICS Pay live across registry + indexer + 10 locales).
 
 ---
+
+## cp128 — Operator-configurable denomination fiat + BRICS Pay payment method (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp128-FULL-STATE.tar.gz` built this turn.
+
+**State:** 16 tradable assets · **39 ADRs** (+1 cp128: ADR-0040) · **316 brag entries** (+2 cp128: §4 #89 denomination, §17 #226 BRICS Pay) · locale parity **2,979 × 10 = 29,790** (+10 vs cp127 — BRICS Pay description key per locale; FAQ paragraph appends to existing string with no new keys) · **5,419 / 0 / 0 / 0** local smoke battery (+8 net vs cp127's 5,411) · 7/7 TS-clean · 53 structural defenses (unchanged).
+
+**Background — Ken's two-question driver:**
+- Q1: "when and if the USD or 'Petrodollar' goes away, won't i need an easy way to set the new base currency (such as a BRICS 'Unit', XDR/SDR, Amero, etc) ticker in the setup wizard?"
+- Q2: "if 'BRICS Pay' is considered a payment gateway like EWise, PayPal, etc, then i think we should add it as another one."
+
+Verified facts before claiming anything: BRICS Pay is a *payment rail* (Pix/UPI/UnionPay/PayShap/SPFS/CIPS interoperability layer), explicitly NOT a currency — pilot live in Russia, 2026 Q4 rolling onboarding to India/Brazil/China/South Africa/Indonesia/Saudi Arabia. The BRICS bloc has NOT announced any common currency. So Ken's Q1 conflated two architectural concerns (denomination unit vs payment rail); cp128 untangles them and ships both legitimately.
+
+Real candidates for denomination-fiat replacement: XDR (IMF Special Drawing Rights), XAU (gold ounces — given gold's 60-70% 2025 surge and >$5,500/oz in 2026), regional fiats (EUR, GBP, JPY, BRL, CNY, INR, RUB, AED), and any future ticker. Per ADR-0040: env var validates against `/^[A-Z]{3,8}$/` so unknown future tickers are accommodated.
+
+**Real near-term beneficiary** isn't a hypothetical USD-collapse scenario — it's *operators in non-USD-native markets today* (Brazilian operator showing BRL, Eurozone showing EUR, etc.). The USD-collapse hedge is a downstream benefit.
+
+**Code shipped — Part 1: Denomination fiat configurability**
+
+Backend:
+- `apps/indexer/src/config/index.ts` — added `priceFeedDenominationFiat: string` field to Config interface + Zod schema for `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` env var (default `'USD'`, regex `^[A-Z]{3,8}$`); wired through to Config object
+- `apps/indexer/src/indexer/price/factory.ts` — reads `config.priceFeedDenominationFiat` instead of hardcoding `'USD'`
+- `apps/indexer/src/api/priceReceipt.ts` — removed `DEFAULT_DENOMINATION_FIAT` constant, reads `config.priceFeedDenominationFiat` for default-when-query-omitted
+- `apps/indexer/src/api/listingFeeBody.ts` — REWRITTEN with denomination-agnostic field rename: `base_fee_usd → base_fee_fiat`, `blurt_price_usd → blurt_price_fiat`, NEW `denomination_fiat: 'USD'` companion field, NOT-AN-ORACLE warning preserved from cp127
+- `apps/indexer/src/api/listingFee.ts` — doc-comment updated to reflect renamed fields + ADR-0040 reference
+- `apps/indexer/test/testutils/context.ts` — fakeConfig defaults `priceFeedDenominationFiat: 'USD'`
+
+API consumer types:
+- `packages/indexer-client/src/index.ts` — `ListingFeeResponse` interface field rename + new `denomination_fiat?: string` + `price_warning?: string` (cp127 had warning in body but not in the public TS type)
+- `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — `ListingFeeSchema` Zod schema rename matching the producer
+
+Frontend:
+- `apps/web/src/lib/i18n/formatters.ts` — added generic `formatFiat(amount, ticker)` helper with `KNOWN_ISO_4217` set (USD/EUR/GBP/JPY/CNY/INR/BRL/RUB/CAD/AUD/CHF/MXN/KRW/IRR/EGP/ZAR/AED/IDR/XAU/XAG/XDR/BTC/ETH/XMR) + per-ticker decimal precision (JPY=0, XAU/XAG=8, XDR=4, BTC/ETH/XMR=8, default=2); fallback `{number} {TICKER}` format for non-ISO tickers; **REMOVED `formatUsd` entirely** (pre-launch leverage, no external consumers)
+- `apps/web/src/lib/components/StrangerFeeModal.svelte` — renamed `usdPerBlurt → fiatPerBlurt` + added `denominationFiat: string = $state('USD')`; reads `lf.quote.blurt_price_fiat` + `lf.quote.denomination_fiat`; renders via `formatFiat(amount, denominationFiat)`
+- `apps/web/src/routes/[lang]/post/+page.svelte` — same rename + denomination state; updated 2 consumer sites (fee echo at line 2280 + waiver-benefits ladder at line ~960); waiver i18n key pattern updated `_with_usd → _with_fiat` for future-correct shape (those keys don't actually exist yet in locale files but the dead-code path now points at the right key name)
+
+Wizard:
+- `apps/ops-cli/src/init/render.ts` — `ListingFeeResult` interface extended with `readonly denominationFiat: string`; env file generator emits `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=...` line with operator-facing comment block
+- `apps/ops-cli/src/init/steps.ts` — `stepListingFee` ends with a curated picker (USD/EUR/GBP/JPY/BRL/CNY/INR/RUB/AED/XDR/XAU/"Other (enter ticker)") + free-text "Other" validated against `^[A-Z]{3,8}$`
+
+Env example:
+- `ops/env/indexer.env.example` — documented `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` with operator-facing notes about realistic use cases (regional fiats, IMF basket, gold-anchored) + Tier 2 stablecoin caveat for non-USD denominations
+
+Smokes:
+- `apps/indexer/scripts/api-response-shape-smoke.ts` — updated all assertions for renamed fields + 2 new EUR + XAU-denomination scenarios (23/23 pass)
+- `apps/web/scripts/i18n-formatters-smoke.ts` — rewritten for `formatFiat` with 10 scenarios covering USD/EUR/JPY/XAU/unknown-ticker/lowercase tests (22/22 pass)
+
+Docs:
+- `docs/adr/0040-denomination-fiat-configurability.md` (~250 lines) — full architectural documentation: rationale, backend changes, frontend changes, wizard step, resilience scenarios (Brazil/Iran/soft-erosion/hard-collapse), Tier 2 stablecoin caveat documentation, honest limitations (cross-instance denomination coordination, no fiat-fiat conversion, operator picks wrong denomination), future work (EUR-pegged stablecoins, per-asset denomination, INR lakh/crore formatting)
+- FAQ `where_does_blurt_price_come_from` × 10 locales gains paragraph mentioning denomination configurability + supported tickers + `denomination_fiat` API field
+- `docs/OPERATIONS.md` §13 — cp128 denomination-fiat note
+- `docs/RUN-A-MORPHIT-NODE.md` — `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` operator callout (placed adjacent to the cp127 native-enabled callout)
+- `docs/API.md` — listing-fee response example updated with new field names + denomination_fiat + price_warning + cp128-history footnote
+- `docs/SECURITY.md` — operator-trust paragraph updated for the renamed field (was `usdPerBlurt`, now `blurt_price_fiat` + cp128 denomination-aware framing)
+
+Brag list:
+- 2 new entries: #89 in §4 (denomination configurability — operator picks USD/EUR/XDR/XAU/etc., one env var, no code change) and #226 in §17 (BRICS Pay as first-class payment method)
+- Sequential renumber 314 → **316** entries
+- STACCATO_ALLOWLIST corrected to `['3', '12', '194', '203']` (the §4 insert at position 89 shifted old #193 → #194 and old #202 → #203)
+- Entry #145 ADR count updated 38 → 39; ADR-range descriptor 0001-0039 → 0001-0040; new ADR-0040 entry added to topic list
+- Trailer ADR range updated to 0001-0040
+- `RELEASE-NOTES-v1.0.0-beta.1.md` ADR count + range updated
+
+Mediakit rebuilt with cp128 brag list (316 entries, 44871 bytes).
+
+**Code shipped — Part 2: BRICS Pay payment method**
+
+- `apps/web/src/lib/payments/registry.ts` — `brics_pay` entry inserted alphabetically between `blik` and `cash_app`; category `'online'`; url `https://brics-pay.com`
+- `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` — `brics_pay` added to RESERVED_CANONICAL_KEYS (between blik and cash_app); enforces frontend-indexer parity (caught by reserved-keys-parity-smoke during the cp128 deep-deep)
+- Descriptions × 10 locales (`payment_method.brics_pay.description`): cross-border payment rail framing, mentions Pix/UPI/UnionPay/PayShap/SPFS/CIPS interop, pilot in Russia + 2026 Q4 onboarding for the BRICS+ Q4 nations
+- Smoke regression: `payment-method-i18n-parity-smoke` 14/14 (registry-vs-locale parity), `reserved-keys-parity-smoke` 1/1 (frontend-vs-indexer parity)
+
+**Mid-stream fixes caught by deep-deep audit:**
+- **reserved-keys-parity-smoke** caught indexer missing `brics_pay` from RESERVED_CANONICAL_KEYS — added
+- **mediakit-freshness-smoke** caught stale mediakit zip — rebuilt with cp128 brag list
+- **workspace-typecheck-smoke** caught `ListingFeeResponse` TS interface drift (the public type still had old field names) — fixed in `packages/indexer-client/src/index.ts`
+- **brag-list-kiss-budget-smoke** caught #89 over 4-sentence budget — compressed; also caught STACCATO_ALLOWLIST drift (the §4 insert shifted old #193 → #194 and old #202 → #203; my initial allowlist guess of `['3', '12', '195', '204']` was off-by-1) — corrected to `['3', '12', '194', '203']`
+- **brag-list-trailer-invariants-smoke** caught stale ADR-0039 trailer reference — updated to ADR-0040
+- Deep-deep grep across `apps/ packages/ docs/ scripts/ ops/` found 4 drift sites I would have missed without it: matrix-bot Zod schema, indexer-client TS interface, docs/API.md, docs/SECURITY.md — all fixed
+
+**Translation-quality flag:** cp128 added ~20 new auto-translated strings across 9 non-EN locales (BRICS Pay description × 10 locales = 10 strings + FAQ paragraph × 10 locales = 10 strings). Cumulative cp108-cp128: ~1,290+ strings awaiting native-speaker polish.
 
 ## cp127 — Self-sovereign BLURT pricing: morphit_native + depeg detector + drift/disagreement monitors + receipt endpoint (2026-05-23)
 

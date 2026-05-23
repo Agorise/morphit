@@ -99,8 +99,15 @@ const ListingFeeSchema = z.object({
 	base_fee_blurt: z.number(),
 	feature_fee_blurt_per_hour: z.number(),
 	quote_ttl_seconds: z.number(),
-	base_fee_usd: z.number().optional(),
-	blurt_price_usd: z.number().optional()
+	// cp128 rename: pre-cp128 these were `base_fee_usd` /
+	// `blurt_price_usd` (USD hardcoded).  Now denomination-
+	// agnostic with a companion `denomination_fiat` field
+	// indicating the unit (USD / EUR / XDR / XAU / etc.).
+	// See ADR-0040.
+	base_fee_fiat: z.number().optional(),
+	blurt_price_fiat: z.number().optional(),
+	denomination_fiat: z.string().optional(),
+	price_warning: z.string().optional()
 });
 
 const ReleaseSchema = z.object({

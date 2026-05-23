@@ -61,7 +61,78 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp127 is a meaningful milestone (self-sovereign pricing architecture complete: morphit_native fetcher + cross-stablecoin depeg detector + drift monitor + disagreement monitor + receipt endpoint + 8 black-hat defenses + 30 new structural smoke scenarios).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp128 is a meaningful milestone (substantial new architecture: operator-configurable denomination fiat coordinated across backend + frontend + wizard + indexer-client public API + matrix-bot consumer + 5 docs; plus BRICS Pay payment method live across registry + indexer reserved + 10 locales).
+
+## CP128 LESSONS
+
+### Lesson #1 — Pre-launch field renames cost less than you think when scoped honestly
+
+cp128 renamed the listing-fee API fields `base_fee_usd` → `base_fee_fiat`, `blurt_price_usd` → `blurt_price_fiat`, and added a companion `denomination_fiat` field. Before starting, the cost estimate was "scope check needed first." After actually grepping the repo, the consumer count was:
+
+- 4 site references (`StrangerFeeModal.svelte`, `post/+page.svelte` × 2, `api-response-shape-smoke.ts`)
+- 1 producer (`listingFeeBody.ts`)
+- 1 public TypeScript interface (`packages/indexer-client/src/index.ts`)
+- 1 downstream Zod schema (`matrix-bot/scripts/api-response-shape-smoke.ts`)
+- 2 documentation references (`docs/API.md`, `docs/SECURITY.md`)
+
+Total: 9 sites for a rename that *sounded* expensive ("the listing-fee API field names"). Pre-launch, with no external API consumers, the actual work is bounded by the repo's own surface area. The lesson: **scope-check by grepping, not by intuition**. The intuition said "API rename = expensive"; the grep said "9 sites, all in-repo."
+
+**Carry-forward:** before deciding a pre-launch rename is too risky, grep for the symbol. If it's all in-repo, the rename is just routine refactoring.
+
+### Lesson #2 — Generic factories pay off again, again
+
+cp127's `createMorphitNativeFetcher({ asset, denominationFiat, db, ... })` was already parameterized on `(asset, denominationFiat)` even though the cp127 wiring hardcoded `'USD'` at the call site. cp128 just exposed the parameter as operator config — zero refactor needed in the factory itself.
+
+Similarly, the cp128 `formatFiat(amount, ticker)` helper centralizes per-ticker decimal precision and ISO-4217-vs-fallback handling in one place. The 2 frontend consumer sites went from "needs a custom format function inline" to "calls `formatFiat(amount, denominationFiat)`" with the ticker provided by the indexer response.
+
+The pattern: **wherever you have to write "USD" or "BLURT" or any specific identifier, ask whether the call site should provide it instead**. The marginal cost of making something generic is small at design time; the marginal cost of un-generic-ing it later (when you discover the second use case) is high.
+
+**Carry-forward:** when a module is going to be reused (or might be), invest the small cost of making it generic up front — even if you only have one caller today.
+
+### Lesson #3 — Denomination is operator sovereignty, not USD-collapse-only
+
+Ken's framing was forward-looking: "when and if USD goes away." But the actual immediate beneficiaries of cp128's denomination configurability are operators serving non-USD-native markets *today*. A Brazilian operator who wants the listing-fee echo in BRL doesn't have to wait for any geopolitical scenario — they flip an env var, restart the indexer, done.
+
+This reframes the feature: not "USD-collapse hedge" but "per-operator display sovereignty, with USD-collapse hedge as a downstream benefit."
+
+The two framings have different ADR narratives, different brag-entry pitches, different FAQ explanations. The "operator sovereignty" framing is more honest (immediate value) and the "USD-collapse hedge" framing is more compelling (future-proofing). Cp128's docs use both: lead with sovereignty, mention the hedge.
+
+**Carry-forward:** when a feature has both an immediate and a hypothetical use case, document both. Don't oversell the hypothetical; don't bury the immediate.
+
+### Lesson #4 — BRICS Pay framing nuance: rail vs currency
+
+Ken's original question conflated two things: "won't I need an easy way to set the new base currency (such as a BRICS 'Unit', XDR/SDR, Amero, etc.)" AND "BRICS Pay as another payment method." The first is denomination; the second is payment rail. These are different architectural concerns.
+
+Verified via web search: BRICS Pay is a *payment rail* connecting national payment systems (Pix, UPI, UnionPay, PayShap, SPFS, CIPS) — explicitly not a currency. The BRICS bloc has not announced any common currency as of mid-2026. The actual candidates for "denomination replacement" are XDR (IMF basket), XAU (gold ounces), regional fiats, and hypothetically-future ones.
+
+Pushed back gently on the framing in the response, then shipped both features distinctly: denomination configurability (Part 1) + BRICS Pay registry entry (Part 2). Both are legitimate; both are now in cp128. The framing distinction matters because conflating them would have produced a worse design — e.g., "BRICS_UNIT" as a denomination ticker that doesn't exist.
+
+**Carry-forward:** when a user's request mixes architectural categories, untangle before designing. Disagreeing politely with a framing while affirming the underlying ask is better than building the wrong thing.
+
+### Lesson #5 — Field renames need a repo-wide grep, not a consumer-list grep
+
+The cp128 rename caught the obvious consumers (`StrangerFeeModal`, `post/+page.svelte`) immediately. But the *deep-deep audit* found 4 additional drift sites that would have shipped stale:
+
+1. `packages/indexer-client/src/index.ts` — public TypeScript interface (caught by `svelte-check` failure in the typecheck smoke)
+2. `apps/matrix-bot/scripts/api-response-shape-smoke.ts` — downstream Zod schema (caught by repo-wide grep)
+3. `docs/API.md` — public API reference doc
+4. `docs/SECURITY.md` — operator-trust documentation referring to the old frontend variable name
+
+Without the comprehensive `grep -rEn '<old-symbol>' apps/ packages/ docs/ scripts/ ops/`, all 4 would have shipped stale. The svelte-check smoke caught #1 mechanically; the deep-deep audit caught #2/#3/#4.
+
+The carry-forward isn't "grep harder" — it's a **structural reflex**: every field/symbol rename runs the grep across ALL of (apps, packages, docs, scripts, ops). Not "the consumers I can think of"; literally `grep -rEn <symbol> .` minus `node_modules`.
+
+**Carry-forward:** add to the rename-checklist: after the obvious consumer fixes, run `grep -rEn '<old-symbol>' . --include=...` across the entire repo before claiming done. If grep returns hits beyond the explanatory rename-history comments, those are bugs.
+
+### Lesson #6 — The WAIVER_MIN_BLURT i18n string is denomination-stale (carry-forward to cp129+)
+
+cp128 caught but didn't fix: the `WAIVER_MIN_BLURT` constant + its i18n key `post_order.errors.waiver_min_usd_required` + the user-facing hint "Minimum for the waiver: {N} BLURT (~$1 USD at current price)" hardcode USD as the reference unit even though the rest of the system now supports per-operator denomination.
+
+Not a security bug — the BLURT constant is denomination-independent and works correctly. Just a UX polish item: a user on an EUR-denominated instance reading "~$1 USD" mixes units in their head.
+
+The fix would be a small i18n string change (interpolate the operator's `denomination_fiat` into the hint) + maybe rename the i18n key to drop the `_usd_` segment. Deferred from cp128 because the surface area touches multiple form-validation paths and risks scope creep.
+
+**Carry-forward:** add to cp129+ backlog. Estimated effort: ~30 min — 10 locale strings + one form-validation message + one i18n-key rename. Low priority (cosmetic only); ship when convenient.
 
 ## CP127 LESSONS
 

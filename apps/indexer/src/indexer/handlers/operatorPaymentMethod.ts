@@ -84,6 +84,8 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'bitso',
 	'bizum',
 	'blik',
+	// cp128 — BRICS Pay (cross-border payment rail, BRICS+ bloc)
+	'brics_pay',
 	'cash_app',
 	'gcash',
 	'google_pay',

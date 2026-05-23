@@ -1717,18 +1717,74 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 		}
 	);
 
+	// ─── cp128: Denomination fiat ──
+	//
+	// The unit the indexer expresses BLURT prices in for its
+	// display surfaces (listing-fee fiat echo, receipt endpoint,
+	// drift baseline, etc.).  Default 'USD' matches pre-cp128
+	// behavior.  See ADR-0040.
+	console.log('\n  ── Denomination fiat (display unit) ──\n');
+	explain(
+		'The unit the indexer displays BLURT prices in.\n' +
+			'\n' +
+			'Default USD.  Set to a different ticker if your market is\n' +
+			"non-USD or you want to hedge against USD erosion.  This\n" +
+			"doesn't affect what currencies traders can post orders in\n" +
+			'(orders carry their own fiat_currency); it only affects the\n' +
+			'small "~$0.12" subtext next to listing-fee BLURT amounts on\n' +
+			'this instance.\n' +
+			'\n' +
+			"You can change this later by editing the env var\n" +
+			'MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT and restarting.'
+	);
+	const COMMON_FIATS: ReadonlyArray<{ ticker: string; label: string }> = [
+		{ ticker: 'USD', label: 'USD — US Dollar (default)' },
+		{ ticker: 'EUR', label: 'EUR — Euro' },
+		{ ticker: 'GBP', label: 'GBP — British Pound' },
+		{ ticker: 'JPY', label: 'JPY — Japanese Yen' },
+		{ ticker: 'BRL', label: 'BRL — Brazilian Real' },
+		{ ticker: 'CNY', label: 'CNY — Chinese Yuan' },
+		{ ticker: 'INR', label: 'INR — Indian Rupee' },
+		{ ticker: 'RUB', label: 'RUB — Russian Ruble' },
+		{ ticker: 'AED', label: 'AED — UAE Dirham' },
+		{ ticker: 'XDR', label: 'XDR — IMF Special Drawing Rights basket' },
+		{ ticker: 'XAU', label: 'XAU — Gold ounces (hard-currency hedge)' },
+		{ ticker: 'OTHER', label: 'Other (enter a 3-8 character uppercase ticker)' }
+	];
+	const fiatChoiceIdx = await askChoice(
+		'  Pick the fiat the indexer should display prices in:',
+		COMMON_FIATS.map((f) => f.label),
+		0 // default USD
+	);
+	const chosen = COMMON_FIATS[fiatChoiceIdx]!;
+	let denominationFiat: string;
+	if (chosen.ticker === 'OTHER') {
+		while (true) {
+			const raw = (await ask('  Enter ticker (3-8 uppercase letters)')).trim().toUpperCase();
+			if (/^[A-Z]{3,8}$/.test(raw)) {
+				denominationFiat = raw;
+				break;
+			}
+			console.log('  ✗ Must be 3-8 uppercase letters (A-Z).  Try again.\n');
+		}
+	} else {
+		denominationFiat = chosen.ticker;
+	}
+
 	console.log('\n  ✓ Listing fee configured:');
-	console.log(`     Target:   $${targetUsd.toFixed(2)} USD`);
-	console.log(`     BTC:      ${btcSatoshis.toLocaleString()} satoshis`);
-	console.log(`     XMR:      ${xmrPiconero.toLocaleString()} piconero`);
-	console.log(`     Source:   ${source}`);
-	console.log(`     Fallback: $${fallbackBlurtPriceUsd} BLURT/USD\n`);
+	console.log(`     Target:        $${targetUsd.toFixed(2)} USD`);
+	console.log(`     BTC:           ${btcSatoshis.toLocaleString()} satoshis`);
+	console.log(`     XMR:           ${xmrPiconero.toLocaleString()} piconero`);
+	console.log(`     Source:        ${source}`);
+	console.log(`     Fallback:      $${fallbackBlurtPriceUsd} BLURT/USD`);
+	console.log(`     Display unit:  ${denominationFiat}\n`);
 
 	return {
 		targetUsd,
 		btcSatoshis,
 		xmrPiconero,
 		fallbackBlurtPriceUsd,
+		denominationFiat,
 		source
 	};
 }

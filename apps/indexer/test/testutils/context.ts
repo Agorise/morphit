@@ -71,6 +71,9 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		disabledAssets: [],
 		priceFeedEnabled: false,
 		priceFeedStaticFloor: 0.002,
+		// cp128: default to USD for backwards-compatibility with
+		// existing tests; tests of non-USD denomination override this.
+		priceFeedDenominationFiat: 'USD',
 		featureFeeBlurtPerHour: 50,
 		verboseHealth: false,
 		// Part 111: default to 'morphit' so existing tests by default
