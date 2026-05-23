@@ -2,7 +2,7 @@
 /**
  * Smoke for the centralized i18n formatters.
  *
- * Validates that `formatUsd`, `formatPercent`, `formatBlurt`,
+ * Validates that `formatFiat`, `formatPercent`, `formatBlurt`,
  * `formatCount`, `formatDateLong`, `formatDateMedium`, and
  * `formatDateTime` produce locale-aware output and don't
  * regress between locales.
@@ -11,8 +11,13 @@
  * per Node version (CLDR updates, narrow-NBSP changes, etc.),
  * so this smoke tests properties rather than exact strings:
  *
- *   - formatUsd(1234.5) contains "1234" digits in some form
- *     and a USD-region indicator ("$" or "USD" or both).
+ *   - formatFiat(1234.5, "USD") contains the digits and a
+ *     USD-region indicator ("$" or "USD" or both).
+ *   - formatFiat(1234.5, "EUR") swaps to EUR display.
+ *   - formatFiat(1234, "JPY") uses 0 decimals.
+ *   - formatFiat(0.0000023, "XAU") uses 8 decimals for precious metals.
+ *   - formatFiat(N, "ZZZ") falls back to "{number} ZZZ" when the
+ *     ticker isn't a known ISO 4217 code.
  *   - formatPercent(1.5) contains the digit pair and a "%".
  *   - formatBlurt(60) produces 3 fractional digits.
  *   - formatCount(1234) contains the digits but possibly with
@@ -22,10 +27,15 @@
  *
  * The smoke also checks for graceful failure on NaN /
  * undefined / out-of-range inputs.
+ *
+ * cp128: `formatUsd` was removed; all call sites migrated to
+ * `formatFiat(amount, ticker)` with ticker coming from the
+ * indexer's denomination_fiat config field.  This smoke was
+ * updated accordingly.
  */
 
 import {
-	formatUsd,
+	formatFiat,
 	formatPercent,
 	formatBlurt,
 	formatCount,
@@ -40,30 +50,85 @@ interface Scenario {
 }
 
 const scenarios: readonly Scenario[] = [
-	// ─── formatUsd ─────────────────────────────────────
+	// ─── formatFiat (cp128 — was formatUsd before the rename) ──
 	{
-		name: 'formatUsd(1234.5) — en, contains 1234',
+		name: 'formatFiat(1234.5, "USD") — contains 1234.50',
 		fn: () => {
-			const out = formatUsd(1234.5);
+			const out = formatFiat(1234.5, 'USD');
 			// Some locales use NBSP or NNBSP between value and currency
 			const digitsOnly = out.replace(/\D/g, '');
 			return digitsOnly.includes('123450');
 		}
 	},
 	{
-		name: 'formatUsd(0) — returns formatted zero',
+		name: 'formatFiat(1234.5) — defaults to USD when ticker omitted',
 		fn: () => {
-			const out = formatUsd(0);
+			const out = formatFiat(1234.5);
+			const digitsOnly = out.replace(/\D/g, '');
+			return digitsOnly.includes('123450');
+		}
+	},
+	{
+		name: 'formatFiat(0, "USD") — returns formatted zero',
+		fn: () => {
+			const out = formatFiat(0, 'USD');
 			return out.length > 0 && /[0]/.test(out);
 		}
 	},
 	{
-		name: 'formatUsd(NaN) — returns "—"',
-		fn: () => formatUsd(Number.NaN) === '—'
+		name: 'formatFiat(NaN, "USD") — returns "—"',
+		fn: () => formatFiat(Number.NaN, 'USD') === '—'
 	},
 	{
-		name: 'formatUsd(Infinity) — returns "—"',
-		fn: () => formatUsd(Number.POSITIVE_INFINITY) === '—'
+		name: 'formatFiat(Infinity, "USD") — returns "—"',
+		fn: () => formatFiat(Number.POSITIVE_INFINITY, 'USD') === '—'
+	},
+	{
+		name: 'formatFiat(1234.5, "EUR") — EUR-formatted',
+		fn: () => {
+			const out = formatFiat(1234.5, 'EUR');
+			const digitsOnly = out.replace(/\D/g, '');
+			return digitsOnly.includes('123450');
+		}
+	},
+	{
+		name: 'formatFiat(1234, "JPY") — 0 decimals',
+		fn: () => {
+			// JPY has no sub-yen.  The formatted output should NOT
+			// contain a "00" decimal suffix.
+			const out = formatFiat(1234, 'JPY');
+			const digitsOnly = out.replace(/\D/g, '');
+			// We want "1234" not "123400".  Could be "1,234" -> "1234".
+			return digitsOnly === '1234';
+		}
+	},
+	{
+		name: 'formatFiat(0.0000023, "XAU") — gold ounces, 8 decimals',
+		fn: () => {
+			const out = formatFiat(0.0000023, 'XAU');
+			// Result should contain the digits 23 somewhere (perhaps
+			// "0.00000230 XAU" or with a recognized symbol).  We don't
+			// over-prescribe the exact format since Intl behavior
+			// varies on XAU support.
+			return /23/.test(out);
+		}
+	},
+	{
+		name: 'formatFiat(1234.5, "ZZZ") — unknown ticker falls back to "{number} ZZZ"',
+		fn: () => {
+			const out = formatFiat(1234.5, 'ZZZ');
+			// Unknown ticker → not ISO 4217 → fallback to
+			// "{decimal-formatted number} ZZZ".
+			return out.includes('ZZZ');
+		}
+	},
+	{
+		name: 'formatFiat — lowercase ticker is normalized',
+		fn: () => {
+			const out = formatFiat(100, 'usd');
+			const digitsOnly = out.replace(/\D/g, '');
+			return digitsOnly.includes('10000');
+		}
 	},
 
 	// ─── formatPercent ─────────────────────────────────

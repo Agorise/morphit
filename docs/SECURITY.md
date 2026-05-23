@@ -908,10 +908,18 @@ entirely; the BLURT-denominated fees and amounts continue to
 work without the USD overlay.
 
 Operator-trust assumption (BATCH14-4): a malicious operator
-can lie about `usdPerBlurt` to mislead users about how much $1
-of BLURT actually costs. This is the pre-existing operator-
-trust boundary; users cross-check by comparing instances. Not
-remedied in code; documented as a known assumption.
+can lie about the fiat price displayed alongside BLURT amounts
+(`blurt_price_fiat` on `/v1/listing-fee`, formerly `usdPerBlurt`
+in the frontend state) to mislead users about how much fiat
+their BLURT actually represents. This is the pre-existing
+operator-trust boundary; users cross-check by comparing
+instances or by visiting `/v1/price/morphit-native/receipt`
+(cp127) to see exactly what data the operator's indexer used to
+derive the displayed price.  Cp128: the denomination is now
+operator-configurable (USD/EUR/XDR/XAU/...); the same trust
+analysis applies regardless of the chosen unit.  Not remedied
+in code beyond the receipt endpoint; documented as a known
+assumption.
 
 ### Federation cache + contact_url hardening
 

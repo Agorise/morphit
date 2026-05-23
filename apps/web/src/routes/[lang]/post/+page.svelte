@@ -39,7 +39,7 @@
 	import Term from '$components/Term.svelte';
 	import ListingFeeAddressPanel from '$components/ListingFeeAddressPanel.svelte';
 	import FirstPostStarterPack from '$components/FirstPostStarterPack.svelte';
-	import { formatUsd } from '$lib/i18n/formatters';
+	import { formatFiat } from '$lib/i18n/formatters';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
 	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
@@ -371,10 +371,13 @@
 
 	// ─── Fee calculation ───────────────────────────────────────────
 	let feeQuote = $state<FeeQuote | null>(null);
-	/** Optional USD-per-BLURT for ambient subtext on the fee
+	/** Optional fiat-per-BLURT for ambient subtext on the fee
 	 *  display.  Populated from /v1/listing-fee when the operator
-	 *  has the price feed enabled.  Null = no USD echo shown. */
-	let usdPerBlurt: number | null = $state(null);
+	 *  has the price feed enabled.  Null = no fiat echo shown.
+	 *  cp128: previously `usdPerBlurt`; renamed because the operator
+	 *  configures the denomination (USD/EUR/XDR/XAU/…). */
+	let fiatPerBlurt: number | null = $state(null);
+	let denominationFiat: string = $state('USD');
 	let feeLoading = $state(false);
 	let feeError = $state('');
 
@@ -628,8 +631,13 @@
 				if (typeof lf.quote.base_fee_blurt === 'number' && lf.quote.base_fee_blurt > 0) {
 					operatorBaseBlurt = lf.quote.base_fee_blurt;
 				}
-				if (typeof lf.quote.blurt_price_usd === 'number') {
-					usdPerBlurt = lf.quote.blurt_price_usd;
+				// cp128: renamed from blurt_price_usd + companion
+				// denomination_fiat field.
+				if (typeof lf.quote.blurt_price_fiat === 'number') {
+					fiatPerBlurt = lf.quote.blurt_price_fiat;
+				}
+				if (typeof lf.quote.denomination_fiat === 'string') {
+					denominationFiat = lf.quote.denomination_fiat;
 				}
 			}
 
@@ -957,15 +965,23 @@
 	 *  UI gates the render).  Computed once per amountMin change.
 	 *
 	 *  When the operator's price feed is enabled and a fresh
-	 *  BLURT/USD value is available (`usdPerBlurt`), each tier
-	 *  row shows the live USD equivalent of that tier amount —
+	 *  BLURT/fiat value is available (`fiatPerBlurt`), each tier
+	 *  row shows the live fiat equivalent of that tier amount —
 	 *  e.g. "500 BLURT (~$1) — ~8 future listings covered".
-	 *  Without USD context, rows fall back to BLURT-only labels.
+	 *  Without fiat context, rows fall back to BLURT-only labels.
 	 *  This way a new user immediately understands the dollar
-	 *  weight of each option rather than guessing.  USD figures
+	 *  weight of each option rather than guessing.  Fiat figures
 	 *  are formatted with locale-aware grouping and 2 decimals
-	 *  (or 0 decimals if the dollar figure is ≥ $10, where
-	 *  cents are noise). */
+	 *  (or 0 decimals if the figure is ≥ 10, where cents are noise).
+	 *
+	 *  cp128 rename: `_with_usd` → `_with_fiat` since the
+	 *  denomination is now operator-configurable.  The
+	 *  `{denomination_fiat}` interpolation placeholder lets the
+	 *  i18n string carry the unit (e.g. "{amount} BLURT (~{fiat}
+	 *  {denomination_fiat})").  Today the `_with_fiat` keys don't
+	 *  exist in the locale files — the lookup gracefully degrades
+	 *  to the BLURT-only label — but the future correct shape is
+	 *  in place. */
 	const waiverBenefitRows = $derived.by(
 		(): ReadonlyArray<{
 			readonly text: string;
@@ -974,7 +990,7 @@
 			const n = amountMinNum ?? 0;
 			const formatBlurt = (amount: number): string =>
 				amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
-			const formatUsd = (amount: number): string => {
+			const formatFiatNumber = (amount: number): string => {
 				const decimals = amount >= 10 ? 0 : 2;
 				return amount.toLocaleString(undefined, {
 					minimumFractionDigits: decimals,
@@ -982,17 +998,20 @@
 				});
 			};
 			return WAIVER_BENEFIT_TIERS.map((tier) => {
-				const usdAmount = usdPerBlurt !== null && usdPerBlurt > 0 ? tier.at * usdPerBlurt : null;
-				// Pick the with-USD i18n variant when we have a live
+				const fiatAmount =
+					fiatPerBlurt !== null && fiatPerBlurt > 0 ? tier.at * fiatPerBlurt : null;
+				// Pick the with-fiat i18n variant when we have a live
 				// price; fall back to the plain BLURT-only key when
-				// we don't.  Both keys interpolate {amount}; only the
-				// USD variant interpolates {usd}.
-				const i18nKey = usdAmount !== null ? `${tier.key}_with_usd` : tier.key;
+				// we don't.  Both keys interpolate {amount}; the
+				// with-fiat variant also interpolates {fiat} and
+				// {denomination_fiat}.
+				const i18nKey = fiatAmount !== null ? `${tier.key}_with_fiat` : tier.key;
 				return {
 					text: $_(i18nKey, {
 						values: {
 							amount: formatBlurt(tier.at),
-							usd: usdAmount !== null ? formatUsd(usdAmount) : ''
+							fiat: fiatAmount !== null ? formatFiatNumber(fiatAmount) : '',
+							denomination_fiat: denominationFiat
 						}
 					}) as string,
 					unlocked: n >= tier.at
@@ -2275,9 +2294,9 @@
 							{feeQuote.blurtFormatted}
 						</span>
 					</div>
-					{#if usdPerBlurt !== null}
+					{#if fiatPerBlurt !== null}
 						<p class="mt-1 text-right text-xs text-ink-500">
-							~{formatUsd(feeQuote.blurtAmount * usdPerBlurt)}
+							~{formatFiat(feeQuote.blurtAmount * fiatPerBlurt, denominationFiat)}
 						</p>
 					{/if}
 					<p class="mt-4 text-sm text-ink-600 dark:text-ink-300">

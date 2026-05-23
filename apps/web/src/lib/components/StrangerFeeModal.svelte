@@ -34,7 +34,7 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { getStrangerFeeQuote } from '$lib/indexer/client';
 	import { fetchListingFee } from '$lib/orders/listingFee';
-	import { formatUsd } from '$lib/i18n/formatters';
+	import { formatFiat } from '$lib/i18n/formatters';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import type { StrangerFeeQuoteResponse } from '@morphit/indexer-client';
 	import type { LiveIdentity } from '$crypto/keygen';
@@ -60,10 +60,14 @@
 	let phase = $state<Phase>({ kind: 'loading' });
 	let passwordInput = $state('');
 	let passwordError = $state('');
-	/** Optional USD-per-BLURT for ambient subtext. Populated from
+	/** Optional fiat-per-BLURT for ambient subtext. Populated from
 	 *  /v1/listing-fee when the operator has the price feed
-	 *  enabled.  Null = no USD echo shown. */
-	let usdPerBlurt: number | null = $state(null);
+	 *  enabled.  Null = no fiat echo shown.
+	 *
+	 *  cp128: previously `usdPerBlurt`; renamed because the operator
+	 *  can configure the denomination to EUR / XDR / XAU / etc. */
+	let fiatPerBlurt: number | null = $state(null);
+	let denominationFiat: string = $state('USD');
 
 	async function loadQuote(): Promise<void> {
 		phase = { kind: 'loading' };
@@ -94,14 +98,20 @@
 				priceQuote: priceResult.data
 			};
 
-			// Step 2 — best-effort optional USD echo.  Falls back
-			// to "no USD shown" silently if the operator hasn't
+			// Step 2 — best-effort optional fiat echo.  Falls back
+			// to "no fiat shown" silently if the operator hasn't
 			// enabled the price feed.  Doesn't block the modal
 			// becoming usable.
+			//
+			// cp128: reads renamed fields `blurt_price_fiat` and
+			// `denomination_fiat`; pre-cp128 was `blurt_price_usd`.
 			void (async () => {
 				const lf = await fetchListingFee(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
-				if (lf.kind === 'ok' && typeof lf.quote.blurt_price_usd === 'number') {
-					usdPerBlurt = lf.quote.blurt_price_usd;
+				if (lf.kind === 'ok' && typeof lf.quote.blurt_price_fiat === 'number') {
+					fiatPerBlurt = lf.quote.blurt_price_fiat;
+					if (typeof lf.quote.denomination_fiat === 'string') {
+						denominationFiat = lf.quote.denomination_fiat;
+					}
 				}
 			})();
 		} catch (err) {
@@ -296,9 +306,9 @@
 						{phase.priceQuote.price_blurt.toFixed(3)} BLURT
 					</span>
 				</div>
-				{#if usdPerBlurt !== null}
+				{#if fiatPerBlurt !== null}
 					<div class="mt-1 flex items-baseline justify-end text-xs text-ink-500 dark:text-ink-500">
-						<span>~{formatUsd(phase.priceQuote.price_blurt * usdPerBlurt)}</span>
+						<span>~{formatFiat(phase.priceQuote.price_blurt * fiatPerBlurt, denominationFiat)}</span>
 					</div>
 				{/if}
 			</div>

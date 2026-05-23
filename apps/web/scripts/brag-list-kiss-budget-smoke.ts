@@ -86,11 +86,14 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * and #12 are in the brag-list preamble (before the reputation-
  * hardening section) so they're unaffected.
  *
- * cp127 numbering shift: 2 new self-sovereign-pricing entries in
- * §4 (between Blurt-RPC #86 and wallet-embed previously #87)
- * shifted subsequent entries by +2 (#191 → #193, #200 → #202).
+ * cp128 numbering shift: 2 new entries added in §4 (denomination
+ * config #89, between price-receipt #88 and wallet-embed previously
+ * #89) and §17 (BRICS Pay #226, between registry #225 and barter
+ * previously #226).  The §4 insert shifted old #193 → new #194 and
+ * old #202 → new #203 (both old positions were before the §17
+ * insertion point so only the §4 insert applied to them).
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '193', '202']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '194', '203']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

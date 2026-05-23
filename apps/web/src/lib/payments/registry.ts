@@ -434,6 +434,19 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'online'
 	},
 	{
+		// cp128 — BRICS Pay (cross-border payment rail launched in
+		// pilot in 2026 by the BRICS economic bloc, expanding through
+		// 2026 Q4 to India/Brazil/China/South Africa/Indonesia/Saudi
+		// Arabia).  Lives in 'online' alongside Alipay, AliPay,
+		// Cash App, etc.  Not a currency — settles in member nations'
+		// national currencies via interoperability with Pix, UPI,
+		// UnionPay, PayShap, SPFS, CIPS.
+		key: 'brics_pay',
+		name: 'BRICS Pay',
+		url: 'https://brics-pay.com',
+		category: 'online'
+	},
+	{
 		key: 'cash_app',
 		name: 'Cash App',
 		url: 'https://cash.app',

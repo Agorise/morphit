@@ -820,6 +820,8 @@ For the full list of every env var the indexer reads (price feed, operator-balan
 
 > **About `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED` (cp127 self-sovereign pricing):** Leave it `false` for a brand-new instance with zero trade history. Once your platform has enough on-platform trading activity (≥3 distinct verified-fee traders posting BLURT-vs-USD or BLURT-vs-stablecoin orders within an 8-hour window), you can flip it to `true`. The native fetcher slots BETWEEN coingecko and the static floor, so external sources still work as primary. Inspect what the native fetcher WOULD produce (even while disabled) via `GET /v1/price/morphit-native/receipt` on your instance. See ADR-0039 for the full design.
 
+> **About `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT` (cp128 denomination configurability):** Default `USD`.  Set this to a different ticker (`EUR`, `GBP`, `JPY`, `BRL`, `CNY`, `INR`, `RUB`, `AED`, `XDR`, `XAU`, or any 3-8 character uppercase ticker) if your instance serves a non-USD-native market — or as a hedge against future scenarios where USD's reserve-currency role erodes.  The wizard's "Listing fee + fallback BLURT price" step now prompts for this with a curated picker plus an "Other (enter ticker)" escape hatch.  Affects only the display unit on `/v1/listing-fee` and `/v1/price/morphit-native/receipt`; order matching and on-chain fees are denomination-agnostic.  See ADR-0040 for the full design.
+
 > **About `MORPHIT_INDEXER_BTC_FEE_ADDRESS` (community
 > operators):** Leave it empty.  As of Part 106, your
 > indexer automatically inherits the canonical Morphit

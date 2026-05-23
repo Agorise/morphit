@@ -462,14 +462,39 @@ Current listing-fee schedule for this instance.
   "base_fee_blurt":              60,
   "feature_fee_blurt_per_hour":  50,
   "quote_ttl_seconds":           300,
-  "base_fee_usd":                0.12,
-  "blurt_price_usd":             0.002
+  "base_fee_fiat":               0.12,
+  "blurt_price_fiat":            0.002,
+  "denomination_fiat":           "USD",
+  "price_warning":               "NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle."
 }
 ```
 
-`base_fee_usd` and `blurt_price_usd` are present iff the operator
-has price-feed integration enabled AND the price is fresh.  If
-either is missing, frontends should display BLURT only.
+`base_fee_fiat`, `blurt_price_fiat`, `denomination_fiat`, and
+`price_warning` are present iff the operator has price-feed
+integration enabled AND the price is fresh.  If any are missing,
+frontends should display BLURT only.
+
+The `denomination_fiat` field tells you which fiat the `_fiat`
+numbers are in.  Default `"USD"`; operators in non-USD-native
+markets (or hedging against USD erosion) can configure
+`"EUR"`, `"GBP"`, `"JPY"`, `"BRL"`, `"CNY"`, `"INR"`, `"RUB"`,
+`"AED"`, `"XDR"` (IMF Special Drawing Rights), `"XAU"` (gold
+ounces), or any 3-8 character uppercase ticker.  See ADR-0040
+for the design.
+
+The `price_warning` field carries a loud NOT-AN-ORACLE warning
+(cp127 defense H from ADR-0039).  Downstream protocols using the
+`_fiat` numbers as oracle input do so against this explicit
+recommendation; the price is for Morphit UI display only and is
+NOT designed to be cryptoeconomically secure as a price feed for
+third-party value-bearing systems.  Use `/v1/price/morphit-native/receipt`
+for the full derivation transparency.
+
+> **cp128 rename**: pre-cp128 the optional fields were
+> `base_fee_usd` and `blurt_price_usd` (USD hardcoded).  No
+> external consumers depend on the old names — the rename
+> shipped during pre-launch hardening before any instance went
+> live.
 
 `quote_ttl_seconds` is how long a frontend should cache its quote
 before re-fetching.  The frontend renders fee amounts using this

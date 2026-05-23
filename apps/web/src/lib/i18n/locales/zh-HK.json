@@ -920,7 +920,7 @@
 			},
 			"where_does_blurt_price_come_from": {
 				"q": "Morphit 上顯示嘅 BLURT 價格從哪裡來?",
-				"a": "您喺 Morphit 上睇到嘅列表費旁邊嘅 BLURT/USD 價格(BLURT 金額旁邊嘅「~$0.12」副文本)來自一個分層嘅價格源鏈,旨在減少對任何單一外部服務嘅依賴。\n\n**鏈,按優先級順序:**\n\n1. **Klingex.io** — 由 Agorise 營運嘅 Blurt 生態系統 CEX。\n\n2. **Coingecko** — 聚合多個交易所嘅 BLURT 價格。\n\n3. **morphit_native** — 來自平台內交易資料嘅自主主權價格(每個營運商選擇啟用)。\n\n4. **靜態回退** — 營運商設置嘅底價(預設 $0.002)。\n\n**點解係鏈而唔係單一源?** 任何價格 feed 都唔可以無條件信任。鏈意味住 BLURT 定價喺每種情況下都能繼續工作。\n\n**morphit_native 點樣工作**(參見 ADR-0039):\n\n- **分層錨點**:Tier 1 直接 BLURT-vs-USD;Tier 2 BLURT-vs-穩定幣;Tier 3 組合。\n- **跨穩定幣脫鉤檢測**。\n- **Sybil 抵抗**:每個貢獻者必須至少有一次先前已驗證費用嘅交易。\n- **每個交易者貢獻上限**:一個賬戶 = 一票。\n- **訂單年齡寬限期**:10 分鐘。\n- **平滑上限**。\n- **長期漂移監視器**。\n- **跨源分歧檢測器**。\n- **硬編碼外部合理性範圍**。\n\n**「自己驗證」端點**:`GET /v1/price/morphit-native/receipt`。\n\n**重要:morphit_native 並非設計為其他系統嘅 oracle。** 參見 ADR-0039。\n\n**預發佈說明**:喺存在足夠交易量之前,每個實例都會退回到 Klingex/Coingecko/靜態。"
+				"a": "您喺 Morphit 上睇到嘅列表費旁邊嘅 BLURT/USD 價格(BLURT 金額旁邊嘅「~$0.12」副文本)來自一個分層嘅價格源鏈,旨在減少對任何單一外部服務嘅依賴。\n\n**鏈,按優先級順序:**\n\n1. **Klingex.io** — 由 Agorise 營運嘅 Blurt 生態系統 CEX。\n\n2. **Coingecko** — 聚合多個交易所嘅 BLURT 價格。\n\n3. **morphit_native** — 來自平台內交易資料嘅自主主權價格(每個營運商選擇啟用)。\n\n4. **靜態回退** — 營運商設置嘅底價(預設 $0.002)。\n\n**點解係鏈而唔係單一源?** 任何價格 feed 都唔可以無條件信任。鏈意味住 BLURT 定價喺每種情況下都能繼續工作。\n\n**morphit_native 點樣工作**(參見 ADR-0039):\n\n- **分層錨點**:Tier 1 直接 BLURT-vs-USD;Tier 2 BLURT-vs-穩定幣;Tier 3 組合。\n- **跨穩定幣脫鉤檢測**。\n- **Sybil 抵抗**:每個貢獻者必須至少有一次先前已驗證費用嘅交易。\n- **每個交易者貢獻上限**:一個賬戶 = 一票。\n- **訂單年齡寬限期**:10 分鐘。\n- **平滑上限**。\n- **長期漂移監視器**。\n- **跨源分歧檢測器**。\n- **硬編碼外部合理性範圍**。\n\n**「自己驗證」端點**:`GET /v1/price/morphit-native/receipt`。\n\n**重要:morphit_native 並非設計為其他系統嘅 oracle。** 參見 ADR-0039。\n\n**預發佈說明**:喺存在足夠交易量之前,每個實例都會退回到 Klingex/Coingecko/靜態。\n\n**cp128 更新 — 計價單位可由營運商配置。** 雖然上面嘅討論使用 USD 作為示例,但 indexer 顯示嘅單位並非硬編碼為 USD。營運商將 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`(預設 `USD`)設置為任何 3-8 字符大寫代碼 — `EUR`、`GBP`、`JPY`、`BRL`、`CNY`、`INR`、`RUB`、`AED`、`XDR`(IMF 籃子)、`XAU`(黃金盎司,硬通貨對沖),或其市場使用嘅任何其他代碼。掛單費響應攜帶 `denomination_fiat` 字段,告訴前端 `blurt_price_fiat` + `base_fee_fiat` 數字使用嘅單位。"
 			},
 			"where_to_buy_blurt": {
 				"q": "我喺邊度買 BLURT 嚟支付網絡費用？",
@@ -3189,6 +3189,9 @@
 		},
 		"blik": {
 			"description": "波蘭非常流行的流動支付系統。"
+		},
+		"brics_pay": {
+			"description": "連接 BRICS+ 國家國家支付系統(Pix、UPI、UnionPay、PayShap、SPFS、CIPS)嘅跨境支付通道。喺俄羅斯試點中;2026 年期間將擴展到印度、巴西、中國、南非、印尼、沙特阿拉伯。"
 		},
 		"cash_app": {
 			"description": "Block 旗下流行的美國 P2P 和銀行應用程式。"

@@ -72,12 +72,17 @@ export function createPriceSource(config: Config, db?: Database): BlurtPriceSour
 	// monitor surfaces sustained external-vs-native divergence; the
 	// priority-flip env var lets operators opt into preferring
 	// native when disagreeing.
+	//
+	// cp128: denominationFiat now reads from operator config instead
+	// of being hardcoded as 'USD'.  Default remains 'USD' for
+	// existing instances; operators serving non-USD markets can set
+	// MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT.  See ADR-0040.
 	if (config.priceFeedNativeEnabled && db) {
 		upstreams.push({
 			name: 'morphit_native',
 			fetch: createMorphitNativeFetcher({
 				asset: 'BLURT',
-				denominationFiat: 'USD',
+				denominationFiat: config.priceFeedDenominationFiat,
 				stablecoinKeys: config.priceFeedStablecoinKeys,
 				db,
 				minPlausibleUsd: config.priceFeedNativePlausibleMin,

@@ -87,27 +87,147 @@ function getDateFormat(locale: string, options: Intl.DateTimeFormatOptions): Int
 	return fmt;
 }
 
-// ─── USD formatter ─────────────────────────────────────────────
+// ─── Fiat formatter ────────────────────────────────────────────
 
 /**
- * Format a USD amount with locale-aware decimal separator
- * and thousands grouping.  Two decimal places, the standard
- * cent-precision display.  Returns "$1,234.56" in en, "1.234,56 $"
- * in de, "۱٬۲۳۴٫۵۶ $" in fa, etc.
+ * Tickers Intl.NumberFormat recognizes as ISO 4217 currency codes.
+ * For these, `style: 'currency'` produces a locale-aware formatted
+ * string with the appropriate symbol ($, €, ¥, etc.).  Listed here
+ * to know when to use `currency` style vs. fallback formatting.
  *
- * The leading "~" tilde used by some call sites for
- * "approximate" should be added by the caller; this
- * function just returns the formatted number.
+ * This is NOT an exhaustive list of ISO 4217 — it's the subset that
+ * Morphit's setup wizard offers in its curated list, plus the ones
+ * that historically appeared in user-facing strings.  Intl supports
+ * many more; if an operator configures a non-listed ISO code,
+ * Intl handles it gracefully (the symbol may be the code itself,
+ * e.g. "ARS 1,234.56" if no symbol is known for ARS in the locale).
+ *
+ * Special non-ISO codes:
+ *   - XAU (gold ounces) — listed for our purposes; some Intl
+ *     implementations recognize it, others don't.  Falls through
+ *     to the safe-format path if not recognized.
+ *   - XDR (IMF Special Drawing Rights) — same.
+ *
+ * cp128 design: do NOT hardcode formatting per-ticker here.  Rely
+ * on Intl + the locale's own rules.  Trying to be clever about
+ * which symbol goes where breaks i18n.
  */
-export function formatUsd(amount: number): string {
+const KNOWN_ISO_4217 = new Set([
+	'USD',
+	'EUR',
+	'GBP',
+	'JPY',
+	'CNY',
+	'INR',
+	'BRL',
+	'RUB',
+	'CAD',
+	'AUD',
+	'CHF',
+	'MXN',
+	'KRW',
+	'IRR',
+	'EGP',
+	'ZAR',
+	'AED',
+	'IDR',
+	'XAU',
+	'XAG',
+	'XDR',
+	'BTC',
+	'ETH',
+	'XMR'
+]);
+
+/**
+ * Format a fiat amount with locale-aware decimal separator and
+ * thousands grouping.
+ *
+ * Decimal precision adapts to the ticker:
+ *   - Standard fiat (USD, EUR, GBP, …) → 2 decimals (cent precision)
+ *   - JPY → 0 decimals (no sub-yen)
+ *   - XAU, XAG (precious metals) → up to 8 decimals (fractional
+ *     ounces traded in tiny amounts at $5,000+/oz)
+ *   - XDR (SDR) → 4 decimals
+ *   - Anything else → 2 decimals default
+ *
+ * For ISO-recognized tickers, uses `Intl.NumberFormat`'s currency
+ * style, which produces locale-appropriate symbol placement
+ * ("$1,234.56" in en-US, "1.234,56 $" in de-DE, "1 234,56 $US" in
+ * fr-FR, etc.).  For non-ISO tickers (or when Intl rejects the
+ * code), falls back to "{number} {TICKER}" format.
+ *
+ * cp128: the indexer's listing-fee response carries `denomination_fiat`
+ * alongside the numeric value; UI callers pass both into this
+ * helper so the rendered output matches the operator's chosen
+ * unit.  Default ticker for back-compat = 'USD'.
+ */
+export function formatFiat(amount: number, ticker: string = 'USD'): string {
 	if (!Number.isFinite(amount)) return '—';
-	return getNumberFormat(activeLocale(), {
-		style: 'currency',
-		currency: 'USD',
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 2
+	const upperTicker = ticker.toUpperCase();
+	const fractionDigits = fractionDigitsForTicker(upperTicker);
+
+	// For ISO-recognized tickers, use the currency style for proper
+	// symbol + locale placement.
+	if (KNOWN_ISO_4217.has(upperTicker)) {
+		try {
+			return getNumberFormat(activeLocale(), {
+				style: 'currency',
+				currency: upperTicker,
+				minimumFractionDigits: fractionDigits,
+				maximumFractionDigits: fractionDigits
+			}).format(amount);
+		} catch {
+			// Some Intl implementations reject XAU/XAG/XDR/crypto
+			// codes; fall through.
+		}
+	}
+
+	// Fallback for non-ISO tickers (or rejected-by-Intl ones):
+	// "{number} {TICKER}".  Use decimal style for the number so it
+	// gets locale-appropriate thousands separators.
+	const numFormatted = getNumberFormat(activeLocale(), {
+		style: 'decimal',
+		minimumFractionDigits: fractionDigits,
+		maximumFractionDigits: fractionDigits
 	}).format(amount);
+	return `${numFormatted} ${upperTicker}`;
 }
+
+/**
+ * Per-ticker decimal precision.  Centralized so callers don't have
+ * to think about it.  Returns the recommended `minimumFractionDigits`
+ * and `maximumFractionDigits` for formatFiat.
+ */
+function fractionDigitsForTicker(ticker: string): number {
+	switch (ticker) {
+		case 'JPY':
+			return 0;
+		case 'XAU':
+		case 'XAG':
+			return 8;
+		case 'XDR':
+			return 4;
+		case 'BTC':
+		case 'ETH':
+		case 'XMR':
+			return 8;
+		default:
+			return 2;
+	}
+}
+
+// ─── (cp128 cleanup) ───────────────────────────────────────────
+//
+// Prior to cp128 this file exported `formatUsd(amount)`.  All call
+// sites have been migrated to `formatFiat(amount, ticker)` with the
+// ticker provided from the listing-fee response's `denomination_fiat`
+// field.  Pre-launch, no external consumers depend on `formatUsd`,
+// so the compat wrapper was removed to keep the API surface
+// honestly denomination-agnostic.  If you need a USD-specific
+// formatter (e.g. for accounting displays that should always read
+// in USD regardless of the operator's configured denomination),
+// call `formatFiat(amount, 'USD')` directly.
 
 // ─── Percent formatter ─────────────────────────────────────────
 

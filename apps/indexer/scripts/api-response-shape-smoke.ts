@@ -109,45 +109,54 @@ await scenario('listing-fee body: returns base + feature-fee + ttl', () => {
 	assertEqual(body.quote_ttl_seconds, 300, 'quote_ttl_seconds');
 });
 
-await scenario('listing-fee body: omits USD echo when priceSource is null', () => {
+await scenario('listing-fee body: omits fiat echo when priceSource is null', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60 });
 	const body = buildListingFeeBody(cfg, null);
-	assertAbsent(body, 'base_fee_usd');
-	assertAbsent(body, 'blurt_price_usd');
+	assertAbsent(body, 'base_fee_fiat');
+	assertAbsent(body, 'blurt_price_fiat');
+	assertAbsent(body, 'denomination_fiat');
 });
 
-await scenario('listing-fee body: includes USD echo when price is non-stale and positive', () => {
+await scenario('listing-fee body: includes fiat echo when price is non-stale and positive', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: false });
 	const body = buildListingFeeBody(cfg, ps);
-	assertContains(body, 'base_fee_usd');
-	assertContains(body, 'blurt_price_usd');
-	assertEqual(body.base_fee_usd, 0.12, 'base_fee_usd'); // 60 * 0.002
-	assertEqual(body.blurt_price_usd, 0.002, 'blurt_price_usd');
+	assertContains(body, 'base_fee_fiat');
+	assertContains(body, 'blurt_price_fiat');
+	assertContains(body, 'denomination_fiat');
+	assertEqual(body.base_fee_fiat, 0.12, 'base_fee_fiat'); // 60 * 0.002
+	assertEqual(body.blurt_price_fiat, 0.002, 'blurt_price_fiat');
+	// cp128: default config denomination is 'USD'; operators in
+	// non-USD markets configure differently.  The fakeConfig helper
+	// defaults to 'USD' to match.
+	assertEqual(body.denomination_fiat, 'USD', 'denomination_fiat');
 });
 
-await scenario('listing-fee body: omits USD echo when price is stale', () => {
+await scenario('listing-fee body: omits fiat echo when price is stale', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: true });
 	const body = buildListingFeeBody(cfg, ps);
-	assertAbsent(body, 'base_fee_usd');
-	assertAbsent(body, 'blurt_price_usd');
+	assertAbsent(body, 'base_fee_fiat');
+	assertAbsent(body, 'blurt_price_fiat');
+	assertAbsent(body, 'denomination_fiat');
 });
 
-await scenario('listing-fee body: omits USD echo when price is zero', () => {
+await scenario('listing-fee body: omits fiat echo when price is zero', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0, stale: false });
 	const body = buildListingFeeBody(cfg, ps);
-	assertAbsent(body, 'base_fee_usd');
-	assertAbsent(body, 'blurt_price_usd');
+	assertAbsent(body, 'base_fee_fiat');
+	assertAbsent(body, 'blurt_price_fiat');
+	assertAbsent(body, 'denomination_fiat');
 });
 
-await scenario('listing-fee body: omits USD echo when price is negative', () => {
+await scenario('listing-fee body: omits fiat echo when price is negative', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: -1, stale: false });
 	const body = buildListingFeeBody(cfg, ps);
-	assertAbsent(body, 'base_fee_usd');
-	assertAbsent(body, 'blurt_price_usd');
+	assertAbsent(body, 'base_fee_fiat');
+	assertAbsent(body, 'blurt_price_fiat');
+	assertAbsent(body, 'denomination_fiat');
 });
 
 await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
@@ -159,12 +168,38 @@ await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
 	assertEqual(body.base_fee_blurt, 80, 'base_fee_blurt');
 });
 
-await scenario('listing-fee body: USD echo math respects operator-tunable feeBaseBlurt', () => {
+await scenario('listing-fee body: fiat echo math respects operator-tunable feeBaseBlurt', () => {
 	// 80 BLURT × $0.002 = $0.16.
 	const cfg = fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: false });
 	const body = buildListingFeeBody(cfg, ps);
-	assertEqual(body.base_fee_usd, 0.16, 'base_fee_usd');
+	assertEqual(body.base_fee_fiat, 0.16, 'base_fee_fiat');
+});
+
+await scenario('listing-fee body (cp128): EUR-denominated operator returns EUR in denomination_fiat', () => {
+	const cfg = fakeConfig({
+		feeBaseBlurt: 60,
+		priceFeedEnabled: true,
+		priceFeedDenominationFiat: 'EUR'
+	});
+	const ps = makePriceSource({ price: 0.0018, stale: false });
+	const body = buildListingFeeBody(cfg, ps);
+	assertEqual(body.denomination_fiat, 'EUR', 'denomination_fiat');
+	assertEqual(body.blurt_price_fiat, 0.0018, 'blurt_price_fiat');
+	assertEqual(body.base_fee_fiat, 0.108, 'base_fee_fiat'); // 60 * 0.0018
+});
+
+await scenario('listing-fee body (cp128): XAU-denominated operator returns XAU in denomination_fiat', () => {
+	// Gold-denominated instance — pricing in fractional ounces.
+	const cfg = fakeConfig({
+		feeBaseBlurt: 60,
+		priceFeedEnabled: true,
+		priceFeedDenominationFiat: 'XAU'
+	});
+	const ps = makePriceSource({ price: 0.00000037, stale: false }); // ~$0.002 at $5500/oz
+	const body = buildListingFeeBody(cfg, ps);
+	assertEqual(body.denomination_fiat, 'XAU', 'denomination_fiat');
+	assertEqual(body.blurt_price_fiat, 0.00000037, 'blurt_price_fiat');
 });
 
 // ─── /v1/stranger-fee-quote body ────────────────────────────────

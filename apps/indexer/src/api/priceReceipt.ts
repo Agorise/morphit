@@ -86,9 +86,13 @@ const querySchema = z.object({
 });
 
 /** Defaults used when query params are omitted.  cp127 wires only
- *  BLURT/USD; future iterations can route on the query params. */
+ *  BLURT/USD; future iterations can route on the query params.
+ *  cp128: denomination_fiat default now reads from config instead
+ *  of being hardcoded 'USD' — operators can serve receipts in their
+ *  configured denomination.  Query-param override still allowed
+ *  for inspection of "what would this receipt look like for fiat
+ *  X if I switched?" use cases. */
 const DEFAULT_ASSET = 'BLURT';
-const DEFAULT_DENOMINATION_FIAT = 'USD';
 
 export function priceReceiptRoute(db: Database, config: Config): Hono {
 	const app = new Hono();
@@ -108,7 +112,7 @@ export function priceReceiptRoute(db: Database, config: Config): Hono {
 		}
 		const asset = (parsed.data.asset ?? DEFAULT_ASSET).toUpperCase();
 		const denominationFiat = (
-			parsed.data.denomination_fiat ?? DEFAULT_DENOMINATION_FIAT
+			parsed.data.denomination_fiat ?? config.priceFeedDenominationFiat
 		).toUpperCase();
 
 		// Re-run derivation for the receipt.  The fetcher is cheap;
