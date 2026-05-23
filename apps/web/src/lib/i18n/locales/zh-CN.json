@@ -3974,7 +3974,11 @@
 				"output_heading": "将此行添加到 morphit.env 文件",
 				"output_subtitle": "然后重启索引器服务: `docker compose restart indexer`",
 				"locked_label": "必需",
-				"locked_title": "联邦依赖此资产 — 运营者无法禁用它"
+				"locked_title": "联邦依赖此资产 — 运营者无法禁用它",
+				"current_state_label": "当前配置:",
+				"current_state_loading": "加载中…",
+				"current_state_all_enabled": "所有可交易资产已启用",
+				"current_state_count": "({count} 个已禁用)"
 			},
 			"payment": {
 				"heading": "添加自定义支付方式",
@@ -3998,7 +4002,9 @@
 				"output_heading": "在你的服务器上运行此命令",
 				"output_subtitle": "在你安装 Morphit 的目录中,将此粘贴到终端。系统会提示你输入 posting key 文件路径。",
 				"output_pending": "填写上方的键、名称、说明和类别字段以生成命令。",
-				"remove_key_error_canonical": "规范方法无法通过每实例机制移除"
+				"remove_key_error_canonical": "规范方法无法通过每实例机制移除",
+				"current_state_label": "此实例当前已配置:",
+				"current_state_none": "尚未添加实例特定方式"
 			},
 			"disclosure": {
 				"heading": "此向导做什么和不做什么",

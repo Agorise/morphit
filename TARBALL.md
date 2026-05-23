@@ -4,19 +4,19 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp117 — 2026-05-22 (operator-doc audit catch-up + SVGO tested-and-rejected + setup-wizard V2 remove UI + brag-list entry #223 + 82-entry renumber for sequential discipline).
+**Last touched:** cp118 — 2026-05-22 (A7 privacy_asset indexable flip + setup-wizard V3 #1 live config preview + new privacy-asset-sitemap-parity smoke + translation re-audit clean).
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · **305 brag entries** (cp117 +1: #223 Browser setup-wizard) · locale parity across 10 locales (**2,901 leaves × 10 = 29,010** after cp117 i18n diff: +9 keys per locale for the remove-UI section — 1 `payment.remove_key_error_canonical` + 8 `payment_remove.*` — × 10 locales)
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp117 have been docs/SEO/UX/CI hardening + 6 new structural defenses + operator setup-wizard V1+V2, no new audits
-- **43** structural defenses (cp117: no new files; og-image-freshness #40 still at 7 scenarios from cp116); **4,971/0** smoke battery; LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · 305 brag entries · locale parity across 10 locales (**2,907 leaves × 10 = 29,070** after cp118 i18n diff: +6 keys per locale for the live-preview rows)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp118 have been docs/SEO/UX/CI hardening + 7 new structural defenses + operator setup-wizard V1+V2+V3#1, no new audits
+- **44** structural defenses (cp118: +1 privacy-asset-sitemap-parity with 4 scenarios; og-image-freshness still at 7 from cp116); **5,295/0** smoke battery (huge jump from cp117's 4,971: seo-url-consistency expanded from 386→686 scenarios due to dynamic-segment expansion, plus +4 from the new smoke); LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108–cp117 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp117 grand total: ~567 strings across 9 non-EN locales awaiting native review)
+1. Native-speaker polish of all auto-translated non-EN content from cp108–cp118 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp118 grand total: ~621 strings across 9 non-EN locales awaiting native review; **cp118 mechanical spot-audit passed with 0 HIGH findings**)
 2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
 **Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
@@ -45,6 +45,38 @@
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
 **Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115-cp7 is a clear meaningful milestone (3 new user-facing surfaces complete, old grid retired, 6 new structural-defense scenarios shipped, FAQ deep-linking + hover/click UX, all i18n covered).
+
+---
+
+## cp118 — A7 privacy_asset indexable flip + setup-wizard V3 #1 live config preview + new defense smoke + translation re-audit (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp118-FULL-STATE.tar.gz` built this turn (Ken's queue: A7 flip + V3 #1 only + audit + recap).
+
+**State:** 16 tradable assets · 35 ADRs · 305 brag entries · locale parity **2,907 × 10 = 29,070** (cp118 net +60: 6 new live-preview i18n keys × 10 locales) · **5,295/0** local smoke battery (massive jump from cp117's 4,971 due to seo-url-consistency dynamic-segment expansion: 386 scenarios → 686 scenarios) · 7/7 TS-clean · **44 defenses** (+1 cp118: privacy-asset-sitemap-parity with 4 scenarios) · 1,381 vitest passing.
+
+**What shipped:**
+
+1. **A7: `privacy_asset` flipped to `indexable: true`** — was set to `false` at cp112 to avoid coupling SEO registry to asset registry. Cost: 16 well-written long-form per-asset privacy pages × 10 locales = 160 indexable URLs Google couldn't find. cp118 pays the coupling cost: `scripts/build-sitemap.mjs` gained `readAssetTickers()` + `expandRoutes()` that handle the `[asset]` dynamic segment by reading `ASSET_TICKERS` from the asset registry and expanding to one URL per ticker. Sitemap went from 180 → 340 URLs. Same expansion mirror added to `scripts/seo-url-consistency-smoke.ts`. Vitest test "no dynamic route pattern is marked indexable" updated to "every indexable dynamic route is expandable by the sitemap builder" with an `EXPANDABLE_SEGMENTS = ['[asset]']` allow-list — new contract: if you mark a dynamic route indexable, you MUST add an expansion case to the builder + the smoke + this test allow-list.
+
+2. **New defense #44: `privacy-asset-sitemap-parity-smoke`** — 4 scenarios: P-1 sitemap exists, P-2 every ASSET_TICKER × every locale present, P-3 no `/privacy/<ticker>` for unknown tickers (catches stale-ticker drift in opposite direction), P-4 exact count = `ASSET_TICKERS.length × LOCALES.length`. Self-tested via 1-char sed mutation of a sitemap entry — P-2 + P-3 both fired on the corruption. Registered in `scripts/run-smokes.sh`.
+
+3. **Setup-wizard V3 #1: live config preview** — operators visiting `/admin/setup-wizard` now see their CURRENT state. Implementation simpler than expected: the existing `/v1/instance` API already exposed `disabled_assets`, and the existing `getInstancePaymentMethods` endpoint already returned the instance additions list. Zero new endpoints needed — pure frontend wiring. The setup-wizard `onMount` subscribes to the `instance` Svelte store + the `instanceAdditions` store, hydrates `disabledTickers` from `state.disabled_assets` on first non-default emission, then stops hydrating so background refetches don't blow away operator's in-progress edits. Two new "Currently configured" preview rows above the asset checkboxes and above the payment-method form, both with `aria-live="polite"`.
+
+4. **Ken vetoed setup-wizard V3 #2 (reordering) and V3 #3 (in-app auth)** — reordering is polish without pain-point evidence; in-app auth duplicates what reverse-proxy auth already gives in `docs/OPERATIONS.md` §14 with smaller attack surface.
+
+5. **6 new i18n keys × 10 locales = 60 strings** (auto-translated, flagged in translation-quality block).
+
+6. **Translation re-audit of cp108-cp117 strings — clean.** Mechanical spot-check of 101 auto-translated keys across 9 non-EN locales using a script checking placeholder mismatches + length-ratio outliers + English-residue in non-Latin scripts. Results: **0 HIGH** (no placeholder breaks anywhere), 13 MEDIUM all false-positives (Chinese density), 4 LOW all false-positives (`docker compose restart indexer` literal shell command). Native-speaker review still recommended pre-launch.
+
+**Memory facts (re-confirmed for the new session):**
+- `@agorise:matrix.org` = private DM MXID for security disclosure
+- `#agorise:matrix.org` = public Matrix room alias
+- Treasury `@morphit-fees`; posting `@morphit`
+- BLURT fees 90/10 (operator/treasury); BTC/XMR fees 100/0 (treasury/operators)
+- Forgejo, never Gitea; repo at `git.agorise.net/agorise/morphit`
+- BTC/XMR/BLURT non-disableable per memory rule (federation-load-bearing); indexer doesn't enforce in code, only in setup-wizard UI
+
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp118 is a meaningful milestone: SEO surface gained 160 newly-indexable URLs + setup-wizard now shows live state + new defense smoke + translation audit passed.
 
 ---
 

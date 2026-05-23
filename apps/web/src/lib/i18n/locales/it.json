@@ -3974,7 +3974,11 @@
 				"output_heading": "Aggiungi questa riga al tuo file morphit.env",
 				"output_subtitle": "Poi riavvia il servizio dell'indexer: `docker compose restart indexer`",
 				"locked_label": "Richiesto",
-				"locked_title": "La federazione dipende da questo asset — gli operatori non possono disattivarlo"
+				"locked_title": "La federazione dipende da questo asset — gli operatori non possono disattivarlo",
+				"current_state_label": "Attualmente configurato:",
+				"current_state_loading": "caricamento…",
+				"current_state_all_enabled": "Tutti gli asset negoziabili attivi",
+				"current_state_count": "({count} disattivati)"
 			},
 			"payment": {
 				"heading": "Aggiungi un metodo di pagamento personalizzato",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Esegui questo comando sul tuo server",
 				"output_subtitle": "Dalla directory in cui hai installato Morphit, incolla questo nel terminale. Ti verrà chiesto il percorso del file della chiave di posting.",
 				"output_pending": "Compila i campi chiave, nome, descrizione e categoria sopra per generare il comando.",
-				"remove_key_error_canonical": "I metodi canonici non possono essere rimossi tramite il meccanismo per istanza"
+				"remove_key_error_canonical": "I metodi canonici non possono essere rimossi tramite il meccanismo per istanza",
+				"current_state_label": "Attualmente configurato su questa istanza:",
+				"current_state_none": "Nessun metodo specifico per questa istanza"
 			},
 			"disclosure": {
 				"heading": "Cosa fa e non fa questa procedura guidata",

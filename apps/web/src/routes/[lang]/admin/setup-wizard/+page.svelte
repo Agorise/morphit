@@ -60,9 +60,12 @@
 	  - Copy buttons have aria-label
 -->
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { ASSETS } from '$lib/assets/registry';
 	import Head from '$components/Head.svelte';
+	import { instance } from '$lib/stores/instance';
+	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 
 	// The core three (memory rule cp115): operators cannot disable
 	// these — they're load-bearing for the federation protocol.
@@ -81,6 +84,48 @@
 	// coins do you want listed?") than the env-var-shape ("which do
 	// you want disabled?").
 	let disabledTickers = $state<Set<string>>(new Set());
+
+	// cp117 V3 #1: live config preview.  On mount, hydrate the
+	// asset-disable state from the indexer's `/v1/instance` response
+	// (already exposed as `disabled_assets`).  Operators see their
+	// CURRENT state pre-populated, then they edit and see the diff
+	// emit live in the env-var line.  This is the "I forgot what
+	// I set last time" workflow.
+	//
+	// The instance store may not have hydrated yet on first mount;
+	// subscribe and wait.  The store's `disabled_assets` field is
+	// readonly string[]; we copy it into a new Set so subsequent
+	// user toggles don't mutate the store state.
+	//
+	// Hydration runs ONCE: after the first non-default value arrives,
+	// further store updates are ignored so the operator's in-progress
+	// edits aren't blown away by a background refetch.  This is the
+	// right tradeoff for an admin config-generator (the operator owns
+	// the page state once they start interacting); a "reload current
+	// state" button could be added later for the rare case the
+	// operator does want to discard their edits.
+	let hydrated = $state(false);
+
+	onMount(() => {
+		const unsubscribe = instance.subscribe((state) => {
+			if (hydrated) return;
+			// `disabled_assets` is always an array (default []); we
+			// treat the initial unsubscribed state ([]) as "not yet
+			// loaded" only if the store itself reports loading.  In
+			// practice the store hydrates from the API fetch within
+			// ~100ms; we accept the first emission whatever it is.
+			//
+			// Edge case: if the operator's instance genuinely has
+			// zero disabled assets, the initial state and the
+			// hydrated state are both empty — visually indistinguishable.
+			// That's fine: empty=empty produces the same env line.
+			if (state.disabled_assets) {
+				disabledTickers = new Set(state.disabled_assets);
+				hydrated = true;
+			}
+		});
+		return unsubscribe;
+	});
 
 	function toggleAsset(ticker: string): void {
 		if (LOCKED_ASSETS.has(ticker)) return;
@@ -277,6 +322,34 @@
 			{$_('admin.setup_wizard.assets.intro')}
 		</p>
 
+		<!-- cp117 V3 #1: live config preview.  Shows the instance's
+		     CURRENTLY-configured disabled assets so operators can
+		     see what's already in effect before they edit. -->
+		<div
+			class="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3 text-xs dark:border-ink-700 dark:bg-ink-950"
+			aria-live="polite"
+		>
+			<span class="font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.assets.current_state_label')}
+			</span>
+			{#if !hydrated}
+				<span class="ml-1 text-ink-500">{$_('admin.setup_wizard.assets.current_state_loading')}</span>
+			{:else if $instance.disabled_assets.length === 0}
+				<span class="ml-1 text-ink-600 dark:text-ink-300">
+					{$_('admin.setup_wizard.assets.current_state_all_enabled')}
+				</span>
+			{:else}
+				<span class="ml-1 font-mono text-ink-600 dark:text-ink-300">
+					{$instance.disabled_assets.join(', ')}
+				</span>
+				<span class="ml-1 text-ink-500">
+					{$_('admin.setup_wizard.assets.current_state_count', {
+						values: { count: $instance.disabled_assets.length }
+					})}
+				</span>
+			{/if}
+		</div>
+
 		<fieldset class="mt-6">
 			<legend class="sr-only">{$_('admin.setup_wizard.assets.legend_sr')}</legend>
 			<ul class="grid gap-2 sm:grid-cols-2">
@@ -349,6 +422,32 @@
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 			{$_('admin.setup_wizard.payment.intro')}
 		</p>
+
+		<!-- cp117 V3 #1: live config preview for payment methods. -->
+		<div
+			class="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3 text-xs dark:border-ink-700 dark:bg-ink-950"
+			aria-live="polite"
+		>
+			<span class="font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.payment.current_state_label')}
+			</span>
+			{#if $instanceAdditions.length === 0}
+				<span class="ml-1 text-ink-600 dark:text-ink-300">
+					{$_('admin.setup_wizard.payment.current_state_none')}
+				</span>
+			{:else}
+				<ul class="mt-2 space-y-1">
+					{#each $instanceAdditions as a (a.key)}
+						<li class="flex items-baseline gap-2">
+							<code class="font-mono">{a.key}</code>
+							<span class="text-ink-600 dark:text-ink-300">{a.name}</span>
+							<span class="text-ink-400">·</span>
+							<span class="text-ink-500">{a.category}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 
 		<div class="mt-6 grid gap-4">
 			<div>

@@ -3974,7 +3974,11 @@
 				"output_heading": "Dodaj tę linię do pliku morphit.env",
 				"output_subtitle": "Następnie zrestartuj usługę indeksera: `docker compose restart indexer`",
 				"locked_label": "Wymagane",
-				"locked_title": "Federacja zależy od tego aktywa — operatorzy nie mogą go wyłączyć"
+				"locked_title": "Federacja zależy od tego aktywa — operatorzy nie mogą go wyłączyć",
+				"current_state_label": "Obecnie skonfigurowane:",
+				"current_state_loading": "ładowanie…",
+				"current_state_all_enabled": "Wszystkie aktywa handlowe włączone",
+				"current_state_count": "({count} wyłączonych)"
 			},
 			"payment": {
 				"heading": "Dodaj niestandardową metodę płatności",
@@ -3998,7 +4002,9 @@
 				"output_heading": "Uruchom to polecenie na serwerze",
 				"output_subtitle": "Z katalogu, w którym zainstalowałeś Morphit, wklej to w terminalu. Zostaniesz poproszony o ścieżkę do pliku klucza wpisu.",
 				"output_pending": "Wypełnij powyższe pola klucz, nazwa, opis i kategoria, aby wygenerować polecenie.",
-				"remove_key_error_canonical": "Metody kanoniczne nie mogą być usuwane mechanizmem instancji"
+				"remove_key_error_canonical": "Metody kanoniczne nie mogą być usuwane mechanizmem instancji",
+				"current_state_label": "Obecnie skonfigurowane na tej instancji:",
+				"current_state_none": "Brak metod specyficznych dla instancji"
 			},
 			"disclosure": {
 				"heading": "Co ten kreator robi, a czego nie robi",

@@ -221,9 +221,18 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		priority: 0.2,
 		changefreq: 'yearly'
 	},
-	// cp112: per-asset privacy guide page (`/privacy/{ticker}`).  Pages
-	// exist for every tradable ticker; not indexable in the sitemap to
-	// avoid coupling the SEO registry to the asset registry, but they
+	// cp117 A7: per-asset privacy guide page (`/privacy/{ticker}`).
+	// Indexable: true (was: false, cp112).  Flipped at cp117 — these
+	// are substantial long-form per-asset privacy explainers that
+	// directly answer high-intent search queries ("is XMR private",
+	// "USDT traceability", etc.).  Keeping them out of the sitemap
+	// was sidestepping the asset-registry coupling but cost visibility
+	// to ~160 indexable URLs (16 tickers × 10 locales).
+	//
+	// The build-sitemap script expands the `[asset]` dynamic segment
+	// to one entry per tradable ticker from packages/asset-registry,
+	// and a new privacy-asset-sitemap-parity smoke (cp117) catches
+	// drift between the asset registry and the sitemap.  The pages
 	// MUST emit a full <Head /> (canonical, hreflang, OG, BreadcrumbList
 	// JSON-LD) for share previews and per-asset rich-result eligibility.
 	// The seo.privacy_asset.title key uses {asset} interpolation; the
@@ -231,7 +240,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	{
 		path: '/privacy/[asset]',
 		key: 'privacy_asset',
-		indexable: false,
+		indexable: true,
 		priority: 0.5,
 		changefreq: 'monthly'
 	}

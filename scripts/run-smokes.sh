@@ -229,6 +229,7 @@ SMOKES=(
 	"apps/web:logo-bling-invariants-smoke"
 	"apps/web:coin-carousel-invariants-smoke"
 	"apps/web:svelte-component-import-coverage-smoke"
+	"apps/web:privacy-asset-sitemap-parity-smoke"
 )
 
 total=0
