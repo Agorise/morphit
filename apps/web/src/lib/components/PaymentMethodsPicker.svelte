@@ -84,6 +84,7 @@
 	let collapsed = $state<Record<PaymentCategory | 'instance', boolean>>({
 		crypto: false,
 		in_person: false,
+		by_mail: false,
 		online: false,
 		instance: false
 	});

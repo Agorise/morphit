@@ -819,6 +819,10 @@
 				"q": "Can I trade goods or services on Morphit, like fruit trees or vintage records?",
 				"a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell BLURT for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "How do I trade cash by mail or ship physical goods through Morphit?",
+				"a": "Cash-by-mail and shipped-goods trades work like any other Morphit trade, with two extra chat tools:\n\n**1. Mailing-address share.** In the chat composer, tap **\"Share mailing address\"**. The form has fields for country, street, city, postal/ZIP code, optional state/province, optional recipient name, optional second line (apt/suite), and an optional note. Your address stays end-to-end encrypted in chat — only you and your trade partner can read it. It is **never** written to the indexer, on-chain, or anywhere federation-readable. The privacy aside in the modal reminds you that sharing is irreversible (once sent, your partner has it even if you clear the message later) and suggests using a P.O. box, mail-drop service, or virtual mailbox if you don't want to share your home address.\n\n**2. Shipment record.** After you mail the cash or the goods, tap **\"Record shipment\"** in the chat composer. Pick a carrier from the dropdown (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, or **Other** with a free-text name + tracking URL), enter the tracking number from your receipt, and optionally add a note (\"Shipped today, ETA Friday\"). Your partner sees a **📦 Shipped via X** pill in chat with a clickable \"Track package\" link. Tracking number is optional — submit without if you used untracked mail — but recommended as proof of shipment.\n\n**Safety tips for any physical shipment** (shown in the modal aside):\n\n- Use a tracked, **insured** service. If the package is lost or stolen, insurance is your only recourse.\n- Use a **plain envelope or box** with no markings suggesting valuables inside.\n- **Return address tradeoff**: omitting your return address preserves anonymity but means undeliverable mail gets destroyed. There's no right answer; pick based on your threat model.\n- Tracking number is optional but strongly recommended.\n\n**If you're mailing CASH** (collapsible expander in the modal):\n\n- **Wrap the cash in aluminum foil inside the envelope.** This defeats people holding envelopes up to bright light to see contents — a well-known soft attack on mailed paper currency.\n- **UPS and FedEx PROHIBIT cash shipments in their terms of service.** If they open the package, they can confiscate it with no recourse. Use a postal service instead (USPS, Royal Mail, Deutsche Post, La Poste, etc.).\n- **International**: don't lie on customs declarations. High-value cash will be seized regardless of how it's declared.\n\n**For sellers receiving tracking numbers — sanity-check spoofing.** A scammy buyer could paste any random tracking number. Before you ship crypto, look up the tracking number on the carrier's site (📋 Copy the number from the pill, then paste into the carrier's tracker via your normal browser or Tor) and **verify the destination ZIP code matches your actual ZIP**. If a number resolves to a package being delivered to someone else's city, the buyer is trying to scam you.\n\n**ELI5 for grandma:**\n\nYou want to buy some Monero (a digital currency) from somebody on Morphit. The seller wants U.S. dollars cash, sent through the mail. Here's what happens:\n\n1. The seller's order says \"Selling 0.05 XMR for $100 USD via Cash by mail.\"\n2. You take the order. A chat opens.\n3. The seller taps \"Share mailing address\" and fills in their P.O. box. You see a 📬 pill with the address. You tap \"Copy address\" to copy it.\n4. You go to the post office. You wrap five $20 bills in tinfoil, put them in a plain envelope addressed to that P.O. box, buy USPS Priority Mail with insurance, and write down the tracking number from your receipt.\n5. Back in Morphit chat, you tap \"Record shipment\", pick USPS, paste the tracking number, and send.\n6. The seller sees a 📦 pill with your tracking number and clicks \"Track package\" to verify on the USPS site that the destination ZIP matches their P.O. box's ZIP.\n7. A few days later, the package arrives. The seller picks it up, opens it, counts the cash, and then sends the 0.05 XMR to your Monero wallet (via Morphit's existing \"Share address\" + \"Mark as sent\" flow).\n8. You leave each other positive feedback. Done.\n\n**Limitations.** Morphit does not arbitrate disputes. If your cash gets lost in the mail and you didn't use insurance, that's between you and the carrier — Morphit cannot recover it. If the seller takes your cash and never sends the crypto, file a feedback report and the community sees their reputation drop, but Morphit cannot reverse the cash transfer. The same is true for any P2P platform that doesn't custody funds. Insurance + verified addresses + good carrier choice + small first trades to build trust are your real protections."
+			},
 			"order_timeouts": {
 				"q": "How long do orders stay open?",
 				"a": "Orders stay visible for up to 90 days by default (you can change this 1–90 days). You have 15 minutes after posting to replace an order for typos; after that it's locked. Trades themselves happen off-platform — Morphit coordinates the order match, but you and your counterparty agree on the payment timeline directly via the encrypted chat. Most pairs settle within hours; long-running disputes are rare because feedback discipline incentivizes both sides to close out quickly. If your order expires without a match, you can re-list it from /my/orders with one click."
@@ -2621,7 +2625,22 @@
 			"close": "Close"
 		},
 		"order_context_label": "About this order",
-		"boot_failed": "Couldn't load chat. Try refreshing the page."
+		"boot_failed": "Couldn't load chat. Try refreshing the page.",
+		"mailing_address": {
+			"button": "Share mailing address",
+			"button_aria": "Share your mailing address with your trade partner",
+			"pill_heading": "Mailing address shared",
+			"copy_button": "Copy address",
+			"for_order": "For order"
+		},
+		"shipment": {
+			"button": "Record shipment",
+			"button_aria": "Record carrier and tracking number for a shipment",
+			"pill_heading": "Shipped via {carrier}",
+			"copy_button": "Copy tracking",
+			"track_button": "Track package",
+			"for_order": "For order"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Trade goods directly for the asset — describe what you're offering or want in the order's terms field (e.g. \"orange trees,\" \"used bicycle,\" \"home-grown garlic\")."
 		},
-		"cash": {
-			"description": "Physical paper currency exchanged in person."
+		"cash_by_mail": {
+			"description": "Cash sent through the postal system or courier service. Use a tracked, insured carrier; wrap cash in foil inside a plain envelope; consider customs rules for international shipments."
+		},
+		"cash_in_person": {
+			"description": "Physical paper currency exchanged in person — meet your trade partner in a public, well-lit place to hand off cash directly."
 		},
 		"precious_metals": {
 			"description": "Gold or silver coins or bars exchanged in person."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Crypto",
 			"in_person": "In Person",
+			"by_mail": "By mail",
 			"online": "Online",
 			"instance": "Added by this instance"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Category",
 				"category_online": "Online",
 				"category_in_person": "In person",
+				"category_by_mail": "By mail",
 				"category_crypto": "Crypto",
 				"url_label": "Website (optional)",
 				"url_help": "Must start with https://",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Existing orders that reference this method continue to display correctly after removal — the on-chain key persists in those orders' history. Remove just means new orders can't pick it."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Share your mailing address",
+		"intro": "Share a physical address with your trade partner so they can ship goods or mail cash. Stays in this encrypted chat only.",
+		"privacy_heading": "Before you share",
+		"privacy_e2ee": "This address is end-to-end encrypted in chat — only you and your trade partner can read it.",
+		"privacy_irreversible": "Sharing is irreversible: once sent, your partner has your address even if you clear the message later.",
+		"privacy_pobox_tip": "Consider using a P.O. box, mail-drop service, or virtual mailbox instead of your home address.",
+		"privacy_clear_chat": "After the trade completes, consider clearing this conversation history on both ends.",
+		"country_label": "Country",
+		"country_placeholder": "Choose country…",
+		"country_other": "Other (type ISO code)",
+		"country_iso_placeholder": "e.g. NL, BR, MX",
+		"country_help": "Two-letter ISO country code (e.g. US, DE, JP).",
+		"recipient_label": "Recipient name",
+		"recipient_help": "Name on the mailbox or package. Leave blank for anonymous P.O. boxes.",
+		"street_label": "Street address",
+		"street2_label": "Apartment, suite, etc.",
+		"city_label": "City",
+		"state_label": "State / province",
+		"postal_label": "Postal / ZIP code",
+		"note_label": "Note for your trade partner",
+		"note_help": "Delivery instructions, buzzer code, etc.",
+		"optional_marker": "(optional)",
+		"share_button": "Share address",
+		"sending": "Sending…"
+	},
+	"shipment_modal": {
+		"heading": "Record a shipment",
+		"intro": "Share your carrier + tracking number so your trade partner can verify the shipment.",
+		"safety_heading": "Safety tips for any physical shipment",
+		"safety_insurance": "Use a tracked, INSURED service. If the package is lost or stolen, insurance is your only recourse.",
+		"safety_plain_envelope": "Use a plain envelope or box with no markings suggesting valuables inside.",
+		"safety_return_address": "Return address tradeoff: omitting it preserves anonymity but means undeliverable mail gets destroyed.",
+		"safety_tracking_optional": "Tracking number is optional but strongly recommended as proof of shipment.",
+		"cash_tips_toggle": "If you're mailing CASH, read this first",
+		"cash_heading": "Cash-by-mail specific tips",
+		"cash_tinfoil": "Wrap the cash in aluminum foil inside the envelope — defeats people holding envelopes to bright light to see contents.",
+		"cash_ups_fedex_prohibit": "UPS and FedEx PROHIBIT cash shipments in their terms of service. If opened, they can confiscate with no recourse. Use a postal service instead.",
+		"cash_customs": "International: do not lie on customs declarations. High-value cash will be seized regardless.",
+		"carrier_label": "Carrier",
+		"carrier_placeholder": "Choose carrier…",
+		"other_heading": "Other carrier details",
+		"custom_carrier_name_label": "Carrier name",
+		"custom_tracking_url_label": "Tracking page URL",
+		"custom_tracking_url_help": "Full https:// URL where the recipient can look up the tracking number.",
+		"tracking_label": "Tracking number",
+		"tracking_help": "As provided by the carrier. Letters, numbers, spaces, dashes are accepted.",
+		"note_label": "Note",
+		"optional_marker": "(optional)",
+		"share_button": "Share shipment",
+		"sending": "Sending…"
 	}
 }

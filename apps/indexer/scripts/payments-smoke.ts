@@ -72,8 +72,15 @@ scenario('url is null or https://', () => {
 	}
 });
 
-scenario('every category in {crypto, in_person, online}', () => {
-	const valid: ReadonlySet<PaymentCategory> = new Set(['crypto', 'in_person', 'online']);
+scenario('every category in {crypto, in_person, by_mail, online}', () => {
+	// cp120: added 'by_mail' category for asynchronous mail-based
+	// payment methods (currently just `cash_by_mail`).
+	const valid: ReadonlySet<PaymentCategory> = new Set([
+		'crypto',
+		'in_person',
+		'by_mail',
+		'online'
+	]);
 	for (const e of PAYMENT_METHODS) {
 		if (!valid.has(e.category)) throw new Error(`bad category: ${e.key}`);
 	}
@@ -103,11 +110,23 @@ scenario('non-crypto entries have no assetExclusion', () => {
 	}
 });
 
-scenario('PAYMENT_CATEGORIES_ORDERED is alphabetical', () => {
-	const sorted = [...PAYMENT_CATEGORIES_ORDERED].sort();
-	for (let i = 0; i < sorted.length; i++) {
-		if (sorted[i] !== PAYMENT_CATEGORIES_ORDERED[i]) {
-			throw new Error('not alphabetical');
+scenario('PAYMENT_CATEGORIES_ORDERED is in UX-display order', () => {
+	// cp120: order is meaningful (UX), not alphabetical.  The
+	// canonical order is: crypto → in_person → by_mail → online.
+	// This reflects the natural mental hierarchy: same-machine
+	// (crypto) → same-room (in_person) → same-country (by_mail)
+	// → anywhere (online).
+	const expected: readonly PaymentCategory[] = ['crypto', 'in_person', 'by_mail', 'online'];
+	if (PAYMENT_CATEGORIES_ORDERED.length !== expected.length) {
+		throw new Error(
+			`expected ${expected.length} categories, got ${PAYMENT_CATEGORIES_ORDERED.length}`
+		);
+	}
+	for (let i = 0; i < expected.length; i++) {
+		if (PAYMENT_CATEGORIES_ORDERED[i] !== expected[i]) {
+			throw new Error(
+				`mismatch at index ${i}: expected ${expected[i]}, got ${PAYMENT_CATEGORIES_ORDERED[i]}`
+			);
 		}
 	}
 });
@@ -274,12 +293,16 @@ scenario('search: results sorted score desc, name asc on tie', () => {
 
 scenario('resolveLegacy: canonical key passes through', () => {
 	if (resolveLegacy('paypal') !== 'paypal') throw new Error('paypal');
-	if (resolveLegacy('cash') !== 'cash') throw new Error('cash');
+	// cp120: 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
+	if (resolveLegacy('cash_in_person') !== 'cash_in_person') throw new Error('cash_in_person');
+	if (resolveLegacy('cash_by_mail') !== 'cash_by_mail') throw new Error('cash_by_mail');
 });
 
 scenario('resolveLegacy: exact name → canonical key', () => {
 	if (resolveLegacy('PayPal') !== 'paypal') throw new Error('PayPal');
-	if (resolveLegacy('Cash') !== 'cash') throw new Error('Cash');
+	// cp120: 'Cash' (in person) and 'Cash by mail' both resolve.
+	if (resolveLegacy('Cash (in person)') !== 'cash_in_person') throw new Error('Cash (in person)');
+	if (resolveLegacy('Cash by mail') !== 'cash_by_mail') throw new Error('Cash by mail');
 });
 
 scenario('resolveLegacy: case-insensitive name match', () => {
@@ -311,15 +334,15 @@ scenario('resolveLegacy: non-string → empty', () => {
 });
 
 scenario('resolveLegacyMany: deduplicates after canonicalization', () => {
-	const r = resolveLegacyMany(['PayPal', 'paypal', 'Cash']);
+	const r = resolveLegacyMany(['PayPal', 'paypal', 'Cash (in person)']);
 	if (r.length !== 2) throw new Error(`got ${r.length}`);
 	if (!r.includes('paypal')) throw new Error('paypal');
-	if (!r.includes('cash')) throw new Error('cash');
+	if (!r.includes('cash_in_person')) throw new Error('cash_in_person');
 });
 
 scenario('resolveLegacyMany: preserves order of first occurrence', () => {
-	const r = resolveLegacyMany(['Cash', 'PayPal']);
-	if (r[0] !== 'cash') throw new Error('cash first');
+	const r = resolveLegacyMany(['Cash (in person)', 'PayPal']);
+	if (r[0] !== 'cash_in_person') throw new Error('cash_in_person first');
 	if (r[1] !== 'paypal') throw new Error('paypal second');
 });
 

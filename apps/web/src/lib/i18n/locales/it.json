@@ -819,6 +819,10 @@
 				"q": "Posso scambiare beni o servizi su Morphit, come alberi da frutto o dischi in vinile?",
 				"a": "Sì — con una forma specifica. Il modello di ordine è sempre **un asset negoziabile (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH o DOGE) da un lato, e qualcos'altro dall'altro lato**. Il «qualcos'altro» può essere una valuta fiat, un'altra criptovaluta, o tramite il metodo di pagamento `Barter (goods)`, beni/servizi. Per alberi di arancio contro XMR: pubblica `asset=XMR`, `payment_methods=[Barter (goods)]`, descrivi i dettagli nel campo `terms`. Baratti puri (beni contro beni senza crypto) non sono modellabili — un lato deve sempre essere BTC, XMR, BLURT, USDT, USDC, BCH, LTC o DASH. Spiegazione completa nella FAQ inglese."
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "Come scambio denaro contante per posta o spedisco beni fisici tramite Morphit?",
+				"a": "Le operazioni in contanti per posta e merci spedite funzionano come qualsiasi altra operazione Morphit, con due strumenti aggiuntivi nella chat:\n\n**1. Condividere indirizzo postale.** Nel compositore della chat tocca **\"Condividi indirizzo postale\"**. Il modulo ha campi: paese, via, città, CAP, provincia opzionale, nome destinatario opzionale, seconda riga opzionale (interno), e una nota opzionale. Il tuo indirizzo resta cifrato end-to-end nella chat. **Mai** scritto nell'indicizzatore, sulla catena, o in luoghi leggibili dalla federazione.\n\n**2. Registrare una spedizione.** Dopo aver spedito contanti o merci, tocca **\"Registra spedizione\"**. Scegli un corriere (USPS, UPS, FedEx, DHL Express, Royal Mail, La Poste, Deutsche Post, Poste Italiane, Correos, Poczta Polska, Pochta Rossii, China Post EMS, Hongkong Post, Japan Post, Australia Post, Canada Post, India Post, Iran Post, SF Express, Aramex, o **Altro** con nome libero e URL di tracciamento). Il tuo partner vedrà una pillola **📦 Spedito tramite X** con un link cliccabile \"Traccia pacco\".\n\n**Consigli di sicurezza**:\n\n- Usa un servizio tracciato e **assicurato**.\n- Usa una **busta semplice** senza segni che suggeriscano oggetti di valore.\n- **Compromesso indirizzo del mittente**: ometterlo preserva l'anonimato ma la posta non recapitabile viene distrutta.\n- Il numero di tracciamento è opzionale ma raccomandato.\n\n**Se invii DENARO CONTANTE**:\n\n- **Avvolgi il denaro in foglio di alluminio dentro la busta.**\n- **UPS e FedEx VIETANO la spedizione di denaro nei loro termini.**\n- **Internazionale**: non mentire nelle dichiarazioni doganali.\n\n**Per venditori che ricevono numeri di tracciamento — verifica falsificazione.** Prima di inviare crypto, cerca il numero sul sito del corriere e **verifica che il CAP di destinazione corrisponda al tuo CAP reale**.\n\n**Spiegazione semplice per la nonna:** Vuoi comprare Monero. Il venditore vuole dollari USA in contanti per posta. Il venditore condivide il suo indirizzo di casella postale. Vai all'ufficio postale, avvolgi i contanti in alluminio, compri una raccomandata con assicurazione, annoti il numero di tracciamento, lo registri nella chat. Quando arriva il pacco, il venditore invia i Monero.\n\n**Limitazioni.** Morphit non arbitra le dispute."
+			},
 			"order_timeouts": {
 				"q": "Per quanto tempo restano aperti gli ordini?",
 				"a": "Gli annunci restano visibili fino a 90 giorni per impostazione predefinita (regolabili da 1 a 90 giorni). Una volta che qualcuno accetta il tuo annuncio, c'è una finestra predefinita di 5 giorni per completare il pagamento — sufficiente per bonifici lenti, fine settimana e festività. Hai 15 minuti dopo la pubblicazione per correggere un annuncio per errori di battitura; dopo è bloccato. Puoi attivare 'solo orario di ufficio' per mettere in pausa il timer nei weekend. Se il tuo annuncio scade senza corrispondenza, puoi ripubblicarlo da /my/orders con un clic."
@@ -2621,7 +2625,22 @@
 			"close": "Chiudi"
 		},
 		"order_context_label": "Su questo ordine",
-		"boot_failed": "Impossibile caricare la chat. Prova a ricaricare la pagina."
+		"boot_failed": "Impossibile caricare la chat. Prova a ricaricare la pagina.",
+		"mailing_address": {
+			"button": "Condividi indirizzo postale",
+			"button_aria": "Condividi il tuo indirizzo postale con la controparte",
+			"pill_heading": "Indirizzo postale condiviso",
+			"copy_button": "Copia indirizzo",
+			"for_order": "Per l'ordine"
+		},
+		"shipment": {
+			"button": "Registra spedizione",
+			"button_aria": "Registra corriere e numero di tracciamento di una spedizione",
+			"pill_heading": "Spedito tramite {carrier}",
+			"copy_button": "Copia tracciamento",
+			"track_button": "Traccia pacco",
+			"for_order": "Per l'ordine"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "Scambia beni direttamente per l'asset — descrivi cosa offri o vuoi nei termini dell'annuncio (es. \"alberi di arancio\", \"bicicletta usata\", \"aglio fatto in casa\")."
 		},
-		"cash": {
-			"description": "Denaro contante fisico scambiato di persona."
+		"cash_by_mail": {
+			"description": "Contanti inviati tramite il sistema postale o un servizio di corriere. Usa un corriere tracciato e assicurato; avvolgi il contante in carta stagnola dentro una busta semplice; considera le regole doganali per le spedizioni internazionali."
+		},
+		"cash_in_person": {
+			"description": "Denaro contante scambiato di persona — incontra il tuo partner di scambio in un luogo pubblico e ben illuminato per consegnare il contante direttamente."
 		},
 		"precious_metals": {
 			"description": "Monete o lingotti d'oro o argento scambiati di persona."
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "Cripto",
 			"in_person": "Di persona",
+			"by_mail": "Per posta",
 			"online": "Online",
 			"instance": "Aggiunti da questa istanza"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "Categoria",
 				"category_online": "Online",
 				"category_in_person": "Di persona",
+				"category_by_mail": "Per posta",
 				"category_crypto": "Cripto",
 				"url_label": "Sito web (opzionale)",
 				"url_help": "Deve iniziare con https://",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "Gli ordini esistenti che fanno riferimento a questo metodo continuano a mostrarsi correttamente dopo la rimozione — la chiave persiste nella cronologia di quegli ordini. Rimuovere significa solo che i nuovi ordini non possono sceglierla."
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "Condividi il tuo indirizzo postale",
+		"intro": "Condividi un indirizzo fisico con la tua controparte per spedire merci o denaro. Resta solo in questa chat cifrata.",
+		"privacy_heading": "Prima di condividere",
+		"privacy_e2ee": "Questo indirizzo è cifrato end-to-end — solo tu e la tua controparte potete leggerlo.",
+		"privacy_irreversible": "La condivisione è irreversibile: una volta inviato, la controparte ha il tuo indirizzo anche se cancelli il messaggio.",
+		"privacy_pobox_tip": "Considera di usare una casella postale, un servizio di mail-drop o una casella virtuale invece dell'indirizzo di casa.",
+		"privacy_clear_chat": "Dopo la conclusione, considera di cancellare la cronologia di questa conversazione su entrambi i lati.",
+		"country_label": "Paese",
+		"country_placeholder": "Scegli paese…",
+		"country_other": "Altro (digita codice ISO)",
+		"country_iso_placeholder": "es. NL, BR, MX",
+		"country_help": "Codice ISO paese a due lettere (es. US, DE, JP).",
+		"recipient_label": "Nome destinatario",
+		"recipient_help": "Nome sulla cassetta o pacco. Lascia vuoto per caselle postali anonime.",
+		"street_label": "Indirizzo",
+		"street2_label": "Appartamento, interno, ecc.",
+		"city_label": "Città",
+		"state_label": "Provincia / regione",
+		"postal_label": "CAP",
+		"note_label": "Nota per la controparte",
+		"note_help": "Istruzioni di consegna, codice citofono, ecc.",
+		"optional_marker": "(opzionale)",
+		"share_button": "Condividi indirizzo",
+		"sending": "Invio…"
+	},
+	"shipment_modal": {
+		"heading": "Registra una spedizione",
+		"intro": "Condividi corriere + numero di tracciamento perché la controparte possa verificare la spedizione.",
+		"safety_heading": "Consigli di sicurezza per qualsiasi spedizione fisica",
+		"safety_insurance": "Usa un servizio tracciato e ASSICURATO. In caso di smarrimento o furto, l'assicurazione è il tuo unico ricorso.",
+		"safety_plain_envelope": "Usa una busta o scatola semplice senza segni che suggeriscano oggetti di valore.",
+		"safety_return_address": "Compromesso indirizzo del mittente: ometterlo preserva l'anonimato ma la posta non recapitabile viene distrutta.",
+		"safety_tracking_optional": "Il numero di tracciamento è opzionale ma fortemente raccomandato come prova di spedizione.",
+		"cash_tips_toggle": "Se stai spedendo DENARO CONTANTE, leggi prima questo",
+		"cash_heading": "Consigli specifici per denaro per posta",
+		"cash_tinfoil": "Avvolgi il denaro in foglio di alluminio dentro la busta — impedisce di vedere il contenuto in controluce.",
+		"cash_ups_fedex_prohibit": "UPS e FedEx VIETANO la spedizione di denaro nei loro termini. Se aperta, può essere confiscata senza ricorso. Usa un servizio postale.",
+		"cash_customs": "Internazionale: non mentire nelle dichiarazioni doganali. Denaro di alto valore sarà sequestrato comunque.",
+		"carrier_label": "Corriere",
+		"carrier_placeholder": "Scegli corriere…",
+		"other_heading": "Dettagli altro corriere",
+		"custom_carrier_name_label": "Nome corriere",
+		"custom_tracking_url_label": "URL pagina di tracciamento",
+		"custom_tracking_url_help": "URL completo https:// dove il destinatario può cercare il numero di tracciamento.",
+		"tracking_label": "Numero di tracciamento",
+		"tracking_help": "Come fornito dal corriere. Accettati lettere, numeri, spazi e trattini.",
+		"note_label": "Nota",
+		"optional_marker": "(opzionale)",
+		"share_button": "Condividi spedizione",
+		"sending": "Invio…"
 	}
 }

@@ -40,7 +40,11 @@ import type { AssetTicker } from '@morphit/asset-registry';
  *   - url       : optional canonical website (https only).  May be
  *                 null for entries without a single canonical URL
  *                 (e.g. "Cash").
- *   - category  : 'crypto' | 'in_person' | 'online'.
+ *   - category  : 'crypto' | 'in_person' | 'by_mail' | 'online'.
+ *                 'by_mail' (cp120) covers asynchronous mail-based
+ *                 payment methods; currently only `cash_by_mail`.
+ *                 Trades using by_mail methods unlock the in-chat
+ *                 mailing-address-share + shipment-tracking pills.
  *   - assetExclusion : for crypto entries that map to a Morphit
  *                 trading asset, the asset code that should hide
  *                 this method when picking ("buy BTC with BTC"
@@ -51,7 +55,7 @@ import type { AssetTicker } from '@morphit/asset-registry';
  * `payment_method.<key>.description` so it's localizable.
  */
 
-export type PaymentCategory = 'crypto' | 'in_person' | 'online';
+export type PaymentCategory = 'crypto' | 'in_person' | 'by_mail' | 'online';
 
 export interface PaymentMethodEntry {
 	readonly key: string;
@@ -351,8 +355,8 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'in_person'
 	},
 	{
-		key: 'cash',
-		name: 'Cash',
+		key: 'cash_in_person',
+		name: 'Cash (in person)',
 		url: null,
 		category: 'in_person'
 	},
@@ -361,6 +365,18 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		name: 'Precious metals (gold/silver)',
 		url: null,
 		category: 'in_person'
+	},
+
+	// ─── By mail (cp120) ────────────────────────────────────────
+	// Asynchronous mail-based payments.  Trades using these
+	// methods unlock the in-chat mailing-address-share + shipment-
+	// tracking pills.  Currently one entry; future additions like
+	// money orders or postal money orders fit here.
+	{
+		key: 'cash_by_mail',
+		name: 'Cash by mail',
+		url: null,
+		category: 'by_mail'
 	},
 
 	// ─── Online ─────────────────────────────────────────────────
@@ -605,6 +621,7 @@ export function findPaymentMethod(key: string): PaymentMethodEntry | null {
 export const PAYMENT_CATEGORIES_ORDERED: readonly PaymentCategory[] = [
 	'crypto',
 	'in_person',
+	'by_mail',
 	'online'
 ];
 

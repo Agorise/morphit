@@ -29,6 +29,11 @@
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
+	import { CARRIERS, buildTrackingUrl } from '$lib/shipping/carriers';
+
+	// cp121: O(1) carrier lookup for shipment-pill rendering.
+	// Built once at module init (CARRIERS is a frozen const array).
+	const CARRIERS_LOOKUP = new Map(CARRIERS.map((c) => [c.key, c]));
 	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl } from '$lib/explorer/urls';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
@@ -909,6 +914,118 @@
 						<p class="text-xs opacity-60">
 							{$_('chat.address.pill_for_order')}:
 							<code class="ml-1 font-mono">{p.orderPermlink}</code>
+						</p>
+					{/if}
+				</div>
+			{:else if decoded?.kind === 'mailing_address'}
+				<!-- cp121: mailing-address pill.  Renders the full
+				     address (recipient may need it to ship).  Copy
+				     button copies the formatted multi-line address.
+				     PRIVACY: address stays in E2E chat only. -->
+				<div
+					class="rounded-lg border border-morphit-emerald/40 bg-emerald-50/40 p-3 dark:border-morphit-emerald/30 dark:bg-emerald-950/20"
+				>
+					<div class="mb-1 flex items-center gap-2">
+						<span aria-hidden="true">✉️</span>
+						<span class="text-sm font-semibold text-morphit-emerald">
+							{$_('chat.mailing_address.pill_heading')}
+						</span>
+					</div>
+					{#if decoded.payload.recipientName}
+						<p class="font-mono text-sm">{decoded.payload.recipientName}</p>
+					{/if}
+					<p class="font-mono text-sm">{decoded.payload.street}</p>
+					{#if decoded.payload.street2}
+						<p class="font-mono text-sm">{decoded.payload.street2}</p>
+					{/if}
+					<p class="font-mono text-sm">
+						{decoded.payload.city}{decoded.payload.state ? `, ${decoded.payload.state}` : ''}
+						{decoded.payload.postalCode}
+					</p>
+					<p class="font-mono text-sm">{decoded.payload.country}</p>
+					{#if decoded.payload.note}
+						<p class="mt-2 text-xs italic opacity-75">{decoded.payload.note}</p>
+					{/if}
+					<button
+						type="button"
+						class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-morphit-emerald hover:underline"
+						onclick={() => {
+							const p = decoded.kind === 'mailing_address' ? decoded.payload : null;
+							if (!p) return;
+							const lines: string[] = [];
+							if (p.recipientName) lines.push(p.recipientName);
+							lines.push(p.street);
+							if (p.street2) lines.push(p.street2);
+							lines.push(
+								`${p.city}${p.state ? `, ${p.state}` : ''} ${p.postalCode}`
+							);
+							lines.push(p.country);
+							void navigator.clipboard?.writeText(lines.join('\n'));
+						}}
+					>
+						<span aria-hidden="true">📋</span>
+						{$_('chat.mailing_address.copy_button')}
+					</button>
+					{#if decoded.payload.orderPermlink}
+						<p class="mt-2 text-xs opacity-60">
+							{$_('chat.mailing_address.for_order')}:
+							<code class="ml-1 font-mono">{decoded.payload.orderPermlink}</code>
+						</p>
+					{/if}
+				</div>
+			{:else if decoded?.kind === 'shipment'}
+				<!-- cp121: shipment pill.  Carrier + tracking + optional
+				     clickable "Track package" link.  Recipient's click
+				     goes to carrier's tracking page in a new tab
+				     (rel=noopener so referrer is suppressed). -->
+				{@const sh = decoded.payload}
+				{@const carrierEntry = sh.carrier === 'other' ? null : CARRIERS_LOOKUP.get(sh.carrier)}
+				{@const carrierDisplay =
+					carrierEntry?.name ?? sh.customCarrierName ?? sh.carrier}
+				{@const trackingUrl =
+					sh.carrier === 'other'
+						? sh.customTrackingUrl ?? null
+						: carrierEntry?.trackingUrlTemplate
+							? buildTrackingUrl(carrierEntry.trackingUrlTemplate, sh.tracking)
+							: null}
+				<div
+					class="rounded-lg border border-blue-400/40 bg-blue-50/40 p-3 dark:border-blue-400/30 dark:bg-blue-950/20"
+				>
+					<div class="mb-1 flex items-center gap-2">
+						<span aria-hidden="true">📦</span>
+						<span class="text-sm font-semibold text-blue-700 dark:text-blue-300">
+							{$_('chat.shipment.pill_heading', { values: { carrier: carrierDisplay } })}
+						</span>
+					</div>
+					<p class="font-mono text-sm">{sh.tracking}</p>
+					{#if sh.note}
+						<p class="mt-2 text-xs italic opacity-75">{sh.note}</p>
+					{/if}
+					<div class="mt-2 flex flex-wrap items-center gap-3 text-xs">
+						<button
+							type="button"
+							class="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
+							onclick={() => void navigator.clipboard?.writeText(sh.tracking)}
+						>
+							<span aria-hidden="true">📋</span>
+							{$_('chat.shipment.copy_button')}
+						</button>
+						{#if trackingUrl}
+							<a
+								href={trackingUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
+							>
+								<span aria-hidden="true">🔗</span>
+								{$_('chat.shipment.track_button')}
+							</a>
+						{/if}
+					</div>
+					{#if sh.orderPermlink}
+						<p class="mt-2 text-xs opacity-60">
+							{$_('chat.shipment.for_order')}:
+							<code class="ml-1 font-mono">{sh.orderPermlink}</code>
 						</p>
 					{/if}
 				</div>

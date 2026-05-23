@@ -819,6 +819,10 @@
 				"q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
 				"a": "可以——但有特定嘅形式。訂單模型永遠係**一邊係可交易資產（BTC、XMR、BLURT、USDT、USDC、DAI、BCH、LTC、DASH 或 DOGE），另一邊係其他嘢**。「其他嘢」可以係法幣、另一種加密貨幣，或透過 `Barter (goods)` 支付方式——商品/服務。用橙樹換 XMR：發佈 `asset=XMR`、`payment_methods=[Barter (goods)]`，喺 `terms` 欄位描述細節。純易貨（商品換商品，唔涉及加密）無法建模——一邊必須永遠係 BTC、XMR、BLURT、USDT、USDC、BCH、LTC 或 DASH。完整說明見英文 FAQ。"
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "我如何透過 Morphit 用郵件交易現金或運送實物商品?",
+				"a": "現金郵寄同實物運送交易與其他 Morphit 交易一樣,但喺聊天入面有兩個額外嘅工具:\n\n**1. 分享郵寄地址。** 喺聊天編輯器入面,撳 **「分享郵寄地址」**。表格包含欄位:國家、街道、城市、郵政編碼、可選省/區域、可選收件人姓名、可選第二行(單位)同可選備註。您嘅地址喺聊天入面保持端到端加密。**絕對唔會**寫入索引器、鏈上,或聯盟可讀嘅任何地方。\n\n**2. 記錄發貨。** 寄出現金或商品後,撳 **「記錄發貨」**。選擇一個承運商(USPS、UPS、FedEx、DHL Express、Royal Mail、La Poste、Deutsche Post、Poste Italiane、Correos、Poczta Polska、Pochta Rossii、China Post EMS、Hongkong Post、Japan Post、Australia Post、Canada Post、India Post、Iran Post、SF Express、Aramex,或 **其他** 帶自由名稱同追蹤 URL)。您嘅夥伴會睇到一個 **📦 通過 X 發送** 標籤,帶有可點擊嘅「追蹤包裹」連結。\n\n**安全提示**:\n\n- 用有追蹤同**保險**嘅服務。\n- 用**普通信封**,無任何暗示貴重物品嘅標記。\n- **退件地址權衡**:省略保持匿名,但無法投遞嘅郵件會被銷毀。\n- 追蹤號碼係選填,但建議作為發貨憑證。\n\n**如果您郵寄現金**:\n\n- **喺信封入面用錫紙包現金。**\n- **UPS 同 FedEx 喺佢哋嘅服務條款入面禁止寄送現金。**\n- **國際**:唔好喺海關申報入面講大話。\n\n**對於收到追蹤號碼嘅賣家——檢查欺騙。** 喺發送加密貨幣之前,喺承運商網站上搜索該號碼,並**驗證目的地郵編與您嘅實際郵編匹配**。\n\n**畀嫲嫲嘅簡單解釋:** 您想買 Monero。賣家想要美元現金通過郵件寄送。賣家分享佢哋嘅郵政信箱地址。您去郵局,用錫紙包好現金,買帶保險嘅掛號郵件,記下追蹤號碼,喺聊天入面登記。當包裹到達時,賣家發送 Monero。\n\n**限制。** Morphit 唔仲裁糾紛。"
+			},
 			"order_timeouts": {
 				"q": "訂單會開幾耐?",
 				"a": "訂單預設可見最多 90 日(可在 1–90 日之間調整)。一旦有人接受你的訂單,預設有 5 日的視窗完成付款 — 足以應付慢速銀行轉帳、週末及假期。發布後你有 15 分鐘修正錯別字;之後訂單將被鎖定。可切換「僅工作時間」以在週末暫停計時器。如果你的訂單到期未配對,可在 /my/orders 一鍵重新發布。"
@@ -2621,7 +2625,22 @@
 			"close": "關閉"
 		},
 		"order_context_label": "關於呢個訂單",
-		"boot_failed": "無法載入聊天。請重新整理頁面。"
+		"boot_failed": "無法載入聊天。請重新整理頁面。",
+		"mailing_address": {
+			"button": "分享郵寄地址",
+			"button_aria": "同交易夥伴分享您嘅郵寄地址",
+			"pill_heading": "已分享郵寄地址",
+			"copy_button": "複製地址",
+			"for_order": "對應訂單"
+		},
+		"shipment": {
+			"button": "記錄發貨",
+			"button_aria": "記錄發貨嘅承運商同追蹤號碼",
+			"pill_heading": "通過 {carrier} 發送",
+			"copy_button": "複製追蹤號碼",
+			"track_button": "追蹤包裹",
+			"for_order": "對應訂單"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "直接以商品換取資產 — 在訂單條款中描述你提供或想要的(例如「橙樹」「二手單車」「自家種的蒜頭」)。"
 		},
-		"cash": {
-			"description": "親自交換的實體紙幣。"
+		"cash_by_mail": {
+			"description": "通過郵政或速遞服務寄送現金。使用可追蹤、有保險嘅承運商;將現金用錫紙包好放入普通信封;國際寄送要考慮海關規定。"
+		},
+		"cash_in_person": {
+			"description": "面對面交付現金——喺公眾、光線充足嘅地方同交易對手見面,直接交付現金。"
 		},
 		"precious_metals": {
 			"description": "親自交換的金幣、銀幣或金條銀條。"
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "加密貨幣",
 			"in_person": "面對面",
+			"by_mail": "郵寄",
 			"online": "線上",
 			"instance": "由此實例新增"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "類別",
 				"category_online": "線上",
 				"category_in_person": "當面",
+				"category_by_mail": "郵寄",
 				"category_crypto": "加密",
 				"url_label": "網站(選填)",
 				"url_help": "必須以 https:// 開始",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "引用呢個方式嘅現有訂單喺移除之後繼續正常顯示 — 個鍵喺嗰啲訂單嘅歷史記錄入面持續存在。移除淨係意味住新訂單唔可以揀佢。"
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "分享您嘅郵寄地址",
+		"intro": "同交易夥伴分享物理地址,等佢哋寄物品或郵寄現金。只保留喺呢個加密聊天入面。",
+		"privacy_heading": "喺分享之前",
+		"privacy_e2ee": "呢個地址用端到端加密——只有您同交易夥伴可以閱讀。",
+		"privacy_irreversible": "分享不可撤銷:一旦發送,即使您之後清除訊息,對方都已經有您嘅地址。",
+		"privacy_pobox_tip": "考慮用郵政信箱、郵件轉駁服務或虛擬信箱,而唔係屋企地址。",
+		"privacy_clear_chat": "交易完成後,考慮喺雙方都清除呢個對話嘅歷史記錄。",
+		"country_label": "國家",
+		"country_placeholder": "選擇國家…",
+		"country_other": "其他(輸入 ISO 代碼)",
+		"country_iso_placeholder": "例如 NL、BR、MX",
+		"country_help": "兩位 ISO 國家代碼(例如 US、DE、JP)。",
+		"recipient_label": "收件人姓名",
+		"recipient_help": "信箱或包裹上嘅姓名。匿名郵政信箱可以留空。",
+		"street_label": "街道地址",
+		"street2_label": "單位、樓層等",
+		"city_label": "城市",
+		"state_label": "省 / 區域",
+		"postal_label": "郵政編碼",
+		"note_label": "畀交易夥伴嘅備註",
+		"note_help": "送貨說明、對講機密碼等。",
+		"optional_marker": "(選填)",
+		"share_button": "分享地址",
+		"sending": "發送中…"
+	},
+	"shipment_modal": {
+		"heading": "記錄一次發貨",
+		"intro": "分享您嘅承運商 + 追蹤號碼,等交易夥伴可以核實發貨。",
+		"safety_heading": "任何實體發貨嘅安全提示",
+		"safety_insurance": "用有追蹤同有保險嘅服務。如果包裹遺失或者被盜,保險係您唯一嘅追索途徑。",
+		"safety_plain_envelope": "用一般信封或盒子,唔好有任何暗示貴重物品嘅標記。",
+		"safety_return_address": "退件地址權衡:省略保持匿名,但無法投遞嘅郵件會被銷毀。",
+		"safety_tracking_optional": "追蹤號碼係選填,但強烈建議作為發貨憑證。",
+		"cash_tips_toggle": "如果您要郵寄現金,請先睇呢個",
+		"cash_heading": "郵寄現金嘅特別提示",
+		"cash_tinfoil": "喺信封入面用錫紙包現金——防止人對住燈光睇信封內容。",
+		"cash_ups_fedex_prohibit": "UPS 同 FedEx 喺佢哋嘅服務條款入面禁止寄送現金。如果被打開,可以被沒收而無追索權。請改用郵政服務。",
+		"cash_customs": "國際:唔好喺海關申報入面講大話。高價值現金無論如何都會被扣押。",
+		"carrier_label": "承運商",
+		"carrier_placeholder": "選擇承運商…",
+		"other_heading": "其他承運商詳情",
+		"custom_carrier_name_label": "承運商名稱",
+		"custom_tracking_url_label": "追蹤頁面 URL",
+		"custom_tracking_url_help": "完整嘅 https:// URL,收件人可以喺嗰度查詢追蹤號碼。",
+		"tracking_label": "追蹤號碼",
+		"tracking_help": "由承運商提供。接受字母、數字、空格同連字符。",
+		"note_label": "備註",
+		"optional_marker": "(選填)",
+		"share_button": "分享發貨",
+		"sending": "發送中…"
 	}
 }

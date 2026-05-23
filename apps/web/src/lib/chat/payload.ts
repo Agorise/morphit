@@ -1005,9 +1005,176 @@ export type StructuredPayload = AddressPayload | FundsSentPayload;
 export type DecodeResult =
 	| { readonly kind: 'address'; readonly payload: AddressPayload }
 	| { readonly kind: 'funds_sent'; readonly payload: FundsSentPayload }
+	| { readonly kind: 'mailing_address'; readonly payload: MailingAddressPayload }
+	| { readonly kind: 'shipment'; readonly payload: ShipmentPayload }
 	| { readonly kind: 'unknown_version'; readonly version: number }
 	| { readonly kind: 'unknown_kind'; readonly name: string }
 	| { readonly kind: 'plaintext' };
+
+// ─── cp120: Mailing address + Shipment payloads ──────────────
+//
+// These payloads support cash-by-mail trades AND any trade where
+// a physical good is shipped (e.g. Barbie doll for Monero via
+// barter_goods).  The flow is generic — either party can share
+// a mailing address or report a shipment.
+//
+// PRIVACY POSTURE:
+//   - Both payloads carry HIGH-SENSITIVITY user data: physical
+//     mailing addresses (full street address + name) and tracking
+//     numbers (which can be looked up to reveal origin postmark
+//     + delivery info).
+//   - Both stay in E2E-encrypted chat ONLY.  They are NEVER
+//     written to the indexer / NEVER stored in chain ops / NEVER
+//     federation-readable.  The chat envelope opaque to the
+//     server side.
+//   - Recipients should consider whether to delete these from
+//     their chat history after the trade completes; Morphit's
+//     chat clients don't currently auto-expire (deferred follow-up).
+//
+// Field shapes are intentionally permissive — we don't try to
+// validate that an address is "real" (no postal-validation API
+// for 200+ countries) or that a tracking number matches a
+// carrier's exact format (would require maintained per-carrier
+// regex set).  Length bounds prevent DoS-shaped messages.
+
+/**
+ * Mailing-address payload — used by either party to share a
+ * physical mailing address with their trade counterparty for
+ * cash-by-mail or shipped-goods trades.
+ *
+ * Country is a two-letter ISO 3166-1 alpha-2 code (e.g. 'US',
+ * 'DE', 'JP').  Caller is responsible for validating against
+ * the country picker's enum.  We don't enforce the enum here
+ * because it changes (new countries added periodically) — the
+ * pattern accepts any uppercase 2-letter sequence.
+ *
+ * `state` is optional because many countries don't have
+ * meaningful subnational divisions or use them differently
+ * (single-line addresses common in DE/FR/UK).
+ */
+export interface MailingAddressPayload {
+	readonly v: 1;
+	readonly kind: 'morphit_mailing_address';
+	/** ISO 3166-1 alpha-2 country code (e.g. 'US', 'DE', 'CN'). */
+	readonly country: string;
+	/** Street address line 1.  Free text. */
+	readonly street: string;
+	/** Optional street address line 2 (apt, suite, etc). */
+	readonly street2?: string;
+	/** City / town / locality. */
+	readonly city: string;
+	/** Optional state / province / region. */
+	readonly state?: string;
+	/** Postal / ZIP code.  Format varies wildly by country;
+	 *  the recipient's payment service requires whatever format
+	 *  their carrier uses. */
+	readonly postalCode: string;
+	/** Recipient name on the package.  Optional — for
+	 *  privacy-conscious users who use pseudonymous mail-drops
+	 *  or PO boxes without a name on file. */
+	readonly recipientName?: string;
+	/** Optional note (e.g. "Apt 4B — buzz #12", "Leave with
+	 *  doorman", or trade-specific instructions). */
+	readonly note?: string;
+	/** Optional order permlink so the recipient client can
+	 *  associate this address-share with a specific trade. */
+	readonly orderPermlink?: string;
+}
+
+/**
+ * Shipment payload — used by either party to share carrier +
+ * tracking number after they've physically mailed something
+ * (cash or goods).  Recipient's UI renders a "Shipped via X,
+ * tracking ABC" pill with optional "Track package" link.
+ *
+ * `carrier` is one of the canonical keys from
+ * $lib/shipping/carriers.ts (e.g. 'usps', 'ups', 'fedex',
+ * 'china_post_ems') OR the special value 'other' when the
+ * sender used a carrier not in the bundled registry.  When
+ * carrier === 'other', the sender MAY supply
+ * `customCarrierName` (display name) and `customTrackingUrl`
+ * (full URL to the tracking page).
+ *
+ * Length bounds: tracking numbers 5-50 chars covers every
+ * known carrier format with headroom; longer values are
+ * almost certainly garbage / DoS attempt.  customCarrierName
+ * ≤100 chars; customTrackingUrl ≤500 chars (URL with embedded
+ * tracking).
+ */
+export interface ShipmentPayload {
+	readonly v: 1;
+	readonly kind: 'morphit_shipment';
+	/** Canonical carrier key, or 'other'. */
+	readonly carrier: string;
+	/** Tracking number / waybill / consignment number.  Format
+	 *  varies by carrier; we accept 5-50 alphanumeric chars
+	 *  + spaces + dashes. */
+	readonly tracking: string;
+	/** When carrier === 'other', the user-supplied carrier name. */
+	readonly customCarrierName?: string;
+	/** When carrier === 'other', the user-supplied tracking
+	 *  URL.  Must be https://; recipient's UI dereferences
+	 *  via target=_blank rel=noopener. */
+	readonly customTrackingUrl?: string;
+	/** Optional note (e.g. "Shipped today, ETA Friday"). */
+	readonly note?: string;
+	/** Optional order permlink to associate with a specific trade. */
+	readonly orderPermlink?: string;
+}
+
+/** Mailing-address field length bounds (cp120). */
+export const MAILING_ADDRESS_LIMITS = {
+	streetMax: 200,
+	cityMax: 100,
+	stateMax: 100,
+	postalCodeMin: 1,
+	postalCodeMax: 20,
+	recipientNameMax: 100,
+	noteMax: 500
+} as const;
+
+/** Shipment field length bounds (cp120). */
+export const SHIPMENT_LIMITS = {
+	trackingMin: 5,
+	trackingMax: 50,
+	customCarrierNameMax: 100,
+	customTrackingUrlMax: 500,
+	noteMax: 500
+} as const;
+
+/** ISO 3166-1 alpha-2 country code shape: two uppercase letters. */
+export const ISO_COUNTRY_RE = /^[A-Z]{2}$/;
+
+/** Tracking number permissive shape: alphanumeric + spaces + dashes
+ *  + slashes (some carriers use slashes in segment-separated formats).
+ *  Bounded by SHIPMENT_LIMITS.trackingMin/Max. */
+export const TRACKING_NUMBER_RE = /^[A-Za-z0-9 \-/]+$/;
+
+/** Validate a country code (ISO 3166-1 alpha-2 shape). */
+export function isValidCountryCode(s: unknown): s is string {
+	return typeof s === 'string' && ISO_COUNTRY_RE.test(s);
+}
+
+/** Validate a tracking number shape + length. */
+export function isValidTrackingNumber(s: unknown): s is string {
+	if (typeof s !== 'string') return false;
+	if (s.length < SHIPMENT_LIMITS.trackingMin) return false;
+	if (s.length > SHIPMENT_LIMITS.trackingMax) return false;
+	return TRACKING_NUMBER_RE.test(s);
+}
+
+/** Validate that a custom tracking URL is https:// + bounded length. */
+export function isValidCustomTrackingUrl(s: unknown): s is string {
+	if (typeof s !== 'string') return false;
+	if (s.length > SHIPMENT_LIMITS.customTrackingUrlMax) return false;
+	if (!s.startsWith('https://')) return false;
+	try {
+		const u = new URL(s);
+		return u.protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
 
 /** Validate a BTC address shape.  No checksum verify. */
 export function isValidBtcAddress(s: string): boolean {
@@ -1665,6 +1832,153 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 	return JSON.stringify(wire);
 }
 
+// ─── cp120: Mailing address + Shipment encoders ──────────────
+
+/**
+ * Encode a mailing-address payload.  Throws on invalid input —
+ * caller should pre-validate fields and surface errors to the
+ * user before reaching this encoder.
+ *
+ * PRIVACY NOTE: the encoded JSON ends up in chat plaintext
+ * (which IS E2E-encrypted en route).  This function does not
+ * write to the indexer or chain; the chat message is only
+ * accessible to the two trade participants.
+ */
+export function encodeMailingAddressPayload(p: MailingAddressPayload): string {
+	if (p.v !== 1) throw new Error('payload: unsupported version');
+	if (p.kind !== 'morphit_mailing_address') throw new Error('payload: wrong kind');
+	if (!isValidCountryCode(p.country)) {
+		throw new Error('payload: invalid country code (expect ISO 3166-1 alpha-2)');
+	}
+	if (typeof p.street !== 'string' || p.street.length === 0) {
+		throw new Error('payload: street required');
+	}
+	if (p.street.length > MAILING_ADDRESS_LIMITS.streetMax) {
+		throw new Error('payload: street too long');
+	}
+	if (typeof p.city !== 'string' || p.city.length === 0) {
+		throw new Error('payload: city required');
+	}
+	if (p.city.length > MAILING_ADDRESS_LIMITS.cityMax) {
+		throw new Error('payload: city too long');
+	}
+	if (typeof p.postalCode !== 'string') {
+		throw new Error('payload: postal_code required');
+	}
+	if (
+		p.postalCode.length < MAILING_ADDRESS_LIMITS.postalCodeMin ||
+		p.postalCode.length > MAILING_ADDRESS_LIMITS.postalCodeMax
+	) {
+		throw new Error('payload: postal_code length out of bounds');
+	}
+	if (p.street2 !== undefined && p.street2.length > MAILING_ADDRESS_LIMITS.streetMax) {
+		throw new Error('payload: street2 too long');
+	}
+	if (p.state !== undefined && p.state.length > MAILING_ADDRESS_LIMITS.stateMax) {
+		throw new Error('payload: state too long');
+	}
+	if (
+		p.recipientName !== undefined &&
+		p.recipientName.length > MAILING_ADDRESS_LIMITS.recipientNameMax
+	) {
+		throw new Error('payload: recipient_name too long');
+	}
+	if (p.note !== undefined && p.note !== '') {
+		if (p.note.length > MAILING_ADDRESS_LIMITS.noteMax) {
+			throw new Error('payload: note too long');
+		}
+		if (noteHasForbiddenChars(p.note)) {
+			throw new Error('payload: note has forbidden control chars');
+		}
+	}
+	if (
+		p.orderPermlink !== undefined &&
+		p.orderPermlink !== '' &&
+		!ORDER_PERMLINK_RE.test(p.orderPermlink)
+	) {
+		throw new Error('payload: invalid order_permlink');
+	}
+
+	const wire: Record<string, unknown> = {
+		v: 1,
+		kind: 'morphit_mailing_address',
+		country: p.country,
+		street: p.street,
+		city: p.city,
+		postal_code: p.postalCode
+	};
+	if (p.street2 !== undefined && p.street2 !== '') wire.street2 = p.street2;
+	if (p.state !== undefined && p.state !== '') wire.state = p.state;
+	if (p.recipientName !== undefined && p.recipientName !== '')
+		wire.recipient_name = p.recipientName;
+	if (p.note !== undefined && p.note !== '') wire.note = p.note;
+	if (p.orderPermlink !== undefined && p.orderPermlink !== '')
+		wire.order_permlink = p.orderPermlink;
+	return JSON.stringify(wire);
+}
+
+/**
+ * Encode a shipment payload.  Throws on invalid input.  The
+ * `carrier` value must be a canonical carrier key OR the
+ * literal 'other'; the encoder does NOT validate against the
+ * carrier registry to keep this module decoupled (the modal UI
+ * validates the dropdown choice; future carrier additions
+ * don't need to touch this file).
+ */
+export function encodeShipmentPayload(p: ShipmentPayload): string {
+	if (p.v !== 1) throw new Error('payload: unsupported version');
+	if (p.kind !== 'morphit_shipment') throw new Error('payload: wrong kind');
+	if (typeof p.carrier !== 'string' || !/^[a-z0-9_]{2,32}$/.test(p.carrier)) {
+		throw new Error('payload: invalid carrier key');
+	}
+	if (!isValidTrackingNumber(p.tracking)) {
+		throw new Error('payload: invalid tracking number');
+	}
+	if (p.carrier === 'other') {
+		if (
+			p.customCarrierName !== undefined &&
+			p.customCarrierName.length > SHIPMENT_LIMITS.customCarrierNameMax
+		) {
+			throw new Error('payload: custom_carrier_name too long');
+		}
+		if (p.customTrackingUrl !== undefined) {
+			if (!isValidCustomTrackingUrl(p.customTrackingUrl)) {
+				throw new Error('payload: custom_tracking_url must be https:// and well-formed');
+			}
+		}
+	}
+	if (p.note !== undefined && p.note !== '') {
+		if (p.note.length > SHIPMENT_LIMITS.noteMax) {
+			throw new Error('payload: note too long');
+		}
+		if (noteHasForbiddenChars(p.note)) {
+			throw new Error('payload: note has forbidden control chars');
+		}
+	}
+	if (
+		p.orderPermlink !== undefined &&
+		p.orderPermlink !== '' &&
+		!ORDER_PERMLINK_RE.test(p.orderPermlink)
+	) {
+		throw new Error('payload: invalid order_permlink');
+	}
+
+	const wire: Record<string, unknown> = {
+		v: 1,
+		kind: 'morphit_shipment',
+		carrier: p.carrier,
+		tracking: p.tracking
+	};
+	if (p.carrier === 'other' && p.customCarrierName !== undefined && p.customCarrierName !== '')
+		wire.custom_carrier_name = p.customCarrierName;
+	if (p.carrier === 'other' && p.customTrackingUrl !== undefined && p.customTrackingUrl !== '')
+		wire.custom_tracking_url = p.customTrackingUrl;
+	if (p.note !== undefined && p.note !== '') wire.note = p.note;
+	if (p.orderPermlink !== undefined && p.orderPermlink !== '')
+		wire.order_permlink = p.orderPermlink;
+	return JSON.stringify(wire);
+}
+
 /** Decode a plaintext string into a structured payload, an
  *  unknown-version marker, or a plaintext fallback.  Never
  *  throws — caller can rely on the result tag.
@@ -1761,6 +2075,49 @@ export function decodePayload(plaintext: string): DecodeResult {
 		const result = optionalFieldsFundsSent(payload, o);
 		if (result === null) return { kind: 'plaintext' };
 		return { kind: 'funds_sent', payload: result };
+	}
+
+	// cp120: mailing-address decoder.  All required fields must
+	// be present + shape-valid; optional fields are length-bounded.
+	if (o.kind === 'morphit_mailing_address') {
+		if (!isValidCountryCode(o.country)) return { kind: 'plaintext' };
+		if (typeof o.street !== 'string' || o.street.length === 0) return { kind: 'plaintext' };
+		if (o.street.length > MAILING_ADDRESS_LIMITS.streetMax) return { kind: 'plaintext' };
+		if (typeof o.city !== 'string' || o.city.length === 0) return { kind: 'plaintext' };
+		if (o.city.length > MAILING_ADDRESS_LIMITS.cityMax) return { kind: 'plaintext' };
+		if (typeof o.postal_code !== 'string') return { kind: 'plaintext' };
+		if (
+			o.postal_code.length < MAILING_ADDRESS_LIMITS.postalCodeMin ||
+			o.postal_code.length > MAILING_ADDRESS_LIMITS.postalCodeMax
+		)
+			return { kind: 'plaintext' };
+		const payload: MailingAddressPayload = {
+			v: 1,
+			kind: 'morphit_mailing_address',
+			country: o.country,
+			street: o.street,
+			city: o.city,
+			postalCode: o.postal_code
+		};
+		const result = optionalFieldsMailingAddress(payload, o);
+		if (result === null) return { kind: 'plaintext' };
+		return { kind: 'mailing_address', payload: result };
+	}
+
+	// cp120: shipment decoder.
+	if (o.kind === 'morphit_shipment') {
+		if (typeof o.carrier !== 'string' || !/^[a-z0-9_]{2,32}$/.test(o.carrier))
+			return { kind: 'plaintext' };
+		if (!isValidTrackingNumber(o.tracking)) return { kind: 'plaintext' };
+		const payload: ShipmentPayload = {
+			v: 1,
+			kind: 'morphit_shipment',
+			carrier: o.carrier,
+			tracking: o.tracking
+		};
+		const result = optionalFieldsShipment(payload, o);
+		if (result === null) return { kind: 'plaintext' };
+		return { kind: 'shipment', payload: result };
 	}
 
 	// Phase F.5 audit fix (F-2) — known version (v:1) but unknown
@@ -2046,6 +2403,82 @@ function optionalFieldsFundsSent(
 		}
 	}
 	return { ...base, amount, orderPermlink, note, memo, network };
+}
+
+// ─── cp120: optionalFields for new payloads ───────────────────
+
+function optionalFieldsMailingAddress(
+	base: MailingAddressPayload,
+	o: Record<string, unknown>
+): MailingAddressPayload | null {
+	let street2: string | undefined;
+	let state: string | undefined;
+	let recipientName: string | undefined;
+	let note: string | undefined;
+	let orderPermlink: string | undefined;
+	if (Object.hasOwn(o, 'street2')) {
+		if (typeof o.street2 !== 'string') return null;
+		if (o.street2.length > MAILING_ADDRESS_LIMITS.streetMax) return null;
+		street2 = o.street2;
+	}
+	if (Object.hasOwn(o, 'state')) {
+		if (typeof o.state !== 'string') return null;
+		if (o.state.length > MAILING_ADDRESS_LIMITS.stateMax) return null;
+		state = o.state;
+	}
+	if (Object.hasOwn(o, 'recipient_name')) {
+		if (typeof o.recipient_name !== 'string') return null;
+		if (o.recipient_name.length > MAILING_ADDRESS_LIMITS.recipientNameMax) return null;
+		recipientName = o.recipient_name;
+	}
+	if (Object.hasOwn(o, 'note')) {
+		if (typeof o.note !== 'string') return null;
+		if (o.note.length > MAILING_ADDRESS_LIMITS.noteMax) return null;
+		if (noteHasForbiddenChars(o.note)) return null;
+		note = o.note;
+	}
+	if (Object.hasOwn(o, 'order_permlink')) {
+		if (typeof o.order_permlink !== 'string') return null;
+		if (!ORDER_PERMLINK_RE.test(o.order_permlink)) return null;
+		orderPermlink = o.order_permlink;
+	}
+	return { ...base, street2, state, recipientName, note, orderPermlink };
+}
+
+function optionalFieldsShipment(
+	base: ShipmentPayload,
+	o: Record<string, unknown>
+): ShipmentPayload | null {
+	let customCarrierName: string | undefined;
+	let customTrackingUrl: string | undefined;
+	let note: string | undefined;
+	let orderPermlink: string | undefined;
+	if (Object.hasOwn(o, 'custom_carrier_name')) {
+		if (typeof o.custom_carrier_name !== 'string') return null;
+		if (o.custom_carrier_name.length > SHIPMENT_LIMITS.customCarrierNameMax) return null;
+		// custom_* fields only meaningful when carrier === 'other';
+		// we still PARSE them defensively to maintain forward compat
+		// (a future cp could repurpose them for "verified-by" or
+		// alternate-tracker variants).
+		customCarrierName = o.custom_carrier_name;
+	}
+	if (Object.hasOwn(o, 'custom_tracking_url')) {
+		if (typeof o.custom_tracking_url !== 'string') return null;
+		if (!isValidCustomTrackingUrl(o.custom_tracking_url)) return null;
+		customTrackingUrl = o.custom_tracking_url;
+	}
+	if (Object.hasOwn(o, 'note')) {
+		if (typeof o.note !== 'string') return null;
+		if (o.note.length > SHIPMENT_LIMITS.noteMax) return null;
+		if (noteHasForbiddenChars(o.note)) return null;
+		note = o.note;
+	}
+	if (Object.hasOwn(o, 'order_permlink')) {
+		if (typeof o.order_permlink !== 'string') return null;
+		if (!ORDER_PERMLINK_RE.test(o.order_permlink)) return null;
+		orderPermlink = o.order_permlink;
+	}
+	return { ...base, customCarrierName, customTrackingUrl, note, orderPermlink };
 }
 
 /** Build a wallet-recognized payment URI for a payload.  Used

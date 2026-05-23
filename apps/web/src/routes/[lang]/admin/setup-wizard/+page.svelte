@@ -148,7 +148,7 @@
 	// Payment-method form state.
 	let pmKey = $state('');
 	let pmName = $state('');
-	let pmCategory = $state<'online' | 'in_person' | 'crypto'>('online');
+	let pmCategory = $state<'online' | 'in_person' | 'by_mail' | 'crypto'>('online');
 	let pmUrl = $state('');
 	let pmDescription = $state('');
 
@@ -158,10 +158,10 @@
 	// canonical methods.  If a future cp adds Visa+Mastercard
 	// rails this list grows.
 	const RESERVED_KEYS = new Set([
-		'pay_btc', 'pay_blurt', 'pay_xmr', 'barter_goods', 'cash',
-		'precious_metals', 'airwallex', 'alipay', 'amazon_pay', 'apple_pay',
-		'bancontact', 'bitso', 'bizum', 'blik', 'cash_app', 'gcash',
-		'google_pay', 'ideal', 'interac_etransfer', 'klarna', 'mpesa',
+		'pay_btc', 'pay_blurt', 'pay_xmr', 'barter_goods', 'cash_in_person',
+		'cash_by_mail', 'precious_metals', 'airwallex', 'alipay', 'amazon_pay',
+		'apple_pay', 'bancontact', 'bitso', 'bizum', 'blik', 'cash_app',
+		'gcash', 'google_pay', 'ideal', 'interac_etransfer', 'klarna', 'mpesa',
 		'mercado_pago', 'mir', 'mtn_momo', 'oxxo_pay', 'payoneer',
 		'paypal', 'paytm', 'payu', 'pix', 'przelewy24', 'revolut',
 		'shaparak', 'shebapay', 'sofort', 'spei', 'square_cash',
@@ -506,6 +506,7 @@
 				>
 					<option value="online">{$_('admin.setup_wizard.payment.category_online')}</option>
 					<option value="in_person">{$_('admin.setup_wizard.payment.category_in_person')}</option>
+					<option value="by_mail">{$_('admin.setup_wizard.payment.category_by_mail')}</option>
 					<option value="crypto">{$_('admin.setup_wizard.payment.category_crypto')}</option>
 				</select>
 			</div>

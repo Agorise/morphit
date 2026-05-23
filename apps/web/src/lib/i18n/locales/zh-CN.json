@@ -819,6 +819,10 @@
 				"q": "我能在 Morphit 上交易商品或服务吗，比如果树或黑胶唱片？",
 				"a": "可以——但有特定的形式。订单模型始终是**一边是可交易资产（BTC、XMR、BLURT、USDT、USDC、DAI、BCH、LTC、DASH 或 DOGE），另一边是别的东西**。\"别的东西\"可以是法币、另一种加密货币，或通过 `Barter (goods)` 支付方式——商品/服务。用橘子树换 XMR：发布 `asset=XMR`、`payment_methods=[Barter (goods)]`，在 `terms` 字段描述细节。纯易货（商品换商品，不涉及加密）无法建模——一方必须始终是 BTC、XMR、BLURT、USDT、USDC、BCH、LTC 或 DASH。完整说明见英文 FAQ。"
 			},
+			"cash_by_mail_walkthrough": {
+				"q": "我如何通过 Morphit 用邮件交易现金或运送实物商品?",
+				"a": "现金邮寄和实物运送交易与其他 Morphit 交易一样,但在聊天中有两个额外的工具:\n\n**1. 分享邮寄地址。** 在聊天编辑器中,点击 **「分享邮寄地址」**。表格包含字段:国家、街道、城市、邮政编码、可选州/省、可选收件人姓名、可选第二行(公寓)和可选备注。您的地址在聊天中保持端到端加密。**绝不**写入索引器、链上,或联盟可读的任何地方。\n\n**2. 记录发货。** 寄出现金或商品后,点击 **「记录发货」**。选择一个承运商(USPS、UPS、FedEx、DHL Express、Royal Mail、La Poste、Deutsche Post、Poste Italiane、Correos、Poczta Polska、Pochta Rossii、China Post EMS、Hongkong Post、Japan Post、Australia Post、Canada Post、India Post、Iran Post、SF Express、Aramex,或 **其他** 带自由名称和跟踪 URL)。您的伙伴将看到一个 **📦 通过 X 发货** 标签,带有可点击的「跟踪包裹」链接。\n\n**安全提示**:\n\n- 使用有跟踪和**保险**的服务。\n- 使用**普通信封**,无任何暗示贵重物品的标记。\n- **退件地址权衡**:省略以保持匿名,但无法投递的邮件会被销毁。\n- 跟踪号是可选的,但建议作为发货凭证。\n\n**如果您邮寄现金**:\n\n- **在信封内用铝箔包裹现金。**\n- **UPS 和 FedEx 在其服务条款中禁止寄送现金。**\n- **国际**:不要在海关申报中撒谎。\n\n**对于收到跟踪号的卖家——检查欺骗。** 在发送加密货币之前,在承运商网站上搜索该号码,并**验证目的地邮编与您的实际邮编匹配**。\n\n**给奶奶的简单解释:** 您想买 Monero。卖家想要美元现金通过邮件寄送。卖家分享他们的邮政信箱地址。您去邮局,用锡纸包好现金,买带保险的挂号邮件,记下跟踪号,在聊天中登记。当包裹到达时,卖家发送 Monero。\n\n**限制。** Morphit 不仲裁纠纷。"
+			},
 			"order_timeouts": {
 				"q": "订单会挂多久?",
 				"a": "订单默认可见最多 90 天(可在 1–90 天之间调整)。一旦有人接受你的订单,默认有 5 天的窗口完成付款 — 足以应对慢速银行转账、周末和节假日。发布后你有 15 分钟时间修正错别字;之后订单将被锁定。可以切换「仅工作时间」以在周末暂停计时器。如果你的订单到期未匹配,可在 /my/orders 一键重新发布。"
@@ -2621,7 +2625,22 @@
 			"close": "关闭"
 		},
 		"order_context_label": "关于此订单",
-		"boot_failed": "无法加载聊天。请刷新页面。"
+		"boot_failed": "无法加载聊天。请刷新页面。",
+		"mailing_address": {
+			"button": "分享邮寄地址",
+			"button_aria": "与交易伙伴分享您的邮寄地址",
+			"pill_heading": "已分享邮寄地址",
+			"copy_button": "复制地址",
+			"for_order": "对应订单"
+		},
+		"shipment": {
+			"button": "记录发货",
+			"button_aria": "记录发货的承运商和跟踪号",
+			"pill_heading": "通过 {carrier} 发货",
+			"copy_button": "复制跟踪号",
+			"track_button": "跟踪包裹",
+			"for_order": "对应订单"
+		}
 	},
 	"app_stores": {
 		"fdroid": {
@@ -3127,8 +3146,11 @@
 		"barter_goods": {
 			"description": "直接以商品换取资产 — 在订单条款中描述你提供或想要的(例如「橙子树」「二手自行车」「自家种的大蒜」)。"
 		},
-		"cash": {
-			"description": "亲自交换的实体纸币。"
+		"cash_by_mail": {
+			"description": "通过邮政或快递服务寄送现金。使用可追踪、有保险的承运商;将现金用锡纸包裹放入普通信封;国际寄送需考虑海关规定。"
+		},
+		"cash_in_person": {
+			"description": "面对面交付现金——在公共、照明良好的场所与交易对手见面,直接交付现金。"
 		},
 		"precious_metals": {
 			"description": "亲自交换的金币、银币或金条银条。"
@@ -3250,6 +3272,7 @@
 		"category": {
 			"crypto": "加密货币",
 			"in_person": "面对面",
+			"by_mail": "邮寄",
 			"online": "在线",
 			"instance": "由本实例添加"
 		},
@@ -3995,6 +4018,7 @@
 				"category_label": "类别",
 				"category_online": "线上",
 				"category_in_person": "当面",
+				"category_by_mail": "邮寄",
 				"category_crypto": "加密",
 				"url_label": "网站(可选)",
 				"url_help": "必须以 https:// 开头",
@@ -4023,5 +4047,57 @@
 				"orders_safety": "引用此方式的现有订单在移除后继续正常显示 — 键在那些订单的历史记录中持续存在。移除仅意味着新订单不能选择它。"
 			}
 		}
+	},
+	"mailing_address_modal": {
+		"heading": "分享您的邮寄地址",
+		"intro": "与交易伙伴分享物理地址,以便他们寄送物品或邮寄现金。仅保留在此加密聊天中。",
+		"privacy_heading": "在分享之前",
+		"privacy_e2ee": "此地址采用端到端加密——只有您和交易伙伴可以阅读。",
+		"privacy_irreversible": "分享不可撤销:一旦发送,即使您稍后清除消息,对方仍掌握您的地址。",
+		"privacy_pobox_tip": "考虑使用邮政信箱、邮件中转服务或虚拟邮箱,而不是您的家庭地址。",
+		"privacy_clear_chat": "交易完成后,考虑在双方都清除此对话的历史记录。",
+		"country_label": "国家",
+		"country_placeholder": "选择国家…",
+		"country_other": "其他(输入 ISO 代码)",
+		"country_iso_placeholder": "例如 NL、BR、MX",
+		"country_help": "两位 ISO 国家代码(例如 US、DE、JP)。",
+		"recipient_label": "收件人姓名",
+		"recipient_help": "邮箱或包裹上的姓名。匿名邮政信箱请留空。",
+		"street_label": "街道地址",
+		"street2_label": "公寓、楼层等",
+		"city_label": "城市",
+		"state_label": "省 / 地区",
+		"postal_label": "邮政编码",
+		"note_label": "给交易伙伴的备注",
+		"note_help": "送货说明、对讲机代码等。",
+		"optional_marker": "(可选)",
+		"share_button": "分享地址",
+		"sending": "发送中…"
+	},
+	"shipment_modal": {
+		"heading": "记录一次发货",
+		"intro": "分享您的承运商 + 跟踪号,以便交易伙伴可以核实发货。",
+		"safety_heading": "任何物理发货的安全提示",
+		"safety_insurance": "使用带跟踪和保险的服务。如果包裹丢失或被盗,保险是您唯一的追索方式。",
+		"safety_plain_envelope": "使用没有任何暗示贵重物品标记的普通信封或盒子。",
+		"safety_return_address": "退件地址权衡:省略以保持匿名,但无法投递的邮件会被销毁。",
+		"safety_tracking_optional": "跟踪号是可选的,但强烈建议作为发货凭证。",
+		"cash_tips_toggle": "如果您要邮寄现金,请先阅读此处",
+		"cash_heading": "邮寄现金的特别提示",
+		"cash_tinfoil": "在信封内用铝箔包裹现金——防止他人对着光看信封内容。",
+		"cash_ups_fedex_prohibit": "UPS 和 FedEx 在其服务条款中禁止寄送现金。如被打开,可被没收且无追索权。请改用邮政服务。",
+		"cash_customs": "国际:不要在海关申报中撒谎。高价值现金无论如何都会被扣押。",
+		"carrier_label": "承运商",
+		"carrier_placeholder": "选择承运商…",
+		"other_heading": "其他承运商详情",
+		"custom_carrier_name_label": "承运商名称",
+		"custom_tracking_url_label": "跟踪页面 URL",
+		"custom_tracking_url_help": "完整的 https:// URL,收件人可在该处查询跟踪号。",
+		"tracking_label": "跟踪号",
+		"tracking_help": "由承运商提供。接受字母、数字、空格和连字符。",
+		"note_label": "备注",
+		"optional_marker": "(可选)",
+		"share_button": "分享发货",
+		"sending": "发送中…"
 	}
 }
