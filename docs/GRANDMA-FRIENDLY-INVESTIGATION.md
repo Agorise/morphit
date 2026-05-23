@@ -570,3 +570,86 @@ it in the registry means picking it is a normal interaction, not
 an "Other" free-text field. The discovery happens through the
 payment-method picker, naturally, with the locale string explaining
 it.
+
+---
+
+## Update — cp129 (item #1: WAIVER_MIN i18n key polish; item #4: Defense F peer-disagreement detector)
+
+### Item #1 — invisible to grandma
+
+The i18n key rename `waiver_min_usd_required` →
+`waiver_min_required` is a backend identifier change. The actual
+error message grandma sees is unchanged ("The waiver requires a
+minimum order size. Set the amount to at least the floor shown
+above."). No visible effect.
+
+### Item #4 — Defense F is operator-side, fully invisible to grandma
+
+The cross-instance peer-disagreement detector is a monitor that
+runs in the operator's indexer and writes to operator logs. There
+is NO user-facing surface in cp129 itself. Grandma sees nothing
+new. If her operator's indexer gets compromised and Defense F
+fires an alert, the operator investigates; either it gets fixed
+(grandma sees nothing) or the operator pauses pricing (grandma
+might see "(~$0.12)" disappear, falling back to BLURT-only
+display — degrades gracefully).
+
+### T2/T3 backlog from cp129
+
+**T2.1 — `/v1/health` surface for peer-disagreement state.**
+Today the cp129 alert is log-only. Adding a field to
+`/v1/health` like `peer_price_disagreement.active: true` (with
+timestamp + deviation magnitude) would surface the alert to
+users who check the instance's health endpoint — and to power-
+users who decide to switch instances based on it. Risk: grandma
+hits `/v1/health`, sees a scary field, panics. Mitigation:
+keep the field name technical (`peer_price_disagreement_active`
+not `your_operator_might_be_lying`). **Estimate**: low-medium.
+**Priority**: T2 — closes a UX gap. Likely cp130 or cp131.
+
+**T2.2 — Weighted peer median by federation-prober score.**
+Today all peers count equally in the median. A more
+sophisticated design would weight peers by their age in the
+federation, trade volume, or last-probe-status track record.
+Trade-off: complexity for slightly better Sybil resistance. The
+cp129 equal-weight design is simpler and already requires
+majority compromise to manipulate. **Priority**: T3 unless a
+real attack pattern emerges that exploits equal-weighting.
+
+**T2.3 — Tor + I2P + Lokinet peer-query support.** Today the
+peer query uses `fetch()`, which goes over clearnet. A peer
+that's reachable ONLY via Tor isn't queried — they show up in
+the federation directory but Defense F can't sample them. Fix:
+plumb the SOCKS proxy used by the federation prober for alt-
+network peers into peerPriceMonitor.ts's fetcher. **Estimate**:
+medium — touching network code. **Priority**: T2 — actual
+operators in privacy-focused jurisdictions need this. Likely
+cp131+.
+
+### What's deliberately NOT being added
+
+- **No /v1/health alert field for users in cp129.** The
+  operator-side log surface is sufficient for the initial
+  defense; adding a public-facing alert risks user confusion
+  on a defense that's still being tuned. Surface later (T2.1).
+- **No automatic price-source switchover on alert.** If
+  Defense F detects my indexer is wrong, the answer is "alert
+  the operator" not "auto-switch to peer median." Auto-
+  switchover creates a new attack vector (manipulate the
+  switchover to feed bad data). Operators investigate and
+  decide.
+- **No mandatory peer-disagreement check.** Defense F is opt-in
+  via env var. Operators with fewer than 3 peers reachable
+  shouldn't run it; the monitor degrades silently anyway.
+
+### Why this is good for grandma even though she doesn't see it
+
+Defense F is the last in the cp127 8-defense table. With it
+shipped, the morphit_native price-source architecture is
+maximally defensive against the realistic attack classes:
+trader-level manipulation (Defenses A-E + G + H from cp127),
+external-source compromise (Defense C from cp127), and now
+operator/indexer-level compromise (Defense F from cp129). All
+the manipulation surfaces have a defense. Grandma trades against
+a price display backed by 8 specific defenses, none of which
+are visible to her — they just work.

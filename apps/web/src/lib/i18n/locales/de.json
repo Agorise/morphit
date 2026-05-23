@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "Füge mindestens eine Zahlungsmöglichkeit hinzu.",
 			"payment_methods_too_many": "Das sind mehr als 12 Zahlungsmethoden. Wähle deine Favoriten.",
 			"payment_method_too_long": "Halte jede Zahlungsmethode kurz (unter 32 Zeichen).",
-			"waiver_min_usd_required": "Der Erlass erfordert eine Mindestordergröße. Setze den Betrag mindestens auf die oben gezeigte Untergrenze.",
+			"waiver_min_required": "Der Erlass erfordert eine Mindestordergröße. Setze den Betrag mindestens auf die oben gezeigte Untergrenze.",
 			"spread_not_a_number": "Spread muss eine Zahl sein.",
 			"spread_out_of_range": "Spread muss zwischen -50% und +50% liegen.",
 			"fixed_price_required": "Gib einen Festpreis ein.",

@@ -4,33 +4,112 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp128 — 2026-05-23 (operator-configurable denomination fiat: env var + Config + factory + receipt + listingFeeBody field rename + frontend `formatFiat` helper + setup-wizard picker step + indexer-client public TS interface + matrix-bot Zod schema + ADR-0040 + 2 brag entries + FAQ paragraph × 10 locales + GRANDMA note + REVISIT-LIST CP128 LESSONS + API.md update + SECURITY.md update; plus BRICS Pay payment method live across registry + indexer reserved + descriptions × 10 locales).
+**Last touched:** cp129 — 2026-05-23 (item #1: i18n key polish `waiver_min_usd_required` → `waiver_min_required` × 10 locales; item #4: Defense F cross-instance peer disagreement detector — new peerPriceMonitor module + schema v36 `price_peer_observations` table + 2 env vars + ADR-0041 + 28 structural smoke scenarios + brag entry #90 closing the cp127 8-defense table + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 troubleshooting runbook + GRANDMA-FRIENDLY note + 6-lesson CP129 LESSONS).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp128-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp129-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **39 ADRs** (+1 cp128: ADR-0040) · **316 brag entries** (+2 cp128: #89 denomination config in §4, #226 BRICS Pay in §17) · locale parity **2,979 × 10 = 29,790** (+10 vs cp127's 2,978 × 10 = 29,780 — one new key per locale: `payment_method.brics_pay.description`; the FAQ denomination paragraph appends to an existing string, no new keys)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp128 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay
-- **53 structural defenses** (unchanged from cp127; cp128 was config + rename, no new defense modules)
-- **5,419 / 0 / 0 / 0** local smoke battery (triple-pulse-pending stable; +8 net vs cp127's 5,411 from cp128's EUR + XAU + formatFiat coverage scenarios)
+- 16 tradable assets · **40 ADRs** (+1 cp129: ADR-0041) · **317 brag entries** (+1 cp129: #90 in §4 — Defense F closing cp127's 8-defense table) · locale parity **2,979 × 10 = 29,790** (unchanged — cp129 item #1 was a rename, no new/removed keys)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp129 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay + Defense F
+- **54 structural defenses** (+1 cp129: peer-price-monitor with 28 scenarios)
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp128 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp128 grand total: ~1,290+ strings across 9 non-EN locales)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 16+ cps; cp125 deep-deep covered reputation surface; cp128's deep-deep covered the denomination-rename surface
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp129 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp129 grand total: ~1,290+ strings across 9 non-EN locales; cp129 was a rename, no new translations needed)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 17+ cps; cp125 deep-deep covered reputation surface, cp128's deep-deep covered the denomination-rename surface, cp129 was a self-contained backend monitor with no UX surface
 
-**What the most recent nine checkpoints did:**
-- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes
-- **cp120-cp122** — cash-by-mail + physical-shipment tracking feature complete (foundation/UI/docs)
-- **cp123-cp125** — Reputation hardening campaign: H1 time-decay + H2 Signal D + H4 verifiable receipt + H5 buy/sell side distinction + H6 dormancy + ADR-0038 + FAQ × 10 + 4 brag entries
-- **cp126** — OpenMonero coverage correction: 1 new brag entry + FAQ vs_others paragraph × 10 locales
-- **cp127** — Self-sovereign pricing: morphit_native fetcher (tiered anchors) + cross-stablecoin depeg detector + drift monitor + disagreement monitor + price-derivation receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 + 2 brag entries
-- **cp128** — Operator-configurable denomination fiat (env var + factory wiring + receipt + listing-fee API field rename + frontend `formatFiat` helper + wizard picker + indexer-client public type + matrix-bot schema + ADR-0040 + FAQ paragraph × 10 + 2 brag entries + 6-lesson CP128 LESSONS + GRANDMA note) + BRICS Pay payment method (registry + indexer reserved + descriptions × 10 locales)
+**Remaining items from Ken's 6-bullet "do them all" ask (cp129's grandparent context):**
+- ✅ **#1 WAIVER_MIN_BLURT denomination-aware** — shipped in cp129 (item #1)
+- ✅ **#4 Defense F cross-instance peer disagreement** — shipped in cp129 (item #4)
+- ⏳ **#5 Wire morphit_native for BTC/USD + XMR/USD** — cp130
+- ⏳ **#3 Per-asset denomination configurability** — cp130 (bundled with #5; revisit per cp129 LESSONS #6)
+- ⏳ **#6 USD-equivalent orderbook display for 16 assets** — cp131 (big UI work)
+- ⏳ **#2 EUR-pegged stablecoin asset additions** — cp132 (needs design discussion: EURC vs EURT vs EURS)
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp128 is a clear meaningful milestone (substantial new architecture: operator-configurable denomination coordinated across backend + frontend + wizard + indexer-client + matrix-bot + 5 docs; plus BRICS Pay live across registry + indexer + 10 locales).
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp129 is a clear meaningful milestone (Defense F closing the cp127 8-defense table represents a full architectural completion + brings forward a deferred ADR).
 
 ---
+
+## cp129 — Item #1 (WAIVER_MIN i18n polish) + Item #4 (Defense F cross-instance peer disagreement detector) (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp129-FULL-STATE.tar.gz` built this turn.
+
+**State:** 16 tradable assets · **40 ADRs** (+1 cp129: ADR-0041) · **317 brag entries** (+1 cp129: §4 #90 Defense F) · locale parity **2,979 × 10 = 29,790** (unchanged — rename only) · **5,447 / 0** local smoke battery (+28 net vs cp128's 5,419 from peer-price-monitor-smoke; final triple-pulse pending) · 7/7 TS-clean · **54 structural defenses** (+1 cp129: peer-price-monitor).
+
+**Background — Ken's "do all 6 deferred items now" directive:**
+
+Ken asked: "can we do those 6 bullet points now? i hate walking away from stuff undone, and/or growing the revisit list." My honest scope-grouping response:
+
+| # | Item | Decision |
+|---|---|---|
+| 1 | WAIVER_MIN_BLURT denomination-aware | **cp129** — tiny rename |
+| 4 | Defense F cross-instance peer disagreement | **cp129** — self-contained ~3hr work |
+| 5 | Wire morphit_native for BTC/USD + XMR/USD | cp130 |
+| 3 | Per-asset denomination configurability | cp130 bundled w/ #5 (per cp129 LESSONS #6) |
+| 6 | USD-equivalent orderbook display | cp131 — big UI |
+| 2 | EUR-pegged stablecoin asset additions | cp132 — design discussion first |
+
+cp129 ships items #1 + #4.
+
+**Code shipped — Item #1: WAIVER_MIN i18n key polish**
+
+- i18n key rename `post_order.errors.waiver_min_usd_required` → `post_order.errors.waiver_min_required` × 10 locales (locale leaves unchanged at 2,979 — pure rename)
+- `apps/web/src/routes/[lang]/post/+page.svelte` — 2 consumer sites updated; comment explains the rename rationale + notes the on-chain rejection code stays `waiver_requires_min_usd` (protocol constant we shouldn't churn on)
+- `apps/web/scripts/native-translations-snapshot.json` regenerated for the new key (25,922 native pairs)
+
+**Code shipped — Item #4: Defense F cross-instance peer disagreement detector**
+
+- `apps/indexer/src/indexer/price/peerPriceMonitor.ts` (~480 lines including extensive doc-comment) — module with 8 exports: runPeerPriceSampleCycle (one cycle of query + store + compare + maybe alert), startPeerPriceMonitor (recurring scheduler with stop-fn return), fetchPeerReceipt (single-peer HTTP query with graceful failure), median (pure-fn, sort-invariant, outlier-resistant), disagreementExceedsThreshold (pure-fn comparison), shouldFireAlert (pure-fn alert-decision logic, takes explicit `now` for testability), pruneOldObservations (TTL cleanup), _resetPeerPriceMonitorState (test-only state reset)
+
+- `apps/indexer/src/db/schema.sql` schema v36 — `price_peer_observations` table (peer_origin, asset, denomination_fiat, observed_price, observed_at, source_native) + index on (asset, denomination_fiat, observed_at DESC) for fast median-window queries; TTL 7 days
+
+- Config — 2 new env vars (`MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` default false, `MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES` default 30) + Config interface fields + Zod schema + wired to Config object
+
+- `apps/indexer/src/main.ts` — import + boot-time `startPeerPriceMonitor` (gated on config.priceFeedPeerMonitorEnabled AND priceSource !== null, so the monitor has something to compare against) + graceful-shutdown call
+
+- `apps/indexer/scripts/peer-price-monitor-smoke.ts` — 28 structural scenarios across 6 dimensions: (PPM-1) public surface area, (PPM-2) sane numeric defaults — 8 constants validated, (PPM-3) median pure-fn correctness incl. outlier-resistance smoke that codifies the Sybil-resistance property, (PPM-4) disagreementExceedsThreshold both directions + edge cases (zero peer median, negative peer median), (PPM-5) shouldFireAlert sustained/cooldown/edge cases with constructed `Date` values, (PPM-6) doc-comment defense manifest
+
+- `scripts/run-smokes.sh` — registered `apps/indexer:peer-price-monitor-smoke`
+
+- `ops/env/indexer.env.example` — documented both env vars with operator-facing notes (built-in defaults, prerequisites, recommendations on sample interval bounds)
+
+- ADR-0041 (~250 lines) shipped at `docs/adr/0041-cross-instance-peer-disagreement.md` — full design rationale, decision (median+min-3 peers+same-denomination filter+same-source filter), resilience scenarios (single/half/full peer compromise + market dislocation + geographic isolation + my-indexer-compromised — the primary attack class Defense F catches), honest limitations (all-federation collusion remains undetectable, weighted median deferred to T3), operator-action (none mandatory), privacy posture
+
+- `docs/RUN-A-MORPHIT-NODE.md` — added operator callout for `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` adjacent to the cp128 denomination callout
+
+- `docs/OPERATIONS.md` §13 — added cp129 update + new "Responding to a peer-price-disagreement alert" runbook subsection with 5-step investigation guide (check own native fetcher → query peers directly → check external sources → check for on-platform manipulation → check for peer-poor isolation) + guidance on false-positive vs true-positive responses
+
+- `MORPHIT-BRAG-LIST.md` — new brag entry #90 in §4 (decentralization) framing Defense F as closing cp127's 8-defense black-hat table; entry #146 ADR count 39 → 40; ADR-range descriptor 0001-0040 → 0001-0041; trailer ADR range updated; STACCATO_ALLOWLIST shifted +1 (cp128's `[3,12,194,203]` → cp129's `[3,12,195,204]`); sequential renumber 316 → 317 entries
+
+- `RELEASE-NOTES-v1.0.0-beta.1.md` — ADR count + range updated
+
+- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — appended cp129 note (T2/T3 backlog: /v1/health surface for alert state, weighted peer median, Tor/I2P/Lokinet peer-query support; deliberately-NOT-doing list)
+
+- `docs/REVISIT-LIST.md` — 6-lesson CP129 LESSONS section (closing deferred items prevents tech-debt accumulation, logger signature varies by codebase grep-first, median is Sybil-resistance not fairness, same-denomination filter is honest about a fundamental limit, pure-function decomposition makes time-dependent logic testable, item #3 push-back was honest but maybe wrong — revisit alongside #5 in cp130)
+
+**Mid-stream fixes caught:**
+- TypeScript compile errors (5 sites) from assuming Pino-style logger signature — corrected to Morphit's `(eventName, contextObject)` shape after reading `log/index.ts:296`; lesson encoded in CP129 LESSONS #2
+- Unused `import type pg from 'pg'` — removed
+- brag-list-kiss-budget-smoke caught #90 over 4-sentence budget — compressed to 4 sentences by reframing the trailing clause as a parenthetical
+- brag-list-trailer-invariants-smoke caught stale ADR-0040 trailer reference — updated to ADR-0041
+
+**Translation-quality flag:** cp129 was a pure rename + a backend-only module — no new translated strings added. Cumulative cp108-cp129: ~1,290+ strings awaiting native-speaker polish (unchanged from cp128).
+
+**The cp127 8-defense black-hat table — final status:**
+
+| # | Attack | Defense | Status |
+|---|---|---|---|
+| A | Sock-puppet whale | Proportional cap via per-trader median | cp127 ✅ |
+| B | Slow-drift attack | 24h half-life exponential baseline + 25%/24h alert | cp127 ✅ |
+| C | External-source compromise undetected | Cross-source disagreement detector + opt-in priority flip | cp127 ✅ |
+| D | Post-and-cancel race | 10-min order-age grace period + live status re-check | cp127 ✅ |
+| E | Operator-config envelope widening | Hardcoded outer bounds clamping | cp127 ✅ |
+| F | Cross-instance peer disagreement | Peer-price monitor with median + ≥3 peers + same-denom filter | **cp129 ✅** |
+| G | Patient sock-puppet evading Sybil | Price-receipt endpoint for post-hoc forensics | cp127 ✅ |
+| H | Downstream oracle abuse | NOT-AN-ORACLE warning everywhere | cp127 ✅ |
+
+All 8 defenses now shipped.
 
 ## cp128 — Operator-configurable denomination fiat + BRICS Pay payment method (2026-05-23)
 

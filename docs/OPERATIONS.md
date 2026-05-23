@@ -1294,6 +1294,78 @@ frontends which unit the `blurt_price_fiat` and `base_fee_fiat`
 values are expressed in.  This is purely a display-side change;
 order matching and on-chain fees are unaffected.  See ADR-0040.
 
+**cp129 update — Defense F cross-instance peer disagreement
+detector**: opt-in via `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`.
+When on, the indexer periodically (every 30 min) queries peer
+Morphit instances' `/v1/price/morphit-native/receipt` and alerts
+on sustained disagreement >25% for >4 hours.  Catches the case
+where YOUR indexer is reporting a different price than the rest
+of the federation (operator pressured, captured, compromised,
+or geographically isolated).  Requires ≥3 reachable peers in
+`/v1/instances` with `last_probe_status` good/quiet; below that
+the monitor degrades silently to no-alert.  Alerts surface in
+`peer_price_disagreement_alert` log entries with the deviation
+percentage, peer median, and your own price.  Investigation
+runbook: see "Responding to a peer-price-disagreement alert"
+below.  See ADR-0041.
+
+### Responding to a peer-price-disagreement alert
+
+If you see a `peer_price_disagreement_alert` event in the
+indexer logs, the cp129 peer-price monitor has detected that
+your indexer's derived BLURT price has been diverging from the
+peer median by more than 25% for sustained 4+ hours.  This is a
+warning signal, not a hard failure — your instance keeps
+serving prices as normal.
+
+The questions to investigate, in order:
+
+1. **Is your morphit_native fetcher healthy?** Check
+   `/v1/price/morphit-native/receipt` on your instance.  Look at
+   `derived_price`, `tier_used`, `contributing_traders`.  If the
+   tier is unexpected (e.g. you expected Tier 1 USD-direct but
+   got Tier 3 hybrid), some trader population shifted.
+
+2. **What are peers reporting?** Pick a few from `/v1/instances`
+   and hit their `/v1/price/morphit-native/receipt` directly.
+   Compare their numbers and contributing-trader sets to yours.
+
+3. **Is there genuine market dislocation?** Check Klingex and
+   Coingecko for BLURT/USD.  If both external sources agree
+   with peers but your indexer's native fetcher disagrees, it's
+   your instance.  If externals agree WITH your native price
+   but disagree with peers, it's the peers (look for whether
+   peers might be on a stale price-source state).
+
+4. **Has someone manipulated your on-platform data?** This is
+   the threat the alert exists for.  Check recent verified-fee
+   orders for unusual patterns: new traders posting
+   abnormally-priced BLURT-vs-fiat orders, large concentrated
+   positions, etc.  The cp127 sybil filters should have caught
+   most of this; an alert that survives the filters might mean
+   a new attack pattern.
+
+5. **Are you in a peer-poor segment?** Geographic or network-
+   isolation scenarios can produce false alerts because your
+   sample of "peers" is itself non-representative.  Check that
+   you have ≥3 peers reachable across diverse networks (not all
+   on the same hosting provider, not all on Tor only, etc.).
+
+If the alert is a false positive (after investigation, your
+price is correct and peers are wrong): the alert auto-suppresses
+for 24h after firing, then re-fires if disagreement persists.
+You can also temporarily set
+`MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=false` and restart;
+this stops querying peers entirely.  Re-enable once the
+underlying situation resolves.
+
+If the alert is a true positive (your indexer is wrong): pause
+fee acceptance until you've identified the root cause; users
+trading against bad price displays could be misled about value.
+Investigate as above; possibly restart with the price feed
+disabled (`MORPHIT_INDEXER_PRICE_FEED_ENABLED=false`) so your
+instance falls back to the static floor while you fix things.
+
 **cp127 update — self-sovereign price source (morphit_native)**:
 once your instance has enough on-platform trading volume, you
 can flip on `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` to

@@ -86,14 +86,12 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * and #12 are in the brag-list preamble (before the reputation-
  * hardening section) so they're unaffected.
  *
- * cp128 numbering shift: 2 new entries added in §4 (denomination
- * config #89, between price-receipt #88 and wallet-embed previously
- * #89) and §17 (BRICS Pay #226, between registry #225 and barter
- * previously #226).  The §4 insert shifted old #193 → new #194 and
- * old #202 → new #203 (both old positions were before the §17
- * insertion point so only the §4 insert applied to them).
+ * cp129 numbering shift: 1 new entry added in §4 (Defense F #90,
+ * between denomination #89 and wallet-embed previously #90).
+ * Subsequent entries shift +1: old #194 → new #195, old #203 →
+ * new #204.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '194', '203']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '195', '204']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

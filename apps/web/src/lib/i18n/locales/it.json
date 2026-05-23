@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "Aggiungi almeno un modo in cui le persone possono pagarti.",
 			"payment_methods_too_many": "Sono più di 12 metodi di pagamento. Scegli i tuoi preferiti.",
 			"payment_method_too_long": "Mantieni breve ogni metodo di pagamento (meno di 32 caratteri).",
-			"waiver_min_usd_required": "L'esenzione richiede una dimensione minima dell'ordine. Imposta l'importo almeno al minimo mostrato sopra.",
+			"waiver_min_required": "L'esenzione richiede una dimensione minima dell'ordine. Imposta l'importo almeno al minimo mostrato sopra.",
 			"spread_not_a_number": "Lo spread deve essere un numero.",
 			"spread_out_of_range": "Lo spread deve essere tra -50% e +50%.",
 			"fixed_price_required": "Inserisci un prezzo fisso.",

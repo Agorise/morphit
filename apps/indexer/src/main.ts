@@ -27,6 +27,7 @@ import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
 import { createPriceSource } from '$indexer/price/factory';
+import { startPeerPriceMonitor } from '$indexer/price/peerPriceMonitor';
 
 import { bodyCap } from '$api/middleware/bodyCap';
 import { security } from '$api/middleware/security';
@@ -122,6 +123,24 @@ async function main(): Promise<void> {
 	const priceSource = config.priceFeedEnabled ? createPriceSource(config, db) : null;
 	if (priceSource !== null) {
 		priceSource.start();
+	}
+
+	// cp129 — Defense F: cross-instance peer price monitor.  Opt-in
+	// via MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED.  Requires
+	// priceSource to be live (otherwise nothing to compare against),
+	// AND at least 3 federation peers reachable for meaningful
+	// median computation.  See ADR-0041.
+	let stopPeerPriceMonitor: (() => void) | null = null;
+	if (config.priceFeedPeerMonitorEnabled && priceSource !== null) {
+		stopPeerPriceMonitor = startPeerPriceMonitor(
+			{
+				db,
+				priceSource,
+				asset: 'BLURT',
+				denominationFiat: config.priceFeedDenominationFiat
+			},
+			config.priceFeedPeerSampleIntervalMinutes
+		);
 	}
 
 	// ─── 6. Poller ─────────────────────────────────────────────
@@ -437,6 +456,13 @@ async function main(): Promise<void> {
 		// interval timer.
 		if (priceSource !== null) {
 			priceSource.stop();
+		}
+
+		// cp129 — Stop the peer-price monitor's recurring tick.
+		// Same shape as priceSource.stop(): no in-flight work to
+		// drain, just clear the setInterval handle.
+		if (stopPeerPriceMonitor !== null) {
+			stopPeerPriceMonitor();
 		}
 
 		// Close HTTP next. @hono/node-server exposes close via the

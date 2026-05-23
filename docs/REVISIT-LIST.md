@@ -61,7 +61,65 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp128 is a meaningful milestone (substantial new architecture: operator-configurable denomination fiat coordinated across backend + frontend + wizard + indexer-client public API + matrix-bot consumer + 5 docs; plus BRICS Pay payment method live across registry + indexer reserved + 10 locales).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp129 is a meaningful milestone (item #1 i18n polish + item #4 Defense F implementation closing the cp127 8-defense table: new module + schema v36 + 2 env vars + ADR-0041 + 28 smoke scenarios + brag entry + 4 docs updates).
+
+## CP129 LESSONS
+
+### Lesson #1 — Closing deferred items prevents technical debt accumulation
+
+cp129 picked up where cp127 left off: Defense F was deferred in cp127's ADR-0039 as "future work" and parked in REVISIT-LIST. Two checkpoints later, with a clear head and no other in-flight work, it shipped in one session — ADR-0041 + module + smokes + docs + operator runbook in ~3 hours of focused work.
+
+**The carry-forward:** deferred items in REVISIT-LIST aren't free. They accumulate context-load. If Ken hadn't pushed back ("can we do those 6 bullet points now? i hate walking away from stuff undone"), Defense F might have sat for several more cps. The earlier you ship a deferred item, the closer the design context is to memory and the less re-discovery cost is incurred.
+
+**Carry-forward:** treat REVISIT-LIST items as "scheduled work, not eternal backlog." Pick a target cp for each entry the moment it's added. Items without a target cp turn into orphans.
+
+### Lesson #2 — Logger signature varies by codebase; check before structuring messages
+
+cp129's first typecheck pass had 5 errors, all from assuming a Pino-style structured-object-first logger signature (`log.warn({ ctx }, 'message')`). Morphit's logger uses `(eventName, contextObject)` — the inverse.
+
+The 5-minute fix was sed-driven once I read `log/index.ts:296`. The lesson is structural: **don't assume logger ergonomics from training data; grep the codebase first.** Even a tiny pattern check (`grep "log\.warn(" $(some_existing_file)`) saves debugging.
+
+**Carry-forward:** when introducing logger calls in a new module, copy the call signature from the closest existing module that already uses the logger correctly. Don't paraphrase from memory.
+
+### Lesson #3 — Median-of-N is a Sybil-resistance primitive, not a fairness primitive
+
+cp129's `median()` choice for peer-disagreement is sometimes mis-framed as "the fair way to combine peer prices." It's not about fairness. It's about Sybil resistance: a single malicious peer can shift the MEAN arbitrarily; a single malicious peer cannot shift the MEDIAN at all (the middle value still wins).
+
+Combined with the ≥3 peers minimum requirement, the Sybil-resistance floor becomes "attacker must compromise majority+1 to manipulate the result." That's a meaningfully harder attack than "compromise one peer."
+
+The doc-comment explicitly calls this out, and the structural smoke includes a "median resists single outlier" scenario that codifies the property. **Why this matters:** future maintainers tempted to switch median→mean for performance reasons (median requires sort; mean is O(n)) would break Sybil resistance. The smoke catches that regression.
+
+**Carry-forward:** when a defense relies on a specific mathematical primitive (median vs. mean, hash vs. equality, modular arithmetic vs. integer), write a smoke that verifies the primitive's defining property — not just its correctness on happy-path inputs. Make the smoke fail under accidental substitution.
+
+### Lesson #4 — Same-denomination filter is honest about a fundamental limit
+
+The cp129 peer-price monitor can ONLY compare peers with the same `denomination_fiat`. A USD-denominated indexer can't compare its BLURT/USD price to a EUR-denominated peer's BLURT/EUR price without converting EUR-to-USD, which would require... an external oracle.
+
+The honest answer is: the monitor degrades. In a mostly-EUR federation, a USD-denominated indexer has few comparable peers and skips comparison entirely. **No signal is better than a misleading signal.**
+
+The lesson generalizes: when introducing per-instance configurability (like cp128's denomination_fiat), audit every downstream feature for "does this still work cross-instance?" If not, document the degradation honestly and ship the degradation rather than pretending otherwise.
+
+**Carry-forward:** per-instance configuration creates federation-fragmentation risk. Each new config knob should ship with a "how does this affect cross-instance features?" audit and a documented degradation behavior.
+
+### Lesson #5 — Pure-function decomposition makes time-dependent logic testable
+
+cp129's `shouldFireAlert(aboveSince, now, lastAlertAt, sustainedHours, cooldownHours)` is a pure function — all inputs explicit, no implicit wall-clock dependency. This let the structural smoke verify edge cases (cooldown-elapsed-but-just-barely, exactly-at-sustained-threshold) with constructed `Date` values rather than `await new Promise(resolve => setTimeout(resolve, ...))`.
+
+The runPeerPriceSampleCycle function also takes `now` as an optional param defaulting to `new Date()`. Production callers don't pass it; tests do.
+
+This pattern — explicit time parameter with default to wall-clock — is borrowed from cp127's driftMonitor. It's worth codifying as a project convention. Anything with timing-driven behavior takes `now: Date = new Date()` as a parameter.
+
+**Carry-forward:** all time-dependent logic accepts `now` as an explicit parameter. Don't lock `new Date()` calls into pure functions — they become untestable.
+
+### Lesson #6 — Item #3 push-back was honest but maybe wrong
+
+In planning cp129, I pushed back on item #3 (per-asset denomination configurability) as "preemptive complexity until #5 lands." The push-back was honest at the time. But thinking about it more:
+
+If cp130 wires BTC/USD and XMR/USD via the generic factory, EACH of those will have a `denominationFiat` parameter that today reads from the single global `priceFeedDenominationFiat`. An operator who wants BTC priced in USD but BLURT in EUR will discover the limitation the moment they try.
+
+So item #3 has a use case that's WAITING for item #5 to materialize. Bundling them in cp130 makes sense — design item #3's solution at the same time as item #5's wiring, rather than as a follow-up.
+
+**Carry-forward to cp130:** revisit item #3 alongside item #5. The decision might be: keep one global (simpler), one global PLUS per-asset override map (flexible), or per-asset map mandatory (most expressive but operator-burden). Discuss with Ken before coding.
 
 ## CP128 LESSONS
 

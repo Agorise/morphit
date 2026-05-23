@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "至少加入一種收款方式。",
 			"payment_methods_too_many": "超過 12 種收款方式了。請挑選最常用的。",
 			"payment_method_too_long": "每種收款方式請保持簡短(32 個字符以內)。",
-			"waiver_min_usd_required": "免除需要最低訂單規模。將金額設置為至少上面顯示嘅下限。",
+			"waiver_min_required": "免除需要最低訂單規模。將金額設置為至少上面顯示嘅下限。",
 			"spread_not_a_number": "價差必須係數字。",
 			"spread_out_of_range": "價差必須喺 -50% 同 +50% 之間。",
 			"fixed_price_required": "請輸入固定價。",

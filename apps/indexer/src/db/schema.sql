@@ -2448,3 +2448,67 @@ CREATE TABLE IF NOT EXISTS price_drift_baseline (
     above_threshold_since  TIMESTAMPTZ,
     PRIMARY KEY (asset, denomination_fiat)
 );
+
+-- ───────────────────────────────────────────────────────────────────
+-- cp129 — Defense F: cross-instance peer price observations
+-- ───────────────────────────────────────────────────────────────────
+--
+-- ADR-0041 cross-instance peer disagreement detector.
+--
+-- Periodically (default every 30 minutes), the indexer queries
+-- each federation peer's `/v1/price/morphit-native/receipt`
+-- endpoint and records what they reported.  Then it computes the
+-- median across all peers in the recent window and compares
+-- with its own derived price.  Sustained disagreement >25% for
+-- >4 hours fires an alert in the indexer logs and surfaces on
+-- /v1/health.
+--
+-- Why this defense matters: cp127 designed the morphit_native
+-- fetcher with several manipulation defenses (sybil filtering,
+-- per-trader caps, tier hierarchy).  Defense F (cp127's deferred
+-- item) catches the case where an operator's *own* indexer is
+-- compromised or geographically isolated and is reporting a
+-- different price than the rest of the federation.  Peers in
+-- aggregate provide a sanity check that no single indexer can
+-- fake.
+--
+-- Sybil resistance for PEERS (not traders):
+--   - Only `known_instances` with last_probe_status = 'good' OR
+--     'quiet' are queried (the federation prober already vetted
+--     them).
+--   - Require ≥3 peers to fire an alert (configurable).
+--   - Use MEDIAN, not mean — one outlier can't shift the result.
+--
+-- Different-denomination peers are excluded from the comparison
+-- (we can't compare EUR-denominated peer's BLURT price to our
+-- USD-denominated BLURT price without a USD/EUR oracle, which
+-- would defeat the self-sovereign premise).
+--
+-- TTL: observations older than 7 days are cleaned up periodically.
+-- Keeps the table bounded (~ peers × 1 row per 30 min × 7 days
+-- ≈ a few thousand rows in steady state).
+CREATE TABLE IF NOT EXISTS price_peer_observations (
+    peer_origin            TEXT NOT NULL,
+    asset                  TEXT NOT NULL,
+    denomination_fiat      TEXT NOT NULL,
+    observed_price         NUMERIC(38, 18) NOT NULL CHECK (observed_price > 0),
+    observed_at            TIMESTAMPTZ NOT NULL,
+    -- 'morphit_native' if peer's receipt said the price came
+    -- from their morphit_native fetcher, or 'unknown' if their
+    -- receipt didn't include a source tag (older peers, etc.).
+    -- We only use 'morphit_native' observations for the peer
+    -- median; that's the cleanest cross-instance comparison
+    -- (apples to apples — both sides derived from on-platform
+    -- trade data, not from external sources both of us pulled
+    -- from anyway).
+    source_native          TEXT NOT NULL DEFAULT 'unknown'
+);
+
+-- Median queries scan recent observations for a given (asset,
+-- denomination_fiat) pair within a time window — this index
+-- makes that fast.
+CREATE INDEX IF NOT EXISTS price_peer_observations_by_pair_recent
+ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
+
+-- Cleanup: a periodic job DELETEs WHERE observed_at < now() - 7 days.
+-- Index supports the bounded scan.

@@ -1720,7 +1720,7 @@
 			"payment_methods_empty": "Add at least one way people can pay you.",
 			"payment_methods_too_many": "That's more than 12 payment methods. Pick your favorites.",
 			"payment_method_too_long": "Keep each payment method short (under 32 characters).",
-			"waiver_min_usd_required": "The waiver requires a minimum order size. Set the amount to at least the floor shown above.",
+			"waiver_min_required": "The waiver requires a minimum order size. Set the amount to at least the floor shown above.",
 			"spread_not_a_number": "Spread must be a number.",
 			"spread_out_of_range": "Spread must be between -50% and +50%.",
 			"fixed_price_required": "Enter a flat price.",
