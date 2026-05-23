@@ -4,9 +4,9 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp130 — 2026-05-23 (item #5: wire morphit_native for BTC/USD + XMR/USD — generic asset factory `createAssetPriceSource` + per-asset defaults `CP130_ASSET_DEFAULTS` + multi-asset map builder `createMultiAssetPriceSources` + coingeckoFetcher generalization on `vsCurrency` + 2 new env vars (BTC + XMR static floors) + main.ts multi-asset boot + per-asset peer monitor wiring + ADR-0042 + 20 structural smoke scenarios + brag entry #91 + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 multi-asset note + GRANDMA cp130 note + 6-lesson CP130 LESSONS).
+**Last touched:** cp130 — 2026-05-23 (item #5: wire morphit_native for BTC/USD + XMR/USD — generic asset factory `createAssetPriceSource` + per-asset defaults `CP130_ASSET_DEFAULTS` + multi-asset map builder `createMultiAssetPriceSources` + coingeckoFetcher generalization on `vsCurrency` + 2 new env vars (BTC + XMR static floors) + main.ts multi-asset boot + per-asset peer monitor wiring + ADR-0042 + 20 structural smoke scenarios + brag entry #91 + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 multi-asset note + GRANDMA cp130 note + 6-lesson CP130 LESSONS). **cp130 close-out fully complete + cross-session handoff cleanup performed this turn (TARBALL.md state markers corrected from 'target/pending' to actual triple-pulse-stable measured values for both cp129 and cp130 work-blocks; brag-list trailer date corrected 2026-05-22 → 2026-05-23; mediakit re-rebuilt to capture date fix; battery re-pulsed triple stable at 5,470/0).**
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. SHA-256 of the handoff tarball is at the bottom of this section.
 
 **Where the project stands:**
 - 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: #91 multi-asset pricing in §4) · locale parity **2,979 × 10 = 29,790** (unchanged — cp130 is backend-only, no new translations)
@@ -37,7 +37,7 @@
 
 **Tarball:** Fresh `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` built this turn.
 
-**State:** 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: §4 #91 multi-asset pricing) · locale parity **2,979 × 10 = 29,790** (unchanged — backend-only checkpoint) · **5,476 / 0** local smoke battery target (+27 net vs cp129's 5,449 from 20 new multi-asset-factory scenarios; final triple-pulse pending) · 7/7 TS-clean · **55 structural defenses** (+1 cp130: multi-asset-factory).
+**State:** 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: §4 #91 multi-asset pricing) · locale parity **2,979 × 10 = 29,790** (unchanged — backend-only checkpoint) · **5,470 / 0 / 0 / 0** local smoke battery triple-pulse stable (+21 net vs cp129's 5,449 — the 20 new multi-asset-factory scenarios plus 1 incidental) · 7/7 TS-clean · **55 structural defenses** (+1 cp130: multi-asset-factory).
 
 **Background — completing Ken's "do all 6" directive:**
 
@@ -110,7 +110,7 @@ cp130 scope: item #5 only. Items #6 and #2 retired; item #3 collapsed.
 
 **Tarball:** Fresh `morphit-audit-2026-05-122-cp129-FULL-STATE.tar.gz` built this turn.
 
-**State:** 16 tradable assets · **40 ADRs** (+1 cp129: ADR-0041) · **317 brag entries** (+1 cp129: §4 #90 Defense F) · locale parity **2,979 × 10 = 29,790** (unchanged — rename only) · **5,447 / 0** local smoke battery (+28 net vs cp128's 5,419 from peer-price-monitor-smoke; final triple-pulse pending) · 7/7 TS-clean · **54 structural defenses** (+1 cp129: peer-price-monitor).
+**State:** 16 tradable assets · **40 ADRs** (+1 cp129: ADR-0041) · **317 brag entries** (+1 cp129: §4 #90 Defense F) · locale parity **2,979 × 10 = 29,790** (unchanged — rename only) · **5,449 / 0 / 0 / 0** local smoke battery triple-pulse stable (+30 net vs cp128's 5,419 from peer-price-monitor-smoke's 28 scenarios + 2 incidental) · 7/7 TS-clean · **54 structural defenses** (+1 cp129: peer-price-monitor).
 
 **Background — Ken's "do all 6 deferred items now" directive:**
 
