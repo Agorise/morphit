@@ -82,11 +82,15 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  *
  * cp125 numbering shift: the 4 new reputation-hardening entries
  * (cp123-cp125 H1/H4 in §8 + Signal D in §8 + H5+H6 in §8) shifted
- * subsequent entries by +4.  Pre-cp125 #195 is now #199; #186 →
- * #190.  Entries #3 and #12 are in the brag-list preamble (before
- * the reputation-hardening section) so they're unaffected.
+ * subsequent entries by +4 (#186 → #190, #195 → #199).  Entries #3
+ * and #12 are in the brag-list preamble (before the reputation-
+ * hardening section) so they're unaffected.
+ *
+ * cp126 numbering shift: 1 new OpenMonero entry in §13 (between
+ * Haveno-exploit #189 and admin-dispute-resolution previously #190)
+ * shifted subsequent entries by +1 (#190 → #191, #199 → #200).
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '190', '199']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '191', '200']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;
