@@ -1281,6 +1281,18 @@ value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
 (`MORPHIT_INDEXER_BLURT_PRICE_USD`).
 
+**cp127 update — self-sovereign price source (morphit_native)**:
+once your instance has enough on-platform trading volume, you
+can flip on `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` to
+add a new upstream slotted BETWEEN coingecko and the static
+floor. The native fetcher derives BLURT/USD from real verified-
+fee on-platform orders and survives external-feed outages
+entirely (Klingex shutdowns, Coingecko rate-limits, etc.). See
+ADR-0039 for full design and `/v1/price/morphit-native/receipt`
+for live operator-side inspection of what it's producing.
+Defaults to OFF so a brand-new instance with zero trade history
+doesn't try to derive from empty data.
+
 > **Quick action:** if you just need to update the static
 > floor during an outage, set `MORPHIT_INDEXER_BLURT_PRICE_USD`
 > in your SystemD `Environment=` directive (or wherever your

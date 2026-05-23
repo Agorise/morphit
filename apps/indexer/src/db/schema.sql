@@ -2421,3 +2421,30 @@ CREATE TABLE IF NOT EXISTS review_concentration (
 CREATE INDEX IF NOT EXISTS review_concentration_subject_idx
     ON review_concentration (dominant_subject);
 
+-- ─── v35: price_drift_baseline (cp127, defense B) ──────────────
+-- Persisted 7-day moving baseline per (asset, denominationFiat)
+-- pair.  Used by the drift monitor (apps/indexer/src/indexer/price/
+-- driftMonitor.ts) to detect slow-drift attacks where each refresh-
+-- cycle move is within the per-cycle smoothing cap but the
+-- cumulative drift is large.
+--
+-- The baseline is updated on every successful price commit via an
+-- exponential time-decay average (24h half-life by default).
+-- `above_threshold_since` tracks when the current price first
+-- entered the "diverged" band; sustained divergence beyond
+-- DRIFT_ALERT_SUSTAINED_HOURS (24h) fires an alert.
+--
+-- Defense #7 (restart-bypass): persistence here means an indexer
+-- restart doesn't reset the baseline, so an attacker can't time
+-- manipulation to restarts.
+--
+-- One row per pair; the table never grows large (~10s of rows at
+-- most, one per asset Morphit tracks).
+CREATE TABLE IF NOT EXISTS price_drift_baseline (
+    asset                  TEXT NOT NULL,
+    denomination_fiat      TEXT NOT NULL,
+    baseline_price         NUMERIC(38, 18) NOT NULL CHECK (baseline_price > 0),
+    baseline_updated_at    TIMESTAMPTZ NOT NULL,
+    above_threshold_since  TIMESTAMPTZ,
+    PRIMARY KEY (asset, denomination_fiat)
+);

@@ -388,3 +388,83 @@ text. Could surface as a colored chip (green if <30 days, yellow
 - **Operator-side reputation override.** Operators cannot bump or
   demote any account's score. Reputation is on-chain; operators choose
   to display it or not, but cannot change what it says.
+
+---
+
+## Update — cp127 (self-sovereign BLURT pricing: morphit_native)
+
+cp127 added a new price source (`morphit_native`) that derives BLURT/USD
+from on-platform trade data instead of asking Klingex/Coingecko. From
+grandma's perspective, this is **entirely invisible** — and that's the
+right outcome.
+
+### What grandma sees today, after cp127
+
+The exact same thing she saw before: "60 BLURT (~$0.12)" next to listing
+fees, an order saying "sell 0.05 BTC for $5,000 USD via bank transfer,"
+etc. Nothing changed in the UI. The price source's job is to make the
+USD echo informative; whether it came from Klingex, Coingecko, or
+on-platform trades is plumbing.
+
+If the operator flips on `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED`,
+grandma still sees the same USD figure — possibly slightly more
+accurate because it's anchored in real on-platform trade activity, but
+not visibly different.
+
+### T2/T3 backlog from cp127
+
+**T2.1 — Price-source-name surface.** Today the price's PROVENANCE
+(Klingex vs Coingecko vs morphit_native vs static) is in
+`/v1/listing-fee.diagnostics` but not displayed to users. Curious
+power-users might want a small "via Klingex" / "via morphit_native"
+chip near the USD echo. Risk: grandma asks "what's morphit_native?
+should I worry?" — answering this in-UI requires careful copy. **Estimate**:
+low for the technical work, medium for the UX copy. **Priority**: T3.
+
+**T2.2 — Receipt UI button.** Today `/v1/price/morphit-native/receipt`
+is API-only. Could add a "[verify the price]" link near the USD echo,
+opening a modal showing the contributing traders and tier breakdown.
+Same risk as the H4 reputation-receipt UI button: cryptic data
+overwhelming for casual users. **Estimate**: medium-high. **Priority**:
+T3.
+
+**T2.3 — Disagreement banner.** When the disagreement monitor fires
+an alert (morphit_native vs Klingex/Coingecko sustained 25% off),
+operators see it in logs and `/v1/health`. Grandma sees nothing. A
+small ambient warning ("Price uncertainty: indexer sources disagree;
+verify before large trades") could help — but it's also alarming and
+might cause more confusion than benefit on small-discrepancy days.
+**Estimate**: low for the technical work, high for getting the UX
+right. **Priority**: T3 pending user feedback.
+
+**T2.4 — Stablecoin-depeg banner.** When the cross-stablecoin depeg
+detector flags a stablecoin as off-peg, currently only operators see
+it. A small "USDC currently trading 5% off peg on Morphit" banner on
+stablecoin order pages could be useful — but rare-event UX is hard
+to get right and "depegged" might be alarming to non-crypto-native
+readers. **Estimate**: low-medium. **Priority**: T3.
+
+### What's deliberately NOT being added (per Ken's priorities)
+
+- **No oracle-style API export of morphit_native.** The NOT-AN-ORACLE
+  warning is loud everywhere because Morphit's native price is for
+  display only — making it usable as an oracle would create
+  manipulation incentives we don't want. Other systems wanting a BLURT
+  price oracle should source from elsewhere or build their own
+  derivation with their own threat model.
+- **No "what price should I set?" suggestion in the order form.**
+  Suggesting prices would create herd behavior that drifts away from
+  market reality. Traders set their own prices based on whatever
+  reference they want; Morphit displays what they posted.
+- **No auto-correction when sources disagree.** Auto-correction
+  introduces a separate attack vector (manipulate the input that gets
+  promoted). Disagreement is surfaced; operators decide what to do.
+
+### Why this is good for grandma even though she'll never see it
+
+Self-sovereign pricing means: when Klingex eventually shuts down (or
+gets regulator-frozen, or rate-limits us), the USD echo on grandma's
+screen doesn't suddenly drift to $0.002 (the static fallback). It
+keeps tracking reality based on what's actually traded. Grandma
+won't notice the day Klingex disappears — and that's exactly the
+point.

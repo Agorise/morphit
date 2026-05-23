@@ -4,32 +4,107 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp126 — 2026-05-23 (OpenMonero coverage correction: 1 new brag entry in §13 between Haveno-exploit and admin-dispute-resolution + OpenMonero paragraph appended to vs_others FAQ entry × 10 locales).
+**Last touched:** cp127 — 2026-05-23 (self-sovereign BLURT pricing: morphit_native fetcher + cross-stablecoin depeg detector + drift monitor + disagreement monitor + receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 locales + 2 brag entries + GRANDMA note + operator-doc updates + 30 new smoke scenarios).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp126-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp127-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **37 ADRs** · **312 brag entries** (+1 cp126: OpenMonero §13) · locale parity **2,976 × 10 = 29,760** (unchanged vs cp125 — modified existing FAQ string, no new keys)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp126 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation-hardening + OpenMonero coverage
-- **49** structural defenses; **5,373/0/0/0** smoke battery quadruple-pulse stable
+- 16 tradable assets · **39 ADRs** (+1 cp127: ADR-0039) · **314 brag entries** (+2 cp127 in §4) · locale parity **2,978 × 10 = 29,780** (+2 per locale vs cp126's 2,976 — FAQ q+a × 10)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp127 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing
+- **53 structural defenses** (+3 cp127: stablecoin-depeg-detector 6 scenarios, morphit-native-fetcher 10 scenarios, price-source-hardening 14 scenarios); **5,411/0/0/0** local smoke battery quadruple-pulse stable
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp126 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp126 grand total: ~1,251+OpenMonero-paragraph strings across 9 non-EN locales)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 14+ cps but the cp125 deep-deep covered all 3 personas at the reputation surface
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp127 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp127 grand total: ~1,271+ strings across 9 non-EN locales)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 15+ cps; cp125 deep-deep covered reputation surface
 
-**What the most recent seven checkpoints did:**
+**What the most recent eight checkpoints did:**
 - **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes
 - **cp120-cp122** — cash-by-mail + physical-shipment tracking feature complete (foundation/UI/docs)
-- **cp123** — Reputation hardening foundation: H1 time-decay (365-day half-life) + H2 Signal D concentration detector + 2-decimal precision
-- **cp124** — Reputation hardening surfaces: H4 verifiable reputation-receipt endpoint + H5 buy/sell side distinction + H6 dormancy signal
-- **cp125** — Reputation hardening close-out: ADR-0038 + how_to_build_high_reputation FAQ × 10 + 4 brag entries + GRANDMA + deep-deep + tarball
-- **cp126** — OpenMonero coverage correction: ADR-0038 + brag list §13 + FAQ vs_others entry × 10 locales (June 6 2025 ~77.85 XMR hack + May 21 2026 second exploit alert facts), STACCATO_ALLOWLIST shifted +1, mediakit rebuilt
+- **cp123-cp125** — Reputation hardening campaign: H1 time-decay + H2 Signal D + H4 verifiable receipt + H5 buy/sell side distinction + H6 dormancy signal + ADR-0038 + FAQ × 10 + 4 brag entries
+- **cp126** — OpenMonero coverage correction: 1 new brag entry + FAQ vs_others paragraph × 10 locales
+- **cp127** — Self-sovereign pricing: morphit_native fetcher (tiered anchor architecture with USD-direct primary + stablecoin supplement + hybrid combined) + cross-stablecoin depeg detector + drift monitor + disagreement monitor + price-derivation receipt endpoint + 8 black-hat defenses + ADR-0039 + FAQ × 10 locales + 2 brag entries + GRANDMA-FRIENDLY note + operator docs + 5-lesson REVISIT-LIST CP127 LESSONS
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp126 regenerates because user-visible brag list + FAQ content drifted.
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp127 is a clear meaningful milestone (substantial new architecture: 4 new modules totaling ~1,200 LOC + new schema table + new endpoint + 8 specific defenses + 30 new smoke scenarios + new ADR + FAQ × 10 + brag + GRANDMA).
 
 ---
+
+## cp127 — Self-sovereign BLURT pricing: morphit_native + depeg detector + drift/disagreement monitors + receipt endpoint (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp127-FULL-STATE.tar.gz` built this turn.
+
+**State:** 16 tradable assets · **39 ADRs** (+1 cp127: ADR-0039) · **314 brag entries** (+2 cp127 in §4) · locale parity **2,978 × 10 = 29,780** (+20 vs cp126's 2,976 — FAQ q+a × 10) · **5,411/0/0/0** local smoke battery (triple-pulse stable) · 7/7 TS-clean · **53 structural defenses** (+3 cp127: stablecoin-depeg-detector, morphit-native-fetcher, price-source-hardening).
+
+**Background — Ken's evolution of the design:**
+- Turn 1: "derive BLURT/USD from on-platform BLURT-vs-stablecoin trades" (3 traders, 2 stablecoins, 8 hours → average)
+- Turn 2: "do this for ALL coins, decentralization is priority #2" + "what about stablecoin pricing"
+- Turn 3: "what if 2-3 stablecoins shut down / 1 shuts down / USD itself gets replaced?"
+- Turn 4: "think like a conspiracy theorist" → 8 specific black-hat defenses A-H locked in
+- Turn 5: "as long as you are also thinking like a black hat during construction, continue"
+
+Result: tiered anchor architecture with USD-direct primary + stablecoin supplement + hybrid combined, full Sybil filtering reusing cp123-cp125 tables, 8 specific code-level defenses, depeg detector self-anchored via cross-ratios.
+
+**Code shipped:**
+
+- **`apps/indexer/src/indexer/price/stablecoinDepegDetector.ts`** (~280 lines) — cross-stablecoin ratio analysis. Generates all unordered stablecoin pairs, queries 2 directions per pair (asset=A pay_B + asset=B pay_A), per-trader median ratio, median across trader medians = pair ratio. Triangulation: for each stablecoin S, signed deviations from 1.0 across all S-pairs (flipping when S is the b-side), median deviation > threshold → depegged. Full Sybil filtering (suspicious_reciprocity + related_accounts + one_way_pile_on + review_concentration + ≥1 prior verified-fee trade). Skips Tier 2 entirely when stablecoinKeys.length < 2 (returns 'unknown' for each). Constants: DEPEG_RATIO_THRESHOLD=0.03, DEPEG_WINDOW_HOURS=8, DEPEG_MIN_TRADERS_PER_PAIR=3, DEPEG_ORDER_AGE_GRACE_MINUTES=10.
+
+- **`apps/indexer/src/indexer/price/morphitNativeFetcher.ts`** (~500 lines) — generic factory `createMorphitNativeFetcher({asset, denominationFiat, db, config})` with tiered anchor resolver. Tier 1 USD-fiat-direct → Tier 2 stablecoin-anchored → Tier 3 hybrid combined. All 8 black-hat defenses A-H documented inline in the file's source. Operator-config envelope clamped to hardcoded outer bounds (HARDCODED_OUTER_MIN_USD=0.00001, HARDCODED_OUTER_MAX_USD=10_000_000). Exclusion of kind:'spread' orders (circular dependency defense). Per-trader median (one vote per trader). Constants: NATIVE_WINDOW_HOURS=8, NATIVE_MIN_DISTINCT_TRADERS=3, NATIVE_MIN_STABLECOIN_COUNT_TIER2=2, NATIVE_ORDER_AGE_GRACE_MINUTES=10.
+
+- **`apps/indexer/src/indexer/price/driftMonitor.ts`** (~155 lines) — 7-day moving baseline with 24h exponential half-life, persisted to `price_drift_baseline` table. Alert on 25% sustained divergence for 24+ hours. Defense B against slow-drift attacks.
+
+- **`apps/indexer/src/indexer/price/disagreementMonitor.ts`** (~155 lines) — cross-source disagreement detector. 25% threshold, 4-hour sustained, 24-hour rate-limited alerts. Defense C against undetected Klingex compromise. Opt-in priority flip via env var.
+
+- **`apps/indexer/src/api/priceReceipt.ts`** (~180 lines) — `/v1/price/morphit-native/receipt` endpoint. Returns full derivation transparency: tier_attempted, contributing_traders, depeg_report, envelope info, NOT-AN-ORACLE warning. ETag + 60s Cache-Control + 304. Defense G against patient sock-puppet attacks (post-hoc forensics).
+
+- **Schema v35** — `price_drift_baseline` table appended to canonical schema. CREATE TABLE IF NOT EXISTS idempotent.
+
+- **Config** — 5 new env vars: MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED (default false), MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING (default false), MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS (default usdt,usdc,dai), MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN (default 0.0001), MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX (default 0.1).
+
+- **Factory wiring** — `createPriceSource(config, db)` now slots morphit_native between coingecko and the static floor when enabled.
+
+- **`apps/indexer/src/api/listingFeeBody.ts`** — NOT-AN-ORACLE warning in payload when USD echo present (defense H).
+
+- **`apps/indexer/src/main.ts`** — receipt endpoint mounted at /v1/price with resource rate-limit.
+
+- **`ops/env/indexer.env.example`** — 5 new env vars documented with rationale (~50 lines added).
+
+**Smokes shipped (30 new structural scenarios total):**
+- `stablecoin-depeg-detector-smoke` — 6 scenarios (exports, sane constants, DepegStatus union, empty/single input handling, type contract)
+- `morphit-native-fetcher-smoke` — 10 scenarios (exports, sane constants, hardcoded envelope, tier names, envelope-inconsistent guard, no-data fallback, envelope clamping math, PriceFetch contract, doc-comment defense manifest, NativeDerivationResult contract)
+- `price-source-hardening-smoke` — 14 scenarios (NOT-AN-ORACLE warning keywords + length + payload presence, drift defaults + schema migration, disagreement defaults + 5 behavioral scenarios including alert sustained + 24h rate-limit + null inputs, factory wiring + config env vars + main.ts mount)
+
+**Docs shipped:**
+- ADR-0039 (~250 lines) — Full architectural documentation: tiered anchor rationale, cross-stablecoin depeg detection rationale, 8-defense table, resilience scenarios (1/2/3 stablecoin shutdowns), honest limitations (regulatory capture, 51% volume, patient sock-puppet, Klingex-Coingecko aggregation overlap, CBDC stealth), future work for cp128+.
+- FAQ entry `where_does_blurt_price_come_from` × 10 locales (+20 strings): the chain explanation, how morphit_native works, the receipt endpoint, NOT-AN-ORACLE warning, pre-launch note. Tied keys: blurt_benefits, where_to_buy_blurt, what_is_blurt, fees, vs_others. Cross-link from blurt_benefits + where_to_buy_blurt cluster.
+- 2 brag entries in §4 (decentralization): #87 self-sovereign BLURT pricing, #88 publicly verifiable price receipt. Sequential renumber 312→314. STACCATO_ALLOWLIST shifted #191→#193, #200→#202. Trailer count updated. ADR range updated 0001-0038→0001-0039 (38 ADRs).
+- GRANDMA-FRIENDLY note: T2/T3 backlog (price-source-name surface, receipt UI button, disagreement banner, stablecoin-depeg banner) + deliberate-NOT-doing list (no oracle export, no auto-suggested prices, no auto-correction).
+- OPERATIONS.md §13 — added cp127 note about morphit_native option.
+- RUN-A-MORPHIT-NODE.md — added cp127 note about MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED.
+- REVISIT-LIST.md — 5-lesson CP127 LESSONS section (discussion-before-code pattern, inline defense documentation, self-anchored systems, pre-launch leverage, generic factory).
+- Mediakit rebuilt (with renumbered brag list).
+
+**Mid-stream fixes:**
+- env-example-schema-parity-smoke caught 5 missing env vars; added to ops/env/indexer.env.example
+- brag-list-kiss-budget-smoke caught STACCATO_ALLOWLIST drift after the +2 entry insert; updated #190→#193, #199→#202
+- brag-list-trailer-invariants-smoke caught stale ADR-0038 trailer reference; updated to ADR-0039
+- price-source-hardening-smoke FW-1 initial check looked for exact "AFTER coingecko" + "BEFORE static floor" phrases; relaxed to accept "between coingecko ... static floor" phrasing
+
+**Black-hat defense table (the 8 specific defenses, all built into cp127 code):**
+
+| # | Attack | Defense | Code location |
+|---|---|---|---|
+| A | Sock-puppet whale | Proportional cap via per-trader median (one vote per trader) | `morphitNativeFetcher.ts:computePerTraderMedians` |
+| B | Slow-drift attack | 24h half-life exponential baseline + 25%/24h alert | `driftMonitor.ts` + `price_drift_baseline` table |
+| C | Klingex compromise undetected | Cross-source disagreement detector + opt-in priority flip | `disagreementMonitor.ts` + env var |
+| D | Post-and-cancel race | 10-min order-age grace period + live status re-check | `queryTier1Orders`, `queryTier2Orders` WHERE clauses |
+| E | Operator-config envelope widening | Hardcoded outer bounds clamping | `morphitNativeFetcher.ts` HARDCODED_OUTER_* constants |
+| F | Cross-instance peer disagreement | DEFERRED to cp128 | (none yet) |
+| G | Patient sock-puppet evading Sybil | Price-receipt endpoint for after-the-fact forensics | `apps/indexer/src/api/priceReceipt.ts` |
+| H | Downstream oracle abuse | NOT-AN-ORACLE warning everywhere | `priceReceipt.ts` NOT_AN_ORACLE_WARNING + `listingFeeBody.ts` price_warning |
+
+**Translation-quality flag:** cp127 added ~20 new auto-translated strings across 9 non-EN locales (FAQ q+a). Cumulative cp108-cp127: ~1,271+ strings awaiting native-speaker polish.
+
 
 ## cp126 — OpenMonero coverage correction: brag §13 + FAQ vs_others × 10 locales (2026-05-23)
 

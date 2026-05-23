@@ -61,7 +61,64 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp126 is a tiny correction checkpoint (1 brag entry + FAQ paragraph × 10 locales for OpenMonero coverage); regenerating the binary because it includes user-visible content drift.
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp127 is a meaningful milestone (self-sovereign pricing architecture complete: morphit_native fetcher + cross-stablecoin depeg detector + drift monitor + disagreement monitor + receipt endpoint + 8 black-hat defenses + 30 new structural smoke scenarios).
+
+## CP127 LESSONS
+
+### Lesson #1 — A discussion phase before coding produces materially better designs
+
+cp127 went through FOUR design discussion turns before any code shipped:
+
+1. Ken's initial proposal (3 traders, 8 hours, 2 stablecoins → average) — sound but underspecified
+2. My response surfaced data-model insights (USDT/USDC/DAI sit as BOTH assets AND payment methods; orders are `asset` × `fiat_currency` × `payment_methods[]`)
+3. Ken's "what about all coins / what about stablecoin pricing" pushed toward broader architecture
+4. Ken's "what if 2-3 stablecoins shut down / USD gets replaced" pushed toward tiered anchors + `denominationFiat` parameterization
+5. Ken's "think like a conspiracy theorist" pushed toward 8 specific defenses with code-level commitments
+
+The cp127 code that landed is qualitatively different from what would have shipped after turn 1. Specifically: the tiered anchor architecture (Tier 1 USD-direct primary, Tier 2 stablecoin supplement) only emerged after turn 4. The black-hat defense table (A-H with specific implementations) only emerged after turn 5. Both are now load-bearing parts of the design.
+
+**Carry-forward:** for architecturally significant features, deliberately spend turns on discussion before coding. The "let me check the codebase, surface what I found, propose tradeoffs, ask decision questions, integrate Ken's pushback" pattern produces designs that wouldn't have emerged from straight-to-code execution. The discussion itself IS deliverable work.
+
+### Lesson #2 — Documenting black-hat defenses inline in the code prevents silent regression
+
+cp127's `morphitNativeFetcher.ts` has an explicit defense-by-defense doc comment (A. sock-puppet whale, B. slow-drift, C. external-source compromise, D. post-and-cancel race, etc.) AND the structural smoke MN-9 specifically checks that all 8 defense markers (A-H) appear in the file's source.
+
+This is anti-regression in a way that prose docs alone aren't: a future maintainer who removes the post-and-cancel grace period code without also removing the "D." marker breaks the smoke. They have to consciously remove BOTH the defense AND its documentation marker. That's the friction we want — accidental defense removal becomes impossible.
+
+The reputation-receipt smoke from cp124 did something similar (R-5 checks the formula docstring lists all 4 signal-table exclusions). Applying the pattern more broadly: any time we add a defense that's load-bearing, also add a smoke that fails when the defense's documentation disappears.
+
+**Carry-forward:** for any defense whose removal would be a security regression, encode the defense's DOCUMENTATION in a smoke. Code without docs is hard to audit; smokes that check docs make documentation maintenance non-optional.
+
+### Lesson #3 — Self-anchored systems beat externally-anchored where possible
+
+The cross-stablecoin depeg detector is self-anchored: it uses cross-ratios between stablecoins to identify which one is the outlier, without needing to know "what USD is worth." The standard approach (assume USDT = $1, alert if it deviates) requires trusting an external fixed point. Self-anchoring removes that dependency.
+
+The same pattern applies to morphit_native generally: deriving BLURT/USD from on-platform orders removes dependency on Klingex/Coingecko, but only AS FAR as on-platform trade volume can support. The trader population becomes the new anchor — which is consistent with Morphit's decentralization priority.
+
+There's a limit: USD itself can't be self-anchored within Morphit's data model because USD IS the unit of account. We accept that limit honestly (the `denominationFiat` parameterization lets us swap to a different unit later if needed, but at any given moment SOME external unit has to be the reference).
+
+**Carry-forward:** when designing systems that need to determine "what is X worth," ask first: can we determine it from internal data + internal consensus, OR do we genuinely need external trust? Self-anchored is preferred when feasible; honest acknowledgment is required when not.
+
+### Lesson #4 — The pre-launch window is precious; don't waste it on backwards-compat we don't owe
+
+Ken's reminder mid-cp127 — "noone on earth has installed morphit yet, not even our sysadmin" — was the critical context that let me skip several layers of compat scaffolding. Specifically:
+
+- No migration tooling for the new `price_drift_baseline` table; `CREATE TABLE IF NOT EXISTS` is fine because every operator starts from this schema
+- No deprecation path for the old static-floor-only behavior; the new env var defaults to false, existing behavior unchanged
+- No "v1 then v2" of the price source interface; ship the tiered architecture from day one
+- No legacy-format support in the receipt endpoint; one canonical shape
+
+Each of these saved real complexity. The pre-launch freedom enabled by zero-installs-yet is finite — once the first instance goes live, we owe backwards-compat. **Use the window aggressively while we still have it.**
+
+**Carry-forward:** for any pre-launch architectural change, confirm with Ken that no instance is live, then design for the ideal endpoint rather than for migration paths.
+
+### Lesson #5 — Generic factory > per-asset implementation
+
+cp127's `createMorphitNativeFetcher({ asset, denominationFiat, db, ... })` is generic across (asset, fiat) pairs even though the cp127 deployment only wires it for BLURT/USD. The marginal cost of making it generic was ~10 lines (parameter plumbing); the marginal benefit is that cp128 BTC/USD + XMR/USD instances are config changes, not refactors.
+
+Same pattern applied to the cross-stablecoin depeg detector: accepts any `stablecoinKeys: ReadonlyArray<string>`, degrades gracefully with <2 keys. When USDF or PYUSD eventually need to be added to Morphit's payment methods, the detector picks them up by config change, not code change.
+
+**Carry-forward:** when a module is going to be reused (or might be), invest the small cost of making it generic up front. Lock in the iteration cost of per-asset wiring as "config change" not "code change."
 
 ## CP126 LESSON
 

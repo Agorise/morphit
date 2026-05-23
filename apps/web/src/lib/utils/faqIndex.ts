@@ -65,6 +65,7 @@ export const FAQ_KEYS = [
 	'where_to_buy_blurt',
 	'what_is_blurt',
 	'blurt_benefits',
+	'where_does_blurt_price_come_from',
 	'what_is_mana',
 
 	// ─── 5. Chat & communication ───────────────────────────────
@@ -239,11 +240,19 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'loyalty_milestones',
 		'where_to_buy_blurt',
 		'what_is_blurt',
-		'what_is_mana'
+		'what_is_mana',
+		'where_does_blurt_price_come_from'
 	],
-	where_to_buy_blurt: ['blurt_benefits', 'first_order_free', 'fees'],
+	where_to_buy_blurt: ['blurt_benefits', 'first_order_free', 'fees', 'where_does_blurt_price_come_from'],
 	what_is_blurt: ['blurt_benefits', 'where_to_buy_blurt', 'why_chat_on_chain', 'what_is_mana', 'what_is_reputation'],
 	what_is_mana: ['what_is_blurt', 'blurt_benefits', 'welcome_bonus'],
+	where_does_blurt_price_come_from: [
+		'blurt_benefits',
+		'where_to_buy_blurt',
+		'what_is_blurt',
+		'fees',
+		'vs_others'
+	],
 
 	// Reputation + feedback cluster. The "chat_vs_feedback_visibility"
 	// entry bridges to the chat cluster and belongs here from the

@@ -39,6 +39,15 @@ export function buildListingFeeBody(
 		if (!detail.stale && detail.price > 0) {
 			body.base_fee_usd = config.feeBaseBlurt * detail.price;
 			body.blurt_price_usd = detail.price;
+			// cp127 defense H: NOT-AN-ORACLE warning.  Loudly visible
+			// to downstream consumers parsing this payload.  Other
+			// smart contracts or value-bearing systems that ignore
+			// this warning and use blurt_price_usd as oracle input
+			// are explicitly on notice; Morphit accepts no
+			// responsibility for losses from such misuse.  See
+			// ADR-0039 and /v1/price/morphit-native/receipt.
+			body.price_warning =
+				'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
 		}
 	}
 
