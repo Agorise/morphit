@@ -3997,13 +3997,24 @@
 				"url_error_format": "Musi być adresem URL https://",
 				"output_heading": "Uruchom to polecenie na serwerze",
 				"output_subtitle": "Z katalogu, w którym zainstalowałeś Morphit, wklej to w terminalu. Zostaniesz poproszony o ścieżkę do pliku klucza wpisu.",
-				"output_pending": "Wypełnij powyższe pola klucz, nazwa, opis i kategoria, aby wygenerować polecenie."
+				"output_pending": "Wypełnij powyższe pola klucz, nazwa, opis i kategoria, aby wygenerować polecenie.",
+				"remove_key_error_canonical": "Metody kanoniczne nie mogą być usuwane mechanizmem instancji"
 			},
 			"disclosure": {
 				"heading": "Co ten kreator robi, a czego nie robi",
 				"read_only": "Tylko do odczytu: ta strona generuje tekst konfiguracyjny i CLI, ale nigdy nie zmienia twojego serwera. Nic się nie zmieni, dopóki sam nie wkleisz i nie zastosujesz wyniku.",
 				"no_auth": "Otwarty dostęp: ta strona nie wymaga logowania, ponieważ niczego nie zmienia. Każdy może ją odwiedzić. Jeśli tego nie chcesz, umieść ją za uwierzytelnianiem swojego reverse proxy.",
 				"restart_required": "Wymagany restart usługi: po edycji morphit.env zrestartuj usługę indeksera, aby zmiana zaczęła obowiązywać. CLI metody płatności emituje na łańcuch natychmiast — dla tego restart nie jest potrzebny."
+			},
+			"payment_remove": {
+				"heading": "Usuń niestandardową metodę płatności",
+				"intro": "Jeśli wcześniej dodałeś metodę płatności przez CLI i chcesz ją wycofać, wygeneruj tutaj polecenie usunięcia. Metody kanoniczne (PayPal, Wise itp.) nie mogą być usunięte — są na poziomie projektu.",
+				"key_label": "Klucz maszynowy do usunięcia",
+				"key_help": "Dokładny klucz użyty przy dodawaniu metody. Uruchom `morphit-ops payment-method list` na swoim serwerze, aby zobaczyć obecne dodatki.",
+				"output_heading": "Uruchom to polecenie na serwerze",
+				"output_subtitle": "Z katalogu, w którym zainstalowałeś Morphit. Zostaniesz poproszony o potwierdzenie przed emisją operacji na łańcuch.",
+				"output_pending": "Wprowadź klucz maszynowy metody specyficznej dla instancji, aby wygenerować polecenie usunięcia.",
+				"orders_safety": "Istniejące zlecenia odnoszące się do tej metody nadal wyświetlają się poprawnie po usunięciu — klucz pozostaje w historii tych zleceń. Usunięcie oznacza tylko, że nowe zlecenia nie mogą jej wybrać."
 			}
 		}
 	}

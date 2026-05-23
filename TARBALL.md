@@ -4,19 +4,19 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp116 — 2026-05-22 (queue execution: A15 mtime→content-hash, operator setup-wizard V1 with asset-disable + payment-method-add CLI emitter).
+**Last touched:** cp117 — 2026-05-22 (operator-doc audit catch-up + SVGO tested-and-rejected + setup-wizard V2 remove UI + brag-list entry #223 + 82-entry renumber for sequential discipline).
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 304 brag entries · locale parity across 10 locales (**2,892 leaves × 10 = 28,920** after cp116 i18n diff: +27 keys per locale for the new operator setup-wizard — 25 `admin.setup_wizard.*` + 2 `seo.admin_setup_wizard.*` — × 10 locales)
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp116 have been docs/SEO/UX/CI hardening + 6 new structural defenses + operator setup-wizard V1, no new audits
-- **43** structural defenses (cp116: no new files; og-image-freshness #40 expanded from 6→7 scenarios with content-hash sidecar + builder-source-grep guard); **4,969/0** smoke battery; LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · **305 brag entries** (cp117 +1: #223 Browser setup-wizard) · locale parity across 10 locales (**2,901 leaves × 10 = 29,010** after cp117 i18n diff: +9 keys per locale for the remove-UI section — 1 `payment.remove_key_error_canonical` + 8 `payment_remove.*` — × 10 locales)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp117 have been docs/SEO/UX/CI hardening + 6 new structural defenses + operator setup-wizard V1+V2, no new audits
+- **43** structural defenses (cp117: no new files; og-image-freshness #40 still at 7 scenarios from cp116); **4,971/0** smoke battery; LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108–cp116 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp116 grand total: ~486 strings across 9 non-EN locales awaiting native review)
+1. Native-speaker polish of all auto-translated non-EN content from cp108–cp117 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp117 grand total: ~567 strings across 9 non-EN locales awaiting native review)
 2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
 **Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
@@ -45,6 +45,41 @@
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
 **Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115-cp7 is a clear meaningful milestone (3 new user-facing surfaces complete, old grid retired, 6 new structural-defense scenarios shipped, FAQ deep-linking + hover/click UX, all i18n covered).
+
+---
+
+## cp117 — operator-doc audit catch-up + SVGO tested-and-rejected + setup-wizard V2 remove UI + brag-list entry #223 with full 82-entry renumber (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp117-FULL-STATE.tar.gz` built this turn (Ken's queue: "keep going").
+
+**State:** 16 tradable assets · 35 ADRs · **305 brag entries** (cp117 +1 at #223 + 82-entry renumber 223→304 → 224→305 for sequential discipline) · locale parity **2,901 × 10 = 29,010** (cp117 net +90: 9 new keys/locale for remove-UI section) · **4,971/0** local smoke battery · 7/7 TS-clean · **43 defenses** (no new files; same scenarios as cp116) · 1,381 vitest passing · mediakit rebuilt post-brag-edit.
+
+**What shipped:**
+
+1. **Operator-doc audit catch-up** — cp116 shipped the `/admin/setup-wizard` route without updating any operator docs (memory rule miss). cp117 fixes: `docs/RUN-A-MORPHIT-NODE.md` "Decide your operator stance" rewritten to lead with 3-path choice (CLI / Browser / Direct env-edit) + new dedicated "Browser setup-wizard" subsection with UX walkthrough + honest "what this does not do" disclosure + when-to-use comparison table; `docs/OPERATIONS.md` disabled-assets section gained browser-wizard mention + new §14 "Securing operator-only routes" subsection with copy-paste Nginx http-basic-auth and Caddy basicauth examples (correct locale-prefix regex matching all 10 locales).
+
+2. **SVGO pass tested-and-rejected** — installed svgo 4.0.1, wrote conservative config with every lossy/breaking plugin disabled, ran on all 22 carousel icons. Aggregate: **199 bytes (0.2%)** across 100 KB total. Path-data SHA-identical verified on doge sample. Net win too small to justify any visual-drift risk under Ken's "don't modify them" rule. **Cleaned up entirely** — devDep uninstalled, config file removed, working tree unchanged. Filed as tested-and-rejected in REVISIT-LIST so future cps don't retry. Sprite-sheet vs SVGO middle-ground now narrowed to "sprite-sheet OR skip" (SVGO proved net-zero).
+
+3. **Setup-wizard V2 — payment-method REMOVE UI** — third section added to the setup-wizard route: machine-key input + KEY_PATTERN client-validation matching indexer + canonical-RESERVED_KEYS warning with distinct error message ("canonical methods can't be removed via per-instance mechanism" — different from add's "reserved") + POSIX-safe shell-escaped `morphit-ops payment-method remove <key>` emission + copy-to-clipboard + honest "orders safety" aside explaining on-chain key persistence in historical orders post-removal.
+
+4. **Brag-list entry #223** — new entry "Browser setup-wizard for live config tweaks" at sequential position #223 inside section 18 "Operator setup." 82 downstream entries shifted #223→#304 → #224→#305 with regex one-liner to preserve strict-sequential numbering convention. Trailer updated 304→305, mediakit rebuilt. The cp117-mid `222a` lettered-sub-entry hack reverted to true sequential.
+
+5. **9 new i18n keys × 10 locales** — 81 strings flagged in translation-quality block (grand total cp108-cp117 awaiting native polish: ~567 strings).
+
+6. **A1/A14 cp113 findings still deferred** — source not recoverable from prior transcripts.
+
+**Memory facts (re-confirmed for the new session):**
+- `@agorise:matrix.org` = private DM MXID for security disclosure
+- `#agorise:matrix.org` = public Matrix room alias (advertised in FAQ footer, `/support`, several FAQ answers)
+- Treasury account is `@morphit-fees`; official posting account is `@morphit`
+- BLURT-paid listing fees: 90/10 split (operator/treasury), paid in BLURT directly to operator's payout address
+- BTC- and XMR-paid listing fees: 100% to project treasury, 0% to operators (BLURT splits atomically on-chain; BTC/XMR would require off-chain custodial bookkeeping — design tradeoff)
+- BLURT-paid path is 50% cheaper for users (deliberate incentive)
+- Forgejo, never Gitea — repo at `git.agorise.net/agorise/morphit`
+- Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
+- BTC/XMR/BLURT are non-disableable as a memory rule (federation depends on them); the indexer doesn't enforce this in code, only in the setup-wizard UI
+
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp117 is a meaningful milestone: cp116 V1 + cp117 V2 together form a complete operator setup-wizard surface; doc audit catch-up + brag-list discipline + SVGO tested-and-rejected all locked in same turn.
 
 ---
 

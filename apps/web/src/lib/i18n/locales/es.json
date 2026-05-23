@@ -3997,13 +3997,24 @@
 				"url_error_format": "Debe ser una URL https://",
 				"output_heading": "Ejecuta este comando en tu servidor",
 				"output_subtitle": "Desde el directorio donde instalaste Morphit, pega esto en tu terminal. Se te pedirá la ruta del archivo de la clave de publicación.",
-				"output_pending": "Rellena los campos de clave, nombre, descripción y categoría para generar el comando."
+				"output_pending": "Rellena los campos de clave, nombre, descripción y categoría para generar el comando.",
+				"remove_key_error_canonical": "Los métodos canónicos no se pueden eliminar mediante el mecanismo por instancia"
 			},
 			"disclosure": {
 				"heading": "Lo que este asistente hace y no hace",
 				"read_only": "Solo lectura: esta página genera texto de configuración y CLI pero nunca modifica tu servidor. Nada cambia hasta que tú mismo pegues la salida y la apliques.",
 				"no_auth": "Acceso abierto: esta página no requiere inicio de sesión porque no modifica nada. Cualquiera puede visitarla. Si eso no es lo que quieres, colócala detrás de la autenticación de tu reverse proxy.",
 				"restart_required": "Se requiere reinicio del servicio: después de editar morphit.env, reinicia el servicio del indexador para que el cambio surta efecto. El CLI de método de pago emite a la cadena de inmediato — no se requiere reinicio para eso."
+			},
+			"payment_remove": {
+				"heading": "Eliminar un método de pago personalizado",
+				"intro": "Si previamente añadiste un método de pago mediante el CLI y quieres retirarlo, genera el comando de eliminación aquí. Los métodos canónicos (PayPal, Wise, etc.) no se pueden eliminar — son a nivel de proyecto.",
+				"key_label": "Clave de máquina a eliminar",
+				"key_help": "La clave exacta que usaste al añadir el método. Ejecuta `morphit-ops payment-method list` en tu servidor para ver tus adiciones actuales.",
+				"output_heading": "Ejecuta este comando en tu servidor",
+				"output_subtitle": "Desde el directorio donde instalaste Morphit. Se te pedirá confirmación antes de emitir la operación a la cadena.",
+				"output_pending": "Introduce la clave de máquina de un método específico de la instancia para generar el comando de eliminación.",
+				"orders_safety": "Las órdenes existentes que hacen referencia a este método siguen mostrándose correctamente tras la eliminación — la clave persiste en el historial de esas órdenes. Eliminar significa solo que las nuevas órdenes no pueden elegirla."
 			}
 		}
 	}

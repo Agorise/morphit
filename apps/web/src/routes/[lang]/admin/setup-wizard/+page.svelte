@@ -180,6 +180,48 @@
 		return parts.join(' \\\n  ');
 	});
 
+	// ─── Section 3: payment-method REMOVE (cp117) ──────────────
+	// Mirror of the add form but minimal — only a key is needed for
+	// the chain op.  Validation uses the same KEY_PATTERN as add,
+	// but does NOT block RESERVED_KEYS at the UI level: canonical
+	// keys aren't removable via the per-instance mechanism (the
+	// indexer rejects them), but the operator may want to surface
+	// the attempted command anyway to see the indexer's rejection
+	// message — we don't second-guess.
+	let pmRemoveKey = $state('');
+
+	const removeKeyError = $derived.by((): string | null => {
+		const k = pmRemoveKey.trim();
+		if (k.length === 0) return null;
+		if (k.length > 32) return $_('admin.setup_wizard.payment.key_error_too_long');
+		if (!KEY_PATTERN.test(k)) return $_('admin.setup_wizard.payment.key_error_format');
+		// Distinct error: not "reserved" (add-only); instead, warn
+		// that removing a canonical key won't work.
+		if (RESERVED_KEYS.has(k)) return $_('admin.setup_wizard.payment.remove_key_error_canonical');
+		return null;
+	});
+
+	const removeReady = $derived(
+		pmRemoveKey.trim().length > 0 && removeKeyError === null
+	);
+
+	const removeCliCommand = $derived.by(() => {
+		if (!removeReady) return '';
+		return `morphit-ops payment-method remove ${shellEscape(pmRemoveKey.trim())}`;
+	});
+
+	let removeCopied = $state(false);
+	async function copyRemove(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(removeCliCommand);
+			removeCopied = true;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => { removeCopied = false; }, 2000);
+		} catch {
+			// Fallback: textarea selectable manually.
+		}
+	}
+
 	// Copy-to-clipboard utility.  Falls back to manual-select if
 	// clipboard API is unavailable (e.g. older browsers, embedded
 	// webviews).
@@ -414,6 +456,68 @@
 					{$_('admin.setup_wizard.payment.output_pending')}
 				</p>
 			{/if}
+		</div>
+	</section>
+
+	<!-- ─── Section 3 (cp117): Payment-method REMOVE ───────────── -->
+	<section class="mt-8 rounded-2xl border border-ink-100 bg-white p-6 md:p-8 dark:border-ink-800 dark:bg-ink-900">
+		<h2 class="font-display text-xl font-bold">
+			{$_('admin.setup_wizard.payment_remove.heading')}
+		</h2>
+		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+			{$_('admin.setup_wizard.payment_remove.intro')}
+		</p>
+
+		<div class="mt-6">
+			<label for="pm-remove-key" class="block text-sm font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.payment_remove.key_label')}
+			</label>
+			<p class="text-xs text-ink-500">{$_('admin.setup_wizard.payment_remove.key_help')}</p>
+			<input
+				id="pm-remove-key"
+				type="text"
+				bind:value={pmRemoveKey}
+				maxlength="32"
+				class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-950"
+				placeholder="my_local_method"
+			/>
+			{#if removeKeyError}
+				<p class="mt-1 text-xs text-morphit-coral" aria-live="polite">{removeKeyError}</p>
+			{/if}
+		</div>
+
+		<div class="mt-6">
+			<p class="text-sm font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.payment_remove.output_heading')}
+			</p>
+			<p class="mt-1 text-xs text-ink-500">
+				{$_('admin.setup_wizard.payment_remove.output_subtitle')}
+			</p>
+			{#if removeReady}
+				<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+					<pre
+						class="flex-1 overflow-x-auto rounded-lg border border-ink-200 bg-ink-50 p-3 font-mono text-xs dark:border-ink-700 dark:bg-ink-950"
+						aria-live="polite"
+					>{removeCliCommand}</pre>
+					<button
+						type="button"
+						onclick={copyRemove}
+						class="btn-secondary whitespace-nowrap"
+						aria-label={$_('admin.setup_wizard.copy_button_aria')}
+					>
+						{removeCopied ? $_('admin.setup_wizard.copied') : $_('admin.setup_wizard.copy_button')}
+					</button>
+				</div>
+			{:else}
+				<p class="mt-2 rounded-lg border border-dashed border-ink-300 p-3 text-sm text-ink-500 dark:border-ink-700">
+					{$_('admin.setup_wizard.payment_remove.output_pending')}
+				</p>
+			{/if}
+		</div>
+
+		<!-- Honest aside: remove doesn't break in-flight orders -->
+		<div class="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3 text-xs text-ink-600 dark:border-ink-700 dark:bg-ink-950 dark:text-ink-300">
+			ℹ️ {$_('admin.setup_wizard.payment_remove.orders_safety')}
 		</div>
 	</section>
 
