@@ -8762,3 +8762,54 @@ instance — users will need to re-subscribe.  Procedure:
    the old public key and won't work.
 6. Users re-subscribe via the Settings UI.
 
+
+## 43. SEO override env vars — homepage title/description/keywords + Twitter card (Part 122 cp119)
+
+**Audience:** operators who want to override the bundled homepage SEO copy with
+something tailored to their audience without forking the frontend.  All fields
+are optional — leave any of them unset and the bundled svelte-i18n value (or no
+emission, for the Twitter handle) is used.
+
+The frontend reads these via `/v1/instance`, so changes propagate after the
+indexer config is re-read (restart `morphit-indexer` after editing the env file).
+
+### Available env vars
+
+**`MORPHIT_INSTANCE_SEO_TITLE`** — overrides the homepage `<title>` and
+`<meta property="og:title">`.  Max 200 chars.  Operators with curated audiences
+(e.g. a Persian-speaking community) can swap in language-specific or
+audience-specific copy here.  When set, the override applies AS-IS — no `— InstanceName`
+suffix is appended (you author the full title you want).
+
+**`MORPHIT_INSTANCE_SEO_DESCRIPTION`** — overrides `<meta name="description">`
+and `<meta property="og:description">`.  Max 500 chars; Google truncates after
+about 155 chars in SERPs, so aim for ≤150.
+
+**`MORPHIT_INSTANCE_SEO_KEYWORDS`** — overrides `<meta name="keywords">`.
+Most modern crawlers ignore this, but Yandex, Baidu, and some federated
+indexers still consume it.  Max 500 chars; comma-separated.
+
+**`MORPHIT_INSTANCE_SEO_TWITTER_SITE`** (cp119-A4) — optional X / Twitter handle
+for `<meta name="twitter:site">`.  When set (e.g. `@morphit`), Twitter cards
+include "via @morphit" attribution.  When unset, the meta tag is omitted
+entirely — the card still renders without it.  Format: must start with `@`,
+1-15 alphanumeric/underscore chars (Twitter's handle limit).  Operators who
+don't have or don't want an X presence simply leave this unconfigured.
+
+### Example morphit.config.env block
+
+```env
+# Optional: override homepage SEO copy
+MORPHIT_INSTANCE_SEO_TITLE="My Instance — privacy-first P2P crypto trading"
+MORPHIT_INSTANCE_SEO_DESCRIPTION="Trade BTC, XMR, BLURT and more directly with people in your region. No KYC, non-custodial, federated."
+MORPHIT_INSTANCE_SEO_KEYWORDS="p2p crypto, no kyc, bitcoin, monero, federated marketplace"
+# Optional: X handle for Twitter Card attribution
+MORPHIT_INSTANCE_SEO_TWITTER_SITE="@morphit"
+```
+
+Restart the indexer after editing, then verify via:
+
+```bash
+curl -sf https://yourinstance.example/v1/instance | jq '.seo'
+```
+

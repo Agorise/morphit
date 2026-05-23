@@ -15,6 +15,7 @@
  */
 
 import { CANONICAL_ORIGIN } from './urls';
+import { stripMarkdown } from './stripMarkdown';
 import type { FaqEntry } from '$utils/faqIndex';
 
 /**
@@ -22,8 +23,12 @@ import type { FaqEntry } from '$utils/faqIndex';
  * Morphit is a collective with no employees or HQ; we emit the minimum
  * honest set of fields.
  */
-export function organizationSchema(siteName: string, tagline: string): Record<string, unknown> {
-	return {
+export function organizationSchema(
+	siteName: string,
+	tagline: string,
+	locale?: string
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',
 		'@id': `${CANONICAL_ORIGIN}/#organization`,
@@ -51,6 +56,12 @@ export function organizationSchema(siteName: string, tagline: string): Record<st
 			height: 512
 		}
 	};
+	// cp119-A5: emit inLanguage when caller passes a locale.  Optional
+	// for back-compat with old call sites; new callers pass it so
+	// Google can disambiguate translated copies of this Organization
+	// node across hreflang variants.
+	if (locale) out.inLanguage = locale;
+	return out;
 }
 
 /**
@@ -58,8 +69,8 @@ export function organizationSchema(siteName: string, tagline: string): Record<st
  * the sitelinks-search-box in Google SERPs — when a user Googles
  * "morphit", the results include a box that searches our FAQ directly.
  */
-export function websiteSchema(siteName: string): Record<string, unknown> {
-	return {
+export function websiteSchema(siteName: string, locale?: string): Record<string, unknown> {
+	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'WebSite',
 		'@id': `${CANONICAL_ORIGIN}/#website`,
@@ -74,6 +85,9 @@ export function websiteSchema(siteName: string): Record<string, unknown> {
 			'query-input': 'required name=search_term_string'
 		}
 	};
+	// cp119-A5: emit inLanguage when caller passes a locale.
+	if (locale) out.inLanguage = locale;
+	return out;
 }
 
 /**
@@ -89,9 +103,10 @@ export function websiteSchema(siteName: string): Record<string, unknown> {
  */
 export function softwareApplicationSchema(
 	siteName: string,
-	description: string
+	description: string,
+	locale?: string
 ): Record<string, unknown> {
-	return {
+	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'SoftwareApplication',
 		'@id': `${CANONICAL_ORIGIN}/#software`,
@@ -113,9 +128,13 @@ export function softwareApplicationSchema(
 			price: '0',
 			priceCurrency: 'USD'
 		},
+		// cp119-A7: softwareVersion lives in MORPHIT_SOFTWARE_VERSION
+		// constant below.  Update there on each pre-launch/launch/major
+		// release.  Avoids the drift risk of hardcoding 'beta' here when
+		// the project actually ships a numbered release.
+		softwareVersion: MORPHIT_SOFTWARE_VERSION,
 		// AGPL-3.0 source link is the most actionable provenance signal
 		// Google's rich results can attach to the listing.
-		softwareVersion: 'beta',
 		license: 'https://www.gnu.org/licenses/agpl-3.0.html',
 		// Publisher uses an @id pointer to the Organization node so the
 		// two schemas link in Google's structured-data graph.
@@ -126,7 +145,29 @@ export function softwareApplicationSchema(
 		// version pin (Morphit runs on whatever the user has).
 		browserRequirements: 'JavaScript enabled, modern web browser'
 	};
+	// cp119-A5: emit inLanguage when caller passes a locale.
+	if (locale) out.inLanguage = locale;
+	return out;
 }
+
+/**
+ * cp119-A7 — single source of truth for the SoftwareApplication
+ * `softwareVersion` field.  Update this constant on each pre-launch
+ * milestone or launch event.
+ *
+ * Pre-launch (current): 'beta'.
+ * At launch: bump to '1.0' (or whatever the launch version is).
+ * Subsequent: bump on each numbered release.
+ *
+ * Read by softwareApplicationSchema().  Memory rule "no hardcoded
+ * figures that change over time" applies — but the right fix for
+ * a version-string is a labeled constant in one place, not a
+ * dynamic lookup (a build-time JSON.parse of package.json would
+ * couple the SEO surface to packaging metadata that has its own
+ * versioning lifecycle).  When Ken bumps this string, the SEO
+ * surface bumps with it.
+ */
+export const MORPHIT_SOFTWARE_VERSION = 'beta';
 
 /**
  * FAQPage schema. This is the SERP rich-snippet lever — Google displays
@@ -147,10 +188,17 @@ export function faqPageSchema(entries: FaqEntry[]): Record<string, unknown> {
 		'@id': `${CANONICAL_ORIGIN}/faq#faqpage`,
 		mainEntity: entries.map((entry) => ({
 			'@type': 'Question',
-			name: entry.question,
+			// cp119-A1: question text is plain in source today, but
+			// strip defensively so future markdown additions can't
+			// leak literal asterisks into SERP results.
+			name: stripMarkdown(entry.question),
 			acceptedAnswer: {
 				'@type': 'Answer',
-				text: entry.answer
+				// cp119-A1: 77 of 128 FAQ entries contain light
+				// markdown (`**bold**`, backticks, `\n\n`, bullets).
+				// Strip before feeding to JSON-LD so Google's
+				// FAQ rich-snippet renders clean plaintext.
+				text: stripMarkdown(entry.answer)
 			}
 		}))
 	};

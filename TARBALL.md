@@ -4,19 +4,19 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp118 — 2026-05-22 (A7 privacy_asset indexable flip + setup-wizard V3 #1 live config preview + new privacy-asset-sitemap-parity smoke + translation re-audit clean).
+**Last touched:** cp119 — 2026-05-22 (fresh-eye re-audit of cp112 SEO surface; 8 findings A1-A8 all fixed same turn + 2 new defense smokes + new operator env var MORPHIT_INSTANCE_SEO_TWITTER_SITE).
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cpNNN-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · 35 ADRs · 305 brag entries · locale parity across 10 locales (**2,907 leaves × 10 = 29,070** after cp118 i18n diff: +6 keys per locale for the live-preview rows)
-- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp118 have been docs/SEO/UX/CI hardening + 7 new structural defenses + operator setup-wizard V1+V2+V3#1, no new audits
-- **44** structural defenses (cp118: +1 privacy-asset-sitemap-parity with 4 scenarios; og-image-freshness still at 7 from cp116); **5,295/0** smoke battery (huge jump from cp117's 4,971: seo-url-consistency expanded from 386→686 scenarios due to dynamic-segment expansion, plus +4 from the new smoke); LL #52 (41st consecutive HW-verified workspace TS-clean)
+- 16 tradable assets · 35 ADRs · 305 brag entries · locale parity across 10 locales (**2,907 leaves × 10 = 29,070**; unchanged in cp119 — no new i18n keys)
+- Codebase deep-audit was end-to-end complete at cp106 (~52,603 lines / 163 modules / 1 finding); cp107–cp119 have been docs/SEO/UX/CI hardening + 9 new structural defenses + operator setup-wizard V1+V2+V3#1, no new audits
+- **46** structural defenses (cp119: +2 — faq-jsonld-no-markdown 7 scenarios, privacy-headline-length 10 scenarios); **5,314/0** smoke battery (cp118 → cp119 +19 via the 2 new smokes + 2 new env-example checks for SEO_TWITTER_SITE); LL #52 (41st consecutive HW-verified workspace TS-clean)
 - 1,381 vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108–cp118 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp118 grand total: ~621 strings across 9 non-EN locales awaiting native review; **cp118 mechanical spot-audit passed with 0 HIGH findings**)
+1. Native-speaker polish of all auto-translated non-EN content from cp108–cp118 — see the translation-quality flag entry in `docs/REVISIT-LIST.md` (cp108-cp118 grand total: ~621 strings across 9 non-EN locales awaiting native review; cp118 mechanical spot-audit passed with 0 HIGH findings; **cp119 added no new auto-translated strings**)
 2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — also tracked in REVISIT
 
 **Standing pre-launch operator-actions that the cp110 handoff listed but are actually closed (clarified at cp111):**
@@ -45,6 +45,40 @@
 - Standing 5-layer @ vs # defense: never collapse @user MXIDs into # room aliases
 
 **Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp115-cp7 is a clear meaningful milestone (3 new user-facing surfaces complete, old grid retired, 6 new structural-defense scenarios shipped, FAQ deep-linking + hover/click UX, all i18n covered).
+
+---
+
+## cp119 — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed same turn + 2 new defense smokes + new operator env var (2026-05-22)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp119-FULL-STATE.tar.gz` built this turn (Ken's queue: re-audit cp112 with fresh eyes + fix everything found).
+
+**State:** 16 tradable assets · 35 ADRs · 305 brag entries · locale parity **2,907 × 10 = 29,070** (unchanged) · **5,314/0** local smoke battery (+19 vs cp118) · 7/7 TS-clean · **46 defenses** (+2 cp119: faq-jsonld-no-markdown 7 scenarios, privacy-headline-length 10 scenarios) · 1,381 vitest passing.
+
+**The 8 cp119 findings (all shipped):**
+
+| # | Severity | Area | What it was | What ships |
+|---|---|---|---|---|
+| **A1** | HIGH | FAQ JSON-LD | `faqPageSchema()` fed raw markdown into `acceptedAnswer.text`; 77 of 128 entries had `**bold**`, backticks, etc. Google's FAQ rich-snippet would render literal asterisks. | New `stripMarkdown()` utility + applied in faqPageSchema; new defense smoke checking 2,560 outputs across 6 markdown classes |
+| **A2** | HIGH | Sitelinks search | WebSite SearchAction JSON-LD promised `/faq?q={query}`, but FaqSearch treated `?q=` as entry KEY (not query). Google sitelinks search box silently broken. | Extended FaqSearch deep-link handler — when `?q=` isn't an entry key, treat as free-text search + populate input + focus |
+| **A3** | MEDIUM | robots.txt | `Disallow: /onboarding/import` is prefix-matched; matched bare path (404) but not `/en/onboarding/import` (real page). Defense-in-depth weakened. | Added `Disallow: /*/onboarding/import` and `Disallow: /*/settings` wildcard variants to all 22 user-agent stanzas |
+| **A4** | LOW | Twitter card | `twitter:site` and `twitter:creator` absent. | Extended existing `MORPHIT_INSTANCE_SEO_*` family with `MORPHIT_INSTANCE_SEO_TWITTER_SITE`; 5 code files + 2 doc files; Head emits conditional on presence |
+| **A5** | LOW | JSON-LD inLanguage | Home schemas (Organization, WebSite, SoftwareApplication) omitted `inLanguage`. | Added optional `locale` parameter to all 3 schemas; home page passes `currentLang` |
+| **A6** | LOW | OG image alt | SVG og:image had no alt (alt grouped with PNG only). ActivityPub/Pleroma tooling that prefers vector got no alt text. | Restructured emission so each og:image is immediately followed by its own og:image:alt |
+| **A7** | LOW | softwareVersion | Hardcoded `'beta'` in jsonld.ts; would drift at v1.0 launch. | Refactored to named constant `MORPHIT_SOFTWARE_VERSION` with doc comment about when to bump |
+| **A8** | INFO | headline length | No check that `privacy.guide_heading` × ticker × locale renders ≤110 chars (Google's Article headline recommendation). | New defense smoke checks 160 ticker × locale combos; worst current rendering is French at 56 chars |
+
+**New env var (operator-facing):** `MORPHIT_INSTANCE_SEO_TWITTER_SITE` — optional X handle for `<meta name="twitter:site">` Twitter card attribution. Documented in `docs/OPERATIONS.md` §43 (entirely new section since OPERATIONS.md didn't yet have one for SEO env vars — also documents the existing TITLE/DESCRIPTION/KEYWORDS triplet alongside).
+
+**Memory facts (re-confirmed for the new session):**
+- `@agorise:matrix.org` = private DM MXID for security disclosure
+- `#agorise:matrix.org` = public Matrix room alias
+- Treasury `@morphit-fees`; posting `@morphit`
+- BLURT fees 90/10 (operator/treasury); BTC/XMR fees 100/0 (treasury/operators)
+- Forgejo, never Gitea; repo at `git.agorise.net/agorise/morphit`
+- BTC/XMR/BLURT non-disableable per memory rule (federation-load-bearing)
+- Sprite-sheet for carousel: SKIP (cp117 SVGO tested-and-rejected at 0.2% savings)
+
+**Cadence rule:** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp119 is a meaningful milestone: 8 SEO findings fixed end-to-end + 2 new defenses + new operator env var documented end-to-end.
 
 ---
 

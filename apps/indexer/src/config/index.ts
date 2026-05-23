@@ -526,6 +526,12 @@ export interface Config {
 	readonly instanceSeoTitle: string | undefined;
 	readonly instanceSeoDescription: string | undefined;
 	readonly instanceSeoKeywords: string | undefined;
+	/** cp119-A4: optional Twitter/X handle for `<meta name="twitter:site">`.
+	 *  When set (e.g. `@morphit`), Twitter cards show "via @morphit"
+	 *  attribution.  When unset, the meta tag is omitted entirely
+	 *  (the card still renders without it).  Operators who don't have
+	 *  or don't want an X presence leave this unconfigured. */
+	readonly instanceSeoTwitterSite: string | undefined;
 }
 
 const envSchema = z.object({
@@ -1170,7 +1176,14 @@ const envSchema = z.object({
 	// can swap the title/description/keywords without forking.
 	MORPHIT_INSTANCE_SEO_TITLE: z.string().max(200).optional(),
 	MORPHIT_INSTANCE_SEO_DESCRIPTION: z.string().max(500).optional(),
-	MORPHIT_INSTANCE_SEO_KEYWORDS: z.string().max(500).optional()
+	MORPHIT_INSTANCE_SEO_KEYWORDS: z.string().max(500).optional(),
+	// cp119-A4: optional Twitter/X handle for twitter:site card
+	// attribution.  Must start with `@`; max 16 chars (Twitter limit).
+	// Operators without X presence leave unset.
+	MORPHIT_INSTANCE_SEO_TWITTER_SITE: z
+		.string()
+		.regex(/^@[A-Za-z0-9_]{1,15}$/, '@handle, 1-15 alphanumeric+underscore chars')
+		.optional()
 });
 
 export function loadConfig(): Config {
@@ -1320,6 +1333,7 @@ export function loadConfig(): Config {
 		instanceSeoTitle: e.MORPHIT_INSTANCE_SEO_TITLE,
 		instanceSeoDescription: e.MORPHIT_INSTANCE_SEO_DESCRIPTION,
 		instanceSeoKeywords: e.MORPHIT_INSTANCE_SEO_KEYWORDS,
+		instanceSeoTwitterSite: e.MORPHIT_INSTANCE_SEO_TWITTER_SITE,
 		frontendBtcChatLinkUrl: e.MORPHIT_FRONTEND_BTC_CHAT_LINK_URL,
 		frontendXmrChatLinkUrl: e.MORPHIT_FRONTEND_XMR_CHAT_LINK_URL,
 		frontendBchChatLinkUrl: e.MORPHIT_FRONTEND_BCH_CHAT_LINK_URL,

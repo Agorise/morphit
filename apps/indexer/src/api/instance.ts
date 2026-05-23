@@ -72,6 +72,11 @@ export interface InstanceResponse {
 		title: string | null;
 		description: string | null;
 		keywords: string | null;
+		/** cp119-A4: optional Twitter/X handle for twitter:site
+		 *  card attribution.  Null = no card attribution (the
+		 *  card still renders without it).  Non-null = full
+		 *  `@handle` form per Twitter spec. */
+		twitter_site: string | null;
 	};
 	/** Frontend chat-link URL templates (Part 109).  Per-instance
 	 *  operator-configurable override for the "click a txid in
@@ -237,7 +242,8 @@ export function instanceRoute(config: Config): Hono {
 			seo: {
 				title: config.instanceSeoTitle ?? null,
 				description: config.instanceSeoDescription ?? null,
-				keywords: config.instanceSeoKeywords ?? null
+				keywords: config.instanceSeoKeywords ?? null,
+				twitter_site: config.instanceSeoTwitterSite ?? null
 			},
 			chat_link_urls: {
 				btc: config.frontendBtcChatLinkUrl ?? null,

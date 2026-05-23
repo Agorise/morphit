@@ -230,7 +230,10 @@
 	<meta property="og:url" content={canonical} />
 	<!-- Primary og:image is PNG (universal compat across X/Twitter,
 	     LinkedIn, Slack, Discord, FB).  SVG fallback emitted as a
-	     secondary og:image for crawlers that prefer vector. -->
+	     secondary og:image for crawlers that prefer vector.
+	     cp119-A6: each og:image is followed by its own og:image:alt
+	     so crawlers that pick the SVG (Pleroma, ActivityPub tooling)
+	     also receive alt text. -->
 	<meta property="og:image" content={ogImagePng} />
 	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:width" content="1200" />
@@ -238,6 +241,7 @@
 	<meta property="og:image:alt" content={ogImageAlt} />
 	<meta property="og:image" content={ogImageSvg} />
 	<meta property="og:image:type" content="image/svg+xml" />
+	<meta property="og:image:alt" content={ogImageAlt} />
 	<!-- og:locale (cp112 audit A10): emit Facebook-conformant
 	     `language_TERRITORY` form via ogLocale() rather than the bare
 	     hyphenated locale code, which some scrapers fall back to
@@ -253,6 +257,12 @@
 
 	<!-- Twitter Card -->
 	<meta name="twitter:card" content="summary_large_image" />
+	{#if $instance.seo?.twitter_site}
+		<!-- cp119-A4: operator-configured X handle ("@morphit").
+		     Twitter cards still render without this; presence adds
+		     "via @handle" attribution to the card. -->
+		<meta name="twitter:site" content={$instance.seo.twitter_site} />
+	{/if}
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={ogImagePng} />

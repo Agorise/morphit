@@ -1,6 +1,20 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp118 — 2026-05-22.  **47 STRUCTURAL DEFENSES (cp118 +1: privacy-asset-sitemap-parity, 4 scenarios; og-image-freshness still 7) · BATTERY 5,295/0 (cp117→cp118 net +324 via seo-url-consistency dynamic-segment expansion 386→686 scenarios + 4 new privacy-asset-sitemap-parity scenarios + small i18n parity drift) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 305 ENTRIES (unchanged) · LOCALE PARITY 2,907 × 10 = 29,070 (cp118 net +60: 6 new live-preview keys × 10 locales) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
+**Last touched:** Part 122 cp119 — 2026-05-22.  **49 STRUCTURAL DEFENSES (cp119 +2: faq-jsonld-no-markdown 7 scenarios, privacy-headline-length 10 scenarios; og-image-freshness still 7; total cp118 44 → cp119 46 with privacy-asset-sitemap-parity still at 4) · BATTERY 5,314/0 (cp118→cp119 net +19 via A1 smoke +7 + A8 smoke +10 + env-example +2 for new SEO_TWITTER_SITE) · LL #52 41ST HW-VERIFIED (unchanged) · 1,381 VITEST TESTS (unchanged) · BRAG LIST 305 ENTRIES (unchanged) · LOCALE PARITY 2,907 × 10 = 29,070 (unchanged from cp118) · CODEBASE DEEP-AUDIT REMAINS END-TO-END COMPLETE AT CP106.**
+
+**cp119 (Ken queue: fresh re-audit of cp112 SEO surface + fix all findings):**
+
+cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option 3: re-audit fresh, label cp119-A1, A2, etc.).  cp119 walks the cp112-touched surface (Head.svelte, urls.ts, jsonld.ts, routes.ts, FaqSearch.svelte, privacy index + per-asset, robots.txt) with a fresh audit eye.  8 findings produced, all 8 shipped same turn:
+
+- **cp119-A1 SHIPPED (HIGH) — FAQ JSON-LD markdown leak.** `faqPageSchema()` was feeding raw FAQ markdown into `acceptedAnswer.text`. 77 of 128 FAQ entries contain `**bold**`, code-backticks, `\n\n`, or bullet markdown.  Google's FAQ rich-snippet would render these as literal asterisks.  Fix: new `stripMarkdown()` utility (`apps/web/src/lib/seo/stripMarkdown.ts`) handles 6 markdown classes (`**bold**`, `__bold__`, `\`code\``, `[link](url)`, `\n\n`, `• bullet`).  Applied in `faqPageSchema()` to both `name` and `acceptedAnswer.text` fields.  New defense `faq-jsonld-no-markdown-smoke` with 7 scenarios checks 2,560 FAQ field outputs (128 entries × 2 fields × 10 locales) for residual markdown across all 6 classes + a self-test that verifies stripMarkdown isn't a no-op.
+- **cp119-A2 SHIPPED (HIGH) — Broken sitelinks search.** `websiteSchema()` declared `urlTemplate: ${origin}/faq?q={search_term_string}` to unlock Google's SERP sitelinks search box.  But `FaqSearch.svelte`'s `?q=` handler treated the value as an FAQ entry KEY, not a search query — a user typing "monero privacy" landed on `/faq?q=monero%20privacy` and saw nothing.  Fix: extended the `$effect` deep-link handler with Form 3 logic — when `?q=` doesn't match an FAQ entry key, populate the search input with the query string + focus it.  Now sitelinks-search-from-Google delivers users into a populated search experience that surfaces relevant FAQ entries.
+- **cp119-A3 SHIPPED (MEDIUM) — robots.txt locale-prefix gap.** `Disallow: /onboarding/import` and `Disallow: /settings` are prefix-matched, so they covered the bare paths (which 404) but NOT `/en/onboarding/import` or `/es/settings` (the real pages).  Defense-in-depth weakened (pages still emit `<meta robots noindex>` so indexing was blocked at meta level).  Fix: added `Disallow: /*/onboarding/import` and `Disallow: /*/settings` wildcard variants to every user-agent stanza (22 stanzas × 2 paths = 44 new wildcard lines, total 88 disallow lines).  Updated header doc-comment.
+- **cp119-A4 SHIPPED (LOW) — Twitter card `twitter:site` plumbing.** Optional `<meta name="twitter:site">` was missing. Extended the existing `MORPHIT_INSTANCE_SEO_*` env-var family with `MORPHIT_INSTANCE_SEO_TWITTER_SITE` (zod validator: `/^@[A-Za-z0-9_]{1,15}$/`).  End-to-end: Config interface + envSchema + map (apps/indexer/src/config/index.ts); InstanceResponse.seo (apps/indexer/src/api/instance.ts); frontend store interface + FALLBACK + API mapping with defensive fallback for older indexers (apps/web/src/lib/stores/instance.ts); indexer-client schema with optional field for back-compat (packages/indexer-client/src/index.ts); Head.svelte emission conditional on presence; canonical example file (ops/env/indexer.env.example); docs/OPERATIONS.md §43 "SEO override env vars" — entirely new section since OPERATIONS.md didn't yet have one (also documents the existing TITLE/DESCRIPTION/KEYWORDS triplet alongside the new TWITTER_SITE).  Ken decides whether/how to populate it for the canonical morphit.io build — Morphit's anti-Twitter stance could justify leaving it unset.
+- **cp119-A5 SHIPPED (LOW) — JSON-LD `inLanguage` on home schemas.** `organizationSchema()`, `websiteSchema()`, `softwareApplicationSchema()` all gained an optional `locale` parameter.  When supplied, the schema emits an `inLanguage` field.  Home page (apps/web/src/routes/[lang]/+page.svelte) now passes `currentLang` to all three.  Helps Google disambiguate translated copies of the same `@id` node across hreflang variants.
+- **cp119-A6 SHIPPED (LOW) — og:image alt grouping.** Each `<meta property="og:image">` now has its own immediately-following `<meta property="og:image:alt">`.  Previously only the PNG image had alt text; the SVG image was emitted alt-less.  Pleroma / ActivityPub tooling that prefers vector OG images now receives alt text too.
+- **cp119-A7 SHIPPED (LOW) — softwareVersion constant.** Was hardcoded `softwareVersion: 'beta'`.  Refactored to named constant `MORPHIT_SOFTWARE_VERSION = 'beta'` at the bottom of `jsonld.ts` with a doc comment explaining: pre-launch is 'beta'; bump to '1.0' at launch; bump on each numbered release.  Single source of truth.  Memory rule "no hardcoded figures that change over time" applies in spirit; a labeled constant is the right granularity for a version string (a build-time package.json read would couple SEO to packaging, which has its own versioning lifecycle).
+- **cp119-A8 SHIPPED (INFO) — privacy.guide_heading length smoke.** New defense `privacy-headline-length-smoke` (10 scenarios, 160 ticker × locale combos checked).  Verifies every `privacy.guide_heading` × `tradable_ticker` interpolation renders ≤110 chars (Google's recommended Article `headline` field limit).  Worst current rendering: French at 56 chars on BLURT.  Catches future drift if a translation gets verbose or a new long-name ticker gets added.
+- **Audit lesson:** cp112's SEO sweep was thorough at its time but accumulated 8 findings over 7 checkpoints of subsequent work + the deeper-look-with-fresh-eyes pass.  Findings ranged from HIGH (FAQ markdown leak, broken sitelinks search) to INFO (defensive smokes).  All 8 fixable in one checkpoint with appropriate defensive tests.  Fresh-eye re-audits at multi-cp intervals are a real defense mechanism that catches both regressions and original-bug drift that the original-time smokes don't.
 
 **cp118 (Ken queue: A7 flip + setup-wizard V3 #1 + translation re-audit):**
 
@@ -47,7 +61,41 @@
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp118 regenerates a fresh binary (clear meaningful milestone — A7 flip + setup-wizard V3 #1 + new defense smoke + translation re-audit clean).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp119 regenerates a fresh binary (clear meaningful milestone — 8 cp119 SEO findings fixed end-to-end + 2 new defense smokes + new operator env var).
+
+## CP119 LESSONS
+
+### Lesson #1 — Fresh-eye re-audits catch original-bug drift the original-time smokes don't
+
+cp112 shipped a comprehensive SEO sweep with three new defenses: brag-list-claim-parity, seo-url-consistency, og-image-freshness.  All three were rigorously tested at cp112 and have stayed green since.  None of them caught any of the 8 findings cp119 surfaced.
+
+Why?  Because each cp112 smoke was scoped to the gap it was created to close.  brag-list-claim-parity checks the brag list, seo-url-consistency checks URL parity, og-image-freshness checks file freshness.  None of them ask "does our JSON-LD render clean text" (cp119-A1), "does our sitelinks search actually work" (cp119-A2), or "are our robots.txt patterns locale-aware" (cp119-A3).
+
+Fresh-eye re-audits are a defense mechanism PER SE.  They re-walk the same surface with no "this was already audited" prior.  Multi-cp intervals are appropriate — the first audit catches most bugs; the second audit catches the bugs the first audit's design didn't think to test for.
+
+**Carry-forward:** schedule a fresh-eye re-audit pass on any "comprehensive sweep" cp ~5-10 cps later.  Label findings with the new cp number to preserve traceability.  If 0 findings, the original sweep was thorough; if N findings, those N are still bugs.  This pattern just shipped 8 real bugs.
+
+### Lesson #2 — A planned-light fix can land in 5-6 files when the plumbing precedent already exists
+
+cp119-A4 (twitter:site) felt heavy.  I initially expected to need a new endpoint, a new schema, a new wizard step, and so on.
+
+Then I noticed the existing `MORPHIT_INSTANCE_SEO_*` family already plumbed an indexer-config → InstanceResponse → frontend-store → Head.svelte path for 3 SEO override fields (title, description, keywords).  Adding a 4th field (twitter_site) to that same path was a 5-file change: extend the Config interface + zod schema + map; extend InstanceResponse.seo; extend the frontend store interface + FALLBACK + API mapping; extend the indexer-client schema (optional for back-compat); emit the meta tag conditionally in Head.svelte.
+
+Plus 2 doc changes: canonical env example + new OPERATIONS.md §43.
+
+7 total files; mechanically straightforward because every file already had the exact pattern I needed to extend.
+
+**Carry-forward:** before designing new plumbing for an optional config knob, check if a sibling family already exists.  Extending a family with one more field is dramatically cheaper than designing new plumbing — and the type checker enforces shape consistency automatically.
+
+### Lesson #3 — The right granularity for a version string is "labeled constant," not "dynamic lookup"
+
+cp119-A7 found `softwareVersion: 'beta'` hardcoded in jsonld.ts.  My first instinct: read from package.json at build time, so the SEO surface stays in sync with packaging.
+
+But that couples two things with different lifecycles.  Package.json version bumps on releases; SEO `softwareVersion` is a human-facing label that may want to lag behind a release ("beta" through 1.x, "stable" at 2.0, etc.).  Coupling them removes the ability to express that intent.
+
+Right answer: a named constant `MORPHIT_SOFTWARE_VERSION` with a doc comment explaining when to bump it.  Ken bumps it manually at meaningful release events.  Single source of truth; intentional state.
+
+**Carry-forward:** the right granularity for a slowly-changing string is "labeled constant + doc comment about when to update it."  Not "hardcoded inline at 5 call sites" (rot risk) and not "dynamic computation" (over-engineering).  Memory rule "no hardcoded figures that change over time" doesn't say "no constants"; it says "no SCATTERED hardcoded figures."  One constant in one place is fine.
 
 ## CP118 LESSONS
 

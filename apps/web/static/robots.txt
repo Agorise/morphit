@@ -8,11 +8,20 @@
 # per-user settings page — both produce no value as indexed results and
 # the recovery form's UI copy could look like phishing bait if a user
 # lands on it from a SERP.
+#
+# cp119-A3: locale-prefixed forms (/{lang}/onboarding/import,
+# /{lang}/settings) are the real URLs; the bare /onboarding/import
+# and /settings forms 404.  Both patterns listed (`/path` and `/*path`)
+# for defense-in-depth.  Major crawlers (Googlebot, Bingbot,
+# DuckDuckBot) honor `*` wildcard in robots.txt paths per the
+# de-facto extended robots.txt grammar.
 
 User-agent: *
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 # Explicit allowlist for major search and retrieval bots.  The
 # wildcard above already grants access; these named entries make
@@ -22,106 +31,148 @@ Disallow: /settings
 User-agent: Googlebot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Bingbot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: DuckDuckBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Slurp
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: YandexBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Baiduspider
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Applebot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Twitterbot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: facebookexternalhit
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: LinkedInBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: GPTBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Claude-Web
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: PerplexityBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Perplexity-User
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Google-Extended
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: Bytespider
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: CCBot
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 User-agent: ia_archiver
 Allow: /
 Disallow: /onboarding/import
+Disallow: /*/onboarding/import
 Disallow: /settings
+Disallow: /*/settings
 
 Sitemap: https://morphit.io/sitemap.xml

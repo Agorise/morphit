@@ -17,26 +17,30 @@
 	// PrioritiesSection which covers the same user-facing properties +
 	// 3 more, with FAQ deep-links and hover/click affordances.
 
+	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// $i18n/path.localePath() + the analogous helper in
+	// [lang]/+layout.svelte for design rationale.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
+
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
 	// SearchAction unlocking the SERP sitelinks search box).
+	// cp119-A5: pass currentLang so each schema emits `inLanguage` —
+	// helps Google disambiguate translated copies of the same @id node.
 	const jsonLd = $derived([
-		organizationSchema($_('seo.site_name'), $_('app.tagline')),
-		websiteSchema($_('seo.site_name')),
+		organizationSchema($_('seo.site_name'), $_('app.tagline'), currentLang),
+		websiteSchema($_('seo.site_name'), currentLang),
 		// cp112: SoftwareApplication schema makes the homepage eligible
 		// for Google's installation-rich-result UI (price/category/OS).
 		// Per-instance SEO description override is respected here so
 		// community operators with custom branding get the right copy.
 		softwareApplicationSchema(
 			$instance.seo?.title || $_('seo.site_name'),
-			$instance.seo?.description || ($_('seo.home.description') as string)
+			$instance.seo?.description || ($_('seo.home.description') as string),
+			currentLang
 		)
 	]);
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
-	// $i18n/path.localePath() + the analogous helper in
-	// [lang]/+layout.svelte for design rationale.
-	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
-	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
 <Head

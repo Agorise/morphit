@@ -230,6 +230,8 @@ SMOKES=(
 	"apps/web:coin-carousel-invariants-smoke"
 	"apps/web:svelte-component-import-coverage-smoke"
 	"apps/web:privacy-asset-sitemap-parity-smoke"
+	"apps/web:faq-jsonld-no-markdown-smoke"
+	"apps/web:privacy-headline-length-smoke"
 )
 
 total=0
