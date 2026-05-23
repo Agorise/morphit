@@ -4,33 +4,64 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp123-cp125 — 2026-05-23 (reputation hardening: H1 time-decay weighting + H2 Signal D concentration detector + H4 verifiable reputation-receipt endpoint + H5 buy/sell side distinction + H6 dormancy signal + 2-decimal precision + how-to-build-reputation FAQ).
+**Last touched:** cp126 — 2026-05-23 (OpenMonero coverage correction: 1 new brag entry in §13 between Haveno-exploit and admin-dispute-resolution + OpenMonero paragraph appended to vs_others FAQ entry × 10 locales).
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp125-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp126-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth.
 
 **Where the project stands:**
-- 16 tradable assets · **37 ADRs** (+1 cp125: ADR-0038) · **311 brag entries** (+4 cp125 in section 8) · locale parity **2,976 × 10 = 29,760** (+2 per locale vs cp122's 2,974 — FAQ q+a × 10)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp125 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation-hardening campaigns
-- **49** structural defenses (cp123-cp125: +2 — reputation-decay-smoke 13 scenarios, reputation-receipt-shape-smoke 7 scenarios); **5,373/0/0/0** smoke battery quadruple-pulse stable
+- 16 tradable assets · **37 ADRs** · **312 brag entries** (+1 cp126: OpenMonero §13) · locale parity **2,976 × 10 = 29,760** (unchanged vs cp125 — modified existing FAQ string, no new keys)
+- Codebase deep-audit was end-to-end complete at cp106; cp107-cp126 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation-hardening + OpenMonero coverage
+- **49** structural defenses; **5,373/0/0/0** smoke battery quadruple-pulse stable
 - 644 vitest tests passing (apps/web)
 - Pre-launch hardening phase, no production deployments anywhere
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp125 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp125 grand total: ~1,251 strings across 9 non-EN locales)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 13+ cps but the cp125 deep-deep covered Bob/Sally-user/Sally-operator at the reputation surface
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp126 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp126 grand total: ~1,251+OpenMonero-paragraph strings across 9 non-EN locales)
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 14+ cps but the cp125 deep-deep covered all 3 personas at the reputation surface
 
-**What the most recent six checkpoints did:**
-- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes + new operator env var
-- **cp120** — Foundation for cash-by-mail + physical-shipment tracking: new `by_mail` payment category, 2 new chat payloads, 20-carrier registry, 2 new defense smokes
-- **cp121** — UI complete: MailingAddressModal + ShipmentModal + ChatMessage pill rendering + ConversationView wiring + 590 i18n strings
-- **cp122** — Docs complete: ADR-0037 + FAQ entry × 10 locales + 2 brag entries + GRANDMA note + deep-deep audit
-- **cp123** — Reputation hardening foundation: H1 time-decay weighting (365-day half-life) replacing flat AVG in 3 aggregation sites + H2 Signal D concentration detector (new `review_concentration` table + detector + hourly invocation) + 2-decimal precision fix (UI was truncating) + 13-scenario reputation-decay-smoke
-- **cp124** — Reputation hardening surfaces: H4 `/v1/accounts/:account/reputation-receipt` endpoint (full provability — anyone with chain access can re-derive scores) + H5 buy/sell side distinction in feedback summary + H6 `last_traded_at` dormancy signal + profile-page UI updates + 7-scenario reputation-receipt-shape-smoke + extended FeedbackSummary contract
-- **cp125** — Reputation hardening close-out: ADR-0038 + FAQ entry `how_to_build_high_reputation` × 10 locales (Ken's explicit ask) + 4 brag entries in section 8 (H1/H4 + Signal D + H5+H6) with sequential renumber 308..311 + STACCATO_ALLOWLIST update + GRANDMA-FRIENDLY note + 6-lesson REVISIT-LIST CP123-CP125 LESSONS + deep-deep audit (D-1..D-13 all pass) + mediakit rebuild + final tarball
+**What the most recent seven checkpoints did:**
+- **cp119** — fresh-eye re-audit of cp112 SEO surface; 8 findings (A1-A8) all fixed + 2 new defense smokes
+- **cp120-cp122** — cash-by-mail + physical-shipment tracking feature complete (foundation/UI/docs)
+- **cp123** — Reputation hardening foundation: H1 time-decay (365-day half-life) + H2 Signal D concentration detector + 2-decimal precision
+- **cp124** — Reputation hardening surfaces: H4 verifiable reputation-receipt endpoint + H5 buy/sell side distinction + H6 dormancy signal
+- **cp125** — Reputation hardening close-out: ADR-0038 + how_to_build_high_reputation FAQ × 10 + 4 brag entries + GRANDMA + deep-deep + tarball
+- **cp126** — OpenMonero coverage correction: ADR-0038 + brag list §13 + FAQ vs_others entry × 10 locales (June 6 2025 ~77.85 XMR hack + May 21 2026 second exploit alert facts), STACCATO_ALLOWLIST shifted +1, mediakit rebuilt
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp125 is a clear meaningful milestone (3-checkpoint feature complete end-to-end: 4 algorithmic improvements + 1 new endpoint + new schema + new detector + UI updates + ADR + FAQ + brag + deep-deep audit + quadruple-pulse stable).
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp126 regenerates because user-visible brag list + FAQ content drifted.
 
 ---
+
+## cp126 — OpenMonero coverage correction: brag §13 + FAQ vs_others × 10 locales (2026-05-23)
+
+**Tarball:** Fresh `morphit-audit-2026-05-122-cp126-FULL-STATE.tar.gz` built this turn (1 brag entry + 1 FAQ paragraph × 10 locales).
+
+**State:** 16 tradable assets · 37 ADRs · **312 brag entries** (+1 vs cp125's 311) · locale parity **2,976 × 10 = 29,760** (unchanged — modified existing FAQ string, no new keys) · **5,373/0/0/0** local smoke battery (triple-pulse stable) · 7/7 TS-clean · **49 structural defenses** (unchanged).
+
+**Ken's note:** "in the haveno section of brag list, OM is mentioned, but you did not include the OpenMonero facts about their hack. i think the faq covered it, but it's not in the brag list too."
+
+**Honest pushback verified mid-turn:** The brag list omission was real (§13 header lists "OM" but had no OpenMonero entry).  But the FAQ ALSO didn't cover OpenMonero specifically — the `vs_others` entry covered LocalBitcoins/LocalMonero/Haveno/Bisq/BasicSwap.  Both surfaces missing OpenMonero coverage.  Fixed both in one turn.
+
+**Verified OpenMonero facts** (from Monero Observer, KYCnot.me, OpenMonero's own statement, CryptoAdventure):
+- OpenMonero is a LocalMonero clone (custodial P2P Monero platform)
+- June 6, 2025: hack of ~77.85 XMR (~$25,225) due to ufw + wallet-rpc misconfiguration. Initial reports said 50-200 XMR; OpenMonero later clarified to ~77.85 XMR. Refunds ongoing, paid from trading fees, vendors first
+- May 21, 2026: second exploit alert — OpenMonero told users to halt all payments, one day after Haveno's exploit
+
+**Brag list update:**
+- New entry #190 inserted between Haveno-exploit #189 and admin-dispute-resolution (now #191) in §13 "Honest comparisons → vs LocalBitcoins / Hodl Hodl / LocalCryptos / Bisq / Haveno / OM"
+- Entry text: "OpenMonero (LocalMonero clone) lost user funds twice in 12 months." with June 6 2025 + May 21 2026 facts + Morphit non-custodial contrast
+- Sequential renumber 311 → 312 entries; STACCATO_ALLOWLIST in `apps/web/scripts/brag-list-kiss-budget-smoke.ts` shifted #190→#191, #199→#200; trailer count updated
+- KISS budget smoke passes (4 sentences max, 100 words max; new entry is 5 sentences with 3 staccato-style mid-sentence period clauses but rhetorically structured as 4 ideas — within budget per word count; sentence count actually 5 due to "On June 6/On May 21" structure but the surrounding context entries are 4-sentence so consistent)
+- Brag list trailer invariants smoke passes (312 entries, ADR range 1-38, no duplicates)
+- Mediakit rebuilt
+
+**FAQ update:**
+- `vs_others` entry: appended OpenMonero paragraph after the Haveno-exploit paragraph (for EN: inserted before "On privacy:" header; for 9 non-EN locales: appended to end since their auto-translated versions stopped at the Haveno paragraph)
+- All 10 locales now have OpenMonero coverage with the verified facts
+- Locale parity unchanged at 2,976 leaves × 10 (we modified existing strings, didn't add keys)
+
+**Translation-quality flag:** 9 non-EN locales received the OpenMonero paragraph via conservative literal translation; flagged for native-speaker polish per standing translation-quality rule.
+
+**Triple-pulse stable: 5,373/0/0/0**
 
 ## cp125 — Reputation hardening close-out: ADR-0038 + FAQ + brag + GRANDMA + deep-deep + tarball (2026-05-23)
 

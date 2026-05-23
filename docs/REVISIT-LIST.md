@@ -61,7 +61,26 @@ cp113's A1/A14 findings weren't recoverable from prior transcripts (Ken's option
 
 **cp109+cp110+cp112+cp115+cp116+cp117+cp118 translation-quality flag (PRE-LAUNCH NATIVE REVIEW NEEDED — updated cp118; spot-check passed):** All auto-translated FAQ content + cp112 SEO keys + cp115 carousel/priorities + cp116/cp117 setup-wizard keys (~567 strings) + **cp118 live-preview keys: `admin.setup_wizard.assets.{current_state_label, current_state_loading, current_state_all_enabled, current_state_count}` + `admin.setup_wizard.payment.{current_state_label, current_state_none}` = 6 keys × 9 non-EN = 54 strings**. **Grand total cp108-cp118 auto-translated strings: ~621 strings.** cp118 spot-audit (mechanical script-based check for placeholder mismatches, length-ratio outliers, English-residue in non-Latin locales) found 0 HIGH issues, 13 MEDIUM (all Chinese density false-positives — Chinese is 3-4× more compact than English for terse UI labels; eye-confirmed all correctly translated), 4 LOW (all matched on the literal shell command `docker compose restart indexer` which correctly stayed English). Native-speaker review still recommended pre-launch, but no obvious errors in the corpus.
 
-**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp125 regenerates a fresh binary (meaningful milestone — reputation-hardening campaign complete across cp123-cp125: H1 time decay + H2 Signal D + H4 verifiable receipt + H5 side distinction + H6 dormancy).
+**Tarball cadence (active since 2026-05-21):** Per Ken's instruction, the .tar.gz binary regenerates only at meaningful milestones (multiple checkpoints of work, end of major audit phase, or when Ken asks). TARBALL.md + REVISIT-LIST + transcripts update every turn. cp126 is a tiny correction checkpoint (1 brag entry + FAQ paragraph × 10 locales for OpenMonero coverage); regenerating the binary because it includes user-visible content drift.
+
+## CP126 LESSON
+
+### Lesson — Verify the user's claim before agreeing, even when they're directionally right
+
+Ken's cp126 note: "OM is mentioned in the brag list haveno section but you did not include the OpenMonero facts. i think the faq covered it, but it's not in the brag list too."
+
+The brag list omission was real — section 13 header lists "OM" but no entry covered OpenMonero.  But Ken's parenthetical claim that "the faq covered it" turned out to be wrong: a thorough search showed the `vs_others` FAQ entry covered LocalBitcoins, LocalMonero, Haveno, Bisq, and BasicSwap — but not OpenMonero specifically.
+
+Two ways this could have gone:
+
+1. **Silently agree** with Ken's framing and just add the brag entry.  Misses the FAQ gap; leaves the brag-vs-FAQ parity Ken implied as broken.
+2. **Verify, then push back honestly**: search the FAQ → find no OpenMonero coverage → tell Ken the FAQ is also missing it → propose adding to both surfaces with verified facts (June 6 2025 ~77.85 XMR hack + May 21 2026 second exploit alert).
+
+Picked #2.  Ken's standing rule "honest pushback when claims are wrong" applies even when the wrong claim is a minor parenthetical; the larger ask is still good and the deliverable is better when both surfaces get fixed in one turn.
+
+**Carry-forward:** when a user's note assumes some other surface is already correct, verify that surface before scoping the work.  The note's main point (brag list missing entry) was right; the implied parity baseline (FAQ has it) was wrong.  Both findings need to land in the same turn or the parity assumption stays broken for the next session.
+
+Also: when adding factual claims about other projects (especially hack/exploit details), web-search to verify dates, amounts, and specifics from multiple sources before writing.  Don't invent figures from memory — got the OpenMonero numbers (~77.85 XMR / $25,225 / June 6 2025 / May 21 2026) from Monero Observer + KYCnot.me + OpenMonero's own statement + CryptoAdventure, all of which agreed.
 
 ## CP123-CP125 LESSONS
 
