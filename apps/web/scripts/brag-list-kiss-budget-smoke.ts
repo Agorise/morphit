@@ -86,11 +86,11 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * and #12 are in the brag-list preamble (before the reputation-
  * hardening section) so they're unaffected.
  *
- * cp126 numbering shift: 1 new OpenMonero entry in §13 (between
- * Haveno-exploit #189 and admin-dispute-resolution previously #190)
- * shifted subsequent entries by +1 (#190 → #191, #199 → #200).
+ * cp127 numbering shift: 2 new self-sovereign-pricing entries in
+ * §4 (between Blurt-RPC #86 and wallet-embed previously #87)
+ * shifted subsequent entries by +2 (#191 → #193, #200 → #202).
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '191', '200']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '193', '202']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

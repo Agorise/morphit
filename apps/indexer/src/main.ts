@@ -39,6 +39,7 @@ import { chainFeeRoute } from '$api/chainFee';
 import { instancesRoute } from '$api/instances';
 import { instancesStreamRoute } from '$api/instancesStream';
 import { listingFeeRoute } from '$api/listingFee';
+import { priceReceiptRoute } from '$api/priceReceipt';
 import { orderbookRoute } from '$api/orderbook';
 import { orderbookStreamRoute } from '$api/orderbookStream';
 import { featuredRoute } from '$api/featuredOrderbook';
@@ -118,7 +119,7 @@ async function main(): Promise<void> {
 	// USD-display courtesy on /v1/listing-fee, gated behind the
 	// `priceFeedEnabled` flag.  When disabled (the default), the
 	// indexer makes ZERO outbound HTTP calls for pricing.
-	const priceSource = config.priceFeedEnabled ? createPriceSource(config) : null;
+	const priceSource = config.priceFeedEnabled ? createPriceSource(config, db) : null;
 	if (priceSource !== null) {
 		priceSource.start();
 	}
@@ -165,6 +166,17 @@ async function main(): Promise<void> {
 	listingFeeApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	listingFeeApp.route('/', listingFeeRoute(config, priceSource));
 	app.route('/v1/listing-fee', listingFeeApp);
+
+	// cp127: price-derivation receipt endpoint.  Resource-rate-
+	// limited (same as listing-fee — these are forensic-grade
+	// reads, not list pagination).  Available whether or not the
+	// native fetcher is currently in the composite chain; operators
+	// can use the receipt to evaluate what the native fetcher WOULD
+	// produce before enabling it.
+	const priceReceiptApp = new Hono();
+	priceReceiptApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	priceReceiptApp.route('/', priceReceiptRoute(db, config));
+	app.route('/v1/price', priceReceiptApp);
 
 	// Phase E — orderbook SSE.  Mounted at /v1/orderbook/stream
 	// BEFORE the rate-limited /v1/orderbook so the more-specific

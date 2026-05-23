@@ -236,6 +236,9 @@ SMOKES=(
 	"apps/web:shipping-payload-roundtrip-smoke"
 	"apps/indexer:reputation-decay-smoke"
 	"apps/indexer:reputation-receipt-shape-smoke"
+	"apps/indexer:stablecoin-depeg-detector-smoke"
+	"apps/indexer:morphit-native-fetcher-smoke"
+	"apps/indexer:price-source-hardening-smoke"
 )
 
 total=0

@@ -203,6 +203,36 @@ export interface Config {
 	/** Optional Coingecko API key. Free tier works without one. */
 	readonly coingeckoApiKey?: string;
 
+	/** ── cp127: morphit_native price-source feed config ──────────
+	 *  Opt-in self-sovereign price derivation from on-platform
+	 *  trade data.  When enabled, the morphit_native fetcher slots
+	 *  into the composite source's upstream chain BETWEEN coingecko
+	 *  and the static floor.  See ADR-0039 for design rationale.
+	 *
+	 *  Default: false (operators turn this on when they trust their
+	 *  platform's trading volume to support self-sovereign pricing). */
+	readonly priceFeedNativeEnabled: boolean;
+
+	/** When true, AND morphit_native is enabled, AND the cross-source
+	 *  disagreement monitor detects sustained material disagreement
+	 *  between morphit_native and the external sources, prefer the
+	 *  morphit_native value.  Default: false (external remains
+	 *  primary).  Operators who trust their data flip this once
+	 *  they've validated their on-platform pricing matches reality. */
+	readonly priceFeedPreferNativeWhenDisagreeing: boolean;
+
+	/** Stablecoin tickers the morphit_native fetcher considers for
+	 *  Tier 2 + the depeg detector.  Default: USDT/USDC/DAI.  An
+	 *  operator can override to drop or add stablecoins. */
+	readonly priceFeedStablecoinKeys: ReadonlyArray<string>;
+
+	/** Per-asset plausibility envelope for the morphit_native fetcher.
+	 *  Operator can TIGHTEN these but cannot WIDEN past the
+	 *  hardcoded outer bounds in morphitNativeFetcher.ts.  Defaults
+	 *  match the BLURT historical range. */
+	readonly priceFeedNativePlausibleMin: number;
+	readonly priceFeedNativePlausibleMax: number;
+
 	/** Featured-slot auction: BLURT cost per
 	 *  hour of featured-slot time. Users pay this (× hours
 	 *  requested) to bid on a featured slot. Default 50 BLURT.
@@ -722,6 +752,42 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_COINGECKO_BASE_URL: z.string().default('https://api.coingecko.com/api/v3'),
 	MORPHIT_INDEXER_COINGECKO_API_KEY: z.string().optional(),
 
+	// ─── cp127: morphit_native (self-sovereign) price feed ──────
+	// Default OFF (operators opt in when they trust their data).
+	MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED: z
+		.enum(['true', 'false'])
+		.default('false')
+		.transform((s) => s === 'true'),
+	// Default OFF (priority remains Klingex > Coingecko > native).
+	// Operators with mature data can flip to true to prefer native
+	// when external sources materially disagree.
+	MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING: z
+		.enum(['true', 'false'])
+		.default('false')
+		.transform((s) => s === 'true'),
+	// Comma-separated lowercase tickers; default USDT/USDC/DAI.
+	MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS: z
+		.string()
+		.default('usdt,usdc,dai')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((t) => t.trim().toLowerCase())
+				.filter((t) => t.length > 0)
+		),
+	// Per-asset plausibility envelope for the native fetcher.
+	// Defaults match BLURT historical range; an operator can tighten
+	// these but the hardcoded outer bounds in morphitNativeFetcher.ts
+	// take precedence (defense E).
+	MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN: z.coerce
+		.number()
+		.positive()
+		.default(0.0001),
+	MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX: z.coerce
+		.number()
+		.positive()
+		.default(0.1),
+
 	// Featured-slot auction.
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),
 
@@ -1236,6 +1302,15 @@ export function loadConfig(): Config {
 		klingexBaseUrl: e.MORPHIT_INDEXER_KLINGEX_BASE_URL,
 		coingeckoBaseUrl: e.MORPHIT_INDEXER_COINGECKO_BASE_URL,
 		coingeckoApiKey: e.MORPHIT_INDEXER_COINGECKO_API_KEY,
+		// cp127 — morphit_native price feed
+		priceFeedNativeEnabled: e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED,
+		priceFeedPreferNativeWhenDisagreeing:
+			e.MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING,
+		priceFeedStablecoinKeys: e.MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS,
+		priceFeedNativePlausibleMin:
+			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN,
+		priceFeedNativePlausibleMax:
+			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX,
 
 		featureFeeBlurtPerHour: e.MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR,
 

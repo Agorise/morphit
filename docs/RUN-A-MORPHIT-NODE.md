@@ -818,6 +818,8 @@ Replace `YOURDBPASSWORD` with the database password you set in step 7. The `__SE
 
 For the full list of every env var the indexer reads (price feed, operator-balance alerts, BTC/XMR fee acceptance, attestation phase, low-balance auto-refill), open `ops/env/indexer.env.example` itself — every key is commented with what it does and a sane default.
 
+> **About `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED` (cp127 self-sovereign pricing):** Leave it `false` for a brand-new instance with zero trade history. Once your platform has enough on-platform trading activity (≥3 distinct verified-fee traders posting BLURT-vs-USD or BLURT-vs-stablecoin orders within an 8-hour window), you can flip it to `true`. The native fetcher slots BETWEEN coingecko and the static floor, so external sources still work as primary. Inspect what the native fetcher WOULD produce (even while disabled) via `GET /v1/price/morphit-native/receipt` on your instance. See ADR-0039 for the full design.
+
 > **About `MORPHIT_INDEXER_BTC_FEE_ADDRESS` (community
 > operators):** Leave it empty.  As of Part 106, your
 > indexer automatically inherits the canonical Morphit
