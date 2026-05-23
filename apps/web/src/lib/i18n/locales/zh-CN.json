@@ -3997,13 +3997,24 @@
 				"url_error_format": "必须是 https:// URL",
 				"output_heading": "在你的服务器上运行此命令",
 				"output_subtitle": "在你安装 Morphit 的目录中,将此粘贴到终端。系统会提示你输入 posting key 文件路径。",
-				"output_pending": "填写上方的键、名称、说明和类别字段以生成命令。"
+				"output_pending": "填写上方的键、名称、说明和类别字段以生成命令。",
+				"remove_key_error_canonical": "规范方法无法通过每实例机制移除"
 			},
 			"disclosure": {
 				"heading": "此向导做什么和不做什么",
 				"read_only": "只读: 此页面生成配置和 CLI 文本,但绝不会修改你的服务器。在你自己粘贴并应用输出之前,什么都不会改变。",
 				"no_auth": "开放访问: 此页面不需要登录,因为它不修改任何内容。任何人都可以访问它。如果这不是你想要的,将它放在你的反向代理的认证后面。",
 				"restart_required": "需要重启服务: 编辑 morphit.env 后,重启索引器服务以使更改生效。支付方式 CLI 立即广播到链上 — 不需要重启。"
+			},
+			"payment_remove": {
+				"heading": "移除自定义支付方式",
+				"intro": "如果你之前通过 CLI 添加了支付方式并希望停用,在此生成移除命令。规范方法(PayPal、Wise 等)无法移除 — 它们是项目范围的。",
+				"key_label": "要移除的机器键",
+				"key_help": "添加方式时使用的确切键。在你的服务器上运行 `morphit-ops payment-method list` 查看当前的扩展。",
+				"output_heading": "在你的服务器上运行此命令",
+				"output_subtitle": "从你安装 Morphit 的目录运行。在链上广播之前会要求你确认。",
+				"output_pending": "输入实例特定方式的机器键以生成移除命令。",
+				"orders_safety": "引用此方式的现有订单在移除后继续正常显示 — 键在那些订单的历史记录中持续存在。移除仅意味着新订单不能选择它。"
 			}
 		}
 	}

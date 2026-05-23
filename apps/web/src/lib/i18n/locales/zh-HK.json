@@ -3997,13 +3997,24 @@
 				"url_error_format": "必須係 https:// URL",
 				"output_heading": "喺你嘅伺服器執行呢個命令",
 				"output_subtitle": "喺你裝咗 Morphit 嘅目錄入面,將呢個貼喺終端機。系統會提示你輸入 posting key 檔案路徑。",
-				"output_pending": "填寫上面嘅鍵、名稱、說明同類別欄位嚟生成命令。"
+				"output_pending": "填寫上面嘅鍵、名稱、說明同類別欄位嚟生成命令。",
+				"remove_key_error_canonical": "規範方法唔可以通過每實例機制移除"
 			},
 			"disclosure": {
 				"heading": "呢個嚮導做乜同唔做乜",
 				"read_only": "只讀: 呢頁生成配置同 CLI 文字,但永遠唔會修改你嘅伺服器。喺你自己貼上同套用輸出之前,冇嘢會改變。",
 				"no_auth": "開放訪問: 呢頁唔需要登入,因為佢冇修改任何嘢。任何人都可以訪問。如果你唔想咁,將佢放喺你嘅反向代理嘅認證後面。",
 				"restart_required": "需要重啟服務: 編輯 morphit.env 後,重啟索引器服務令更改生效。付款方式 CLI 即時廣播到鏈上 — 唔需要重啟。"
+			},
+			"payment_remove": {
+				"heading": "移除自訂付款方式",
+				"intro": "如果你之前通過 CLI 添加咗付款方式並想停用,喺呢度生成移除命令。規範方法(PayPal、Wise 等)唔可以移除 — 佢哋係項目範圍嘅。",
+				"key_label": "要移除嘅機器鍵",
+				"key_help": "添加方式時使用嘅確切鍵。喺你嘅伺服器執行 `morphit-ops payment-method list` 睇你嘅當前擴展。",
+				"output_heading": "喺你嘅伺服器執行呢個命令",
+				"output_subtitle": "喺你裝咗 Morphit 嘅目錄執行。喺鏈上廣播之前會要求你確認。",
+				"output_pending": "輸入實例特定方式嘅機器鍵嚟生成移除命令。",
+				"orders_safety": "引用呢個方式嘅現有訂單喺移除之後繼續正常顯示 — 個鍵喺嗰啲訂單嘅歷史記錄入面持續存在。移除淨係意味住新訂單唔可以揀佢。"
 			}
 		}
 	}

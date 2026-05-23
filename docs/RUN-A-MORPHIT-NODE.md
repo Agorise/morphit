@@ -1880,16 +1880,35 @@ memory #23 and ADR-0011).
 
 ### Decide your operator stance
 
-The `morphit-ops init` wizard, step 13 "Trade-only asset
-policy" (Part 122 cp22), walks through every shipped trade-only
-asset and asks per-ticker whether to enable it on your
-instance.  Default is YES for each (per Memory #25).  Choose
-"n" at the prompt to disable that asset; the wizard emits the
-correct `MORPHIT_INDEXER_DISABLED_ASSETS=` line into
-`morphit.config.env` for you — no manual env-file editing.
+You have three paths to set the disabled-assets list, all of which
+write the same `MORPHIT_INDEXER_DISABLED_ASSETS=...` line:
 
-You can re-run the wizard later to change your mind, or edit
-the env var directly.  Both paths write the same line.
+1. **CLI wizard** (the path this guide walks you through) — the
+   `morphit-ops init` wizard, step 13 "Trade-only asset policy"
+   (Part 122 cp22), prompts per-ticker whether to enable it on
+   your instance.  Default is YES for each (per Memory #25).
+   The wizard emits the line into `morphit.config.env`.
+
+2. **Web setup-wizard** (Part 122 cp116) — once your instance is
+   up and a browser can reach it, visit `/admin/setup-wizard` on
+   your site.  Tick or untick each tradable asset to see the
+   exact env line update live; click Copy and paste into your
+   `morphit.config.env`, then restart the indexer
+   (`docker compose restart indexer`).  Read-only — the page
+   never mutates your server, so no auth-gating is needed (put
+   it behind your reverse proxy's auth if you want one anyway).
+   See "Browser setup-wizard" below for the full operator UX.
+
+3. **Direct env-file edit** — open `morphit.config.env` in your
+   editor of choice, find or add the
+   `MORPHIT_INDEXER_DISABLED_ASSETS=` line, set the value, and
+   restart the indexer.
+
+All three paths write the exact same line; pick whichever is
+fastest for you.  The CLI wizard is friendliest for first-time
+setup (it walks per-ticker); the web wizard is friendliest for
+"oops, I forgot to disable X" mid-deployment; the direct edit
+is fastest if you already know what you want.
 
 Reasonable positions for an operator:
 
@@ -2007,6 +2026,66 @@ visible in the orderbook.  No extra wiring needed on your
 side; just set the env var and restart the indexer service.
 Browsers see the change at most 5 minutes after restart
 (`/v1/instance` carries a 5-minute Cache-Control header).
+
+### Browser setup-wizard
+
+If you'd rather not memorize env-var names, your instance hosts
+a browser-based setup-wizard at `/admin/setup-wizard` (cp116).
+Visit it from any browser that can reach your domain.
+
+What the page lets you do:
+
+- **Toggle which assets your instance lists.** A checkbox for
+  each tradable asset, with BTC/XMR/BLURT locked enabled (the
+  three "core" assets cannot be disabled — federation depends
+  on them for listing-fee payment).  Tick or untick anything
+  else; the page emits the exact
+  `MORPHIT_INDEXER_DISABLED_ASSETS=...` line live.  Hit Copy,
+  paste into `morphit.config.env`, restart the indexer
+  (`docker compose restart indexer`).
+
+- **Add a custom payment method.** If your region uses a payment
+  method that isn't in Morphit's canonical list, fill in the
+  form (machine key, display name, description, category,
+  optional URL).  The page emits the exact
+  `morphit-ops payment-method add ...` CLI command with all the
+  flags pre-filled and POSIX-safe shell-escaped.  Hit Copy,
+  paste into your terminal on the operator host, follow the
+  prompts.  The CLI broadcasts a chain op — no service restart
+  needed.
+
+What the page does NOT do:
+
+- **It never mutates your server.** Read-only by design.
+  Nothing changes until you paste the output and apply it
+  yourself.  This is the architectural choice — giving the web
+  tier filesystem-write or service-restart privileges would
+  expand attack surface significantly, so the wizard limits
+  itself to generating the text you need.
+
+- **It has no login requirement.** Anyone who can reach your
+  domain can visit `/admin/setup-wizard` and see the form.
+  That's fine because the form mutates nothing — but if you'd
+  rather hide it from your users, put it behind your reverse
+  proxy's auth (Nginx HTTP basic-auth, Caddy `basicauth`
+  directive, or your favourite SSO middleware).  Documented
+  examples in `docs/OPERATIONS.md` "Securing operator-only
+  routes."
+
+- **It doesn't preview your current state.** V1 only generates
+  the lines you'd need to set; it doesn't read your current
+  `morphit.config.env` to show what's already there.  V2 may
+  add a live-preview endpoint.
+
+When to use the browser wizard vs the CLI wizard:
+
+| Situation                         | Best path                |
+|-----------------------------------|--------------------------|
+| First-time setup, fresh server    | `morphit-ops init` CLI   |
+| Already-running instance changes  | `/admin/setup-wizard`    |
+| Scripted/headless config          | Direct env-file edit     |
+
+All three paths produce the same env file in the end.
 
 ### Per-network explorer URLs (multi-network assets)
 

@@ -3997,13 +3997,24 @@
 				"url_error_format": "Must be an https:// URL",
 				"output_heading": "Run this command on your server",
 				"output_subtitle": "From the directory where you installed Morphit, paste this into your terminal. You'll be prompted for the posting key file path.",
-				"output_pending": "Fill in the key, name, description, and category fields above to generate the command."
+				"output_pending": "Fill in the key, name, description, and category fields above to generate the command.",
+				"remove_key_error_canonical": "Canonical methods can't be removed via the per-instance mechanism"
 			},
 			"disclosure": {
 				"heading": "What this wizard does and does not do",
 				"read_only": "Read-only: this page generates config and CLI text but never mutates your server. Nothing changes until you paste the output and apply it yourself.",
 				"no_auth": "Open access: this page has no login requirement because it never mutates anything. Anyone can visit it. If that's not what you want, place it behind your reverse proxy's auth.",
 				"restart_required": "Service restart required: after editing morphit.env, restart the indexer service so the change takes effect. The payment-method CLI broadcasts to chain immediately — no restart needed for that."
+			},
+			"payment_remove": {
+				"heading": "Remove a custom payment method",
+				"intro": "If you previously added a payment method via the CLI and want to retire it, generate the remove command here. Canonical methods (PayPal, Wise, etc.) cannot be removed — they're project-wide.",
+				"key_label": "Machine key to remove",
+				"key_help": "The exact key you used when adding the method. Run `morphit-ops payment-method list` on your server to see your current additions.",
+				"output_heading": "Run this command on your server",
+				"output_subtitle": "From the directory where you installed Morphit. You'll be prompted to confirm before the chain op is broadcast.",
+				"output_pending": "Enter the machine key of an instance-specific method to generate the remove command.",
+				"orders_safety": "Existing orders that reference this method continue to display correctly after removal — the on-chain key persists in those orders' history. Remove just means new orders can't pick it."
 			}
 		}
 	}

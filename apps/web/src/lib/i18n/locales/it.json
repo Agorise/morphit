@@ -3997,13 +3997,24 @@
 				"url_error_format": "Deve essere un URL https://",
 				"output_heading": "Esegui questo comando sul tuo server",
 				"output_subtitle": "Dalla directory in cui hai installato Morphit, incolla questo nel terminale. Ti verrà chiesto il percorso del file della chiave di posting.",
-				"output_pending": "Compila i campi chiave, nome, descrizione e categoria sopra per generare il comando."
+				"output_pending": "Compila i campi chiave, nome, descrizione e categoria sopra per generare il comando.",
+				"remove_key_error_canonical": "I metodi canonici non possono essere rimossi tramite il meccanismo per istanza"
 			},
 			"disclosure": {
 				"heading": "Cosa fa e non fa questa procedura guidata",
 				"read_only": "Sola lettura: questa pagina genera testo di configurazione e CLI ma non modifica mai il tuo server. Nulla cambia finché non incolli e applichi l'output tu stesso.",
 				"no_auth": "Accesso aperto: questa pagina non richiede login perché non modifica nulla. Chiunque può visitarla. Se non è ciò che vuoi, posizionala dietro l'autenticazione del tuo reverse proxy.",
 				"restart_required": "Riavvio del servizio richiesto: dopo aver modificato morphit.env, riavvia il servizio dell'indexer affinché la modifica abbia effetto. Il CLI dei metodi di pagamento trasmette alla chain immediatamente — non è richiesto alcun riavvio."
+			},
+			"payment_remove": {
+				"heading": "Rimuovi un metodo di pagamento personalizzato",
+				"intro": "Se hai precedentemente aggiunto un metodo di pagamento tramite CLI e vuoi ritirarlo, genera qui il comando di rimozione. I metodi canonici (PayPal, Wise, ecc.) non possono essere rimossi — sono a livello di progetto.",
+				"key_label": "Chiave macchina da rimuovere",
+				"key_help": "La chiave esatta che hai usato quando hai aggiunto il metodo. Esegui `morphit-ops payment-method list` sul tuo server per vedere le tue aggiunte attuali.",
+				"output_heading": "Esegui questo comando sul tuo server",
+				"output_subtitle": "Dalla directory in cui hai installato Morphit. Ti verrà chiesto di confermare prima di trasmettere l'operazione alla chain.",
+				"output_pending": "Inserisci la chiave macchina di un metodo specifico dell'istanza per generare il comando di rimozione.",
+				"orders_safety": "Gli ordini esistenti che fanno riferimento a questo metodo continuano a mostrarsi correttamente dopo la rimozione — la chiave persiste nella cronologia di quegli ordini. Rimuovere significa solo che i nuovi ordini non possono sceglierla."
 			}
 		}
 	}

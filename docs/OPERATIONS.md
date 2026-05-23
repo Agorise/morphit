@@ -1938,6 +1938,63 @@ until the disk is full and the host wedges.
   (`/etc/crypttab` with a random key per boot) so suspended
   process memory isn't recoverable from disk.
 
+#### Securing operator-only routes (cp116)
+
+Morphit exposes a small surface of operator-helpful routes
+that don't make sense for end users.  Currently this is just
+`/admin/setup-wizard` (cp116, config-line generator —
+read-only, no mutation, but visually cluttery for end users),
+but more may follow.
+
+These routes are NOT auth-gated at the application level by
+design — making them read-only sidesteps the need for an auth
+system that adds attack surface for marginal benefit.  If you
+prefer to hide the admin surface from your users anyway, two
+common options:
+
+**Nginx HTTP basic-auth:**
+
+```nginx
+location /admin/ {
+    auth_basic "Operator only";
+    auth_basic_user_file /etc/nginx/.morphit-admin-htpasswd;
+    proxy_pass http://localhost:3000;
+}
+```
+
+Generate the htpasswd file with `htpasswd -c /etc/nginx/.morphit-admin-htpasswd <username>`.
+
+**Caddy basicauth directive:**
+
+```caddy
+your-domain.example {
+    handle /admin/* {
+        basicauth {
+            <username> <bcrypt-hash>
+        }
+        reverse_proxy localhost:3000
+    }
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
+```
+
+Generate the bcrypt hash with `caddy hash-password`.
+
+For both: pick a username and password unrelated to any of
+your Blurt account names — the admin surface is unauthenticated
+in the application but you don't want a passive observer of the
+HTTP traffic to learn your relay account name.
+
+Locale-prefixed routes (`/en/admin/...`, `/es/admin/...`, etc.)
+must all be covered.  The route's canonical URL form is
+`/<locale>/admin/setup-wizard`; the bare `/admin/setup-wizard`
+form gets client-side JS-redirected to the locale-prefixed
+form on first hit (see `apps/web/src/routes/+page.svelte`), so
+your auth rule should match `^/[a-z]{2}(?:-[A-Z]{2})?/admin/`
+to cover all 10 locale variants.
+
 ---
 
 ## 15. Frontend CSP + security headers for operators
@@ -8076,6 +8133,16 @@ The wizard emits the right
 `MORPHIT_INDEXER_DISABLED_ASSETS=` line into
 `morphit.config.env` — no manual env-file editing needed.
 
+**Post-deploy on a running instance, in your browser (cp116):**
+visit `/admin/setup-wizard` on your domain.  Toggle the asset
+checkboxes (BTC/XMR/BLURT are locked enabled — core federation
+assets), hit Copy, paste the emitted line into
+`morphit.config.env`, restart the indexer
+(`docker compose restart indexer`).  Read-only page — never
+mutates your server, no auth-gating needed.  See
+RUN-A-MORPHIT-NODE.md "Browser setup-wizard" for the full
+operator UX.
+
 **Post-deploy or on an existing instance:** edit
 `MORPHIT_INDEXER_DISABLED_ASSETS` directly in
 `/etc/morphit/morphit.config.env` (or wherever your
@@ -8084,10 +8151,10 @@ Browsers see the change at most 5 minutes after restart (the
 `/v1/instance` response carries a 5-minute `Cache-Control`
 header).
 
-Both paths write the same env var — the wizard is a UX
-affordance, not a separate code path.  Re-running the wizard
-later (via `morphit-ops init` again) will let you change your
-mind without touching the env file by hand.
+All three paths write the same env var — the CLI wizard, the
+browser wizard, and direct env-file editing differ only in
+ergonomics.  Re-running any path overwrites the previous
+value; there is no merge logic.
 
 ### Disabling specific assets instance-wide
 

@@ -3997,13 +3997,24 @@
 				"url_error_format": "Muss eine https://-URL sein",
 				"output_heading": "Führen Sie diesen Befehl auf Ihrem Server aus",
 				"output_subtitle": "Fügen Sie dies vom Verzeichnis aus, in dem Sie Morphit installiert haben, in Ihr Terminal ein. Sie werden nach dem Pfad zur Posting-Key-Datei gefragt.",
-				"output_pending": "Füllen Sie oben die Felder Schlüssel, Name, Beschreibung und Kategorie aus, um den Befehl zu generieren."
+				"output_pending": "Füllen Sie oben die Felder Schlüssel, Name, Beschreibung und Kategorie aus, um den Befehl zu generieren.",
+				"remove_key_error_canonical": "Kanonische Methoden können nicht über den Pro-Instanz-Mechanismus entfernt werden"
 			},
 			"disclosure": {
 				"heading": "Was dieser Assistent leistet und was nicht",
 				"read_only": "Nur-Lese: Diese Seite generiert Konfigurations- und CLI-Text, verändert aber niemals Ihren Server. Nichts ändert sich, bis Sie die Ausgabe einfügen und selbst anwenden.",
 				"no_auth": "Offener Zugang: Diese Seite erfordert keine Anmeldung, da sie nichts verändert. Jeder kann sie besuchen. Wenn das nicht erwünscht ist, schützen Sie sie hinter der Authentifizierung Ihres Reverse Proxys.",
 				"restart_required": "Dienst-Neustart erforderlich: Nach dem Bearbeiten von morphit.env starten Sie den Indexer-Dienst neu, damit die Änderung wirksam wird. Das Zahlungsmethoden-CLI sendet sofort an die Chain — dafür ist kein Neustart erforderlich."
+			},
+			"payment_remove": {
+				"heading": "Eine benutzerdefinierte Zahlungsmethode entfernen",
+				"intro": "Wenn Sie zuvor eine Zahlungsmethode über die CLI hinzugefügt haben und sie zurückziehen möchten, generieren Sie hier den Entfernungsbefehl. Kanonische Methoden (PayPal, Wise usw.) können nicht entfernt werden — sie sind projektweit.",
+				"key_label": "Zu entfernender Maschinenschlüssel",
+				"key_help": "Der exakte Schlüssel, den Sie beim Hinzufügen verwendet haben. Führen Sie `morphit-ops payment-method list` auf Ihrem Server aus, um Ihre aktuellen Ergänzungen zu sehen.",
+				"output_heading": "Führen Sie diesen Befehl auf Ihrem Server aus",
+				"output_subtitle": "Aus dem Verzeichnis, in dem Sie Morphit installiert haben. Sie werden vor dem Senden der Chain-Operation um Bestätigung gebeten.",
+				"output_pending": "Geben Sie den Maschinenschlüssel einer instanzspezifischen Methode ein, um den Entfernungsbefehl zu generieren.",
+				"orders_safety": "Bestehende Aufträge, die auf diese Methode verweisen, werden nach dem Entfernen weiterhin korrekt angezeigt — der Schlüssel bleibt in der Historie dieser Aufträge bestehen. Entfernen bedeutet nur, dass neue Aufträge sie nicht mehr auswählen können."
 			}
 		}
 	}
