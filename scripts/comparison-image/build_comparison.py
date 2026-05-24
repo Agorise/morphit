@@ -1,18 +1,94 @@
 """
-Build the Morphit vs. competitors comparison table — 5x-longer
-edition.  Adds 2FA, YubiKey, immutable feedback, never-been-hacked,
-canary, signup-friction features, and ~25 more rows requested by
-Ken.  Renders as SVG → large PNG via cairosvg.
+Build the Morphit vs. competitors comparison table.
+
+Renders an SVG (with real 💚 green-heart emoji via Noto Color Emoji)
+then converts to a large PNG via cairosvg.
+
+Output:
+  - SVG: scripts/comparison-image/comparison.svg (in the repo)
+  - PNG: apps/web/static/morphit-comparison.png (served publicly so
+    blog posts can hot-link a stable URL like
+    https://morphit.io/morphit-comparison.png)
+
+Run:
+  python3 scripts/comparison-image/build_comparison.py
 """
 
 from datetime import date
+from pathlib import Path
 from xml.sax.saxutils import escape
+import shutil
+import subprocess
+import sys
 import cairosvg
+
+
+# ─── Embedded Morphit wordmark (Ken's edit, preserved verbatim) ──
+# This SVG fragment was hand-placed into the column header by Ken
+# in Inkscape and lives at x≈894, y≈282 in the 2400x9155 viewBox.
+# The wordmark is composed of three paths:
+#   - path3 ("fil0", filled with linearGradient id="id0"):
+#       the two linked circles (green→teal gradient).
+#   - path4 ("fil1", filled with #fefefe):
+#       the WHITE letters "morph".
+#   - path5 ("fil2", filled with #7fed2d):
+#       the GREEN letters "it!".
+# DO NOT change those fills or the order of paths.  The build
+# script injects this block verbatim, plus the linearGradient
+# `<defs>` it references.
+WORDMARK_DEFS = """<linearGradient
+       id="id0"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="369.47"
+       x2="1089.5"
+       y2="369.47">
+   <stop
+   offset="0"
+   style="stop-opacity:1; stop-color:#8EEF26"
+   id="stop1" />
+
+   <stop
+   offset="0.501961"
+   style="stop-opacity:1; stop-color:#00DA69"
+   id="stop2" />
+
+   <stop
+   offset="1"
+   style="stop-opacity:1; stop-color:#02A6B2"
+   id="stop3" />
+
+  </linearGradient>"""
+
+WORDMARK_GROUP = """<g
+     id="_1197533152"
+     style="clip-rule:evenodd;fill-rule:evenodd;image-rendering:optimizeQuality;shape-rendering:geometricPrecision;text-rendering:geometricPrecision"
+     transform="matrix(0.05576732,0,0,0.05576732,894.76928,282.47195)">
+   <path
+   class="fil0"
+   d="m 545,74 c 25,-16 52,-29 81,-39 35,-12 72,-18 111,-18 97,0 185,39 249,103 64,64 103,152 103,249 0,98 -39,186 -103,250 -64,63 -152,103 -249,103 -39,0 -76,-6 -111,-18 -29,-10 -56,-23 -81,-39 -25,16 -52,29 -81,39 -35,12 -73,18 -112,18 C 255,722 167,682 103,619 39,555 0,467 0,369 0,272 39,184 103,120 167,56 255,17 352,17 c 39,0 77,6 112,18 29,10 56,23 81,39 z m 101,22 c -18,5 -34,13 -50,22 9,11 18,24 25,38 12,25 20,55 20,85 0,31 -8,61 -21,87 -14,27 -33,50 -57,68 -16,12 -28,27 -37,45 -9,17 -13,36 -13,57 0,20 5,40 13,57 9,18 22,33 38,45 v 0 c 0,0 0,0 0,0 24,19 52,33 82,43 28,10 59,15 91,15 80,0 152,-32 204,-85 52,-52 84,-124 84,-204 0,-79 -32,-151 -84,-203 -52,-53 -124,-85 -204,-85 -32,0 -63,5 -91,15 z m -101,17 v 0 l -14,18 z m 0,513 1,-2 z m -101,17 c 17,-6 34,-13 50,-22 -10,-11 -18,-24 -25,-37 -13,-26 -20,-55 -20,-86 0,-31 7,-59 19,-85 14,-27 33,-50 56,-68 v 0 c 17,-12 30,-28 39,-46 9,-17 14,-37 14,-58 0,-20 -5,-40 -14,-57 -9,-18 -22,-33 -38,-45 h 1 C 501,120 473,106 444,96 415,86 385,81 352,81 273,81 201,113 149,166 96,218 64,290 64,369 c 0,80 32,152 85,204 52,53 124,85 203,85 33,0 63,-5 92,-15 z M 352,124 c 18,0 33,15 33,33 0,17 -15,32 -33,32 -15,0 -29,1 -43,5 -14,3 -28,8 -41,15 -5,3 -10,6 -14,9 -5,3 -9,6 -14,10 -5,4 -9,7 -13,11 -3,3 -7,7 -11,12 -8,9 -15,18 -20,28 -6,10 -11,20 -15,31 -5,17 -24,26 -40,20 -17,-6 -26,-24 -20,-41 5,-15 12,-29 19,-42 8,-14 18,-27 28,-38 4,-5 9,-10 15,-16 6,-6 12,-11 17,-15 6,-5 12,-9 19,-14 6,-4 13,-8 20,-11 17,-9 35,-17 55,-21 19,-5 38,-8 58,-8 z M 110,405 c -2,-18 10,-34 27,-36 18,-3 34,9 36,27 2,11 5,22 8,33 4,10 9,20 14,30 9,16 4,35 -11,44 -16,9 -35,4 -44,-12 -7,-13 -14,-27 -19,-42 -5,-14 -9,-29 -11,-44 z"
+   id="path3"
+   style="fill:url(#id0)" />
+
+   <path
+   class="fil1"
+   d="m 1491,540 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -13,-20 -13,-32 V 334 c 0,-50 17,-92 52,-128 36,-35 78,-52 128,-52 59,0 104,19 134,59 30,-40 75,-59 134,-59 50,0 92,17 128,52 35,36 52,78 52,128 v 206 c 0,12 -4,23 -13,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -31,-13 -9,-9 -14,-20 -14,-32 V 334 c 0,-25 -8,-46 -26,-63 -17,-17 -38,-26 -63,-26 -24,0 -45,9 -62,26 -17,17 -26,38 -26,63 v 206 c 0,12 -5,23 -14,32 -8,9 -19,13 -31,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 334 c 0,-25 -8,-46 -26,-63 -17,-17 -38,-26 -62,-26 -25,0 -45,9 -63,26 -17,17 -26,38 -26,63 z m 817,-294 c -35,0 -64,12 -88,36 -24,25 -36,54 -36,88 0,35 12,64 36,88 24,24 53,36 88,36 34,0 63,-12 88,-36 24,-24 36,-53 36,-88 0,-34 -12,-63 -36,-88 -25,-24 -54,-36 -88,-36 z m 0,-92 c 59,0 110,21 152,63 43,42 64,93 64,152 0,60 -21,111 -64,153 -42,42 -93,63 -152,63 -59,0 -110,-21 -153,-63 -42,-42 -63,-93 -63,-153 0,-59 21,-110 63,-152 43,-42 94,-63 153,-63 z m 466,0 c 12,0 23,4 32,13 9,9 13,20 13,32 v 1 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -22 c -20,0 -37,7 -52,22 -14,14 -21,31 -21,52 v 221 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 319 c 1,-46 17,-85 49,-117 32,-32 71,-48 116,-48 z m 271,338 c 35,0 64,-12 88,-36 24,-24 36,-53 36,-87 0,-35 -12,-64 -36,-89 -24,-23 -53,-35 -88,-35 -34,0 -63,12 -88,35 -24,25 -36,54 -36,89 0,34 12,63 36,87 25,24 54,36 88,36 z m -170,247 c -12,0 -23,-5 -32,-13 -9,-10 -13,-20 -13,-32 V 369 c 0,-60 21,-111 63,-153 42,-41 93,-62 152,-62 60,0 111,21 153,63 42,42 63,93 63,152 0,60 -21,111 -63,153 -42,42 -93,63 -153,63 -54,0 -95,-13 -124,-37 v 146 c 0,12 -4,22 -13,32 -9,8 -20,13 -32,13 z M 3371,0 c 13,0 23,4 32,13 9,9 14,20 14,32 v 131 c 19,-15 49,-22 89,-22 50,0 92,17 128,53 35,35 53,78 53,128 v 205 c 0,12 -4,23 -13,32 -9,9 -20,13 -32,13 h -1 c -13,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 335 c 0,-25 -8,-46 -26,-63 -17,-18 -38,-27 -63,-27 -25,0 -46,9 -64,27 -17,17 -25,38 -25,63 v 205 c 0,12 -5,23 -14,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -13,-20 -13,-32 V 45 c 0,-12 4,-23 13,-32 9,-9 20,-13 32,-13 z"
+   id="path4"
+   style="fill:#fefefe;fill-rule:nonzero" />
+
+   <path
+   class="fil2"
+   d="m 3821,154 c 13,0 23,4 32,13 9,9 13,20 13,32 v 341 c 0,12 -4,23 -13,32 -9,9 -19,13 -32,13 h -1 c -12,0 -23,-4 -32,-13 -9,-9 -14,-20 -14,-32 V 199 c 0,-12 5,-23 14,-32 9,-9 20,-13 32,-13 z m 0,-49 c -15,0 -27,-5 -37,-16 -11,-10 -16,-22 -16,-37 0,-14 5,-26 16,-36 10,-11 22,-16 37,-16 14,0 26,5 36,16 11,10 16,22 16,36 0,15 -5,28 -16,37 -10,11 -22,16 -36,16 z M 4002,0 c 12,0 23,4 32,13 9,9 13,20 13,32 v 109 h 56 c 13,0 23,4 32,13 9,9 14,20 14,32 v 1 c 0,13 -5,23 -14,32 -9,9 -19,13 -32,13 h -56 v 222 c 0,8 3,14 8,19 5,5 11,7 18,7 h 30 c 13,0 23,5 32,14 9,9 14,19 14,32 v 1 c 0,12 -5,23 -14,32 -9,9 -19,13 -32,13 h -30 c -32,0 -60,-11 -83,-35 -23,-23 -35,-50 -35,-83 V 45 c 0,-12 5,-23 14,-32 9,-9 19,-13 32,-13 z m 297,267 -13,170 h -65 L 4207,267 V 45 c 0,-12 5,-23 14,-32 9,-9 20,-13 32,-13 h 1 c 12,0 23,4 32,13 9,9 13,20 13,32 z m -45,318 c -15,0 -27,-5 -38,-15 -10,-11 -15,-23 -15,-37 0,-15 5,-27 15,-37 11,-10 23,-15 38,-15 14,0 26,5 36,15 11,10 16,22 16,37 0,14 -5,27 -16,37 -10,10 -22,15 -36,15 z"
+   id="path5"
+   style="fill:#7fed2d;fill-rule:nonzero" />
+
+  </g>"""
+
 
 # ─── Comparison matrix ────────────────────────────────────────────
 PLATFORMS = ['Morphit', 'Bisq', 'Haveno / RetoSwap', 'OpenMonero', 'BasicSwap']
 
-# Each row is (feature_text, [m, b, h, o, s], optional_icon_id).
+# (feature_text, [m, b, h, o, s], optional_icon_id)
 # icon_id: None | 'lock' (2FA padlock) | 'key' (YubiKey hardware key)
 SECTIONS = [
     ('Privacy & anonymity', [
@@ -21,7 +97,6 @@ SECTIONS = [
         ('Tor (.onion) accessible',                                          ['Y','Y','Y','Y','Y'], None),
         ('I2P accessible',                                                   ['Y','-','-','Y','-'], None),
         ('Lokinet accessible',                                               ['Y','-','-','-','-'], None),
-        ('Four parallel networks (clearnet + Tor + I2P + Lokinet)',         ['Y','-','-','-','-'], None),
         ('End-to-end encrypted in-app chat',                                 ['Y','Y','Y','-','-'], None),
         ('Real-time streaming chat (no polling)',                            ['Y','-','-','-','-'], None),
         ('Immutable on-chain chat history (operator cannot delete)',         ['Y','-','-','-','-'], None),
@@ -42,13 +117,13 @@ SECTIONS = [
     ('Custody & trade safety', [
         ('Fully non-custodial (no platform holdings)',                       ['Y','Y','Y','-','Y'], None),
         ('Never been hacked — platform holds no funds to drain',             ['Y','-','-','-','Y'], None),
-        ('Multi-signature escrow',                                           ['-','Y','Y','-','-'], None),
+        ('Multi-signature escrow deposit required',                          ['-','Y','Y','-','-'], None),
         ('Trustless cryptographic atomic swaps',                             ['-','-','-','-','Y'], None),
-        ('Built-in arbitration / dispute resolution',                        ['-','Y','Y','Y','-'], None),
+        ('Third-party arbitrators for dispute resolution',                   ['-','Y','Y','Y','-'], None),
         ('On-chain immutable reputation that survives operator shutdown',    ['Y','-','-','-','-'], None),
         ('Immutable feedback (no operator can edit or remove)',              ['Y','-','-','-','-'], None),
-        ('Optional TOTP-based 2FA at login',                                 ['Y','-','-','-','-'], 'lock'),
-        ('YubiKey / FIDO2 hardware-key unlock',                              ['Y','-','-','-','-'], 'key'),
+        ('Optional TOTP-based 2FA at login',                                 ['Y','-','-','Y','-'], 'lock'),
+        ('Optional YubiKey / FIDO2 hardware-key unlock',                     ['Y','-','-','-','-'], 'key'),
         ('Warrant canary (cryptographically signed weekly)',                 ['Y','-','-','-','-'], None),
         ('Operator kill-switch (instance-wide compromise response)',         ['Y','-','-','-','-'], None),
         ('Reproducible builds with on-chain release attestation',            ['Y','-','-','-','-'], None),
@@ -84,13 +159,13 @@ SECTIONS = [
         ('Push notifications with in-app inbox',                             ['Y','-','-','-','-'], None),
         ('100+ interactive tooltips and inline help',                        ['Y','-','-','-','-'], None),
         ('130+ FAQ entries in 10 languages',                                 ['Y','-','-','-','-'], None),
-        ('In-app payment QR codes',                                          ['Y','-','-','-','-'], None),
+        ('In-app payment QR codes',                                          ['Y','Y','Y','Y','-'], None),
         ('Loyalty milestones and trader achievements',                       ['Y','-','-','-','-'], None),
         ('Operator earns ~2% on idle treasury while users trade',            ['Y','-','-','-','-'], None),
         ('Saved searches and per-asset alerts',                              ['Y','-','-','-','-'], None),
         ('Orderbook filters by network, payment method, country',            ['Y','-','-','-','-'], None),
         ('Custom amount-range alerts (notify when a $X trade appears)',      ['Y','-','-','-','-'], None),
-        ('Dark mode',                                                        ['Y','-','-','-','-'], None),
+        ('Dark mode',                                                        ['Y','Y','Y','-','Y'], None),
         ('Offline-first UI (orderbook viewable without network)',            ['Y','-','-','-','-'], None),
         ('Multi-device pairing via signed QR session',                       ['Y','-','-','-','-'], None),
         ('Per-trade encrypted note field',                                   ['Y','-','-','-','-'], None),
@@ -104,6 +179,7 @@ SECTIONS = [
         ('Public read-only orderbook (no signup to browse)',                 ['Y','-','-','Y','-'], None),
         ('Free signup — zero deposit required',                              ['Y','Y','Y','Y','-'], None),
         ('Self-host on a $5/month VPS or Raspberry Pi',                      ['Y','-','-','-','-'], None),
+        ('Requires user to run a full node (Bitcoin / Monero / per-coin)',   ['-','Y','Y','-','Y'], None),
         ('10 fully localized languages (incl. RTL Persian)',                 ['Y','-','-','-','-'], None),
         ('Public API for wallet developers and third-party tools',           ['Y','-','-','-','-'], None),
         ('RSS feed of the orderbook',                                        ['Y','-','-','-','-'], None),
@@ -115,26 +191,25 @@ SECTIONS = [
         ('Server-side rendering for the orderbook',                          ['Y','-','-','Y','-'], None),
     ]),
     ('Assets & fiat', [
-        ('Bitcoin',                                                          ['Y','Y','Y','-','Y'], None),
-        ('Monero',                                                           ['Y','Y','Y','Y','Y'], None),
-        ('Ethereum',                                                         ['Y','-','Y','-','-'], None),
-        ('Litecoin',                                                         ['Y','-','Y','-','Y'], None),
-        ('Bitcoin Cash',                                                     ['Y','-','Y','-','Y'], None),
+        ('Bitcoin (BTC)',                                                    ['Y','Y','Y','-','Y'], None),
+        ('Monero (XMR)',                                                     ['Y','Y','Y','Y','Y'], None),
+        ('Ethereum (ETH)',                                                   ['Y','-','Y','-','-'], None),
+        ('Litecoin (LTC)',                                                   ['Y','-','Y','-','Y'], None),
+        ('Bitcoin Cash (BCH)',                                               ['Y','-','Y','-','Y'], None),
         ('Stablecoins (USDT, USDC, DAI)',                                    ['Y','-','Y','-','-'], None),
-        ('Multi-network stablecoins (ERC-20 / TRC-20 / BEP-20 / Polygon / Solana / Arbitrum / Base)',['Y','-','-','-','-'], None),
-        ('Zcash',                                                            ['Y','-','-','-','-'], None),
+        ('Subs (ERC-20 / TRC-20 / BEP-20 / Polygon / Solana / Arbitrum / Base)',['Y','-','-','-','-'], None),
+        ('Zcash (ZEC)',                                                      ['Y','-','-','-','-'], None),
         ('Pirate Chain (ARRR)',                                              ['Y','-','-','-','-'], None),
-        ('Decred',                                                           ['Y','-','-','-','-'], None),
-        ('Dogecoin',                                                         ['Y','-','-','-','-'], None),
-        ('Dash',                                                             ['Y','-','-','-','Y'], None),
-        ('Solana',                                                           ['Y','-','-','-','-'], None),
-        ('XRP',                                                              ['Y','-','-','-','-'], None),
+        ('Decred (DCR)',                                                     ['Y','-','-','-','-'], None),
+        ('Dogecoin (DOGE)',                                                  ['Y','-','-','-','-'], None),
+        ('Dash (DASH)',                                                      ['Y','-','-','-','Y'], None),
+        ('Solana (SOL)',                                                     ['Y','-','-','-','-'], None),
+        ('XRP (XRP)',                                                        ['Y','-','-','-','-'], None),
         ('Fiat (cash, bank transfer, etc.)',                                 ['Y','Y','Y','Y','-'], None),
         ('Barter for goods and services',                                    ['Y','-','-','-','-'], None),
         ('Cash by mail with carrier-tracking workflow',                      ['Y','-','-','-','-'], None),
         ('Precious metals (gold, silver, etc.)',                             ['Y','-','-','-','-'], None),
         ('Gift cards as trade payment',                                      ['Y','-','-','-','-'], None),
-        ('16 tradable cryptocurrencies',                                     ['Y','-','-','-','-'], None),
     ]),
     ('Decentralization & federation', [
         ('Federated multi-operator network with shared orderbook',           ['Y','-','-','-','-'], None),
@@ -183,7 +258,7 @@ SECTION_FONT     = 28
 ROW_H            = 64
 ROW_FONT         = 24
 CELL_FONT        = 36
-HEART_R          = 18
+HEART_FONT       = 38   # emoji size for the 💚 character
 ICON_SIZE        = 28
 
 FOOTER_GAP       = 35
@@ -197,12 +272,13 @@ def col_x(i):
     return PAD_LR + FEATURE_COL_W + PLATFORM_COL_W//2 + i*PLATFORM_COL_W
 
 
-# ─── Colors ──────────────────────────────────────────────────────
+# ─── Colors — zebra contrast pushed wider per Ken's request ─────
 BG          = '#0a0d12'
 BG_HEADER   = '#161b22'
 BG_SECTION  = '#1a212c'
-BG_ROW_A    = '#0e1218'
-BG_ROW_B    = '#11161e'
+# Increased contrast between zebra A/B so the eye can follow rows:
+BG_ROW_A    = '#0d1119'   # darker
+BG_ROW_B    = '#161c25'   # noticeably lighter
 BG_MORPHIT  = '#0f1f15'
 BG_MORPHIT_HEADER = '#143d28'
 
@@ -213,15 +289,16 @@ TEXT_MORPHIT = '#3fb950'
 TEXT_SECTION = '#79c0ff'
 
 LINE        = '#21262d'
-HEART_FILL  = '#2ea043'
-HEART_BORDER= '#3fb950'
 HYPHEN      = '#484f58'
 ICON_COLOR  = '#79c0ff'
 
+# Stack with Noto Color Emoji first so 💚 renders as a colored bitmap
+# via Cairo; fall back to DejaVu Sans for the literal Unicode glyph.
+EMOJI_FONT  = 'Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, DejaVu Sans'
 
-# ─── Inline SVG icons (lock + hardware-key) ──────────────────────
+
+# ─── Inline SVG icons (2FA padlock + YubiKey) ────────────────────
 def icon_lock(cx, cy, size=ICON_SIZE):
-    """Closed-padlock icon centered at (cx, cy)."""
     s = size / 2.0
     body_x = cx - s
     body_y = cy - s * 0.15
@@ -242,7 +319,6 @@ def icon_lock(cx, cy, size=ICON_SIZE):
 
 
 def icon_key(cx, cy, size=ICON_SIZE):
-    """USB hardware-key icon (YubiKey-style)."""
     s = size / 2.0
     width = s * 1.05
     head_h = s * 0.7
@@ -263,7 +339,7 @@ def icon_key(cx, cy, size=ICON_SIZE):
 ICONS = {'lock': icon_lock, 'key': icon_key}
 
 
-# ─── Compute total height ────────────────────────────────────────
+# ─── Total height ────────────────────────────────────────────────
 total_rows = sum(len(rows) for _, rows in SECTIONS)
 total_sections = len(SECTIONS)
 
@@ -279,6 +355,9 @@ H = (PAD_TOP
 # ─── Render SVG ──────────────────────────────────────────────────
 out = []
 out.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">')
+# Inject Ken's linearGradient defs (the green→teal gradient used by the
+# wordmark's linked-circle motif).  See WORDMARK_DEFS constant above.
+out.append(f'<defs>{WORDMARK_DEFS}</defs>')
 out.append(f'<rect width="{W}" height="{H}" fill="{BG}"/>')
 
 table_top = PAD_TOP + TITLE_SIZE + 30 + SUBTITLE_SIZE + TITLE_GAP
@@ -287,7 +366,7 @@ morphit_col_x = PAD_LR + FEATURE_COL_W
 out.append(f'<rect x="{morphit_col_x}" y="{table_top}" width="{PLATFORM_COL_W}" '
            f'height="{table_bottom - table_top}" fill="{BG_MORPHIT}"/>')
 
-# Title
+# Title block
 y = PAD_TOP + TITLE_SIZE
 out.append(f'<text x="{W//2}" y="{y}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="{TITLE_SIZE}" '
@@ -315,9 +394,12 @@ out.append(f'<text x="{PAD_LR + 30}" y="{header_y}" '
 for i, name in enumerate(PLATFORMS):
     cx = col_x(i)
     if i == 0:
-        out.append(f'<text x="{cx}" y="{header_y}" text-anchor="middle" '
-                   f'font-family="DejaVu Sans, sans-serif" font-size="{HEADER_FONT_LG}" '
-                   f'font-weight="700" fill="{TEXT_MORPHIT}">{escape(name)}</text>')
+        # Morphit column header: inject Ken's hand-placed wordmark
+        # (linked green circles + "morph" in white + "it!" in green)
+        # instead of plain text.  WORDMARK_GROUP positions itself
+        # via its own transform matrix (x≈894, y≈282 in the 2400x9155
+        # viewBox).
+        out.append(WORDMARK_GROUP)
     else:
         if '/' in name:
             parts = name.split(' / ')
@@ -333,12 +415,13 @@ for i, name in enumerate(PLATFORMS):
                        f'font-family="DejaVu Sans, sans-serif" font-size="{HEADER_FONT}" '
                        f'font-weight="600" fill="{TEXT_HEADER}">{escape(name)}</text>')
 
-# Sections
+# Body
 y_cur = y_top + HEADER_H
 counts = [0, 0, 0, 0, 0]
 total_features = 0
 
 for sect_title, rows in SECTIONS:
+    # Section header
     out.append(f'<rect x="{PAD_LR}" y="{y_cur}" width="{W - 2*PAD_LR}" '
                f'height="{SECTION_H}" fill="{BG_SECTION}"/>')
     sec_text_y = y_cur + SECTION_H // 2 + SECTION_FONT // 3
@@ -373,24 +456,20 @@ for sect_title, rows in SECTIONS:
             cx = col_x(plat_idx)
             cy = y_cur + ROW_H // 2
             if m == 'Y':
-                r = HEART_R
-                d = (
-                    f'M {cx} {cy + r * 0.5} '
-                    f'C {cx} {cy + r * 0.2}, {cx + r * 0.9} {cy - r * 0.95}, {cx + r * 0.5} {cy - r * 0.55} '
-                    f'C {cx + r * 0.95} {cy - r * 1.05}, {cx + r * 1.4} {cy - r * 0.25}, {cx} {cy + r * 0.85} '
-                    f'C {cx - r * 1.4} {cy - r * 0.25}, {cx - r * 0.95} {cy - r * 1.05}, {cx - r * 0.5} {cy - r * 0.55} '
-                    f'C {cx - r * 0.9} {cy - r * 0.95}, {cx} {cy + r * 0.2}, {cx} {cy + r * 0.5} '
-                    f'Z'
-                )
-                out.append(f'<path d="{d}" fill="{HEART_FILL}" stroke="{HEART_BORDER}" '
-                           f'stroke-width="1.5" stroke-linejoin="round"/>')
+                # Real 💚 green-heart emoji centered in cell.
+                # Cairo's emoji baseline is slightly above text baseline;
+                # the +HEART_FONT/2.7 offset centers it visually.
+                heart_y = cy + HEART_FONT / 2.7
+                out.append(f'<text x="{cx}" y="{heart_y}" text-anchor="middle" '
+                           f'font-family="{EMOJI_FONT}" font-size="{HEART_FONT}">'
+                           f'\U0001F49A</text>')
             else:
                 out.append(f'<text x="{cx}" y="{cy + 12}" text-anchor="middle" '
                            f'font-family="DejaVu Sans, sans-serif" font-size="{CELL_FONT}" '
                            f'fill="{HYPHEN}">—</text>')
         y_cur += ROW_H
 
-# Footer
+# Footer: per-platform totals
 y_footer = H - PAD_BOTTOM - FOOTER_FONT
 counts_str = ' · '.join(
     f'{name}: {counts[i]}/{total_features}'
@@ -402,24 +481,110 @@ out.append(f'<text x="{W//2}" y="{y_footer - 22}" text-anchor="middle" '
 out.append(f'<text x="{W//2}" y="{y_footer}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="{FOOTER_FONT}" '
            f'fill="{TEXT_DIM}">'
-           f'As of {date(2026,5,24).isoformat()}. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.'
+           f'As of {date.today().isoformat()}. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.'
            f'</text>')
 
 out.append('</svg>')
 svg_str = '\n'.join(out)
 
-with open('/home/claude/work/comparison.svg', 'w') as f:
-    f.write(svg_str)
+# ─── Write outputs ───────────────────────────────────────────────
+# 1. SVG into the repo (script-adjacent for hand-inspection)
+script_dir = Path(__file__).resolve().parent
+svg_path = script_dir / 'comparison.svg'
+svg_path.write_text(svg_str)
 
+
+# Target PNG size budget.  The image is 2400 pixels wide and ~9,155
+# pixels tall — at lossless RGB it would be 4-5 MB.  We aim for under
+# 512 KB so blog posts hot-linking the URL don't blow the page budget.
+# pngquant @ quality 70-90 with speed=1 (slowest/best) is the right
+# tradeoff: visually indistinguishable from the source at this DPI,
+# but ~64% smaller.  See the comparison-image-freshness-smoke for the
+# budget assertion that fails CI if a future change blows past it.
+PNG_BUDGET_BYTES = 512 * 1024
+
+
+def optimize_png(path: Path) -> None:
+    """Shrink the PNG in-place via pngquant (palette quantization).
+
+    Falls back to a clear error if pngquant is missing — we never
+    silently ship the unoptimized 1.3 MB version.  Re-runs are
+    idempotent (pngquant skips already-optimized output).
+    """
+    pngquant = shutil.which('pngquant')
+    if pngquant is None:
+        print(
+            f'ERROR: pngquant is required to keep {path.name} under the '
+            f'{PNG_BUDGET_BYTES // 1024} KB budget. Install it with:\n'
+            f'  apt-get install pngquant     # Debian / Ubuntu\n'
+            f'  brew install pngquant        # macOS\n'
+            f'  pacman -S pngquant           # Arch\n',
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    before = path.stat().st_size
+    # --quality=70-90: pngquant will refuse the result if it can't hit
+    #   the 70-quality floor, which is well above visual-distinguishability
+    #   at this DPI.  --speed=1 spends more CPU finding a better palette.
+    # --strip: drop ancillary chunks (timestamps, color profiles) for
+    #   determinism so the same SVG produces a byte-identical PNG.
+    # --force: overwrite the input in-place.
+    subprocess.run(
+        [
+            pngquant,
+            '--quality=70-90',
+            '--speed=1',
+            '--strip',
+            '--force',
+            '--output', str(path),
+            str(path),
+        ],
+        check=True,
+    )
+    after = path.stat().st_size
+    pct = (1 - after / before) * 100
+    print(f'  optimized {path.name}: {before:,} -> {after:,} bytes ({pct:.1f}% smaller)')
+
+    if after > PNG_BUDGET_BYTES:
+        print(
+            f'WARNING: {path.name} ({after:,} bytes) is over the '
+            f'{PNG_BUDGET_BYTES:,}-byte budget.  This means a future SVG edit '
+            f'introduced more visual complexity (more distinct colors) than '
+            f'pngquant\'s palette can fit.  Investigate before committing.',
+            file=sys.stderr,
+        )
+
+
+# 2. PNG into the public static folder so blogs can hot-link
+#    https://morphit.io/morphit-comparison.png
+repo_root = script_dir.parent.parent  # .../morphit
+static_png = repo_root / 'apps' / 'web' / 'static' / 'morphit-comparison.png'
+static_png.parent.mkdir(parents=True, exist_ok=True)
 cairosvg.svg2png(
     bytestring=svg_str.encode('utf-8'),
-    write_to='/mnt/user-data/outputs/morphit-comparison.png',
+    write_to=str(static_png),
     output_width=W,
 )
+optimize_png(static_png)
 
-print(f'Canvas:  {W} × {H} px')
-print(f'Sections: {total_sections}')
-print(f'Total feature rows: {total_features}')
-print('Per-platform 💚 counts:')
+# 3. ALSO write to /mnt/user-data/outputs so the chat can preview it
+outputs_png = Path('/mnt/user-data/outputs/morphit-comparison.png')
+if outputs_png.parent.exists():
+    cairosvg.svg2png(
+        bytestring=svg_str.encode('utf-8'),
+        write_to=str(outputs_png),
+        output_width=W,
+    )
+    optimize_png(outputs_png)
+
+# ─── Stats ───────────────────────────────────────────────────────
+print(f'Canvas:           {W} x {H} px')
+print(f'Sections:         {total_sections}')
+print(f'Feature rows:     {total_features}')
+print(f'SVG:              {svg_path}')
+print(f'Static PNG:       {static_png}')
+print(f'Outputs PNG:      {outputs_png}')
+print('Per-platform heart counts:')
 for i, name in enumerate(['Morphit', 'Bisq', 'Haveno/RetoSwap', 'OpenMonero', 'BasicSwap']):
     print(f'  {name}: {counts[i]}/{total_features}')

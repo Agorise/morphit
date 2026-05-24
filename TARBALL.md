@@ -4,6 +4,116 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
+**Last touched:** cp135 — 2026-05-24 (PNG file-size budget enforced + footer date auto-updates).
+
+**cp135 work units, all complete:**
+
+1. **PNG size budget: 512 KB, enforced structurally.** The 2400 × 9155 PNG was 1.32 MB after cairosvg — too heavy for blog hot-linking. Build script now post-processes via `pngquant --quality=70-90 --speed=1 --strip --force` which drops it to **454.6 KB (64.7% smaller)**, visually indistinguishable from source (green hearts crisp, wordmark sharp, all text readable). If `pngquant` is missing, the build script fails loudly with install instructions rather than silently committing the heavier PNG.
+
+2. **Footer "As of YYYY-MM-DD" auto-updates** — replaced the hardcoded `date(2026,5,24)` with `date.today()` so every rebuild stamps the current date. No more stale "As of" claims.
+
+3. **`comparison-image-freshness-smoke` extended** with 2 new invariants (now 17 total):
+   - **#10 PNG file-size budget** — fails if the committed PNG exceeds 512 KB with an actionable message ("re-run scripts/comparison-image/build_comparison.py to pngquant it"). **Tamper-tested:** an unoptimized 513 KB PNG fires the smoke.
+   - **#11 footer date freshness** — parses the "As of YYYY-MM-DD" line from the SVG and fails if it's more than 7 days behind the SVG's mtime (catches hand-edits that forgot to re-run the build script).
+
+4. **README updated** at `scripts/comparison-image/README.md` documenting the budget, the pngquant dependency, and the path forward if a future SVG edit busts the budget (reduce visual complexity, split images, or negotiate a larger budget).
+
+**Cumulative state:**
+- 16 tradable assets · **42 ADRs** · **323 brag entries** sequential 1..323
+- **Triple-pulse: 5,908 / 5,908 / 5,908**, 0 failures (cp134 was 5,906; +2 from new invariants #10 #11)
+- **TypeScript: 0 errors** across 5 workspaces
+- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web)
+- **Mediakit fresh**
+- **Comparison PNG fresh at 454.6 KB** at `apps/web/static/morphit-comparison.png` (was 1.32 MB)
+
+---
+
+## cp134 handoff (kept for context)
+
+**Last touched:** cp134 — 2026-05-24 (Ken's wordmark integration locked into build script + freshness smoke).
+
+**cp134 work units, all complete:**
+
+1. **Ken's hand-edited wordmark SVG accepted into the repo verbatim** at `scripts/comparison-image/comparison.svg` (187 KB, Inkscape-edited). PNG regenerated to `apps/web/static/morphit-comparison.png` (1.32 MB, 2400x9155 px).
+
+2. **`build_comparison.py` updated** so future runs preserve the wordmark instead of overwriting it:
+   - Added `WORDMARK_DEFS` constant (the `<linearGradient id="id0">` block, 429 chars) at the top of the file.
+   - Added `WORDMARK_GROUP` constant (the `<g>` block containing the three wordmark paths, 5,310 chars).
+   - Color contract documented in the docstring AND locked structurally:
+     - `path3` → `fill:url(#id0)` → linked-circle gradient (green→teal)
+     - `path4` → `fill:#fefefe` → "morph" letters in WHITE
+     - `path5` → `fill:#7fed2d` → "it!" letters in GREEN
+   - Injected `out.append(f'<defs>{WORDMARK_DEFS}</defs>')` after the `<svg>` opening tag.
+   - Replaced the old `if i == 0:` text-emission branch with `out.append(WORDMARK_GROUP)`. All other column headers (Bisq, Haveno/RetoSwap, OpenMonero, BasicSwap) untouched.
+
+3. **`comparison-image-freshness-smoke.ts` extended** with 8 new wordmark-preservation invariants (5 originally, plus 3 defense-in-depth checks):
+   - #5: build script declares `WORDMARK_DEFS` AND `WORDMARK_GROUP` Python constants
+   - #6: build script emits both via `out.append(...)` calls (defs into `<defs>`, group into body)
+   - #7: build script does NOT emit a plain "Morphit" `<text>` label in the i==0 header branch (tamper-detects reverts)
+   - #8a: SVG carries `fill:url(#id0)` for the gradient circles
+   - #8b: SVG carries `fill:#fefefe` for "morph" letters in WHITE
+   - #8c: SVG carries `fill:#7fed2d` for "it!" letters in GREEN
+   - #8d: path order check — `#fefefe` appears BEFORE `#7fed2d` in the SVG so colors can't accidentally swap
+   - #9: SVG has `linearGradient id="id0"` with all three stop colors (#8EEF26, #00DA69, #02A6B2)
+   - **Tamper-tested:** swapping `#fefefe` ↔ `#7fed2d` in the SVG fires #8d ("path ORDER is reversed"). Removing the constants from the build script fires #5. Reverting to plain text label fires #7.
+
+**Cumulative state:**
+- 16 tradable assets · **42 ADRs** · **323 brag entries** sequential 1..323
+- **Triple-pulse: 5,906 / 5,906 / 5,906**, 0 failures across all 3 pulses (was 5,898; +8 new wordmark invariants)
+- **TypeScript: 0 errors** across 5 workspaces
+- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web)
+- **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
+- **Comparison PNG fresh** at `apps/web/static/morphit-comparison.png` (now with Ken's wordmark baked in)
+
+---
+
+## cp133 handoff (kept for context)
+
+**Last touched:** cp133 — 2026-05-24 (comparison-image v2: real 💚 emoji renders, every Ken edit applied, hosted at apps/web/static for blog hot-linking, new freshness smoke).
+
+**cp133 work units, all complete:**
+
+1. **Comparison image — Ken's review pass applied.** All edits:
+   - **Real 💚 emoji.** Replaced hand-drawn Bezier heart paths with the actual U+1F49A character; Cairo rasterises via Noto Color Emoji so the image bakes in the colored glyph and renders identically on every browser that displays it.
+   - **Removed redundant "Four parallel networks" row** (already covered by individual Tor/I2P/Lokinet rows).
+   - **Removed "16 tradable cryptocurrencies"** (redundant with the per-asset rows).
+   - **OpenMonero 2FA cell** now green (LocalMonero/OpenMonero offers TOTP 2FA on its settings page — verified at localmonero.co/start/2fa).
+   - **"Multi-signature escrow"** → **"Multi-signature escrow deposit required"**.
+   - **"Built-in arbitration / dispute resolution"** → **"Third-party arbitrators for dispute resolution"**.
+   - **YubiKey row** prefixed with "Optional" to match the 2FA row's framing.
+   - **Dark mode** row: green for Bisq (merged in 2019, PR #3152), Haveno (forked from Bisq, inherits), BasicSwap (verified in GUI 2.0+). Dash only for OpenMonero (web app, no toggle).
+   - **In-app payment QR codes**: green for Morphit + Bisq + Haveno + OpenMonero (all show QR on payment/order details). Dash for BasicSwap (atomic swaps, no fiat payment flow).
+   - **"Multi-network stablecoins"** → **"Subs (ERC-20 / TRC-20 / BEP-20 / Polygon / Solana / Arbitrum / Base)"**.
+   - **Every coin row** now carries its ticker symbol in parentheses — Bitcoin (BTC), Monero (XMR), Ethereum (ETH), Litecoin (LTC), Bitcoin Cash (BCH), Zcash (ZEC), Pirate Chain (ARRR), Decred (DCR), Dogecoin (DOGE), Dash (DASH), Solana (SOL), XRP (XRP).
+   - **New row "Requires user to run a full node (Bitcoin / Monero / per-coin)"** — green for Bisq + Haveno + BasicSwap (Docker/desktop apps that bundle node daemons), dash for Morphit + OpenMonero (web-based, no node required from the user).
+   - **Zebra-row contrast widened** — `BG_ROW_A=#0d1119` vs `BG_ROW_B=#161c25` (was `#0e1218` vs `#11161e`) so the eye can follow rows across the wide page.
+   - **Footer counts** recomputed and correct: Morphit 123/128, Bisq 19/128, Haveno/RetoSwap 24/128, OpenMonero 20/128, BasicSwap 22/128.
+
+2. **Hosted from the static folder for blog hot-linking.** The build script writes the canonical PNG to `apps/web/static/morphit-comparison.png`, so every Morphit instance serves it at `https://<instance>/morphit-comparison.png`. Blog posts can embed a single stable URL and the image updates with the next release. The SVG source lives at `scripts/comparison-image/comparison.svg` for code-review-friendly diffs.
+
+3. **New smoke `comparison-image-freshness-smoke`** (7 scenarios, registered in `scripts/run-smokes.sh`):
+   - PNG + SVG + build script all exist
+   - PNG is no older than `build_comparison.py`
+   - PNG and SVG were generated in the same run
+   - PNG is no older than `MORPHIT-BRAG-LIST.md`
+   If anyone touches the brag list or build script without regenerating, this fails with a one-line "run this command" message.
+
+4. **New brag entry #323** about the hosted comparison image. Brag list renumbered to 323 entries sequential.
+
+5. **README documentation** at `scripts/comparison-image/README.md` documenting the build flow, why both formats, per-platform source citations, and the freshness-smoke contract.
+
+**Cumulative state:**
+- 16 tradable assets · **42 ADRs** · **323 brag entries** sequential 1..323
+- **Smoke battery: 5,898 / 0** scenarios passing
+- **TypeScript: 0 errors** across 5 workspaces
+- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web)
+- **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
+- **Comparison PNG fresh** at `apps/web/static/morphit-comparison.png` (1.3 MB, 2400×9155 px)
+
+---
+
+## cp132 handoff (kept for context)
+
 **Last touched:** cp132 — 2026-05-24 (optional TOTP-based 2FA shipment + brag-list renumbering + OpenMonero May 2026 exploit figures corrected + 5×-longer comparison image).
 
 **cp132 work units, all complete:**
