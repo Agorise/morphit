@@ -183,6 +183,21 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// Anchor element also carries rel="noopener noreferrer" to suppress
 		// referrer leak + Spectre-style window.opener attacks.
 		new Set(['trackingUrl'])
+	],
+	[
+		'apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte',
+		// `app.officialUrl` — comes from RECOMMENDED_AUTHENTICATOR_APPS,
+		// a hardcoded TypeScript constant in
+		// `apps/web/src/lib/auth/recommendedAuthenticatorApps.ts` that
+		// only Morphit maintainers can edit (not operators, not peers,
+		// not users).  Every entry is statically curated under the
+		// strict open-source-only policy documented in ADR-0043.  The
+		// `2fa-recommended-apps-coverage-smoke` validates that every
+		// officialUrl in the list starts with `https://` and is not
+		// localhost, providing a second structural check.  Anchor
+		// elements also carry rel="noopener noreferrer" to suppress
+		// referrer leak + Spectre-style window.opener attacks.
+		new Set(['app.officialUrl'])
 	]
 ]);
 

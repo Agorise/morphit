@@ -91,7 +91,7 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * embed previously #91).  Subsequent entries shift +1: old #195
  * → new #196, old #204 → new #205.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205', '209']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

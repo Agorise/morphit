@@ -123,6 +123,31 @@ export interface FullIdentity {
 		readonly posting: Keypair;
 		readonly memo: Keypair | null;
 	};
+	/** Optional TOTP enrollment.  When present, the keystore unlock
+	 *  flow gates on a successful TOTP code verification AFTER the
+	 *  password decrypts the envelope.  See `apps/web/src/lib/auth/totp.ts`
+	 *  for the honest threat-model framing (session gate, not crypto
+	 *  wrap — the secret lives in the same encrypted blob as the keys).
+	 *
+	 *  NULL means TOTP is not enrolled.  Field omitted on the JSON
+	 *  wire for keystores that pre-date 2FA enrollment.
+	 *
+	 *  The shared secret is 20 raw bytes (160 bits, RFC 4226 §4).
+	 *  Encoded base64 on the JSON wire. */
+	readonly totpSecret?: Uint8Array | null;
+	/** Optional backup-code slots, paired with `totpSecret`.  10
+	 *  hashed slots (Argon2id MODERATE).  Each is single-use; the
+	 *  `used` flag is flipped in-place after redemption and the
+	 *  keystore is re-saved.
+	 *
+	 *  When `totpSecret` is null, this is also null/omitted.  When
+	 *  the user re-generates backup codes (settings → "Regenerate"),
+	 *  the entire slot array is replaced. */
+	readonly totpBackupCodes?: ReadonlyArray<{
+		readonly hash: string;
+		readonly used: boolean;
+		readonly usedAt: number;
+	}> | null;
 }
 
 /**

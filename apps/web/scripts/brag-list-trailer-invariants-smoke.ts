@@ -240,6 +240,47 @@ if (dups.length === 0) {
 	);
 }
 
+// ─── I-5 entries appear in strictly ascending sequential order
+//     1, 2, 3, ..., N (no gaps, no jumps, no out-of-order).  cp76
+//     surfaced "entries 319-322 inserted in the middle of section
+//     3 with original numbers"; renumber + this invariant locks
+//     the discipline so any future drift fails CI. ──
+{
+	const entryNumbersInOrder: { n: number; line: number }[] = [];
+	for (let i = bodyStart; i < bodyEnd; i++) {
+		const m = lines[i]!.match(/^(\d+)\.\s+\*\*/);
+		if (m) {
+			entryNumbersInOrder.push({ n: parseInt(m[1]!, 10), line: i + 1 });
+		}
+	}
+	const outOfOrder: { from: number; to: number; line: number }[] = [];
+	for (let i = 0; i < entryNumbersInOrder.length; i++) {
+		const expected = i + 1;
+		if (entryNumbersInOrder[i]!.n !== expected) {
+			outOfOrder.push({
+				from: expected,
+				to: entryNumbersInOrder[i]!.n,
+				line: entryNumbersInOrder[i]!.line
+			});
+			if (outOfOrder.length >= 8) break;
+		}
+	}
+	if (outOfOrder.length === 0) {
+		pass(
+			`I-5 entries are sequentially ordered 1..${entryNumbersInOrder.length} (no gaps, no jumps)`
+		);
+	} else {
+		const detail = outOfOrder
+			.map((o) => `expected #${o.from}, found #${o.to} @ line ${o.line}`)
+			.join('; ');
+		fail(
+			'I-5 entries are sequentially ordered 1..N',
+			`First ${outOfOrder.length} divergences: ${detail}. ` +
+				`Renumber the body to be sequential.  The renumber script is in scripts/renumber-brag-list.py if you need it.`
+		);
+	}
+}
+
 const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {

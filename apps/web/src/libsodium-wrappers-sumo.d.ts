@@ -34,6 +34,11 @@ declare module 'libsodium-wrappers-sumo' {
 		crypto_pwhash_ALG_ARGON2ID13: number;
 		crypto_pwhash_MEMLIMIT_INTERACTIVE: number;
 		crypto_pwhash_OPSLIMIT_INTERACTIVE: number;
+		/** "Moderate" parameters — slower than INTERACTIVE; used for
+		 *  hashes of low-entropy values (e.g. TOTP backup codes,
+		 *  ~40 bits) where extra slowness is the defense. */
+		crypto_pwhash_MEMLIMIT_MODERATE: number;
+		crypto_pwhash_OPSLIMIT_MODERATE: number;
 		crypto_pwhash_SALTBYTES: number;
 		crypto_secretbox_KEYBYTES: number;
 		crypto_secretbox_NONCEBYTES: number;
@@ -61,6 +66,17 @@ declare module 'libsodium-wrappers-sumo' {
 			memLimit: number,
 			algorithm: number
 		): Uint8Array;
+		/** Self-contained password hashing — libsodium picks the
+		 *  salt and packs the params into a portable string format
+		 *  ("$argon2id$...").  Used for TOTP backup-code storage. */
+		crypto_pwhash_str(
+			password: Uint8Array | string,
+			opsLimit: number,
+			memLimit: number
+		): string;
+		/** Verify a password against a self-contained hash string
+		 *  produced by crypto_pwhash_str.  Constant-time. */
+		crypto_pwhash_str_verify(hash: string, password: Uint8Array | string): boolean;
 
 		// ── X25519 key-agreement ────────────────────────────────
 		crypto_scalarmult_base(secretKey: Uint8Array): Uint8Array;

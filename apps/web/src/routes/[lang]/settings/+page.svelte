@@ -1813,6 +1813,26 @@
 			</p>
 
 			{#if canChangePassword}
+				<!-- Two-factor authentication — sub-route for the full
+				     enrollment flow.  Card here is just a link with
+				     a one-line summary.  Sub-routes are cleaner than
+				     inlining 600 lines of state machine into this
+				     already-long settings page. -->
+				<div class="mt-6">
+					<h3 class="text-base font-semibold">
+						{$_('settings.totp.heading')}
+					</h3>
+					<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+						{$_('settings.totp.subtitle')}
+					</p>
+					<a
+						href={localePath('/settings/security/2fa', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE)}
+						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-900"
+					>
+						{$_('settings.totp.enroll.cta')} →
+					</a>
+				</div>
+
 				<!-- Change password (K1.3).  Only shown to users who
 				     chose password-mode at onboarding — seed-only
 				     users have no persisted envelope to re-encrypt

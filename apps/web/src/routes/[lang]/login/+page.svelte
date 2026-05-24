@@ -50,6 +50,19 @@
 	/** Phase indicator during YubiKey unlock so the user knows to tap. */
 	let ykPhase: 'idle' | 'requesting' | 'tap' | 'finalizing' = $state('idle');
 
+	/** 2FA gate state.  When the persisted envelope has TOTP enrolled,
+	 *  decryptIdentity succeeds with the password BUT bootFromEnvelope
+	 *  throws KeystoreError 'totp_required'.  The login form then
+	 *  transitions to showing a TOTP entry field, keeping the password
+	 *  in memory for the re-call.  Failed TOTP attempts are
+	 *  rate-limited via `totpFailCount` to thwart brute force. */
+	let needTotp = $state(false);
+	let totpCode = $state('');
+	let totpFailCount = $state(0);
+	/** Lock-out timestamp: Date.now() when locked out until.  0 if
+	 *  not locked out.  Recomputed on each submit. */
+	let totpLockedUntil = $state(0);
+
 	const webhidSupported = $derived(isWebHidSupported());
 
 	onMount(() => {
@@ -112,6 +125,26 @@
 	async function handleUnlock(): Promise<void> {
 		if (busy) return;
 		errorMsg = '';
+		// Lock-out check: if the user has burned through 5 invalid
+		// TOTP attempts, refuse further submissions for 30s.  This
+		// is a SESSION-local rate limit (lives in component state),
+		// not a server-side one — bots can sidestep it by reloading
+		// the page.  That's fine; the threat model here is humans
+		// at the keyboard, not automated cracking (which would have
+		// to also break the keystore encryption).
+		if (totpLockedUntil > Date.now()) {
+			const secondsLeft = Math.ceil((totpLockedUntil - Date.now()) / 1000);
+			errorMsg = $_('settings.totp.unlock_prompt.err_locked_out', {
+				values: { seconds: secondsLeft }
+			});
+			return;
+		}
+		if (totpLockedUntil > 0 && totpLockedUntil <= Date.now()) {
+			// Lock-out elapsed.  Reset the counter and allow a fresh
+			// burst of 5 attempts.
+			totpLockedUntil = 0;
+			totpFailCount = 0;
+		}
 		if (password.length < 1) {
 			errorMsg = $_('login.unlock.password_required');
 			return;
@@ -129,12 +162,15 @@
 				formMode = 'import-needed';
 				return;
 			}
-			await bootFromEnvelope(env, password);
+			await bootFromEnvelope(env, password, needTotp ? totpCode.replace(/\s/g, '') : undefined);
 			// Successful unlock — identity store now holds live keys.
 			// Clear the password before navigating away. The component
 			// will unmount on goto(), but explicitly clearing now
 			// shortens the heap-residency window.
 			password = '';
+			totpCode = '';
+			needTotp = false;
+			totpFailCount = 0;
 			// Send them home.
 			await goto('/');
 		} catch (err) {
@@ -148,26 +184,57 @@
 				switch (err.kind) {
 					case 'bad_password':
 						errorMsg = $_('login.unlock.wrong_password');
+						password = ''; // clear the failed password
 						break;
 					case 'envelope_corrupt':
 						errorMsg = $_('login.unlock.envelope_corrupt');
+						password = '';
 						break;
 					case 'identity_mismatch':
 						errorMsg = $_('crypto.error.identity_mismatch');
+						password = '';
 						break;
 					case 'no_passphrase_wrap':
 						errorMsg = $_('login.unlock.yubikey_required');
+						password = '';
 						break;
 					case 'unsupported':
 						errorMsg = $_('login.unlock.unsupported_envelope');
+						password = '';
+						break;
+					case 'totp_required':
+						// Password worked; switch UI to TOTP entry.
+						// Do NOT clear the password — we'll re-submit
+						// with both password and totpCode in the next
+						// call.  Per Argon2id KDF the password
+						// re-derives each time; that's intentional —
+						// no plaintext keys hang around between
+						// submissions.
+						needTotp = true;
+						errorMsg = '';
+						break;
+					case 'totp_invalid':
+						// Wrong TOTP code (or wrong backup code).
+						// Increment fail count; lock out after 5
+						// consecutive failures for 30 seconds.
+						totpFailCount += 1;
+						totpCode = '';
+						if (totpFailCount >= 5) {
+							totpLockedUntil = Date.now() + 30_000;
+							errorMsg = $_('settings.totp.unlock_prompt.err_locked_out', {
+								values: { seconds: 30 }
+							});
+						} else {
+							errorMsg = $_('settings.totp.unlock_prompt.err_invalid_code');
+						}
 						break;
 				}
 			} else {
 				// Non-keystore error (e.g. store-update bug).  Don't
 				// echo internal text — show a generic message.
 				errorMsg = $_('login.unlock.generic_error');
+				password = '';
 			}
-			password = ''; // clear the failed password
 		} finally {
 			busy = false;
 		}
@@ -364,8 +431,30 @@
 						autocomplete="current-password"
 						class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						required
+						disabled={needTotp}
 					/>
 				</div>
+
+				{#if needTotp}
+					<div>
+						<label for="unlock-totp" class="mb-1 block text-sm font-semibold">
+							{$_('settings.totp.unlock_prompt.code_label')}
+						</label>
+						<p class="mb-2 text-xs text-ink-700 dark:text-ink-300">
+							{$_('settings.totp.unlock_prompt.body')}
+						</p>
+						<input
+							id="unlock-totp"
+							type="text"
+							inputmode="numeric"
+							bind:value={totpCode}
+							autocomplete="one-time-code"
+							placeholder={$_('settings.totp.unlock_prompt.code_placeholder')}
+							class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 font-mono tracking-wide focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							required
+						/>
+					</div>
+				{/if}
 
 				{#if ykPhase !== 'idle'}
 					<p

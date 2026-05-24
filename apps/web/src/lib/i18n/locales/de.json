@@ -401,6 +401,122 @@
 			"clear_confirm_body": "Ihre gespeicherte Fiat-Währung und Region löschen? Beim nächsten Posten müssen Sie sie nur erneut auswählen.",
 			"clear_confirm_yes": "Ja, löschen",
 			"clear_confirm_cancel": "Behalten"
+		},
+		"totp": {
+			"heading": "Zwei-Faktor-Authentifizierung",
+			"subtitle": "Füge eine Authenticator-App als zweiten Faktor nach deinem Passwort hinzu. Schützt vor Schulterblicken, geliehenen Geräten und gelegentlicher lokaler Malware.",
+			"honest_framing": {
+				"title": "Wovor das schützt — ehrlich gesagt",
+				"protects_intro": "TOTP-basierte 2FA ist eine bedeutsame zweite Barriere nach deinem Passwort. Sie stoppt:",
+				"protects_shoulder_surf": "Jemanden, der zusieht, während du dein Passwort tippst",
+				"protects_borrowed": "Einen Freund, der einmal sah, wie du dich anmeldest, und es auf deinem Laptop erneut versucht",
+				"protects_malware": "Gelegentliche lokale Malware, die deinen Keystore greift, aber nicht weiß, das TOTP-Geheimnis zu extrahieren",
+				"limits_intro": "Es fügt KEINE kryptographische Stärke hinzu gegen:",
+				"limits_offline": "Einen entschlossenen Angreifer, der deinen verschlüsselten Keystore gestohlen UND dein Passwort geknackt hat — das TOTP-Geheimnis lebt im selben verschlüsselten Blob wie die Schlüssel.",
+				"limits_path_forward": "Für echte kryptographische 2FA, bei der das Geheimnis des zweiten Faktors niemals auf dem geschützten Gerät lebt, ist der Weg nach vorn FIDO2/WebAuthn-Hardware-Schlüssel. Morphit hat experimentelle Unterstützung; sie ist noch nicht produktionsreif."
+			},
+			"status": {
+				"not_enrolled": "Die Zwei-Faktor-Authentifizierung ist AUS.",
+				"enrolled": "Die Zwei-Faktor-Authentifizierung ist EIN.",
+				"enrolled_since": "Aktiviert seit {date}.",
+				"backup_codes_remaining": "{count, plural, one {# Sicherungscode übrig} other {# Sicherungscodes übrig}}",
+				"backup_codes_low": "Dir gehen die Sicherungscodes aus. Erzeuge einen neuen Satz und lege sie an einem sicheren Ort ab.",
+				"backup_codes_exhausted": "Du hast keine Sicherungscodes mehr. Wenn du deinen Authenticator verlierst, brauchst du deine Seed-Phrase zur Wiederherstellung."
+			},
+			"enroll": {
+				"cta": "Zwei-Faktor-Authentifizierung einrichten",
+				"step1_title": "1. Installiere eine Open-Source-Authenticator-App",
+				"step1_body": "Wir empfehlen dringend die folgenden Open-Source-Optionen. Morphit empfiehlt NICHT Google Authenticator, Microsoft Authenticator oder Authy — geschlossener Quellcode, mit Backup-/Sync-Pfaden, die deine Geheimnisse durchsickern lassen können.",
+				"step2_title": "2. Scanne den QR-Code",
+				"step2_body": "Öffne deinen Authenticator und scanne diesen Code. Wenn du nicht scannen kannst (keine Kamera, Barrierefreiheit), gib das Geheimnis unten manuell ein.",
+				"manual_label": "Manuelle Eingabe (Geheimnis):",
+				"manual_help": "Konto: {account}. Typ: Zeitbasiert (TOTP). Algorithmus: SHA-1. Stellen: 6. Intervall: 30 Sekunden.",
+				"step3_title": "3. Bestätige den Code aus deiner App",
+				"step3_body": "Gib den 6-stelligen Code ein, den dein Authenticator gerade anzeigt. Der Code rotiert alle 30 Sekunden; wenn deiner gerade gewechselt hat, warte auf den nächsten.",
+				"code_label": "Aktueller 6-stelliger Code",
+				"code_placeholder": "000000",
+				"confirm_cta": "Bestätigen und 2FA aktivieren",
+				"confirm_busy": "Überprüfung…",
+				"step4_title": "4. Speichere deine Sicherungscodes",
+				"step4_body": "Diese zehn Codes lassen dich anmelden, falls du deinen Authenticator verlierst. Jeder Code funktioniert genau EINMAL. Speichere sie an einem sicheren Ort — einem Passwortmanager, gedruckt und verschlossen, oder auf Papier geschrieben. Wir werden sie nicht noch einmal anzeigen.",
+				"backup_acknowledge": "Ich habe diese Sicherungscodes an einem sicheren Ort gespeichert.",
+				"backup_continue": "Einrichtung abschließen",
+				"cancel": "Abbrechen",
+				"err_invalid_code": "Dieser Code wurde nicht verifiziert. Prüfe, ob die Zeit deines Geräts synchron ist, und versuche es erneut.",
+				"err_internal": "Etwas ist schiefgelaufen. Dein Keystore ist unverändert; bitte versuche es erneut.",
+				"err_locked": "Deine Sitzung ist gesperrt. Entsperre zuerst und versuche es dann erneut."
+			},
+			"unenroll": {
+				"cta": "Zwei-Faktor-Authentifizierung deaktivieren",
+				"confirm_heading": "2FA deaktivieren",
+				"confirm_body": "Du kannst dann mit nur deinem Passwort entsperren. Bist du sicher?",
+				"code_label": "Aktueller 6-stelliger Code (zur Bestätigung)",
+				"submit": "2FA deaktivieren",
+				"submit_busy": "Deaktivierung…",
+				"cancel": "2FA aktiviert lassen",
+				"success": "Zwei-Faktor-Authentifizierung deaktiviert.",
+				"err_invalid_code": "Dieser Code wurde nicht verifiziert. Versuche es erneut."
+			},
+			"regenerate": {
+				"cta": "Sicherungscodes neu erzeugen",
+				"confirm_heading": "Sicherungscodes neu erzeugen",
+				"confirm_body": "Deine vorherigen Sicherungscodes hören sofort auf zu funktionieren. Stelle sicher, dass du den Speicherschritt für die neuen Codes abschließen kannst, bevor du fortfährst.",
+				"code_label": "Aktueller 6-stelliger Code (zur Bestätigung)",
+				"submit": "Neue Codes erzeugen",
+				"submit_busy": "Erzeugung…",
+				"cancel": "Abbrechen",
+				"success": "Neue Sicherungscodes erzeugt. Speichere sie jetzt.",
+				"err_invalid_code": "Dieser Code wurde nicht verifiziert. Versuche es erneut."
+			},
+			"unlock_prompt": {
+				"heading": "Zwei-Faktor-Code",
+				"body": "Dein Passwort hat funktioniert. Gib jetzt den 6-stelligen Code aus deiner Authenticator-App ein, oder einen Sicherungscode.",
+				"code_label": "Authenticator-Code oder Sicherungscode",
+				"code_placeholder": "000000 oder XXXX-XXXX",
+				"submit": "Weiter",
+				"submit_busy": "Überprüfung…",
+				"cancel": "Abbrechen",
+				"err_invalid_code": "Dieser Code wurde nicht verifiziert. Prüfe, ob die Zeit deines Geräts synchron ist, oder versuche einen Sicherungscode.",
+				"err_locked_out": "Zu viele ungültige Versuche. Versuche es in {seconds} Sekunden erneut.",
+				"backup_code_redeemed_warning": "Ein Sicherungscode wurde gerade verwendet. {remaining} Sicherungscodes verbleiben."
+			},
+			"recommended_apps": {
+				"heading": "Empfohlene Authenticator-Apps (Open Source)",
+				"aegis": {
+					"tagline": "Verschlüsselte lokale Backups, biometrische Sperre, keine Cloud-Synchronisation. Nur Android."
+				},
+				"2fas": {
+					"tagline": "iOS + Android. Optionales verschlüsseltes Cloud-Backup ist OPT-IN, nicht die Standardeinstellung."
+				},
+				"ente": {
+					"tagline": "Ende-zu-Ende-verschlüsselte Geräte-übergreifende Synchronisation (iOS + Android + Linux + Mac + Windows + Web)."
+				}
+			},
+			"not_recommended_apps": {
+				"heading": "Apps, die wir nicht empfehlen (und warum)",
+				"expand": "Sieh, welche Apps wir empfehlen zu meiden",
+				"collapse": "Ausblenden",
+				"google_authenticator": {
+					"name": "Google Authenticator",
+					"reason": "Geschlossener Quellcode. Cloud-Backup synchronisiert Geheimnisse standardmäßig zu Google (opt-OUT, nicht opt-IN), und diese Geheimnisse sind nicht Ende-zu-Ende mit deinem Kontopasswort verschlüsselt."
+				},
+				"microsoft_authenticator": {
+					"name": "Microsoft Authenticator",
+					"reason": "Geschlossener Quellcode. Verpflichtende Microsoft-Konto-Telemetrie."
+				},
+				"authy": {
+					"name": "Authy",
+					"reason": "Geschlossener Quellcode. Nur Cloud-Backups mit einer Geschichte von Konto-Wiederherstellungs-Exploits (SIM-Swap-Vektoren). Desktop-App 2024 eingestellt."
+				}
+			},
+			"lost_device": {
+				"heading": "Was, wenn ich meinen Authenticator verliere?",
+				"body": "Verwende einen deiner 10 Sicherungscodes beim Entsperren. Jeder funktioniert einmal. Wenn du deinen Authenticator UND alle Sicherungscodes verlierst, brauchst du deine 12-Wort-Seed-Phrase zur Wiederherstellung — es gibt keinen Administrator, der helfen kann, weil Morphit deine Schlüssel nicht hält."
+			},
+			"confirm_password_to_begin": "Bestätigen Sie Ihr Passwort, um zu beginnen",
+			"confirm_password": "Bestätigen Sie Ihr Passwort",
+			"copy_secret": "Kopieren",
+			"yubikey_protected": "Dieser Keystore ist mit einem YubiKey geschützt. Das Hinzufügen von TOTP-basierter 2FA zu einem YubiKey-geschützten Keystore wird in dieser Version nicht unterstützt. Ihr YubiKey bietet bereits eine kryptographisch stärkere Authentifizierung als TOTP es täte."
 		}
 	},
 	"profile": {
@@ -792,7 +908,7 @@
 			},
 			"vs_others": {
 				"q": "Wie unterscheidet sich Morphit von LocalMonero, LocalBitcoins oder Haveno/Retoswap?",
-				"a": "Kurzfassung: Morphit geht in Dezentralisierung, Privatsphäre und Nicht-Verwahrung weiter als jede dieser Plattformen — und macht bewusst weniger im Gegenzug. LocalBitcoins (2023 geschlossen) und LocalMonero (2024 geschlossen) waren zentralisierte Unternehmen mit treuhänderischem Escrow. Bei einem Streit hielten menschliche Arbitrageure die Coins und entschieden, wer sie bekommt. Als die Firmen dichtmachten — durch Regulierungsdruck oder Geschäftsentscheidung — verschwanden über Nacht sämtliche Nutzer, Reputationen, Streit-Historie und laufende Trades. Morphit kann nicht auf die gleiche Weise abgeschaltet werden: keine zentralen Arbitrageure, keine verwahrten Wallets, kein Firmenkonto, das man einfrieren könnte. Jede Order liegt auf Blurt, jeder Trade ist peer-to-peer, und jeder darf einen Indexer oder ein Frontend betreiben. Mehrere Instanzen auf vier Netzen (Clearnet, Tor, Lokinet, I2P) sorgen dafür, dass das Sperren eines Knotens nichts bewirkt. Haveno (und der Fork Retoswap) ist vom Geist her viel näher dran — ohne Verwahrung, P2P, ohne KYC. Die wichtigen Unterschiede: Haveno ist eine Desktop-Java-/JavaFX-App, die für ihr 2-von-3-Multisig-Escrow an die Monero-Chain gekoppelt ist, und braucht einen (selbst betriebenen oder fremden) Seednode. Morphit läuft in jedem Browser, auf jedem Handy, ohne Installation; nutzt Blurt (nicht Monero) als Koordinationslayer, der schneller und pro Aktion viel günstiger ist (~gratis vs. Moneros Transaktionsgebühren); und bringt Tor-, Lokinet- und I2P-Erreichbarkeit von Haus aus mit, statt sie dir zu überlassen. Haveno-Trades nutzen arbitriertes Escrow, was robust ist, aber pro Markt vertrauenswürdige Arbitrageure voraussetzt. Morphit v1 ist ein reines reputationsbasiertes schwarzes Brett — kein Escrow, keine Schiedsstelle, die ganze Verantwortung bei den Händlern, Partner mit echter Bilanz auszuwählen. Konservativeres Sicherheitsmodell, aber auch weniger zentrale Flaschenhälse und keine Schiedsstellenrolle, auf die ein Staat Druck ausüben könnte. Privatsphäre: Morphit zieht bei Transport, Speicherung und Chat härter durch als alle oben genannten.\n• Transport: vier parallele Netze, alle erstklassig (nicht nur ein 'Onion-Modus').\n• Speicherung: nichts über dich lebt auf Morphits Servern — Schlüssel im Browser, Orders auf Blurt, Chats auf Blurt nur als Ciphertext. Haveno speichert die Trade-Historie auf deinem Desktop; Morphit hält da mit und lässt dich zusätzlich mit nur deinem 12-Wörter-Seed auf jedes Gerät umziehen.\n• Chat: Ende-zu-Ende-verschlüsselt mit X25519-Schlüsselvereinbarung plus ChaCha20-Poly1305 (aus libsodium), mit einem ephemeren Schlüssel pro Nachricht. LocalBitcoins/LocalMonero-Chats waren für Mitarbeiter sichtbar. Haveno-Chats sind Ende-zu-Ende verschlüsselt. Morphits Chat wird auf deinem Gerät verschlüsselt, als Ciphertext in der Blurt-Blockchain gespeichert und nur von den beiden Teilnehmern entschlüsselbar — Betreiber und Kettenbeobachter sehen nichts. Wir haben bewusst ein einfaches, schnelles, bundle-leichtes ECIES-Design gewählt. Nicht-Verwahrung: LocalBitcoins/LocalMonero hielten deine Coins während des Trades. Haveno/Retoswap sperren sie für den Trade ins Multisig. Morphit fasst sie zu keinem Zeitpunkt an — der Verkäufer schickt sie bei bestätigter Zahlung direkt an den Käufer. Mehr Vertrauen in Reputation, weniger in Kryptographie; ehrlich zu diesem Tradeoff. Arbitration: LocalBitcoins/LocalMonero-Arbitrageure konnten Bewertungen überstimmen. Haveno-Arbitrageure konnten Multisig-Auszahlungen umlenken. Morphit hat gar keine Arbitrageur-Rolle; Bewertungen sind dauerhaft und auf der Chain signiert. Wer betrügt, trägt die Bewertung an seinem Public Key für immer; bei keinem Menschen einlegbar. Starker Hebel gegen Wiederholungstäter und null Schutz für Ersttäter — daher der Fokus auf Kontoalter und Reputation. Was Morphit nicht hat, was jene haben: Escrow, menschliche Arbitration, Markt-Moderation. **Morphit wird nichts davon jemals anbieten.** Escrow, Multisig oder Arbitration wieder einzuführen hieße, den Mittelsmann wieder einzuführen, den dieses Projekt eliminieren soll. Morphits Vorteil: schlank, portabel, browser-nativ, auf jeder Schicht dezentralisiert, nicht abschaltbar — und der Tradeoff: Handel auf unveränderlicher, beweisbarer Reputation.\n\nAm 20. Mai 2026 wurde das Haveno-Handelsprotokoll für rund 2,7 Millionen US-Dollar ausgenutzt. Der Angriff verwendete eine gefälschte, nicht der Reihenfolge entsprechende Bestätigungsnachricht eines falschen Arbiters, um die Adresse der 2-von-3-Multisig-Wallet umzuleiten, bevor die Nutzerguthaben eingezahlt wurden; RetoSwap stoppte den Handel noch am selben Tag. Morphits Design kennt keine Arbiter-Rolle, keinen Multisig-Treuhandservice und keine zentrale Koordinationsnachricht, auf die der Haveno-Exploit angewiesen war — diese Angriffsklasse trifft also nicht auf unser Bedrohungsmodell zu. Der Tradeoff ist real und oben beschrieben: Morphit-Nutzer tragen die volle Selbstverwahrung und stützen sich auf signierte On-Chain-Reputation anstatt auf das Sicherheitsnetz eines Arbiters.\n\nOpenMonero (ein LocalMonero-Klon) hat in 12 Monaten zweimal Benutzergelder verloren. Am 6. Juni 2025 leerte eine falsch konfigurierte Firewall + wallet-rpc-Kombination etwa 77,85 XMR (~$25.225) aus der treuhänderischen internen Wallet der Plattform; Rückerstattungen werden mehr als ein Jahr später immer noch aus Handelsgebühren bezahlt, wobei Anbieter vor regulären Benutzern bevorzugt werden. Am 21. Mai 2026 — einen Tag nach dem Haveno-Exploit — veröffentlichte OpenMonero eine zweite Exploit-Warnung und forderte Benutzer auf, alle Zahlungen einzustellen. Morphit hat überhaupt keine treuhänderische Wallet; dein XMR liegt nie auf einem Morphit-Server, also hat diese gesamte Angriffsklasse nichts zu stehlen. Das Muster ist konsistent: jede Monero-P2P-Plattform, die Benutzergelder in einer internen Wallet hält, wurde mindestens einmal geleert. Morphits Antwort ist, sie gar nicht erst zu halten."
+				"a": "Kurzfassung: Morphit geht in Dezentralisierung, Privatsphäre und Nicht-Verwahrung weiter als jede dieser Plattformen — und macht bewusst weniger im Gegenzug. LocalBitcoins (2023 geschlossen) und LocalMonero (2024 geschlossen) waren zentralisierte Unternehmen mit treuhänderischem Escrow. Bei einem Streit hielten menschliche Arbitrageure die Coins und entschieden, wer sie bekommt. Als die Firmen dichtmachten — durch Regulierungsdruck oder Geschäftsentscheidung — verschwanden über Nacht sämtliche Nutzer, Reputationen, Streit-Historie und laufende Trades. Morphit kann nicht auf die gleiche Weise abgeschaltet werden: keine zentralen Arbitrageure, keine verwahrten Wallets, kein Firmenkonto, das man einfrieren könnte. Jede Order liegt auf Blurt, jeder Trade ist peer-to-peer, und jeder darf einen Indexer oder ein Frontend betreiben. Mehrere Instanzen auf vier Netzen (Clearnet, Tor, Lokinet, I2P) sorgen dafür, dass das Sperren eines Knotens nichts bewirkt. Haveno (und der Fork Retoswap) ist vom Geist her viel näher dran — ohne Verwahrung, P2P, ohne KYC. Die wichtigen Unterschiede: Haveno ist eine Desktop-Java-/JavaFX-App, die für ihr 2-von-3-Multisig-Escrow an die Monero-Chain gekoppelt ist, und braucht einen (selbst betriebenen oder fremden) Seednode. Morphit läuft in jedem Browser, auf jedem Handy, ohne Installation; nutzt Blurt (nicht Monero) als Koordinationslayer, der schneller und pro Aktion viel günstiger ist (~gratis vs. Moneros Transaktionsgebühren); und bringt Tor-, Lokinet- und I2P-Erreichbarkeit von Haus aus mit, statt sie dir zu überlassen. Haveno-Trades nutzen arbitriertes Escrow, was robust ist, aber pro Markt vertrauenswürdige Arbitrageure voraussetzt. Morphit v1 ist ein reines reputationsbasiertes schwarzes Brett — kein Escrow, keine Schiedsstelle, die ganze Verantwortung bei den Händlern, Partner mit echter Bilanz auszuwählen. Konservativeres Sicherheitsmodell, aber auch weniger zentrale Flaschenhälse und keine Schiedsstellenrolle, auf die ein Staat Druck ausüben könnte. Privatsphäre: Morphit zieht bei Transport, Speicherung und Chat härter durch als alle oben genannten.\n• Transport: vier parallele Netze, alle erstklassig (nicht nur ein 'Onion-Modus').\n• Speicherung: nichts über dich lebt auf Morphits Servern — Schlüssel im Browser, Orders auf Blurt, Chats auf Blurt nur als Ciphertext. Haveno speichert die Trade-Historie auf deinem Desktop; Morphit hält da mit und lässt dich zusätzlich mit nur deinem 12-Wörter-Seed auf jedes Gerät umziehen.\n• Chat: Ende-zu-Ende-verschlüsselt mit X25519-Schlüsselvereinbarung plus ChaCha20-Poly1305 (aus libsodium), mit einem ephemeren Schlüssel pro Nachricht. LocalBitcoins/LocalMonero-Chats waren für Mitarbeiter sichtbar. Haveno-Chats sind Ende-zu-Ende verschlüsselt. Morphits Chat wird auf deinem Gerät verschlüsselt, als Ciphertext in der Blurt-Blockchain gespeichert und nur von den beiden Teilnehmern entschlüsselbar — Betreiber und Kettenbeobachter sehen nichts. Wir haben bewusst ein einfaches, schnelles, bundle-leichtes ECIES-Design gewählt. Nicht-Verwahrung: LocalBitcoins/LocalMonero hielten deine Coins während des Trades. Haveno/Retoswap sperren sie für den Trade ins Multisig. Morphit fasst sie zu keinem Zeitpunkt an — der Verkäufer schickt sie bei bestätigter Zahlung direkt an den Käufer. Mehr Vertrauen in Reputation, weniger in Kryptographie; ehrlich zu diesem Tradeoff. Arbitration: LocalBitcoins/LocalMonero-Arbitrageure konnten Bewertungen überstimmen. Haveno-Arbitrageure konnten Multisig-Auszahlungen umlenken. Morphit hat gar keine Arbitrageur-Rolle; Bewertungen sind dauerhaft und auf der Chain signiert. Wer betrügt, trägt die Bewertung an seinem Public Key für immer; bei keinem Menschen einlegbar. Starker Hebel gegen Wiederholungstäter und null Schutz für Ersttäter — daher der Fokus auf Kontoalter und Reputation. Was Morphit nicht hat, was jene haben: Escrow, menschliche Arbitration, Markt-Moderation. **Morphit wird nichts davon jemals anbieten.** Escrow, Multisig oder Arbitration wieder einzuführen hieße, den Mittelsmann wieder einzuführen, den dieses Projekt eliminieren soll. Morphits Vorteil: schlank, portabel, browser-nativ, auf jeder Schicht dezentralisiert, nicht abschaltbar — und der Tradeoff: Handel auf unveränderlicher, beweisbarer Reputation.\n\nAm 20. Mai 2026 wurde das Haveno-Handelsprotokoll für rund 2,7 Millionen US-Dollar ausgenutzt. Der Angriff verwendete eine gefälschte, nicht der Reihenfolge entsprechende Bestätigungsnachricht eines falschen Arbiters, um die Adresse der 2-von-3-Multisig-Wallet umzuleiten, bevor die Nutzerguthaben eingezahlt wurden; RetoSwap stoppte den Handel noch am selben Tag. Morphits Design kennt keine Arbiter-Rolle, keinen Multisig-Treuhandservice und keine zentrale Koordinationsnachricht, auf die der Haveno-Exploit angewiesen war — diese Angriffsklasse trifft also nicht auf unser Bedrohungsmodell zu. Der Tradeoff ist real und oben beschrieben: Morphit-Nutzer tragen die volle Selbstverwahrung und stützen sich auf signierte On-Chain-Reputation anstatt auf das Sicherheitsnetz eines Arbiters.\n\nOpenMonero (ein LocalMonero-Klon) hat in 12 Monaten zweimal Benutzergelder verloren. Am 6. Juni 2025 leerte eine falsch konfigurierte Firewall + wallet-rpc-Kombination etwa 77,85 XMR (~$25.225) aus der treuhänderischen internen Wallet der Plattform; Rückerstattungen werden mehr als ein Jahr später immer noch aus Handelsgebühren bezahlt, wobei Anbieter vor regulären Benutzern bevorzugt werden. Am 21. Mai 2026 — einen Tag nach dem Haveno-Exploit — entzog ein zweiter Exploit OpenMonero etwa 40 XMR (~16.120 $); die Plattform veröffentlichte eine Warnung und forderte Benutzer auf, alle Zahlungen einzustellen. Morphit hat überhaupt keine treuhänderische Wallet; dein XMR liegt nie auf einem Morphit-Server, also hat diese gesamte Angriffsklasse nichts zu stehlen. Das Muster ist konsistent: jede Monero-P2P-Plattform, die Benutzergelder in einer internen Wallet hält, wurde mindestens einmal geleert. Morphits Antwort ist, sie gar nicht erst zu halten."
 			},
 			"vs_atomic_swap_dexes": {
 				"q": "Wie unterscheidet sich Morphit von Bisq oder BasicSwap?",
@@ -1305,6 +1421,18 @@
 			"how_to_spread_morphit": {
 				"q": "Wie bringe ich Leute dazu, Morphit zu nutzen?",
 				"a": "Mundpropaganda ist die gesamte Wachstumsstrategie. Morphit wirbt nicht, betreibt keine bezahlten Inhalte, bezahlt keine Influencer — aber jeder Betreiber und Unterstützer, der ein paar Leute auf die Plattform bringt, macht das Orderbook für alle materiell nützlicher. Hier sind die Kanäle, die funktioniert haben, geordnet ungefähr nach Aufwand:\n\n**1. Online-Kanäle (kostenlos).**\n- **Blog-Artikel** auf Blurt.blog (veröffentliche im selben Ökosystem, in dem du handelst — und verdiene BLURT für den Post), Substack, Medium, Ghost, Mirror oder deiner eigenen Seite. Tiefgehende Beiträge über Morphit, Blurt und das breitere Cypherpunk-Fiat-zu-Krypto-Problem altern gut: verlinkbar, zitierbar, dauerhaft. Cross-poste zu Hacker News, Lobste.rs, dem Monero-Subreddit und jeder Community, wo es zum Thema passt.\n- **meetup.com-Gruppen** für Krypto, Bitcoin, Monero, Datenschutz, Libertär, Freedom-Tech, Mesh-Netzwerke und angrenzende Themen — viele haben monatliche Meetups, bei denen ein 5-Minuten-Show-and-Tell der Morphit-App willkommen ist\n- **Universitätsclubs und Anschlagtafeln** — studentische Kryptographie-Clubs, libertäre Studentengruppen, Informatik-Gesellschaften. Pinne ein gedrucktes QR-Code-zu-/install-Poster.\n- **Bestehende Datenschutz-/Sicherheits-Communities** wie KYCnot.me, PrivacyGuides-Foren, Monero-Subreddit/Matrix, GrapheneOS-Diskussionen\n\n**2. Physische Kanäle (kleine Druckkosten).**\n- **Flyer am Fabriktor zu Feierabend** verteilen — viele Arbeiter haben unbankisierte Bargeldbedürfnisse, die Krypto-ohne-KYC löst, und sie sind 60 Sekunden in einer Reihe, wo du ihnen etwas in die Hand drücken kannst\n- **Flyer auf Autos in Parkplätzen, an Türen, an Community-Pinnwänden** in Cafés, Bibliotheken, Makerspaces, Freedom-Tech-Events. Halte den QR-Code groß und den Call-to-Action einzeilig ('Krypto kaufen, keine ID' / 'Krypto für Bargeld verkaufen')\n- **Aufkleber** auf Laptops auf Konferenzen, an Laternenpfählen in tech-lastigen Vierteln. Billiger als Flyer pro Impression\n\n**3. Cross-Promotion (kostenlos).**\n- **Andere Krypto-Communities**: Ethereum, DeFi, Solana, XRP, Pirate Chain, Decred — jede hat ihre eigene Nutzerbasis, und Morphit handelt sie alle. Der Pitch 'wir handeln deine Lieblings-Coin auch, Peer-to-Peer ohne KYC' kommt gut an\n- **Nicht-Krypto-Communities** mit Werteüberschneidung: libertäre Gruppen, Voluntaryisten-Meetups, Datenschutz-Aktivisten, Hartgeld-Vertreter, Freedom-Tech- und Mesh-Netzwerk-Communities, Agoristen-Kreise. Morphit ist speziell für die Werte gebaut, die diese Communities bereits halten\n\n**4. Bezahlte lokale Promoter (Operator-Ebene, bescheidene Ausgaben).**\n- Bezahl einen lokalen krypto-neugierigen 'Geek-Marketer' ein kleines Grundgehalt in Pesos (oder welcher lokalen Währung auch immer) plus Performance-Provisionen in BLURT. Das Peso-Gehalt hält sie engagiert; die BLURT-Provisionen richten sie an das Langzeitwachstum des Netzwerks aus und geben ihnen einen Free-Speech-Token-Anteil. Funktionierende Provisionsereignisse: neue Kontoanmeldung (kleine Prämie), erster erfolgreicher Trade (größere Prämie), App-Demo auf einem Meetup (ereignisbasierte Prämie)\n- Das ist genau die Art von verteiltem Graswurzel-Marketing, wo Morphits Föderationsmodell glänzt — jeder Operator kann sein eigenes lokales Promoter-Netzwerk aufbauen, unabhängig von einem zentralen Marketingbudget\n\n**5. Was du NICHT tun solltest.**\n- Spamme keine Telegram-Gruppen, Discord-Server oder Subreddits zu, in denen du kein Stammgast bist. Krypto-Communities haben starke Spam-Immunitäts-Reflexe und du verbrennst die Marke\n- Pitche Morphit nicht an Leute, die bereits ein CEX-Konto haben und glücklich damit sind; pitche an die Nichtbankisierten, die Datenschutzbewussten, Menschen, deren CEX-Konten eingefroren wurden\n- Versprich keine Dinge, die Morphit nicht verspricht (keine sofortige Schlichtung, kein Treuhand, keine garantierte Liquidität) — Überverkauf treibt Abwanderung\n\nDas Föderationsmodell bedeutet, dass jede erfolgreiche lokale Promotion das Netzwerk für alle wachsen lässt. Ein Meetup-Teilnehmer, der über deine Operator-Instanz beitritt, ist ein Counterparty, der gleichzeitig auf jeder anderen Operator-Instanz verfügbar ist. Lokales Wachstum ist globales Wachstum."
+			},
+			"totp_2fa_what_is_it": {
+				"q": "Was ist Zwei-Faktor-Authentifizierung und wie aktiviere ich sie auf Morphit?",
+				"a": "Zwei-Faktor-Authentifizierung (2FA) bedeutet, dass Sie ZWEI Beweise benötigen, um Ihren Morphit-Keystore zu entsperren: Ihr Passwort (etwas, das Sie wissen) plus einen rotierenden 6-stelligen Code von einer Telefon-App (etwas, das Sie haben). Auf Morphit ist 2FA vollständig optional — Morphit wird es NIEMALS verlangen, Sie zur Anmeldung drängen oder Sie warnen, dass Ihr Konto ohne es \"unsicher\" ist. Um es zu aktivieren, gehen Sie zu Einstellungen → Zwei-Faktor-Authentifizierung, installieren Sie eine unserer empfohlenen Open-Source-Authenticator-Apps (Aegis, 2FAS oder Ente Auth), scannen Sie den QR-Code und speichern Sie die 10 Sicherungscodes an einem sicheren Ort. Ehrlich darüber, was es tut: 2FA auf Morphit blockiert Schulterblicke, geliehene Geräte-Wiederholung und gelegentliche lokale Malware. Es fügt KEINE kryptographische Stärke hinzu gegen einen Angreifer, der sowohl Ihren verschlüsselten Keystore als AUCH Ihr Passwort hat — das TOTP-Geheimnis lebt im selben verschlüsselten Blob wie Ihre Schlüssel. Für dieses Bedrohungsmodell ist der Weg nach vorn FIDO2/WebAuthn-Hardware-Schlüssel, für die Morphit experimentelle Unterstützung hat."
+			},
+			"totp_2fa_lost_authenticator": {
+				"q": "Ich habe meine Authenticator-App verloren — wie komme ich wieder rein?",
+				"a": "Als Sie sich für 2FA angemeldet haben, hat Morphit Ihnen 10 Sicherungscodes gezeigt und verlangt, dass Sie bestätigen, sie an einem sicheren Ort gespeichert zu haben (einem Passwortmanager, gedruckt und verschlossen oder auf Papier geschrieben). Geben Sie auf dem Entsperr-Bildschirm einen dieser Sicherungscodes anstelle eines 6-stelligen Authenticator-Codes ein — das Entsperr-Feld akzeptiert beides. Jeder Sicherungscode funktioniert genau einmal; der Keystore markiert ihn automatisch als verwendet und speichert sich erneut, bevor Sie hereingelassen werden. Wenn Sie alle 10 Sicherungscodes verwendet und auch Ihren Authenticator verloren haben, ist Ihr einziger Weg zurück Ihre 12-Wort-Seed-Phrase — Melden Sie sich ab, wählen Sie dann auf dem Willkommensbildschirm \"Ich habe eine Seed-Phrase\", geben Sie die 12 Wörter ein und legen Sie ein neues Passwort fest. Ihre Schlüssel werden aus der Seed abgeleitet, sodass dies alles genau wiederherstellt. Es gibt keinen Morphit-Administrator, der Ihre 2FA zurücksetzen kann — Morphit hält Ihre Schlüssel nicht, also können wir wirklich nicht helfen, wenn Sie alle drei verlieren: Authenticator, Sicherungscodes und Seed."
+			},
+			"totp_2fa_why_not_google_authenticator": {
+				"q": "Warum empfiehlt Morphit Google Authenticator nicht?",
+				"a": "Drei Gründe. Erstens: geschlossener Quellcode. Wir können nicht überprüfen, was es mit Ihren Geheimnissen macht, und Sie auch nicht. Zweitens: Cloud-Backup. Seit 2023 synchronisiert Google Authenticator Ihre 2FA-Geheimnisse standardmäßig mit Ihrem Google-Konto — opt-OUT, nicht opt-IN — und diese Geheimnisse sind nicht Ende-zu-Ende mit einem von Ihnen kontrollierten Passwort verschlüsselt. Das bedeutet, dass jeder, der Ihr Google-Konto kompromittiert (Phishing, SIM-Swap, Google verliert einen Schlüssel, eine Vorladung), all Ihre 2FA-Geheimnisse auf einmal erhält. Drittens: Der ganze Sinn von 2FA auf einem privacy-respektierenden Marktplatz ist, dass der zweite Faktor von Ihren Hauptkonten getrennt bleibt. Eine Authenticator zu empfehlen, die mit Google synchronisiert, vereitelt den Zweck für genau die Benutzerpopulation (privacy-bewusste Bitcoin- und Monero-Händler), die Morphit speziell gewählt hat, um dieses Muster zu vermeiden. Morphit empfiehlt Open-Source-Apps, bei denen SIE kontrollieren, wohin das Backup geht: Aegis (Android, verschlüsselte lokale Backups), 2FAS (iOS + Android, optionales opt-in Cloud-Backup) oder Ente Auth (plattformübergreifend, Ende-zu-Ende-verschlüsselte Synchronisation). Wenn Sie bereits einen Authenticator haben, dem Sie vertrauen und der nicht auf unserer Liste steht — KeePassXC TOTP, Bitwarden Authenticator, Yubico Authenticator, andOTP — ist das in Ordnung. Die Empfehlungen sind \"was wir einem neuen Benutzer vorschlagen\", keine Sperrliste für alles andere."
 			}
 		},
 		"share_link": "Link teilen",

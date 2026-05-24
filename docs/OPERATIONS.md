@@ -8987,3 +8987,74 @@ Restart the indexer after editing, then verify via:
 curl -sf https://yourinstance.example/v1/instance | jq '.seo'
 ```
 
+## 44. User-side optional TOTP 2FA — operator-side notes
+
+**TL;DR for operators: zero action required.** 2FA is a purely
+client-side, opt-in feature. The Morphit web app offers it as an
+option from Settings → Two-factor authentication. The TOTP secret
+and backup-code hashes are stored inside the user's encrypted
+keystore, alongside their identity. The indexer and relay are not
+involved in the 2FA flow at any point.
+
+### What you (the operator) should know
+
+- **The user enrolls — not you.** There is no operator-side
+  toggle to enable, disable, or require 2FA for users of your
+  instance. Morphit users own their keys; we don't gate them.
+- **There's no server-side state.** The relay holds no TOTP
+  secrets, no backup codes, no 2FA enabled/disabled flag for
+  any user. The encrypted keystore lives in the user's browser
+  storage (or wherever they exported it).
+- **Reports of "I lost my 2FA, can you reset it?" — you can't.**
+  The correct response is: "I can't reset your 2FA because
+  Morphit doesn't hold your keystore or your secrets. If you
+  still have your 12-word seed phrase, you can sign out and
+  re-import to recover. If you saved your 10 backup codes at
+  enrollment, type one of those at the unlock screen instead
+  of the 6-digit code. If you don't have either, the keystore
+  isn't recoverable." This is documented in the user-facing
+  FAQ (`totp_2fa_lost_authenticator`).
+- **No support for "force 2FA before withdrawing $X" or
+  similar paternalism.** ADR-0043 documents the rejection of
+  this pattern: gating user funds on a second factor that the
+  user can lose, on a non-custodial wallet, is contradictory.
+- **No telemetry on enrollment.** The relay does not know which
+  users on your instance have 2FA enabled. No metric is
+  reported, no log line surfaces the fact. This is intentional.
+
+### Recommending apps to users
+
+Morphit's recommended-apps list ships in
+`apps/web/src/lib/auth/recommendedAuthenticatorApps.ts` and is
+surfaced to the user at enrollment time. It currently
+recommends Aegis (Android), 2FAS (iOS + Android), and Ente Auth
+(cross-platform). All three are open source.
+
+The same file also explicitly tells users why Morphit does NOT
+recommend Google Authenticator, Microsoft Authenticator, or
+Authy. Operators who get pushback on this from a user who
+prefers a closed-source authenticator can point them at
+ADR-0043 §"Open-source-only recommended-app policy" or the FAQ
+entry `totp_2fa_why_not_google_authenticator`. The user is
+free to use any TOTP-compatible app — Morphit accepts the
+standard otpauth:// URI — but Morphit will only recommend
+open-source options.
+
+### If a user reports "the TOTP code never works"
+
+Almost always device clock drift. TOTP requires the user's
+device clock to be within 90 seconds of NTP-correct time
+(Morphit's TOTP verifier accepts ±1 step on either side of
+the current 30-second window, so up to ±90s drift). On
+desktops, this is almost never an issue. On phones with
+buggy NTP sync, it can be — direct the user to enable
+automatic date/time in their system settings.
+
+### Source pointers
+
+- ADR-0043 — design rationale
+- `apps/web/src/lib/auth/totp.ts` — RFC 6238 implementation
+- `apps/web/src/lib/crypto/keystoreTotp.ts` — unlock-time gate
+- `apps/web/src/lib/crypto/keystoreTotpEnroll.ts` — enrollment
+- `apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte`
+  — user-facing UI

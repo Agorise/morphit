@@ -60,13 +60,28 @@ export type KeystoreEnvelope = SimplePassphraseEnvelope | LayeredCekEnvelope;
  *  - 'no_passphrase_wrap'   — layered envelope has no passphrase
  *                             wrap; user must use YubiKey unlock.
  *  - 'unsupported'          — version/scheme/KDF the code can't
- *                             handle.  Bug or future-format file. */
+ *                             handle.  Bug or future-format file.
+ *  - 'totp_required'        — keystore has 2FA enrolled; caller
+ *                             must re-invoke the unlock with the
+ *                             user's current TOTP code (or a
+ *                             backup code).  Password decrypt
+ *                             succeeded; the UI should prompt
+ *                             for the second factor.
+ *  - 'totp_invalid'         — TOTP code did not verify, AND no
+ *                             backup code matched.  UI should
+ *                             let the user retry.  Rate-limiting
+ *                             is the caller's responsibility
+ *                             (typically a per-session in-memory
+ *                             attempts counter that locks out
+ *                             after N consecutive failures). */
 export type KeystoreErrorKind =
 	| 'bad_password'
 	| 'envelope_corrupt'
 	| 'identity_mismatch'
 	| 'no_passphrase_wrap'
-	| 'unsupported';
+	| 'unsupported'
+	| 'totp_required'
+	| 'totp_invalid';
 
 export class KeystoreError extends Error {
 	readonly kind: KeystoreErrorKind;
@@ -165,7 +180,16 @@ function identityToJson(id: Identity): string {
 		// load.  The mnemonic string is reconstructed only when the
 		// user explicitly wants to back it up via mnemonicForBackup.
 		seedBytes: id.seedBytes ? toB64(id.seedBytes) : null,
-		keys: keyObj
+		keys: keyObj,
+		// 2FA — optional fields, omitted from older keystores.
+		// `totpSecret`: base64 of raw 20-byte HMAC-SHA1 secret;
+		// null/missing when 2FA isn't enrolled.
+		// `totpBackupCodes`: array of {hash, used, usedAt} slots,
+		// paired with totpSecret.  See `apps/web/src/lib/auth/backupCodes.ts`.
+		totpSecret: id.totpSecret ? toB64(id.totpSecret) : null,
+		totpBackupCodes: id.totpBackupCodes
+			? id.totpBackupCodes.map((s) => ({ hash: s.hash, used: s.used, usedAt: s.usedAt }))
+			: null
 	});
 }
 
@@ -194,6 +218,10 @@ function jsonToIdentity(json: string): Identity {
 		origin?: 'morphit-seed' | 'posting-only';
 		seedBytes: string | null;
 		keys: Record<string, { pub: string; priv: string } | null>;
+		totpSecret?: string | null;
+		totpBackupCodes?:
+			| ReadonlyArray<{ hash: string; used: boolean; usedAt: number }>
+			| null;
 	};
 
 	const origin: 'morphit-seed' | 'posting-only' = parsed.origin ?? 'morphit-seed';
@@ -260,11 +288,51 @@ function jsonToIdentity(json: string): Identity {
 		(parsed as { seedBytes: string | null }).seedBytes = null;
 	}
 
+	// 2FA fields — optional, omitted from pre-2FA keystores.
+	let totpSecret: Uint8Array | null = null;
+	if (parsed.totpSecret) {
+		if (typeof parsed.totpSecret !== 'string') {
+			throw new Error('Keystore totpSecret has wrong type');
+		}
+		totpSecret = fromB64(parsed.totpSecret);
+		// Drop the parsed reference to the base64 secret.
+		(parsed as { totpSecret: string | null }).totpSecret = null;
+	}
+	let totpBackupCodes: ReadonlyArray<{
+		hash: string;
+		used: boolean;
+		usedAt: number;
+	}> | null = null;
+	if (parsed.totpBackupCodes) {
+		if (!Array.isArray(parsed.totpBackupCodes)) {
+			throw new Error('Keystore totpBackupCodes has wrong type');
+		}
+		// Validate each slot structurally.
+		for (const slot of parsed.totpBackupCodes) {
+			if (
+				typeof slot !== 'object' ||
+				slot === null ||
+				typeof (slot as { hash?: unknown }).hash !== 'string' ||
+				typeof (slot as { used?: unknown }).used !== 'boolean' ||
+				typeof (slot as { usedAt?: unknown }).usedAt !== 'number'
+			) {
+				throw new Error('Keystore totpBackupCodes has malformed slot');
+			}
+		}
+		totpBackupCodes = parsed.totpBackupCodes.map((s) => ({
+			hash: s.hash,
+			used: s.used,
+			usedAt: s.usedAt
+		}));
+	}
+
 	return {
 		createdAt: parsed.createdAt,
 		origin,
 		seedBytes,
-		keys: Object.freeze(keys)
+		keys: Object.freeze(keys),
+		totpSecret,
+		totpBackupCodes
 	};
 }
 

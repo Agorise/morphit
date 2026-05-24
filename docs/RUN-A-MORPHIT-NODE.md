@@ -1844,6 +1844,18 @@ If you suspect the relay's active key has been compromised:
 
 Full procedure with the safeguards is in OPERATIONS.md §7 ("Suspected relay compromise") and §8 ("Owner-key rotation ceremony"). Don't improvise — follow that doc step by step.
 
+### "A user says they lost their 2FA — can you reset it?"
+
+You cannot — and you should be glad you can't. Morphit's TOTP-based two-factor authentication is entirely client-side: the secret and backup-code hashes live inside the user's encrypted keystore, on the user's device, and your relay never sees them. There's no server-side switch to flip.
+
+Direct the user at three recovery paths in this order:
+
+1. **Backup code.** If they saved their 10 single-use backup codes at enrollment (which the UI made them acknowledge), they can type one of those at the unlock screen instead of the 6-digit authenticator code. Each works once.
+2. **Seed phrase.** If they kept their 12-word recovery phrase, they sign out and choose "I have a seed phrase" on the welcome screen. This recovers their identity exactly and they can set a fresh password — and re-enroll 2FA from scratch if they want.
+3. **Neither.** If they have neither backup codes nor seed phrase, the keystore is not recoverable. This is a fundamental property of non-custodial design; it's not a Morphit limitation we can work around.
+
+See OPERATIONS.md §44 for the full operator-side rundown of how the 2FA flow works (spoiler: there is no operator-side rundown — it's user-side only). The user-facing FAQ entries `totp_2fa_what_is_it`, `totp_2fa_lost_authenticator`, and `totp_2fa_why_not_google_authenticator` cover the same ground from the user's angle.
+
 ---
 
 ## 13. Where to go from here
