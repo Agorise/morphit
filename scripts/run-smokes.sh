@@ -238,6 +238,7 @@ SMOKES=(
 	"apps/web:2fa-no-google-recommendation-smoke"
 	"apps/web:2fa-recommended-apps-coverage-smoke"
 	"apps/web:2fa-locale-parity-smoke"
+	"apps/web:comparison-image-freshness-smoke"
 	"apps/indexer:reputation-decay-smoke"
 	"apps/indexer:reputation-receipt-shape-smoke"
 	"apps/indexer:stablecoin-depeg-detector-smoke"

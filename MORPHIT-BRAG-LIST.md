@@ -714,6 +714,8 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 322. **Ripple (XRP) peer-to-peer with Federated Byzantine Agreement consensus.** Trade XRP peer to peer — non-custodial, no KYC. Native XRP cannot be frozen by any central authority (only IOU-token variants on XRPL can; native XRP cannot), and Morphit's post-flow surfaces the two XRPL gotchas — destination tags (required when sending to exchange-hosted addresses) and the 1-XRP base reserve (first receive needs ≥1 XRP). Trade-only on Morphit.
 
+323. **Live-updated comparison image hosted at a stable URL.** Blog posts, fediverse threads, and external sites can hot-link `https://morphit.io/morphit-comparison.png` — a 2400-pixel-wide feature-by-feature table comparing Morphit to Bisq, Haveno/RetoSwap, OpenMonero, and BasicSwap across 128 verified data points. The image regenerates from `scripts/comparison-image/build_comparison.py` every time the brag list or competitor facts change; a CI smoke (`comparison-image-freshness-smoke`) fails if the PNG goes stale. Every claim is traceable to either Morphit's source code or the competitor's public docs; corrections welcome via Matrix #agorise:matrix.org.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -732,4 +734,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*322 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-24.*
+*323 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-24.*
