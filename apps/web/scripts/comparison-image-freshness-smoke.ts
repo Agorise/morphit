@@ -8,12 +8,18 @@
  * and external sites can hot-link a stable URL.  This smoke asserts:
  *
  *   1. PNG / SVG / build script / brag list all exist on disk.
- *   2. PNG is no older than `scripts/comparison-image/build_comparison.py`.
- *      If the build script changed and the PNG wasn't regenerated, this
- *      fires and tells the operator to run:
- *        python3 scripts/comparison-image/build_comparison.py
- *   3. PNG is no older than `MORPHIT-BRAG-LIST.md`.
- *   4. PNG and SVG were generated in the same build (mtime within 60s).
+ *   2. The PNG's SHA-256 fingerprint sidecar
+ *      (`apps/web/static/morphit-comparison.png.fingerprint`) matches
+ *      the SHA-256 of the current SVG content.  When the SVG changes
+ *      without re-running build_comparison.py, the sidecar hash and
+ *      the live SVG hash diverge → smoke fails with an actionable
+ *      "re-run the build script" message.
+ *
+ *      Why fingerprint instead of mtime: git checkout resets every
+ *      file's mtime to the checkout instant in filesystem-walk
+ *      order, so an mtime-based check is non-deterministic in CI
+ *      even when the repo is byte-perfect.  (cp136 shipped with an
+ *      mtime check that passed locally but failed CI — F-5.)
  *
  * Wordmark-preservation checks (introduced cp134 after Ken's hand-edited
  * Morphit wordmark replaced the plain "Morphit" text in the column
@@ -47,10 +53,11 @@
  *   - Swap `#fefefe` ↔ `#7fed2d` in the SVG → fails #8.
  *   - Delete the `<linearGradient id="id0">` block → fails #9.
  *   - Commit an unoptimized PNG (>512 KB) → fails #10.
- *   - Hand-edit the SVG without re-running the build script (stale
- *     footer "As of" date) → fails #11.
+ *   - Hand-edit the SVG without re-running the build script (fingerprint
+ *     sidecar diverges from current SVG hash) → fails fingerprint check.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +67,7 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 const PNG = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png');
+const FINGERPRINT = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png.fingerprint');
 const SVG = join(REPO_ROOT, 'scripts/comparison-image/comparison.svg');
 const SCRIPT = join(REPO_ROOT, 'scripts/comparison-image/build_comparison.py');
 const BRAG = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
@@ -103,43 +111,42 @@ if (!existsSync(BRAG)) {
 	pass(`MORPHIT-BRAG-LIST.md exists`);
 }
 
-if (existsSync(PNG) && existsSync(SCRIPT)) {
-	const pngMtime = statSync(PNG).mtimeMs;
-	const scriptMtime = statSync(SCRIPT).mtimeMs;
-	if (pngMtime >= scriptMtime) {
-		pass(`PNG (${new Date(pngMtime).toISOString()}) is no older than build script`);
+// Content fingerprint check (replaces three mtime-based checks).
+//
+// build_comparison.py writes a SHA-256 of the rendered SVG to
+// `apps/web/static/morphit-comparison.png.fingerprint` every time
+// it builds.  If the SVG on disk hashes to that same value, the PNG
+// was built from this exact SVG and is fresh.  If they diverge,
+// someone hand-edited the SVG (or the build script) without
+// regenerating, and the PNG is stale.
+//
+// This survives `git checkout`'s mtime reset because both inputs
+// are file contents, not metadata.
+if (existsSync(SVG) && existsSync(FINGERPRINT)) {
+	const svgContent = readFileSync(SVG, 'utf8');
+	const liveSvgHash = createHash('sha256').update(svgContent, 'utf8').digest('hex');
+	const recordedHash = readFileSync(FINGERPRINT, 'utf8').trim();
+	if (liveSvgHash === recordedHash) {
+		pass(`PNG fingerprint matches the current SVG content (sha256:${liveSvgHash.slice(0, 12)}…)`);
 	} else {
 		fail(
-			`PNG is older than build_comparison.py`,
-			`Run: python3 scripts/comparison-image/build_comparison.py and commit the new PNG.`
+			`PNG fingerprint does not match the current SVG content`,
+			`The fingerprint sidecar says the PNG was built from a different SVG. ` +
+				`Either the SVG was hand-edited without rebuilding, or the build ` +
+				`script was changed in a way that affects the rendered SVG. ` +
+				`Re-run: python3 scripts/comparison-image/build_comparison.py and ` +
+				`commit the regenerated PNG + fingerprint together.\n` +
+				`  recorded: ${recordedHash.slice(0, 16)}…\n` +
+				`  live SVG: ${liveSvgHash.slice(0, 16)}…`
 		);
 	}
-}
-
-if (existsSync(PNG) && existsSync(SVG)) {
-	const pngMtime = statSync(PNG).mtimeMs;
-	const svgMtime = statSync(SVG).mtimeMs;
-	if (Math.abs(pngMtime - svgMtime) < 60_000) {
-		pass(`PNG and SVG were generated in the same build (within 60s)`);
-	} else {
-		fail(
-			`PNG and SVG mtimes diverge by more than 60s`,
-			`They must come from the same build_comparison.py run.  Re-run the script.`
-		);
-	}
-}
-
-if (existsSync(PNG) && existsSync(BRAG)) {
-	const pngMtime = statSync(PNG).mtimeMs;
-	const bragMtime = statSync(BRAG).mtimeMs;
-	if (pngMtime >= bragMtime) {
-		pass(`PNG is no older than MORPHIT-BRAG-LIST.md`);
-	} else {
-		fail(
-			`PNG is older than MORPHIT-BRAG-LIST.md`,
-			`When brag-list claims change, re-verify comparison cells then re-run the build script.`
-		);
-	}
+} else if (existsSync(SVG) && !existsSync(FINGERPRINT)) {
+	fail(
+		`PNG fingerprint sidecar is missing`,
+		`Expected at apps/web/static/morphit-comparison.png.fingerprint. ` +
+			`Re-run: python3 scripts/comparison-image/build_comparison.py and ` +
+			`commit the produced fingerprint file.`
+	);
 }
 
 // ─── Wordmark preservation checks ──────────────────────────────
@@ -301,13 +308,15 @@ if (existsSync(PNG)) {
 	}
 }
 
-// ─── #11 — SVG footer "As of YYYY-MM-DD" date is recent ─────────
-// The footer says "As of 2026-MM-DD" — that's the build date,
-// auto-populated by `date.today()` in build_comparison.py.  If the
-// SVG carries a stale date (more than 7 days behind the SVG file's
-// own mtime), the build script didn't run when the SVG was last
-// edited, which means a hand-edited SVG is in the repo with a stale
-// "As of" claim.  Fix: re-run build_comparison.py.
+// ─── SVG footer "As of YYYY-MM-DD" date is present ──────────────
+// The footer says "As of 2026-MM-DD" — auto-populated by
+// `date.today()` in build_comparison.py.  Freshness of this date
+// relative to the build time is already covered by the SHA-256
+// fingerprint check above: if the date changes, the SVG hashes
+// differently, and the fingerprint sidecar diverges.  All this
+// check has to do is structural — assert the line is still there
+// and well-formed, so a future build-script edit can't silently
+// drop it.
 if (existsSync(SVG)) {
 	const svgSrc = readFileSync(SVG, 'utf8');
 	const dateMatch = svgSrc.match(/As of (\d{4})-(\d{2})-(\d{2})\./);
@@ -319,23 +328,7 @@ if (existsSync(SVG)) {
 		);
 	} else {
 		const [, yyyy, mm, dd] = dateMatch;
-		const footerDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`).getTime();
-		const svgMtime = statSync(SVG).mtimeMs;
-		const STALE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-		// SVG mtime should be no more than 7 days AFTER the footer date.
-		// (mtime BEFORE footer date is weird but theoretically possible
-		// in a fresh git clone; we don't fail on that.)
-		if (svgMtime - footerDate > STALE_WINDOW_MS) {
-			const drift = Math.floor((svgMtime - footerDate) / (24 * 60 * 60 * 1000));
-			fail(
-				`SVG footer date "${yyyy}-${mm}-${dd}" is ${drift} days behind the SVG file mtime`,
-				`The build script should be re-run whenever the SVG is touched so ` +
-					`the footer "As of" date stays current.  Run: ` +
-					`python3 scripts/comparison-image/build_comparison.py`
-			);
-		} else {
-			pass(`SVG footer date "${yyyy}-${mm}-${dd}" is current relative to SVG mtime`);
-		}
+		pass(`SVG footer carries an "As of YYYY-MM-DD" date stamp (${yyyy}-${mm}-${dd})`);
 	}
 }
 

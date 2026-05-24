@@ -716,6 +716,12 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 323. **Live-updated comparison image hosted at a stable URL.** Blog posts, fediverse threads, and external sites can hot-link `https://morphit.io/morphit-comparison.png` — a 2400-pixel-wide feature-by-feature table comparing Morphit to Bisq, Haveno/RetoSwap, OpenMonero, and BasicSwap across 128 verified data points. The image regenerates from `scripts/comparison-image/build_comparison.py` every time the brag list or competitor facts change; a CI smoke (`comparison-image-freshness-smoke`) fails if the PNG goes stale. Every claim is traceable to either Morphit's source code or the competitor's public docs; corrections welcome via Matrix #agorise:matrix.org.
 
+324. **Orderbook filters every tradable asset, automatically.** The `/orderbook` page's asset dropdown is wired to the canonical `ASSET_TICKERS` registry, so any new asset that becomes tradable appears as a filter option the same moment the rest of the app learns about it — no separate "remember to update the filter" step. A `asset-select-coverage-smoke` enforces this structurally by failing CI on any future `<select>` that hardcodes a partial ticker list.
+
+325. **Seed-phrase sign-in has a clear "remember me?" step.** Pasting a 12-word seed phrase on a new device used to be a one-way trip to the trading screen — but the session ended when the tab closed, forcing the user to re-paste the seed next visit. Now after a successful seed import, Morphit asks "Automatically remember me on this device? (assuming nobody else uses it)" with the checkbox UNCHECKED by default — privacy-positive on public computers, one click + a password to persist on personal ones.
+
+326. **FAQ search answers Grandma's first questions.** Queries like "how do I start", "how do I begin", "first time user", and "what is this" used to land on unrelated entries — pre-cp137 "how do I start" returned an order-editing FAQ at score 1.00. The synonym map now routes these grandma-shaped phrasings to the actual getting-started walkthrough, locked in by a coverage smoke with 14 sample queries.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -734,4 +740,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*323 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-24.*
+*326 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-24.*

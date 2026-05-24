@@ -769,6 +769,15 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	tabs: ['inbox', 'messages', 'requests'],
 	// Crypto assets
 	btc: ['bitcoin'],
+	// "how do I buy X" / "how do I sell X" should route to the
+	// canonical how-to entries, not to the most-common-token-match
+	// (which is often "what is X" since both contain the asset
+	// name).  cp137 H-2: "how do I buy bitcoin" was hitting
+	// `what_is_bch` because "bitcoin" alone is high-weight.
+	buy: ['how_to_buy', 'purchase', 'walkthrough'],
+	buying: ['how_to_buy', 'purchase', 'walkthrough'],
+	sell: ['how_to_sell', 'walkthrough'],
+	selling: ['how_to_sell', 'walkthrough'],
 	bitcoin: ['btc'],
 	xmr: ['monero'],
 	monero: ['xmr'],
@@ -834,7 +843,42 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	// `stranger` already route via the chat_anti_spam cluster
 	// (lines 540/542); these are the genuinely-new keys.
 	blocked: ['block', 'privacy', 'spam'],
-	stalker: ['block', 'privacy', 'spam']
+	stalker: ['block', 'privacy', 'spam'],
+	// ─── Getting-started cluster (cp137 grandma walkthrough H-2).
+	// Without these, "how do I start" / "how do I begin" /
+	// "first time" route to unrelated entries (`order_editing`,
+	// `profile_pages`, etc.) instead of the actual walkthrough.
+	// Map all common grandma-phrasings to the canonical tokens
+	// from `how_to_trade_walkthrough`, `signup_requirements`,
+	// `how_to_buy`, and `how_to_sell`.
+	start: ['walkthrough', 'signup', 'begin', 'trade', 'first'],
+	starting: ['walkthrough', 'signup', 'begin', 'trade'],
+	started: ['walkthrough', 'signup', 'begin', 'trade'],
+	getting: ['walkthrough', 'signup', 'begin', 'start'],
+	begin: ['walkthrough', 'signup', 'start', 'trade'],
+	beginning: ['walkthrough', 'signup', 'start'],
+	beginner: ['walkthrough', 'signup', 'new'],
+	newbie: ['walkthrough', 'signup', 'new', 'beginner'],
+	newcomer: ['walkthrough', 'signup', 'new', 'beginner'],
+	first: ['walkthrough', 'signup', 'start'],
+	'getting-started': ['walkthrough', 'signup', 'start'],
+	howto: ['walkthrough', 'trade', 'buy', 'sell'],
+	tutorial: ['walkthrough', 'video', 'guide'],
+	guide: ['walkthrough', 'tutorial'],
+	step: ['walkthrough', 'guide'],
+	// ─── "What is this" cluster (cp137 grandma walkthrough H-2).
+	// A bare "this" tokenizes to nothing after stopwords, so
+	// "what is this" used to return random high-IDF hits.
+	// Anchor the search at the `what_is_morphit` entry by
+	// expanding generic deictic queries to "morphit".
+	this: ['morphit'],
+	thing: ['morphit'],
+	site: ['morphit', 'instance', 'website'],
+	app: ['morphit', 'install', 'download'],
+	platform: ['morphit'],
+	service: ['morphit'],
+	product: ['morphit'],
+	website: ['morphit', 'site', 'instance']
 };
 
 /** Whether we apply English synonyms/stopwords for a given locale.

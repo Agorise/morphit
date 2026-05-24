@@ -4,6 +4,97 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
+**Last touched:** cp137 — 2026-05-24 (deep-deep walkthrough with VERIFY-everything rigor; 6 findings fixed end-to-end; CI failure root-caused and resolved).
+
+**cp137 work units, all complete:**
+
+1. **CI failure root-caused and fixed (F-5).** The cp136 push hit a CI failure on `comparison-image-freshness-smoke`: "PNG is older than build_comparison.py" — even though the repo was byte-perfect. Root cause: `git checkout` resets every file's mtime to the checkout instant in filesystem-walk order, so mtime-based "PNG newer than script" checks are non-deterministic in CI. Replaced three mtime checks with a single SHA-256 fingerprint sidecar at `apps/web/static/morphit-comparison.png.fingerprint`. The build script writes this every run; the smoke recomputes the live SVG hash and compares. Tamper-tested: editing SVG without rebuilding correctly fires "PNG fingerprint does not match" with both hashes shown.
+
+2. **Three-persona walkthrough run as a deep-deep of its own.** Ken's directive: "VERIFY everything, do not assume." Re-ran first-time user (Grandma), returning user (Sally lost device), existing Blurt user (Bob posting-only), YubiKey enrollment end-to-end, 2FA TOTP end-to-end including backup code redemption at login. Trace by reading actual code, not narrating routes. Full report at `docs/THREE-PERSONA-WALKTHROUGH-cp137.md` (901 lines).
+
+3. **G-1 FIXED:** Stray trailing "+" on `home.hero_title`, `home.hero_body`, `seo.home.title` — verified by greppage that it's a literal character with no special rendering, not a brand convention. Stripped across 10 locales.
+
+4. **G-2 FIXED:** `login.body` showed "Enter your Blurt account name and the passphrase..." on the no-form branch (`import-needed`). Replaced with branch-appropriate "Pick the option that matches how you got here." × 10 locales.
+
+5. **G-3 FIXED:** `login.no_account_body` said "the first posting is free" — "posting" jargon. Grandma reads "blog post". Replaced with "first-time signup is free" × 10 locales.
+
+6. **H-1 FIXED (Ken picked Option B):** Seed-mode import used to encrypt the envelope with a random ephemeral key and never persist it → Sally closes browser → has to re-paste seed next visit. Added a new `remember_me_choice` import stage. After successful seed import, the user sees a single checkbox UNCHECKED BY DEFAULT: "Automatically remember me on this device? (assuming nobody else uses it)" — Ken's exact wording. If unchecked: session-only behavior preserved (privacy-positive default). If checked: she picks a password, the envelope is re-encrypted with it, persisted to localStorage via `writeEnvelope`, keystore mode set to `'password'`, and future visits prompt for password only. Keyfile + posting-only modes untouched (they have their own password capture). New `import-remember-me-smoke` (5 scenarios, tamper-tested) locks in the unchecked-by-default behavior so a future PR can't flip the privacy posture by accident.
+
+7. **H-2 FIXED:** FAQ search failed Grandma's first-load questions. "How do I start" → `order_editing` (1.00) instead of `how_to_trade_walkthrough`. "How do I begin" → 0 hits. "First time user" → `profile_pages` (1.00). Simulated against the live `searchEntries` function: 7 of 8 grandma queries either failed or returned wrong top results. Added getting-started + deictic synonym clusters to `SYNONYMS_EN` in `apps/web/src/lib/utils/faqIndex.ts`. Post-fix: 14 of 14 grandma-shaped queries route to acceptable top hits. New `faq-search-grandma-coverage-smoke` (14 scenarios, tamper-tested — removing the getting-started cluster fails 5 of the 14).
+
+8. **Brag entries #325 + #326 added.** #325: "Seed-phrase sign-in has a clear 'remember me?' step." #326: "FAQ search answers Grandma's first questions." Brag list now 326 sequential entries 1..326.
+
+9. **Verified by reading code (no fix needed):**
+   - YubiKey HardwareKeyCard: structural soundness, WebHID feature-detect, seed-only gating, backup-confirmed hard gate, password gate, slot picker radio, label maxlength=64, 3 state-gated actions
+   - 2FA TOTP: all 8 phases defined in `Phase` type AND rendered in template, all 9 handlers wired
+   - 2FA backup code redemption: traced end-to-end via `bootFromEnvelope` → `'totp_required'` → `verifyTotpOrBackup` accepts both 6-digit and backup → backup-redeemed slot marked-used + envelope re-encrypted to prevent replay
+   - Backup codes themselves: 10 codes, Crockford-base32 8 chars, Argon2id-hashed at rest, single-use, formatted XXXX-XXXX, honest UI framing about non-custodial limits
+   - Returning user (lost device, seed in hand): `/login` correctly detects fresh device → `import-needed` branch with 3 cleaned-up CTAs
+   - Existing Blurt user (Bob, posting-only): 4 fields with clear hints, capability warning
+   - Onboarding seed/quiz/password copy: genuinely grandma-friendly throughout
+
+**Cumulative state:**
+- 16 tradable assets · **42 ADRs** · **326 brag entries** sequential 1..326
+- **Triple-pulse: 5,931 / 5,931 / 5,931**, 0 failures (cp136 was 5,914; +17 from 3 new smokes' scenarios + brag entry coverage)
+- **TypeScript: 0 errors** across 5 workspaces (indexer src+test, relay src+test, ops-cli, matrix-bot, web) plus svelte-check clean
+- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web)
+- **Locale parity: 3,095 keys** across 10 locales after all G-*/H-* edits
+- **All 5 brag-list trailer invariants** passing including I-5 sequential
+- **KISS budget** 326/326 entries pass
+- **Comparison PNG fresh** at `apps/web/static/morphit-comparison.png` (454.6 KB, under 512 KB budget) — now fingerprint-validated, immune to git checkout mtime resets
+- **16 comparison-image-freshness invariants** passing (was 17 mtime-based; net -1 from removing brittle "footer-date older than mtime" check which is now structurally guaranteed by the fingerprint)
+- **3 new smokes wired and tamper-tested:** `asset-select-coverage-smoke`, `faq-search-grandma-coverage-smoke`, `import-remember-me-smoke`
+- **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
+
+**Standing pre-launch operator-actions (carried forward):**
+- Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`
+- Native-speaker QA of auto-translated locales (cp108-cp137 backlog now includes cp137's `onboarding.import.remember_me.*` tree × 9 non-EN locales)
+
+---
+
+## cp136 handoff (kept for context)
+
+**Last touched:** cp136 — 2026-05-24 (three-persona walkthrough + 4 findings fixed end-to-end).
+
+**cp136 work units, all complete:**
+
+1. **Three-persona walkthrough run end-to-end.** Standing audit per memory rule — Bob (Blurt user multi-login), Sally-user (no crypto), Sally-operator (run a node from any `.md`, every CLI/screen/button, launch→week1). Each persona clicked every button, link, field, and select-option across all surfaces: homepage, login (3 import tabs), AvatarMenu (10 menu items + 2 confirm modals), /post (24 widgets across 3 steps), /orderbook, /chat, /my/orders (feedback flow end-to-end: `PendingFeedbackReminderBanner` → `LeaveFeedbackForm` → `morphit_feedback_v1` → indexer handler → profile → `feedbackResponse_v1`), /settings (19 widgets + 17-widget NotificationSettings), /backup-keys, /faq + FaqSearch, /glossary, /cheat-sheet, /compare, all footer chips, ops-cli init (now 19 prompts), register, payment-method, /admin/setup-wizard, all 8 daily ops commands, /instances self-check, /dev/* tools. Walkthrough captured at `docs/THREE-PERSONA-WALKTHROUGH-cp136.md`.
+
+2. **F-1 BUG FIXED: `/orderbook` asset filter was stale at 3-of-16.** Replaced hardcoded `<option>BTC/XMR/BLURT` with `{#each ASSET_TICKERS as t (t)}` loop over the canonical registry. Added `import { ASSET_TICKERS } from '@morphit/asset-registry'`. Users can now filter the orderbook by any tradable asset (SOL, ETH, USDT, etc.) — pre-cp136 these were silently unfilterable despite being orderable.
+
+3. **F-2 BUG FIXED: `morphit-ops init` skipped `stepRpcEndpoints`.** Wired the 19th step into `init.ts`. Updated doc header from "~18 ELI5" → "19 ELI5". Dropped unused `DEFAULT_BLURT_RPC_ENDPOINTS` import (step handles defaulting). Updated persona-walkthrough-smoke sentinel So-4 to expect "19 ELI5". Operators can now customize Blurt RPC endpoints during initial setup — pre-cp136 they always got hardcoded defaults despite the doc-string promising a prompt.
+
+4. **F-3 UX FIXED: `/dev` landing 404.** Created `apps/web/src/routes/[lang]/dev/+page.svelte` with a tour-guide-style list of the three diagnostic tools (icons / responsive / yubikey-probe). Added `dev.index.*` locale strings + `seo.dev_index` across all 10 locales (en, es, fr, de, it, pl, ru, fa, zh-CN, zh-HK). Registered `dev_index` in `apps/web/src/lib/seo/routes.ts` as non-indexable (priority 0.1). Added persona-walkthrough sentinel F-3 to catch reverts.
+
+5. **F-4 SMOKE GAP FIXED: new `asset-select-coverage-smoke`.** Walks every `.svelte` under `routes/`, finds any `<select>` with asset-like binding (`bind:value`/`name` containing "asset"), and asserts it either uses `{#each ASSET_TICKERS}` or enumerates every canonical ticker literally. **Tamper-tested:** simulating F-1 by reverting the orderbook fix correctly fires the smoke with all 13 missing tickers named in the failure message. Registered in `scripts/run-smokes.sh`.
+
+6. **Brag entry #324 added** about the orderbook filter wired to ASSET_TICKERS. Brag list now 324 sequential entries 1..324.
+
+7. **Cascade fixes from regression catches:**
+   - Adding `seo.dev_index` to en.json failed the existing `seo/routes.test.ts` reverse-coverage test. Fixed by registering `dev_index` in the `ROUTES` array as non-indexable.
+   - Adding brag entry #324 made the comparison PNG stale relative to `MORPHIT-BRAG-LIST.md`. Re-ran `build_comparison.py`. 17/17 freshness invariants passing.
+   - Mediakit rebuilt (brag list changed).
+
+**Cumulative state:**
+- 16 tradable assets · **42 ADRs** · **324 brag entries** sequential 1..324
+- **Triple-pulse: 5,914 / 5,914 / 5,914**, 0 failures across all 3 pulses (cp135 was 5,908; +6 net from new asset-select smoke and persona-walkthrough sentinel additions)
+- **TypeScript: 0 errors** across 5 workspaces (indexer src+test, relay src+test, ops-cli, matrix-bot, web) plus svelte-check clean
+- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web; +1 from new dev_index route entry in `seo/routes.test.ts`)
+- **All 5 brag-list trailer invariants** including I-5 sequential — passing
+- **KISS budget** 324/324 entries pass (≤4 sentences, ≤100 words; allowlist 3, 12, 196, 205, 209)
+- **Comparison PNG fresh** at `apps/web/static/morphit-comparison.png` (454.6 KB, under 512 KB budget)
+- **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
+- **All 17 comparison-image-freshness invariants** passing (PNG/SVG/script/brag-list freshness, wordmark preservation, PNG file-size budget, footer date freshness)
+- **All 129 persona-walkthrough sentinels** passing (was 127 + 2 from cp136 = 129)
+
+**Standing pre-launch operator-actions (carried forward):**
+- Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql` before any production deploy
+- Native-speaker QA of auto-translated locales (cp108-cp136 backlog now includes cp136's `dev.index.*` tree × 9 non-EN locales)
+
+---
+
+## cp135 handoff (kept for context)
+
 **Last touched:** cp135 — 2026-05-24 (PNG file-size budget enforced + footer date auto-updates).
 
 **cp135 work units, all complete:**

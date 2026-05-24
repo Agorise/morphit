@@ -243,7 +243,14 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		indexable: true,
 		priority: 0.5,
 		changefreq: 'monthly'
-	}
+	},
+	// /dev is the diagnostic-tools landing page (cp136 walkthrough fix
+	// F-3).  Non-indexable on purpose — search engines have no
+	// business listing a contributor-facing icon catalog + responsive
+	// preview + WebAuthn probe.  Listed here so Head emits the
+	// proper title/description meta when an operator visits it
+	// directly.
+	{ path: '/dev', key: 'dev_index', indexable: false, priority: 0.1, changefreq: 'yearly' }
 ] as const;
 
 /** Look up a route by its resolved URL path. Returns undefined for

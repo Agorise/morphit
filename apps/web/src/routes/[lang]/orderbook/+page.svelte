@@ -38,6 +38,7 @@
 	import OrderExpiryChip from '$components/OrderExpiryChip.svelte';
 	import RatingChip from '$components/RatingChip.svelte';
 	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
+	import { ASSET_TICKERS } from '@morphit/asset-registry';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
@@ -602,9 +603,9 @@
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value="">{$_('orderbook.filters.asset_any')}</option>
-					<option value="BTC">BTC</option>
-					<option value="XMR">XMR</option>
-					<option value="BLURT">BLURT</option>
+					{#each ASSET_TICKERS as t (t)}
+						<option value={t}>{t}</option>
+					{/each}
 				</select>
 			</label>
 
