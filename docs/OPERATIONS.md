@@ -3965,15 +3965,22 @@ The indexer reads `MORPHIT_INDEXER_RPC_ENDPOINTS` from
 `morphit.env` at startup.  Three ways to change it, from
 easiest to most low-level:
 
-1. **`morphit-ops edit`** (recommended).  The wizard's
-   edit flow now includes "Blurt RPC endpoints" in its
-   menu of editable sections.  It validates the list
+1. **`morphit-ops edit`** (recommended for an existing instance).
+   The wizard's edit flow now includes "Blurt RPC endpoints"
+   in its menu of editable sections.  It validates the list
    (https-only, dedup, well-formed URLs), backs up the
    previous version of `morphit.env` to a timestamped
    `.bak-` file, and writes atomically.  Available only
    when `morphit.env` exists at the repo root — operators
    who deploy via Docker/SystemD `Environment=` directives
    instead won't see this option.
+
+   The **`morphit-ops init`** wizard (fresh setup) also
+   prompts for the RPC list as its 19th step
+   (cp137 F-2 — pre-cp137 this prompt was missing and
+   operators silently got hardcoded defaults).  Press
+   Enter to accept the bundled defaults, or paste a
+   comma-separated list of your preferred endpoints.
 
 2. **Edit `morphit.env` by hand.**  Find the
    `MORPHIT_INDEXER_RPC_ENDPOINTS=` line and replace the
