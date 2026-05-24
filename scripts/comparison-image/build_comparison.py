@@ -20,6 +20,7 @@ from xml.sax.saxutils import escape
 import shutil
 import subprocess
 import sys
+import hashlib
 import cairosvg
 
 
@@ -567,6 +568,26 @@ cairosvg.svg2png(
     output_width=W,
 )
 optimize_png(static_png)
+
+# Content fingerprint sidecar (F-5 / cp137).
+#
+# Git checkout resets every file's mtime to checkout time in
+# filesystem-walk order, so an mtime-based "PNG newer than build
+# script" check is non-deterministic in CI even when the repo is
+# byte-perfect.  Replace it with a content fingerprint: SHA-256 of
+# the rendered SVG, written to a sidecar file the smoke can verify
+# against the current SVG.  If the SVG changes without re-running
+# the build, the sidecar hash mismatches → smoke fails with a clear
+# "re-run build_comparison.py" message.
+#
+# Why hash the SVG and not the PNG itself: pngquant output can vary
+# slightly between versions of the encoder, so hashing the PNG would
+# trip on benign upgrades.  The SVG is deterministic from the build
+# script's inputs, so hashing it precisely captures "is the output
+# in-sync with the source."
+svg_hash = hashlib.sha256(svg_str.encode('utf-8')).hexdigest()
+fingerprint_path = static_png.with_suffix('.png.fingerprint')
+fingerprint_path.write_text(svg_hash + '\n')
 
 # 3. ALSO write to /mnt/user-data/outputs so the chat can preview it
 outputs_png = Path('/mnt/user-data/outputs/morphit-comparison.png')

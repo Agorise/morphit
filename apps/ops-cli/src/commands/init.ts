@@ -3,14 +3,14 @@
  *
  * The first-time setup wizard.  Walks the operator through:
  *   1. Pre-flight system check (CPU, RAM, disk, OS, network)
- *   2. ~18 ELI5-style configuration prompts (instance name,
+ *   2. 19 ELI5-style configuration prompts (instance name,
  *      tagline, database URL, relay account + posting key,
  *      fees account, daily ceiling, contact URL, origin,
  *      alt-networks, fee explorers, chat-link explorers,
- *      listing fee, SEO copy, backup config, operator tag,
- *      Blurt RPC endpoint list — exact count drifts as we
- *      add operator-config surface; check steps.ts for the
- *      authoritative list)
+ *      disabled assets, listing fee, SEO copy, backup config,
+ *      operator tag, Matrix surfaces, Blurt RPC endpoint list
+ *      — exact count drifts as we add operator-config
+ *      surface; check steps.ts for the authoritative list)
  *   3. Review and confirmation
  *   4. Write morphit.config.env + keystore
  *   5. Print next-steps with backup hint
@@ -42,7 +42,7 @@ import {
 	stepBackup,
 	stepOperatorTag,
 	stepMatrixSurfaces,
-	DEFAULT_BLURT_RPC_ENDPOINTS
+	stepRpcEndpoints
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
 import type { WizardAnswers } from '../init/render.ts';
@@ -109,7 +109,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		}
 	}
 
-	// ─── Run the 18 steps ────
+	// ─── Run the 19 steps ────
 	const instanceName = await stepInstanceName();
 	const tagline = await stepTagline();
 	const databaseUrl = await stepDatabase();
@@ -128,12 +128,18 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const backup = await stepBackup();
 	const operatorTag = await stepOperatorTag();
 	const matrix = await stepMatrixSurfaces();
+	// 19th step (F-2 from the cp136 walkthrough): RPC endpoints.
+	// Defaults to DEFAULT_BLURT_RPC_ENDPOINTS — operators with a
+	// witness preference or self-hosted RPC override here.  Pressing
+	// Enter accepts the defaults; this is opt-in customization,
+	// not mandatory configuration.
+	const blurtRpcEndpoints = await stepRpcEndpoints(null);
 
 	const answers: WizardAnswers = {
 		instanceName,
 		tagline,
 		databaseUrl,
-		blurtRpcEndpoints: DEFAULT_BLURT_RPC_ENDPOINTS,
+		blurtRpcEndpoints,
 		relayAccount,
 		postingKey,
 		feesAccount,

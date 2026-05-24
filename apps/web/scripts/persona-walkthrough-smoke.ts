@@ -453,7 +453,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'So-4 — init.ts JSDoc has realistic step count + disclaimer',
 		file: 'apps/ops-cli/src/commands/init.ts',
 		rootRelative: true,
-		mustHave: ['~18 ELI5', 'check steps.ts'],
+		mustHave: ['19 ELI5', 'check steps.ts'],
 		// Pre-fix said "Nine ELI5-style configuration prompts."
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
@@ -467,6 +467,20 @@ const SCENARIOS: readonly Scenario[] = [
 			'systemctl edit morphit-relay',
 			'WorkingDirectory=/home/morphit/morphit/apps/indexer',
 			'WorkingDirectory=/home/morphit/morphit/apps/relay'
+		]
+	},
+	{
+		name: 'F-3 — /dev has a landing page (cp136 walkthrough fix)',
+		file: 'apps/web/src/routes/[lang]/dev/+page.svelte',
+		rootRelative: true,
+		// The landing lists the three diagnostic children.  If any
+		// future PR removes the landing, /en/dev 404s again — same
+		// dead-end Sally-operator hit pre-cp136.
+		mustHave: [
+			'/dev/icons',
+			'/dev/responsive',
+			'/dev/yubikey-probe',
+			"routeKey=\"dev_index\""
 		]
 	},
 

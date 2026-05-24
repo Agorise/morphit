@@ -12,7 +12,9 @@
 		type FullIdentity,
 		type LiveIdentity
 	} from '$crypto/keygen';
-	import { blobToEnvelope, encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
+	import { blobToEnvelope, decryptIdentity, encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
+	import { writeKeystoreMode, writeEnvelope } from '$crypto/persistentKeystore';
+	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { getBlurtClient } from '$blurt/client';
@@ -31,6 +33,35 @@
 	let postingNewPasswordConfirm = $state('');
 	let working = $state(false);
 	let errorMsg = $state('');
+
+	/** cp137 H-1 — post-seed-import "remember me on this device" step.
+	 *  After a successful seed-mode import, instead of redirecting to
+	 *  /settings immediately, we show a small intermediate screen that
+	 *  asks the user whether to persist the encrypted envelope on this
+	 *  device behind a password OR keep the privacy-positive default
+	 *  (session-only, ephemeral random key — envelope vanishes when
+	 *  the tab closes).
+	 *
+	 *  Default is UNCHECKED — explicit opt-in to persistence preserves
+	 *  the prior behavior for users on shared/public computers.  The
+	 *  checkbox wording carries the qualifier "(assuming nobody else
+	 *  uses it)" so the privacy implication is visible at the click.
+	 *
+	 *  Keyfile + posting-only modes don't use this step: keyfile
+	 *  already has a user-set password from when the file was made,
+	 *  and posting-only asks for a new password earlier in the form.
+	 *  Only seed-mode lacks an explicit password capture, which is
+	 *  what makes the original session-only default a UX trap. */
+	type ImportStage = 'form' | 'remember_me_choice';
+	let importStage = $state<ImportStage>('form');
+	let rememberMe = $state(false);
+	let rememberPassword = $state('');
+	let rememberPasswordConfirm = $state('');
+	/** Held envelope + random session password from the seed import,
+	 *  waiting on the user's choice in the remember-me step.  Wiped
+	 *  after the choice is made (either path consumes them). */
+	let pendingEnvelope: KeystoreEnvelope | null = $state(null);
+	let pendingSessionPassword = $state('');
 
 	/** Map a WifError code to a localized error message. */
 	function wifErrorMessage(code: WifError): string {
@@ -56,9 +87,11 @@
 				const result = await importIdentityFromSeed(seed);
 				full = result.full;
 				live = result.live;
-				// Seed-path users didn't set a password — generate a session one
-				// and keep the envelope in memory only via the identity store.
-				// User can export a real keyfile from Settings later.
+				// Seed-path users haven't picked a password yet.  Encrypt
+				// with a random session key for now; the remember-me
+				// choice step (cp137 H-1) will either re-encrypt with the
+				// user's password and persist, OR keep this session-only
+				// random-key envelope (privacy-positive default).
 				const rnd = crypto.getRandomValues(new Uint8Array(24));
 				usedPassword = Array.from(rnd, (b) => b.toString(16).padStart(2, '0')).join('');
 				env = await encryptIdentity(full, usedPassword);
@@ -84,6 +117,21 @@
 			// mnemonic; `password` is the keyfile decrypt password.
 			seed = '';
 			password = '';
+
+			// cp137 H-1 — for seed-mode imports, pause here and ask
+			// the user whether to persist the envelope.  Stash env +
+			// session-password until the choice is made.  For
+			// keyfile-mode imports (and posting-only via its own
+			// path), the envelope is already persistent by virtue of
+			// the user-set password, so we proceed straight to the
+			// redirect.
+			if (mode === 'seed') {
+				pendingEnvelope = env;
+				pendingSessionPassword = usedPassword;
+				importStage = 'remember_me_choice';
+				return;
+			}
+
 			// Local `usedPassword` exits scope at function return.
 			// Sally finding H2 (Part 68): seed/keyfile imports don't
 			// carry the account name, so we redirect to /settings.
@@ -132,6 +180,113 @@
 			// wants to re-submit the same seed (typo correction,
 			// brief network glitch, etc).
 			password = '';
+		}
+	}
+
+	/** cp137 H-1 — finalize the "remember me on this device" choice
+	 *  for seed-mode imports.
+	 *
+	 *  When `rememberMe` is FALSE (default): the envelope stays in
+	 *  memory only via the identity store, exactly as the original
+	 *  seed-mode behavior.  When the tab closes, the envelope is
+	 *  gone; the user re-enters their seed next visit.  No
+	 *  localStorage write, no keystore-mode marker.  Privacy-
+	 *  positive default — preserves the prior session-only posture
+	 *  for users on public/shared computers.
+	 *
+	 *  When `rememberMe` is TRUE: the user picked a password.
+	 *  We re-decrypt the session envelope (which is encrypted with
+	 *  the random ephemeral key from the import step), then re-
+	 *  encrypt the FullIdentity with the user's password, persist
+	 *  the new envelope via `writeEnvelope`, and write keystore
+	 *  mode = 'password' so future sessions know to show the
+	 *  unlock form.  The re-decrypt path is the cleanest way to
+	 *  do this: it avoids exposing the FullIdentity outside of
+	 *  this scoped block. */
+	async function finalizeImportChoice(): Promise<void> {
+		if (working) return;
+		errorMsg = '';
+
+		if (!rememberMe) {
+			// Session-only — original behavior preserved.  The
+			// identity store already holds the live envelope from
+			// the earlier `bootFromEnvelope` call; nothing to
+			// persist.  Wipe the pending session-password and
+			// continue to the account-name banner.
+			pendingEnvelope = null;
+			pendingSessionPassword = '';
+			rememberPassword = '';
+			rememberPasswordConfirm = '';
+			try {
+				sessionStorage.setItem('morphit.import.needs_account_name', '1');
+			} catch {
+				// Private/Incognito — fall through.
+			}
+			await goto('/settings#account-name-heading');
+			return;
+		}
+
+		// rememberMe === true — re-encrypt with the user's password
+		// and persist.
+		if (rememberPassword.length < 8) {
+			errorMsg = $_('onboarding.import.remember_me.error.password_too_short');
+			return;
+		}
+		if (rememberPassword !== rememberPasswordConfirm) {
+			errorMsg = $_('onboarding.import.remember_me.error.passwords_mismatch');
+			return;
+		}
+		if (!isPasswordAcceptable(rememberPassword)) {
+			errorMsg = $_('onboarding.import.remember_me.error.password_weak');
+			return;
+		}
+		if (!pendingEnvelope) {
+			errorMsg = $_('onboarding.import.error.generic');
+			return;
+		}
+
+		working = true;
+		let full: FullIdentity | null = null;
+		try {
+			// Re-decrypt the session envelope so we have the
+			// FullIdentity to re-encrypt with the user's password.
+			full = (await decryptIdentity(
+				pendingEnvelope,
+				pendingSessionPassword
+			)) as FullIdentity;
+			const persistedEnv = await encryptIdentity(full, rememberPassword);
+			writeEnvelope(persistedEnv);
+			writeKeystoreMode('password');
+			// Re-boot the identity store to the persistent envelope.
+			// Same end-state — the live identity is unchanged — but
+			// the envelope reference in the store now matches what's
+			// on disk, so Settings/Backup-keys surfaces show the
+			// right state.
+			await bootFromEnvelope(persistedEnv, rememberPassword);
+
+			// Wipe sensitive locals.
+			wipeFullIdentity(full);
+			full = null;
+			pendingEnvelope = null;
+			pendingSessionPassword = '';
+			rememberPassword = '';
+			rememberPasswordConfirm = '';
+
+			try {
+				sessionStorage.setItem('morphit.import.needs_account_name', '1');
+			} catch {
+				// Private/Incognito — fall through.
+			}
+			await goto('/settings#account-name-heading');
+		} catch (err) {
+			console.warn('[import] remember-me persist failed:', err);
+			errorMsg = $_('onboarding.import.error.generic');
+			if (full) {
+				wipeFullIdentity(full);
+				full = null;
+			}
+		} finally {
+			working = false;
 		}
 	}
 
@@ -335,6 +490,7 @@
 		</div>
 	{/if}
 
+	{#if importStage === 'form'}
 	<div class="mb-6 flex flex-wrap gap-2" role="tablist">
 		<button
 			type="button"
@@ -502,4 +658,90 @@
 			</BusyButton>
 		</div>
 	</div>
+	{:else if importStage === 'remember_me_choice'}
+		<!-- cp137 H-1 — post-seed-import "remember me on this device"
+		     choice.  Default is UNCHECKED (privacy-positive).  The
+		     qualifier in the checkbox label ("assuming nobody else
+		     uses it") makes the privacy implication visible at the
+		     point of decision. -->
+		<div class="card">
+			<h2 class="font-display text-xl font-bold">
+				{$_('onboarding.import.remember_me.heading')}
+			</h2>
+			<p class="mt-3 text-ink-700 dark:text-ink-200">
+				{$_('onboarding.import.remember_me.body')}
+			</p>
+
+			<label class="mt-5 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700">
+				<input
+					type="checkbox"
+					bind:checked={rememberMe}
+					class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+				/>
+				<span class="text-ink-800 dark:text-ink-100">
+					{$_('onboarding.import.remember_me.checkbox_label')}
+				</span>
+			</label>
+
+			{#if rememberMe}
+				<div class="mt-5 space-y-4 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-4">
+					<p class="text-sm text-ink-700 dark:text-ink-200">
+						{$_('onboarding.import.remember_me.password_intro')}
+					</p>
+					<label class="block">
+						<span class="block text-sm font-semibold">
+							{$_('onboarding.import.remember_me.password_label')}
+						</span>
+						<input
+							type="password"
+							bind:value={rememberPassword}
+							autocomplete="new-password"
+							minlength="8"
+							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						/>
+						<span class="mt-1 block text-xs text-ink-500">
+							{$_('onboarding.import.remember_me.password_hint')}
+						</span>
+					</label>
+					{#if rememberPassword.length >= 10}
+						{@const strength = scorePassword(rememberPassword)}
+						{#if strength === 'too_simple'}
+							<p class="text-xs text-red-600 dark:text-red-400">
+								⚠ {$_('onboarding.import.remember_me.password_strength_too_simple')}
+							</p>
+						{:else if strength === 'common'}
+							<p class="text-xs text-red-600 dark:text-red-400">
+								⚠ {$_('onboarding.import.remember_me.password_strength_common')}
+							</p>
+						{/if}
+					{/if}
+					<label class="block">
+						<span class="block text-sm font-semibold">
+							{$_('onboarding.import.remember_me.password_confirm_label')}
+						</span>
+						<input
+							type="password"
+							bind:value={rememberPasswordConfirm}
+							autocomplete="new-password"
+							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						/>
+					</label>
+				</div>
+			{/if}
+
+			<div class="mt-6">
+				<BusyButton
+					variant="primary"
+					busy={working}
+					onclick={finalizeImportChoice}
+					busyLabel={$_('onboarding.import.remember_me.submit_pending')}
+					fullWidth
+				>
+					{rememberMe
+						? $_('onboarding.import.remember_me.submit_remembered')
+						: $_('onboarding.import.remember_me.submit_session_only')}
+				</BusyButton>
+			</div>
+		</div>
+	{/if}
 </div>
