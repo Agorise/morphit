@@ -86,6 +86,31 @@ The goal is to identify what's missing for someone who:
 
 This panel disappears once the user has completed any trade (i.e., has any outgoing feedback). Privacy posture preserved — the helper is purely client-side.
 
+### 1.6 — Seed-phrase sign-in had no "remember me on this device" choice
+
+**Status:** ✅ SHIPPED (cp137 H-1).
+
+**Where it bit.**  Sally pastes her 12 words on a new device, logs in, trades, closes the tab.  Tomorrow she comes back to Morphit and is presented with the sign-in screen again — same 12 words required.  The session-only behavior was privacy-positive (great for shared computers) but the user had no way to opt OUT of it without finding the Backup-keys card buried under Settings.
+
+**Fix.**  After a successful seed import, Morphit transitions to a new "remember me on this device?" step with a single checkbox UNCHECKED BY DEFAULT.  Wording: "Automatically remember me on this device? (assuming nobody else uses it)" — the qualifier makes the privacy implication visible at the point of decision.  If unchecked: session-only behavior preserved (privacy-positive default).  If checked: she picks a password, the envelope is re-encrypted with it and persisted to localStorage; future visits prompt for password only.
+
+**Why this matters more than it sounds.**  The previous trap was the kind of UX defect that gets silently misdiagnosed as "the app forgot me" or "I must have done something wrong."  Grandma assumes she did the thing wrong; Sally re-pastes her seed every visit; both end up with worse-than-necessary friction.  Lock-in via `import-remember-me-smoke` (5 scenarios, tamper-tested — flipping the default to `$state(true)` fails with "MUST be unchecked by default") prevents the privacy-positive posture from drifting in a future edit.
+
+### 1.7 — FAQ search failed Grandma's first-load questions
+
+**Status:** ✅ SHIPPED (cp137 H-2).
+
+**Where it bit.**  Simulated against the live `searchEntries` function, Grandma's first three FAQ queries all routed to wrong top hits before cp137:
+
+| Grandma's query | Pre-cp137 top hit | Should be |
+|---|---|---|
+| "how do I start" | `order_editing` (1.00) | `how_to_trade_walkthrough` |
+| "how do I begin" | (zero hits) | `how_to_trade_walkthrough` |
+| "first time user" | `profile_pages` (1.00) | `how_to_trade_walkthrough` |
+| "getting started" | `how_morphit_protects_me` (1.00) | `how_to_trade_walkthrough` |
+
+**Fix.**  Added two synonym clusters to `SYNONYMS_EN` in `apps/web/src/lib/utils/faqIndex.ts`: a getting-started cluster (`start`, `starting`, `started`, `getting`, `begin`, `beginning`, `beginner`, `newbie`, `newcomer`, `first`, `howto`, `tutorial`, `guide`, `step`) and a deictic cluster (`this`, `thing`, `site`, `app`, `platform`, `service`, `product`, `website`) — all mapped to canonical tokens that appear in the walkthrough/signup/morphit entries.  Post-fix: 14 of 14 grandma-shaped queries route correctly.  Lock-in via `faq-search-grandma-coverage-smoke` (14 scenarios, tamper-tested — removing the cluster fails 5 of 14).
+
 ---
 
 ## Tier 2 — Friction that experienced users tolerate but grandmas don't

@@ -46,6 +46,38 @@
 - **3 new smokes wired and tamper-tested:** `asset-select-coverage-smoke`, `faq-search-grandma-coverage-smoke`, `import-remember-me-smoke`
 - **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
 
+**cp137 post-publish discoveries (this turn — after Ken pushed back with "think HARDER"):**
+
+After producing the initial cp137 tarball, Ken invoked the never-assume-always-verify rule. The deeper sweep found and fixed 13 additional items, all shipped this turn:
+
+1. **KISS budget smoke was actually FAILING** — entry #212 ("No leverage. No margin...") wasn't in `STACCATO_ALLOWLIST` after my brag-list section moves bumped its position from #209 to #212.  Added '212' to allowlist.
+
+2. **KISS smoke parser had an off-by-one bug** — `Total: 325 entries` when the file had 326.  Regex required `\s+` after closing `**`, which silently dropped entry #48 (`**Two independent verification paths**:` has `**:` with no space).  Fixed regex to `[\s:.]*`. Pre-existing bug, not introduced by cp137, but I'm fixing it here since I found it.
+
+3. **Brag entries 323-326 were in WRONG sections** — memory rule says "Insert in proper themed section, never append to end."  All 4 were appended to section 18 (operator setup).  Moved 323→§10 (Open source and transparent), 324→§17 (Trade anything), 325→§2 (Privacy by design), 326→§1 (Free, fast, and friction-free).  Ran `scripts/renumber-brag-list.py` — entries now correctly numbered 1..326 sequential in proper sections.
+
+4. **OPERATIONS.md §22 missing F-2 update** — only mentioned `morphit-ops edit` for RPC endpoints, not the new `morphit-ops init` 19th step that ships cp137.  Added note that fresh-setup operators now get the RPC prompt at init time.
+
+5. **REVISIT-LIST.md top was stale** — memory rule: re-confirm facts at top each session.  Was still on cp131.  Updated to cp137 header with all 6 findings logged.
+
+6. **GRANDMA-FRIENDLY-INVESTIGATION.md not updated** — memory says this is the source-of-truth for UX rough edges, and H-1 (seed-mode session-only trap) + H-2 (FAQ search grandma coverage) are exactly that.  Added items 1.6 (H-1) + 1.7 (H-2) as SHIPPED with full context.
+
+7. **Comparison PNG was stale** — built BEFORE the section moves.  Rebuilt PNG + fingerprint sidecar (`de7c8220fa3155a364ab7dd6a917d72b17f963f129782139e20f868882dccaec`) + mediakit so all derived artifacts match current source.
+
+8. **Feedback-system walkthrough verified** — memory rule says this MUST be a checked facet of every walkthrough.  Walked: `/my/orders` → `PendingFeedbackReminderBanner` + `LeaveFeedbackForm` → `morphit_feedback_v1` → indexer's `feedback.ts` + `feedbackResponse.ts` handlers → profile (`RespondToFeedbackForm` + `getFeedback`/`getFeedbackGiven`).  Wired end-to-end ✓.
+
+9. **Forgejo/Gitea audit ran** — `forgejo-not-gitea-smoke` 3/3 passing, clean ✓.
+
+10. **CI workflow analysis** — 4 jobs total: `typecheck`, `web-check`, `ansible-lint`, `smokes`.  All four should pass once cp137 ships: typecheck 0 errors locally, web-check 0 errors locally, ansible files untouched since May 21 (pre-session), smokes 5931/0 triple-pulse.
+
+11. **Byte-weight audit** — static dir 2.3 MB total, PNG 465 KB < 512 KB budget, locale files lazy-loaded per language ✓.
+
+12. **Fingerprint byte-equivalence triple-confirmed** — Python byte-read, Node UTF-8 read, and sidecar all produce identical SHA-256 hash.  Confirms F-5 fix is sound across both language runtimes.
+
+13. **`morphit-ops init --check-only` actually run** — completed cleanly through pre-flight, confirming F-2's wiring of the 19th RPC step doesn't break the pre-flight gate.
+
+After all the post-publish fixes: triple-pulse re-ran 5931/5931/5931 stable, all smokes pass, KISS smoke now sees 326 entries with correct allowlist (was 325/incorrect-allowlist before).
+
 **Standing pre-launch operator-actions (carried forward):**
 - Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`
 - Native-speaker QA of auto-translated locales (cp108-cp137 backlog now includes cp137's `onboarding.import.remember_me.*` tree × 9 non-EN locales)

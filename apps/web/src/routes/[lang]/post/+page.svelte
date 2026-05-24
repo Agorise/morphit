@@ -1630,9 +1630,11 @@
 
 			<!-- Part 121 / cp30 — privacy/decentralization warning chip.
 			     Renders only when the chosen asset has a non-null
-			     privacyWarningKey in the canonical registry.  USDT
-			     and USDC are the two stablecoin assets that surface
-			     here; BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP all carry
+			     privacyWarningKey in the canonical registry.  USDT,
+			     USDC, and DAI are the three stablecoin assets that
+			     surface here (USDT/USDC are issuer-centralized;
+			     DAI is partly-centralized via its collateral mix);
+			     BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP all carry
 			     null and skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />

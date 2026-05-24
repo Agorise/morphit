@@ -91,7 +91,7 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * embed previously #91).  Subsequent entries shift +1: old #195
  * → new #196, old #204 → new #205.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205', '209']);
+const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205', '209', '212']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;
@@ -106,7 +106,14 @@ interface Entry {
 function parseEntries(src: string): Entry[] {
 	const entries: Entry[] = [];
 	// Match: `^N. **Title.** body...` until next entry or section heading.
-	const re = /^(\d+[a-z]?)\.\s+(\*\*[^*]+\*\*)\s+(.*?)(?=\n\d+[a-z]?\.|\n## |\Z)/gms;
+	// cp137 parser fix: `\s+` after the closing `**` used to be mandatory,
+	// which silently dropped entries where the title ends with `**:`
+	// (no space between the closing `**` and the colon — entry #48
+	// is the canonical example: `**Two independent verification paths**:`).
+	// Use `[\s:.]*` so the parser consumes optional terminal punctuation
+	// AND/OR whitespace before the body.  The body capture itself is
+	// non-greedy so it stops at the next entry or section heading.
+	const re = /^(\d+[a-z]?)\.\s+(\*\*[^*]+\*\*)[\s:.]*(.*?)(?=\n\d+[a-z]?\.|\n## |\Z)/gms;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(src)) !== null) {
 		entries.push({
