@@ -586,7 +586,7 @@ FAQ entry reflects 50/50 in all 10 locales; the
   (Q1 — identity-key management — was resolved by ADR-0015:
   X25519 keypair derived deterministically from the Blurt
   posting private key via BLAKE2b-256 with domain separation.)
-- `morphit_chat_identity_v1` and `morphit_chat_message_v1`
+- `morphit_chat_identity_v1` and `morphit_chat_v1`
   ops themselves.
 - Chat UI implementation (5c-M4).
 - Reputation signals derived from chat data (5c-M5).

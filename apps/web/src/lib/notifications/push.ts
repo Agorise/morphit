@@ -137,15 +137,21 @@ async function sha256(input: string): Promise<Uint8Array> {
 	return new Uint8Array(buf);
 }
 
-/** Sign the canonical "morphit:push:subscribe:..." string with
+/** Sign the canonical "morphit:push:<action>:..." string with
  *  the user's posting key.  Throws SubscribeError when the
- *  session is locked or signing fails.  Part 122 cp14.
+ *  session is locked or signing fails.  cp14 (subscribe) +
+ *  cp131 MED-009 (unsubscribe).
  *
  *  The signature is what the relay's posting-key signature
  *  verifier expects: a BLURT-prefix base58 string produced by
  *  dblurt's Signature.toString().
+ *
+ *  ACTION is part of the canonical message so a captured
+ *  subscribe signature cannot be replayed as an unsubscribe
+ *  (or vice-versa).
  */
-async function signSubscribe(
+async function signPushAction(
+	action: 'subscribe' | 'unsubscribe',
 	account: string,
 	endpoint: string,
 	timestamp: number
@@ -157,7 +163,7 @@ async function signSubscribe(
 	// Canonical message must match the server-side reconstruction
 	// in apps/relay/src/policy/pushSubscribeSig.ts verbatim.
 	const endpointHashBytes = await sha256(endpoint);
-	const canonical = `morphit:push:subscribe:${account}:${bytesToHex(endpointHashBytes)}:${timestamp}`;
+	const canonical = `morphit:push:${action}:${account}:${bytesToHex(endpointHashBytes)}:${timestamp}`;
 	const messageHashBytes = await sha256(canonical);
 
 	// dblurt's PrivateKey/Sign API takes Buffer in TS types but
@@ -171,6 +177,27 @@ async function signSubscribe(
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 	return sig.toString();
+}
+
+/** cp14 — sign a subscribe request. */
+async function signSubscribe(
+	account: string,
+	endpoint: string,
+	timestamp: number
+): Promise<string> {
+	return signPushAction('subscribe', account, endpoint, timestamp);
+}
+
+/** cp131 MED-009 — sign an unsubscribe request.  Same shape
+ *  as signSubscribe but binds the signature to the
+ *  unsubscribe action so it can't be replayed against
+ *  subscribe (or vice-versa). */
+async function signUnsubscribe(
+	account: string,
+	endpoint: string,
+	timestamp: number
+): Promise<string> {
+	return signPushAction('unsubscribe', account, endpoint, timestamp);
 }
 
 /** Subscribe the current browser to push notifications for
@@ -324,11 +351,33 @@ export async function unsubscribe(account: string): Promise<UnsubscribeSuccess> 
 	//    the relay about; otherwise there's nothing to delete.
 	if (endpoint) {
 		const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/unsubscribe`;
+		// cp131 MED-009 — sign the unsubscribe just like
+		// subscribe.  When the session is locked we can't
+		// sign; fall back to an unsigned request (the relay
+		// will accept it in cp13-compat mode, reject it
+		// otherwise — either way the browser-side
+		// existing.unsubscribe() above already cut off
+		// future deliveries).  ACTION-binding in the
+		// canonical message prevents subscribe↔unsubscribe
+		// signature replay.
+		const timestamp = Math.floor(Date.now() / 1000);
+		let signatureHex: string | undefined;
+		try {
+			signatureHex = await signUnsubscribe(account, endpoint, timestamp);
+		} catch {
+			// 'locked_session' or signing failure — proceed
+			// unsigned.  The relay-side gate decides.
+			signatureHex = undefined;
+		}
 		try {
 			await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ account, endpoint })
+				body: JSON.stringify(
+					signatureHex !== undefined
+						? { account, endpoint, signature: signatureHex, timestamp }
+						: { account, endpoint }
+				)
 			});
 		} catch {
 			// Non-fatal — the relay's auto-cleanup on 410 Gone

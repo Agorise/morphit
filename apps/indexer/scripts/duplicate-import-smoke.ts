@@ -37,8 +37,7 @@ const SCAN_ROOTS = [
 	'apps/indexer/scripts',
 	'apps/relay/src',
 	'apps/ops-cli/src',
-	'apps/avatar/src',
-	'apps/payment-watcher/src',
+	'apps/matrix-bot/src',
 	'packages'
 ];
 
@@ -85,6 +84,26 @@ async function* walk(dir: string): AsyncGenerator<string> {
 async function main(): Promise<void> {
 	const findings: Finding[] = [];
 	let scanned = 0;
+
+	// cp131 — fail loudly on stale SCAN_ROOTS.  Pre-cp131 the walk()
+	// helper silently caught ENOENT and returned, so paths like
+	// `apps/avatar/src` (long-since-removed) sat in the list
+	// unnoticed.  Stale roots are silent drift: a real bug in a
+	// missing directory wouldn't fire.  Verify each root exists
+	// before walking.
+	const { access } = await import('node:fs/promises');
+	for (const root of SCAN_ROOTS) {
+		try {
+			await access(join(REPO, root));
+		} catch {
+			console.error(
+				`  ✗ stale SCAN_ROOT: '${root}' does not exist on disk.\n` +
+					`      If a workspace was removed, drop the entry from SCAN_ROOTS.\n` +
+					`      If a new workspace was added, this smoke needs an additive update.`
+			);
+			process.exit(1);
+		}
+	}
 
 	for (const root of SCAN_ROOTS) {
 		for await (const file of walk(join(REPO, root))) {

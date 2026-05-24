@@ -332,7 +332,7 @@ Per the sub-ADR resolving ADR-0014 Q1. Leaning toward option
 has a chat identity published to chain; private key stored
 encrypted on the user's device.
 
-**5c-M3: `morphit_chat_message_v1` op + indexer handler.**
+**5c-M3: `morphit_chat_v1` op + indexer handler.**
 The transport for ciphertexts.
 - Payload: `{ order_permlink, recipient, ciphertext, header }`
 - Handler verifies sender is a counterparty in the

@@ -4,25 +4,36 @@
  *   POST /v1/push/subscribe   — register a browser subscription
  *   POST /v1/push/unsubscribe — remove a subscription
  *
- * Authentication model for cp13:
- *   No cryptographic proof of account ownership.  The endpoint
- *   accepts an account name + a browser-issued subscription
- *   blob and stores them.  Rationale:
- *     (a) The subscription endpoint URL is issued by the push
- *         service (FCM/autopush/APNS) and only that browser/
- *         device can RECEIVE pushes on it — an attacker can't
- *         forward push to an arbitrary URL.
- *     (b) Push payloads summarize PUBLIC chain events (order
- *         posted, order filled, feedback received).  An attacker
- *         "subscribing as alice" learns nothing they can't learn
- *         by watching the chain.
- *     (c) Chat message content is NEVER in the push payload —
- *         we send "you have a new chat message" without quoting
- *         the message (chat is E2EE on chain).
- *     (d) Per-IP rate limit bounds enumeration / DB-flood abuse.
- *   A cp14 follow-on can add posting-key signature verification
- *   for stronger account-binding; the trade-off is documented in
- *   `docs/NOTIFICATIONS-DESIGN.md` Phase 3 update.
+ * Authentication evolution:
+ *
+ *   cp13 (historical): no cryptographic proof of account
+ *     ownership on either endpoint, only per-IP rate limit on
+ *     subscribe.  Rationale leaned on (a) the push endpoint URL
+ *     being unforwardable, (b) push payloads only summarizing
+ *     PUBLIC chain events, (c) chat content never appearing in
+ *     pushes (E2EE on chain).
+ *
+ *   cp14 (subscribe-side): posting-key signature added to
+ *     subscribe.  Closes "an attacker subscribes my account to
+ *     their own device" (which would have leaked nothing
+ *     non-public, but is still tidier closed than open).
+ *     Signed canonical message:
+ *       morphit:push:subscribe:<account>:<endpoint_sha256>:<timestamp>
+ *
+ *   cp131 MED-009 (unsubscribe-side, this checkpoint):
+ *     symmetric posting-key signature added to unsubscribe.
+ *     Closes the real risk that motivates the work — an
+ *     attacker with a DB-leaked (account, endpoint) list
+ *     could mass-fire unsubscribes and DoS notifications
+ *     federation-wide.  Also adds a per-IP rate limit on
+ *     unsubscribe; pre-cp131 unsubscribe was unlimited on the
+ *     reasoning that users should always be able to remove a
+ *     subscription, but a generous cap doesn't impede legit
+ *     users while shutting down enumeration.
+ *
+ *     Signed canonical message — distinct ACTION keyword
+ *     prevents subscribe↔unsubscribe signature replay:
+ *       morphit:push:unsubscribe:<account>:<endpoint_sha256>:<timestamp>
  *
  * Privacy: no IP logging on subscribe; user-agent capped at 200
  * chars at the storage layer; subscription endpoint never logged
@@ -38,7 +49,7 @@ import { z } from 'zod';
 import type { Limiter } from '../middleware/ratelimit.ts';
 import type { PushSubscriptionStore, PushPrivacyMode } from '../policy/pushSubscriptions.ts';
 import type { BlurtClient } from '../blurt/client.ts';
-import { verifyPushSubscribeSignature } from '../policy/pushSubscribeSig.ts';
+import { verifyPushSubscribeSignature, verifyPushUnsubscribeSignature } from '../policy/pushSubscribeSig.ts';
 import { clientIp, canonicalBucketKey } from '../middleware/ip.ts';
 import { logger } from '$log';
 
@@ -91,7 +102,16 @@ const subscribeBody = z
 const unsubscribeBody = z
 	.object({
 		account: z.string().regex(ACCOUNT_NAME_RE, 'invalid account name'),
-		endpoint: z.string().url().max(MAX_ENDPOINT_LEN)
+		endpoint: z.string().url().max(MAX_ENDPOINT_LEN),
+		// cp131 MED-009 — posting-key signature over the
+		// canonical message
+		// `morphit:push:unsubscribe:<account>:<endpoint_sha256>:<timestamp>`.
+		// Both fields are required when the relay was
+		// constructed with requireSignedUnsubscribe=true;
+		// optional otherwise (signatures still verified when
+		// present but their absence isn't rejected).
+		signature: z.string().min(40).max(200).optional(),
+		timestamp: z.number().int().positive().optional()
 	})
 	.strict();
 
@@ -110,9 +130,19 @@ export class PushEndpoints {
 		 *  legitimate clients only subscribe once per device per
 		 *  session, but bounds DB-flood abuse. */
 		private readonly subscribeLimiter: Limiter,
+		/** cp131 MED-009 — per-IP rate limiter for unsubscribe.
+		 *  Pre-cp131 unsubscribe was unlimited on the rationale
+		 *  that "users should always be able to remove a
+		 *  subscription," but that left a DoS vector: anyone
+		 *  who knew or guessed (account, endpoint) pairs could
+		 *  mass-fire deletes.  A generous per-IP cap (same
+		 *  shape as subscribeLimiter) doesn't break legitimate
+		 *  clients — one user unsubscribes one device at a
+		 *  time — and shuts down enumeration-class abuse. */
+		private readonly unsubscribeLimiter: Limiter,
 		private readonly store: PushSubscriptionStore,
 		/** Used to fetch the subscribing account's posting public
-		 *  key for signature verification (cp14). */
+		 *  key for signature verification (cp14 / cp131). */
 		private readonly blurt: BlurtClient,
 		/** When true, every /v1/push/subscribe MUST carry a valid
 		 *  posting-key signature over the canonical message.
@@ -120,7 +150,14 @@ export class PushEndpoints {
 		 *  signatures still verified when present but their
 		 *  absence isn't rejected.  Operators turn this off only
 		 *  to support legacy clients during a roll-forward. */
-		private readonly requireSignedSubscribe: boolean
+		private readonly requireSignedSubscribe: boolean,
+		/** cp131 MED-009 — same posture for unsubscribe.  Same
+		 *  toggle semantics as requireSignedSubscribe: when
+		 *  true, signature required; when false, signature is
+		 *  verified IF present but its absence is not a
+		 *  rejection.  Operators who set requireSignedSubscribe
+		 *  should also set this; the pair is symmetric. */
+		private readonly requireSignedUnsubscribe: boolean
 	) {}
 
 	register(app: Hono): void {
@@ -227,8 +264,22 @@ export class PushEndpoints {
 			return c.json({ status: 'push_disabled' }, 503);
 		}
 
-		// No rate limit on unsubscribe — users should always be
-		// able to remove a subscription.
+		// cp131 MED-009 — per-IP rate limit on unsubscribe.
+		// Pre-cp131 this was deliberately UN-limited on the
+		// "users should always be able to remove a
+		// subscription" reasoning, but that argument breaks
+		// down when the attacker isn't the legitimate user:
+		// a DB-leaked (account, endpoint) list could be
+		// mass-deleted with no friction.  Returning 429
+		// when an attacker hammers the endpoint doesn't
+		// stop a single legitimate user from clicking
+		// "unsubscribe" on their own device — they're not
+		// going to hit the cap.
+		const ip = clientIp(c);
+		const key = canonicalBucketKey(ip);
+		if (!this.unsubscribeLimiter.allow(key)) {
+			return c.json({ status: 'rate_limited' }, 429);
+		}
 
 		let body: unknown;
 		try {
@@ -241,6 +292,41 @@ export class PushEndpoints {
 			return c.json({ status: 'bad_request' }, 400);
 		}
 		const input = parsed.data;
+
+		// cp131 MED-009 — posting-key signature gate.  Same
+		// shape as subscribe's cp14 gate: when configured to
+		// require signatures, reject unsigned requests with
+		// 401.  When configured permissive (signatures
+		// optional), still verify any provided signature so
+		// a client that opts in to signing isn't worse off
+		// than one that doesn't.
+		const hasSigFields =
+			typeof input.signature === 'string' && typeof input.timestamp === 'number';
+		if (this.requireSignedUnsubscribe && !hasSigFields) {
+			return c.json({ status: 'signature_required' }, 401);
+		}
+		if (hasSigFields) {
+			const sigResult = await verifyPushUnsubscribeSignature(
+				this.blurt,
+				{
+					account: input.account,
+					endpoint: input.endpoint,
+					timestamp: input.timestamp!,
+					signatureHex: input.signature!
+				},
+				Math.floor(Date.now() / 1000)
+			);
+			if (!sigResult.ok) {
+				log.warn('unsubscribe_sig_rejected', {
+					account: input.account,
+					reason: sigResult.reason
+				});
+				return c.json(
+					{ status: 'signature_invalid', reason: sigResult.reason },
+					401
+				);
+			}
+		}
 
 		try {
 			await this.store.delete(input.account, input.endpoint);

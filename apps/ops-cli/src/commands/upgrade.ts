@@ -267,7 +267,56 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	try {
 		mkdirSync(installDir, { recursive: true });
 		info(`Extracting ${tarballAsset.name} to ${installDir}...`);
-		runOrThrow('tar', ['-xzf', tarballPath, '-C', installDir, '--strip-components=0']);
+		// cp131 LOW-010 — defense-in-depth tar flags.
+		//
+		// GNU tar's documented defaults already refuse two of
+		// the three classical tarball-extract escapes:
+		//   - absolute paths (entry name starts with `/`) are
+		//     stripped to relative with a warning, then
+		//     extracted inside -C target;
+		//   - `..` traversal entries are refused outright.
+		// Empirically verified at cp131 audit time.
+		//
+		// What the defaults DO permit:
+		//   - the archive may set ownership on extracted files
+		//     to whatever uid/gid the entries name (when run
+		//     as root);
+		//   - the archive may set file modes including setuid
+		//     / setgid bits;
+		//   - the archive may overwrite a non-empty existing
+		//     directory with a regular-file entry of the same
+		//     name, OR overwrite a regular-file with a symlink.
+		//
+		// A CI-built Morphit tarball never relies on any of
+		// these, so disabling them costs nothing.  A compromised
+		// build host (or supply-chain replacement of the tarball
+		// AND its .sha256 sibling) could exploit any of them.
+		// Explicit flags shut them off:
+		//
+		//   --no-same-owner       (don't honor archived uid/gid;
+		//                          extracted files belong to the
+		//                          process user, no setuid-as-root
+		//                          via a maliciously-owned entry)
+		//   --no-same-permissions (don't honor archived setuid/
+		//                          setgid bits; mode is clipped by
+		//                          the umask)
+		//   --no-overwrite-dir    (refuse to replace an existing
+		//                          directory with a file of the
+		//                          same name)
+		//
+		// `--strip-components=0` is kept for the explicit "we
+		// don't strip" record.  `-p` is INTENTIONALLY NOT used
+		// (it would override --no-same-permissions).
+		runOrThrow('tar', [
+			'-xzf',
+			tarballPath,
+			'-C',
+			installDir,
+			'--strip-components=0',
+			'--no-same-owner',
+			'--no-same-permissions',
+			'--no-overwrite-dir'
+		]);
 	} catch (err) {
 		warn(`Extract failed; rolling back to ${backupDir}.`);
 		return rollback(installDir, backupDir, tmpDir, err);

@@ -1,6 +1,6 @@
 # PRE-LAUNCH-CHECKLIST.md
 
-**Status:** living document.  Last refreshed: 2026-05-22 (Part 122 cp112 — smoke baseline +366 + 6 from new SEO-class smokes).
+**Status:** living document.  Last refreshed: 2026-05-24 (Part 122 cp131 — 11 findings shipped end-to-end; backup-retention default + cp131 encryption/push features refreshed).
 
 This is the consolidated, ordered list of operator actions
 required (or recommended) before flipping morphit.io from
@@ -136,17 +136,24 @@ file in the same turn.
       not signup-rate-dependent.  `@morphit` is the
       trust-anchor account that signs the chain-
       pinned `morphit_release_v1` op (canonical
-      BTC/XMR treasury addresses) plus the periodic
-      `morphit_warrant_canary_v1` ops (weekly
-      automated, see OPERATIONS §36).  Each op
-      consumes BLURT mana; the account needs enough
-      headroom for the initial release op plus a
-      year-or-two of weekly canary broadcasts.
-      ~10 BLURT covers both with margin.
+      BTC/XMR treasury addresses).  Each op consumes
+      BLURT mana; ~10 BLURT covers many years of
+      releases with comfortable headroom.
+
+      The **warrant canary** is a separate primitive
+      — a PGP-signed static file at `/canary.txt`
+      regenerated weekly by `scripts/canary/generate.sh`
+      and signed by the operator's release PGP key
+      (see OPERATIONS §36).  The canary does NOT
+      consume `@morphit` BLURT; it lives off-chain
+      and uses a PGP keypair.
 
       *(Origin: Part 112 — gap noticed when listing
       the three Morphit accounts and only the relay
-      had explicit funding guidance.)*
+      had explicit funding guidance.  Updated cp131
+      HIGH-006 — removed misleading reference to a
+      non-existent `morphit_warrant_canary_v1` chain
+      op.)*
 
 - [ ] **[blocking]** **Mint the first batch of ACTs
       before opening signups.**  The relay does NOT
@@ -596,30 +603,46 @@ file in the same turn.
       indexer and relay envs.  Initial schema applied
       via the indexer's auto-migrate on first boot
       (currently `schema_migrations.version = 1`, which
-      under the May 2026 audit collapses historical
-      versions 1-27 into one canonical
+      under the May 2026 audit and the cp131 DEEP-002
+      framing extension is the **pre-launch baseline**
+      that grows in place: it collapses historical
+      versions 1-35 into the single canonical
       `apps/indexer/src/db/schema.sql`; the collapsed
-      schema contains every v33 feature originally added
-      incrementally — `push_subscriptions` +
+      schema contains every v33+ feature originally
+      added incrementally — `push_subscriptions` +
       `push_pending` tables, the `locale` column on
       push_subscriptions, the composite
       push_subscriptions(account, created_at DESC) index,
-      and the `extension_count` + `last_extended_at`
+      the `extension_count` + `last_extended_at`
       columns on featured_slot_bids for the anti-snipe
-      soft-close auction rule, plus an
-      ix_featured_bids_expires index for the "expiring
-      within snipe window" check.  Downstream code that
-      checks "is v15 applied?" via `subsumesVersions`
-      still works.  Future schema changes from this
-      point forward are additive migrations starting
-      at v28.).  *(Origin: ADR-0001 schema management;
-      version refreshed Part 121 audit; collapsed-schema
-      framing refreshed Part 122 cp82.)*
+      soft-close auction rule, ix_featured_bids_expires
+      index for the snipe-window check,
+      review_concentration (cp123 H2), and
+      price_drift_baseline (cp127 defense B).
+      Downstream code that checks "is vN applied?" via
+      `subsumesVersions` still works for any
+      v ∈ {2..35}.  The v1 baseline grows in place
+      until 1.0.0 launch; the first separate additive
+      migration to be assigned an integer version will
+      land at launch.  No further collapse should happen
+      until well after 1.0.0 ships.).  *(Origin:
+      ADR-0001 schema management; collapsed-schema
+      framing refreshed Part 122 cp82; subsumesVersions
+      extended 2..27 → 2..35 + framing reconciled with
+      schema.sql section markers Part 122 cp131
+      DEEP-002.)*
 
 - [ ] **[recommended]** Enable the daily DB backup
       scheduled by the wizard (off by default; opt-in
-      during setup).  Retention configurable; default
-      14 days.  *(Origin: ops-cli init.)*
+      during setup).  Retention configurable via
+      `RETAIN_DAYS` in `backup.env`; default 30 days.
+      The shipped script also supports optional age
+      encryption (set `AGE_RECIPIENT`) and optional
+      rsync push to an off-site host (set
+      `REMOTE_DESTINATION` + `SSH_KEY`) — see
+      `RUN-A-MORPHIT-NODE.md §10` and `OPERATIONS.md §37.12`
+      for the recipe.  *(Origin: ops-cli init; encryption
+      and push features Part 122 cp131 HIGH-001.)*
 
 - [ ] **[recommended]** Reverse proxy in front of the
       indexer + frontend with HTTPS termination.  Caddy
@@ -766,6 +789,7 @@ block initial launch:
 
 | Part | Date | Change to this file |
 |---|---|---|
+| 122 cp131 | 2026-05-24 | D-section backup item updated: retention default corrected 14→30 days (real default in `ops/backup/backup.env.example`); cp131 HIGH-001 added `AGE_RECIPIENT`/`REMOTE_DESTINATION`/`SSH_KEY` env-var-honored encryption + rsync features to `morphit-backup.sh`, referenced from the item with pointers to RUN-A-MORPHIT-NODE §10 + OPERATIONS §37.12 for the recipe. No new operator action items for cp131 — all 11 findings were code/doc-side closures that landed without operator-facing surface change. Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. Battery is now 5,713/0 across triple-pulse. |
 | 122 cp112 | 2026-05-22 | Section C cumulative cp listing extended with cp112-O30 (`seo-url-consistency-smoke`, 366 scenarios — verifies canonical/hreflang URLs from the helper match the sitemap-builder's URLs byte-for-byte across every indexable route × locale; mutation-tested) + cp112-O31 (`og-image-freshness-smoke`, 6 scenarios — verifies the PNG OG image fallback exists, is 1200×630, is under 5 MB, and is no older than its SVG source).  No operator-facing surface changes — both are internal hardening for SEO + share-preview surfaces.  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |
 | 122 cp111 | 2026-05-22 | Section C scenario-count cumulative checkpoint listing extended to include cp111-O29 (`brag-list-claim-parity-smoke`, 81 scenarios across 7 drift classes — file paths, custom-JSON op IDs, MORPHIT_* env-vars, asset/locale/ADR/brag-footer count anchors; mutation-tested across all 7 classes).  No operator-facing surface changes — the smoke is internal hardening for the three marketing-class docs (MORPHIT-BRAG-LIST, README, RELEASE-NOTES).  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |
 | 122 cp82 | 2026-05-21 | Section C scenario-count cumulative checkpoint listing extended to include cp80-O26 (long-form-en-fallback-floor, 1,758 translation pairs/CI run), cp81-O27 (service-worker-single-registration, 7 checks against the cp81-D22 dual-registration regression), and cp81-O28 (short-form-en-fallback-floor, 4,770 translation pairs/CI run).  No new operator action items — cp80/cp81 work is internal hardening + content backlog closure + bug-fix (push notifications were silently broken in production due to dual SW registration; clickPath was an operator-phishing primitive); all fixed without operator-facing surface change.  Floor of 3,327 still load-bearing — operators just need to verify zero runners failed. |

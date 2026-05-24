@@ -65,12 +65,17 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // ─── Pinned expected values (the contract this smoke defends) ─────
 /** Highest `-- v<N>` banner in schema.sql.  Bump in lockstep
  *  with a schema change; the smoke fails until you do, which is
- *  the point. */
-const SCHEMA_HEAD_VERSION = 33;
+ *  the point.  cp131 DEEP-003 — bumped 33 → 35 after the parser
+ *  was widened to recognize the cp123/cp127-era banner format
+ *  `-- ─── v<N>: <description>` (previously only `-- v<N> / ...`
+ *  was recognized, silently undercounting v34 and v35). */
+const SCHEMA_HEAD_VERSION = 35;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
- *  entry lands. */
-const MIGRATIONS_COVERAGE_HIGH = 27;
+ *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
+ *  `subsumesVersions` was extended to match the in-place
+ *  v28-v35 sections in schema.sql. */
+const MIGRATIONS_COVERAGE_HIGH = 35;
 
 interface ScenarioResult {
 	readonly name: string;
@@ -86,18 +91,41 @@ function readFileOrFail(path: string): string {
 	return readFileSync(path, 'utf-8');
 }
 
-/** Parse `-- v<N>` head-section banners in schema.sql.  Only matches
- *  banner-style lines: `-- v<N>` followed by either end-of-line or
- *  ` / Part ...` continuation.  Excludes narrative references like
- *  `-- v5 used to add ...` or `-- v1-v27 stay with treasury IS NULL`
- *  by requiring the banner suffix pattern. */
+/** Parse `-- v<N>` head-section banners in schema.sql.  Recognizes
+ *  two banner formats that coexist in the codebase:
+ *
+ *  Format A (cp82-era, used through v33):
+ *      `-- v<N>` followed by end-of-line OR ` / Part ...` continuation
+ *  Format B (cp123/cp127-era, used for v34 and v35):
+ *      `-- ─── v<N>:` (box-decorator prefix + colon separator)
+ *
+ *  cp131 DEEP-003 — pre-cp131 the regex only recognized Format A,
+ *  silently undercounting v34 (review_concentration) and v35
+ *  (price_drift_baseline).  Both formats are now accepted.
+ *
+ *  Excludes narrative references like `-- v5 used to add ...` or
+ *  `-- v1-v27 stay with treasury IS NULL` by requiring one of the
+ *  two banner suffix patterns. */
 function parseSchemaHeadBanners(): number[] {
 	const src = readFileOrFail(SCHEMA_SQL);
 	const found = new Set<number>();
 	for (const line of src.split('\n')) {
-		const m = /^--\s+v(\d+)(?:\s*$|\s+\/\s+)/.exec(line);
-		if (m) {
-			found.add(parseInt(m[1]!, 10));
+		// Format A: -- v<N> at start, optional / continuation
+		const mA = /^--\s+v(\d+)(?:\s*$|\s+\/\s+)/.exec(line);
+		if (mA) {
+			found.add(parseInt(mA[1]!, 10));
+			continue;
+		}
+		// Format B: -- ─── v<N>: <description> ─── (box-decorator
+		// frame).  The non-ASCII U+2500/2501-class box-drawing
+		// characters appear in cp123+ schema sections.  We don't
+		// pin the exact decorator characters — any non-word run
+		// between `-- ` and `v<N>` is accepted, since the
+		// alternative is to babysit a unicode allowlist that
+		// drifts with the editor's mood.
+		const mB = /^--\s+\W+\s*v(\d+)\s*:/.exec(line);
+		if (mB) {
+			found.add(parseInt(mB[1]!, 10));
 		}
 	}
 	return [...found].sort((a, b) => a - b);

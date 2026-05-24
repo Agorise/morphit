@@ -8,8 +8,8 @@
 
 Pre-launch, Morphit supported two-party trades over BTC, XMR, BLURT, and a
 catalogue of trade-only assets (USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/
-SOL/ETH/XRP). Chat carried two structured payloads — `morphit_addr_v1` for
-sharing crypto receiving addresses and `morphit_funds_sent_v1` for txid
+SOL/ETH/XRP). Chat carried two structured payloads — `morphit_addr` (carried inside `morphit_chat_v1`) for
+sharing crypto receiving addresses and `morphit_funds_sent` (carried inside `morphit_chat_v1`) for txid
 receipts — to let either party hand off cryptographic-grade trade evidence
 without re-typing.
 
@@ -64,7 +64,17 @@ in lockstep with the frontend registry (enforced by
 
 ### 2. Two new chat payloads (E2EE chat-only, never on-chain)
 
-- **`morphit_mailing_address_v1`** — share a physical mailing address.
+> **Versioning note:** chat-payload `kind` values are bare
+> (`morphit_addr`, `morphit_mailing_address`, `morphit_shipment`,
+> ...) without a `_v1` suffix.  Per ADR-0015, versioning lives at
+> the OUTER envelope (`morphit_chat_v1`); the inner `kind` is a
+> discriminator within that envelope and evolves by adding new
+> fields or new kinds, not by bumping a per-kind version.  An
+> earlier draft of this ADR (and PHASE-5 docs) wrote
+> `morphit_addr_v1` etc., which never matched the code; cp131
+> LOW-007 corrected this.
+
+- **`morphit_mailing_address`** — share a physical mailing address.
   Fields: `country` (ISO 3166-1 alpha-2), `street`, optional `street2`,
   `city`, optional `state`, `postal_code`, optional `recipient_name`,
   optional `note`, optional `order_permlink`. Length-bounded to defeat
@@ -72,7 +82,7 @@ in lockstep with the frontend registry (enforced by
   validated against `/^[A-Z]{2}$/` (any ISO alpha-2; not enum-locked
   because country lists evolve).
 
-- **`morphit_shipment_v1`** — share carrier + tracking number. Fields:
+- **`morphit_shipment`** — share carrier + tracking number. Fields:
   `carrier` (canonical key from carrier registry OR the special
   `'other'`), `tracking` (5-50 chars alphanumeric+space+dash+slash),
   optional `custom_carrier_name` + `custom_tracking_url` (used only
@@ -175,7 +185,7 @@ choices in order of importance (per Morphit's standing priority #1):
 
 ## Wire-format example
 
-Mailing address (`morphit_mailing_address_v1`):
+Mailing address (`morphit_mailing_address`):
 
 ```json
 {
@@ -193,7 +203,7 @@ Mailing address (`morphit_mailing_address_v1`):
 }
 ```
 
-Shipment (`morphit_shipment_v1`, USPS):
+Shipment (`morphit_shipment`, USPS):
 
 ```json
 {

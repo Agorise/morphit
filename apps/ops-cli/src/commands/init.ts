@@ -3,7 +3,7 @@
  *
  * The first-time setup wizard.  Walks the operator through:
  *   1. Pre-flight system check (CPU, RAM, disk, OS, network)
- *   2. ~17 ELI5-style configuration prompts (instance name,
+ *   2. ~18 ELI5-style configuration prompts (instance name,
  *      tagline, database URL, relay account + posting key,
  *      fees account, daily ceiling, contact URL, origin,
  *      alt-networks, fee explorers, chat-link explorers,

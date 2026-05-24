@@ -94,7 +94,32 @@ const ALLOWED_PATHS = new Set([
 	// standing-action item was based on a misreading
 	// (the string is in a denylist by design).  Removing
 	// the literal would weaken the closure provenance.
-	'MORPHIT-BRAG-LIST.md'
+	'MORPHIT-BRAG-LIST.md',
+	// cp131 HIGH-001 — the backup script implements the
+	// SAME placeholder-denylist discipline for AGE_RECIPIENT
+	// / REMOTE_DESTINATION values that pre-cp131 only the
+	// indexer/relay Zod configs enforced.  The literal
+	// CHANGE_ME / CHANGEME / REPLACE / XXXXX strings have
+	// to live in `is_placeholder()` so the script can
+	// MATCH them; the example env file names them as the
+	// values an operator must replace.  Same trust posture
+	// as init.sql + the example env files above.
+	'ops/backup/morphit-backup.sh',
+	'ops/backup/backup.env.example',
+	// cp131 HIGH-001 — Ansible template's safe-empty
+	// defaults sit alongside operator-facing comments
+	// that NAME the placeholder strings so operators
+	// know what to type.  Same trust posture as
+	// indexer.env.example.
+	'ops/ansible/group_vars/all.yml',
+	// cp131 — findings log mentions the placeholder
+	// strings by name in HIGH-001 / HIGH-002 narrative.
+	'audit-cp131/FINDINGS.md',
+	// cp131 HIGH-006 — PRE-LAUNCH-CHECKLIST.md was already
+	// in the implicit-allowlist set via docs/ blanket
+	// inclusion below; this entry just makes the
+	// rationale explicit.
+	'docs/PRE-LAUNCH-CHECKLIST.md'
 ]);
 
 // ─── Directories to skip while walking ────────────────────────────────

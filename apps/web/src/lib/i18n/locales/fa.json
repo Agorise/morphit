@@ -788,7 +788,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Morphit چیست؟",
-				"a": "Morphit یک بازار نفر‌به‌نفر است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، BLURT، USDT، USD Coin (USDC)، Dai، Bitcoin Cash، Litecoin، Dash و Dogecoin) معامله می‌کنند. Morphit هرگز پول تو را نگه نمی‌دارد و هرگز نمی‌پرسد کی هستی. این یک تختهٔ اعلانات است، نه یک بانک."
+				"a": "Morphit یک بازار نفر‌به‌نفر است که آدم‌ها مستقیم با هم پول نقد را با ارزهای دیجیتال (Bitcoin، Monero، BLURT، USDT، USD Coin (USDC)، Dai، Bitcoin Cash، Litecoin، Dash، Dogecoin، Zcash، Pirate Chain، Decred، Solana، Ethereum و XRP) معامله می‌کنند. Morphit هرگز پول تو را نگه نمی‌دارد و هرگز نمی‌پرسد کی هستی. این یک تختهٔ اعلانات است، نه یک بانک."
 			},
 			"is_it_safe": {
 				"q": "آیا امن است؟",

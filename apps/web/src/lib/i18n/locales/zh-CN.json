@@ -784,7 +784,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Morphit 是什么?",
-				"a": "Morphit 是一个点对点市场,人们直接用现金换取加密货币(比特币、门罗币、BLURT、USDT、美元币 (USDC)、Dai、比特币现金、莱特币、达世币和狗狗币)。Morphit 从不保管你的钱,也不问你是谁。它是公告板,不是银行。"
+				"a": "Morphit 是一个点对点市场,人们直接用现金换取加密货币(比特币、门罗币、BLURT、USDT、美元币 (USDC)、Dai、比特币现金、莱特币、达世币、狗狗币、Zcash、Pirate Chain、Decred、Solana、以太坊和 XRP)。Morphit 从不保管你的钱,也不问你是谁。它是公告板,不是银行。"
 			},
 			"is_it_safe": {
 				"q": "它安全吗?",

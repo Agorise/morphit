@@ -4,20 +4,30 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp130 — 2026-05-23 (item #5: wire morphit_native for BTC/USD + XMR/USD — generic asset factory `createAssetPriceSource` + per-asset defaults `CP130_ASSET_DEFAULTS` + multi-asset map builder `createMultiAssetPriceSources` + coingeckoFetcher generalization on `vsCurrency` + 2 new env vars (BTC + XMR static floors) + main.ts multi-asset boot + per-asset peer monitor wiring + ADR-0042 + 20 structural smoke scenarios + brag entry #91 + RUN-A-MORPHIT-NODE.md callout + OPERATIONS.md §13 multi-asset note + GRANDMA cp130 note + 6-lesson CP130 LESSONS). **cp130 close-out fully complete + cross-session handoff cleanup performed this turn (TARBALL.md state markers corrected from 'target/pending' to actual triple-pulse-stable measured values for both cp129 and cp130 work-blocks; brag-list trailer date corrected 2026-05-22 → 2026-05-23; mediakit re-rebuilt to capture date fix; battery re-pulsed triple stable at 5,470/0).**
+**Last touched:** cp131 — 2026-05-23/24 (deep-deep continuation: full hostile-handler black-hat sweep on all 17 chain-op handlers, doc-drift audit, FAQ accuracy walk on all 131 entries, DB dead-field check, fallback/failover sweep, regex-accuracy audit on 84 unaudited smokes, OPERATIONS.md + RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md line-by-line walks. 13 findings produced — HIGH-001 backup-script-ignored-env-vars, HIGH-002 env-var-consumer-smoke-prefix-bug, MED-003 init.ts-step-count-drift, MED-004 README-ADR-range-drift, LOW-005 duplicate-BLURT-price-source-wiring, HIGH-006 warrant-canary-ghost-op, LOW-007 ADR-0037-_v1-suffix-drift, LOW-008 PHASE-5-chat-op-name-drift, MED-009 push-unsubscribe-unauthenticated+unrate-limited, LOW-010 tar-extract-safety-flags, DEEP-001 what_is_morphit-FAQ-enumerates-10-of-16-assets, DEEP-002 schema-versioning-framing-reconciled-via-Option-1, DEEP-003 schema-migration-coverage-smoke-banner-regex-missed-cp123-cp127-format — ALL 13 SHIPPED end-to-end with sentinels pinning each so the drift class can't recur). **cp131 close-out fully complete + final triple-pulse stable at 5,715/0 (cp130 5,470 + cp131 net +245 from new and widened smokes).**
 
-**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. SHA-256 of the handoff tarball is at the bottom of this section.
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp131-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. SHA-256 of the handoff tarball is at the bottom of this section.
 
 **Where the project stands:**
-- 16 tradable assets · **41 ADRs** (+1 cp130: ADR-0042) · **318 brag entries** (+1 cp130: #91 multi-asset pricing in §4) · locale parity **2,979 × 10 = 29,790** (unchanged — cp130 is backend-only, no new translations)
-- Codebase deep-audit was end-to-end complete at cp106; cp107-cp130 have been docs/SEO/UX/CI hardening + cash-by-mail + reputation hardening + OpenMonero coverage + self-sovereign pricing + denomination configurability + BRICS Pay + Defense F + multi-asset pricing
-- **55 structural defenses** (+1 cp130: multi-asset-factory with 20 scenarios)
-- 644 vitest tests passing (apps/web)
+- 16 tradable assets · **41 ADRs** (unchanged from cp130: ADR-0042) · **321 brag entries** (+3 cp131: #319 backup env-var consumption, #320 push unsubscribe ACTION-bound sig, #321 headline-FAQ asset-enum sentinel) · locale parity **2,979 × 10 = 29,790** (unchanged — cp131 changed only the `what_is_morphit` FAQ enumeration prose, no key adds/removes)
+- Codebase deep-audit END-TO-END COMPLETE AT CP131 — all 17 chain-op handlers black-hat reviewed line-by-line with no exploits found. The handlers reviewed: `block`, `chat`, `chatIdentity`, `chatRead`, `featureBid`, `feeAttest`, `feedback`, `feedbackResponse`, `operatorBlock`, `operatorPaymentMethod`, `operatorRegister`, `order`, `orderCancel`, `orderReplace`, `profile`, `release`, `strangerFee`. All have appropriate authorization gates, char-class denylists, NFC normalization where user text is accepted, SQL-injection-safe parameterized queries, deterministic-replay via `ctx.blockTime`, savepoint isolation where non-fatal sub-work runs, and federation-op-tag gating where per-instance state would diverge.
+- **58 structural defenses** (cp130 55 + cp131 +3: what-is-morphit-asset-enum 160 scenarios, brag-list claim class H, duplicate-import-smoke stale-root catch). Plus 2 widened smokes (sidecar-shell-quoting added ops/backup/*.sh + fail-loudly stale-roots; schema-migration-coverage banner regex widened to Format A + Format B for cp123/cp127-era markers).
+- 644 web + 493 indexer + 244 relay vitest tests passing
 - Pre-launch hardening phase, no production deployments anywhere
+- Battery: **5,715/0 final triple-pulse stable** (3 consecutive runs all 5,715 scenarios pass, 0 runners fail)
+- TypeScript clean across all 5 workspaces (apps/indexer, apps/relay, apps/ops-cli, apps/matrix-bot, apps/web)
+- All 131 FAQ entries audited end-to-end against code-backed claims — no drift found
+- All 26 file path references in OPERATIONS.md + 16 in RUN-A-MORPHIT-NODE.md verified to exist; all 14 + 8 ADR references valid; all 30 §N section cross-references resolve
+- All 84 unaudited smokes verified working (when invoked via runner with proper tsconfig)
 
 **Standing pre-launch operator-actions (the two that remain — both non-code):**
-1. Native-speaker polish of all auto-translated non-EN content from cp108-cp129 — see translation-quality flag in `docs/REVISIT-LIST.md` (cp108-cp129 grand total: ~1,290+ strings; cp130 added zero translation strings, backend-only)
-2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — overdue 18+ cps; cp125 deep-deep covered reputation surface, cp128's deep-deep covered the denomination-rename surface, cp129+cp130 were backend-only
+1. Native-speaker polish of all auto-translated non-EN content from cp108-cp131 — see translation-quality flag in `docs/REVISIT-LIST.md`. cp131 added zero new translation strings (only modified the `what_is_morphit` answer body in all 10 locales, preserving each locale's existing conjunction grammar).
+2. Three-persona walk-through (Bob/Sally-user/Sally-operator) — partially done cp131 (Sally-operator walk surfaced HIGH-001 backup-script-ignored-env-vars; remaining personas + Bob multi-login walk + Sally-user no-crypto walk still pending a clean end-to-end run after the closing artifacts land).
+
+**cp131 changes that an operator would notice:**
+- `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=true` now also requires signed unsubscribe (was previously subscribe-only). Most operators set this once; no per-instance action needed but the OPERATIONS.md §42 rationale section was rewritten for accuracy.
+- Backup script's `backup.env` now supports `AGE_RECIPIENT` + `REMOTE_DESTINATION` + `SSH_KEY` for the encrypted+pushed off-site backup recipe. Operators who relied on the previous "shipped script does three things" line should re-read RUN-A-MORPHIT-NODE §10 for the new optional features.
+- Setup wizard step count is 18 (was incorrectly documented as 17 in init.ts JSDoc).
 
 **Ken's 6-bullet "do them all" ask — final status:**
 - ✅ **#1 WAIVER_MIN_BLURT denomination-aware** — shipped cp129
@@ -29,11 +39,71 @@
 
 **Per Ken's "after that, that's a wrap" directive: pre-launch hardening PAUSED at cp130.** Project state is stable, audited, smoke-tested, documented end-to-end.
 
-**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp130 is a clear meaningful milestone (closes Ken's 3-bullet "do all" ask + final architectural completion of the cp127 self-sovereign pricing design).
+**Cadence rule (active since 2026-05-21):** .tar.gz binary regenerates only at meaningful milestones OR when Ken asks. TARBALL.md + REVISIT-LIST + transcripts update EVERY turn. cp131 is a clear meaningful milestone (13 findings shipped end-to-end + codebase deep-audit complete at all 17 chain-op handlers + FAQ accuracy walked on all 131 entries + line-by-line audits of OPERATIONS.md and RUN-A-MORPHIT-NODE.md).
+
+**Tarball binary:**
+- Filename: `morphit-audit-2026-05-122-cp131-FULL-STATE.tar.gz`
+- Size: ~7.4 MB (1,192 files; node_modules / build / dist / .svelte-kit / .git excluded)
+- SHA-256: communicated outside the tarball (in Claude's response message at handoff time, NOT embedded here — embedding would be self-referential since the SHA changes every time this doc is edited).
+- Verify before unpack: receive the SHA-256 from Claude's response, then `echo "<SHA>  morphit-audit-2026-05-122-cp131-FULL-STATE.tar.gz" | sha256sum -c -`.
 
 ---
 
-## cp130 — Multi-asset morphit_native (BTC + XMR via generic factory) (2026-05-23)
+## cp131 — Deep-deep continuation: 13 findings shipped end-to-end (2026-05-23/24)
+
+**Ken's directive at session start:** "ship fixes as you go. all findings and observations need to be taken care of. nothing left hanging in the wind." cp131 walked the full post-cp130 surface with a fresh audit eye: three-persona walkthrough, full 94-task hostile-handler black-hat sweep, doc-drift scan, FAQ accuracy walk on all 131 entries, regex-accuracy audit on 84 unaudited smokes, DB dead-field check, fallback/failover sweep, OPERATIONS.md + RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md line-by-line walks. 13 findings produced. ALL 13 shipped end-to-end with sentinels pinning each.
+
+**Findings shipped this cp:**
+
+- **HIGH-001** — `ops/backup/morphit-backup.sh` ignored `AGE_RECIPIENT`, `REMOTE_DESTINATION`, `SSH_KEY`, `DB_HOST`, `DB_PORT` env vars the Ansible role wired in. Operators got UNENCRYPTED plaintext SQL dumps despite `OPERATIONS.md §37.12` promising encryption. Script rewrite 111→261 lines; consumes all five vars, age-encrypts when `AGE_RECIPIENT` is set, rsync-pushes when `REMOTE_DESTINATION` is set, refuses to run on placeholder denylist matches. Companion rewrites: `backup.env.example`, Ansible group_vars, Jinja template, OPERATIONS.md §37.12 verification recipe.
+- **HIGH-002** — `ansible-env-var-consumer-smoke` had a hard `MORPHIT_` prefix gate that dropped non-prefixed vars like `AGE_RECIPIENT` — exactly the bug class that masked HIGH-001 for 100+ checkpoints. Prefix gate removed from both scans; consumer scan widened to `ops/backup/*.sh`; `EXTERNAL_CONSUMER_TEMPLATES` allowlist added; smoke now 122/122 (was 79).
+- **MED-003** — `apps/ops-cli/src/commands/init.ts:6` JSDoc said "~17 ELI5 steps"; actual count is 18. Fixed + sentinel updated.
+- **MED-004** — `README.md` L34/L53 said "0036-…"; actual highest ADR is 0042. Fixed + new brag-list-claim-parity claim class H (`ADR_RANGE_RE` regex + `highestAdrNumber()` + `CANONICAL_ADR_MAX`) pins ADR-range claims.
+- **LOW-005** — `apps/indexer/src/main.ts` ran TWO independent BLURT price fetchers (standalone `createPriceSource` + multi-asset map containing BLURT). Consolidated: `priceSource` now aliases `multiAssetSources.get('BLURT') ?? null`. Single fetch loop, single cache.
+- **HIGH-006** — Docs claimed `@morphit` broadcasts a `morphit_warrant_canary_v1` chain op weekly. Reality: PGP-signed static file `/canary.txt`; the op id was never implemented. Removed 4 references in OPERATIONS.md + PRE-LAUNCH-CHECKLIST.md, rewrote `@morphit` funding rationale, added 3 sentinels.
+- **LOW-007** — ADR-0037 used `_v1` suffix on `morphit_addr_v1`/`morphit_funds_sent_v1`/`morphit_mailing_address_v1`/`morphit_shipment_v1`; real code uses bare kinds (these are chat-payload kinds nested inside `morphit_chat_v1`, not standalone ops). Stripped suffix at 6 sites + versioning convention note.
+- **LOW-008** — PHASE-5-PLAN.md + PHASE-5-BACKLOG.md said `morphit_chat_message_v1`; real op is `morphit_chat_v1`. Renamed in both.
+- **MED-009** — Pre-cp131 `/v1/push/unsubscribe` accepted `{account, endpoint}` with no signature and no rate limit; a DB-leaked endpoint list was weaponizable as federation-wide notifications DoS. Mirrored cp14 subscribe-side sig gate onto unsubscribe with ACTION-binding (`subscribe`/`unsubscribe` in the canonical signed message) — captured subscribe-signature CANNOT replay as unsubscribe or vice-versa. Cross-action replay defense mathematically verified by 5 new scenarios in `canonical-message-cross-check-smoke.ts` plus 9 wiring sentinels in `web-push-wiring-smoke.ts`. Per-IP rate limit added (20/hour, same shape as subscribe). End-to-end server + client refactor; OPERATIONS.md §42 rationale rewritten; RELEASE-NOTES updated.
+- **LOW-010** — `apps/ops-cli/src/commands/upgrade.ts` `tar -xzf` relied on default behavior, which honors archived setuid bits, uid/gid, and same-name dir→file overwrites. Added `--no-same-owner`, `--no-same-permissions`, `--no-overwrite-dir`. Empirically verified setuid bit stripped during extract. 3 sentinels.
+- **DEEP-001** — `what_is_morphit` FAQ (the first answer a new user reads) enumerated 10 of 16 supported assets — stale since cp124+ asset additions. Updated all 10 locales preserving conjunction styles. New `what-is-morphit-asset-enum-smoke` (160 scenarios — 16 assets × 10 locales with native-script aliases for zh-CN/zh-HK) pins the enumeration. Tamper-tested.
+
+- **DEEP-002** — Schema versioning framing drift: `apps/indexer/src/db/migrations.ts` had `subsumesVersions: [2..27]` with a comment promising "future migrations land here at v28, v29...", but schema.sql had grown in place with v28/v33.1/v33.2/v34/v35 sections during cp82+ work. Reconciled via Option 1: extended `subsumesVersions` to `[2..35]` so audit trail records all collapsed versions; rewrote comment to "v1 collapsed schema is the pre-launch baseline that grows in place until 1.0.0 launch; first separate additive migration to be assigned an integer version at launch"; description updated "v1-v27 merged" → "v1-v35 merged in-place"; PRE-LAUNCH-CHECKLIST.md D-section schema framing rewritten to match (cites v33+ features like review_concentration cp123 H2 + price_drift_baseline cp127 defense B); RUN-A-MORPHIT-NODE.md §7 migration log claim fixed (was "Migrations complete (27 applied)" — wrong format AND wrong count; now matches actual structured `applied {versions: [1]}` JSON logging).
+
+- **DEEP-003** — Discovered while shipping DEEP-002: `apps/indexer/scripts/schema-migration-coverage-smoke.ts` had a banner-parser regex `/^--\s+v(\d+)(?:\s*$|\s+\/\s+)/` that only matched the cp82-era format `-- v<N> /...`. Schema v34 (review_concentration) and v35 (price_drift_baseline) used the cp123/cp127-era box-decorator format `-- ─── v<N>: <description> ───`. The smoke silently undercounted, reporting `schema head = v33` when actual head was v35. Fixed: widened regex to accept both Format A (cp82-era) and Format B (cp123+-era); bumped `SCHEMA_HEAD_VERSION` 33→35 and `MIGRATIONS_COVERAGE_HIGH` 27→35. Tamper-tested. Also generalized the brittle `'SCHEMA_HEAD_VERSION = 33'` literal pin in `apps/web/scripts/web-push-wiring-smoke.ts` to parse the value and assert `>= 33` (the cp13 push_pending invariant) rather than pinning a specific point-in-time value.
+
+**Plus structural improvements:** `apps/indexer/scripts/duplicate-import-smoke.ts` SCAN_ROOTS cleaned up (dropped stale `apps/avatar/src` + `apps/payment-watcher/src`; added `apps/matrix-bot/src`) AND smoke now fails loudly on a stale root (defense against the class). `scripts/sidecar-shell-quoting-smoke.ts` widened to scan `ops/backup/*.sh` (was `ops/scripts/*.sh` only — cp131 HIGH-001 added morphit-backup.sh outside scope); now fail-loudly on stale `SHELL_SCRIPT_DIRS` entries. RUN-A-MORPHIT-NODE.md §10 backups section updated to reflect the cp131-rewritten script's new optional env-var-honored features (age encryption, rsync push).
+
+**Audit walk results (cp131 final):**
+- All 17 chain-op handlers black-hat reviewed — no exploits found.
+- All 131 FAQ entries audited against code-backed claims — no drift found (365-day reputation half-life, 168hr max bid, 5% min-bid, anti-snipe 5min/6x/30min, loyalty 100/500/2000/10000 BLURT→10/50/200/1000 BP cumulative 1260 max, $0.25 BTC/XMR + $0.125 BLURT fees, 100 BLURT/ACT, 25 ACTs/week default, 2 signups/IP/day, 3-16 char account names, 90/10 BLURT split + 100/0 BTC/XMR — all match code state).
+- All 84 unaudited smokes verified working (when invoked via runner with proper tsconfig).
+- OPERATIONS.md line-by-line: 43 sections walked. All 26 file paths + 14 ADR refs + 30 §N section cross-refs verified. One minor doc fix in §15 (nginx admin-route example clarified for dev-vs-production case).
+- RUN-A-MORPHIT-NODE.md line-by-line: 14 sections walked. All 16 file paths + 8 ADR refs verified. One DEEP-002-class fix in §7 (migration log claim).
+- DB schema dead-field audit: 0 dead columns across 38 tables / 308 columns.
+- Fallback/failover audit: zero "user hanging" patterns — every silent catch is UI-degraded-state, no-op-by-design, error-promotion-to-modal, or non-actionable best-effort.
+
+**Verification:**
+- TypeScript clean: apps/indexer, apps/relay, apps/ops-cli, apps/matrix-bot
+- svelte-check: 0 errors (3 pre-existing warnings unrelated to cp131)
+- vitest: 493/493 indexer, 244/244 relay, 644/644 web (1 pre-existing skipped suite, 5 pre-existing skipped tests)
+- multi-asset-factory-smoke 20/20 (cp130 backward-compat with LOW-005 consolidation intact)
+- brag-list-claim-parity 88/88 + brag-list-kiss-budget 2/2 (entries fit ≤4-sentence / ≤100-word KISS budget)
+- mediakit-freshness 6/6 (rebuilt after brag list change per memory rule)
+- schema-migration-coverage-smoke 4/4 (banners `[32,33,34,35]`, coverage `[1..35]`, sanity OK)
+- Full battery **5,715/0** across pulse 1, pulse 2, AND pulse 3 — FINAL TRIPLE-PULSE STABLE
+
+**cp131 lessons (filed in REVISIT-LIST.md cp131 LESSONS section):**
+
+1. A "hardened" smoke can hide a real bug class for 100+ checkpoints if its gate excludes part of the surface (HIGH-002 prefix-gate bug).
+2. Documentation can SOUND right while being structurally wrong (HIGH-001 §37.12 promised encryption that didn't exist).
+3. The "headline FAQ" is its own audit surface — prose enumerations are a category of drift the registry-coupled smokes don't catch.
+4. Cross-action signature replay needs ACTION-binding in the canonical message — always include the action keyword in any new signed-message scheme.
+5. All 17 chain-op handlers deep-read at cp131; codebase is meticulous. No exploits found.
+6. The TARBALL.md handoff protocol works — cp131 was completed across multiple browser-session resumptions thanks to per-turn TARBALL.md updates.
+
+---
+
+
 
 **Tarball:** Fresh `morphit-audit-2026-05-122-cp130-FULL-STATE.tar.gz` built this turn.
 

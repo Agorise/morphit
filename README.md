@@ -31,7 +31,7 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
 | `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config` |
-| `docs/` | ADRs (`docs/adr/0001-…` through `0036-…`), audit logs, operator runbooks |
+| `docs/` | ADRs (`docs/adr/0001-…` through `0042-…`), audit logs, operator runbooks |
 | `ops/` | Ansible role, systemd units, env templates, nginx/Caddy snippets, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
 
@@ -50,7 +50,7 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 
 - Architecture overview: `docs/ARCHITECTURE.md`
 - API reference: `docs/API.md`
-- ADR index: `docs/adr/0001-…` through `docs/adr/0036-…`
+- ADR index: `docs/adr/0001-…` through `docs/adr/0042-…`
 - Audit log: `docs/AUDIT-2026-05.md`
 - Per-language translation guide: `docs/CONTRIBUTING-TRANSLATIONS.md`
 

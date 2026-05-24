@@ -300,6 +300,132 @@ async function buildClientCanonical(
 	);
 }
 
+// ─── cp131 MED-009 — unsubscribe signature mirror + ACTION-binding
+//     replay defense ─────────────────────────────────────────────
+{
+	const { verifyPushUnsubscribeSignature } = await import(
+		'../src/policy/pushSubscribeSig.ts'
+	);
+
+	const privKey = PrivateKey.fromSeed('cp131-MED-009-unsubscribe-seed');
+	const pubKey = privKey.createPublic();
+	const pubKeyStr = pubKey.toString();
+
+	const stubBlurt = {
+		async getAccount(_name: string) {
+			return {
+				name: fixedAccount,
+				created: '',
+				balance: '0.000 BLURT',
+				pending_claimed_accounts: 0,
+				posting_pubkey: pubKeyStr
+			};
+		}
+	} as unknown as BlurtClient;
+
+	// Build the canonical message for the UNSUBSCRIBE action and sign.
+	const endpointHashHex = createHash('sha256')
+		.update(fixedEndpoint, 'utf-8')
+		.digest('hex');
+	const unsubCanonical = `morphit:push:unsubscribe:${fixedAccount}:${endpointHashHex}:${fixedTimestamp}`;
+	const unsubHashBuf = createHash('sha256').update(unsubCanonical, 'utf-8').digest();
+	const unsubSig = privKey.sign(unsubHashBuf as unknown as Buffer).toString();
+
+	// Scenario: a signature produced over the unsubscribe canonical
+	// passes the unsubscribe verifier.
+	const unsubOk = await verifyPushUnsubscribeSignature(
+		stubBlurt,
+		{
+			account: fixedAccount,
+			endpoint: fixedEndpoint,
+			timestamp: fixedTimestamp,
+			signatureHex: unsubSig
+		},
+		fixedTimestamp + 1
+	);
+	record(
+		'cp131 MED-009 — verifyPushUnsubscribeSignature accepts a freshly signed message',
+		unsubOk.ok === true,
+		unsubOk.ok === false ? `reason=${unsubOk.reason}` : undefined
+	);
+
+	// Scenario: a SUBSCRIBE-action signature MUST NOT be accepted
+	// as an unsubscribe (cross-action replay defense).  Sign over
+	// the subscribe canonical, present to unsubscribe verifier.
+	const subCanonical = `morphit:push:subscribe:${fixedAccount}:${endpointHashHex}:${fixedTimestamp}`;
+	const subHashBuf = createHash('sha256').update(subCanonical, 'utf-8').digest();
+	const subSig = privKey.sign(subHashBuf as unknown as Buffer).toString();
+	const crossUnsub = await verifyPushUnsubscribeSignature(
+		stubBlurt,
+		{
+			account: fixedAccount,
+			endpoint: fixedEndpoint,
+			timestamp: fixedTimestamp,
+			signatureHex: subSig
+		},
+		fixedTimestamp + 1
+	);
+	record(
+		'cp131 MED-009 — subscribe signature CANNOT be replayed as unsubscribe',
+		crossUnsub.ok === false && crossUnsub.reason === 'signature_mismatch'
+	);
+
+	// Scenario: symmetric — an UNSUBSCRIBE-action signature MUST
+	// NOT be accepted as a subscribe (cross-action replay defense).
+	const crossSub = await verifyPushSubscribeSignature(
+		stubBlurt,
+		{
+			account: fixedAccount,
+			endpoint: fixedEndpoint,
+			timestamp: fixedTimestamp,
+			signatureHex: unsubSig
+		},
+		fixedTimestamp + 1
+	);
+	record(
+		'cp131 MED-009 — unsubscribe signature CANNOT be replayed as subscribe',
+		crossSub.ok === false && crossSub.reason === 'signature_mismatch'
+	);
+
+	// Scenario: skew enforcement applies symmetrically to
+	// unsubscribe.
+	const unsubStale = await verifyPushUnsubscribeSignature(
+		stubBlurt,
+		{
+			account: fixedAccount,
+			endpoint: fixedEndpoint,
+			timestamp: fixedTimestamp,
+			signatureHex: unsubSig
+		},
+		fixedTimestamp + 6 * 60 // 6 min in the future
+	);
+	record(
+		'cp131 MED-009 — unsubscribe verifier rejects signatures beyond ±5min skew',
+		unsubStale.ok === false && unsubStale.reason === 'timestamp_out_of_range'
+	);
+
+	// Scenario: client + server agree on the unsubscribe canonical
+	// message string (parallel to the subscribe cross-check above).
+	const subtle = webcrypto.subtle;
+	const clientUnsubEndpointHashBuf = await subtle.digest(
+		'SHA-256',
+		new TextEncoder().encode(fixedEndpoint)
+	);
+	const clientUnsubEndpointHashHex = Array.from(
+		new Uint8Array(clientUnsubEndpointHashBuf)
+	)
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+	const clientUnsubCanonical = `morphit:push:unsubscribe:${fixedAccount}:${clientUnsubEndpointHashHex}:${fixedTimestamp}`;
+	record(
+		'cp131 MED-009 — client + server compute identical unsubscribe canonical',
+		clientUnsubCanonical === unsubCanonical,
+		clientUnsubCanonical !== unsubCanonical
+			? `server="${unsubCanonical}", client="${clientUnsubCanonical}"`
+			: undefined
+	);
+}
+
 // ─── Report ───────────────────────────────────────────────
 console.log(`canonical-message-cross-check smoke: ${results.length} scenarios\n`);
 let failed = 0;

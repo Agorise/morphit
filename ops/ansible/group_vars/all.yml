@@ -168,27 +168,45 @@ morphit_indexer_attestation_phase: launch
 # Daily backup timer fires at this systemd OnCalendar spec.
 morphit_backup_schedule: "*-*-* 04:00:00"
 
-# DUMMY-VALUE: rsync/scp destination for off-host backup.
+# Optional rsync/scp destination for off-host backup.
 # CRITICAL: backups on the same disk as the DB are not backups.
+# Leave EMPTY to keep backups local-only; the operator MUST
+# replace this with a real destination before the off-host
+# leg means anything.  Placeholder values containing
+# "REPLACE", "XXXXX", or "example.com" are detected by
+# morphit-backup.sh and SKIPPED with a journald warning,
+# rather than silently shipping plaintext to a bogus host.
 # Examples:
-#   "backups@backup-host.example.com:/morphit-backups/"
+#   "backups@backup-host.your-org.tld:/morphit-backups/"
 #   "/mnt/external-volume/morphit-backups/"   (separate physical disk)
 #   "s3://my-backups-bucket/morphit/"          (with rclone configured)
-morphit_backup_remote_destination: "backups@backup.example.com:/morphit/"
+morphit_backup_remote_destination: ""
 
-# DUMMY-VALUE: SSH key the backup script uses to push to the
-# remote destination.  Created by `morphit` role; the public side
-# must be in the backup destination's authorized_keys.
-morphit_backup_ssh_key_path: /etc/morphit/backup-ssh-key
+# Path to the SSH key the backup script uses to push to the
+# remote destination.  Created by the `morphit` role.  Empty
+# when off-host push is not configured.  When non-empty, the
+# matching public key must be in the backup destination's
+# authorized_keys.
+morphit_backup_ssh_key_path: ""
 
-# DUMMY-VALUE: age recipient public key for backup encryption
-# (§37.12).  Generate with:  age-keygen -o backup.key
-# (keep backup.key private OFF the morphit host; put the matching
-# public key — starts with "age1..." — here).
-morphit_backup_age_recipient: "age1XXXXX-replace-with-real-age-public-key-XXXXX"
+# age recipient public key (https://age-encryption.org) for
+# encrypting backups before write.  Leave EMPTY to write
+# plaintext .sql.gz files (acceptable when the host disk is
+# LUKS-encrypted AND backups never leave the host).  When
+# set, every backup is encrypted with `age -r ...` before
+# write; the matching PRIVATE key MUST live off this host
+# (§37.12).  Placeholder values containing "REPLACE" or
+# "XXXXX" are detected and SKIPPED with a warning rather
+# than silently leaking plaintext.
+# Generate a fresh keypair with:
+#   age-keygen -o /path/to/safe/storage/morphit-backup.key
+# The first line of the output file is the public key; put
+# THAT here (starts with "age1...").
+morphit_backup_age_recipient: ""
 
-# How many days of remote backups to retain.  Older ones are
-# deleted from the remote side by the daily timer.
+# How many days of local backups to retain.  Remote retention is
+# the operator's responsibility (rsync does not delete; older
+# remote backups accumulate unless the operator prunes them).
 morphit_backup_retention_days: 30
 
 

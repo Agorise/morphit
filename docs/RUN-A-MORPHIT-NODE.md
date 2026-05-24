@@ -770,7 +770,7 @@ npm run migrate
 cd ../..
 ```
 
-The migration runner reads `MORPHIT_INDEXER_DATABASE_URL` from your environment, applies every schema file in order (the base `schema.sql` plus the numbered deltas `schema-v2.sql` through `schema-v27.sql`), and records what it has applied in a `schema_migrations` table so re-running it is idempotent. You should see `Migrations complete (27 applied)` (or a higher number on later versions). If you see a smaller number, check that `MORPHIT_INDEXER_DATABASE_URL` is exported in your shell — the runner won't guess.
+The migration runner reads `MORPHIT_INDEXER_DATABASE_URL` from your environment, applies the canonical `apps/indexer/src/db/schema.sql` (which is the pre-launch v1 collapsed baseline — it folds the historical v1-v35 deltas into one in-place schema), and records what it has applied in a `schema_migrations` table so re-running it is idempotent. You should see log lines like `applied {versions: [1]}` on the first run, and `already_applied {versions: [1]}` on subsequent runs. Behind the scenes, the runner also records all subsumed historical versions (v2-v35) in `schema_migrations` so any downstream "is v15 applied?" check returns true. If you see neither `applied` nor `already_applied` log lines, check that `MORPHIT_INDEXER_DATABASE_URL` is exported in your shell — the runner won't guess.
 
 > **Note on the password sentinel.** The init script and both runtime services (indexer and relay) reject a known list of placeholder password strings — `CHANGEME`, `CHANGE_ME`, `CHANGE_ME_BEFORE_PRODUCTION`, `__SET_BEFORE_DEPLOY__`, `password`, `postgres`. The example `.env` files ship with `__SET_BEFORE_DEPLOY__` as the placeholder so it's obvious you need to replace it. See OPERATIONS.md §30 for the full provisioning + runtime guardrail rationale.
 
@@ -1394,7 +1394,17 @@ If it exists, the wizard handled it. If not, run `morphit-ops init` again and an
 
 If you want to set up backups manually, or you skipped the wizard, here's what to do.
 
-The shipped script at `ops/backup/morphit-backup.sh` does three things: pg_dumps the DB, gzips it, prunes old backups. It's the same script the wizard installs. Make it readable by your morphit system user:
+The shipped script at `ops/backup/morphit-backup.sh` does the local backup loop:
+pg_dumps the DB, gzips it, optionally encrypts it with age (when
+`AGE_RECIPIENT` is set in `backup.env`), optionally rsync-pushes the result
+to an off-site host (when `REMOTE_DESTINATION` is set), and prunes old
+backups by age.  All four are independently configurable — leaving the
+optional env vars unset gives the simple gzip-locally behaviour; setting
+`AGE_RECIPIENT` alone gives encrypted local backups; setting both gives
+encrypted-and-pushed off-site backups.  See `ops/backup/backup.env.example`
+for the full list with REQUIRED/OPTIONAL labelling.
+
+Make it readable by your morphit system user:
 
 ```
 chmod +x ops/backup/morphit-backup.sh
@@ -1404,7 +1414,8 @@ Copy the example config and edit it:
 
 ```
 cp ops/backup/backup.env.example ops/backup/backup.env
-# edit BACKUP_DIR and RETAIN_DAYS to taste
+# edit BACKUP_DIR and RETAIN_DAYS to taste; optionally set
+# AGE_RECIPIENT for encryption and REMOTE_DESTINATION for off-site push
 ```
 
 Install the config to `/etc/morphit/backup.env` (root-owned, 600):
@@ -1482,11 +1493,15 @@ The two counts should be within ±1 (some orders may have expired between the sn
 
 The setup above keeps a 30-day rolling local backup. If the server burns down, you lose those too. Pick one or more of:
 
-- **rsync to a second host** (cheapest, works with any SSH-reachable destination)
-- **rclone to S3, B2, or any object store** (best for off-network durability)
+- **rsync built into the backup script** (simplest — set `REMOTE_DESTINATION` and `SSH_KEY` in `/etc/morphit/backup.env` and the nightly run pushes after writing the local snapshot; encrypts first if `AGE_RECIPIENT` is also set)
+- **Separate rsync to a second host** (use this when you want a different schedule or a different destination than the main script's)
+- **rclone to S3, B2, or any object store** (best for off-network durability; runs as a separate timer)
 - **Periodic manual download** if you SSH to the server anyway
 
-For rsync, add a second cron entry (or a second systemd timer):
+The simplest path is to use the script's built-in rsync — set both
+`REMOTE_DESTINATION=user@backup-host:/path/to/morphit/` and `SSH_KEY=/home/morphit/.ssh/morphit-backup` in `backup.env`, ensure the morphit user has a passwordless SSH key authorized on the destination, and the nightly timer takes care of it. Verify the recipe works by running the script once by hand: `sudo systemctl start morphit-backup.service` then check the destination host.
+
+For a separate rsync (different cadence or destination), add a cron entry:
 
 ```
 30 4 * * * rsync -az --delete /home/morphit/backups/ user@backup-host:/path/to/morphit/

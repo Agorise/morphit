@@ -74,6 +74,13 @@
  *      numbered top-level entries in the brag list
  *      (lines matching `^[0-9]+\.\s+\*\*`).
  *
+ *   H. **ADR filename-range anchor.**  Any prose claim of the
+ *      form "0001-… through NNNN-…" or "docs/adr/0001-foo
+ *      through 0042-bar.md" must name the highest non-template
+ *      ADR number on disk as the upper bound.  Catches the
+ *      drift caught manually at cp131 (README.md was stale at
+ *      "through 0036-…" when the disk had 0042-…).
+ *
  * Scope: this smoke covers MORPHIT-BRAG-LIST.md, README.md,
  * and RELEASE-NOTES-v*.md — the three "marketing-class"
  * surfaces where stale specific claims hurt most.  ADRs,
@@ -293,6 +300,27 @@ const ADR_RE = new RegExp(
 // (G) footer brag-entry count: "*N specific selling points*"
 const FOOTER_RE = /\*(\d+)\s+specific\s+selling\s+points/g;
 
+// (H) ADR filename-range claim: catches "0001-… through 0036-…",
+// "docs/adr/0001- through 0042-", "ADRs 0001-foo through
+// 0042-bar.md", etc.  The captured group is the ENDING ADR
+// number; it MUST equal the highest non-template ADR number on
+// disk.  Without this, README.md / brag-list claims like "ADRs
+// 0001-… through 0036-…" silently drift as new ADRs land.
+//
+// Shape captured (whitespace/backticks tolerated between tokens
+// because markdown commonly wraps the range tokens in backticks
+// — e.g. ``\`0001-…\` through \`0042-…\``):
+//   - optional `docs/adr/` prefix
+//   - 4-digit ADR number (start of range)
+//   - hyphen + filename body (either "…" placeholder or
+//     `[a-z0-9-]+\.md`)
+//   - " through " keyword (with optional backticks/whitespace)
+//   - optional `docs/adr/` prefix
+//   - 4-digit ADR number (END of range) <- CAPTURED
+//   - hyphen + filename body
+const ADR_RANGE_RE =
+	/(?:docs\/adr\/)?(\d{4})-(?:…|[a-z0-9-]+\.md)[\s`]*through[\s`]*(?:docs\/adr\/)?(\d{4})-(?:…|[a-z0-9-]+(?:\.md)?)/g;
+
 // ─────────────────────────────────────────────────────────────
 
 interface Scenario {
@@ -388,6 +416,24 @@ function countAdrs(): number {
 	).length;
 }
 
+/** Highest 4-digit prefix among non-template ADR filenames.
+ *  Used by claim-class (H): claims like "ADRs 0001-… through
+ *  0036-…" must name THIS number as the upper bound or be
+ *  flagged as stale.  Counts disjoint from countAdrs() because
+ *  numbering can be sparse (retracted ADRs, e.g. 0016, leave a
+ *  gap — the highest number still climbs). */
+function highestAdrNumber(): number {
+	const dir = join(REPO, 'docs/adr');
+	let max = 0;
+	for (const f of readdirSync(dir)) {
+		const m = /^(\d{4})-/.exec(f);
+		if (!m || f === '0000-template.md') continue;
+		const n = parseInt(m[1]!, 10);
+		if (n > max) max = n;
+	}
+	return max;
+}
+
 function countBragEntries(): number {
 	const src = readFileSync(join(REPO, 'MORPHIT-BRAG-LIST.md'), 'utf8');
 	const lines = src.split('\n');
@@ -401,6 +447,7 @@ function countBragEntries(): number {
 const CANONICAL_ASSETS = countAssetTickers();
 const CANONICAL_LOCALES = countLocales();
 const CANONICAL_ADRS = countAdrs();
+const CANONICAL_ADR_MAX = highestAdrNumber();
 const CANONICAL_BRAG_ENTRIES = countBragEntries();
 
 if (CANONICAL_ASSETS < 1) {
@@ -424,7 +471,7 @@ function isOperatorManaged(p: string): boolean {
 }
 
 console.log('\n── brag-list-claim-parity smoke (cp111) ──────────────\n');
-console.log(`  canonical: ${CANONICAL_ASSETS} assets · ${CANONICAL_LOCALES} locales · ${CANONICAL_ADRS} ADRs · ${CANONICAL_BRAG_ENTRIES} brag entries`);
+console.log(`  canonical: ${CANONICAL_ASSETS} assets · ${CANONICAL_LOCALES} locales · ${CANONICAL_ADRS} ADRs (max #${CANONICAL_ADR_MAX}) · ${CANONICAL_BRAG_ENTRIES} brag entries`);
 
 for (const docRel of MARKETING_DOCS) {
 	const abs = join(REPO, docRel);
@@ -569,6 +616,30 @@ for (const docRel of MARKETING_DOCS) {
 				scenarios.push(sc);
 			}
 		}
+
+		// (H) ADR filename-range claim — cp131 MED-004.
+		ADR_RANGE_RE.lastIndex = 0;
+		while ((m = ADR_RANGE_RE.exec(ln)) !== null) {
+			const startN = parseInt(m[1]!, 10);
+			const endN = parseInt(m[2]!, 10);
+			const sc: Scenario = {
+				doc: docRel,
+				line: i + 1,
+				kind: 'H',
+				claim: `ADR range ${m[1]}-… through ${m[2]}-…`
+			};
+			if (endN !== CANONICAL_ADR_MAX) {
+				sc.failure =
+					`claims ADR range ends at ${m[2]} but highest ADR ` +
+					`on disk is ${String(CANONICAL_ADR_MAX).padStart(4, '0')}`;
+			} else if (startN !== 1) {
+				// Sanity: ADR ranges that don't start at 0001
+				// would be confusing — ADRs are an append-only
+				// log starting from 0001.
+				sc.failure = `claims ADR range starts at ${m[1]} but ADRs begin at 0001`;
+			}
+			scenarios.push(sc);
+		}
 	}
 }
 
@@ -588,10 +659,11 @@ const KIND_LABEL: Record<string, string> = {
 	D: 'tradable-asset count claims',
 	E: 'locale/language count claims',
 	F: 'ADR count claims',
-	G: 'brag-list footer count'
+	G: 'brag-list footer count',
+	H: 'ADR filename-range claims'
 };
 
-for (const k of ['A', 'B', 'C', 'D', 'E', 'F', 'G']) {
+for (const k of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
 	const b = byKind[k] ?? { pass: 0, fail: 0 };
 	const tot = b.pass + b.fail;
 	console.log(`  ${k}. ${KIND_LABEL[k]}: ${tot} (${b.fail} failed)`);
