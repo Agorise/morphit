@@ -115,6 +115,7 @@ SMOKES=(
 	"apps/web:native-translations-floor-smoke"
 	"apps/web:i18n-key-coverage-smoke"
 	"apps/web:faq-per-tradable-asset-parity-smoke"
+	"apps/web:what-is-morphit-asset-enum-smoke"
 	"apps/web:operator-doc-per-asset-coverage-smoke"
 	"apps/web:what-is-asset-faq-native-locale-floor-smoke"
 	"apps/web:per-asset-key-family-native-locale-floor-smoke"

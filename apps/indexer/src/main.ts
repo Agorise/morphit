@@ -26,7 +26,7 @@ import { runMigrations } from '$db/migrations';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
-import { createPriceSource, createMultiAssetPriceSources } from '$indexer/price/factory';
+import { createMultiAssetPriceSources } from '$indexer/price/factory';
 import { startPeerPriceMonitor } from '$indexer/price/peerPriceMonitor';
 import type { BlurtPriceSource } from '$indexer/price/source';
 
@@ -114,38 +114,40 @@ async function main(): Promise<void> {
 	// ─── 4. Blurt client ───────────────────────────────────────
 	const blurt = new BlurtClient(config);
 
-	// ─── 5. Optional price source ──────────────────────────────
-	// After the BLURT-native fee refactor, fee verification runs
-	// without a price source — the indexer doesn't need one for
-	// correctness.  The price source exists purely as an optional
-	// USD-display courtesy on /v1/listing-fee, gated behind the
-	// `priceFeedEnabled` flag.  When disabled (the default), the
-	// indexer makes ZERO outbound HTTP calls for pricing.
-	const priceSource = config.priceFeedEnabled ? createPriceSource(config, db) : null;
-	if (priceSource !== null) {
-		priceSource.start();
-	}
-
-	// cp130: multi-asset price sources (BLURT + BTC + XMR).  Same
-	// gate as the BLURT-only `priceSource` above — only created when
-	// the operator has opted in to the price feed.  The BLURT source
-	// here is independent from `priceSource` above (different cache,
-	// independent refresh schedule); callers that only need BLURT
-	// pricing (e.g. listing-fee endpoint) keep using `priceSource`.
-	// Callers that want multi-asset (receipt endpoint, per-asset
-	// peer monitor) use `multiAssetSources`.
+	// ─── 5. Optional price sources (cp130 multi-asset; cp131 consolidated) ──
 	//
-	// Could be unified into a single map (drop the standalone
-	// `priceSource`) but leaving the existing BLURT path
-	// untouched minimizes regression risk for the listing-fee
-	// endpoint, which is hot-path for every order-compose page
-	// load.  cp131+ could consolidate.
+	// History:
+	//   - Pre-cp130: a single `createPriceSource(config, db)` for
+	//     BLURT only.  /v1/listing-fee and /v1/health consumed it
+	//     directly.
+	//   - cp130: added `createMultiAssetPriceSources` for the
+	//     BLURT + BTC + XMR set, kept the standalone BLURT
+	//     priceSource alive in parallel for hot-path stability.
+	//     Both made independent outbound HTTP calls to fetch
+	//     BLURT pricing — a needless 2x cost for priority #4
+	//     (tiny footprint) and a duplicated failure surface.
+	//   - cp131 LOW-005 (this checkpoint): consolidated.  When
+	//     priceFeedEnabled, the BLURT-only callers (listing fee,
+	//     health, poller) consume `multiAssetSources.get('BLURT')`
+	//     instead of a parallel-instantiated standalone source.
+	//     Single fetch loop, single cache.  When priceFeedEnabled
+	//     is false, no source exists and callers receive null —
+	//     same behavior as pre-cp130 disabled mode.
+	//
+	// `priceSource` is preserved as the named handle the
+	// downstream callers still expect (`BlurtPriceSource | null`).
+	// It's now ALIASED to the BLURT entry in the multi-asset map.
+	// The map ALSO contains it, so the start()/stop() loops below
+	// (which iterate multiAssetSources.values()) cover the BLURT
+	// source — no separate start()/stop() is needed for the alias.
 	const multiAssetSources: Map<string, BlurtPriceSource> = config.priceFeedEnabled
 		? createMultiAssetPriceSources(config, db)
 		: new Map();
 	for (const source of multiAssetSources.values()) {
 		source.start();
 	}
+	const priceSource: BlurtPriceSource | null =
+		multiAssetSources.get('BLURT') ?? null;
 
 	// cp129 — Defense F: cross-instance peer price monitor.  Opt-in
 	// via MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED.  Requires
@@ -483,15 +485,13 @@ async function main(): Promise<void> {
 		const pollerTimeout = new Promise<void>((resolve) => setTimeout(resolve, 10_000));
 		await Promise.race([pollerPromise, pollerTimeout]);
 
-		// Stop the price source's background refresh, if running.
-		// No in-flight work to drain — refreshOnce() is a best-effort
-		// fetch that's safe to abandon; stop() just clears the
-		// interval timer.
-		if (priceSource !== null) {
-			priceSource.stop();
-		}
-
-		// cp130 — Stop all multi-asset price sources.
+		// Stop all price sources.  cp131 LOW-005 — pre-cp131 had
+		// a separate priceSource.stop() for the standalone BLURT
+		// fetcher AND this loop for the multi-asset map.  Now
+		// that `priceSource` aliases multiAssetSources.get('BLURT'),
+		// a single loop covers everything.  No in-flight work to
+		// drain — refreshOnce() is best-effort; stop() just clears
+		// the interval timer.
 		for (const source of multiAssetSources.values()) {
 			source.stop();
 		}

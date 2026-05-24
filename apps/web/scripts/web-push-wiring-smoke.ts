@@ -61,8 +61,26 @@ results.push({
 	ok: fileContains('apps/indexer/src/db/schema.sql', 'CREATE TABLE IF NOT EXISTS push_pending')
 });
 results.push({
-	name: 'Schema head version bumped to 33',
-	ok: fileContains('apps/indexer/scripts/schema-migration-coverage-smoke.ts', 'SCHEMA_HEAD_VERSION = 33')
+	name: 'Schema head version is bumped past v33 (where push_pending landed)',
+	ok: (() => {
+		// cp13 added push_pending at schema v33; the sentinel
+		// pinned the pin literally as 'SCHEMA_HEAD_VERSION = 33'.
+		// cp131 generalized: schema head can grow past 33 freely,
+		// the cp13 invariant is "push_pending must be at or below
+		// the head."  Parse the value and assert >= 33.
+		try {
+			const txt = readFileSync(
+				join(REPO, 'apps/indexer/scripts/schema-migration-coverage-smoke.ts'),
+				'utf-8'
+			);
+			const m = /SCHEMA_HEAD_VERSION\s*=\s*(\d+)/.exec(txt);
+			if (!m) return false;
+			const head = parseInt(m[1]!, 10);
+			return Number.isFinite(head) && head >= 33;
+		} catch {
+			return false;
+		}
+	})()
 });
 
 // ─── 3. Relay config exposes VAPID env vars ─────────────────
@@ -272,10 +290,18 @@ results.push({
 	name: 'cp14 — client subscribe signs canonical message',
 	ok:
 		fileContains('apps/web/src/lib/notifications/push.ts', 'signSubscribe') &&
-		fileContains(
+		// cp131 refactored the literal `morphit:push:subscribe:`
+		// into the action-templated `morphit:push:${action}:`
+		// shared by subscribe + unsubscribe.  Both forms are
+		// acceptable evidence the canonical string is built.
+		(fileContains(
 			'apps/web/src/lib/notifications/push.ts',
 			'morphit:push:subscribe'
-		)
+		) ||
+			fileContains(
+				'apps/web/src/lib/notifications/push.ts',
+				'morphit:push:${action}'
+			))
 });
 results.push({
 	name: 'cp14 — push_subscriptions.locale column added in schema',
@@ -325,6 +351,111 @@ results.push({
 			for (const k of required) if (!notif[k]) return false;
 		}
 		return true;
+	})()
+});
+
+// ─── cp131 MED-009 — unsubscribe signature + rate limit ──
+// Pre-cp131 the unsubscribe endpoint had no sig check and no
+// rate limit; this smoke pins the symmetric protections so
+// the bug class can't return silently.
+results.push({
+	name: 'cp131 MED-009 — relay exports verifyPushUnsubscribeSignature',
+	ok: fileContains(
+		'apps/relay/src/policy/pushSubscribeSig.ts',
+		'verifyPushUnsubscribeSignature'
+	)
+});
+results.push({
+	name: 'cp131 MED-009 — relay push handler imports verifyPushUnsubscribeSignature',
+	ok: fileContains(
+		'apps/relay/src/api/push.ts',
+		'verifyPushUnsubscribeSignature'
+	)
+});
+results.push({
+	name: 'cp131 MED-009 — unsubscribe wire body accepts signature + timestamp fields',
+	ok:
+		fileContains('apps/relay/src/api/push.ts', 'const unsubscribeBody') &&
+		(() => {
+			// The schema definition must include both `signature`
+			// and `timestamp` in the optional fields of
+			// unsubscribeBody (not just subscribeBody).
+			const txt = readFileSync(
+				join(REPO, 'apps/relay/src/api/push.ts'),
+				'utf-8'
+			);
+			const i = txt.indexOf('const unsubscribeBody');
+			if (i < 0) return false;
+			// Slice from start of unsubscribeBody to the next blank-line
+			// separator so we only see the body of that schema.
+			const slice = txt.slice(i, i + 1200);
+			return slice.includes('signature') && slice.includes('timestamp');
+		})()
+});
+results.push({
+	name: 'cp131 MED-009 — relay constructs a per-IP unsubscribeLimiter',
+	ok: fileContains('apps/relay/src/main.ts', 'pushUnsubscribeLimiter')
+});
+results.push({
+	name: 'cp131 MED-009 — push handler calls unsubscribeLimiter.allow before the DB delete',
+	ok: (() => {
+		const txt = readFileSync(
+			join(REPO, 'apps/relay/src/api/push.ts'),
+			'utf-8'
+		);
+		const unsubIdx = txt.indexOf('private async unsubscribe');
+		const allowIdx = txt.indexOf('unsubscribeLimiter.allow');
+		const deleteIdx = txt.indexOf('this.store.delete');
+		// All three present, and allow() lands BEFORE the delete
+		// inside the unsubscribe handler body.
+		return (
+			unsubIdx > 0 &&
+			allowIdx > unsubIdx &&
+			deleteIdx > allowIdx
+		);
+	})()
+});
+results.push({
+	name: 'cp131 MED-009 — push handler verifies signature before the DB delete (when present)',
+	ok: (() => {
+		const txt = readFileSync(
+			join(REPO, 'apps/relay/src/api/push.ts'),
+			'utf-8'
+		);
+		const unsubIdx = txt.indexOf('private async unsubscribe');
+		// Search for the CALL (not the import) by looking
+		// after the unsubscribe handler starts.
+		const verifyIdx = unsubIdx > 0
+			? txt.indexOf('verifyPushUnsubscribeSignature(', unsubIdx)
+			: -1;
+		const deleteIdx = unsubIdx > 0
+			? txt.indexOf('this.store.delete', unsubIdx)
+			: -1;
+		return unsubIdx > 0 && verifyIdx > unsubIdx && deleteIdx > verifyIdx;
+	})()
+});
+results.push({
+	name: 'cp131 MED-009 — client signs unsubscribe POST with signUnsubscribe',
+	ok: fileContains(
+		'apps/web/src/lib/notifications/push.ts',
+		'signUnsubscribe'
+	)
+});
+results.push({
+	name: 'cp131 MED-009 — canonical-message-cross-check covers unsubscribe + action-binding replay',
+	ok: (() => {
+		const p = 'apps/relay/scripts/canonical-message-cross-check-smoke.ts';
+		return (
+			fileContains(p, 'verifyPushUnsubscribeSignature') &&
+			fileContains(
+				p,
+				'subscribe signature CANNOT be replayed as unsubscribe'
+			) &&
+			fileContains(
+				p,
+				'unsubscribe signature CANNOT be replayed as subscribe'
+			)
+		);
 	})()
 });
 

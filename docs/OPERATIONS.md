@@ -381,25 +381,30 @@ grep MORPHIT_RELAY_ACCOUNT /etc/morphit/relay.env
 ### Funding the @morphit account (~10 BLURT, small fixed cost)
 
 The `@morphit` account is the **trust-anchor account**
-that signs the canonical `morphit_release_v1` op (which
-pins BTC + XMR treasury addresses on chain) plus the
-periodic `morphit_warrant_canary_v1` ops (weekly
-automated; see §36).  Posting key stays on the
-operator's personal laptop, OFF the morphit.io
-production box — only the signed serialized op is
-copied to a place where the broadcast can happen.
+that signs the canonical `morphit_release_v1` op, which
+pins BTC + XMR treasury addresses on chain.  Posting key
+stays on the operator's personal laptop, OFF the
+morphit.io production box — only the signed serialized
+op is copied to a place where the broadcast can happen.
+
+The **warrant canary** is a separate primitive — a
+PGP-signed static file at `/canary.txt` regenerated
+weekly by `scripts/canary/generate.sh` and signed by
+the operator's release PGP key (see §36).  The canary
+does NOT consume `@morphit` BLURT; it lives off-chain
+and uses a PGP keypair, not the Blurt posting key.
 
 Pre-fund `@morphit` with **~10 BLURT** before launch.
 This is a small fixed cost, not signup-rate-dependent:
 
 - Initial `morphit_release_v1` broadcast — sub-BLURT.
-- Periodic `morphit_warrant_canary_v1` broadcasts —
-  sub-BLURT each, weekly automated; over a year that's
-  ~52 ops.
+- Subsequent re-pins (rare: only when treasury
+  addresses rotate or the frontend hash manifest
+  changes) — sub-BLURT each.
 
-Rounding up generously to ~10 BLURT covers both with
-multi-year headroom.  Most operators won't need to top
-this up for years.
+Rounding up generously to ~10 BLURT covers many years
+of releases with comfortable headroom.  Most operators
+won't need to top this up for years.
 
 ### Funding the fees account (and whether it needs BLURT)
 
@@ -422,7 +427,7 @@ fee transfer fails, the order doesn't promote to
 
 | Account | Role | Upfront funding | Signing key location |
 |---|---|---|---|
-| `@morphit` | Trust anchor (release + warrant canary) | ~10 BLURT | Operator's laptop (OFF prod) |
+| `@morphit` | Trust anchor (release pin) | ~10 BLURT | Operator's laptop (OFF prod) |
 | `@morphit-relay` | Service account (ACT minting + bonuses + refills + payouts) | ~700 BLURT (testers) – ~12,000 BLURT (100 signups/week) | Encrypted on prod box at `/etc/morphit/keys/relay-active.key` mode 0400 |
 | `@morphit-fees` | Receive-only treasury | ~0 BLURT | Not on any production box |
 
@@ -2073,6 +2078,11 @@ common options:
 location /admin/ {
     auth_basic "Operator only";
     auth_basic_user_file /etc/nginx/.morphit-admin-htpasswd;
+    # If your frontend is served by nginx as static files
+    # (production default), use `try_files` here instead of
+    # proxy_pass.  The example below covers the dev-server
+    # case (SvelteKit dev on :3000); production usually wants:
+    #   try_files $uri $uri/ /index.html;
     proxy_pass http://localhost:3000;
 }
 ```
@@ -6737,21 +6747,59 @@ unencrypted-VPS is acceptable.
 
 ### 37.12 Backup encryption
 
-`docs/RUN-A-MORPHIT-NODE.md §10` documents daily DB backups.
-Make sure the offsite copy is **encrypted**:
+`docs/RUN-A-MORPHIT-NODE.md §10` documents daily DB backups
+via `ops/backup/morphit-backup.sh`.  The script has built-in
+support for two protections — both off by default, both
+enabled by editing `/etc/morphit/backup.env` (no script
+modification needed):
 
+1. **Per-backup age encryption.**  Set `AGE_RECIPIENT=age1...`
+   to the operator's age public key.  Every backup is then
+   encrypted with `age -r "$AGE_RECIPIENT"` before being
+   written to disk; the resulting filename ends in
+   `.sql.gz.age` instead of `.sql.gz`.
+
+   Generate the keypair OFF this host (laptop, vault host,
+   hardware token):
+   ```sh
+   age-keygen -o ~/.age/morphit-backup.key
+   ```
+   The first line of `morphit-backup.key` is the public key
+   (`age1...`); copy it into `/etc/morphit/backup.env`.  The
+   matching PRIVATE key MUST stay off the morphit host — an
+   attacker who roots the box should not be able to decrypt
+   your offsite backups.
+
+2. **Off-host push.**  Set
+   `REMOTE_DESTINATION=user@backup-host:/morphit/` (any
+   rsync-compatible target) and optionally
+   `SSH_KEY=/etc/morphit/backup-ssh-key`.  Every backup
+   is then rsync'd off this host immediately after the
+   local write.  rsync errors are warned but non-fatal —
+   the local copy remains the source-of-truth.
+
+**Placeholder-value guardrail (cp131):** if either
+`AGE_RECIPIENT` or `REMOTE_DESTINATION` still contains a
+placeholder marker (`REPLACE`, `XXXXX`, `example.com`,
+`CHANGE_ME`), the script SKIPS that feature and logs a
+journald warning rather than silently shipping plaintext
+to a bogus host or producing unencrypted backups operators
+believed were encrypted.  An operator following the
+Ansible defaults (which leave both empty) gets local-only
+plaintext backups — no silent leak.
+
+To verify a backup is genuinely encrypted, try to read it
+WITHOUT the age private key:
 ```sh
-# In the backup script — instead of:
-pg_dump morphit | gzip > /backup/morphit-$(date +%F).sql.gz
+zcat /home/morphit/backups/morphit-20260523-040000.sql.gz.age 2>&1 | head
+# Expected: gzip: stdin: not in gzip format
+#   (because the bytes are age-encrypted, not gzipped)
 
-# Do:
-pg_dump morphit | gzip | \
-  age -r "age1pubkey..." > /backup/morphit-$(date +%F).sql.gz.age
+age --decrypt -i ~/.age/morphit-backup.key \
+    /home/morphit/backups/morphit-20260523-040000.sql.gz.age \
+  | zcat | head
+# Expected: real SQL dump content.
 ```
-
-Store the age private key on a separate operator-controlled
-machine — NOT on the production host (an attacker who gets
-root there shouldn't be able to decrypt your offsite backups).
 
 ### 37.13 Outbound network policy
 
@@ -8799,17 +8847,28 @@ invariant).
   *content* is never in any push payload — the indexer doesn't
   hold chat encryption keys.
 
-- **Unsubscribe is intentionally unauthenticated
-  (DD-4 audit clarification).**  `/v1/push/unsubscribe` accepts
-  `{account, endpoint}` without a signature.  This is a
-  deliberate UX choice — if we required posting-key sig-verify
-  on unsubscribe, a user who locked their session couldn't stop
-  notifications until they unlocked, which is exactly when many
-  users would want push off.  Attack surface: an adversary who
-  has captured a user's endpoint URL (requires HTTPS MITM or
-  local browser access) can remove the subscription.  The
-  user's worst case is missed notifications until they
-  re-subscribe — irritating, not a security failure.
+- **Unsubscribe is signed + rate-limited
+  (cp131 MED-009 — supersedes the pre-cp131 DD-4 audit
+  clarification).**  `/v1/push/unsubscribe` requires the
+  same posting-key signature as subscribe over the
+  canonical message
+  `morphit:push:unsubscribe:<account>:<sha256(endpoint)>:<timestamp>`,
+  and the endpoint is per-IP rate-limited (20/hour, same
+  shape as subscribe).  Pre-cp131 reasoning ("if we
+  required sig-verify on unsubscribe, a user who locked
+  their session couldn't stop notifications") is preserved
+  by accepting unsigned unsubscribes in cp13-compat mode
+  when `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=false` AND by
+  the client falling back to unsigned when the session is
+  locked (the browser-side `PushSubscription.unsubscribe()`
+  already cuts off future deliveries; the relay-side
+  delete is best-effort cleanup).  ACTION-binding in the
+  canonical message prevents subscribe↔unsubscribe
+  signature replay (verified by 5 scenarios in
+  `apps/relay/scripts/canonical-message-cross-check-smoke.ts`).
+  Real attack closed: an adversary with a DB-leaked
+  (account, endpoint) list could pre-cp131 mass-fire
+  unsubscribes and DoS notifications federation-wide.
 
 - **Captured-signature replay window is bounded but non-zero
   (DD-7 audit clarification).**  The subscribe signature has

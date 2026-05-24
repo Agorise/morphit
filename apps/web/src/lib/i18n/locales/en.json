@@ -784,7 +784,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "What is Morphit?",
-				"a": "Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, and Dogecoin) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank."
+				"a": "Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, BLURT, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank."
 			},
 			"is_it_safe": {
 				"q": "Is it safe?",

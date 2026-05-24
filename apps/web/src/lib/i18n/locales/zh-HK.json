@@ -784,7 +784,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Morphit 係咩?",
-				"a": "Morphit 係一個點對點市場,大家直接用現金換加密貨幣(比特幣、門羅幣、BLURT、USDT、美元幣 (USDC)、Dai、比特幣現金、萊特幣、達世幣同狗狗幣)。Morphit 永遠唔會揸住你啲錢,亦唔會問你係邊個。佢係一塊公告板,唔係銀行。"
+				"a": "Morphit 係一個點對點市場,大家直接用現金換加密貨幣(比特幣、門羅幣、BLURT、USDT、美元幣 (USDC)、Dai、比特幣現金、萊特幣、達世幣、狗狗幣、Zcash、Pirate Chain、Decred、Solana、以太坊同 XRP)。Morphit 永遠唔會揸住你啲錢,亦唔會問你係邊個。佢係一塊公告板,唔係銀行。"
 			},
 			"is_it_safe": {
 				"q": "安唔安全?",

@@ -31,21 +31,43 @@
  * smoke recognizes this case via the line's first token and
  * skips it.
  *
- * Scope: every `ops/scripts/*.sh` sidecar.  Each file is one
- * scenario; the file passes iff zero unsafe patterns are found.
+ * Scope: every shell script under `ops/scripts/*.sh` (sidecar
+ * monitor scripts) AND `ops/backup/*.sh` (the cp131-rewritten
+ * backup script, plus any future ops shell scripts).  Each file
+ * is one scenario; the file passes iff zero unsafe patterns are
+ * found.  cp131 widened scope from `ops/scripts/` only — the
+ * narrow scope was a HIGH-002-class scope-too-narrow risk:
+ * `morphit-backup.sh` (cp131 HIGH-001 rewrite) is also a
+ * function-call-heavy shell script and belongs in the gate.
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
-const SIDECAR_DIR = join(REPO, 'ops/scripts');
 
-const SHELL_FILES = readdirSync(SIDECAR_DIR)
-	.filter((f) => f.endsWith('.sh'))
-	.map((f) => join(SIDECAR_DIR, f));
+/** Directories to scan for *.sh files.  cp131 added ops/backup
+ *  to cover the new morphit-backup.sh.  When adding a new ops
+ *  shell-script directory, ADD IT HERE — leaving the smoke
+ *  unaware of a new script directory is the HIGH-002 class. */
+const SHELL_SCRIPT_DIRS = [
+	join(REPO, 'ops/scripts'),
+	join(REPO, 'ops/backup')
+];
+
+const SHELL_FILES: string[] = [];
+for (const dir of SHELL_SCRIPT_DIRS) {
+	if (!existsSync(dir)) {
+		// cp131 fail-loudly: stale scan dir is silent drift.
+		console.error(`✗ stale SHELL_SCRIPT_DIR: '${dir}' does not exist`);
+		process.exit(1);
+	}
+	for (const f of readdirSync(dir)) {
+		if (f.endsWith('.sh')) SHELL_FILES.push(join(dir, f));
+	}
+}
 
 console.log('\n── sidecar shell-quoting static smoke ───────────────────\n');
 console.log(`  sidecar files: ${SHELL_FILES.length}`);

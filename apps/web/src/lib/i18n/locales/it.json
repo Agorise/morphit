@@ -784,7 +784,7 @@
 		"entries": {
 			"what_is_morphit": {
 				"q": "Cos'è Morphit?",
-				"a": "Morphit è un mercato peer-to-peer dove le persone scambiano contanti con criptovalute (Bitcoin, Monero, BLURT, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash e Dogecoin) direttamente tra loro. Morphit non trattiene mai i tuoi soldi e non chiede mai chi sei. È una bacheca, non una banca."
+				"a": "Morphit è un mercato peer-to-peer dove le persone scambiano contanti con criptovalute (Bitcoin, Monero, BLURT, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum e XRP) direttamente tra loro. Morphit non trattiene mai i tuoi soldi e non chiede mai chi sei. È una bacheca, non una banca."
 			},
 			"is_it_safe": {
 				"q": "È sicuro?",

@@ -251,12 +251,24 @@ async function main(): Promise<void> {
 	// on undefined keys).
 	const pushSubscriptionStore = new PushSubscriptionStore(db);
 	const pushSubscribeLimiter = new Limiter(20, 60 * 60_000); // 20/hour/IP
+	// cp131 MED-009 — per-IP rate limit on unsubscribe.  Same
+	// shape as subscribe; legitimate users never hit it
+	// (humans unsubscribe one device at a time), but it
+	// shuts down the DB-leak-DoS class.
+	const pushUnsubscribeLimiter = new Limiter(20, 60 * 60_000); // 20/hour/IP
 	const pushEndpoints = new PushEndpoints(
 		cfg.pushEnabled,
 		cfg.vapidPublicKey,
 		pushSubscribeLimiter,
+		pushUnsubscribeLimiter,
 		pushSubscriptionStore,
 		blurt,
+		cfg.pushRequireSigned,
+		// cp131 MED-009 — unsubscribe signature requirement
+		// follows the same toggle as subscribe.  Operators
+		// who require signed subscribe also require signed
+		// unsubscribe; permissive-mode operators get the
+		// signature verified opportunistically.
 		cfg.pushRequireSigned
 	);
 	const pushSender = cfg.pushEnabled

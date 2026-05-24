@@ -102,12 +102,19 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Notifications
 
-- **Web Push subscriptions** (cp13–cp16) for chat / feedback /
-  outbid events.  VAPID-protected; subscribe requires a valid
-  posting-key signature over a canonical message binding
-  account-name + endpoint + timestamp.  Captured signatures
-  expire after 5 minutes and cannot be replayed across accounts
-  or devices.
+- **Web Push subscriptions** (cp13–cp16, hardened cp131) for
+  chat / feedback / outbid events.  VAPID-protected; subscribe
+  AND unsubscribe both require a valid posting-key signature
+  over a canonical message binding account-name + endpoint +
+  timestamp.  The canonical message ACTION keyword
+  (`subscribe` vs `unsubscribe`) is part of the signed payload,
+  so a captured subscribe signature cannot be replayed as an
+  unsubscribe (and vice-versa).  Captured signatures expire
+  after 5 minutes and cannot be replayed across accounts or
+  devices.  Operators set
+  `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=true` to require
+  signatures (the default for new deployments); permissive
+  mode is available for legacy clients during roll-forward.
 - **In-tab ambient channels** (title-bar badge, favicon dot,
   audio cue, vibration) work even without VAPID keys configured.
 
