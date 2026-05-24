@@ -1013,6 +1013,21 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'admin.setup_wizard.payment.category_online', locale: 'de', reason: `(b) "Online" is the same word in German UI conventions; identical to EN by accepted usage` },
 	{ key: 'admin.setup_wizard.payment.category_crypto', locale: 'fr', reason: `(b) "Crypto" is the same word in French UI conventions; identical to EN by accepted usage` },
 	{ key: 'admin.setup_wizard.payment.description_label', locale: 'fr', reason: `(b) "Description" is the same word in French; identical to EN by spelling identity` },
+	// ─── ADR-0043 / cp132 2FA: closed-source-authenticator brand
+	//     names that do NOT translate.  Google Authenticator,
+	//     Microsoft Authenticator, and Authy are product names
+	//     trademarked by their respective vendors; their .name
+	//     fields render identically in every locale by design.
+	//     The .reason field beside each name IS translated. ──
+	{ key: 'settings.totp.not_recommended_apps.google_authenticator.name', locale: 'de', reason: '(c) "Google Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.google_authenticator.name', locale: 'es', reason: '(c) "Google Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.google_authenticator.name', locale: 'fr', reason: '(c) "Google Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.microsoft_authenticator.name', locale: 'de', reason: '(c) "Microsoft Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.microsoft_authenticator.name', locale: 'es', reason: '(c) "Microsoft Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.microsoft_authenticator.name', locale: 'fr', reason: '(c) "Microsoft Authenticator" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'de', reason: '(c) "Authy" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'es', reason: '(c) "Authy" is a registered product name; does not translate' },
+	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'fr', reason: '(c) "Authy" is a registered product name; does not translate' },
 ];
 
 const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));

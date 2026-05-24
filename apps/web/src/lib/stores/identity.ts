@@ -126,8 +126,64 @@ export const currentEnvelope: Readable<KeystoreEnvelope | null> = derived(intern
  * mutually exclusive, and a successful keystore unlock supersedes the
  * paired pseudonymous session.
  */
-export async function bootFromEnvelope(env: KeystoreEnvelope, password: string): Promise<void> {
+/**
+ * Unlock the keystore via the password path.
+ *
+ * Per ADR-0043, two-factor authentication is **OPT-IN ONLY**.
+ * Users who never enroll a TOTP secret will never see a 2FA prompt
+ * here — this function takes the standard password path, returns
+ * successfully, and the rest of the app runs identically to a
+ * pre-2FA Morphit session.  The only users affected by the 2FA
+ * gate are those who have explicitly clicked "Set up 2FA" in
+ * Settings.  Morphit will never nag, banner, or interrupt to
+ * push enrollment.  This is a privacy/agency stance: requiring
+ * a second factor on a non-custodial wallet is contradictory
+ * with the design — losing the second factor must never lock
+ * the user out, and a forced second factor whose secret lives
+ * on the same device adds friction without cryptographic gain.
+ *
+ * If 2FA IS enrolled and the caller didn't supply a `totpCode`,
+ * a KeystoreError with kind 'totp_required' is thrown.  The
+ * caller (the login UI) is expected to prompt the user for
+ * their authenticator code or a backup code, and re-invoke
+ * with the code attached.  See `keystoreTotp.ts` for the
+ * gate implementation and threat-model framing.
+ */
+export async function bootFromEnvelope(
+	env: KeystoreEnvelope,
+	password: string,
+	totpCode?: string
+): Promise<void> {
 	const full = await decryptIdentity(env, password);
+
+	// 2FA gate — if this keystore has TOTP enrolled, require a
+	// verified TOTP code or backup code before exposing the keys
+	// to the rest of the app via the identity store.  Caller is
+	// expected to handle the 'totp_required' error by prompting
+	// the user and re-calling bootFromEnvelope with the code.
+	if (full.totpSecret) {
+		if (!totpCode) {
+			const { KeystoreError } = await import('$crypto/keystore');
+			throw new KeystoreError(
+				'totp_required',
+				'This keystore has 2FA enabled. Provide your authenticator code or a backup code.'
+			);
+		}
+		const { verifyTotpOrBackup } = await import('$crypto/keystoreTotp');
+		const result = await verifyTotpOrBackup(full, totpCode);
+		if (result.kind === 'backup_redeemed') {
+			// A backup code was consumed — re-encrypt and persist the
+			// updated identity so the same code can't be replayed by
+			// an attacker who reads the keystore before the user
+			// notices the redemption.
+			const { encryptIdentity } = await import('$crypto/keystore');
+			const { writeEnvelope } = await import('$crypto/persistentKeystore');
+			const newEnv = await encryptIdentity(result.updatedIdentity, password);
+			writeEnvelope(newEnv);
+			env = newEnv;
+		}
+	}
+
 	const live = toLiveIdentity(full);
 	// If we were paired-readonly, an envelope unlock is an upgrade.
 	// Wipe the paired marker so the next reload doesn't ambiguously

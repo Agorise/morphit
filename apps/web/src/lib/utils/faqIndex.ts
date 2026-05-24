@@ -122,6 +122,9 @@ export const FAQ_KEYS = [
 	'scam_patterns',
 	'why_self_trading_fails',
 	'why_multi_accounts_fail',
+	'totp_2fa_what_is_it',
+	'totp_2fa_lost_authenticator',
+	'totp_2fa_why_not_google_authenticator',
 
 	// ─── 9. Per-asset (every tradable cryptocurrency) ──────────
 	// Stablecoins (multi-network)

@@ -4,7 +4,59 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp131 — 2026-05-23/24 (deep-deep continuation: full hostile-handler black-hat sweep on all 17 chain-op handlers, doc-drift audit, FAQ accuracy walk on all 131 entries, DB dead-field check, fallback/failover sweep, regex-accuracy audit on 84 unaudited smokes, OPERATIONS.md + RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md line-by-line walks. 13 findings produced — HIGH-001 backup-script-ignored-env-vars, HIGH-002 env-var-consumer-smoke-prefix-bug, MED-003 init.ts-step-count-drift, MED-004 README-ADR-range-drift, LOW-005 duplicate-BLURT-price-source-wiring, HIGH-006 warrant-canary-ghost-op, LOW-007 ADR-0037-_v1-suffix-drift, LOW-008 PHASE-5-chat-op-name-drift, MED-009 push-unsubscribe-unauthenticated+unrate-limited, LOW-010 tar-extract-safety-flags, DEEP-001 what_is_morphit-FAQ-enumerates-10-of-16-assets, DEEP-002 schema-versioning-framing-reconciled-via-Option-1, DEEP-003 schema-migration-coverage-smoke-banner-regex-missed-cp123-cp127-format — ALL 13 SHIPPED end-to-end with sentinels pinning each so the drift class can't recur). **cp131 close-out fully complete + final triple-pulse stable at 5,715/0 (cp130 5,470 + cp131 net +245 from new and widened smokes).**
+**Last touched:** cp132 — 2026-05-24 (optional TOTP-based 2FA shipment + brag-list renumbering + OpenMonero May 2026 exploit figures corrected + 5×-longer comparison image).
+
+**cp132 work units, all complete:**
+
+1. **Opt-in TOTP 2FA shipment (full stack, end-to-end):**
+   - `apps/web/src/lib/auth/totp.ts` — RFC 6238 HMAC-SHA1 + base32 + otpauth:// URI builder + verifyCode with ±1 step (90s) acceptance window. **38 RFC 6238 vector tests passing.**
+   - `apps/web/src/lib/auth/backupCodes.ts` — Crockford-base32 (no 0/O/1/I) 8-char codes × 10, Argon2id-MODERATE hashed, single-use, displayFormat `XXXX-XXXX`. **12 tests passing (72s — intentional Argon2id slowness).**
+   - `apps/web/src/lib/auth/recommendedAuthenticatorApps.ts` — strict open-source-only policy: Aegis (GPL-3.0), 2FAS (GPL-3.0), Ente Auth (AGPL-3.0). Explicit NOT_RECOMMENDED list (Google Authenticator, Microsoft Authenticator, Authy) with reasons.
+   - `apps/web/src/lib/crypto/keygen.ts` — `FullIdentity` extended with optional `totpSecret` + `totpBackupCodes` (both nullable; defaults to null = opt-in).
+   - `apps/web/src/lib/crypto/keystore.ts` — `identityToJson`/`jsonToIdentity` round-trip the new fields with structural validation. Two new `KeystoreErrorKind`: `'totp_required'`, `'totp_invalid'`.
+   - `apps/web/src/lib/crypto/keystoreTotp.ts` — unlock-time `verifyTotpOrBackup` (auto-detects TOTP code vs backup code by char class). Returns `{kind:'ok'}` or `{kind:'backup_redeemed', updatedIdentity}` or throws `'totp_invalid'`.
+   - `apps/web/src/lib/crypto/keystoreTotpEnroll.ts` — `enrollTotp` / `unenrollTotp` / `regenerateBackupCodes` for simple-passphrase envelopes. Layered (YubiKey) keystores currently surface a "not supported, YubiKey already stronger" message.
+   - `apps/web/src/lib/stores/identity.ts` — `bootFromEnvelope(env, password, totpCode?)` gates on TOTP **only if** `full.totpSecret` is set; otherwise transparent for users who never enrolled (opt-in by construction). On backup-code redemption: re-encrypts + persists via `writeEnvelope()` BEFORE returning success (prevents replay).
+   - `apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte` — full state-machine UI: not-enrolled / enrolling-secret / enrolling-backup / enrolled-idle / regenerating / unenrolling / locked / layered-keystore-warning. QR via existing `qrcode` dep. Recommended-apps cards (linking to official site + source repo + F-Droid). Collapsible "apps we don't recommend" disclosure. Honest threat-model framing exposed in the UI.
+   - `apps/web/src/routes/[lang]/login/+page.svelte` — captures `'totp_required'`, surfaces a TOTP entry field, password stays in component state for the second submit. 5-fail → 30s lockout via session-local `totpFailCount`.
+   - `apps/web/src/routes/[lang]/settings/+page.svelte` — link card at the top of the security section pointing to the 2FA route.
+   - All 10 locale JSON files updated: `settings.totp.*` subtree (~60 strings each) + `settings.totp.{confirm_password,confirm_password_to_begin,copy_secret,yubikey_protected}` + 3 new FAQ entries (`totp_2fa_what_is_it`, `totp_2fa_lost_authenticator`, `totp_2fa_why_not_google_authenticator`). Native-QA pending for the 9 non-EN locales per memory rule.
+   - `apps/web/src/lib/utils/faqIndex.ts` — 3 new FAQ keys added under Security & anti-abuse section.
+   - `docs/adr/0043-totp-2fa-opt-in.md` — full design rationale, opt-in commitment, honest threat model, open-source-only policy, backup-code design, rate-limit design, rejected alternatives.
+   - `docs/OPERATIONS.md` §44 — operator-side rundown (TL;DR: zero operator action required).
+   - `docs/RUN-A-MORPHIT-NODE.md` §12 — "A user says they lost their 2FA — can you reset it?" support script with the three-step recovery path.
+   - `MORPHIT-BRAG-LIST.md` entry #322 — "Optional TOTP-based 2FA — never required, never nagged" (KISS-budget compliant: ≤4 sentences, ≤100 words).
+   - 3 new smokes: `2fa-no-google-recommendation-smoke` (42 scenarios), `2fa-recommended-apps-coverage-smoke` (102 scenarios), `2fa-locale-parity-smoke` (720 verifications across 9×80). All registered in `scripts/run-smokes.sh`.
+   - 9 brand-name × 3-locale entries added to `i18n-translation-completeness-smoke` ALLOW_LIST (proper-noun policy for Google Authenticator/Microsoft Authenticator/Authy).
+   - `app.officialUrl` href added to `href-xss-smoke` allowlist with justification (curated TS constant, ADR-0043 open-source-only policy).
+
+2. **Brag list renumbering — locked permanent.** All 322 entries now sequentially numbered 1..322 in document order. Previous drift: entries 319–322 were inserted in the middle of section 3 with their original (out-of-order) numbers; cp131 surfaced this. `scripts/renumber-brag-list.py` shipped as a permanent helper. New invariant **I-5 sequential ordering** added to `brag-list-trailer-invariants-smoke.ts` so the class can't drift again. Trailer count: **322**, ADR range now `1-43`.
+
+3. **OpenMonero May 2026 exploit detail correction.** Per Ken (more recent than public press): the second exploit drained ~40 XMR (~$16,120). Surgical sentence-level replacement applied to brag entry #199 AND to the FAQ `vs_others` answer across all 10 locales (each with native phrasing — de, es, fr, it, pl, ru, fa, zh-CN, zh-HK all got correct grammar for the new sentence).
+
+4. **5×-longer comparison image.** `/mnt/user-data/outputs/morphit-comparison.png` — 2400×9219 px, 1.2 MB, **129 rows across 8 sections** (5× the original 26 rows). Custom inline SVG icons for the 2FA padlock and YubiKey hardware-key. Every feature Ken listed is in: 2FA, YubiKey, immutable feedback, real-time E2EE streaming chat with immutable history, never-been-hacked, solicitor/spammer protection, 94-task security audits, ~3-second trade confirmations, eBay-style anti-sniping, barter, free signup / zero deposit / no-JS / public orderbook, warrant canary, featured-trade auctions, push notifications with inbox, one-click trade relist, public API, immutable reputation, loyalty milestones, plus ~100 more across Privacy / Custody / Audits / Speed-UX / Access / Assets / Federation / Community. Counts: Morphit 125/129, Bisq 16/129, Haveno/RetoSwap 21/129, OpenMonero 18/129, BasicSwap 20/129. Build script: `/home/claude/work/build_comparison.py`.
+
+**Resume here:** unpack the latest `morphit-audit-2026-05-122-cp132-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. SHA-256 at the bottom of this section.
+
+**Where the project stands:**
+- 16 tradable assets · **42 ADRs** (cp132 added ADR-0043 opt-in TOTP 2FA) · **322 brag entries** (cp132 added #322 opt-in TOTP 2FA; renumbered the entire list 1..322 sequential) · locale parity holds (~30,030 strings × 10 with the new 2FA tree + 3 FAQ entries × 10 = ~660 new translation cells)
+- **Triple-pulse 5,890 / 5,890 / 5,890 scenarios passed, 0 failures across all 3 pulses**
+- **TypeScript clean** across all 5 workspaces (indexer, relay, ops-cli, matrix-bot, web; src + test trees)
+- **Vitest:** 1,431 tests passing (493 indexer + 244 relay + 694 web; +50 new web tests from the TOTP + backup-codes batteries)
+- **Mediakit rebuilt** at `apps/web/static/morphit-mediakit.zip` (46.5 KB) — fresh relative to all sources
+
+**Standing pre-launch operator-actions (carried forward, unchanged):**
+- Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql` before any production deploy
+- Native-speaker QA of all 10 auto-translated locales (cp108-cp132 backlog, now includes cp132's `settings.totp.*` tree + 3 FAQ entries × 9 non-EN locales)
+- Three-persona walkthrough (Bob multi-login / Sally-user / Sally-operator) with the new feedback system as a checked facet
+
+**Brief history (preserved from cp131):**
+
+---
+
+## cp131 handoff (kept for context)
+
+
 
 **Resume here:** unpack the latest `morphit-audit-2026-05-122-cp131-FULL-STATE.tar.gz` into your working directory. The repo state in the tarball IS the source of truth. SHA-256 of the handoff tarball is at the bottom of this section.
 

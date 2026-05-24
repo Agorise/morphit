@@ -401,6 +401,122 @@
 			"clear_confirm_body": "清除已儲存的法幣和地區?下次發布時您只需重新選擇它們。",
 			"clear_confirm_yes": "是,清除",
 			"clear_confirm_cancel": "保留"
+		},
+		"totp": {
+			"heading": "雙因素身份驗證",
+			"subtitle": "喺密碼之後加多一個身份驗證器應用程式作為第二因素。防範偷窺、借用設備同普通本地惡意軟件。",
+			"honest_framing": {
+				"title": "呢個保護到啲乜嘢 — 老實咁講",
+				"protects_intro": "基於 TOTP 嘅 2FA 喺密碼之後係一道有意義嘅第二道屏障。可以阻止:",
+				"protects_shoulder_surf": "有人睇住你打密碼",
+				"protects_borrowed": "見過你登入一次嘅朋友喺你部手提電腦再試",
+				"protects_malware": "攞到你 keystore 但唔知點樣攞出 TOTP 密鑰嘅普通本地惡意軟件",
+				"limits_intro": "佢唔會對以下情況增加加密強度:",
+				"limits_offline": "已經偷咗你加密 keystore 同破解咗你密碼嘅堅定攻擊者 — TOTP 密鑰同啲鑰匙住喺同一個加密塊度。",
+				"limits_path_forward": "對於真正嘅加密 2FA,即係第二因素嘅密鑰永遠唔會住喺受保護設備上,前進嘅道路係 FIDO2/WebAuthn 硬件鑰匙。Morphit 有探索性支援;仲未準備好用於生產。"
+			},
+			"status": {
+				"not_enrolled": "雙因素身份驗證已關閉。",
+				"enrolled": "雙因素身份驗證已開啟。",
+				"enrolled_since": "由 {date} 起激活。",
+				"backup_codes_remaining": "剩餘 {count} 個備用代碼",
+				"backup_codes_low": "你嘅備用代碼快用完。重新產生一組新嘅,放喺安全嘅地方。",
+				"backup_codes_exhausted": "你冇剩餘嘅備用代碼。如果你唔見咗身份驗證器,你需要你嘅種子短語嚟恢復。"
+			},
+			"enroll": {
+				"cta": "設置雙因素身份驗證",
+				"step1_title": "1. 安裝開源身份驗證器應用程式",
+				"step1_body": "我哋強烈推薦下面嘅開源選項。Morphit 唔推薦 Google Authenticator、Microsoft Authenticator 或者 Authy — 閉源,有可能洩漏你密鑰嘅備份/同步路徑。",
+				"step2_title": "2. 掃描二維碼",
+				"step2_body": "打開你嘅身份驗證器並掃描呢個代碼。如果你冇辦法掃描(冇相機、無障礙),手動輸入下面嘅密鑰。",
+				"manual_label": "手動輸入(密鑰):",
+				"manual_help": "帳戶: {account}。類型: 基於時間(TOTP)。算法: SHA-1。位數: 6。間隔: 30 秒。",
+				"step3_title": "3. 確認你應用程式中嘅代碼",
+				"step3_body": "輸入你嘅身份驗證器當前顯示嘅 6 位代碼。代碼每 30 秒輪換一次;如果你嘅啱啱變,等下一個。",
+				"code_label": "當前 6 位代碼",
+				"code_placeholder": "000000",
+				"confirm_cta": "確認並啟用 2FA",
+				"confirm_busy": "驗證中…",
+				"step4_title": "4. 保存你嘅備用代碼",
+				"step4_body": "如果你唔見咗身份驗證器,呢十個代碼會畀你登入。每個代碼精確地工作一次。將佢哋保存喺安全嘅地方 — 密碼管理器、打印並鎖起,或者寫喺紙上。我哋唔會再顯示。",
+				"backup_acknowledge": "我已將呢啲備用代碼保存喺安全嘅地方。",
+				"backup_continue": "完成設置",
+				"cancel": "取消",
+				"err_invalid_code": "個代碼冇通過驗證。檢查你嘅設備時間係咪同步,然後再試。",
+				"err_internal": "出咗問題。你嘅 keystore 冇變;請再試。",
+				"err_locked": "你嘅會話已鎖定。請先解鎖,然後再試。"
+			},
+			"unenroll": {
+				"cta": "停用雙因素身份驗證",
+				"confirm_heading": "停用 2FA",
+				"confirm_body": "你會可以淨係用密碼解鎖。你確定?",
+				"code_label": "當前 6 位代碼(用嚟確認)",
+				"submit": "停用 2FA",
+				"submit_busy": "停用中…",
+				"cancel": "保持 2FA 啟用",
+				"success": "雙因素身份驗證已停用。",
+				"err_invalid_code": "個代碼冇通過驗證。請再試。"
+			},
+			"regenerate": {
+				"cta": "重新產生備用代碼",
+				"confirm_heading": "重新產生備用代碼",
+				"confirm_body": "你之前嘅備用代碼會立即停止工作。喺繼續之前,確保你可以完成新代碼嘅保存步驟。",
+				"code_label": "當前 6 位代碼(用嚟確認)",
+				"submit": "產生新代碼",
+				"submit_busy": "產生中…",
+				"cancel": "取消",
+				"success": "新備用代碼已產生。即刻保存。",
+				"err_invalid_code": "個代碼冇通過驗證。請再試。"
+			},
+			"unlock_prompt": {
+				"heading": "雙因素代碼",
+				"body": "你嘅密碼成功。而家輸入你身份驗證器應用程式中嘅 6 位代碼,或者備用代碼。",
+				"code_label": "身份驗證器代碼或備用代碼",
+				"code_placeholder": "000000 或 XXXX-XXXX",
+				"submit": "繼續",
+				"submit_busy": "驗證中…",
+				"cancel": "取消",
+				"err_invalid_code": "個代碼冇通過驗證。檢查你嘅設備時間係咪同步,或者試備用代碼。",
+				"err_locked_out": "太多無效嘗試。{seconds} 秒後再試。",
+				"backup_code_redeemed_warning": "剛剛使用咗一個備用代碼。剩餘 {remaining} 個備用代碼。"
+			},
+			"recommended_apps": {
+				"heading": "推薦嘅身份驗證器應用程式(開源)",
+				"aegis": {
+					"tagline": "加密本地備份,生物識別鎖,冇雲端同步。淨係 Android。"
+				},
+				"2fas": {
+					"tagline": "iOS + Android。可選嘅加密雲備份係 OPT-IN,唔係默認。"
+				},
+				"ente": {
+					"tagline": "端對端加密嘅跨設備同步(iOS + Android + Linux + Mac + Windows + Web)。"
+				}
+			},
+			"not_recommended_apps": {
+				"heading": "我哋唔推薦嘅應用程式(同原因)",
+				"expand": "睇我哋建議避免邊啲應用程式",
+				"collapse": "隱藏",
+				"google_authenticator": {
+					"name": "Google Authenticator",
+					"reason": "閉源。雲備份默認將密鑰同步到 Google(opt-OUT,唔係 opt-IN),呢啲密鑰唔係端對端加密到你帳戶密碼。"
+				},
+				"microsoft_authenticator": {
+					"name": "Microsoft Authenticator",
+					"reason": "閉源。強制 Microsoft 帳戶遙測。"
+				},
+				"authy": {
+					"name": "Authy",
+					"reason": "閉源。淨係雲備份,有帳戶恢復漏洞歷史(SIM-swap 向量)。桌面應用程式喺 2024 年廢棄。"
+				}
+			},
+			"lost_device": {
+				"heading": "如果我唔見咗身份驗證器點算?",
+				"body": "喺解鎖時用你 10 個備用代碼中嘅一個。每個工作一次。如果你唔見咗身份驗證器同所有備用代碼,你需要你嘅 12 個字嘅種子短語嚟恢復 — 冇管理員可以幫助,因為 Morphit 唔持有你嘅密鑰。"
+			},
+			"confirm_password_to_begin": "確認您嘅密碼以開始",
+			"confirm_password": "確認您嘅密碼",
+			"copy_secret": "複製",
+			"yubikey_protected": "呢個 keystore 受 YubiKey 保護。此版本唔支持將基於 TOTP 嘅 2FA 添加到受 YubiKey 保護嘅 keystore。您嘅 YubiKey 已經提供咗比 TOTP 更強嘅加密身份驗證。"
 		}
 	},
 	"profile": {
@@ -792,7 +908,7 @@
 			},
 			"vs_others": {
 				"q": "Morphit 同 LocalMonero、LocalBitcoins、Haveno/Retoswap 有咩唔同?",
-				"a": "短版:Morphit 喺去中心化、私隱同非託管三樣嘢上都行得比佢哋任何一個都遠——代價係有心咁做少啲嘢。 LocalBitcoins(2023 年執咗)同 LocalMonero(2024 年執咗)都係中心化公司、走託管式中介。交易一出事,佢哋個人類仲裁員揸住啲幣、決定啲幣畀邊個。公司一執——無論係監管壓力定自己決定——所有用家、信譽、紛爭紀錄、做緊嘅交易,一夜之間全部消失。Morphit 唔會用同一個方式畀人關閉:冇中心仲裁員,冇託管錢包,冇公司銀行戶口畀人凍結。每個訂單都係住喺 Blurt 度,每筆交易都係點對點,任何人都可以自己跑索引器或者前端。多個版本分佈喺四個網絡(明網、Tor、Lokinet、I2P)上面,擋走一個節點都冇用。 Haveno(同埋佢個 fork Retoswap)精神上就近好多——非託管、P2P、冇 KYC。幾個主要分別:Haveno 係一個 desktop Java/JavaFX app,佢個 2-of-3 multisig 託管綁實喺 Monero 鏈,仲要你自己跑(或者連去)一個 seednode。Morphit 喺任何瀏覽器、任何電話都行,唔使裝嘢;佢用 Blurt(唔係 Monero)做協調層,每一個動作都快啲、又平好多(近乎免費,相比 Monero 每條 op 都要 fee);仲有原生支援 Tor、Lokinet、I2P,唔使你自己搞。Haveno 啲交易行仲裁式託管,穩陣但每個市場都要有可信仲裁員。Morphit v1 係純粹靠信譽嘅公告板——冇託管、冇仲裁員,全部責任返番去交易者身上,要自己揀有真記錄嘅對手。保守啲嘅安全模型,但同時中心瓶頸少咗、又冇一個畀政府施壓嘅仲裁員位。 私隱方面:Morphit 喺傳輸、儲存同 chat 都壓過上面所有人。\n• 傳輸:四個網絡一齊行,全部都係一等公民(唔係嗰種「順手開個 onion 模式」)。\n• 儲存:關於你嘅嘢冇一樣住喺 Morphit 個伺服器度——key 喺你個瀏覽器度,訂單喺 Blurt 上,chat 都係喺 Blurt 上、而且淨係密文。Haveno 將交易歷史留喺你個 desktop;Morphit 同佢平齊,仲畀你凈係靠 12 個字嘅助記詞就可以換任何一部機繼續用。\n• Chat:使用 X25519 密鑰協商加上 ChaCha20-Poly1305(嚟自 libsodium)進行端到端加密,每條訊息使用新嘅臨時密鑰。LocalBitcoins/LocalMonero 聊天對員工可見。Haveno 聊天係端到端加密嘅。Morphit 聊天喺你嘅裝置上加密,作為密文儲存喺 Blurt 區塊鏈上,只有兩個參與者可以解密 — 操作員同鏈觀察者睇唔到任何內容。我哋刻意選擇簡單、快速、包體積輕嘅 ECIES 設計。 非託管方面:LocalBitcoins/LocalMonero 喺交易期間揸住你啲幣。Haveno/Retoswap 喺交易期間將啲幣鎖喺 multisig。Morphit 任何一刻都唔會掂你啲幣——賣家確認收錢之後就直接打畀買家。信任更多放喺信譽度、對密碼學依賴少啲;我哋對呢個取捨講到明。 仲裁方面:LocalBitcoins/LocalMonero 嘅仲裁員可以覆蓋反饋。Haveno 嘅仲裁員可以改變 multisig 結算方向。Morphit 完全冇仲裁員呢個角色;反饋係永久嘅、鏈上簽咗名。你呃人,你個 public key 就會永遠帶住嗰條反饋;冇任何人可以畀你申訴。對慣犯嚟講威嚇力極大,對新手受害者就零保護——所以先再三強調要睇對方嘅戶口年齡同信譽。 佢哋有而 Morphit 冇嘅:託管、人類仲裁、分市場嘅人手審核。**Morphit 永遠唔會提供以上任何一樣。** 重新引入託管、multisig 或者仲裁,即係重新引入呢個項目存在係為咗消除嘅中間人。Morphit 嘅優勢就係輕、方便搬、瀏覽器原生、每一層都完全去中心化、停唔到——取捨就係:喺不可篡改、可驗證嘅信譽上做交易。\n\n2026年5月20日,Haveno交易協議遭到攻擊,損失約270萬美元。攻擊者使用偽造的、來自虛假仲裁員的亂序確認訊息,在用戶資金存入之前重定向了2-of-3多簽錢包地址;RetoSwap當日就停止了交易。Morphit的設計中沒有仲裁員角色、沒有多簽託管、也沒有Haveno漏洞所依賴的中央協調訊息——所以這類攻擊不適用於我們的威脅模型。代價是真實的,如上所述:Morphit用戶承擔完全的自我託管,並依賴簽名的鏈上聲譽,而不是仲裁員的安全網。\n\nOpenMonero(LocalMonero 嘅克隆)喺 12 個月內已經兩次損失用戶資金。2025 年 6 月 6 日,錯誤配置嘅防火牆同 wallet-rpc 組合從該平台嘅托管內部錢包流失咗大約 77.85 XMR(~$25,225);一年多後,退款仍然透過交易費支付,商家優先於普通用戶。2026 年 5 月 21 日 — Haveno 漏洞利用後嘅一日 — OpenMonero 發布咗第二次漏洞利用警報,並話畀用戶聽要停止所有付款。Morphit 根本冇托管錢包;您嘅 XMR 從來唔會存放喺 Morphit 服務器上,所以整個攻擊類別根本冇可偷嘅嘢。模式係一致嘅:每個喺內部錢包入面持有用戶資金嘅 Monero P2P 平台至少被掏空過一次。Morphit 嘅答案係根本唔持有佢哋。"
+				"a": "短版:Morphit 喺去中心化、私隱同非託管三樣嘢上都行得比佢哋任何一個都遠——代價係有心咁做少啲嘢。 LocalBitcoins(2023 年執咗)同 LocalMonero(2024 年執咗)都係中心化公司、走託管式中介。交易一出事,佢哋個人類仲裁員揸住啲幣、決定啲幣畀邊個。公司一執——無論係監管壓力定自己決定——所有用家、信譽、紛爭紀錄、做緊嘅交易,一夜之間全部消失。Morphit 唔會用同一個方式畀人關閉:冇中心仲裁員,冇託管錢包,冇公司銀行戶口畀人凍結。每個訂單都係住喺 Blurt 度,每筆交易都係點對點,任何人都可以自己跑索引器或者前端。多個版本分佈喺四個網絡(明網、Tor、Lokinet、I2P)上面,擋走一個節點都冇用。 Haveno(同埋佢個 fork Retoswap)精神上就近好多——非託管、P2P、冇 KYC。幾個主要分別:Haveno 係一個 desktop Java/JavaFX app,佢個 2-of-3 multisig 託管綁實喺 Monero 鏈,仲要你自己跑(或者連去)一個 seednode。Morphit 喺任何瀏覽器、任何電話都行,唔使裝嘢;佢用 Blurt(唔係 Monero)做協調層,每一個動作都快啲、又平好多(近乎免費,相比 Monero 每條 op 都要 fee);仲有原生支援 Tor、Lokinet、I2P,唔使你自己搞。Haveno 啲交易行仲裁式託管,穩陣但每個市場都要有可信仲裁員。Morphit v1 係純粹靠信譽嘅公告板——冇託管、冇仲裁員,全部責任返番去交易者身上,要自己揀有真記錄嘅對手。保守啲嘅安全模型,但同時中心瓶頸少咗、又冇一個畀政府施壓嘅仲裁員位。 私隱方面:Morphit 喺傳輸、儲存同 chat 都壓過上面所有人。\n• 傳輸:四個網絡一齊行,全部都係一等公民(唔係嗰種「順手開個 onion 模式」)。\n• 儲存:關於你嘅嘢冇一樣住喺 Morphit 個伺服器度——key 喺你個瀏覽器度,訂單喺 Blurt 上,chat 都係喺 Blurt 上、而且淨係密文。Haveno 將交易歷史留喺你個 desktop;Morphit 同佢平齊,仲畀你凈係靠 12 個字嘅助記詞就可以換任何一部機繼續用。\n• Chat:使用 X25519 密鑰協商加上 ChaCha20-Poly1305(嚟自 libsodium)進行端到端加密,每條訊息使用新嘅臨時密鑰。LocalBitcoins/LocalMonero 聊天對員工可見。Haveno 聊天係端到端加密嘅。Morphit 聊天喺你嘅裝置上加密,作為密文儲存喺 Blurt 區塊鏈上,只有兩個參與者可以解密 — 操作員同鏈觀察者睇唔到任何內容。我哋刻意選擇簡單、快速、包體積輕嘅 ECIES 設計。 非託管方面:LocalBitcoins/LocalMonero 喺交易期間揸住你啲幣。Haveno/Retoswap 喺交易期間將啲幣鎖喺 multisig。Morphit 任何一刻都唔會掂你啲幣——賣家確認收錢之後就直接打畀買家。信任更多放喺信譽度、對密碼學依賴少啲;我哋對呢個取捨講到明。 仲裁方面:LocalBitcoins/LocalMonero 嘅仲裁員可以覆蓋反饋。Haveno 嘅仲裁員可以改變 multisig 結算方向。Morphit 完全冇仲裁員呢個角色;反饋係永久嘅、鏈上簽咗名。你呃人,你個 public key 就會永遠帶住嗰條反饋;冇任何人可以畀你申訴。對慣犯嚟講威嚇力極大,對新手受害者就零保護——所以先再三強調要睇對方嘅戶口年齡同信譽。 佢哋有而 Morphit 冇嘅:託管、人類仲裁、分市場嘅人手審核。**Morphit 永遠唔會提供以上任何一樣。** 重新引入託管、multisig 或者仲裁,即係重新引入呢個項目存在係為咗消除嘅中間人。Morphit 嘅優勢就係輕、方便搬、瀏覽器原生、每一層都完全去中心化、停唔到——取捨就係:喺不可篡改、可驗證嘅信譽上做交易。\n\n2026年5月20日,Haveno交易協議遭到攻擊,損失約270萬美元。攻擊者使用偽造的、來自虛假仲裁員的亂序確認訊息,在用戶資金存入之前重定向了2-of-3多簽錢包地址;RetoSwap當日就停止了交易。Morphit的設計中沒有仲裁員角色、沒有多簽託管、也沒有Haveno漏洞所依賴的中央協調訊息——所以這類攻擊不適用於我們的威脅模型。代價是真實的,如上所述:Morphit用戶承擔完全的自我託管,並依賴簽名的鏈上聲譽,而不是仲裁員的安全網。\n\nOpenMonero(LocalMonero 嘅克隆)喺 12 個月內已經兩次損失用戶資金。2025 年 6 月 6 日,錯誤配置嘅防火牆同 wallet-rpc 組合從該平台嘅托管內部錢包流失咗大約 77.85 XMR(~$25,225);一年多後,退款仍然透過交易費支付,商家優先於普通用戶。2026 年 5 月 21 日 — Haveno 漏洞利用後嘅一日 — 第二次漏洞利用從 OpenMonero 流失咗大約 40 XMR(~$16,120);平台發布咗警報,並話畀用戶聽要停止所有付款。Morphit 根本冇托管錢包;您嘅 XMR 從來唔會存放喺 Morphit 服務器上,所以整個攻擊類別根本冇可偷嘅嘢。模式係一致嘅:每個喺內部錢包入面持有用戶資金嘅 Monero P2P 平台至少被掏空過一次。Morphit 嘅答案係根本唔持有佢哋。"
 			},
 			"vs_atomic_swap_dexes": {
 				"q": "Morphit 同 Bisq 或者 BasicSwap 有咩唔同?",
@@ -1305,6 +1421,18 @@
 			"how_to_spread_morphit": {
 				"q": "我如何讓人們使用 Morphit?",
 				"a": "口碑是整個增長策略。Morphit 不打廣告、不投放推廣內容、不付費給網紅——但每個把幾個人帶到平台上的營運商和支持者,都讓訂單簿對所有人來說實質上更有用。以下是已被證明有效的渠道,大致按所需努力排序:\n\n**1. 線上渠道(免費)。**\n- **部落格文章**發布在 Blurt.blog(在你交易的同一生態系統中發布——並為帖子賺取 BLURT)、Substack、Medium、Ghost、Mirror 或你自己的網站。關於 Morphit、Blurt 和更廣泛的密碼朋克 fiat-to-crypto 問題的深度文章歷久彌新:可連結、可引用、長青。交叉發布到 Hacker News、Lobste.rs、Monero subreddit,以及任何相關的社群。\n- **meetup.com 群組**:加密貨幣、比特幣、Monero、私隱、自由主義、freedom-tech、mesh 網絡及相鄰主題——許多每月有一次聚會,5 分鐘展示 Morphit 應用是受歡迎的\n- **大學社團和公告板**——學生密碼學社團、自由主義學生團體、電腦科學學會。貼一張印有 /install QR 碼的海報。\n- **現有的私隱/保安社群**,如 KYCnot.me、PrivacyGuides 論壇、Monero subreddit/Matrix、GrapheneOS 討論\n\n**2. 實體渠道(小印刷成本)。**\n- **下班時間在工廠門口派發傳單**——許多工人有未銀行化的現金需要,crypto-no-KYC 可以解決,他們在隊列中固定停留 60 秒,你可以遞給他們東西\n- **停車場車輛上的傳單、門上的傳單、社群公告板上的傳單**——咖啡店、圖書館、makerspaces、freedom-tech 活動。保持 QR 碼大,call-to-action 一行('買加密貨幣,無需 ID'/'賣加密貨幣換現金')\n- **貼紙**在會議的筆記型電腦上,在科技密集街區的燈柱上。每次曝光比傳單更便宜\n\n**3. 交叉推廣(免費)。**\n- **其他加密貨幣社群**:以太坊、DeFi、Solana、XRP、Pirate Chain、Decred——每個都有自己的用戶群,Morphit 全部交易。'我們也交易你最喜歡的幣,peer-to-peer 無 KYC' 的角度很有效\n- **價值觀重疊的非加密社群**:自由主義團體、voluntaryist 聚會、私隱倡導者、硬通貨倡導者、freedom-tech 和 mesh 網絡社群、agorist 圈子。Morphit 專門為這些社群已經持有的價值觀而構建\n\n**4. 付費本地推廣者(營運商級別,適度支出)。**\n- 付給一個對加密貨幣好奇的本地'極客行銷者'一個小的 peso 基本薪金(或你的本地貨幣),加上用 BLURT 支付的業績佣金。peso 薪金讓他們保持承諾;BLURT 佣金將他們與網絡的長期增長對齊,並給他們一個 free-speech-token 的股份。有效的佣金事件:新帳戶註冊(小獎勵)、首次成功交易(更大獎勵)、在聚會上演示應用(基於事件的獎勵)\n- 這正是 Morphit 聯邦模型大放異彩的那種分散式 grassroots 行銷——每個營運商都可以構建自己的本地推廣者網絡,獨立於任何中央行銷預算\n\n**5. 不要做的事。**\n- 不要在你不是常客的 Telegram 群組、Discord 伺服器或 subreddit 中洗版。加密社群有強烈的防洗版反射,你會燒掉品牌\n- 不要向已經有 CEX 帳戶且對其滿意的人推銷 Morphit;向未銀行化者、注重私隱者、CEX 帳戶被凍結的人推銷\n- 不要承諾 Morphit 不承諾的事情(沒有即時仲裁、沒有 escrow、沒有保證流動性)——過度承諾會導致流失\n\n聯邦模型意味著每次成功的本地推廣都為所有人擴大網絡。透過你的營運商實例加入的聚會參與者,是同時可在每個其他營運商實例上存取的交易對手。本地增長就是全球增長。"
+			},
+			"totp_2fa_what_is_it": {
+				"q": "咩係雙因素身份驗證,我點樣喺 Morphit 上啟用?",
+				"a": "雙因素身份驗證(2FA)意思係你需要兩個證據嚟解鎖你嘅 Morphit keystore:你嘅密碼(你知嘅嘢)加上手機應用程式中轉動嘅 6 位數代碼(你擁有嘅嘢)。喺 Morphit 上,2FA 完全係可選嘅 — Morphit 永遠唔會要求佢,唔會催促你註冊,亦唔會警告你冇佢你嘅帳戶\"唔安全\"。要啟用佢,去設置 → 雙因素身份驗證,安裝我哋推薦嘅開源身份驗證器應用程式之一(Aegis、2FAS 或者 Ente Auth),掃描二維碼並將 10 個備用代碼保存喺安全嘅地方。誠實咁講佢做啲乜:Morphit 上嘅 2FA 阻止偷窺、借用設備重放同埋普通本地惡意軟件。佢唔會對同時擁有你加密 keystore 同你密碼嘅攻擊者增加加密強度 — TOTP 密鑰同你嘅密鑰住喺同一個加密塊度。對於嗰個威脅模型,前進嘅道路係 FIDO2/WebAuthn 硬件密鑰,Morphit 對此有探索性支援。"
+			},
+			"totp_2fa_lost_authenticator": {
+				"q": "我唔見咗我嘅身份驗證器應用程式 — 點樣返嚟?",
+				"a": "當你註冊 2FA 嘅時候,Morphit 向你顯示咗 10 個備用代碼,並要求你確認已將佢哋保存喺安全嘅地方(密碼管理器、打印並鎖起,或者寫喺紙上)。喺解鎖畫面,輸入呢啲備用代碼之一而唔係 6 位數嘅身份驗證器代碼 — 解鎖字段兩者都接受。每個備用代碼只能精確工作一次;keystore 會自動將佢標記為已用,並喺畀你入嚟之前重新保存。如果你用咗所有 10 個備用代碼,並且亦都唔見咗你嘅身份驗證器,你唯一嘅返回路徑就係你嘅 12 個字嘅種子短語 — 登出,然後喺歡迎畫面選擇\"我有種子短語\",輸入 12 個字並設置新密碼。你嘅密鑰係由種子派生嘅,所以呢個可以精確咁恢復所有內容。冇 Morphit 管理員可以重置你嘅 2FA — Morphit 唔持有你嘅密鑰,所以如果你唔見咗所有三個:身份驗證器、備用代碼同種子,我哋真係幫唔到手。"
+			},
+			"totp_2fa_why_not_google_authenticator": {
+				"q": "點解 Morphit 唔推薦 Google Authenticator?",
+				"a": "三個原因。第一:閉源。我哋無法驗證佢對你嘅密鑰做咗乜,你亦都無法驗證。第二:雲備份。由 2023 年起,Google Authenticator 默認將你嘅 2FA 密鑰同步到你嘅 Google 帳戶 — opt-OUT,唔係 opt-IN — 呢啲密鑰唔係用你控制嘅密碼端對端加密。即係話任何破壞你 Google 帳戶嘅人(網絡釣魚、SIM 卡交換、Google 唔見咗密鑰、傳票)都會一次過獲得你所有 2FA 密鑰。第三:喺尊重隱私嘅市場上 2FA 嘅全部意義在於第二個因素同你嘅主要帳戶保持分離。推薦同 Google 同步嘅身份驗證器會違背為咗完全選擇 Morphit 嚟避免嗰種模式嘅確切用戶群體(注重隱私嘅 Bitcoin 同 Monero 交易者)嘅目的。Morphit 推薦你控制備份位置嘅開源應用程式:Aegis(Android,加密本地備份)、2FAS(iOS + Android,可選 opt-in 雲備份)或者 Ente Auth(跨平台,端對端加密同步)。如果你已經有一個唔喺我哋列表中你信任嘅身份驗證器 — KeePassXC TOTP、Bitwarden Authenticator、Yubico Authenticator、andOTP — 冇問題。建議係\"我哋建議新用戶用乜\",唔係其他任何嘢嘅拒絕列表。"
 			}
 		},
 		"share_link": "分享連結",
