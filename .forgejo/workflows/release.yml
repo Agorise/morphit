@@ -59,6 +59,43 @@ jobs:
           done
           echo "Imported $asc_count authorized signer key(s)."
 
+      - name: Restore annotated tag (actions/checkout strips signatures)
+        # Forgejo Actions (and GitHub Actions) ship a version of
+        # actions/checkout that, after fetching all refs correctly,
+        # performs a SECOND fetch of the form
+        # `+<commit-sha>:refs/tags/<tag>` which force-rewrites the
+        # tag in the runner's local workspace to a lightweight
+        # pointer at the commit.  This destroys the annotated tag
+        # object locally — and therefore destroys the signature —
+        # even though the tag on the Forgejo server is still a
+        # proper annotated signed tag.
+        #
+        # `git verify-tag` operates on the local copy, so it sees
+        # the lightweight pointer and fails with:
+        #   "cannot verify a non-tag object of type commit"
+        #
+        # Re-fetch the tag in its annotated form before verify.
+        # The `+refs/tags/X:refs/tags/X` refspec preserves tag
+        # objects (vs the commit-SHA refspec checkout uses).
+        # See: github.com/actions/checkout issue #290 / #1467.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          git fetch origin "+refs/tags/${TAG}:refs/tags/${TAG}" --force
+          # Sanity-check: confirm we now have a tag object, not a
+          # commit.  If this fails, the fetch above didn't restore
+          # the annotated form (which would mean the tag on the
+          # server is also lightweight — a separate bug).
+          OBJTYPE=$(git cat-file -t "${TAG}")
+          if [ "$OBJTYPE" != "tag" ]; then
+            echo "ERROR: ${TAG} is a '${OBJTYPE}' object, not 'tag'" >&2
+            echo "       This means the tag on the server is lightweight." >&2
+            echo "       Delete and recreate with: git tag -s ${TAG} -m '...'" >&2
+            exit 1
+          fi
+          echo "✓ ${TAG} restored as annotated tag object"
+
       - name: Verify tag is signed by an authorized key
         # Part 122 cp8 — the tag itself must be a signed annotated
         # tag (`git tag -s vX.Y.Z`).  `git verify-tag` consults
