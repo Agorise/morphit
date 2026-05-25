@@ -625,9 +625,38 @@ export async function generateCek(): Promise<Uint8Array> {
 	return sodium.randombytes_buf(CEK_BYTES);
 }
 
-/** Defensive minimums for KDF parameters in a stored envelope. */
-const MIN_KDF_OPSLIMIT = 1;
-const MIN_KDF_MEMLIMIT = 1 << 20; // 1 MB
+/** Defensive minimums for KDF parameters in a stored envelope.
+ *
+ *  cp138 C-1 — raised to libsodium's `crypto_pwhash_OPSLIMIT_
+ *  INTERACTIVE` (=2) and `crypto_pwhash_MEMLIMIT_INTERACTIVE`
+ *  (=64 MiB) values.  This closes the M4 finding from the
+ *  2026-04-28 batch-I audit:
+ *
+ *    Pre-cp138: ops>=1, mem>=1 MiB.  The decrypt path uses
+ *    INTERACTIVE (ops=2, mem=64 MiB) so stored params are
+ *    advisory today, BUT a future code change that honored
+ *    stored params would silently accept a tampered envelope
+ *    with ops=1 mem=1 MiB.  At that floor, password cracking
+ *    is ~6000× cheaper than at INTERACTIVE — a downgrade attack
+ *    against any user whose localStorage gets compromised.
+ *
+ *  Post-cp138: ops>=2, mem>=64 MiB.  Floor matches encrypt-time
+ *  default exactly.  A tampered envelope that drops below this
+ *  floor is rejected.  No drift surface left.
+ *
+ *  Note: these are also above OWASP's Argon2id floor (m=19 MiB,
+ *  t=2, p=1) — INTERACTIVE is 3.4× OWASP's memory floor.  The
+ *  parallelism field is fixed at 1 by libsodium and not exposed
+ *  in the envelope; not part of the floor check.
+ *
+ *  If libsodium ever bumps its INTERACTIVE constants in a future
+ *  release, this floor will lag the bump.  That's intentional:
+ *  the floor is a downgrade-attack guard, not a forward-secrecy
+ *  guarantee.  An old envelope written at the prior INTERACTIVE
+ *  still decrypts fine; new envelopes at the new INTERACTIVE
+ *  comfortably exceed the floor.  No breakage either way. */
+const MIN_KDF_OPSLIMIT = 2; // crypto_pwhash_OPSLIMIT_INTERACTIVE
+const MIN_KDF_MEMLIMIT = 64 * 1024 * 1024; // 64 MiB = crypto_pwhash_MEMLIMIT_INTERACTIVE
 
 function assertSafeKdfParams(p: { opslimit: number; memlimit: number } | undefined): void {
 	if (

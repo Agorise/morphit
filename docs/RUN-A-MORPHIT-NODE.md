@@ -1583,7 +1583,7 @@ Two operator-config knobs set at `morphit-ops init` time and editable in `morphi
 - `MORPHIT_MATRIX_BOT_ALERT_MXID` — your private MXID for operator alerts (`@user:server`).  Comma-separate multiple for vacation coverage.  PRIVATE — never exposed via the public API.
 - `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM` — a PUBLIC group room alias (`#room:server`).  Surfaced on `/support`, `/about-this-instance`, and the site footer so users can contact the operator publicly.  Distinct from the MXID; the codebase enforces the split at compile time + at every boundary via adversarial smoke.
 
-Setup + the full alert-tier policy + vacation coverage advice in `OPERATIONS.md` §16 "Canonical Matrix routing — apps/matrix-bot".
+Setup + the full alert-tier policy + vacation coverage advice in `OPERATIONS.md` §16 "Canonical Matrix routing — apps/matrix-bot".  If `npm audit` flags critical vulnerabilities for your install, those trace through `matrix-bot-sdk@0.7.1`'s deprecated `request` dependency — OPERATIONS.md has the full risk analysis under "matrix-bot — known dependency vulnerabilities" (TL;DR: matrix-bot is outbound-only and opt-in, so the practical exposure is near-zero, but expect automated CVE scanners to flag it).
 
 #### Host-resource monitoring — disk / memory / swap / CPU
 

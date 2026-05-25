@@ -52,11 +52,42 @@ export interface PushSubscription {
  *  cruft of no value. */
 const MAX_USER_AGENT_LEN = 200;
 
+/** cp138 D-2 — Maximum number of push subscriptions per account.
+ *
+ *  Without this cap, a single account can register thousands of
+ *  `(account, endpoint)` pairs.  The push-sender's fan-out loop
+ *  (`apps/relay/src/policy/pushSender.ts:190`) then awaits one
+ *  POST per device per inbound message — amplifying every chat
+ *  message they receive into a thrash of outbound HTTPS calls
+ *  against arbitrary push services.  Concrete attack: a hostile
+ *  user signs up many push endpoints, then asks a popular trader
+ *  for a long conversation; every reply fans out and the relay
+ *  ties up its outbound HTTPS pool for that account's queue.
+ *
+ *  20 is generous (a heavy user with 3 phones, 2 laptops, 2
+ *  tablets sits well below it) AND prevents amplification.  If
+ *  an account hits the cap, the OLDEST subscription is evicted
+ *  before the new one is inserted — same as a sliding window.
+ *  This guarantees that a user who switches devices regularly
+ *  doesn't get permanently locked out by old/dead subscriptions
+ *  occupying their slot. */
+const MAX_SUBSCRIPTIONS_PER_ACCOUNT = 20;
+
 export class PushSubscriptionStore {
 	constructor(private readonly db: Database) {}
 
 	/** Upsert one subscription.  Idempotent on (account, endpoint).
 	 *  Returns the row that's now in the DB. */
+	/** Upsert one subscription.  Idempotent on (account, endpoint).
+	 *  Returns the row that's now in the DB.
+	 *
+	 *  cp138 D-2: enforces MAX_SUBSCRIPTIONS_PER_ACCOUNT.  If the
+	 *  caller already has the max number of distinct endpoints and
+	 *  this upsert would add a NEW one (no conflict on the unique
+	 *  key), the oldest existing subscription is evicted first.
+	 *  Existing-endpoint upserts (same account, same endpoint, just
+	 *  refreshing keys / locale / privacy_mode) are unaffected by
+	 *  the cap because they don't add a row. */
 	async upsert(input: {
 		account: string;
 		endpoint: string;
@@ -71,38 +102,85 @@ export class PushSubscriptionStore {
 				? null
 				: input.userAgent.slice(0, MAX_USER_AGENT_LEN);
 
-		const result = await this.db.query<RawRow>(
-			`INSERT INTO push_subscriptions
-			   (account, endpoint, p256dh, auth, user_agent, privacy_mode, locale)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 ON CONFLICT (account, endpoint) DO UPDATE
-			   SET p256dh = EXCLUDED.p256dh,
-			       auth = EXCLUDED.auth,
-			       user_agent = EXCLUDED.user_agent,
-			       privacy_mode = EXCLUDED.privacy_mode,
-			       locale = EXCLUDED.locale,
-			       consecutive_failures = 0
-			 RETURNING *`,
-			[
-				input.account,
-				input.endpoint,
-				input.p256dh,
-				input.auth,
-				ua,
-				input.privacyMode,
-				input.locale
-			]
-		);
-		const row = result.rows[0];
-		if (!row) {
-			// Should be unreachable: INSERT ... ON CONFLICT ... RETURNING
-			// always yields the inserted/updated row.  Defensive throw
-			// instead of `!` so a future schema change can't quietly
-			// hand back undefined.
-			throw new Error('upsert returned no row');
-		}
-		log.info('upsert', { account: input.account, privacy_mode: input.privacyMode });
-		return rowToSub(row);
+		// cp138 D-2 — eviction step.  ONLY runs when the incoming
+		// endpoint is NEW for this account (the ON CONFLICT path
+		// is a no-op for cap purposes since it doesn't add a row).
+		// We need a transaction so a race between two parallel
+		// upserts can't both see the same "under cap" snapshot and
+		// both insert.  PoolClient.transaction here makes the
+		// SELECT-DELETE-INSERT atomic.
+		return this.db.withTx(async (tx) => {
+			// Step 1: count this account's existing subscriptions
+			// (cheap — account is indexed).
+			const countRes = await tx.query<{ c: string; has_endpoint: boolean }>(
+				`SELECT
+				   COUNT(*)::text AS c,
+				   BOOL_OR(endpoint = $2) AS has_endpoint
+				 FROM push_subscriptions
+				 WHERE account = $1`,
+				[input.account, input.endpoint]
+			);
+			const existingCount = Number(countRes.rows[0]?.c ?? '0');
+			const hasEndpoint = countRes.rows[0]?.has_endpoint ?? false;
+
+			// Step 2: if this would add a NEW endpoint and we're at
+			// the cap, evict the oldest.  Use created_at DESC + LIMIT
+			// rather than a tx-internal MIN() so the eviction is
+			// deterministic even if multiple rows tie on created_at.
+			if (!hasEndpoint && existingCount >= MAX_SUBSCRIPTIONS_PER_ACCOUNT) {
+				const toEvict = existingCount - MAX_SUBSCRIPTIONS_PER_ACCOUNT + 1;
+				await tx.query(
+					`DELETE FROM push_subscriptions
+					 WHERE (account, endpoint) IN (
+					   SELECT account, endpoint
+					   FROM push_subscriptions
+					   WHERE account = $1
+					   ORDER BY created_at ASC
+					   LIMIT $2
+					 )`,
+					[input.account, toEvict]
+				);
+				log.info('evicted_for_cap', {
+					account: input.account,
+					evicted: toEvict,
+					max_per_account: MAX_SUBSCRIPTIONS_PER_ACCOUNT
+				});
+			}
+
+			// Step 3: the actual upsert.
+			const result = await tx.query<RawRow>(
+				`INSERT INTO push_subscriptions
+				   (account, endpoint, p256dh, auth, user_agent, privacy_mode, locale)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)
+				 ON CONFLICT (account, endpoint) DO UPDATE
+				   SET p256dh = EXCLUDED.p256dh,
+				       auth = EXCLUDED.auth,
+				       user_agent = EXCLUDED.user_agent,
+				       privacy_mode = EXCLUDED.privacy_mode,
+				       locale = EXCLUDED.locale,
+				       consecutive_failures = 0
+				 RETURNING *`,
+				[
+					input.account,
+					input.endpoint,
+					input.p256dh,
+					input.auth,
+					ua,
+					input.privacyMode,
+					input.locale
+				]
+			);
+			const row = result.rows[0];
+			if (!row) {
+				// Should be unreachable: INSERT ... ON CONFLICT ... RETURNING
+				// always yields the inserted/updated row.  Defensive throw
+				// instead of `!` so a future schema change can't quietly
+				// hand back undefined.
+				throw new Error('upsert returned no row');
+			}
+			log.info('upsert', { account: input.account, privacy_mode: input.privacyMode });
+			return rowToSub(row);
+		});
 	}
 
 	/** All live subscriptions for an account.  Used by the push

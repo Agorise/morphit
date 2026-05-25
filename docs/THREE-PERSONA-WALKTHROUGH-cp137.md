@@ -899,3 +899,68 @@ removing the getting-started cluster fails 5 of the 14 scenarios.
 - 3 new smokes wired and tamper-tested:
   `asset-select-coverage-smoke`, `faq-search-grandma-coverage-smoke`,
   `import-remember-me-smoke`
+
+---
+
+## cp137 Day-2 additions — after Ken's "I'm hoping you'll find it" pushback
+
+After cp137's first-day six findings shipped and the initial post-publish sweep closed 13 more items, Ken invoked the verify-don't-assume rule one more time. This day-2 sweep found two material defects plus a structural-defense expansion and a doc-drift backlog.
+
+### F-6 SHIPPED — BLURT missing from comparison image
+
+The `morphit-comparison.png` that's displayed on `morphit.io`, referenced in marketing/blog posts and fediverse threads, and called out in brag entry #168 was showing **only 15 of 16 tradable assets** in its "Assets & fiat" section. **BLURT** — one of the THREE original core trading assets per memory rules, AND the chain Morphit actually federates over — was absent. This is the kind of defect that would have been noticed by every BLURT-community visitor immediately and undermined the brag list's credibility ("If they don't even list BLURT, what else did they get wrong?").
+
+**Fix.** Added the row `('Blurt (BLURT) — the chain Morphit federates over', ['Y','-','-','-','-'], None)` between Monero and Ethereum in `scripts/comparison-image/build_comparison.py`. Only Morphit gets a Y; competitors (Bisq/Haveno/OpenMonero/BasicSwap) don't support BLURT. Feature row count went 128→129. PNG (480.8 KB, still under 512 KB budget), fingerprint sidecar, and mediakit all regenerated. Brag entry #168 updated "128 verified data points" → "129".
+
+**Why this was hard to catch.**  The comparison-image script's data tables are dense (~129 rows × 5 columns of single-char `Y/-` cells); a single missing row is invisible at the diff level unless you know to count. The fix is structural — but I should have built a smoke that enforces "every asset in the asset-registry MUST appear in the comparison image's asset section" so this can't drift again. **Outstanding follow-up.**
+
+### G-4 SHIPPED — stale privacy-warning comment in `/post`
+
+`apps/web/src/routes/[lang]/post/+page.svelte` had a comment block claiming the privacy-warning chip surfaces for "USDT and USDC — the two stablecoin assets". This is wrong: cp31 added DAI (with `privacyWarningKey: 'dai_partly_centralized'`) so there are three. The comment was cosmetic — the actual `<PrivacyWarningChip>` elements below correctly include the DAI case — but a Future-Ken reading the comment to understand the design would have an off-by-one mental model.
+
+**Fix.** Comment updated to "USDT, USDC, and DAI are the three stablecoin assets that surface here (USDT/USDC are issuer-centralized; DAI is partly-centralized via its collateral mix)".
+
+### G-5 SHIPPED — four sites of stale docstring asset-enumerations
+
+Repo-wide grep for ticker enumerations turned up four sites where docstrings listed fewer tickers than the code actually handles. None affected runtime behavior; all were stale-comment drift from successive asset additions failing to update the surrounding docs.
+
+1. **`apps/web/src/lib/components/ConversationView.svelte` lines 273 + 405.** `markSentArgs` state docstring listed 8 tickers (`BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH`) but the TypeScript union below has 15 (added DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP). Mark-as-sent click handler docstring listed 9. Both updated to enumerate all 15 single-side methods (clarifying that BLURT pays via the separate PayBlurtModal path).
+
+2. **`apps/web/src/lib/components/AddressShareModal.svelte` header docstring.** Listed 10 of 16 tradable assets. Updated to all 16. Threshold-list docstring (L263) listed 8 of 15 single-side methods — updated to 15. Jitter docstring (L128) described only BTC/BCH/LTC/DASH UTXO coverage; rewritten to enumerate XMR + 8 UTXO assets (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) + BLURT + per-asset SOL/ETH/XRP + 3 stablecoins (USDT/USDC/DAI), reflecting actual coverage in `jitterAmountForAsset`.
+
+3. **`apps/web/src/lib/chat/payload.ts` line 573.** `jitterUtxoAmount` function header said "transparent UTXO chains (BTC, BCH, LTC)". Updated to all 8 UTXO assets it covers (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR), with a clarifying note that SOL/ETH/XRP have their own dedicated jitter functions because their unit precision and network semantics differ (lamport / wei / drop, not satoshi).
+
+4. **`apps/ops-cli/src/init/render.ts`.** The comment block of default explorer URLs in the rendered `morphit.env` listed only 5 single-network defaults (BTC/XMR/BCH/LTC/DASH). Extended to all 12 single-network bundled defaults (added DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP). Also added the 4 DAI multi-network defaults (ERC-20/Polygon/Base/Arbitrum) which were missing from the multi-network examples list. Each URL copied verbatim from the canonical authoritative source (`apps/web/src/lib/explorer/urlsCore.ts` for bundled chat-link URLs; `apps/web/src/lib/assets/networks.ts` for multi-network `bundledExplorerUrl`).
+
+### Persona-walkthrough sentinel-family expansion: +36 sentinels
+
+USDT shipped at Part 121 cp3 with 5 dedicated sentinels (P121-USDT-1..5) in this smoke. The 12 subsequent asset additions — USDC cp30, BCH cp23, LTC cp24, DAI cp31, DASH cp27, DOGE cp33, ZEC cp39, ARRR cp41, DCR cp43, SOL cp45, ETH cp47, XRP cp49 — each shipped with per-checkpoint sentinels in OTHER smokes (asset-registry-smoke, fee-method-enum-frozen-smoke, per-asset-key-family-*, what-is-morphit-asset-enum-smoke, plus their own dedicated `*-trade-only-smoke`). But none had a structural-defense sentinel family in persona-walkthrough.
+
+cp137 closes the gap with three sentinels per asset (12 × 3 = 36 new):
+- **-1** Canonical asset registry invariants (ticker / canPayListingFee:false / supportedNetworks / defaultNetwork / privacyWarningKey where applicable)
+- **-2** Frontend asset registry parity (lowercase ticker + displayName + canBeUsedForListingFee:false + defaultNetwork)
+- **-3** Supporting metadata (per-network metadata module for multi-network assets) OR bundled chat-link URL constant + TXID regex (for single-network assets)
+
+Persona-walkthrough went from 129 to 165 scenarios.
+
+**Tamper test.** Renaming a ticker in the canonical registry (`ticker: 'BCH'` → `'BCH_TAMPERED'`) fires `cp137-BCH-1` with the message "MUST HAVE (not found): "ticker: 'BCH'"". Confirms structural-defense behavior.
+
+### Translation completeness audit (Ken's other ask, this same day)
+
+Ran a full audit on all 9 non-EN locales: any key whose value is character-identical to the EN value AND contains common English prose words. **Zero untranslated prose entries** across all 9 non-EN locales. The 740 "identical-to-EN" entries that DO exist are proper nouns / brand names / network identifiers (F-Droid, ERC-20, BNB Smart Chain, Aptoide, etc.) that SHOULD be identical across locales by design.
+
+### Latent observation worth flagging — date in comparison SVG
+
+The comparison-image SVG embeds `date.today().isoformat()` in its footer text. This means each rebuild on a different UTC day produces a different SVG byte-content and therefore a different SHA-256 fingerprint. **The freshness smoke is unaffected** because it compares committed-state bytes (SVG + sidecar are committed in lockstep by the build script). CI doesn't re-run `build_comparison.py` — it only runs the smoke against bytes already in the repo. So this is fine for the current usage pattern.
+
+But anyone wiring `build_comparison.py` into CI rather than relying on committed output would see the freshness check fail on day boundaries. **Outstanding follow-up:** consider deriving the footer date from the brag-list trailer's "Last updated" date rather than `date.today()`, which would make the SVG content fully deterministic per-commit.
+
+### Final cp137 verification (real triple-pulse)
+
+The full triple-pulse was blocked by the sandbox's wrapper-timeout killing children before flush. Resolved by splitting `run-smokes.sh` into 4 slices via a helper script that takes BATCH_START/BATCH_END indexes — each slice fits comfortably within the wrapper budget. Three full runs of all four slices:
+
+- Pulse 1: 1,782 + 853 + 1,494 + 1,838 = **5,967 / 5,967, 0 failures**
+- Pulse 2: 1,782 + 853 + 1,494 + 1,838 = **5,967 / 5,967, 0 failures**
+- Pulse 3: 1,782 + 853 + 1,494 + 1,838 = **5,967 / 5,967, 0 failures**
+
+That's 5,931 cp136 baseline + 36 cp137 persona-walkthrough sentinel additions = 5,967 expected. Net 0 regression across the full suite, three times in a row.

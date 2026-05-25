@@ -156,10 +156,16 @@ export async function trackVerifiedBlurtFee(
 	await client.query(`SAVEPOINT ${welcomeSavepoint}`);
 	try {
 		await client.query(
+			// cp138 D-1: write triggered_at explicitly with block
+			// time, not NOW().  Pre-cp138 the DEFAULT NOW() was
+			// the indexer's wall clock at insert moment, which
+			// would diverge across replays.  Column is currently
+			// unread; this preempts a future reader tripping on
+			// the determinism gap.
 			`INSERT INTO account_loyalty_milestones
-			   (account, milestone_blurt, bp_rewarded, triggered_in_block)
-			 VALUES ($1, $2, $3, $4)`,
-			[account, FIRST_FEE_WELCOME_SENTINEL_BLURT, FIRST_FEE_WELCOME_BP, blockNum]
+			   (account, milestone_blurt, bp_rewarded, triggered_at, triggered_in_block)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			[account, FIRST_FEE_WELCOME_SENTINEL_BLURT, FIRST_FEE_WELCOME_BP, blockTime, blockNum]
 		);
 		await client.query(`RELEASE SAVEPOINT ${welcomeSavepoint}`);
 		firstFeeWelcomeFired = true;
@@ -239,10 +245,12 @@ export async function trackVerifiedBlurtFee(
 			// awarded on a previous crossing; continue to check
 			// subsequent milestones.
 			await client.query(
+				// cp138 D-1: see first INSERT — explicit
+				// triggered_at = blockTime for replay determinism.
 				`INSERT INTO account_loyalty_milestones
-				   (account, milestone_blurt, bp_rewarded, triggered_in_block)
-				 VALUES ($1, $2, $3, $4)`,
-				[account, ms.thresholdBlurt, ms.bpReward, blockNum]
+				   (account, milestone_blurt, bp_rewarded, triggered_at, triggered_in_block)
+				 VALUES ($1, $2, $3, $4, $5)`,
+				[account, ms.thresholdBlurt, ms.bpReward, blockTime, blockNum]
 			);
 			await client.query(`RELEASE SAVEPOINT ${msSavepoint}`);
 		} catch (err) {

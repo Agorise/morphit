@@ -194,6 +194,7 @@ SECTIONS = [
     ('Assets & fiat', [
         ('Bitcoin (BTC)',                                                    ['Y','Y','Y','-','Y'], None),
         ('Monero (XMR)',                                                     ['Y','Y','Y','Y','Y'], None),
+        ('Blurt (BLURT) — the chain Morphit federates over',                 ['Y','-','-','-','-'], None),
         ('Ethereum (ETH)',                                                   ['Y','-','Y','-','-'], None),
         ('Litecoin (LTC)',                                                   ['Y','-','Y','-','Y'], None),
         ('Bitcoin Cash (BCH)',                                               ['Y','-','Y','-','Y'], None),
@@ -479,10 +480,44 @@ counts_str = ' · '.join(
 out.append(f'<text x="{W//2}" y="{y_footer - 22}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="20" '
            f'font-weight="600" fill="{TEXT_DIM}">{escape(counts_str)}</text>')
+# cp137 G-6 — determinism: derive the footer date from the brag-list
+# trailer's "Last updated" date rather than `date.today()`, so a
+# rebuild produces byte-identical SVG output regardless of the
+# wall-clock day it ran on.  Pre-cp137 used `date.today()`, which
+# meant rebuilding on a new UTC day silently changed the SVG hash
+# (and therefore the .png.fingerprint sidecar).  Harmless for the
+# current CI pattern (smoke compares committed bytes, doesn't
+# regenerate) but a footgun if anyone ever wires
+# `build_comparison.py` into CI on every push — every UTC midnight
+# would fail the comparison-image-freshness smoke until somebody
+# committed a fresh PNG.  Deriving from the brag-list trailer also
+# means the displayed date moves only when the brag list moves,
+# which is semantically what "As of X" actually means here (the
+# comparison data, not today's wall clock).
+def _read_brag_trailer_date(brag_path: Path) -> str:
+    """Find the most-recent ISO date in the trailer line of the brag
+    list.  The trailer format is canonical and pinned by the
+    brag-list-trailer-invariants smoke; we look for `Last updated
+    YYYY-MM-DD`.  Falls back to today() ONLY if the trailer is
+    missing or malformed, with a stderr warning so the operator
+    sees the regression."""
+    import re
+    try:
+        text = brag_path.read_text(encoding='utf-8')
+        m = re.search(r'Last updated (\d{4}-\d{2}-\d{2})', text)
+        if m:
+            return m.group(1)
+        sys.stderr.write(f'WARNING: brag-list trailer "Last updated YYYY-MM-DD" not found at {brag_path}; falling back to date.today()\n')
+    except OSError as e:
+        sys.stderr.write(f'WARNING: cannot read brag list at {brag_path}: {e}; falling back to date.today()\n')
+    return date.today().isoformat()
+
+_brag_path = Path(__file__).resolve().parent.parent.parent / 'MORPHIT-BRAG-LIST.md'
+_footer_date = _read_brag_trailer_date(_brag_path)
 out.append(f'<text x="{W//2}" y="{y_footer}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="{FOOTER_FONT}" '
            f'fill="{TEXT_DIM}">'
-           f'As of {date.today().isoformat()}. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.'
+           f'As of {_footer_date}. Information about other platforms gathered from their public docs and recent independent reviews; corrections welcome via Matrix #agorise:matrix.org.'
            f'</text>')
 
 out.append('</svg>')

@@ -476,6 +476,13 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   BCH:  https://blockchair.com/bitcoin-cash/transaction/{txid}');
 	lines.push('#   LTC:  https://litecoinspace.org/tx/{txid}');
 	lines.push('#   DASH: https://insight.dash.org/insight/tx/{txid}');
+	lines.push('#   DOGE: https://blockchair.com/dogecoin/transaction/{txid}');
+	lines.push('#   ZEC:  https://mainnet.zcashexplorer.app/transactions/{txid}');
+	lines.push('#   ARRR: https://explorer.piratechain.com/tx/{txid}');
+	lines.push('#   DCR:  https://dcrdata.decred.org/tx/{txid}');
+	lines.push('#   SOL:  https://explorer.solana.com/tx/{txid}');
+	lines.push('#   ETH:  https://eth.blockscout.com/tx/{txid}');
+	lines.push('#   XRP:  https://livenet.xrpl.org/transactions/{txid}');
 	lines.push('#');
 	lines.push('# Defaults (multi-network, per chain):');
 	lines.push('#   USDT (ERC-20):  https://etherscan.io/tx/{txid}');
@@ -486,6 +493,10 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   USDC (SPL):     https://solscan.io/tx/{txid}');
 	lines.push('#   USDC (Base):    https://basescan.org/tx/{txid}');
 	lines.push('#   USDC (Polygon): https://polygonscan.com/tx/{txid}');
+	lines.push('#   DAI  (ERC-20):  https://etherscan.io/tx/{txid}');
+	lines.push('#   DAI  (Polygon): https://polygonscan.com/tx/{txid}');
+	lines.push('#   DAI  (Base):    https://basescan.org/tx/{txid}');
+	lines.push('#   DAI  (Arbitrum): https://arbiscan.io/tx/{txid}');
 	lines.push(
 		`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.btc)}`
 	);

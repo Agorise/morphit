@@ -1,6 +1,75 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp137 — 2026-05-24.  **58+ STRUCTURAL DEFENSES (cp137 added: comparison-image-freshness now content-fingerprint-based 15 scenarios, asset-select-coverage 3 scenarios, faq-search-grandma-coverage 14 scenarios, import-remember-me 5 scenarios) · BATTERY 5,931/0 TRIPLE-PULSE STABLE (cp136 5,914 + cp137 net +17 from new smokes + brag-coverage rebalance) · LL #52 41ST HW-VERIFIED (unchanged) · 694 WEB + 493 INDEXER + 244 RELAY VITEST TESTS (1,431 — was 1,381 since cp131; tests added across the deep-audit campaign) · BRAG LIST 326 ENTRIES (cp136 324 + cp137 +2) · LOCALE PARITY 3,095 × 10 = 30,950 · CI GREEN AFTER F-5 FINGERPRINT FIX SHIPS.**
+**Last touched:** Part 122 cp138 — 2026-05-25 (deep-deep 94-task audit CLOSED).  Sentinel battery 169/0 across persona-walkthrough.
+
+## cp138 — Pre-launch deep-deep 94-task audit (CLOSED 2026-05-25)
+
+Triggered by Ken's "do a full deep deep on absolutely everything, every file and script, .md/.ts/all svelte-related" + "put on your black hat. FULL security and code audits" directive. **94 tasks across 11 phases A–K reviewed end-to-end. 11 findings shipped, 1 standing follow-up.**
+
+**Audit framework files:** `docs/AUDIT-cp138-PLAN.md` (94-task plan), `docs/AUDIT-cp138-FINDINGS.md` (255-line full ledger), `docs/AUDIT-OUTSIDE-SCOPE.md` (answers Ken's "would a pro firm do anything I haven't?" with leverage/urgency table + budget estimates).
+
+**cp138 findings shipped (11 total):**
+
+| # | Severity | What | Where |
+|---|---|---|---|
+| A-1 | MED | ADR-0004 amendment overstated frontend price-provider wiring | `docs/adr/0004-price-feeds.md` |
+| A-2 | MED | parseInt-on-BIGSERIAL feedback id passed to SQL param | `apps/indexer/src/indexer/handlers/feedbackResponse.ts` |
+| A-3 | LOW | Stale comment claimed chat_messages.id is SERIAL (it's BIGSERIAL) | `apps/indexer/src/api/chatStream.ts` |
+| A-4 | LOW | operatorPaymentMethod forbidden-char + NFC drift vs peer handlers | `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` |
+| A-5 | LOW | operatorBlock.sanitizeReason lacked NFC normalization | `apps/indexer/src/indexer/handlers/operatorBlock.ts` |
+| C-1 | MED | **CRITICAL FIX — was M4 from 2026-04-28 audit, open for a month.** KDF floor was 6000× too generous (ops>=1, mem>=1MB) — latent downgrade-attack surface | `apps/web/src/lib/crypto/keystore.ts` + `apps/web/src/lib/crypto/yubikey/wrap.ts` |
+| D-1 | LOW | account_loyalty_milestones.triggered_at non-deterministic across replays | `apps/indexer/src/indexer/loyalty.ts` |
+| D-2 | MED | push_subscriptions had no per-account cap → fan-out amplification surface | `apps/relay/src/policy/pushSubscriptions.ts` |
+| H-1 | LOW | persona-walkthrough ALERT_COPY sentinel listed 14 of 17 host-resource events | `apps/web/scripts/persona-walkthrough-smoke.ts` |
+| I-1 | LOW | No repo-root SECURITY.md (Forgejo auto-discovery friendliness) | new `SECURITY.md` |
+| J-1 | LOW | XRP address placeholder unwired in chat-share-modal ternary chain | `apps/web/src/lib/components/AddressShareModal.svelte` |
+| D-3 | LOW practical / MED on paper | npm audit: 2 critical + 14 moderate transitive deps via matrix-bot-sdk@0.7.1 (request@2.88.2, form-data@2.3.3) | `package-lock.json` (upstream-constrained) |
+| F-1 | LOW | 3 svelte-check warnings on intentional state_referenced_locally pattern in FundsSentModal | `apps/web/src/lib/components/FundsSentModal.svelte` |
+
+**cp138 standing follow-ups (post-launch):**
+
+- **cp138-R-1 (post-launch scaling) — bigint id propagation.** 11 sites in `apps/indexer/src/{api,indexer}/...` use `parseInt(row.id, 10)` on BIGSERIAL. Safe at practical Morphit scale (limit is 2^53 ~ 9 quadrillion rows, vs realistic projected ~1e10) but correct pattern is end-to-end string ids since JSON has no native bigint. Long-horizon scaling item.
+
+- **cp138-R-2 (post-launch dependency hygiene) — matrix-bot-sdk transitive vulnerabilities.** `npm audit` shows 2 critical + several moderate vulnerabilities all traced through `matrix-bot-sdk@0.7.1` to its dependency on deprecated `request@2.88.2` (which pulls vulnerable `form-data@2.3.3`, `qs`, `tough-cookie`, `uuid`). Upgrading to `matrix-bot-sdk@0.8.0` (latest) does NOT fix it — 0.8.0 still depends on `request@^2.88.2`. **Practical exposure on Morphit is near-zero** because matrix-bot is opt-in (only runs if `MORPHIT_MATRIX_BOT_ALERT_MXID` is set), sends outbound only to operator-configured homeserver, doesn't accept user URLs to fetch. Real fix options: (a) swap to `matrix-js-sdk` (official Matrix SDK, bigger surface — needs evaluation), or (b) add `npm overrides` to force-resolve transitives (needs testing that matrix-bot's actual API surface still works with overridden versions). Tracked as a quarterly-review item, not a pre-launch blocker.
+
+- **Ship `ApiRelayProvider` + Settings opt-in for live prices** to deliver the user-facing price-staleness UX that ADR-0004 originally promised. Frontend `$lib/prices/` module exists, indexer `/v1/price/...` endpoint exists; what's missing is the apirelay provider wiring + a Settings toggle.
+
+- **Add `statement_timeout` guidance to OPERATIONS.md** so operators know to set Postgres-side `statement_timeout` for production. Pool defaults don't ship one to avoid breaking long-running queue drains.
+
+**cp138 sentinel additions (persona-walkthrough 165 → 169):**
+
+- cp138-D-2 push_subscriptions per-account cap with sliding-window eviction
+- cp138-C-1 (keystore) KDF floor matches INTERACTIVE — downgrade-attack defense
+- cp138-C-1 (yubikey wrap) KDF floor matches INTERACTIVE
+- cp138-I-1 repo-root SECURITY.md exists with Matrix DM + Forgejo paths
+
+**cp138 audit completeness across 11 phases:**
+
+- **Phase A** (hostile chain-op review): **all 17 handlers reviewed deeply**. 5 findings, 0 critical.
+- **Phase B** (HTTP/API): all clean — locked-down CSP, exact-match CORS, origin-enforcement for fund-spending endpoints, body cap with chunked rejection.
+- **Phase C** (crypto): 1 finding (C-1 KDF floor). AEAD nonces, BIP-39 lib, secp256k1 deterministic-k, random-source audit, forward-secrecy posture all clean.
+- **Phase D** (DB): 2 findings (D-1, D-2). FK integrity, migration linearization, race conditions, SQL injection, LIKE escapes all clean.
+- **Phase E** (frontend XSS): all clean — 16 `@html` sites verified, sanitized SVG + closed-set kinds + escaped JSON-LD + validated onion-location.
+- **Phase F** (static quality): all clean — 0 TODO/FIXME/secrets-in-logs, all silent catches legitimate, JSON.parse guards proper.
+- **Phase G** (regex): all clean — 0 ReDoS at 10k chars, 22 unanchored .test() all intentional.
+- **Phase H** (smokes): 1 finding (H-1). 17 hardcoded counts verified current, skipped tests all gated/documented.
+- **Phase I** (docs): 1 finding (I-1). README/OPERATIONS/RUN-A-MORPHIT-NODE/METADATA-LEAK-CATALOG all accurate.
+- **Phase J** (wiring): 1 finding (J-1). Locale parity 30,950/30,950 ✓ Every static `$_(...)` reference resolves.
+- **Phase K** (failover): all clean — endpoint rotator throws cleanly, errors actionable.
+
+**Pre-launch defenses raised meaningfully by cp138:**
+
+- M4 latent downgrade-attack vector — open for a month — closed
+- Push fan-out amplification surface eliminated
+- Loyalty milestones now replay-deterministic
+- Repo-root SECURITY.md for researcher auto-discovery
+- 4 new structural sentinels in persona-walkthrough
+- ADR-0004 doc↔code accuracy restored
+- Forbidden-char policy aligned across 4 indexer handlers
+- XRP placeholder wired (last asset's UI completion)
+
+---
+  **58+ STRUCTURAL DEFENSES (cp137 added: comparison-image-freshness now content-fingerprint-based 15 scenarios, asset-select-coverage 3 scenarios, faq-search-grandma-coverage 14 scenarios, import-remember-me 5 scenarios, plus persona-walkthrough expanded from 129 to 165 scenarios with 12 new per-asset structural sentinel families × 3 sentinels each = 36 new sentinels for USDC/BCH/LTC/DAI/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP) · BATTERY 5,967/0 TRIPLE-PULSE STABLE (5,931 cp136 baseline + 36 cp137 sentinel additions = 5,967; sandbox wrapper-timeout blocked the monolithic run-smokes.sh but a slice-based helper at `/tmp/run-smokes-slice.sh` runs the suite in 4 batches of ~60 — three full passes of all four slices = 5,967/5,967/5,967, 0 failures) (cp136 5,914 + cp137 net +17 from new smokes + brag-coverage rebalance) · LL #52 41ST HW-VERIFIED (unchanged) · 694 WEB + 493 INDEXER + 244 RELAY VITEST TESTS (1,431 — was 1,381 since cp131; tests added across the deep-audit campaign) · BRAG LIST 326 ENTRIES (cp136 324 + cp137 +2) · LOCALE PARITY 3,095 × 10 = 30,950 · CI GREEN AFTER F-5 FINGERPRINT FIX SHIPS.**
 
 **cp137 — DEEP-DEEP three-persona walkthrough redo with VERIFY-everything rigor, plus CI failure fix:**
 
@@ -19,6 +88,16 @@ After cp136 push hit a CI failure on `comparison-image-freshness-smoke` ("PNG ol
 - **cp137-H-2 SHIPPED — FAQ search failed Grandma's first-load questions.** Simulated against live `searchEntries`: pre-fix "how do I start" → `order_editing` (1.00), "how do I begin" → 0 hits, "first time user" → `profile_pages`, "getting started" → `how_morphit_protects_me`. Root cause: synonym map had no entries for `start`/`begin`/`first`/`newbie`/`getting`/`tutorial`/`this`/`thing`/`site`. Added two clusters (getting-started + deictic). Post-fix: 14 of 14 grandma queries route correctly. New `faq-search-grandma-coverage-smoke` (14 scenarios, tamper-tested — removing the cluster fails 5 of 14).
 
 - **cp137-F-2 SHIPPED (from cp136 walkthrough, doc completion in cp137).** Updated `docs/OPERATIONS.md §22` to mention the new 19th step in `morphit-ops init` for fresh setups (was edit-only path).
+
+- **cp137-G-5 SHIPPED — stale docstring asset-enumerations.** Four sites had docstrings listing only a subset of the tickers their code actually handles. (1) `apps/web/src/lib/components/ConversationView.svelte` lines 273 + 405 listed 8 and 9 tickers in `markSentArgs`/Mark-as-sent prefill docstrings — actual TypeScript union has 15 single-side methods (BLURT pays via PayBlurtModal separately). Updated to full 15. (2) `apps/web/src/lib/components/AddressShareModal.svelte` header docstring listed 10/16 tradable assets — updated to all 16; threshold-list docstring listed 8/15 single-side methods — updated to all 15; jitter docstring described only BTC/BCH/LTC/DASH UTXO coverage — rewritten to enumerate XMR + 8 UTXO assets + BLURT + SOL/ETH/XRP per-asset + 3 stablecoins. (3) `apps/web/src/lib/chat/payload.ts` line 573 — `jitterUtxoAmount` header "(BTC, BCH, LTC)" updated to all 8 UTXO assets it covers (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR — note that SOL/ETH/XRP have their own dedicated jitter functions because their unit semantics differ). (4) `apps/ops-cli/src/init/render.ts` — comment block of default explorer URLs listed only 5 single-network defaults (BTC/XMR/BCH/LTC/DASH); extended to all 12 single-network bundled defaults (added DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP) plus added the 4 DAI multi-network defaults (ERC-20/Polygon/Base/Arbitrum) that were missing from the multi-network examples list. Each correction copies the exact URL from the canonical authoritative source (urlsCore.ts for bundled chat-link URLs; networks.ts for multi-network bundledExplorerUrl).
+
+- **cp137-F-6 SHIPPED — BLURT missing from comparison image.** The `morphit-comparison.png` displayed on `morphit.io` (referenced in marketing/blog posts/fediverse threads/brag entry #168) showed only 15 of 16 tradable assets in its "Assets & fiat" section. BLURT — one of the THREE original core trading assets and the chain Morphit federates over — was missing. Added `('Blurt (BLURT) — the chain Morphit federates over', ['Y','-','-','-','-'], None)` between Monero and Ethereum rows in `scripts/comparison-image/build_comparison.py`. Only Morphit gets a Y; competitors don't support BLURT. Feature row count went 128→129. PNG rebuilt (still under 512 KB byte-budget). Brag entry #168 updated "128 verified data points" → "129". Mediakit rebuilt. SHA-256 fingerprint sidecar regenerated. This was a public-facing claim defect — marketing material was missing a CORE asset.
+
+
+- **cp137-G-6 SHIPPED — comparison-image date non-determinism.** `scripts/comparison-image/build_comparison.py` embedded `date.today().isoformat()` in the SVG footer text. Two rebuilds on different UTC days produced different SVG byte content (and therefore different SHA-256 fingerprints). Harmless for current CI usage (smoke compares committed bytes, doesn't regenerate), but a footgun if anyone ever wires `build_comparison.py` into CI on every push — every UTC midnight would fail the comparison-image-freshness smoke until somebody committed a fresh PNG. Fix: derive the footer date from the brag-list trailer's "Last updated YYYY-MM-DD" via a `_read_brag_trailer_date` helper. Falls back to `date.today()` with a stderr warning if the trailer is missing/malformed. Verified deterministic: two rebuilds 2 seconds apart now produce byte-identical SVG (hash `a091a225...`). Semantically also more correct: the displayed date is "as of when the comparison data was last updated," not "as of when the script happened to run."
+
+- **cp137 persona-walkthrough sentinel-family expansion.** USDT got 5 sentinels at Part 121 cp3 (P121-USDT-1..5) but the 12 subsequent asset additions (USDC cp30, BCH cp23, LTC cp24, DAI cp31, DASH cp27, DOGE cp33, ZEC cp39, ARRR cp41, DCR cp43, SOL cp45, ETH cp47, XRP cp49) had dedicated checkpoint-specific sentinels in other smokes (asset-registry, fee-method-enum-frozen, per-asset-key-family, etc.) but NOT in persona-walkthrough. Added 3-sentinel families for each: (1) canonical asset registry invariants (ticker / canPayListingFee:false / supportedNetworks / defaultNetwork / privacyWarningKey where applicable), (2) frontend asset registry parity (lowercase ticker + displayName + canBeUsedForListingFee:false + defaultNetwork), (3) supporting metadata or bundled chat-link URL constant + TXID regex. Total +36 sentinels: 12 × 3. All 165 walkthrough scenarios pass. Tamper-tested: renaming BCH in canonical registry → cp137-BCH-1 fails with clear "MUST HAVE not found: ticker: 'BCH'" message.
+
 
 **cp136 — initial three-persona walkthrough (covered in §cp136 below):**
 

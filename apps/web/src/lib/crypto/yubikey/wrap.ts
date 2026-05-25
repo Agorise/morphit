@@ -52,9 +52,13 @@ import {
 export type YubikeyHmacFn = (challenge: Uint8Array) => Promise<Uint8Array>;
 
 /** Defensive minimums for the wrap-Argon2id params, mirroring the
- *  passphrase wrap floor. */
-const MIN_ARGON_OPSLIMIT = 1;
-const MIN_ARGON_MEMLIMIT = 1 << 20; // 1MB
+ *  passphrase wrap floor (see keystore.ts comment for full
+ *  rationale).  cp138 C-1: raised from (1, 1 MB) to libsodium's
+ *  INTERACTIVE values (2, 64 MiB) to close the M4 latent
+ *  downgrade-attack vector identified by the 2026-04-28 batch-I
+ *  audit.  A tampered envelope cannot claim weak params here. */
+const MIN_ARGON_OPSLIMIT = 2; // crypto_pwhash_OPSLIMIT_INTERACTIVE
+const MIN_ARGON_MEMLIMIT = 64 * 1024 * 1024; // 64 MiB = crypto_pwhash_MEMLIMIT_INTERACTIVE
 
 function assertSafeKdfParams(p: YubikeyArgonParams): void {
 	if (

@@ -4,83 +4,65 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp137 — 2026-05-24 (deep-deep walkthrough with VERIFY-everything rigor; 6 findings fixed end-to-end; CI failure root-caused and resolved).
+**Last touched:** cp138 — 2026-05-25 (pre-launch deep-deep 94-task audit, CLOSED).
 
-**cp137 work units, all complete:**
+**cp138 work summary:**
 
-1. **CI failure root-caused and fixed (F-5).** The cp136 push hit a CI failure on `comparison-image-freshness-smoke`: "PNG is older than build_comparison.py" — even though the repo was byte-perfect. Root cause: `git checkout` resets every file's mtime to the checkout instant in filesystem-walk order, so mtime-based "PNG newer than script" checks are non-deterministic in CI. Replaced three mtime checks with a single SHA-256 fingerprint sidecar at `apps/web/static/morphit-comparison.png.fingerprint`. The build script writes this every run; the smoke recomputes the live SVG hash and compares. Tamper-tested: editing SVG without rebuilding correctly fires "PNG fingerprint does not match" with both hashes shown.
+12 findings shipped end-to-end. 1 CRITICAL fix from a prior audit (M4 KDF floor, open for a month) finally closed. Triple-pulse smoke regression 5971/5971/5971, 0 failures. All 5 workspaces tsc-clean, svelte-check 0/0.
 
-2. **Three-persona walkthrough run as a deep-deep of its own.** Ken's directive: "VERIFY everything, do not assume." Re-ran first-time user (Grandma), returning user (Sally lost device), existing Blurt user (Bob posting-only), YubiKey enrollment end-to-end, 2FA TOTP end-to-end including backup code redemption at login. Trace by reading actual code, not narrating routes. Full report at `docs/THREE-PERSONA-WALKTHROUGH-cp137.md` (901 lines).
+**Findings shipped (cp138):**
 
-3. **G-1 FIXED:** Stray trailing "+" on `home.hero_title`, `home.hero_body`, `seo.home.title` — verified by greppage that it's a literal character with no special rendering, not a brand convention. Stripped across 10 locales.
+- **A-1 (MED)** — ADR-0004 amendment overstated frontend price-provider wiring (`docs/adr/0004-price-feeds.md`)
+- **A-2 (MED)** — feedbackResponse.ts parseInt-on-BIGSERIAL feedback id (`apps/indexer/src/indexer/handlers/feedbackResponse.ts`)
+- **A-3 (LOW)** — stale comment claimed chat_messages.id is SERIAL (`apps/indexer/src/api/chatStream.ts`)
+- **A-4 (LOW)** — operatorPaymentMethod forbidden-char + NFC drift vs peer handlers (`apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`)
+- **A-5 (LOW)** — operatorBlock.sanitizeReason lacked NFC normalization (`apps/indexer/src/indexer/handlers/operatorBlock.ts`)
+- **C-1 (MED, CRITICAL FIX — was M4 from 2026-04-28)** — KDF floor was 6000× too generous; latent downgrade-attack surface; now raised to libsodium INTERACTIVE in both `keystore.ts` and `yubikey/wrap.ts`
+- **D-1 (LOW)** — account_loyalty_milestones.triggered_at non-deterministic across replays (`apps/indexer/src/indexer/loyalty.ts`)
+- **D-2 (MED)** — push_subscriptions had no per-account cap → fan-out amplification surface; fixed with MAX_SUBSCRIPTIONS_PER_ACCOUNT=20 + atomic withTx eviction (`apps/relay/src/policy/pushSubscriptions.ts`)
+- **D-3 (LOW practical / MED on paper)** — npm audit 2 critical + 14 moderate transitive deps via matrix-bot-sdk@0.7.1; documented in OPERATIONS.md + RUN-A-MORPHIT-NODE.md with risk analysis (matrix-bot is opt-in + outbound-only → near-zero practical exposure); tracked as cp138-R-2 for post-launch
+- **F-1 (LOW)** — 3 svelte-check state_referenced_locally warnings on intentional initial-prop-capture pattern (`apps/web/src/lib/components/FundsSentModal.svelte`)
+- **H-1 (LOW)** — persona-walkthrough ALERT_COPY sentinel listed 14 of 17 host-resource events (`apps/web/scripts/persona-walkthrough-smoke.ts`)
+- **I-1 (LOW)** — no repo-root SECURITY.md (Forgejo auto-discovery friendliness); added 27-line root SECURITY.md
+- **J-1 (LOW)** — XRP address placeholder unwired in chat-share-modal ternary chain (`apps/web/src/lib/components/AddressShareModal.svelte`)
 
-4. **G-2 FIXED:** `login.body` showed "Enter your Blurt account name and the passphrase..." on the no-form branch (`import-needed`). Replaced with branch-appropriate "Pick the option that matches how you got here." × 10 locales.
+**cp138 audit campaign:**
 
-5. **G-3 FIXED:** `login.no_account_body` said "the first posting is free" — "posting" jargon. Grandma reads "blog post". Replaced with "first-time signup is free" × 10 locales.
+94 tasks across 11 phases A–K reviewed end-to-end. **All 17 chain-op handlers** deep-reviewed (dispatcher, order, chat, feedback, feedbackResponse, operatorRegister, chatRead, chatIdentity, release, featureBid, orderCancel, orderReplace, profile, strangerFee, feeAttest, operatorBlock, operatorPaymentMethod, block). **All 35 indexer HTTP API endpoints** spot-checked for input validation (zod / isAccountName / validateOrderPermlink / whitelist sets). **All 3 fund-spending relay endpoints** (create, invite, availability) verified rigorous (zod + rate-limit + kill-switch + ceiling + invite-token + canonical-bucket-key). **Type-bypass scan:** 0 @ts-ignore, 1 documented @ts-expect-error, 27 `as unknown as` all legitimate library-typing-shim casts.
 
-6. **H-1 FIXED (Ken picked Option B):** Seed-mode import used to encrypt the envelope with a random ephemeral key and never persist it → Sally closes browser → has to re-paste seed next visit. Added a new `remember_me_choice` import stage. After successful seed import, the user sees a single checkbox UNCHECKED BY DEFAULT: "Automatically remember me on this device? (assuming nobody else uses it)" — Ken's exact wording. If unchecked: session-only behavior preserved (privacy-positive default). If checked: she picks a password, the envelope is re-encrypted with it, persisted to localStorage via `writeEnvelope`, keystore mode set to `'password'`, and future visits prompt for password only. Keyfile + posting-only modes untouched (they have their own password capture). New `import-remember-me-smoke` (5 scenarios, tamper-tested) locks in the unchecked-by-default behavior so a future PR can't flip the privacy posture by accident.
+Plan + findings docs:
+- `docs/AUDIT-cp138-PLAN.md` — 94-task plan
+- `docs/AUDIT-cp138-FINDINGS.md` — 283-line full findings ledger
+- `docs/AUDIT-OUTSIDE-SCOPE.md` — what a pro firm would do that I can't (DAST, active fuzzing, crypto specialist review, threat modeling workshop, supply-chain audit + SBOM), with budget estimates
 
-7. **H-2 FIXED:** FAQ search failed Grandma's first-load questions. "How do I start" → `order_editing` (1.00) instead of `how_to_trade_walkthrough`. "How do I begin" → 0 hits. "First time user" → `profile_pages` (1.00). Simulated against the live `searchEntries` function: 7 of 8 grandma queries either failed or returned wrong top results. Added getting-started + deictic synonym clusters to `SYNONYMS_EN` in `apps/web/src/lib/utils/faqIndex.ts`. Post-fix: 14 of 14 grandma-shaped queries route to acceptable top hits. New `faq-search-grandma-coverage-smoke` (14 scenarios, tamper-tested — removing the getting-started cluster fails 5 of the 14).
+**State at cp138 close:**
 
-8. **Brag entries #325 + #326 added.** #325: "Seed-phrase sign-in has a clear 'remember me?' step." #326: "FAQ search answers Grandma's first questions." Brag list now 326 sequential entries 1..326.
+- Triple-pulse smokes: **5971/5971/5971, 0 failures** (cp137 baseline 5967 + 4 new cp138 sentinels)
+- TypeScript: 0 errors across all 5 workspaces (apps/web, apps/indexer, apps/relay, apps/matrix-bot, apps/ops-cli)
+- svelte-check: 0 errors, 0 warnings
+- vitest: 1431+ tests passing (cp137 baseline + cp138 added test coverage for D-2 cap eviction)
+- Persona-walkthrough: 169 scenarios (165 cp137 + 4 cp138)
+- Locale parity: 3,095 × 10 = 30,950 pairs ✓
+- Brag list: 326 entries (no cp138 internal additions per Memory #15 — cp138 is internal hardening, not user-facing features)
 
-9. **Verified by reading code (no fix needed):**
-   - YubiKey HardwareKeyCard: structural soundness, WebHID feature-detect, seed-only gating, backup-confirmed hard gate, password gate, slot picker radio, label maxlength=64, 3 state-gated actions
-   - 2FA TOTP: all 8 phases defined in `Phase` type AND rendered in template, all 9 handlers wired
-   - 2FA backup code redemption: traced end-to-end via `bootFromEnvelope` → `'totp_required'` → `verifyTotpOrBackup` accepts both 6-digit and backup → backup-redeemed slot marked-used + envelope re-encrypted to prevent replay
-   - Backup codes themselves: 10 codes, Crockford-base32 8 chars, Argon2id-hashed at rest, single-use, formatted XXXX-XXXX, honest UI framing about non-custodial limits
-   - Returning user (lost device, seed in hand): `/login` correctly detects fresh device → `import-needed` branch with 3 cleaned-up CTAs
-   - Existing Blurt user (Bob, posting-only): 4 fields with clear hints, capability warning
-   - Onboarding seed/quiz/password copy: genuinely grandma-friendly throughout
+**Tarball binary identity (cp138 FULL state):**
 
-**Cumulative state:**
-- 16 tradable assets · **42 ADRs** · **326 brag entries** sequential 1..326
-- **Triple-pulse: 5,931 / 5,931 / 5,931**, 0 failures (cp136 was 5,914; +17 from 3 new smokes' scenarios + brag entry coverage)
-- **TypeScript: 0 errors** across 5 workspaces (indexer src+test, relay src+test, ops-cli, matrix-bot, web) plus svelte-check clean
-- **Vitest: 1,431 tests passing** (493 indexer + 244 relay + 694 web)
-- **Locale parity: 3,095 keys** across 10 locales after all G-*/H-* edits
-- **All 5 brag-list trailer invariants** passing including I-5 sequential
-- **KISS budget** 326/326 entries pass
-- **Comparison PNG fresh** at `apps/web/static/morphit-comparison.png` (454.6 KB, under 512 KB budget) — now fingerprint-validated, immune to git checkout mtime resets
-- **16 comparison-image-freshness invariants** passing (was 17 mtime-based; net -1 from removing brittle "footer-date older than mtime" check which is now structurally guaranteed by the fingerprint)
-- **3 new smokes wired and tamper-tested:** `asset-select-coverage-smoke`, `faq-search-grandma-coverage-smoke`, `import-remember-me-smoke`
-- **Mediakit fresh** at `apps/web/static/morphit-mediakit.zip`
+- File: `morphit-audit-2026-05-122-cp138-FULL-STATE.tar.gz`
+- Built: 2026-05-25
+- Files: 1,470 (source only — excludes node_modules, .svelte-kit, build/dist/coverage)
+- SHA-256 of the archive is communicated alongside the binary at delivery time (it's a meta-property of the archive, not embedded in it; embedding a SHA would change the SHA recursively).
+- Restore: `tar -xzf morphit-audit-2026-05-122-cp138-FULL-STATE.tar.gz && cd morphit && npm install`
 
-**cp137 post-publish discoveries (this turn — after Ken pushed back with "think HARDER"):**
+**Standing follow-ups (post-launch):**
 
-After producing the initial cp137 tarball, Ken invoked the never-assume-always-verify rule. The deeper sweep found and fixed 13 additional items, all shipped this turn:
+- **cp138-R-1** — bigint id propagation: 11 `parseInt(row.id, 10)` sites on BIGSERIAL ids. Safe at practical scale, correct pattern is end-to-end string ids
+- **cp138-R-2** — matrix-bot-sdk transitive vulnerabilities: swap to matrix-js-sdk OR add npm overrides; tracked as quarterly-review item
+- **Standing pre-launch operator action that remains:** `CHANGE_ME_BEFORE_PRODUCTION` rotation in `ops/postgres/init.sql:60-61` (this is operator action, not code — the placeholder MUST live in init.sql so the placeholder-rejection guard can recognize and reject it)
 
-1. **KISS budget smoke was actually FAILING** — entry #212 ("No leverage. No margin...") wasn't in `STACCATO_ALLOWLIST` after my brag-list section moves bumped its position from #209 to #212.  Added '212' to allowlist.
+**Pre-launch operator items that were noted as pending in memory but are SHIPPED (memory drift discovered cp138):**
 
-2. **KISS smoke parser had an off-by-one bug** — `Total: 325 entries` when the file had 326.  Regex required `\s+` after closing `**`, which silently dropped entry #48 (`**Two independent verification paths**:` has `**:` with no space).  Fixed regex to `[\s:.]*`. Pre-existing bug, not introduced by cp137, but I'm fixing it here since I found it.
-
-3. **Brag entries 323-326 were in WRONG sections** — memory rule says "Insert in proper themed section, never append to end."  All 4 were appended to section 18 (operator setup).  Moved 323→§10 (Open source and transparent), 324→§17 (Trade anything), 325→§2 (Privacy by design), 326→§1 (Free, fast, and friction-free).  Ran `scripts/renumber-brag-list.py` — entries now correctly numbered 1..326 sequential in proper sections.
-
-4. **OPERATIONS.md §22 missing F-2 update** — only mentioned `morphit-ops edit` for RPC endpoints, not the new `morphit-ops init` 19th step that ships cp137.  Added note that fresh-setup operators now get the RPC prompt at init time.
-
-5. **REVISIT-LIST.md top was stale** — memory rule: re-confirm facts at top each session.  Was still on cp131.  Updated to cp137 header with all 6 findings logged.
-
-6. **GRANDMA-FRIENDLY-INVESTIGATION.md not updated** — memory says this is the source-of-truth for UX rough edges, and H-1 (seed-mode session-only trap) + H-2 (FAQ search grandma coverage) are exactly that.  Added items 1.6 (H-1) + 1.7 (H-2) as SHIPPED with full context.
-
-7. **Comparison PNG was stale** — built BEFORE the section moves.  Rebuilt PNG + fingerprint sidecar (`de7c8220fa3155a364ab7dd6a917d72b17f963f129782139e20f868882dccaec`) + mediakit so all derived artifacts match current source.
-
-8. **Feedback-system walkthrough verified** — memory rule says this MUST be a checked facet of every walkthrough.  Walked: `/my/orders` → `PendingFeedbackReminderBanner` + `LeaveFeedbackForm` → `morphit_feedback_v1` → indexer's `feedback.ts` + `feedbackResponse.ts` handlers → profile (`RespondToFeedbackForm` + `getFeedback`/`getFeedbackGiven`).  Wired end-to-end ✓.
-
-9. **Forgejo/Gitea audit ran** — `forgejo-not-gitea-smoke` 3/3 passing, clean ✓.
-
-10. **CI workflow analysis** — 4 jobs total: `typecheck`, `web-check`, `ansible-lint`, `smokes`.  All four should pass once cp137 ships: typecheck 0 errors locally, web-check 0 errors locally, ansible files untouched since May 21 (pre-session), smokes 5931/0 triple-pulse.
-
-11. **Byte-weight audit** — static dir 2.3 MB total, PNG 465 KB < 512 KB budget, locale files lazy-loaded per language ✓.
-
-12. **Fingerprint byte-equivalence triple-confirmed** — Python byte-read, Node UTF-8 read, and sidecar all produce identical SHA-256 hash.  Confirms F-5 fix is sound across both language runtimes.
-
-13. **`morphit-ops init --check-only` actually run** — completed cleanly through pre-flight, confirming F-2's wiring of the 19th RPC step doesn't break the pre-flight gate.
-
-After all the post-publish fixes: triple-pulse re-ran 5931/5931/5931 stable, all smokes pass, KISS smoke now sees 326 entries with correct allowlist (was 325/incorrect-allowlist before).
-
-**Standing pre-launch operator-actions (carried forward):**
-- Rotate `CHANGE_ME_BEFORE_PRODUCTION` placeholder in `ops/postgres/init.sql`
-- Native-speaker QA of auto-translated locales (cp108-cp137 backlog now includes cp137's `onboarding.import.remember_me.*` tree × 9 non-EN locales)
+- `package-lock.json` — committed (308KB)
+- `svelte-kit sync + tsc --noEmit` in CI — wired in `.forgejo/workflows/ci.yml:107` (svelte-check runs svelte-aware tsc; equivalent)
 
 ---
 

@@ -1,7 +1,7 @@
 # ADR-0004: Price feed architecture
 
 **Status:** Accepted (implemented in `apps/indexer/src/indexer/price/`)
-**Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 implementation shipped)
+**Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 indexer-side shipped); 2026-05-25 (cp138 — frontend wiring partially complete; live prices on indexer at `/v1/price/...`, frontend still fallback-only pending an `ApiRelayProvider` + Settings opt-in)
 **Deciders:** project maintainer
 
 ## Context
@@ -231,21 +231,52 @@ proved unnecessary for Phase 3 launch.
   `setProvider()` / `getQuote()` API.
 - `apps/web/src/lib/prices/providers/fallback.ts` — the
   hardcoded fallback the original ADR specified for Phase 2.
+  **This is the only provider actually wired into the live
+  UI today.**  The reactive `priceStore` + `getPrice()` API
+  in `index.ts` defaults to `fallbackProvider` at boot and
+  there is no Settings toggle to swap it.
 - `apps/web/src/lib/prices/providers/coingecko.ts` —
-  opt-in direct provider (corresponds to `DirectClientProvider`
-  in the original Phase 3 plan).
-- `apps/web/src/lib/prices/providers/composite.ts` — wraps
-  multiple upstream providers with stale-quote tolerance.
+  reference implementation of a direct-client price fetcher
+  (corresponds to `DirectClientProvider` in the original
+  Phase 3 plan).  **Not currently imported anywhere.**
+  Retained as RFC code for a future "users who want freshest
+  prices and accept the IP leak" opt-in.
+- `apps/web/src/lib/prices/providers/composite.ts` — reference
+  implementation of a multi-upstream chainer.  **Not
+  currently imported anywhere.**  Retained as RFC code for
+  the same future opt-in path.
 
-The frontend defaults to fallback prices unless the user
-explicitly opts into the indexer-relayed feed via Settings.
-A direct-CoinGecko provider also exists and ships with the
-documented privacy warning; a user who wants freshest prices
-and is OK with the IP leak can flip to it.
+The frontend serves prices from the static `fallback` quotes
+only.  To get live prices into the UI, the next step is to
+ship an `ApiRelayProvider` that calls the indexer's
+`/v1/price/...` endpoint and wire it via a Settings toggle
+("opt-in to live prices?  may slightly degrade privacy by
+relaying through your home instance").  Until that ships, the
+ADR's user-facing privacy promise (indexer is the privacy
+boundary, frontend never speaks to CoinGecko directly) is
+trivially upheld because the frontend doesn't fetch prices
+at all.
 
-**Net:** the architecture is functionally what the ADR
-proposed (multi-provider, swappable, privacy-first default),
-just differently named and split across indexer/frontend
-rather than all-frontend.  No semantic regression.  The
-"NOT YET DECIDED; candidate" framing in the body is now
-historical context, not an open decision.
+### 2026-05-25 (cp138 audit) — accuracy correction to the 2026-05-09 amendment
+
+The 2026-05-09 amendment overstated the frontend wiring.  It said
+"frontend defaults to fallback prices unless the user explicitly
+opts into the indexer-relayed feed via Settings" and "a direct-
+CoinGecko provider also exists and ships [...]; a user who wants
+freshest prices and is OK with the IP leak can flip to it."  In
+reality:
+
+- No Settings toggle for price-provider switching exists.
+- `setProvider()` is exported but uncalled.
+- `composite.ts` and `coingecko.ts` are unimported (and so unused).
+- The frontend serves fallback quotes only.
+
+That overstatement was caught by the cp138 deep audit's orphan-file
+sweep.  The amendment text above has been corrected to describe the
+actual state — RFC code parked for a future Settings opt-in, with
+no semantic regression vs. the original Phase 2 promise (which was
+"fallback only at Phase 2 launch").
+
+The follow-up work is tracked in `REVISIT-LIST.md` as
+"Ship `ApiRelayProvider` + Settings toggle (drift-resolved
+in cp138; future Phase-3-completion work)."
