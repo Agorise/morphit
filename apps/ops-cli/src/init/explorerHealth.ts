@@ -29,6 +29,8 @@ export type ProbeStatus =
 	| { kind: 'wrong_shape'; latencyMs: number; reason: string }
 	| { kind: 'unreachable'; reason: string };
 
+import { sanitizeForTerm } from '../render/term.ts';
+
 const PROBE_TIMEOUT_MS = 5_000;
 
 /** Probe a BTC explorer URL.  Expects the Esplora-style API
@@ -214,14 +216,19 @@ export async function probeChatLinkExplorer(
 /** Render a ProbeStatus as a one-line summary with an
  *  emoji prefix suitable for the wizard screen.  Used by
  *  the explorer-URL editor as it polls each URL on the
- *  list and prints results inline. */
+ *  list and prints results inline.
+ *
+ *  cp139-C-9: s.reason can include HTTP server response text
+ *  or fetch-library error messages.  These have flowed from
+ *  attacker-controllable network responses, so strip terminal
+ *  escapes before returning the string for display. */
 export function renderProbeStatus(s: ProbeStatus): string {
 	switch (s.kind) {
 		case 'ok':
 			return `✓ ok (${s.latencyMs}ms)`;
 		case 'wrong_shape':
-			return `⚠ unexpected response (${s.latencyMs}ms): ${s.reason}`;
+			return `⚠ unexpected response (${s.latencyMs}ms): ${sanitizeForTerm(s.reason)}`;
 		case 'unreachable':
-			return `✗ unreachable: ${s.reason}`;
+			return `✗ unreachable: ${sanitizeForTerm(s.reason)}`;
 	}
 }

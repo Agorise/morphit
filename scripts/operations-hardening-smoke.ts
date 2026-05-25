@@ -139,6 +139,7 @@ const REQUIRED_KEYWORDS_PER_LAYER: Array<[string, string]> = [
 	['Systemd hardening', 'ProtectSystem'],
 	['auditd', 'auditd'],
 	['Postgres SCRAM', 'scram-sha-256'],
+	['Postgres statement_timeout', 'statement_timeout'],
 	['Filesystem integrity (AIDE)', 'aide'],
 	['Secrets perms', '0600'],
 	['Disk encryption', 'LUKS'],

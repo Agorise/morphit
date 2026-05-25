@@ -43,6 +43,24 @@ const SCHEMA = z.object({
 	MORPHIT_MATRIX_BOT_HOMESERVER: z
 		.string()
 		.url('homeserver must be a full URL, e.g. https://matrix.org')
+		// cp139 B-4: zod's .url() accepts any scheme (http://,
+		// https://, file://, gopher://...).  An operator who
+		// copy-pasted `http://matrix.example.com` (no s) without
+		// noticing would emit alert traffic cleartext to the
+		// homeserver — leaking operator alerting metadata (which
+		// categories of alert fire when, payload contents) to any
+		// on-path observer.  Matrix protocol assumes TLS at the
+		// homeserver boundary; this enforces it.
+		//
+		// Exception: localhost / 127.x / [::1] over http for local
+		// dev or hosted-homeserver-on-same-box deployments where
+		// the operator has explicitly chosen the loopback risk.
+		.refine(
+			(s) =>
+				/^https:\/\//i.test(s) ||
+				/^http:\/\/(localhost|127\.|\[::1\])/i.test(s),
+			'homeserver must use https:// (http:// allowed only for localhost / 127.x / [::1])'
+		)
 		.default('https://matrix.org'),
 
 	MORPHIT_MATRIX_BOT_ACCESS_TOKEN: z
@@ -73,7 +91,15 @@ const SCHEMA = z.object({
 
 	MORPHIT_MATRIX_BOT_DIGEST_SEND_TIME_UTC: z
 		.string()
-		.regex(/^[0-2]\d:[0-5]\d$/, 'digest time must be "HH:MM" 24-hour UTC')
+		// cp139 B-3: was `/^[0-2]\d:[0-5]\d$/` — accepted "24:00"
+		// through "29:59".  Date.UTC silently normalizes (24:00 →
+		// midnight next day; 29:00 → 5:00 next day) so a typo
+		// like "25:00" became "01:00 next day" with no error.
+		// Tightened: hours 00-23 only.
+		.regex(
+			/^(?:[01]\d|2[0-3]):[0-5]\d$/,
+			'digest time must be "HH:MM" 24-hour UTC with hour 00-23'
+		)
 		.default('09:00'),
 
 	MORPHIT_MATRIX_BOT_DRY_RUN: z

@@ -38,6 +38,7 @@ import {
 	closeSync
 } from 'node:fs';
 import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 import {
 	stepAltNetworks,
 	stepOrigin,
@@ -212,11 +213,11 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	console.log('━'.repeat(58));
 	console.log('');
 	for (const [k, v] of configUpdates) {
-		const display = v === null ? '(unset/cleared)' : v;
+		const display = v === null ? '(unset/cleared)' : sanitizeForTerm(v);
 		console.log(`  ${k.padEnd(36)} ${display}`);
 	}
 	for (const [k, v] of envUpdates) {
-		const display = v === null ? '(unset/cleared)' : v;
+		const display = v === null ? '(unset/cleared)' : sanitizeForTerm(v);
 		console.log(`  ${k.padEnd(36)} ${display}`);
 	}
 	console.log('');
@@ -234,9 +235,12 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// operator can recover; the OTHER file's write is still
 	// committed if it succeeded first.
 	if (configUpdates.size > 0) {
-		const result = atomicEnvWrite(configPath, existing.text, configUpdates);
+		const result = atomicEnvWrite(configPath, existing.text, configUpdates, 'parseEnv');
 		if (!result.ok) {
-			console.log(`\n✗ ${result.message}`);
+			// cp139-C-6: result.message includes err.message from
+			// the filesystem layer and may reference paths.
+			// Sanitize at display.
+			console.log(`\n✗ ${sanitizeForTerm(result.message)}`);
 			return 3;
 		}
 		console.log(`\n  ✓ wrote ${configPath}`);
@@ -251,9 +255,9 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			console.log('\n✗ Internal error: env updates set with no env file loaded.');
 			return 3;
 		}
-		const result = atomicEnvWrite(envPath, existingEnv.text, envUpdates);
+		const result = atomicEnvWrite(envPath, existingEnv.text, envUpdates, 'bash');
 		if (!result.ok) {
-			console.log(`\n✗ ${result.message}`);
+			console.log(`\n✗ ${sanitizeForTerm(result.message)}`);
 			return 3;
 		}
 		console.log(`\n  ✓ wrote ${envPath}`);
@@ -295,7 +299,8 @@ type AtomicWriteResult = AtomicWriteSuccess | AtomicWriteFailure;
 function atomicEnvWrite(
 	path: string,
 	originalText: string,
-	updates: Map<string, string | null>
+	updates: Map<string, string | null>,
+	consumer: EnvFileConsumer = 'bash'
 ): AtomicWriteResult {
 	const backupPath = `${path}.bak-${Date.now()}`;
 	try {
@@ -308,7 +313,7 @@ function atomicEnvWrite(
 		};
 	}
 
-	const newText = applyUpdates(originalText, updates);
+	const newText = applyUpdates(originalText, updates, consumer);
 	const tmpPath = `${path}.tmp`;
 	try {
 		writeFileSync(tmpPath, newText, { mode: 0o600, flag: 'w' });
@@ -330,9 +335,9 @@ function atomicEnvWrite(
 			}
 		} catch (fsyncErr) {
 			console.log(
-				`  (note: fsync on ${tmpPath} failed: ${
+				`  (note: fsync on ${tmpPath} failed: ${sanitizeForTerm(
 					fsyncErr instanceof Error ? fsyncErr.message : String(fsyncErr)
-				}; proceeding anyway)`
+				)}; proceeding anyway)`
 			);
 		}
 		renameSync(tmpPath, path);
@@ -438,7 +443,13 @@ function parseKvLines(text: string): Map<string, string> {
  *    - If the new value is null and the key doesn't appear: no-op.
  *    - If the new value is null and the key DOES appear: remove
  *      that line. */
-function applyUpdates(original: string, updates: Map<string, string | null>): string {
+type EnvFileConsumer = 'parseEnv' | 'bash';
+
+function applyUpdates(
+	original: string,
+	updates: Map<string, string | null>,
+	consumer: EnvFileConsumer = 'bash'
+): string {
 	const lines = original.split('\n');
 	const seen = new Set<string>();
 	const newLines: string[] = [];
@@ -467,7 +478,7 @@ function applyUpdates(original: string, updates: Map<string, string | null>): st
 			// less surprising than aggressive comment-deletion.
 			continue;
 		}
-		newLines.push(`${key}=${quoteValue(newValue)}`);
+		newLines.push(`${key}=${quoteValue(newValue, consumer)}`);
 	}
 
 	// Append any updates that didn't appear in the original.
@@ -488,7 +499,7 @@ function applyUpdates(original: string, updates: Map<string, string | null>): st
 		newLines.push("# Added by 'morphit-ops edit'");
 		newLines.push('# ──────────────────────────────────────────────────────');
 		for (const [k, v] of toAppend) {
-			newLines.push(`${k}=${quoteValue(v)}`);
+			newLines.push(`${k}=${quoteValue(v, consumer)}`);
 		}
 		newLines.push('');
 	}
@@ -499,16 +510,40 @@ function applyUpdates(original: string, updates: Map<string, string | null>): st
 	return joined;
 }
 
-/** Quote a value for the env file when needed.  Values
- *  containing whitespace or shell-special characters get
- *  double-quoted; simple values are emitted bare to match the
- *  wizard's existing output style. */
-function quoteValue(v: string): string {
-	if (v.length === 0) return '""';
+/** Quote a value for the env file.  cp139-D-1 v2: prefers single-
+ *  quoted form in BOTH consumer modes since single-quoted handles
+ *  `$`/`(`/`"`/etc. literally in both parseEnv and bash.  Differs
+ *  only in apostrophe handling:
+ *
+ *  - 'bash' consumer: POSIX close-escape-reopen idiom `'\''` for
+ *    embedded apostrophes (bash understands; parseEnv doesn't).
+ *  - 'parseEnv' consumer: falls back to double-quoted when value
+ *    contains `'`.  Double-quoted in parseEnv doesn't expand
+ *    `$`/backtick (dotenv semantics) but does NOT support `\"`
+ *    escape, so a value containing both `'` AND `"` is rejected
+ *    at quote() time.
+ *
+ *  Symmetric with init/render.ts:quote() — both write paths must
+ *  produce identical env-file output for the same (value, consumer)
+ *  pair. */
+function quoteValue(v: string, consumer: EnvFileConsumer = 'bash'): string {
+	if (v.length === 0) return "''";
 	if (/^[A-Za-z0-9_./:@\-+]+$/.test(v)) return v;
-	// Escape backslashes and double-quotes for the quoted form.
-	const esc = v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-	return `"${esc}"`;
+	if (consumer === 'parseEnv') {
+		if (!v.includes("'")) {
+			return `'${v}'`;
+		}
+		if (v.includes('"')) {
+			throw new Error(
+				`quoteValue(): value contains both ' and " which is unrepresentable in parseEnv ` +
+					`env-file format.  Wizard/edit prompt layer must reject this input.`
+			);
+		}
+		return `"${v}"`;
+	}
+	// Bash consumer.
+	const esc = v.replace(/'/g, "'\\''");
+	return `'${esc}'`;
 }
 
 /** Test-only export.  Smoke runner imports this to verify the
@@ -629,17 +664,22 @@ async function pickSection(
 
 function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	console.log('Current values:\n');
-	console.log(`  Primary origin:    ${c.origin ?? '(unset)'}`);
-	console.log(`  Tor address:       ${c.altNetworks.tor ?? '(unset)'}`);
-	console.log(`  Lokinet address:   ${c.altNetworks.lokinet ?? '(unset)'}`);
-	console.log(`  I2P address:       ${c.altNetworks.i2p ?? '(unset)'}`);
-	console.log(`  Nostr pubkey:      ${c.altNetworks.nostr ?? '(unset)'}`);
-	console.log(`  SEO title:         ${c.seo.title ?? '(default)'}`);
+	// cp139-C-17: every value here comes from file-system read of
+	// morphit.config.env / morphit.env.  An operator who pasted a
+	// hostile blob into the file (or a process that wrote there
+	// with elevated privilege) could plant ANSI escapes that fire
+	// at next `morphit-ops edit` invocation.  Sanitize on display.
+	console.log(`  Primary origin:    ${c.origin !== null ? sanitizeForTerm(c.origin) : '(unset)'}`);
+	console.log(`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`);
+	console.log(`  Lokinet address:   ${c.altNetworks.lokinet !== null ? sanitizeForTerm(c.altNetworks.lokinet) : '(unset)'}`);
+	console.log(`  I2P address:       ${c.altNetworks.i2p !== null ? sanitizeForTerm(c.altNetworks.i2p) : '(unset)'}`);
+	console.log(`  Nostr pubkey:      ${c.altNetworks.nostr !== null ? sanitizeForTerm(c.altNetworks.nostr) : '(unset)'}`);
+	console.log(`  SEO title:         ${c.seo.title !== null ? sanitizeForTerm(c.seo.title) : '(default)'}`);
 	console.log(
-		`  SEO description:   ${c.seo.description ? truncate(c.seo.description, 50) : '(default)'}`
+		`  SEO description:   ${c.seo.description !== null ? sanitizeForTerm(truncate(c.seo.description, 50)) : '(default)'}`
 	);
 	console.log(
-		`  SEO keywords:      ${c.seo.keywords ? truncate(c.seo.keywords, 50) : '(default)'}`
+		`  SEO keywords:      ${c.seo.keywords !== null ? sanitizeForTerm(truncate(c.seo.keywords, 50)) : '(default)'}`
 	);
 	console.log(
 		`  BTC fee:           ${c.listingFee.btcSatoshis ?? '(unset)'} satoshis`
@@ -651,7 +691,7 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 		`  Fallback BLURT/USD: ${c.listingFee.fallbackBlurtPriceUsd ?? '(unset)'}`
 	);
 	console.log(
-		`  Operator tag:      ${c.operatorTag ?? '(unset — relay queues nothing)'}`
+		`  Operator tag:      ${c.operatorTag !== null ? sanitizeForTerm(c.operatorTag) : '(unset — relay queues nothing)'}`
 	);
 	if (env !== null) {
 		const rpc = env.rpcEndpoints;
@@ -661,8 +701,8 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 				: rpc.length === 0
 					? '(empty)'
 					: rpc.length === 1
-						? rpc[0]!
-						: `${rpc[0]!} +${rpc.length - 1} more`;
+						? sanitizeForTerm(rpc[0]!)
+						: `${sanitizeForTerm(rpc[0]!)} +${rpc.length - 1} more`;
 		console.log(`  Blurt RPC list:    ${rpcDisplay}`);
 	}
 	console.log('');

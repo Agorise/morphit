@@ -23,6 +23,7 @@
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { runSystemCheck, renderSystemCheck } from '../init/systemCheck.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 import {
 	stepInstanceName,
 	stepTagline,
@@ -99,7 +100,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 			console.log(`  ✓ Backed up existing config to ${backupPath}\n`);
 		} catch (err) {
 			console.log(
-				`  ⚠ Could not back up existing config: ${err instanceof Error ? err.message : String(err)}\n`
+				`  ⚠ Could not back up existing config: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
 			);
 			const stillProceed = await askYesNo('Proceed anyway (existing config will be lost)?', false);
 			if (!stillProceed) {
@@ -170,15 +171,20 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	try {
 		result = writeWizardOutput(answers, repoRoot);
 	} catch (err) {
-		console.log(`\n✗ Failed to write config: ${err instanceof Error ? err.message : String(err)}`);
+		// cp139-C-5: err.message could be filesystem error text
+		// containing an attacker-influenced path component (e.g.
+		// operator typed `--out=$'\x1b[2J'`).  Sanitize.
+		console.log(
+			`\n✗ Failed to write config: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`
+		);
 		return 3;
 	}
 
-	console.log(`\n  ✓ wrote ${result.configBytes} bytes to ${result.configPath}`);
-	console.log(`  ✓ wrote ${result.envBytes} bytes to ${result.envPath}`);
-	console.log(`  ✓ wrote ${result.keystoreBytes} bytes to ${result.keystorePath}`);
+	console.log(`\n  ✓ wrote ${result.configBytes} bytes to ${sanitizeForTerm(result.configPath)}`);
+	console.log(`  ✓ wrote ${result.envBytes} bytes to ${sanitizeForTerm(result.envPath)}`);
+	console.log(`  ✓ wrote ${result.keystoreBytes} bytes to ${sanitizeForTerm(result.keystorePath)}`);
 	if (result.backupEnvPath) {
-		console.log(`  ✓ wrote ${result.backupEnvBytes} bytes to ${result.backupEnvPath}`);
+		console.log(`  ✓ wrote ${result.backupEnvBytes} bytes to ${sanitizeForTerm(result.backupEnvPath)}`);
 		console.log('  ✓ permissions set to 600 on all four (only you can read them)');
 	} else {
 		console.log('  ✓ permissions set to 600 on all three (only you can read them)');
@@ -219,23 +225,23 @@ function printReview(answers: WizardAnswers): void {
 	console.log('');
 	console.log("Here's what we'll write to morphit.config.env:");
 	console.log('');
-	console.log(`  Instance name:        ${answers.instanceName}`);
-	console.log(`  Tagline:              ${answers.tagline}`);
-	console.log(`  Database URL:         ${maskDatabasePassword(answers.databaseUrl)}`);
-	console.log(`  Relay account:        @${answers.relayAccount.name}`);
+	console.log(`  Instance name:        ${sanitizeForTerm(answers.instanceName)}`);
+	console.log(`  Tagline:              ${sanitizeForTerm(answers.tagline)}`);
+	console.log(`  Database URL:         ${sanitizeForTerm(maskDatabasePassword(answers.databaseUrl))}`);
+	console.log(`  Relay account:        @${sanitizeForTerm(answers.relayAccount.name)}`);
 	const keyDesc =
 		answers.postingKey.mode === 'encrypted'
 			? 'encrypted (passphrase prompted at startup)'
 			: 'plaintext (consider switching to encrypted later)';
 	console.log(`  Posting key:          ${keyDesc}`);
-	console.log(`  Fees account:         @${answers.feesAccount}`);
+	console.log(`  Fees account:         @${sanitizeForTerm(answers.feesAccount)}`);
 	console.log(`  Daily ceiling:        ${answers.dailyCeiling}`);
-	console.log(`  Contact URL:          ${answers.contactUrl ?? '(skipped)'}`);
-	console.log(`  Public origin:        ${answers.origin ?? '(skipped — federation-invisible)'}`);
-	console.log(`  Tor address:          ${answers.altNetworks.tor ?? '(skipped)'}`);
-	console.log(`  Lokinet address:      ${answers.altNetworks.lokinet ?? '(skipped)'}`);
-	console.log(`  I2P address:          ${answers.altNetworks.i2p ?? '(skipped)'}`);
-	console.log(`  Nostr pubkey:         ${answers.altNetworks.nostr ?? '(skipped)'}`);
+	console.log(`  Contact URL:          ${answers.contactUrl !== null ? sanitizeForTerm(answers.contactUrl) : '(skipped)'}`);
+	console.log(`  Public origin:        ${answers.origin !== null ? sanitizeForTerm(answers.origin) : '(skipped — federation-invisible)'}`);
+	console.log(`  Tor address:          ${answers.altNetworks.tor !== null ? sanitizeForTerm(answers.altNetworks.tor) : '(skipped)'}`);
+	console.log(`  Lokinet address:      ${answers.altNetworks.lokinet !== null ? sanitizeForTerm(answers.altNetworks.lokinet) : '(skipped)'}`);
+	console.log(`  I2P address:          ${answers.altNetworks.i2p !== null ? sanitizeForTerm(answers.altNetworks.i2p) : '(skipped)'}`);
+	console.log(`  Nostr pubkey:         ${answers.altNetworks.nostr !== null ? sanitizeForTerm(answers.altNetworks.nostr) : '(skipped)'}`);
 	console.log(
 		`  BTC fee explorers:    ${answers.feeExplorers.btc.length} URL${answers.feeExplorers.btc.length === 1 ? '' : 's'}`
 	);
@@ -298,13 +304,13 @@ function printReview(answers: WizardAnswers): void {
 	console.log(
 		`  Fallback BLURT/USD:   $${answers.listingFee.fallbackBlurtPriceUsd}`
 	);
-	console.log(`  Operator tag:         ${answers.operatorTag.tag}`);
+	console.log(`  Operator tag:         ${sanitizeForTerm(answers.operatorTag.tag)}`);
 	const seoOverridden =
 		answers.seo.title !== null || answers.seo.description !== null || answers.seo.keywords !== null;
 	console.log(`  SEO override:         ${seoOverridden ? 'yes' : '(using i18n defaults)'}`);
 	if (answers.backup.enabled) {
 		console.log(
-			`  Daily DB backup:      enabled → ${answers.backup.backupDir}, ${answers.backup.retainDays}-day retention`
+			`  Daily DB backup:      enabled → ${answers.backup.backupDir !== null ? sanitizeForTerm(answers.backup.backupDir) : '(default)'}, ${answers.backup.retainDays}-day retention`
 		);
 	} else {
 		console.log('  Daily DB backup:      disabled');
@@ -413,7 +419,7 @@ function printNextSteps(
 		// editing the shipped unit.
 		if (answers.backup.backupDir !== null && answers.backup.backupDir !== '/home/morphit/backups') {
 			console.log(`     ⚠  You picked a non-default backup directory`);
-			console.log(`        (${answers.backup.backupDir}).  The shipped systemd unit`);
+			console.log(`        (${sanitizeForTerm(answers.backup.backupDir)}).  The shipped systemd unit`);
 			console.log(`        is wired to /home/morphit/backups; you need to add an`);
 			console.log(`        override so the dump isn't blocked by ProtectSystem:`);
 			console.log('');
@@ -422,7 +428,7 @@ function printNextSteps(
 			console.log('        Then paste these two lines and save:');
 			console.log('');
 			console.log('          [Service]');
-			console.log(`          ReadWritePaths=${answers.backup.backupDir}`);
+			console.log(`          ReadWritePaths=${sanitizeForTerm(answers.backup.backupDir)}`);
 			console.log('');
 		}
 		stepNum++;
@@ -439,7 +445,7 @@ function printNextSteps(
 	console.log('━'.repeat(58));
 	console.log('');
 	console.log(`Your posting key is now stored at:`);
-	console.log(`  ${result.keystorePath}`);
+	console.log(`  ${sanitizeForTerm(result.keystorePath)}`);
 	console.log('');
 	if (answers.postingKey.mode === 'encrypted') {
 		console.log(

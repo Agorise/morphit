@@ -1126,7 +1126,12 @@ export function renderAlertBody(c: ClassifiedAlert): { plain: string; html: stri
 	return { plain, html };
 }
 
-function escapeHtml(s: string): string {
+/** HTML-escape the five XSS-sensitive characters.  Order matters:
+ *  `&` must be replaced first or we double-escape the entities we
+ *  just produced.  Exported so the digest builder and any future
+ *  Matrix-HTML emitter share a single defense; if you find
+ *  yourself reaching for a second copy, import this one instead. */
+export function escapeHtml(s: string): string {
 	return s
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')

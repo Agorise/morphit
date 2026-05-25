@@ -29,6 +29,7 @@ import {
 } from './prompt.ts';
 import { lookupBlurtAccount, validateBlurtAccountName, type AccountInfo } from './chainCheck.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 import {
 	probeBitcoinExplorer,
 	probeMoneroExplorer,
@@ -198,7 +199,7 @@ export async function stepRelayAccount(): Promise<RelayAccountResult> {
 				}
 				continue;
 			}
-			console.log(`  ✓ @${name} exists on Blurt.  Current balance: ${account.balance}`);
+			console.log(`  ✓ @${name} exists on Blurt.  Current balance: ${sanitizeForTerm(account.balance)}`);
 			// Estimate runway at 100 BLURT/signup.
 			const runway = Math.floor(account.balanceBlurt / 100);
 			if (runway < 50) {
@@ -212,8 +213,11 @@ export async function stepRelayAccount(): Promise<RelayAccountResult> {
 			console.log('');
 			return { name, account, chainLookupSucceeded: true };
 		} catch (err) {
+			// cp139-C-12: err.message can carry chain-RPC response
+			// text (HTTP server's error body) which is attacker-
+			// influenceable.  Strip terminal escapes before display.
 			console.log(
-				`  ⚠ Could not check @${name} on Blurt: ${err instanceof Error ? err.message : 'unknown error'}`
+				`  ⚠ Could not check @${name} on Blurt: ${sanitizeForTerm(err instanceof Error ? err.message : 'unknown error')}`
 			);
 			const useAnyway = await askYesNo(
 				'Use this name anyway? (will validate later when relay starts)',
@@ -387,8 +391,13 @@ export async function stepDailyCeiling(relayAccount: AccountInfo | null): Promis
 		const safeCeiling = Math.max(1, Math.floor(balance / 100 / 2));
 		// Aim for "balance funds at least 2 days at ceiling rate".
 		suggestedDefault = Math.min(50, safeCeiling);
+		// cp139-C-20: relayAccount.balance comes from Blurt RPC
+		// response; sanitize before display.  relayAccount.name
+		// passed validateBlurtAccountName (regex a-z0-9._-) so
+		// can't carry escapes, but pass through sanitize anyway
+		// for consistency with the rest of the file.
 		console.log(
-			`Suggestions based on your @${relayAccount.name} balance (${relayAccount.balance}):`
+			`Suggestions based on your @${sanitizeForTerm(relayAccount.name)} balance (${sanitizeForTerm(relayAccount.balance)}):`
 		);
 		const tightDays3 = Math.max(1, Math.floor(balance / 100 / 3));
 		console.log(`  • ${tightDays3}        — most conservative (~3 days runway at this rate)`);
@@ -701,19 +710,23 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 		return 'At least one RPC endpoint is required.';
 	}
 	for (const u of list) {
+		// cp139-C-15: same defense as parseExplorerUrlList — the
+		// error string is interpolated into a console.log by the
+		// caller (stepRpcEndpoints).
+		const safeU = sanitizeForTerm(u);
 		if (!u.startsWith('https://')) {
-			return `RPC endpoint must start with https:// — got "${u}"`;
+			return `RPC endpoint must start with https:// — got "${safeU}"`;
 		}
 		try {
 			const parsed = new URL(u);
 			if (parsed.protocol !== 'https:') {
-				return `RPC endpoint must be https — got "${u}"`;
+				return `RPC endpoint must be https — got "${safeU}"`;
 			}
 			if (parsed.username !== '' || parsed.password !== '') {
-				return `RPC endpoint must not include user:pass@ — got "${u}"`;
+				return `RPC endpoint must not include user:pass@ — got "${safeU}"`;
 			}
 		} catch {
-			return `Could not parse RPC endpoint as URL: "${u}"`;
+			return `Could not parse RPC endpoint as URL: "${safeU}"`;
 		}
 	}
 	// De-dupe while preserving order.
@@ -968,19 +981,27 @@ export function parseExplorerUrlList(raw: string): readonly string[] | string {
 		return 'At least one explorer URL is required.';
 	}
 	for (const u of list) {
+		// cp139-C-15: sanitize the operator's raw URL in the error
+		// path.  Error strings are interpolated into editExplorerList's
+		// `console.log('  ✗ ${result}')` line which writes directly
+		// to the operator's terminal.  A paste with embedded ANSI
+		// escapes (e.g. operator copies from a hostile webpage with
+		// invisible content-injection) would otherwise reach the
+		// terminal interpreter.
+		const safeU = sanitizeForTerm(u);
 		if (!u.startsWith('https://')) {
-			return `Explorer URL must start with https:// — got "${u}"`;
+			return `Explorer URL must start with https:// — got "${safeU}"`;
 		}
 		try {
 			const parsed = new URL(u);
 			if (parsed.protocol !== 'https:') {
-				return `Explorer URL must be https — got "${u}"`;
+				return `Explorer URL must be https — got "${safeU}"`;
 			}
 			if (parsed.username !== '' || parsed.password !== '') {
-				return `Explorer URL must not include user:pass@ — got "${u}"`;
+				return `Explorer URL must not include user:pass@ — got "${safeU}"`;
 			}
 		} catch {
-			return `Could not parse explorer URL: "${u}"`;
+			return `Could not parse explorer URL: "${safeU}"`;
 		}
 	}
 	const seen = new Set<string>();
@@ -1011,7 +1032,10 @@ async function renderHealthChecks(
 		const r = results[i];
 		const status =
 			r === null || r === undefined ? '✗ probe failed' : renderProbeStatus(r);
-		console.log(`  ${i + 1}. ${urls[i]}\n     ${status}`);
+		// cp139-C-13: defense-in-depth — operator-typed URLs are
+		// sanitized at display.  renderProbeStatus already
+		// sanitizes the reason inside the status string.
+		console.log(`  ${i + 1}. ${sanitizeForTerm(urls[i]!)}\n     ${status}`);
 	}
 	console.log('');
 }
@@ -1404,7 +1428,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
 	let current = defaultUrl;
 	while (true) {
-		console.log(`  Current ${label}: ${current}`);
+		// cp139-C-13: sanitize operator-typed URL before display
+		// (defense-in-depth — askForUrl validates shape but we
+		// also strip terminal-control escapes here).
+		console.log(`  Current ${label}: ${sanitizeForTerm(current)}`);
 		const probe = await probeChatLinkExplorer(current).catch(
 			(): ProbeStatus => ({ kind: 'unreachable', reason: 'probe threw' })
 		);
@@ -1678,7 +1705,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 		}
 	} catch (err) {
 		console.log(
-			`  ⚠ Coingecko unreachable: ${err instanceof Error ? err.message : String(err)}\n`
+			`  ⚠ Coingecko unreachable: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
 		);
 		console.log('  You can enter BTC sat + XMR piconero amounts by hand,');
 		console.log("  or keep the hardcoded defaults (calibrated for $0.25 at");

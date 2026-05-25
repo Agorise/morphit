@@ -31,6 +31,7 @@
 
 import { readFileSync } from 'node:fs';
 import { askPassword, askYesNo } from '../init/prompt.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 
 /** Codepoint sanitization — same as operatorBlock + the indexer.
  *  See the operator-block command for rationale. */
@@ -134,7 +135,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	}
 	const key = keyRaw.trim();
 	if (!KEY_RE.test(key)) {
-		console.log(`✗ Invalid key: ${key}`);
+		console.log(`✗ Invalid key: ${sanitizeForTerm(key)}`);
 		console.log('  Keys must match /^[a-z][a-z0-9_]+$/ (lowercase, start with letter,');
 		console.log('  may contain digits and underscores; 3–24 chars).');
 		return 1;
@@ -180,7 +181,9 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 
 	const category = (ctx.flags.category ?? '').trim();
 	if (!VALID_CATEGORIES.has(category)) {
-		console.log(`✗ Invalid --category: "${category}".  Must be one of: crypto, in_person, online.`);
+		// cp139-C-16: operator's --category flag value echoed in
+		// error.  Sanitize before display.
+		console.log(`✗ Invalid --category: "${sanitizeForTerm(category)}".  Must be one of: crypto, in_person, online.`);
 		return 1;
 	}
 
@@ -211,16 +214,16 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	console.log('');
-	console.log(`  Operator:    @${account}`);
+	console.log(`  Operator:    @${sanitizeForTerm(account)}`);
 	console.log(`  Action:      add`);
-	console.log(`  Key:         ${key}`);
-	console.log(`  Name:        ${name}`);
-	console.log(`  Description: ${description.length > 0 ? description : '(empty)'}`);
-	console.log(`  Category:    ${category}`);
-	console.log(`  URL:         ${url ?? '(none)'}`);
+	console.log(`  Key:         ${sanitizeForTerm(key)}`);
+	console.log(`  Name:        ${sanitizeForTerm(name)}`);
+	console.log(`  Description: ${description.length > 0 ? sanitizeForTerm(description) : '(empty)'}`);
+	console.log(`  Category:    ${sanitizeForTerm(category)}`);
+	console.log(`  URL:         ${url !== null ? sanitizeForTerm(url) : '(none)'}`);
 	console.log('');
 	console.log('  This op is signed and broadcast on chain.  Other Morphit');
-	console.log('  instances will see the addition is namespaced (@instance:' + key + ')');
+	console.log('  instances will see the addition is namespaced (@instance:' + sanitizeForTerm(key) + ')');
 	console.log("  and only this instance's picker will offer it as a selectable");
 	console.log('  option.  Cross-instance order filtering still matches by the');
 	console.log('  exact namespaced key.');
@@ -236,7 +239,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	try {
 		wif = await loadPostingKey(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${errMsg(err)}`);
+		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -263,7 +266,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 			}
 		});
 	} catch (err) {
-		console.log(`✗ Broadcast failed: ${errMsg(err)}`);
+		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	} finally {
 		wif = '';
@@ -271,10 +274,10 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 
 	console.log('');
 	console.log(`✓ Posted in block ${result.block_num}.`);
-	console.log(`  Transaction: ${result.trx_id}`);
+	console.log(`  Transaction: ${sanitizeForTerm(result.trx_id)}`);
 	console.log('');
-	console.log(`  Once the indexer ingests this op, the picker will offer "${name}"`);
-	console.log(`  in the ${category} category, with the description you provided.`);
+	console.log(`  Once the indexer ingests this op, the picker will offer "${sanitizeForTerm(name)}"`);
+	console.log(`  in the ${sanitizeForTerm(category)} category, with the description you provided.`);
 	return 0;
 }
 
@@ -292,7 +295,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 		return 1;
 	}
 	if (RESERVED_CANONICAL_KEYS.has(key)) {
-		console.log(`✗ "${key}" is a canonical key — operators can\'t remove canonical entries.`);
+		console.log(`✗ "${sanitizeForTerm(key)}" is a canonical key — operators can\'t remove canonical entries.`);
 		console.log('  This is a federation-safety guarantee.  See ADR-0021.');
 		return 1;
 	}
@@ -310,9 +313,9 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	console.log('');
-	console.log(`  Operator: @${account}`);
+	console.log(`  Operator: @${sanitizeForTerm(account)}`);
 	console.log(`  Action:   remove`);
-	console.log(`  Key:      ${key}`);
+	console.log(`  Key:      ${sanitizeForTerm(key)}`);
 	console.log('');
 	console.log('  Existing orders that referenced this key will keep their');
 	console.log('  display name (sourced from chain history); the picker will');
@@ -329,7 +332,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	try {
 		wif = await loadPostingKey(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${errMsg(err)}`);
+		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -342,7 +345,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 			payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
 		});
 	} catch (err) {
-		console.log(`✗ Broadcast failed: ${errMsg(err)}`);
+		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	} finally {
 		wif = '';
@@ -350,7 +353,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 
 	console.log('');
 	console.log(`✓ Posted in block ${result.block_num}.`);
-	console.log(`  Transaction: ${result.trx_id}`);
+	console.log(`  Transaction: ${sanitizeForTerm(result.trx_id)}`);
 	return 0;
 }
 
@@ -390,16 +393,26 @@ async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 			return 0;
 		}
 		console.log('');
-		console.log(`Operator: @${account}`);
+		console.log(`Operator: @${sanitizeForTerm(account)}`);
 		console.log('');
 		for (const row of result.rows) {
+			// cp139-C-4: DB rows from instance_payment_methods could
+			// carry attacker-controlled text in theory (compromised
+			// peer instance replicating a chain op with hostile
+			// fields, although the indexer's NFC + forbidden-char
+			// gate at operatorPaymentMethod handler strips control
+			// chars on the way in).  Defense-in-depth: strip again
+			// at display.
 			const stateMark = row.state === 'active' ? '✓' : '✗';
-			console.log(`${stateMark} ${row.key}  [${row.category}]  ${row.name}`);
+			console.log(
+				`${stateMark} ${sanitizeForTerm(row.key)}  ` +
+					`[${sanitizeForTerm(row.category)}]  ${sanitizeForTerm(row.name)}`
+			);
 			if (row.description.length > 0) {
-				console.log(`     ${row.description}`);
+				console.log(`     ${sanitizeForTerm(row.description)}`);
 			}
 			if (row.url) {
-				console.log(`     ${row.url}`);
+				console.log(`     ${sanitizeForTerm(row.url)}`);
 			}
 			console.log(`     state: ${row.state}, updated: ${row.updated_at.toISOString()}`);
 			console.log('');

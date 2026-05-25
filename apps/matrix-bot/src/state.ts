@@ -45,6 +45,46 @@ export interface State {
 	close(): void;
 }
 
+/** Parse a batch of info_events `payload_json` strings into
+ *  StructuredAlert instances, tolerating rows with corrupt JSON.
+ *
+ *  Exported so the matrix-bot-input-hardening smoke can verify
+ *  cp139 B-1 (tolerant drain) without standing up a real SQLite
+ *  instance — the smoke environment may not have a built
+ *  better-sqlite3 binary.  Production `drainInfoEvents()` below
+ *  calls this with the rows it SELECTed from the DB.
+ *
+ *  Behavior:
+ *  - Good rows → parsed StructuredAlert objects in the output.
+ *  - Bad rows → skipped, with a console.error per row and one
+ *    aggregate console.error if any rows were dropped.
+ *  - Order preserved (input order = output order, minus drops). */
+export function parseInfoRowsTolerantly(
+	rows: ReadonlyArray<{ payload_json: string }>
+): StructuredAlert[] {
+	const events: StructuredAlert[] = [];
+	let corruptCount = 0;
+	for (const r of rows) {
+		try {
+			events.push(JSON.parse(r.payload_json) as StructuredAlert);
+		} catch (err) {
+			corruptCount++;
+			console.error(
+				`drainInfoEvents: skipping corrupt info_events row ` +
+					`(payload_json not valid JSON): ${err instanceof Error ? err.message : String(err)}`
+			);
+		}
+	}
+	if (corruptCount > 0) {
+		console.error(
+			`drainInfoEvents: ${corruptCount} of ${rows.length} info_events ` +
+				`rows had corrupt JSON and were dropped.  Continuing with ` +
+				`${events.length} good events.`
+		);
+	}
+	return events;
+}
+
 /** Open / create the SQLite database at `path`.  Creates parent
  *  directory if missing.  Schema is set up idempotently on every
  *  open. */
@@ -122,7 +162,14 @@ export function openState(path: string): State {
 		},
 		drainInfoEvents() {
 			const rows = stmts.selectInfo.all() as ReadonlyArray<{ payload_json: string }>;
-			const events: StructuredAlert[] = rows.map((r) => JSON.parse(r.payload_json));
+			// cp139 B-1: tolerant parse — see parseInfoRowsTolerantly
+			// docstring above for the full rationale.  Net: corrupt
+			// row (operator hand-edit, partial-write recovery, bug
+			// in a prior version's pushInfoEvent) doesn't throw the
+			// drain or block the DELETE.  Loss of one INFO event
+			// is acceptable; permanent silent hang of the daily
+			// digest is not.
+			const events = parseInfoRowsTolerantly(rows);
 			stmts.deleteInfo.run();
 			return events;
 		},

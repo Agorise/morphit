@@ -6531,6 +6531,70 @@ version installed) and configure via
 plus `pgaudit.log = 'write,ddl'` in the morphit DB's
 configuration.  Restart Postgres to take effect.
 
+**e. `statement_timeout` — defense-in-depth against runaway
+queries.**  Morphit's pg pool
+(`apps/indexer/src/db/pool.ts`) sets `connectionTimeoutMillis:
+5000` and `idleTimeoutMillis: 30000`, but deliberately does
+**not** set a pool-level `statement_timeout` — doing so at the
+client would force a single value across both the indexer
+worker (which writes blocks one-at-a-time and stays sub-second
+in steady state) and ad-hoc psql sessions an operator might
+use for maintenance.  The right place to set this defense is
+at the Postgres server, per-database, where the operator
+owns the value:
+
+```sh
+# Set a 30-second per-statement ceiling for the indexer DB.
+sudo -u postgres psql -d morphit_indexer -c \
+    "ALTER DATABASE morphit_indexer SET statement_timeout = '30s';"
+```
+
+This applies to all **new** connections from this point on.
+Existing pool connections keep the old value until they
+recycle, so reload the services to pick it up promptly:
+
+```sh
+sudo systemctl restart morphit-indexer morphit-relay
+```
+
+**Choice of value.**  `30s` is comfortable for Morphit's normal
+HTTP API + per-block indexer transactions (steady-state
+queries run in sub-second; 30s is two orders of magnitude of
+headroom).  Bump to `60s` if you're running unusually large
+backfills or your instance has accumulated tables beyond
+typical scale.  `0` (unlimited) is Postgres's unsafe default —
+don't leave it there.
+
+**Initial backfill on a fresh instance.**  The poller drains
+the chain block-by-block with one transaction per block.  No
+single statement is ever a deep replay; each block's write
+stays well under the timeout even when catching up from
+genesis on a brand-new instance.  No special handling needed.
+
+**Ad-hoc long queries.**  If you ever need to run a one-off
+long query (analytics from psql, a custom report), override
+per-session without changing the database default:
+
+```sql
+SET statement_timeout = 0;
+-- long query here
+RESET statement_timeout;
+```
+
+**Verify it took effect:**
+
+```sh
+sudo -u postgres psql -d morphit_indexer -c \
+    "SHOW statement_timeout;"
+# Expected: 30s
+```
+
+You can also verify per-role from inside a Morphit-side psql
+session by setting `MORPHIT_INDEXER_DATABASE_URL` and running
+`psql "$MORPHIT_INDEXER_DATABASE_URL" -c 'SHOW
+statement_timeout;'` — that proves the indexer user picks up
+the database-level default through the connection string.
+
 ### 37.9 Filesystem integrity monitoring with AIDE
 
 AIDE (Advanced Intrusion Detection Environment) baselines every

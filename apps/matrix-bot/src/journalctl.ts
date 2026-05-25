@@ -56,11 +56,33 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 
 	// ts: prefer the inner JSON's ts (most accurate — set by the
 	// emitter), fall back to journald's __REALTIME_TIMESTAMP.
+	//
+	// Defensive: __REALTIME_TIMESTAMP is journald-produced and in
+	// practice always a microsecond-epoch numeric string, but we
+	// type-narrow + range-check it before letting it reach
+	// `new Date(...)`.  If Number() returns NaN/Infinity OR the
+	// derived ms value is outside Date's representable range
+	// (±8.64e15), `toISOString()` would throw `RangeError: Invalid
+	// time value` — and parseJournalLine's contract says it
+	// returns null on malformed input, NOT that it throws.  The
+	// call site (tailJournalctl's stdout 'data' handler) has no
+	// outer try/catch, so a thrown RangeError would crash the
+	// tailer and the bot would stop alerting silently.
 	const innerTs = typeof m['ts'] === 'string' ? m['ts'] : null;
-	const journaldTs =
-		typeof j['__REALTIME_TIMESTAMP'] === 'string'
-			? new Date(Number(j['__REALTIME_TIMESTAMP']) / 1000).toISOString()
-			: new Date().toISOString();
+	const journaldRaw = j['__REALTIME_TIMESTAMP'];
+	let journaldTs: string;
+	if (typeof journaldRaw === 'string') {
+		const micros = Number(journaldRaw);
+		const millis = micros / 1000;
+		// Date can represent ±8,640,000,000,000,000 ms (~ ±285M years).
+		if (Number.isFinite(millis) && Math.abs(millis) <= 8.64e15) {
+			journaldTs = new Date(millis).toISOString();
+		} else {
+			journaldTs = new Date().toISOString();
+		}
+	} else {
+		journaldTs = new Date().toISOString();
+	}
 	const ts = innerTs ?? journaldTs;
 
 	const source =
@@ -75,12 +97,42 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 			? (ctx as Record<string, unknown>)
 			: undefined;
 
+	// cp139 B-2: cap envelope-field lengths defensively.
+	//
+	// Today Morphit's own loggers emit short module/event constants
+	// (typical names like "operator-balance" / "low_balance" — well
+	// under 64 bytes) and journald itself bounds line size to
+	// LineMax (default ~48 KiB).  Practical reach is ~zero.
+	//
+	// But cp18 AUDIT-4 capped the payload-details block at
+	// MAX_FIELD_BYTES=1024 + MAX_PAYLOAD_BYTES=8192 because a
+	// compromised SIDECAR (host-monitor / smartctl-monitor /
+	// dmesg-monitor) could emit a mega-payload.  The same threat
+	// model applies to module/event/source/ts: a sidecar bug or a
+	// future logger refactor that accidentally lets user input
+	// flow into one of these fields would create an unbounded-
+	// length-string surface that the classifier's renderAlertBody
+	// default-path (`${alert.module} :: ${alert.event}`) inlines
+	// into the title without truncation, and the digest's `cat`
+	// interpolation inlines without truncation.
+	//
+	// Defending at the parse boundary closes the gap for every
+	// downstream consumer in one place.  256 bytes is generous —
+	// 4× the longest current Morphit module/event name combined,
+	// fits comfortably under Matrix's 65 KiB body cap even when
+	// rendered into the HTML body.
+	const MAX_ENVELOPE_FIELD_BYTES = 256;
+	const truncEnv = (s: string): string =>
+		s.length > MAX_ENVELOPE_FIELD_BYTES
+			? `${s.slice(0, MAX_ENVELOPE_FIELD_BYTES)}…(truncated)`
+			: s;
+
 	return {
-		module: m['module'] as string,
-		event: m['event'] as string,
+		module: truncEnv(m['module'] as string),
+		event: truncEnv(m['event'] as string),
 		payload,
-		source,
-		ts
+		source: source !== undefined ? truncEnv(source) : undefined,
+		ts: truncEnv(ts)
 	};
 }
 

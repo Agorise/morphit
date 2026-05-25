@@ -15,7 +15,7 @@
 
 import type { State } from './state.ts';
 import type { RateLimiter } from './rateLimit.ts';
-import type { StructuredAlert } from './classifier.ts';
+import { escapeHtml, type StructuredAlert } from './classifier.ts';
 
 export interface DigestSchedulerOptions {
 	readonly sendTimeUtc: string; // "HH:MM"
@@ -122,7 +122,15 @@ export function buildDigestBody(
 
 	for (const [cat, list] of sortedCategories) {
 		plainLines.push(`  ${cat}: ${list.length}`);
-		htmlLines.push(`<br/><code>${cat}</code>: ${list.length}`);
+		// cp139 ME-2: cat is `${e.module}:${e.event}` from parsed
+		// journal JSON — type-narrowed as `string` but not format-
+		// checked.  Today Morphit's own loggers emit hardcoded
+		// constants so there's no user-controlled path, but the
+		// classifier's renderAlertBody already escapes every
+		// variable that reaches its HTML body; the digest skipped
+		// that defense.  Pulling escapeHtml from classifier.ts so
+		// both paths share one canonical escape.
+		htmlLines.push(`<br/><code>${escapeHtml(cat)}</code>: ${list.length}`);
 	}
 
 	return {

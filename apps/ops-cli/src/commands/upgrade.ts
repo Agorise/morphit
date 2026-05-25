@@ -68,7 +68,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
-import { error as printError, info, warn } from '../render/term.ts';
+import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 
 interface UpgradeFlags {
 	readonly 'check-only'?: string;
@@ -180,7 +180,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	console.log('');
 	info('Release notes:');
 	for (const line of latest.body.trim().split('\n')) {
-		console.log(`  ${line}`);
+		// cp139-C-19: defense-in-depth.  latest.body is the release
+		// body fetched from Forgejo — upstream-trusted content but
+		// not source-controlled review-gated (a compromised release-
+		// publishing account could plant terminal escapes here).
+		// Sanitize before display.
+		console.log(`  ${sanitizeForTerm(line)}`);
 	}
 	console.log('');
 

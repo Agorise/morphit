@@ -117,6 +117,7 @@
 import type { Database } from '$db/pool';
 import { logger } from '$log';
 import type { BlurtPriceSource } from '$indexer/price/source';
+import { fetchJson } from '$indexer/federationProbe';
 
 const log = logger('peer-price-monitor');
 
@@ -212,17 +213,46 @@ export interface PeerSampleCycleResult {
 }
 
 /** Fetch a single peer's price-receipt endpoint.  Returns null on
- *  any failure (timeout, 4xx/5xx, parse error, missing fields) —
+ *  any failure (timeout, 4xx/5xx, parse error, missing fields,
+ *  non-public host, DNS rebinding, oversized response, redirect) —
  *  failures are normal in the federation and shouldn't block the
- *  cycle. */
+ *  cycle.
+ *
+ *  cp139-F-2 hardening: routes through `fetchJson` from
+ *  federationProbe so the per-peer fetch gets the same six-layer
+ *  SSRF defense the probe loop has:
+ *    1. HTTPS protocol enforcement
+ *    2. Literal-private-hostname denylist (catches localhost,
+ *       127.x, 169.254.169.254, ULA, link-local, .local/.internal
+ *       TLDs etc.)
+ *    3. DNS resolve + EVERY record validated public (closes
+ *       DNS-rebinding window — an attacker who chain-registered
+ *       a public-looking origin then flipped DNS to a private IP
+ *       between probe and this fetch is rejected here)
+ *    4. IP-pinned undici dispatcher (TOCTOU defense)
+ *    5. redirect: 'manual' (no 30x chains to internal URLs)
+ *    6. Body cap at 256KB with streaming abort (DoS bound)
+ *
+ *  Pre-cp139-F-2 this function called bare fetch(), relying solely
+ *  on the operator-register handler's intake-time literal-hostname
+ *  check.  Intake gating catches static forms; the request-time
+ *  layers above catch DNS-rebinding + redirect + body-bomb.  Both
+ *  are defense-in-depth; both are now in place. */
 export async function fetchPeerReceipt(
 	peerOrigin: string,
 	asset: string,
 	denominationFiat: string,
 	timeoutMs: number = PEER_FETCH_TIMEOUT_MS
 ): Promise<PeerReceiptResponse | null> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	// timeoutMs is observed via fetchJson's internal FETCH_TIMEOUT_MS
+	// (5s).  Per-call override would require fetchJson to accept a
+	// timeout parameter; for now the canonical 5s is shorter than
+	// PEER_FETCH_TIMEOUT_MS default 10s so peers are MORE likely to
+	// be skipped on slow responses, not less — acceptable tradeoff
+	// vs forking fetchJson's signature.  The argument is preserved
+	// in the function signature for API back-compat with smokes that
+	// pass it explicitly.
+	void timeoutMs;
 	try {
 		const url = new URL(
 			'/v1/price/morphit-native/receipt',
@@ -230,14 +260,7 @@ export async function fetchPeerReceipt(
 		);
 		url.searchParams.set('asset', asset);
 		url.searchParams.set('denomination_fiat', denominationFiat);
-		const res = await fetch(url.toString(), {
-			signal: controller.signal,
-			headers: { accept: 'application/json' }
-		});
-		if (!res.ok) {
-			return null;
-		}
-		const body = (await res.json()) as PeerReceiptResponse;
+		const body = await fetchJson<PeerReceiptResponse>(url.toString());
 		if (
 			typeof body.derived_price !== 'number' ||
 			!Number.isFinite(body.derived_price) ||
@@ -257,8 +280,6 @@ export async function fetchPeerReceipt(
 	} catch (err) {
 		log.debug('peer_fetch_failed', { peerOrigin, err: String(err) });
 		return null;
-	} finally {
-		clearTimeout(timer);
 	}
 }
 

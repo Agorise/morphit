@@ -245,13 +245,13 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# Instance branding');
 	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push(`MORPHIT_INSTANCE_NAME=${quote(answers.instanceName)}`);
-	lines.push(`MORPHIT_INSTANCE_TAGLINE=${quote(answers.tagline)}`);
+	lines.push(`MORPHIT_INSTANCE_NAME=${quote(answers.instanceName, 'parseEnv')}`);
+	lines.push(`MORPHIT_INSTANCE_TAGLINE=${quote(answers.tagline, 'parseEnv')}`);
 	if (answers.contactUrl !== null) {
-		lines.push(`MORPHIT_INSTANCE_CONTACT_URL=${quote(answers.contactUrl)}`);
+		lines.push(`MORPHIT_INSTANCE_CONTACT_URL=${quote(answers.contactUrl, 'parseEnv')}`);
 	}
 	if (answers.origin !== null) {
-		lines.push(`MORPHIT_INSTANCE_ORIGIN=${quote(answers.origin)}`);
+		lines.push(`MORPHIT_INSTANCE_ORIGIN=${quote(answers.origin, 'parseEnv')}`);
 	}
 	lines.push('');
 
@@ -265,16 +265,16 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('# Alt-network reachability');
 		lines.push('# ──────────────────────────────────────────────────────');
 		if (altNetworks.tor !== null) {
-			lines.push(`MORPHIT_INSTANCE_TOR_ADDRESS=${quote(altNetworks.tor)}`);
+			lines.push(`MORPHIT_INSTANCE_TOR_ADDRESS=${quote(altNetworks.tor, 'parseEnv')}`);
 		}
 		if (altNetworks.lokinet !== null) {
-			lines.push(`MORPHIT_INSTANCE_LOKINET_ADDRESS=${quote(altNetworks.lokinet)}`);
+			lines.push(`MORPHIT_INSTANCE_LOKINET_ADDRESS=${quote(altNetworks.lokinet, 'parseEnv')}`);
 		}
 		if (altNetworks.i2p !== null) {
-			lines.push(`MORPHIT_INSTANCE_I2P_ADDRESS=${quote(altNetworks.i2p)}`);
+			lines.push(`MORPHIT_INSTANCE_I2P_ADDRESS=${quote(altNetworks.i2p, 'parseEnv')}`);
 		}
 		if (altNetworks.nostr !== null) {
-			lines.push(`MORPHIT_INSTANCE_NOSTR_PUBKEY=${quote(altNetworks.nostr)}`);
+			lines.push(`MORPHIT_INSTANCE_NOSTR_PUBKEY=${quote(altNetworks.nostr, 'parseEnv')}`);
 		}
 		lines.push('');
 	}
@@ -288,13 +288,13 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('# Override the bundled svelte-i18n SEO copy for / .');
 		lines.push('# Empty/unset = use the bundled defaults (10 locales).');
 		if (answers.seo.title !== null) {
-			lines.push(`MORPHIT_INSTANCE_SEO_TITLE=${quote(answers.seo.title)}`);
+			lines.push(`MORPHIT_INSTANCE_SEO_TITLE=${quote(answers.seo.title, 'parseEnv')}`);
 		}
 		if (answers.seo.description !== null) {
-			lines.push(`MORPHIT_INSTANCE_SEO_DESCRIPTION=${quote(answers.seo.description)}`);
+			lines.push(`MORPHIT_INSTANCE_SEO_DESCRIPTION=${quote(answers.seo.description, 'parseEnv')}`);
 		}
 		if (answers.seo.keywords !== null) {
-			lines.push(`MORPHIT_INSTANCE_SEO_KEYWORDS=${quote(answers.seo.keywords)}`);
+			lines.push(`MORPHIT_INSTANCE_SEO_KEYWORDS=${quote(answers.seo.keywords, 'parseEnv')}`);
 		}
 		lines.push('');
 	}
@@ -350,12 +350,12 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('# contact.  Exposed via /v1/instance.operator_matrix_room.');
 		if (answers.matrix.alertMxid !== null) {
 			lines.push(
-				`MORPHIT_MATRIX_BOT_ALERT_MXID=${quote(answers.matrix.alertMxid)}`
+				`MORPHIT_MATRIX_BOT_ALERT_MXID=${quote(answers.matrix.alertMxid, 'parseEnv')}`
 			);
 		}
 		if (answers.matrix.groupRoomAlias !== null) {
 			lines.push(
-				`MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=${quote(answers.matrix.groupRoomAlias)}`
+				`MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=${quote(answers.matrix.groupRoomAlias, 'parseEnv')}`
 			);
 		}
 		lines.push('');
@@ -736,17 +736,66 @@ function renderBackupEnv(answers: WizardAnswers): string {
 	return lines.join('\n');
 }
 
-/** Quote a value safely for an env-file line.  Wraps in double-
- *  quotes if the value contains spaces, special chars, or is empty;
- *  escapes embedded backslashes and double-quotes. */
-function quote(value: string): string {
-	if (value === '') return '""';
+/** Quote a value safely for an env-file line.
+ *
+ *  Strategy depends on which consumer reads the file:
+ *
+ *  - 'parseEnv' (morphit.config.env, read by Node's
+ *    node:util.parseEnv via @morphit/operator-config):
+ *      • Prefer single-quoted: `'value'`.  Embedded `$`,
+ *        backticks, `$(...)` are literal (no expansion).
+ *        Embedded `"` is literal.  parseEnv does NOT support
+ *        the POSIX `'\''` close-escape-reopen idiom, so when
+ *        value contains `'`, we fall back to double-quoted.
+ *      • Fall back to double-quoted: `"value"`.  Embedded `$`
+ *        is literal (parseEnv doesn't expand inside double
+ *        quotes either, per dotenv semantics).  Embedded `"`
+ *        is NOT supported as `\"` — parseEnv terminates at
+ *        the first `"`, so a value containing both `'` AND
+ *        `"` is unrepresentable.  We throw at quote() time
+ *        rather than silently corrupt; the wizard prompt
+ *        layer is responsible for rejecting such inputs.
+ *
+ *  - 'bash' (morphit.env, sourced by `set -a; .` or systemd
+ *    `EnvironmentFile=`):
+ *      • Single-quoted with POSIX close-escape-reopen idiom
+ *        for embedded `'`.  Suppresses every form of bash
+ *        expansion.
+ *
+ *  cp139-C-11 first switched both to single-quoted; cp139-D-1
+ *  then discovered parseEnv's apostrophe-handling gap.  This
+ *  per-consumer split is the canonical fix.  Symmetric with
+ *  apps/ops-cli/src/commands/edit.ts:quoteValue() — both write
+ *  paths must produce identical env-file output for the same
+ *  (value, consumer) pair. */
+export type EnvFileConsumer = 'parseEnv' | 'bash';
+
+function quote(value: string, consumer: EnvFileConsumer = 'bash'): string {
+	if (value === '') return "''";
 	if (/^[A-Za-z0-9._\/:@-]+$/.test(value)) {
-		// Safe characters — no quoting needed.
+		// Safe characters — no quoting needed.  Works in both
+		// parseEnv and bash.
 		return value;
 	}
-	const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-	return `"${escaped}"`;
+	if (consumer === 'parseEnv') {
+		// parseEnv consumer: prefer single-quoted.
+		if (!value.includes("'")) {
+			return `'${value}'`;
+		}
+		// Apostrophe present.  Fall back to double-quoted.  But
+		// embedded `"` is not representable in parseEnv's double-
+		// quote form (no \" escape), so reject up front.
+		if (value.includes('"')) {
+			throw new Error(
+				`quote(): value contains both ' and " which is unrepresentable in parseEnv ` +
+					`env-file format.  Wizard prompt layer must reject this input.  Value (first 80 chars): ${value.slice(0, 80)}`
+			);
+		}
+		return `"${value}"`;
+	}
+	// Bash consumer: single-quoted with close-escape-reopen.
+	const escaped = value.replace(/'/g, "'\\''");
+	return `'${escaped}'`;
 }
 
 /** Resolve --out=PATH to an absolute path.  PATH may be relative

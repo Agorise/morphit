@@ -575,7 +575,28 @@ function buildPinnedAgent(
 	});
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+/**
+ * Public-only-host JSON fetch with full SSRF defense.
+ *
+ * Six layers of defense:
+ *   1. HTTPS protocol enforcement
+ *   2. Literal-hostname denylist (isPrivateHostname)
+ *   3. DNS resolution + EVERY record validated public
+ *      (resolveAndValidatePublicIp — Cp3 DNS-rebinding closure)
+ *   4. IP-pinned undici dispatcher (TOCTOU defense)
+ *   5. redirect: 'manual' (no following 30x to internal URLs)
+ *   6. Body cap with streaming abort (MAX_BYTES = 256KB)
+ *
+ * Used by:
+ *   - federationProbe probe loop (canonical caller)
+ *   - peerPriceMonitor's per-peer receipt fetch (cp139-F-2 fix)
+ *
+ * Exported for use by other indexer subsystems that fetch from
+ * peer instances stored in known_instances.  Any new fetch site
+ * that accepts a peer-supplied origin URL MUST route through this
+ * helper rather than calling fetch() directly.
+ */
+export async function fetchJson<T>(url: string): Promise<T> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
 	// origin slipped past registration (older row, manual DB

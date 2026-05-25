@@ -31,6 +31,7 @@
 
 import { readFileSync } from 'node:fs';
 import { ask, askPassword, askYesNo } from '../init/prompt.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -43,16 +44,22 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	// ─── 1. Validate env ────
 	const env = readEnv();
 	if ('error' in env) {
-		console.log(`✗ ${env.error}`);
+		// cp139-C-8: env.error is built from env-var validation
+		// failures; it can include the offending env-var VALUE
+		// in the error message ("MORPHIT_INSTANCE_ORIGIN must
+		// be https://, got 'http://attacker$\x1b[2J/'").  Strip
+		// terminal escapes from the operator's screen at
+		// display.
+		console.log(`✗ ${sanitizeForTerm(env.error)}`);
 		return 1;
 	}
 	const { account, keyFile, instanceName, origin, contactUrl } = env;
 
-	console.log(`  Account:      @${account}`);
-	console.log(`  Origin:       ${origin}`);
-	console.log(`  Display name: ${instanceName}`);
+	console.log(`  Account:      @${sanitizeForTerm(account)}`);
+	console.log(`  Origin:       ${sanitizeForTerm(origin)}`);
+	console.log(`  Display name: ${sanitizeForTerm(instanceName)}`);
 	if (contactUrl !== null) {
-		console.log(`  Contact URL:  ${contactUrl}`);
+		console.log(`  Contact URL:  ${sanitizeForTerm(contactUrl)}`);
 	}
 	console.log('');
 
@@ -71,7 +78,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	try {
 		wif = await loadPostingKey(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${errMsg(err)}`);
+		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -98,7 +105,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 			contactUrl
 		});
 	} catch (err) {
-		console.log(`✗ Broadcast failed: ${errMsg(err)}`);
+		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
 		console.log('');
 		console.log('Common causes:');
 		console.log('  - Tag already claimed by another account.  Edit');
