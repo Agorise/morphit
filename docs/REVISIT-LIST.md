@@ -4,11 +4,11 @@
 
 ## cp138 — Pre-launch deep-deep 94-task audit (CLOSED 2026-05-25)
 
-Triggered by Ken's "do a full deep deep on absolutely everything, every file and script, .md/.ts/all svelte-related" + "put on your black hat. FULL security and code audits" directive. **94 tasks across 11 phases A–K reviewed end-to-end. 11 findings shipped, 1 standing follow-up.**
+Triggered by Ken's "do a full deep deep on absolutely everything, every file and script, .md/.ts/all svelte-related" + "put on your black hat. FULL security and code audits" directive. **94 tasks across 11 phases A–K reviewed end-to-end. 12 findings shipped (A-1..A-5, C-1, D-1, D-2, D-3, F-1, H-1, I-1, J-1) + 1 stale-brag-claim fix during handoff prep + 2 standing follow-ups.**
 
-**Audit framework files:** `docs/AUDIT-cp138-PLAN.md` (94-task plan), `docs/AUDIT-cp138-FINDINGS.md` (255-line full ledger), `docs/AUDIT-OUTSIDE-SCOPE.md` (answers Ken's "would a pro firm do anything I haven't?" with leverage/urgency table + budget estimates).
+**Audit framework files:** `docs/AUDIT-cp138-PLAN.md` (94-task plan), `docs/AUDIT-cp138-FINDINGS.md` (283-line full ledger), `docs/AUDIT-OUTSIDE-SCOPE.md` (answers Ken's "would a pro firm do anything I haven't?" with leverage/urgency table + budget estimates).
 
-**cp138 findings shipped (11 total):**
+**cp138 findings shipped (12 total + 1 follow-up post-handoff prep):**
 
 | # | Severity | What | Where |
 |---|---|---|---|

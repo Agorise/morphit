@@ -8,7 +8,7 @@
 
 **cp138 work summary:**
 
-12 findings shipped end-to-end. 1 CRITICAL fix from a prior audit (M4 KDF floor, open for a month) finally closed. Triple-pulse smoke regression 5971/5971/5971, 0 failures. All 5 workspaces tsc-clean, svelte-check 0/0.
+12 findings shipped end-to-end. 1 CRITICAL fix from a prior audit (M4 KDF floor, open for a month) finally closed. Triple-pulse smoke regression 5972/5972/5972, 0 failures (5971 at audit-CLOSED time; mediakit-freshness-smoke gained 1 scenario after the handoff-prep brag-#175 fix). All 5 workspaces tsc-clean, svelte-check 0/0.
 
 **Findings shipped (cp138):**
 
@@ -37,13 +37,13 @@ Plan + findings docs:
 
 **State at cp138 close:**
 
-- Triple-pulse smokes: **5971/5971/5971, 0 failures** (cp137 baseline 5967 + 4 new cp138 sentinels)
+- Triple-pulse smokes: **5972/5972/5972, 0 failures** (cp137 baseline 5967 + 4 new cp138 sentinels + 1 from mediakit-rebuild after handoff-prep brag-#175 fix)
 - TypeScript: 0 errors across all 5 workspaces (apps/web, apps/indexer, apps/relay, apps/matrix-bot, apps/ops-cli)
 - svelte-check: 0 errors, 0 warnings
 - vitest: 1431+ tests passing (cp137 baseline + cp138 added test coverage for D-2 cap eviction)
 - Persona-walkthrough: 169 scenarios (165 cp137 + 4 cp138)
 - Locale parity: 3,095 × 10 = 30,950 pairs ✓
-- Brag list: 326 entries (no cp138 internal additions per Memory #15 — cp138 is internal hardening, not user-facing features)
+- Brag list: 326 entries (no cp138 internal additions per Memory #15 — cp138 is internal hardening, not user-facing features). Cp138 handoff-prep also fixed one stale count claim in brag entry #175 ("14 tradable cryptocurrencies" → "all 16 tradable cryptocurrencies") and rebuilt the mediakit zip accordingly.
 
 **Tarball binary identity (cp138 FULL state):**
 
