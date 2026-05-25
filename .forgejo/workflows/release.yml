@@ -208,11 +208,13 @@ jobs:
           cat release-info.json
 
       - name: Build release tarball
-        # Excludes node_modules, .git, /out, /dist, the private
-        # working directories, and — critically — the tarball
-        # itself.  Without `--exclude="./${TARBALL}"`, tar reads
-        # its own output file mid-write and bails with
-        # `file changed as we read it` (run 401).
+        # Stage the output in /tmp so tar never sees its own
+        # output land inside the directory it's reading.  Writing
+        # the tarball directly into `.` updates the directory's
+        # mtime mid-walk and tar bails with `.: file changed as
+        # we read it` (run 406, even after the per-file exclude
+        # from run 401).  Staging in /tmp and moving the finished
+        # tarball back is the standard workaround.
         #
         # AUDIT-CI-7: tag value passed via env, not ${{ }}
         # interpolation, so bash sees a plain variable (no
@@ -221,6 +223,7 @@ jobs:
           TARBALL: ${{ steps.ver.outputs.tarball }}
         run: |
           set -eu
+          STAGE=$(mktemp -d)
           tar --exclude='./node_modules' \
               --exclude='./.git' \
               --exclude='./out' \
@@ -231,9 +234,9 @@ jobs:
               --exclude='./packages/*/node_modules' \
               --exclude='./packages/*/dist' \
               --exclude='*.log' \
-              --exclude="./${TARBALL}" \
-              --exclude="./${TARBALL}.sha256" \
-              -czf "$TARBALL" .
+              -czf "${STAGE}/${TARBALL}" .
+          mv "${STAGE}/${TARBALL}" "./${TARBALL}"
+          rmdir "${STAGE}"
 
       - name: Compute tarball checksum
         env:
