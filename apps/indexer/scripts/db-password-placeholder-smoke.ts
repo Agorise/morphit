@@ -119,9 +119,6 @@ const ALLOWED_PATHS = new Set([
 	// know what to type.  Same trust posture as
 	// indexer.env.example.
 	'ops/ansible/group_vars/all.yml',
-	// cp131 — findings log mentions the placeholder
-	// strings by name in HIGH-001 / HIGH-002 narrative.
-	'audit-cp131/FINDINGS.md',
 	// cp131 HIGH-006 — PRE-LAUNCH-CHECKLIST.md was already
 	// in the implicit-allowlist set via docs/ blanket
 	// inclusion below; this entry just makes the
