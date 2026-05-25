@@ -208,10 +208,11 @@ jobs:
           cat release-info.json
 
       - name: Build release tarball
-        # Excludes node_modules, .git, /out, /dist, and the
-        # private working directories.  Includes the full source
-        # tree the operator needs to npm-install + run on a
-        # clean Ubuntu 24.04 box.
+        # Excludes node_modules, .git, /out, /dist, the private
+        # working directories, and — critically — the tarball
+        # itself.  Without `--exclude="./${TARBALL}"`, tar reads
+        # its own output file mid-write and bails with
+        # `file changed as we read it` (run 401).
         #
         # AUDIT-CI-7: tag value passed via env, not ${{ }}
         # interpolation, so bash sees a plain variable (no
@@ -230,6 +231,8 @@ jobs:
               --exclude='./packages/*/node_modules' \
               --exclude='./packages/*/dist' \
               --exclude='*.log' \
+              --exclude="./${TARBALL}" \
+              --exclude="./${TARBALL}.sha256" \
               -czf "$TARBALL" .
 
       - name: Compute tarball checksum
