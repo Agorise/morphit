@@ -247,15 +247,20 @@ jobs:
           cat "$TARBALL.sha256"
 
       - name: Upload release artifact
-        # AUDIT-CI-2 (cp18 deep-deep) — SHA-pinned in cp22.
-        # v4.6.2 is the latest v4.x release (19 Mar 2025); v5/v6/v7
-        # exist but bump Node.js runtime so staying at v4 keeps
-        # parity with actions/checkout@v4.2.2 + actions/setup-node@v4.0.3.
-        # Verified via the release tag page on github.com/actions/upload-artifact;
-        # tag commit was signed by GitHub's verified GPG key
-        # B5690EEEBB952194.  To bump, look at the releases page
-        # and update both the SHA and the `# vX.Y.Z` comment.
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # AUDIT-CI-2 — Forgejo Actions does not implement the
+        # `@actions/artifact` v2 backend that upload-artifact@v4+
+        # requires (run 411 surfaced this with the explicit
+        # `GHESNotSupportedError: @actions/artifact v2.0.0+,
+        # upload-artifact@v4+ and download-artifact@v4+ are not
+        # currently supported on GHES`).  Pin to v3, which uses
+        # the older backend Forgejo does support.
+        #
+        # Tag-based pinning rather than SHA-pinning here: Forgejo
+        # mirrors all action sources via data.forgejo.org, which
+        # is already the trust boundary for every action in this
+        # workflow.  v3 is a stable security-supported branch;
+        # the tag won't relocate.
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ steps.ver.outputs.tag }}
           path: |
