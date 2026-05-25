@@ -92,7 +92,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			`INSERT INTO feedback_responses (
 				feedback_id, responder, comment, created_at, source_trx_id
 			) VALUES ($1, $2, $3, $4, $5)`,
-			[parseInt(row.id, 10), ctx.signer, comment, ctx.blockTime, ctx.trxId]
+			// cp138 A-2: pass the BIGINT id as a string rather than
+			// parseInt(...,10).  pg accepts strings for BIGINT params
+			// and preserves the full 2^63 range.  parseInt loses
+			// precision above 2^53 (~9e15 rows).  Pre-launch + tiny
+			// scale = doesn't matter today, but the pattern is wrong
+			// and the fix is free.
+			[row.id, ctx.signer, comment, ctx.blockTime, ctx.trxId]
 		);
 	} catch (err) {
 		if (isUniqueViolation(err)) {

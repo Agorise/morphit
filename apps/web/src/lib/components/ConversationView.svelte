@@ -270,7 +270,9 @@
 	let showMailingAddressModal = $state(false);
 	let showShipmentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
-	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH).  Held separately from
+	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
+	 *  ETH/XRP — all 15 single-side methods; BLURT pays via the
+	 *  separate PayBlurtModal path).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
 	 *  button (no prefill) and the pill-level Mark-as-sent
 	 *  button (with prefill) share the modal but supply
@@ -402,12 +404,12 @@
 	}
 
 	/** Q5 — Mark-as-sent click on an incoming address pill
-	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE).  Captures the
-	 *  seller's specified method+amount and opens FundsSentModal
-	 *  pre-filled. Critical for the Monero amount-jitter flow:
-	 *  the buyer's funds-sent echo MUST carry the same jittered
-	 *  amount the seller asked for, otherwise the seller's
-	 *  verification false-mismatches.
+	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
+	 *  ETH/XRP).  Captures the seller's specified method+amount
+	 *  and opens FundsSentModal pre-filled. Critical for the
+	 *  Monero amount-jitter flow: the buyer's funds-sent echo
+	 *  MUST carry the same jittered amount the seller asked for,
+	 *  otherwise the seller's verification false-mismatches.
 	 *
 	 *  We don't open PayBlurtModal here — Morphit doesn't run an
 	 *  external-chain wallet of its own.  The buyer pays from

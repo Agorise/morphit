@@ -2,7 +2,8 @@
 	/**
 	 * AddressShareModal — share a receiving address through the
 	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, USDC,
-	 * DAI, BCH, LTC, DASH, DOGE).
+	 * DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP —
+	 * all 16 currently-shipped tradable assets).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
 	 * sends it through the same chat-send path as a normal text
@@ -128,13 +129,17 @@
 	 *  Default ON for XMR (cp3) AND all transparent assets
 	 *  (BTC/BCH/LTC/BLURT) from cp26.  XMR uses 6 trailing
 	 *  decimals of jitter to defeat amount-correlation on the
-	 *  Monero chain (see jitterMoneroAmount).  BTC/BCH/LTC/DASH use
-	 *  satoshi-precision jitter (up to 999 sat ≈ $0.001-$0.50
-	 *  trivial cost — see jitterUtxoAmount).  BLURT uses
-	 *  milliblurt-precision jitter (see jitterBlurtAmount).
-	 *  USDT, USDC, and DAI (cp30 reversed cp26's USDT-no-jitter
-	 *  decision per ADR-0028 Decision 2): 6-decimal precision,
-	 *  0-999 microunit jitter ≈ $0.001 (jitterStablecoinAmount).
+	 *  Monero chain (see jitterMoneroAmount).  All 8 UTXO assets
+	 *  (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) use satoshi-precision
+	 *  jitter (up to 999 sat ≈ $0.001-$0.50 trivial cost — see
+	 *  jitterUtxoAmount).  BLURT uses milliblurt-precision jitter
+	 *  (see jitterBlurtAmount).  SOL/ETH/XRP use their own
+	 *  per-asset jitter (jitterSolAmount/jitterEthAmount/
+	 *  jitterXrpAmount — calibrated to lamport / wei / drop
+	 *  precision respectively).  USDT, USDC, and DAI (cp30
+	 *  reversed cp26's USDT-no-jitter decision per ADR-0028
+	 *  Decision 2): 6-decimal precision, 0-999 microunit jitter
+	 *  ≈ $0.001 (jitterStablecoinAmount).
 	 *  The cp26 rationale "centralization is the issue, not
 	 *  amount-correlation" correctly observed that jitter doesn't
 	 *  help against Circle/Tether freezes, but did NOT refute the
@@ -261,7 +266,8 @@
 	 *  invalid AFTER they've typed something substantial.  BLURT
 	 *  account names are short (3-16 chars) so the threshold is
 	 *  lower than for the other assets (BTC, XMR, USDT, USDC, DAI,
-	 *  BCH, LTC, DASH, all of which use the same 10-char threshold). */
+	 *  BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP — all
+	 *  use the same 10-char threshold). */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
 		// Method-aware "still typing" threshold.
@@ -710,7 +716,9 @@
 																	? ($_('chat.address.address_placeholder_sol') as string)
 																	: method === 'eth'
 																		? ($_('chat.address.address_placeholder_eth') as string)
-																		: ($_('chat.address.address_placeholder_blurt') as string)}
+																		: method === 'xrp'
+																			? ($_('chat.address.address_placeholder_xrp') as string)
+																			: ($_('chat.address.address_placeholder_blurt') as string)}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

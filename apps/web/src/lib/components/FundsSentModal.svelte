@@ -115,8 +115,18 @@
 	// front (came from an address pill).  Locks the matching
 	// picker as read-only so the buyer can't accidentally pick a
 	// different network when reporting the txid.
+	// cp138 — `xNetworkPinned` is computed ONCE at mount on purpose.
+	// We want to know whether the parent pinned the network at the
+	// beginning of this modal session.  If the parent later updates
+	// the prop, the user has already committed to the picker shape;
+	// changing pinned-ness mid-session would be confusing UX.  The
+	// `svelte-ignore` matches the pattern used by the underlying
+	// $state declarations above.
+	// svelte-ignore state_referenced_locally
 	const networkPinned = initialUsdtNetwork !== null;
+	// svelte-ignore state_referenced_locally
 	const usdcNetworkPinned = initialUsdcNetwork !== null;
+	// svelte-ignore state_referenced_locally
 	const daiNetworkPinned = initialDaiNetwork !== null;
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally

@@ -74,10 +74,19 @@ const FORBIDDEN_REASON_CODEPOINTS = new Set<number>([
 /** Strip dangerous/invisible codepoints from an operator reason.
  *  Preserves newline (0x0a) and tab (0x09) since they're
  *  legitimate in multi-line reasons; strips everything else in
- *  the C0/C1 control ranges.  Returns the cleaned string. */
+ *  the C0/C1 control ranges.  Returns the cleaned string.
+ *
+ *  cp138 A-5: NFC-normalize before stripping so the codepoint
+ *  iteration sees canonical sequences.  Without NFC, an NFD-
+ *  decomposed input could carry visually-equivalent characters
+ *  with different codepoint values, and the strip loop would
+ *  hit the WRONG codepoints (e.g. NFD-decomposed bidi marks
+ *  might miss).  Matches the NFC-first pattern used by
+ *  order.ts, feedback.ts, profile.ts, operatorRegister.ts. */
 function sanitizeReason(raw: string): string {
+	const normalized = raw.normalize('NFC');
 	let out = '';
-	for (const ch of raw) {
+	for (const ch of normalized) {
 		const cp = ch.codePointAt(0)!;
 		// Strip explicit forbidden set.
 		if (FORBIDDEN_REASON_CODEPOINTS.has(cp)) continue;

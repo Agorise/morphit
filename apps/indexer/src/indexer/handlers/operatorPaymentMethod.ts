@@ -117,13 +117,22 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /** Codepoints stripped from operator-supplied name + description.
- *  Same set as operator-block.ts; duplicated here to avoid a
- *  shared dep across independently-deployable apps.  Covers
- *  bidi-override and zero-width characters. */
-const STRIP_CODEPOINTS_RE = /[\u202a-\u202e\u2066-\u2069\u200b-\u200f\u2028\u2029\ufeff]/g;
+ *  cp138 A-4: aligned with order/feedback/profile handlers — block
+ *  C0/C1 control chars + DEL (U+007F) + Latin-1 supplement controls
+ *  (U+0080–U+009F) in addition to the bidi-override and zero-width
+ *  characters that were already covered.  Pre-cp138 the set was
+ *  narrower than the user-facing handlers'.  Risk surface here is
+ *  small (operator-only signer = single trusted account, who can't
+ *  really attack themselves) but the defense-in-depth pattern
+ *  should match.  Same range as `FORBIDDEN_TEXT_CHARS` in order.ts. */
+const STRIP_CODEPOINTS_RE =
+	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\u2028\u2029\uFEFF]/g;
 
 function sanitize(s: string): string {
-	return s.replace(STRIP_CODEPOINTS_RE, '').trim();
+	// cp138 A-4: NFC-normalize first so the codepoint-strip + trim
+	// operate on the canonical form.  Matches the order/feedback/
+	// profile pattern (NFC → strip/reject → length-check).
+	return s.normalize('NFC').replace(STRIP_CODEPOINTS_RE, '').trim();
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

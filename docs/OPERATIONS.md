@@ -2535,6 +2535,53 @@ going live.
 generic Option 1 advice above still applies.  matrix-bot is the
 canonical sidecar but not the only one supported.
 
+#### matrix-bot — known dependency vulnerabilities (cp138 audit)
+
+`npm audit` reports 2 critical and several moderate CVEs that all
+trace through `matrix-bot-sdk@0.7.1`'s dependency on the
+deprecated `request@2.88.2` package and its transitives
+(`form-data@2.3.3`, `qs`, `tough-cookie`, `uuid`).  Upgrading the
+SDK to its current latest `0.8.0` does NOT fix this — `0.8.0`
+still depends on the same `request@^2.88.2`.
+
+**Practical exposure on a Morphit instance is near-zero because:**
+
+1. matrix-bot is **opt-in** — the systemd unit only does work if
+   `MORPHIT_MATRIX_BOT_ALERT_MXID` is set.  Operators who don't
+   enable Matrix alerts never load the SDK into a running
+   process.  If you're picking email or another channel for
+   alerts, this section doesn't apply to you.
+2. matrix-bot's network direction is **outbound only**.  It POSTs
+   to a homeserver URL that **the operator configured via env
+   var** (`MORPHIT_MATRIX_BOT_HOMESERVER`).  It does NOT accept
+   inbound user URLs to fetch.  The `request`-package SSRF CVE
+   requires user-controlled URLs; matrix-bot doesn't provide any.
+3. The `form-data` unsafe-random-boundary CVE requires an
+   attacker-controlled multipart upload.  matrix-bot doesn't
+   accept multipart uploads; it only emits JSON to the
+   homeserver.
+4. The `qs` DoS and `tough-cookie` prototype-pollution CVEs
+   require user-supplied query strings / cookies.  matrix-bot
+   doesn't parse any.
+
+**What this means for operators:**
+
+- If you don't enable matrix-bot, you can ignore these CVEs.
+- If you DO enable matrix-bot, the practical risk is minimal so
+  long as you keep `MORPHIT_MATRIX_BOT_HOMESERVER` pointed at a
+  homeserver you trust (which is the design intent: it's your
+  Matrix homeserver, not a user's).
+- An automated CVE scanner WILL flag your install.  This is
+  expected; the scanner is right about the CVE numbers but
+  doesn't model matrix-bot's input surface.
+
+**Tracked for post-launch:** cp138-R-2 in `docs/REVISIT-LIST.md`.
+Two real fix options under evaluation: swap to `matrix-js-sdk`
+(official Matrix SDK with a larger surface but maintained deps),
+or add `npm overrides` to force-resolve transitives (needs
+testing matrix-bot's actual API surface still works with
+overridden versions).  Neither is a pre-launch blocker.
+
 ### Host-resource monitoring sidecar — disk / memory / swap / CPU
 
 The matrix-bot tails `morphit-indexer` + `morphit-relay` journals

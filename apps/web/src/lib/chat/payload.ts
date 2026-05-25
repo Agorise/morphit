@@ -570,8 +570,11 @@ export function jitterStablecoinAmount(base: string): string {
 }
 
 /** Part 122 cp26 — Amount-jitter for transparent UTXO chains
- *  (BTC, BCH, LTC).  Same defense as jitterMoneroAmount but
- *  calibrated to satoshi precision (8 decimals).
+ *  (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR — all 8 UTXO
+ *  assets ride this same function; SOL/ETH/XRP have their own
+ *  per-asset jitter functions because their unit precision and
+ *  network semantics differ).  Same defense as jitterMoneroAmount
+ *  but calibrated to satoshi precision (8 decimals).
  *
  *  Why this exists for transparent chains: every order Morphit
  *  posts has an exact amount derived from the fiat-amount +

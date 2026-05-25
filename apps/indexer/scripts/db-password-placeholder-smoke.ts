@@ -76,6 +76,13 @@ const ALLOWED_PATHS = new Set([
 	// sentinel literally in the "standing pre-launch action items"
 	// section so operators know what to rotate.
 	'docs/AUDIT-2026-05-FINAL-REPORT.md',
+	// cp138 deep-deep audit campaign — plan, findings, outside-
+	// scope docs all reference the placeholder sentinel in the
+	// context of pre-launch operator-actions.  cp138 follows
+	// the same naming convention as the May 2026 audit.
+	'docs/AUDIT-cp138-PLAN.md',
+	'docs/AUDIT-cp138-FINDINGS.md',
+	'docs/AUDIT-OUTSIDE-SCOPE.md',
 	// Memorized facts in REVISIT-LIST mention placeholders by
 	// name in the operator-action checklist.
 	'docs/REVISIT-LIST.md',

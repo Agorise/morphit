@@ -1328,7 +1328,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-CP10-4 — ALERT_COPY has friendly ELI5 advice for every host-resource event (14 entries)',
+		name: 'P121-CP10-4 — ALERT_COPY has friendly ELI5 advice for every host-resource event (17 entries: disk/mem/swap × 3 + swap_thrashing × 2 + cpu_saturated × 3 + mount × 3)',
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
@@ -1346,6 +1346,9 @@ const SCENARIOS: readonly Scenario[] = [
 			"'host-resource:cpu_saturated_critical'",
 			"'host-resource:cpu_saturated_warn'",
 			"'host-resource:cpu_saturated_info'",
+			"'host-resource:mount_critical'",
+			"'host-resource:mount_warn'",
+			"'host-resource:mount_info'",
 			'OOM ',
 			'sudo journalctl --vacuum-time=7d',
 			'ps aux --sort=-%mem'
@@ -2120,6 +2123,427 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/indexer/src/main.ts',
 		rootRelative: true,
 		mustHave: ["multiAssetSources.get('BLURT')"]
+	},
+	// ─── cp137 — per-asset structural sentinels for the 12 assets
+	//     shipped after USDT.  USDT got 5 sentinels (P121-USDT-1..5)
+	//     when it shipped at Part 121 cp3 — the subsequent additions
+	//     (USDC cp30, BCH cp23, LTC cp24, DAI cp31, DASH cp27,
+	//     DOGE cp33, ZEC cp39, ARRR cp41, DCR cp43, SOL cp45, ETH
+	//     cp47, XRP cp49) shipped with dedicated per-checkpoint
+	//     sentinels in OTHER smokes (asset-registry-smoke,
+	//     fee-method-enum-frozen-smoke, per-asset-key-family-*,
+	//     what-is-morphit-asset-enum-smoke, etc.) but not in
+	//     persona-walkthrough.  This cluster adds 3 sentinels per
+	//     asset: (1) canonical-registry invariants, (2) frontend-
+	//     registry parity, (3) supporting metadata or chat-link
+	//     URL constant.  Structural defense at the persona-walk
+	//     layer so any asset rip-out or invariant drift fires here
+	//     in addition to the per-checkpoint smokes.
+	// ─── USDC (Part 122 cp30) ────────────────────────────────
+	{
+		name: 'cp137-USDC-1 — canonical asset registry has USDC entry with trade-only invariant + 4 networks',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'USDC'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['erc20', 'spl', 'base', 'polygon']",
+			'defaultNetwork: null',
+			"privacyWarningKey: 'usdc_centralized'"
+		]
+	},
+	{
+		name: 'cp137-USDC-2 — frontend asset registry matches USDC entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'usdc'",
+			"displayName: 'USD Coin'",
+			'canBeUsedForListingFee: false',
+			'defaultNetwork: null',
+			"privacyWarningKey: 'usdc_centralized'"
+		]
+	},
+	{
+		name: 'cp137-USDC-3 — per-network metadata ships ERC-20/SPL/Base/Polygon bundled explorers',
+		file: 'apps/web/src/lib/assets/networks.ts',
+		rootRelative: true,
+		mustHave: [
+			'USDC_NETWORK_METADATA',
+			"key: 'erc20'",
+			"key: 'spl'",
+			"key: 'base'",
+			"key: 'polygon'"
+		]
+	},
+	// ─── BCH (Part 122 cp23) ─────────────────────────────────
+	{
+		name: 'cp137-BCH-1 — canonical asset registry has BCH entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'BCH'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-BCH-2 — frontend asset registry matches BCH entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'bch'",
+			"displayName: 'Bitcoin Cash'",
+			'canBeUsedForListingFee: false',
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-BCH-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_BCH_CHAT_LINK_URL', 'BCH_TXID_RE']
+	},
+	// ─── LTC (Part 122 cp24) ─────────────────────────────────
+	{
+		name: 'cp137-LTC-1 — canonical asset registry has LTC entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'LTC'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-LTC-2 — frontend asset registry matches LTC entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'ltc'",
+			"displayName: 'Litecoin'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-LTC-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_LTC_CHAT_LINK_URL', 'LTC_TXID_RE']
+	},
+	// ─── DAI (Part 122 cp31) ─────────────────────────────────
+	{
+		name: 'cp137-DAI-1 — canonical asset registry has DAI entry with trade-only invariant + 4 networks',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'DAI'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['erc20', 'polygon', 'base', 'arbitrum']",
+			'defaultNetwork: null',
+			"privacyWarningKey: 'dai_partly_centralized'"
+		]
+	},
+	{
+		name: 'cp137-DAI-2 — frontend asset registry matches DAI entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'dai'",
+			"displayName: 'Dai'",
+			'canBeUsedForListingFee: false',
+			'defaultNetwork: null',
+			"privacyWarningKey: 'dai_partly_centralized'"
+		]
+	},
+	{
+		name: 'cp137-DAI-3 — per-network metadata ships ERC-20/Polygon/Base/Arbitrum bundled explorers',
+		file: 'apps/web/src/lib/assets/networks.ts',
+		rootRelative: true,
+		mustHave: [
+			'DAI_NETWORK_METADATA',
+			"key: 'erc20'",
+			"key: 'polygon'",
+			"key: 'base'",
+			"key: 'arbitrum'"
+		]
+	},
+	// ─── DASH (Part 122 cp27) ────────────────────────────────
+	{
+		name: 'cp137-DASH-1 — canonical asset registry has DASH entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'DASH'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-DASH-2 — frontend asset registry matches DASH entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'dash'",
+			"displayName: 'Dash'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-DASH-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_DASH_CHAT_LINK_URL', 'DASH_TXID_RE']
+	},
+	// ─── DOGE (Part 122 cp33) ────────────────────────────────
+	{
+		name: 'cp137-DOGE-1 — canonical asset registry has DOGE entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'DOGE'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-DOGE-2 — frontend asset registry matches DOGE entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'doge'",
+			"displayName: 'Dogecoin'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-DOGE-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_DOGE_CHAT_LINK_URL', 'DOGE_TXID_RE']
+	},
+	// ─── ZEC (Part 122 cp39) ─────────────────────────────────
+	{
+		name: 'cp137-ZEC-1 — canonical asset registry has ZEC entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'ZEC'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-ZEC-2 — frontend asset registry matches ZEC entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'zec'",
+			"displayName: 'Zcash'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-ZEC-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_ZEC_CHAT_LINK_URL', 'ZEC_TXID_RE']
+	},
+	// ─── ARRR / Pirate Chain (Part 122 cp41) ─────────────────
+	{
+		name: 'cp137-ARRR-1 — canonical asset registry has ARRR entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'ARRR'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-ARRR-2 — frontend asset registry matches ARRR entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'arrr'",
+			"displayName: 'Pirate Chain'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-ARRR-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_ARRR_CHAT_LINK_URL', 'ARRR_TXID_RE']
+	},
+	// ─── DCR / Decred (Part 122 cp43) ────────────────────────
+	{
+		name: 'cp137-DCR-1 — canonical asset registry has DCR entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'DCR'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-DCR-2 — frontend asset registry matches DCR entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'dcr'",
+			"displayName: 'Decred'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-DCR-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_DCR_CHAT_LINK_URL', 'DCR_TXID_RE']
+	},
+	// ─── SOL / Solana (Part 122 cp45) ────────────────────────
+	{
+		name: 'cp137-SOL-1 — canonical asset registry has SOL entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'SOL'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-SOL-2 — frontend asset registry matches SOL entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'sol'",
+			"displayName: 'Solana'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-SOL-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_SOL_CHAT_LINK_URL', 'SOL_TXID_RE']
+	},
+	// ─── ETH / Ethereum (Part 122 cp47) ──────────────────────
+	{
+		name: 'cp137-ETH-1 — canonical asset registry has ETH entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'ETH'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-ETH-2 — frontend asset registry matches ETH entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'eth'",
+			"displayName: 'Ethereum'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-ETH-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_ETH_CHAT_LINK_URL', 'ETH_TXID_RE']
+	},
+	// ─── XRP / Ripple (Part 122 cp49) ────────────────────────
+	{
+		name: 'cp137-XRP-1 — canonical asset registry has XRP entry with trade-only invariant',
+		file: 'packages/asset-registry/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'XRP'",
+			'canPayListingFee: false',
+			"supportedNetworks: ['mainnet']",
+			"defaultNetwork: 'mainnet'"
+		]
+	},
+	{
+		name: 'cp137-XRP-2 — frontend asset registry matches XRP entry',
+		file: 'apps/web/src/lib/assets/registry.ts',
+		rootRelative: true,
+		mustHave: [
+			"ticker: 'xrp'",
+			"displayName: 'Ripple (XRP)'",
+			'canBeUsedForListingFee: false'
+		]
+	},
+	{
+		name: 'cp137-XRP-3 — bundled chat-link explorer constant exists',
+		file: 'apps/web/src/lib/explorer/urlsCore.ts',
+		rootRelative: true,
+		mustHave: ['BUNDLED_XRP_CHAT_LINK_URL', 'XRP_TXID_RE']
+	},
+	// ─── cp138 — DB/Relay hardening sentinels ─────────────────
+	{
+		name: 'cp138-D-2 — push_subscriptions enforces per-account cap with sliding-window eviction',
+		file: 'apps/relay/src/policy/pushSubscriptions.ts',
+		rootRelative: true,
+		mustHave: [
+			'MAX_SUBSCRIPTIONS_PER_ACCOUNT',
+			'cp138 D-2',
+			'this.db.withTx',
+			'ORDER BY created_at ASC',
+			'evicted_for_cap'
+		],
+		// Pre-cp138 the upsert was a single client.query() with no
+		// cap check.  Defend against accidental regression to that
+		// pattern by requiring the withTx wrapper + eviction query.
+		mustNotHave: [
+			'await this.db.query<RawRow>(\n\t\t\t`INSERT INTO push_subscriptions'
+		]
+	},
+	{
+		name: 'cp138-C-1 — keystore.ts KDF floor matches INTERACTIVE (downgrade-attack defense)',
+		file: 'apps/web/src/lib/crypto/keystore.ts',
+		rootRelative: true,
+		mustHave: [
+			'cp138 C-1',
+			'MIN_KDF_OPSLIMIT = 2',
+			'MIN_KDF_MEMLIMIT = 64 * 1024 * 1024'
+		]
+	},
+	{
+		name: 'cp138-C-1 — yubikey/wrap.ts KDF floor matches INTERACTIVE',
+		file: 'apps/web/src/lib/crypto/yubikey/wrap.ts',
+		rootRelative: true,
+		mustHave: [
+			'cp138 C-1',
+			'MIN_ARGON_OPSLIMIT = 2',
+			'MIN_ARGON_MEMLIMIT = 64 * 1024 * 1024'
+		]
+	},
+	{
+		name: 'cp138-I-1 — repo-root SECURITY.md exists with Matrix DM + Forgejo paths',
+		file: 'SECURITY.md',
+		rootRelative: true,
+		mustHave: [
+			'@agorise:matrix.org',
+			'docs/SECURITY.md',
+			'Matrix DM',
+			'72 hours',
+			'7 days'
+		]
 	}
 ];
 

@@ -99,11 +99,19 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		header: unknown;
 		created_at: Date;
 	}>(sql, [f.lo, f.hi]);
-	// pg returns BIGINT-as-string for id::text; coerce to JS number
-	// (safe — chat_messages.id is SERIAL, max ~2^31).  Reverse the
-	// list to match the wire-format expectation of newest-first
-	// (the snapshot rendering order is the same as the REST
-	// endpoint's response).
+	// pg returns BIGINT-as-string for id::text; coerce to JS number.
+	// cp138 A-3 correction: schema declares chat_messages.id as
+	// BIGSERIAL (not SERIAL as a prior comment claimed).  Range is
+	// 2^63 (max ~9.2e18); JS Number.MAX_SAFE_INTEGER is 2^53 (~9e15).
+	// At Morphit's projected message volume — even very optimistic
+	// adoption scenarios — we won't reach 2^53 messages in a
+	// generation, so parseInt is safe in practice.  If we ever
+	// approach 2^53 messages, this codepath needs to switch to
+	// string-based ids end-to-end (DB → wire → client) since JSON
+	// has no native bigint.  cp138 R-1 tracks this in
+	// REVISIT-LIST.md as "bigint id propagation, post-launch
+	// scaling work."  Reverse the list to match the wire-format
+	// expectation of newest-first.
 	return result.rows.map((r) => ({
 		id: parseInt(r.id, 10),
 		sender: r.sender,
