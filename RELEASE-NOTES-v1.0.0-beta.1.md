@@ -9,7 +9,10 @@ instance and for beta testers to try real trades on morphit.io.
 
 ## Install
 
-See `docs/RUN-A-MORPHIT-NODE.md`.  ~30 minutes on a $5/mo VPS.
+See `docs/RUN-A-MORPHIT-NODE.md` for the friendly walkthrough.
+Plan two evenings: the first to set up the server and install
+things, the second to troubleshoot whatever didn't work the
+first time.  Runs comfortably on a $5/mo VPS or a Raspberry Pi 4.
 
 For the day-zero procedure (the morning-of and first-24-hour
 operator runbook) see `docs/LAUNCH-DAY.md`.
@@ -43,13 +46,16 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   by default at the operator's instance and can be turned off per-ticker via
   `MORPHIT_INDEXER_DISABLED_ASSETS` or interactively at install time via the
   setup wizard's trade-only-policy step.
-  - **EVM-multi-network stablecoins** (USDT, USDC, DAI) span four networks
-    each (Ethereum / ERC-20, Tron / TRC-20, Solana / SPL, BNB Smart Chain /
-    BEP-20 where applicable) with a no-default-network rule so users can't
-    accidentally cross-send.  Amount-jitter at 6-decimal precision applies
-    (cp30 reversal of the earlier USDT pass-through decision — Circle/Tether
-    freeze power is documented per-asset as a separate, independently-real
-    threat).
+  - **EVM-multi-network stablecoins** (USDT, USDC, DAI) span four
+    networks each, with a no-default-network rule so users can't
+    accidentally cross-send.  USDT covers Ethereum / ERC-20, Tron /
+    TRC-20, Solana / SPL, and BNB Smart Chain / BEP-20.  USDC covers
+    Ethereum / ERC-20, Solana / SPL, Base, and Polygon.  DAI covers
+    Ethereum / ERC-20, Polygon, Base, and Arbitrum.  Amount-jitter
+    at 6-decimal precision applies (cp30 reversal of the earlier
+    USDT pass-through decision — Circle/Tether/MakerDAO governance
+    powers are documented per-asset as separate, independently-real
+    threats).
   - **UTXO chains** (BCH, LTC, DASH, DOGE) accept their canonical address
     families: LTC accepts all four forms (legacy P2PKH `L…`, modern P2SH
     `M…`, deprecated P2SH `3…`, bech32/bech32m `ltc1…`); DASH accepts both
@@ -66,10 +72,13 @@ commit.  For the exhaustive claim-by-claim breakdown, read
     governance documented in the per-asset guide.
   - **High-throughput / smart-contract chains** (SOL, ETH, XRP).  ETH
     addresses are EIP-55 mixed-case-checksum-validated; XRP supports
-    destination tags and respects the 10-XRP base reserve.  Block-explorer
+    destination tags and respects the 1-XRP base reserve.  Block-explorer
     health-probed at install time and re-probed on every address-share.
 - Listing fees in **BLURT, BTC, or XMR** — choice belongs to the
-  poster.  Default operator-treasury target is ~$0.12/order.
+  poster.  Default operator-treasury target is $0.25 USD per
+  order; BLURT-paying posters get an automatic 50% discount
+  (so a BLURT fee on the canonical instance currently rounds to
+  ~60 BLURT ≈ $0.12).
 - **First buy of BLURT is fee-waived** — new users can post their
   first order without holding any BLURT.
 - **Featured-slot auction** with a minimum-hours floor (prevents
@@ -195,7 +204,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 - **10 languages**, fully translated: English, Spanish, French,
   German, Italian, Polish, Russian, Persian, Simplified Chinese,
   Traditional Chinese.
-- **Per-locale prerendering** — 200 static HTML files (20 routes
+- **Per-locale prerendering** — 170 static HTML files (17 routes
   × 10 locales) so non-English speakers never see a flash of
   English content.
 
