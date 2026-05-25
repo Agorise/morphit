@@ -126,7 +126,17 @@ const ALLOWED_PATHS = new Set([
 	// in the implicit-allowlist set via docs/ blanket
 	// inclusion below; this entry just makes the
 	// rationale explicit.
-	'docs/PRE-LAUNCH-CHECKLIST.md'
+	'docs/PRE-LAUNCH-CHECKLIST.md',
+	// cp139 three-persona walkthrough — Sally-operator
+	// section names the placeholder sentinels in the
+	// context of the 3-tier denylist defense (init.sql +
+	// indexer config + relay config).  Same trust posture
+	// as the other walkthrough/audit docs above; removing
+	// the literal names would weaken the closure narrative.
+	'docs/THREE-PERSONA-WALKTHROUGH-cp139.md',
+	// cp137 three-persona walkthrough — likewise mentions
+	// placeholder sentinels in the operator-facing section.
+	'docs/THREE-PERSONA-WALKTHROUGH-cp137.md'
 ]);
 
 // ─── Directories to skip while walking ────────────────────────────────

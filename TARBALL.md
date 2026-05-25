@@ -24,9 +24,11 @@
 
 **State after cp139A-F CLOSED + G ~75% walked:**
 
-- Smoke battery: **6076/6076, 0 failures** — **septuple-pulse 14+15+16+17+18+19+20 all match** (well beyond Ken's "same number 5 times" stability bar).
+- Smoke battery: **6076/6076 across NINE confirmed pulses** (14+15+16+17+18+19+20+22+23).  Pulse 21 caught a real regression — the new `docs/THREE-PERSONA-WALKTHROUGH-cp139.md` named the placeholder sentinels in its Sally-operator section explaining the 3-tier denylist defense, tripping `db-password-placeholder-smoke`.  Fixed same-turn by adding the doc to `ALLOWED_PATHS` in `apps/indexer/scripts/db-password-placeholder-smoke.ts:130`.  All 8 placeholder-smoke scenarios pass; full battery restored.
 - TypeScript: 0 errors across all 5 workspaces.
 - svelte-check: 0 errors / 0 warnings.
+- **Persona walkthrough:** `docs/THREE-PERSONA-WALKTHROUGH-cp139.md` shipped — delta against cp137 baseline, walks Bob/Sally-user/Sally-operator through every cp138+cp139 audit-closure touchpoint, zero regressions.
+- **`[lang]/+layout` re-walk:** dedicated final re-walk confirmed zero new findings; defense-in-depth on operator-supplied alt_networks fields holds.
 
 **cp139-G-1 (LOW, code quality) shipped this turn:** duplicate locale-register loop in `apps/web/src/lib/i18n/index.ts` removed (delete the second `for (const { code } of SUPPORTED_LOCALES) { register(...) }` and its leading comment block).  Behavior unchanged (svelte-i18n was last-write-wins); audit hygiene improved.
 
