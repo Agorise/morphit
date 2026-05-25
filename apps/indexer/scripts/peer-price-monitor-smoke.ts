@@ -262,6 +262,138 @@ scenario('PPM-6: module source still documents the design pillars', () => {
 	}
 });
 
+// ─── PPM-7: cp139-F-2 SSRF defense via fetchJson ──
+// Pre-cp139-F-2, fetchPeerReceipt called bare fetch() and lacked
+// the DNS-rebinding closure / redirect:manual / body-cap defenses
+// that federationProbe.fetchJson() has.  This batch pins:
+//   (a) the helper now routes through fetchJson (source sentinel)
+//   (b) the import is wired
+//   (c) attacker-controlled peerOrigin pointing at a literal
+//       private host is rejected by fetchJson's layer-2 denylist
+//       before any network call fires.
+scenario(
+	'PPM-7-1: fetchPeerReceipt routes through fetchJson (source sentinel)',
+	() => {
+		const src = readFileSync(MODULE_PATH, 'utf-8');
+		if (!src.includes(`from '$indexer/federationProbe'`)) {
+			throw new Error('expected $indexer/federationProbe import');
+		}
+		if (!src.includes('fetchJson<PeerReceiptResponse>(')) {
+			throw new Error('expected fetchJson<PeerReceiptResponse> call');
+		}
+	}
+);
+
+scenario('PPM-7-2: fetchPeerReceipt no longer calls bare fetch()', () => {
+	const src = readFileSync(MODULE_PATH, 'utf-8');
+	// Look for the old smell.  The string `await fetch(` should
+	// NOT appear in this module — every outbound HTTP call must
+	// go through fetchJson.  This sentinel catches a regression
+	// that re-introduces a bare fetch() (e.g. for a future second
+	// endpoint).
+	if (src.match(/\bawait\s+fetch\s*\(/)) {
+		throw new Error('regression: bare fetch() in peerPriceMonitor');
+	}
+});
+
+scenario(
+	'PPM-7-3: cp139-F-2 design-rationale marker present in source',
+	() => {
+		const src = readFileSync(MODULE_PATH, 'utf-8');
+		const markers = [
+			'cp139-F-2', // explicit finding reference
+			'DNS-rebinding', // the hardening this closes
+			'six-layer' // points at federationProbe.fetchJson's defense stack
+		];
+		for (const m of markers) {
+			if (!src.includes(m)) {
+				throw new Error(`missing marker: ${m}`);
+			}
+		}
+	}
+);
+
+scenario(
+	'PPM-7-4: localhost peerOrigin rejected by fetchJson layer 2',
+	async () => {
+		// fetchJson rejects literal-private hostnames before any
+		// network resolution.  We pass localhost as the peer origin
+		// and expect fetchPeerReceipt to swallow the error and
+		// return null — caller (sample-cycle loop) interprets null
+		// as "skip this peer."
+		const result = await fetchPeerReceipt(
+			'https://localhost:8443',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for localhost origin');
+	}
+);
+
+scenario(
+	'PPM-7-5: 127.0.0.1 peerOrigin rejected by fetchJson layer 2',
+	async () => {
+		const result = await fetchPeerReceipt(
+			'https://127.0.0.1:8443',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for 127.0.0.1 origin');
+	}
+);
+
+scenario(
+	'PPM-7-6: 169.254.169.254 (AWS metadata) peerOrigin rejected',
+	async () => {
+		const result = await fetchPeerReceipt(
+			'https://169.254.169.254',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for AWS metadata origin');
+	}
+);
+
+scenario(
+	'PPM-7-7: http:// peerOrigin rejected by fetchJson layer 1',
+	async () => {
+		// Layer 1: HTTPS protocol enforcement.  An attacker who
+		// chain-registered an http:// origin (rejected at intake,
+		// but defense-in-depth) reaches the fetch layer and is
+		// rejected again.
+		const result = await fetchPeerReceipt(
+			'http://example.com',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for http:// origin');
+	}
+);
+
+scenario(
+	'PPM-7-8: ::1 IPv6 loopback peerOrigin rejected',
+	async () => {
+		const result = await fetchPeerReceipt(
+			'https://[::1]',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for IPv6 loopback');
+	}
+);
+
+scenario(
+	'PPM-7-9: .local TLD peerOrigin rejected',
+	async () => {
+		const result = await fetchPeerReceipt(
+			'https://printer.local',
+			'BLURT',
+			'USD'
+		);
+		assertEq(result, null, 'expected null for .local TLD');
+	}
+);
+
 // Settle async scenarios + report
 await new Promise((r) => setTimeout(r, 50));
 

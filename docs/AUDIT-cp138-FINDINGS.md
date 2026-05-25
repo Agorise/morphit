@@ -270,7 +270,7 @@ Substantively complete:
 
 - **Ship `ApiRelayProvider` + Settings opt-in for live prices** to deliver the user-facing price-staleness UX that ADR-0004 originally promised. Frontend module exists, indexer endpoint exists; what's missing is the apirelay provider implementation + a Settings toggle. Was overstated as shipped in 2026-05-09; corrected in cp138.
 
-- **Add `statement_timeout` guidance** to OPERATIONS.md so operators know to set Postgres-side `statement_timeout` for production deployments (current pool defaults don't ship one to avoid breaking long-running queue drains).
+- **Add `statement_timeout` guidance** to OPERATIONS.md so operators know to set Postgres-side `statement_timeout` for production deployments (current pool defaults don't ship one to avoid breaking long-running queue drains). — **SHIPPED 2026-05-25 (post-cp138)** at OPERATIONS.md §37.8 sub-item `e.`, with sentinel coverage in `scripts/operations-hardening-smoke.ts` and the §37.8 one-liner in RUN-A-MORPHIT-NODE.md §11 updated to match.
 
 ---
 

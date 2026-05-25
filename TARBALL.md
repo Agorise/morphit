@@ -4,7 +4,56 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp138 — 2026-05-25 (pre-launch deep-deep 94-task audit, CLOSED).
+**Last touched:** cp139 checkpoint F **CLOSED** — apps/indexer fully walked, 2 findings shipped (F-1 LOW SEC log-sanitize, **F-2 MED SEC peerPriceMonitor SSRF**) — 2026-05-25.
+
+**cp139 status:**
+
+| Checkpoint | Workspace | Files walked | Findings | Status |
+|---|---|---|---|---|
+| A | (mixed) | (smoke + statement_timeout cleanup) | 3 (statement_timeout, ME-1, ME-2) | CLOSED |
+| B | matrix-bot | All 8 files | 4 (B-1..B-4) | CLOSED |
+| C | ops-cli | All 30 files | 19 shipped + 1 noted + 1 deferred (C-1..C-21) | CLOSED |
+| D | packages/* (operator-config, asset-registry, indexer-client, relay-client) | All 4 packages | 2 shipped (D-1 HIGH, D-2 LOW) | CLOSED |
+| E | apps/relay | ALL 34 files (log + crypto×2 + config×2 + middleware×7 + api×5 + policy×11 + blurt×2 + queue + clock + db + main) | 1 shipped (E-1 LOW SEC) | CLOSED |
+| **F** | **apps/indexer** | **ALL ~94 files**: 17 chain-op handlers (cp138-A) + 32 API/middleware + 27 indexer/* internals + 4 fee/ + 10 price/ + 1 reputation/ + 7 infra (blurt/{verify,client,chainProperties}, config/index, db/{migrations,pool}, lib/feeAmountCalc, log/index, main.ts) | **2 shipped (F-1 LOW SEC, F-2 MED SEC)** | **CLOSED** |
+| G | apps/web | — | — | NOT STARTED |
+
+**Total cp139 findings shipped: 31** (statement_timeout + ME-1 + ME-2 + B-1..B-4 + C-1..C-9 + C-11..C-20 + D-1 + D-2 + E-1 + F-1 + F-2).  C-10 NOTED (LOW INFO).  C-21 DEFERRED to Phase 4.
+
+**Total cp139 regression scenarios added: ~104** — 28 matrix-bot-input-hardening + 24 term-sanitize + 7 init-smoke C-11/D-1 + 7 edit-smoke C-11/D-1 + 3 init-smoke round-trip + 1 init-smoke negative throw + 13 relay log-sanitize + 13 indexer log-sanitize + 9 peer-price-monitor PPM-7-{1..9} (cp139-F-2).  Every fix tamper-tested.
+
+**State after cp139A-F CLOSED + G ~75% walked:**
+
+- Smoke battery: **6076/6076, 0 failures** — **septuple-pulse 14+15+16+17+18+19+20 all match** (well beyond Ken's "same number 5 times" stability bar).
+- TypeScript: 0 errors across all 5 workspaces.
+- svelte-check: 0 errors / 0 warnings.
+
+**cp139-G-1 (LOW, code quality) shipped this turn:** duplicate locale-register loop in `apps/web/src/lib/i18n/index.ts` removed (delete the second `for (const { code } of SUPPORTED_LOCALES) { register(...) }` and its leading comment block).  Behavior unchanged (svelte-i18n was last-write-wins); audit hygiene improved.
+
+**apps/web Checkpoint G coverage (this turn):**
+- lib/crypto (12 files) + lib/net (8) + lib/auth (8) + lib/chat (23) + lib/stores (7) + lib/blurt (sign + apr + ops/{chatIdentity,profile}) + lib/security (privateKeyDetector) + lib/notifications (sanitizeClickPath + push + native) + lib/utils (safeContactUrl, safeStorage, hiddenAccounts, blurtMediaUrl, nostrUrl) + lib/indexer (client, profileCache, profileProps) + lib/components (71 Svelte files — XSS-pattern batch grep verified safe) + lib/assets/networks + lib/avatar/index + lib/drafts/index + lib/explorer/{urls,urlsCore} + service-worker.ts + hooks.client.ts + app.html = **~115 files walked CLEAN**
+- All prior audit closures verified in place: M4/M6/M7/M8 (keystore + cross-tab), L2/L3/L9/L15 (validators), K1.2/K1.4 (memory/keyfile caps), J-1 (trust anchor weight-0 inert), G2.2/O3.2 (avatar re-sanitize + data-URI shape), F-7/F-9/F-13/F-18/F-20/F-29/F-44 (multi-transfer/empty-memo/NaN/split-sign/parenthesize/CustomEvent/verifier-cache), 2-4/2-7/2-9/2-11/2-12 (chat ops), 1-1/1-4/1-8/1-9 (typed dispatch + privileged-slot-tie), 6-2 (sanitizeSvg root attr fix), S14 (local secp256k1), cp30-DD-DD SEC-3 (cross-network), cp71-O21 (fetch-must-have-timeout), cp81-D22b (notification click sanitize), BATCH14-7 (contact-url scheme allowlist), cp138-C-1 (KDF-floor downgrade)
+
+**Standing pre-launch operator actions:** NONE REMAINING.  The previously-tracked `CHANGE_ME_BEFORE_PRODUCTION` action is actually closed — that string appears in `ops/postgres/init.sql:58-65` as a DENYLIST entry that REJECTS operator deployment when the password is set to known placeholders.  It is itself the safety feature, not a placeholder needing rotation.  Confirmed via cp111 Lesson #1 in REVISIT-LIST.md line 920.  Memory entry #29 updated to reflect this.  Cp111 Lesson #1 itself ("TARBALL.md handoff section drift is its own real risk") is exactly the class of mistake this turn caught and closed.
+
+**cp138 close standing follow-ups status:**
+
+- ~~Add statement_timeout guidance to OPERATIONS.md~~ — **SHIPPED in cp139A.**
+- cp138-R-1 — bigint id propagation (post-launch scaling)
+- cp138-R-2 — matrix-bot-sdk transitive vulnerabilities (upstream-blocked, near-zero practical exposure)
+- Ship `ApiRelayProvider` + Settings opt-in for live prices (post-launch)
+
+**cp139-C-21 — Phase 4 backlog:** stepAltNetworks (Tor/Lokinet/I2P/Nostr) + stepSeo accept any free-form input.  Upstream defenses (cp139-C-11 + sanitize wraps) close every concrete security path; this is UX hardening + reject the `'`+`"` combo cp139-D-1 throws on.
+
+**cp139-D-1 — biggest catch of this audit pass.** HIGH SEC; converts cp139-C-11's fix from "operator footgun protection" to "data-corruption-by-design."  The wizard's emitted morphit.config.env was lossy across the canonical reader (`node:util.parseEnv`) for ~24 hours before this audit caught it.  Round-trip invariant now in smoke battery.
+
+**cp139-F-2 — second-biggest catch this audit pass.** MED SEC; `peerPriceMonitor.fetchPeerReceipt` was bypassing federationProbe's six-layer SSRF defense (HTTPS-only, isPrivateHostname denylist, DNS-rebinding closure, IP-pinned dispatcher, redirect:manual, body cap).  Real DNS-rebinding exposure window between probe-time check + monitor's 30-min fetch cycle.  Fix: exported `fetchJson<T>` from federationProbe.ts and routed monitor through it.  Single canonical SSRF helper now serves both call sites; future fetch sites touching `known_instances.origin` inherit defense automatically.  Bug-class sweep catalogued ALL fetch sites in apps/indexer — F-2 was the only attacker-input fetch site missing defense.
+
+**Tarball binary identity:** cp138 FULL state remains the binary on disk (`morphit-audit-2026-05-122-cp138-FULL-STATE.tar.gz`). cp139A+B+C+D+E+**F CLOSED** changes document-tracked in TARBALL.md + REVISIT-LIST.md + AUDIT-cp139-FINDINGS.md.  Tarball binary regenerates at end of full cp139 deep-deep close (after G completes).
+
+---
+
+## cp138 handoff (kept for context)
 
 **cp138 work summary:**
 

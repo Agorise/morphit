@@ -17,6 +17,7 @@ import { cpus, totalmem, freemem, arch, platform } from 'node:os';
 import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { connect } from 'node:net';
+import { sanitizeForTerm } from '../render/term.ts';
 
 export type CheckStatus = 'ok' | 'warn' | 'error';
 
@@ -733,12 +734,20 @@ export function renderSystemCheck(result: SystemCheckResult, color: boolean): vo
 	const NAME_W = 28;
 	const ACTUAL_W = 22;
 	for (const c of result.checks) {
-		const nameCol = c.name.padEnd(NAME_W);
-		const actualCol = c.actual.padEnd(ACTUAL_W);
+		// cp139-C-3: c.name / c.actual / c.note can include file
+		// content (PRETTY_NAME from /etc/os-release, SystemMaxUse
+		// value from journald.conf, sshd_config directive values)
+		// or library error messages.  Stripping terminal escapes
+		// defends against a hostile file-write (semi-trusted
+		// process on the box, post-install script, operator typo)
+		// from clearing the operator's screen or setting the
+		// terminal window title.
+		const nameCol = sanitizeForTerm(c.name).padEnd(NAME_W);
+		const actualCol = sanitizeForTerm(c.actual).padEnd(ACTUAL_W);
 		const g = glyph(c.status, color);
 		console.log(`  ${nameCol}${actualCol}${g}`);
 		if (c.note !== undefined) {
-			console.log(`      ${c.note}`);
+			console.log(`      ${sanitizeForTerm(c.note)}`);
 		}
 	}
 	console.log('');

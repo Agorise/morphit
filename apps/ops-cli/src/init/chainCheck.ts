@@ -42,7 +42,19 @@ export async function lookupBlurtAccount(
 		try {
 			const result = await callRpc(endpoint, 'condenser_api.get_accounts', [[accountName]]);
 			if (!Array.isArray(result) || result.length === 0) return null;
-			const row = result[0] as BlurtAccountRow;
+			const first = result[0];
+			// cp139-C-2: runtime type guard before the cast.  If a
+			// rogue RPC endpoint returns `[null]` (or any non-object)
+			// as the first row, `first.balance` would TypeError on
+			// the null path.  The catch below would absorb it and
+			// fall through to the next endpoint, but a hostile
+			// upstream serving all 4 fallbacks the same garbage
+			// would yield an opaque "Could not reach any Blurt RPC"
+			// error instead of a clean "account doesn't exist"
+			// return.  Treat non-object as same-as-empty (account
+			// not found).
+			if (typeof first !== 'object' || first === null) return null;
+			const row = first as BlurtAccountRow;
 			const balanceStr = row.balance ?? '0.000 BLURT';
 			const m = /^([\d.]+)\s+BLURT$/.exec(balanceStr);
 			const balanceBlurt = m !== null ? parseFloat(m[1]!) : 0;

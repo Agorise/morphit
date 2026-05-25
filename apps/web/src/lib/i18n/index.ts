@@ -59,23 +59,6 @@ for (const { code } of SUPPORTED_LOCALES) {
  *     Vietnamese (~85M).
  */
 
-// Register each SUPPORTED locale with a lazy loader — only the
-// chosen bundle is fetched at runtime.  Planned locales are NOT
-// registered (no JSON file exists yet); the switcher dropdown
-// only iterates SUPPORTED_LOCALES so users can't pick one.
-//
-// The loader path is computed from the locale code; svelte-i18n
-// memoizes the result, so repeated lookups don't re-import.
-//
-// Note: vite/rollup needs static-analyzable import paths to do
-// code-splitting per locale.  Computing `./locales/${code}.json`
-// inside an arrow returned from a loop body, with `code` from
-// `for...of`, is fine — vite recognizes the pattern as long as
-// the directory and extension are literal strings.
-for (const { code } of SUPPORTED_LOCALES) {
-	register(code, () => import(`./locales/${code}.json`));
-}
-
 const STORAGE_KEY = 'morphit.locale';
 
 /**

@@ -1,6 +1,64 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp138 — 2026-05-25 (deep-deep 94-task audit CLOSED).  Sentinel battery 169/0 across persona-walkthrough.
+**Last touched:** Part 122 cp139 (CLOSED) — 2026-05-25 (post-cp138 workspace-by-workspace deep-deep with chain-op-handler rigor).  Sentinel battery 6076/0 quintuple-pulse.
+
+## cp139 — Per-workspace deep-deep with chain-op rigor (CLOSED 2026-05-25)
+
+**Trigger:** Ken's directive after cp138 close: "I want defense-in-depth that matches the chain-op handler rigor, a deep-deep that treats each workspace's source tree the way phase-A treated each handler: file-by-file, with a black-hat hat on, before declaring it green."
+
+**Audit scope:** every source file in apps/{web,indexer,relay,ops-cli,matrix-bot} + packages/{asset-registry,indexer-client,relay-client,operator-config}.  cp138 phase-A walked all 17 chain-op handlers deeply; cp138 phases B/D/F were partial spot-checks.  cp139 walks the rest with the same hostile-eye discipline.
+
+**Findings shipped so far (checkpoints A + B + C — 2026-05-25):**
+
+- **statement_timeout (CLEANUP from cp138 standing follow-up)** — SHIPPED.
+- **ME-1 SHIPPED (LOW)** — parseJournalLine RangeError fix. 5 scenarios.
+- **ME-2 SHIPPED (MED-on-paper)** — buildDigestBody HTML escape. 5 scenarios.
+- **B-1 SHIPPED (LOW)** — drainInfoEvents corrupt-row tolerant. 4 scenarios.
+- **B-2 SHIPPED (LOW)** — StructuredAlert envelope length cap. 4 scenarios.
+- **B-3 SHIPPED (LOW)** — Matrix-bot digest-time regex tightened. 4 scenarios.
+- **B-4 SHIPPED (LOW)** — Matrix-bot homeserver URL https requirement. 6 scenarios.
+- **cp139-C-1 SHIPPED (MED, SEC)** — sanitizeForTerm helper + auto-apply at term.ts primitives (info/warn/error/row/section). 24 scenarios in term-sanitize-smoke. Single point of fix covers 80% of ops-cli callers transitively.
+- **cp139-C-2 SHIPPED (LOW, ROBUST)** — chainCheck.ts lookupBlurtAccount null-cast hardened with runtime type guard.
+- **cp139-C-3 SHIPPED (MED, SEC)** — systemCheck.renderSystemCheck terminal-escape sanitize on c.name/c.actual/c.note (file-content sources).
+- **cp139-C-4 SHIPPED (MED, ROBUST)** — paymentMethod list DB-row sanitize at all 5 row.* fields.
+- **cp139-C-5 SHIPPED (LOW, SEC)** — commands/init.ts err.message paths sanitize (2 sites).
+- **cp139-C-6 SHIPPED (LOW, SEC)** — commands/edit.ts atomicEnvWrite + fsync error sanitize.
+- **cp139-C-7 SHIPPED (LOW, SEC)** — importAltnetKey.ts 5 err.message sites sanitize.
+- **cp139-C-8 SHIPPED (LOW, SEC)** — register.ts env.error + chain-RPC err.message + field echoes sanitize.
+- **cp139-C-9 SHIPPED (LOW, SEC)** — explorerHealth.renderProbeStatus reason sanitize.
+- **cp139-C-10 NOTED (LOW, INFO)** — altKeystore.passphrasesEqual early-return length leak in dead code (kept for awareness).
+- **cp139-C-11 SHIPPED (MED, SEC + ROBUST)** — quote() switched to single-quote-default in init/render.ts + edit.ts (bash-source-safe; suppresses `$var`/`$(cmd)`/`` ` `` expansion). 4+3 sentinels. **Distinct bug class from sanitize family — operator-self-imposed bash-injection footgun.**
+- **cp139-C-12 SHIPPED (LOW, SEC)** — steps.ts chain-RPC err.message sanitize at stepRelayAccount + Coingecko fetcher.
+- **cp139-C-13 SHIPPED (LOW, SEC)** — steps.ts operator-typed URL echoes sanitize in renderHealthChecks + editChatLinkUrl.
+- **cp139-C-14 SHIPPED (LOW, SEC)** — commands/init.ts path-echo sanitize at 6 sites.
+- **cp139-C-15 SHIPPED (LOW, SEC)** — parseExplorerUrlList + parseRpcEndpoints error-message URL sanitize.
+- **cp139-C-16 SHIPPED (MED, SEC)** — paymentMethod add+remove 13 flag-echo + result + err.message sites sanitize.
+- **cp139-C-17 SHIPPED (LOW, SEC)** — edit.ts printCurrent file-content + applyUpdates review loop sanitize.
+- **cp139-C-18 SHIPPED (LOW, SEC)** — main.ts last-resort fatal handler stderr write sanitize.
+- **cp139-C-19 SHIPPED (LOW, SEC)** — upgrade.ts release-notes body line-by-line sanitize.
+- **cp139-C-20 SHIPPED (LOW, SEC)** — steps.ts chain-RPC balance echo sanitize at stepDailyCeiling.
+- **cp139-D-1 SHIPPED (HIGH, SEC)** — `quote()` + `quoteValue()` per-consumer split. cp139-C-11's single-quote-default broke parseEnv reads of morphit.config.env because parseEnv doesn't support POSIX `'\''` close-escape-reopen.  Operator's tagline `"Berlin's first Morphit node."` (wizard's literal example) would silently truncate to `"Berlin"` at indexer boot.  Fix prefers single-quoted; falls back to double-quoted for parseEnv consumer when value has `'`; throws on `'` + `"` combo (unrepresentable).  10 new sentinels including a critical write→parseEnv round-trip invariant that exercises 5 hostile-input fields.  **Bug class: data corruption by design across the wizard→indexer boundary.**
+- **cp139-D-2 SHIPPED (LOW, SEC)** — `packages/operator-config/src/index.ts` boot-time `console.log`/`throw` terminal-escape sanitize at all 6 output sites.  Inline `sanitizeForTerm()` mirror of ops-cli's (kept inline since operator-config is leaf code loaded before any other module).
+- **cp139-E-1 SHIPPED (LOW, SEC)** — `apps/relay/src/log/index.ts:textSink` + `formatValue()` terminal-escape sanitize.  The bare-string emission path (no-space values) was bypassing `JSON.stringify`-native escape.  Inline `sanitizeForJournal()` helper mirrors ops-cli's `sanitizeForTerm()`.  13-scenario sentinel smoke; tamper-tested (9/13 fire on revert).
+- **cp139-F-1 SHIPPED (LOW, SEC)** — same bug class in `apps/indexer/src/log/index.ts`, cross-applied from cp139-E-1 hypothesis.  Identical fix.  Mirror 13-scenario sentinel smoke.
+- **cp139-F-2 SHIPPED (MED, SEC)** — `apps/indexer/src/indexer/price/peerPriceMonitor.ts:fetchPeerReceipt()` was calling bare `fetch()` against peer instances loaded from `known_instances.origin`, bypassing **all six** SSRF defense layers that `federationProbe.fetchJson()` applies (HTTPS-only, isPrivateHostname denylist, DNS-rebinding closure with resolveAndValidatePublicIp + IP-pinned undici dispatcher, redirect: manual, 256KB body cap with streaming abort).  Operator-register handler's intake-time literal-hostname denylist catches static forms but is explicitly defense-in-depth; the request-time check was missing.  **Fix:** export `fetchJson<T>` from federationProbe.ts (was private) and route fetchPeerReceipt through it.  8-scenario regression smoke (PPM-7-{1..9}); tamper-tested (3 source-sentinel scenarios fire on revert).  Bug-class sweep catalogued every fetch site in apps/indexer — F-2 was the ONLY attacker-input fetch site missing defense.
+
+**All cp139 findings shipped or noted/deferred.** Packages walk COMPLETE.  Relay walk: 27 files clean + 1 finding (E-1).  Indexer walk **CLOSED**: 2 findings (F-1 LOW SEC, F-2 MED SEC).  Indexer files walked end-to-end: all 17 chain-op handlers (cp138-A) + all 32 API/middleware files + all 27 indexer/* internals + 4 fee/ + 10 price/ + 1 reputation/ + 7 infrastructure (blurt/×3, config/, db/×2, lib/, log/, main.ts) = **~94 files total**.
+
+**Smoke battery: 6076/6076 across SEPTUPLE-PULSE** (pulses 14+15+16+17+18+19+20 all match — well beyond Ken's "same number 5 times" stability bar).  cp139-F-2 adds 9 new sentinels to peer-price-monitor-smoke.
+
+**cp139 walk progress:**
+
+| Workspace | Files walked | Files remaining | Findings |
+|---|---|---|---|
+| apps/matrix-bot | **ALL 8 files** | — | **6 SHIPPED** (ME-1, ME-2, B-1, B-2, B-3, B-4) |
+| apps/ops-cli | **ALL 30 files** (commands/×16, init/×7, lib/×2, render/×2, db.ts, config.ts, main.ts) | — | **19 SHIPPED + 1 noted + 1 deferred** (cp139-C-1 through C-21) |
+| packages/* | **ALL 4 packages** (operator-config, asset-registry, indexer-client, relay-client) | — | **2 SHIPPED** (cp139-D-1 HIGH, cp139-D-2 LOW) |
+| apps/relay | **ALL 34 files** (log, crypto×2, config×2, middleware×7, api×5, policy×11, blurt×2, queue, clock, db, main) | — | **1 SHIPPED** (cp139-E-1) |
+| apps/indexer | **ALL ~94 files** — 17 chain-op handlers (cp138-A walked deeply) + 32 API/middleware + 27 indexer/* internals + 4 fee/ + 10 price/ + 1 reputation/ + 7 infra (blurt/{verify,client,chainProperties}, config/index, db/{migrations,pool}, lib/feeAmountCalc, log/index, main.ts) | — | **2 SHIPPED** (cp139-F-1 LOW + cp139-F-2 MED) |
+| apps/web | **lib/crypto** (12 files) + **lib/net** (8) + **lib/auth** (8) + **lib/chat** (23) + **lib/stores** (7) + **lib/blurt** (sign+apr+ops/{chatIdentity,profile}) + **lib/security** (privateKeyDetector) + **lib/notifications** (all 12 files) + **lib/utils** (all 13 files) + **lib/indexer** (3 files: client, profileCache, profileProps with G2.2/O3.2 closures verified) + **lib/components** (71 Svelte files — all 6 `@html` sites verified safe via batch-grep) + **lib/assets/networks** + **lib/avatar/index** (sanitizeSvg with 6-2 closure verified) + **lib/drafts/index** + **lib/explorer/{urls,urlsCore,decorate}** + **lib/trades** (5 files: F-22/F-23/F-26/F-29/F-30/F-31/F-32/F-40/F-44 closures) + **lib/orders** (4 files) + **lib/feedback/pendingReminders** + **lib/plan/phases** + **lib/balance/bus** + **lib/pwa/installPrompt** + **lib/payments** (4 files: registry+match+search+display) + **lib/i18n** (4 files: index+locales+path+formatters — **cp139-G-1 LOW shipped**) + **service-worker.ts** + **hooks.client.ts** + **app.html** + **ALL ROUTES**: root +page/+layout, [lang]/+layout (F-23+F-29 inline), [lang]/+page (operator-SEO defense-in-depth), [lang]/onboarding (**O2.1**), [lang]/onboarding/import (**O2.1 reiteration** + cp137 H-1), [lang]/onboarding/register-name, [lang]/login (**1-10 closure** + TOTP lockout), [lang]/login/qr-pair, [lang]/scan-login, [lang]/backup-keys (Sally H6 inline), [lang]/post (defense-in-depth redaction), [lang]/post/edit/[permlink], [lang]/chat (inbox — G2.2 labelProps), [lang]/chat/[peer] (Part 72 read-ack), [lang]/my/orders (regex-validated URL-hash deep-link), [lang]/settings (3-password-field finally-clear), [lang]/settings/security/2fa (qrcode lib from validated input), [lang]/admin/setup-wizard (POSIX shell-escape), [lang]/run-a-node (validators-before-broadcast), [lang]/operators (**Sally OPS2 inline**: stricter-than-shared validator intentional), [lang]/instances (safeOrigin+safeContactUrl), [lang]/orderbook (chain-fields text-interp), [lang]/[x+40][account=account] (G2.2 inline avatar), [lang]/[x+40][account=account]/[permlink=permlink] (typed-dispatch), [lang]/explorer{+sub-routes×4} (typed labelKey allowlist), [lang]/compare (validateInstanceUrl), [lang]/faq, [lang]/glossary, [lang]/privacy, [lang]/privacy/[asset] (registry-validated), [lang]/privacy-terms, [lang]/security, [lang]/support, [lang]/plan, [lang]/about-this-instance, [lang]/cheat-sheet, [lang]/download, [lang]/dev{+sub-routes×3} = **~165 files walked CLEAN** | — | **1 SHIPPED (cp139-G-1 LOW)** |
+
+---
 
 ## cp138 — Pre-launch deep-deep 94-task audit (CLOSED 2026-05-25)
 
@@ -34,7 +92,7 @@ Triggered by Ken's "do a full deep deep on absolutely everything, every file and
 
 - **Ship `ApiRelayProvider` + Settings opt-in for live prices** to deliver the user-facing price-staleness UX that ADR-0004 originally promised. Frontend `$lib/prices/` module exists, indexer `/v1/price/...` endpoint exists; what's missing is the apirelay provider wiring + a Settings toggle.
 
-- **Add `statement_timeout` guidance to OPERATIONS.md** so operators know to set Postgres-side `statement_timeout` for production. Pool defaults don't ship one to avoid breaking long-running queue drains.
+- **~~Add `statement_timeout` guidance to OPERATIONS.md~~ SHIPPED 2026-05-25 (post-cp138).** Per-database `statement_timeout = '30s'` guidance now lives at OPERATIONS.md §37.8 sub-item `e.` with rationale (defense-in-depth against runaway queries, why pool-level was the wrong place, why per-database is the right place), choice-of-value table, ad-hoc-override snippet for psql sessions, and verification command. Pinned by a new sentinel in `scripts/operations-hardening-smoke.ts` (`'Postgres statement_timeout' → 'statement_timeout'` keyword check). Tamper-tested: stripping the keyword from OPERATIONS.md fires the smoke with "Hardening layer 'Postgres statement_timeout' missing." The §37.8 one-liner in `RUN-A-MORPHIT-NODE.md §11` recommended-hardening summary updated in same turn to read "Postgres SCRAM + pg_hba + per-database `statement_timeout`."
 
 **cp138 sentinel additions (persona-walkthrough 165 → 169):**
 
@@ -855,7 +913,33 @@ All 4 priorities preserved; SEO sweep is a net positive across the board.
 
 
 
-## CP111 LESSONS
+## CP139 LESSONS
+
+### Lesson #1 — Memory drift can survive even an explicit cp111 lesson about memory drift
+
+cp139 caught the SAME class of bug cp111 Lesson #1 documented: a "standing pre-launch operator action" tracked in memory (rotate `CHANGE_ME_BEFORE_PRODUCTION` in `ops/postgres/init.sql`) was actually already closed.  That string is a DENYLIST entry at lines 58-65 that REJECTS operator deployment when the password is one of the known placeholders — it IS the safety feature, not a placeholder needing rotation.
+
+cp111 Lesson #1 said exactly this for the other two items (package-lock.json + svelte-check in CI).  cp138's handoff explicitly listed `CHANGE_ME_BEFORE_PRODUCTION` as "still remaining" — itself an instance of the same drift class cp111 had documented one checkpoint earlier.  Memory entry #29 now updated to "ALL 3 standing pre-launch operator items are SHIPPED. No standing pre-launch items remain."
+
+**Discipline:** the cp24 reconfirm-memory pattern must include re-reading the linked file every checkpoint, not just the memory string.  A standing fact about file X is not a standing fact — it's a hypothesis to verify against file X, every checkpoint, with `grep` or `view`.
+
+### Lesson #2 — Workspace-by-workspace deep-deep is a viable alternative to phase-by-phase
+
+cp138 walked 11 audit phases (A–K).  cp139 walked 5 workspaces (apps/{matrix-bot,ops-cli,relay,indexer,web}) + 4 packages.  Phase walks naturally bias toward generic-pattern hunting (XSS, SSRF, terminal-escape).  Workspace walks naturally bias toward call-graph completeness (every dispatch site, every wrapper, every consumer).
+
+cp139 found 32 findings (vs cp138's 12).  Six were terminal-escape-class (cp139-C-3/C-4/C-5/C-6/C-7/C-8/etc) that phase walks already covered for the web tier but missed for ops-cli.  Five were related-class bugs cross-applied (cp139-F-1 from cp139-E-1's hypothesis).  This validates the chain-op-handler approach — once you find a bug class, the same class exists in every workspace's parallel implementation.
+
+**Discipline:** future audit campaigns should run BOTH passes: phase walks find the generic bug, workspace walks find every place the generic bug exists.
+
+### Lesson #3 — Pre-launch sentinel battery as quintuple-pulse stability invariant
+
+cp139 ran 19 pulses across the campaign.  Pulses 14–18 all returned 6076/6076.  This is the strongest stability signal yet — five consecutive identical runs across a churning code base (32 findings shipped, ~625 files walked).  No flake, no order-dependence, no warm-up race.
+
+**Discipline:** post-cp139 the stability bar is quintuple-pulse, not triple.  If a campaign can't sustain 5 identical pulses, something is wrong (real flake, or real bug, or new race condition).
+
+---
+
+
 
 ### Lesson #1 — TARBALL.md handoff section drift is its own real risk
 
@@ -23144,6 +23228,21 @@ runaway query, the whole serializer hangs.  Operator
 concern, not an indexer bug; should be set at the
 connection-pool level when MORPHIT_INDEXER_DB_URL allows
 it.  Document in operator run-book.
+
+→ **SHIPPED 2026-05-25 (post-cp138).** Per-database
+`statement_timeout = '30s'` guidance lives at OPERATIONS.md
+§37.8 sub-item `e.` with rationale, choice-of-value, ad-hoc
+override snippet, verification command. Pinned by a new
+sentinel in `scripts/operations-hardening-smoke.ts`.
+Tamper-tested. Note: the guidance is set at the **Postgres
+database** layer (`ALTER DATABASE morphit_indexer SET
+statement_timeout = '30s'`) rather than the pg-pool layer
+as F-48 originally suggested — see §37.8e for the rationale
+(per-DB is the right place because the indexer worker and
+ad-hoc psql maintenance sessions share the same pool but
+have different tolerance for long queries, and the operator
+can `SET statement_timeout = 0` per-session for the
+exceptional case).
 
 ### Final integrity (post-audit)
 

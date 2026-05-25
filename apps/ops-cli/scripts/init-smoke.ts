@@ -15,6 +15,7 @@
 import { mkdtempSync, rmSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseEnv } from 'node:util';
 
 import { validateBlurtAccountName } from '../src/init/chainCheck.ts';
 import { checkPassphraseStrength } from '../src/init/encrypt.ts';
@@ -243,7 +244,10 @@ scenario('writeWizardOutput: morphit.config.env contains operator-tunable keys',
 		const result = writeWizardOutput(sampleAnswers, tmp);
 		const content = readFileSync(result.configPath, 'utf8');
 		assertContains(content, 'MORPHIT_INSTANCE_NAME=test-instance', 'instance name');
-		assertContains(content, 'MORPHIT_INSTANCE_TAGLINE="A test"', 'tagline');
+		// cp139-D-1 v2: morphit.config.env is the parseEnv consumer.
+		// Single-quoted form works for everything except embedded
+		// apostrophes; "A test" has no apostrophe → single-quoted.
+		assertContains(content, "MORPHIT_INSTANCE_TAGLINE='A test'", 'tagline (parseEnv = single-quoted)');
 		assertContains(content, 'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25', 'ceiling');
 		assertContains(content, 'MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT=100', 'fee fallback');
 		assertContains(content, 'MORPHIT_INSTANCE_CONTACT_URL=https://example.com/contact', 'contact');
@@ -300,6 +304,269 @@ scenario('writeWizardOutput: omits optional keys when null', () => {
 		rmSync(tmp, { recursive: true, force: true });
 	}
 });
+
+// ─── cp139-D-1: per-consumer quote-format split ─────────────────
+//
+// morphit.config.env → parseEnv consumer (operator-config package).
+//   Format: double-quoted.  parseEnv does NOT expand $/backtick
+//   inside double-quoted values (dotenv semantics).  Apostrophes
+//   pass through verbatim — needed because parseEnv does NOT
+//   support the POSIX `'\''` close-escape-reopen idiom.
+//
+// morphit.env → bash consumer (sourced via `set -a; .` or
+//   systemd EnvironmentFile=).
+//   Format: single-quoted.  Suppresses every form of bash
+//   expansion.  Apostrophes use the POSIX close-escape-reopen
+//   idiom which bash understands but parseEnv doesn't.
+//
+// cp139-C-11 first switched both to single-quoted; cp139-D-1
+// discovered the parseEnv/POSIX mismatch and split by consumer.
+
+scenario('cp139-D-1: $HOME in tagline (parseEnv consumer) is single-quoted', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = { ...sampleAnswers, tagline: 'Morphit $HOME instance' };
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		// cp139-D-1 v2: prefer single-quoted in parseEnv consumer
+		// (no apostrophe in value → single-quoted works).  parseEnv
+		// reads $HOME inside single-quotes literally; bash never
+		// sources morphit.config.env so the would-be bash expansion
+		// is not a concern.
+		assertContains(content, "MORPHIT_INSTANCE_TAGLINE='Morphit $HOME instance'", 'single-quoted');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('cp139-D-1: command-substitution $(...) in tagline is single-quoted (parseEnv literal)', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			tagline: 'evil $(curl http://x.example) instance'
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		// parseEnv reads $(curl ...) inside single-quotes literally.
+		assertContains(
+			content,
+			"MORPHIT_INSTANCE_TAGLINE='evil $(curl http://x.example) instance'",
+			'single-quoted (parseEnv literal)'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario("cp139-D-1: embedded apostrophe in tagline falls back to double-quoted (parseEnv consumer)", () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			tagline: "alice's morphit"
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		// Apostrophe in value → can't use single-quoted (parseEnv
+		// doesn't support POSIX close-escape-reopen).  Fall back to
+		// double-quoted; parseEnv reads $ inside double-quotes
+		// literally (no expansion).  Apostrophe survives verbatim.
+		assertContains(content, 'MORPHIT_INSTANCE_TAGLINE="alice\'s morphit"', 'double-quoted fallback');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('cp139-D-1: bare-safe values still emit without quotes', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const result = writeWizardOutput(sampleAnswers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		// `test-instance` matches the bare regex — must emit without
+		// quotes.
+		assertContains(content, 'MORPHIT_INSTANCE_NAME=test-instance', 'bare emission');
+		assertTrue(
+			!content.includes("MORPHIT_INSTANCE_NAME='test-instance'"),
+			'bare must NOT be force-quoted'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario("cp139-D-1: bash consumer (morphit.env critical-infra) stays single-quoted", () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		// morphit.env's writable values (DB URL + RPC list) are
+		// the bash consumer.  The DB URL in sampleAnswers has a
+		// colon-port + an @ inside the password section so it'll
+		// pass through bare; but the RPC endpoints join is comma-
+		// separated which doesn't match the bare regex.
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			blurtRpcEndpoints: ['https://rpc1.example', 'https://rpc2.example']
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const env = readFileSync(result.envPath, 'utf8');
+		assertContains(
+			env,
+			"MORPHIT_INDEXER_RPC_ENDPOINTS='https://rpc1.example,https://rpc2.example'",
+			'bash consumer = single-quoted'
+		);
+		assertTrue(
+			!env.includes('MORPHIT_INDEXER_RPC_ENDPOINTS="https://'),
+			'bash consumer must NOT use double-quotes (would expand $-substring in URL params)'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario(
+	"cp139-D-1 negative: value with both ' and \" throws at quote() time (unrepresentable in parseEnv)",
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			// parseEnv supports neither escape form for the OTHER
+			// quote char inside a given quote.  An operator typing
+			// `alice's "first" morphit` into the tagline is an edge
+			// case we surface loudly rather than silently corrupt.
+			// Wizard prompt layer is the right place to reject — for
+			// now the write throws, which is much better than
+			// truncating at parse time.
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				tagline: "alice's \"first\" morphit"
+			};
+			let threw = false;
+			try {
+				writeWizardOutput(answers, tmp);
+			} catch (err) {
+				if (
+					err instanceof Error &&
+					err.message.includes('both') &&
+					err.message.includes('unrepresentable')
+				) {
+					threw = true;
+				} else {
+					throw err;
+				}
+			}
+			assertTrue(threw, 'expected quote() to throw on value with both apostrophe and double-quote');
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
+
+// ─── cp139-D-1: parseEnv round-trip invariant ───────────────────
+//
+// The big regression sentinel: the wizard's emitted morphit.config.env
+// must round-trip cleanly through Node's parseEnv (operator-config's
+// consumer).  This is the test that would have CAUGHT cp139-D-1 if
+// it had existed at cp139-C-11 ship time.
+
+scenario(
+	"cp139-D-1 round-trip: tagline with apostrophe survives parseEnv read-back",
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			// "Berlin's first Morphit node." — the EXACT example string
+			// stepTagline shows the operator.  cp139-C-11 would have
+			// emitted this as 'Berlin'\''s first Morphit node.' which
+			// parseEnv truncates to "Berlin" silently.
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				tagline: "Berlin's first Morphit node."
+			};
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			const parsed = parseEnv(content);
+			assertTrue(
+				parsed.MORPHIT_INSTANCE_TAGLINE === "Berlin's first Morphit node.",
+				`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}, expected "Berlin's first Morphit node."`
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
+
+scenario(
+	"cp139-D-1 round-trip: tagline with $HOME survives parseEnv read-back as literal",
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				tagline: 'My $HOME node'
+			};
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			const parsed = parseEnv(content);
+			// parseEnv doesn't expand $ inside double-quotes (dotenv
+			// semantics); the literal string $HOME survives.
+			assertTrue(
+				parsed.MORPHIT_INSTANCE_TAGLINE === 'My $HOME node',
+				`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}`
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
+
+scenario(
+	"cp139-D-1 round-trip: every config field round-trips through parseEnv",
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			// Hostile-ish values that hit the non-bare-safe regex path
+			// in each operator-tunable field.  All must round-trip
+			// through Node's parseEnv (the canonical consumer for
+			// morphit.config.env).
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				instanceName: 'My Test Node',  // space → quote path
+				tagline: "alice's tagline with $HOME",  // apostrophe + $ literal
+				contactUrl: 'https://example.com/contact?to=alice@example.com',  // @ + ? + =
+				origin: 'https://my-morphit.example.com:8443',  // : (bare-safe)
+				operatorTag: {
+					tag: 'my-org.morphit-instance'  // bare-safe
+				},
+				seo: {
+					title: "morphit's first instance",  // apostrophe → double-quoted fallback
+					description: null,
+					keywords: null
+				}
+			};
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			const parsed = parseEnv(content);
+
+			// All fields below are in morphit.config.env (parseEnv
+			// consumer).  OPERATOR_TAG lives in morphit.env per
+			// render.ts (bash consumer) and is exercised by a
+			// separate bash-consumer round-trip in edit-smoke.
+			const checks: Array<[string, string]> = [
+				['MORPHIT_INSTANCE_NAME', 'My Test Node'],
+				['MORPHIT_INSTANCE_TAGLINE', "alice's tagline with $HOME"],
+				['MORPHIT_INSTANCE_CONTACT_URL', 'https://example.com/contact?to=alice@example.com'],
+				['MORPHIT_INSTANCE_ORIGIN', 'https://my-morphit.example.com:8443'],
+				['MORPHIT_INSTANCE_SEO_TITLE', "morphit's first instance"]
+			];
+			for (const [key, expected] of checks) {
+				assertTrue(
+					parsed[key] === expected,
+					`${key}: parsed=${JSON.stringify(parsed[key])}, expected=${JSON.stringify(expected)}`
+				);
+			}
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
 
 scenario('writeWizardOutput: writes MORPHIT_INSTANCE_ORIGIN when origin set', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -532,10 +799,11 @@ scenario('writeWizardOutput: only room populated → only MORPHIT_INDEXER_OPERAT
 		writeWizardOutput(answers, tmp);
 		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
 		// # is NOT in quote()'s safe-char set (shell-comment hazard) so
-		// the value gets wrapped in double-quotes — both renderings are
-		// valid env-file syntax.  Match the start-of-line pattern.
+		// the value gets wrapped in quotes.  cp139-C-11: quote() now
+		// uses SINGLE quotes for bash-safety (was double in earlier
+		// audit), and the regex accepts either form for posterity.
 		assertTrue(
-			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=("?)#agorise:matrix\.org\1$/m.test(env),
+			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=(['"]?)#agorise:matrix\.org\1$/m.test(env),
 			'room line present (quoted or unquoted)'
 		);
 		assertTrue(
@@ -564,7 +832,7 @@ scenario('writeWizardOutput: both Matrix surfaces populated → both env lines e
 			'MXID line present (unquoted: @ is in safe-char set)'
 		);
 		assertTrue(
-			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=("?)#agorise:matrix\.org\1$/m.test(env),
+			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=(['"]?)#agorise:matrix\.org\1$/m.test(env),
 			'room line present (quoted: # is shell-comment hazard so quote() wraps it)'
 		);
 		// Critical: the room line must carry #-prefixed value, the
@@ -575,14 +843,14 @@ scenario('writeWizardOutput: both Matrix surfaces populated → both env lines e
 		const roomLine = lines.find((l) =>
 			l.startsWith('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=')
 		);
-		assertTrue(mxidLine !== undefined && /=("?)@/.test(mxidLine), 'MXID line carries @');
-		assertTrue(roomLine !== undefined && /=("?)#/.test(roomLine), 'room line carries #');
+		assertTrue(mxidLine !== undefined && /=(['"]?)@/.test(mxidLine), 'MXID line carries @');
+		assertTrue(roomLine !== undefined && /=(['"]?)#/.test(roomLine), 'room line carries #');
 		assertTrue(
-			mxidLine !== undefined && !/=("?)#/.test(mxidLine),
+			mxidLine !== undefined && !/=(['"]?)#/.test(mxidLine),
 			'MXID line must NOT carry a # value (the @↔# footgun)'
 		);
 		assertTrue(
-			roomLine !== undefined && !/=("?)@/.test(roomLine),
+			roomLine !== undefined && !/=(['"]?)@/.test(roomLine),
 			'room line must NOT carry an @ value (the @↔# footgun)'
 		);
 	} finally {

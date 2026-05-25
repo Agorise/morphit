@@ -49,6 +49,75 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 
+/** Inline sanitize for any string this package prints to the
+ *  operator's terminal at boot time.  Strips C0/C1/DEL + all
+ *  non-SGR ESC sequences.  Mirror of
+ *  apps/ops-cli/src/render/term.ts:sanitizeForTerm() but kept
+ *  inline so this package has no dependency on the ops-cli
+ *  render module (operator-config is loaded by indexer + relay
+ *  at boot, BEFORE any other module imports).
+ *
+ *  cp139-D-2: defends against a hostile morphit.config.env file
+ *  (operator wrote escape sequences into a key name, OR
+ *  MORPHIT_OPERATOR_CONFIG_FILE points at a file with hostile
+ *  path bytes) from clearing the operator's screen or setting
+ *  the terminal window title at boot. */
+function sanitizeForTerm(s: string): string {
+	let out = '';
+	let i = 0;
+	while (i < s.length) {
+		const ch = s.charCodeAt(i);
+		if (ch === 0x1b) {
+			if (s.charCodeAt(i + 1) === 0x5b) {
+				let j = i + 2;
+				let sgr = false;
+				const maxJ = Math.min(s.length, i + 32);
+				while (j < maxJ) {
+					const cc = s.charCodeAt(j);
+					if (cc === 0x6d) {
+						let allDigits = true;
+						for (let k = i + 2; k < j; k++) {
+							const c2 = s.charCodeAt(k);
+							if (!((c2 >= 0x30 && c2 <= 0x39) || c2 === 0x3b)) {
+								allDigits = false;
+								break;
+							}
+						}
+						if (allDigits) {
+							out += s.slice(i, j + 1);
+							i = j + 1;
+							sgr = true;
+						}
+						break;
+					}
+					if (!((cc >= 0x30 && cc <= 0x39) || cc === 0x3b)) break;
+					j++;
+				}
+				if (sgr) continue;
+				i++;
+				continue;
+			}
+			i++;
+			continue;
+		}
+		if ((ch >= 0x00 && ch <= 0x08) || (ch >= 0x0b && ch <= 0x1f)) {
+			i++;
+			continue;
+		}
+		if (ch === 0x7f) {
+			i++;
+			continue;
+		}
+		if (ch >= 0x80 && ch <= 0x9f) {
+			i++;
+			continue;
+		}
+		out += s[i];
+		i++;
+	}
+	return out;
+}
+
 /** Operator-tunable env vars. The keys here can be set via
  *  morphit.config.env. Everything else is rejected with a
  *  clear error pointing at the file. */
@@ -251,7 +320,7 @@ export function loadOperatorConfig(
 		const resolved = resolve(overridePath);
 		if (!existsSync(resolved)) {
 			throw new Error(
-				`[operator-config] MORPHIT_OPERATOR_CONFIG_FILE points to ${resolved}, ` +
+				`[operator-config] MORPHIT_OPERATOR_CONFIG_FILE points to ${sanitizeForTerm(resolved)}, ` +
 					`but no file exists there. Either create the file or unset the env var.`
 			);
 		}
@@ -285,9 +354,9 @@ export function loadOperatorConfig(
 		// file to apply; surface the error rather than
 		// silently degrading to env-only.
 		throw new Error(
-			`[operator-config] failed to read ${path}: ${
+			`[operator-config] failed to read ${sanitizeForTerm(path)}: ${sanitizeForTerm(
 				err instanceof Error ? err.message : String(err)
-			}`
+			)}`
 		);
 	}
 
@@ -305,9 +374,13 @@ export function loadOperatorConfig(
 		(k) => !ALLOWLIST.has(k)
 	);
 	if (offenders.length > 0) {
-		const list = offenders.map((k) => `  - ${k}`).join('\n');
+		// cp139-D-2: sanitize each offender key name before
+		// embedding in the error message.  A hostile file could
+		// have a key like "\x1b[2JFAKE_KEY" that would clear the
+		// screen on boot when this error surfaces.
+		const list = offenders.map((k) => `  - ${sanitizeForTerm(k)}`).join('\n');
 		throw new Error(
-			`[operator-config] ${path} contains keys not in the operator allowlist:\n${list}\n` +
+			`[operator-config] ${sanitizeForTerm(path)} contains keys not in the operator allowlist:\n${list}\n` +
 				`If you want to set these, use the OS environment directly (SystemD, Docker, etc.). ` +
 				`The morphit.config.env file is intentionally restricted to a small set of operator-tunable values.`
 		);
@@ -331,11 +404,14 @@ export function loadOperatorConfig(
 	}
 
 	console.log(
-		`[operator-config] loaded ${path} (${applied} applied, ${skipped.length} skipped — env wins)`
+		`[operator-config] loaded ${sanitizeForTerm(path)} (${applied} applied, ${skipped.length} skipped — env wins)`
 	);
 	if (skipped.length > 0) {
+		// Allowlist keys (which is all `skipped` entries can be)
+		// are constants from ALLOWLIST, but sanitize for defense in
+		// depth.
 		console.log(
-			`[operator-config] skipped (already in env): ${skipped.join(', ')}`
+			`[operator-config] skipped (already in env): ${skipped.map(sanitizeForTerm).join(', ')}`
 		);
 	}
 

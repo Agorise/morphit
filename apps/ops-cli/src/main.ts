@@ -47,7 +47,7 @@
 
 import { loadConfig } from './config.ts';
 import { createDatabase } from './db.ts';
-import { initColor, error as printError, info } from './render/term.ts';
+import { initColor, error as printError, info, sanitizeForTerm } from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
 import { runSignups } from './commands/signups.ts';
@@ -383,7 +383,14 @@ main()
 	.catch((err: unknown) => {
 		// Last-resort handler — main()'s try/finally should have
 		// caught everything, but if a Promise rejection escapes
-		// we still want to surface it cleanly.
-		process.stderr.write(`fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+		// we still want to surface it cleanly.  cp139-C-18: the
+		// err.message can carry filesystem/RPC/library text that
+		// has attacker-influenced bytes; sanitizeForTerm strips
+		// terminal-control escapes before writing to stderr so a
+		// hostile error message can't clear the operator's
+		// screen or set the terminal title.
+		process.stderr.write(
+			`fatal: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
+		);
 		process.exit(127);
 	});

