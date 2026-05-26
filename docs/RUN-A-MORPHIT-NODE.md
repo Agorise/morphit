@@ -910,6 +910,16 @@ MORPHIT_RELAY_SIGNUP_ENABLED=true
 > this audit** — existing key files, envelopes, and passphrases
 > work unchanged. Full details in `docs/OPERATIONS.md` §3.
 
+> **Want more than the baseline?** §3 + §37 + the in-process
+> handling above are the production-ready baseline.  Once the
+> relay is live and stable, `docs/OPERATIONS.md` **§37.20**
+> documents an optional 8-step defense-in-depth ladder for the
+> active key (YubiKey-as-boot-passphrase, `mlock`-on-key-buffer,
+> air-gapped signer process, YubiHSM 2, etc.).  Each step
+> declares its cost, value, and when it makes sense.  Read
+> §37.20 in a quiet week; pick the ones that fit your threat
+> model and budget.  Don't try them all at once.
+
 The two HMAC secrets MUST be different from each other AND from any other password on the system. Generate fresh ones with `openssl rand -base64 32`. They're used to sign anti-bot puzzles and invite tokens; if either is empty or a known placeholder, the relay refuses to boot.
 
 `MORPHIT_RELAY_DATA_DIR` is where the relay keeps its kill-switch sentinel file (see step 11 below) and the persisted daily-ceiling counter. Create it now and give the relay user ownership:
