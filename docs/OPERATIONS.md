@@ -7311,6 +7311,420 @@ If any check above fails, fix that subsection before moving on
 honest about the gap, because operational decisions will be
 made assuming the layer is in place.
 
+### 37.20 Active-key defense-in-depth — beyond the OS baseline
+
+Subsections 37.1–37.19 above harden the **operating system** the
+relay runs on.  This subsection layers on top: even after the OS
+baseline is in place and verified, the active key still sits in
+the relay's process memory and on disk (encrypted).  The items
+below add successive layers above the OS so that compromise of
+the OS itself doesn't immediately mean compromise of the key.
+
+Each item declares: **why it helps**, **what it costs**, and
+**when it makes sense to add it**.  The ordering is roughly by
+value-per-effort — early items are cheap and high-value; later
+items are operationally heavier but raise the ceiling further.
+
+**The baseline starting point assumed by this subsection:**
+
+- §3 boot-time passphrase ceremony with `systemd-creds`
+- §37.5 systemd process / capability hardening (`PrivateTmp`,
+  `ProtectSystem=strict`, etc.)
+- §37.7 AppArmor profile for `morphit-relay`
+- §37.10 secrets-file hygiene (mode `0400`, owned by
+  `morphit-relay`, AIDE-monitored via §37.9)
+- §3 in-process key-handling discipline (KDF buffer zeroed
+  after use, decrypted WIF only in JS string scope)
+
+Do not start on the items below until the baseline is in place
+and the §37.19 verification checklist passes.  Layering
+defense on top of a broken baseline is wasted effort.
+
+#### 37.20.1 — YubiKey HMAC-SHA1 challenge-response as boot passphrase
+
+**Why it helps.**  Today, the boot-time passphrase is something
+the operator types.  An attacker with hypervisor access to the
+VPS can power-cycle the box and wait for an auto-restart with a
+cached passphrase — or, if the operator is using `systemd-creds`
+encrypted with the TPM, hope to extract the credential.  Adding
+a YubiKey challenge-response step means the relay literally
+cannot decrypt its envelope without the physical YubiKey
+inserted in a USB port.  The challenge lives in the boot
+script; the YubiKey computes HMAC-SHA1(challenge, slot-2-secret)
+and the result is the passphrase.
+
+**What it costs.**
+
+- Hardware: $45 for a YubiKey 5 (USB-A or USB-C variant — either
+  works; YubiKey 5 NFC also works if you want the NFC option).
+  Order TWO.  One stays plugged into the server; one is the
+  backup, stored offline in a safe.  Both keys must be
+  programmed with the SAME slot-2 secret so they're
+  interchangeable.
+- Setup time: ~1 hour.  Mostly programming the YubiKey slot via
+  `ykman` + writing the unlock script that calls `ykchalresp`
+  and pipes the result into `systemd-creds`.
+- Operational change: at boot, the relay won't come up until
+  the YubiKey is plugged in.  This means **unplanned reboots
+  require physical access** (or a known-trusted remote-KVM
+  with KVM-over-IP smart-card passthrough).  Plan accordingly.
+
+**When it makes sense.**  As soon as the relay is on a
+production server you don't physically touch daily.  The
+defense is strongest precisely when the operator is NOT in the
+data center — which is when remote reboots are the threat.
+
+**Operational caveat — paper backup of the challenge response.**
+Program the YubiKey slot-2 secret OFF-DEVICE first (compute the
+secret on your laptop with `dd if=/dev/urandom bs=20 count=1 |
+xxd -p`), then load it into both YubiKeys.  Mail an envelope
+containing the hex secret to yourself (paper, multi-location).
+A lost-AND-stolen pair of YubiKeys is not fatal: regenerate
+from the paper backup onto new YubiKeys.
+
+**Source.**  No code change required.  Wire as a boot-script
+addition that runs before `systemctl start morphit-relay`.
+Reference implementation:
+
+```bash
+#!/bin/sh
+# /usr/local/sbin/morphit-relay-unlock-with-yubikey.sh
+# Run by the operator interactively at boot, before starting
+# the morphit-relay service.  Touches the YubiKey (you'll see
+# the LED blink — press the button when it does), computes the
+# challenge response, and feeds it into the relay's encrypted
+# envelope passphrase.
+
+set -eu
+
+CHALLENGE_FILE=/etc/morphit/yubikey-challenge
+CRED_NAME=morphit-relay-passphrase
+
+if [ ! -f "$CHALLENGE_FILE" ]; then
+  echo "ERROR: $CHALLENGE_FILE missing — see §37.20.1" >&2
+  exit 1
+fi
+
+# Compute response; ykchalresp blocks until the user touches
+# the YubiKey button.
+CHALLENGE=$(cat "$CHALLENGE_FILE")
+RESPONSE=$(ykchalresp -2 "$CHALLENGE")
+
+# Pipe into systemd-creds to recreate the encrypted credential
+# for this boot only.  The credential lives in tmpfs and is
+# wiped when the service stops.
+echo -n "$RESPONSE" | systemd-creds encrypt --name="$CRED_NAME" \
+  - /run/credentials/morphit-relay/passphrase
+
+systemctl start morphit-relay
+echo "✓ morphit-relay started"
+```
+
+#### 37.20.2 — `mlock` + `MADV_DONTDUMP` on the decrypted-key buffer
+
+**Why it helps.**  Standard process-memory hygiene above the
+existing memzero-after-use pattern.  `mlock()` pins the live
+key page in RAM so the kernel cannot page it to swap (where it
+would persist after process termination unless swap is
+encrypted).  `madvise(MADV_DONTDUMP)` marks the page as
+excluded from coredumps — defense in depth alongside
+`fs.suid_dumpable=0` from §37.3 and `LimitCORE=0` from
+§37.5.  Together they harden against: (a) post-compromise
+swap-scraping, (b) any accidental coredump path that §37.3
+missed, and (c) `ptrace`-based memory inspection from a
+non-root process running as `morphit-relay`.
+
+**What it costs.**
+
+- Code: ~15 lines in `apps/relay/src/crypto/keyEnvelope.ts`.
+  Wrap the decrypted-WIF buffer's lifecycle with libsodium's
+  `sodium_mlock()` + `sodium_munlock()`, which call
+  `mlock()`/`madvise(MADV_DONTDUMP)` under the hood (and
+  `memzero` on `munlock()`).
+- Capability: needs `CAP_IPC_LOCK` for the relay process.  Add
+  `AmbientCapabilities=CAP_IPC_LOCK` and
+  `CapabilityBoundingSet=CAP_IPC_LOCK` to the morphit-relay
+  systemd unit (these go alongside the existing §37.5
+  capability lockdown).
+- Runtime overhead: negligible (a single 32-byte page locked
+  for the lifetime of the relay).
+
+**When it makes sense.**  Now.  This is a code change in the
+relay's crypto layer that costs an afternoon and tightens the
+process-memory model regardless of any OS-level defense state.
+
+**Verification.**
+
+```sh
+# From the morphit-relay user, with the relay running:
+sudo -u morphit-relay cat /proc/$(pgrep -f morphit-relay)/status | grep -E 'VmLck|CoreDumping'
+# Expect:
+#   VmLck:    4 kB           (or some multiple of page size)
+#   CoreDumping: 0
+```
+
+#### 37.20.3 — Out-of-band signature alerts (first 4-6 weeks of operation)
+
+**Why it helps.**  The relay's existing matrix-bot integration
+can DM the operator on every chain op the relay broadcasts.
+Each DM includes: monotonic sequence number, op type
+(`create_claimed_account` / `transfer` / `custom_json`),
+recipient account (for transfers), BLURT amount (for
+transfers), and timestamp.  The operator sees in real time
+whether anything anomalous gets signed.  Catches compromise
+within minutes instead of days.
+
+This is observability, not prevention — but on a fresh
+production relay where traffic patterns aren't yet baselined,
+the asymmetric value of catching a compromise EARLY is huge.
+After 4-6 weeks of legitimate-pattern data, the human-eye
+oversight stops scaling and you turn it off (or keep it
+filtered to anomalies only).
+
+**What it costs.**
+
+- Code: a `postBroadcastAlert(op)` hook in the relay's broadcast
+  path.  Wire to the matrix-bot send API.
+- Operator attention: ~30 DMs per day from a tester-scale
+  relay; check them at coffee, lunch, end of day.  Use a
+  dedicated Matrix room so they don't drown other DMs.
+- After-baseline tuning: filter to only transfers above $1
+  USD-equivalent, or only `create_claimed_account` ops, or
+  only ops to recipients not in the operators table.
+
+**When it makes sense.**  Days 0–42 of beta.  Disable (or
+filter heavily) after that, once you trust the patterns.
+
+**Source.**  `apps/relay/src/broadcast/` is the natural site;
+add an `alertSink` next to the existing logging sinks.
+
+#### 37.20.4 — In-app signer-policy fence
+
+**Why it helps.**  Even if an attacker gets code-execution
+inside the relay (e.g., via a malicious upstream npm dependency
+breaking past the lockfile pin, or a 0-day in a runtime
+dependency), they have to go through the relay's own signer
+helper to broadcast — and that helper enforces business-logic
+constraints regardless of caller.  The fence rejects:
+
+1. **Transfer recipient not in `operators` table AND not a
+   freshly-created signup account.**  The relay legitimately
+   transfers BLURT only to (a) other operators (fee splits) or
+   (b) brand-new signups (welcome bonus).  An attacker
+   transferring to a fresh attacker-controlled account would
+   fail (b)'s monotonicity gate.
+2. **Per-recipient 24h cumulative cap.**  No single recipient
+   can drain more than $X per day.  Configurable per operator.
+3. **Global per-minute transfer rate ceiling.**  N transfers
+   per minute max; an attacker trying to burst-drain hits this
+   wall.
+4. **`create_claimed_account` only when ALTCHA + invite-HMAC
+   re-verify at sign time.**  Closes a race where the
+   anti-bot evidence was valid at request-time but the actual
+   sign happens later; the signer re-checks.
+
+This is the natural home for the spending-limit logic
+discussed in cp47 kill-switch territory — extended from
+"refuse everything" to "refuse anything outside policy."
+
+**What it costs.**
+
+- Code: a new module living alongside the existing
+  `apps/relay/src/policy/killSwitch.ts` — call it whatever you
+  like (the obvious name is "signerPolicy" but that's a
+  bikeshed choice).  ~150–300 lines including smoke coverage.
+- Configuration: 4–6 new env vars (`MORPHIT_RELAY_DAILY_RECIPIENT_CAP_USD`,
+  `MORPHIT_RELAY_GLOBAL_TPM_CEILING`, etc.).
+- Operational tuning: the first week, you'll watch alerts (37.20.3)
+  for false-positive policy rejections and tighten/loosen as needed.
+
+**When it makes sense.**  Best paired with 37.20.5 (air-gapped
+signer); the policy fence and the signing primitive belong
+next to each other.  If 37.20.5 is in your plan, do them
+together.  If not, do this alone — still meaningfully reduces
+attacker leverage.
+
+#### 37.20.5 — Air-gapped signer process
+
+**Why it helps.**  Today, the active key is decrypted into the
+SAME process that handles HTTP requests, talks to Postgres,
+runs npm dependencies, parses JSON from chain RPC, etc.  Any
+remote-code-execution vector in that process gives the attacker
+the key in memory.
+
+Air-gapped-signer means moving signing into a separate process,
+running as a separate Unix user, with no network egress, that
+talks to the relay over a Unix-domain socket.  The relay sends:
+`{"op": "transfer", "to": "alice", "amount": "5.000 BLURT"}`.
+The signer (a) re-validates the request against the §37.20.4
+policy fence, (b) signs with the active key in its OWN process
+memory, (c) returns the signed bytes back over the socket.
+
+Compromise of the relay process now means:
+- ✗ No filesystem access to the key envelope (signer's user
+  owns the file, mode 0400)
+- ✗ No memory access to the decrypted key (separate process,
+  different ASLR layout, different cgroup, denied `ptrace`)
+- ✓ An RPC interface to the signer — but that interface is
+  exactly the §37.20.4 policy fence
+
+The signer process is tiny, audited, deliberately
+feature-frozen.  The relay process is allowed to evolve
+rapidly; the signer is treated as cryptographic infrastructure.
+
+**What it costs.**
+
+- Code: ~500–800 lines for a minimal signer + socket protocol.
+  Could be Rust, Go, or Node.js — whichever the team is most
+  comfortable security-auditing.  Rust gets you memory-safety
+  guarantees the JS process doesn't have.
+- Deployment: a second systemd unit (`morphit-relay-signer.service`),
+  a separate Unix user (`morphit-relay-signer`), a Unix socket
+  with restrictive permissions, an AppArmor profile
+  specifically for the signer that denies network egress
+  entirely.
+- Operational change: minimal once deployed.  Relay restart no
+  longer prompts for the passphrase (signer holds it); signer
+  restart does.  Decouples the two lifecycles.
+
+**When it makes sense.**  After 37.20.1–37.20.4 are in place
+and stable.  This is the largest architectural change in the
+ladder; it should be a deliberate sprint, not a side project.
+Target it for around the first quarterly maintenance window.
+
+#### 37.20.6 — Quarterly active-key rotation
+
+**Why it helps.**  Even with all the layers above, a
+sufficiently determined attacker who somehow extracts the
+active key could sit on it indefinitely, waiting for a
+high-value window.  Rotating the key on a calendar bounds the
+window: any silent compromise has a 90-day shelf life.
+
+§3 already documents the rotation procedure (owner key signs
+the new active-authority on chain; the old active becomes
+useless the moment the chain confirms).  This subsection just
+says: **make it a scheduled discipline, not a reactive one.**
+
+**What it costs.**
+
+- 30 minutes every 90 days.  Plus the ~10–15 minutes of
+  one-time setup to put a calendar reminder somewhere visible
+  (Matrix bot pings on the 1st of every 3rd month; cron job
+  emails the operator; whatever fits your workflow).
+- Owner-key handling for the actual rotation: must remain
+  offline.  See §3 for the cold-signing flow.
+
+**When it makes sense.**  Set the calendar reminder today.
+First rotation: 90 days after relay first goes live.
+
+#### 37.20.7 — YubiHSM 2 — hardware key isolation
+
+**Why it helps.**  The endgame for hot-signing-key protection.
+Replace the encrypted-envelope-on-disk model with a hardware
+security module: the active key is generated INSIDE the YubiHSM
+and physically cannot be extracted from it.  Every chain op
+becomes an API call to the HSM ("here is a 32-byte hash;
+please sign it with key handle 0x0042").  The HSM signs and
+returns 65 bytes.  The relay never sees the key.
+
+Even root on the box can't read the key.  Even physical
+removal of the HSM doesn't yield the key — the HSM stores it
+in tamper-resistant silicon and self-destructs the key
+material on tamper detection.
+
+YubiHSM 2 supports secp256k1 natively (Blurt's curve), which
+not every HSM does.
+
+**What it costs.**
+
+- Hardware: ~$650 for YubiHSM 2.  Buy two — primary + backup
+  with the same key material (HSM-to-HSM cloning via the
+  audit-log mode).
+- Code: ~200–400 lines.  Replace the in-process signer
+  primitive (`sign(payload, wif)`) with a YubiHSM RPC call
+  (`yubihsm.sign(payload, key_handle)`).  If §37.20.5
+  air-gapped-signer is already in place, this slots into the
+  signer process — the rest of the relay doesn't change.
+- One-time provisioning: ~2 hours to set up the HSM, generate
+  the key inside it, configure audit-log mode, mirror to the
+  backup HSM.
+
+**When it makes sense.**  When morphit.io has measurable
+transaction volume and a real treasury balance that justifies
+the capex.  Until then, 37.20.1 (cheap YubiKey for boot
+unlock) + 37.20.5 (air-gapped signer) gets you 80% of the way
+there for $45 + an afternoon.
+
+#### 37.20.8 — Native Blurt 2-of-2 multi-auth with cold cosigner
+
+**Why it helps.**  Blurt accounts support weighted multi-key
+authorities natively.  Set the relay account's active
+authority to weight-1 + weight-1, threshold 2: a key on the
+relay box (weight 1) AND a key held offline by the operator
+(weight 1).  Every broadcast requires BOTH signatures.
+
+Even total compromise of the hot key + the YubiHSM cannot
+move funds: the chain rejects single-signature broadcasts on
+this account.  The attacker must also compromise the
+operator's offline key, which is a different threat model
+entirely (physical access to the operator).
+
+**What it costs.**
+
+- Operational: every broadcast must be cosigned offline.  The
+  natural pattern is batch-signing: the relay queues ops; the
+  operator goes online every 6 hours, reviews the queue,
+  cosigns valid ops, and lets the relay broadcast the
+  fully-signed bytes.
+- That 6-hour batch-sign cadence is fundamentally incompatible
+  with on-demand free signups (which expect an ACT mint within
+  seconds).  Compatibility options: (a) accept a 6-hour SLA
+  on signups, which is awful UX; (b) split the account
+  topology so a fast-cycle "signup mint" key is single-sig
+  on the relay while a slow-cycle "operator payout" key is
+  2-of-2; (c) skip this layer entirely.
+- Code: minimal once the multi-auth payload format is
+  understood; chain-side support is in place.
+
+**When it makes sense.**  Only if you accept a 6-hour-batch
+signup SLA (option b above) or if signup ACT mints have been
+delegated to a separate key with its own narrow authority.
+Probably skip for v1.0; revisit if a real compromise event
+forces the question.
+
+---
+
+### 37.20 — summary table
+
+| # | Item | Cost | Value | When |
+|---|---|---|---|---|
+| 37.20.1 | YubiKey challenge-response boot passphrase | $45 + 1 hr | High — defeats unattended remote reboot | Now |
+| 37.20.2 | `mlock` + `MADV_DONTDUMP` on key buffer | Afternoon | Medium — closes swap + coredump gaps | Now |
+| 37.20.3 | Out-of-band signature alerts | 1 day + ops attention | High during beta-1 | Days 0–42 |
+| 37.20.4 | In-app signer-policy fence | Week + smoke coverage | High — bounds blast radius | Before/with 37.20.5 |
+| 37.20.5 | Air-gapped signer process | Sprint | Very high — isolates key from main process | First quarterly window |
+| 37.20.6 | Quarterly active-key rotation | 30 min/90 days | High — bounds silent-compromise window | Calendar from launch day |
+| 37.20.7 | YubiHSM 2 — hardware key isolation | $650 + sprint | Maximum — key never extractable | When volume justifies capex |
+| 37.20.8 | Native Blurt 2-of-2 multi-auth | Operational complexity | Maximum — but breaks on-demand signups | Probably skip for v1.0 |
+
+The natural sequencing:
+
+- **Week 1 of beta:** 37.20.1 (YubiKey passphrase), 37.20.2
+  (`mlock`), 37.20.3 (alerts), 37.20.6 (calendar reminder).
+- **Weeks 2–6:** 37.20.4 + 37.20.5 together (policy fence and
+  air-gapped signer; they belong next to each other).
+- **Quarterly:** 37.20.6 (rotation) fires automatically from
+  the calendar reminder.
+- **When morphit.io has real volume:** 37.20.7 (YubiHSM 2)
+  slots into the air-gapped signer.
+- **Probably never (or only after an incident):** 37.20.8.
+
+Don't try to do all of these at once.  Each is a layer; each
+needs its own verification step (which is why every subsection
+above declared what success looks like).  Layering hardening
+without verification at each step compounds risk rather than
+reducing it — see §37.19 preamble.
+
 
 ## 38. Diamond-hardened squatter defense — operator playbook
 
