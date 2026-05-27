@@ -4,22 +4,109 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp141 **CLOSED** — locale-graduation readiness audit + drift-catching infrastructure for adding any of the 7 PLANNED locales (hi/ar/bn/pt/id/ja/vi) without missing stale "10 locales" mentions — 2026-05-27.
+**Last touched:** cp144 **CLOSED** — **CI has been red since cp140 (2026-05-26) and nobody noticed for ~24 hours.**  When `apps/mcp-server` was added as a workspace in cp140, `package-lock.json` was not regenerated.  `npm ci` (the CI command) requires `package.json` ↔ `package-lock.json` consistency and refused to install — gating ALL downstream CI jobs (typecheck, smokes, svelte-check, build) with EUSAGE.  Local triple-pulse verifications in cp141, cp142, cp143 ALL looked green because `npm install` (the dev command) silently heals the lockfile, masking the broken state from anyone not reading the actual Forgejo CI logs.  Discovered when Ken sent the failing typecheck task #421 log.  Fix this turn: (1) regenerated `package-lock.json` to include morphit-mcp and all transitive deps; (2) NEW `scripts/lockfile-sync-smoke.ts` enforces the invariant with both an authoritative `npm ci --dry-run` check AND a fast offline workspace cross-check; (3) tamper-tested against the original stale lockfile from the cp141 tarball — smoke correctly identifies the missing workspace by name (`apps/mcp-server`) and the missing top-level packages (`morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, etc.).  **CRITICAL: the next push must include the updated package-lock.json or CI stays red.**  Triple-pulse 6092/6092/6092 stable.  — 2026-05-27.
+
+**Why no prior cp caught this:** the entire cp141 → cp142 → cp143 progression validated locally against an `npm install`-healed lockfile.  `npm install` is idempotent and silent when it heals the lockfile — no warning, no diff prompt, no log message that says "I just rewrote your lockfile because package.json drifted."  The healed state was invisible to my eyes and to every static-analysis smoke.  Only `npm ci` distinguishes the two.  Lesson #1 in cp144's REVISIT-LIST entry.
+
+**Prior turn (cp143):** Per-smoke wall-clock runtime timeout (`timeout --signal=TERM --kill-after=5 240`).  Defense-in-depth complement to cp142's static catch — any future hang gets converted into a legible "HUNG — killed after 240s" in ≤245s instead of stalling CI until the action runner's hard wall.
+
+**Prior turn (cp142):** mcp-server-smoke fresh-checkout hang fix.  Self-healing lazy-build at smoke startup + explicit `npm run build -w apps/mcp-server` step in CI + NEW `scripts/spawn-dist-prebuild-coverage-smoke.ts` meta-smoke enforcing "every dist-bin workspace declares a build script + every smoke spawning from dist/ has an ensureBuilt()/existsSync() guard."  Two-layer defense with cp143.
+
+**Three checkpoints this session (cp142, cp143, cp144) all turn out to be different facets of the same root cause:** cp140 added the mcp-server workspace without exercising the full fresh-checkout install + smoke pipeline.  cp142 caught the smoke depending on a build artifact; cp143 added runtime defense for any hang; cp144 caught the lockfile drift that was preventing CI from even reaching the smoke step.  Pre-launch hardening pattern: when a workspace is added, BOTH the smoke surface AND the dependency surface need to be validated from a clean state, ideally in a sandbox that doesn't have the healing behaviors of dev-machine tooling.
 
 ### Fresh-session quick orientation
 
 If you're a fresh Claude opening this for the first time, the project context you need is in user memory (Ken's standing rules + the recent_updates section). The repository state is:
 
-- **Smoke battery:** 6084/6084, quadruple-pulse stable (pulses 34–37 at cp141 baseline). 0 runners failed.
+- **Smoke battery:** 6092/6092, triple-pulse stable at cp144 baseline (pulses 44–46). 0 runners failed.  Smoke runner script count: 236.  Per-smoke wall-clock ceiling 240s (cp143); slow-pole is `vitest-must-pass-smoke.ts` at ~150s.
 - **TypeScript:** 0 errors across all 10 projects (apps/web, apps/relay, apps/indexer, apps/ops-cli, apps/matrix-bot, apps/mcp-server, packages/indexer-client, packages/relay-client, packages/operator-config, packages/asset-registry).
 - **svelte-check:** 0 errors / 0 warnings.
+- **CI:** package-lock.json regenerated in cp144 — RED since cp140, GREEN as of cp144 ship.
 - **Canonical counts:** 16 tradable assets · 10 supported locales (+ 7 planned: hi/ar/bn/pt/id/ja/vi) · 43 active ADRs (0001–0044, 0016 reserved-but-unused) · 327 brag-list entries.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140 (`morphit-mcp` + comparison-table corrections) + cp141 (locale-graduation readiness) will ship in the next beta release (~1 week, exact version TBD by Ken).
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140 (`morphit-mcp` + comparison-table corrections) + cp141 (locale-graduation readiness) + cp142 (mcp-server-smoke CI-bomb fix + meta-smoke) + cp143 (per-smoke runtime timeout) + cp144 (lockfile regenerated + lockfile-sync smoke) will ship in the next beta release.
 
 ### Most recent work — what just shipped
 
-**cp141 (2026-05-27, this session):** Locale-graduation readiness — audit confirmed adding any of the 7 PLANNED locales is a single-array edit in `apps/web/src/lib/i18n/locales.ts`. Closed 5 drift-vector gaps:
+**cp144 (2026-05-27, this session):** CI-RED-since-cp140 lockfile drift fix + lockfile-sync smoke.
+
+**Severity:** HIGH.  CI had been failing for ~24 hours and no prior cp caught it.
+
+The bug: cp140 added `apps/mcp-server` to the root `package.json:workspaces` array but did NOT regenerate `package-lock.json`.  `npm ci` (the CI install command) requires the two files to be in sync and refuses to install otherwise.  Every CI run after cp140 failed at the `npm ci` step with EUSAGE, gating ALL downstream jobs (typecheck, smokes, svelte-check, build, release).  Local triple-pulse verifications in cp141, cp142, cp143 all looked green because `npm install` (the dev command) silently heals the lockfile on first invocation — the inconsistent state was invisible to anyone not reading the actual Forgejo CI logs.
+
+Discovered when Ken sent the failing typecheck task #421 log directly.  The relevant line:
+
+```
+npm error code EUSAGE
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
+npm error Missing: morphit-mcp@1.0.0-beta.1 from lock file
+npm error Missing: @modelcontextprotocol/sdk@1.29.0 from lock file
+... (30+ more missing packages)
+```
+
+Empirical confirmation of which lockfile was stale: the cp141 tarball's `package-lock.json` (308876 bytes) had ZERO references to `morphit-mcp` or `@modelcontextprotocol`; my locally `npm install`-healed version (327617 bytes) had 3 + 24 references respectively.  The cp140 commit pushed the workspace declaration without the corresponding lockfile update; cp141 / cp142 / cp143 tarballs all contained the same stale lockfile because my local healing was invisible during tarball construction (the healing happened transparently when I ran `npm install --ignore-scripts` at session start; I never explicitly committed the healed lockfile as a "fix").
+
+Fixes shipped:
+
+1. **`package-lock.json` regenerated** in the working tree (and present in the cp144 tarball).  Adds entries for `apps/mcp-server` workspace, `morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, and ~30 transitive dependencies.  Lockfile size goes 308 KB → 327 KB (+19 KB).
+
+2. **`scripts/lockfile-sync-smoke.ts`** (NEW, ~190 lines) — runs `npm ci --dry-run --no-audit --no-fund --prefer-offline` against the working tree and asserts exit-zero.  Three scenarios:
+   - **Scenario 1 (authoritative):** npm ci dry-run succeeds → lockfile in sync.  This IS the exact CI invocation that catches the drift, so the smoke speaks the CI's own language.
+   - **Scenario 2 (precondition):** package-lock.json exists at repo root and parses as valid npm schema with a recognized lockfileVersion.
+   - **Scenario 3 (fast offline cross-check):** every workspace declared in root package.json appears in package-lock.json's `packages` map.  This catches the cp140 specific class even without network access — names the missing workspace by path.
+
+   On failure, the smoke emits a class-of-bug message with the fix command: "run `npm install --package-lock-only` from repo root, commit the updated package-lock.json, and push."  Tamper-tested by re-staging the cp141 stale lockfile: smoke correctly identifies missing packages (`morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, …) AND missing workspace (`apps/mcp-server`).  Restored, all 3 scenarios pass.
+
+3. **`scripts/run-smokes.sh`** — `.:lockfile-sync-smoke` registered as the 236th entry.
+
+Smoke battery growth: cp143's 6088 → cp144's 6092 (+4).  Breakdown: +3 from new lockfile-sync-smoke's 3 scenarios, +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` from the new file being walked.
+
+Triple-pulse 6092/6092/6092 stable (pulses 44–46).  Typecheck-sweep 0 errors × 11 projects.  Svelte-check 0/0.
+
+**Critical for next push:** the regenerated `package-lock.json` in the cp144 tarball is what unblocks CI.  Without it, CI stays red regardless of every other cp142/cp143/cp144 fix.
+
+**cp143 (2026-05-27, prior turn this session):** Runtime complement to cp142's static catch.
+
+cp142 caught the dist-spawning-smoke-without-build-guard bug at static-analysis time via `scripts/spawn-dist-prebuild-coverage-smoke.ts`.  cp143 adds the runtime complement: every smoke is now wrapped in `timeout --signal=TERM --kill-after=5 240` so ANY future hang — same class, different class, doesn't matter — gets converted into a legible "HUNG — killed after 240s" failure instead of stalling the CI job until the action runner's hard wall.  Two-layer defense.
+
+How the ceiling was set: measurement, not guess.  I instrumented 18 candidate file-walking smokes (the prior turn's recommendation #3 had been "memory-cap hardening on file-walking smokes") and found every smoke peaks at ~62-65 MB RSS regardless of what it does — that's just tsx + esbuild + V8 baseline.  The actual file-walk data is in the noise.  Recommendation #3 was wrong; the symptom it was trying to address (smokes getting OOM-killed in low-memory environments) was actually caused by mcp-server-smoke's hang holding wall-clock pressure on adjacent smokes.  cp142's fix kills the root cause; cp143's timeout converts any future analog into a fast, legible failure.
+
+Slow-pole measurement: `apps/web/scripts/vitest-must-pass-smoke.ts` runs real `vitest run` invocations across apps/{indexer,relay,web} = 981 unit tests under jsdom.  Clocks ~150s on this hardware.  240s ceiling = 1.6× buffer for slow CI hosts and cold caches.  Every other smoke clocks under 15s.
+
+Tamper-tested: a setInterval-based hang script with `MORPHIT_SMOKE_TIMEOUT=5` was correctly killed at exactly 5s with exit 124 ("HUNG" path).  Then the full triple-pulse smoke battery passed at 240s ceiling with 0 false positives.
+
+Files touched:
+- `scripts/run-smokes.sh` — wrapped per-smoke spawn in `timeout`, distinguished 124/137 (timeout) from other non-zero exits with class-of-bug message pointing at cp142's meta-smoke.
+- `scripts/run-smokes-chunk.sh` — session-aid chunked runner matched to canonical.
+- `TARBALL.md`, `docs/REVISIT-LIST.md` — handoff + cp143 lesson logged.
+
+Smoke battery growth: cp142's 6088 → cp143's 6088 (+0).  No new scenarios, just runtime hardening.
+
+Triple-pulse 6088/6088/6088 stable (pulses 41-43).  Typecheck-sweep 0 errors × 11 projects.  Svelte-check 0/0.
+
+**cp142 (2026-05-27, prior turn this session):** mcp-server-smoke fresh-checkout hang fix + class-of-bug meta-smoke.
+
+The bug: `apps/mcp-server/scripts/mcp-server-smoke.ts` was spawning `node dist/main.js` from cp140 (Ken's `morphit-mcp` ship), but `dist/` is gitignored.  On any fresh checkout — including every CI `actions/checkout` → `npm ci` run — `dist/main.js` doesn't exist; node exits immediately with `ERR_MODULE_NOT_FOUND`; the smoke's 9 JSON-RPC requests EPIPE on stdin (caught and swallowed); the 5-second deadline-poll loop collects no responses; the smoke then either emits 8 ✗ scenarios in environments with plenty of headroom (printing zero canonical `✓ all N` lines, so the runner counts it as a failed runner anyway), OR hangs past any reasonable wall-clock and gets killed by OOM-killer / signal-killer in constrained environments.  The bug was masked from cp140→cp142 only because Ken's dev machine kept `dist/` on disk between manual `npm run build` runs.
+
+How I found it: a fresh-session smoke-pulse verification of the cp141 tarball.  In a 4 GB sandbox running 60 smokes back-to-back, the mcp-server-smoke OOMed alongside two other smokes that just happened to peak memory at the same wall-clock slot.  Two of the three Killed signals were red herrings (`release-notes-asset-count-parity-smoke` and `npm-audit-gate-smoke` both ran clean individually).  The third — mcp-server-smoke — reproduced 100% of the time after `rm -rf apps/mcp-server/dist/`, confirming the underlying bug rather than environmental flake.
+
+Fix #1 — smoke self-heals: `mcp-server-smoke.ts` now calls `ensureBuilt(serverCwd)` at the top of `main()`, which `existsSync`-checks `dist/main.js` and shells `npm run build` if missing.  Build failures print a clear diagnostic and exit 1 with a useful "run `npm run build` in apps/mcp-server manually to debug" message instead of an unbounded hang.
+
+Fix #2 — CI build step: `.forgejo/workflows/ci.yml` smokes job grew a new "Build workspaces that ship compiled artifacts" step that runs `npm run build -w apps/mcp-server` before the triple-pulse smoke run.  Defense in depth.  If mcp-server's build is ever actually broken, the failure now surfaces as that named step failing, not buried in smoke output.
+
+Fix #3 — class-of-bug meta-smoke: `scripts/spawn-dist-prebuild-coverage-smoke.ts` (NEW, ~180 lines) walks every workspace and every smoke and enforces three invariants:
+
+  - Every workspace whose `package.json:bin` points into `dist/...` MUST have a `scripts.build` entry. (1 dist-bin: mcp-server)
+  - Every smoke file that contains `spawn('node', ['dist/...'])` MUST also contain `ensureBuilt(` or `existsSync(...dist)` (checked against a comment-stripped copy of the source so stale prose can't satisfy the guard). (1 matched: mcp-server-smoke)
+  - Every dist-bin workspace has at least one dist-spawning smoke. (1 workspace, 1 smoke)
+
+Tamper-tested by ripping `ensureBuilt()` out of mcp-server-smoke — meta-smoke correctly fires with the filename named, exits 1.  Restored, all 3 scenarios pass again.
+
+Smoke battery growth: cp141's 6084 → cp142's 6088 (+4).  Breakdown: +3 from new meta-smoke's 3 scenarios, +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` which walks the file tree and counts one more file (the new meta-smoke).
+
+Triple-pulse 6088/6088/6088 stable.  Typecheck-sweep 0 errors × 11 projects.  Svelte-check 0/0.
+
+**cp141 (2026-05-27, prior turn this session):** Locale-graduation readiness — audit confirmed adding any of the 7 PLANNED locales is a single-array edit in `apps/web/src/lib/i18n/locales.ts`. Closed 5 drift-vector gaps:
 1. `apps/web/scripts/i18n-translation-completeness-smoke.ts` — `>= 10` literal replaced with `=== SUPPORTED_LOCALES.length` (parametric).
 2. `scripts/brag-list-claim-parity-smoke.ts` — `MARKETING_DOCS` extended to include `apps/web/static/llms.txt` (so locale-count claims in llms.txt are now policed alongside brag list + README).
 3. `apps/web/scripts/web-push-wiring-smoke.ts` + `apps/web/scripts/2fa-locale-parity-smoke.ts` — "10 locales" → "every supported locale" in comments.
@@ -50,7 +137,7 @@ Translator UX confirmed already excellent: `i18n-translator-diff.ts` produces pe
 
 - **Code:** `apps/{web,relay,indexer,ops-cli,matrix-bot,mcp-server}/` + `packages/{indexer-client,relay-client,operator-config,asset-registry}/`
 - **Docs:** `docs/` — most important: `OPERATIONS.md`, `RUN-A-MORPHIT-NODE.md`, `REVISIT-LIST.md`, `CONTRIBUTING-TRANSLATIONS.md` (translator-facing), `LOCALE-GRADUATION.md` (maintainer-facing graduation), `AUDIT-2026-05.md`, `SECURITY.md`, `FEES-AND-REWARDS.md`, `METADATA-LEAK-CATALOG.md`, `OPERATOR-TRUST-DESIGN.md`, `GRANDMA-FRIENDLY-INVESTIGATION.md`, `BETA-INCIDENT-RUNBOOK.md`, `THREE-PERSONA-WALKTHROUGH-cp139.md`, ADRs 0001–0044 in `adr/`.
-- **Smoke runner:** `scripts/run-smokes.sh` — drives ~150 individual smoke scripts, ~6084 scenarios total. Typical full-pulse run: ~6 minutes.
+- **Smoke runner:** `scripts/run-smokes.sh` — drives 235 individual smoke scripts, 6088 scenarios total. Typical full-pulse run: ~6 minutes.
 - **Typecheck sweep:** `scripts/typecheck-sweep.sh` — sweep across all 10 projects.
 - **Brag list:** `MORPHIT-BRAG-LIST.md` — 327 entries, public-facing, claim-parity-policed.
 - **Mediakit:** `apps/web/static/morphit-mediakit.zip` — regenerate via `bash scripts/build-mediakit.sh` after any brag-list or brand-asset change.

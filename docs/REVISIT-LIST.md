@@ -1,6 +1,306 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp141 (CLOSED) — 2026-05-27 (post-cp140 locale-graduation readiness audit + drift-catching infrastructure for adding the 7 PLANNED locales).  Sentinel battery 6084/0 quadruple-pulse stable (pulses 34, 35, 36, 37).
+**Last touched:** Part 122 cp144 (CLOSED) — 2026-05-27 (CI-RED-since-cp140 lockfile drift fix + lockfile-sync smoke).  Sentinel battery 6092/0 triple-pulse stable (pulses 44, 45, 46).
+
+## cp144 — CI-RED-since-cp140 lockfile drift fix + lockfile-sync smoke (CLOSED 2026-05-27)
+
+**Severity: HIGH.**  CI was failing at the install step for ~24 hours.  cp141, cp142, cp143 local triple-pulse verifications all looked green because `npm install` (dev command) silently heals the lockfile, while `npm ci` (CI command) refuses to.  The broken state was invisible to anyone not reading the Forgejo CI logs.
+
+### How it happened
+
+In cp140 the `apps/mcp-server` workspace was added to root `package.json:workspaces`.  Per the standard npm workspace pattern, adding a workspace requires running `npm install` to populate `package-lock.json` with the new workspace's entries and transitive deps.  This was not done before the cp140 commit was pushed.  The committed `package-lock.json` had zero references to `morphit-mcp` or `@modelcontextprotocol/sdk`.
+
+CI's `npm ci` step refused to install:
+
+```
+npm error code EUSAGE
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
+npm error Missing: morphit-mcp@1.0.0-beta.1 from lock file
+npm error Missing: @modelcontextprotocol/sdk@1.29.0 from lock file
+...
+```
+
+### How it was discovered
+
+Ken sent the failing typecheck task #421 Forgejo log directly into the cp144 session.  Until that point, my fresh-session verification of cp141 → cp142 → cp143 had been running `npm install --ignore-scripts` at session start, which silently rewrote the lockfile on disk.  Every subsequent `npm install`, `tsc`, `tsx` invocation, smoke pulse, and typecheck succeeded.  The fact that the lockfile had been mutated was invisible — npm install emits no warning when it heals a lockfile.
+
+### Empirical proof
+
+| File | Bytes | `morphit-mcp` refs | `@modelcontextprotocol` refs |
+|---|---|---|---|
+| cp141 tarball's package-lock.json (what's in CI) | 308876 | 0 | 0 |
+| My session's healed package-lock.json | 327617 | 3 | 24 |
+
+The +19 KB delta is the missing mcp-server workspace entry + the @modelcontextprotocol/sdk subtree + its transitive deps (ajv, cors, express, jose, raw-body, …).
+
+### Fixes shipped
+
+1. **`package-lock.json` regenerated** in the working tree.  Now in sync with the workspaces declared in package.json.
+
+2. **`scripts/lockfile-sync-smoke.ts` (NEW, ~190 lines)** — 3 scenarios:
+   - **Scenario 1 (authoritative):** `npm ci --dry-run --no-audit --no-fund --prefer-offline` against the repo, asserts exit-zero.  This IS the exact CI invocation that fails; the smoke speaks the CI's own language.
+   - **Scenario 2 (precondition):** `package-lock.json` exists at repo root and parses as valid npm schema with a recognized `lockfileVersion`.
+   - **Scenario 3 (fast offline cross-check):** every workspace declared in root `package.json` appears in `package-lock.json`'s `packages` map.  Catches the cp140 class even without network access; names the missing workspace by path.
+
+   On failure, the smoke emits the class-of-bug fix command verbatim: "run `npm install --package-lock-only` from repo root, commit the updated package-lock.json, and push."
+
+3. **`scripts/run-smokes.sh`** — `.:lockfile-sync-smoke` registered as the 236th smoke entry.
+
+### Tamper-tested
+
+Re-staged the cp141 tarball's stale lockfile.  Smoke correctly fired:
+
+- Scenario 1: ✗ — named missing packages: `morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, `ajv@8.20.0`, `ajv-formats@3.0.1`, `cors@2.8.6`, …
+- Scenario 2: ✓ — lockfile JSON itself is valid, just stale.
+- Scenario 3: ✗ — named missing workspace: `apps/mcp-server`.
+
+Restored the healed lockfile; smoke goes 3/3 green again.
+
+### Smoke battery growth
+
+cp143's 6088 → cp144's 6092 (+4).  Breakdown:
+- +3 from new lockfile-sync-smoke's 3 scenarios.
+- +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` from walking one additional file (the new smoke).
+
+Triple-pulse 6092/6092/6092 stable (pulses 44, 45, 46).
+
+### Verified clean
+
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+- npm ci --dry-run against current package-lock.json: succeeds in ~4s
+- lockfile-sync-smoke: 3/3 baseline, 2/3 fail-as-expected after tamper, 3/3 passes again after restore
+
+### Lessons
+
+#### Lesson #1 — `npm install` and `npm ci` have asymmetric healing semantics
+
+`npm install` silently heals a stale lockfile.  No warning.  No diff.  No log line.  The lockfile after `npm install` may differ from the lockfile before, and you'll never know unless you `git diff` it or notice the file's mtime.
+
+`npm ci` refuses to install when the lockfile is stale.  Exits 1 with EUSAGE.
+
+This asymmetry means: a dev workflow that uses `npm install` (the default) will SILENTLY MASK any lockfile drift that a CI workflow using `npm ci` would surface.  If the dev never pushes the healed lockfile (or if the heal happens in a non-committed working state), CI breaks while local works.
+
+**Going forward:** any session that adds or removes a workspace, or changes any dep in any workspace, MUST end with an explicit `git diff package-lock.json` check.  If the lockfile changed, it goes in the same commit as the package.json change.  No exceptions.
+
+Better still: the cp144 lockfile-sync smoke catches this at smoke time.  Run the smoke battery before pushing, and a drift would have been flagged in 4 seconds.
+
+#### Lesson #2 — Local triple-pulse is not a substitute for fresh-checkout CI
+
+cp141, cp142, cp143 ALL reported clean triple-pulse smokes locally.  cp143 even did extensive RSS measurement and runtime hang protection.  None of these caught CI being red, because the smoke battery doesn't include a "would `npm ci` succeed?" check.  The cp144 smoke fills that gap.
+
+**Broader principle:** any tool whose invocation a CI step uses (npm ci, tsc, svelte-check, vitest run, …) should have a corresponding smoke that validates the SAME invocation locally.  cp143 already does this for vitest; cp144 adds it for npm ci.  Future audit candidates: svelte-check (already wrapped by smoke), tsc (covered by typecheck-sweep but not invoked as a smoke), forgejo-runner act-locally (not currently covered).
+
+#### Lesson #3 — Fresh-session verification is necessary but not sufficient
+
+In cp142 I made the case for fresh-session verification: extract a tarball into a clean dir, install, run everything.  That CAUGHT the mcp-server-smoke hang.  But it DID NOT catch the lockfile drift, because `npm install --ignore-scripts` (which I used at session start) silently healed the lockfile before any check ran.
+
+To catch the cp144 class via fresh-session verification, the workflow needs to be: `tar xzf … && npm ci` (not `npm install`).  If `npm ci` fails, that IS the bug.  Then `npm install` to heal, run the rest of the pipeline.
+
+I've added this to my own "fresh-session verification" mental checklist going forward.  Also captured by Scenario 1 of the lockfile-sync-smoke, so future sessions don't need to remember.
+
+#### Lesson #4 — The cp142–cp144 trifecta is the same root cause expressed three ways
+
+All three checkpoints are downstream of one cp140 oversight: adding the mcp-server workspace without exercising the full fresh-checkout install + smoke pipeline.
+
+- cp142: the smoke spawned `node dist/main.js` but dist/ wasn't built. (build-artifact-dependency)
+- cp143: any future hang would stall CI without bound. (runtime-defense complement)
+- cp144: the lockfile was never regenerated for the new workspace. (lockfile-dependency)
+
+**Pattern:** when adding a workspace, three sub-pipelines need verification:
+1. The workspace's source builds (covered by tsc/typecheck — already verified).
+2. The workspace's build artifacts (if any) exist before any smoke depends on them (cp142).
+3. The workspace's dependencies are in the root lockfile (cp144).
+4. Any smoke that exercises the workspace can't hang indefinitely (cp143).
+
+Pre-launch hardening should now include a "new workspace checklist" in `docs/CONTRIBUTING.md` or similar.  Filed as cp145 candidate: write that checklist.
+
+---
+
+## cp143 — Per-smoke runtime timeout (CLOSED 2026-05-27)
+
+cp142 caught the mcp-server-smoke hang class at static-analysis time (the `spawn-dist-prebuild-coverage-smoke` meta-smoke).  cp143 adds the runtime complement: regardless of cause, regardless of class, any smoke that doesn't return in 240 seconds gets SIGTERMed by `timeout`, gets a 5-second grace period, then SIGKILLed, and the runner emits a "HUNG — killed after 240s" message pointing at cp142's meta-smoke as the place to look for static-analysis enforcement of the relevant invariant.
+
+### Falsified prior-turn recommendation
+
+Prior turn's recommendation #3 was "memory-cap hardening on file-walking smokes."  Before shipping a code change on that basis, I measured peak RSS of 18 candidate smokes (the heavy file-walkers from cp141 + the smokes that were `Killed` in the cp141→cp142 chunk run).  Result: every smoke peaks at ~62-65 MB regardless of what it does.  That's just tsx + esbuild + V8 baseline; the actual file-walk data is in the noise.
+
+Examples (peak RSS):
+- `.:brag-list-claim-parity-smoke` — 62816 KB (heavy: walks every doc + brag list)
+- `.:spawn-dist-prebuild-coverage-smoke` — 62104 KB (walks every workspace + every smoke file)
+- `.:last-char-tamper-anti-pattern-smoke` — 63928 KB (walks the entire repo)
+- `apps/web:persona-walkthrough-smoke` — 62324 KB (lightweight)
+- `apps/web:sally-walkthrough-smoke` — 62060 KB (lightweight)
+- `.:operations-hardening-smoke` — 65064 KB (trivial 1-scenario smoke)
+- `apps/mcp-server:mcp-server-smoke` — 65220 KB (cp142-fixed; now includes lazy-build pathway)
+- `.:sidecar-envelope-error-path-smoke` — 62256 KB (2 scenarios)
+
+The cp141 `Killed` chain was actually mcp-server-smoke hanging and holding wall-clock pressure on adjacent smokes, not memory pressure.  cp142's root-cause fix solves that; cp143's runtime timeout catches any future analog before it can cascade.
+
+Memory rule "NEVER ASSUME, ALWAYS VERIFY" applies: I almost shipped a useless code change ("convert array reads to streaming") based on the wrong root-cause story.  Measurement falsified the hypothesis in 30 seconds.  Should have measured before recommending in the first place.
+
+### Slow-pole derivation
+
+Before setting the timeout ceiling, I ran every candidate smoke individually with `date +%s` bracketing:
+
+- Median smoke: ~1-3 seconds (the smoke-runner's full pulse is ~6 minutes for 235 smokes ≈ 1.5s/smoke avg).
+- Slowest fast smoke: ~15 seconds (mcp-server-smoke with cold dist build).
+- True slow-pole: `apps/web/scripts/vitest-must-pass-smoke.ts` — runs real `vitest run` × 3 workspaces (apps/indexer = 493 tests, apps/relay = 244, apps/web = 244+) under jsdom.  Total ~150 seconds on this hardware.
+
+First attempt set the ceiling to 90s.  Pulse 1 chunk B caught vitest-must-pass-smoke mid-run.  Bumped to 240s (1.6× headroom over the slow-pole).  Pulse 1 chunk B + C + D ran clean.  Triple-pulse stable.
+
+### Configurable via env var
+
+Slower CI hosts (low-tier ARM runners, shared CI infrastructure) can bump the ceiling without editing the runner script:
+
+```
+MORPHIT_SMOKE_TIMEOUT=480 bash scripts/run-smokes.sh
+```
+
+The default (240) is calibrated for the published `.forgejo/workflows/ci.yml` runner (ubuntu-24.04 / 2 vCPU / 7 GB).
+
+### Exit code classification
+
+`timeout`'s exit codes are distinguishable from smoke-emitted non-zero:
+
+- 124 — SIGTERM expiry (smoke didn't respond to graceful termination)
+- 137 — SIGKILL (smoke held on past the grace period; required `--kill-after`)
+- Anything else — smoke's own non-zero exit
+
+The runner branches on these and emits a different error message for each: HUNG-class gets a pointer at cp142's meta-smoke (where the relevant static-analysis enforcement lives); other-class gets the standard "exit N" format.
+
+### Verified clean
+
+- Triple-pulse smokes: **6088/6088/6088**, 0 runners failed (pulses 41, 42, 43 at cp143 baseline)
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+- Tamper test: setInterval-based hang script killed at exactly 5s with exit 124 ("HUNG" branch) under MORPHIT_SMOKE_TIMEOUT=5
+- vitest-must-pass-smoke clocks 148s (well under 240s ceiling)
+- All other smokes clock under 15s
+
+### Files touched
+
+- `scripts/run-smokes.sh` — wrapped per-smoke spawn in `timeout --signal=TERM --kill-after=5 240`, added MORPHIT_SMOKE_TIMEOUT override, branched on 124/137 vs other exits.
+- `scripts/run-smokes-chunk.sh` — session-aid chunked runner matched to canonical.
+
+### Lessons
+
+#### Lesson #1 — Measure before optimizing
+
+Prior turn's recommendation #3 ("memory-cap hardening on file-walking smokes") felt obvious — "the smokes that got Killed were the ones walking lots of files; they must be memory-heavy."  But a 5-line bash measurement loop falsified it in 30 seconds.  Every smoke peaks at the same ~62-65 MB regardless of what it does.
+
+Going forward: any recommendation involving "memory" or "performance" gets measured before being recommended.  The cost of measurement is small; the cost of shipping a change based on a wrong root-cause story is huge.
+
+#### Lesson #2 — Static and runtime defense in depth
+
+cp142 catches the dist-spawning-smoke-without-build-guard bug at **static-analysis time** (the meta-smoke walks every smoke file and asserts the guard pattern is present).  cp143 catches **any hang at runtime** (the timeout).  Together they form a layered defense:
+
+- Static layer fires fast (sub-second) and emits a clear "you forgot the guard" message naming the offending file.
+- Runtime layer catches things the static layer can't see — for example, a smoke that uses `ensureBuilt()` correctly but hangs for a different reason (deadlock, infinite loop, slow external HTTP call).
+
+A bug in the static layer (false negative) is caught by the runtime layer in 240s.  A bug in the runtime layer (mistaken classification) is caught by the static layer the next time the meta-smoke runs.  Two-layer.
+
+#### Lesson #3 — Slow smokes need explicit ceiling justification
+
+`vitest-must-pass-smoke.ts` legitimately takes ~150s to run.  That's not a bug — it's running 981 real unit tests, which is exactly what a vitest-rot defense is supposed to do.  But the 240s ceiling means any future smoke that creeps past 150s needs to be looked at: is it genuinely a slow real test, or is it accidentally doing too much per file?
+
+If a third such smoke ever lands, consider whether it should be moved to a separate "slow smoke" stage that runs less often (e.g. nightly instead of per-PR), or whether the per-smoke ceiling should be raised.  Today (cp143) only one smoke crosses 60s; the ceiling is calibrated for that reality.
+
+---
+
+## cp142 — mcp-server-smoke CI-bomb fix + class-of-bug meta-smoke (CLOSED 2026-05-27)
+
+A fresh-session smoke-pulse verification of the cp141 tarball surfaced a real, latent bug in cp140's `apps/mcp-server/scripts/mcp-server-smoke.ts`: the smoke spawned `node dist/main.js`, but `dist/` is gitignored.  On any fresh checkout — and on every CI run that does `actions/checkout` → `npm ci` without a prior build — `dist/main.js` doesn't exist.  The smoke hangs forever (or gets OOM-killed in low-memory environments), masking as either a flaky CI run or a multi-hour CI-minutes burn until job timeout.
+
+The bug survived cp140 → cp141 only because Ken's dev machine kept `dist/` on disk between manual `npm run build` runs.  The smoke had never been re-verified from a clean checkout.
+
+### What I found
+
+- One workspace in the entire repo (`apps/mcp-server`) has a `package.json:bin` field pointing into `dist/...`.
+- One smoke in the entire repo (`mcp-server-smoke.ts`) spawns a `node dist/...` child.
+- Zero of those one smokes had any `existsSync` guard or lazy-build mechanism before the spawn.
+
+### Reproducing
+
+```
+cd apps/mcp-server && rm -rf dist
+cd .. && timeout 60 node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/mcp-server/scripts/mcp-server-smoke.ts
+# Hangs after printing the banner; killed by timeout with exit 124.
+```
+
+After fix:
+
+```
+cd apps/mcp-server && rm -rf dist
+cd .. && timeout 60 node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/mcp-server/scripts/mcp-server-smoke.ts
+# Smoke prints "  · dist/main.js missing — running `npm run build` …", builds in ~2s, then runs all 8 scenarios green.
+```
+
+### Fixes shipped
+
+1. **`apps/mcp-server/scripts/mcp-server-smoke.ts`** — `ensureBuilt(serverCwd)` helper added.  Called at the top of `main()` before any `runMcpDialog()` spawn.  If `dist/main.js` is missing, spawns `npm run build` synchronously, validates the artifact appeared, and exits 1 with a debug-pointer message if the build fails.  Production-faithful: the smoke still tests the BUILT artifact (which is what ships as the `morphit-mcp` bin), not the source.
+
+2. **`.forgejo/workflows/ci.yml`** — new "Build workspaces that ship compiled artifacts" step runs `npm run build -w apps/mcp-server` after `npm ci` and before the smoke triple-pulse.  Defense in depth: smoke is self-healing, but a build break here surfaces as a named step failure (legible) rather than buried in smoke output.
+
+3. **`scripts/spawn-dist-prebuild-coverage-smoke.ts`** (NEW, ~180 lines) — meta-smoke catching the CLASS of bug.  Three invariants:
+   - Every workspace with a `dist/`-pointing `bin` MUST declare `scripts.build`.
+   - Every smoke file that contains `spawn('node', ['dist/...'])` MUST also contain `ensureBuilt(` or `existsSync(...dist)` — tested against a **comment-stripped** copy of the source so stale prose can't satisfy the guard.
+   - Every dist-bin workspace has at least one dist-spawning smoke.
+   Skips itself (its own docblock + regex source contain the patterns).  Tamper-tested: ripping `ensureBuilt()` out of mcp-server-smoke fires the second invariant with the offending filename named.
+
+4. **`scripts/run-smokes.sh`** — `.:spawn-dist-prebuild-coverage-smoke` registered as the last entry.
+
+### Verified clean
+
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0 errors / 0 warnings
+- Triple-pulse smokes: 6088/6088/6088, 0 runners failed (pulses 38, 39, 40 at cp142 baseline)
+- mcp-server-smoke: clean fresh-checkout repro confirms self-healing
+- spawn-dist-prebuild-coverage-smoke: 3/3 baseline, 1/3 fails-as-expected after tamper, 3/3 passes again after restore
+
+### Smoke battery growth
+
+cp141's 6084 → cp142's 6088 (+4).  Breakdown:
+- +3 from the new meta-smoke's 3 scenarios.
+- +1 derived growth in `scripts/last-char-tamper-anti-pattern-smoke.ts` which walks the file tree and counts one more file (the new meta-smoke gets walked too — passes the tamper-pattern lint because it doesn't use `.slice(0, -1)` anywhere).
+
+### Lessons
+
+#### Lesson #1 — Sentinel-grep smokes need comment-stripping when checking GUARD patterns
+
+First draft of the meta-smoke used a plain regex against the raw file text to assert the GUARD pattern (`ensureBuilt(` OR `existsSync(...dist`).  Tamper test revealed that a stale **comment** referencing `ensureBuilt()` left over from a partial revert satisfied the regex.  Class of bug: "smoke proves text exists, not that code exists."
+
+Fix: strip line- (`// …`) and block- (`/* … */`) comments before the GUARD test.  Deliberately do NOT strip comments before the SPAWN_DIST test — we want to over-flag (a docblock example mentioning `spawn('node', ['dist/'])` should count as a "smoke that spawns from dist/" candidate, so a guard is required even if the spawn is hypothetical).  Asymmetric stripping = fewer false negatives on either side.
+
+Memory rule "Sentinel-grep smokes only prove text exists; structural Svelte/TS requires `svelte-kit sync + tsc --noEmit`" applies here too: text-only smokes have an additional failure mode where the text exists but is in a comment.  When a smoke's pass/fail bit depends on the presence of code (not prose), strip comments first.
+
+#### Lesson #2 — Every dist-bin workspace needs a fresh-checkout sanity check
+
+The `npm run build` step belongs SOMEWHERE in the path from `actions/checkout` to "test runs," and that somewhere needs to be explicit.  Options, in increasing order of legibility:
+- (a) Self-healing inside the smoke (fix #1 above).  Robust but the failure mode is buried.
+- (b) Explicit CI step (fix #2 above).  Legible failure mode.
+- (c) `npm run build --workspaces --if-present` after install.  Most general — would have prevented this bug AND any future analogous one across all workspaces — but adds CI time for workspaces that don't actually need it.
+
+Morphit ships both (a) and (b) at cp142.  (c) is rejected at this time because mcp-server is the only workspace with a dist-bin; if a second one ships, revisit (c).
+
+#### Lesson #3 — "smoke battery N/N triple-pulse stable" doesn't mean the smokes have been re-tested from a clean state
+
+The cp141 close report said "6084/6084 quadruple-pulse stable."  All four of those pulses were against a working tree that had `apps/mcp-server/dist/` lying around from cp140's `npm run build` during MCP development.  A fresh `git clone` followed by `npm ci` and a smoke run would have hung — none of the pulses tested that path.
+
+Standing rule for future deep audits: before every release tag, do at least one smoke pulse in a directory that has just been freshly extracted from a known-clean tarball (no working-tree gunk).  This is exactly the workflow that a CI job runs, so it catches CI-only failure modes that dev machines mask.
+
+The cp142 fix infrastructure (meta-smoke + explicit CI build) is what enforces this going forward.  Pre-cp142, the only enforcement was Ken's eyes on the next CI run.
+
+#### Lesson #4 — OOM-Killed signals are not always genuine OOM
+
+The fresh-pulse run had three smokes report `Killed` in the same 60-smoke chunk: `mcp-server-smoke`, `release-notes-asset-count-parity-smoke`, `npm-audit-gate-smoke`.  First instinct was to blame all three on memory pressure in the sandbox.  The truth was:
+- mcp-server-smoke: real bug (hang → wall-clock kill).
+- release-notes-asset-count-parity-smoke: ran clean in isolation; was a victim of the wall-clock pressure caused by mcp-server-smoke hanging in the same chunk.
+- npm-audit-gate-smoke: ran clean in isolation; same root cause.
+
+Lesson: when multiple smokes fail with `Killed` in the same chunk, verify each individually before concluding "OOM."  One genuinely hanging smoke can drag adjacent ones across the wall-clock cliff.
+
+---
 
 ## cp141 — Locale-graduation readiness (CLOSED 2026-05-27)
 

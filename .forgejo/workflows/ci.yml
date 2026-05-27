@@ -165,6 +165,21 @@ jobs:
           ansible-galaxy collection install -r \
             ops/ansible/collections/requirements.yml
 
+      - name: Build workspaces that ship compiled artifacts
+        # `apps/mcp-server` is the only workspace whose `bin`
+        # points into `dist/` and therefore needs `tsc -p
+        # tsconfig.build.json` to run before its smoke spawns
+        # `node dist/main.js`.  The smoke is self-healing as of
+        # cp142 (will lazy-build if missing), but doing the
+        # build here makes the failure mode legible — a build
+        # break surfaces as this step failing, not as a
+        # mystery hang inside the smoke runner.
+        #
+        # If a future workspace adds a similar dist-bin, add
+        # it here and the matching `spawn-dist-prebuild-coverage-smoke`
+        # (cp142) will keep this list and the smokes in sync.
+        run: npm run build -w apps/mcp-server
+
       - name: Run smokes (triple-pulse)
         # We run the suite three times to catch flakes.  Each
         # invocation is ~30s in CI; the parallel typecheck +

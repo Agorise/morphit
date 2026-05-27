@@ -254,6 +254,8 @@ SMOKES=(
 	"apps/indexer:price-source-hardening-smoke"
 	"apps/indexer:peer-price-monitor-smoke"
 	"apps/indexer:multi-asset-factory-smoke"
+	".:spawn-dist-prebuild-coverage-smoke"
+	".:lockfile-sync-smoke"
 )
 
 total=0
@@ -281,7 +283,30 @@ for entry in "${SMOKES[@]}"; do
 	else
 		TSX_ARGS=()
 	fi
-	if (cd "$repo/$dir" && "$TSX" "${TSX_ARGS[@]}" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+	# Per-smoke wall-clock timeout (cp143).  cp142 closed a CI-bomb
+	# where `apps/mcp-server/scripts/mcp-server-smoke.ts` hung
+	# indefinitely on fresh checkouts (no built dist/main.js → child
+	# never produced stdout → smoke waited forever).  The cp142 fix
+	# was static (lazy-build + meta-smoke), this is the runtime
+	# complement: any future smoke that hangs gets converted into a
+	# legible "killed after N seconds" failure instead of stalling
+	# the whole CI job until the action runner's hard timeout.
+	#
+	# 240 seconds is the ceiling.  The current slow-pole is
+	# `apps/web/scripts/vitest-must-pass-smoke.ts` which spawns
+	# real `vitest run` invocations across apps/{indexer,relay,web}
+	# — 981 unit tests in jsdom — and clocks ~150s on this hardware.
+	# 240s gives ~1.6× buffer for slow CI hosts and cold caches.
+	# Every other smoke clocks under 15s.  If a real smoke ever
+	# legitimately approaches 240s, bump this constant AND ask why
+	# the smoke got that slow (probably means it's doing too much
+	# in one file).
+	#
+	# Override via MORPHIT_SMOKE_TIMEOUT env var for slower hosts.
+	# `timeout` exits 124 on SIGTERM expiry / 137 on SIGKILL,
+	# distinguishable from smoke's own non-zero exits.
+	SMOKE_TIMEOUT="${MORPHIT_SMOKE_TIMEOUT:-240}"
+	if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$SMOKE_TIMEOUT" "$TSX" "${TSX_ARGS[@]}" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
 		# Smokes MUST emit a canonical `✓ all N ...` line so this runner
 		# can tally scenarios.  Without that line, the smoke is treated as
 		# a runner failure rather than silently counted as 0 — see J-1
@@ -297,8 +322,14 @@ for entry in "${SMOKES[@]}"; do
 		fi
 		total=$((total + n))
 	else
+		exit_code=$?
 		failed=$((failed + 1))
-		echo "  ✗ $name"
+		# Distinguish timeout (124/137) from smoke-emitted non-zero.
+		if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then
+			echo "  ✗ $name (HUNG — killed after ${SMOKE_TIMEOUT}s; this is the cp142 bug class — see scripts/spawn-dist-prebuild-coverage-smoke.ts)"
+		else
+			echo "  ✗ $name (exit $exit_code)"
+		fi
 		tail -30 "$SMOKE_OUT" | sed 's/^/      /'
 	fi
 done
