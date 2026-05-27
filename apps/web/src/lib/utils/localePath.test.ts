@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { localePath, fromLocalePath } from './localePath';
+import { SUPPORTED_LOCALES } from '../i18n/locales';
 
 describe('localePath', () => {
 	it('prefixes a simple path', () => {
@@ -100,13 +101,12 @@ describe('fromLocalePath', () => {
 });
 
 describe('localePath + fromLocalePath round-trip', () => {
-	it('round-trips for all supported locales', () => {
-		const locales = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
-		for (const l of locales) {
-			const prefixed = localePath('/orderbook', l as never);
+	it('round-trips for every supported locale', () => {
+		for (const { code } of SUPPORTED_LOCALES) {
+			const prefixed = localePath('/orderbook', code as never);
 			const parsed = fromLocalePath(prefixed);
 			expect(parsed).not.toBeNull();
-			expect(parsed!.lang).toBe(l);
+			expect(parsed!.lang).toBe(code);
 			expect(parsed!.path).toBe('/orderbook');
 		}
 	});

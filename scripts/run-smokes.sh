@@ -146,6 +146,7 @@ SMOKES=(
 	"apps/matrix-bot:classifier-smoke"
 	"apps/matrix-bot:rate-limiter-smoke"
 	"apps/matrix-bot:surface-invariant-smoke"
+	"apps/mcp-server:mcp-server-smoke"
 	"apps/web:canary-template-smoke"
 	"packages/asset-registry:asset-registry-smoke"
 	".:operations-hardening-smoke"

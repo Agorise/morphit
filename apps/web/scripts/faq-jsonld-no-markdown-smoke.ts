@@ -34,11 +34,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripMarkdown } from '../src/lib/seo/stripMarkdown';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
 
-const LOCALES = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 
 let failed = 0;
 let passed = 0;

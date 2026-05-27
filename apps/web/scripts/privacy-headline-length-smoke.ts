@@ -31,12 +31,13 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 import { ASSET_TICKERS } from '@morphit/asset-registry';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
 
-const LOCALES = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 
 /** Google's recommended maximum for Article `headline` field. */
 const HEADLINE_LIMIT = 110;

@@ -35,12 +35,13 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 // Hardcoded list — these are the locales we ship.  If a
 // future locale is added, this smoke fails until it's added
 // here too, which is correct: a new locale that doesn't
 // support the voucher path is a UX regression.
-const LOCALES = ['en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK'] as const;
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 
 const LOC_DIR = join(import.meta.dirname, '..', 'src', 'lib', 'i18n', 'locales');
 

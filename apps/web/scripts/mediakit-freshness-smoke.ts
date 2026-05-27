@@ -22,6 +22,7 @@
 
 import { statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 
@@ -108,8 +109,8 @@ results.push({
 		  `apps/web/src/routes/[lang]/+layout.svelte.  Was the footer link removed?`
 });
 
-// ─── 6. All 10 locales have the mediakit + mediakit_title keys ───
-const LOCALES = ['en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+// ─── 6. Every SUPPORTED locale has the mediakit + mediakit_title keys ───
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 const localesDir = join(REPO_ROOT, 'apps', 'web', 'src', 'lib', 'i18n', 'locales');
 const missingLocaleKeys: string[] = [];
 const { readFileSync } = await import('node:fs');
@@ -125,7 +126,7 @@ for (const loc of LOCALES) {
 	if (!footer.mediakit_title) missingLocaleKeys.push(`${loc}: footer.mediakit_title`);
 }
 results.push({
-	name: 'all 10 locales define footer.mediakit + footer.mediakit_title',
+	name: `all ${LOCALES.length} locales define footer.mediakit + footer.mediakit_title`,
 	ok: missingLocaleKeys.length === 0,
 	detail:
 		missingLocaleKeys.length === 0

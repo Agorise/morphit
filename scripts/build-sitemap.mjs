@@ -17,9 +17,16 @@
  * drift risk with a CONSISTENCY CHECK at the top of main() — the
  * script reads the .ts file as text, extracts the indexable routes,
  * and fails the build if they don't match the ROUTES array below.
+ *
+ * Locale data is NOT duplicated: this script reads the locale codes
+ * directly from the on-disk JSON files in apps/web/src/lib/i18n/locales/.
+ * The i18n-locale-registry-smoke enforces 1:1 correspondence between
+ * SUPPORTED_LOCALES (TS) and the JSON files, so a new locale ships
+ * automatically once its JSON file lands AND its entry graduates from
+ * PLANNED_LOCALES to SUPPORTED_LOCALES.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,14 +39,19 @@ const ASSET_REGISTRY_PATH = resolve(
 	__dirname,
 	'../packages/asset-registry/src/index.ts'
 );
+const LOCALES_DIR = resolve(__dirname, '../apps/web/src/lib/i18n/locales');
 
 const ORIGIN = 'https://morphit.io';
 const DEFAULT_LOCALE = 'en';
 
-// Duplicated from src/lib/seo/routes.ts — see module doc-comment.
-// Must stay in sync with the INDEXABLE_ROUTES subset of ROUTES in
-// that file. assertRoutesInSync() below verifies at build time.
-const LOCALES = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+// Derived from the on-disk JSON files in apps/web/src/lib/i18n/locales/.
+// i18n-locale-registry-smoke enforces 1:1 correspondence between
+// SUPPORTED_LOCALES (TS) and these files, so this directory listing
+// is the canonical "what locales does Morphit ship" source.
+const LOCALES = readdirSync(LOCALES_DIR)
+	.filter((f) => f.endsWith('.json'))
+	.map((f) => f.replace(/\.json$/, ''))
+	.sort();
 
 const ROUTES = [
 	{ path: '/', priority: 1.0, changefreq: 'weekly' },

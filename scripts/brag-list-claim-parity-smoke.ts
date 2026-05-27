@@ -124,10 +124,25 @@ const REPO = resolve(HERE, '..');
 // Marketing-class docs in scope.  Each is the kind of surface a
 // reader uses to decide whether to trust the project; stale
 // specifics damage trust more here than in journal-style docs.
+//
+// NOTE: published `RELEASE-NOTES-v*.md` files are intentionally
+// NOT policed.  They describe a specific shipped release and are
+// frozen at publish-time — counting them against the current
+// canonical source would either force lies (rewrite the file to
+// match today's state) or trigger false failures (correctly
+// describing a past release that had different counts).  When a
+// new release is being prepared, drop its in-progress notes file
+// into this list temporarily so claim-parity catches drift before
+// publish, then remove it again once the release ships.
 const MARKETING_DOCS = [
 	'MORPHIT-BRAG-LIST.md',
 	'README.md',
-	'RELEASE-NOTES-v1.0.0-beta.1.md'
+	// llms.txt is the public-facing policy/index file served at
+	// /llms.txt for AI agents and retrieval crawlers.  Same trust-
+	// damage class as the brag list — wrong asset/locale/ADR
+	// counts here mislead a uniquely-influential audience (AI
+	// training pipelines that may ingest stale claims at scale).
+	'apps/web/static/llms.txt'
 ];
 
 // --- (A) file-path references --------------------------------

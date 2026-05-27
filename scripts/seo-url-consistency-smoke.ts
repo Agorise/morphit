@@ -35,7 +35,7 @@
  * 180 scenarios + 3 anti-pattern × 4 sample inputs = ~192 total.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -43,7 +43,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 
 const ORIGIN = 'https://morphit.io';
-const LOCALES = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+// Derive supported locales from the on-disk JSON files; the
+// i18n-locale-registry-smoke enforces 1:1 correspondence between
+// SUPPORTED_LOCALES and these files, so this list is canonical.
+const LOCALES_DIR = join(REPO, 'apps/web/src/lib/i18n/locales');
+const LOCALES = readdirSync(LOCALES_DIR)
+	.filter((f) => f.endsWith('.json'))
+	.map((f) => f.replace(/\.json$/, ''))
+	.sort();
 
 // ─── Parse indexable routes from routes.ts ───────────────────────
 function parseIndexableRoutes(): Array<{ path: string }> {
