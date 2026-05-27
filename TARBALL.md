@@ -4,7 +4,59 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp139 checkpoint F **CLOSED** — apps/indexer fully walked, 2 findings shipped (F-1 LOW SEC log-sanitize, **F-2 MED SEC peerPriceMonitor SSRF**) — 2026-05-25.
+**Last touched:** cp141 **CLOSED** — locale-graduation readiness audit + drift-catching infrastructure for adding any of the 7 PLANNED locales (hi/ar/bn/pt/id/ja/vi) without missing stale "10 locales" mentions — 2026-05-27.
+
+### Fresh-session quick orientation
+
+If you're a fresh Claude opening this for the first time, the project context you need is in user memory (Ken's standing rules + the recent_updates section). The repository state is:
+
+- **Smoke battery:** 6084/6084, quadruple-pulse stable (pulses 34–37 at cp141 baseline). 0 runners failed.
+- **TypeScript:** 0 errors across all 10 projects (apps/web, apps/relay, apps/indexer, apps/ops-cli, apps/matrix-bot, apps/mcp-server, packages/indexer-client, packages/relay-client, packages/operator-config, packages/asset-registry).
+- **svelte-check:** 0 errors / 0 warnings.
+- **Canonical counts:** 16 tradable assets · 10 supported locales (+ 7 planned: hi/ar/bn/pt/id/ja/vi) · 43 active ADRs (0001–0044, 0016 reserved-but-unused) · 327 brag-list entries.
+- **Working dir:** `/home/claude/morphit/morphit/`
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140 (`morphit-mcp` + comparison-table corrections) + cp141 (locale-graduation readiness) will ship in the next beta release (~1 week, exact version TBD by Ken).
+
+### Most recent work — what just shipped
+
+**cp141 (2026-05-27, this session):** Locale-graduation readiness — audit confirmed adding any of the 7 PLANNED locales is a single-array edit in `apps/web/src/lib/i18n/locales.ts`. Closed 5 drift-vector gaps:
+1. `apps/web/scripts/i18n-translation-completeness-smoke.ts` — `>= 10` literal replaced with `=== SUPPORTED_LOCALES.length` (parametric).
+2. `scripts/brag-list-claim-parity-smoke.ts` — `MARKETING_DOCS` extended to include `apps/web/static/llms.txt` (so locale-count claims in llms.txt are now policed alongside brag list + README).
+3. `apps/web/scripts/web-push-wiring-smoke.ts` + `apps/web/scripts/2fa-locale-parity-smoke.ts` — "10 locales" → "every supported locale" in comments.
+4. **`docs/LOCALE-GRADUATION.md`** (NEW, ~200 lines) — maintainer-side 10-step procedural checklist for graduating PLANNED → SUPPORTED. Smoke output IS the graduation checklist.
+5. `docs/CONTRIBUTING-TRANSLATIONS.md` — cross-linked to LOCALE-GRADUATION.md (both directions).
+
+Translator UX confirmed already excellent: `i18n-translator-diff.ts` produces per-locale missing/fallback/extra reports with English source text inline as `// EN:` comments.
+
+**cp140 (2026-05-26, this session):** `morphit-mcp` shipped — new workspace `apps/mcp-server/` exposing the federated orderbook to MCP-compatible AI agents (Claude Desktop, Cline, Cursor, Continue, Windsurf, Zed, local-LLM stacks). 5 read-only tools, deeplink-handoff posture preserves zero-KYC + non-custodial. ADR-0044, brag #99, 8-scenario `mcp-server-smoke.ts`, integration recipes in `apps/mcp-server/README.md`. Comparison-table corrections + 1 new row for MCP also shipped in this checkpoint.
+
+**cp139 (2026-05-25, prior session):** v1.0.0-beta.1 release published. 5 CI bugs fixed during release publish (annotated-tag restore, tar-self-read excludes, mktemp staging, actions/upload-artifact downgrade, Forgejo zip-wrapping). 94-task workspace-by-workspace audit closed with 32 findings shipped.
+
+### What's NOT in the repo (intentionally)
+
+- **`/home/claude/build_mirrors_pdf.py`** — the mirror-signups PDF generator lives OUTSIDE the repo by Ken's standing instruction. Output is `/mnt/user-data/outputs/morphit-mirror-signups.pdf` (cp140-dated, 12 pages, 28 submission targets including AI-agent surfaces like MCP Registry + smithery.ai + OpenAI GPT Store). Regenerate from the script if needed; don't commit either the script or the PDF.
+
+### Standing pre-launch operator actions
+
+**NONE REMAINING.** All previously-tracked items are closed. Specifically: the `CHANGE_ME_BEFORE_PRODUCTION` reference in `ops/postgres/init.sql:58-65` is a DENYLIST entry (rejects weak operator passwords); it is itself the safety feature, NOT a placeholder needing rotation. See cp111 Lesson #1 in REVISIT-LIST.md.
+
+### Standing follow-ups (post-launch, not blocking)
+
+1. cp138-R-1 — bigint id propagation through API surfaces (post-launch scaling concern; not blocking v1.0.0)
+2. cp138-R-2 — matrix-bot-sdk transitive vulns (upstream-blocked; track upstream releases)
+3. Ship `ApiRelayProvider` + Settings opt-in for live prices (deferred design call)
+
+### Reference layout — where to look for what
+
+- **Code:** `apps/{web,relay,indexer,ops-cli,matrix-bot,mcp-server}/` + `packages/{indexer-client,relay-client,operator-config,asset-registry}/`
+- **Docs:** `docs/` — most important: `OPERATIONS.md`, `RUN-A-MORPHIT-NODE.md`, `REVISIT-LIST.md`, `CONTRIBUTING-TRANSLATIONS.md` (translator-facing), `LOCALE-GRADUATION.md` (maintainer-facing graduation), `AUDIT-2026-05.md`, `SECURITY.md`, `FEES-AND-REWARDS.md`, `METADATA-LEAK-CATALOG.md`, `OPERATOR-TRUST-DESIGN.md`, `GRANDMA-FRIENDLY-INVESTIGATION.md`, `BETA-INCIDENT-RUNBOOK.md`, `THREE-PERSONA-WALKTHROUGH-cp139.md`, ADRs 0001–0044 in `adr/`.
+- **Smoke runner:** `scripts/run-smokes.sh` — drives ~150 individual smoke scripts, ~6084 scenarios total. Typical full-pulse run: ~6 minutes.
+- **Typecheck sweep:** `scripts/typecheck-sweep.sh` — sweep across all 10 projects.
+- **Brag list:** `MORPHIT-BRAG-LIST.md` — 327 entries, public-facing, claim-parity-policed.
+- **Mediakit:** `apps/web/static/morphit-mediakit.zip` — regenerate via `bash scripts/build-mediakit.sh` after any brag-list or brand-asset change.
+- **Comparison image:** `apps/web/static/morphit-comparison.png` + `scripts/comparison-image/comparison.svg` — regenerate via `python3 scripts/comparison-image/build_comparison.py`.
+
+---
 
 **cp139 status:**
 
@@ -22,13 +74,13 @@
 
 **Total cp139 regression scenarios added: ~104** — 28 matrix-bot-input-hardening + 24 term-sanitize + 7 init-smoke C-11/D-1 + 7 edit-smoke C-11/D-1 + 3 init-smoke round-trip + 1 init-smoke negative throw + 13 relay log-sanitize + 13 indexer log-sanitize + 9 peer-price-monitor PPM-7-{1..9} (cp139-F-2).  Every fix tamper-tested.
 
-**State after cp139A-F CLOSED + G ~75% walked:**
+**State after cp141 CLOSED (locale-graduation readiness pass on top of cp140's morphit-mcp):**
 
-- Smoke battery: **6076/6076 across NINE confirmed pulses** (14+15+16+17+18+19+20+22+23).  Pulse 21 caught a real regression — the new `docs/THREE-PERSONA-WALKTHROUGH-cp139.md` named the placeholder sentinels in its Sally-operator section explaining the 3-tier denylist defense, tripping `db-password-placeholder-smoke`.  Fixed same-turn by adding the doc to `ALLOWED_PATHS` in `apps/indexer/scripts/db-password-placeholder-smoke.ts:130`.  All 8 placeholder-smoke scenarios pass; full battery restored.
-- TypeScript: 0 errors across all 5 workspaces.
+- Smoke battery: **6084/6084 across QUADRUPLE-PULSE at the cp141 baseline** (pulses 34 + 35 + 36 + 37; cp140's 6078 → cp141's 6084: +6 net from claim-parity scope expansion to include llms.txt + a few derived-scenario growths).
+- TypeScript: 0 errors across all 10 projects.
 - svelte-check: 0 errors / 0 warnings.
-- **Persona walkthrough:** `docs/THREE-PERSONA-WALKTHROUGH-cp139.md` shipped — delta against cp137 baseline, walks Bob/Sally-user/Sally-operator through every cp138+cp139 audit-closure touchpoint, zero regressions.
-- **`[lang]/+layout` re-walk:** dedicated final re-walk confirmed zero new findings; defense-in-depth on operator-supplied alt_networks fields holds.
+- **`morphit-mcp` shipped** (cp140): new workspace at `apps/mcp-server/` exposing the federated orderbook to any MCP-compatible AI agent (Claude Desktop, Cline, Cursor, Continue, Windsurf, Zed, local-LLM stacks). Read-only, deeplink-handoff posture preserves zero-KYC + non-custodial. 5 tools + 8-scenario smoke + ADR-0044 + brag #99 + apps/mcp-server/README.md integration recipes.
+- **Locale-graduation readiness shipped** (cp141): infrastructure audit confirmed adding any of the 7 PLANNED locales (hi, ar, bn, pt, id, ja, vi) is a single-array edit in `apps/web/src/lib/i18n/locales.ts`.  Closed five small drift-vector gaps: (1) `i18n-translation-completeness-smoke` hardcoded `>= 10` made parametric; (2) `brag-list-claim-parity-smoke` MARKETING_DOCS extended to include `apps/web/static/llms.txt`; (3) two smoke comments degraded from "10 locales" to "every supported locale"; (4) **NEW** `docs/LOCALE-GRADUATION.md` (~200-line maintainer-side procedural checklist); (5) `docs/CONTRIBUTING-TRANSLATIONS.md` cross-linked to graduation doc.  Translator UX confirmed already excellent: `i18n-translator-diff.ts` produces missing/fallback/extra reports with English source text inline as `// EN:` comments.
 
 **cp139-G-1 (LOW, code quality) shipped this turn:** duplicate locale-register loop in `apps/web/src/lib/i18n/index.ts` removed (delete the second `for (const { code } of SUPPORTED_LOCALES) { register(...) }` and its leading comment block).  Behavior unchanged (svelte-i18n was last-write-wins); audit hygiene improved.
 

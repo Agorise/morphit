@@ -1,6 +1,106 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp139 (CLOSED) — 2026-05-25 (post-cp138 workspace-by-workspace deep-deep with chain-op-handler rigor).  Sentinel battery 6076/0 quintuple-pulse.
+**Last touched:** Part 122 cp141 (CLOSED) — 2026-05-27 (post-cp140 locale-graduation readiness audit + drift-catching infrastructure for adding the 7 PLANNED locales).  Sentinel battery 6084/0 quadruple-pulse stable (pulses 34, 35, 36, 37).
+
+## cp141 — Locale-graduation readiness (CLOSED 2026-05-27)
+
+Pre-cp141 the codebase had 10 SUPPORTED locales (en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK) and 7 PLANNED locales scaffolded but not shipped (hi, ar, bn, pt, id, ja, vi).  Ken's directive: make sure graduating a PLANNED → SUPPORTED is a one-pass mechanical operation rather than a hunt for stale "10 locales" mentions across the tree.  Also: make sure human translators have a clear workflow for editing the JSON files.
+
+### Audit findings — already-good state
+
+The translator UX was already comprehensive:
+
+- `apps/web/src/lib/i18n/locales.ts` is the SSoT with both `SUPPORTED_LOCALES` and `PLANNED_LOCALES` arrays; graduation is a one-line array-relocation.
+- `apps/web/src/routes/[lang]/+layout.ts` + `[lang]/+page.ts` derive prerender entries and lang-validation from `SUPPORTED_LOCALES.map()` — adding a locale auto-prerenders.
+- `matchSupported()` in locales.ts handles BCP-47 mapping including the Chinese script-variant disambiguation (Hant → zh-HK, Hans/default → zh-CN).
+- `i18n-locale-parity-smoke.ts` enforces JSON key-shape parity via `readdirSync` (auto-adapts to new locales).
+- `i18n-locale-registry-smoke.ts` enforces disjointness + 1:1 JSON-to-locale invariants.
+- `i18n-translator-diff.ts` produces per-locale missing/fallback/extra reports with English source text inline as `// EN:` comments for context — works for both supported and planned locales.
+- `docs/CONTRIBUTING-TRANSLATIONS.md` (239 lines) covers JSON shape, placeholders, ICU plurals, HTML inline tags, RTL, quality bar, submission process.
+- Most per-feature locale smokes (mediakit-freshness, web-push-wiring, voucher-locale-parity, payment-method-i18n-parity, privacy-headline-length, etc.) already use `SUPPORTED_LOCALES.map(...)` so are parametric.
+
+### Audit findings — gaps closed
+
+**Five fixes shipped:**
+
+1. **`apps/web/scripts/i18n-translation-completeness-smoke.ts`** — replaced hardcoded `>= 10` literal in the "all N locale files were loaded" check with `=== SUPPORTED_LOCALES.length`.  Scenario name made dynamic.  Imports `SUPPORTED_LOCALES` from `../src/lib/i18n/locales`.
+
+2. **`scripts/brag-list-claim-parity-smoke.ts`** — added `apps/web/static/llms.txt` to `MARKETING_DOCS`.  This means when a PLANNED locale graduates, the smoke flags llms.txt:42's "10 languages" claim alongside the existing brag-list + README scans.  Locale-count claim coverage went 15 → 16; total scenarios 75 → 76.
+
+3. **`apps/web/scripts/web-push-wiring-smoke.ts` + `apps/web/scripts/2fa-locale-parity-smoke.ts`** — replaced "all 10 locales" comment text with generic "every supported locale" wording so the comments don't drift at graduation time.
+
+4. **`docs/LOCALE-GRADUATION.md` (NEW, ~200 lines)** — the maintainer-side procedural checklist for graduating a PLANNED locale.  10-step walkthrough: drop JSON, move registry entry, run smokes (smoke output is the graduation checklist — every flagged file:line is a thing to update), update flagged prose, update untracked comments via a targeted git-grep, rebuild mediakit + comparison image, triple-pulse, persona walkthroughs especially RTL, PR.  Also documents what's NOT part of graduation (no DNS, no CDN, no federation announce, no backend change), and how to revert.
+
+5. **`docs/CONTRIBUTING-TRANSLATIONS.md`** — cross-link to LOCALE-GRADUATION.md added in two places (inline graduation paragraph + bottom reference list).  The translator-side doc and the maintainer-side doc now reference each other explicitly.
+
+### Verified clean
+
+- TypeScript: 0 errors across all 10 projects
+- `i18n-translation-completeness-smoke`: 4/4 ✓
+- `brag-list-claim-parity-smoke`: 76/76 ✓ (16 locale claims, was 15)
+- `web-push-wiring-smoke`: 44/44 ✓
+- `2fa-locale-parity-smoke`: 9/9 ✓
+- `i18n-locale-registry-smoke`: pass
+- `i18n-translator-diff.ts es`: 0 missing, 0 extra (es complete)
+- `i18n-translator-diff.ts hi`: 3095 missing (expected — PLANNED locale, no JSON file yet)
+
+### Smoke battery growth
+
+cp140's 6078 → cp141's 6084 (+6).  Breakdown: claim-parity gained 1 scenario (llms.txt locale claim) + a few derived/dependent scenario growths from upstream changes.  Quadruple-pulse stable: pulses 34, 35, 36, 37 all reported 6084/0.
+
+### Lessons
+
+#### Lesson #1 — Most-of-the-work-was-already-done discovery
+The cp114-era PLANNED_LOCALES scaffold + the readdirSync-based loaders + the SUPPORTED_LOCALES-driven `entries()` patterns meant the heavy lifting was done.  cp141's job was closing five small gaps that would have created post-graduation toil.  A 30-minute audit beats a 4-hour graduation that misses comments.
+
+#### Lesson #2 — Drift-catching beats drift-avoiding
+Trying to make every "10 locales" mention dynamic via string interpolation would have meant editing 30+ files for what's essentially a comment-text concern.  Instead, leaning into `brag-list-claim-parity-smoke` as the drift detector (which already existed for the brag list and README) and just extending it to llms.txt was a 5-line code change that catches more places more reliably.  When the 11th locale lands, the smoke output IS the graduation checklist.
+
+#### Lesson #3 — Translator UX is a doc, not a tool
+The pre-cp141 tooling (`i18n-translator-diff.ts` with `// EN:` comments inline) was already excellent.  The missing piece was a single-page "here are the 10 mechanical steps" doc for maintainers.  Tooling doesn't fix workflow gaps — process docs do.
+
+---
+
+## cp140 — `morphit-mcp` Model Context Protocol server (CLOSED 2026-05-26)
+
+New workspace `apps/mcp-server/` shipping `morphit-mcp` — a standalone read-only MCP server (npm + Docker) that exposes Morphit's federated orderbook to any MCP-compatible AI agent (Claude Desktop, Cline, Cursor, Continue, Windsurf, Zed, local-LLM stacks).
+
+**Tools advertised:**
+- `morphit_search_orders` — orderbook query mirroring `/v1/orderbook` (asset, side, fiat_currency, location_region, payment_methods, min_trades, sort, limit)
+- `morphit_get_listing` — single-listing detail by (account, permlink)
+- `morphit_list_instances` — federation directory
+- `morphit_list_payment_methods` — per-instance payment-method registry
+- `morphit_describe` — structured "what is Morphit" descriptor for AI grounding
+
+**Architecture posture:** read-only by design.  No keys.  No signing.  No mutation.  Every tool result includes a `deeplink` field handing the user off to the Morphit web UI for the actual key-signing step — preserves non-custodial + zero-KYC.
+
+**Single env var:** `MORPHIT_MCP_INSTANCE_URL` (default `https://morphit.io`).
+
+**Smoke coverage:** 8 scenarios in `apps/mcp-server/scripts/mcp-server-smoke.ts` covering wire-protocol NDJSON framing, schema advertisement, bogus-tool error path, unreachable-instance error path, working-stub describe + searchOrders, internal-field trimming, Zod input validation, deeplink shape.
+
+**Docs:** ADR-0044, brag-list #99 (concise; per memory rule #28), `apps/mcp-server/README.md` (Claude Desktop / Cline / Cursor / Continue / Windsurf / Zed integration recipes).
+
+**Smoke battery growth:** cp139's 6079 → cp140's 6078.  +8 from mcp-server-smoke, −16 from removing historical `RELEASE-NOTES-v1.0.0-beta.1.md` from `MARKETING_DOCS` in `brag-list-claim-parity-smoke.ts`, +6 net from brag-list-entry-count + other deltas across the touched smokes.  Double-pulse stable at 6078 across pulses 31+32.
+
+**Lessons:**
+
+### Lesson #1 — Workspace add surfaces multiple registration smokes at once
+- `workspace-membership-smoke` flagged tsconfig not in typecheck-sweep.sh
+- `brag-list-trailer-invariants-smoke` flagged duplicate entry number (99 collided)
+- `brag-list-claim-parity-smoke` flagged stale ADR count claims in 4 places
+- `mediakit-freshness-smoke` flagged stale bundled zip
+
+Each smoke caught a real registration step I'd missed.  Pre-launch smoke battery doing exactly what it's designed for.
+
+### Lesson #2 — RELEASE-NOTES-vX.Y.Z.md becomes frozen at publish
+Once a release is shipped, the corresponding RELEASE-NOTES file describes that specific artifact and shouldn't be policed against current canonical source (counts evolve; the file doesn't).  Removed `RELEASE-NOTES-v1.0.0-beta.1.md` from `MARKETING_DOCS` in `brag-list-claim-parity-smoke.ts` with a comment explaining the pattern: drop in-progress notes into the list while a release is being prepared, remove again once published.
+
+### Lesson #3 — MCP stdio framing is NDJSON, not Content-Length
+First smoke draft assumed Content-Length-framed JSON-RPC (the spec's other transport option).  Real SDK uses newline-delimited JSON.  Always read the actual SDK source for transport invariants instead of guessing from the spec — fixed in `apps/mcp-server/scripts/mcp-server-smoke.ts`.
+
+---
+
+
 
 ## cp139 — Per-workspace deep-deep with chain-op rigor (CLOSED 2026-05-25)
 

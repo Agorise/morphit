@@ -91,7 +91,12 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * embed previously #91).  Subsequent entries shift +1: old #195
  * → new #196, old #204 → new #205.
  */
-const STACCATO_ALLOWLIST = new Set(['3', '12', '196', '205', '209', '212']);
+// Staccato-exempt entries: 3, 12, 197, 206, 210, 213.
+// Numbers 197/206/210/213 were 196/205/209/212 before cp140's
+// AI-MCP brag entry was inserted at #99; the renumbering shifted
+// every staccato-allowlisted entry by +1.  Numbers 3 and 12 are
+// below the insertion point so they didn't shift.
+const STACCATO_ALLOWLIST = new Set(['3', '12', '197', '206', '210', '213']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

@@ -6,7 +6,7 @@
  * The Morphit standing rule is that EVERY user-facing string in
  * a non-EN locale must be translated, not left as the EN
  * fallback.  This smoke walks the `settings.totp.*` subtree
- * across all 10 locales and refuses any string that is
+ * across every supported locale and refuses any string that is
  * byte-identical to its EN counterpart (with whitelist
  * exceptions for genuinely-shared tokens: 'Morphit', 'Aegis',
  * '2FAS', 'Ente Auth', etc., where translation would be wrong).

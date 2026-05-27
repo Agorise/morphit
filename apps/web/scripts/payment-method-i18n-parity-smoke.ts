@@ -32,6 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -40,18 +41,7 @@ const REGISTRY_PATH = resolve(
 	'apps/web/src/lib/payments/registry.ts'
 );
 const LOCALES_DIR = resolve(REPO_ROOT, 'apps/web/src/lib/i18n/locales');
-const LOCALES = [
-	'en',
-	'es',
-	'fr',
-	'de',
-	'it',
-	'pl',
-	'ru',
-	'fa',
-	'zh-CN',
-	'zh-HK'
-] as const;
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 
 let scenarios = 0;
 let failures = 0;

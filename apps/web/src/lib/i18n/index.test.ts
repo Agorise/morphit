@@ -15,10 +15,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { matchSupported } from './index';
+import { SUPPORTED_LOCALES } from './locales';
 
 describe('locale auto-detection — matchSupported', () => {
-	it('exact-matches all 10 supported locales', () => {
-		for (const code of ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK']) {
+	it('exact-matches every supported locale', () => {
+		for (const { code } of SUPPORTED_LOCALES) {
 			expect(matchSupported(code)).toBe(code);
 		}
 	});

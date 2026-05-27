@@ -16,6 +16,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
 
@@ -172,8 +173,8 @@ results.push({
 		)
 });
 
-// ─── 9. Locale parity — all 10 locales have the push UI keys ─
-const LOCALES = ['en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK'];
+// ─── 9. Locale parity — every supported locale has the push UI keys ─
+const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 const REQUIRED_KEYS = [
 	'push_subscribe',
 	'push_subscribing',
@@ -200,7 +201,7 @@ for (const loc of LOCALES) {
 	}
 }
 results.push({
-	name: 'all 10 locales define push UI strings',
+	name: `all ${LOCALES.length} locales define push UI strings`,
 	ok: missing.length === 0,
 	detail: missing.length === 0 ? undefined : `Missing: [${missing.join(', ')}]`
 });

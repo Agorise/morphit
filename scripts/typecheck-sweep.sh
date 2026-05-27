@@ -148,6 +148,7 @@ project "relay (incl. test)"    apps/relay/tsconfig.json
 # duplicating it here would double-fail or false-fail.
 project "ops-cli"               apps/ops-cli/tsconfig.json
 project "matrix-bot"            apps/matrix-bot/tsconfig.json
+project "mcp-server"            apps/mcp-server/tsconfig.json
 project "indexer-client"        packages/indexer-client/tsconfig.json
 project "relay-client"          packages/relay-client/tsconfig.json
 project "operator-config"       packages/operator-config/tsconfig.json

@@ -27,6 +27,12 @@
  * (e.g. permlink, custom_json)."
  */
 
+// Import SUPPORTED_LOCALES so the "expected count" assertion below
+// auto-tracks the registry instead of pinning a literal "10".  When a
+// PLANNED locale graduates to SUPPORTED, this assertion updates with
+// no code change.
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
+
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -1080,8 +1086,8 @@ console.log('');
 
 const scenarios = [
 	{
-		name: 'all 10 locale files were loaded successfully',
-		ok: locales.length >= 10
+		name: `all ${SUPPORTED_LOCALES.length} locale files were loaded successfully`,
+		ok: locales.length === SUPPORTED_LOCALES.length
 	},
 	{
 		name: 'EN source-of-truth has at least 2,000 string keys',
