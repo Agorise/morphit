@@ -18,10 +18,59 @@
  * just send/receive JSON messages line by line.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { existsSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import process from 'node:process';
+
+/**
+ * mcp-server is the only workspace in the repo whose `bin` field
+ * points into `dist/` (apps/mcp-server/package.json declares
+ * `bin.morphit-mcp = "dist/main.js"`).  `dist/` is gitignored,
+ * so on a fresh checkout — including every CI run that does
+ * `actions/checkout` then `npm ci` — `dist/main.js` does NOT
+ * exist until something runs `npm run build`.
+ *
+ * Pre-cp142 this smoke spawned `node dist/main.js` directly.  On
+ * a fresh checkout that child exits immediately with
+ * ERR_MODULE_NOT_FOUND, the smoke's stdin.write fires EPIPE
+ * (swallowed), the 5-second response-deadline loop times out
+ * with `responses = []`, and the smoke either:
+ *   - emits 8 ✗ scenarios and exits 1 (in environments with
+ *     plenty of memory / no concurrent smoke pressure), OR
+ *   - hangs past the runner's per-smoke wall-clock and gets
+ *     OOM-killed / signal-killed (in CI with concurrent jobs
+ *     or in constrained sandboxes).
+ *
+ * Either way the smoke was a CI-time bomb whose only saving
+ * grace was that dev machines tend to keep dist/ on disk after
+ * the first `npm run build` and never blow it away.
+ *
+ * Fix: build dist/ lazily inside the smoke if it's missing.
+ * This makes the smoke self-healing on any fresh checkout AND
+ * keeps it production-faithful by still spawning the built
+ * artifact (the same `dist/main.js` that ships as the `bin`).
+ */
+function ensureBuilt(cwdPath: string): void {
+	const distMain = resolvePath(cwdPath, 'dist', 'main.js');
+	if (existsSync(distMain)) return;
+	console.log('  · dist/main.js missing — running `npm run build` …');
+	const build = spawnSync('npm', ['run', 'build'], {
+		cwd: cwdPath,
+		stdio: 'inherit'
+	});
+	if (build.status !== 0) {
+		console.error(`  ${ANSI_RED}✗${ANSI_RESET} build failed (exit ${build.status})`);
+		console.error('    run `npm run build` in apps/mcp-server manually to debug');
+		process.exit(1);
+	}
+	if (!existsSync(distMain)) {
+		console.error(`  ${ANSI_RED}✗${ANSI_RESET} build succeeded but dist/main.js still missing`);
+		process.exit(1);
+	}
+}
 
 const ANSI_GREEN = '\x1b[32m';
 const ANSI_RED = '\x1b[31m';
@@ -126,6 +175,12 @@ async function runMcpDialog(
 
 async function main() {
 	console.log('── morphit-mcp smoke ───────────────────────────────────');
+
+	// Ensure dist/main.js exists before any runMcpDialog() call
+	// tries to spawn it.  See the ensureBuilt() docblock above
+	// for the failure-mode this guards against (cp142 LL #1).
+	const serverCwd = new URL('..', import.meta.url).pathname;
+	ensureBuilt(serverCwd);
 
 	// Stand up a stub indexer for tests that need a working instance.
 	const stub = createServer((req, res) => {
