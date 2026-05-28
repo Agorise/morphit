@@ -1245,7 +1245,7 @@
       },
       "how_to_stake_blurt": {
         "q": "如何质押我的 Blurt(power up 转成 BP)来赚取利息?",
-        "a": "质押 Blurt 是指把你的流动 Blurt 转换成 **Blurt Power(BP)**——Blurt 把这个过程称为「power up」。质押的 Blurt 每年约赚取 **2% 的利息**(实际利率根据链上通胀计算并在应用内显示),增强你的点赞权重,并赚取策展奖励。整个过程中它始终是你自己的币——不是存款,不是借贷,也不由任何其他人保管。\n\n**最简单的方式是使用 Blurt 钱包。**打开 [BlurtWallet.com](https://blurtwallet.com),用你的 Blurt 账户登录,找到你的流动 Blurt 余额,选择 **Power Up**。输入金额并确认。就这样——你的 Blurt 现在变成了 BP 并开始产生收益。\n\nMorphit 本身不是钱包,所以我们不会为你保管或转移 Blurt;power up 直接在 Blurt 区块链上、通过你控制的钱包完成。如果你想要换回流动 Blurt,就执行 **power down**,它会在大约四周内逐步释放(这种逐步解押是 Blurt 协议的规则,不是 Morphit 的)。"
+        "a": "质押 Blurt 是指把你的流动 Blurt 转换成 **Blurt Power(BP)**——Blurt 把这个过程称为「power up」。质押的 Blurt 每年约赚取 **2% 的利息(APR)**(实际利率根据链上通胀计算并在应用内显示),增强你的点赞权重,并赚取策展奖励。整个过程中它始终是你自己的币——不是存款,不是借贷,也不由任何其他人保管。\n\n**最简单的方式是使用 Blurt 钱包。**打开 [BlurtWallet.com](https://blurtwallet.com),用你的 Blurt 账户登录,找到你的流动 Blurt 余额,选择 **Power Up**。输入金额并确认。就这样——你的 Blurt 现在变成了 BP 并开始产生收益。\n\nMorphit 本身不是钱包,所以我们不会为你保管或转移 Blurt;power up 直接在 Blurt 区块链上、通过你控制的钱包完成。如果你想要换回流动 Blurt,就执行 **power down**,它会在大约四周内逐步释放(这种逐步解押是 Blurt 协议的规则,不是 Morphit 的)。"
       },
       "where_does_blurt_price_come_from": {
         "q": "Morphit 上显示的 Blurt 价格来自哪里?",
