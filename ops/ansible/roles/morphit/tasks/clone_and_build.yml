@@ -44,16 +44,21 @@
 
 - name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
   ansible.builtin.command:
-    cmd: npx --no-install morphit-ops --help
+    cmd: npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
     chdir: "{{ morphit_repo_path }}"
   become: true
   become_user: "{{ morphit_service_user }}"
   register: morphit_ops_smoke
   changed_when: false
-  # `--no-install` forces npx to resolve the LOCAL workspace bin
-  # (node_modules/.bin/morphit-ops) and refuse any network fetch.
-  # If `npm install` didn't create the symlink, or tsx is absent,
-  # this fails the play with a clear error instead of letting the
-  # operator hit "command not found" at first `morphit-ops init`.
-  # The ops-cli bin runs from TS source via tsx (a production dep
-  # since cp161), so this works under NODE_ENV=production too.
+  # `npm exec --offline --workspace` resolves the ops-cli bin
+  # purely from the local workspace and forbids any registry
+  # access — if `npm install` didn't wire up the tool, or tsx
+  # (a production dep since cp161) is absent, this fails the play
+  # with a clear error instead of letting the operator hit
+  # "command not found" at their first `morphit-ops init`.
+  # NOTE: we use `npm exec --offline`, NOT `npx --no-install` —
+  # the latter still performs a registry lookup before erroring,
+  # so it is not a reliable offline guarantee on hardened/air-
+  # gapped hosts.  `--offline` forbids network access outright.
+  # The ops-cli bin runs from TS source via tsx, so this exercises
+  # the full resolve→tsx→execute path the operator will use.

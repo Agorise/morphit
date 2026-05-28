@@ -5525,11 +5525,26 @@ These should run on the host with the same Node version your image uses, against
 
 ### Troubleshooting: `morphit-ops` says "command not found"
 
-If `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once and then stopped after a `git pull` — or never worked on a fresh clone — the cause is almost always the same: **the workspace bin symlink is missing or stale.**
+If `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once and then stopped — or never worked on a fresh clone — there are two causes, in order of how often they bite:
 
-`morphit-ops` is a workspace-local tool. It is *not* published to the public npm registry; it lives in this repo under `apps/ops-cli/`. What makes `npx morphit-ops` resolve is a symlink at `node_modules/.bin/morphit-ops` that **`npm install` creates** at the repo root. A `git pull` never creates or refreshes that symlink — and if the pull changed `package.json`, `package-lock.json`, or the workspace layout (this repo regenerates the lockfile at meaningful milestones), the symlink can be invalidated. `npx` then finds nothing locally, looks for a *published* package named `morphit-ops` (there is none — it is private), and reports **command not found**.
+**Cause 1 (most common): you're not in the repo directory, or `npm install` hasn't populated `node_modules` yet.**
 
-**Fix — run from the repo root:**
+`morphit-ops` is a workspace-local tool — it is *not* published to the public npm registry; it lives in this repo under `apps/ops-cli/`. `npx` finds it only when you run from **inside the Morphit repo** (it searches upward from your current directory for the workspace) **and** after `npm install` has populated `node_modules` at the repo root. If you run it from your home directory, from a subdirectory outside the repo, or from a fresh clone where you haven't installed yet, `npx` finds no local tool, falls through to the public registry, and you see something like:
+
+```
+npm error code E404
+npm error 404 Not Found - GET https://registry.npmjs.org/morphit-ops - Not found
+```
+
+That E404 *is* the "command not found" — npx looked for a published package named `morphit-ops` (there is none — it's private to this repo).
+
+The classic trap: yesterday you ran it from `~/morphit` and it worked; today after a `git pull` you happened to be in a different directory, or you're on a freshly-cloned second server where you haven't run `npm install` yet.
+
+**Cause 2: the workspace bin symlink went stale.**
+
+`npm install` creates a symlink at `node_modules/.bin/morphit-ops` pointing into the workspace. If a `git pull` changed `package.json` / `package-lock.json` / the workspace layout (this repo regenerates the lockfile at meaningful milestones), that symlink can be invalidated until you re-run `npm install`.
+
+**Both causes have the same fix — run from the repo root, after installing:**
 
 ```
 cd ~/morphit          # wherever you cloned it

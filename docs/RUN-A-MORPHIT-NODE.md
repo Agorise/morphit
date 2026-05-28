@@ -726,14 +726,17 @@ cd morphit
 
 This downloads the Morphit source code into `~/morphit`. The first clone takes a minute or two.
 
-Now install the dependencies and build:
+Now install the dependencies and build. **Run these from inside the repo** (`cd ~/morphit` if you've changed directories since the clone — every Morphit command in this guide assumes you're in the repo root):
 
 ```
+cd ~/morphit
 npm install
 npm run build
 ```
 
 `npm install` downloads all the libraries Morphit uses (about 800 MB of node_modules — most modern projects are like this). It also creates **workspace symlinks** under `node_modules/@morphit/asset-registry`, `node_modules/@morphit/indexer-client`, and a few others — these are Morphit's own internal packages (the source lives under `packages/`) wired up so the indexer, relay, and frontend can `import` from them by name. Without this step the smoke suite at `bash scripts/run-smokes.sh` will fail several runners with `ERR_MODULE_NOT_FOUND` errors complaining about `@morphit/asset-registry` (or one of the other `@morphit/*` packages) — that's the symptom that you ran the smoke suite before `npm install`, not a real code problem. Run `npm install` once and they pass.
+
+`npm install` *also* creates the `morphit-ops` command you'll use for setup (`morphit-ops init`, `register`, `edit`). That command only exists after `npm install`, and only resolves when you run it from inside this repo — if `npx morphit-ops` ever says "command not found," you're either outside the repo directory or you haven't run `npm install` yet. (See §12 if you hit that.) **Re-run `npm install` after every `git pull`**, the same way you re-run `npm run build`.
 
 `npm run build` compiles the web app into static HTML/CSS/JavaScript that nginx will serve.
 
@@ -1741,11 +1744,15 @@ Some common things and how to fix them.
 
 ### "`morphit-ops` says command not found"
 
-This is the most common first-run snag. `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once, then stopped after a `git pull` — or never worked on a fresh clone.
+This is the most common first-run snag. `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once, then stopped — or never worked on a fresh clone.
 
-**The cause:** `morphit-ops` is a tool that lives inside this repo (under `apps/ops-cli/`), not something published to the public npm registry. What makes `npx morphit-ops` work is a small symlink at `node_modules/.bin/morphit-ops` that **`npm install` creates** at the repo root. A `git pull` does *not* refresh that symlink, and if the pull changed the dependency files it can go stale — at which point `npx` finds nothing and reports "command not found."
+**The cause (almost always one of these two):**
 
-**The fix — run from the repo root:**
+1. **You're not inside the repo, or you haven't run `npm install` yet.** `morphit-ops` is a tool that lives inside *this repo* (under `apps/ops-cli/`), not something published to the public npm registry. `npx` finds it only when you run from **inside the Morphit directory** and after `npm install` has set up `node_modules`. Run it from your home folder, a subdirectory, or a fresh clone you haven't installed — and `npx` gives up and asks the public registry, which returns a 404 that shows up as "command not found." The classic version: it worked yesterday from `~/morphit`, but today you're in a different folder, or on a second server where you skipped `npm install`.
+
+2. **A `git pull` invalidated the symlink** that `npm install` creates (`node_modules/.bin/morphit-ops`). If the pull changed the dependency files, re-running `npm install` rebuilds it.
+
+**The fix — run from the repo root, after installing:**
 
 ```
 cd ~/morphit
