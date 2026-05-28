@@ -7,6 +7,10 @@ cryptocurrency to Morphit.  It covers two phases:
    is written.
 2. **The file-by-file checklist** for actually doing the work.
 
+Sibling maintainer docs: [`ADDING-A-WORKSPACE.md`](./ADDING-A-WORKSPACE.md)
+for adding `apps/*` or `packages/*`; [`LOCALE-GRADUATION.md`](./LOCALE-GRADUATION.md)
+for graduating a `PLANNED_LOCALES` entry to `SUPPORTED_LOCALES`.
+
 If you maintain or represent a cryptocurrency project and want
 yours added: read part 1, send us the requested data, and we
 take it from there.  Reach the Agorise team via the contact

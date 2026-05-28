@@ -50,6 +50,12 @@ jobs:
   typecheck:
     name: TypeScript typecheck (sweep all workspaces)
     runs-on: ubuntu-24.04
+    # cp145 — every job gets an explicit wall-clock ceiling.
+    # cp143 put a per-smoke timeout inside scripts/run-smokes.sh;
+    # this job-level timeout is the complement for the other CI
+    # steps (npm ci, tsc invocations) that no smoke wraps.
+    # Current runtime is <2 minutes; 10× headroom for slow runners.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -72,6 +78,8 @@ jobs:
   web-check:
     name: apps/web svelte-check (svelte-kit sync + svelte-aware tsc)
     runs-on: ubuntu-24.04
+    # cp145 — current runtime is ~3 minutes; 10 minutes is roomy.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -109,6 +117,8 @@ jobs:
   ansible-lint:
     name: ansible-lint (playbook quality gate)
     runs-on: ubuntu-24.04
+    # cp145 — current runtime is <1 minute; 5 minutes is roomy.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -135,6 +145,15 @@ jobs:
   smokes:
     name: Smoke suite (run-smokes.sh, triple-pulse)
     runs-on: ubuntu-24.04
+    # cp145 — triple-pulse currently takes ~18 minutes (6 minutes
+    # per pulse × 3).  cp143's per-smoke 240s timeout caps any
+    # single hung smoke; this job-level ceiling caps the whole
+    # battery in case a non-smoke step (npm ci, build, ansible-lint
+    # install, ansible-galaxy collection install) hangs, or in
+    # case the outer `for i in 1 2 3` loop itself wedges.
+    # 45 minutes gives 2.5× headroom over the current observed
+    # runtime.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

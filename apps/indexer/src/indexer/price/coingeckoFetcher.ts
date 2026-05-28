@@ -28,6 +28,11 @@
  */
 
 import { logger } from '$log';
+import {
+	priceUpstreamFetchInit,
+	priceUpstreamHeaders,
+	readPriceBodyCapped
+} from './priceFetchUtil.ts';
 
 const log = logger('price-coingecko');
 
@@ -67,14 +72,17 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), config.timeoutMs);
 		try {
-			const headers: Record<string, string> = { accept: 'application/json' };
+			// cp159 F-indexer-3 — named User-Agent via shared helper.
+			const headers: Record<string, string> = priceUpstreamHeaders();
 			if (config.apiKey) {
 				headers['x-cg-pro-api-key'] = config.apiKey;
 			}
+			// cp159 F-indexer-2 — `redirect: 'manual'` via priceUpstreamFetchInit.
+			// A 30x to an unexpected host should be an operator-visible
+			// failure, not a silent redirect.
 			const res = await fetchImpl(url, {
-				method: 'GET',
-				headers,
-				signal: ac.signal
+				...priceUpstreamFetchInit(ac.signal),
+				headers
 			});
 			if (res.status === 429) {
 				// Rate-limited. Log at warn level so operators see it
@@ -87,7 +95,12 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 				log.warn('http_not_ok', { url, status: res.status });
 				return null;
 			}
-			const body = (await res.json()) as unknown;
+			// cp159 F-indexer-1 — capped body read.  Replaces
+			// `await res.json()` which had no size bound.  Coingecko
+			// price payloads are <100 bytes normally; 64 KiB cap is
+			// 600x normal and still catches any pathology.
+			const text = await readPriceBodyCapped(res, ac, url);
+			const body = JSON.parse(text) as unknown;
 			const price = extractPrice(body, config.coinId, vsCurrency);
 			if (price === null) {
 				log.warn('unexpected_shape', { url, coin_id: config.coinId, vs_currency: vsCurrency });

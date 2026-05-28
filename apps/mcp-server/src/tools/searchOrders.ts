@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import { ASSET_TICKERS } from '@morphit/asset-registry';
-import { buildV1Url, fetchJson, trimOrderRow } from '../indexerClient.js';
+import { buildV1Url, fetchJson, getInstanceUrl, trimOrderRow } from '../indexerClient.js';
 
 /** AI-agent-facing description.  Kept short and concrete so the
  *  agent's tool-selection step has unambiguous signals about when
@@ -139,16 +139,32 @@ export async function searchOrders(input: SearchOrdersInput): Promise<{
 	// off to the actual Morphit web UI for the trade step.  Mirror
 	// the same filter params in the fragment so the page lands on
 	// the filtered orderbook view.
-	const base = (process.env.MORPHIT_MCP_INSTANCE_URL || 'https://morphit.io').replace(
-		/\/+$/,
-		''
-	);
-	const ui = new URL(`${base}/en/orderbook`);
-	if (input.asset) ui.searchParams.set('asset', input.asset);
-	if (input.side) ui.searchParams.set('side', input.side);
-	if (input.fiat_currency) ui.searchParams.set('fiat', input.fiat_currency);
-	if (input.location_region) ui.searchParams.set('region', input.location_region);
-	if (input.payment_methods) ui.searchParams.set('pm', input.payment_methods);
+	//
+	// cp146 F-mcp-6 — use getInstanceUrl() rather than a direct
+	// process.env read so this code path inherits the env-var
+	// validation (scheme check, malformed-URL rejection) and we
+	// don't have two divergent base-URL derivations.
+	const base = getInstanceUrl();
+	// cp156 F-mcp-7 — build the inner locale-less path (with the
+	// filter query params), then wrap it in `${base}/?then=...`
+	// so the root locale-detection shell adds the right locale
+	// prefix client-side.  Before cp156 this hardcoded `/en/`,
+	// which gave non-English users the English orderbook.
+	//
+	// Two-step construction:
+	//   1. Build the inner URL with searchParams so all values get
+	//      proper URI-encoding.
+	//   2. Extract `pathname + search` (locale-less) and pass it
+	//      to the outer `?then=` via searchParams.set, which
+	//      double-encodes the inner `?`/`&` correctly.
+	const inner = new URL('/orderbook', base);
+	if (input.asset) inner.searchParams.set('asset', input.asset);
+	if (input.side) inner.searchParams.set('side', input.side);
+	if (input.fiat_currency) inner.searchParams.set('fiat', input.fiat_currency);
+	if (input.location_region) inner.searchParams.set('region', input.location_region);
+	if (input.payment_methods) inner.searchParams.set('pm', input.payment_methods);
+	const ui = new URL('/', base);
+	ui.searchParams.set('then', inner.pathname + inner.search);
 
 	return {
 		rows,

@@ -23,6 +23,7 @@
   "dependencies": {
     "@beblurt/dblurt": "^0.10.9",
     "@morphit/asset-registry": "*",
+    "@morphit/net-defense": "*",
     "@morphit/operator-config": "*",
     "hono": "^4.6.0",
     "@hono/node-server": "^1.13.0",

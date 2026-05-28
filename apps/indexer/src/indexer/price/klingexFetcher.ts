@@ -45,6 +45,11 @@
  */
 
 import { logger } from '$log';
+import {
+	priceUpstreamFetchInit,
+	priceUpstreamHeaders,
+	readPriceBodyCapped
+} from './priceFetchUtil.ts';
 
 const log = logger('price-klingex');
 
@@ -73,16 +78,22 @@ export function createKlingexFetcher(config: KlingexConfig): () => Promise<numbe
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), config.timeoutMs);
 		try {
+			// cp159 F-indexer-2/3 — `redirect: 'manual'` + named UA via
+			// the shared price-fetch helper.  Coingecko fetcher shares
+			// the same hardening path.
 			const res = await fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal
+				...priceUpstreamFetchInit(ac.signal),
+				headers: priceUpstreamHeaders()
 			});
 			if (!res.ok) {
 				log.warn('http_not_ok', { url, status: res.status });
 				return null;
 			}
-			const body = (await res.json()) as unknown;
+			// cp159 F-indexer-1 — capped body read.  Klingex ticker
+			// payloads are <300 bytes normally; 64 KiB cap is 200x
+			// normal and catches any pathology.
+			const text = await readPriceBodyCapped(res, ac, url);
+			const body = JSON.parse(text) as unknown;
 			const price = extractPrice(body);
 			if (price === null) {
 				log.warn('unexpected_shape', { url });

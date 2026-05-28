@@ -24,6 +24,28 @@
 	 * from `/es/orderbook` should land on whatever they were
 	 * doing before Morphit, not bounce through the redirect shell
 	 * every time.
+	 *
+	 * cp156 F-mcp-7 — `?then=/path` query-parameter support.
+	 *
+	 * The MCP server (cp140) needs to hand AI agents URLs they can
+	 * pass to users, but the agent doesn't know the user's locale.
+	 * Before cp156, the only options were (a) hardcode `/en/` and
+	 * accept that non-English users get the English page, or (b)
+	 * make every tool call accept a locale parameter (places the
+	 * burden on every AI agent integrator).  Neither was good.
+	 *
+	 * With cp156, the MCP server can hand out `${base}/?then=/path`
+	 * deeplinks.  The user clicks → this shell detects their
+	 * locale → redirects to `/{detected-lang}{then-value}`.  One
+	 * extra hop, but the user's actual locale is preserved.
+	 *
+	 * Safety: `then` is constrained to start with `/` and not
+	 * `//` (which would be a protocol-relative URL escape) and
+	 * not contain `\` (Windows-path-like normalization).
+	 * Malformed `then` values silently fall back to the root
+	 * locale page rather than aborting (a malformed deeplink is
+	 * better as a "you landed on Morphit's homepage" experience
+	 * than as a stuck loading spinner).
 	 */
 
 	import { onMount } from 'svelte';
@@ -43,13 +65,47 @@
 				: [];
 		const preferred = pickLocaleFromAcceptLanguages(prefs);
 
-		// Build the target URL.  `pathname` for the bare root is
-		// `/`; localePath('/', 'es') returns `/es` per the cp6
-		// helper's canonical-no-trailing-slash root normalization.
-		const target =
-			localePath(window.location.pathname, preferred) +
-			window.location.search +
-			window.location.hash;
+		// cp156 F-mcp-7 — extract `?then=/path` if present.
+		//
+		// Safety constraints:
+		//   - MUST start with `/` (absolute path only)
+		//   - MUST NOT start with `//` (protocol-relative URL escape)
+		//   - MUST NOT contain `\` (Windows-path-like normalization
+		//     that some browsers fold into `/`)
+		//
+		// Malformed values silently fall back to root locale page.
+		// Rationale: a typoed/malicious deeplink yielding a clean
+		// "you landed on Morphit's homepage" experience is better
+		// than a hard error.  The deeplink-receiver also can't
+		// meaningfully recover from "this URL is bad" — pushing
+		// them to root is the most useful fallback.
+		const params = new URLSearchParams(window.location.search);
+		const thenRaw = params.get('then');
+		const thenIsSafe =
+			thenRaw !== null &&
+			thenRaw.length > 0 &&
+			thenRaw.startsWith('/') &&
+			!thenRaw.startsWith('//') &&
+			!thenRaw.includes('\\');
+
+		let target: string;
+		if (thenIsSafe) {
+			// `then` value is the full path-with-query the caller
+			// wants the user to land on (locale-less).  Prefix the
+			// detected locale and use it as the redirect target.
+			// We deliberately DROP outer query and hash here — the
+			// `then` value carries everything the caller wanted to
+			// preserve.
+			target = `/${preferred}${thenRaw}`;
+		} else {
+			// Original behavior: bare root → /{lang} with outer query
+			// and hash passed through.  Used when no `?then=` (or
+			// when `then` was malformed and we silently dropped it).
+			target =
+				localePath(window.location.pathname, preferred) +
+				window.location.search +
+				window.location.hash;
+		}
 
 		window.location.replace(target);
 	});

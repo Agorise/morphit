@@ -4,31 +4,934 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp144 **CLOSED** — **CI has been red since cp140 (2026-05-26) and nobody noticed for ~24 hours.**  When `apps/mcp-server` was added as a workspace in cp140, `package-lock.json` was not regenerated.  `npm ci` (the CI command) requires `package.json` ↔ `package-lock.json` consistency and refused to install — gating ALL downstream CI jobs (typecheck, smokes, svelte-check, build) with EUSAGE.  Local triple-pulse verifications in cp141, cp142, cp143 ALL looked green because `npm install` (the dev command) silently heals the lockfile, masking the broken state from anyone not reading the actual Forgejo CI logs.  Discovered when Ken sent the failing typecheck task #421 log.  Fix this turn: (1) regenerated `package-lock.json` to include morphit-mcp and all transitive deps; (2) NEW `scripts/lockfile-sync-smoke.ts` enforces the invariant with both an authoritative `npm ci --dry-run` check AND a fast offline workspace cross-check; (3) tamper-tested against the original stale lockfile from the cp141 tarball — smoke correctly identifies the missing workspace by name (`apps/mcp-server`) and the missing top-level packages (`morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, etc.).  **CRITICAL: the next push must include the updated package-lock.json or CI stays red.**  Triple-pulse 6092/6092/6092 stable.  — 2026-05-27.
+**Last touched:** cp160 **CLOSED** — remaining-workspace audit sweep applying the cp146-style finding lens to apps/web (@html sanitization), packages/* (×4), apps/ops-cli, apps/matrix-bot.  Plus a stale-doc cleanup (F-mcp-7 line) and a permanent decision record (sprite-sheet ruled out).
 
-**Why no prior cp caught this:** the entire cp141 → cp142 → cp143 progression validated locally against an `npm install`-healed lockfile.  `npm install` is idempotent and silent when it heals the lockfile — no warning, no diff prompt, no log message that says "I just rewrote your lockfile because package.json drifted."  The healed state was invisible to my eyes and to every static-analysis smoke.  Only `npm ci` distinguishes the two.  Lesson #1 in cp144's REVISIT-LIST entry.
+**apps/web @html walk (8 code-path sinks, ALL verified safe — zero findings):**
 
-**Prior turn (cp143):** Per-smoke wall-clock runtime timeout (`timeout --signal=TERM --kill-after=5 240`).  Defense-in-depth complement to cp142's static catch — any future hang gets converted into a legible "HUNG — killed after 240s" in ≤245s instead of stalling CI until the action runner's hard wall.
+| # | Site | Provenance | Defense | Verdict |
+|---|---|---|---|---|
+| 1-3 | LoginQrInitiator, QrPanel, 2fa-page QR | qrcode lib `type:'svg'` | fixed-structure SVG geometry; encoded text → QR module path-data, never markup | ✅ safe-by-construction |
+| 4-5 | IdentityLabel + profile-hero avatar | user upload → indexer → `deriveProfileProps()` | `safeSanitizeFromIndexer()` re-sanitizes at render (defense-in-depth even though indexer sanitized at ingest); single source of truth feeds all 6 consumers | ✅ |
+| 6 | Head onion-location meta | computeOnionLocation URL-validated | `.replace(/"/g,'&quot;')` | ✅ |
+| 7 | Head JSON-LD | structured node | `.replace(/</g,'\\u003c')` neutralizes `</script>` breakout | ✅ |
+| 8 | ProtectedTextarea overlay | user value + closed-enum kind | `escapeHtml()` on every user slice; `data-kind` from closed union `'wif'\|'hex_64'\|'mnemonic'` | ✅ |
+| (i18n) | WelcomeFirstBuyHero ×4 bullets | locale files | `i18n-html-injection-smoke` mechanism-discovers all `{@html $_(...)}` keys + validates ×10 locales against safe-tag allowlist | ✅ |
 
-**Prior turn (cp142):** mcp-server-smoke fresh-checkout hang fix.  Self-healing lazy-build at smoke startup + explicit `npm run build -w apps/mcp-server` step in CI + NEW `scripts/spawn-dist-prebuild-coverage-smoke.ts` meta-smoke enforcing "every dist-bin workspace declares a build script + every smoke spawning from dist/ has an ensureBuilt()/existsSync() guard."  Two-layer defense with cp143.
+The 16→23 @html count growth cp158 flagged is fully accounted for: the real delta is 4 i18n bullets (smoke-covered) + test files + docblock prose.  **No unsafe @html anywhere.**
 
-**Three checkpoints this session (cp142, cp143, cp144) all turn out to be different facets of the same root cause:** cp140 added the mcp-server workspace without exercising the full fresh-checkout install + smoke pipeline.  cp142 caught the smoke depending on a build artifact; cp143 added runtime defense for any hang; cp144 caught the lockfile drift that was preventing CI from even reaching the smoke step.  Pre-launch hardening pattern: when a workspace is added, BOTH the smoke surface AND the dependency surface need to be validated from a clean state, ideally in a sandbox that doesn't have the healing behaviors of dev-machine tooling.
+**packages/* + matrix-bot (cp146 lens scan — clean):**
+- 4 packages (indexer-client, relay-client, operator-config, asset-registry): zero fetch(), zero @html, zero Dockerfile.  Mostly type definitions + pure helpers.
+- matrix-bot: zero raw fetch() (matrix-bot-sdk handles its own transport).  cp138-D-3 known-issue + opt-in semantics already documented.
 
-### Fresh-session quick orientation
+**apps/ops-cli (cp146 lens — one LOW finding closed):**
 
-If you're a fresh Claude opening this for the first time, the project context you need is in user memory (Ken's standing rules + the recent_updates section). The repository state is:
+ops-cli is an operator-run local CLI, not a network service.  5 fetch() sites: 2 HEAD connectivity checks (hardcoded rpc.blurt.blog + google.com), 1 chain RPC POST (operator's own endpoint), 1 release-metadata JSON, 1 archive download.
 
-- **Smoke battery:** 6092/6092, triple-pulse stable at cp144 baseline (pulses 44–46). 0 runners failed.  Smoke runner script count: 236.  Per-smoke wall-clock ceiling 240s (cp143); slow-pole is `vitest-must-pass-smoke.ts` at ~150s.
-- **TypeScript:** 0 errors across all 10 projects (apps/web, apps/relay, apps/indexer, apps/ops-cli, apps/matrix-bot, apps/mcp-server, packages/indexer-client, packages/relay-client, packages/operator-config, packages/asset-registry).
+- **F-opscli-1 (LOW):** `fetchLatestRelease()` in `commands/upgrade.ts` did bare `await res.json()` with no body cap + no `redirect: 'manual'`.  Host is operator-configured (git.agorise.net default) so not SSRF, but a MITM'd/compromised release API returning multi-GB JSON would OOM the operator's upgrade run.  **Fixed:** 1 MiB body cap (Content-Length pre-check + post-text length check) + `redirect: 'manual'`.  Archive download already SHA-256-verified downstream, so only the metadata fetch needed the guard.  NEW `apps/ops-cli/scripts/upgrade-fetch-hardening-smoke.ts` (6 source-sentinel scenarios, tamper-tested).
+
+**verbatimModuleSyntax — now consistent across ALL 12 projects:**
+
+cp160 flipped the final 6 (ops-cli, matrix-bot, + 4 packages) from `false`/unset to `true`.  Zero source changes, zero typecheck errors in every case — the source discipline held repo-wide.  Combined with cp155 (mcp-server), cp157 (relay), cp159 (indexer), and the web baseline, **every workspace now has `verbatimModuleSyntax: true`.**
+
+**Doc cleanups:**
+- Stale F-mcp-7 "deferred" line in REVISIT-LIST corrected — cp156 actually shipped the `?then=` fix; the deferred prose was cp155-era and never updated.
+- SVG sprite-sheet permanently RULED OUT per Ken (2026-05-27) — removed from pending lists in REVISIT-LIST + TARBALL so it never resurfaces.
+
+**Verified clean:**
+- Triple-pulse smokes: 6245/6245/6245, 0 runners failed (+6 from cp159: +6 new upgrade-fetch-hardening smoke)
+- TypeScript: 0 errors × 12 projects (verbatimModuleSyntax true everywhere now)
+- svelte-check: 0/0
+- i18n-html-injection-smoke: 1/1
+
+**Smoke runner script count:** 248 (was 247 at cp159).
+
+— 2026-05-27.
+
+**Prior turn (cp159):** apps/indexer focused audit — 5 findings closed via NEW shared price-fetch helper + 11-scenario sentinel smoke.
+
+**Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
+
+**Prior turn (cp157):** apps/relay focused audit — verbatimModuleSyntax flip + 3 INFO findings.
+
+**Prior turn (cp156):** F-mcp-7 closure — root-shell `?then=` support.
+
+**Prior turn (cp155):** Tier-C cleanup batch.
+
+**Prior turn (cp154):** F-mcp-1 SSRF defense via `@morphit/net-defense`.
+
+**Prior turn (cp152 + cp153):** Marketing-prose smoke + comment-stripping helper.
+
+**Prior turn (cp151):** F-mcp-5 response body cap.
+
+**Prior turn (cp150):** REVISIT-LIST archive split.
+
+**Prior turn (cp149):** mcp-server read-only invariant smoke.
+
+**Prior turn (cp148):** Four-persona walkthrough.
+
+**Prior turn (cp147):** ADDING-A-WORKSPACE.md.
+
+**Prior turn (cp146):** apps/mcp-server pre-launch deep-deep.
+
+**Prior turns (cp142–cp145):** mcp-server CI-bomb fix, per-smoke timeout, CI-RED lockfile regen, CI workflow audit.
+
+**Nineteen checkpoints this session (cp142–cp160).**  Every Morphit workspace has now been audited under the cp146 finding lens:
+
+| Workspace | Audit cp(s) | Result |
+|---|---|---|
+| mcp-server | cp146, cp151, cp154-cp156 | 13 findings closed + 4 sentinel smokes |
+| relay | cp157 | 0 HIGH/CRITICAL + 3 INFO + tsconfig flip |
+| indexer | cp159 | 5 findings + 1 sentinel smoke |
+| web | cp160 | 0 findings (8 @html sinks all verified safe) |
+| ops-cli | cp160 | 1 LOW finding + 1 sentinel smoke |
+| matrix-bot + 4 packages | cp160 | 0 findings (clean scan) + verbatimModuleSyntax flips |
+
+The cp146 lens audit campaign is **complete across the entire monorepo.**  All outbound-HTTP surfaces now have body caps + redirect:manual + named UA where applicable; all @html sinks verified sanitized; verbatimModuleSyntax consistent across all 12 projects.
+
+### Orientation snapshot (cp160 baseline)
+
+- **Smoke battery:** 6245/6245, triple-pulse stable at cp160 baseline. 0 runners failed.  Smoke runner script count: 248.
+- **TypeScript:** 0 errors across all 12 projects.  `verbatimModuleSyntax: true` now in EVERY workspace (web, indexer, relay, mcp-server, ops-cli, matrix-bot, + 4 packages).
 - **svelte-check:** 0 errors / 0 warnings.
-- **CI:** package-lock.json regenerated in cp144 — RED since cp140, GREEN as of cp144 ship.
-- **Canonical counts:** 16 tradable assets · 10 supported locales (+ 7 planned: hi/ar/bn/pt/id/ja/vi) · 43 active ADRs (0001–0044, 0016 reserved-but-unused) · 327 brag-list entries.
+- **CI:** package-lock.json regenerated in cp144 + cp154 — RED since cp140, GREEN as of cp144 ship.
+- **Monorepo workspaces:** 11 (apps ×6 + packages ×5 incl. net-defense).
+- **REVISIT-LIST split:** cp100+ live in `docs/REVISIT-LIST.md`; cp99-and-earlier frozen in `docs/REVISIT-LIST-ARCHIVE.md`.
+- **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140 (`morphit-mcp` + comparison-table corrections) + cp141 (locale-graduation readiness) + cp142 (mcp-server-smoke CI-bomb fix + meta-smoke) + cp143 (per-smoke runtime timeout) + cp144 (lockfile regenerated + lockfile-sync smoke) will ship in the next beta release.
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp160 will ship in the next beta release.
+- **cp146 lens audit:** COMPLETE across all workspaces.  Remaining pre-launch work is deployment-gated (cp138 items #95-104 need a staging instance) + A1/A14 cp113 items needing Ken's scope clarification.
 
 ### Most recent work — what just shipped
 
-**cp144 (2026-05-27, this session):** CI-RED-since-cp140 lockfile drift fix + lockfile-sync smoke.
+**cp160 (2026-05-27, this session):** Remaining-workspace audit sweep completing the cp146 finding lens across the entire monorepo + two doc cleanups.
+
+**Scope:** apps/web (@html sanitization surface), packages/* (×4: indexer-client, relay-client, operator-config, asset-registry), apps/ops-cli, apps/matrix-bot.  Plus stale-doc cleanup (F-mcp-7 deferred-line correction) and a permanent decision record (SVG sprite-sheet ruled out).
+
+**apps/web @html walk — 8 code-path sinks, ALL verified safe, ZERO findings:**
+
+The cp146 lens for a frontend is XSS via `{@html}` (Svelte's auto-escaping bypass).  cp158 flagged the @html count growing 16→23 since cp138 but only verified the delta was safe; cp160 applies the full per-sink provenance+defense analysis.
+
+Real code-path `{@html}` sinks (excluding test files + docblock-prose mentions):
+
+| # | Site | Provenance | Defense | Verdict |
+|---|---|---|---|---|
+| 1 | `LoginQrInitiator.svelte:249` | `qrcode` lib `toString(text, {type:'svg'})` | Library emits fixed-structure `<svg><rect><path>`; encoded text becomes QR module path-geometry, never markup | ✅ safe-by-construction |
+| 2 | `QrPanel.svelte:133` | same qrcode lib `type:'svg'` | same | ✅ |
+| 3 | `2fa/+page.svelte:510` | same qrcode lib `type:'svg'` | same | ✅ |
+| 4 | `IdentityLabel.svelte:262` (avatar) | user upload → indexer → `deriveProfileProps()` | `safeSanitizeFromIndexer()` re-sanitizes at render time even though indexer sanitized at ingest (defense-in-depth) | ✅ |
+| 5 | profile-hero `[account]/+page.svelte:418` | same single source `deriveProfileProps()` | same `safeSanitizeFromIndexer()` | ✅ |
+| 6 | `Head.svelte:203` onion-location | `computeOnionLocation` URL-shape-validated | `.replace(/"/g, '&quot;')` on the attribute value | ✅ |
+| 7 | `Head.svelte:277` JSON-LD | structured JSON node | `JSON.stringify(node).replace(/</g, '\\u003c')` neutralizes `</script>` breakout (canonical JSON-LD XSS defense) | ✅ |
+| 8 | `ProtectedTextarea.svelte:228` overlay | user value + closed-enum kind | every user slice through `escapeHtml()`; `data-kind="${m.kind}"` from closed union `'wif'\|'hex_64'\|'mnemonic'` (hardcoded detector literals, never user-derived) | ✅ |
+
+Plus the i18n bullets: `WelcomeFirstBuyHero.svelte` ×4 `{@html $_('welcome_first_buy.bullet_*')}`.  These are covered by the existing `apps/web/scripts/i18n-html-injection-smoke.ts` which is **mechanism-based** — it dynamically extracts every `{@html $_(...)}` callsite via regex and validates the resolved value across all 10 locales against a safe-inline-tag allowlist.  Verified the smoke discovers exactly these 4 keys (they're the only `{@html $_(...)}` callsites in the codebase).  Smoke green 1/1.
+
+**Single-source-of-truth confirmed for avatars:** `profileProps.ts:139` `avatarSvg: safeSvg` is the only producer; all 6 consumers (IdentityLabel, ConversationView, FeaturedOrders, operators page, chat page ×2, profile hero) receive the already-sanitized value.  The render-time re-sanitization is belt-and-braces over the indexer's ingest-time sanitization.
+
+**Zero unsafe @html anywhere in apps/web.**  The 16→23 growth cp158 flagged is fully accounted for: +4 i18n bullets (smoke-covered) + test-file refs + docblock prose.
+
+**packages/* (×4) + matrix-bot — clean cp146-lens scan:**
+
+| Workspace | fetch() | @html | Dockerfile | Verdict |
+|---|---|---|---|---|
+| packages/indexer-client | 0 | 0 | 0 | clean (mostly type defs) |
+| packages/relay-client | 0 | 0 | 0 | clean (mostly type defs) |
+| packages/operator-config | 0 | 0 | 0 | clean (pure helpers) |
+| packages/asset-registry | 0 | 0 | 0 | clean (registry data + types) |
+| apps/matrix-bot | 0 raw | 0 | 0 | clean (matrix-bot-sdk handles its own transport; cp138-D-3 known-issue + opt-in already documented) |
+
+**apps/ops-cli — one LOW finding closed (F-opscli-1):**
+
+ops-cli is an operator-run local CLI, not a network service.  5 fetch() sites: 2 HEAD connectivity checks (hardcoded rpc.blurt.blog + google.com in systemCheck.ts), 1 chain RPC POST (operator's own endpoint in chainCheck.ts), 1 release-metadata JSON + 1 archive download (upgrade.ts).
+
+The threat model is fundamentally different from a network service — this runs on the operator's own machine, invoked by the operator, hitting URLs the operator controls or that are hardcoded.  SSRF isn't meaningfully applicable (no untrusted input drives the URL).
+
+**F-opscli-1 (LOW):** `fetchLatestRelease()` in `commands/upgrade.ts:388` did bare `await res.json()` with no body cap and no `redirect: 'manual'`.  The host is operator-configured (defaults to git.agorise.net), so not SSRF, but a MITM'd or compromised release API returning a multi-GB JSON would OOM the operator's upgrade run.
+
+**Fix:** 1 MiB body cap (Content-Length pre-check + post-text length check) + `redirect: 'manual'`.  The downloaded archive itself is already SHA-256-verified downstream (`parseShaFile` + `computeSha256`), so a tampered archive is caught regardless — only the metadata-JSON fetch lacked a guard.
+
+**NEW smoke** `apps/ops-cli/scripts/upgrade-fetch-hardening-smoke.ts` (6 scenarios, source-sentinel since `fetchLatestRelease` is private):
+1. redirect:manual present
+2. Content-Length pre-check against RELEASE_JSON_MAX_BYTES
+3. post-text length cap (catches absent/lying Content-Length)
+4. no bare `await res.json()` (uses strip-comments to avoid false-positive on explanatory comments)
+5. cap value sane (1 MiB, between 64 KiB and 16 MiB bounds)
+6. cp160 F-opscli-1 attribution present
+
+Tamper-tested: reverting to bare `res.json()` fires scenarios 3 + 4.
+
+**verbatimModuleSyntax — now consistent across ALL 12 projects:**
+
+cp160 flipped the final 6 (ops-cli, matrix-bot, + the 4 packages which previously didn't set the flag at all).  Zero source changes, zero typecheck errors in every case.  Combined with cp155 (mcp-server), cp157 (relay), cp159 (indexer), and the web baseline, every workspace now has `verbatimModuleSyntax: true`.  The repo-wide consistency means future code review catches `import { type Foo }` vs `import type { Foo }` shape mistakes uniformly.
+
+**Doc cleanups:**
+
+1. **Stale F-mcp-7 line:** REVISIT-LIST line 625 still read "deferred until pre-launch polish phase ... the hardcoded `/en/` remains in three call sites."  That prose was written at cp155 when the fix was deferred; cp156 shipped Option A (`?then=` support) the very next checkpoint.  Corrected to point at the cp156 implementation.
+
+2. **SVG sprite-sheet RULED OUT:** Ken permanently rejected the idea (2026-05-27).  Removed from the cp116/cp117 pending lists in REVISIT-LIST + TARBALL; marked "RULED OUT — do not resurface" with the prior rationale preserved as record but the decision marked final.
+
+**Verified clean:**
+- Triple-pulse smokes: 6245/6245/6245, 0 runners failed (+6 from cp159: +6 new upgrade-fetch-hardening smoke)
+- TypeScript: 0 errors × 12 projects (verbatimModuleSyntax: true everywhere)
+- svelte-check: 0/0
+- i18n-html-injection-smoke: 1/1
+
+**Smoke runner script count:** 248 (was 247 at cp159).
+
+**The cp146 lens audit campaign is COMPLETE across the entire monorepo:**
+
+| Workspace | Audit cp(s) | Result |
+|---|---|---|
+| mcp-server | cp146, cp151, cp154-cp156 | 13 findings closed + 4 sentinel smokes |
+| relay | cp157 | 0 HIGH/CRITICAL + 3 INFO + tsconfig flip |
+| indexer | cp159 | 5 findings + 1 sentinel smoke |
+| web | cp160 | 0 findings (8 @html sinks all verified safe) |
+| ops-cli | cp160 | 1 LOW finding + 1 sentinel smoke |
+| matrix-bot + 4 packages | cp160 | 0 findings (clean scan) + verbatimModuleSyntax flips |
+
+Every outbound-HTTP surface now has body caps + redirect:manual + named UA where applicable; every @html sink verified sanitized; verbatimModuleSyntax consistent across all 12 projects.
+
+**cp159 (2026-05-27, prior turn this session):** apps/indexer focused audit applying the cp146-style finding lens — fourth workspace pass.
+
+**Scope:** 26,903 lines across `apps/indexer/src/` (41 files in `api/`, 23 in `indexer/`, 17 in `indexer/handlers/`, 10 in `indexer/price/`, plus middleware/blurt/db/log/config/lib).  Walked the outbound-fetch surfaces (price feeds, signupAnomalyProbe, federationProbe — last one already cp154-hardened) and verified inbound posture (security middleware + body caps + two POST endpoints `orderViews` + `loginPairing`).
+
+**Scan-pattern results (cp146 finding lens):**
+
+| cp146 finding | Indexer status |
+|---|---|
+| F-mcp-1 — SSRF | ✅ federationProbe already cp154-hardened via lifted `@morphit/net-defense`.  peerPriceMonitor cp139-F-2 hardened to route through `fetchJson`.  Price-feed fetchers `coingeckoFetcher` / `klingexFetcher` use operator-config trusted URLs — not SSRF surface, but **body-bomb surface** (see F-indexer-1). |
+| F-mcp-2 — URL credential leak | ✅ No fetcher embeds credentials in URL; coingecko uses `x-cg-pro-api-key` header |
+| F-mcp-3 — redirect follow | ⚙️ FIXED: price fetchers were `redirect: 'follow'` default (F-indexer-2) |
+| F-mcp-4 — User-Agent | ⚙️ FIXED: price fetchers had no UA (F-indexer-3); signupAnomalyProbe had no UA (F-indexer-4) |
+| F-mcp-5 — response body cap | ⚙️ FIXED: price fetchers bare `await res.json()` (F-indexer-1 MED); signupAnomalyProbe bare `res.json()` (F-indexer-4) |
+| F-mcp-22 — Docker `:latest` | ✅ No Dockerfile in apps/indexer |
+| F-mcp-27 — `verbatimModuleSyntax` | ⚙️ FIXED: F-indexer-5 — flipped to `true` (third workspace where source was already aligned) |
+
+**F-indexer-1 (MED) — Price-fetcher missing body cap:**
+
+The two price fetchers `coingeckoFetcher.ts` + `klingexFetcher.ts` call operator-configured upstream APIs (Coingecko, Klingex) every refresh cycle (~5 min).  Pre-cp159, both used `await res.json()` with no size bound.
+
+**Threat model:** the URL is operator-trusted, so the canonical attack isn't SSRF (the operator picked the URL).  The exposure is upstream-misbehavior:
+- A compromised upstream returns multi-GB JSON → indexer memory exhaustion
+- A buggy upstream returns truncated JSON in an infinite stream → indexer pegs at 100% CPU on `res.json()` parse
+- An incident at the upstream (e.g. Coingecko status page) returns a multi-MB HTML error page → indexer chokes on the parse
+
+**Real-world precedent:** Coingecko's free tier has had multi-MB error responses during outages.  Klingex's API has occasionally returned full orderbook dumps when the ticker endpoint misbehaves.  No defense was in place.
+
+**Fix:** NEW `apps/indexer/src/indexer/price/priceFetchUtil.ts` exports:
+
+```typescript
+export const PRICE_FETCH_MAX_BODY_BYTES = ... // 64 KiB default, env-overridable
+export const PRICE_FETCH_USER_AGENT = 'morphit-indexer/price-fetch'
+export async function readPriceBodyCapped(res, ac, url): Promise<string>
+export function priceUpstreamHeaders(): Record<string, string>
+export function priceUpstreamFetchInit(signal): Pick<RequestInit, 'method' | 'redirect' | 'signal'>
+```
+
+The `readPriceBodyCapped()` helper mirrors cp151 F-mcp-5 (mcp-server) and cp154 net-defense `fetchJson` shape: Content-Length pre-check followed by streaming reader with abort-on-cap-exceed.  Two-layer defense — Content-Length pre-check catches headers that declare oversize; streaming reader catches headers that lie about (or omit) Content-Length.
+
+Cap is 64 KiB default — 100x normal payload size (Coingecko `{"blurt":{"usd":0.00237}}` is 28 bytes; Klingex ticker is ~250 bytes).  Env-overridable via `MORPHIT_INDEXER_PRICE_FETCH_MAX_BODY_BYTES` for operators with verbose-response upstreams.  Hard ceiling 16 MiB to prevent operator misconfiguration from disabling the defense entirely.
+
+**F-indexer-2 (LOW) — Price-fetcher redirect-follow default:**
+
+`redirect: 'manual'` added via `priceUpstreamFetchInit()`.  A 30x to an unexpected host should be operator-visible failure, not silent follow.
+
+**F-indexer-3 (LOW) — Price-fetcher no User-Agent:**
+
+Named UA `'morphit-indexer/price-fetch'` (fixed string, not version-derived — upstreams don't care about Morphit version, they care that we're identifiable).  Friendlier for Coingecko's rate limiter to identify and contact us if needed; doesn't leak Node version.
+
+**F-indexer-4 (LOW) — signupAnomalyProbe bare fetch:**
+
+`apps/indexer/src/indexer/signupAnomalyProbe.ts` fetches `relay-health-url?verbose=1` for the signup-anomaly judgment.  The relay URL is operator-config sibling-process URL — typically `http://127.0.0.1:8080/v1/health?verbose=1` for colocated deployments.  Low SSRF surface but defense-in-depth still warranted.
+
+Added `redirect: 'manual'` + named UA `'morphit-indexer/signup-anomaly-probe'` + 16 KiB post-read body cap with non-JSON fallback (smaller cap because relay /v1/health responses are <1 KB; 16 KiB is 16x normal).  Also wrapped `JSON.parse` in try/catch so a misbehaving relay returning non-JSON (HTML error page) degrades to "anomaly check skipped" rather than throwing.
+
+**F-indexer-5 (LOW) — verbatimModuleSyntax flip:**
+
+`apps/indexer/tsconfig.json` `verbatimModuleSyntax: false → true`.  Zero typecheck errors after flip; zero source changes required.  Same pattern as cp155 (mcp-server) and cp157 (relay).  Third workspace where earlier discipline kept `import type` consistent even when flag wasn't enforcing it.  Now all four major workspaces (web + indexer + relay + mcp-server) have `verbatimModuleSyntax: true`.
+
+**NEW sentinel smoke** `apps/indexer/scripts/price-fetch-util-smoke.ts` (11 scenarios):
+
+1. priceUpstreamHeaders returns accept + named User-Agent
+2. priceUpstreamFetchInit returns method=GET, redirect=manual, threaded signal
+3. PRICE_FETCH_MAX_BODY_BYTES default 64 KiB
+4. Content-Length pre-check rejects oversized body before stream-read
+5. Content-Length pre-check fires abort signal
+6. Streaming reader rejects body that exceeds cap when Content-Length absent or lies
+7. Streaming-overflow path fires abort signal
+8. Well-formed small body reads cleanly (round-trips intact)
+9. Source-sentinel: priceFetchUtil source contains all 6 required safety markers
+10. Callsite-sentinel: both fetchers actually use the hardened helper
+11. Regression guard: no bare `await res.json()` in fetchers (uses strip-comments to avoid false-positive on cp159 explanatory annotations)
+
+**Tamper-tested:** reverting coingecko to bare `res.json()` correctly fires scenarios 10 + 11.
+
+**Lesson learned (cp159):** cross-tree TS import from `apps/*/scripts/` to repo-root `scripts/lib/strip-comments.ts` resolves awkwardly under `tsx --tsconfig=tsconfig.smoke.json`.  Per-workspace smokes get a 3-line local copy of the strip-comments helper.  cp153's shared helper remains canonical for repo-root scripts/ smokes.
+
+**`apps/indexer/api/middleware/security.ts` review (no findings):**
+
+31-line module that mirrors cp138 Phase B clean-area summary: `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `x-frame-options: DENY`, `content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'`, `cross-origin-resource-policy: cross-origin` (public-read API), Cache-Control defaulting.  No regressions from cp138 verification.
+
+**Two POST endpoints reviewed (no findings):**
+
+- `apps/indexer/src/api/orderViews.ts` `POST /:account/:permlink/view` — body ignored, only URL params used.  No body-read surface.
+- `apps/indexer/src/api/loginPairing.ts` `POST /:pid/deliver` — body cap enforced at endpoint level via `DELIVER_BODY_MAX_BYTES` length check on `c.req.text()`, followed by JSON shape validation including pid-mismatch defense.  Self-contained defense, mirrors cp151 pattern.
+
+**Verified clean:**
+- Triple-pulse smokes: 6239/6239/6239, 0 runners failed (+13 from cp158: +11 new smoke + 2 derived growth)
+- TypeScript: 0 errors × 12 projects (now with `verbatimModuleSyntax: true` in indexer + relay + mcp-server)
+- svelte-check: 0/0
+- All price-related smokes still pass: price-source-hardening (14/14), peer-price-monitor (37/37), morphit-native-fetcher, multi-asset-factory
+- compositeSource vitest 19/19 still pass with the refactored coingecko/klingex fetchers
+- mcp-server build: clean
+
+**Smoke runner script count:** 247 (was 246 at cp158).
+
+**Three workspaces now audited under the cp146 lens:**
+
+| Workspace | Audit cp | Findings | Sentinel smokes added |
+|---|---|---|---|
+| mcp-server | cp146 + cp151 + cp154 + cp155 + cp156 | 13 (all closed) | mcp-server-read-only-invariant + fetchjson-body-cap + private-instance-policy + root-shell-then-redirect |
+| relay | cp157 | 0 HIGH/CRITICAL + 3 INFO + verbatimModuleSyntax flip | (none — clean audit) |
+| indexer | cp159 (this) | 5 (4 actual + 1 tsconfig) | price-fetch-util-smoke |
+
+The cp146 finding lens has now surfaced real defense-in-depth wins on three workspaces, each in a different exposure shape: outbound HTTP/SSRF for mcp-server, X-Forwarded-For trust for relay, price-feed body-bombing for indexer.
+
+**cp158 (2026-05-27, prior turn this session):** cp138 110-task audit plan walk (Ken's session direction #3).
+
+**Plan-status verification.**  The cp138 plan ran 2026-05-25 and CLOSED that day.  All 94 static tasks complete per `docs/AUDIT-cp138-FINDINGS.md`.  11 findings shipped at cp138 + 3 standing follow-ups + 0 outstanding HIGH/CRITICAL.
+
+**Three standing follow-ups re-verified:**
+
+1. **cp138-R-1 (bigint id propagation):** Reduced from 11 sites at cp138 baseline to **2 sites** today.  Both remaining sites in `apps/indexer/src/api/chatStream.ts` (lines 116 and 151) are explicitly annotated with `cp138 A-3 correction` + `cp138 R-1` reference comments documenting:
+   - Schema is BIGSERIAL (2^63 ≈ 9.2e18 range)
+   - JS Number.MAX_SAFE_INTEGER is 2^53 (~9e15)
+   - At Morphit's projected scale parseInt is safe in practice
+   - When approaching 2^53 messages the codepath needs to switch to string-based ids end-to-end
+   - cp138 R-1 tracks this in REVISIT-LIST as "bigint id propagation, post-launch scaling work"
+   
+   Standing-correct deferral.  Net better than cp138 baseline.
+
+2. **cp138-R-2 (matrix-bot-sdk transitive deps):** Opt-in semantics confirmed in `apps/matrix-bot/src/main.ts:35-44`.  The source comment "if an operator doesn't use Matrix, the systemd unit can be safely enabled (or not) and the bot will exit cleanly without consuming resources" is intact.  Operators who don't set `MORPHIT_MATRIX_BOT_ALERT_MXID` never load the SDK.  No code change needed pre-launch; OPERATIONS.md documents the opt-in posture and the practical-exposure annotations from cp138-D-3.
+
+3. **R-3 (Postgres statement_timeout operator guidance):** SHIPPED post-cp138.  Verified:
+   - `OPERATIONS.md §37.8 e.` (line 6534) — the recommendation with concrete `ALTER DATABASE morphit_indexer SET statement_timeout = '30s'` example
+   - `OPERATIONS.md` lines 6579/6581 — escape-hatch documentation for queue drains (`SET statement_timeout = 0; ... RESET statement_timeout;`)
+   - `RUN-A-MORPHIT-NODE.md §11` — one-liner cross-reference
+   - `scripts/operations-hardening-smoke.ts:142` — sentinel coverage `['Postgres statement_timeout', 'statement_timeout']` keeps the OPERATIONS.md guidance present-and-accurate going forward
+
+**Regression check.** Applied key cp138 phase-finding patterns to the current state (19 checkpoints since cp138) to detect any new violations introduced during the intervening work:
+
+| Phase | Pattern | Status |
+|---|---|---|
+| D (SQL injection) | ILIKE without escapeLike() | ✅ 0 violations (only hit is a documentation comment in `shared.ts:33`) |
+| C (random source) | Math.random in security paths | ✅ 2 production uses (ConfirmModal modal-id, endpoints.ts Fisher-Yates) — both non-security; cp138's documented count holds. 8 other hits are all docstring prose explaining "NOT Math.random, which..." |
+| F (code quality) | TODO/FIXME/XXX/HACK | ✅ 0 real instances; 4 hits are all docblock prose ("XXXX-XXXX" display format, `\uXXXX` unicode escapes) |
+| G (ReDoS) | (X+)* catastrophic-backtracking | ✅ 0 hits in production source.  cp138's permlink validator pattern still benchmarks <1ms at 10k chars. |
+| E (XSS via @html) | New `{@html}` sites since cp138's 16-site enumeration | ⚙️ Count grew to 23 across all files including tests; **verified safe** |
+
+**@html count delta breakdown (16 → 23):**
+
+| Delta | Site | Verdict |
+|---|---|---|
+| +4 | `lib/components/WelcomeFirstBuyHero.svelte` — `{@html $_('welcome_first_buy.bullet_*')}` (free, starter, runway, bp_stake) | ✅ i18n keys covered by existing `i18n-html-injection-smoke.ts` which walks all `{@html $_(...)}` callsites and scans all 10 locale files |
+| +3 | Test files: `lib/avatar/index.test.ts` (1), `lib/indexer/profileProps.test.ts` (1), `lib/avatar/index.ts` (1 — the production sanitizer itself) | ✅ Test files + sanitizer reference, not new XSS surface |
+| +2 | `lib/utils/splitOnPlaceholder.ts` — both hits inside docblock prose ("we don't use {@html} because translators are part of our trust boundary but a compromised-CDN locale file should not be able to inject script tags") | ✅ Documentation prose, not code |
+| +1 | `lib/blurt/ops/profile.ts` — inside docblock prose ("Rendered by IdentityLabel via {@html} so it MUST be safe at the point of broadcast") | ✅ Documentation prose, not code |
+| +1 | `lib/components/IdentityLabel.svelte` — extra `@html` for avatar SVG (cp138 enumerated 1 instance for IdentityLabel; now 3) | ✅ All sanitized via `$lib/avatar/index.ts sanitizeSvg` with 39 test cases (cp138 verified) |
+| +1 | `routes/[lang]/[x+40][account=account]/+page.svelte` — extra hit for account profile avatar (cp138 had 1; now 2) | ✅ Same sanitizer chain as IdentityLabel |
+| +1 | `lib/components/Head.svelte` — extra hit (cp138 had 2 for onion-location + JSON-LD; now 3) | ✅ Worth a spot-check but Head.svelte's @html sites are all hardcoded-internal (no user input) |
+
+**Net: 4 new i18n-keyed bullets (all sentinel-covered) + the rest is non-code or non-XSS surface.**  No new unsafe `@html` sites since cp138.
+
+**Outcome:** cp138 audit-plan walk complete.  Zero new findings.  Zero regressions across the 19 checkpoints since cp138.  All standing follow-ups in their expected state or better.
+
+**Verified clean:**
+- Triple-pulse smokes: 6226/6226/6226 (from cp157, no code changes in cp158)
+- TypeScript: 0 errors × 12 projects
+- svelte-check: 0/0
+- Smoke battery unchanged from cp156/cp157 baseline (walk-only checkpoint, no new smokes shipped)
+
+**Smoke runner script count:** 246 (unchanged from cp157).
+
+**Lesson — walking a completed audit's standing follow-ups is the right way to verify health.**  cp138's standing follow-ups document what we'd intentionally deferred; cp158 re-walks them to verify they're still in their deferred-correct state.  R-1 going from 11 sites to 2 (net better than baseline) is a healthy signal: the deferred work didn't grow, it shrank as adjacent refactors absorbed the cleanup organically.  R-2 (matrix-bot) and R-3 (statement_timeout) confirm the post-cp138 commitments held.  Regression-pattern sampling across the cp138 phases turned up zero issues — the cp138 invariants survived 19 checkpoints of subsequent work intact.
+
+This is what "the audit campaign worked" looks like.
+
+**cp157 (2026-05-27, prior turn this session):** apps/relay focused audit applying the cp146-style finding lens.
+
+**Audit scope:** 8800 lines across 32 TypeScript files.  Walked the two biggest single-file attack surfaces in depth (`apps/relay/src/api/create.ts` — 864-line signup endpoint, the user-facing fund-spending route; `apps/relay/src/middleware/ip.ts` — 382-line forwarded-header trust logic).  Spot-checked the remaining middleware (`security.ts`, `origin_enforcement.ts`, `ratelimit.ts`).
+
+**Scan-pattern results (cp146 finding lens):**
+
+| Pattern | Relay status |
+|---|---|
+| F-mcp-1 — SSRF / `fetch()` calls | ✅ No fetch() in relay source.  Relay only talks to Blurt nodes (via `@beblurt/dblurt` client) and PostgreSQL (via pool).  Both internal contracts, no SSRF surface. |
+| F-mcp-2 — URL credential leak | N/A — no fetch() |
+| F-mcp-3 — redirect-follow | N/A — no fetch() |
+| F-mcp-4 — User-Agent | N/A — no outbound HTTP |
+| F-mcp-5 — response body cap | N/A for outbound; INBOUND covered by `middleware/security.ts maxBodyBytes` (Content-Length pre-check + chunked-encoding 411 rejection) |
+| F-mcp-6/12/13 — URL building consolidation | N/A — relay doesn't construct user-facing URLs |
+| F-mcp-7 — locale prefix | N/A — relay returns JSON-only |
+| F-mcp-16 — marketing-prose drift | ✅ Walked all user-facing error messages; all factual ("Daily signup limit reached", "Account signup is currently unavailable on this relay") |
+| F-mcp-22 — Docker `:latest` | ✅ No Dockerfile in apps/relay |
+| F-mcp-27 — `verbatimModuleSyntax` | ⚙️ Flipped `false → true` (zero source changes — same pattern as cp155 mcp-server flip) |
+| F-mcp-30 — LICENSE / packaging | N/A — relay is internal, not published as npm package |
+
+**`api/create.ts` 9-layer defense stack walked end-to-end and verified:**
+
+1. **Kill-switch (env + file)** — operator pause via `MORPHIT_RELAY_SIGNUP_ENABLED=0` or `touch SIGNUPS_DISABLED` runtime file
+2. **Global daily ceiling `tryReserve()` atomic** — closes the canAccept-then-increment N-1 overshoot from concurrent requests; explicit audit-fix annotation in source
+3. **Per-IP burst limiter** — `allow(bucketKey)` consumes on attempt, not on success (real rate-limiter behavior)
+4. **Per-IP daily limiter PEEK + spacing** — peek-vs-commit pattern lets legitimate users iterate through usernames-that-turn-out-taken without burning quota
+5. **Health pre-check** — relay BLURT funds available
+6. **Zod schema parse + `.strict()` shape lockdown** — every body field shape-validated before use
+7. **Invite-token HMAC verify** — bound to IP /24-or-/64 bucket, expiry-checked, single-use after consume
+8. **Name validation + high-value-name policy + sequential-pattern detector** — anti-squatter + anti-enumeration defenses, all logged with operator-tunable thresholds
+9. **Pubkey validation × 4 roles + weight check + distinct-keys check** — owner/active/posting/memo all individually `isValidPublicKey()`, weights==1, set-cardinality==4
+10. **Composite-fingerprint dedupe** — 60s window, key on `sha256(name + keys)` not key-fingerprint alone (so a user retrying with a different name after `already_registered` isn't blocked for 60s)
+11. **Final chain availability check** — `blurt.getAccount(name)`
+12. **Broadcast with try/finally for reservation release** — `handleWithReservation()` pattern auto-releases the ceiling reservation on any path that didn't call `finalize()`
+13. **Post-success bookkeeping** — invite consume + daily limiter commit + ceiling record + 1-BLURT signup dust + sequential-detector record; all defensive (failures here can't undo the chain record, so logged-but-not-failed)
+14. **Error-path** — duplicate-transaction recovery (chain accepted earlier retry → look up account → return success-shape); error-message redaction with "Never echo the full error to the caller — it may contain hex-encoded transaction bytes" comment
+
+Every layer correctly implemented and explicitly documented in source.  No new HIGH/CRITICAL findings.
+
+**`middleware/ip.ts` trust-boundary review:**
+
+- **Default trusts only loopback** (`127.0.0.1`, `::1`, `::ffff:127.0.0.1`) — secure default
+- **Operator-configurable** via `MORPHIT_RELAY_TRUSTED_PROXY_IPS` env (CIDR + bare addresses, IPv4 CIDR + IPv4/IPv6 exact-match)
+- **Documented as "most dangerous knob"** — misconfig in either direction (too narrow → shared rate-limit buckets; too broad → forge-XFF rate-limit bypass) called out explicitly in source comments
+- **X-Forwarded-For 64-char cap** — prevents bucket-map bloat from absurdly-long forged headers
+- **IPv4-mapped IPv6 unwrap** (`::ffff:1.2.3.4`) for dual-stack normalization
+- **`/24` IPv4 + `/64` IPv6 bucket prefixes** — defeat `/64`-prefix attacker source-addr budget
+- **`main.ts:32+106-122` verified to actually call `configureTrustedProxies()` at boot** from `cfg.trustedProxyIps` env
+
+**`clientIp()` is the SOLE forwarded-header reader** — grep `x-forwarded-for|x-real-ip|remoteAddress` across relay source returned exactly the four lines inside `middleware/ip.ts`.  Three call sites (`api/create.ts`, `api/push.ts`, `api/availability.ts`) all route through the trusted-peer-gated extractor.  No bypass paths.
+
+**`middleware/security.ts` review:**
+
+- Body-size cap via Content-Length pre-check (rejects pre-read, no memory consumption)
+- Body-bearing methods (POST/PUT/PATCH) WITHOUT Content-Length but WITH `Transfer-Encoding: chunked` get 411 — closes the chunked-encoding unbounded-body bypass
+- Stock security headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy: interest-cohort=()`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'`
+- Defense-in-depth with nginx that sets similar headers; documented as belt-and-braces
+
+**`middleware/origin_enforcement.ts` review:**
+
+- Acknowledges CORS is browser-only; server-side allowlist with 403 catches curl/bot/Postman bypass attempts
+- Missing-Origin → 403 (fails closed, the safe direction for fund-spending endpoints)
+- Scoped to fund-spending endpoints only (read-only routes stay permissive for operator debugging)
+- Triple defense for /v1/account/create: CORS (browser-side) + origin_enforcement (server-side) + per-IP rate limits
+
+**`middleware/ratelimit.ts` review:**
+
+- Sliding-window with separate `allow()` + `peekWithSpacing()` + `commit()` primitives — exactly the pattern api/create.ts uses for the peek-then-commit-after-chain-confirms shape
+
+**LOW/INFO findings (documented, not blocking):**
+
+- **F-relay-N1** (INFO): XFF leftmost-split is correct for single-trusted-proxy hop; multi-hop chains require per-hop proxy config documented in `OPERATIONS.md §32`.  Operator config, not a code bug.
+- **F-relay-N2** (INFO): IPv6 CIDR not supported; operators with IPv6 reverse proxies must whitelist each address individually.  Documented limitation in `configureTrustedProxies()` docblock.
+- **F-relay-N3** (INFO): Module-level mutable state for `trustedExactPeers`/`trustedV4Cidrs` is correct per the "called once at boot" contract — verified `main.ts` actually calls before any handler registers.
+
+**Code change shipped:**
+
+`apps/relay/tsconfig.json`: added `"verbatimModuleSyntax": true,` after `"isolatedModules": true,`.  Zero typecheck errors after the flip.  Zero source changes required.  Same pattern as cp155 F-mcp-27 (mcp-server) — the source already used `import type` consistently from earlier discipline.  Now consistent with the rest of the monorepo's workspaces.
+
+**Verified clean:**
+- Triple-pulse smokes: 6226/6226/6226, 0 runners failed
+- TypeScript: 0 errors × 12 projects (with `verbatimModuleSyntax: true` now in relay + mcp-server)
+- svelte-check: 0/0
+- Smoke battery unchanged from cp156 baseline (audit only, no new smokes)
+
+**Smoke runner script count:** 246 (unchanged from cp156).
+
+**cp156 (2026-05-27, prior turn this session):** F-mcp-7 closure — root locale-detection shell `?then=` support.
+
+**The web-app fix** (`apps/web/src/routes/+page.svelte`):
+
+Extended the existing root shell that does `navigator.languages` detection + locale redirect.  Before cp156, the shell ignored everything except path/query/hash passthrough.  After cp156, the shell extracts `?then=` from the URL, validates it against three safety constraints, and uses it as the redirect target.
+
+**Safety constraints on `?then=` value:**
+1. **Must start with `/`** — absolute path only, no relative redirects.
+2. **Must NOT start with `//`** — blocks protocol-relative URL escape (e.g. `?then=//evil.com/` would redirect off-site).
+3. **Must NOT contain `\`** — blocks Windows-path normalization escapes (some browsers fold `\` → `/`).
+
+Malformed values silently fall back to the bare-root redirect (`/{lang}`) rather than erroring.  A typoed/malicious deeplink yielding "you landed on Morphit's homepage" is friendlier than a stuck loading spinner.
+
+**The mcp-server fix** — three deeplink call sites updated to use the new form:
+
+| File | Before | After |
+|---|---|---|
+| `describeMorphit.ts:96` | `${base}/en/faq` | `${base}/?then=/faq` |
+| `searchOrders.ts:148` | `${base}/en/orderbook` + searchParams | `${base}/?then=/orderbook?...` (inner URL built then encoded into outer `then`) |
+| `getListing.ts:72` | `/en/@${account}/${permlink}` | `${base}/?then=/@${account}/${permlink}` |
+
+The redirect chain: AI agent hands user `${base}/?then=/orderbook?asset=BTC` → user clicks → root shell loads → `navigator.languages` picks `es` → `window.location.replace('/es/orderbook?asset=BTC')`.  One extra hop, but the user's actual locale is preserved on every deeplink.
+
+**Trade-off:** the redirect-hop introduces ~50ms latency on AI deeplink handoffs.  Acceptable because the user is already in a multi-step flow (read AI summary → decide to click → land on Morphit → unlock identity → reply to listing); one extra invisible client-side redirect is not the bottleneck.
+
+**Why client-side redirect, not server-side Accept-Language detection:**
+
+Server-side detection would be cleaner UX (no redirect hop), but it would introduce a server-side dependency where there isn't one today.  Morphit web is currently fully prerendered + statically deployable (operators can serve from any static host — nginx, Caddy, a CDN bucket).  Adding a hooks.server.ts Accept-Language reader would require every operator's deployment to support SvelteKit's adapter-node or equivalent runtime.  Not worth it for a ~50ms UX win.
+
+**NEW smoke:** `scripts/root-shell-then-redirect-smoke.ts` (4 scenarios):
+
+1. **Safety predicate** — 15 cases covering SAFE (`/orderbook`, `/faq`, `/@alice/permlink`, bare `/`, paths with query) and UNSAFE (`//evil.com`, `http://full-url`, missing-leading-slash, contains-backslash, empty, null).
+2. **Well-formed-then target construction** — 10 cases × all 10 supported locales, verifying `/{lang}{then}` for each.
+3. **Malformed-then fallback** — 6 cases covering null, empty, protocol-relative, full URL, missing-leading-slash, contains-backslash; all fall back to `/{lang}`.
+4. **Source-sentinel** — 8 markers in the shell source: URLSearchParams extraction, length>0 check, leading-slash check, protocol-relative check, backslash check, target-construction template, fallback-to-localePath, cp156 docblock attribution.
+
+Tamper-tested: removing the protocol-relative check fires the source-sentinel; restored, all 4 pass.
+
+**mcp-server-smoke updated:** scenario 8 expectation changed from `/en/orderbook?asset=XMR` to `/?then=%2Forderbook%3Fasset%3DXMR` (the new URI-encoded shape).
+
+**Verified clean:**
+- Triple-pulse smokes: 6226/6226/6226, 0 runners failed
+- TypeScript: 0 errors × 12 projects
+- svelte-check: 0/0
+- All three mcp-server smokes pass with new deeplink shape
+- mcp-server build: clean
+
+Smoke battery growth cp155 6221 → cp156 6226 (+5).  Breakdown: +4 new root-shell smoke + 1 derived growth.
+
+**Smoke runner script count:** 246 (was 245 at cp155).
+
+**cp146 finding cluster — fully closed:**
+
+All 13 actionable F-mcp-* findings now closed.  F-mcp-7 was the last deferred item; cp156 ships the web-app change recommended in cp155's reclassified analysis.
+
+**cp155 (2026-05-27, prior turn this session):** Tier-C cleanup.
+
+**F-mcp-22 — no-`:latest`-Docker-tag sentinel:**
+
+NEW `scripts/no-docker-latest-tag-smoke.ts` (3 scenarios).  Walks every Dockerfile (`Dockerfile*`, `*.containerfile`), docker-compose config (`docker-compose*.yml`, `compose.yml`), and operator-facing markdown (`apps/`, `packages/`, `ops/`, `docs/`) for `:latest` references.  Three invariants:
+1. No `:latest` in any container config.
+2. No `:latest` in operator-facing markdown (outside documented guidance prose).
+3. Guidance allowlist (`PROSE_GUIDANCE_PATHS`) is non-empty and includes the canonical `apps/mcp-server/README.md` guidance.
+
+**Smarter than naive regex:** strips backtick-quoted text before matching, so guidance prose like "never `:latest`" doesn't trip the smoke even outside the allowlist.  This lets operator docs include the explanatory note inline next to the pinned image directives.
+
+**Fixed two real pre-existing violations** in `docs/OPERATIONS.md` (Monero block-explorer template):
+- `sethforprivacy/simple-monerod:latest` → `ghcr.io/sethforprivacy/simple-monerod:v0.18.4.1` (also corrected to the actively-maintained ghcr.io path)
+- `xmrblocks:latest` → `morphit-xmrblocks:v1` (local build, namespaced + version-pinned)
+
+Added inline operator-facing comment: "(Pin both images to specific tags — never `:latest` — for reproducibility.  Update by checking the upstream pages for current stable releases before each deploy.)"
+
+PROSE_GUIDANCE_PATHS includes `apps/mcp-server/README.md`, `docs/INTEGRATION-TEST-HARNESS-DESIGN.md`, `docs/REVISIT-LIST.md`, `docs/REVISIT-LIST-ARCHIVE.md`, `TARBALL.md`, and the smoke itself (which mentions `:latest` to explain what it enforces).
+
+**Tamper-tested:** reintroducing an `image: foo:latest` directive in OPERATIONS.md correctly fires the smoke with the violation line + remediation pointer.
+
+**F-mcp-27 — verbatimModuleSyntax tsconfig flip:**
+
+Flipped `apps/mcp-server/tsconfig.json` `verbatimModuleSyntax: false` → `true`.
+
+**Outcome:** zero typecheck errors, zero source changes required.  The mcp-server source ALREADY used `import type` consistently throughout (all type-only imports already had the `type` keyword).  The cp146 finding was about the flag-value inconsistency with other workspaces, not actual import-syntax violations.  Build clean.  All three mcp-server smokes (mcp-server-smoke 8/8, fetchjson-body-cap-smoke 3/3, private-instance-policy-smoke 22/22) still pass.
+
+This is a "the fix was trivially clean because earlier discipline kept the source aligned even when the flag wasn't enforcing it" outcome.  Good news: no follow-up needed.
+
+**F-mcp-7 — RECLASSIFIED, not fixed:**
+
+The cp146 finding asserted "Web UI's Accept-Language detection would do the right thing without a prefix."  Verification this session showed this is incorrect.
+
+The web app's locale routing structure (`apps/web/src/routes/[lang]/...`) puts all content under `[lang]/` subtrees.  The root `+page.svelte` does client-side `navigator.languages` detection and redirects to `/{detected-lang}/`, but ONLY at the root `/` path.  A URL like `/orderbook` (without locale prefix) doesn't match any route and would 404.
+
+Three call sites in mcp-server still hardcode `/en/`:
+- `apps/mcp-server/src/tools/describeMorphit.ts:96` — FAQ URL
+- `apps/mcp-server/src/tools/searchOrders.ts:148` — orderbook deeplink
+- `apps/mcp-server/src/tools/getListing.ts:72` — listing deeplink
+
+**Stripping `/en/` would break these deeplinks.**  The right fix requires either:
+
+(a) Adding `?then=/path` query-parameter support to the root `+page.svelte` shell, so `${base}/?then=/orderbook?asset=BTC` redirects to `/{detected}/orderbook?asset=BTC` after locale negotiation.  Clean shape; small web-app change; introduces a redirect hop on every AI-deeplink handoff.
+
+(b) Adding server-side Accept-Language detection via SvelteKit hooks or nginx/Caddy config.  Cleaner UX (no redirect hop) but introduces server-side dependency where there isn't one today (Morphit web is prerendered + statically deployable).
+
+Both options are bigger than Tier-C polish.  Deferred with corrected analysis in cp155 REVISIT-LIST entry; will revisit during pre-launch polish phase or when locale-aware deeplink demand surfaces.
+
+**Verified clean:**
+- Triple-pulse smokes: 6221/6221/6221, 0 runners failed
+- TypeScript: 0 errors × 12 projects (with `verbatimModuleSyntax: true` in mcp-server)
+- svelte-check: 0/0
+- All three mcp-server smokes pass
+- mcp-server build: clean
+
+Smoke battery growth cp154 6217 → cp155 6221 (+4).  Breakdown: +3 new no-docker-latest-tag-smoke + 1 derived growth.
+
+**Smoke runner script count:** 245 (was 244 at cp154).
+
+**cp146 finding cluster status:**
+
+| Finding | Status | Closed by |
+|---|---|---|
+| F-mcp-1 (MED) — SSRF defense | CLOSED | cp154 |
+| F-mcp-2 (HIGH) — URL credential leak | CLOSED | cp146 |
+| F-mcp-3 (HIGH) — redirect-follow to internal | CLOSED | cp146 |
+| F-mcp-4 (LOW) — User-Agent from package.json | CLOSED | cp146 |
+| F-mcp-5 (MED) — response body cap | CLOSED | cp151 |
+| F-mcp-6/13/17 (LOW) — getInstanceUrl consolidation | CLOSED | cp146 |
+| F-mcp-7 (LOW UX) — hardcoded `/en/` | **RECLASSIFIED** (cp155 — needs web-app change) | (deferred) |
+| F-mcp-12 (LOW) — URL building | CLOSED | cp146 |
+| F-mcp-16 (MED) — honest IP-visibility prose | CLOSED + LOCKED | cp146 + cp152 smoke |
+| F-mcp-22 (LOW) — `:latest` Docker tag | CLOSED + SENTINEL | cp155 |
+| F-mcp-23/24 (LOW) — README forthcoming markers | CLOSED | cp146 |
+| F-mcp-27 (LOW) — verbatimModuleSyntax | CLOSED | cp155 |
+| F-mcp-30 (HIGH) — LICENSE packaging defect | CLOSED | cp146 |
+
+All actionable findings closed.  F-mcp-7 reclassified with corrected scope and a clear path forward for when polish phase begins.
+
+**cp154 (2026-05-27, prior turn this session):** F-mcp-1 SSRF defense via lifted federationProbe.
+
+**NEW shared workspace:** `packages/net-defense/` (`@morphit/net-defense`, `"private": true`).  Exports two pure functions byte-for-byte lifted from the indexer's `federationProbe.ts`:
+- `isPrivateHostname(hostnameRaw: string): boolean` — URL-side literal-form denylist (loopback, RFC1918, link-local, cloud-metadata, .local/.internal TLDs, IPv6 unique-local + link-local + loopback)
+- `isPrivateIp(ip: string): boolean` — DNS-resolved IP form (same coverage plus CGNAT, IPv4-mapped IPv6 unwrap)
+
+**Threat model differs per consumer**, so they compose policy independently:
+
+| Layer | indexer (peer-supplied URL) | mcp-server (user-supplied URL) |
+|---|---|---|
+| HTTPS-only | Required | Not enforced (Tor onions / local dev) |
+| Literal denylist | Hard reject | **Reject by default, env opt-in** ← cp154 closure |
+| DNS rebinding defense | Required | Out of scope |
+| IP-pinned dispatcher | Required (TOCTOU) | Out of scope |
+| redirect: manual | Required | Shipped at cp146 |
+| Body cap | 256 KB | 4 MiB (cp151) |
+
+**Consumer refactor:**
+- `apps/indexer/src/indexer/federationProbe.ts` — inline function bodies replaced with `import { isPrivateHostname, isPrivateIp } from '@morphit/net-defense'` + named re-export.  Existing callers and smokes that import from `federationProbe.ts` unchanged.  Why import + re-export instead of bare `export { X } from '...'`: the internal callers `resolveAndValidatePublicIp` and `fetchJson` reference these symbols by name, and pure re-exports don't create local bindings.  Caught at typecheck — 0 errors after the fix.
+- `apps/mcp-server/src/indexerClient.ts:getInstanceUrl()` — F-mcp-1 closure: rejects private hostnames by default with clear diagnostic ("If this is intentional (self-hosted instance, Tor onion that resolves locally, dev setup), set MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE=1 to opt in"); allows when env var equals `'1'` exactly (strict — loose-truthy values `'true'`/`'yes'`/`'on'`/etc. do NOT activate the opt-in).
+
+**Monorepo wiring (followed ADDING-A-WORKSPACE.md Phase 3):**
+- Root `package.json:workspaces` adds `packages/net-defense` (11 workspaces)
+- `apps/indexer/package.json` + `apps/mcp-server/package.json` add the dep
+- `package-lock.json` regenerated via `npm install` (the cp144 step)
+- `scripts/typecheck-sweep.sh` adds the `net-defense` project (12 projects all clean)
+
+**New smokes:**
+- `packages/net-defense/scripts/net-defense-smoke.ts` (51 scenarios): every branch of both functions — IPv4 ranges, RFC1918, link-local, cloud-metadata, IPv6 forms, IPv4-mapped IPv6 unwrap, CGNAT boundaries (100.63 just below + 100.128 just above), TLD suffixes, public controls (8.8.8.8, 1.1.1.1, 2001:db8, 2606:4700), documented edge cases (trailing dot, mixed case).
+- `apps/mcp-server/scripts/private-instance-policy-smoke.ts` (22 scenarios): public always allowed, 6 private URLs rejected by default with diagnostic, 6 private URLs allowed with opt-in, 6 loose-truthy values do NOT activate opt-in, malformed URL rejected, unsupported scheme rejected.
+
+**Existing mcp-server smokes patched** to set `MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE=1` (they bind 127.0.0.1 for local stubs):
+- `apps/mcp-server/scripts/mcp-server-smoke.ts` — env block in spawn call
+- `apps/mcp-server/scripts/fetchjson-body-cap-smoke.ts` — env set/restore around test body
+
+**Documentation updated same-turn:**
+- `docs/adr/0045-net-defense-shared-package.md` — full ADR documenting lift decision, per-consumer threat model differences, why two functions (URL-form vs DNS-form), why "private" (not published)
+- `MORPHIT-BRAG-LIST.md` — entry 154 updated to 44 ADRs / 0001 through 0045; verification trailer updated
+- `README.md` — packages list now includes `net-defense`; ADR range references updated
+- `apps/web/static/morphit-mediakit.zip` — regenerated via `scripts/build-mediakit.sh`
+- `apps/web/scripts/persona-walkthrough-smoke.ts` — P122-CP3 sentinel updated for cp154 lifted form (federationProbe.ts now has re-exports + imports from @morphit/net-defense), NEW P122-CP3-cp154 sentinel pins net-defense package contents (the subtle `::ffff:` IPv4-mapped IPv6 unwrap + `100\.(6[4-9]` CGNAT regex)
+
+**Smokes that fired correctly during pulse 1** (the system working as designed):
+- `brag-list-trailer-invariants-smoke` — caught the ADR-0044→0045 trailer drift
+- `brag-list-claim-parity-smoke` — caught two README ADR-range claims
+- `mediakit-freshness-smoke` — caught stale mediakit zip
+- `persona-walkthrough-smoke` — caught the federationProbe sentinel needing update
+
+All four patched in the same turn — none required additional design work, just same-turn doc/sentinel sync.  This is exactly the discipline pattern the smokes were built to enforce.
+
+**Verified clean:**
+- Triple-pulse smokes: 6217/6217/6217, 0 runners failed
+- TypeScript: 0 errors × 12 projects
+- svelte-check: 0/0
+- mcp-server-smoke: 8/8 still passing (loopback opt-in wired correctly)
+- fetchjson-body-cap-smoke: 3/3 still passing
+- mcp-server build: clean
+
+Smoke battery growth cp153 6136 → cp154 6217 (+81).  Breakdown: +51 net-defense self-test, +22 private-instance-policy, +1 new persona-walkthrough sentinel, +7 derived growth in other smokes walking the new files/docs.
+
+**Smoke runner script count:** 244 (was 242 at cp153).
+
+**cp146 finding cluster now fully closed:**
+- F-mcp-1 (MED) — SSRF defense via private-address denylist → **cp154 (this checkpoint)**
+- F-mcp-2 (HIGH) — URL credential leak → cp146
+- F-mcp-3 (HIGH) — redirect-follow to internal → cp146 (redirect:'manual')
+- F-mcp-4 (LOW) — User-Agent from package.json → cp146
+- F-mcp-5 (MED) — response body cap → cp151
+- F-mcp-6/13/17 (LOW) — getInstanceUrl consolidation → cp146
+- F-mcp-12 (LOW) — URL building via `new URL()` → cp146
+- F-mcp-16 (MED) — honest IP-visibility prose → cp146 (and cp152 marketing-prose smoke locks it)
+- F-mcp-23/24 (LOW) — README forthcoming markers → cp146
+- F-mcp-30 (HIGH) — LICENSE packaging defect → cp146
+
+Only the cp146 deferred Tier-C items remain (low-priority polish: `:latest` Docker tag, `verbatimModuleSyntax`, hardcoded `/en/` deeplink).
+
+**cp153 (2026-05-27, prior turn this session):** Shared comment-stripping helper.
+
+**NEW self-test smoke:** `scripts/strip-comments-smoke.ts` (15 scenarios covering core behaviors, subtler cases, documented limitations, and empty/pathological inputs).
+
+**Caught and resolved a meta-bug while writing:** the literal `*/` sequence inside the helper's docblock (and the self-test smoke's docblock) prematurely closed the outer block comment, causing esbuild to throw confusing "Expected ;" errors at later lines.  Resolved by paraphrasing the docblock prose to avoid the literal close-marker — uses "OPEN" / "CLOSE" prose references instead.  The irony of comment-stripping logic breaking on its own comment markers is documented inline.
+
+**cp152 (2026-05-27, this session):** Source-marketing-prose smoke — closes the cp146 Lesson #3 candidate.
+
+`scripts/source-marketing-prose-smoke.ts` pins critical marketing claims and bans known-misleading phrasings in the source-embedded strings AI agents quote verbatim to users.
+
+**Pinned (8 phrases must be present):**
+
+- `describeMorphit.ts`: "Instance operators see the connecting IP at the HTTP layer", "per-user IP log of its own", "Tor onions", "non-custodial", "federated", "no email collection" (cp146 F-mcp-16 honest-IP-visibility set)
+- `searchOrders.ts`: "non-custodial and KYC-free", "the agent never sees keys"
+
+**Banned (4 phrasings must NOT appear):**
+
+- `describeMorphit.ts`: "no IP logging by design" (the pre-cp146 misleading shorthand), "completely anonymous", "we cannot see"
+- `searchOrders.ts`: "anonymous"
+
+Each pin has a `since: cpNN-finding` rationale; each ban has a `from: cpNN-finding` rationale.  Smoke fails with the rationale string included so future maintainers know why each rule exists before they reach for the smoke's allowlist.
+
+**Tamper-tested all directions:**
+- Reintroduce "no IP logging by design" → smoke fires with cp146 F-mcp-16 reference
+- Remove "Tor onions" from describeMorphit → smoke fires with cp146 F-mcp-16 reference
+- Remove "non-custodial and KYC-free" from searchOrders → smoke fires with cp140 reference
+
+Restored, 4/4 baseline.
+
+**Memory rule #22 update** (cp148 carryover): committed via memory_user_edits tool.  Memory now reflects four-persona walkthrough including Charlie.
+
+**Verified clean:**
+- Triple-pulse smokes: 6136/6136/6136, 0 runners failed
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+- cp142 + cp149 smokes still pass post-refactor
+
+Smoke battery growth cp151 6114 → cp153 6136 (+22).  Breakdown: +4 cp152 source-marketing-prose, +15 cp153 strip-comments self-test, +3 derived growth in other smokes walking the new files.
+
+**Smoke runner script count:** 242 (was 240 at cp151).
+
+**cp151 (2026-05-27, prior turn this session):** F-mcp-5 response body cap.
+
+**Threat:** A malicious instance operator can return an arbitrarily large response body (multi-GB JSON, infinite chunked stream).  Pre-cp151, `await res.json()` would accumulate everything into memory before parsing, exhausting Charlie's heap and crashing the MCP server.  Worse: from the AI agent's perspective, this looks like a transient tool failure to retry — a single malicious instance could amplify into repeat OOM across the agent's session.
+
+**Two-layer defense:**
+
+1. **Content-Length pre-check.**  If the server declares `Content-Length` exceeding the cap, reject BEFORE allocating a single byte.  Handles honest-server cases where the response was unexpectedly large.
+2. **Streaming reader.**  Read chunks via `res.body.getReader()`, accumulate into an array, abort the fetch + throw when running total crosses the cap.  Handles dishonest `Content-Length` (lying or omitted) and infinite streams.
+
+**Cap value:** 4 MiB default.  Typical orderbook /v1/orders response is ~150 KB; high-water mark observed is ~500 KB; 4 MiB gives 8× headroom.  Operator override via `MORPHIT_MCP_MAX_BODY_BYTES` env var (e.g. for private deployments with extended /v1/ surfaces).
+
+**Implementation details:**
+
+- Replaced `await res.text()` / `await res.json()` with `readBodyCapped()` helper that streams + bounds.
+- Both error path (non-2xx with body) and success path (parse JSON) now route through the cap-aware byte aggregator.
+- JSON parse errors get a clean "response from {url} is not valid JSON: {msg}" wrapper instead of bare SyntaxError.
+- `ac.abort()` on cap violation releases the network resource without waiting for the server to close.
+
+**NEW smoke:** `apps/mcp-server/scripts/fetchjson-body-cap-smoke.ts` (~210 lines).  Three scenarios using real HTTP servers (no mocking framework):
+- **Normal under-cap response** returns parsed JSON cleanly.
+- **Content-Length pre-check rejection:** server declares 10× cap, body is never sent, fetchJson throws with cap-violation message.
+- **Streaming-overflow rejection:** chunked transfer (no Content-Length) sends 12 KB against an 8 KB cap, fetchJson throws once running total crosses.
+
+**Tamper-tested both check layers independently:**
+- Stubbed the streaming-cap `total > cap` check to `total > MAX_SAFE_INTEGER` → smoke's scenario 3 fails with downstream JSON parse error (correct, since body was unexpectedly truncated).
+- Stubbed the Content-Length pre-check to `declaredN > MAX_SAFE_INTEGER` → smoke's scenario 2 fails with "terminated" (Node's fetch errors when the server closes without body matching declared length).
+
+Restored, 3/3 pass.
+
+**Verified clean:**
+- Triple-pulse smokes: 6114/6114/6114, 0 runners failed (pulses 65, 66, 67)
+- TypeScript: 0 errors × 11 projects
+- mcp-server-smoke: 8/8 with all the body-cap logic in place
+- mcp-server build: clean, dist/main.js with shebang preserved
+
+Smoke battery growth cp150 6111 → cp151 6114 (+3).  All three from the new body-cap smoke; no derived growth (the smoke uses HTTP imports that other smokes don't walk).
+
+**Smoke runner script count:** 240 (was 239).
+
+**cp150 (2026-05-27, prior turn this session):** REVISIT-LIST archive split.
+
+**Outcome:** live file shrank 86% (33,373 lines / 2.1MB → 3,513 lines / 320KB).  Archive: 29,967 lines / 1.8MB at `docs/REVISIT-LIST-ARCHIVE.md`.
+
+**Split boundary** at line 3427 (`## CP99 STATE`).  Everything cp99-and-earlier moved to archive; everything cp100+ kept live.  The boundary is clean because the CP100 STATE/FIXES sections (lines 3307–3322) sit just above CP99 STATE.
+
+**Two smokes caught the archive content during pulse 1** — both fixed in the same turn:
+
+1. **`db-password-placeholder-smoke`** — flagged 17 placeholder mentions in archived cp82-era operator-action recaps.  Added `docs/REVISIT-LIST-ARCHIVE.md` to `ALLOWED_PATHS` with the same rationale pattern as the existing REVISIT-LIST.md entry.
+2. **`forgejo-not-gitea-smoke`** — flagged Gitea→Forgejo cleanup discussion in archived parts.  Added archive to `ALLOW_LIST` + bumped integrity-test size from 3 → 4 entries.
+
+This is a textbook example of cp150 Lesson #1 ("first check if any tool actually parses the file's content"): both smokes were walking the source tree without explicit knowledge of the live-vs-archive split, and they correctly fired when the split landed.  Patching them was a 4-line change each.
+
+**Cross-file plumbing:**
+- Live file gains a footer pointing at the archive.
+- Archive gains a 30-line header explaining what it covers, what it doesn't, and three concrete use cases for when to read it.
+
+**Verified clean:**
+- Triple-pulse smokes: 6111/6111/6111, 0 runners failed (pulses 62, 63, 64)
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+- File integrity: original 33,373 lines + 31 lines of new headers/footers = 33,404 total preserved.
+
+Smoke battery count unchanged: cp149's 6111 = cp150's 6111.  No new scenarios; the smokes that walk REVISIT-LIST already excluded it.
+
+**cp149 (2026-05-27, prior turn this session):** mcp-server read-only invariant smoke.
+
+**Three invariants** enforced over every `.ts` file under `apps/mcp-server/src/`:
+
+1. **No signing/mutation primitives.**  A 12-entry pattern list blocks module-spec matches (libsodium, @noble/curves, secp256k1 variants, blurt SDK families, dsteem) AND symbol-name matches (signTx, signAuthored, signPostingKey, signActiveKey, signMemoKey, signMemo, broadcastTransaction, broadcastAuthored, deriveKeyPair, derivePostingKey, crypto_sign*).  Hits include file:line + the offending import line + a remediation instruction pointing at ADR-first workflow.
+
+2. **No mutation-API symbols from `@morphit/{indexer,relay}-client`.**  Forward-looking — mcp-server doesn't currently consume these packages, but if it ever does, the smoke catches any symbol matching `/^(post|submit|broadcast|cancel|mutate|sign|publish|send)[A-Z]/` (PascalCase camelCase mutation verbs).
+
+3. **No raw `fetch(` calls outside `indexerClient.ts`.**  Every network call from a tool file must go through `fetchJson()` so it inherits the cp146 hardening (redirect:'manual', User-Agent, URL redaction in errors, AbortController timeout).  Comment-stripping handles `//` and `/* */` so docstrings mentioning fetch don't false-positive.
+
+**Tamper-tested** all three invariants independently:
+  - Injected `import { signTx } from '@noble/curves/secp256k1'` → smoke fires both module-match AND symbol-match with rationale pointing at ADR-first workflow.
+  - Injected `import { postOrder } from '@morphit/indexer-client'` → smoke fires invariant 2 with PascalCase regex hit.
+  - Appended `const x = await fetch('https://example.com');` to searchOrders.ts → smoke fires invariant 3 with file:line.
+
+After restore: 3/3 baseline pass.  Registered as 239th smoke.
+
+**Why this matters:**
+
+The cp148 walkthrough asserts Charlie is read-only by construction.  Without this smoke, that property is preserved by reviewer attention.  A future PR that adds a "submit feedback via MCP" feature could silently invalidate the entire AI-agent trust model — the cp148 walkthrough's verification grep would still pass at the moment of merge, but the next walkthrough would catch the drift weeks later.  cp149 closes the window.
+
+The pattern is the same as cp142–cp146's meta-smokes: find a real bug, fix it, write a smoke to prevent regression of the CLASS, not just the instance.
+
+**Verified clean:**
+- Triple-pulse smokes: 6111/6111/6111, 0 runners failed (pulses 59, 60, 61)
+- TypeScript: 0 errors × 11 projects
+
+Smoke battery growth cp148 6107 → cp149 6111 (+4).  Breakdown: +3 from new smoke's 3 scenarios, +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` from walking the new smoke file.
+
+**cp148 (2026-05-27, prior turn this session):** Four-persona walkthrough — `docs/FOUR-PERSONA-WALKTHROUGH-cp148.md`.
+
+**What's new vs cp137/cp139 walkthroughs:** Adds **Charlie** as a fourth persona alongside Bob, Sally-user, Sally-operator.  Charlie represents the AI-agent audience the cp140 MCP server introduced.  The walkthrough covers Charlie's full flow (install → wire into MCP client → tool calls → deeplink handoff) plus a per-fix breakdown of how each cp146 finding affects Charlie's reliability and the user-facing copy Charlie repeats verbatim.
+
+**Per-persona delta against cp139:**
+
+- **Bob (multi-login Blurt user):** No code path Bob touches was modified in cp140–cp147.  His flow is unchanged.  cp140 surfaces new tradable assets in his orderbook filter; cp146 F-mcp-16 affects copy he never sees (the MCP server is invisible to him by design).
+- **Sally-user (no crypto):** Like Bob, sees cp140 new assets in the orderbook view but her onboarding/feedback/first-buy paths are unchanged.
+- **Sally-operator:** cp144 lockfile fix is silently correct on next pull (she'd never have triggered the failure because her local install is from tarball).  cp146 mcp-server changes don't touch her deployed instance — the MCP server runs on the END USER's machine, not the operator's.
+- **Charlie (NEW, AI agent):** All cp146 Tier-A fixes affect him.  Highest-impact change: F-mcp-16's honest IP-visibility copy in `describeMorphit` — Charlie now quotes the accurate "Instance operators see IP at HTTP layer; data model retains no per-user IP log; Tor onions available" to users instead of the misleading pre-cp146 "no IP logging by design."  Verified read-only by construction: `grep` confirms zero signing primitives in `apps/mcp-server/src/`.
+
+**Caught one real smoke regression along the way:** The new walkthrough mentions `CHANGE_ME_BEFORE_PRODUCTION` in the standing-memory-items table (memory rule #29 callout).  `db-password-placeholder-smoke` correctly flagged this because the literal string is a denylist sentinel.  Added `docs/FOUR-PERSONA-WALKTHROUGH-cp148.md` to `ALLOWED_PATHS` with the same rationale pattern as the existing cp137/cp139 walkthrough entries.
+
+**Process observation logged in the walkthrough:** Memory rule #22 specifies "three personas end-to-end."  cp140's MCP server creates a fourth audience distinct enough to warrant fourth-persona status.  Walkthrough recommends updating the rule.
+
+**Verified clean:**
+- Triple-pulse smokes: 6107/6107/6107, 0 runners failed (pulses 56, 57, 58)
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+- Smoke battery count unchanged (the new doc adds to ALLOWED_PATHS, which is offset by the new file being walked).
+
+**Zero new code findings** from the walkthrough.  cp140–cp147 hardening lands cleanly across all four personas; persona-critical flows are unregressed; standing memory items are honored.
+
+**cp147 (2026-05-27, prior turn this session):** `docs/ADDING-A-WORKSPACE.md` — six-phase maintainer playbook codifying the cp142–cp146 sub-pipelines.
+
+478 lines, six phases:
+
+1. **Decide the workspace shape** — apps vs packages decision, publishable Y/N, ships-compiled-artifacts Y/N, network-calling Y/N.  These four answers drive the rest of the checklist.
+2. **Create the workspace** — package.json template + tsconfig.json template + LICENSE copy rule if publishable.
+3. **Wire into the monorepo** — register in root `workspaces` array, **regenerate package-lock.json** (the cp144 step), register tsconfig in `typecheck-sweep.sh`, add to ci.yml build step if dist-shipping.
+4. **Build smokes** — minimum content (wire-up sanity / happy path / error path), dist-spawn guard pattern with self-healing `ensureBuilt()` helper, register in `run-smokes.sh`, must emit canonical `✓ all N scenarios passed` line.
+5. **Pre-PR verification** — fresh-checkout clone → `npm ci` (CI's exact command) → typecheck-sweep → triple-pulse → svelte-check → meta-smokes.
+6. **Docs** — README with from-source-first format, ADR if architectural shift, brag-list only if user-facing.
+
+Plus a "what gets caught automatically" table mapping each cp142–cp146 meta-smoke to its class of bug, and a "cp140 → cp146 sequence" table at the end so future readers see the failure cascade and understand WHY each step matters, not just what to do.
+
+**Cross-linked from three places** so it's discoverable:
+
+- `README.md` — For-developers section gained three entries (ADDING-A-WORKSPACE, ADDING-A-COIN, LOCALE-GRADUATION); only ADDING-A-COIN was indirectly findable before, the other two weren't linked from anywhere.
+- `LOCALE-GRADUATION.md` — sibling-doc reference paragraph after the opening summary.
+- `ADDING-A-COIN.md` — same.
+
+Now all three maintainer playbooks reference each other.  A new maintainer landing in any one of them can find the other two.
+
+**Verified clean:**
+
+- Triple-pulse smokes: **6107 / 6107 / 6107**, 0 runners failed (pulses 53, 54, 55)
+- TypeScript: 0 errors × 11 projects
+- svelte-check: 0/0
+
+Smoke battery growth: cp146's 6101 → cp147's 6107 (+6).  All from doc-walker smokes picking up the new 478-line file (brag-list-claim-parity, locale-doc-references-smoke, sibling-doc-cross-link-smoke, etc.).  No new scenarios authored.
+
+**cp146 (2026-05-27, prior turn this session):** Pre-launch deep-deep on `apps/mcp-server`.
+
+Audited 7 TS source files (~1230 LOC) + README + package.json + tsconfig + ADR-0044.  35 findings classified across 4 tiers.
+
+**Tier A (8 fixed this turn):**
+
+- **F30** (real packaging defect): `package.json:files` listed `LICENSE` but no `LICENSE` file existed → `npm publish` would silently ship the tarball without a license, leaving npmjs.com showing "No license."  Fixed by adding `apps/mcp-server/LICENSE` (copy of root AGPL-3.0).
+- **F2 + F3** (LOW SEC): `indexerClient.fetchJson` had two SSRF-adjacent gaps.  (a) Error messages echoed the full URL including userinfo, so `https://user:pass@morphit.io/` would leak creds into chat transcripts.  (b) Default `redirect: 'follow'` allowed a malicious instance to redirect to internal addresses.  Fixed: added `redactUserinfo()` helper (clears `.username`/`.password` then `.toString()`), set `redirect: 'manual'`, and added the opaqueredirect-detection branch with a clear "unexpected redirect from {url}" message.
+- **F4** (INFO): Hardcoded `User-Agent: morphit-mcp/1.0.0-beta.1` replaced with version read from `package.json` via `createRequire` — version never drifts on bump.
+- **F6 + F13 + F17** (LOW): 3 places in 3 different tools (`searchOrders`, `getListing`, `describeMorphit`) read `process.env.MORPHIT_MCP_INSTANCE_URL` directly, bypassing `getInstanceUrl()`'s scheme validation and trailing-slash normalization.  All consolidated to call `getInstanceUrl()`.
+- **F12** (LOW SEC, defense in depth): `getListing` deeplink was built via raw string concat (`${base}/en/@${account}/${permlink}`).  Zod regexes already constrain inputs, but the URL builder is the structural defense.  Now uses `new URL(...)`.
+- **F16** (LOW privacy/copy): `describeMorphit` summary said "no IP logging by design" — could read as "no IP visible" which is misleading.  Tightened to "Instance operators see the connecting IP at the HTTP layer; Morphit's data model retains no per-user IP log of its own, and instances expose Tor onions for users who want IP-level unlinkability."  AI agent will repeat this verbatim to users; matters for the #1 Privacy & anonymity priority.
+- **F23 + F24** (LOW docs): README pointed at `npm install -g morphit-mcp` and `ghcr.io/agorise/morphit-mcp:latest`, but neither pipeline exists yet (release.yml only builds a tarball; no `npm publish` or `docker push`).  Added a "Beta status" callout marking npm + Docker as forthcoming with v1.0.0 stable.  Restructured Installation section: from-source first (current beta state), npm + Docker labeled "(forthcoming, v1.0.0 stable)".  Added from-source variant to the Claude Desktop + Cline wiring config examples.
+- **mcp-smoke temporal-const**: `ensureBuilt()` referenced `ANSI_RED`/`ANSI_RESET` consts declared below it.  Works because called at runtime, but fragile.  Hoisted consts.
+
+**NEW class-of-bug meta-smoke** (cp146): `scripts/package-files-exist-smoke.ts` (~220 lines) enforcing 3 invariants:
+
+  1. Every non-glob entry in every workspace's `package.json:files` exists in the working tree.  Globs (`dist/`, `src/**/*`) are accepted as npm's job.
+  2. Every workspace `bin` target either exists OR is in `dist/` with a `build` script (the cp142 self-healing pattern).
+  3. Every publishable workspace (`private: !== true` AND has `bin`/`main`/`exports`) declares `LICENSE` in its files array.
+
+Tamper-tested all 3 invariants independently.  Registered as 238th smoke.  Caught the F30 class permanently going forward.
+
+**Tier B (5 deferred to REVISIT-LIST):**
+
+- **F1** (MED): SSRF defense — need to lift indexer's `federationProbe` helpers into a shared package.  Bigger refactor; document trust model in README instead for now.
+- **F5** (LOW): no fetch body cap (could exhaust memory on malicious instance response).
+- **F7** (LOW UX): hardcoded `/en/` locale prefix in deeplinks (web UI's Accept-Language detection would do the right thing without it).
+- **F22** (LOW docs): `:latest` docker tag pin — now handled by the "forthcoming" callout.
+- **F27** (LOW): `verbatimModuleSyntax: false` inconsistent with other workspaces.
+
+**Tier C (22 INFO findings, not bugs):** documented in cp146 audit notes but not actioned.
+
+Smoke battery growth: cp145's 6097 → cp146's 6101 (+4).  Breakdown: +3 from new package-files-exist-smoke's 3 scenarios, +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` from walking the new smoke file.
+
+Triple-pulse 6101/6101/6101 stable (pulses 50–52).  Typecheck-sweep 0 errors × 11 projects.  Svelte-check 0/0.  mcp-server-smoke still 8/8 with all the source changes.
+
+**cp145 (2026-05-27, prior turn this session):** CI workflow audit — both `.forgejo/workflows/*.yml` read end-to-end, 5 findings classified.
+
+Audit scope: 460 lines across two workflow files (ci.yml 191 + release.yml 269), 5 jobs total (typecheck, web-check, ansible-lint, smokes, release).
+
+**Findings (severity-ordered):**
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | MED | No `timeout-minutes` on any of the 5 jobs | **Shipped** |
+| 2 | LOW | pip ansible install unpinned (3 places) | Punted (pinning trade-off documented) |
+| 3 | LOW | Outer `for i in 1 2 3` smoke loop unprotected | Subsumed by #1 |
+| 4 | INFO | npx in web-check could go network in pathological cases | Punted (verbose state is more legible than DRY) |
+| 5 | INFO | release.yml's `npm ci` already enforces cp144 lockfile invariant | No fix needed |
+
+**Finding #1 (MED) — shipped:**
+
+cp143 wraps every individual smoke in `timeout 240` inside `scripts/run-smokes.sh`.  But every OTHER CI step (npm ci, tsc, svelte-kit sync, svelte-check, ansible-galaxy, gpg --import, git fetch, tar, npm run build) had no protection.  Without job-level `timeout-minutes`, a hung step burns the runner's default ceiling — which is unlimited on self-hosted Forgejo runners and 360 minutes on hosted GitHub Actions.  Same class of bug as cp143 but at the job/step level, one layer higher in the stack.
+
+Timeouts added (calibrated 2–3× observed runtime):
+
+| Job | Observed runtime | Ceiling | Headroom |
+|---|---|---|---|
+| typecheck | <2 min | 10 min | 5× |
+| web-check | ~3 min | 10 min | 3.3× |
+| ansible-lint | <1 min | 5 min | 5× |
+| smokes | ~18 min (triple-pulse) | 45 min | 2.5× |
+| release | ~25 min | 60 min | 2.4× |
+
+**Meta-smoke:** `scripts/ci-workflow-hardening-smoke.ts` (NEW, ~210 lines) — regex-parses workflow YAML and enforces 4 invariants:
+
+  1. Every CI job declares `timeout-minutes`.
+  2. Every `timeout-minutes` is in range 1..90 (rejects typos like 0 and "ceiling-defeating" values like 9999).
+  3. Every job pins `runs-on` to a concrete OS version, not a moving-target alias like `ubuntu-latest`.
+  4. Every job has `runs-on` declared.
+
+Parser is regex-based (not YAML lib) because the project's transitive `yaml` dep is a phantom — no workspace declares it as a direct dep, importing from a smoke would create dependency fragility.  Workflow YAML conventions are tight enough (2-space job indent, 4-space field indent) that regex covers correctly.
+
+Tamper-tested all 3 actively-checked invariants:
+  - Stripped `timeout-minutes: 10` from typecheck + web-check → smoke names both by `file::name (line N)` with the cp145 rationale and fix instruction.
+  - Set `timeout-minutes: 9999` on smokes → smoke flags as out-of-range, suggests splitting the job into stages.
+  - Replaced `ubuntu-24.04` with `ubuntu-latest` → smoke names all 4 jobs as moving-target with a reproducibility-loss warning.
+
+Restored, 4/4 baseline pass.
+
+**Findings #2 + #4 punted with reasoning:**
+
+  - **#2 pip ansible unpinned**: pinning `pip3 install ansible==X.Y.Z ansible-lint==A.B.C` adds maintenance burden (security fixes don't flow automatically; you have to actively check upstream and bump).  The cost is small CI flakiness on rare major-version-bumps that introduce new strict checks; the benefit of pinning would be near-zero.  Net negative.
+  - **#4 npx-in-web-check**: switching `npx svelte-kit sync` + `npx svelte-check --tsconfig ... --threshold error` to `npm run check -w apps/web` would DRY two lines into one but hide what's running behind `package.json`.  CI step legibility wins; the cp143 Lesson #2 principle ("CI commands deserve direct smokes") suggests keeping them verbatim.
+
+Smoke battery growth: cp144's 6092 → cp145's 6097 (+5).  +4 from new ci-workflow-hardening-smoke, +1 derived growth in `last-char-tamper-anti-pattern-smoke.ts` from walking one additional file.
+
+Triple-pulse 6097/6097/6097 stable (pulses 47–49).  Typecheck-sweep 0 errors × 11 projects.  Svelte-check 0/0.
+
+**cp144 (2026-05-27, prior turn this session):** CI-RED-since-cp140 lockfile drift fix + lockfile-sync smoke.
 
 **Severity:** HIGH.  CI had been failing for ~24 hours and no prior cp caught it.
 
@@ -1333,7 +2236,7 @@ Result: tiered anchor architecture with USD-direct primary + stablecoin suppleme
 
 5. **A1/A14 deferred** — source not recoverable from transcripts; filed for Ken to clarify what those cp113 findings were if hardening is still wanted.
 
-6. **SVG sprite-sheet deferred** — honest pushback to Ken: lazy-loading + per-file Vite caching already do most of the work; sprite-sheet regresses cold-visit cost and ages worse than current architecture. Ken's call queued.
+6. **SVG sprite-sheet RULED OUT** — honest pushback to Ken: lazy-loading + per-file Vite caching already do most of the work; sprite-sheet regresses cold-visit cost and ages worse than current architecture. Ken permanently rejected the idea on 2026-05-27; do not resurface.
 
 **Memory facts (re-confirmed for the new session):**
 - `@agorise:matrix.org` = private DM MXID for security disclosure

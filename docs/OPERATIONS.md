@@ -8215,9 +8215,14 @@ third-party sees any verification request.
 
 ```yaml
 # In docker-compose.yml on your operator box:
+# (Pin both images to specific tags — never `:latest` — for
+#  reproducibility.  Update by checking the upstream pages for
+#  current stable releases before each deploy.)
 services:
   monerod:
-    image: sethforprivacy/simple-monerod:latest
+    # Check https://github.com/sethforprivacy/simple-monerod-docker/pkgs/container/simple-monerod
+    # for the current Monero stable release; pin to that tag.
+    image: ghcr.io/sethforprivacy/simple-monerod:v0.18.4.1
     volumes:
       - ./monero-data:/home/monero/.bitmonero
     command:
@@ -8230,7 +8235,10 @@ services:
     networks: [internal]
 
   block-explorer:
-    image: xmrblocks:latest
+    # Locally-built image (the `build:` directive below compiles
+    # from source).  Pin the local tag so `docker compose up`
+    # rebuilds deterministically when the upstream changes.
+    image: morphit-xmrblocks:v1
     build:
       context: https://github.com/moneroexamples/onion-monero-blockchain-explorer.git
     depends_on: [monerod]

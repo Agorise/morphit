@@ -4,6 +4,8 @@ This document is the procedural checklist for graduating a `PLANNED_LOCALES` ent
 
 Read [`CONTRIBUTING-TRANSLATIONS.md`](./CONTRIBUTING-TRANSLATIONS.md) first if you haven't. That doc explains the JSON-file shape, placeholders, pluralization, RTL handling, and what makes a translation review-ready. This doc is the mechanical "now that the translation is ready, how do I ship it" walkthrough.
 
+Sibling maintainer docs: [`ADDING-A-WORKSPACE.md`](./ADDING-A-WORKSPACE.md) for adding `apps/*` or `packages/*`; [`ADDING-A-COIN.md`](./ADDING-A-COIN.md) for adding a tradable cryptocurrency.
+
 ## When to graduate
 
 A locale is ready to graduate when ALL of these are true:
