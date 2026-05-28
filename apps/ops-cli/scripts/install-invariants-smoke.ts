@@ -69,7 +69,7 @@ const deps = (opsPkg.dependencies ?? {}) as Record<string, string>;
 const devDeps = (opsPkg.devDependencies ?? {}) as Record<string, string>;
 
 if (deps.tsx !== undefined && devDeps.tsx === undefined) {
-	pass('tsx is a PRODUCTION dependency of apps/ops-cli (survives --omit=dev / NODE_ENV=production)');
+	pass('tsx is a PRODUCTION dependency of apps/ops-cli (powers the shim fallback path under --omit=dev)');
 } else if (deps.tsx !== undefined && devDeps.tsx !== undefined) {
 	fail(
 		'tsx is a PRODUCTION dependency only',
@@ -78,58 +78,108 @@ if (deps.tsx !== undefined && devDeps.tsx === undefined) {
 } else {
 	fail(
 		'tsx is a PRODUCTION dependency of apps/ops-cli',
-		`tsx not in dependencies (the bin runs from TS source via tsx; as a devDependency it would be stripped by a production install and the operator would get "command not found"). dependencies=${JSON.stringify(Object.keys(deps))}`
+		`tsx not in dependencies (the bin shim falls back to running TS source via tsx when dist/ is absent; as a devDependency it would be stripped by a production install and the fallback would break). dependencies=${JSON.stringify(Object.keys(deps))}`
 	);
 }
 
-/* ---------------- invariant 2: bin shebang invokes tsx via npx ---------------- */
+/* ---------------- invariant 2: bin launcher shim exists with a node shebang ---------------- */
+
+// cp162: the published bin is a launcher shim (bin/morphit-ops.mjs)
+// that runs the compiled dist/main.js under plain node when present,
+// and falls back to the tsx source otherwise.  The shim itself is
+// plain JS with a node shebang so it always runs under node.
+const shimRel = 'apps/ops-cli/bin/morphit-ops.mjs';
+let shimSrc = '';
+try {
+	shimSrc = readText(shimRel);
+} catch {
+	shimSrc = '';
+}
+const shimShebang = shimSrc.split('\n')[0] ?? '';
+if (shimSrc && /^#!\/usr\/bin\/env node$/.test(shimShebang)) {
+	// The shim must implement BOTH paths: compiled dist + tsx fallback.
+	const hasDistPath = /dist\/main\.js/.test(shimSrc) && /process\.execPath/.test(shimSrc);
+	const hasTsxFallback = /tsx/.test(shimSrc) && /src\/main\.ts/.test(shimSrc);
+	if (hasDistPath && hasTsxFallback) {
+		pass('bin launcher shim has node shebang + compiled-dist path + tsx-source fallback');
+	} else {
+		fail(
+			'bin launcher shim implements both compiled + fallback paths',
+			`hasDistPath=${hasDistPath} hasTsxFallback=${hasTsxFallback} — the shim must run dist/main.js under node when present and fall back to tsx source otherwise`
+		);
+	}
+} else {
+	fail(
+		'bin launcher shim exists with a node shebang',
+		`expected ${shimRel} with "#!/usr/bin/env node"; got shebang ${JSON.stringify(shimShebang)}`
+	);
+}
+
+/* ---------------- invariant 2b: source main.ts keeps its tsx shebang (dev/fallback path) ---------------- */
 
 const mainSrc = readText('apps/ops-cli/src/main.ts');
-const shebang = mainSrc.split('\n')[0] ?? '';
-
-// The npx form is the verified-robust choice: it resolves the
-// local tsx across both the operator's bare-shell direct-bin
-// invocation AND the npm-managed `npx morphit-ops` path.  A bare
-// `tsx` shebang (no npx) fails in a bare shell where tsx isn't on
-// PATH (verified cp161-verify), so the npx form must be preserved.
-if (/^#!\/usr\/bin\/env -S npx tsx$/.test(shebang)) {
-	pass('bin shebang is "#!/usr/bin/env -S npx tsx" (robust across bare-shell + npm invocation)');
+const srcShebang = mainSrc.split('\n')[0] ?? '';
+// src/main.ts is still run directly by tsx in the dev path (`npm
+// start`/`dev`) and the shim's fallback.  Its shebang stays the
+// robust npx-tsx form so `tsx src/main.ts` and bare-shell runs work.
+if (/^#!\/usr\/bin\/env -S npx tsx$/.test(srcShebang)) {
+	pass('src/main.ts keeps its "#!/usr/bin/env -S npx tsx" shebang (dev + fallback path)');
 } else {
 	fail(
-		'bin shebang invokes tsx via npx',
-		`shebang is ${JSON.stringify(shebang)}; expected "#!/usr/bin/env -S npx tsx". A bare "tsx" shebang fails in a shell where tsx isn't on PATH (the operator's direct-bin fallback path).`
+		'src/main.ts keeps its tsx shebang',
+		`shebang is ${JSON.stringify(srcShebang)}; expected "#!/usr/bin/env -S npx tsx" for the dev/fallback run path`
 	);
 }
 
-/* ---------------- invariant 3: bin field points at an existing source entry ---------------- */
+/* ---------------- invariant 3: bin field points at the shim; build script + files present ---------------- */
 
 const binField = opsPkg.bin as Record<string, string> | undefined;
-if (binField && binField['morphit-ops'] === 'src/main.ts') {
-	pass('bin field maps morphit-ops → src/main.ts (matches the tsx-source run model)');
+const scripts = (opsPkg.scripts ?? {}) as Record<string, string>;
+const filesField = (opsPkg.files ?? []) as string[];
+
+const binOk = binField?.['morphit-ops'] === 'bin/morphit-ops.mjs';
+const buildOk = typeof scripts.build === 'string' && scripts.build.includes('build.mjs');
+const filesOk = filesField.includes('dist/') && filesField.includes('bin/') && filesField.includes('src/');
+
+if (binOk && buildOk && filesOk) {
+	pass('bin → shim, build script present (esbuild bundle), files includes bin/+dist/+src/');
 } else {
 	fail(
-		'bin field maps morphit-ops → src/main.ts',
-		`bin is ${JSON.stringify(binField)}. NOTE: if cp162 ships a compiled dist/ build, this invariant changes to dist/main.js + a node shebang — update this smoke in the same change.`
+		'bin → shim + build script + files field',
+		`bin=${JSON.stringify(binField)} (want bin/morphit-ops.mjs) · build=${JSON.stringify(scripts.build)} (want node scripts/build.mjs) · files=${JSON.stringify(filesField)} (want bin/ dist/ src/)`
 	);
 }
 
-/* ---------------- invariant 4: Ansible build task doesn't claim to build ops-cli ---------------- */
+/* ---------------- invariant 3b: esbuild is available to the build ---------------- */
+
+const esbuildDep =
+	(devDeps as Record<string, string>).esbuild !== undefined ||
+	(deps as Record<string, string>).esbuild !== undefined;
+if (esbuildDep) {
+	pass('esbuild is a declared dependency (the build script needs it)');
+} else {
+	fail(
+		'esbuild is a declared dependency',
+		'scripts/build.mjs imports esbuild but it is not in dependencies/devDependencies — the build would fail on a clean install'
+	);
+}
+
+/* ---------------- invariant 4: Ansible build task builds ops-cli (now has a build script) ---------------- */
 
 const cloneBuild = readText('ops/ansible/roles/morphit/tasks/clone_and_build.yml');
 
-// ops-cli has no build script; the build task uses --if-present
-// which correctly skips it.  The task NAME must not list ops-cli
-// among what it builds (the original misleading comment did).
-const buildTaskNameLine = cloneBuild
-	.split('\n')
-	.find((l) => l.includes('name:') && l.toLowerCase().includes('build workspaces'));
-if (buildTaskNameLine && /ops-cli/.test(buildTaskNameLine)) {
-	fail(
-		'Ansible build task name does not falsely list ops-cli',
-		`the build task claims to build ops-cli, but ops-cli has no build script (it runs from source via tsx). Misleading line: ${buildTaskNameLine.trim()}`
-	);
+// cp162: ops-cli now HAS a build script, so `--if-present` builds
+// it.  The build task must run AFTER the full npm install (dev deps
+// incl. esbuild present).  Verify the build command is present and
+// uses --if-present (which now picks up ops-cli).
+const hasIfPresentBuild = /npm run build --workspaces --if-present/.test(cloneBuild);
+if (hasIfPresentBuild) {
+	pass('Ansible build task uses `npm run build --workspaces --if-present` (now builds ops-cli dist)');
 } else {
-	pass('Ansible build task name does not falsely claim to build ops-cli');
+	fail(
+		'Ansible build task builds ops-cli via --if-present',
+		'expected `npm run build --workspaces --if-present` in clone_and_build.yml — ops-cli now has a build script that this picks up'
+	);
 }
 
 /* ---------------- invariant 5: Ansible verify task uses the offline npm exec form ---------------- */

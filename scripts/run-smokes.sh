@@ -233,6 +233,7 @@ SMOKES=(
 	"apps/ops-cli:workspace-deps-pin-check"
 	"apps/ops-cli:upgrade-fetch-hardening-smoke"
 	"apps/ops-cli:install-invariants-smoke"
+	"apps/ops-cli:compiled-bundle-smoke"
 	"packages/asset-registry:usdt-network-picker-required-smoke"
 	".:brag-list-claim-parity-smoke"
 	".:seo-url-consistency-smoke"

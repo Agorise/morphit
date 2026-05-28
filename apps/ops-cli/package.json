@@ -9,12 +9,19 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "morphit-ops": "src/main.ts"
+    "morphit-ops": "bin/morphit-ops.mjs"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "src/"
+  ],
   "scripts": {
+    "build": "node scripts/build.mjs",
     "format": "prettier --write .",
     "lint": "prettier --check .",
     "start": "tsx src/main.ts",
+    "dev": "tsx src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -26,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
+    "esbuild": "^0.19.12",
     "prettier": "~3.6.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.9"
