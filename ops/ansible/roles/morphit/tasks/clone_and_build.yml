@@ -28,7 +28,7 @@
   register: morphit_npm_install_result
   changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
 
-- name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
+- name: Build workspaces (relay + indexer + indexer-client + asset-registry)
   ansible.builtin.command:
     cmd: npm run build --workspaces --if-present
     chdir: "{{ morphit_repo_path }}"
@@ -36,3 +36,24 @@
   become_user: "{{ morphit_service_user }}"
   register: npm_build_result
   changed_when: true
+  # NOTE: ops-cli has no `build` script (it runs from TypeScript
+  # source via tsx, which is a production dependency).  `--if-present`
+  # correctly skips it.  The next task verifies the ops-cli bin is
+  # runnable so a broken install surfaces here, not later when the
+  # operator first reaches for `morphit-ops init`.
+
+- name: Verify morphit-ops CLI is runnable (catches missing bin symlink / missing tsx)
+  ansible.builtin.command:
+    cmd: npx --no-install morphit-ops --help
+    chdir: "{{ morphit_repo_path }}"
+  become: true
+  become_user: "{{ morphit_service_user }}"
+  register: morphit_ops_smoke
+  changed_when: false
+  # `--no-install` forces npx to resolve the LOCAL workspace bin
+  # (node_modules/.bin/morphit-ops) and refuse any network fetch.
+  # If `npm install` didn't create the symlink, or tsx is absent,
+  # this fails the play with a clear error instead of letting the
+  # operator hit "command not found" at first `morphit-ops init`.
+  # The ops-cli bin runs from TS source via tsx (a production dep
+  # since cp161), so this works under NODE_ENV=production too.

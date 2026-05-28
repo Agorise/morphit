@@ -4,54 +4,39 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp160 **CLOSED** — remaining-workspace audit sweep applying the cp146-style finding lens to apps/web (@html sanitization), packages/* (×4), apps/ops-cli, apps/matrix-bot.  Plus a stale-doc cleanup (F-mcp-7 line) and a permanent decision record (sprite-sheet ruled out).
+**Last touched:** cp161 **CLOSED** — operator-reported `morphit-ops command not found` after `git pull`.  Root-caused, fixed, documented across all three operator entry points.  cp162 (proper compiled dist/ build) scoped as a REVISIT item, not done.
 
-**apps/web @html walk (8 code-path sinks, ALL verified safe — zero findings):**
+**The report:** sysadmin ran `npx morphit-ops init` (wizard started), next day after `git pull` + same steps got "command not found."
 
-| # | Site | Provenance | Defense | Verdict |
-|---|---|---|---|---|
-| 1-3 | LoginQrInitiator, QrPanel, 2fa-page QR | qrcode lib `type:'svg'` | fixed-structure SVG geometry; encoded text → QR module path-data, never markup | ✅ safe-by-construction |
-| 4-5 | IdentityLabel + profile-hero avatar | user upload → indexer → `deriveProfileProps()` | `safeSanitizeFromIndexer()` re-sanitizes at render (defense-in-depth even though indexer sanitized at ingest); single source of truth feeds all 6 consumers | ✅ |
-| 6 | Head onion-location meta | computeOnionLocation URL-validated | `.replace(/"/g,'&quot;')` | ✅ |
-| 7 | Head JSON-LD | structured node | `.replace(/</g,'\\u003c')` neutralizes `</script>` breakout | ✅ |
-| 8 | ProtectedTextarea overlay | user value + closed-enum kind | `escapeHtml()` on every user slice; `data-kind` from closed union `'wif'\|'hex_64'\|'mnemonic'` | ✅ |
-| (i18n) | WelcomeFirstBuyHero ×4 bullets | locale files | `i18n-html-injection-smoke` mechanism-discovers all `{@html $_(...)}` keys + validates ×10 locales against safe-tag allowlist | ✅ |
+**Root cause (two layers):**
+1. **Workspace-bin fragility** — `morphit-ops` is `private:true` (not on npm registry); `npx morphit-ops` resolves only via the `node_modules/.bin/morphit-ops` symlink that `npm install` creates.  `git pull` never refreshes it; lockfile/workspace changes (this repo regenerates the lockfile at milestones) stale it.  npx then finds no local bin → looks for a published `morphit-ops` (none) → command not found.
+2. **tsx was a devDependency** — the bin shebang runs the CLI from TS source via tsx.  Worked in the common case (plain `npm install` includes dev deps) but broke under `NODE_ENV=production` / `npm install --omit=dev` (standard on servers), where tsx is absent and the shebang fails or attempts a network fetch.
 
-The 16→23 @html count growth cp158 flagged is fully accounted for: the real delta is 4 i18n bullets (smoke-covered) + test files + docblock prose.  **No unsafe @html anywhere.**
+**Ansible angle:** operator was likely on `ops/ansible/`.  `clone_and_build.yml` ran `npm run build --workspaces --if-present` — ops-cli has NO build script so `--if-present` silently skipped it, yet the task comment falsely claimed it built ops-cli.  The playbook never produced a runnable ops-cli; it relied entirely on the symlink + tsx.
 
-**packages/* + matrix-bot (cp146 lens scan — clean):**
-- 4 packages (indexer-client, relay-client, operator-config, asset-registry): zero fetch(), zero @html, zero Dockerfile.  Mostly type definitions + pure helpers.
-- matrix-bot: zero raw fetch() (matrix-bot-sdk handles its own transport).  cp138-D-3 known-issue + opt-in semantics already documented.
+**Fixes shipped (cp161):**
+1. **tsx → production dependency** in `apps/ops-cli/package.json`.  Shebang now resolves under production installs.  Lockfile regenerated.
+2. **Ansible hardening** (`clone_and_build.yml`): corrected the misleading build comment; NEW post-install verify task `npx --no-install morphit-ops --help` (forces local-bin resolution, refuses network fetch) so a broken install fails the play with a clear error instead of surfacing at the operator's first `morphit-ops init`.
+3. **Docs at all three entry points:** `OPERATIONS.md §33` NEW troubleshooting block (full explanation); `RUN-A-MORPHIT-NODE.md §12` NEW subsection + inline warning at §9.1 first invocation; `ops/ansible/morphit-sysadmin-handoff.txt` NEW troubleshooting entry (Ansible-specific: re-run playbook don't manual-pull).
 
-**apps/ops-cli (cp146 lens — one LOW finding closed):**
+**cp162 SCOPED (not done):** proper compiled `dist/` build matching mcp-server (bin → `dist/main.js`, `#!/usr/bin/env node`, no tsx runtime).  Deferred because ops-cli isn't a clean compile target: 92 `.ts`-extension imports across 24 files + 2 cross-workspace reaches into relay/src + indexer/src that escape rootDir (proper fix: lift keyEnvelope + feeAmountCalc into `@morphit/*` packages like cp154's net-defense).  Substantial refactor with its own verification pass.  cp161's tsx-promotion fully resolves the operator's immediate failure; cp162 removes the tsx runtime dependency for good.
 
-ops-cli is an operator-run local CLI, not a network service.  5 fetch() sites: 2 HEAD connectivity checks (hardcoded rpc.blurt.blog + google.com), 1 chain RPC POST (operator's own endpoint), 1 release-metadata JSON, 1 archive download.
+**Verified:**
+- `node_modules/.bin/morphit-ops --help` runs via the symlink (operator's exact path) after lockfile regen
+- ansible-structural-smoke 69/69
+- Triple-pulse 6246/6246/6246, TypeScript 0×12 (no code logic changed — package.json dep move + docs + ansible only; +1 scenario from upgrade-fetch smoke seeing tsx as production dep)
 
-- **F-opscli-1 (LOW):** `fetchLatestRelease()` in `commands/upgrade.ts` did bare `await res.json()` with no body cap + no `redirect: 'manual'`.  Host is operator-configured (git.agorise.net default) so not SSRF, but a MITM'd/compromised release API returning multi-GB JSON would OOM the operator's upgrade run.  **Fixed:** 1 MiB body cap (Content-Length pre-check + post-text length check) + `redirect: 'manual'`.  Archive download already SHA-256-verified downstream, so only the metadata fetch needed the guard.  NEW `apps/ops-cli/scripts/upgrade-fetch-hardening-smoke.ts` (6 source-sentinel scenarios, tamper-tested).
-
-**verbatimModuleSyntax — now consistent across ALL 12 projects:**
-
-cp160 flipped the final 6 (ops-cli, matrix-bot, + 4 packages) from `false`/unset to `true`.  Zero source changes, zero typecheck errors in every case — the source discipline held repo-wide.  Combined with cp155 (mcp-server), cp157 (relay), cp159 (indexer), and the web baseline, **every workspace now has `verbatimModuleSyntax: true`.**
-
-**Doc cleanups:**
-- Stale F-mcp-7 "deferred" line in REVISIT-LIST corrected — cp156 actually shipped the `?then=` fix; the deferred prose was cp155-era and never updated.
-- SVG sprite-sheet permanently RULED OUT per Ken (2026-05-27) — removed from pending lists in REVISIT-LIST + TARBALL so it never resurfaces.
-
-**Verified clean:**
-- Triple-pulse smokes: 6245/6245/6245, 0 runners failed (+6 from cp159: +6 new upgrade-fetch-hardening smoke)
-- TypeScript: 0 errors × 12 projects (verbatimModuleSyntax true everywhere now)
-- svelte-check: 0/0
-- i18n-html-injection-smoke: 1/1
-
-**Smoke runner script count:** 248 (was 247 at cp159).
+**Smoke runner script count:** 248 (unchanged from cp160).
 
 — 2026-05-27.
 
-**Prior turn (cp159):** apps/indexer focused audit — 5 findings closed via NEW shared price-fetch helper + 11-scenario sentinel smoke.
+**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 finding lens (apps/web @html walk 0 findings, ops-cli F-opscli-1, verbatimModuleSyntax consistent across all 12 projects) + doc cleanups (stale F-mcp-7 line, sprite-sheet ruled out).
+
+**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper + 11-scenario smoke.
 
 **Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
 
-**Prior turn (cp157):** apps/relay focused audit — verbatimModuleSyntax flip + 3 INFO findings.
+**Prior turn (cp157):** apps/relay focused audit — verbatimModuleSyntax flip + 3 INFO.
 
 **Prior turn (cp156):** F-mcp-7 closure — root-shell `?then=` support.
 
@@ -63,47 +48,66 @@ cp160 flipped the final 6 (ops-cli, matrix-bot, + 4 packages) from `false`/unset
 
 **Prior turn (cp151):** F-mcp-5 response body cap.
 
-**Prior turn (cp150):** REVISIT-LIST archive split.
+**Prior turns (cp142–cp150):** mcp-server CI-bomb fix, per-smoke timeout, CI-RED lockfile regen, CI workflow audit, mcp-server deep-deep, ADDING-A-WORKSPACE playbook, four-persona walkthrough, read-only invariant smoke, REVISIT archive split.
 
-**Prior turn (cp149):** mcp-server read-only invariant smoke.
+**Twenty checkpoints this session (cp142–cp161).**  The cp146 lens audit campaign is complete across all workspaces (cp160).  cp161 closed an operator-reported install failure with a robust fix + full cross-entry-point documentation; cp162 (compiled dist/) scoped for the architectural cleanup.
 
-**Prior turn (cp148):** Four-persona walkthrough.
+### Orientation snapshot (cp161 baseline)
 
-**Prior turn (cp147):** ADDING-A-WORKSPACE.md.
-
-**Prior turn (cp146):** apps/mcp-server pre-launch deep-deep.
-
-**Prior turns (cp142–cp145):** mcp-server CI-bomb fix, per-smoke timeout, CI-RED lockfile regen, CI workflow audit.
-
-**Nineteen checkpoints this session (cp142–cp160).**  Every Morphit workspace has now been audited under the cp146 finding lens:
-
-| Workspace | Audit cp(s) | Result |
-|---|---|---|
-| mcp-server | cp146, cp151, cp154-cp156 | 13 findings closed + 4 sentinel smokes |
-| relay | cp157 | 0 HIGH/CRITICAL + 3 INFO + tsconfig flip |
-| indexer | cp159 | 5 findings + 1 sentinel smoke |
-| web | cp160 | 0 findings (8 @html sinks all verified safe) |
-| ops-cli | cp160 | 1 LOW finding + 1 sentinel smoke |
-| matrix-bot + 4 packages | cp160 | 0 findings (clean scan) + verbatimModuleSyntax flips |
-
-The cp146 lens audit campaign is **complete across the entire monorepo.**  All outbound-HTTP surfaces now have body caps + redirect:manual + named UA where applicable; all @html sinks verified sanitized; verbatimModuleSyntax consistent across all 12 projects.
-
-### Orientation snapshot (cp160 baseline)
-
-- **Smoke battery:** 6245/6245, triple-pulse stable at cp160 baseline. 0 runners failed.  Smoke runner script count: 248.
-- **TypeScript:** 0 errors across all 12 projects.  `verbatimModuleSyntax: true` now in EVERY workspace (web, indexer, relay, mcp-server, ops-cli, matrix-bot, + 4 packages).
+- **Smoke battery:** 6246/6246, triple-pulse stable at cp161 baseline. 0 runners failed.  Smoke runner script count: 248.
+- **TypeScript:** 0 errors across all 12 projects.  `verbatimModuleSyntax: true` in EVERY workspace.
 - **svelte-check:** 0 errors / 0 warnings.
-- **CI:** package-lock.json regenerated in cp144 + cp154 — RED since cp140, GREEN as of cp144 ship.
+- **CI:** package-lock.json regenerated cp144 + cp154 + cp161 (tsx promotion) — RED since cp140, GREEN as of cp144 ship.
 - **Monorepo workspaces:** 11 (apps ×6 + packages ×5 incl. net-defense).
 - **REVISIT-LIST split:** cp100+ live in `docs/REVISIT-LIST.md`; cp99-and-earlier frozen in `docs/REVISIT-LIST-ARCHIVE.md`.
 - **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp160 will ship in the next beta release.
-- **cp146 lens audit:** COMPLETE across all workspaces.  Remaining pre-launch work is deployment-gated (cp138 items #95-104 need a staging instance) + A1/A14 cp113 items needing Ken's scope clarification.
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp161 will ship in the next beta release.
+- **cp146 lens audit:** COMPLETE across all workspaces (cp160).  **cp161** closed an operator install failure (morphit-ops command-not-found); **cp162** (compiled ops-cli dist/) scoped not done.  Remaining pre-launch work is deployment-gated (cp138 items #95-104) + A1/A14 cp113 items needing Ken's scope clarification.
 
 ### Most recent work — what just shipped
 
-**cp160 (2026-05-27, this session):** Remaining-workspace audit sweep completing the cp146 finding lens across the entire monorepo + two doc cleanups.
+**cp161 (2026-05-27, this session):** Operator install fix — `morphit-ops command not found` after `git pull`.
+
+**Operator report (via Ken):** a sysadmin ran `npx morphit-ops init`, the wizard started; next day after `git pull` + same steps, "command not found."
+
+**Root cause — two layers:**
+
+1. **Workspace-bin fragility.** `morphit-ops` is `"private": true` — not published to the npm registry.  `npx morphit-ops` resolves only via the `node_modules/.bin/morphit-ops` symlink that `npm install` creates at the repo root.  `git pull` never creates/refreshes that symlink; if the pull touched package.json / package-lock.json / workspace layout (this repo regenerates the lockfile at milestones — cp144, cp154), the symlink goes stale.  npx then finds no local bin, looks for a published `morphit-ops` (none — private), and reports command not found.
+
+2. **tsx was a devDependency.** The bin shebang is `#!/usr/bin/env -S npx tsx` — the CLI runs from TypeScript source via tsx.  tsx was in ops-cli's devDependencies.  A plain `npm install` includes dev deps so it worked in the common case, but under `NODE_ENV=production` or `npm install --omit=dev` (standard on servers) tsx would be absent and the shebang would fail or attempt a network fetch (fails on hardened/offline boxes).
+
+**Ansible angle:** the operator was likely deploying via `ops/ansible/`.  `roles/morphit/tasks/clone_and_build.yml` ran `npm run build --workspaces --if-present` — ops-cli had NO build script so `--if-present` silently skipped it, yet the task comment falsely claimed it built ops-cli.  The playbook never produced a runnable ops-cli; it relied entirely on the install symlink + tsx.
+
+**Fixes shipped:**
+
+1. **tsx → production dependency** (`apps/ops-cli/package.json`, moved devDependencies → dependencies).  Shebang now resolves under production installs.  Lockfile regenerated.
+
+2. **Ansible hardening** (`clone_and_build.yml`):
+   - Corrected the misleading build-task comment (ops-cli runs from source via tsx, not compiled).
+   - NEW post-install verification task: `npx --no-install morphit-ops --help` run as the service user.  `--no-install` forces local-bin resolution + refuses network fetch.  A broken install now fails the play with a clear error instead of surfacing at the operator's first `morphit-ops init`.
+
+3. **Docs — git-pull→npm-install requirement at all three operator entry points:**
+   - `OPERATIONS.md §33`: NEW "Troubleshooting: morphit-ops says command not found" block — full explanation (workspace bins, tsx runtime dep, NODE_ENV edge case, `npm exec --workspace` + `cd apps/ops-cli && npm start` bypasses).
+   - `RUN-A-MORPHIT-NODE.md §12`: NEW "morphit-ops says command not found" subsection (operator-friendly, cross-linked to OPERATIONS.md §33) + inline warning at the first `npx morphit-ops register` invocation (§9.1).
+   - `ops/ansible/morphit-sysadmin-handoff.txt`: NEW troubleshooting entry at top — Ansible-specific (re-run the playbook, don't manual-pull; the in-place fix command; cross-link to OPERATIONS.md §33).
+
+**cp162 scoped (NOT done):** the proper fix is a compiled `dist/` build matching mcp-server (bin → `dist/main.js`, `#!/usr/bin/env node`, no tsx runtime).  Deferred because ops-cli isn't a clean compile target: 92 `.ts`-extension import specifiers across 24 files + 2 cross-workspace reaches into relay/src + indexer/src that escape rootDir (proper fix: lift keyEnvelope + feeAmountCalc into `@morphit/*` packages, à la cp154 net-defense).  Substantial refactor with its own verification pass.  Full scope in REVISIT-LIST cp162 entry.  cp161's tsx-promotion fully resolves the operator's immediate failure; cp162 removes the tsx runtime dependency for good.
+
+**Verified clean:**
+- `node_modules/.bin/morphit-ops --help` runs via the symlink (operator's exact path) after lockfile regen
+- ansible-structural-smoke: 69/69 checks hold
+- workspace-deps-pin-check: 34/34 (tsx promotion didn't break dep pinning)
+- Triple-pulse: 6246/6246/6246, 0 runners failed
+- TypeScript: 0 errors × 12 projects
+
+No code logic changed — package.json dep move + docs + ansible only.  The +1 smoke scenario vs cp160 (6245→6246) is the upgrade-fetch-hardening smoke's workspace-deps walk seeing tsx as a production dep.
+
+**Smoke runner script count:** 248 (unchanged from cp160).
+
+**Lesson — "works on my machine" install paths hide a setup dependency.**  The CLI worked in dev because the dev always runs `npm install` and never sets `NODE_ENV=production`.  The operator hit two latent failures (stale symlink + missing-tsx-under-prod) the dev environment masks.  When a tool's `bin` points at source-run-via-tsx, tsx MUST be a production dependency, and the npm-install-after-pull requirement MUST be documented wherever the tool is first invoked — including paths the dev doesn't personally use (Ansible, OPERATIONS.md).
+
+**cp160 (2026-05-27, prior turn this session):** Remaining-workspace audit sweep completing the cp146 finding lens across the entire monorepo + two doc cleanups.
 
 **Scope:** apps/web (@html sanitization surface), packages/* (×4: indexer-client, relay-client, operator-config, asset-registry), apps/ops-cli, apps/matrix-bot.  Plus stale-doc cleanup (F-mcp-7 deferred-line correction) and a permanent decision record (SVG sprite-sheet ruled out).
 

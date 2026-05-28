@@ -1,6 +1,57 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp160 (CLOSED) — 2026-05-27 (remaining-workspace audit sweep completing the cp146 finding lens across the entire monorepo: apps/web @html walk [0 findings], packages/* + matrix-bot [clean], apps/ops-cli [1 LOW finding F-opscli-1]; verbatimModuleSyntax now consistent across all 12 projects; two doc cleanups).  Sentinel battery 6245/0 triple-pulse stable.
+**Last touched:** Part 122 cp161 (CLOSED) — 2026-05-27 (operator-reported `morphit-ops command not found` after git pull: root-caused to workspace-bin fragility + tsx-as-devDependency; promoted tsx to production dep, hardened Ansible build/verify, documented the git-pull→npm-install requirement across OPERATIONS.md + RUN-A-MORPHIT-NODE.md + Ansible sysadmin-handoff).  Sentinel battery 6245/0 triple-pulse stable.
+
+## cp162 — ops-cli proper build artifact (SCOPED, NOT DONE)
+
+**The real fix** for the operator's `morphit-ops command not found` class of problem: give apps/ops-cli a compiled `dist/` build the way apps/mcp-server has, so `bin` points at `dist/main.js` (with a `#!/usr/bin/env node` shebang) instead of `src/main.ts` (with a `tsx` shebang).  This removes the runtime dependency on tsx entirely and makes ops-cli installable like any normal CLI.
+
+**Why deferred (not done at cp161):** apps/ops-cli is NOT a clean compile target the way mcp-server was.  Two structural blockers, both requiring careful migration:
+
+1. **92 `.ts`-extension import specifiers across 24 files.**  ops-cli's tsconfig has `allowImportingTsExtensions: true` + `noEmit: true` — the imports are written as `from './foo.ts'`.  `tsc` emit rejects `allowImportingTsExtensions` unless paired with rewriting, and even a successful emit would leave `.ts` paths in the output that Node can't resolve at runtime.  All 92 must become extensionless (or `.js`) imports.  mcp-server avoided this entirely — it was written extensionless from the start.
+
+2. **2 cross-workspace reaches outside rootDir:**
+   - `from '../../../relay/src/crypto/keyEnvelope.ts'` (encrypt.ts + 2 dynamic imports in paymentMethod.ts, register.ts)
+   - `from '../../../indexer/src/lib/feeAmountCalc.ts'`
+   These `../../../` paths escape ops-cli's `rootDir: src`, which breaks a clean `tsc -p tsconfig.build.json` emit (files outside rootDir either error or emit to unexpected nested dist paths).  The proper fix is to promote the shared modules (keyEnvelope, feeAmountCalc) into a `@morphit/*` package — same pattern as cp154's `@morphit/net-defense` lift — then import by package name.  That is itself a meaningful refactor with its own deep-verification pass.
+
+**Scope estimate:** rewrite 92 imports + lift 2 shared modules into packages (or relax rootDir + accept nested dist) + add `tsconfig.build.json` + `build` script + `files: ['dist/','src/']` + flip `bin` to `dist/main.js` + add `#!/usr/bin/env node` shebang to a built entry + regenerate lockfile + update the Ansible build comment (ops-cli would then have a real `build` script that `--if-present` picks up) + full triple-pulse + verify the bin runs from dist.  A focused checkpoint of its own.
+
+**Interim mitigation (cp161, DONE):** tsx promoted to production dependency so the existing `src/main.ts` + tsx shebang works reliably under `NODE_ENV=production` and `npm install --omit=dev`; Ansible verifies bin runnability post-install; docs explain the npm-install-after-pull requirement everywhere an operator might enter.  The operator's immediate failure is fully resolved; cp162 is the architectural cleanup that removes the tsx runtime dependency for good.
+
+## cp161 — operator install fix: `morphit-ops command not found` (CLOSED 2026-05-27)
+
+**Operator report:** a sysadmin ran `npx morphit-ops init`, the wizard started; next day after `git pull` + same steps, "command not found."
+
+**Root cause (two layers):**
+
+1. **Workspace-bin fragility.**  `morphit-ops` is `"private": true` — not published to the npm registry.  `npx morphit-ops` resolves only via the `node_modules/.bin/morphit-ops` symlink that `npm install` creates at the repo root.  `git pull` never creates/refreshes that symlink; if the pull touched package.json / package-lock.json / workspace layout (this repo regenerates the lockfile at milestones — cp144, cp154), the symlink goes stale.  npx then finds no local bin, looks for a published `morphit-ops` (none — private), and reports command not found.
+
+2. **tsx was a devDependency.**  The bin shebang is `#!/usr/bin/env -S npx tsx` — the CLI runs from TypeScript source via tsx.  tsx was in ops-cli's `devDependencies`.  A plain `npm install` includes dev deps, so it worked in the common case, BUT under `NODE_ENV=production` or `npm install --omit=dev` (standard on servers) tsx would be absent and the shebang would either fail or attempt a network fetch of tsx (fails on hardened/offline boxes).  Latent second failure mode beyond the symlink issue.
+
+**Ansible angle:** the operator was likely deploying via `ops/ansible/`.  `roles/morphit/tasks/clone_and_build.yml` runs `npm run build --workspaces --if-present` — and because ops-cli had NO `build` script, `--if-present` silently skipped it.  The task comment falsely claimed it built ops-cli ("relay + indexer + **ops-cli** + ...").  So the playbook never produced a runnable ops-cli artifact; it relied entirely on the install symlink + tsx.
+
+**Fixes shipped (cp161):**
+
+1. **tsx → production dependency** in `apps/ops-cli/package.json` (moved from devDependencies to dependencies).  The shebang now resolves under production installs.  Lockfile regenerated.
+
+2. **Ansible hardening** (`clone_and_build.yml`):
+   - Corrected the misleading build-task comment (ops-cli is NOT built; it runs from source via tsx).
+   - NEW post-install verification task: `npx --no-install morphit-ops --help` run as the service user.  `--no-install` forces local-bin resolution + refuses network fetch.  A broken install (missing symlink, absent tsx) now fails the play with a clear error instead of surfacing weeks later at the operator's first `morphit-ops init`.
+
+3. **Docs — the git-pull→npm-install requirement documented at all three operator entry points:**
+   - `OPERATIONS.md §33` — NEW "Troubleshooting: morphit-ops says command not found" block (full explanation: workspace bins, tsx runtime dep, NODE_ENV edge case, the `npm exec --workspace` and `cd apps/ops-cli && npm start` bypasses).
+   - `RUN-A-MORPHIT-NODE.md §12` — NEW "morphit-ops says command not found" subsection (operator-friendly version, cross-linked to OPERATIONS.md §33) + inline warning at the first `npx morphit-ops register` invocation (§9.1).
+   - `ops/ansible/morphit-sysadmin-handoff.txt` — NEW troubleshooting entry at top (Ansible-specific: re-run the playbook, don't manual-pull; the in-place fix command; cross-link to OPERATIONS.md §33).
+
+**Verified:**
+- `node_modules/.bin/morphit-ops --help` runs correctly via the symlink (the operator's exact path) after lockfile regen.
+- ansible-structural-smoke: 69/69 checks hold (playbook edit valid).
+- Triple-pulse 6245/6245/6245, TypeScript 0×12 (no code logic changed; package.json dep move + docs + ansible only).
+
+**Lesson — "works on my machine" install paths hide a setup dependency.**  The CLI worked in dev because the dev always runs `npm install` and never sets `NODE_ENV=production`.  The operator hit two latent failures (stale symlink + missing-tsx-under-prod) that the dev environment masks.  When a tool's `bin` points at source-run-via-tsx, tsx MUST be a production dependency, and the npm-install-after-pull requirement MUST be documented wherever the tool is first invoked — including paths the dev doesn't personally use (Ansible, OPERATIONS.md).  The proper fix (compiled dist, no tsx runtime) is cp162.
+
+---
 
 ## cp160 — Remaining-workspace audit sweep + doc cleanups (CLOSED 2026-05-27)
 
