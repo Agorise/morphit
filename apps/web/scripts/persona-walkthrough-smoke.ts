@@ -605,17 +605,39 @@ const SCENARIOS: readonly Scenario[] = [
 		// that keeps smokes offline-deterministic.  If a future
 		// refactor strips the dispatcher or skips the pre-validation,
 		// the sentinel catches it at PR time.
+		// Cp154 — the helper bodies (isPrivateHostname,
+		// isPrivateIp) were lifted to `@morphit/net-defense`
+		// so the mcp-server can consume the same primitives.
+		// federationProbe.ts now imports + re-exports them; the
+		// next scenario pins the lifted package's contents
+		// (including the subtle CGNAT and ::ffff: branches).
 		name: 'P122-CP3 — federationProbe has 3-layer DNS-rebinding defense (hostname denylist + DNS-resolved IP validation + pinned dispatcher)',
 		file: 'apps/indexer/src/indexer/federationProbe.ts',
 		rootRelative: true,
 		mustHave: [
-			'export function isPrivateHostname',
-			'export function isPrivateIp',
+			"import { isPrivateHostname, isPrivateIp } from '@morphit/net-defense'",
+			'export { isPrivateHostname }',
+			'export { isPrivateIp }',
 			'resolveAndValidatePublicIp',
 			'buildPinnedAgent',
 			'dispatcher: pinnedAgent',
 			"import { Agent } from 'undici'",
-			"import { lookup as dnsLookup } from 'node:dns/promises'",
+			"import { lookup as dnsLookup } from 'node:dns/promises'"
+		]
+	},
+	{
+		// cp154 — net-defense package self-pin.  The
+		// IPv4/IPv6 branches that used to live in
+		// federationProbe.ts are now here.  Sentinel pins both
+		// pure-function exports + the subtle branches (IPv4-
+		// mapped IPv6 unwrap, CGNAT range) that an audit-by-eye
+		// would otherwise need to chase across files.
+		name: 'P122-CP3-cp154 — @morphit/net-defense ships the lifted SSRF primitives (hostname denylist + IP-form denylist with IPv4-mapped IPv6 unwrap + CGNAT)',
+		file: 'packages/net-defense/src/index.ts',
+		rootRelative: true,
+		mustHave: [
+			'export function isPrivateHostname',
+			'export function isPrivateIp',
 			// IPv4-mapped IPv6 unwrap is the subtle one — explicitly
 			// pin its presence so a future refactor doesn't drop it.
 			'::ffff:',

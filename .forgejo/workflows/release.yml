@@ -28,6 +28,10 @@ jobs:
   release:
     name: Build + publish release tarball
     runs-on: ubuntu-24.04
+    # cp145 — release does the smokes-job's work (~18 min) plus
+    # tag verification, tarball build, checksum, upload.  Observed
+    # runtime ~25 min.  60-minute ceiling = 2.4× headroom.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout (full history for git describe)

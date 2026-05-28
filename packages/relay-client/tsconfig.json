@@ -9,6 +9,7 @@
 		"noImplicitOverride": true,
 		"esModuleInterop": true,
 		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"noEmit": true

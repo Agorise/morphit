@@ -29,6 +29,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@morphit/asset-registry": "*",
+    "@morphit/net-defense": "*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

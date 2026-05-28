@@ -402,74 +402,31 @@ function isWithinDays(iso: string | undefined, days: number): boolean {
 	return Date.now() - t < days * 24 * 60 * 60 * 1000;
 }
 
+import { isPrivateHostname, isPrivateIp } from '@morphit/net-defense';
+
 /**
  * Check whether a hostname string (as it appears in a URL) is
- * one of the obviously-private literal forms.  This is the FIRST
- * defense — catches `https://127.0.0.1/`, `https://localhost/`,
- * `https://[::1]/`, cloud-metadata addresses, and the
- * `.local`/`.localhost`/`.internal` TLDs.
+ * one of the obviously-private literal forms.
+ *
+ * cp154 — implementation lifted to `@morphit/net-defense` so the
+ * MCP server can consume the same primitive.  This module
+ * re-exports it under the original name to keep existing
+ * indexer call sites and smoke imports working.
  *
  * Exported for testing.  Used by fetchJson() before any DNS work.
  */
-export function isPrivateHostname(hostnameRaw: string): boolean {
-	const h = hostnameRaw.toLowerCase();
-	if (/^127\.\d+\.\d+\.\d+$/.test(h)) return true;
-	if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
-	if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
-	if (/^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/.test(h)) return true;
-	if (/^169\.254\.\d+\.\d+$/.test(h)) return true;
-	if (h === 'localhost') return true;
-	if (h === '0.0.0.0') return true;
-	if (h === '[::]' || h === '[::1]' || h === '::1') return true;
-	if (h === '169.254.169.254') return true;
-	if (h === 'metadata.google.internal') return true;
-	if (/^\[?(fc|fd)[0-9a-f]{2}:/i.test(h)) return true;
-	if (/^\[?fe80:/i.test(h)) return true;
-	if (h.endsWith('.local')) return true;
-	if (h.endsWith('.localhost')) return true;
-	if (h.endsWith('.internal')) return true;
-	return false;
-}
+export { isPrivateHostname };
 
 /**
  * Check whether a *resolved IP address* (as returned by DNS lookup,
  * canonical form — not user-supplied) is in a private range.
  *
- * Distinct from isPrivateHostname() because:
- *   - DNS gives us already-normalized IP strings (no `[]` brackets,
- *     no port, IPv6 in canonical form).
- *   - IPv4-mapped IPv6 (`::ffff:a.b.c.d`) needs unwrap + re-check
- *     as IPv4.
- *   - We don't need TLD checks (no hostnames here).
+ * cp154 — implementation lifted to `@morphit/net-defense`.  See
+ * the re-export note above.
  *
  * Exported for testing.  Cp3 of Part 122 — DNS-rebinding closure.
  */
-export function isPrivateIp(ip: string): boolean {
-	const v = ip.toLowerCase();
-	// IPv4 patterns
-	if (/^127\.\d+\.\d+\.\d+$/.test(v)) return true;
-	if (/^10\.\d+\.\d+\.\d+$/.test(v)) return true;
-	if (/^192\.168\.\d+\.\d+$/.test(v)) return true;
-	if (/^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/.test(v)) return true;
-	if (/^169\.254\.\d+\.\d+$/.test(v)) return true;
-	if (/^0\.\d+\.\d+\.\d+$/.test(v)) return true; // 0.0.0.0/8
-	if (v === '255.255.255.255') return true; // broadcast
-	// Carrier-grade NAT (RFC 6598).  Operators sometimes have
-	// internal services in this range; treat as private for safety.
-	if (/^100\.(6[4-9]|[789][0-9]|1[01][0-9]|12[0-7])\.\d+\.\d+$/.test(v)) return true;
-	// IPv6 patterns (DNS returns canonical form: no brackets, lowercase hex).
-	if (v === '::' || v === '::1') return true;
-	if (/^fc[0-9a-f]{2}:/.test(v)) return true; // unique-local
-	if (/^fd[0-9a-f]{2}:/.test(v)) return true; // unique-local
-	if (/^fe80:/.test(v)) return true; // link-local
-	// IPv4-mapped IPv6 (::ffff:a.b.c.d) — unwrap + re-validate as IPv4
-	const v4mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v);
-	if (v4mapped !== null) return isPrivateIp(v4mapped[1]!);
-	// IPv6 loopback in compressed form (`::1` already caught above)
-	// and the unspecified address `::` (caught above).  All other
-	// public-routable IPv6 falls through to public.
-	return false;
-}
+export { isPrivateIp };
 
 /**
  * Resolve `hostname` via DNS, validate EVERY returned address

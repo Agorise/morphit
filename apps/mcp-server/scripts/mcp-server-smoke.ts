@@ -25,6 +25,10 @@ import { existsSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import process from 'node:process';
 
+const ANSI_GREEN = '\x1b[32m';
+const ANSI_RED = '\x1b[31m';
+const ANSI_RESET = '\x1b[0m';
+
 /**
  * mcp-server is the only workspace in the repo whose `bin` field
  * points into `dist/` (apps/mcp-server/package.json declares
@@ -72,10 +76,6 @@ function ensureBuilt(cwdPath: string): void {
 	}
 }
 
-const ANSI_GREEN = '\x1b[32m';
-const ANSI_RED = '\x1b[31m';
-const ANSI_RESET = '\x1b[0m';
-
 interface JsonRpcRequest {
 	jsonrpc: '2.0';
 	id: number;
@@ -115,7 +115,13 @@ async function runMcpDialog(
 		cwd: new URL('..', import.meta.url).pathname,
 		env: {
 			...process.env,
-			MORPHIT_MCP_INSTANCE_URL: instanceUrl
+			MORPHIT_MCP_INSTANCE_URL: instanceUrl,
+			// cp154 F-mcp-1 — opt into the private-address denylist
+			// override because this smoke runs a local HTTP server
+			// on 127.0.0.1 to stub the indexer.  Real users running
+			// against morphit.io don't need this env var; it's
+			// dev/test infrastructure.
+			MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE: '1'
 		},
 		stdio: ['pipe', 'pipe', 'pipe']
 	});
@@ -390,15 +396,18 @@ async function main() {
 		fail('invalid asset enum rejected with isError', JSON.stringify(badInput[0]));
 	}
 
-	// Scenario 8: deeplink is well-formed URL pointing at stub.
+	// Scenario 8: deeplink is well-formed URL routed through the
+	// cp156 `?then=` locale-detection shell with filter preserved.
+	// Inner path-with-query gets URI-encoded inside the `then`
+	// value: `?then=%2Forderbook%3Fasset%3DXMR`.
 	if (
 		searchText &&
-		/"deeplink":\s*"http:\/\/127\.0\.0\.1:\d+\/en\/orderbook\?asset=XMR"/.test(searchText)
+		/"deeplink":\s*"http:\/\/127\.0\.0\.1:\d+\/\?then=%2Forderbook%3Fasset%3DXMR"/.test(searchText)
 	) {
-		pass('deeplink is well-formed URL with filter preserved');
+		pass('deeplink is well-formed ?then= URL with filter preserved');
 	} else {
 		fail(
-			'deeplink is well-formed URL with filter preserved',
+			'deeplink is well-formed ?then= URL with filter preserved',
 			searchText?.match(/"deeplink":\s*"[^"]+"/)?.[0] || 'no deeplink'
 		);
 	}

@@ -14,7 +14,8 @@
 		"packages/indexer-client",
 		"packages/relay-client",
 		"packages/operator-config",
-		"packages/asset-registry"
+		"packages/asset-registry",
+		"packages/net-defense"
 	],
 	"engines": {
 		"node": ">=22.0.0"

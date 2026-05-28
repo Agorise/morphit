@@ -153,3 +153,4 @@ project "indexer-client"        packages/indexer-client/tsconfig.json
 project "relay-client"          packages/relay-client/tsconfig.json
 project "operator-config"       packages/operator-config/tsconfig.json
 project "asset-registry"        packages/asset-registry/tsconfig.json
+project "net-defense"           packages/net-defense/tsconfig.json

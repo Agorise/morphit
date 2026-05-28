@@ -13,7 +13,7 @@
 
 import { z } from 'zod';
 import { ASSET_TICKERS } from '@morphit/asset-registry';
-import { buildV1Url, fetchJson } from '../indexerClient.js';
+import { buildV1Url, fetchJson, getInstanceUrl } from '../indexerClient.js';
 
 export const DESCRIBE_DESCRIPTION =
 	'Return a structured, current description of Morphit — what it is, ' +
@@ -51,10 +51,9 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 		documentation: string;
 	};
 }> {
-	const base = (process.env.MORPHIT_MCP_INSTANCE_URL || 'https://morphit.io').replace(
-		/\/+$/,
-		''
-	);
+	// cp146 F-mcp-17 — same DRY/validation reasoning as the other
+	// two tools that had the same direct env read.
+	const base = getInstanceUrl();
 
 	// Pull the live instance metadata so the description is grounded
 	// in the actual instance the agent is talking to, not stale
@@ -76,8 +75,11 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 				'instance is an independent operator running the open-source ' +
 				'stack; all instances share a single on-chain orderbook over the ' +
 				'public Blurt blockchain. Private keys never leave the user\'s ' +
-				'device — there is no signup form, no email collection, no IP ' +
-				'logging by design.',
+				'device — there is no signup form and no email collection. ' +
+				'Instance operators see the connecting IP at the HTTP layer ' +
+				'(same as any web service); Morphit\'s data model retains no ' +
+				'per-user IP log of its own, and instances expose Tor onions ' +
+				'for users who want IP-level unlinkability.',
 			non_custodial: true,
 			kyc_required: false,
 			federated: true,
@@ -91,7 +93,13 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 			project_repo: 'https://git.agorise.net/agorise/morphit',
 			project_license: 'AGPL-3.0',
 			web_ui: base,
-			documentation: `${base}/en/faq`
+			// cp156 F-mcp-7 — route documentation deeplink through
+			// the root locale-detection shell.  AI agents hand the
+			// user a URL like `${base}/?then=/faq`; the shell at
+			// `/` detects navigator.languages and redirects to
+			// `/{detected}/faq`.  Before cp156, hardcoded `/en/`
+			// gave non-English users the English FAQ page.
+			documentation: `${base}/?then=/faq`
 		}
 	};
 }

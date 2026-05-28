@@ -55,6 +55,12 @@ interface RelayHealthVerboseBody {
 	};
 }
 
+/** Cap on the relay /v1/health response body.  Real responses
+ *  are <1 KB; 16 KiB is 16x normal and well above anything a
+ *  healthy relay would emit, while still bounding any pathology
+ *  (a misbehaving relay echoing back a large error page, etc.). */
+const SIGNUP_PROBE_MAX_BODY_BYTES = 16 * 1024;
+
 /** Build a probe that fetches the relay's /v1/health?verbose=1
  *  over HTTP and judges anomaly. The relayHealthUrl should be
  *  something like `http://127.0.0.1:8080/v1/health?verbose=1`
@@ -71,9 +77,20 @@ export function buildSignupAnomalyProbe(
 		const controller = new AbortController();
 		const t = setTimeout(() => controller.abort(), timeoutMs);
 		try {
+			// cp159 F-indexer-4 — `redirect: 'manual'` + named UA.
+			// The relay URL is operator-config (sibling process,
+			// typically colocated), but defense-in-depth via these
+			// headers matches the cp146-style finding shape.  A
+			// misconfigured relay URL that redirects elsewhere
+			// should be an operator-visible failure, not a silent
+			// follow.
 			const res = await fetch(relayHealthUrl, {
 				signal: controller.signal,
-				headers: { accept: 'application/json' }
+				redirect: 'manual',
+				headers: {
+					accept: 'application/json',
+					'user-agent': 'morphit-indexer/signup-anomaly-probe'
+				}
 			});
 			if (!res.ok) {
 				return {
@@ -82,7 +99,35 @@ export function buildSignupAnomalyProbe(
 					message: `relay /v1/health returned ${res.status}; anomaly check skipped`
 				};
 			}
-			const body = (await res.json()) as RelayHealthVerboseBody;
+			// cp159 F-indexer-4 — bound the body size before parse.
+			// Relay /v1/health responses are <1 KB; the 16 KiB cap
+			// catches any pathology (e.g. a misbehaving relay
+			// echoing a large error page) without affecting any
+			// healthy response.  res.text() is bounded because the
+			// abort fires on overrun via the upstream signal; we
+			// add the post-read length check as belt-and-braces.
+			const rawText = await res.text();
+			if (rawText.length > SIGNUP_PROBE_MAX_BODY_BYTES) {
+				log.warn('relay_health_body_too_large', {
+					length: rawText.length,
+					cap: SIGNUP_PROBE_MAX_BODY_BYTES
+				});
+				return {
+					probed: false,
+					recommendKillSwitch: false,
+					message: `relay /v1/health response exceeded size cap; anomaly check skipped`
+				};
+			}
+			let body: RelayHealthVerboseBody;
+			try {
+				body = JSON.parse(rawText) as RelayHealthVerboseBody;
+			} catch {
+				return {
+					probed: false,
+					recommendKillSwitch: false,
+					message: `relay /v1/health returned non-JSON body; anomaly check skipped`
+				};
+			}
 			if (!body.signup_stats) {
 				return {
 					probed: false,

@@ -36,21 +36,12 @@ Five read-only tools:
 
 ## Installation
 
-### npm (recommended)
+> **Beta status:** Until the v1.0.0 stable release, `morphit-mcp` is
+> installed from source (instructions below).  The npm + Docker
+> distribution pipeline lands with the v1.0.0 release tag —
+> follow `git.agorise.net/agorise/morphit/releases` for the cut.
 
-```sh
-npm install -g morphit-mcp
-```
-
-### Docker
-
-```sh
-docker run --rm -i ghcr.io/agorise/morphit-mcp:latest
-```
-
-(stdio-piped — MCP clients invoke this directly.)
-
-### From source
+### From source (currently the only option)
 
 ```sh
 git clone https://git.agorise.net/agorise/morphit
@@ -59,6 +50,25 @@ npm install
 npm run build --workspace=apps/mcp-server
 node apps/mcp-server/dist/main.js
 ```
+
+Wire that absolute path into your MCP client config (next
+section); the server speaks stdio so the client invokes it
+directly.
+
+### npm (forthcoming, v1.0.0 stable)
+
+```sh
+npm install -g morphit-mcp
+```
+
+### Docker (forthcoming, v1.0.0 stable)
+
+```sh
+docker run --rm -i ghcr.io/agorise/morphit-mcp:1.0.0
+```
+
+(stdio-piped — MCP clients invoke this directly.  Pin to a
+specific tag like `:1.0.0`; never `:latest` for reproducibility.)
 
 ## Configuration
 
@@ -75,7 +85,25 @@ That's it. No API keys. No credentials. No accounts.
 ### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
-(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+
+**From source (beta):**
+
+```json
+{
+  "mcpServers": {
+    "morphit": {
+      "command": "node",
+      "args": ["/absolute/path/to/morphit/apps/mcp-server/dist/main.js"],
+      "env": {
+        "MORPHIT_MCP_INSTANCE_URL": "https://morphit.io"
+      }
+    }
+  }
+}
+```
+
+**From npm (v1.0.0 stable, when published):**
 
 ```json
 {
@@ -101,12 +129,14 @@ In Cline's MCP settings, add:
 {
   "mcpServers": {
     "morphit": {
-      "command": "npx",
-      "args": ["-y", "morphit-mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/morphit/apps/mcp-server/dist/main.js"]
     }
   }
 }
 ```
+
+Replace `command`/`args` with the npm form (`"command": "npx", "args": ["-y", "morphit-mcp"]`) when the v1.0.0 npm package ships.
 
 ### Cursor / Continue / Windsurf / Zed
 

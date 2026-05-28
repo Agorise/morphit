@@ -35,6 +35,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { stripComments } from './lib/strip-comments.js';
 
 const ANSI_GREEN = '\x1b[32m';
 const ANSI_RED = '\x1b[31m';
@@ -163,9 +164,6 @@ const GUARD_PATTERN = /\b(ensureBuilt\s*\(|existsSync\s*\(\s*[^)]*dist)/;
 // text so docblock examples and regex literals still count
 // the file as "spawns from dist/" — we want to over-match the
 // flagging side so under-stripping doesn't hide bugs.
-function stripComments(src: string): string {
-	return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-}
 
 // Skip the meta-smoke itself — its illustrative docblock and
 // regex source contain the literal pattern that would otherwise

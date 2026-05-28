@@ -11,7 +11,7 @@
  */
 
 import { z } from 'zod';
-import { buildV1Url, fetchJson } from '../indexerClient.js';
+import { buildV1Url, fetchJson, getInstanceUrl } from '../indexerClient.js';
 
 export const GET_LISTING_DESCRIPTION =
 	'Fetch the full detail of one Morphit listing by its (account, ' +
@@ -61,11 +61,23 @@ export async function getListing(input: GetListingInput): Promise<{
 		);
 	}
 
-	const base = (process.env.MORPHIT_MCP_INSTANCE_URL || 'https://morphit.io').replace(
-		/\/+$/,
-		''
-	);
-	const deeplink = `${base}/en/@${input.account}/${input.permlink}`;
+	// cp146 F-mcp-13 — use getInstanceUrl() for the same validation
+	// + DRY reasons as searchOrders.
+	// cp146 F-mcp-12 — build the deeplink via URL so any future
+	// change to the account/permlink validation grammar can't
+	// introduce path-component injection.  Zod already constrains
+	// `input.account` and `input.permlink` to safe character sets,
+	// but the URL builder is the right structural defense in depth.
+	//
+	// cp156 F-mcp-7 — route through `${base}/?then=...` so the
+	// root locale-detection shell adds the user's locale prefix.
+	// Before cp156, hardcoded `/en/` gave non-English users the
+	// English listing page even though the page itself is
+	// translated for every supported locale.
+	const innerPath = `/@${input.account}/${input.permlink}`;
+	const deeplinkUrl = new URL('/', getInstanceUrl());
+	deeplinkUrl.searchParams.set('then', innerPath);
+	const deeplink = deeplinkUrl.toString();
 
 	return {
 		listing: match,

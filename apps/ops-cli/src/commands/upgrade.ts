@@ -392,12 +392,38 @@ async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRe
 	try {
 		const res = await fetch(url, {
 			headers: { Accept: 'application/json' },
+			redirect: 'manual',
 			signal: controller.signal
 		});
 		if (!res.ok) {
 			throw new Error(`HTTP ${res.status} from ${url}`);
 		}
-		const body = (await res.json()) as ForgejoRelease;
+		// cp160 F-opscli-1 — bound the response body before parse.
+		// The host is operator-configured (defaults to git.agorise.net)
+		// so this isn't an SSRF surface, but a MITM'd or compromised
+		// release API returning a multi-GB JSON would OOM the operator's
+		// upgrade run.  Forgejo release-latest payloads are <8 KB; a
+		// 1 MiB cap is 100x+ normal and catches any pathology.  Also
+		// `redirect: 'manual'` above — a 30x to an unexpected host on
+		// the release-metadata call should be operator-visible.
+		const RELEASE_JSON_MAX_BYTES = 1024 * 1024;
+		const cl = res.headers.get('content-length');
+		if (cl !== null) {
+			const n = Number(cl);
+			if (Number.isFinite(n) && n > RELEASE_JSON_MAX_BYTES) {
+				controller.abort();
+				throw new Error(
+					`Forgejo release API body exceeds cap (Content-Length ${n} > ${RELEASE_JSON_MAX_BYTES}) from ${url}`
+				);
+			}
+		}
+		const text = await res.text();
+		if (text.length > RELEASE_JSON_MAX_BYTES) {
+			throw new Error(
+				`Forgejo release API body exceeds cap (${text.length} > ${RELEASE_JSON_MAX_BYTES}) from ${url}`
+			);
+		}
+		const body = JSON.parse(text) as ForgejoRelease;
 		if (typeof body.tag_name !== 'string') {
 			throw new Error(`Forgejo API response missing tag_name field`);
 		}
