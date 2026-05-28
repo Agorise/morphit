@@ -4,7 +4,53 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp162 **CLOSED + VERIFIED** — the architectural fix for the cp161 install failure class: ops-cli now has a compiled build, so the runtime no longer depends on tsx.  Verified seamless across all four install paths.
+**Last touched:** cp163 **CLOSED** — brag-list / FAQ / comparison-image content pass: reward-claim rewording, new staking FAQ (10 locales), Blurt-casing sweep, comparison + mediakit regen.  Plus two brag claims evaluated and REJECTED as false (TEE-attested, anonymous-LLM-proxy).  Triple-pulse 6261 stable.
+
+**Content changes (Ken-directed):**
+
+1. **Comparison-image reward rows** (`scripts/comparison-image/build_comparison.py`):
+   - "Loyalty milestones and trader achievements" → "All users earn financial rewards on trading milestones"
+   - NEW row: "Instance operators earn 90% of Blurt-paid listing fees"
+   - "Operator earns ~2% on idle treasury while users trade" → "All users earn ~2% interest on staked Blurt"
+   - Chain row "Blurt (BLURT) — the chain…" → "Blurt — the chain…" (dropped redundant ticker parenthetical)
+   - **Accuracy correction:** Ken proposed "90% of all Blurt trading fees"; corrected to "90% of Blurt-paid **listing** fees" — the accurate scope (Morphit is non-custodial P2P, no per-trade fee; the 90/10 split is specifically the Blurt-paid listing fee, brag item 86).
+
+2. **NEW FAQ entry** `how_to_stake_blurt` — added to `FAQ_KEYS` (faqIndex.ts, cluster 4 after `blurt_benefits`) + full native translations in all 10 locales.  Covers: power-up to BP via BlurtWallet.com, ~2% APR (live-computed from chain inflation), ~4-week power-down to unstake, non-custodial (Morphit isn't a wallet).
+
+3. **Blurt-casing sweep** (Ken: "do not use ALL CAPS when mentioning Blurt" in faq/brag/comparison):
+   - FAQ subtree, all 10 locales: BLURT→Blurt (1,489 occurrences → 0).  "Blurt Power (BP)" + BP abbreviation preserved.
+   - Brag list: 25 prose lines swept.  **Preserved** BLURT in 2 ticker-enumeration contexts (lines 96, 573: `BTC/BCH/.../BLURT/SOL/ETH` and `16 assets across BTC, XMR, BLURT, USDT…`) where lowercasing only BLURT among uppercase ticker neighbors would read as a typo.
+   - Comparison: handled above.
+   - **Scope note:** swept only the FAQ subtree in locales, NOT the 1,024 BLURT occurrences elsewhere (asset pickers, balance cards, tooltips) — those aren't in the three named surfaces and BLURT-as-ticker is correct there.
+
+4. **Regenerated:** comparison SVG+PNG (466 KB, under 512 KB budget — added `PNG_RENDER_WIDTH=2200` constant since the new row pushed 2400px-render over budget; 2200px stays crisp), mediakit zip (the mediakit-freshness smoke caught the brag-list edit staling the bundled zip).
+
+**Two brag claims evaluated — BOTH REJECTED (false claims, do not add):**
+
+- **"TEE-Attested":** Morphit does NOT run in a Trusted Execution Environment (Intel SGX / AMD SEV / AWS Nitro) with remote attestation.  The "attestation" throughout the codebase is unrelated: on-chain release attestation (bundle hashes on Blurt), multi-explorer Monero-proof attestation, and fee-attestation (≥2 attestors).  None involve a CPU enclave.  Claiming TEE-attested would be a flat false security claim.  To actually claim it would require deploying relay/indexer inside an enclave + wiring remote attestation — weeks of work, and it fights priority #2 (decentralization: TEEs lean on Intel/AMD/cloud root-of-trust).
+- **"PROXY — Anonymous to vendor — Closed-weight frontier (Claude/GPT/Gemini)":** that's an LLM-inference proxy (phantom.codes' product: your prompt reaches a frontier model but your identity doesn't).  Morphit is a P2P marketplace, not an LLM proxy.  The MCP server is the inverse (an AI agent operates Morphit).  Claiming it = claiming a feature Morphit doesn't have.
+- **Principle reaffirmed:** "competitors probably don't have it either" is not a basis for a claim.  Morphit's real, verifiable privacy story (Tor/I2P, no-KYC, non-custodial, view-key privacy, on-chain release attestation) is strong and true; don't dilute it with claims that can't be backed.
+
+**Verified clean:**
+- Triple-pulse 6261/6261/6261, 0 runners failed (no count change — content edits only)
+- TypeScript 0 × 12
+- i18n-locale-parity 10/10 (3097 keys), i18n-key-coverage 2/2, all FAQ smokes, comparison-freshness 15/15, mediakit-freshness 6/6, source-marketing-prose 4/4
+
+**Smoke runner script count:** 250 (unchanged).
+
+— 2026-05-28.
+
+**Prior turn (cp162):** ops-cli compiled build (esbuild bundle + launcher shim) — removed tsx from the runtime path, verified seamless across all four install paths.
+
+**Prior turn (cp161 + verify):** operator install fix — tsx→prod-dep, Ansible verify task, docs at 3 entry points; verification caught + corrected two defects.
+
+**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 lens + doc cleanups.
+
+**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper.
+
+**Prior turns (cp142–cp158):** mcp-server hardening + audit infrastructure + cp146 lens across mcp-server/relay/indexer + cp138 plan walk.
+
+**Twenty-two checkpoints this session (cp142–cp163).**  cp146 lens audit complete (cp160).  cp161/cp162 closed the operator install-fragility class (verified, compiled build).  cp163 is a content pass: reward-claim wording, staking FAQ, Blurt casing — plus two false brag claims correctly rejected.
 
 **What cp162 does:** gives `apps/ops-cli` a single self-contained esbuild bundle (`dist/main.js`) that runs under plain `node`, plus a launcher-shim `bin` that runs the compiled bundle when present and falls back to tsx-source when not.  This removes tsx from the runtime path entirely (compiled mode) while keeping the install bulletproof across every path.
 
@@ -42,65 +88,58 @@ Pointing `bin` straight at `dist/main.js` would have BROKEN the manual-install p
 
 **Smoke runner script count:** 250 (was 249; +1 compiled-bundle-smoke).
 
-**cp162 fully closes the cp161 install-fragility class.**  The operator's `morphit-ops command not found` is now defended at three layers: (1) docs lead with the verified cause across all entry points, (2) Ansible verifies runnability post-install, (3) the runtime no longer needs tsx (compiled) yet still works without a build (fallback).  Nothing about the install can surprise the sysadmin tomorrow.
+### Orientation snapshot (cp163 baseline)
 
-— 2026-05-28.
-
-**Prior turn (cp161 + verify):** operator install fix — tsx→prod-dep, Ansible verify task, docs at all 3 entry points; verification pass caught + corrected two defects (`npx --no-install` non-guarantee, mis-ordered doc cause) + added install-invariants-smoke.
-
-**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 finding lens + doc cleanups.
-
-**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper.
-
-**Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
-
-**Prior turn (cp157):** apps/relay focused audit.
-
-**Prior turns (cp142–cp156):** mcp-server hardening campaign + audit infrastructure + the cp146 lens audit across mcp-server.
-
-**Twenty-one checkpoints this session (cp142–cp162).**  cp146 lens audit complete across all workspaces (cp160).  cp161 closed an operator install failure (verified, two defects caught).  cp162 delivered the architectural fix — compiled ops-cli build via esbuild bundle + launcher shim — removing the tsx runtime dependency while keeping the install seamless across every path.
-
-**The report:** sysadmin ran `npx morphit-ops init` (wizard started), next day after `git pull` + same steps got "command not found."
-
-**VERIFIED root cause** (the verification pass nailed down the exact reproducer, which differed from the first hypothesis):
-
-The decisive reproducer is **running `npx morphit-ops` from outside the repo, or before `npm install` populated node_modules** — npx then falls through to the public registry and returns `E404 GET https://registry.npmjs.org/morphit-ops - Not found`, which surfaces as "command not found."  The likely story: yesterday he ran it from `~/morphit`; today after `git pull` he was in a different directory or on a fresh second server.  (Stale-symlink-after-pull is a real secondary cause but NOT the primary one — verified by reproduction.)  Secondary latent failure: tsx was a devDependency, so `npm install --omit=dev` / `NODE_ENV=production` would strip it and break the bin a second way.
-
-**Fixes shipped (all VERIFIED against real reproductions):**
-
-1. **tsx → production dependency** (`apps/ops-cli/package.json`).  VERIFIED: ran `npm install --omit=dev --workspaces --include-workspace-root` in the sandbox — tsx survives, `morphit-ops --help` runs.  This is the exact production-install path that would have broken pre-cp161.  Lockfile regenerated (tsx now recorded as a prod dep of apps/ops-cli).
-
-2. **Ansible hardening** (`clone_and_build.yml`): corrected the misleading build-task comment (no longer claims to build ops-cli); NEW post-install verify task.  **VERIFICATION CAUGHT A DEFECT:** the first cut used `npx --no-install morphit-ops --help`, but testing proved `--no-install` still performs a registry lookup (E404 on network) — NOT a reliable offline guarantee.  Corrected to `npm exec --offline --workspace apps/ops-cli morphit-ops -- --help`, which VERIFIED refuses network (`ENOTCACHED`, cache-only) and resolves purely from the local workspace.
-
-3. **Docs at all three operator entry points** — and the VERIFICATION CAUGHT A SECOND DEFECT: the first-cut docs led with "stale symlink after git pull" as the primary cause, but the verified reproducer is directory-context / missing-install.  Rewrote OPERATIONS.md §33 + RUN-A-MORPHIT-NODE.md §12 to lead with the real cause (run-from-repo + npm-install), symlink as secondary.  Also corrected the `--no-install` claim in the sysadmin-handoff to the `npm exec --offline` form.  Made the manual-install step's `cd ~/morphit` explicit and added the morphit-ops-bin-needs-npm-install note right at the install step.
-
-4. **NEW regression smoke** `apps/ops-cli/scripts/install-invariants-smoke.ts` (7 scenarios) — locks the entire install contract so this class of failure can't silently regress: tsx-is-prod-dep, robust shebang, bin-field correctness, Ansible-doesn't-falsely-claim-ops-cli-build, Ansible-verify-uses-offline-exec, engines-Node-major-matches-Ansible-Node, all-three-docs-document-the-fix.  Tamper-tested (reverting tsx→dev + verify→npx --no-install fires the right 2 scenarios).
-
-**Footgun hunt (beyond the reported bug) — verified clean:**
-- Shebang `#!/usr/bin/env -S npx tsx`: KEPT.  Verified a bare `tsx` shebang FAILS (exit 127) in an operator's bare shell where tsx isn't on PATH; the npx form is robust across both bare-shell direct-bin and `npx morphit-ops` paths.  ~0.4s npx overhead is irrelevant for an interactive wizard.
-- Node version: engines `>=22` matches Ansible `morphit_node_version: "22"` — no mismatch.  Manual path docs Node 22 via NodeSource.  No engine-strict gotcha.
-- No other fragile workspace bins (mcp-server uses dist/main.js + node shebang; only ops-cli runs from source).
-- `morphit-ops init --check-only` runs and produces a clean actionable system-check report, exits gracefully.
-- All documented bypass commands verified runnable: `npm exec --workspace`, `cd apps/ops-cli && npm start --`, `npx morphit-ops`.
-- Doc cross-refs resolve (§33 Docker section holds the troubleshooting block; §12 exists); zero "Gitea" introduced.
-
-### Orientation snapshot (cp162 baseline)
-
-- **Smoke battery:** 6261/6261, triple-pulse stable at cp162 baseline. 0 runners failed.  Smoke runner script count: 250.
+- **Smoke battery:** 6261/6261, triple-pulse stable at cp163 baseline. 0 runners failed.  Smoke runner script count: 250.
 - **TypeScript:** 0 errors across all 12 projects.  `verbatimModuleSyntax: true` in EVERY workspace.
 - **svelte-check:** 0 errors / 0 warnings.
-- **CI:** package-lock.json regenerated cp144 + cp154 + cp161 (tsx promotion) + cp162 (esbuild devDep + bin→shim) — RED since cp140, GREEN as of cp144 ship.
+- **CI:** package-lock.json regenerated cp144 + cp154 + cp161 + cp162 — RED since cp140, GREEN as of cp144 ship.
 - **Monorepo workspaces:** 11 (apps ×6 + packages ×5 incl. net-defense).
 - **REVISIT-LIST split:** cp100+ live in `docs/REVISIT-LIST.md`; cp99-and-earlier frozen in `docs/REVISIT-LIST-ARCHIVE.md`.
-- **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries.
+- **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries · 3097 i18n keys/locale.
+- **Blurt casing convention:** "Blurt" = chain/brand; "BLURT" = currency-unit ticker (like BTC/ETH) in code (`ASSET_TICKERS`) + UI ticker contexts. As of cp163, the FAQ/brag/comparison content surfaces use "Blurt" in prose (Ken directive), preserving "BLURT" only inside ticker-enumeration lists.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp162 will ship in the next beta release.
-- **ops-cli build:** `apps/ops-cli` now compiles to a self-contained `dist/main.js` (esbuild bundle); the `bin` is a launcher shim that runs the compiled bundle when present and falls back to tsx-source otherwise.  `dist/` is gitignored — built on install (Ansible via `--workspaces --if-present`; manual optional).
-- **cp146 lens audit:** COMPLETE across all workspaces (cp160).  **cp161** closed an operator install failure (morphit-ops command-not-found, verified).  **cp162** delivered the architectural fix (compiled ops-cli build, no tsx runtime).  Remaining pre-launch work is deployment-gated (cp138 items #95-104) + A1/A14 cp113 items needing Ken's scope clarification.
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp163 will ship in the next beta release.
+- **ops-cli build:** compiles to self-contained `dist/main.js` (esbuild); `bin` is a launcher shim (compiled-when-present, tsx-fallback). `dist/` gitignored, built on install.
+- **cp146 lens audit:** COMPLETE (cp160).  **cp161/cp162** closed the operator install-fragility class (verified + compiled build).  **cp163** content pass (reward wording, staking FAQ, Blurt casing).  Remaining pre-launch: deployment-gated cp138 items #95-104 + A1/A14 cp113 items needing Ken's scope clarification.
+- **Two brag claims permanently rejected (cp163):** TEE-attested (no enclave) + anonymous-LLM-proxy (not Morphit's category) — do not add.
 
 ### Most recent work — what just shipped
 
-**cp162 (2026-05-28, this session):** The architectural fix for the cp161 install-fragility class — ops-cli now compiles to a self-contained bundle, removing tsx from the runtime path.
+**cp163 (2026-05-28, this session):** Content pass on the public-facing surfaces — reward-claim rewording, new staking FAQ, Blurt-casing sweep — plus two brag claims evaluated and rejected.
+
+**Reward-claim rewording (comparison image, `build_comparison.py`):**
+- "Loyalty milestones and trader achievements" → "All users earn financial rewards on trading milestones"
+- NEW row: "Instance operators earn 90% of Blurt-paid listing fees"
+- "Operator earns ~2% on idle treasury while users trade" → "All users earn ~2% interest on staked Blurt"
+- Chain row simplified: "Blurt (BLURT) — the chain…" → "Blurt — the chain…"
+
+**Accuracy correction:** Ken proposed "90% of all Blurt trading fees"; I corrected to "90% of Blurt-paid **listing** fees."  Morphit is non-custodial P2P — there is no per-trade fee to take 90% of.  The 90/10 split is specifically the Blurt-paid listing fee (and only Blurt-paid; BTC/XMR-paid listings fund treasury 100%).  "trading fees" would have been a false claim.
+
+**NEW FAQ entry `how_to_stake_blurt`** (faqIndex.ts cluster 4 + all 10 locales, full native translations): how to power up liquid Blurt into BP via a Blurt wallet (BlurtWallet.com easiest), ~2% APR (live-computed from chain inflation, shown in-app), ~4-week power-down to unstake, non-custodial (Morphit isn't a wallet, power-up happens on-chain through a wallet you control).
+
+**Blurt-casing sweep** (Ken: no all-caps "BLURT" in faq/brag/comparison):
+- FAQ subtree, all 10 locales: BLURT→Blurt, 1,489 occurrences → 0.  "Blurt Power (BP)" + the BP abbreviation preserved.
+- Brag list: 25 prose lines swept.  **Preserved** BLURT in 2 ticker-enumeration contexts (`BTC/BCH/…/BLURT/SOL/ETH` and `16 assets across BTC, XMR, BLURT, USDT…`) where lowercasing only BLURT among uppercase ticker neighbors would read as a typo — same Blurt-prose-vs-BLURT-ticker principle the codebase already uses.
+- **Scope:** swept only the FAQ subtree in locales, NOT the 1,024 BLURT occurrences elsewhere (asset pickers, balance cards, tooltips) — out of the three named surfaces, and BLURT-as-ticker is correct there.
+
+**Regenerated:** comparison SVG+PNG and mediakit zip.  The new comparison row pushed the 2400px-render PNG over the 512 KB footprint budget → added a `PNG_RENDER_WIDTH=2200` constant (raster width distinct from layout width; 2200px stays crisp, lands at 466 KB).  The mediakit-freshness smoke caught the brag-list edit staling the bundled zip — rebuilt per the standing rule.
+
+**Two brag claims evaluated → BOTH REJECTED (false; do not add):**
+- **"TEE-Attested":** Morphit runs in no Trusted Execution Environment.  The codebase "attestation" is on-chain release attestation + multi-explorer Monero attestation + fee-attestation — none are CPU enclaves (SGX/SEV/Nitro).  Claiming TEE-attested = false security claim.  Real implementation would need enclave deployment + remote attestation (weeks; fights priority #2 decentralization).
+- **"PROXY — Anonymous to vendor — frontier LLM":** that's an LLM-inference proxy (phantom.codes).  Morphit is a P2P marketplace, not an LLM proxy.  Claiming it = claiming a feature Morphit lacks.
+- **Principle:** "competitors probably don't have it either" is not a basis for a claim.  Morphit's true privacy story is strong; don't dilute it.
+
+**Verified clean:**
+- Triple-pulse 6261/6261/6261, 0 runners failed (content edits only, no count change)
+- TypeScript 0 × 12
+- i18n-locale-parity 10/10 (3097 keys), i18n-key-coverage 2/2, all FAQ smokes, comparison-freshness 15/15, mediakit-freshness 6/6, source-marketing-prose 4/4
+
+**Smoke runner script count:** 250 (unchanged).
+
+**Lesson — distinguish brand from ticker before a casing sweep, and respect cross-asset dependencies.**  "Blurt" (chain/brand) vs "BLURT" (currency-unit ticker) is a real distinction the codebase already encodes; a blind global lowercase would have broken ticker-list consistency with BTC/SOL/ETH.  And editing the brag list staled the mediakit zip — the mediakit-freshness smoke caught it, exactly the cross-dependency the verify-everything discipline exists for.
+
+**cp162 (2026-05-28, prior turn this session):** The architectural fix for the cp161 install-fragility class — ops-cli now compiles to a self-contained bundle, removing tsx from the runtime path.
 
 **The problem cp161 left open:** cp161 made the install reliable but ops-cli still ran from TypeScript source via tsx at runtime.  cp162 is the proper fix: a compiled `dist/main.js` so the bin points at runnable JS.
 

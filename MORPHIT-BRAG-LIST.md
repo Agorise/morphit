@@ -33,7 +33,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 1. Free, fast, and friction-free
 
-1. **Signup is free to the user.** No credit card, no bank link, no fee, no deposit. The operator's relay account pre-mints Account Creation Tokens (ACTs) at ~100 BLURT each in a weekly batch ceremony, then consumes one ACT to create your account on-chain — so you join cost-free, and the operator's hot wallet is never sized to the daily signup rate. (See ADR-0010 §4 for the key-custody rationale.)
+1. **Signup is free to the user.** No credit card, no bank link, no fee, no deposit. The operator's relay account pre-mints Account Creation Tokens (ACTs) at ~100 Blurt each in a weekly batch ceremony, then consumes one ACT to create your account on-chain — so you join cost-free, and the operator's hot wallet is never sized to the daily signup rate. (See ADR-0010 §4 for the key-custody rationale.)
 
 2. **No KYC, no ID, no selfie, no proof of address, no nothing.** You submit your cryptographic public keys and your desired username. That's the entire signup.
 
@@ -47,7 +47,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 7. **No transaction-fee auctions.** No gas wars. No priority-fee arms races. Listing fees are flat (with a Sybil-tier multiplier for spammers, see §9).
 
-8. **First buy of BLURT is free.** New users get a one-time waiver on their first listing fee, which puts real BLURT in their wallet so they can post and participate from day one.
+8. **First buy of Blurt is free.** New users get a one-time waiver on their first listing fee, which puts real Blurt in their wallet so they can post and participate from day one.
 
 9. **No deposits.** Nothing to "fund" before trading. You hold your own coins; you trade when you want.
 
@@ -95,7 +95,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 30. **Sharing your public address goes through a privacy-aware modal.** Not just a copy-paste field — a flow that asks about subaddress preferences (XMR), amount-jitter (applied to every supported asset — BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/BLURT/SOL/ETH/XRP/XMR plus the stablecoins USDT/USDC/DAI; even XMR with its on-chain hidden amounts gets jitter because chat-shared amounts and centralized off-ramps both reveal the figure, and that's a separate linkability threat from the issuer-freeze concern the stablecoins already carry), client-side address-reuse detection (warns when you're about to share an address you've shared from this device before), and optional PayJoin (BIP-78) endpoint for BTC. Untraceability is the mission.
 
-31. **Amount-jitter on every transparent chain.** Default ON. Adds a small random extra (≤999 satoshis for UTXO chains, ≤99 milliblurt for BLURT) so the "exact 0.00513924 BTC" giveaway becomes "approximately 0.00513924 BTC with a small random tail your buyer absorbs." Trivial cost; significant chain-analysis defeat.
+31. **Amount-jitter on every transparent chain.** Default ON. Adds a small random extra (≤999 satoshis for UTXO chains, ≤99 milliblurt for Blurt) so the "exact 0.00513924 BTC" giveaway becomes "approximately 0.00513924 BTC with a small random tail your buyer absorbs." Trivial cost; significant chain-analysis defeat.
 
 32. **Client-side address-reuse warning.** When you paste or type a receive address you've previously shared from this device, the address-share modal surfaces an amber chip with the date of the prior share (and previous order permlink, if available). Pure localStorage — never transmitted to any Morphit server. Per-device limit: 200 entries (rolling buffer).
 
@@ -157,7 +157,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 60. **Global daily ceiling** on signups, configurable per operator. Caps worst-case Sybil drain regardless of how many IPs an attacker controls.
 
-61. **Operator-balance scanner** alerts when the relay's BLURT balance approaches zero, so the operator can refill if desired before signups stall.
+61. **Operator-balance scanner** alerts when the relay's Blurt balance approaches zero, so the operator can refill if desired before signups stall.
 
 62. **Federation probe** auto-discovers other Morphit instances and tracks their health (good / quiet / stale / unreachable / mismatch / never).
 
@@ -209,7 +209,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 85. **Anyone can run a node.** Pick a domain (or skip the domain), clone the repo, run the setup script, broadcast a `morphit_operator_register_v1` op. You're in the federation. No application, no permission, no central listing.
 
-86. **Operators earn 90% of every BLURT-paid listing fee on their instance, paid in BLURT directly to their payout address — the other 10% goes to the project treasury (@morphit-fees).** BTC/XMR-paid listings fund the project treasury 100% — those don't generate operator revenue — but the BLURT-paid path is 50% cheaper for users (deliberate incentive), so most listings naturally choose BLURT, where operator revenue lives. Real revenue stream for serious operators on a $5-10/month VPS. No project skim on the operator's BLURT share.
+86. **Operators earn 90% of every Blurt-paid listing fee on their instance, paid in Blurt directly to their payout address — the other 10% goes to the project treasury (@morphit-fees).** BTC/XMR-paid listings fund the project treasury 100% — those don't generate operator revenue — but the Blurt-paid path is 50% cheaper for users (deliberate incentive), so most listings naturally choose Blurt, where operator revenue lives. Real revenue stream for serious operators on a $5-10/month VPS. No project skim on the operator's Blurt share.
 
 87. **Operator instances are self-branded.** `acme.example.com` running Morphit looks like Acme Corp's marketplace, not like a generic affiliate page.
 
@@ -223,15 +223,15 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 92. **Indexer cross-verifies via multiple Blurt RPCs.** No single chain provider is a trust anchor.
 
-93. **Self-sovereign BLURT pricing from on-platform trade data** (opt-in). Operators can flip on a price source that derives BLURT/USD from real verified-fee trades happening on Morphit instead of asking Klingex or Coingecko. Survives any external feed shutting down: tiered anchors prefer direct BLURT-vs-USD orders, fall back to BLURT-vs-stablecoin orders with cross-stablecoin depeg detection, then combine both pools when each alone is thin. Same Sybil filters as reputation; one-vote-per-trader medians; manipulation defenses at every layer.
+93. **Self-sovereign Blurt pricing from on-platform trade data** (opt-in). Operators can flip on a price source that derives Blurt/USD from real verified-fee trades happening on Morphit instead of asking Klingex or Coingecko. Survives any external feed shutting down: tiered anchors prefer direct Blurt-vs-USD orders, fall back to Blurt-vs-stablecoin orders with cross-stablecoin depeg detection, then combine both pools when each alone is thin. Same Sybil filters as reputation; one-vote-per-trader medians; manipulation defenses at every layer.
 
 94. **Publicly verifiable price receipt.** Fetch `GET /v1/price/morphit-native/receipt` and you get exactly which on-platform traders contributed to the current native price, which tier was used, the live cross-stablecoin depeg report, the plausibility envelope settings, and a loud NOT-AN-ORACLE warning. Anyone can audit; nothing about price derivation is opaque.
 
-95. **Operator-configurable price denomination.** The "~$0.12" subtext next to listing-fee BLURT amounts isn't hardcoded to USD — operators pick their instance's display unit (USD, EUR, GBP, JPY, BRL, CNY, INR, RUB, AED, XDR for the IMF basket, XAU for gold ounces, or any 3-8 character ticker their market uses). Works today for non-USD-native markets, hedges against future scenarios where USD's reserve-currency role erodes. One env var, no code change; listing-fee API returns a `denomination_fiat` field so frontends know which unit they're rendering.
+95. **Operator-configurable price denomination.** The "~$0.12" subtext next to listing-fee Blurt amounts isn't hardcoded to USD — operators pick their instance's display unit (USD, EUR, GBP, JPY, BRL, CNY, INR, RUB, AED, XDR for the IMF basket, XAU for gold ounces, or any 3-8 character ticker their market uses). Works today for non-USD-native markets, hedges against future scenarios where USD's reserve-currency role erodes. One env var, no code change; listing-fee API returns a `denomination_fiat` field so frontends know which unit they're rendering.
 
 96. **Cross-instance peer-disagreement detector (Defense F).** Opt-in monitor that periodically queries peer Morphit instances' price-receipt endpoint, computes the federation median, and alerts on sustained 25%+ disagreement vs your own derived price. Catches the case where YOUR indexer is the one being manipulated — pressured operator, captured server, geographic isolation — rather than the trader-level manipulation the cp127 sybil filters address. Uses median (not mean) so a single bad peer can't swing the result, requires ≥3 peers minimum, and filters by same-denomination so EUR-vs-USD instances aren't compared apples-to-oranges (which closes the last open item from cp127's 8-defense black-hat table).
 
-97. **Multi-asset self-sovereign pricing.** The cp127 morphit_native price source (which derives BLURT/USD from on-platform trade data when external feeds are unavailable) extends to BTC and XMR in cp130 — each asset has its own composite chain (BLURT gets Klingex + Coingecko + native + static floor; BTC and XMR get Coingecko + native + static floor since Klingex doesn't trade them at scale). The receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC` now returns a real BTC/USD derivation that operators can inspect, and per-asset peer monitoring extends Defense F to alert on BTC and XMR disagreement independently.
+97. **Multi-asset self-sovereign pricing.** The cp127 morphit_native price source (which derives Blurt/USD from on-platform trade data when external feeds are unavailable) extends to BTC and XMR in cp130 — each asset has its own composite chain (Blurt gets Klingex + Coingecko + native + static floor; BTC and XMR get Coingecko + native + static floor since Klingex doesn't trade them at scale). The receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC` now returns a real BTC/USD derivation that operators can inspect, and per-asset peer monitoring extends Defense F to alert on BTC and XMR disagreement independently.
 
 98. **Wallet developers can embed Morphit's orderbook directly inside their wallet UI** — the same kind of integration Mycelium famously did with LocalBitcoins years ago. Morphit publishes a stable public REST + SSE API (`/v1/openapi.json` on any instance) covering the orderbook, profiles, feedback, and chat — federation-aware, so the wallet can point at any operator's instance or a self-hosted one. Any wallet supporting Morphit's 16 tradable assets can offer peer-to-peer trading without making users leave it. AGPL-3.0 like the rest of the project; integrators ship under their own license.
 
@@ -259,7 +259,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 6. For Monero users specifically
 
-109. **Monero is a first-class asset, not an afterthought.** Listed alongside Bitcoin and BLURT as the three core trading assets. Treated as a peer, not a curiosity.
+109. **Monero is a first-class asset, not an afterthought.** Listed alongside Bitcoin and Blurt as the three core trading assets. Treated as a peer, not a curiosity.
 
 110. **Morphit won't accept your view key.** Ever. For any reason. The Monero verification flow is explicitly designed to NOT require it.
 
@@ -321,11 +321,11 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 137. **Engagement counter** shows how many distinct accounts messaged the order owner about a specific order in the last 24 hours. Tells you if an order is alive or stale.
 
-138. **Loyalty milestones** delegate progressively more BP (10/50/200/1000, totaling 1,260 BP) as you accumulate cumulative BLURT-fee spend. Real reward for sustained good-faith trading.
+138. **Loyalty milestones** delegate progressively more BP (10/50/200/1000, totaling 1,260 BP) as you accumulate cumulative Blurt-fee spend. Real reward for sustained good-faith trading.
 
-139. **Welcome bonus on first completed trade: 10 BLURT liquid + 10 BLURT Power (BP).** BP is your own vested, staked BLURT — not a delegation, not borrowed. You own it. Staking earns you curation rewards, empowers your upvotes, and earns you ~2% interest (APR).
+139. **Welcome bonus on first completed trade: 10 Blurt liquid + 10 Blurt Power (BP).** BP is your own vested, staked Blurt — not a delegation, not borrowed. You own it. Staking earns you curation rewards, empowers your upvotes, and earns you ~2% interest (APR).
 
-140. **First-fee welcome BP** delegates 1 BP on your first BLURT-paid listing fee, separate from the welcome bonus. Small symbolic stake giving you a foot in the broader Blurt ecosystem.
+140. **First-fee welcome BP** delegates 1 BP on your first Blurt-paid listing fee, separate from the welcome bonus. Small symbolic stake giving you a foot in the broader Blurt ecosystem.
 
 141. **Reputation can't be migrated to a competitor's silo.** It's on a public chain. Your reputation is yours, portable across every Morphit instance. If you want to start using a different operator's frontend, your reputation comes with you.
 
@@ -334,17 +334,17 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 143. **Listing fees rise with abuse.** Sybil-tier multiplier scales: 4th order in 24h = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×. Honest traders pay $0.12; spammers pay rapidly-growing tolls.
 
-144. **Cold-message fees** discourage drive-by spam. First-time DM to someone you've never traded with costs ~$0.01 in BLURT, escalating with abuse history.
+144. **Cold-message fees** discourage drive-by spam. First-time DM to someone you've never traded with costs ~$0.01 in Blurt, escalating with abuse history.
 
 145. **Featured-slot bidding is auctioned, with anti-snipe protections and outbid alerts.** Top-of-orderbook placement requires outbidding, but minimum-hours floors prevent micro-bid sniping, bids go to the operator (no project skim), and a soft-close rule extends the deadline of any expiring top-5 bid when a new bidder triggers it in the last 5 minutes (capped at 6 extensions / 30 min). Bidders see their own recent bids inline with the bid form (status chips: Visible / Outranked / Expired / Order ended), so they know what to pay before pressing submit. When a new bid outranks yours, the displaced bidder gets a push notification with one-tap re-bid.
 
-146. **Account creation costs the operator 100 BLURT per signup.** That's a real economic gate. Sybil farms attacking a Morphit instance must convince the operator's relay to spend real money on each puppet account, which the operator's daily-ceiling defenses cap.
+146. **Account creation costs the operator 100 Blurt per signup.** That's a real economic gate. Sybil farms attacking a Morphit instance must convince the operator's relay to spend real money on each puppet account, which the operator's daily-ceiling defenses cap.
 
 147. **Per-IP signup spacing.** Multiple invite-token issuance from the same IP triggers an Altcha PoW challenge.
 
 148. **`/v1/health` short-circuits signups when the relay is low on funds.** Drains stop before they become unbounded.
 
-149. **Drainer has defense-in-depth.** Per-row caps (N BLURT max amount per queued transfer), savepoint isolation per op, idempotency guards.
+149. **Drainer has defense-in-depth.** Per-row caps (N Blurt max amount per queued transfer), savepoint isolation per op, idempotency guards.
 
 150. **No invite is "verified by SMS / phone."** No carrier surveillance. The invite system uses cryptographic proof-of-work, not telecom data.
 
@@ -394,7 +394,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 171. **Right-to-left support for Persian.** Layout flips, numerals localize (Persian uses ۱۰ not 10), text flow respects RTL conventions.
 
-172. **Persian numerals tracked separately.** The fee-reward smoke specifically validates Persian-numeral consistency, because "10 BLURT" and "۱۰ BLURT" don't share regex patterns.
+172. **Persian numerals tracked separately.** The fee-reward smoke specifically validates Persian-numeral consistency, because "10 Blurt" and "۱۰ Blurt" don't share regex patterns.
 
 173. **No US-centric defaults assumed.** Currency display, date formatting, payment method names — locale-aware.
 
@@ -430,7 +430,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 188. **Documented in plain English: "Morphit cannot see this."** Throughout the chat-trade flow, the UI explicitly tells users which actions Morphit observes and which it doesn't. No false claims of total privacy where partial privacy is the truth.
 
-189. **Pro-Monero stance in the welcome bonus.** New users with their first XMR trade get the same welcome bonus (10 BLURT liquid + 10 BLURT Power) as BLURT-fee payers, no second-class treatment.
+189. **Pro-Monero stance in the welcome bonus.** New users with their first XMR trade get the same welcome bonus (10 Blurt liquid + 10 Blurt Power) as Blurt-fee payers, no second-class treatment.
 
 ## 13. Honest comparisons (CEX, fake DEX, P2P)
 
@@ -530,11 +530,11 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 232. **Trading-activity dashboard at `/explorer/activity`.** Daily fee revenue, top-5 trading pairs, federation-wide order volume — all derived from public chain data, no analytics scripts. Useful for traders deciding which assets are liquid, and for operators showing prospective traders what the marketplace looks like at scale. Same data the project uses internally; nothing hidden.
 
-233. **Cross-chain explorer links inside chat.** When a counterparty sends you a Bitcoin txid, the chat bubble auto-routes to mempool.space; Monero txid auto-routes to xmrchain.net (or the operator-configured XMR explorer); BLURT txid routes to the in-app `/explorer`. Click → confirm payment landed. No copy-paste-into-a-third-party-site dance.
+233. **Cross-chain explorer links inside chat.** When a counterparty sends you a Bitcoin txid, the chat bubble auto-routes to mempool.space; Monero txid auto-routes to xmrchain.net (or the operator-configured XMR explorer); Blurt txid routes to the in-app `/explorer`. Click → confirm payment landed. No copy-paste-into-a-third-party-site dance.
 
 234. **Display-payment QR codes for receiving addresses.** Share a receive address through the trade flow and Morphit can render it as a QR code on screen, using the right URI scheme per asset (BIP-21 for Bitcoin-family, official Monero URI, ZIP-321 for Zcash, Solana Pay, EIP-681 for EVM, XRPL URI, etc.). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service — the QR library is lazy-loaded so users who never tap "Show QR" don't pay the bytes.
 
-235. **Live BLURT staking APR display** in the balance card. Computed locally from chain DGP — no third-party endpoint, no CoinGecko, no fee-feed dependency. (Current chain inflation is 7.6% as of 2026-05-03; ~75% of new emission goes to BP holders pro-rata, so the real APR per staked BP unit varies with the vesting pool size.)
+235. **Live Blurt staking APR display** in the balance card. Computed locally from chain DGP — no third-party endpoint, no CoinGecko, no fee-feed dependency. (Current chain inflation is 7.6% as of 2026-05-03; ~75% of new emission goes to BP holders pro-rata, so the real APR per staked BP unit varies with the vesting pool size.)
 
 ## 17. Trade anything — barter, cash, precious metals
 
@@ -580,7 +580,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 255. **Operators publish two I2P addresses, both render.** Operators with both a long-form `.b32.i2p` (always-resolvable) AND a human-readable `.i2p` alias can publish both. The footer renders both as separate chips; the directory shows both for every operator that publishes them. Backwards-compatible with single-address operators.
 
-256. **Discretionary bug bounty program.** Find a real security bug — privacy leak, signup-drain vulnerability, cryptographic flaw — disclose responsibly via `@agorise:matrix.org`, and the operator may compensate you in BTC, XMR, or BLURT at their discretion. No formal program scope, no rigid payout grid — the operator decides based on severity, novelty, and demonstrability. Honest framing: this isn't HackerOne, it's a thanks-with-money for genuinely good security research.
+256. **Discretionary bug bounty program.** Find a real security bug — privacy leak, signup-drain vulnerability, cryptographic flaw — disclose responsibly via `@agorise:matrix.org`, and the operator may compensate you in BTC, XMR, or Blurt at their discretion. No formal program scope, no rigid payout grid — the operator decides based on severity, novelty, and demonstrability. Honest framing: this isn't HackerOne, it's a thanks-with-money for genuinely good security research.
 
 257. **Weekly automated warrant canary.** Every Monday at 00:00 UTC the canonical operator signs a short statement ("no warrants received this week") and broadcasts it as a chain op. If the signature stops appearing for two consecutive weeks, the chain itself surfaces the missing signal — no operator can be compelled to lie because the silence is the message. Federated instances run their own canaries on their own schedules.
 
@@ -646,7 +646,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 288. **First-post starter pack.** First-time posters see a green-tinted card with three safe-default tips (start small, 7-day expiry, pick payment methods you actually accept) and a deep link to the trade-walkthrough FAQ. Self-hides once the user has any prior posting experience. Privacy posture: client-side only.
 
-289. **Centralized locale-aware number/date formatters.** Currency, percent, BLURT amount, count, and date helpers all read the active locale. A German user sees "1.234,56" where a US user sees "1,234.56" — no ad-hoc `.toFixed()` calls drifting across the codebase.
+289. **Centralized locale-aware number/date formatters.** Currency, percent, Blurt amount, count, and date helpers all read the active locale. A German user sees "1.234,56" where a US user sees "1,234.56" — no ad-hoc `.toFixed()` calls drifting across the codebase.
 
 290. **Printable one-page cheat-sheet at `/cheat-sheet`.** A landscape A4 / US Letter sheet with the trade flow on the left, the chat-paste safety rules in the middle, and the per-asset quick-reference table on the right. Fold and put it on your desk; hand it to the grandma you're onboarding. Print-friendly CSS strips colors and reformats for a single black-and-white page.
 
@@ -688,7 +688,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 309. **Operator-doc audit pinned by regression smokes.** Every CLI command, every environment variable, every API field path, every install location named in the operator docs is sentinel-grep checked against the real code. When the docs and the code disagree, CI fails loudly before the operator copy-pastes from a doc that lies.
 
-310. **USDT (Tether) peer-to-peer across four networks.** Trade USDT on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or BNB Smart Chain (BEP-20) — peer to peer, non-custodial, no KYC. The most-traded stablecoin in the world, with the price stability active traders rely on. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum); operators can disable USDT on their instance with one env var if they prefer to specialize.
+310. **USDT (Tether) peer-to-peer across four networks.** Trade USDT on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or BNB Smart Chain (BEP-20) — peer to peer, non-custodial, no KYC. The most-traded stablecoin in the world, with the price stability active traders rely on. Trade-only on Morphit (listing fees stay Blurt/BTC/XMR per the frozen fee enum); operators can disable USDT on their instance with one env var if they prefer to specialize.
 
 311. **No default USDT network — every USDT trade is an explicit network commit.** Cross-network sends are unrecoverable (USDT-ERC20 to a TRC-20 address loses the funds, period). Morphit's UI refuses to let the user default into that mistake: every USDT trade picks the network deliberately, every USDT address shared in chat carries a bold per-network header and a permanent per-message reminder of which chain it's for, and the post-order form won't submit until the network is chosen. Friction by design — the right kind of friction.
 
@@ -698,13 +698,13 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 314. **No flash of English content for non-English speakers.** Every page is prerendered per locale — `/de/orderbook` ships German bytes, `/fa/orderbook` ships Persian, `/zh-HK/orderbook` ships Traditional Chinese. No layout flicker, no client-side translation reload — what you see is what you get from the first byte.
 
-315. **Bitcoin Cash (BCH) peer-to-peer.** Trade BCH on Morphit — bigger blocks and lower fees than BTC, transparent and decentralized with no issuer who can freeze addresses. Single mainnet, single CashAddr address format, no bridges. Trade-only on Morphit (listing fees stay BLURT/BTC/XMR per the frozen fee enum).
+315. **Bitcoin Cash (BCH) peer-to-peer.** Trade BCH on Morphit — bigger blocks and lower fees than BTC, transparent and decentralized with no issuer who can freeze addresses. Single mainnet, single CashAddr address format, no bridges. Trade-only on Morphit (listing fees stay Blurt/BTC/XMR per the frozen fee enum).
 
 316. **Setup wizard handles trade-only-asset opt-out — no manual env editing.** Step 13 of `morphit-ops init` walks operators through each tradable asset and asks per-ticker whether to disable. Picks emit the right `MORPHIT_INDEXER_DISABLED_ASSETS=` line automatically. Grandma-friendly: zero shell editing for the most common operator-stance decision.
 
-317. **Litecoin (LTC) peer-to-peer.** Trade LTC on Morphit — fast 2.5-minute blocks, low transaction fees, transparent and decentralized like Bitcoin with no central issuer. Three address formats accepted (legacy `L`, P2SH `M`/`3`, bech32 `ltc1`). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
+317. **Litecoin (LTC) peer-to-peer.** Trade LTC on Morphit — fast 2.5-minute blocks, low transaction fees, transparent and decentralized like Bitcoin with no central issuer. Three address formats accepted (legacy `L`, P2SH `M`/`3`, bech32 `ltc1`). Trade-only on Morphit (listing fees stay Blurt/BTC/XMR).
 
-318. **Dash (DASH) peer-to-peer.** Trade DASH on Morphit — fast-confirmation Bitcoin-family chain with optional InstantSend (sub-second confirmations) and opt-in PrivateSend mixing via masternodes. Two address formats accepted (`X` legacy, `7` P2SH). Trade-only on Morphit (listing fees stay BLURT/BTC/XMR).
+318. **Dash (DASH) peer-to-peer.** Trade DASH on Morphit — fast-confirmation Bitcoin-family chain with optional InstantSend (sub-second confirmations) and opt-in PrivateSend mixing via masternodes. Two address formats accepted (`X` legacy, `7` P2SH). Trade-only on Morphit (listing fees stay Blurt/BTC/XMR).
 
 319. **USD Coin (USDC) peer-to-peer across four networks.** Trade USDC on Ethereum, Solana, Base, or Polygon — peer to peer, non-custodial, no KYC. Pick whichever network you and your counterparty both support; Morphit's network picker locks it in at post time so a cross-network send can't accidentally lose your funds. Honest disclosure: Circle (the issuer) can freeze any USDC address on demand — exactly why Morphit ships USDC as trade-only and never pays its own listing fees in it.
 

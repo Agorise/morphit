@@ -1,6 +1,68 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp162 (CLOSED) — 2026-05-28 (the architectural fix for the cp161 install-fragility class: ops-cli now compiles to a self-contained esbuild bundle `dist/main.js` + a launcher-shim `bin` that runs the compiled bundle when present and falls back to tsx-source otherwise; removes tsx from the runtime path; verified seamless across all four install paths).  Sentinel battery 6261/0 triple-pulse stable.
+**Last touched:** Part 122 cp163 (CLOSED) — 2026-05-28 (content pass: comparison-image reward-claim rewording + new staking FAQ in 10 locales + Blurt-casing sweep across faq/brag/comparison + comparison/mediakit regen; two brag claims [TEE-attested, anonymous-LLM-proxy] evaluated and rejected as false).  Sentinel battery 6261/0 triple-pulse stable.
+
+## cp163 — Public-surface content pass + two rejected brag claims (CLOSED 2026-05-28)
+
+Ken-directed wording changes to the comparison image and FAQ, a Blurt-casing sweep, and evaluation of two brag claims he saw on phantom.codes.
+
+### Reward-claim rewording (comparison image)
+
+`scripts/comparison-image/build_comparison.py`:
+- "Loyalty milestones and trader achievements" → "All users earn financial rewards on trading milestones"
+- NEW row inserted: "Instance operators earn 90% of Blurt-paid listing fees"
+- "Operator earns ~2% on idle treasury while users trade" → "All users earn ~2% interest on staked Blurt"
+- Chain row "Blurt (BLURT) — the chain…" → "Blurt — the chain…" (dropped redundant ticker parenthetical)
+
+**Accuracy correction (verify-don't-rubber-stamp):** Ken proposed "90% of all Blurt trading fees."  Corrected to "90% of Blurt-paid **listing** fees" — Morphit is non-custodial P2P, there is no per-trade fee; the 90/10 operator/treasury split is specifically the Blurt-paid listing fee (brag item 86), and only Blurt-paid (BTC/XMR-paid listings fund treasury 100%).  "trading fees" would have been false.
+
+The ~2% interest claim is accurate for all stakers: it's a Blurt-protocol fact (vesting share of chain inflation), live-computed by `apps/web/src/lib/blurt/apr.ts`, earned by anyone holding BP — not operator-only.
+
+### NEW FAQ entry `how_to_stake_blurt`
+
+Added to `FAQ_KEYS` (faqIndex.ts, cluster 4 "Fees & economics", after `blurt_benefits`) + full native translations in all 10 locales (en/es/fr/de/ru/it/fa/zh-CN/zh-HK/pl).  Content: powering up liquid Blurt into BP via a Blurt wallet (BlurtWallet.com easiest path), ~2% APR (live from chain inflation, shown in-app), ~4-week power-down to unstake (Blurt protocol rule), non-custodial framing (Morphit isn't a wallet; power-up is on-chain via a wallet the user controls).
+
+### Blurt-casing sweep
+
+Ken directive: "do not use ALL CAPS when mentioning Blurt" in faq/brag/comparison.
+
+The codebase convention: **"Blurt" = chain/brand**, **"BLURT" = currency-unit ticker** (registered in `packages/asset-registry` `ASSET_TICKERS` alongside BTC/XMR/ETH/etc., used like any ticker).  Ken chose the full sweep of the currency-unit form in the three content surfaces.
+
+- **FAQ subtree, all 10 locales:** BLURT→Blurt, 1,489 occurrences → 0.  Swept the `faq` subtree only (not keys; no JSON keys contain BLURT).  "Blurt Power (BP)" and the BP abbreviation preserved.
+- **Brag list:** 25 prose lines swept.  **Preserved** BLURT in 2 ticker-enumeration contexts (lines 96, 573: `BTC/BCH/LTC/.../BLURT/SOL/ETH` and `16 assets across BTC, XMR, BLURT, USDT…`) — lowercasing only BLURT among uppercase ticker neighbors reads as a typo; this is the same Blurt-prose-vs-BLURT-ticker principle the codebase already uses (e.g. comparison's old "Blurt (BLURT)").
+- **Comparison image:** handled in the reward-rows + chain-row edits above.
+- **Out of scope (deliberately untouched):** the 1,024 BLURT occurrences elsewhere in locale files (asset pickers, balance cards, tooltips, welcome flow) — not in the three named surfaces, and BLURT-as-ticker is correct there.  Also untouched: `ASSET_TICKERS` and all code ticker constants.
+
+### Regenerated artifacts
+
+- **Comparison SVG+PNG:** the new row pushed the 2400px-render PNG over the 512 KB footprint budget (priority #4).  Added a `PNG_RENDER_WIDTH=2200` constant (raster output width, distinct from the SVG layout width `W=2400`) — 2200px stays crisp at blog display sizes and lands at 466 KB.  No quality-floor reduction (would hurt legibility for negligible savings; the size driver was dimensions, not color depth).
+- **Mediakit zip:** the mediakit-freshness smoke caught the brag-list edit staling `morphit-mediakit.zip` (which bundles MORPHIT-BRAG-LIST.md).  Rebuilt via `scripts/build-mediakit.sh` per the standing rule.
+
+### Two brag claims evaluated → BOTH REJECTED
+
+Ken asked whether Morphit could claim two things phantom.codes brags about.  Both are false for Morphit:
+
+**"TEE-Attested" — NO.**  A TEE is a CPU enclave (Intel SGX / AMD SEV / AWS Nitro) that cryptographically attests specific untampered code ran inside it.  Morphit runs in no such enclave.  The "attestation" throughout the codebase is unrelated: on-chain release attestation (bundle hashes broadcast to Blurt), multi-explorer Monero-proof attestation (5 explorers cross-checked), and fee-attestation (≥2 attestors promote an order).  The word collision does not bridge the gap.  Claiming TEE-attested would be a flat false security claim.  Actually earning it would require deploying relay/indexer inside an enclave + wiring remote attestation so clients verify the enclave measurement — weeks of infra work, and it fights priority #2 (decentralization: TEEs root trust in Intel/AMD/cloud).
+
+**"PROXY — Anonymous to vendor — Closed-weight frontier (Claude/GPT/Gemini)" — NO.**  That's an LLM-inference proxy (phantom.codes' product: your prompt reaches a frontier model but the vendor doesn't see who you are).  Morphit is a P2P trading marketplace, not an LLM proxy.  The closest thing — the MCP server — is the inverse (an AI agent operates Morphit on a user's behalf).  Claiming it would be claiming a feature Morphit doesn't have.
+
+**Principle reaffirmed:** "the competitors probably don't have it either" is not a basis for a claim — if nobody in the category has it and you claim it, you're the one who gets caught.  Morphit's real, verifiable privacy story (Tor/I2P, no-KYC, non-custodial, Monero view-key privacy, on-chain release attestation) is strong and true.  Don't dilute it with claims that can't be backed in code.
+
+### Verified clean
+
+- Triple-pulse 6261/6261/6261, 0 runners failed (content edits only; no scenario-count change)
+- TypeScript 0 × 12
+- i18n-locale-parity 10/10 (3097 keys), i18n-key-coverage 2/2, faq-jsonld-no-markdown 7/7, faq-keys-themed-section 4/4, faq-search-grandma-coverage 14/14, comparison-image-freshness 15/15, mediakit-freshness 6/6, source-marketing-prose 4/4
+
+### Lesson
+
+Distinguish brand from ticker before a casing sweep — a blind global lowercase would have broken ticker-list consistency with BTC/SOL/ETH and corrupted the `ASSET_TICKERS` code constant.  And content edits have cross-dependencies (the brag list is bundled into the mediakit zip); the mediakit-freshness smoke caught the staleness, which is exactly why those freshness sentinels exist.
+
+### Smoke runner script count
+
+250 (unchanged — content-only checkpoint).
+
+---
 
 ## cp162 — ops-cli compiled build (CLOSED 2026-05-28)
 
