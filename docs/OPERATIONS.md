@@ -5523,6 +5523,43 @@ Add `~/.pgpass` to the morphit system user's home with the same password as `sec
 
 These should run on the host with the same Node version your image uses, against the running container's exposed ports.
 
+### Troubleshooting: `morphit-ops` says "command not found"
+
+If `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once and then stopped after a `git pull` — or never worked on a fresh clone — the cause is almost always the same: **the workspace bin symlink is missing or stale.**
+
+`morphit-ops` is a workspace-local tool. It is *not* published to the public npm registry; it lives in this repo under `apps/ops-cli/`. What makes `npx morphit-ops` resolve is a symlink at `node_modules/.bin/morphit-ops` that **`npm install` creates** at the repo root. A `git pull` never creates or refreshes that symlink — and if the pull changed `package.json`, `package-lock.json`, or the workspace layout (this repo regenerates the lockfile at meaningful milestones), the symlink can be invalidated. `npx` then finds nothing locally, looks for a *published* package named `morphit-ops` (there is none — it is private), and reports **command not found**.
+
+**Fix — run from the repo root:**
+
+```
+cd ~/morphit          # wherever you cloned it
+npm install           # re-creates node_modules/.bin/morphit-ops
+npx morphit-ops init  # now resolves the local bin
+```
+
+The rule: **re-run `npm install` after every `git pull`.** The repo's update procedure (§12 here and `RUN-A-MORPHIT-NODE.md §12`) already does this for `npm run build`; the same `npm install` is what restores the `morphit-ops` bin.
+
+Two more things worth knowing:
+
+- **Run it from inside the repo.** `npx` searches upward from your current directory for `node_modules/.bin`. If you `cd` somewhere outside the Morphit tree first, it won't find the local bin. Always run `morphit-ops` from the repo root.
+- **It needs `tsx`.** The CLI runs from TypeScript source via `tsx`, which is a **production dependency** of `apps/ops-cli` (since cp161 — previously a devDependency, which broke the CLI under `NODE_ENV=production` or `npm install --omit=dev`). A plain `npm install` at the repo root installs it. If you deliberately install with `--omit=dev`, `tsx` is still present because it is a production dep.
+
+If `npm install` doesn't fix it, you can bypass the symlink entirely and invoke the workspace directly:
+
+```
+npm exec --workspace apps/ops-cli morphit-ops -- init
+```
+
+or
+
+```
+cd apps/ops-cli && npm start -- init
+```
+
+Both run `tsx src/main.ts init` against the local source without relying on the root `node_modules/.bin` symlink.
+
+**Ansible operators:** the playbook (`ops/ansible/`) handles `npm install` for you on each run, and since cp161 it verifies the `morphit-ops` bin is runnable as a post-install step — so a broken install fails the play with a clear error rather than surfacing later. If you re-deploy after a repo change, re-run the playbook; don't `git pull` on the target host out-of-band.
+
 ---
 
 ## 34. UFW firewall + fail2ban — extended hardening

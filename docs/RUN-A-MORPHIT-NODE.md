@@ -1238,6 +1238,11 @@ cd ~/morphit
 npx morphit-ops register
 ```
 
+> If this returns **command not found**, you most likely
+> `git pull`ed without re-running `npm install`. Run
+> `npm install` from the repo root first, then retry. See
+> §12 "morphit-ops says command not found" for the full fix.
+
 You'll see a confirmation showing the values that will be
 broadcast:
 
@@ -1733,6 +1738,32 @@ If you went the home-hosting route in §3a, there are a few additional operation
 ## 12. What to do when things break
 
 Some common things and how to fix them.
+
+### "`morphit-ops` says command not found"
+
+This is the most common first-run snag. `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once, then stopped after a `git pull` — or never worked on a fresh clone.
+
+**The cause:** `morphit-ops` is a tool that lives inside this repo (under `apps/ops-cli/`), not something published to the public npm registry. What makes `npx morphit-ops` work is a small symlink at `node_modules/.bin/morphit-ops` that **`npm install` creates** at the repo root. A `git pull` does *not* refresh that symlink, and if the pull changed the dependency files it can go stale — at which point `npx` finds nothing and reports "command not found."
+
+**The fix — run from the repo root:**
+
+```
+cd ~/morphit
+npm install
+npx morphit-ops init
+```
+
+**The rule: re-run `npm install` after every `git pull`.** The update procedure later in this section already says to rebuild the frontend after a pull; the same `npm install` is what restores the `morphit-ops` command. Two notes:
+
+- Run `morphit-ops` **from inside the repo** — `npx` looks for the local tool by searching upward from your current directory, so running it from an unrelated folder won't find it.
+- If `npm install` doesn't fix it, run the tool directly without the symlink:
+  ```
+  npm exec --workspace apps/ops-cli morphit-ops -- init
+  ```
+
+If you installed Morphit with the **Ansible playbook** (`ops/ansible/`), you don't run these commands by hand — the playbook runs `npm install` for you and (since cp161) verifies the `morphit-ops` tool is runnable before finishing. If something changed on the box, re-run the playbook rather than doing a manual `git pull` on the server.
+
+For the full explanation of *why* this happens (workspace bins, the `tsx` runtime dependency, the `NODE_ENV=production` edge case), see **OPERATIONS.md → "Troubleshooting: `morphit-ops` says command not found"** in §33.
 
 ### "The indexer fell behind"
 

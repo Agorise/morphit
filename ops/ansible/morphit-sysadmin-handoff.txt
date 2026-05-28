@@ -178,6 +178,45 @@ by this playbook:
 ═══════════════════════════════════════════════════════════════════
 
 ──────────────────────────────────────────────────────────────────
+"npx morphit-ops <cmd> returns command not found"
+
+    Worked once, then stopped after a `git pull` — or never worked
+    on a fresh clone / manual checkout on the host.
+
+    CAUSE:  morphit-ops is a workspace-local tool (it lives in the
+    repo under apps/ops-cli/, NOT published to the npm registry).
+    `npx morphit-ops` only resolves when the symlink
+    node_modules/.bin/morphit-ops exists — and that symlink is
+    created by `npm install` at the repo root, NOT by git.  A bare
+    `git pull` on the host does not refresh it; if the pull changed
+    package.json / package-lock.json the symlink can go stale, and
+    npx then reports "command not found".
+
+    THE RIGHT FIX FOR ANSIBLE DEPLOYMENTS:  do NOT `git pull` on the
+    target host by hand.  Re-run the playbook instead — it runs
+    `npm install` and (since cp161) verifies the morphit-ops bin is
+    runnable as a post-install step, so a broken install fails the
+    play with a clear error rather than surfacing here.
+
+    IF YOU MUST FIX IN PLACE (host already diverged from a manual
+    pull):  run as the morphit service user, from the repo root:
+
+        sudo -u <morphit_service_user> bash -lc \
+          'cd <morphit_repo_path> && npm install && \
+           npx --no-install morphit-ops --help'
+
+    The `--no-install` flag forces npx to use the LOCAL workspace
+    bin and refuse any network fetch — if it prints the help text,
+    the operator's `morphit-ops init` / `register` will work.
+
+    NOTE: the CLI runs from TypeScript source via tsx, which is a
+    PRODUCTION dependency of apps/ops-cli (since cp161).  Installing
+    with --omit=dev or NODE_ENV=production no longer breaks it.
+
+    Full explanation: OPERATIONS.md §33 "Troubleshooting:
+    morphit-ops says command not found".
+
+──────────────────────────────────────────────────────────────────
 "morphit-indexer service fails to start with Zod validation error"
 
     sudo journalctl -u morphit-indexer --since '5 minutes ago'
