@@ -37,11 +37,16 @@
 	import FocusedField from '$components/FocusedField.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
 	import Term from '$components/Term.svelte';
-	import ListingFeeAddressPanel from '$components/ListingFeeAddressPanel.svelte';
+	// cp165 byte-budget: ListingFeeAddressPanel renders only when
+	// the user picks btc/xmr fee method (alt path; default is
+	// BLURT-paid).  PrivateKeyWarningModal renders only on
+	// detected key leak in user input (rare).  Both deferred.
+	// import ListingFeeAddressPanel from '$components/ListingFeeAddressPanel.svelte';
 	import FirstPostStarterPack from '$components/FirstPostStarterPack.svelte';
 	import { formatFiat } from '$lib/i18n/formatters';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
-	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
+	// cp165: lazy below (showTermsKeyWarning guard)
+	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
 	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
@@ -94,6 +99,12 @@
 
 	let side = $state<Side | null>(null);
 	let asset = $state<Asset | null>(null);
+
+	// cp165 lazy-loaders
+	const loadListingFeeAddressPanel = () =>
+		import('$components/ListingFeeAddressPanel.svelte').then((m) => m.default);
+	const loadPrivateKeyWarningModal = () =>
+		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
 	// Part 121 — when asset=USDT, the user MUST pick a network
 	// (ERC-20/TRC-20/SPL/BEP-20).  Null when asset is not USDT
 	// OR when USDT is picked but the user hasn't chosen yet.
@@ -2143,7 +2154,9 @@
 			     Part-106 fork-attack vector where the operator
 			     could social-engineer a hostile address into the
 			     user's flow. -->
-			<ListingFeeAddressPanel method={feeMethodChoice} />
+			{#await loadListingFeeAddressPanel() then ListingFeeAddressPanel}
+				<ListingFeeAddressPanel method={feeMethodChoice} />
+			{/await}
 
 			<section class="card mb-4" aria-labelledby="txid-heading">
 				<div class="mb-3 flex items-center gap-2">
@@ -2567,15 +2580,17 @@
 </div>
 
 {#if showTermsKeyWarning}
-	<PrivateKeyWarningModal
-		matches={termsKeyMatches}
-		onEdit={() => {
-			showTermsKeyWarning = false;
-		}}
-		onSendAnyway={() => {
-			showTermsKeyWarning = false;
-			userAckedTermsKeyWarning = true;
-			void submitBroadcast();
-		}}
-	/>
+	{#await loadPrivateKeyWarningModal() then PrivateKeyWarningModal}
+		<PrivateKeyWarningModal
+			matches={termsKeyMatches}
+			onEdit={() => {
+				showTermsKeyWarning = false;
+			}}
+			onSendAnyway={() => {
+				showTermsKeyWarning = false;
+				userAckedTermsKeyWarning = true;
+				void submitBroadcast();
+			}}
+		/>
+	{/await}
 {/if}

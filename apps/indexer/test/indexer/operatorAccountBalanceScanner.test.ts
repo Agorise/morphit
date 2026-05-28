@@ -277,7 +277,7 @@ describe('OperatorAccountBalanceScanner', () => {
 		});
 		const result = await fx.scanner.scanOnce();
 		expect(result.accountsChecked).toBe(1);
-		expect(fx.getAccountsSpy).toHaveBeenCalledWith(['morphit-relay']);
+		expect(fx.getAccountsSpy).toHaveBeenCalledWith(['morphit-relay'], { userFacing: false });
 		expect(fx.alerts).toHaveLength(1);
 		expect(fx.alerts[0]!.kind).toBe('LOW_BALANCE');
 	});

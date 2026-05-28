@@ -135,5 +135,5 @@ export async function verifyChainOpSignature(
 	posting = accounts[0].posting;
 
 	// Step 3 — pure cryptographic verification.
-	return verifyTransactionSignatures(tx, posting);
+	return await verifyTransactionSignatures(tx, posting);
 }

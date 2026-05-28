@@ -7,8 +7,14 @@
 	import Head from '$components/Head.svelte';
 	import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
-	import CoinCarousel from '$components/CoinCarousel.svelte';
-	import PrioritiesSection from '$components/PrioritiesSection.svelte';
+	// cp165 byte-budget: CoinCarousel + PrioritiesSection are both
+	// below the fold on the landing page (CoinCarousel even does
+	// its own IntersectionObserver internally, but its compiled
+	// component code still ships in the eager bundle).  Lazy-load
+	// both at the route level so the 28 KB combined doesn't land
+	// on first paint for visitors who don't scroll.
+	// import CoinCarousel from '$components/CoinCarousel.svelte';
+	// import PrioritiesSection from '$components/PrioritiesSection.svelte';
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
 
@@ -22,6 +28,12 @@
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	// cp165 lazy-loaders for below-the-fold landing sections
+	const loadPrioritiesSection = () =>
+		import('$components/PrioritiesSection.svelte').then((m) => m.default);
+	const loadCoinCarousel = () =>
+		import('$components/CoinCarousel.svelte').then((m) => m.default);
 
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
 	// SearchAction unlocking the SERP sitelinks search box).
@@ -181,11 +193,15 @@
 		     each hyperlinked to a cross-linked FAQ entry.  Replaces
 		     the old 4-card points grid as the canonical priorities
 		     surface on the home page. -->
-		<PrioritiesSection />
+		{#await loadPrioritiesSection() then PrioritiesSection}
+			<PrioritiesSection />
+		{/await}
 
 		<!-- Below-the-fold: carousel of supported assets + 5 settlement
 		     networks + barter, lazy-mounted via IntersectionObserver,
 		     lazy-loaded images. -->
-		<CoinCarousel />
+		{#await loadCoinCarousel() then CoinCarousel}
+			<CoinCarousel />
+		{/await}
 	</div>
 </section>

@@ -24,9 +24,15 @@
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import FeatureBidForm from '$components/FeatureBidForm.svelte';
-	import LeaveFeedbackForm from '$components/LeaveFeedbackForm.svelte';
-	import PendingFeedbackReminderBanner from '$components/PendingFeedbackReminderBanner.svelte';
+	// cp165 byte-budget: 3 disclosure/modal components below are
+	// lazy-imported.  None render on first paint; all are gated by
+	// state that toggles only after a user action.  Combined the
+	// three are ~37 KB of component source plus transitive helpers
+	// — non-trivial for /my/orders where Sally lands after every
+	// trade.
+	// import FeatureBidForm from '$components/FeatureBidForm.svelte';
+	// import LeaveFeedbackForm from '$components/LeaveFeedbackForm.svelte';
+	// import PendingFeedbackReminderBanner from '$components/PendingFeedbackReminderBanner.svelte';
 	import PaymentStatusBadge from '$components/PaymentStatusBadge.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
@@ -50,6 +56,14 @@
 	let phase = $state<Phase>('loading');
 	let items = $state<OrderRecord[]>([]);
 	let errorMessage = $state('');
+
+	// cp165 lazy-loaders for below-the-fold / behind-disclosure components
+	const loadFeatureBidForm = () =>
+		import('$components/FeatureBidForm.svelte').then((m) => m.default);
+	const loadLeaveFeedbackForm = () =>
+		import('$components/LeaveFeedbackForm.svelte').then((m) => m.default);
+	const loadPendingFeedbackReminderBanner = () =>
+		import('$components/PendingFeedbackReminderBanner.svelte').then((m) => m.default);
 
 	// Task #14 — per-permlink viewcount.  Fetched lazily after
 	// items load.  Display only — never used for routing or
@@ -468,7 +482,9 @@
 	     user hasn't reciprocated.  Embeds LeaveFeedbackForm
 	     inline so the user doesn't have to scroll-and-find. -->
 	{#if blurtAccount}
-		<PendingFeedbackReminderBanner />
+		{#await loadPendingFeedbackReminderBanner() then PendingFeedbackReminderBanner}
+			<PendingFeedbackReminderBanner />
+		{/await}
 	{/if}
 
 	{#if !blurtAccount}
@@ -723,16 +739,18 @@
 								     pulls identity state itself; no prop plumbing
 								     needed. -->
 								{#if pendingFeaturePermlink === o.permlink && $isUnlocked}
-									<FeatureBidForm
-										orderPermlink={o.permlink}
-										feeBlurtPerHour={featureBlurtPerHour}
-										onSuccess={(r) => {
-											pendingFeaturePermlink = null;
-											featureSuccessPermlink = o.permlink;
-											featureSuccessBlurt = r.blurtPaid;
-										}}
-										onCancel={() => (pendingFeaturePermlink = null)}
-									/>
+									{#await loadFeatureBidForm() then FeatureBidForm}
+										<FeatureBidForm
+											orderPermlink={o.permlink}
+											feeBlurtPerHour={featureBlurtPerHour}
+											onSuccess={(r) => {
+												pendingFeaturePermlink = null;
+												featureSuccessPermlink = o.permlink;
+												featureSuccessBlurt = r.blurtPaid;
+											}}
+											onCancel={() => (pendingFeaturePermlink = null)}
+										/>
+									{/await}
 								{:else if featureSuccessPermlink === o.permlink}
 									<StatusLine kind="ok">
 										{$_('feature_bid.success', {
@@ -774,14 +792,16 @@
 								     ADR-0011 §8, feedback IS the trade-complete
 								     signal. -->
 								{#if pendingFeedbackPermlink === o.permlink && $isUnlocked}
-									<LeaveFeedbackForm
-										orderPermlink={o.permlink}
-										onSuccess={() => {
-											pendingFeedbackPermlink = null;
-											feedbackSuccessPermlink = o.permlink;
-										}}
-										onCancel={() => (pendingFeedbackPermlink = null)}
-									/>
+									{#await loadLeaveFeedbackForm() then LeaveFeedbackForm}
+										<LeaveFeedbackForm
+											orderPermlink={o.permlink}
+											onSuccess={() => {
+												pendingFeedbackPermlink = null;
+												feedbackSuccessPermlink = o.permlink;
+											}}
+											onCancel={() => (pendingFeedbackPermlink = null)}
+										/>
+									{/await}
 								{:else if feedbackSuccessPermlink === o.permlink}
 									<StatusLine kind="ok">
 										{$_('feedback.success_line')}

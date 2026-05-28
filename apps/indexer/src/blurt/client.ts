@@ -1,19 +1,42 @@
 /**
  * Morphit indexer — Blurt RPC client.
  *
- * Read-only view of the Blurt chain. Wraps @beblurt/dblurt with:
- *   - Round-robin endpoint rotation on transport failure
- *   - Exponential cooldown (2s → 10s → 60s → 5min) on unhealthy
- *     endpoints, mirroring the relay (ADR-0006)
+ * Read-only view of the Blurt chain.  Wraps @beblurt/dblurt with
+ * latency-aware endpoint selection via `@morphit/rpc-pool`:
+ *   - EWMA latency tracking; the fastest known endpoint is tried first
+ *   - Exponential cooldown ladder on transport failure (2s → 10s → 60s → 5min)
+ *   - Optional adaptive hedging on user-facing calls (off by default for
+ *     background poller / drainer to avoid double-loading public RPCs)
+ *   - Per-call timeout via AbortSignal — slow nodes can't pin a request
+ *     beyond the budget even when the underlying dblurt call hangs
  *   - No private keys, no broadcasting — the indexer never signs
  *
+ * cp165: migrated from the bespoke rotation logic (round-robin + raw
+ * cooldown) to the shared `@morphit/rpc-pool` package.  The relay's
+ * BlurtClient now uses the same primitives, so a future audit only
+ * needs to verify one rotation/hedging implementation instead of two.
+ *
  * API exposed to the rest of the indexer:
- *   - getDynamicGlobalProperties() — for head + irreversible block
- *   - getBlock(n)                  — the block we're about to apply
- *   - getAccount(name)             — for public-key verification
+ *   - getDynamicGlobalProperties() — head + irreversible block
+ *   - getBlock(n)                  — block being applied
+ *   - getAccount(name)             — public-key verification
+ *   - getAccounts(names)           — batch lookup
+ *   - callCondenser(method, ...)   — escape hatch for new RPCs
+ *
+ * Hedging policy on this client:
+ *   - getAccount: USER-FACING (called during availability check, signup
+ *     verification, on-the-wire sig verify) — hedge on
+ *   - getAccounts (batch): MIXED — used by the poller for batch sig
+ *     verification AND by user-facing handlers; we expose two methods,
+ *     one user-facing and one background, to let callers signal intent
+ *   - getDynamicGlobalProperties, getBlock: BACKGROUND (poller loop) —
+ *     hedge off (don't double-load Blurt public RPCs)
+ *   - callCondenser: BACKGROUND by default (safer for new callers);
+ *     opt-in to hedging via the `userFacing` option
  */
 
 import { Client } from '@beblurt/dblurt';
+import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
 import type { Config } from '$config';
 
 /** What the chain reports on every tick. Only the fields we actually
@@ -40,9 +63,9 @@ export interface BlockTransaction {
 	readonly signatures: readonly string[];
 }
 
-/** Blurt ops are heterogeneous — `[op_name, payload]` tuples. For
+/** Blurt ops are heterogeneous — `[op_name, payload]` tuples.  For
  *  the indexer we care about `custom_json` ops with `id` matching
- *  one of OP_IDS. The dispatcher narrows the shape; here we keep it
+ *  one of OP_IDS.  The dispatcher narrows the shape; here we keep it
  *  permissive. */
 export type ChainOperation = readonly [string, Record<string, unknown>];
 
@@ -59,63 +82,78 @@ export interface ChainAccount {
 	readonly owner: ChainAccount['posting'];
 	readonly memo_key: string;
 	/** Liquid BLURT balance as a Graphene asset string like
-	 *  "42.500 BLURT". Present in the RPC response; exposed here
+	 *  "42.500 BLURT".  Present in the RPC response; exposed here
 	 *  for callers doing balance-sensitive logic (ADR-0010 §3
-	 *  low-balance auto-refill). Parse with parseBlurtAmount. */
+	 *  low-balance auto-refill).  Parse with parseBlurtAmount. */
 	readonly balance?: string;
 }
 
-/** Per-endpoint availability tracking. */
-interface EndpointHealth {
-	url: string;
-	failures: number;
-	cooldownUntil: number;
+/** Bridge a dblurt call (no native cancellation) to an AbortSignal.
+ *  The dblurt call still runs to completion in the background if the
+ *  signal aborts mid-flight; we just stop awaiting it.  Cost: one
+ *  abandoned RPC per hedge — same tradeoff hedging already makes
+ *  intentionally (the hedge double-fires the request anyway). */
+function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) {
+		return Promise.reject(new Error('aborted'));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = (): void => {
+			reject(new Error('aborted'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		promise.then(
+			(v) => {
+				signal.removeEventListener('abort', onAbort);
+				resolve(v);
+			},
+			(err) => {
+				signal.removeEventListener('abort', onAbort);
+				reject(err);
+			}
+		);
+	});
 }
 
-const COOLDOWN_LADDER_MS = [2_000, 10_000, 60_000, 300_000] as const;
-
-/** Heuristic — is this error a transport failure (worth rotating off)
- *  or an application-level error from the chain (pass through)? */
-function isTransportError(err: unknown): boolean {
-	if (!(err instanceof Error)) return false;
-	const m = err.message.toLowerCase();
-	// dblurt / undici surface these strings on DNS / connection / TLS / timeout.
-	if (m.includes('fetch failed')) return true;
-	if (m.includes('timeout')) return true;
-	if (m.includes('econnrefused')) return true;
-	if (m.includes('econnreset')) return true;
-	if (m.includes('enotfound')) return true;
-	if (m.includes('etimedout')) return true;
-	if (m.includes('socket hang up')) return true;
-	return false;
+/** Per-endpoint dblurt Client instance cache.  Building a new Client
+ *  per call is cheap but allocates; cache them by URL so the same
+ *  Client instance is reused across calls. */
+const clientCache = new Map<string, Client>();
+function clientFor(url: string): Client {
+	let c = clientCache.get(url);
+	if (c === undefined) {
+		c = new Client(url, { timeout: 10_000 });
+		clientCache.set(url, c);
+	}
+	return c;
 }
 
 export class BlurtClient {
-	private readonly endpoints: EndpointHealth[];
-	private rotationCounter = 0;
+	private readonly pool: EndpointPool;
 
 	constructor(config: Config) {
 		if (config.blurtRpcEndpoints.length === 0) {
 			throw new Error('BlurtClient: at least one endpoint required');
 		}
-		this.endpoints = config.blurtRpcEndpoints.map((url) => ({
-			url,
-			failures: 0,
-			cooldownUntil: 0
-		}));
+		this.pool = new EndpointPool({
+			endpoints: [...config.blurtRpcEndpoints]
+		});
 	}
 
-	/** Current dynamic global properties — includes head and
-	 *  last-irreversible block numbers. */
+	/** Expose pool snapshot for /v1/health diagnostics (latency,
+	 *  cooldown state, last-success timestamps). */
+	endpointSnapshot(): ReturnType<EndpointPool['snapshot']> {
+		return this.pool.snapshot();
+	}
+
+	/** Current dynamic global properties.  Background call (poller). */
 	async getDynamicGlobalProperties(): Promise<DynamicGlobalProperties> {
-		return this.callWithRotation(async (client) => {
-			// dblurt exposes this on the condenser API helper, NOT the
-			// database API helper. The casts are lightweight because
-			// dblurt's typed return shape is a subset of what the
-			// indexer needs to consume.
-			const dgp = (await client.condenser.getDynamicGlobalProperties()) as DynamicGlobalProperties;
-			// Minimal validation — if these two fields are missing the
-			// indexer can't function at all.
+		return this.pool.call(async (url, signal) => {
+			const client = clientFor(url);
+			const dgp = (await withSignal(
+				client.condenser.getDynamicGlobalProperties(),
+				signal
+			)) as DynamicGlobalProperties;
 			if (
 				typeof dgp.head_block_number !== 'number' ||
 				typeof dgp.last_irreversible_block_num !== 'number'
@@ -126,17 +164,11 @@ export class BlurtClient {
 		});
 	}
 
-	/** Fetch a specific block by number. Returns null if the node
-	 *  hasn't indexed that block yet (newer than head), not an error. */
+	/** Fetch a specific block.  Background call (poller). */
 	async getBlock(num: number): Promise<BlockHeader | null> {
-		return this.callWithRotation(async (client) => {
-			// dblurt exposes `getBlock` on the condenser API. Nodes that
-			// haven't seen that block yet return null.
-			// dblurt types this as SignedBlock; we narrow to BlockHeader
-			// (a structural subset of the fields the indexer consumes)
-			// via an `unknown` step because the two types don't have a
-			// declared subtype relationship.
-			const block = (await client.condenser.getBlock(num)) as unknown as
+		return this.pool.call(async (url, signal) => {
+			const client = clientFor(url);
+			const block = (await withSignal(client.condenser.getBlock(num), signal)) as unknown as
 				| BlockHeader
 				| null
 				| undefined;
@@ -144,123 +176,80 @@ export class BlurtClient {
 		});
 	}
 
-	/** Fetch a single account by name. Returns null if the name
-	 *  doesn't exist on chain (not an error). */
-	async getAccount(name: string): Promise<ChainAccount | null> {
-		return this.callWithRotation(async (client) => {
-			const accounts = (await client.condenser.getAccounts([name])) as
-				| readonly ChainAccount[]
-				| null
-				| undefined;
-			if (!accounts || accounts.length === 0) return null;
-			return accounts[0] ?? null;
-		});
+	/** Fetch a single account.  Defaults to USER-FACING (hedge on) —
+	 *  callers in background paths (chain dispatch, periodic
+	 *  scanners) should pass `{userFacing: false}` to avoid double-
+	 *  loading public RPCs. */
+	async getAccount(
+		name: string,
+		options: { userFacing?: boolean } = {}
+	): Promise<ChainAccount | null> {
+		const userFacing = options.userFacing !== false;
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const accounts = (await withSignal(
+					client.condenser.getAccounts([name]),
+					signal
+				)) as readonly ChainAccount[] | null | undefined;
+				if (!accounts || accounts.length === 0) return null;
+				return accounts[0] ?? null;
+			},
+			{ hedge: userFacing }
+		);
 	}
 
-	/** Batch account fetch — useful for verifying a block's signatures
-	 *  without N round-trips. */
-	async getAccounts(names: readonly string[]): Promise<ReadonlyMap<string, ChainAccount>> {
+	/** Batch account fetch.  Defaults to USER-FACING; pass
+	 *  `{userFacing: false}` for poller / scanner paths. */
+	async getAccounts(
+		names: readonly string[],
+		options: { userFacing?: boolean } = {}
+	): Promise<ReadonlyMap<string, ChainAccount>> {
 		if (names.length === 0) return new Map();
 		const unique = Array.from(new Set(names));
-		return this.callWithRotation(async (client) => {
-			const list = (await client.condenser.getAccounts(unique)) as
-				| readonly ChainAccount[]
-				| null
-				| undefined;
-			const map = new Map<string, ChainAccount>();
-			for (const acc of list ?? []) {
-				map.set(acc.name, acc);
-			}
-			return map;
-		});
-	}
-
-	/** Generic escape hatch for condenser_api methods the typed
-	 *  wrappers above don't cover. Returns the raw response as
-	 *  unknown — the caller is responsible for validating shape.
-	 *  Used by chainProperties.ts for
-	 *  condenser_api.get_chain_properties and reserved for future
-	 *  condenser-API additions.
-	 *
-	 *  Rotates endpoints identically to the typed methods; a
-	 *  transport failure on one endpoint moves to the next. */
-	async callCondenser<T = unknown>(method: string, params: readonly unknown[] = []): Promise<T> {
-		return this.callWithRotation(async (client) => {
-			// dblurt's Client exposes a `call` method for arbitrary
-			// RPC invocations. Argument order: api namespace, method
-			// name, params array.
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const result = await (client as any).call('condenser_api', method, params);
-			return result as T;
-		});
-	}
-
-	// ─── Rotation plumbing ──────────────────────────────────────────
-
-	private isAvailable(ep: EndpointHealth): boolean {
-		return Date.now() >= ep.cooldownUntil;
-	}
-
-	private recordSuccess(ep: EndpointHealth): void {
-		ep.failures = 0;
-		ep.cooldownUntil = 0;
-	}
-
-	private recordFailure(ep: EndpointHealth): void {
-		ep.failures += 1;
-		const ladderIdx = Math.min(ep.failures - 1, COOLDOWN_LADDER_MS.length - 1);
-		ep.cooldownUntil = Date.now() + COOLDOWN_LADDER_MS[ladderIdx]!;
-	}
-
-	/** Try endpoints in round-robin order. Skips cooled-down endpoints
-	 *  on the first pass; does a last-ditch pass ignoring cooldowns so
-	 *  the caller gets a current error rather than a stale one if
-	 *  every endpoint is simultaneously in cooldown. */
-	private async callWithRotation<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-		const start = this.rotationCounter++ % this.endpoints.length;
-		let lastError: unknown = null;
-
-		for (let i = 0; i < this.endpoints.length; i++) {
-			const ep = this.endpoints[(start + i) % this.endpoints.length]!;
-			if (!this.isAvailable(ep)) continue;
-			const client = new Client(ep.url, { timeout: 10_000 });
-			try {
-				const result = await fn(client);
-				this.recordSuccess(ep);
-				return result;
-			} catch (err) {
-				if (isTransportError(err)) {
-					this.recordFailure(ep);
-					lastError = err;
-					continue;
+		const userFacing = options.userFacing !== false;
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const list = (await withSignal(
+					client.condenser.getAccounts(unique),
+					signal
+				)) as readonly ChainAccount[] | null | undefined;
+				const map = new Map<string, ChainAccount>();
+				for (const acc of list ?? []) {
+					map.set(acc.name, acc);
 				}
-				throw err;
-			}
-		}
+				return map;
+			},
+			{ hedge: userFacing }
+		);
+	}
 
-		// Last-ditch: retry every endpoint ignoring cooldowns, so the
-		// caller gets a fresh error rather than a stale one.
-		for (let i = 0; i < this.endpoints.length; i++) {
-			const ep = this.endpoints[(start + i) % this.endpoints.length]!;
-			const client = new Client(ep.url, { timeout: 10_000 });
-			try {
-				const result = await fn(client);
-				this.recordSuccess(ep);
-				return result;
-			} catch (err) {
-				if (isTransportError(err)) {
-					this.recordFailure(ep);
-					lastError = err;
-					continue;
-				}
-				throw err;
-			}
-		}
-
-		throw new Error(
-			`all Blurt endpoints unavailable: ${
-				lastError instanceof Error ? lastError.message : String(lastError)
-			}`
+	/** Generic condenser-API escape hatch.  Background by default;
+	 *  callers can opt into hedging for user-facing paths. */
+	async callCondenser<T = unknown>(
+		method: string,
+		params: readonly unknown[] = [],
+		options: { userFacing?: boolean } = {}
+	): Promise<T> {
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				// dblurt's Client exposes a `call` method for arbitrary
+				// RPC invocations.  Argument order: api namespace, method
+				// name, params array.
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const result = await withSignal(
+					(client as any).call('condenser_api', method, params),
+					signal
+				);
+				return result as T;
+			},
+			{ hedge: options.userFacing === true }
 		);
 	}
 }
+
+/** Re-export for consumers that want to inspect transport errors
+ *  without pulling rpc-pool directly. */
+export { isTransportError };

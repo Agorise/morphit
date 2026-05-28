@@ -21,7 +21,14 @@
  */
 
 import { browser } from '$app/environment';
-import { broadcastCustomJson } from '../sign';
+// cp165 byte-budget: `broadcastCustomJson` is dynamically imported
+// inside `broadcastProfile` (which is only called on user action).
+// A static import of '../sign' here transitively pulled dblurt into
+// the eager-load graph of any route that imports profile.ts for the
+// read-only helper `getUserBlurtAccount` (used by /my/orders,
+// /chat/*, /settings, etc.).  Switching to dynamic import keeps the
+// 2 MB dblurt chunk out of those routes' first paint — the chunk
+// loads only when the user actually triggers a profile broadcast.
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
@@ -173,6 +180,9 @@ export async function broadcastProfile(
 		throw new BroadcastError('no_account', 'No Blurt account registered yet.');
 	}
 	const body = buildProfileBody(payload, Math.floor(Date.now() / 1000));
+	// cp165: dynamic import of '../sign' keeps dblurt out of the
+	// eager-load graph for read-only routes that pull profile.ts.
+	const { broadcastCustomJson } = await import('../sign');
 	const result = await broadcastCustomJson(live, OP_IDS.profile, body, account);
 	// Invalidate the client-side profile cache for this account so
 	// the user sees their own updated display_name / avatar

@@ -37,7 +37,8 @@
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
-	import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
+	// cp165: lazy below (rare leak-detection path)
+	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
@@ -82,6 +83,10 @@
 		| 'save_error';
 	let phase = $state<Phase>('loading');
 	let errorMessage = $state('');
+
+	// cp165: lazy-load
+	const loadPrivateKeyWarningModal = () =>
+		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
 
 	// ─── The order we're editing ───────────────────────────────────
 	let order = $state<OrderRecord | null>(null);
@@ -953,15 +958,17 @@
 </div>
 
 {#if showTermsKeyWarning}
-	<PrivateKeyWarningModal
-		matches={termsKeyMatches}
-		onEdit={() => {
-			showTermsKeyWarning = false;
-		}}
-		onSendAnyway={() => {
-			showTermsKeyWarning = false;
-			userAckedTermsKeyWarning = true;
-			void save();
-		}}
-	/>
+	{#await loadPrivateKeyWarningModal() then PrivateKeyWarningModal}
+		<PrivateKeyWarningModal
+			matches={termsKeyMatches}
+			onEdit={() => {
+				showTermsKeyWarning = false;
+			}}
+			onSendAnyway={() => {
+				showTermsKeyWarning = false;
+				userAckedTermsKeyWarning = true;
+				void save();
+			}}
+		/>
+	{/await}
 {/if}

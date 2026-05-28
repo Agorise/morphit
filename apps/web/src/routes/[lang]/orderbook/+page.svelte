@@ -40,8 +40,15 @@
 	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
 	import { ASSET_TICKERS } from '@morphit/asset-registry';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
-	import FeaturedOrders from '$components/FeaturedOrders.svelte';
-	import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
+	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
+	// lazy-imported below.  Both render below the orderbook fold
+	// AND each fires an HTTP fetch on onMount — for visitors who
+	// don't scroll, that's bytes downloaded and requests issued
+	// they never benefit from.  Converting to {#await} means the
+	// chunks ship only when the orderbook list has scrolled
+	// past them.
+	// import FeaturedOrders from '$components/FeaturedOrders.svelte';
+	// import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
 
@@ -69,6 +76,15 @@
 	let side = $state<SideFilter>('');
 	let fiat = $state('');
 	let region = $state('');
+
+	// cp165 byte-budget: lazy-load below-the-fold featured components.
+	// Each kicks off a network fetch in its onMount, so deferring the
+	// import also defers the fetch for visitors who don't scroll past
+	// the orderbook list.
+	const loadFeaturedOrders = () =>
+		import('$components/FeaturedOrders.svelte').then((m) => m.default);
+	const loadFeaturedAuctionHistory = () =>
+		import('$components/FeaturedAuctionHistory.svelte').then((m) => m.default);
 	/** Batch L: payment-method display lookup.  Reading
 	 *  `$instanceAdditions` here triggers the lazy fetch of the
 	 *  instance-additions store; the value itself is ignored,
@@ -749,7 +765,9 @@
 	     layout below. Self-hides when empty so no promotional noise
 	     on a fresh marketplace. -->
 	<div class="mt-6">
-		<FeaturedOrders variant="stack" />
+		{#await loadFeaturedOrders() then FeaturedOrders}
+			<FeaturedOrders variant="stack" />
+		{/await}
 	</div>
 
 	<!-- Item 5 (Group 1 #2): clearing-price history for the
@@ -757,7 +775,9 @@
 	     least one bid in the window.  Below the live featured
 	     panel because "is the auction competitive?" is more
 	     interesting AFTER you've seen who's currently winning. -->
-	<FeaturedAuctionHistory />
+	{#await loadFeaturedAuctionHistory() then FeaturedAuctionHistory}
+		<FeaturedAuctionHistory />
+	{/await}
 
 	<!-- Loading status -->
 	{#if phase === 'loading'}

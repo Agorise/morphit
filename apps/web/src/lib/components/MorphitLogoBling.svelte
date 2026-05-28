@@ -311,6 +311,7 @@
 		alt="Morphit"
 		class="morphit-logo-bling-wordmark"
 		style="height: {heightPx}px;"
+		decoding="async"
 	/>
 </div>
 

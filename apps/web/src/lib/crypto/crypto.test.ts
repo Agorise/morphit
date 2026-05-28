@@ -24,7 +24,8 @@ import {
 	KeystoreError
 } from './keystore';
 import { identiconSvg, identiconDataUri } from './identicon';
-import { fingerprint, fullPublicKey, formatIdentity, validateDisplayName } from './profile';
+import { fingerprint, formatIdentity, validateDisplayName } from './profile';
+import { formatPublicKeyBLT } from './keygen';
 
 describe('keygen — full identity', () => {
 	it('produces a four-role identity with 16-byte (12-word) seed entropy', async () => {
@@ -381,18 +382,37 @@ describe('profile — fingerprints & validation', () => {
 		expect(tail).toHaveLength(4);
 	});
 
-	it('fullPublicKey returns BLT + full hex', () => {
-		const pk = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
-		expect(fullPublicKey(pk)).toBe('BLT01020304');
+	it('formatPublicKeyBLT returns the canonical BLT-base58check key (async, lazy dblurt)', async () => {
+		// cp165: fullPublicKey was removed.  The async
+		// formatPublicKeyBLT is the canonical formatter; it
+		// dynamically imports dblurt so the 2 MB chunk doesn't
+		// land on the first-paint graph of every authenticated
+		// page.  Input must be a real 33-byte compressed key.
+		// Use the chain-distinguishable generator zero-scalar
+		// edge case isn't valid for secp256k1, so use a derived
+		// real key.
+		const seed = new Uint8Array(32);
+		for (let i = 0; i < 32; i++) seed[i] = (i + 1) & 0xff;
+		const secp256k1 = await import('@noble/secp256k1');
+		const pub = secp256k1.getPublicKey(seed, true);
+		const blt = await formatPublicKeyBLT(pub);
+		expect(blt.startsWith('BLT')).toBe(true);
+		// canonical Blurt key string: BLT prefix + base58check body,
+		// typically ~50 characters total
+		expect(blt.length).toBeGreaterThan(40);
 	});
 
-	it('formatIdentity returns name, fingerprint, and full', () => {
+	it('formatIdentity returns name and fingerprint (no eager `full` field — cp165 lazy-load)', () => {
 		const pk = new Uint8Array(32).fill(0xab);
 		const f = formatIdentity('Sally Doe', pk);
 		expect(f.name).toBe('Sally Doe');
 		expect(f.fingerprint.startsWith('BLT')).toBe(true);
-		expect(f.full.startsWith('BLT')).toBe(true);
-		expect(f.full.length).toBeGreaterThan(f.fingerprint.length);
+		// cp165 byte-budget: the `full` field was removed because it
+		// required dblurt (2 MB chunk) at first paint.  Consumers
+		// that need the canonical full key call formatPublicKeyBLT
+		// directly (async).  See IdentityLabel.svelte for the
+		// lazy-resolve-on-hover pattern.
+		expect((f as { full?: string }).full).toBeUndefined();
 	});
 
 	it('validates display names: accepts reasonable input', () => {

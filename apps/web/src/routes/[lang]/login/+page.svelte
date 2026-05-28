@@ -370,6 +370,8 @@
 					src="/icons/icon-yubikey.svg"
 					alt=""
 					aria-hidden="true"
+					loading="lazy"
+					decoding="async"
 					class="mx-auto h-28 w-auto opacity-90"
 				/>
 				<p class="mt-4 text-ink-600 dark:text-ink-300">

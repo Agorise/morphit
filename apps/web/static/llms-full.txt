@@ -555,7 +555,7 @@ Morphit is built on Blurt because the ledger's design (low transaction overhead,
 
 **FAQ key:** `how_to_stake_blurt`
 
-Staking Blurt means converting your liquid Blurt into **Blurt Power (BP)** — a process Blurt calls "powering up." Staked Blurt earns roughly **2% interest a year** (the live rate is computed from the chain's inflation and shown in-app), strengthens your upvotes, and earns curation rewards. It's your own coin the whole time — not a deposit, not a loan, not held by anyone else.
+Staking Blurt means converting your liquid Blurt into **Blurt Power (BP)** — a process Blurt calls "powering up." Staked Blurt earns roughly **2% interest a year (APR)** (the live rate is computed from the chain's inflation and shown in-app), strengthens your upvotes, and earns curation rewards. It's your own coin the whole time — not a deposit, not a loan, not held by anyone else.
 
 **The easiest way is a Blurt wallet.** Open [BlurtWallet.com](https://blurtwallet.com), log in with your Blurt account, find your liquid Blurt balance, and choose **Power Up**. Enter the amount and confirm. That's it — your Blurt is now BP and starts earning.
 

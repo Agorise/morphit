@@ -233,7 +233,7 @@ export class OperatorAccountBalanceScanner {
 		const names = monitored.map((a) => a.name);
 		let balances: ReadonlyMap<string, string | undefined>;
 		try {
-			const accounts = await this.blurt.getAccounts(names);
+			const accounts = await this.blurt.getAccounts(names, { userFacing: false });
 			balances = new Map(
 				Array.from(accounts.entries()).map(
 					([name, acc]) => [name, acc.balance] as [string, string | undefined]

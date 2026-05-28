@@ -268,6 +268,7 @@
 				height="40"
 				class="rounded-full bg-ink-200/50 dark:bg-ink-800/50"
 				aria-hidden="true"
+				decoding="async"
 			/>
 
 			{#if $isPairedReadOnly}

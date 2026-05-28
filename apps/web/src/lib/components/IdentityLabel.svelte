@@ -162,22 +162,53 @@
 
 	const avatarSrc = $derived(identiconDataUri(seedBytes, avatarSize));
 
-	// The existing formatIdentity() helper expects a publicKey. For
-	// account-only render sites we still want the label, so pass an empty
-	// pubkey — formatIdentity degrades gracefully (fingerprint will just
-	// be short) and we override the name below to use the account when
-	// the fingerprint has nothing useful to say.
+	// The existing formatIdentity() helper returns {name, fingerprint}
+	// only — the `full` BLT-canonical key requires dblurt (a 2 MB
+	// chunk) and is lazy-loaded.  We expose `fullKey` here as
+	// component-local $state, resolving via the async
+	// formatPublicKeyBLT helper on first hover, focus, or copy.
 	const identity = $derived(
 		publicKey && publicKey.length > 0
 			? formatIdentity(displayName, publicKey)
 			: {
 					name: displayName ?? (account ? `@${account}` : ''),
-					fingerprint: '',
-					full: account ?? ''
+					fingerprint: ''
 				}
 	);
 
-	const { name, fingerprint, full } = $derived(identity);
+	const { name, fingerprint } = $derived(identity);
+
+	// Lazy-resolved canonical BLT-prefixed key.  Null until the user
+	// hovers / focuses the label or clicks copy.  See ensureFullKey().
+	// Falls back to fingerprint for tooltip/copy while unresolved —
+	// in practice the resolve completes in <50 ms because the dblurt
+	// chunk is already cached after the first use anywhere in the
+	// session, and on a brand-new tab the user typically hovers for
+	// more than 50 ms before clicking.
+	let fullKey: string | null = $state(null);
+	let resolving = false;
+	async function ensureFullKey(): Promise<void> {
+		if (fullKey !== null || resolving) return;
+		if (!publicKey || publicKey.length === 0) {
+			fullKey = account ?? '';
+			return;
+		}
+		resolving = true;
+		try {
+			const { formatPublicKeyBLT } = await import('$crypto/keygen');
+			fullKey = await formatPublicKeyBLT(publicKey);
+		} catch {
+			// dblurt unavailable for any reason — fall back to the
+			// hex fingerprint.  Tooltip + clipboard still get
+			// SOMETHING usable; rare path.
+			fullKey = fingerprint || (account ?? '');
+		} finally {
+			resolving = false;
+		}
+	}
+	// What the tooltip/clipboard show: the resolved BLT key when
+	// available, fingerprint as the synchronous placeholder otherwise.
+	const full = $derived(fullKey ?? fingerprint ?? (account ?? ''));
 
 	const weightCls = $derived(
 		weight === 'bold' ? 'font-bold' : weight === 'normal' ? 'font-normal' : 'font-semibold'
@@ -189,6 +220,11 @@
 	async function copyFull(e: Event): Promise<void> {
 		e.preventDefault();
 		e.stopPropagation();
+		// cp165: ensure the canonical BLT key is resolved before
+		// copying — otherwise the clipboard would get the
+		// fingerprint placeholder.  ensureFullKey is a no-op if
+		// already resolved, and lazy-loads dblurt on first call.
+		await ensureFullKey();
 		try {
 			await navigator.clipboard.writeText(full);
 			copied = true;
@@ -217,15 +253,22 @@
 {#snippet label()}
 	{#if name && fingerprint}
 		<span class={weightCls}>{name}</span>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<bdi
 			class="ltr-in-rtl ms-1.5 font-mono text-[0.85em] text-ink-500 dark:text-ink-400"
-			title={full}>({fingerprint})</bdi
+			title={full}
+			onpointerenter={ensureFullKey}
+			onfocus={ensureFullKey}>({fingerprint})</bdi
 		>
 	{:else if name}
 		<span class={weightCls}>{name}</span>
 	{:else}
-		<bdi class="ltr-in-rtl font-mono {weightCls} text-ink-700 dark:text-ink-200" title={full}
-			>{fingerprint}</bdi
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<bdi
+			class="ltr-in-rtl font-mono {weightCls} text-ink-700 dark:text-ink-200"
+			title={full}
+			onpointerenter={ensureFullKey}
+			onfocus={ensureFullKey}>{fingerprint}</bdi
 		>
 	{/if}
 {/snippet}
@@ -331,6 +374,8 @@
 		<button
 			type="button"
 			onclick={copyFull}
+			onpointerenter={ensureFullKey}
+			onfocus={ensureFullKey}
 			aria-label={$_('identity.copy_full_key_aria')}
 			title={full}
 			class="ms-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded text-ink-500 opacity-0 transition hover:bg-ink-100 hover:text-morphit-emerald focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald group-hover:opacity-100 dark:text-ink-400 dark:hover:bg-ink-800"

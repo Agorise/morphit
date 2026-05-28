@@ -1,18 +1,28 @@
 /**
  * Morphit relay — Blurt chain client.
  *
- * Thin wrapper over @beblurt/dblurt. Provides:
- *   - Endpoint rotation across multiple Blurt RPC nodes, with the
- *     same cooldown model as the frontend's $lib/net/endpoints.ts.
+ * Thin wrapper over @beblurt/dblurt.  Provides:
+ *   - Endpoint rotation across multiple Blurt RPC nodes via
+ *     `@morphit/rpc-pool`'s EndpointPool (latency-aware: fastest
+ *     EWMA known endpoint first, exponential cooldown ladder on
+ *     transport failure, optional adaptive hedging for user-facing
+ *     calls only — broadcasts never hedge).
  *   - A small, relay-specific API: account lookup, chain properties
  *     for the current account_creation_fee, and account creation.
  *
- * Nothing about user private keys ever touches this module. The only
+ * Nothing about user private keys ever touches this module.  The only
  * key it handles is the relay's own active key (passed in explicitly
  * from main.ts).
+ *
+ * cp165: migrated from the bespoke rotation logic (round-robin +
+ * raw cooldown counter, ~80 lines of private code at the bottom of
+ * this class) to the shared `@morphit/rpc-pool` package.  Same
+ * primitives the indexer's BlurtClient now uses, so future audits
+ * only need to verify one rotation implementation.
  */
 
 import { Client, PrivateKey } from '@beblurt/dblurt';
+import { EndpointPool } from '@morphit/rpc-pool';
 
 /** Parse a Graphene asset string like "1234.567 BLURT" or
  *  "9876543.210987 VESTS" into its raw integer amount (BigInt),
@@ -46,14 +56,6 @@ export function formatBigIntWithScale(amount: bigint, scale: number): string {
 	const fracPart = padded.slice(padded.length - scale);
 	const body = `${intPart}.${fracPart}`;
 	return negative ? `-${body}` : body;
-}
-
-/** Per-endpoint state for the rotator. Cooldown grows exponentially
- *  on consecutive failures and resets on any success. */
-interface EndpointState {
-	readonly url: string;
-	consecutiveFailures: number;
-	cooldownUntil: number;
 }
 
 /** Subset of the Blurt account object the relay needs. The full
@@ -233,8 +235,7 @@ export function analyzeFeeDivergence(
 }
 
 export class BlurtClient {
-	private readonly endpoints: EndpointState[];
-	private rotationCounter = 0;
+	private readonly pool: EndpointPool;
 	private readonly fallbackAccountCreationFeeBlurt: number;
 	/** Throttle flag for the chain-fee-diverges-from-config warn
 	 *  log (REVISIT-LIST §G).  We warn once per process startup
@@ -252,24 +253,37 @@ export class BlurtClient {
 				'BlurtClient: fallbackAccountCreationFeeBlurt must be a positive finite number'
 			);
 		}
-		this.endpoints = endpointUrls.map((url) => ({
-			url,
-			consecutiveFailures: 0,
-			cooldownUntil: 0
-		}));
+		this.pool = new EndpointPool({
+			endpoints: [...endpointUrls]
+		});
 		this.fallbackAccountCreationFeeBlurt = fallbackAccountCreationFeeBlurt;
+	}
+
+	/** Expose pool snapshot for /v1/health diagnostics. */
+	endpointSnapshot(): ReturnType<EndpointPool['snapshot']> {
+		return this.pool.snapshot();
 	}
 
 	/**
 	 * Look up an account by name. Returns null if the account does
 	 * not exist (Blurt returns an empty array, not an error, for
 	 * nonexistent names).
+	 *
+	 * cp165 USER-FACING — called during signup availability check
+	 * and posting-key verification.  Hedging on: when the primary
+	 * endpoint is slow, fire a parallel request to the next-best so
+	 * the user doesn't wait on the slow node.  withSignal lets the
+	 * pool cancel-and-rotate within the per-call budget even though
+	 * dblurt itself doesn't support AbortSignal natively.
 	 */
 	async getAccount(name: string): Promise<AccountInfo | null> {
-		const result = await this.callWithRotation<unknown>(async (client) => {
-			// dblurt exposes getAccounts on the condenser API helper.
-			return await client.condenser.getAccounts([name]);
-		});
+		const result = await this.callWithRotation<unknown>(
+			async (client, signal) => {
+				// dblurt exposes getAccounts on the condenser API helper.
+				return await withSignal(client.condenser.getAccounts([name]), signal);
+			},
+			{ hedge: true }
+		);
 		if (!Array.isArray(result) || result.length === 0) return null;
 		const acct = result[0] as Record<string, unknown>;
 		// pending_claimed_accounts is a uint32 on chain.  Some
@@ -631,112 +645,79 @@ export class BlurtClient {
 
 	/**
 	 * Invoke `fn` against a healthy endpoint, rotating on transport
-	 * failure. RPC errors (the chain rejecting the call) bubble up
+	 * failure.  RPC errors (the chain rejecting the call) bubble up
 	 * immediately without cooling the endpoint down — those are the
 	 * caller's problem, not the endpoint's.
+	 *
+	 * cp165: delegates to `@morphit/rpc-pool`'s EndpointPool —
+	 * latency-aware (fastest known endpoint first by EWMA), with
+	 * adaptive hedging when the caller opts in via `{hedge: true}`.
+	 *
+	 * Hedging policy on this client:
+	 *   - User-facing reads (availability check, getAccount during
+	 *     signup): hedge on — instant failover under degradation.
+	 *   - Broadcasts: hedge OFF unconditionally.  Two parallel
+	 *     broadcasts of the same transaction would either land
+	 *     twice (chain rejects the duplicate but burns a roundtrip)
+	 *     or race-condition.  The single-broadcast latency is the
+	 *     cost of correctness.
+	 *
+	 * The `signal` passed to `fn` lets callers bridge dblurt's
+	 * non-cancellable API: wrap any awaited dblurt call in
+	 * `withSignal(call, signal)` and the pool can cancel a slow
+	 * dispatch (e.g. when hedging wins on a peer endpoint).
 	 */
-	private async callWithRotation<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-		const start = this.rotationCounter++ % this.endpoints.length;
-		let lastError: unknown = null;
-
-		for (let i = 0; i < this.endpoints.length; i++) {
-			const ep = this.endpoints[(start + i) % this.endpoints.length]!;
-			if (!this.isAvailable(ep)) continue;
-
-			const client = new Client(ep.url, { timeout: 8_000 });
-			try {
-				const result = await fn(client);
-				this.recordSuccess(ep);
-				return result;
-			} catch (err) {
-				// Determine if this is a transport failure (cool down the
-				// endpoint) or an RPC error (return as-is; the chain is
-				// telling us something).
-				if (isTransportError(err)) {
-					this.recordFailure(ep);
-					lastError = err;
-					continue;
-				}
-				throw err;
-			}
-		}
-
-		// Every endpoint was either cooled-down or failed transport.
-		// One last-ditch pass ignoring cooldowns so the caller gets a
-		// current error rather than a stale one.
-		for (let i = 0; i < this.endpoints.length; i++) {
-			const ep = this.endpoints[(start + i) % this.endpoints.length]!;
-			const client = new Client(ep.url, { timeout: 8_000 });
-			try {
-				const result = await fn(client);
-				this.recordSuccess(ep);
-				return result;
-			} catch (err) {
-				if (isTransportError(err)) {
-					this.recordFailure(ep);
-					lastError = err;
-					continue;
-				}
-				throw err;
-			}
-		}
-
-		throw new Error(
-			`all Blurt endpoints failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+	private async callWithRotation<T>(
+		fn: (client: Client, signal: AbortSignal) => Promise<T>,
+		options: { hedge?: boolean } = {}
+	): Promise<T> {
+		return this.pool.call(
+			async (url, signal) => {
+				const client = clientFor(url);
+				return fn(client, signal);
+			},
+			{ hedge: options.hedge === true }
 		);
-	}
-
-	private isAvailable(ep: EndpointState): boolean {
-		return Date.now() >= ep.cooldownUntil;
-	}
-
-	private recordSuccess(ep: EndpointState): void {
-		ep.consecutiveFailures = 0;
-		ep.cooldownUntil = 0;
-	}
-
-	private recordFailure(ep: EndpointState): void {
-		ep.consecutiveFailures++;
-		// Cooldown: 2s → 10s → 60s → 5min; pinned thereafter.
-		const cool =
-			ep.consecutiveFailures <= 1
-				? 2_000
-				: ep.consecutiveFailures === 2
-					? 10_000
-					: ep.consecutiveFailures === 3
-						? 60_000
-						: 300_000;
-		ep.cooldownUntil = Date.now() + cool;
 	}
 }
 
-/**
- * Heuristic: is this a transport-level failure (should rotate) or an
- * RPC-level rejection (caller's problem, keep the endpoint warm)?
- *
- * dblurt wraps RPC errors with a distinct shape. We detect either by
- * the error's structural markers or (as a fallback) by substring match
- * on common transport error messages.
- */
-function isTransportError(err: unknown): boolean {
-	if (!(err instanceof Error)) return true;
-	const msg = err.message.toLowerCase();
-	// Node's fetch/undici emits these on connection failures.
-	if (msg.includes('econnrefused')) return true;
-	if (msg.includes('etimedout')) return true;
-	if (msg.includes('enotfound')) return true;
-	if (msg.includes('network')) return true;
-	if (msg.includes('timeout')) return true;
-	if (msg.includes('fetch failed')) return true;
-	// HTTP 5xx from a broken node is a transport failure too.
-	if (msg.includes('502') || msg.includes('503') || msg.includes('504')) return true;
-	// dblurt uses `RPCError` for structured RPC responses (e.g. the
-	// chain rejecting the op). Anything else is transport.
-	// (RPCError class check would be ideal but requires importing
-	// internal types; string match is pragmatic.)
-	if (msg.includes('assert_exception')) return false;
-	if (msg.includes('missing_object_exception')) return false;
-	return false;
+/** Bridge a dblurt call (no native cancellation) to an AbortSignal.
+ *  The dblurt call still runs to completion in the background if the
+ *  signal aborts mid-flight; we just stop awaiting it.  Cost: one
+ *  abandoned RPC per hedge — same tradeoff hedging already makes
+ *  intentionally (the hedge double-fires the request anyway). */
+function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) {
+		return Promise.reject(new Error('aborted'));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = (): void => {
+			reject(new Error('aborted'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		promise.then(
+			(v) => {
+				signal.removeEventListener('abort', onAbort);
+				resolve(v);
+			},
+			(err) => {
+				signal.removeEventListener('abort', onAbort);
+				reject(err);
+			}
+		);
+	});
+}
+
+/** Per-endpoint dblurt Client instance cache.  Reuse Clients across
+ *  calls so we don't pay the allocation cost per request. */
+const clientCache = new Map<string, Client>();
+function clientFor(url: string): Client {
+	let c = clientCache.get(url);
+	if (c === undefined) {
+		c = new Client(url, { timeout: 10_000 });
+		clientCache.set(url, c);
+	}
+	return c;
 }
 
 /**

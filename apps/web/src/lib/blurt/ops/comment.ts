@@ -62,12 +62,12 @@
  *     still points at the original publish.
  */
 
-import {
+import type {
 	PrivateKey,
 	Client,
-	type Transaction,
-	type SignedTransaction,
-	type Operation
+	Transaction,
+	SignedTransaction,
+	Operation
 } from '@beblurt/dblurt';
 
 import { getBlurtClient } from '$blurt/client';
@@ -75,12 +75,20 @@ import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 
+// cp165 byte-budget: dblurt is type-only at module scope.  Runtime
+// values (PrivateKey, Client) load dynamically inside the broadcast
+// function so the 2 MB dblurt chunk stays out of the eager-load
+// graph for routes that transitively reach this file
+// (syndication/publish.ts → /post + LeaveFeedbackForm on /my/orders).
+
 /** Convert a raw 32-byte secp256k1 scalar to a dblurt PrivateKey.
  *  Same helper shape as sign.ts (kept local to this module to
  *  avoid a cross-module import of a private conversion).
- *  Cast via unknown — see sign.ts for rationale. */
-function rawToPrivateKey(raw: Uint8Array): PrivateKey {
-	return new PrivateKey(raw as unknown as Buffer);
+ *  Cast via unknown — see sign.ts for rationale.
+ *  cp165: async + dynamic dblurt import. */
+async function rawToPrivateKey(raw: Uint8Array): Promise<PrivateKey> {
+	const { PrivateKey: PK } = await import('@beblurt/dblurt');
+	return new PK(raw as unknown as Buffer);
 }
 
 /** Sign a transaction with a PrivateKey via dblurt's broadcast helper.
@@ -91,11 +99,16 @@ function rawToPrivateKey(raw: Uint8Array): PrivateKey {
  *  broadcast helper, so we instantiate a throwaway Client whose
  *  endpoint is never contacted (broadcast.sign is pure crypto).
  *  Local copy to keep this module self-contained per the
- *  duplication note in the helper above. */
+ *  duplication note in the helper above.
+ *  cp165: async + dynamic dblurt import. */
 let _signingClient: Client | null = null;
-function signTransactionWithKey(tx: Transaction, key: PrivateKey): SignedTransaction {
+async function signTransactionWithKey(
+	tx: Transaction,
+	key: PrivateKey
+): Promise<SignedTransaction> {
 	if (_signingClient === null) {
-		_signingClient = new Client(['https://signing-only.invalid']);
+		const { Client: ClientCtor } = await import('@beblurt/dblurt');
+		_signingClient = new ClientCtor(['https://signing-only.invalid']);
 	}
 	return _signingClient.broadcast.sign(tx, key);
 }
@@ -260,8 +273,8 @@ export async function broadcastComment(
 		extensions: []
 	};
 
-	const postingKey = rawToPrivateKey(live.posting.privateKey);
-	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey);
+	const postingKey = await rawToPrivateKey(live.posting.privateKey);
+	const signed: SignedTransaction = await signTransactionWithKey(tx, postingKey);
 
 	const result = await client.call<{ block_num: number; trx_id: string }>(
 		'condenser_api.broadcast_transaction_synchronous',

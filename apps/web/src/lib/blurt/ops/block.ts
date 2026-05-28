@@ -28,7 +28,10 @@
  * the belt-and-suspenders rationale.
  */
 
-import { broadcastCustomJson } from '../sign';
+// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// at the call site below so dblurt (a 2 MB chunk) doesn't land in
+// the eager-load graph of routes that pull this ops file for its
+// types/helpers but don't immediately trigger a broadcast.
 import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from './profile';
@@ -68,7 +71,8 @@ async function broadcastBlockOp(
 		action,
 		ts: Math.floor(Date.now() / 1000)
 	};
-	return broadcastCustomJson(live, OP_IDS.block, body, account);
+	const { broadcastCustomJson } = await import('../sign');
+	return await broadcastCustomJson(live, OP_IDS.block, body, account);
 }
 
 /** Block `blocked` from sending further chat messages to us. */

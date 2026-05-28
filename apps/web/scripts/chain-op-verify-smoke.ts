@@ -144,7 +144,7 @@ async function run(): Promise<void> {
 	const carolKey = makeKeyFromSeed('carol unrelated key seed for smoke');
 
 	// ─── Scenario 1 ───────────────────────────────────────────
-	await scenario('single-sig: matching signature → ok', () => {
+	await scenario('single-sig: matching signature → ok', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, aliceKey.priv);
 		const auth: AuthorityType = {
@@ -152,14 +152,14 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKey.pub, 1]]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(result.ok === true, `expected ok=true, got ${JSON.stringify(result)}`);
 		assert(result.ok === true && result.weightSum === 1, `expected weightSum=1`);
 		assert(result.ok === true && result.threshold === 1, `expected threshold=1`);
 	});
 
 	// ─── Scenario 2 ───────────────────────────────────────────
-	await scenario('single-sig: unrelated signature → weight_below_threshold', () => {
+	await scenario('single-sig: unrelated signature → weight_below_threshold', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, carolKey.priv); // signed by carol
 		const auth: AuthorityType = {
@@ -167,7 +167,7 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKey.pub, 1]] // expects alice
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(result.ok === false, `expected ok=false`);
 		assert(
 			!result.ok && result.code === 'weight_below_threshold',
@@ -176,7 +176,7 @@ async function run(): Promise<void> {
 	});
 
 	// ─── Scenario 3 ───────────────────────────────────────────
-	await scenario('empty signatures array → no_signatures', () => {
+	await scenario('empty signatures array → no_signatures', async () => {
 		const signed: SignedTransaction = {
 			...buildUnsignedTx(),
 			signatures: [],
@@ -189,7 +189,7 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKey.pub, 1]]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(
 			!result.ok && result.code === 'no_signatures',
 			`expected no_signatures, got ${result.ok ? 'ok' : result.code}`
@@ -197,7 +197,7 @@ async function run(): Promise<void> {
 	});
 
 	// ─── Scenario 4 ───────────────────────────────────────────
-	await scenario('multi-sig: only one match (sum<threshold) → weight_below_threshold', () => {
+	await scenario('multi-sig: only one match (sum<threshold) → weight_below_threshold', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, aliceKey.priv); // alice only
 		const auth: AuthorityType = {
@@ -208,7 +208,7 @@ async function run(): Promise<void> {
 				[bobKey.pub, 1]
 			]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(
 			!result.ok && result.code === 'weight_below_threshold',
 			`expected weight_below_threshold for 1<2, got ${result.ok ? 'ok' : result.code}`
@@ -216,7 +216,7 @@ async function run(): Promise<void> {
 	});
 
 	// ─── Scenario 5 ───────────────────────────────────────────
-	await scenario('multi-sig: both match (sum=threshold) → ok', () => {
+	await scenario('multi-sig: both match (sum=threshold) → ok', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTxMulti(tx, [aliceKey.priv, bobKey.priv]);
 		const auth: AuthorityType = {
@@ -227,13 +227,13 @@ async function run(): Promise<void> {
 				[bobKey.pub, 1]
 			]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(result.ok === true, `expected ok=true, got ${JSON.stringify(result)}`);
 		assert(result.ok === true && result.weightSum === 2, `expected weightSum=2`);
 	});
 
 	// ─── Scenario 6 ───────────────────────────────────────────
-	await scenario('tampered signature: recovers to non-authority key → fails', () => {
+	await scenario('tampered signature: recovers to non-authority key → fails', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, aliceKey.priv);
 		// Tamper with the signature: flip the recovery byte (first byte
@@ -252,7 +252,7 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKey.pub, 1]]
 		};
-		const result = verifyTransactionSignatures(tamperedTx, auth);
+		const result = await verifyTransactionSignatures(tamperedTx, auth);
 		// Expected: either weight_below_threshold (recovered key
 		// not in authority) or the malformed-sig-skip path also
 		// leading to weight=0.  Either way, not ok.
@@ -260,7 +260,7 @@ async function run(): Promise<void> {
 	});
 
 	// ─── Scenario 7 ───────────────────────────────────────────
-	await scenario('PublicKey-typed key_auths entry (not string) works', () => {
+	await scenario('PublicKey-typed key_auths entry (not string) works', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, aliceKey.priv);
 		// dblurt's AuthorityType permits PublicKey objects in
@@ -273,7 +273,7 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKeyObj, 1]]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(
 			result.ok === true,
 			`expected ok=true with PublicKey object, got ${JSON.stringify(result)}`
@@ -281,7 +281,7 @@ async function run(): Promise<void> {
 	});
 
 	// ─── Scenario 8 ───────────────────────────────────────────
-	await scenario('weight_threshold=0 is degenerate but legal: any sig passes', () => {
+	await scenario('weight_threshold=0 is degenerate but legal: any sig passes', async () => {
 		const tx = buildUnsignedTx();
 		const signed = signTx(tx, aliceKey.priv);
 		const auth: AuthorityType = {
@@ -289,7 +289,7 @@ async function run(): Promise<void> {
 			account_auths: [],
 			key_auths: [[aliceKey.pub, 1]]
 		};
-		const result = verifyTransactionSignatures(signed, auth);
+		const result = await verifyTransactionSignatures(signed, auth);
 		assert(result.ok === true, `expected ok=true with threshold=0`);
 		// weight_sum still 1 (sig matches alice)
 		assert(result.ok === true && result.weightSum === 1, `expected weightSum=1`);
