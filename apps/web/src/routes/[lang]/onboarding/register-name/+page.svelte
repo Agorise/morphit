@@ -231,10 +231,10 @@
 			// At this point origin === 'morphit-seed', so all four slots
 			// are guaranteed populated.  The non-null assertions below
 			// are safe under that invariant.
-			ownerBLT = formatPublicKeyBLT(live.ownerPublicKey!);
-			activeBLT = formatPublicKeyBLT(live.activePublicKey!);
-			postingBLT = formatPublicKeyBLT(live.posting.publicKey);
-			memoBLT = formatPublicKeyBLT(live.memo!.publicKey);
+			ownerBLT = await formatPublicKeyBLT(live.ownerPublicKey!);
+			activeBLT = await formatPublicKeyBLT(live.activePublicKey!);
+			postingBLT = await formatPublicKeyBLT(live.posting.publicKey);
+			memoBLT = await formatPublicKeyBLT(live.memo!.publicKey);
 		} catch (err) {
 			// Key-formatting failure means our keygen produced something
 			// malformed — should never happen, but fail loudly rather

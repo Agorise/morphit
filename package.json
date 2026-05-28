@@ -15,7 +15,8 @@
 		"packages/relay-client",
 		"packages/operator-config",
 		"packages/asset-registry",
-		"packages/net-defense"
+		"packages/net-defense",
+		"packages/rpc-pool"
 	],
 	"engines": {
 		"node": ">=22.0.0"

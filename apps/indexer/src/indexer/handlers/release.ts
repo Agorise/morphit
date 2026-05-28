@@ -261,7 +261,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (valid) {
 		let account;
 		try {
-			account = await ctx.blurt.getAccount(ctx.signer);
+			account = await ctx.blurt.getAccount(ctx.signer, { userFacing: false });
 		} catch (err) {
 			// Chain unreachable during this handler. Re-throw so the
 			// dispatcher rolls the block back and we retry — we'd

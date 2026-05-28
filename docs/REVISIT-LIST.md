@@ -1,6 +1,74 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp164 (CLOSED) — 2026-05-28 (four-persona walkthrough refresh + two cross-cutting themed deep-deeps [Monero view-key leak surfaces; internal hostname/IP leak surfaces]; walkthrough caught + fixed two manual-install doc footguns Sally-operator would have hit; deep-deeps confirmed defense-by-construction across both threat angles with one INFO-level env-example doc clarification shipped).  Sentinel battery 6261/0 triple-pulse stable.
+**Last touched:** Part 122 cp165 (CLOSED) — 2026-05-28 (RPC pool foundation + comprehensive byte-budget audit; built `@morphit/rpc-pool` package, migrated both BlurtClients to it, converted 15+ modules to dynamic dblurt imports, lazy-mounted 10+ heavyweight components, fixed nginx so it serves the pre-compressed assets the SvelteKit build already produces, added gzip to indexer + relay).  Sentinel battery 6285/0 triple-pulse stable.
+
+## cp165 — RPC pool foundation + byte-budget audit (CLOSED 2026-05-28)
+
+Built a shared latency-aware endpoint pool used by both indexer and relay BlurtClients, replaced bespoke rotation/cooldown logic in both, then pushed the byte-budget audit deep — every dblurt static-import chain converted to dynamic, every below-the-fold heavyweight component lazy-mounted, every nginx server block configured to actually serve the pre-compressed assets and JSON.
+
+### RPC pool foundation (`@morphit/rpc-pool`)
+
+New workspace package.  EWMA latency tracking, fastest-known-endpoint-first ordering, exponential cooldown ladder (2s → 10s → 60s → 5min), AbortSignal-based cancellation, per-call timeouts, adaptive hedging (gate opens when primary EWMA exceeds 500ms; stagger 150ms minimum).
+
+**Design fix:** unknown-EWMA endpoints sort FIRST (bootstrap them) rather than LAST.  Old behavior would have pinned 100% of traffic on the first declared endpoint until it failed, on services with sparse RPC traffic (ops-cli; relay's signup-time getAccount).  The indexer's poller exercised every endpoint implicitly because it loops constantly, so the bug never surfaced in production, but it was latent.  Fix is strict improvement.
+
+10/10 unit smoke scenarios pass.  Registered in workspaces, smoke battery, typecheck-sweep.
+
+### Both BlurtClients migrated to rpc-pool
+
+`apps/indexer/src/blurt/client.ts` and `apps/relay/src/blurt/client.ts` — removed ~150 lines of bespoke rotation/cooldown logic from each, replaced with a thin wrapper over `pool.call`.  `getAccount`/`getAccounts` API gained `{userFacing?: boolean}` option: defaults to user-facing (hedge on), background callers (`release.ts` chain-dispatch, `operatorAccountBalanceScanner`, `lowBalanceScanner`) opt out via `{userFacing: false}` to avoid double-loading public RPCs.  All 9 relay broadcast methods keep `hedge: false` unconditionally — two parallel broadcasts of the same tx would either land twice (chain rejects duplicate but burns roundtrip) or race-condition.  dblurt's Client doesn't accept AbortSignal natively; bridged via inline `withSignal()` helper.  `endpointSnapshot()` exposed on both clients for `/v1/health` diagnostics.
+
+New integration smoke `apps/indexer/scripts/blurt-client-rpc-pool-smoke.ts` — 5 scenarios using two fake JSON-RPC HTTP servers on ephemeral ports.  Validates fastest-first, transparent rotation on transport fail, RPC-errors propagate without rotating, endpointSnapshot shape, and hedge fires under primary degradation (52ms when EWMA-warm).  All 5 pass.
+
+### Byte-budget audit — frontend lazy-loading
+
+15 modules converted to dynamic dblurt imports (every static dblurt-runtime-pull on a route's eager-load graph):
+
+- `keygen.ts` — `formatPublicKeyBLT` now async with dynamic dblurt import
+- `profile.ts` — removed eager `fullPublicKey` export; `formatIdentity` returns `{name, fingerprint}` only
+- `notifications/push.ts` — dynamic `PrivateKey + cryptoUtils` inside the sign function
+- `chat/chainOpVerifyCore.ts` — converted to dynamic imports; verify function is now async
+- 8 `blurt/ops/*` files (`profile`, `operatorRegister`, `chatIdentity`, `block`, `chatRead`, `feedbackResponse`, `feedback`, `comment`) — replaced static `broadcastCustomJson` static import with lazy import at the call site
+
+**IdentityLabel regression fix** — lazy-resolves canonical BLT key on first `pointerenter`/`focus`/copy-click with fingerprint as the synchronous placeholder.  Resolution happens during the natural hover delay so tooltips never show stale values; copy button awaits the resolution before writing to clipboard so users always get the correct canonical key.
+
+10+ heavyweight components lazy-mounted behind their conditional render gates: `FeaturedOrders`, `FeaturedAuctionHistory`, `FeatureBidForm`, `LeaveFeedbackForm` (21 KB), `PendingFeedbackReminderBanner`, `HardwareKeyCard` (22 KB), `MyBalanceCard` (16 KB), `RespondToFeedbackForm`, `SeedBackupPrint`, `ListingFeeAddressPanel`, `PrivateKeyWarningModal` (2 routes), `ConfirmModal`, `PrioritiesSection` (13 KB), `CoinCarousel` (15 KB).
+
+### Nginx compression — biggest single UX win
+
+**Discovery:** the SvelteKit build emits `.gz` and `.br` siblings for every `.js` / `.css` / `.html` / `.svg`, but nginx wasn't configured to serve them.  Every visitor was downloading raw uncompressed JS even though pre-compressed versions sat right next to the originals.
+
+- `web.conf`: `gzip_static on; brotli_static on;` — pre-compressed files now actually served.  4-6× reduction on every frontend page load with zero CPU cost at runtime (compression happened once at build time).
+- `indexer.conf`: `gzip on;` with JSON+text/* types, level 5.  4-8× reduction on API responses — matters both for Sally on a slow mobile connection AND for third-party API consumers building bots/explorers.  Brotli kept as commented-optional (requires extra module).
+- `relay.conf`: same gzip config.
+- `docs/RUN-A-MORPHIT-NODE.md`: documented optional `libnginx-mod-brotli` install paragraph with explicit "comment out `brotli_static` if you don't install the module" guidance.
+
+### Img-tag audit
+
+41/45 already had `loading=` attribute coverage.  Surgical fixes on the 4 that didn't — added `decoding="async"` to two above-the-fold logos (MorphitLogoBling wordmark, AvatarMenu avatar — keep eager but non-blocking decode), `loading="lazy" decoding="async"` on the conditional YubiKey icon on `/login`.
+
+### Cumulative byte impact
+
+- **Before cp165:** biggest dblurt chunk 2.0 MB raw / 424 KB Brotli; 11 routes preloaded it eagerly at first paint
+- **After cp165:** biggest dblurt chunk 945 KB raw / 170 KB Brotli; 0 prerendered HTML pages preload dblurt anywhere
+- All deferred routes still work — the lazy chunk loads only when the user triggers the gated action
+
+### Verified clean (cp165 sentinel)
+
+- Triple-pulse 6285/6285/6285, 0 runners failed
+- TypeScript 0 × 13 (including new `rpc-pool` workspace)
+- svelte-check 0 errors / 0 warnings
+- Frontend unit tests 694/694 (was 591 baseline — added tests for the async `formatPublicKeyBLT` path)
+- 1 indexer vitest assertion updated to reflect the new `{userFacing: false}` background-call option
+- New smokes registered: `rpc-pool-smoke` (+10 scenarios), `blurt-client-rpc-pool-smoke` (+5 scenarios)
+
+### Notes for future work
+
+- The bespoke `EndpointState` interface + `isTransportError` heuristic deleted from `apps/relay/src/blurt/client.ts` (~80 lines).  Future audits only need to verify one rotation/hedging implementation across both apps instead of two divergent ones.
+- `apps/web/src/lib/blurt/sign.ts` deliberately keeps eager dblurt imports — the `signTransferWithKey` and `signOrderWithFeeWithKey` exports are explicitly sync (per the F-18 audit comment "Pure, sync, ~10ms.") to minimize active-key lifetime in memory.  Making them async would widen key lifetime across an `await` suspension point — a real security regression.  All other call paths through `sign.ts` are reached only via the already-async `broadcastCustomJson` which is itself dynamic-imported by every ops/* file that reaches it.
+- `pairingPhoneSigner.ts` keeps eager dblurt — only used on `/scan-login` which legitimately needs signing.  Component is self-contained (only consumer is `ScanLoginQr.svelte` on the same route).
+
+---
 
 ## cp164 — Four-persona walkthrough + themed deep-deeps (CLOSED 2026-05-28)
 

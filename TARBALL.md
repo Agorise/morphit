@@ -4,7 +4,67 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp164 **CLOSED** — full four-persona walkthrough refresh + two cross-cutting themed deep-deeps (Monero view-key leak + internal-host/IP leak surfaces).  Walkthrough caught + fixed two real Sally-operator doc footguns; deep-deeps confirmed defense-by-construction across both threat angles with one INFO-level doc clarification shipped.
+**Last touched:** cp165 **CLOSED** — RPC pool foundation + comprehensive byte-budget audit.  Built a shared latency-aware endpoint pool (`@morphit/rpc-pool`), migrated both BlurtClients to it (indexer + relay), converted 15+ modules to dynamic dblurt imports, lazy-mounted 10+ heavyweight components behind their conditional render gates, fixed nginx so it actually serves the pre-compressed assets the SvelteKit build already produces, and enabled API-response compression on indexer + relay.
+
+**The single biggest find:** the SvelteKit build produces `.gz` and `.br` siblings for every `.js` / `.css` / `.html`, but nginx wasn't told to serve them.  Every visitor was downloading raw uncompressed JS — `gzip_static on; brotli_static on;` in `ops/nginx/web.conf` is a **4-6× reduction on every frontend page load** with zero CPU cost at runtime (compression happened once at build time).
+
+**RPC pool foundation (`@morphit/rpc-pool`):**
+- New workspace package — EWMA latency tracking, fastest-known-endpoint-first ordering, exponential cooldown ladder (2s → 10s → 60s → 5min), AbortSignal-based cancellation, per-call timeouts (4s user-facing / 10s background), adaptive hedging (gate opens when primary EWMA > 500ms, stagger 150ms minimum).
+- **Design fix**: unknown-EWMA endpoints sort FIRST (bootstrap them) rather than LAST.  Old behavior would have pinned 100% of traffic on the first declared endpoint until it failed, on services with sparse RPC traffic (ops-cli, relay signup-time getAccount).  Production poller exercised everything implicitly so this never surfaced, but it was a latent bug; the fix is strict improvement.
+- 10/10 unit smoke scenarios.
+
+**BlurtClient migration to rpc-pool:**
+- Both `apps/indexer/src/blurt/client.ts` and `apps/relay/src/blurt/client.ts` migrated.  Removed ~150 lines of bespoke rotation/cooldown logic from each (replaced by a thin wrapper over `pool.call`).
+- `getAccount`/`getAccounts` API gained `{userFacing?: boolean}` option — defaults to user-facing (hedge on); background callers (`release.ts` chain-dispatch, `operatorAccountBalanceScanner`, `lowBalanceScanner`) pass `{userFacing: false}` to avoid double-loading public RPCs.
+- All 9 relay broadcast methods keep `hedge: false` unconditionally — two parallel broadcasts of the same tx would either land twice (chain rejects duplicate but burns roundtrip) or race-condition.
+- `dblurt`'s Client doesn't support AbortSignal natively; bridged via inline `withSignal()` helper.  Abandoned-call cost matches the hedging policy already in flight.
+- `endpointSnapshot()` exposed for `/v1/health` diagnostics.
+- New integration smoke `apps/indexer/scripts/blurt-client-rpc-pool-smoke.ts` — 5 scenarios with two fake JSON-RPC HTTP servers on ephemeral ports.  Validates fastest-first, transparent rotation on transport fail, RPC-errors propagate without rotating, endpointSnapshot shape, and hedge fires under primary degradation (52ms when EWMA-warm).
+
+**Frontend byte-budget audit — 15 modules converted to lazy dblurt imports:**
+
+`keygen.ts` — `formatPublicKeyBLT` now async + dynamic dblurt.  `profile.ts` — removed eager `fullPublicKey` export; `formatIdentity` returns `{name, fingerprint}` only.  `notifications/push.ts`, `chat/chainOpVerifyCore.ts` — dynamic imports inside their async functions.  All 7 `blurt/ops/*` files (`profile`, `operatorRegister`, `chatIdentity`, `block`, `chatRead`, `feedbackResponse`, `feedback`, `comment`) — replaced static `broadcastCustomJson` static import with lazy import at the call site.
+
+**IdentityLabel regression fix:** lazy-resolves canonical BLT key on first `pointerenter`/`focus`/copy-click with fingerprint as the synchronous placeholder.  Resolution happens during natural hover delay so tooltips never show stale values; copy button `awaits` the resolution before writing to clipboard so users always get the correct canonical key.
+
+**Heavyweight component lazy-loading (10 routes):**
+
+- `/orderbook`: `FeaturedOrders`, `FeaturedAuctionHistory` (below-the-fold + each fires an HTTP fetch on `onMount`)
+- `/my/orders`: `FeatureBidForm`, `LeaveFeedbackForm` (21 KB), `PendingFeedbackReminderBanner`
+- `/settings`: `HardwareKeyCard` (only renders for unlocked users with persisted keystores)
+- `/[account]`: `MyBalanceCard` (own-profile only), `RespondToFeedbackForm` (reply-flow only)
+- `/onboarding`: `SeedBackupPrint`, `ConfirmModal` (both render sites)
+- `/post`: `ListingFeeAddressPanel` (btc/xmr fee paths), `PrivateKeyWarningModal`
+- `/post/edit/[permlink]`: `PrivateKeyWarningModal`
+- Landing page: `PrioritiesSection` + `CoinCarousel` (below-the-fold, 28 KB combined)
+
+**Nginx compression — biggest single UX win:**
+
+- `web.conf`: `gzip_static on; brotli_static on;` — pre-compressed `.gz`/`.br` siblings now actually served.  4-6× reduction per page load.
+- `indexer.conf`: `gzip on;` with JSON+text/* types, level 5.  4-8× reduction on API responses.  Brotli kept as commented-optional.
+- `relay.conf`: same gzip config.
+- `docs/RUN-A-MORPHIT-NODE.md`: documented optional `libnginx-mod-brotli` install with explicit "comment out brotli_static if you don't install the module" guidance.
+
+**Img-tag audit:** 41/45 already had `loading=` attribute coverage; surgical fixes on the 4 that didn't — `decoding="async"` on two above-the-fold logos (MorphitLogoBling wordmark, AvatarMenu avatar), `loading="lazy" decoding="async"` on the conditional yubikey icon on `/login`.
+
+**Cumulative byte impact:**
+- BEFORE cp165: biggest dblurt chunk 2.0 MB raw / 424 KB Brotli; **11 routes preloaded it eagerly** at first paint (chat, /my/orders, /post, all /onboarding/*, /settings, /scan-login, /login/qr-pair, /backup-keys).
+- AFTER cp165: biggest dblurt chunk 945 KB raw / 170 KB Brotli; **0 prerendered HTML pages preload it** (verified across orderbook/post/onboarding/faq/login/explorer/instances/run-a-node/security/operators/about-this-instance/cheat-sheet/download/glossary/faq/plan/privacy-terms/chat).
+- All deferred routes still work — the lazy chunk loads only when the user triggers the gated action.
+
+**Verified clean:**
+- Triple-pulse 6285/6285/6285, 0 runners failed
+- TypeScript 0 × 13 (including new `rpc-pool` workspace)
+- svelte-check 0 errors / 0 warnings
+- Frontend unit tests 694/694
+- 1 indexer vitest assertion updated (`OperatorAccountBalanceScanner` mock was checking call args; now reflects the `{userFacing: false}` background-call option I added)
+- New smokes registered: `packages/rpc-pool:rpc-pool-smoke` (+10 scenarios), `apps/indexer:blurt-client-rpc-pool-smoke` (+5 scenarios)
+
+**Smoke runner script count:** 252 (was 250 — added rpc-pool-smoke + blurt-client-rpc-pool-smoke; +10 + +5 scenarios for a net of 6285 from baseline 6270).
+
+— 2026-05-28.
+
+**Prior turn (cp164):** Full four-persona walkthrough refresh + two cross-cutting themed deep-deeps (Monero view-key leak + internal-host/IP leak surfaces).  Walkthrough caught + fixed two real Sally-operator doc footguns; deep-deeps confirmed defense-by-construction across both threat angles with one INFO-level doc clarification shipped.
 
 **Four-persona walkthrough (`docs/FOUR-PERSONA-WALKTHROUGH-cp164.md`):** re-walked all four personas (Bob, Sally-user, Sally-operator, Charlie) against every checkpoint since cp148 (15 checkpoints).  Sally-operator was the centerpiece since cp161/cp162 fundamentally reshaped her install flow.
 

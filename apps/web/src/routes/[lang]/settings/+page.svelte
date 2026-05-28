@@ -15,7 +15,14 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import NotificationSettings from '$components/NotificationSettings.svelte';
-	import HardwareKeyCard from '$components/HardwareKeyCard.svelte';
+	// cp165 byte-budget: HardwareKeyCard is lazy-imported below.
+	// It's only rendered for unlocked users with a persisted
+	// keystore (excludes paired-readonly + seed-only + locked
+	// visitors) and pulls webhid + yubikey transport code (~22 KB
+	// of component source plus transitive helpers).  Lazy import
+	// keeps it out of the eager-load chunk for the majority of
+	// visitors who'll never trigger the condition.
+	// import HardwareKeyCard from '$components/HardwareKeyCard.svelte';
 	import { autoLockTimeoutMinutes, writeTimeoutMinutes, NEVER_LOCK } from '$stores/autoLock';
 	import { userPreferences, clearPreferences } from '$stores/userPreferences';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
@@ -52,6 +59,16 @@
 	let input = $state('');
 	let saved = $state('');
 	let saving = $state(false);
+
+	// cp165 byte-budget: lazy-load HardwareKeyCard.  The
+	// `HardwareKeyCardPromise` starts null and gets populated on
+	// first render of the gated card (see {#await} block below).
+	// Once the import resolves, Svelte's {#await} replaces the
+	// loading state with the actual component.  For visitors who
+	// never satisfy the gate ($isUnlocked && hasPersistedKeystore),
+	// the import never fires — the chunk is never downloaded.
+	const loadHardwareKeyCard = () =>
+		import('$components/HardwareKeyCard.svelte').then((m) => m.default);
 	let savedToast = $state(false);
 	let broadcasting = $state(false);
 	let broadcastError = $state('');
@@ -270,7 +287,7 @@
 		accountVerifying = true;
 		accountVerifyError = '';
 		try {
-			const derivedPub = formatPublicKeyBLT(live.posting.publicKey);
+			const derivedPub = await formatPublicKeyBLT(live.posting.publicKey);
 			const client = getBlurtClient();
 			const fetched = await client.getAccount(candidate);
 			if (!fetched) {
@@ -2006,6 +2023,8 @@
 	     key to.  The component itself feature-detects WebHID and
 	     renders an "unsupported" card on Firefox/Safari. -->
 	{#if $isUnlocked && hasPersistedKeystore()}
-		<HardwareKeyCard />
+		{#await loadHardwareKeyCard() then HardwareKeyCard}
+			<HardwareKeyCard />
+		{/await}
 	{/if}
 </div>

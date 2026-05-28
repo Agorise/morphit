@@ -100,6 +100,8 @@ SMOKES=(
 	"packages/operator-config:operator-config-smoke"
 	"packages/relay-client:contract-symmetry-smoke"
 	"packages/net-defense:net-defense-smoke"
+	"packages/rpc-pool:rpc-pool-smoke"
+	"apps/indexer:blurt-client-rpc-pool-smoke"
 	"apps/web:balance-bus-smoke"
 	"apps/web:chain-op-verify-smoke"
 	"apps/web:yubikey-error-classifier-smoke"

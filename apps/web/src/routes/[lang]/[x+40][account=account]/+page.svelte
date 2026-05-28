@@ -33,8 +33,13 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import RespondToFeedbackForm from '$components/RespondToFeedbackForm.svelte';
-	import MyBalanceCard from '$components/MyBalanceCard.svelte';
+	// cp165 byte-budget: MyBalanceCard renders only on a viewer's
+	// OWN profile (rare path — most profile-page traffic is people
+	// looking at counterparties).  RespondToFeedbackForm renders
+	// only when actively replying to a piece of feedback (rare
+	// action).  Lazy-import both.
+	// import RespondToFeedbackForm from '$components/RespondToFeedbackForm.svelte';
+	// import MyBalanceCard from '$components/MyBalanceCard.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identiconDataUri } from '$crypto/identicon';
@@ -88,6 +93,12 @@
 	let feedbackItems = $state<FeedbackRecord[]>([]);
 	let feedbackNextCursor: string | null = $state(null);
 	let feedbackError = $state('');
+
+	// cp165 lazy-loaders for /[account] conditional components
+	const loadMyBalanceCard = () =>
+		import('$components/MyBalanceCard.svelte').then((m) => m.default);
+	const loadRespondToFeedbackForm = () =>
+		import('$components/RespondToFeedbackForm.svelte').then((m) => m.default);
 	let loadingMore = $state(false);
 	/** Raw orders from the indexer — all statuses. We filter to
 	 *  live + sort by expires_at ASC client-side (see liveOrders
@@ -471,7 +482,9 @@
 	<!-- ─── Private balance card (own profile only) ──────────── -->
 	{#if isOwnProfile}
 		<div class="mb-6">
-			<MyBalanceCard {account} />
+			{#await loadMyBalanceCard() then MyBalanceCard}
+				<MyBalanceCard {account} />
+			{/await}
 		</div>
 	{/if}
 
@@ -859,21 +872,23 @@
 										{$_('feedback_response.posted')}
 									</StatusLine>
 								{:else if replyingTo === fb.id}
-									<RespondToFeedbackForm
-										feedbackTrxId={fb.source_trx_id}
-										onSuccess={() => {
-											replyingTo = null;
-											// Snapshot-set update — Svelte 5 tracks
-											// by reference, so we replace the whole
-											// Set to trigger reactivity.
-											recentlyRepliedIds = new Set([...recentlyRepliedIds, fb.id]);
-											// Kick off a refetch so the response
-											// record lands in the DOM. The success
-											// line stays visible until then.
-											void loadFeedbackPage();
-										}}
-										onCancel={() => (replyingTo = null)}
+									{#await loadRespondToFeedbackForm() then RespondToFeedbackForm}
+										<RespondToFeedbackForm
+											feedbackTrxId={fb.source_trx_id}
+											onSuccess={() => {
+												replyingTo = null;
+												// Snapshot-set update — Svelte 5 tracks
+												// by reference, so we replace the whole
+												// Set to trigger reactivity.
+												recentlyRepliedIds = new Set([...recentlyRepliedIds, fb.id]);
+												// Kick off a refetch so the response
+												// record lands in the DOM. The success
+												// line stays visible until then.
+												void loadFeedbackPage();
+											}}
+											onCancel={() => (replyingTo = null)}
 									/>
+									{/await}
 								{:else}
 									<div class="mt-3">
 										<BusyButton variant="secondary" onclick={() => (replyingTo = fb.id)}>

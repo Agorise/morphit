@@ -26,7 +26,7 @@
  * cryptographic fingerprint always shown beside the name defeats it.
  */
 
-import { formatPublicKey, formatPublicKeyBLT } from './keygen';
+import { formatPublicKey } from './keygen';
 import { impersonatesReservedName } from './confusables';
 
 export const DISPLAY_NAME_MAX_LENGTH = 40;
@@ -182,23 +182,32 @@ export function fingerprint(publicKey: Uint8Array): string {
  * as a placeholder. Post-ADR-0007, the real base58-checksummed form
  * is used. The `BLT` visual anchor is preserved across that
  * migration — `fingerprint()` still shows the hex-based abbreviation
- * for recognizability, while this function is the paste-correct form.
+ * for recognizability, while the canonical paste-correct form is now
+ * produced by `formatPublicKeyBLT` in `$crypto/keygen`.
+ *
+ * cp165 byte-budget: the sync `fullPublicKey` helper was REMOVED.
+ * Its previous body called dblurt's `PublicKey.toString()` which
+ * statically imported the 2 MB dblurt+libsodium+secp256k1 chunk into
+ * every authenticated page through the identity-store transitive
+ * load graph.  Callers that need the canonical BLT-prefixed string
+ * now call the async `formatPublicKeyBLT` directly when the user
+ * action triggering the need fires (hover, click, submit) — it
+ * dynamically imports dblurt on first call.  First-paint rendering
+ * continues to use the sync `fingerprint(publicKey)` here.
  */
-export function fullPublicKey(publicKey: Uint8Array): string {
-	try {
-		return formatPublicKeyBLT(publicKey);
-	} catch {
-		// If the key isn't 33-byte secp256k1 shape for any reason, fall
-		// back to the hex rendering rather than throwing. In practice
-		// this only triggers on test fixtures or malformed inputs.
-		return `BLT${formatPublicKey(publicKey)}`;
-	}
-}
 
 /**
  * Produce the canonical "Display Name (BLT7gHu8mn…A9bb)" rendering used
  * throughout the UI. If display name is empty/unset, returns just the
  * fingerprint — the key is always the authoritative anchor.
+ *
+ * cp165 byte-budget: this helper used to also return a `full` field
+ * (the canonical BLT-base58check string).  That field required dblurt's
+ * PublicKey class which is part of a 2 MB chunk.  Callers that need
+ * the canonical full key string (tooltip on hover, clipboard copy)
+ * now call `formatPublicKeyBLT` (async, dynamic dblurt import) on
+ * demand — see IdentityLabel.svelte for the lazy-resolve-on-hover
+ * pattern.
  */
 export function formatIdentity(
 	displayName: string | null | undefined,
@@ -206,10 +215,8 @@ export function formatIdentity(
 ): {
 	name: string;
 	fingerprint: string;
-	full: string;
 } {
 	const fp = fingerprint(publicKey);
-	const full = fullPublicKey(publicKey);
 	const name = (displayName ?? '').trim();
-	return { name, fingerprint: fp, full };
+	return { name, fingerprint: fp };
 }

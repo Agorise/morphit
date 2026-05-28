@@ -8,9 +8,13 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
-	import SeedBackupPrint from '$components/SeedBackupPrint.svelte';
+	// cp165 byte-budget: SeedBackupPrint only renders after the user
+	// clicks "Show seed" — a one-time onboarding action.  Defer the
+	// ~9 KB component until then.
+	// import SeedBackupPrint from '$components/SeedBackupPrint.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import ConfirmModal from '$components/ConfirmModal.svelte';
+	// cp165: lazy ConfirmModal (only renders on leave-with-pending-state prompt)
+	// import ConfirmModal from '$components/ConfirmModal.svelte';
 	import {
 		generateIdentity,
 		wipeFullIdentity,
@@ -39,6 +43,12 @@
 
 	let wroteDown = $state(false);
 	let understand = $state(false);
+
+	// cp165: lazy SeedBackupPrint (only rendered after Show Seed click)
+	const loadSeedBackupPrint = () =>
+		import('$components/SeedBackupPrint.svelte').then((m) => m.default);
+	const loadConfirmModal = () =>
+		import('$components/ConfirmModal.svelte').then((m) => m.default);
 	let showSeed = $state(false);
 	let password = $state('');
 	/** The user's keystore persistence choice. `null` means they
@@ -507,7 +517,9 @@
 				     own print machinery handles paper or save-to-PDF. -->
 				{#if showSeed}
 					<div class="mt-3 flex items-center gap-3">
-						<SeedBackupPrint words={seedWords} />
+						{#await loadSeedBackupPrint() then SeedBackupPrint}
+							<SeedBackupPrint words={seedWords} />
+						{/await}
 						<span class="text-xs text-ink-500">
 							{$_('onboarding.backup.print_card.helper_hint')}
 						</span>
@@ -760,27 +772,31 @@
 </div>
 
 {#if pendingLeaveUrl !== null}
-	<ConfirmModal
-		bind:open={leaveConfirmOpen}
-		title={$_('onboarding.leave_confirm.title') as string}
-		body={$_('onboarding.leave_confirm.body') as string}
-		confirmLabel={$_('onboarding.leave_confirm.yes') as string}
-		cancelLabel={$_('onboarding.leave_confirm.stay') as string}
-		variant="destructive"
-		onConfirm={onConfirmLeave}
-		onCancel={onCancelLeave}
-	/>
+	{#await loadConfirmModal() then ConfirmModal}
+		<ConfirmModal
+			bind:open={leaveConfirmOpen}
+			title={$_('onboarding.leave_confirm.title') as string}
+			body={$_('onboarding.leave_confirm.body') as string}
+			confirmLabel={$_('onboarding.leave_confirm.yes') as string}
+			cancelLabel={$_('onboarding.leave_confirm.stay') as string}
+			variant="destructive"
+			onConfirm={onConfirmLeave}
+			onCancel={onCancelLeave}
+		/>
+	{/await}
 {/if}
 
 {#if pendingRestartFromReview}
-	<ConfirmModal
-		open={true}
-		title={$_('onboarding.review.back_confirm.title') as string}
-		body={$_('onboarding.review.back_confirm.body') as string}
-		confirmLabel={$_('onboarding.review.back_confirm.confirm') as string}
-		cancelLabel={$_('onboarding.review.back_confirm.cancel') as string}
-		variant="destructive"
-		onConfirm={confirmRestartFromReview}
-		onCancel={cancelRestartFromReview}
-	/>
+	{#await loadConfirmModal() then ConfirmModal}
+		<ConfirmModal
+			open={true}
+			title={$_('onboarding.review.back_confirm.title') as string}
+			body={$_('onboarding.review.back_confirm.body') as string}
+			confirmLabel={$_('onboarding.review.back_confirm.confirm') as string}
+			cancelLabel={$_('onboarding.review.back_confirm.cancel') as string}
+			variant="destructive"
+			onConfirm={confirmRestartFromReview}
+			onCancel={cancelRestartFromReview}
+		/>
+	{/await}
 {/if}

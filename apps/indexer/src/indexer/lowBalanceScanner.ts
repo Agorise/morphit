@@ -117,7 +117,7 @@ export class LowBalanceScanner {
 		let balances: ReadonlyMap<string, string | undefined>;
 		let rpcErrors = 0;
 		try {
-			const accounts = await this.blurt.getAccounts(candidates);
+			const accounts = await this.blurt.getAccounts(candidates, { userFacing: false });
 			balances = new Map(
 				Array.from(accounts.entries()).map(
 					([name, acc]) => [name, acc.balance] as [string, string | undefined]

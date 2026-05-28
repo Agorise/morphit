@@ -36,7 +36,15 @@ import { get } from 'svelte/store';
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import { liveIdentity } from '$lib/stores/identity';
-import { PrivateKey, cryptoUtils } from '@beblurt/dblurt';
+// cp165 byte budget: dblurt's PrivateKey + cryptoUtils are only
+// used inside `signSubscribe`/`signUnsubscribe`, which only fire
+// when the user toggles a notification preference.  Importing
+// dblurt statically here pulled the 2 MB chunk into
+// settings/+page.svelte's first-paint graph via NotificationSettings
+// → push.ts.  Switching to dynamic import: the chunk loads only on
+// the first signed subscribe/unsubscribe action.
+//
+// import { PrivateKey, cryptoUtils } from '@beblurt/dblurt';
 
 export type PushPrivacyMode = 'standard' | 'self_hosted';
 
@@ -169,6 +177,9 @@ async function signPushAction(
 	// dblurt's PrivateKey/Sign API takes Buffer in TS types but
 	// accepts any Uint8Array at runtime.  Mirrors the pattern at
 	// apps/web/src/lib/blurt/sign.ts.
+	// cp165: dynamic-imported to keep dblurt out of the first-paint
+	// settings-page chunk graph (the only consumer of this module).
+	const { PrivateKey, cryptoUtils } = await import('@beblurt/dblurt');
 	const messageBuf = messageHashBytes as unknown as Buffer;
 	const privKey = new PrivateKey(live.posting.privateKey as unknown as Buffer);
 	const sig = privKey.sign(messageBuf);

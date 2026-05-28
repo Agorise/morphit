@@ -54,7 +54,16 @@ import sodium from 'libsodium-wrappers-sumo';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import * as secp256k1 from '@noble/secp256k1';
-import { PublicKey } from '@beblurt/dblurt';
+// Note (cp165 byte budget): we DELIBERATELY do NOT statically import
+// `PublicKey` from `@beblurt/dblurt` here.  `keygen.ts` is reached
+// transitively from `$lib/stores/identity.ts`, which is loaded on
+// essentially every authenticated page; a static dblurt import here
+// would pull the 2 MB / 424 KB Brotli dblurt+libsodium+secp256k1
+// chunk onto every signed-in user's first paint even when they're
+// not signing anything.  The single dblurt-using function
+// (`formatPublicKeyBLT`) is action-triggered (account-name verify,
+// onboarding register), so it dynamically imports dblurt on first
+// call.  See cp165 audit + REVISIT-LIST.
 
 /** Blurt's four key roles. */
 export type KeyRole = 'owner' | 'active' | 'posting' | 'memo';
@@ -531,13 +540,20 @@ export function formatPublicKey(pk: Uint8Array): string {
  *
  * Wraps dblurt's PublicKey class rather than re-implementing
  * base58check — one less thing to get wrong.
+ *
+ * **Async + dynamic dblurt import** (cp165 byte-budget fix).  All
+ * callers are user-action handlers (settings account verify,
+ * onboarding register-name); none need this at first paint.  The
+ * dynamic import keeps the 2 MB dblurt chunk out of the identity-
+ * store transitive load graph.
  */
-export function formatPublicKeyBLT(pk: Uint8Array): string {
+export async function formatPublicKeyBLT(pk: Uint8Array): Promise<string> {
 	if (pk.length !== 33) {
 		throw new Error(
 			`formatPublicKeyBLT: expected 33-byte compressed point, got ${pk.length} bytes`
 		);
 	}
+	const { PublicKey } = await import('@beblurt/dblurt');
 	return new PublicKey(pk as unknown as Buffer).toString();
 }
 

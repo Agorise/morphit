@@ -19,14 +19,22 @@
  */
 
 import { Buffer } from 'buffer';
-import {
+import type {
 	Client,
-	cryptoUtils,
-	PublicKey,
-	Signature,
-	type AuthorityType,
-	type SignedTransaction
+	AuthorityType,
+	SignedTransaction
 } from '@beblurt/dblurt';
+
+// cp165 byte-budget: dblurt is statically imported here as TYPES
+// ONLY (`import type` — erased at compile time, zero runtime cost).
+// The runtime values (`cryptoUtils`, `PublicKey`, `Signature`, the
+// Client.DEFAULT_CHAIN_ID constant) are pulled via dynamic import
+// inside the verify function so the 2 MB dblurt chunk doesn't land
+// on the chat page first-paint graph.  This file is reachable from
+// chat/chainVerify → chatService + peerPubFetch, both of which load
+// on /chat/* routes.  Verification only fires on a rare pin-mismatch
+// path, so deferring the load until that path actually triggers is
+// a strict improvement.
 
 /** Result of a local signature verification. */
 export type ChainOpVerifyResult =
@@ -54,11 +62,13 @@ export type ChainOpVerifyResult =
  *  chain id. */
 let chainIdCache: Buffer | null = null;
 
-function getChainId(): Buffer {
+async function getChainId(): Promise<Buffer> {
 	if (chainIdCache !== null) return chainIdCache;
 	// dblurt's DEFAULT_CHAIN_ID is exposed on the Client class.
 	// We don't need a working Client instance to read it; the
-	// constant is a module-level static.
+	// constant is a module-level static.  cp165: dynamic import to
+	// keep dblurt out of the first-paint chunk graph.
+	const { Client } = await import('@beblurt/dblurt');
 	const c = Client as unknown as { DEFAULT_CHAIN_ID: Buffer };
 	chainIdCache = c.DEFAULT_CHAIN_ID;
 	return chainIdCache;
@@ -80,19 +90,27 @@ function getChainId(): Buffer {
  * authority).  An account whose posting authority delegates to
  * another account's posting key is treated as "no matching
  * key_auth signature found" — conservative but safe.
+ *
+ * cp165: now async.  dblurt's runtime values (`cryptoUtils`,
+ * `Signature`, `PublicKey`) are dynamically imported inside.
+ * The only caller (`verifyChainOpSignature` in chainOpVerify.ts)
+ * was already async, so this is a transparent refactor.
  */
-export function verifyTransactionSignatures(
+export async function verifyTransactionSignatures(
 	tx: SignedTransaction,
 	authority: AuthorityType,
 	chainId?: Buffer
-): ChainOpVerifyResult {
+): Promise<ChainOpVerifyResult> {
 	if (!Array.isArray(tx.signatures) || tx.signatures.length === 0) {
 		return { ok: false, code: 'no_signatures', message: 'tx has no signatures' };
 	}
 
+	const { cryptoUtils, Signature } = await import('@beblurt/dblurt');
+	type PublicKeyT = import('@beblurt/dblurt').PublicKey;
+
 	let digest: Buffer;
 	try {
-		digest = cryptoUtils.transactionDigest(tx, chainId ?? getChainId());
+		digest = cryptoUtils.transactionDigest(tx, chainId ?? (await getChainId()));
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return { ok: false, code: 'rpc_error', message: `digest_failed: ${message}` };
@@ -112,7 +130,7 @@ export function verifyTransactionSignatures(
 	for (const sigStr of tx.signatures) {
 		try {
 			const sig = Signature.fromString(sigStr);
-			const recovered: PublicKey = sig.recover(digest);
+			const recovered: PublicKeyT = sig.recover(digest);
 			const recoveredStr = recovered.toString();
 			recoveredKeys.push(recoveredStr);
 			const w = keyToWeight.get(recoveredStr);

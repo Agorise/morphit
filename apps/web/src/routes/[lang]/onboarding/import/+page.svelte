@@ -332,7 +332,7 @@
 			scalar = null;
 
 			// 3. Format the derived posting public key for chain comparison.
-			const derivedPub = formatPublicKeyBLT(full.keys.posting.publicKey);
+			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
 			// 4. Fetch the account from chain and classify the key.
 			const client = getBlurtClient();

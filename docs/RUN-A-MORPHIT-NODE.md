@@ -674,6 +674,8 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 
 nginx is now installed and running on port 80 with a default landing page. We'll replace the default config with Morphit's in step 8. certbot (the Let's Encrypt client) is installed but won't issue a certificate until step 8 either — you need a valid DNS record and the nginx config in place first.
 
+> **Optional — Brotli compression module:** Morphit's `web.conf` enables both `gzip_static` (always works) and `brotli_static` (requires an extra module). gzip alone is fine for production. If you want the extra 15–20% smaller payload Brotli gives on JS/CSS, install `libnginx-mod-brotli` from your distro (Debian/Ubuntu) or the `nginx-mod-http-brotli` package on Fedora/RHEL. If you skip this, comment out the single `brotli_static on;` line in `ops/nginx/web.conf` to silence the "unknown directive" warning — your operator still wins compression via gzip. See [§9 Configure nginx](#configure-nginx) for the full config walkthrough.
+
 That's all the system prep done. The actual Morphit install is shorter than this section.
 
 > **Note for Caddy users:** if you'd rather use Caddy, that
