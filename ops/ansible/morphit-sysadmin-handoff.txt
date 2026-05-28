@@ -185,12 +185,17 @@ by this playbook:
 
     CAUSE:  morphit-ops is a workspace-local tool (it lives in the
     repo under apps/ops-cli/, NOT published to the npm registry).
-    `npx morphit-ops` only resolves when the symlink
-    node_modules/.bin/morphit-ops exists — and that symlink is
-    created by `npm install` at the repo root, NOT by git.  A bare
-    `git pull` on the host does not refresh it; if the pull changed
-    package.json / package-lock.json the symlink can go stale, and
-    npx then reports "command not found".
+    `npx morphit-ops` resolves it ONLY when run from inside the
+    repo, after `npm install` has populated node_modules.  Run it
+    from the wrong directory, or before install, and npx falls
+    through to the public registry and returns:
+
+        npm error 404 Not Found - GET .../morphit-ops - Not found
+
+    which surfaces as "command not found".  (A `git pull` that
+    changed the dependency files can also stale the
+    node_modules/.bin/morphit-ops symlink until `npm install` is
+    re-run — same fix.)
 
     THE RIGHT FIX FOR ANSIBLE DEPLOYMENTS:  do NOT `git pull` on the
     target host by hand.  Re-run the playbook instead — it runs
@@ -203,11 +208,15 @@ by this playbook:
 
         sudo -u <morphit_service_user> bash -lc \
           'cd <morphit_repo_path> && npm install && \
-           npx --no-install morphit-ops --help'
+           npm exec --offline --workspace apps/ops-cli morphit-ops -- --help'
 
-    The `--no-install` flag forces npx to use the LOCAL workspace
-    bin and refuse any network fetch — if it prints the help text,
-    the operator's `morphit-ops init` / `register` will work.
+    The `npm exec --offline --workspace` form resolves the tool
+    purely from the LOCAL workspace and forbids any registry
+    access — if it prints the help text, the operator's
+    `morphit-ops init` / `register` will work.  (Do NOT rely on
+    `npx --no-install` for this check: it still performs a
+    registry lookup before erroring, so it is not a reliable
+    offline guarantee on a hardened or air-gapped host.)
 
     NOTE: the CLI runs from TypeScript source via tsx, which is a
     PRODUCTION dependency of apps/ops-cli (since cp161).  Installing

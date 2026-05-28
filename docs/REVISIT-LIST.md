@@ -51,6 +51,46 @@
 
 **Lesson — "works on my machine" install paths hide a setup dependency.**  The CLI worked in dev because the dev always runs `npm install` and never sets `NODE_ENV=production`.  The operator hit two latent failures (stale symlink + missing-tsx-under-prod) that the dev environment masks.  When a tool's `bin` points at source-run-via-tsx, tsx MUST be a production dependency, and the npm-install-after-pull requirement MUST be documented wherever the tool is first invoked — including paths the dev doesn't personally use (Ansible, OPERATIONS.md).  The proper fix (compiled dist, no tsx runtime) is cp162.
 
+### cp161 verification pass (same turn — "do it right, make tomorrow's install seamless")
+
+The fix was adversarially walked end-to-end rather than spot-checked.  The verification **caught two real defects in the first-cut fix** and corrected both:
+
+**Defect 1 — the `npx --no-install` claim was false.**  The first-cut Ansible verify task + sysadmin-handoff stated `npx --no-install` "refuses any network fetch."  Reproduction proved otherwise: `npx --no-install <bogus-pkg>` still issues a registry request (`E404 GET registry.npmjs.org/...`).  It is NOT a reliable offline guarantee on a hardened/air-gapped host.  **Corrected** to `npm exec --offline --workspace apps/ops-cli morphit-ops -- --help`, which was verified to refuse network outright (`ENOTCACHED`, cache mode `only-if-cached`).  Fixed in `clone_and_build.yml` + the sysadmin-handoff.
+
+**Defect 2 — the documented root cause was mis-ordered.**  The first-cut docs led with "stale symlink after git pull."  Reproduction proved the actual primary trigger is running `npx morphit-ops` from **outside the repo** or before `npm install` populated node_modules → npx falls through to the public registry → `E404 .../morphit-ops - Not found` → "command not found."  The classic version: worked yesterday from `~/morphit`, failed today from a different directory or a fresh second server.  **Rewrote** OPERATIONS.md §33 + RUN-A-MORPHIT-NODE.md §12 to lead with the verified cause (run-from-repo + npm-install); symlink demoted to secondary.
+
+**Verifications performed (real reproductions, not assertions):**
+- Reproduced the operator's failure (`npx morphit-ops` from `/tmp` → E404) and confirmed the documented `npm install` + run-from-repo fix resolves it.
+- Ran `npm install --omit=dev --workspaces --include-workspace-root` (the production path that would have broken pre-cp161) — tsx survives, `morphit-ops --help` runs.  Decisive proof for the tsx-promotion fix.
+- Confirmed `npm exec --offline` refuses network (ENOTCACHED) vs `npx --no-install` which hits the registry.
+- Shebang test in a bare shell: a plain `tsx` shebang FAILS (exit 127, tsx not on PATH); the `npx tsx` form works → KEPT the npx shebang as the robust choice across both bare-shell direct-bin and `npx morphit-ops` invocation paths.  (Changing to bare `tsx` would have introduced a NEW footgun.)
+- engines.node `>=22` matches Ansible `morphit_node_version: "22"` — no Node-mismatch footgun.  Manual path docs Node 22 via NodeSource.  No engine-strict gotcha.
+- All documented bypass commands verified runnable: `npm exec --workspace`, `cd apps/ops-cli && npm start --`, `npx morphit-ops`.
+- `morphit-ops init --check-only` runs, prints a clean actionable system-check report, exits gracefully.
+- Doc cross-ref integrity: OPERATIONS.md §33 (Docker section, holds the troubleshooting block) + §12 (RUN-A-MORPHIT-NODE "What to do when things break") both resolve.  Zero "Gitea" introduced.
+- No other fragile workspace bins (mcp-server uses dist/main.js + node shebang; only ops-cli runs from source via tsx).
+
+**NEW regression smoke** `apps/ops-cli/scripts/install-invariants-smoke.ts` (7 scenarios) — locks the install contract so this failure class can't silently regress:
+1. tsx is a PRODUCTION dependency (survives --omit=dev / NODE_ENV=production)
+2. bin shebang is the robust `#!/usr/bin/env -S npx tsx`
+3. bin field maps morphit-ops → src/main.ts (with inline note to update when cp162 flips to dist/main.js)
+4. Ansible build task name does not falsely claim to build ops-cli
+5. Ansible post-install verify task uses the genuinely-offline `npm exec --offline --workspace` form (NOT npx --no-install)
+6. engines.node major matches the Ansible-installed Node major
+7. all three operator-entry docs document the command-not-found fix
+
+Tamper-tested: reverting tsx→devDependency + verify-task→`npx --no-install` fires exactly scenarios 1 + 5.
+
+**Also strengthened the manual-install doc step:** explicit `cd ~/morphit` before `npm install`/`npm run build`, and a note that `npm install` is what creates the `morphit-ops` command (must be re-run after every `git pull`).
+
+**Verified clean (cp161 final):**
+- Operator's exact failure REPRODUCED then RESOLVED via the documented fix
+- Production install (--omit=dev) keeps tsx + runs the bin
+- install-invariants-smoke 7/7 (tamper-tested), ansible-structural 69/69
+- Triple-pulse 6253/6253/6253, TypeScript 0×12
+
+**Smoke runner script count:** 249 (was 248; +1 install-invariants-smoke).
+
 ---
 
 ## cp160 — Remaining-workspace audit sweep + doc cleanups (CLOSED 2026-05-27)
