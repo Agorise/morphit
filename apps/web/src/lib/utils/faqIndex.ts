@@ -65,6 +65,7 @@ export const FAQ_KEYS = [
 	'where_to_buy_blurt',
 	'what_is_blurt',
 	'blurt_benefits',
+	'how_to_stake_blurt',
 	'where_does_blurt_price_come_from',
 	'what_is_mana',
 

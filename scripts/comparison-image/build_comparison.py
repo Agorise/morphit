@@ -161,8 +161,9 @@ SECTIONS = [
         ('100+ interactive tooltips and inline help',                        ['Y','-','-','-','-'], None),
         ('130+ FAQ entries in 10 languages',                                 ['Y','-','-','-','-'], None),
         ('In-app payment QR codes',                                          ['Y','Y','Y','Y','-'], None),
-        ('Loyalty milestones and trader achievements',                       ['Y','-','-','-','-'], None),
-        ('Operator earns ~2% on idle treasury while users trade',            ['Y','-','-','-','-'], None),
+        ('All users earn financial rewards on trading milestones',           ['Y','-','-','-','-'], None),
+        ('Instance operators earn 90% of Blurt-paid listing fees',           ['Y','-','-','-','-'], None),
+        ('All users earn ~2% interest on staked Blurt',                      ['Y','-','-','-','-'], None),
         ('Saved searches and per-asset alerts',                              ['Y','-','-','-','-'], None),
         ('Orderbook filters by network, payment method, country',            ['Y','-','-','-','-'], None),
         ('Custom amount-range alerts (notify when a $X trade appears)',      ['Y','-','-','-','-'], None),
@@ -195,7 +196,7 @@ SECTIONS = [
     ('Assets & fiat', [
         ('Bitcoin (BTC)',                                                    ['Y','Y','Y','-','Y'], None),
         ('Monero (XMR)',                                                     ['Y','Y','Y','Y','Y'], None),
-        ('Blurt (BLURT) — the chain Morphit federates over',                 ['Y','-','-','-','-'], None),
+        ('Blurt — the chain Morphit federates over',                         ['Y','-','-','-','-'], None),
         ('Ethereum (ETH)',                                                   ['Y','-','Y','-','-'], None),
         ('Litecoin (LTC)',                                                   ['Y','-','Y','-','Y'], None),
         ('Bitcoin Cash (BCH)',                                               ['Y','-','Y','-','Y'], None),
@@ -243,6 +244,15 @@ SECTIONS = [
 
 # ─── Layout constants ────────────────────────────────────────────
 W                = 2400
+# Raster output width for the PNG (distinct from the SVG layout
+# width W).  The SVG is vector and renders crisply at any size; the
+# PNG is what blogs hot-link, so it carries the 512 KB footprint
+# budget (priority #4: tiny footprint).  2200px keeps every row +
+# the wordmark sharp at typical blog display sizes while landing
+# comfortably under budget — 2400px pushed a freshly-added row over
+# 512 KB.  Bump this only if legibility at common widths suffers,
+# and re-check the budget in comparison-image-freshness-smoke.
+PNG_RENDER_WIDTH = 2200
 PAD_LR           = 80
 PAD_TOP          = 60
 PAD_BOTTOM       = 50
@@ -601,7 +611,7 @@ static_png.parent.mkdir(parents=True, exist_ok=True)
 cairosvg.svg2png(
     bytestring=svg_str.encode('utf-8'),
     write_to=str(static_png),
-    output_width=W,
+    output_width=PNG_RENDER_WIDTH,
 )
 optimize_png(static_png)
 
@@ -631,7 +641,7 @@ if outputs_png.parent.exists():
     cairosvg.svg2png(
         bytestring=svg_str.encode('utf-8'),
         write_to=str(outputs_png),
-        output_width=W,
+        output_width=PNG_RENDER_WIDTH,
     )
     optimize_png(outputs_png)
 
