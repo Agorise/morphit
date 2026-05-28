@@ -731,16 +731,16 @@ Now install the dependencies and build. **Run these from inside the repo** (`cd 
 ```
 cd ~/morphit
 npm install
-npm run build
+npm run build --workspaces --if-present
 ```
 
 `npm install` downloads all the libraries Morphit uses (about 800 MB of node_modules — most modern projects are like this). It also creates **workspace symlinks** under `node_modules/@morphit/asset-registry`, `node_modules/@morphit/indexer-client`, and a few others — these are Morphit's own internal packages (the source lives under `packages/`) wired up so the indexer, relay, and frontend can `import` from them by name. Without this step the smoke suite at `bash scripts/run-smokes.sh` will fail several runners with `ERR_MODULE_NOT_FOUND` errors complaining about `@morphit/asset-registry` (or one of the other `@morphit/*` packages) — that's the symptom that you ran the smoke suite before `npm install`, not a real code problem. Run `npm install` once and they pass.
 
-`npm install` *also* creates the `morphit-ops` command you'll use for setup (`morphit-ops init`, `register`, `edit`). That command only exists after `npm install`, and only resolves when you run it from inside this repo — if `npx morphit-ops` ever says "command not found," you're either outside the repo directory or you haven't run `npm install` yet. (See §12 if you hit that.) **Re-run `npm install` after every `git pull`**, the same way you re-run `npm run build`.
+`npm install` *also* creates the `morphit-ops` command you'll use for setup (`morphit-ops init`, `register`, `edit`). That command only exists after `npm install`, and only resolves when you run it from inside this repo — if `npx morphit-ops` ever says "command not found," you're either outside the repo directory or you haven't run `npm install` yet. (See §12 if you hit that.) **Re-run `npm install` after every `git pull`**, the same way you re-run the build.
 
-> *Optional, for a slightly faster CLI:* `npm run build --workspace=apps/ops-cli` compiles `morphit-ops` into a single bundled file that runs under plain `node` (no per-invocation TypeScript transpile). The Ansible playbook does this automatically; for a manual install it's optional — the command works either way (it falls back to running the TypeScript source if you haven't built it).
+`npm run build --workspaces --if-present` builds each workspace that has a build script — the web app (static HTML/CSS/JS that nginx will serve), the `morphit-ops` CLI (compiled into a single bundled file that runs under plain `node`), and the `morphit-mcp` AI-agent server. Workspaces without a build script (the relay and indexer run from TypeScript source) are skipped. This is the same command the Ansible playbook runs, so the manual and automated paths produce identical artifacts.
 
-`npm run build` compiles the web app into static HTML/CSS/JavaScript that nginx will serve.
+> *Note:* if the build for the morphit-ops CLI fails or you skip it, the CLI still works — it falls back to running its TypeScript source via tsx. The build just makes invocation faster (no per-invocation transpile). The web app, however, must be built; nginx serves the static files it produces.
 
 This takes 5–10 minutes. Make tea.
 
@@ -1243,10 +1243,11 @@ cd ~/morphit
 npx morphit-ops register
 ```
 
-> If this returns **command not found**, you most likely
-> `git pull`ed without re-running `npm install`. Run
-> `npm install` from the repo root first, then retry. See
-> §12 "morphit-ops says command not found" for the full fix.
+> If this returns **command not found**, you're most likely running
+> it from outside the repo directory, or you haven't run `npm install`
+> yet. `cd` back to the Morphit repo root (`cd ~/morphit`), make sure
+> `npm install` has finished, then retry. See §12 "morphit-ops says
+> command not found" for the full fix.
 
 You'll see a confirmation showing the values that will be
 broadcast:

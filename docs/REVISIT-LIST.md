@@ -1,6 +1,79 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp163 (CLOSED) — 2026-05-28 (content pass: comparison-image reward-claim rewording + new staking FAQ in 10 locales + Blurt-casing sweep across faq/brag/comparison + comparison/mediakit regen; two brag claims [TEE-attested, anonymous-LLM-proxy] evaluated and rejected as false).  Sentinel battery 6261/0 triple-pulse stable.
+**Last touched:** Part 122 cp164 (CLOSED) — 2026-05-28 (four-persona walkthrough refresh + two cross-cutting themed deep-deeps [Monero view-key leak surfaces; internal hostname/IP leak surfaces]; walkthrough caught + fixed two manual-install doc footguns Sally-operator would have hit; deep-deeps confirmed defense-by-construction across both threat angles with one INFO-level env-example doc clarification shipped).  Sentinel battery 6261/0 triple-pulse stable.
+
+## cp164 — Four-persona walkthrough + themed deep-deeps (CLOSED 2026-05-28)
+
+Re-walk of all four personas against every checkpoint since cp148, plus two cross-cutting threat-themed deep-deeps (view-key leak / internal-host leak) that cut across workspaces.  Full report in `docs/FOUR-PERSONA-WALKTHROUGH-cp164.md` and `docs/AUDIT-cp164-THEMED-DEEP-DEEPS.md`.
+
+### Walkthrough — two real Sally-operator footguns caught + fixed
+
+1. **`docs/RUN-A-MORPHIT-NODE.md` line ~731:** manual-install block told her `npm run build` at the repo root.  No root `build` script exists (only `typecheck` and `test`) → "missing script: build" on a fresh install.  cp161/cp162 work had focused on the Ansible path + the launcher shim; the manual `npm run build` step slipped through.  **Fix:** replaced with `npm run build --workspaces --if-present` (the cross-workspace form Ansible uses).  Builds web + ops-cli + mcp-server in one shot.  Explanatory paragraph rewritten to describe each workspace's output.
+2. **`docs/RUN-A-MORPHIT-NODE.md` line ~1246 (inline note at first morphit-ops invocation):** still led with "git pull without npm install" as the primary cause.  cp161-verify had corrected §12 to lead with the verified primary cause (directory) but missed this inline note.  **Fix:** rewrote to match the §12 cause-ordering (directory first, npm-install second).
+
+### Walkthrough — one UX enhancement
+
+3. **`how_to_stake_blurt` FAQ** said "2% interest a year" but not "APR."  A user searching specifically for "APR" wouldn't have matched this entry.  **Fix:** added "(APR)" parenthetically in all 10 locales.
+
+### Themed deep-deep #1 — Monero view-key leak surfaces
+
+Twelve phases walked.  **Clean across all phases.**
+
+- **Architecture eliminates the threat by design.**  Part 109 removed the indexer's view-key dependency entirely; per-payment `tx_proof` replaced view-key decryption.  The env var `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` is fully deprecated and no code path reads it.
+- **Defense in depth (legacy paths):** `validateReleasePayload` in `apps/web/src/lib/net/releaseValidate.ts` silently ignores any `viewkey` field in incoming release payloads (forward-compat for any historical release op).  Same silent-ignore behavior in the indexer's release handler — never persists to the `treasury` JSONB column.
+- **Proof-verifier input shape:** strict prefix check (`OutProofV1`/`OutProofV2`), max 4096 chars, base62-ish charset.  A 64-char hex view key is rejected by the prefix check alone.
+- **Frontend UI surface:** zero view-key fields, prompts, labels, or local-storage entries anywhere in `apps/web/src/`.
+- **`privateKeyDetector`** (`apps/web/src/lib/security/privateKeyDetector.ts`): explicitly catches 64-char hex strings, which the docblock names as "Monero private view key" (line 24).  If a user accidentally pastes a view key into chat or feedback, they're stopped before sending.
+- **Test fixtures:** one 64-char hex (a public Blurt mainnet chainId — verified safe, not a key).
+- **METADATA-LEAK-CATALOG.md** lists "XMR private view-key NEVER leaves the operator's box" as a defended property.
+
+**Zero leak vectors found.  No code changes needed.**
+
+### Themed deep-deep #2 — internal hostname/IP leak surfaces
+
+Twelve phases walked.  **Clean across all default-on paths; one already-defended diagnostic surface where the documentation was strengthened.**
+
+- **Error-throw sites:** zero URL/host interpolation in production paths.
+- **`errorBody()` helper** (`apps/indexer/src/api/shared.ts:62`): typed code union, hand-curated messages.  `'internal'` code is defined in the type but **never used in any handler** in the indexer's API.
+- **Relay catch-all 500** (`apps/relay/src/main.ts:347-350`): `c.json({status:'error', code:'internal'}, 500)` — no message, no URL, no stack trace.  Errors go to `httpLog.error('unhandled', {}, err)` locally.
+- **Relay 404 catch-all:** `c.json({status:'not_found'}, 404)`.  Tight.
+- **Logger sinks** (`apps/relay/src/log/index.ts:142,153` and `apps/indexer/src/log/index.ts:146,177`): **`process.stdout` / `process.stderr` only.**  Zero `fetch`, `axios`, `net.connect`, or `createWriteStream` for remote shipping.  Even if an `err.message` contains an internal hostname, it never leaves the operator's box via Morphit itself.
+- **Response headers:** constants only across security/CORS/ratelimit middleware.  No host/IP interpolation.
+- **CORS:** exact-match origin allowlist; echoes only the matched origin (a value the request already supplied).
+- **Redirects:** zero `c.redirect(...)` in the API layer.
+- **Debug/admin/metrics endpoints:** **none exist.**  No `/admin`, no `/_debug`, no Prometheus `/metrics`.
+- **DB/upstream-error bubbling:** sampled catches in SSE streams (`chatStream`, `instancesStream`, `orderbookStream`) and relay-push.  Pattern is uniform: `log.warn/error(..., err)` locally + close-stream-silently or return `{status:'internal'}` with no message.
+
+#### One finding — `/v1/health?verbose=1` diagnostic exposure (already gated; doc strengthened)
+
+`apps/indexer/src/api/health.ts:135` conditionally adds a `diagnostics` block to `/v1/health` containing `last_error` (the raw err.message from the poller's most recent failure, which **can** include internal hostnames / Postgres connection strings / RPC URLs depending on what failed), `explorers[].url` (configured Monero explorers), and `operator_balances` (below-threshold state).
+
+**Double-gated** (already defended by a previous audit fix, per the file's own comments):
+
+1. Server-side: `config.verboseHealth` (env var `MORPHIT_INDEXER_VERBOSE_HEALTH`, default `false`).
+2. Request-side: `?verbose=1` query param.
+
+Both must be set.  Default deployments expose **none** of this.
+
+**Change shipped (cp164):** strengthened `ops/env/indexer.env.example` documentation so operators flipping verbose ON understand exactly what they're exposing (raw upstream error text, explorer URLs, below-threshold balance state) and a suggested mitigation (nginx IP-allowlist `/v1/health?verbose=1` to the admin workstation).  The previous text said "leave off in production unless actively debugging" without telling the operator *what* they'd be trading away.
+
+### Lesson
+
+Cross-cutting threat-themed audits surface what per-workspace audits miss, but not always as new HIGH findings.  Both deep-deeps confirmed defense-by-construction more than they surfaced bugs.  That's still valuable: the threat surface is now *named* in committed documentation, not just implicit in code structure.
+
+And the persona walkthrough caught two real bugs that workspace-scoped passes hadn't surfaced because they're **cross-doc inconsistencies** (manual-install instructions vs. actual root scripts; inline troubleshooting note vs. §12 troubleshooting block), not per-workspace defects.  That's exactly the gap the four-persona walk exists to close — every other lens is per-component, the persona walk is per-flow.
+
+### Verified clean
+
+- Triple-pulse 6261/6261/6261, 0 runners failed (doc + env-example + FAQ APR-keyword edits; no scenario-count change)
+- TypeScript 0 × 12
+- env-example-schema-parity 6/6, all FAQ smokes, mediakit-freshness 6/6, automated persona-walkthrough 170/170, sally-walkthrough 22/22
+
+### Smoke runner script count
+
+250 (unchanged — content + doc edits only).
+
+---
 
 ## cp163 — Public-surface content pass + two rejected brag claims (CLOSED 2026-05-28)
 

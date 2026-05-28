@@ -1245,7 +1245,7 @@
       },
       "how_to_stake_blurt": {
         "q": "點樣質押我嘅 Blurt(power up 轉成 BP)嚟賺取利息?",
-        "a": "質押 Blurt 即係將你嘅流動 Blurt 轉換成 **Blurt Power(BP)**——Blurt 將呢個過程叫做「power up」。質押咗嘅 Blurt 每年大約賺取 **2% 利息**(實際利率根據鏈上通脹計算並喺應用程式內顯示),加強你嘅點讚權重,仲會賺取策展獎勵。成個過程入面佢一直都係你自己嘅幣——唔係存款,唔係借貸,亦都唔由任何其他人保管。\n\n**最簡單嘅方法係用 Blurt 錢包。**打開 [BlurtWallet.com](https://blurtwallet.com),用你嘅 Blurt 帳戶登入,搵到你嘅流動 Blurt 餘額,揀 **Power Up**。輸入金額並確認。就係咁——你嘅 Blurt 而家變咗 BP 並開始產生收益。\n\nMorphit 本身唔係錢包,所以我哋唔會幫你保管或者轉移 Blurt;power up 直接喺 Blurt 區塊鏈上、透過你控制嘅錢包完成。如果你想換返流動 Blurt,就執行 **power down**,佢會喺大約四個星期內逐步釋放(呢種逐步解押係 Blurt 協議嘅規則,唔係 Morphit 嘅)。"
+        "a": "質押 Blurt 即係將你嘅流動 Blurt 轉換成 **Blurt Power(BP)**——Blurt 將呢個過程叫做「power up」。質押咗嘅 Blurt 每年大約賺取 **2% 利息(APR)**(實際利率根據鏈上通脹計算並喺應用程式內顯示),加強你嘅點讚權重,仲會賺取策展獎勵。成個過程入面佢一直都係你自己嘅幣——唔係存款,唔係借貸,亦都唔由任何其他人保管。\n\n**最簡單嘅方法係用 Blurt 錢包。**打開 [BlurtWallet.com](https://blurtwallet.com),用你嘅 Blurt 帳戶登入,搵到你嘅流動 Blurt 餘額,揀 **Power Up**。輸入金額並確認。就係咁——你嘅 Blurt 而家變咗 BP 並開始產生收益。\n\nMorphit 本身唔係錢包,所以我哋唔會幫你保管或者轉移 Blurt;power up 直接喺 Blurt 區塊鏈上、透過你控制嘅錢包完成。如果你想換返流動 Blurt,就執行 **power down**,佢會喺大約四個星期內逐步釋放(呢種逐步解押係 Blurt 協議嘅規則,唔係 Morphit 嘅)。"
       },
       "where_does_blurt_price_come_from": {
         "q": "Morphit 上顯示嘅 Blurt 價格從哪裡來?",
