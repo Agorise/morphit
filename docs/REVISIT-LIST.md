@@ -1,23 +1,81 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp161 (CLOSED) — 2026-05-27 (operator-reported `morphit-ops command not found` after git pull: root-caused to workspace-bin fragility + tsx-as-devDependency; promoted tsx to production dep, hardened Ansible build/verify, documented the git-pull→npm-install requirement across OPERATIONS.md + RUN-A-MORPHIT-NODE.md + Ansible sysadmin-handoff).  Sentinel battery 6245/0 triple-pulse stable.
+**Last touched:** Part 122 cp162 (CLOSED) — 2026-05-28 (the architectural fix for the cp161 install-fragility class: ops-cli now compiles to a self-contained esbuild bundle `dist/main.js` + a launcher-shim `bin` that runs the compiled bundle when present and falls back to tsx-source otherwise; removes tsx from the runtime path; verified seamless across all four install paths).  Sentinel battery 6261/0 triple-pulse stable.
 
-## cp162 — ops-cli proper build artifact (SCOPED, NOT DONE)
+## cp162 — ops-cli compiled build (CLOSED 2026-05-28)
 
-**The real fix** for the operator's `morphit-ops command not found` class of problem: give apps/ops-cli a compiled `dist/` build the way apps/mcp-server has, so `bin` points at `dist/main.js` (with a `#!/usr/bin/env node` shebang) instead of `src/main.ts` (with a `tsx` shebang).  This removes the runtime dependency on tsx entirely and makes ops-cli installable like any normal CLI.
+The architectural fix for the cp161 install-fragility class.  cp161 made the install reliable but ops-cli still ran from TypeScript source via tsx at runtime.  cp162 gives ops-cli a compiled `dist/main.js` so the bin points at runnable JS, removing tsx from the runtime path.
 
-**Why deferred (not done at cp161):** apps/ops-cli is NOT a clean compile target the way mcp-server was.  Two structural blockers, both requiring careful migration:
+### Approach: esbuild bundle (not plain tsc)
 
-1. **92 `.ts`-extension import specifiers across 24 files.**  ops-cli's tsconfig has `allowImportingTsExtensions: true` + `noEmit: true` — the imports are written as `from './foo.ts'`.  `tsc` emit rejects `allowImportingTsExtensions` unless paired with rewriting, and even a successful emit would leave `.ts` paths in the output that Node can't resolve at runtime.  All 92 must become extensionless (or `.js`) imports.  mcp-server avoided this entirely — it was written extensionless from the start.
+ops-cli is NOT a clean `tsc` compile target (unlike mcp-server).  Two structural blockers:
 
-2. **2 cross-workspace reaches outside rootDir:**
-   - `from '../../../relay/src/crypto/keyEnvelope.ts'` (encrypt.ts + 2 dynamic imports in paymentMethod.ts, register.ts)
-   - `from '../../../indexer/src/lib/feeAmountCalc.ts'`
-   These `../../../` paths escape ops-cli's `rootDir: src`, which breaks a clean `tsc -p tsconfig.build.json` emit (files outside rootDir either error or emit to unexpected nested dist paths).  The proper fix is to promote the shared modules (keyEnvelope, feeAmountCalc) into a `@morphit/*` package — same pattern as cp154's `@morphit/net-defense` lift — then import by package name.  That is itself a meaningful refactor with its own deep-verification pass.
+1. **92 `.ts`-extension import specifiers across 24 files.**  ops-cli's tsconfig has `allowImportingTsExtensions: true` + `noEmit: true`.  `tsc` emit rejects `allowImportingTsExtensions`, and a successful emit would leave `.ts` paths Node can't resolve.
 
-**Scope estimate:** rewrite 92 imports + lift 2 shared modules into packages (or relax rootDir + accept nested dist) + add `tsconfig.build.json` + `build` script + `files: ['dist/','src/']` + flip `bin` to `dist/main.js` + add `#!/usr/bin/env node` shebang to a built entry + regenerate lockfile + update the Ansible build comment (ops-cli would then have a real `build` script that `--if-present` picks up) + full triple-pulse + verify the bin runs from dist.  A focused checkpoint of its own.
+2. **2 cross-workspace reaches escaping `rootDir: src`:** `apps/relay/src/crypto/keyEnvelope.ts` (1 static import in encrypt.ts + 2 dynamic imports in paymentMethod.ts/register.ts) and `apps/indexer/src/lib/feeAmountCalc.ts` (static in steps.ts).  Plus the source-only `@morphit/operator-config` package.
 
-**Interim mitigation (cp161, DONE):** tsx promoted to production dependency so the existing `src/main.ts` + tsx shebang works reliably under `NODE_ENV=production` and `npm install --omit=dev`; Ansible verifies bin runnability post-install; docs explain the npm-install-after-pull requirement everywhere an operator might enter.  The operator's immediate failure is fully resolved; cp162 is the architectural cleanup that removes the tsx runtime dependency for good.
+The tsc alternative — lift keyEnvelope + feeAmountCalc into `@morphit/*` packages (à la cp154 net-defense) — would have touched relay + indexer too (both have their own consumers: relay's config/unlock import keyEnvelope; indexer's scripts import feeAmountCalc).  Wide blast radius.
+
+An **esbuild bundle** inlines all the cross-workspace source + resolves the `.ts` extensions at build time, touching ONLY ops-cli.  Single-file bundling is the standard Node-CLI ship strategy.  Externals: `pg` (real npm dep with internal requires) + `node:*` builtins; everything else inlined.
+
+### The launcher shim — key design decision
+
+Pointing `bin` straight at `dist/main.js` would BREAK the manual-install path (which never builds workspaces — only `cd apps/web && npm run build` is in the manual docs), **reintroducing the exact cp161 "command not found."**  Pointing `bin` at TS source needs tsx at runtime (what cp162 removes).
+
+Solution: `apps/ops-cli/bin/morphit-ops.mjs` — a plain-JS launcher (node shebang) that:
+- runs `dist/main.js` under plain `node` when present (compiled, fast, no tsx)
+- falls back to running `src/main.ts` via the local tsx when dist is absent
+
+Either way `npx morphit-ops` resolves to a working tool.  Best of both: compiled-and-fast when built, still-works when not.
+
+### Components shipped
+
+- `apps/ops-cli/scripts/build.mjs` — esbuild config (entry src/main.ts, bundle, platform node, target node22, format esm, `external: ['pg']`, post-process for single node shebang, chmod 0755).
+- `apps/ops-cli/bin/morphit-ops.mjs` — the launcher shim.
+- `apps/ops-cli/package.json` — `bin → bin/morphit-ops.mjs`, `"build": "node scripts/build.mjs"`, `files: ['bin/','dist/','src/']`, esbuild devDep, tsx kept as prod dep (shim fallback under --omit=dev), `dev` script added.
+- `ops/ansible/roles/morphit/tasks/clone_and_build.yml` — build-task comment updated (ops-cli now HAS a build script so `--if-present` builds it; runs after full npm install so esbuild is present).
+- `docs/RUN-A-MORPHIT-NODE.md` — optional `npm run build --workspace=apps/ops-cli` note for the faster compiled CLI (works either way via fallback).
+
+### Bug caught + fixed mid-build (double shebang)
+
+First esbuild config used a `banner` shebang.  But esbuild PRESERVES the entry file's own leading shebang (`#!/usr/bin/env -S npx tsx` in src/main.ts) — so the output had TWO shebangs → `SyntaxError: Invalid or unexpected token` under node.  Fixed by dropping the banner and post-processing: strip any leading shebang, prepend exactly one node shebang.  compiled-bundle-smoke scenario 2 is a tamper-tested regression guard.
+
+### NEW smoke
+
+`apps/ops-cli/scripts/compiled-bundle-smoke.ts` (6 scenarios): build produces dist/main.js · exactly-one-node-shebang (double-shebang regression guard) · runs under plain node · pg external · cross-workspace source inlined (keyEnvelope.decryptEnvelope + feeAmountCalc.computeFeeAmounts) · shim prefers compiled path.  Tamper-tested (reintroducing the double-shebang fires 3 scenarios).
+
+### install-invariants-smoke updated (7→9 scenarios)
+
+Updated for the shim model: tsx-prod-dep (now "powers shim fallback") · shim-has-node-shebang+both-paths · src/main.ts-keeps-tsx-shebang · bin→shim+build-script+files · esbuild-declared · Ansible-builds-ops-cli-via-if-present · Ansible-offline-verify · engines-match · all-3-docs.
+
+### Verified seamless across ALL FOUR install paths
+
+Each tested in the sandbox:
+- **Ansible:** full npm install → `npm run build --workspaces --if-present` builds dist → compiled path runs (offline verify task exit 0, npx exit 0).
+- **Manual with build:** `npm run build --workspace=apps/ops-cli` → compiled path.
+- **Manual skip build:** dist absent → shim tsx-fallback runs.
+- **Production --omit=dev:** dist persists (install doesn't touch it) + tsx present → runs.
+- **Fresh-clone simulation** (dist gitignored, removed, rebuilt from scratch): full install→build→run sequence works end-to-end.
+
+### Lesson — enumerate every install path before changing a `bin` target
+
+Pointing bin straight at dist/main.js was the "obvious" fix and would have silently broken the manual-install path that never builds workspaces — reintroducing the very failure cp161 fixed.  The launcher shim covers every path because it degrades gracefully.  The same enumerate-reproduce-don't-assume discipline that caught the cp161 doc/verify defects caught this before it shipped.
+
+### Verified clean
+
+- Triple-pulse 6261/6261/6261, 0 runners failed (+8 from cp161-verified 6253)
+- TypeScript 0 × 12 projects
+- compiled-bundle 6/6 (tamper-tested), install-invariants 9/9 (tamper-tested), ansible-structural 69/69
+
+### Smoke runner script count
+
+250 (was 249; +1 compiled-bundle-smoke).
+
+### The cp161/cp162 install-fragility class is fully closed
+
+The operator's `morphit-ops command not found` is now defended at three layers: (1) docs lead with the verified cause across all entry points; (2) Ansible verifies runnability post-install; (3) the runtime no longer needs tsx (compiled) yet still works without a build (fallback).
+
+---
 
 ## cp161 — operator install fix: `morphit-ops command not found` (CLOSED 2026-05-27)
 

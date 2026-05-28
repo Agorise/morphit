@@ -4,7 +4,61 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp161 **CLOSED + VERIFIED** — operator-reported `morphit-ops command not found`.  Root-caused, fixed, documented, AND adversarially verified end-to-end (the verification pass found and corrected two real defects in the first-cut fix — see below).
+**Last touched:** cp162 **CLOSED + VERIFIED** — the architectural fix for the cp161 install failure class: ops-cli now has a compiled build, so the runtime no longer depends on tsx.  Verified seamless across all four install paths.
+
+**What cp162 does:** gives `apps/ops-cli` a single self-contained esbuild bundle (`dist/main.js`) that runs under plain `node`, plus a launcher-shim `bin` that runs the compiled bundle when present and falls back to tsx-source when not.  This removes tsx from the runtime path entirely (compiled mode) while keeping the install bulletproof across every path.
+
+**Why esbuild bundle, not plain `tsc` like mcp-server:** ops-cli had two structural blockers that make a clean `tsc` emit impractical — (1) ~92 `.ts`-extension import specifiers across 24 files (the tsx-source-run model; `allowImportingTsExtensions` requires `noEmit`); (2) two cross-workspace reaches that escape ops-cli's `rootDir: src` — `apps/relay/src/crypto/keyEnvelope.ts` (static + 2 dynamic imports) and `apps/indexer/src/lib/feeAmountCalc.ts` (static), plus the source-only `@morphit/operator-config` package.  A bundler inlines all of that into one file, resolving the `.ts` extensions and the rootDir-escaping cross-workspace source at build time — touching ONLY ops-cli.  Lifting the shared modules into `@morphit/*` packages (the tsc alternative) would have touched relay + indexer too (both have their own consumers of keyEnvelope/feeAmountCalc) — a far wider blast radius.  Single-file bundling is the standard Node-CLI ship strategy anyway.
+
+**The launcher shim (`apps/ops-cli/bin/morphit-ops.mjs`) — the key design decision:**
+
+Pointing `bin` straight at `dist/main.js` would have BROKEN the manual-install path (which never builds workspaces — only `cd apps/web && npm run build` is in the manual docs), reintroducing the exact cp161 "command not found."  Pointing `bin` at the TS source needs tsx at runtime (the thing cp162 removes).  The shim gets both: plain-JS with a node shebang, it runs `dist/main.js` under `node` when present (fast, no tsx), and falls back to running `src/main.ts` via the local tsx when dist is absent.  Either way `npx morphit-ops` resolves to a working tool.
+
+**Components shipped:**
+1. `apps/ops-cli/scripts/build.mjs` — esbuild bundle config (entry src/main.ts, bundle, platform node, target node22, format esm, `external: ['pg']`, post-process to guarantee exactly one node shebang, chmod 0755).
+2. `apps/ops-cli/bin/morphit-ops.mjs` — the launcher shim (node shebang, dist-preferred + tsx-fallback).
+3. `apps/ops-cli/package.json` — `bin → bin/morphit-ops.mjs`, `"build": "node scripts/build.mjs"`, `files: ['bin/','dist/','src/']`, esbuild added as devDependency, tsx kept as production dependency (powers the shim fallback under --omit=dev), `dev` script added.
+4. Ansible `clone_and_build.yml` — build-task comment updated (ops-cli now HAS a build script so `--if-present` builds it; runs after the full npm install so esbuild is present).  The cp161 offline verify task unchanged (still correct).
+5. Docs: RUN-A-MORPHIT-NODE.md manual-install note — optional `npm run build --workspace=apps/ops-cli` for the faster compiled CLI; works either way via fallback.
+
+**A real bug caught + fixed mid-build:** the first esbuild config used a `banner` shebang, but esbuild PRESERVES the entry file's own leading shebang (`#!/usr/bin/env -S npx tsx` in src/main.ts) — so the output had TWO shebangs → `SyntaxError: Invalid or unexpected token` under node.  Fixed by dropping the banner and post-processing: strip any leading shebang, prepend exactly one node shebang.  compiled-bundle-smoke scenario 2 is a tamper-tested regression guard for exactly this.
+
+**NEW smokes:**
+- `apps/ops-cli/scripts/compiled-bundle-smoke.ts` (6 scenarios): build produces dist/main.js · exactly-one-node-shebang (double-shebang regression guard) · runs under plain node · pg external · cross-workspace source inlined · shim prefers compiled path.  Tamper-tested (reintroducing the double-shebang fires 3 scenarios).
+- `install-invariants-smoke.ts` updated 7→9 scenarios for the shim model: tsx-prod-dep (now "powers shim fallback") · shim-has-node-shebang+both-paths · src/main.ts-keeps-tsx-shebang · bin→shim+build-script+files · esbuild-declared · Ansible-builds-ops-cli-via-if-present · Ansible-offline-verify · engines-match · docs.
+
+**Verified seamless across ALL FOUR install paths (each tested in sandbox):**
+- **Ansible:** full npm install → `npm run build --workspaces --if-present` builds dist → compiled path runs (verify task exit 0, npx exit 0).
+- **Manual with build:** `npm run build --workspace=apps/ops-cli` → compiled path.
+- **Manual skip build:** dist absent → shim tsx-fallback runs (verified).
+- **Production --omit=dev:** dist persists (install doesn't touch it) + tsx present for fallback → runs.
+- **Fresh-clone simulation** (dist gitignored, removed, rebuilt from scratch): full sequence works end-to-end.
+
+**Verified clean:**
+- Triple-pulse 6261/6261/6261, 0 runners failed (+8 from cp161-verified 6253: +6 compiled-bundle, +2 install-invariants growth)
+- TypeScript 0 × 12 projects
+- compiled-bundle 6/6 (tamper-tested), install-invariants 9/9 (tamper-tested), ansible-structural 69/69
+- bundle runs under plain node; pg external; cross-workspace source inlined
+
+**Smoke runner script count:** 250 (was 249; +1 compiled-bundle-smoke).
+
+**cp162 fully closes the cp161 install-fragility class.**  The operator's `morphit-ops command not found` is now defended at three layers: (1) docs lead with the verified cause across all entry points, (2) Ansible verifies runnability post-install, (3) the runtime no longer needs tsx (compiled) yet still works without a build (fallback).  Nothing about the install can surprise the sysadmin tomorrow.
+
+— 2026-05-28.
+
+**Prior turn (cp161 + verify):** operator install fix — tsx→prod-dep, Ansible verify task, docs at all 3 entry points; verification pass caught + corrected two defects (`npx --no-install` non-guarantee, mis-ordered doc cause) + added install-invariants-smoke.
+
+**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 finding lens + doc cleanups.
+
+**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper.
+
+**Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
+
+**Prior turn (cp157):** apps/relay focused audit.
+
+**Prior turns (cp142–cp156):** mcp-server hardening campaign + audit infrastructure + the cp146 lens audit across mcp-server.
+
+**Twenty-one checkpoints this session (cp142–cp162).**  cp146 lens audit complete across all workspaces (cp160).  cp161 closed an operator install failure (verified, two defects caught).  cp162 delivered the architectural fix — compiled ops-cli build via esbuild bundle + launcher shim — removing the tsx runtime dependency while keeping the install seamless across every path.
 
 **The report:** sysadmin ran `npx morphit-ops init` (wizard started), next day after `git pull` + same steps got "command not found."
 
@@ -30,75 +84,60 @@ The decisive reproducer is **running `npx morphit-ops` from outside the repo, or
 - All documented bypass commands verified runnable: `npm exec --workspace`, `cd apps/ops-cli && npm start --`, `npx morphit-ops`.
 - Doc cross-refs resolve (§33 Docker section holds the troubleshooting block; §12 exists); zero "Gitea" introduced.
 
-**cp162 SCOPED (not done):** proper compiled `dist/` build (bin → dist/main.js, node shebang, no tsx runtime).  Deferred — ops-cli isn't a clean compile target (92 `.ts`-extension imports across 24 files + 2 cross-workspace reaches into relay/indexer escaping rootDir; proper fix lifts keyEnvelope + feeAmountCalc into `@morphit/*` packages).  cp161's tsx-promotion fully resolves the operator's failure; cp162 removes the tsx runtime dependency for good.  install-invariants-smoke invariant 3 has an inline note to update it when cp162 flips the bin to dist/main.js.
+### Orientation snapshot (cp162 baseline)
 
-**Verified clean:**
-- The operator's exact failure REPRODUCED then RESOLVED via the documented `npm install` fix (sandbox)
-- Production install (`--omit=dev`) keeps tsx + runs the bin
-- Ansible verify command is genuinely offline (ENOTCACHED)
-- install-invariants-smoke 7/7 (tamper-tested), ansible-structural 69/69
-- Triple-pulse 6253/6253/6253, TypeScript 0×12
-
-**Smoke runner script count:** 249 (was 248; +1 install-invariants-smoke).
-
-— 2026-05-27.
-
-**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 finding lens (apps/web @html walk 0 findings, ops-cli F-opscli-1, verbatimModuleSyntax across all 12 projects) + doc cleanups.
-
-**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper + 11-scenario smoke.
-
-**Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
-
-**Prior turn (cp157):** apps/relay focused audit — verbatimModuleSyntax flip + 3 INFO.
-
-**Prior turn (cp156):** F-mcp-7 closure — root-shell `?then=` support.
-
-**Prior turn (cp155):** Tier-C cleanup batch.
-
-**Prior turn (cp154):** F-mcp-1 SSRF defense via `@morphit/net-defense`.
-
-**Prior turns (cp142–cp153):** mcp-server hardening campaign + audit infrastructure (CI-bomb fix, timeouts, lockfile regen, workflow audit, deep-deep, playbook, persona walkthrough, invariant smoke, archive split, body cap, marketing-prose smoke, comment-stripping helper).
-
-**Twenty checkpoints this session (cp142–cp161).**  cp146 lens audit complete across all workspaces (cp160).  cp161 closed an operator install failure with a fix that was then adversarially verified end-to-end — the verification caught two real defects in the first cut (the `--no-install` non-guarantee + the mis-ordered doc cause) and corrected both.  cp162 (compiled dist/) scoped for the architectural cleanup.
-
-**Prior turn (cp160):** Remaining-workspace audit sweep completing the cp146 finding lens (apps/web @html walk 0 findings, ops-cli F-opscli-1, verbatimModuleSyntax consistent across all 12 projects) + doc cleanups (stale F-mcp-7 line, sprite-sheet ruled out).
-
-**Prior turn (cp159):** apps/indexer focused audit — 5 findings + price-fetch helper + 11-scenario smoke.
-
-**Prior turn (cp158):** cp138 110-task audit plan walk — no regressions.
-
-**Prior turn (cp157):** apps/relay focused audit — verbatimModuleSyntax flip + 3 INFO.
-
-**Prior turn (cp156):** F-mcp-7 closure — root-shell `?then=` support.
-
-**Prior turn (cp155):** Tier-C cleanup batch.
-
-**Prior turn (cp154):** F-mcp-1 SSRF defense via `@morphit/net-defense`.
-
-**Prior turn (cp152 + cp153):** Marketing-prose smoke + comment-stripping helper.
-
-**Prior turn (cp151):** F-mcp-5 response body cap.
-
-**Prior turns (cp142–cp150):** mcp-server CI-bomb fix, per-smoke timeout, CI-RED lockfile regen, CI workflow audit, mcp-server deep-deep, ADDING-A-WORKSPACE playbook, four-persona walkthrough, read-only invariant smoke, REVISIT archive split.
-
-**Twenty checkpoints this session (cp142–cp161).**  The cp146 lens audit campaign is complete across all workspaces (cp160).  cp161 closed an operator-reported install failure with a robust fix + full cross-entry-point documentation; cp162 (compiled dist/) scoped for the architectural cleanup.
-
-### Orientation snapshot (cp161 baseline)
-
-- **Smoke battery:** 6253/6253, triple-pulse stable at cp161 (verified) baseline. 0 runners failed.  Smoke runner script count: 249.
+- **Smoke battery:** 6261/6261, triple-pulse stable at cp162 baseline. 0 runners failed.  Smoke runner script count: 250.
 - **TypeScript:** 0 errors across all 12 projects.  `verbatimModuleSyntax: true` in EVERY workspace.
 - **svelte-check:** 0 errors / 0 warnings.
-- **CI:** package-lock.json regenerated cp144 + cp154 + cp161 (tsx promotion) — RED since cp140, GREEN as of cp144 ship.
+- **CI:** package-lock.json regenerated cp144 + cp154 + cp161 (tsx promotion) + cp162 (esbuild devDep + bin→shim) — RED since cp140, GREEN as of cp144 ship.
 - **Monorepo workspaces:** 11 (apps ×6 + packages ×5 incl. net-defense).
 - **REVISIT-LIST split:** cp100+ live in `docs/REVISIT-LIST.md`; cp99-and-earlier frozen in `docs/REVISIT-LIST-ARCHIVE.md`.
 - **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp161 will ship in the next beta release.
-- **cp146 lens audit:** COMPLETE across all workspaces (cp160).  **cp161** closed an operator install failure (morphit-ops command-not-found); **cp162** (compiled ops-cli dist/) scoped not done.  Remaining pre-launch work is deployment-gated (cp138 items #95-104) + A1/A14 cp113 items needing Ken's scope clarification.
+- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp162 will ship in the next beta release.
+- **ops-cli build:** `apps/ops-cli` now compiles to a self-contained `dist/main.js` (esbuild bundle); the `bin` is a launcher shim that runs the compiled bundle when present and falls back to tsx-source otherwise.  `dist/` is gitignored — built on install (Ansible via `--workspaces --if-present`; manual optional).
+- **cp146 lens audit:** COMPLETE across all workspaces (cp160).  **cp161** closed an operator install failure (morphit-ops command-not-found, verified).  **cp162** delivered the architectural fix (compiled ops-cli build, no tsx runtime).  Remaining pre-launch work is deployment-gated (cp138 items #95-104) + A1/A14 cp113 items needing Ken's scope clarification.
 
 ### Most recent work — what just shipped
 
-**cp161 (2026-05-27, this session):** Operator install fix — `morphit-ops command not found` after `git pull`.
+**cp162 (2026-05-28, this session):** The architectural fix for the cp161 install-fragility class — ops-cli now compiles to a self-contained bundle, removing tsx from the runtime path.
+
+**The problem cp161 left open:** cp161 made the install reliable but ops-cli still ran from TypeScript source via tsx at runtime.  cp162 is the proper fix: a compiled `dist/main.js` so the bin points at runnable JS.
+
+**Approach — esbuild bundle (not plain tsc):** ops-cli had two structural blockers a clean `tsc` emit can't handle:
+1. ~92 `.ts`-extension import specifiers across 24 files (`allowImportingTsExtensions` requires `noEmit`; tsc can't emit them).
+2. Two cross-workspace reaches escaping ops-cli's `rootDir: src` — `apps/relay/src/crypto/keyEnvelope.ts` (1 static + 2 dynamic imports) and `apps/indexer/src/lib/feeAmountCalc.ts` (static) — plus the source-only `@morphit/operator-config` package.
+
+The tsc alternative (lift keyEnvelope + feeAmountCalc into `@morphit/*` packages) would have touched relay + indexer too — both have their own consumers (relay's config/unlock import keyEnvelope; indexer's scripts import feeAmountCalc).  Wide blast radius.  An esbuild bundle inlines all the cross-workspace source + resolves the `.ts` extensions at build time, touching ONLY ops-cli.  Single-file bundling is the standard Node-CLI ship strategy.
+
+**The launcher shim — the key design decision:** pointing `bin` straight at `dist/main.js` would BREAK the manual-install path (which never builds workspaces), reintroducing the exact cp161 "command not found."  Pointing `bin` at TS source needs tsx at runtime (what cp162 removes).  Solution: `apps/ops-cli/bin/morphit-ops.mjs` — a plain-JS launcher (node shebang) that runs `dist/main.js` under node when present (fast, no tsx) and falls back to `src/main.ts` via local tsx when dist is absent.  Best of both: compiled-and-fast when built, still-works when not.
+
+**Components:**
+- `apps/ops-cli/scripts/build.mjs` — esbuild config: entry src/main.ts, bundle, platform node, target node22, format esm, `external: ['pg']`, post-process to guarantee exactly one node shebang, chmod 0755.
+- `apps/ops-cli/bin/morphit-ops.mjs` — the launcher shim.
+- `apps/ops-cli/package.json` — bin→shim, `"build": "node scripts/build.mjs"`, `files: ['bin/','dist/','src/']`, esbuild devDep, tsx kept as prod dep (shim fallback under --omit=dev), `dev` script.
+- Ansible `clone_and_build.yml` — build-task comment updated (ops-cli now builds via `--if-present`, after the full install so esbuild is present).
+- RUN-A-MORPHIT-NODE.md — optional build note (works either way via fallback).
+
+**Bug caught + fixed mid-build:** the first esbuild config used a `banner` shebang, but esbuild PRESERVES the entry file's own leading shebang — output had TWO shebangs → `SyntaxError` under node.  Fixed by dropping the banner and post-processing: strip any leading shebang, prepend exactly one node shebang.  compiled-bundle-smoke scenario 2 is a tamper-tested regression guard for exactly this bug.
+
+**NEW smoke** `apps/ops-cli/scripts/compiled-bundle-smoke.ts` (6 scenarios): build produces dist · exactly-one-node-shebang (double-shebang guard) · runs under plain node · pg external · cross-workspace source inlined · shim prefers compiled path.  Tamper-tested (double-shebang reintroduction fires 3 scenarios).
+
+**install-invariants-smoke updated 7→9** for the shim model: tsx-prod-dep (powers shim fallback) · shim-has-node-shebang+both-paths · src/main.ts-keeps-tsx-shebang · bin→shim+build-script+files · esbuild-declared · Ansible-builds-ops-cli · Ansible-offline-verify · engines-match · docs.
+
+**Verified seamless across ALL FOUR install paths** (each tested in sandbox): Ansible (build→compiled), manual-with-build (compiled), manual-skip-build (tsx fallback), production --omit=dev (dist persists + tsx fallback).  Plus a fresh-clone simulation (dist gitignored → removed → rebuilt from scratch → both verify-task and `npx morphit-ops` work).
+
+**Verified clean:**
+- Triple-pulse 6261/6261/6261, 0 runners failed (+8 from cp161-verified 6253)
+- TypeScript 0 × 12 projects
+- compiled-bundle 6/6 (tamper-tested), install-invariants 9/9 (tamper-tested), ansible-structural 69/69
+- bundle runs under plain node; pg external; cross-workspace source (keyEnvelope + feeAmountCalc) inlined
+
+**Smoke runner script count:** 250 (was 249).
+
+**Lesson — when changing a `bin` target, enumerate every install path before flipping it.**  Pointing bin straight at dist/main.js was the "obvious" fix and would have silently broken the manual-install path that never builds workspaces — reintroducing the very failure cp161 fixed.  The launcher shim covers every path because it degrades gracefully.  The same discipline that caught the cp161 doc/verify defects (enumerate, reproduce, don't assume) caught this before it shipped.
+
+**cp161 (2026-05-27, prior turn this session):** Operator install fix — `morphit-ops command not found` after `git pull`.
 
 **Operator report (via Ken):** a sysadmin ran `npx morphit-ops init`, the wizard started; next day after `git pull` + same steps, "command not found."
 

@@ -738,6 +738,8 @@ npm run build
 
 `npm install` *also* creates the `morphit-ops` command you'll use for setup (`morphit-ops init`, `register`, `edit`). That command only exists after `npm install`, and only resolves when you run it from inside this repo — if `npx morphit-ops` ever says "command not found," you're either outside the repo directory or you haven't run `npm install` yet. (See §12 if you hit that.) **Re-run `npm install` after every `git pull`**, the same way you re-run `npm run build`.
 
+> *Optional, for a slightly faster CLI:* `npm run build --workspace=apps/ops-cli` compiles `morphit-ops` into a single bundled file that runs under plain `node` (no per-invocation TypeScript transpile). The Ansible playbook does this automatically; for a manual install it's optional — the command works either way (it falls back to running the TypeScript source if you haven't built it).
+
 `npm run build` compiles the web app into static HTML/CSS/JavaScript that nginx will serve.
 
 This takes 5–10 minutes. Make tea.
