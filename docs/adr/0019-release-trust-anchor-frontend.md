@@ -75,8 +75,10 @@ key listed at weight 0 to fool the check. The fix requires the
 pinned key with `weight > 0`.
 
 The pure helper `checkPinnedKeyInAuthority` lives in
-`apps/web/src/lib/net/releaseTrustAnchor.ts` (no project imports;
-smoke-testable from outside the SvelteKit context). Its smoke
+`@morphit/release-schema` (cp170; formerly
+`apps/web/src/lib/net/releaseTrustAnchor.ts` — extracted into the
+shared package so the indexer's parity smoke imports it without
+reaching into `apps/web` source). Its smoke
 (`apps/indexer/scripts/release-validator-smoke.ts`) covers eight
 scenarios including the explicit J-1 attack:
 
@@ -237,8 +239,11 @@ When deploying a new release, the deploy pipeline:
 - `packages/release-schema/src/releaseValidate.ts` — pure validator;
   mirrors indexer's rejection reasons.  (Was
   `apps/web/src/lib/net/releaseValidate.ts` pre-cp170.)
-- `apps/web/src/lib/net/releaseTrustAnchor.ts` — pure pubkey-
-  authority check (carved out for smoke-testability).
+- `packages/release-schema/src/releaseTrustAnchor.ts` — pure pubkey-
+  authority check (carved out for smoke-testability).  (Was
+  `apps/web/src/lib/net/releaseTrustAnchor.ts` pre-cp170; moved into
+  the package so the indexer's parity smoke imports it without a
+  cross-app reach.)
 - `apps/web/src/lib/net/releaseFetch.ts` — chain-direct fetch +
   trust-anchor verification + payload validation.
 - `apps/web/src/lib/net/releaseHashCheck.ts` — asset-hash

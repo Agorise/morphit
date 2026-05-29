@@ -35,7 +35,7 @@
       "raw_link": "Ver el manifiesto completo (verify.json)"
     },
     "worried": {
-      "explain": "Morphit es federado — cualquiera puede levantar una instancia. Si esta parece rara, muévete a una en la que confíes. Tus llaves, órdenes y reputación viven en la cadena de Blurt, no en ninguna instancia individual. Verás el mismo marketplace desde donde sea.",
+      "explain": "Morphit es federado — cualquiera puede levantar una instancia. Si esta parece rara, muévete a una en la que confíes. Tus llaves, órdenes y reputación viven en la cadena subyacente, no en ninguna instancia individual. Verás el mismo marketplace desde donde sea.",
       "known_good_note": "— mantenida por el proyecto, de confianza",
       "faq_pointer": "Para más sobre cómo detectar un operador malo, ve",
       "faq_link": "las preguntas sobre operadores rogue",
@@ -1853,7 +1853,7 @@
     },
     "federation": {
       "title": "Federación",
-      "body": "Múltiples instancias de Morphit independientes que comparten el mismo orderbook y ecosistema de chat porque todas leen de la misma blockchain de Blurt. Si un operador se cae (o se vuelve hostil), los usuarios se mueven a otro y encuentran las mismas órdenes, las mismas operaciones, las mismas reputaciones. La federación es lo que hace a Morphit incensurable."
+      "body": "Múltiples instancias de Morphit independientes que comparten el mismo orderbook y ecosistema de chat porque todas leen de la misma blockchain subyacente. Si un operador se cae (o se vuelve hostil), los usuarios se mueven a otro y encuentran las mismas órdenes, las mismas operaciones, las mismas reputaciones. La federación es lo que hace a Morphit incensurable."
     },
     "feedback": {
       "title": "Feedback (valoración)",
@@ -1865,7 +1865,7 @@
     },
     "indexer": {
       "title": "Indexador",
-      "body": "El componente de una instancia de Morphit que observa la blockchain de Blurt, decodifica las operaciones relevantes para Morphit (órdenes, feedback, sobres de chat) y se las sirve al frontend web en una forma utilizable. La cadena es la fuente de verdad; el indexador es solo un caché rápido. Lo opera el operador, no tú."
+      "body": "El componente de una instancia de Morphit que observa la cadena, decodifica las operaciones relevantes para Morphit (órdenes, feedback, sobres de chat) y se las sirve al frontend web en una forma utilizable. La cadena es la fuente de verdad; el indexador es solo un caché rápido. Lo opera el operador, no tú."
     },
     "listing_fee": {
       "title": "Tarifa de listado",
@@ -1915,16 +1915,11 @@
     }
   },
   "home": {
-    "hero_title": "Intercambia Monero, Bitcoin y más con monedas fiat+ de forma privada",
+    "hero_title": "Intercambia en privado criptos como Monero y Bitcoin, además de bienes, servicios y más",
     "hero_body": "Morphit conecta compradores y vendedores directamente. Sin KYC, no custodial, sin cookies, E2EE, sin registros, sin custodia, privado por defecto, código abierto, totalmente distribuido",
     "cta_browse": "Ver el libro de órdenes",
     "cta_start": "Empezar a operar",
-    "reachable_via": "También accesible vía",
     "welcome_to_instance": "Bienvenido a {name}",
-    "returning_user_prompt": "¿Ya tienes una cuenta de Blurt o configuraste Morphit en otro dispositivo?",
-    "returning_user_link": "Iniciar sesión",
-    "networks_heading": "Cuatro redes, un solo Morphit.",
-    "networks_body": "El mismo sitio, el mismo código, cuatro maneras de alcanzarlo. Si una ruta se bloquea, otra funciona.",
     "coin_carousel": {
       "aria_label": "Activos compatibles",
       "networks": {
@@ -1961,7 +1956,7 @@
       },
       "discoverability": {
         "title": "Descubribilidad",
-        "body": "La federación usa la cadena de bloques de Blurt y RSS para la distribución del libro de órdenes, la finalización de operaciones y la reputación de usuarios."
+        "body": "La federación usa una cadena de bloques pública y RSS para la distribución del libro de órdenes, la finalización de operaciones y la reputación de usuarios."
       },
       "encrypted_chat": {
         "title": "Chat cifrado",
@@ -2831,8 +2826,8 @@
     "subtitle": "El plan es público. Lo enviamos por fases para que cada pieza quede bien hecha.",
     "phase_1_title": "Fase 1 — bases",
     "phase_1_body": "El armazón, los diez idiomas, el flujo de generación de claves, la ayuda buscable — todo lo que un visitante por primera vez necesita, sin ninguna cuenta del lado del servidor.",
-    "phase_2_title": "Fase 2 — integración con Blurt",
-    "phase_2_body": "Conectar con nodos de Blurt. Enviar el servicio de relé que difunde operaciones firmadas por usuarios. El puntero de descubrimiento de releases llega a la cadena.",
+    "phase_2_title": "Fase 2 — integración con la cadena",
+    "phase_2_body": "Conectarse a la cadena. Enviar el servicio de relé que difunde operaciones firmadas por usuarios. El puntero de descubrimiento de releases llega a la cadena.",
     "phase_3_title": "Fase 3 — libro de órdenes en vivo",
     "phase_3_body": "El indexador entra en producción. Navega, filtra y publica órdenes. Ventana de reemplazo de 15 minutos. Escalado de comisiones resistente a Sybil. Detección de operaciones consigo mismo.",
     "phase_4_title": "Fase 4 — chat, feedback, reputación",
@@ -3490,12 +3485,12 @@
     "tracking_title": "Cero rastreo, cero registros.",
     "tracking_body": "Sin cookies. Sin analíticas. Sin scripts de terceros. Sin registro de IP. Sin telemetría. Si miras la pestaña de red en tu navegador, cada petición va a Morphit y a ningún otro sitio.",
     "chat_title": "El chat está cifrado de extremo a extremo.",
-    "chat_body": "Cada mensaje usa intercambio de claves X25519 más cifrado autenticado ChaCha20-Poly1305 (primitivas libsodium) con una clave efímera nueva por mensaje. El texto plano solo existe dentro de tu navegador y el de tu par. Los servidores de Morphit, la blockchain Blurt y cualquiera en el medio solo ven cifrado. El protocolo completo — incluyendo los tradeoffs deliberados (sin forward secrecy por mensaje) — está en {chat_crypto_doc}.",
+    "chat_body": "Cada mensaje usa intercambio de claves X25519 más cifrado autenticado ChaCha20-Poly1305 (primitivas libsodium) con una clave efímera nueva por mensaje. El texto plano solo existe dentro de tu navegador y el de tu par. Los servidores de Morphit, la cadena subyacente y cualquiera en el medio solo ven cifrado. El protocolo completo — incluyendo los tradeoffs deliberados (sin forward secrecy por mensaje) — está en {chat_crypto_doc}.",
     "reproducible_title": "Builds reproducibles.",
     "reproducible_body": "Cada release lleva tag; cada asset tiene huella; SRI protege cada script. Puedes reconstruir desde fuentes y comparar — publicamos los hashes junto a cada release.",
     "open_source_title": "Código abierto, modelo de amenazas abierto.",
     "open_source_body": "El modelo de amenazas completo está en {security_doc} del repo. Somos explícitos sobre contra qué protegemos y contra qué no — fingir lo contrario sería peor que la honestidad.",
-    "footer_body": "¿Encontraste un problema? Repórtalo en el repo público de Forgejo, o (en Fase 5) por mensaje cifrado a la cuenta {morphit_account} en Blurt.",
+    "footer_body": "¿Encontraste un problema? Repórtalo en el repo público de Forgejo, o (en Fase 5) por mensaje cifrado a la cuenta {morphit_account} de la cadena.",
     "bounty_title": "Programa de recompensas por errores",
     "bounty_body": "Operamos un programa discrecional de reconocimiento de seguridad. Cada hallazgo accionable es revisado por un ingeniero real, recibe una respuesta y — si mejora materialmente la postura de seguridad de Morphit — es recompensado en BLURT (pagado desde @morphit-fees) o BTC, escalado por severidad y calidad del informe. Sin tabla de niveles fija; adjudicación caso por caso. Crédito en el salón de la fama disponible incluso cuando no hay pago. El alcance completo, la guía de severidad, el flujo de pago y lo que no haremos (sin NDA, sin divulgación exclusiva) está documentado en SECURITY.md.",
     "bounty_link": "Leer el alcance y las reglas completas →",

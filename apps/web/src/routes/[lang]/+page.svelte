@@ -5,16 +5,21 @@
 	import { _ } from 'svelte-i18n';
 	import MorphitMark from '$components/MorphitMark.svelte';
 	import Head from '$components/Head.svelte';
-	import FeaturedOrders from '$components/FeaturedOrders.svelte';
-	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
-	// cp165 byte-budget: CoinCarousel + PrioritiesSection are both
-	// below the fold on the landing page (CoinCarousel even does
-	// its own IntersectionObserver internally, but its compiled
-	// component code still ships in the eager bundle).  Lazy-load
-	// both at the route level so the 28 KB combined doesn't land
-	// on first paint for visitors who don't scroll.
-	// import CoinCarousel from '$components/CoinCarousel.svelte';
-	// import PrioritiesSection from '$components/PrioritiesSection.svelte';
+	// cp169 byte-budget — everything below the fold is lazy-loaded.
+	// On a 1024×768 desktop the hero block ends at ~760px (py-24 +
+	// 96px MorphitMark + eyebrow + italic tagline + H1 + hero body +
+	// CTAs + py-24 bottom), placing the FeaturedOrders wrapper at
+	// ~824px — below the 768px fold.  PrioritiesSection sits after
+	// FeaturedOrders (or after its empty wrapper on fresh-install
+	// instances) so it's also below the fold.  CoinCarousel is
+	// further below.  All three lazy-load at the route level so the
+	// initial bundle for first-paint is hero-only.
+	//
+	// cp168 had eager-loaded PrioritiesSection on the theory that it
+	// might sit above the fold post-Reachable-via-removal — but
+	// measurement showed it doesn't, so cp169 reverts to lazy.
+	// AltNetworkIcon import remains removed (Reachable-via panel is
+	// gone; the footer renders its own chips).
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
 	import { instance } from '$stores/instance';
 
@@ -29,7 +34,11 @@
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
-	// cp165 lazy-loaders for below-the-fold landing sections
+	// cp169 lazy-loaders for every below-the-fold component on the
+	// landing page.  All three sit below the fold on the typical
+	// 1024×768 desktop viewport and on every mobile viewport.
+	const loadFeaturedOrders = () =>
+		import('$components/FeaturedOrders.svelte').then((m) => m.default);
 	const loadPrioritiesSection = () =>
 		import('$components/PrioritiesSection.svelte').then((m) => m.default);
 	const loadCoinCarousel = () =>
@@ -114,85 +123,37 @@
 				<a href={lp('/orderbook')} class="btn-primary">{$_('home.cta_browse')}</a>
 				<a href={lp('/onboarding')} class="btn-secondary">{$_('home.cta_start')}</a>
 			</div>
-			<!-- Tertiary CTA for returning users who already have a
-			     Blurt account or already used Morphit on another
-			     device.  Lower-key than the primary CTAs so first-
-			     timers (the larger audience) aren't distracted, but
-			     visible enough that returning users don't have to
-			     hunt for the top-right corner. -->
-			<p
-				class="mt-4 animate-fade-up text-sm text-ink-600 dark:text-ink-300"
-				style="animation-delay: 280ms"
-			>
-				{$_('home.returning_user_prompt')}
-				<a href={lp('/login')} class="font-semibold text-morphit-emerald hover:underline">
-					{$_('home.returning_user_link')}
-				</a>
-			</p>
+			<!-- cp168 removed the returning-user "Already have a Blurt
+			     account…" tertiary CTA.  Reason: it mentioned the chain
+			     by name above the fold, which we're trying to lessen.
+			     Returning users find Sign in via the header AvatarMenu
+			     (always visible), and the login flow has its own
+			     prompts; this paragraph wasn't load-bearing. -->
 		</div>
 
 		<!-- Phase 5 item 5: featured slots showcase. Up to 5 orders
 		     users have paid to promote. Self-hides when empty so
 		     a fresh-install site doesn't show an awkward empty
-		     panel. -->
+		     panel.  cp169 lazy-loaded — see rationale on the
+		     loadFeaturedOrders import. -->
 		<div class="mt-16">
-			<FeaturedOrders variant="grid" />
+			{#await loadFeaturedOrders() then FeaturedOrders}
+				<FeaturedOrders variant="grid" />
+			{/await}
 		</div>
 
-		<section
-			class="mt-20 rounded-3xl border border-ink-100 bg-white p-8 dark:border-ink-800 dark:bg-ink-900 md:p-12"
-		>
-			<div class="grid gap-8 md:grid-cols-[2fr,3fr]">
-				<div>
-					<p class="text-xs font-semibold uppercase tracking-widest text-ink-500">
-						{$_('home.reachable_via')}
-					</p>
-					<h2 class="mt-2 font-display text-2xl font-bold">{$_('home.networks_heading')}</h2>
-					<p class="mt-3 text-ink-600 dark:text-ink-300">
-						{$_('home.networks_body')}
-					</p>
-				</div>
-				<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-					<div class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-4 dark:bg-ink-800">
-						<AltNetworkIcon
-							network="tor"
-							size={32}
-							class="h-8 w-8 text-ink-800 dark:text-ink-100"
-						/>
-						<span class="text-sm font-semibold">Tor</span>
-					</div>
-					<div class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-4 dark:bg-ink-800">
-						<AltNetworkIcon
-							network="lokinet"
-							size={32}
-							class="h-8 w-8 text-ink-800 dark:text-ink-100"
-						/>
-						<span class="text-sm font-semibold">Lokinet</span>
-					</div>
-					<div class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-4 dark:bg-ink-800">
-						<AltNetworkIcon
-							network="i2p"
-							size={32}
-							class="h-8 w-8 text-ink-800 dark:text-ink-100"
-						/>
-						<span class="text-sm font-semibold">I2P</span>
-					</div>
-					<div class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-4 dark:bg-ink-800">
-						<AltNetworkIcon
-							network="nostr"
-							size={32}
-							class="h-8 w-8 text-ink-800 dark:text-ink-100"
-						/>
-						<span class="text-sm font-semibold">Nostr mirror</span>
-					</div>
-				</div>
-			</div>
-		</section>
+		<!-- cp168 removed the "Reachable via" four-network card panel
+		     that used to sit here.  Reason: redundant with the footer
+		     which already chips Tor / Lokinet / I2P (.b32.i2p) / Nostr
+		     + No-JS + RSS.  Removing it shortens the path between the
+		     hero and the priorities cards. -->
 
 		<!-- Seven cards bragging about Morphit's design priorities,
 		     each hyperlinked to a cross-linked FAQ entry.  Replaces
 		     the old 4-card points grid as the canonical priorities
-		     surface on the home page. -->
+		     surface on the home page.  cp169 lazy-loaded (reverted
+		     from cp168 eager — measurement showed it sits below the
+		     fold on 1024×768 desktops). -->
 		{#await loadPrioritiesSection() then PrioritiesSection}
 			<PrioritiesSection />
 		{/await}

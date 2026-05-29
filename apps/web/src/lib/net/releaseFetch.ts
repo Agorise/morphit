@@ -45,13 +45,13 @@
 import { getBlurtClient } from '$blurt/client';
 import { MORPHIT_OFFICIAL_POSTING_PUBKEY } from '$net/config';
 import { validateReleasePayload, type ReleaseValidateError } from '@morphit/release-schema';
-import { checkPinnedKeyInAuthority } from './releaseTrustAnchor';
+import { checkPinnedKeyInAuthority } from '@morphit/release-schema';
 import type { ReleasePayloadV1 } from '@morphit/release-schema';
 
 // Re-export for backward-compat with anything that imports it from
 // here.  releaseTrustAnchor.ts is the new canonical module.
-export { checkPinnedKeyInAuthority } from './releaseTrustAnchor';
-export type { PubkeyAuthorityCheck } from './releaseTrustAnchor';
+export { checkPinnedKeyInAuthority } from '@morphit/release-schema';
+export type { PubkeyAuthorityCheck } from '@morphit/release-schema';
 
 /** The signer account whose release ops we follow.  Mainnet
  *  default; configurable per-deployment for sibling instances that

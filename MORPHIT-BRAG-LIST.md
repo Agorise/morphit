@@ -71,7 +71,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 18. **No password reset emails.** Because there are no passwords stored. You hold your own keys; the project can't forget what it never knew.
 
-19. **End-to-end encrypted (E2EE) chat.** Buyer-seller conversations are encrypted on your device, then stored on the Blurt chain as ciphertext. Not even the indexer can decrypt them.
+19. **End-to-end encrypted (E2EE) chat.** Buyer-seller conversations are encrypted on your device, then stored on the public chain as ciphertext. Not even the indexer can decrypt them.
 
 20. **End-to-end encrypted (E2EE) chat uses per-message ECIES (X25519 + ChaCha20-Poly1305-IETF, libsodium primitives).** Each outbound message generates a fresh sender ephemeral key that's wiped after one use — that gives you sender-side forward secrecy: even if your posting key leaks later, an attacker cannot decrypt messages YOU sent in the past. We're honest about the tradeoff: the receiver's long-term chat key is stable until you rotate your posting key, so we don't claim per-message receiver-side forward secrecy. Full design + tradeoff rationale in `docs/adr/0015-chat-crypto.md` and the `forward_secrecy` FAQ entry.
 
@@ -189,11 +189,11 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 4. Real decentralization, not the marketing kind
 
-76. **Federated orderbook over a public blockchain.** Orders live on the Blurt chain. Any operator running a Morphit indexer sees the same orderbook in real-time, and a buyer on one instance sees orders posted through any other instance — each operator's frontend is its own brand and URL, but the data layer is shared. Multiple indexers cross-verify each other.
+76. **Federated orderbook over a public blockchain.** Orders live on the public chain. Any operator running a Morphit indexer sees the same orderbook in real-time, and a buyer on one instance sees orders posted through any other instance — each operator's frontend is its own brand and URL, but the data layer is shared. Multiple indexers cross-verify each other.
 
 77. **No central server to attack.** Take down a Morphit website and the federation continues; a buyer just opens another operator's URL.
 
-78. **No central database to subpoena.** The orderbook isn't IN a database; it's ON the public Blurt chain. Subpoenas aren't a useful attack here.
+78. **No central database to subpoena.** The orderbook isn't IN a database; it's ON the public blockchain. Subpoenas aren't a useful attack here.
 
 79. **No single point of failure.** Operators come and go; the chain is permanent.
 
@@ -249,7 +249,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 104. **No custody fees.** Because no custody.
 
-105. **No "frozen account" mechanism.** Thanks to the Blurt blockchain, demonetization, censorship and user bans are impossible.
+105. **No "frozen account" mechanism.** Thanks to the public blockchain, demonetization, censorship and user bans are impossible.
 
 106. **No exchange-side hot wallet to be hacked.** Because no exchange-side wallet.
 
@@ -259,7 +259,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 109. **The trade itself never appears on Morphit's books.** Your bank transfer goes from your bank to the seller's bank. The XMR moves directly from seller's wallet to buyer's wallet. Morphit cannot see, log, or intervene.
 
-110. **You can audit the on-chain receipts.** Every fee paid, every listing posted, every feedback signed — provable on the Blurt blockchain, no Morphit cooperation required.
+110. **You can audit the on-chain receipts.** Every fee paid, every listing posted, every feedback signed — provable on the public blockchain, no Morphit cooperation required.
 
 ## 6. For Monero users specifically
 

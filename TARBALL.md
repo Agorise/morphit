@@ -4,35 +4,55 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp170 **CLOSED** — root-caused a long-standing CI failure and fixed it architecturally by extracting the release validator into a shared package.
+**Last touched:** cp170 **CLOSED** — root-caused a long-standing CI failure and fixed it architecturally by extracting the release validator into a shared package, completed the package family (trust-anchor moved in too), merged the previously-undelivered cp168/cp169 homepage work, and hardened two smokes that had latent blind spots.
+
+**⚠️ This tarball is a CONSOLIDATED checkpoint.** It carries three streams of work, now reconciled into one coherent state:
+  1. **cp170** — the CI root-cause fix + `@morphit/release-schema` extraction (validator, schema types, AND the `releaseTrustAnchor` helper).
+  2. **cp168/cp169** — homepage edits + repo-wide Blurt reduction + hero-title rewrite, completed earlier in the session but never shipped as a tarball (they lived only in a sandbox tree; the uploaded `morphit11` base did not contain them). Verified safe to fold in: the two trees' locale key-sets and untouched values were byte-identical (0 hidden divergence), so re-applying introduced nothing unexpected.
+  3. **Two smoke hardenings** surfaced by the full-suite during the merge (see "cp168/cp169 merge" section below).
 
 **The CI failure (vitest-must-pass red on main).** The `run-smokes` job reported `apps/indexer` at 445 passing vs the 456 baseline. Stitching two CI runs showed the real cause: `apps/indexer/test/handlers/release.test.ts` (exactly 30 tests) was failing to *collect* — a `TSConfckParseError`. That test imports the frontend validator (`apps/web/src/lib/net/releaseValidate.ts`) to prove byte-for-byte parity between the indexer handler and the frontend validator (Part 106/107 invariant). When vitest transformed that web source file, vite auto-discovered `apps/web/tsconfig.json`, which `extends ./.svelte-kit/tsconfig.json` — a SvelteKit-*generated* file that only exists after `svelte-kit sync`. The `run-smokes` CI job never runs sync (only the separate `web-check` job does), so the file was absent and collection failed, dropping 30 tests. This was **exactly** the unexplained "stable -30" CI gap the cp83 baseline comment flagged with a cp84+ TODO to chase down. The indexer SCRIPTS that import the same validator never hit it because they run through tsx with an explicit `tsconfig.smoke.json` (no auto-discovery); only the vitest path auto-discovers.
 
 **The fix (architectural, not a workaround).** Extracted `release.ts` (schema types) + `releaseValidate.ts` (validator) into a new standalone package **`@morphit/release-schema`** (`packages/release-schema/`). Both the frontend (`apps/web`) and the indexer (its release-handler parity test + the release-build / release-validator scripts) now import the validator from this one canonical package — which has its own plain tsconfig, no SvelteKit `extends` — so `release.test.ts` collects in every environment with no sync step. The cross-app reach into `apps/web` source is gone entirely. (A first-pass interim fix added an `ensureWebSynced()` step to the vitest smoke; it was REMOVED once the package extraction made it unnecessary.)
 
 **Wiring (everything checked):**
-- New package: `packages/release-schema/{package.json, tsconfig.json, src/{index.ts, release.ts, releaseValidate.ts}}`. Internal `./release` → `./release.js` (NodeNext). tsconfig mirrors asset-registry (pure package, no node types).
+- New package: `packages/release-schema/{package.json, tsconfig.json, src/{index.ts, release.ts, releaseValidate.ts, releaseTrustAnchor.ts}}`. Internal `./release` → `./release.js` (NodeNext). tsconfig mirrors asset-registry (pure package, no node types).
 - Root `workspaces` += `packages/release-schema`; `apps/indexer` + `apps/web` deps += `@morphit/release-schema: "*"`.
-- All 7 import sites rewritten (4 indexer-side relative paths → package; `releaseFetch.ts` ×2 + `stores/release.ts` inline `import('$net/release')` type → package).
+- All import sites rewritten: 4 indexer-side relative paths → package (validator + trust-anchor in `release-validator-smoke.ts`, validator + types in `release-build-payload.ts`, validator in `release.test.ts`); web-side `releaseFetch.ts` (validator import + 2 trust-anchor re-exports + types) + `stores/release.ts` inline `import('$net/release')` type → package.
+- **Trust-anchor moved too (final cross-app cleanup):** `releaseTrustAnchor.ts` (pure pubkey-authority check) was the last release-family file the indexer reached into `apps/web` for. Moved into the package; barrel re-exports `checkPinnedKeyInAuthority` + `PubkeyAuthorityCheck`. The release-schema family now has ZERO cross-app reaches. (NOTE: many OTHER indexer→`apps/web` parity-smoke imports remain — payments, explorer, pnl, blurt, chat, apr, etc. — an established, intentional codebase pattern; all tsx-only, none trigger the vitest tsconfig issue. Out of scope for this work.)
 - `scripts/typecheck-sweep.sh` += release-schema project (now 14 projects).
 - `indexer-result-shape-smoke.ts` `.value`/`.error.kind` allowlists updated `$net/releaseValidate` → `@morphit/release-schema`.
 - `package-lock.json` workspace + symlink entries added (`npm ci --dry-run` passes).
-- Originals deleted from `apps/web/src/lib/net/`.
+- Originals deleted from `apps/web/src/lib/net/`: `release.ts`, `releaseValidate.ts`, `releaseTrustAnchor.ts`.
 - `apps/web/scripts/vitest-must-pass-smoke.ts` indexer baseline restored 456 → **475** (the true floor; CI now matches local).
 - Active docs updated: ADR-0019, ADR-0011, REVISIT-LIST (new package path; historical audit/archive entries left as-is recording past state).
 
+### cp168/cp169 merge (homepage + Blurt reduction) — folded in this checkpoint
+
+- **Homepage** (`apps/web/src/routes/[lang]/+page.svelte`): removed the "Reachable via" four-network panel (redundant with footer chips) and the "Already have a Blurt account?" returning-user prompt (mentioned the chain above the fold). All three below-fold components (`FeaturedOrders`, `PrioritiesSection`, `CoinCarousel`) are now lazy-loaded via `{#await loadX() then X}` — measurement put the FeaturedOrders wrapper at ~824px on a 1024×768 desktop, below the 768px fold. `AltNetworkIcon` import dropped from the homepage (still used by the footer/layout, so the component file stays).
+- **Blurt reduction (repo-wide, user-facing):** ~95 lowercase `Blurt` mentions removed across the 10 locales (3,523 → 3,428); the `BLURT` ticker is preserved everywhere (1,024). Reductions used "the chain" / "the underlying chain" / "an open public blockchain" where the mention wasn't load-bearing. Above-the-fold homepage copy is now Blurt-free. Brag-list 5 reductions (50 → 45), README 2 reductions. Load-bearing mentions preserved: BLURT ticker, ADRs, operator fee mechanics, glossary entries that DEFINE Blurt, FAQ entries specifically about Blurt, account names.
+- **Hero title** (all 10 locales): "Privately trade Monero, Bitcoin and more with Fiat currencies" → "Privately trade Cryptos like Monero and Bitcoin, plus tangibles, services and more".
+- **5 locale keys removed ×10** (3,099 → **3,094** keys): `home.{returning_user_prompt, returning_user_link, reachable_via, networks_heading, networks_body}`. Parity holds at 3,094 × 10.
+- **Mediakit regenerated** (`apps/web/static/morphit-mediakit.zip`) after the brag-list edits.
+
+### Two smoke hardenings (surfaced by the full-suite during the merge)
+
+- **`native-translations-snapshot.json` regenerated.** The cp168 removal of the 5 keys left them stale in the native-translations snapshot; `native-translations-floor-smoke` correctly flagged 9/10 locales. Regenerated the snapshot (the keys were deliberately removed). This was a latent loose end the cp168/cp169 sandbox work never closed because that smoke wasn't run then.
+- **`svelte-component-import-coverage-smoke.ts` hardened.** It had been passing the homepage only because of dead commented-out `// import CoinCarousel …` lines (the regex matched import text inside comments — a false NEGATIVE). Cleaning up those dead comments exposed that the smoke couldn't see Svelte's `{#await … then X}` block binding. Fix: (a) strip JS comments from the script blob before import-matching (so commented imports can't fake a pass — now strictly stronger, still catches genuine misses), and (b) recognize `{#await … then X}` / `{:then X}` / `{#each … as X}` block clauses as valid component bindings. Both a false-negative and a false-positive closed.
+
 ### Verified clean (cp170 sentinel)
 
-- Triple-pulse **6,335 × 3 = 19,005 scenarios, 0 failures** across all three pulses
+- Triple-pulse **6,334 × 3 = 19,002 scenarios, 0 failures** across all three pulses (merged state)
 - TypeScript: 0 errors across **14** projects (release-schema added to the sweep)
 - svelte-check: 0 errors, 0 warnings
+- Locale parity: **3,094 keys × 10 locales**
 - The root-cause proof: `release.test.ts` collects all 30 tests with `.svelte-kit` ABSENT (fresh-checkout simulation)
 - Package-structure gates: workspace-membership 26/26, package-files-exist 3/3, workspace-deps-pin 38/38, lockfile-sync 3/3
-- release-validator-smoke 69/69, indexer-result-shape 26/26
+- release-validator-smoke 69/69, indexer-result-shape 26/26, persona-walkthrough 170/170, brag-list (KISS 2/2, claim-parity 79/79, trailer-invariants 5/5)
 
 ### No cleanup script this checkpoint
 
-cp170 deletes two files (`apps/web/src/lib/net/{release,releaseValidate}.ts`). Operator confirmed they nuke-and-extract fresh, so a `cpNN-cleanup.sh` is unnecessary (tar can't communicate deletions only matters when extracting *over* an existing tree). A fresh extract never had the deleted files.
+cp170 deletes three files (`apps/web/src/lib/net/{release,releaseValidate,releaseTrustAnchor}.ts`). Operator confirmed they nuke-and-extract fresh, so a `cpNN-cleanup.sh` is unnecessary (the "tar can't communicate deletions" problem only bites when extracting *over* an existing tree). A fresh extract never had the deleted files.
 
 ---
 
