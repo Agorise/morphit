@@ -35,7 +35,7 @@
       "raw_link": "Zobacz pełny manifest (verify.json)"
     },
     "worried": {
-      "explain": "Morphit jest sfederowany — każdy może postawić instancję. Jeśli ta wydaje się podejrzana, przenieś się na taką, której ufasz. Twoje klucze, zlecenia i reputacja żyją na łańcuchu Blurt, nie na żadnej pojedynczej instancji. Zobaczysz ten sam marketplace z dowolnego miejsca.",
+      "explain": "Morphit jest sfederowany — każdy może postawić instancję. Jeśli ta wydaje się podejrzana, przenieś się na taką, której ufasz. Twoje klucze, zlecenia i reputacja żyją na łańcuchu bazowym, nie na żadnej pojedynczej instancji. Zobaczysz ten sam marketplace z dowolnego miejsca.",
       "known_good_note": "— utrzymywana przez projekt, znana-dobra",
       "faq_pointer": "Więcej o tym, jak rozpoznać złego operatora, zobacz",
       "faq_link": "FAQ o rogue-operatorach",
@@ -1853,7 +1853,7 @@
     },
     "federation": {
       "title": "Federacja",
-      "body": "Wiele niezależnych instancji Morphit, które dzielą ten sam orderbook i ekosystem czatu, ponieważ wszystkie czytają z tej samej blockchaina Blurt. Jeśli operator wypadnie (lub stanie się wrogi), użytkownicy przenoszą się do innego i znajdują te same zlecenia, te same transakcje, te same reputacje. Federacja jest tym, co czyni Morphit nieocenzurowalnym."
+      "body": "Wiele niezależnych instancji Morphit, które dzielą ten sam orderbook i ekosystem czatu, ponieważ wszystkie czytają z tej samej bazowej blockchainy. Jeśli operator wypadnie (lub stanie się wrogi), użytkownicy przenoszą się do innego i znajdują te same zlecenia, te same transakcje, te same reputacje. Federacja jest tym, co czyni Morphit nieocenzurowalnym."
     },
     "feedback": {
       "title": "Opinia (feedback)",
@@ -1865,7 +1865,7 @@
     },
     "indexer": {
       "title": "Indexer",
-      "body": "Komponent instancji Morphit, który obserwuje blockchain Blurt, dekoduje operacje istotne dla Morphit (zlecenia, opinie, koperty czatu) i podaje je frontendowi webowemu w użytecznej formie. Łańcuch jest źródłem prawdy; indexer to tylko szybki cache. Prowadzony przez operatora, nie przez Ciebie."
+      "body": "Komponent instancji Morphit, który obserwuje łańcuch, dekoduje operacje istotne dla Morphit (zlecenia, opinie, koperty czatu) i podaje je frontendowi webowemu w użytecznej formie. Łańcuch jest źródłem prawdy; indexer to tylko szybki cache. Prowadzony przez operatora, nie przez Ciebie."
     },
     "listing_fee": {
       "title": "Opłata za listing",
@@ -1915,16 +1915,11 @@
     }
   },
   "home": {
-    "hero_title": "Handluj prywatnie Monero, Bitcoinem i innymi za waluty fiat",
+    "hero_title": "Handluj prywatnie kryptowalutami jak Monero i Bitcoin, a także dobrami, usługami i innymi rzeczami",
     "hero_body": "Morphit łączy kupujących i sprzedających bezpośrednio. Bez KYC, niedepozytowy, bez ciasteczek, E2EE, bez logów, bez escrow, prywatny domyślnie, otwarty kod, w pełni rozproszony",
     "cta_browse": "Przeglądaj księgę zleceń",
     "cta_start": "Zacznij handel",
-    "reachable_via": "Dostępny też przez",
     "welcome_to_instance": "Witaj w {name}",
-    "returning_user_prompt": "Masz już konto Blurt lub Morphit skonfigurowany na innym urządzeniu?",
-    "returning_user_link": "Zaloguj się",
-    "networks_heading": "Cztery sieci, jeden Morphit.",
-    "networks_body": "Ta sama strona, ten sam kod, cztery sposoby dotarcia. Jeśli jedna droga jest zablokowana, inna działa.",
     "coin_carousel": {
       "aria_label": "Obsługiwane aktywa",
       "networks": {
@@ -1961,7 +1956,7 @@
       },
       "discoverability": {
         "title": "Wyszukiwalność",
-        "body": "Federacja używa blockchaina Blurt i RSS-a do dystrybucji księgi zleceń, finalizacji transakcji i reputacji użytkowników."
+        "body": "Federacja używa publicznego blockchaina i RSS-a do dystrybucji księgi zleceń, finalizacji transakcji i reputacji użytkowników."
       },
       "encrypted_chat": {
         "title": "Szyfrowany czat",
@@ -2831,8 +2826,8 @@
     "subtitle": "Plan jest publiczny. Wydajemy fazami, żeby każdy element był dopracowany.",
     "phase_1_title": "Faza 1 — fundamenty",
     "phase_1_body": "Powłoka, dziesięć języków, przepływ generowania kluczy, przeszukiwana pomoc — wszystko, czego potrzebuje pierwszy gość, bez żadnego konta po stronie serwera.",
-    "phase_2_title": "Faza 2 — integracja z Blurt",
-    "phase_2_body": "Połączenie z węzłami Blurt. Dostarczenie usługi przekaźnika, która rozsyła operacje podpisane przez użytkownika. Wskaźnik release-discovery ląduje on-chain.",
+    "phase_2_title": "Faza 2 — integracja z łańcuchem",
+    "phase_2_body": "Połączenie z łańcuchem. Dostarczenie usługi przekaźnika, która rozsyła operacje podpisane przez użytkownika. Wskaźnik release-discovery ląduje on-chain.",
     "phase_3_title": "Faza 3 — księga zleceń na żywo",
     "phase_3_body": "Indekser wchodzi do produkcji. Przeglądaj, filtruj i publikuj zlecenia. 15-minutowe okno wymiany. Eskalacja opłat odporna na Sybil. Wykrywanie self-trade.",
     "phase_4_title": "Faza 4 — czat, opinie, reputacja",
@@ -3490,12 +3485,12 @@
     "tracking_title": "Zero śledzenia, zero logowania.",
     "tracking_body": "Bez ciasteczek. Bez analityki. Bez skryptów stron trzecich. Bez logowania IP. Bez telemetrii. Jeśli spojrzysz na zakładkę Sieć w przeglądarce, każde żądanie idzie do Morphit i nigdzie indziej.",
     "chat_title": "Czat jest szyfrowany end-to-end.",
-    "chat_body": "Każda wiadomość używa wymiany kluczy X25519 plus uwierzytelnionego szyfrowania ChaCha20-Poly1305 (prymityw libsodium) ze świeżym kluczem efemerycznym na wiadomość. Tekst jawny istnieje tylko w twojej przeglądarce i przeglądarce partnera handlowego. Serwery Morphit, blockchain Blurt i każdy pomiędzy widzą tylko szyfrogram. Pełny protokół — w tym świadome kompromisy (brak forward secrecy per-wiadomość) — jest w {chat_crypto_doc}.",
+    "chat_body": "Każda wiadomość używa wymiany kluczy X25519 plus uwierzytelnionego szyfrowania ChaCha20-Poly1305 (prymityw libsodium) ze świeżym kluczem efemerycznym na wiadomość. Tekst jawny istnieje tylko w twojej przeglądarce i przeglądarce partnera handlowego. Serwery Morphit, bazowy łańcuch i każdy pomiędzy widzą tylko szyfrogram. Pełny protokół — w tym świadome kompromisy (brak forward secrecy per-wiadomość) — jest w {chat_crypto_doc}.",
     "reproducible_title": "Powtarzalne buildy.",
     "reproducible_body": "Każde wydanie jest otagowane; każdy asset ma odcisk; SRI chroni każdy skrypt. Możesz przebudować ze źródła i porównać — publikujemy hashe obok każdego wydania.",
     "open_source_title": "Open source, otwarty model zagrożeń.",
     "open_source_body": "Pełny model zagrożeń jest w {security_doc} repo. Jesteśmy jednoznaczni co do tego przed czym chronimy a przed czym nie — udawanie byłoby gorsze niż szczerość.",
-    "footer_body": "Znalazłeś problem? Zgłoś przez publiczne repo Forgejo, lub (w Fazie 5) szyfrowaną wiadomością na konto {morphit_account} na Blurt.",
+    "footer_body": "Znalazłeś problem? Zgłoś przez publiczne repo Forgejo, lub (w Fazie 5) szyfrowaną wiadomością na konto {morphit_account} łańcucha.",
     "bounty_title": "Program nagród za błędy",
     "bounty_body": "Prowadzimy uznaniowy program uznawania bezpieczeństwa. Każde wykonalne odkrycie jest sprawdzane przez prawdziwego inżyniera, otrzymuje odpowiedź i — jeśli istotnie poprawia postawę bezpieczeństwa Morphit — jest nagradzane w BLURT (płacone z @morphit-fees) lub BTC, skalowane według powagi i jakości raportu. Brak stałej tabeli poziomów; ocena indywidualna. Kredyt w hall of fame dostępny nawet bez płatności. Pełny zakres, wytyczne dotyczące powagi, przepływ płatności i czego nie zrobimy (brak NDA, brak ekskluzywnego ujawnienia) jest udokumentowane w SECURITY.md.",
     "bounty_link": "Przeczytaj pełny zakres i zasady →",

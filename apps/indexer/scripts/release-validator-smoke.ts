@@ -6,7 +6,7 @@
  */
 
 import { validateReleasePayload } from '@morphit/release-schema';
-import { checkPinnedKeyInAuthority } from '../../web/src/lib/net/releaseTrustAnchor';
+import { checkPinnedKeyInAuthority } from '@morphit/release-schema';
 
 let scenarios = 0;
 let failures = 0;

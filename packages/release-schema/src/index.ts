@@ -41,3 +41,6 @@ export type {
 	ReleaseValidateError,
 	ReleaseValidateResult
 } from './releaseValidate.js';
+
+export { checkPinnedKeyInAuthority } from './releaseTrustAnchor.js';
+export type { PubkeyAuthorityCheck } from './releaseTrustAnchor.js';

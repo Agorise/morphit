@@ -35,7 +35,7 @@
       "raw_link": "查看完整清單 (verify.json)"
     },
     "worried": {
-      "explain": "Morphit 是聯邦化的 — 任何人都可以搭建實例。如果這個看起來不對勁,轉到你信任的那個。你的密鑰、訂單和聲譽住在 Blurt 鏈上,而不是任何單個實例上。你會從任何地方看到相同的市場。",
+      "explain": "Morphit 是聯邦化的 — 任何人都可以搭建實例。如果這個看起來不對勁,轉到你信任的那個。你的密鑰、訂單和聲譽住在 底層鏈上,而不是任何單個實例上。你會從任何地方看到相同的市場。",
       "known_good_note": "— 由項目維護,已知良好",
       "faq_pointer": "關於如何識別壞運營者的更多資訊,請參閱",
       "faq_link": "rogue 運營者常見問題",
@@ -1853,7 +1853,7 @@
     },
     "federation": {
       "title": "聯邦",
-      "body": "多個獨立的 Morphit 實例共享同一訂單簿和聊天生態系統,因為它們都讀取同一條 Blurt 區塊鏈。如果一個營運者下線(或變得敵對),用戶可以轉到另一個實例,在那裡找到相同的訂單、相同的交易、相同的信譽。聯邦就是讓 Morphit 抵禦審查的東西。"
+      "body": "多個獨立的 Morphit 實例共享同一訂單簿和聊天生態系統,因為它們都讀取同一條底層區塊鏈。如果一個營運者下線(或變得敵對),用戶可以轉到另一個實例,在那裡找到相同的訂單、相同的交易、相同的信譽。聯邦就是讓 Morphit 抵禦審查的東西。"
     },
     "feedback": {
       "title": "反饋",
@@ -1865,7 +1865,7 @@
     },
     "indexer": {
       "title": "索引器",
-      "body": "Morphit 實例的組件,它監聽 Blurt 區塊鏈、解碼與 Morphit 相關的操作(訂單、反饋、聊天信封),並以可用的形式提供給網頁前端。區塊鏈是真實之源;索引器只是一個快速快取。由營運者運行,不是您。"
+      "body": "Morphit 實例的組件,它監聽鏈、解碼與 Morphit 相關的操作(訂單、反饋、聊天信封),並以可用的形式提供給網頁前端。區塊鏈是真實之源;索引器只是一個快速快取。由營運者運行,不是您。"
     },
     "listing_fee": {
       "title": "掛單費",
@@ -1915,16 +1915,11 @@
     }
   },
   "home": {
-    "hero_title": "私密交易 Monero、Bitcoin 等與法定貨幣",
+    "hero_title": "私密交易像 Monero 同 Bitcoin 噉嘅加密貨幣,以及實物商品、服務等等",
     "hero_body": "Morphit 讓買家同賣家直接連接。無 KYC、非託管、無 Cookie、端到端加密、無日誌、無託管、預設私密、開源、完全分散式",
     "cta_browse": "睇訂單簿",
     "cta_start": "開始交易",
-    "reachable_via": "亦可以經以下方式上到",
     "welcome_to_instance": "歡迎來到 {name}",
-    "returning_user_prompt": "已有 Blurt 帳戶或喺其他裝置上設置咗 Morphit?",
-    "returning_user_link": "登入",
-    "networks_heading": "四種網絡,一個 Morphit。",
-    "networks_body": "同一個網站,同一份代碼,四種到達方式。一條路被阻斷,仲有其他路。",
     "coin_carousel": {
       "aria_label": "支援的資產",
       "networks": {
@@ -1961,7 +1956,7 @@
       },
       "discoverability": {
         "title": "可發現性",
-        "body": "聯邦使用 Blurt 區塊鏈同 RSS 嚟做訂單簿分發、交易最終確認同用戶信譽。"
+        "body": "聯邦使用 公開區塊鏈同 RSS 嚟做訂單簿分發、交易最終確認同用戶信譽。"
       },
       "encrypted_chat": {
         "title": "加密聊天",
@@ -2831,8 +2826,8 @@
     "subtitle": "計劃係公開嘅。我哋分階段交付,咁樣每一塊都做得好。",
     "phase_1_title": "第 1 階段 — 基礎",
     "phase_1_body": "外殼、十種語言、密鑰生成流程、可搜索嘅幫助 — 第一次訪問者所需嘅一切,毋須任何服務器端帳戶。",
-    "phase_2_title": "第 2 階段 — Blurt 整合",
-    "phase_2_body": "連接 Blurt 節點。交付廣播用戶簽名操作嘅中繼服務。發佈發現指針落到鏈上。",
+    "phase_2_title": "第 2 階段 — 鏈整合",
+    "phase_2_body": "連接鏈。交付廣播用戶簽名操作嘅中繼服務。發佈發現指針落到鏈上。",
     "phase_3_title": "第 3 階段 — 即時訂單簿",
     "phase_3_body": "索引器上線。瀏覽、篩選、發佈訂單。15 分鐘替換窗口。抗女巫嘅費用升級。自交易檢測。",
     "phase_4_title": "第 4 階段 — 聊天、反饋、信譽",
@@ -3490,12 +3485,12 @@
     "tracking_title": "零追蹤,零日誌。",
     "tracking_body": "冇 cookie。冇分析。冇第三方腳本。冇 IP 日誌。冇遙測。如果你睇瀏覽器嘅網絡 tab,每個請求都去 Morphit,唔去其他地方。",
     "chat_title": "聊天係端到端加密。",
-    "chat_body": "每條訊息用 X25519 密鑰協商加 ChaCha20-Poly1305 認證加密(libsodium 原語),每條訊息都有新嘅臨時密鑰。明文只存在於你嘅瀏覽器同交易夥伴嘅瀏覽器入面。Morphit 嘅服務器、Blurt 區塊鏈同中間任何人都只睇到密文。完整協議 — 包括我哋接受嘅有意權衡(冇逐訊息前向保密)— 喺 {chat_crypto_doc} 入面。",
+    "chat_body": "每條訊息用 X25519 密鑰協商加 ChaCha20-Poly1305 認證加密(libsodium 原語),每條訊息都有新嘅臨時密鑰。明文只存在於你嘅瀏覽器同交易夥伴嘅瀏覽器入面。Morphit 嘅服務器、底層鏈同中間任何人都只睇到密文。完整協議 — 包括我哋接受嘅有意權衡(冇逐訊息前向保密)— 喺 {chat_crypto_doc} 入面。",
     "reproducible_title": "可重現構建。",
     "reproducible_body": "每個發佈都打 tag;每個資源都有指紋;SRI 保護每個腳本。你可以由源碼重新構建並比較 — 我哋喺每個發佈旁邊發佈 hash。",
     "open_source_title": "開源,開放威脅模型。",
     "open_source_body": "完整威脅模型喺 repo 嘅 {security_doc} 入面。我哋明確講保護乜嘢同唔保護乜嘢 — 扮唔知比誠實仲衰。",
-    "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或(喺第 5 階段)通過加密訊息發俾 Blurt 上嘅 {morphit_account} 帳戶。",
+    "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或(喺第 5 階段)通過加密訊息發俾 {morphit_account} 鏈帳戶。",
     "bounty_title": "漏洞賞金計劃",
     "bounty_body": "我們運行一個酌情決定的安全識別計劃。每一個可操作的發現都由真實的工程師審查,獲得答覆,並且 — 如果它實質上改善了 Morphit 的安全態勢 — 將在 BLURT(從 @morphit-fees 支付)或 BTC 中獲得獎勵,根據嚴重程度和報告質量進行調整。沒有固定的等級表;按個案裁定。即使沒有付款,名人堂榮譽也可用。完整範圍、嚴重程度指導、付款流程以及我們不會做的事情(沒有保密協議,沒有獨家披露)記錄在 SECURITY.md 中。",
     "bounty_link": "閱讀完整範圍和規則 →",

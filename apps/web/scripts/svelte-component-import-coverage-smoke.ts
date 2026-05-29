@@ -81,7 +81,21 @@ for (const file of files) {
 	// are imported in <script>, used in template.  Inline svelte tags
 	// inside <script lang="ts"> blocks don't count (strings, comments).
 	const scriptMatch = src.match(/<script[\s\S]*?<\/script>/g) ?? [];
-	const scriptBlob = scriptMatch.join('\n');
+	// cp170: strip JS comments from the script blob BEFORE import-
+	// matching.  Otherwise a commented-out `// import Foo from '…'`
+	// line satisfies the import regex and the smoke passes a file
+	// that never actually imports Foo (a false negative — the exact
+	// bug class this smoke exists to catch).  This surfaced when the
+	// homepage's dead commented-out CoinCarousel/PrioritiesSection
+	// import lines were cleaned up: the components are bound by
+	// `{#await … then X}` blocks (see below), not script imports, and
+	// removing the dead comments correctly exposed that the binding
+	// detection — not the comments — must carry the proof.
+	const stripJsComments = (s: string): string =>
+		s
+			.replace(/\/\*[\s\S]*?\*\//g, '') // block comments
+			.replace(/(^|[^:])\/\/[^\n]*/g, '$1'); // line comments (avoid URLs' `://`)
+	const scriptBlob = stripJsComments(scriptMatch.join('\n'));
 	// Remove all script blocks from the source to get just the template + style.
 	let template = src;
 	for (const s of scriptMatch) template = template.replace(s, '');
@@ -92,6 +106,22 @@ for (const file of files) {
 	// reference.  Counting those as real tags would cause every
 	// self-documenting component to fail the smoke against itself.
 	template = template.replace(/<!--[\s\S]*?-->/g, '');
+
+	// cp170: collect component names bound by Svelte await/each block
+	// clauses in the template.  These are legitimate ways to bind a
+	// PascalCase component identifier WITHOUT a script import — used
+	// for route-level lazy-loading:
+	//   {#await loadFoo() then Foo}  <Foo />  {/await}
+	//   {:then Foo}                  (continuation form)
+	//   {#each comps as Comp}        <Comp />  (rare, but valid)
+	// Treat any name bound this way as "declared" so it isn't flagged
+	// as an unimported reference.
+	const blockBound = new Set<string>();
+	const bindRe = /\{(?::then|#await[^}]*?\bthen|#each[^}]*?\bas)\s+([A-Z][A-Za-z0-9_]*)\b/g;
+	let bm: RegExpExecArray | null;
+	while ((bm = bindRe.exec(template)) !== null) {
+		blockBound.add(bm[1]!);
+	}
 
 	// Pull every PascalCase opening tag from the template.
 	//   <Foo …>  or  <Foo />
@@ -115,9 +145,12 @@ for (const file of files) {
 	//   - aliased import:           `import { Y as X } from '…'`
 	// Also accept `let X` / `const X` declarations in the script
 	// (covers cases where the PascalCase identifier is a local
-	// destructure or dynamic component-class binding).
+	// destructure or dynamic component-class binding), and names
+	// bound by `{#await … then X}` / `{:then X}` / `{#each … as X}`
+	// block clauses in the template (cp170 — lazy-load idiom).
 	const missing: string[] = [];
 	for (const name of referenced) {
+		if (blockBound.has(name)) continue;
 		const escName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		const reDefault = new RegExp(`\\bimport\\s+${escName}\\s+from\\s+['"]`);
 		const reNamed = new RegExp(
