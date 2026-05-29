@@ -17,7 +17,7 @@
  *   POST /v1/account/invite       → issue a short-lived invite token
  *                                    or surface an altcha challenge
  *   POST /v1/account/create       → broadcast the create_claimed_account
- *                                    op via the relay's posting key
+ *                                    op via the relay's active key (relay holds the active key; never a posting key)
  *   GET  /v1/account/availability → check whether a candidate username
  *                                    is structurally valid AND not
  *                                    already on-chain (best-effort)

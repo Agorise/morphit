@@ -785,7 +785,91 @@ The migration runner reads `MORPHIT_INDEXER_DATABASE_URL` from your environment,
 
 ## 8. First-time configuration
 
-Morphit is configured through environment files. Templates live in `ops/env/`. Copy them and fill in your specifics:
+### 8.0 The recommended path — `morphit-ops init` (interactive wizard)
+
+The fastest, lowest-error setup path is the interactive wizard.
+It walks you through 20 steps in plain English and generates
+correctly-shaped `morphit.config.env` + `morphit.env` files plus
+your encrypted relay keystore.
+
+```
+cd /opt/morphit                  # or wherever you cloned to
+npx morphit-ops init
+```
+
+What it asks you, in order:
+
+1. Instance name (the public brand for your node)
+2. Tagline (one-line description shown on `/`)
+3. Database connection (postgres URL — set up in §7)
+4. Your relay's Blurt account name (the dedicated account you
+   created in §6)
+5. **The ACTIVE key for that relay account** — paste the WIF
+   string starting with `5`.  This is the **active** key, not
+   posting.  The wizard explains why in detail; the short
+   version is that the relay broadcasts `create_claimed_account`,
+   `transfer`, `transfer_to_vesting`, and
+   `delegate_vesting_shares` operations — all active-authority.
+   The chain rejects every one of those with "missing required
+   active authority" if you paste the posting key by mistake.
+6. Fees account name (where listing-fee revenue lands)
+7. Daily signup ceiling (how many account creations per 24h)
+8. Contact URL (operator email or chat link — optional)
+9. Public origin URL (your https:// frontend)
+10. Alt-network addresses (Tor / Lokinet / I2P / Nostr — optional)
+11. Fee-verifier explorer URLs (BTC + XMR; defaults are fine)
+12. Chat-link external explorer URLs (per-asset; defaults are fine)
+13. Trade-only asset policy (which non-BLURT assets to accept)
+14. Listing fee + fallback BLURT price
+15. Homepage SEO meta tags (title / description / keywords —
+    optional but recommended for your instance to stand out)
+16. Daily DB backup automation (recommended on)
+17. Operator tag (for federation-scoped payout attribution)
+18. Matrix surfaces (private alert MXID + public room alias)
+19. Blurt RPC endpoints (defaults are fine for most operators)
+20. **MCP server** (Model Context Protocol for AI agents —
+    recommended on; lets AI agents like Claude Desktop, Cursor,
+    etc. discover your instance and answer user queries from
+    your orderbook).  See OPERATIONS.md §45 for details.
+
+The wizard writes three files atomically:
+
+  - `/etc/morphit/morphit.config.env` — operator-tunable settings
+  - `/etc/morphit/morphit.env` — critical infrastructure (DB URL,
+    account names, keystore path)
+  - `/opt/morphit/apps/relay/keystore.{json,wif}` — your encrypted
+    or plaintext relay active key
+
+Each is mode 0600, owned by the appropriate service user.
+
+#### If you accidentally pasted the wrong key
+
+If the wizard accepted your input but the relay refuses to start
+(`missing required active authority` on every broadcast), or
+you realize you pasted your posting key instead of the active
+key, **do NOT re-run `morphit-ops init` from scratch** — that
+would force you to re-enter all 19 other steps.  Instead use
+the dedicated rotation command:
+
+```
+morphit-ops edit-active-key
+```
+
+When it asks "Was the previous key wrong or compromised?",
+answer YES.  The prior keystore gets overwritten with random
+bytes + zeros, then unlinked — no `.bak` file is left behind.
+See [`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](RECOVERING-FROM-WRONG-RELAY-KEY.md)
+for the full procedure with verification steps.
+
+### 8.1 The manual path — hand-editing env files
+
+If you'd rather not use the wizard, you can configure Morphit by
+hand.  The wizard generates the same files this section describes;
+the result is byte-equivalent.  Use this path when you're
+automating the setup (Ansible, Terraform, etc.) and need the
+shape documented.
+
+Templates live in `ops/env/`. Copy them and fill in your specifics:
 
 ```
 cp ops/env/indexer.env.example /etc/morphit/indexer.env

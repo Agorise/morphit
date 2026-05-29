@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Inna aplikacja",
         "native_unknown": "Inna operacja chaina"
       }
-    }
+    },
+    "more_explorers": "+{count} więcej",
+    "more_explorers_aria": "{count} alternatywne eksploratory"
   },
   "faq": {
     "title": "Pomoc i FAQ",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Faza 1 — fundamenty",
     "phase_1_body": "Powłoka, dziesięć języków, przepływ generowania kluczy, przeszukiwana pomoc — wszystko, czego potrzebuje pierwszy gość, bez żadnego konta po stronie serwera.",
     "phase_2_title": "Faza 2 — integracja z Blurt",
-    "phase_2_body": "Połączenie z węzłami Blurt. Dostarczenie przekaźnika posting, który rozsyła operacje podpisane przez użytkownika. Wskaźnik release-discovery ląduje on-chain.",
+    "phase_2_body": "Połączenie z węzłami Blurt. Dostarczenie usługi przekaźnika, która rozsyła operacje podpisane przez użytkownika. Wskaźnik release-discovery ląduje on-chain.",
     "phase_3_title": "Faza 3 — księga zleceń na żywo",
     "phase_3_body": "Indekser wchodzi do produkcji. Przeglądaj, filtruj i publikuj zlecenia. 15-minutowe okno wymiany. Eskalacja opłat odporna na Sybil. Wykrywanie self-trade.",
     "phase_4_title": "Faza 4 — czat, opinie, reputacja",

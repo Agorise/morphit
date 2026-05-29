@@ -29,7 +29,7 @@ import {
 	stepTagline,
 	stepDatabase,
 	stepRelayAccount,
-	stepPostingKey,
+	stepActiveKey,
 	stepFeesAccount,
 	stepDailyCeiling,
 	stepContactUrl,
@@ -43,7 +43,8 @@ import {
 	stepBackup,
 	stepOperatorTag,
 	stepMatrixSurfaces,
-	stepRpcEndpoints
+	stepRpcEndpoints,
+	stepMcpServer
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
 import type { WizardAnswers } from '../init/render.ts';
@@ -115,7 +116,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const tagline = await stepTagline();
 	const databaseUrl = await stepDatabase();
 	const relayAccount = await stepRelayAccount();
-	const postingKey = await stepPostingKey(relayAccount.name);
+	const activeKey = await stepActiveKey(relayAccount.name);
 	const feesAccount = await stepFeesAccount(relayAccount.name);
 	const dailyCeiling = await stepDailyCeiling(relayAccount.account);
 	const contactUrl = await stepContactUrl();
@@ -136,13 +137,18 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	// not mandatory configuration.
 	const blurtRpcEndpoints = await stepRpcEndpoints(null);
 
+	// Step 20 — opt-out for MCP installation (Model Context Protocol).
+	// Default-on so AI agents (Claude Desktop, Cursor, etc.) can
+	// discover the operator's instance and surface it in user queries.
+	const mcpServer = await stepMcpServer();
+
 	const answers: WizardAnswers = {
 		instanceName,
 		tagline,
 		databaseUrl,
 		blurtRpcEndpoints,
 		relayAccount,
-		postingKey,
+		activeKey,
 		feesAccount,
 		dailyCeiling,
 		contactUrl,
@@ -155,7 +161,8 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		seo,
 		backup,
 		operatorTag,
-		matrix
+		matrix,
+		mcpServer
 	};
 
 	// ─── Review ────
@@ -230,7 +237,7 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  Database URL:         ${sanitizeForTerm(maskDatabasePassword(answers.databaseUrl))}`);
 	console.log(`  Relay account:        @${sanitizeForTerm(answers.relayAccount.name)}`);
 	const keyDesc =
-		answers.postingKey.mode === 'encrypted'
+		answers.activeKey.mode === 'encrypted'
 			? 'encrypted (passphrase prompted at startup)'
 			: 'plaintext (consider switching to encrypted later)';
 	console.log(`  Posting key:          ${keyDesc}`);
@@ -362,7 +369,7 @@ function printNextSteps(
 	console.log('');
 	console.log('  5. In another terminal (also source morphit.env), start the relay:');
 	console.log('       npm start -w apps/relay');
-	if (answers.postingKey.mode === 'encrypted') {
+	if (answers.activeKey.mode === 'encrypted') {
 		console.log("       (it'll prompt for your unlock passphrase)");
 	}
 	console.log('');
@@ -447,7 +454,7 @@ function printNextSteps(
 	console.log(`Your posting key is now stored at:`);
 	console.log(`  ${sanitizeForTerm(result.keystorePath)}`);
 	console.log('');
-	if (answers.postingKey.mode === 'encrypted') {
+	if (answers.activeKey.mode === 'encrypted') {
 		console.log(
 			'Back up this file along with your unlock passphrase.\n' +
 				'Without BOTH, you cannot restart your relay.'

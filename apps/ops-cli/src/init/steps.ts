@@ -43,7 +43,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import type { ListingFeeResult } from './render.ts';
 
-const TOTAL_STEPS = 18;
+const TOTAL_STEPS = 20;
 
 // ─── Step 1: Instance name ───────────────────────────────────────
 
@@ -230,29 +230,50 @@ export async function stepRelayAccount(): Promise<RelayAccountResult> {
 	}
 }
 
-// ─── Step 5: Posting key ─────────────────────────────────────────
+// ─── Step 5: Relay account ACTIVE key ────────────────────────────
 
-export interface PostingKeyResult {
+export interface ActiveKeyResult {
 	readonly mode: 'encrypted' | 'plaintext';
 	readonly plaintextWif: string | undefined;
 	readonly envelope: KeyEnvelope | undefined;
 	readonly passphraseHint: string | undefined;
 }
 
-export async function stepPostingKey(relayAccountName: string): Promise<PostingKeyResult> {
-	step(5, TOTAL_STEPS, "Your relay's posting key");
+export async function stepActiveKey(relayAccountName: string): Promise<ActiveKeyResult> {
+	step(5, TOTAL_STEPS, `The ACTIVE key for @${relayAccountName} (the relay account from step 4)`);
 	explain(
-		'This is the secret key that authorizes your relay to post\n' +
-			'operations on Blurt on your behalf.  It looks like:\n' +
+		`This is the ACTIVE key for the @${relayAccountName} account you\n` +
+			'named in step 4 — NOT the posting key.  Blurt has four key\n' +
+			'types per account; the relay needs the active key because\n' +
+			'every operation it broadcasts on chain is an active-authority\n' +
+			'operation:\n' +
+			'\n' +
+			'  • create_claimed_account     (signing up a new Morphit user)\n' +
+			'  • transfer                   (sending the welcome bonus)\n' +
+			'  • transfer_to_vesting        (powering up donated BLURT)\n' +
+			'  • delegate_vesting_shares    (delegating BP for posting)\n' +
+			'\n' +
+			'The posting key CANNOT sign any of these — the chain will\n' +
+			'reject every relay op with "missing required active authority".\n' +
+			'So your relay will fail to start (the unlock step checks the\n' +
+			'public key against the chain).\n' +
+			'\n' +
+			`You can find the active key in your Blurt wallet under\n` +
+			'"Permissions" or "Keys" — make sure you copy the ACTIVE one,\n' +
+			'not posting or owner.  It looks like:\n' +
 			'\n' +
 			'  5J...... (51 characters, starts with 5)\n' +
 			'\n' +
-			'You can find it in your Blurt wallet under "Permissions"\n' +
-			'or "Keys".  Use the POSTING key, not the active or owner\n' +
-			'key.\n' +
+			'⚠  This key authorizes the relay to spend BLURT and create\n' +
+			`   accounts on @${relayAccountName}'s behalf.  Use a relay\n` +
+			'   account dedicated to Morphit operations, NOT your personal\n' +
+			'   Blurt account — that way even worst-case compromise of\n' +
+			"   the VPS can't touch your personal Blurt holdings.\n" +
 			'\n' +
-			'⚠  This key gives whoever has it the ability to post on\n' +
-			'   your account.  Treat it like a password.'
+			'Background: the @morphit project account (separate from the\n' +
+			"relay) signs release ops with its POSTING key, but those are\n" +
+			"always signed offline on a personal laptop — the production\n" +
+			"server only ever sees an active key for the relay account."
 	);
 
 	const choiceIdx = await askChoice(
@@ -261,7 +282,7 @@ export async function stepPostingKey(relayAccountName: string): Promise<PostingK
 			'Encrypted (recommended).  Prompt for an unlock passphrase, encrypt the key, ' +
 				'relay prompts for the passphrase at startup.',
 			'Plaintext.  Key sits in morphit.config.env in plain text.  Easier (no ' +
-				'passphrase) but if someone reads the file they can post as you.'
+				'passphrase) but if someone reads the file they can spend BLURT as you.'
 		],
 		0
 	);
@@ -270,7 +291,9 @@ export async function stepPostingKey(relayAccountName: string): Promise<PostingK
 
 	let wif: string;
 	while (true) {
-		wif = await askPassword('Posting key (paste the 5J... string; it will not be echoed)');
+		wif = await askPassword(
+			`Active key for @${relayAccountName} (paste the 5J... string; it will not be echoed)`
+		);
 		if (wif.length === 0) {
 			console.log('  ✗ Required.  Try again.\n');
 			continue;
@@ -285,7 +308,7 @@ export async function stepPostingKey(relayAccountName: string): Promise<PostingK
 		break;
 	}
 	console.log(`  ✓ Key shape looks valid.\n`);
-	// Note: we don't verify against @relayAccount's posting pubkey
+	// Note: we don't verify against @relayAccount's active pubkey
 	// here — that requires deriving the pubkey from the WIF, which
 	// would couple ops-cli to dblurt.  The relay's startup unlock
 	// performs the pubkey-on-chain match check instead.
@@ -331,7 +354,7 @@ export async function stepPostingKey(relayAccountName: string): Promise<PostingK
 	}
 
 	console.log('  ✓ Passphrase set.');
-	console.log('  Encrypting your posting key (takes ~1 second)...');
+	console.log('  Encrypting your active key (takes ~1 second)...');
 	const envelope = encryptEnvelope(wif, passphrase);
 	console.log('  ✓ Done.\n');
 
@@ -584,17 +607,45 @@ export interface SeoResult {
 }
 
 export async function stepSeo(): Promise<SeoResult> {
-	step(15, TOTAL_STEPS, 'SEO override (optional)');
+	step(15, TOTAL_STEPS, 'Homepage SEO meta tags (optional)');
+	explain(
+		'Out of the box, your homepage advertises itself with generic\n' +
+			"Morphit copy in the <title>, <meta description>, and\n" +
+			'<meta keywords> tags — the same text every Morphit instance\n' +
+			'ships with.  Search engines like Google + Bing index those\n' +
+			'tags; social-media platforms like Matrix, Mastodon, Twitter,\n' +
+			'and Discord render them as link previews when someone shares\n' +
+			'your URL.\n' +
+			'\n' +
+			'If you want your instance to stand out (its own brand name\n' +
+			'in search results, your own tagline in link previews), this\n' +
+			"is where you set that copy.  If you skip this, you'll show\n" +
+			"up alongside every other Morphit instance — fine for a\n" +
+			"community node; suboptimal if you're trying to build a\n" +
+			'recognizable brand.\n' +
+			'\n' +
+			'You can also leave this for now and edit `MORPHIT_SEO_*`\n' +
+			'in morphit.config.env later.'
+	);
 	const wantsOverride = await askYesNo(
-		'Override homepage SEO copy (title/description/keywords)?',
+		'Customize your homepage SEO copy (title / description / keywords)?',
 		false
 	);
 	if (!wantsOverride) {
 		return { title: null, description: null, keywords: null };
 	}
-	const title = await ask('SEO title (Enter to skip)', '');
-	const description = await ask('SEO description (Enter to skip)', '');
-	const keywords = await ask('SEO keywords, comma-separated (Enter to skip)', '');
+	const title = await ask(
+		'Homepage <title> tag (e.g. "Acme P2P Marketplace — no KYC, no custody")',
+		''
+	);
+	const description = await ask(
+		'Homepage <meta description> — one sentence, ~150 chars (Enter to skip)',
+		''
+	);
+	const keywords = await ask(
+		'Homepage <meta keywords>, comma-separated (Enter to skip)',
+		''
+	);
 	return {
 		title: title.length > 0 ? title : null,
 		description: description.length > 0 ? description : null,
@@ -744,6 +795,7 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 export async function stepRpcEndpoints(
 	current: readonly string[] | null
 ): Promise<readonly string[]> {
+	step(19, TOTAL_STEPS, 'Blurt RPC endpoints (defaults are fine for most operators)');
 	const defaultDisplay =
 		current !== null && current.length > 0
 			? current.join(',')
@@ -1923,7 +1975,7 @@ import type { MatrixSurfacesResult } from './render.ts';
  *  @morphit/operator-config parsers so the @-vs-# distinction
  *  is enforced consistently across wizard, indexer, and bot. */
 export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
-	step(TOTAL_STEPS, TOTAL_STEPS, 'Matrix surfaces (optional)');
+	step(18, TOTAL_STEPS, 'Matrix surfaces (optional)');
 	explain(
 		'Morphit can use Matrix for two distinct purposes:\n\n' +
 			'  1. PRIVATE alerts to you (the operator) — low balance,\n' +
@@ -2043,4 +2095,92 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 	}
 
 	return { alertMxid, groupRoomAlias };
+}
+
+// ─── Step 20: MCP (Model Context Protocol) server ────────────────
+//
+// Default = enabled.  The morphit-mcp server exposes Morphit's
+// federated orderbook to any MCP-compatible AI agent (Claude
+// Desktop, Cursor, Cline, Continue, Windsurf, Zed, plus local
+// LLM stacks built on @modelcontextprotocol/sdk).  Five read-only
+// tools: search orders, fetch listing detail, list operators,
+// look up an account's reputation, return a federation summary.
+//
+// Why this matters for SEO and discoverability:
+//
+//   - AI agents are the new search engines.  When a user asks
+//     their LLM "where can I buy XMR with cash near me", an
+//     MCP-connected agent answers from your orderbook in real
+//     time — your instance is a discovery surface, not behind
+//     a search-engine ranking.
+//   - The MCP server is read-only and non-custodial — no keys,
+//     no privileges, no abuse vector.  Tools return data plus
+//     a deeplink back to your frontend; the user's wallet
+//     still does the actual trade.
+//   - Federation-wide: every Morphit instance running MCP
+//     contributes to a shared discovery layer.  Operators who
+//     opt out reduce the surface area for the whole project.
+//
+// What enabling does:
+//   - Installs the morphit-mcp systemd service alongside the
+//     existing relay/indexer services
+//   - Binds to 127.0.0.1:8124 (loopback only — operators
+//     who want public exposure configure their reverse proxy)
+//   - Documents the MCP install URL in the operator's
+//     `morphit ops doctor` output so AI agent configurators
+//     can copy-paste it
+
+export interface McpServerResult {
+	readonly enabled: boolean;
+}
+
+export async function stepMcpServer(): Promise<McpServerResult> {
+	step(20, TOTAL_STEPS, 'MCP server for AI agents (recommended)');
+	explain(
+		'MCP (Model Context Protocol) is an open standard that lets AI\n' +
+			'agents discover and use external tools.  Morphit ships a\n' +
+			'tiny MCP server (`morphit-mcp`) that exposes your orderbook\n' +
+			'to ANY MCP-compatible agent — Claude Desktop, Cursor, Cline,\n' +
+			'Continue, Windsurf, Zed, and local LLM stacks built on the\n' +
+			'`@modelcontextprotocol/sdk`.\n' +
+			'\n' +
+			'Five read-only tools:\n' +
+			'  • morphit_search_orders     (filter the live orderbook)\n' +
+			'  • morphit_get_listing       (fetch one listing in detail)\n' +
+			'  • morphit_list_operators    (federation directory)\n' +
+			'  • morphit_account_reputation (look up a trader)\n' +
+			'  • morphit_federation_summary (federation health snapshot)\n' +
+			'\n' +
+			'Why you want this on:\n' +
+			'\n' +
+			'  • AI agents are becoming the new search layer.  When\n' +
+			'    a user asks their LLM "where can I buy XMR with cash\n' +
+			'    near me", an MCP-connected agent answers from your\n' +
+			'    orderbook in real time and hands them a deeplink to\n' +
+			'    your frontend.  You appear in answers, not just in\n' +
+			'    search results.\n' +
+			'\n' +
+			'  • Read-only and non-custodial.  The MCP server holds\n' +
+			'    NO keys, NO privileges; tools return public orderbook\n' +
+			"    data plus a deeplink.  The user's wallet still does\n" +
+			'    the trade.  Zero abuse surface.\n' +
+			'\n' +
+			'  • Federation-wide effect.  Every Morphit instance running\n' +
+			'    MCP enlarges the shared AI-discoverable surface for the\n' +
+			"    project.  Opting out shrinks it.\n" +
+			'\n' +
+			'  • ~30 MB RAM, negligible CPU.  Binds to 127.0.0.1:8124\n' +
+			'    by default (loopback only); operators who want public\n' +
+			'    exposure proxy it via nginx.  See OPERATIONS.md §41.'
+	);
+	const enabled = await askYesNo('Install the MCP server alongside the relay + indexer?', true);
+	if (enabled) {
+		console.log('  ✓ MCP will be installed.  The systemd unit + nginx config will land\n' +
+			'    in the rendered ops artifacts.  After setup, run `morphit ops doctor`\n' +
+			'    to see the public MCP URL operators can share with AI agent users.\n');
+	} else {
+		console.log('  ⓘ Skipped.  Re-run `morphit ops init` to enable later, or hand-install\n' +
+			'    by enabling the `morphit-mcp.service` unit.\n');
+	}
+	return { enabled };
 }

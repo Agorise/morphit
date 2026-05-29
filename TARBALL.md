@@ -4,7 +4,55 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp166 **CLOSED** — extended the rpc-pool pattern to BTC + XMR fee verifiers via a new `quorumCall` primitive.  Addresses the production choke point where `Promise.allSettled` forced the indexer to wait for the slowest explorer's full timeout even when fast ones had already agreed; now releases that previously hung for ~5 seconds on a slow/dead explorer land in milliseconds.  Includes a behavioral change worth flagging: under the old `Promise.allSettled` + post-hoc unanimity check, a single dissenting explorer could DoS a legitimate trade by forcing rejection on disagreement; under the new quorum-with-early-return model, the dissenter is outvoted by the agreeing majority.  Strict improvement on the attack surface as well as the latency.
+**Last touched:** cp167 **CLOSED** — a security finding plus an outstanding UX deferral plus the MCP runtime wiring all converged in one checkpoint.
+
+**Security finding (relay key mislabel).** A code audit found that `apps/ops-cli/src/init/steps.ts` step 5 prompted operators to "Paste the relay's **posting key**" — wrong on every count.  The relay broadcasts `create_claimed_account`, `transfer`, `transfer_to_vesting`, and `delegate_vesting_shares` — all active-authority operations.  Signing them with a posting key gets `missing required active authority` from chain and the relay refuses to broadcast.  cp167 renames every `posting` reference in the relay context to `active` throughout the codebase (wizard, render, CLI commands, README, comments, locales) and ships a clear operator-facing explanation of why.
+
+**Recovery story for operators already burned.** New `morphit-ops edit-active-key` subcommand with two paths: safe rotation (creates timestamped `.bak`) and **no-trace rotation** (`--wipe-prior` flag OR interactive "was the prior key compromised?" YES → overwrites the prior keystore with `randomBytes` + zeros, fsyncs, then unlinks).  19-scenario smoke covers env parsing, atomic-write 0600 perms, backup byte-identity, wipe actually-gone, encryptEnvelope round-trip with the real envelope shape.  Full sysadmin recovery doc at `docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`.
+
+**MCP step + runtime wiring.** New wizard step 20 (default-Yes) offers operators the MCP server install with full explanation of the 5 read-only tools, the AI agent clients (Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed), federation-wide discoverability effect, and resource cost (~30 MiB RAM).  Runtime side: `MORPHIT_MCP_ADVERTISE` env var (allowlisted in `operator-config`); `mcpAdvertise: boolean` on indexer `Config`; `/v1/instance.mcp_url` field built from `publicOrigin + '/mcp'`; new hardened `ops/systemd/morphit-mcp.service` (loopback bind, 256 MiB cap, no key handling); Ansible task creates the `morphit-mcp` system user; `ops/env/indexer.env.example` documents the flag.
+
+**Explorer dropdown UI.** 12 new `BUNDLED_<ASSET>_CHAT_LINK_URLS` ordered arrays (BTC has 4, XMR has 4, ETH has 4, SOL has 4, XRP has 4, others 1-3); new `externalExplorerUrls(asset, txid)` plural function with operator-override prepending + dedupe + empty-array sentinel; new `<ExplorerLink>` Svelte component with grandma-friendly progressive disclosure — single-URL paths unchanged, multi-URL paths show a small "+N more ▾" `<details>` toggle next to the primary link.  Wired into ChatMessage.svelte.  11-scenario smoke locks the contract.
+
+**peerPriceMonitor decision.** Investigated but NOT migrated to quorumCall — different pattern (needs all observations for median + alert; quorum's early-return would defeat the purpose).  Documented in-source.
+
+**Doc audits.** OPERATIONS.md §45 (full MCP operator guide) + TOC refreshed (was stale by 4 entries); RUN-A-MORPHIT-NODE.md §8 restructured wizard-first; `docs/AUDIT-ITEMS-95-110.md` (NEW) explicitly enumerates items #95-104 (deployment-gated, pointer to AUDIT-OUTSIDE-SCOPE) and #105-110 (epistemic limits); `docs/FOUR-PERSONA-WALKTHROUGH-cp167.md` (NEW) re-walks Bob/Sally-user/Sally-operator/Charlie against every cp165/166/167 surface change with no regressions.
+
+### CI-critical: ship `scripts/cp167-cleanup.sh` alongside the tarball
+
+The cp166 deletions of `circuitBreaker.ts` + 3 breaker test files couldn't be communicated via tar extraction — tar creates files but never deletes them.  Operators upgrading from cp16N MUST run `bash scripts/cp167-cleanup.sh` after extracting before `npm install` and before any CI step.  The script `rm -f`s the 4 stale paths and is idempotent (safe to run when the files are already gone).
+
+### Verified clean (cp167 sentinel)
+
+- Triple-pulse **6,331 × 3 = 18,993 scenarios, 0 failures** across all three pulses
+- TypeScript: 0 errors across 13 projects
+- svelte-check: 0 errors, 0 warnings
+- Locale parity: 3099 keys × 10 locales (+2 new at parity)
+- Smoke runner registry: 255 entries (+2 from cp166: `edit-active-key-smoke`, `explorer-urls-multi-smoke`)
+- Brag-list-claim-parity 79/79; brag-list-KISS-budget 2/2 (#235 + #101 trimmed for budget after cp167 enhancements)
+- env-example-schema-parity 6/6 (after adding MORPHIT_MCP_ADVERTISE to ops/env/indexer.env.example)
+- ansible-systemd-user-consistency 19/19 (after adding morphit-mcp user task to base role)
+
+### Sysadmin handoff (Ken to paste verbatim to the operator who already pasted the wrong key)
+
+```
+1. cd /path/to/morphit && git pull && npm install && npm run build -w apps/ops-cli
+2. morphit-ops edit-active-key
+3. When asked "Was the previous key wrong or compromised?" → YES
+4. Confirm rotation → YES
+5. Paste the active key Ken sent (51 chars starting with 5)
+6. Storage mode: 1 (encrypted, same as before)
+7. Type unlock passphrase twice (any passphrase, fresh or reused)
+8. Command overwrites old keystore with random+zeros, unlinks. No .bak.
+9. sudo systemctl restart morphit-relay.service
+10. Relay verifies new active pubkey vs chain authority at startup; refuses to start on mismatch.
+```
+
+---
+
+## cp166 handoff (kept for context — preserved below)
+
+**Last touched (pre-cp167):** cp166 **CLOSED** — extended the rpc-pool pattern to BTC + XMR fee verifiers via a new `quorumCall` primitive.  Addresses the production choke point where `Promise.allSettled` forced the indexer to wait for the slowest explorer's full timeout even when fast ones had already agreed; now releases that previously hung for ~5 seconds on a slow/dead explorer land in milliseconds.  Includes a behavioral change worth flagging: under the old `Promise.allSettled` + post-hoc unanimity check, a single dissenting explorer could DoS a legitimate trade by forcing rejection on disagreement; under the new quorum-with-early-return model, the dissenter is outvoted by the agreeing majority.  Strict improvement on the attack surface as well as the latency.
 
 **The integration smoke proves the actual UX win:** `apps/indexer/scripts/btc-quorum-call-integration-smoke.ts` spins up 4 fake mempool.space-style HTTP servers, then runs four scenarios — all 4 healthy + agree, 2 healthy + 2 connection-refused, **2 healthy + 2 hanging forever (the choke point)**, and 3-agree-1-dissents (majority outvotes the dissenter).  The hanging-explorer scenario verifies in **23 ms** instead of the 5 s timeout-hang under the old code.
 

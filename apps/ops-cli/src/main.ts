@@ -8,6 +8,12 @@
  * Subcommands:
  *   init [--check-only] [--out=PATH]    First-time setup wizard (run on a fresh install)
  *   edit [--out=PATH]                   Re-prompt origin / alt-DNS / SEO of an existing config
+ *   edit-active-key [--wipe-prior | --keep-backup]
+ *                                       Rotate the relay account ACTIVE key.  Interactive by default;
+ *                                       --wipe-prior overwrites prior keystore with random bytes + zeros
+ *                                       and unlinks (no .bak created — use for compromised/wrong-key
+ *                                       recovery).  --keep-backup forces the safe path even for a
+ *                                       compromised-key scenario.
  *   import-altnet-key --network=tor|lokinet|i2p --in=PATH
  *                                       Encrypt an alt-network service key with the relay passphrase
  *   export-altnet-key --network=tor|lokinet|i2p [--out=PATH]
@@ -59,6 +65,7 @@ import { runFlags } from './commands/flags.ts';
 import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
 import { runEdit } from './commands/edit.ts';
+import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
 import { runImportAltnetKey } from './commands/importAltnetKey.ts';
 import { runExportAltnetKey } from './commands/exportAltnetKey.ts';
@@ -142,6 +149,13 @@ function printHelp(): void {
 		'Subcommands:',
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
 		'  edit [--out=PATH]               Re-prompt origin / alt-DNS / SEO of an existing config',
+		'  edit-active-key [--wipe-prior | --keep-backup]',
+		'                                  Rotate the relay account ACTIVE key (no full re-init needed;',
+		'                                  use this when an operator pasted the wrong key, or for routine',
+		'                                  rotation after an on-chain account_update op).  By default the',
+		'                                  command asks interactively whether the prior key was wrong',
+		'                                  (no-trace rotation, overwrites + unlinks the prior keystore)',
+		'                                  or whether to keep a .bak backup (safe rotation; default).',
 		'  import-altnet-key --network=tor|lokinet|i2p --in=PATH',
 		'                                  Encrypt an alt-network service key with the relay passphrase',
 		'  export-altnet-key --network=tor|lokinet|i2p [--out=PATH]',
@@ -284,9 +298,29 @@ async function main(): Promise<number> {
 		}
 	}
 
+	// `edit-active-key` rotates ONLY the relay account's active
+	// key.  cp167 — recovery path for operators who pasted the
+	// wrong key (e.g. posting instead of active) during the
+	// initial wizard, or for routine key rotation after an
+	// on-chain account_update.  Atomic rename + .bak backup +
+	// relay-restart reminder.  No DB needed.
+	if (args.subcommand === 'edit-active-key') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runEditActiveKey({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
 	// Alt-network key management — encrypted-at-rest service
 	// keys for Tor / Lokinet / I2P.  Same passphrase as the
-	// relay's posting-key keystore unlocks them.  No DB needed.
+	// relay's active-key keystore unlocks them.  No DB needed.
 	if (args.subcommand === 'import-altnet-key') {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {

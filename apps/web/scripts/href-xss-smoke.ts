@@ -198,6 +198,27 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// elements also carry rel="noopener noreferrer" to suppress
 		// referrer leak + Spectre-style window.opener attacks.
 		new Set(['app.officialUrl'])
+	],
+	[
+		'apps/web/src/lib/components/ExplorerLink.svelte',
+		// cp167: primaryUrl and altUrl are both elements of the
+		// `urls` prop, which callers populate exclusively from
+		// `externalExplorerUrls(asset, txid)` in apps/web/src/lib/
+		// explorer/urls.ts.  That builder:
+		//   (a) validates the txid against the asset's regex
+		//       (BTC_TXID_RE, XMR_TXID_RE, …) — returns [] on fail
+		//   (b) routes both the operator-supplied template AND the
+		//       bundled defaults through isValidChatLinkTemplate
+		//       which rejects anything not starting with https://
+		//   (c) substitutes the regex-validated txid into the
+		//       validated template via substituteTxidIntoTemplate
+		// Bundled defaults are hardcoded https:// templates in
+		// urlsCore.ts; operator overrides are zod-validated at
+		// indexer config load AND defense-in-depth re-validated
+		// here.  No peer-controllable string ever reaches a raw
+		// href.  Both <a> tags also carry rel="noopener noreferrer"
+		// and target="_blank".
+		new Set(['primaryUrl', 'altUrl'])
 	]
 ]);
 

@@ -793,11 +793,17 @@ const SCENARIOS: readonly Scenario[] = [
 		// steps.ts.  If the wizard ever grows or shrinks the step
 		// count, this sentinel fails so the OPERATIONS.md doc
 		// references can be re-audited at the same turn.
+		//
+		// cp167 update: was 18, now 20.  cp167 added the MCP step
+		// (default-Yes, federation-wide discoverability) and the
+		// stepMatrixSurfaces/stepRpcEndpoints explicit-numbering
+		// pass that took the orchestrator's effective step count
+		// from 18 to 20.
 		name: 'P122-CP5-F14b — wizard TOTAL_STEPS pinned (must update F14 doc reference if this changes)',
 		file: 'apps/ops-cli/src/init/steps.ts',
 		rootRelative: true,
 		mustHave: [
-			'const TOTAL_STEPS = 18;'
+			'const TOTAL_STEPS = 20;'
 		]
 	},
 	{

@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Altra app",
         "native_unknown": "Altra operazione chain"
       }
-    }
+    },
+    "more_explorers": "+{count} altri",
+    "more_explorers_aria": "{count} explorer alternativi"
   },
   "faq": {
     "title": "Aiuto e FAQ",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Fase 1 — fondamenta",
     "phase_1_body": "Lo scheletro, le dieci lingue, il flusso di generazione chiavi, la guida ricercabile — tutto ciò che un visitatore alla prima visita serve, senza account lato server.",
     "phase_2_title": "Fase 2 — integrazione Blurt",
-    "phase_2_body": "Connettersi ai nodi Blurt. Spedire il relay posting che trasmette operazioni firmate dall'utente. Il puntatore di release-discovery atterra on-chain.",
+    "phase_2_body": "Connettersi ai nodi Blurt. Spedire il servizio di relay che trasmette operazioni firmate dall'utente. Il puntatore di release-discovery atterra on-chain.",
     "phase_3_title": "Fase 3 — libro ordini live",
     "phase_3_body": "L'indexer entra in produzione. Sfoglia, filtra, pubblica ordini. Finestra di sostituzione di 15 minuti. Escalation commissioni resistente al Sybil. Rilevamento self-trade.",
     "phase_4_title": "Fase 4 — chat, feedback, reputazione",

@@ -150,7 +150,7 @@ const sampleAnswers: WizardAnswers = {
 		account: null,
 		chainLookupSucceeded: false
 	},
-	postingKey: {
+	activeKey: {
 		mode: 'plaintext',
 		plaintextWif: '5J' + 'a'.repeat(50),
 		envelope: undefined,
@@ -219,7 +219,8 @@ const sampleAnswers: WizardAnswers = {
 	// Part 121 cp9 — both Matrix surfaces opted-out in the
 	// baseline fixture.  Per-scenario overrides exercise the
 	// populated paths.
-	matrix: { alertMxid: null, groupRoomAlias: null }
+	matrix: { alertMxid: null, groupRoomAlias: null },
+	mcpServer: { enabled: true }
 };
 
 scenario('writeWizardOutput: writes config + env + keystore at expected paths', () => {
@@ -640,7 +641,7 @@ scenario('writeWizardOutput: encrypted mode writes JSON envelope to keystore.jso
 	try {
 		const encryptedAnswers: WizardAnswers = {
 			...sampleAnswers,
-			postingKey: {
+			activeKey: {
 				mode: 'encrypted',
 				plaintextWif: undefined,
 				envelope: {

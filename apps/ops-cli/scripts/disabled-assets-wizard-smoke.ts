@@ -233,13 +233,13 @@ const scenarios: Scenario[] = [
 		}
 	},
 	{
-		name: 'TOTAL_STEPS bumped to 18 (cp22 added step 13)',
+		name: 'TOTAL_STEPS bumped to 20 (cp22 added step 13; cp167 added MCP step + explicit-numbering pass)',
 		check: async () => {
 			const stepsSrc = await import('node:fs/promises').then((m) =>
 				m.readFile(new URL('../src/init/steps.ts', import.meta.url), 'utf-8')
 			);
 			return (
-				stepsSrc.includes('const TOTAL_STEPS = 18;') &&
+				stepsSrc.includes('const TOTAL_STEPS = 20;') &&
 				stepsSrc.includes("step(13, TOTAL_STEPS, 'Trade-only asset policy')") &&
 				stepsSrc.includes("step(14, TOTAL_STEPS, 'Listing fee + fallback BLURT price')")
 			);

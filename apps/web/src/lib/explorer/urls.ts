@@ -51,6 +51,18 @@ import {
 	BUNDLED_SOL_CHAT_LINK_URL,
 	BUNDLED_ETH_CHAT_LINK_URL,
 	BUNDLED_XRP_CHAT_LINK_URL,
+	BUNDLED_BTC_CHAT_LINK_URLS,
+	BUNDLED_XMR_CHAT_LINK_URLS,
+	BUNDLED_BCH_CHAT_LINK_URLS,
+	BUNDLED_LTC_CHAT_LINK_URLS,
+	BUNDLED_DASH_CHAT_LINK_URLS,
+	BUNDLED_DOGE_CHAT_LINK_URLS,
+	BUNDLED_ZEC_CHAT_LINK_URLS,
+	BUNDLED_ARRR_CHAT_LINK_URLS,
+	BUNDLED_DCR_CHAT_LINK_URLS,
+	BUNDLED_SOL_CHAT_LINK_URLS,
+	BUNDLED_ETH_CHAT_LINK_URLS,
+	BUNDLED_XRP_CHAT_LINK_URLS,
 	substituteTxidIntoTemplate,
 	isValidChatLinkTemplate
 } from './urlsCore';
@@ -81,7 +93,19 @@ export {
 	BUNDLED_DCR_CHAT_LINK_URL,
 	BUNDLED_SOL_CHAT_LINK_URL,
 	BUNDLED_ETH_CHAT_LINK_URL,
-	BUNDLED_XRP_CHAT_LINK_URL
+	BUNDLED_XRP_CHAT_LINK_URL,
+	BUNDLED_BTC_CHAT_LINK_URLS,
+	BUNDLED_XMR_CHAT_LINK_URLS,
+	BUNDLED_BCH_CHAT_LINK_URLS,
+	BUNDLED_LTC_CHAT_LINK_URLS,
+	BUNDLED_DASH_CHAT_LINK_URLS,
+	BUNDLED_DOGE_CHAT_LINK_URLS,
+	BUNDLED_ZEC_CHAT_LINK_URLS,
+	BUNDLED_ARRR_CHAT_LINK_URLS,
+	BUNDLED_DCR_CHAT_LINK_URLS,
+	BUNDLED_SOL_CHAT_LINK_URLS,
+	BUNDLED_ETH_CHAT_LINK_URLS,
+	BUNDLED_XRP_CHAT_LINK_URLS
 } from './urlsCore';
 
 /** External (non-BLURT) asset tickers Morphit knows how to build
@@ -108,67 +132,84 @@ interface ExplorerEntry {
 	readonly txidRe: RegExp;
 	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
 	readonly bundledDefault: string;
+	/** cp167 — full bundled list, best→worst.  bundledDefault is
+	 *  always bundledList[0]; the rest are alternatives the user
+	 *  can pick from a dropdown.  Operators who override via env
+	 *  prepend their URL to this list at lookup time. */
+	readonly bundledList: readonly string[];
 }
 const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object.freeze({
 	BTC: Object.freeze({
 		txidRe: BTC_TXID_RE,
 		instanceTplKey: 'btc',
-		bundledDefault: BUNDLED_BTC_CHAT_LINK_URL
+		bundledDefault: BUNDLED_BTC_CHAT_LINK_URL,
+		bundledList: BUNDLED_BTC_CHAT_LINK_URLS
 	}),
 	XMR: Object.freeze({
 		txidRe: XMR_TXID_RE,
 		instanceTplKey: 'xmr',
-		bundledDefault: BUNDLED_XMR_CHAT_LINK_URL
+		bundledDefault: BUNDLED_XMR_CHAT_LINK_URL,
+		bundledList: BUNDLED_XMR_CHAT_LINK_URLS
 	}),
 	BCH: Object.freeze({
 		txidRe: BCH_TXID_RE,
 		instanceTplKey: 'bch',
-		bundledDefault: BUNDLED_BCH_CHAT_LINK_URL
+		bundledDefault: BUNDLED_BCH_CHAT_LINK_URL,
+		bundledList: BUNDLED_BCH_CHAT_LINK_URLS
 	}),
 	LTC: Object.freeze({
 		txidRe: LTC_TXID_RE,
 		instanceTplKey: 'ltc',
-		bundledDefault: BUNDLED_LTC_CHAT_LINK_URL
+		bundledDefault: BUNDLED_LTC_CHAT_LINK_URL,
+		bundledList: BUNDLED_LTC_CHAT_LINK_URLS
 	}),
 	DASH: Object.freeze({
 		txidRe: DASH_TXID_RE,
 		instanceTplKey: 'dash',
-		bundledDefault: BUNDLED_DASH_CHAT_LINK_URL
+		bundledDefault: BUNDLED_DASH_CHAT_LINK_URL,
+		bundledList: BUNDLED_DASH_CHAT_LINK_URLS
 	}),
 	DOGE: Object.freeze({
 		txidRe: DOGE_TXID_RE,
 		instanceTplKey: 'doge',
-		bundledDefault: BUNDLED_DOGE_CHAT_LINK_URL
+		bundledDefault: BUNDLED_DOGE_CHAT_LINK_URL,
+		bundledList: BUNDLED_DOGE_CHAT_LINK_URLS
 	}),
 	ZEC: Object.freeze({
 		txidRe: ZEC_TXID_RE,
 		instanceTplKey: 'zec',
-		bundledDefault: BUNDLED_ZEC_CHAT_LINK_URL
+		bundledDefault: BUNDLED_ZEC_CHAT_LINK_URL,
+		bundledList: BUNDLED_ZEC_CHAT_LINK_URLS
 	}),
 	ARRR: Object.freeze({
 		txidRe: ARRR_TXID_RE,
 		instanceTplKey: 'arrr',
-		bundledDefault: BUNDLED_ARRR_CHAT_LINK_URL
+		bundledDefault: BUNDLED_ARRR_CHAT_LINK_URL,
+		bundledList: BUNDLED_ARRR_CHAT_LINK_URLS
 	}),
 	DCR: Object.freeze({
 		txidRe: DCR_TXID_RE,
 		instanceTplKey: 'dcr',
-		bundledDefault: BUNDLED_DCR_CHAT_LINK_URL
+		bundledDefault: BUNDLED_DCR_CHAT_LINK_URL,
+		bundledList: BUNDLED_DCR_CHAT_LINK_URLS
 	}),
 	SOL: Object.freeze({
 		txidRe: SOL_TXID_RE,
 		instanceTplKey: 'sol',
-		bundledDefault: BUNDLED_SOL_CHAT_LINK_URL
+		bundledDefault: BUNDLED_SOL_CHAT_LINK_URL,
+		bundledList: BUNDLED_SOL_CHAT_LINK_URLS
 	}),
 	ETH: Object.freeze({
 		txidRe: ETH_TXID_RE,
 		instanceTplKey: 'eth',
-		bundledDefault: BUNDLED_ETH_CHAT_LINK_URL
+		bundledDefault: BUNDLED_ETH_CHAT_LINK_URL,
+		bundledList: BUNDLED_ETH_CHAT_LINK_URLS
 	}),
 	XRP: Object.freeze({
 		txidRe: XRP_TXID_RE,
 		instanceTplKey: 'xrp',
-		bundledDefault: BUNDLED_XRP_CHAT_LINK_URL
+		bundledDefault: BUNDLED_XRP_CHAT_LINK_URL,
+		bundledList: BUNDLED_XRP_CHAT_LINK_URLS
 	})
 });
 
@@ -199,6 +240,44 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 		? operatorTpl
 		: entry.bundledDefault;
 	return substituteTxidIntoTemplate(tpl, lower);
+}
+
+/** cp167 — Returns the full ordered list of explorer URLs for a
+ *  given asset/txid, best→worst.  First element is what
+ *  `externalExplorerUrl` returns (operator override if valid,
+ *  bundled primary otherwise); the rest are bundled alternatives.
+ *
+ *  Returns `[]` (empty array, not null) if the txid fails its
+ *  validator or the asset is unknown.  Empty-array sentinel makes
+ *  iteration sites cleaner — `for (const u of urls) {}` does the
+ *  right thing without a null check.
+ *
+ *  De-duplicated: if the operator override happens to equal the
+ *  bundled primary, the duplicate is dropped.  Order is preserved:
+ *  the first occurrence of a URL determines its position. */
+export function externalExplorerUrls(asset: ExternalAsset, txid: string): readonly string[] {
+	if (typeof txid !== 'string') return [];
+	const entry = EXPLORER_REGISTRY[asset];
+	if (entry === undefined) return [];
+	if (!entry.txidRe.test(txid)) return [];
+	const lower = txid.toLowerCase();
+	const operatorTpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey];
+	const seen = new Set<string>();
+	const result: string[] = [];
+	const push = (tpl: string): void => {
+		const url = substituteTxidIntoTemplate(tpl, lower);
+		if (url === null) return;
+		if (seen.has(url)) return;
+		seen.add(url);
+		result.push(url);
+	};
+	if (operatorTpl !== null && operatorTpl !== undefined && isValidChatLinkTemplate(operatorTpl)) {
+		push(operatorTpl);
+	}
+	for (const tpl of entry.bundledList) {
+		push(tpl);
+	}
+	return result;
 }
 
 /** Builds the Morphit explorer URL for a Blurt transaction.

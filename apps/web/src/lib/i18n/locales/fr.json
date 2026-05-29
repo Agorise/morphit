@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Autre application",
         "native_unknown": "Autre opération de chaîne"
       }
-    }
+    },
+    "more_explorers": "+{count} autres",
+    "more_explorers_aria": "{count} explorateurs alternatifs"
   },
   "faq": {
     "title": "Aide & FAQ",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Phase 1 — fondations",
     "phase_1_body": "L'écorce, les dix langues, le flux de génération de clés, l'aide cherchable — tout ce dont un nouveau visiteur a besoin, sans aucun compte côté serveur.",
     "phase_2_title": "Phase 2 — intégration Blurt",
-    "phase_2_body": "Se connecter aux nœuds Blurt. Livrer le relais de posting qui diffuse les opérations signées par l'utilisateur. Le pointeur de découverte de release atterrit on-chain.",
+    "phase_2_body": "Se connecter aux nœuds Blurt. Livrer le service de relais qui diffuse les opérations signées par l'utilisateur. Le pointeur de découverte de release atterrit on-chain.",
     "phase_3_title": "Phase 3 — carnet d'ordres en direct",
     "phase_3_body": "L'indexer passe en prod. Parcours, filtres et dépôt d'ordres. Fenêtre de remplacement de 15 minutes. Escalade de frais résistante au Sybil. Détection d'auto-trade.",
     "phase_4_title": "Phase 4 — chat, feedback, réputation",

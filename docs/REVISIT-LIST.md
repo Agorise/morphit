@@ -1,6 +1,87 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp166 (CLOSED) — 2026-05-28 (extended the rpc-pool pattern to BTC + XMR fee verifiers via a new `quorumCall` primitive that returns the moment minAgree explorers cluster on the same equivalence key; releases that previously hung for ~5 seconds on a slow/dead explorer now land in milliseconds.  Deleted the CircuitBreaker class entirely — superseded by EndpointPool's cooldown ladder.  Brag-list entries trimmed to fit the KISS budget; STACCATO_ALLOWLIST updated to track cp165's #12/#79 numbering shift).  Sentinel battery 6285/0 triple-pulse stable.
+**Last touched:** Part 122 cp167 (CLOSED) — 2026-05-29 (security finding: wizard mislabeled the relay account's active key as a posting key; cp167 renames every occurrence of "posting key" in the relay context to "active key" with full operator-facing explanation of why — the relay broadcasts `create_claimed_account`, `transfer`, `transfer_to_vesting`, and `delegate_vesting_shares`, all active-authority ops.  New `morphit-ops edit-active-key` subcommand with `--wipe-prior` for compromised-key recovery (random+zero overwrite then unlink, no `.bak`).  New wizard step 20 for the MCP server with full operator-facing explanation; runtime wiring lands `MORPHIT_MCP_ADVERTISE` env var, `/v1/instance.mcp_url` field, and `ops/systemd/morphit-mcp.service`.  Explorer dropdown UI: every chat-pill txid link now offers grandma-friendly progressive disclosure to 2-4 bundled alternatives per chain via `<ExplorerLink>` component.  Doc audits: OPERATIONS.md §45 added (full MCP guide), TOC refreshed (was stale by 4 entries); RUN-A-MORPHIT-NODE.md §8 restructured wizard-first.  Audit items #95-110 explicitly enumerated in `docs/AUDIT-ITEMS-95-110.md` — static portion of the 110-item audit list formally closed.  Sentinel battery 6331/0 triple-pulse stable.
+
+## cp167 — Wizard active-key rename + MCP step + edit-active-key + explorer dropdown (CLOSED 2026-05-29)
+
+Two parallel discoveries kicked this off:
+
+1. **Security finding (wizard mislabel).**  An audit of `apps/ops-cli/src/init/steps.ts` step 5 found it asked operators to "Paste the relay's **posting key**" — wrong on every count.  The relay broadcasts `create_claimed_account` (for signups), `transfer` + `transfer_to_vesting` (for funding), and `delegate_vesting_shares` (for the loyalty-delegation feature).  Every one of those is an active-authority op; signing them with a posting key gets `missing required active authority` from the chain and the relay refuses to broadcast.  Worse: an operator who follows the wizard literally hands over a key that satisfies neither the chain (operation rejected) nor the intent (posting key has weaker security properties; conflating it with the high-trust active key creates an architectural confusion).
+
+2. **Ken's "BTC and XMR explorers are sometimes down" plus the cp166 deferral about widening `chat_link_urls`.**  The cp166 transcript explicitly deferred dropdown UI for users to pick among multiple explorers as a cp167 enhancement.
+
+cp167 closes both, plus the cumulative MCP runtime wiring that was started but not wired through the operator-config and `/v1/instance` API.
+
+### What shipped — Wizard active-key rename
+
+- `apps/ops-cli/src/init/steps.ts` step 5 prompt rewritten from "posting key" to "**active key**" with the four-op enumeration above.  Names the specific account from step 4 in the prompt so the operator can't pick up the wrong key by mistake.
+- `stepPostingKey` → `stepActiveKey`, `PostingKeyResult` → `ActiveKeyResult`, `postingKey` → `activeKey` throughout the wizard surface (`steps.ts`, `render.ts`, `altKeystore.ts`, `commands/init.ts`).
+- `apps/ops-cli/src/commands/register.ts`: `loadPostingKey` → `loadKeyWif`, "your relay posting key" → "your relay account's active key (the same key the relay already holds for chain broadcasts)", "Posting-key mismatch" hint → "Key-signature mismatch.  Check that MORPHIT_RELAY_ACTIVE_KEY_FILE points at the active key for this account on chain."
+- `apps/ops-cli/src/commands/paymentMethod.ts`: `loadPostingKey` → `loadKeyWif`; dropped the dead `MORPHIT_RELAY_POSTING_KEY_FILE` fallback (that env var no longer exists by that name post-cp167).
+- `apps/ops-cli/src/commands/importAltnetKey.ts`, `apps/ops-cli/src/commands/edit.ts` header, `apps/relay/src/blurt/client.ts` comment, `apps/web/src/lib/notifications/push.ts` comment, `packages/relay-client/src/index.ts` docstring: all leftover "posting" references in the RELAY context corrected.  `apps/ops-cli/README.md` updated.
+- `apps/web/src/lib/i18n/locales/*.json`: `faq.entries.what_is_morphit_relay.phase_2_body` rewritten across all 10 locales — "posting relay" → "relay service".
+- `ops/systemd/morphit-relay.service` Description corrected: "Morphit posting relay" → "Morphit relay (broadcasts user-signed chain ops with the relay account active key)".
+
+### What shipped — MCP step + runtime wiring
+
+- New wizard step 20 (`stepMcpServer`).  Default-Yes.  Explains MCP, lists the five read-only tools (`morphit_search_orders`, `morphit_get_listing`, `morphit_list_operators`, `morphit_account_reputation`, `morphit_federation_summary`), names the prominent AI agent clients, frames the federation-wide effect, and discloses the resource cost (~30 MiB RAM, loopback bind, ~0 CPU at idle).  Adds `mcpServer: { enabled: boolean }` to `WizardAnswers`.
+- `TOTAL_STEPS = 20` (was 18 pre-cp167; cp167 added MCP as step 20 and explicit-numbered `stepMatrixSurfaces` → step 18, `stepRpcEndpoints` → step 19).
+- `apps/ops-cli/src/init/render.ts`: emits an MCP block in `morphit.config.env` reflecting the wizard answer, with `MORPHIT_MCP_ADVERTISE=true|false` plus comment guidance on how to start the service (`sudo systemctl enable --now morphit-mcp.service`) and how to flip the flag later.
+- `packages/operator-config/src/index.ts`: allowlists `MORPHIT_MCP_ADVERTISE` as an operator-tunable post-launch knob.
+- `apps/indexer/src/config/index.ts`: parses `MORPHIT_MCP_ADVERTISE` as boolean (default false), exposes `mcpAdvertise: boolean` on `Config`.
+- `apps/indexer/src/api/instance.ts`: `/v1/instance` response now includes `mcp_url: string | null` built from `publicOrigin + '/mcp'` when `mcpAdvertise` is true, null otherwise.  AI agent operators discover this field via the federation directory and configure their clients accordingly.
+- New `ops/systemd/morphit-mcp.service` — hardened systemd unit (loopback bind by default, 256 MiB RAM cap, no key handling, no passphrase prompt; same hardening pattern as relay.service minus the active-key + tty bits).  Ansible side: new task in `ops/ansible/roles/base/tasks/main.yml` creates the `morphit-mcp` system user (member of `morphit_service_group` for config read access, no shell, no home).
+- `ops/env/indexer.env.example`: documents `MORPHIT_MCP_ADVERTISE=false` with explanation + flip-later instructions.
+
+### What shipped — `morphit-ops edit-active-key` (the recovery command)
+
+The recovery story for an operator who already ran the buggy pre-cp167 wizard and pasted their posting key:
+
+- New command file `apps/ops-cli/src/commands/editActiveKey.ts` registered in `apps/ops-cli/src/main.ts` dispatcher.
+- Reads `morphit.env` → keystore path + relay account.  Loads the current keystore (encrypted envelope or plaintext WIF).  Same crystal-clear five-op active-authority prompt as the wizard step 5.  Storage-mode choice (encrypted vs plaintext, default same as current).  Optional new passphrase.  Atomic write with fsync; auto-updates `MORPHIT_RELAY_ACTIVE_KEY_FILE` in `morphit.env` if the storage mode changes (`.json` ↔ `.wif`).  Restart hint at the end.
+- **Two rotation paths:**
+  - **Safe rotation (default):** Creates a `.bak-<unix-ms>` backup of the prior keystore before atomic-write.
+  - **No-trace rotation (`--wipe-prior` flag OR the interactive "Was the previous key wrong or compromised?" YES answer):** Overwrites the prior keystore in-place with `randomBytes()` then zeros, fsyncs, then `unlink`s.  No `.bak` left behind.  Defends against forensic recovery of the compromised key from the operator's disk.
+- Arg parser supports mutually-exclusive `--wipe-prior` | `--keep-backup` for automation.
+- New smoke `apps/ops-cli/scripts/edit-active-key-smoke.ts` — 19 scenarios covering env parsing (3 quote styles + missing-env-file/missing-key/missing-account rejections), keystore-mode detection (encrypted vs plaintext vs garbage vs missing-file), atomic-write 0600 perms + no `.tmp-*` leftover, backup byte-identity + unique paths, wipe-prior actually-gone + tiny-files OK, encryptEnvelope round-trip with the real envelope shape (`{v, kdf, kdf_params: {N, r, p, salt}, cipher, iv, ct}`).  End-to-end staged walkthrough verified: staged `morphit.env` + fake encrypted "posting key" envelope, ran the full pipeline, decryptEnvelope returned the new active-key WIF byte-for-byte (using the same module the relay calls at startup).  Final state: only `keystore.json`, mode 0600, no `.bak-*`.
+- New doc `docs/RECOVERING-FROM-WRONG-RELAY-KEY.md` — full sysadmin recovery procedure with verification steps.
+
+### What shipped — Explorer dropdown UI
+
+- 12 new `BUNDLED_<ASSET>_CHAT_LINK_URLS` ordered arrays in `apps/web/src/lib/explorer/urlsCore.ts`.  Each lists best→worst bundled explorer templates per chain (BTC has 4, XMR has 4, ETH has 4, SOL has 4, XRP has 4, others 1-3).  Selection criteria documented in-source: no auth, no captcha, txid-clickable, project-maintained, independent infrastructure from the primary.
+- New `externalExplorerUrls(asset, txid)` plural function in `apps/web/src/lib/explorer/urls.ts`.  Returns the ordered URL list: operator override prepended first (if valid via `isValidChatLinkTemplate`), then bundled list, deduped on first occurrence.  Empty-array sentinel on validation failure (not null — iterator-safe).
+- New Svelte component `apps/web/src/lib/components/ExplorerLink.svelte`.  Progressive-disclosure UI: single-URL paths render identically to today's `<a>` link (no UX change for chains with one bundled explorer); multi-URL paths show a "+N more ▾" `<details>` toggle revealing alternatives with host names visible so the user can pick.  Grandma's default click target is unchanged — opt-in disclosure pattern.
+- Wired into `apps/web/src/lib/components/ChatMessage.svelte` via a new `explorerLinksForTxid(method, txid, network)` helper (parallel to the existing singular `explorerLinkForTxid`) that returns `readonly string[]`.  Single-URL paths (BLURT, per-network stablecoins) render as one-element arrays preserving today's behavior.
+- 2 new i18n keys (`explorer.more_explorers`, `explorer.more_explorers_aria`) added to all 10 locales (3099 keys per locale at parity).
+- `apps/web/scripts/href-xss-smoke.ts` allowlist entry for `primaryUrl` + `altUrl` with full safety rationale: both come from `externalExplorerUrls` which validates the txid against the asset regex, routes the template through `isValidChatLinkTemplate` (rejects non-https://), and substitutes via `substituteTxidIntoTemplate`.  No peer-controllable string reaches a raw href.
+- New smoke `apps/web/scripts/explorer-urls-multi-smoke.ts` — 11 scenarios: bundled-list shape + immutability, every URL https:// + contains `{txid}` template, singular-matches-plural[0] backward-compat parity, operator-override prepending, override-equal-to-primary → dedupe applied, override-invalid → ignored (XSS leak check), invalid-txid → empty array sentinel, XMR regex validation, uppercase-txid → lowercased in output.
+
+### Doc audits
+
+- `docs/OPERATIONS.md`: new §45 "MCP server — AI agent surface (cp167)" — full operator guide covering security posture (read-only, holds no keys), resource cost, setup, reverse-proxy config with nginx location block, disable path (two switches: stop advertising vs stop the service), source pointers.  TOC refreshed (was stale by 4 entries; now lists §41-45).
+- `docs/RUN-A-MORPHIT-NODE.md` §8 restructured.  §8.0 is now the **wizard-first** path with a full top-to-bottom listing of all 20 wizard steps (including the cp167 ACTIVE-key explanation at step 5 and the MCP step 20), plus a pointer to `RECOVERING-FROM-WRONG-RELAY-KEY.md` if the operator already ran the pre-cp167 buggy wizard.  §8.1 keeps the manual env-file fallback for automation (Ansible, Terraform).  Operators discover `morphit-ops init` immediately on their first read.
+- `docs/AUDIT-ITEMS-95-110.md` (NEW) — explicit enumeration of audit items #95-110 with status + pointers.  #95-104 are deployment-gated (DAST, fuzzing, crypto specialist, threat modeling workshop, supply-chain, fingerprinting, Tor/I2P operational, load+chaos, mobile/WebView, social-engineering); covered by `AUDIT-OUTSIDE-SCOPE.md`.  #105-110 are epistemic limits (unknown unknowns, compiler/runtime trust, specification gaps, maintainer trust, future regression, coverage measurement); documented here.  Static portion of the 110-item audit list formally closed.
+- `docs/FOUR-PERSONA-WALKTHROUGH-cp167.md` (NEW) — Bob, Sally-user, Sally-operator, Charlie walked against every cp165 / cp166 / cp167 surface change.  No regressions found.
+
+### peerPriceMonitor decision
+
+Investigated migrating `apps/indexer/src/indexer/price/peerPriceMonitor.ts` from `Promise.allSettled` to the new `quorumCall` primitive.  Concluded NO — the patterns are opposite.  `quorumCall` is optimized for "give me one answer (or early-return on consensus)" — ideal for choosing among multiple equivalent explorers serving the same function.  peerPriceMonitor needs the opposite: every peer's observation, including failures.  The downstream median calculation IS the consensus mechanism, and the disagreement signal (one peer vs the rest) is the entire point.  Early-returning on partial agreement would defeat the alert.  Per-peer health tracking already happens via the federation prober (`last_probe_status IN ('good', 'quiet')` filter).  Documented in-source so future audits don't re-litigate.
+
+### Other cp167 mislabel cleanups
+
+- `apps/ops-cli/scripts/init-smoke.ts`: added `mcpServer: { enabled: true }` to the WizardAnswers fixture (was breaking on the new field's `undefined.mode` access pre-fix).
+- `apps/web/scripts/persona-walkthrough-smoke.ts`: TOTAL_STEPS sentinel updated 18 → 20 with cp167-attributed comment.
+- `apps/ops-cli/scripts/disabled-assets-wizard-smoke.ts`: same TOTAL_STEPS update.
+- `scripts/cp167-cleanup.sh` (NEW) — idempotent `rm -f` for the 4 cp166 stale files (`bitcoinExplorerVerifier.breaker.test.ts`, `moneroProofVerifier.breaker.test.ts`, `circuitBreaker.test.ts`, `circuitBreaker.ts`).  Ships with the tarball.  Operators upgrading from cp16N MUST run this after extracting because tar doesn't communicate deletions.
+
+### Verified clean (cp167 sentinel)
+
+- Triple-pulse **6,331 / 6,331 / 6,331**, 0 runners failed (up from 6285 baseline — the +46 scenarios come from edit-active-key-smoke (19), explorer-urls-multi-smoke (11), persona-walkthrough TOTAL_STEPS test re-counted, init-smoke +1 new MCP field assertion, env-example-schema-parity +1 new var, plus various TOTAL_STEPS-dependent sentinel re-counts).
+- TypeScript: 0 errors across 13 projects (indexer src+test, relay src+test, ops-cli, matrix-bot, mcp-server, indexer-client, relay-client, operator-config, asset-registry, net-defense, rpc-pool).
+- svelte-check: 0 errors, 0 warnings.
+- Locale parity: 3099 keys × 10 locales (+2 new keys at parity: `explorer.more_explorers`, `explorer.more_explorers_aria`).
+- Smoke runner registry: 255 entries (+2 from cp166's 253: `edit-active-key-smoke`, `explorer-urls-multi-smoke`).
+- Brag-list-claim-parity 79/79; brag-list-KISS-budget 2/2 (#235 + #101 trimmed to fit budget post-cp167 enhancements).
 
 ## cp166 — Extend rpc-pool to BTC + XMR fee verifiers (CLOSED 2026-05-28)
 

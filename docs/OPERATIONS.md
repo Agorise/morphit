@@ -81,6 +81,10 @@ before relying on any of it.**
 39. [Operating a home-hosted instance — concerns specific to running on residential internet](#39-operating-a-home-hosted-instance--concerns-specific-to-running-on-residential-internet)
 40. [Treasury chain-pin + XMR per-payment proofs — broadcasting and verifying](#40-treasury-chain-pin--xmr-per-payment-proofs--broadcasting-and-verifying)
 41. [Federation-cost attribution — only paying for ops served by YOUR instance](#41-federation-cost-attribution--only-paying-for-ops-served-by-your-instance)
+42. [Web Push notifications — VAPID setup and the push-sender worker](#42-web-push-notifications--vapid-setup-and-the-push-sender-worker)
+43. [SEO override env vars — homepage title/description/keywords + Twitter card](#43-seo-override-env-vars--homepage-titledescriptionkeywords--twitter-card-part-122-cp119)
+44. [User-side optional TOTP 2FA — operator-side notes](#44-user-side-optional-totp-2fa--operator-side-notes)
+45. [MCP server — AI agent surface (cp167)](#45-mcp-server--ai-agent-surface-cp167)
 
 ---
 
@@ -9650,3 +9654,115 @@ automatic date/time in their system settings.
 - `apps/web/src/lib/crypto/keystoreTotpEnroll.ts` — enrollment
 - `apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte`
   — user-facing UI
+
+## 45. MCP server — AI agent surface (cp167)
+
+The Morphit MCP server (`apps/mcp-server`) exposes this instance's
+federated orderbook to MCP-compatible AI agents — Claude Desktop,
+Cursor, Cline, Continue, Windsurf, Zed, and any local LLM stack
+built on `@modelcontextprotocol/sdk`.  Five read-only tools:
+
+| Tool                          | What it does                                                       |
+| :---------------------------- | :----------------------------------------------------------------- |
+| `morphit_search_orders`       | Query the live orderbook with filters (asset, side, fiat, region). |
+| `morphit_get_listing`         | Fetch one listing in full detail by `(account, permlink)`.         |
+| `morphit_list_operators`      | Federation directory: operator tags, instance URLs, asset stance.  |
+| `morphit_account_reputation`  | Look up a trader's completion rate, age, recent feedback.          |
+| `morphit_federation_summary`  | Federation health snapshot — peer count, recent activity.          |
+
+### Why operators are encouraged to enable this
+
+AI agents are becoming the new search layer.  When a user asks
+their LLM "where can I buy XMR with cash near me," an
+MCP-connected agent can answer from your orderbook in real time
+and hand them a deeplink to your frontend.  Your instance appears
+in answers, not just in search-engine results.
+
+Federation-wide effect: every Morphit instance running MCP
+enlarges the shared AI-discoverable surface for the project.
+Opting out shrinks it.
+
+### Security posture
+
+The MCP server holds **no keys, no privileges, no write paths**.
+Tools return public orderbook data (the same data already served
+at `/v1/orderbook` etc.) plus deeplinks back to your frontend.
+The user's wallet still executes the actual trade — the agent is
+strictly a discovery surface.
+
+Default bind: `127.0.0.1:8124` (loopback only).  Reverse-proxy
+via nginx at `/mcp/*` if you want public exposure.  No CORS
+needed because the MCP protocol is request/response over HTTP
+without browser-origin restrictions in the agent runtime.
+
+### Resource cost
+
+~30 MiB RAM at idle, negligible CPU.  The systemd unit
+(`ops/systemd/morphit-mcp.service`) caps memory at 256 MiB and
+task count at 128 — plenty of headroom for legitimate spikes.
+
+### Setup
+
+The wizard (`morphit-ops init`, step 20) installs MCP by default.
+If you accepted that, you'll see `MORPHIT_MCP_ADVERTISE=true`
+in your `morphit.config.env` and the systemd unit is shipped at
+`ops/systemd/morphit-mcp.service`.  Enable + start:
+
+```
+sudo systemctl enable --now morphit-mcp.service
+```
+
+If you skipped MCP at wizard time and want to enable it later:
+
+```
+# Flip the advertise flag in morphit.config.env:
+sudo sed -i 's/^MORPHIT_MCP_ADVERTISE=false/MORPHIT_MCP_ADVERTISE=true/' \
+  /etc/morphit/morphit.config.env
+
+# Start the service:
+sudo systemctl enable --now morphit-mcp.service
+
+# Restart the indexer so /v1/instance starts advertising mcp_url:
+sudo systemctl restart morphit-indexer.service
+```
+
+### Reverse proxy (optional — public exposure)
+
+If you want AI agent users to reach your MCP endpoint from
+outside your VPN, add a location block to your nginx config:
+
+```nginx
+location /mcp/ {
+    proxy_pass http://127.0.0.1:8124/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # MCP responses can be long-running for federation queries.
+    proxy_read_timeout 120s;
+}
+```
+
+The indexer's `/v1/instance` response will then include
+`mcp_url: "https://<your-origin>/mcp"` (built from
+`MORPHIT_INDEXER_PUBLIC_ORIGIN` plus `/mcp`).  AI agent operators
+discover this via the federation directory and configure their
+clients accordingly.
+
+### Disabling
+
+Two switches:
+
+- **Stop advertising** (still serve to local clients):
+  set `MORPHIT_MCP_ADVERTISE=false` in `morphit.config.env`,
+  restart `morphit-indexer.service`.
+- **Stop the service entirely**:
+  `sudo systemctl disable --now morphit-mcp.service`.
+
+### Source pointers
+
+- `apps/mcp-server/README.md` — protocol overview, tool schemas
+- `apps/mcp-server/src/tools/` — implementations
+- `ops/systemd/morphit-mcp.service` — hardened systemd unit
+- `apps/indexer/src/api/instance.ts` — `/v1/instance.mcp_url` field
+- `packages/operator-config/src/index.ts` — `MORPHIT_MCP_ADVERTISE`
+  allowlist entry

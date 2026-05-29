@@ -210,6 +210,13 @@ export interface InstanceResponse {
 	 *  return-type which only constructs valid #-prefixed
 	 *  values. */
 	operator_matrix_room: string | null;
+	/** cp167 — Public MCP endpoint URL if the operator opted in
+	 *  to MCP advertisement at wizard time (or flipped
+	 *  MORPHIT_MCP_ADVERTISE=true later).  Null when the operator
+	 *  did not opt in.  AI agent operators (Claude Desktop,
+	 *  Cursor, etc.) discover this field via /v1/instance and
+	 *  configure their clients accordingly. */
+	mcp_url: string | null;
 }
 
 export function instanceRoute(config: Config): Hono {
@@ -278,7 +285,10 @@ export function instanceRoute(config: Config): Hono {
 				}
 			},
 			disabled_assets: config.disabledAssets,
-			operator_matrix_room: config.operatorMatrixRoom
+			operator_matrix_room: config.operatorMatrixRoom,
+			mcp_url: config.mcpAdvertise && config.publicOrigin !== ''
+				? `${config.publicOrigin.replace(/\/$/, '')}/mcp`
+				: null
 		};
 		c.header('Cache-Control', 'public, max-age=300');
 		return c.json(body);

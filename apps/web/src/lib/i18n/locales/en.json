@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Other app",
         "native_unknown": "Other chain op"
       }
-    }
+    },
+    "more_explorers": "+{count} more",
+    "more_explorers_aria": "{count} alternate explorers"
   },
   "faq": {
     "title": "Help & FAQ",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Phase 1 — foundations",
     "phase_1_body": "The shell, the ten languages, the keygen flow, the searchable help — everything a first-time visitor needs, without any server-side account.",
     "phase_2_title": "Phase 2 — Blurt integration",
-    "phase_2_body": "Connect to Blurt nodes. Ship the posting relay that broadcasts user-signed operations. Release-discovery pointer lands on-chain.",
+    "phase_2_body": "Connect to Blurt nodes. Ship the relay service that broadcasts user-signed operations. Release-discovery pointer lands on-chain.",
     "phase_3_title": "Phase 3 — live orderbook",
     "phase_3_body": "Indexer goes live. Browse, filter, and post orders. 15-minute replace window. Sybil-resistant fee escalation. Self-trade detection.",
     "phase_4_title": "Phase 4 — chat, feedback, reputation",

@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Andere App",
         "native_unknown": "Andere Chain-Operation"
       }
-    }
+    },
+    "more_explorers": "+{count} weitere",
+    "more_explorers_aria": "{count} alternative Explorer"
   },
   "faq": {
     "title": "Hilfe & FAQ",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Phase 1 — Fundamente",
     "phase_1_body": "Die Hülle, die zehn Sprachen, der Schlüsselgenerierungs-Flow, die durchsuchbare Hilfe — alles, was ein Erstbesucher braucht, ohne serverseitiges Konto.",
     "phase_2_title": "Phase 2 — Blurt-Integration",
-    "phase_2_body": "Verbindung zu Blurt-Nodes. Posting-Relay ausliefern, der user-signierte Operationen broadcastet. Release-Discovery-Zeiger landet on-chain.",
+    "phase_2_body": "Verbindung zu Blurt-Nodes. Den Relay-Dienst ausliefern, der user-signierte Operationen broadcastet. Release-Discovery-Zeiger landet on-chain.",
     "phase_3_title": "Phase 3 — Live-Orderbuch",
     "phase_3_body": "Indexer geht live. Durchsuchen, filtern, Orders posten. 15-Minuten-Replace-Fenster. Sybil-resistente Gebühren-Eskalation. Self-Trade-Erkennung.",
     "phase_4_title": "Phase 4 — Chat, Feedback, Reputation",

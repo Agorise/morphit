@@ -34,7 +34,8 @@
 	// cp121: O(1) carrier lookup for shipment-pill rendering.
 	// Built once at module init (CARRIERS is a frozen const array).
 	const CARRIERS_LOOKUP = new Map(CARRIERS.map((c) => [c.key, c]));
-	import { externalExplorerUrl, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl } from '$lib/explorer/urls';
+	import { externalExplorerUrl, externalExplorerUrls, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl } from '$lib/explorer/urls';
+	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
@@ -244,6 +245,39 @@
 			return null;
 		}
 		return null;
+	}
+
+	/** cp167 — plural counterpart of explorerLinkForTxid.  Returns
+	 *  the ordered list of all available explorer URLs for the
+	 *  given txid (best→worst).  For BLURT and the per-network
+	 *  stablecoin paths there's only one explorer; for the
+	 *  bundled-list chains (BTC, XMR, ETH, etc.) returns the full
+	 *  list.  Empty array means no link should render.
+	 *
+	 *  This drives the <ExplorerLink> dropdown: one-element arrays
+	 *  render exactly the same single link as today; multi-element
+	 *  arrays add a "+N more ▾" progressive-disclosure affordance. */
+	function explorerLinksForTxid(
+		method: ChatAssetTicker,
+		txid: string,
+		network?: string
+	): readonly string[] {
+		if (method === 'btc') return externalExplorerUrls('BTC', txid);
+		if (method === 'xmr') return externalExplorerUrls('XMR', txid);
+		if (method === 'bch') return externalExplorerUrls('BCH', txid);
+		if (method === 'ltc') return externalExplorerUrls('LTC', txid);
+		if (method === 'dash') return externalExplorerUrls('DASH', txid);
+		if (method === 'doge') return externalExplorerUrls('DOGE', txid);
+		if (method === 'zec') return externalExplorerUrls('ZEC', txid);
+		if (method === 'arrr') return externalExplorerUrls('ARRR', txid);
+		if (method === 'dcr') return externalExplorerUrls('DCR', txid);
+		if (method === 'sol') return externalExplorerUrls('SOL', txid);
+		if (method === 'eth') return externalExplorerUrls('ETH', txid);
+		if (method === 'xrp') return externalExplorerUrls('XRP', txid);
+		// Single-URL paths fall through to the singular function;
+		// wrap the result in a one-element array (or empty if null).
+		const single = explorerLinkForTxid(method, txid, network);
+		return single === null ? [] : [single];
 	}
 
 	/** Phase F.4 — on-chain verification state for incoming BLURT
@@ -884,16 +918,10 @@
 							>
 								{p.txid}
 							</code>
-							{#if explorerLinkForTxid(p.method, p.txid, p.network)}
-								<a
-									href={explorerLinkForTxid(p.method, p.txid, p.network) ?? '#'}
-									target={p.method === 'blurt' ? undefined : '_blank'}
-									rel={p.method === 'blurt' ? undefined : 'noopener noreferrer'}
-									class="text-xs underline-offset-2 opacity-70 hover:underline hover:opacity-100"
-								>
-									{$_('chat.funds_sent.view_on_explorer')}
-									{p.method !== 'blurt' ? '↗' : '→'}
-								</a>
+							{#if explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
+								<ExplorerLink
+									urls={explorerLinksForTxid(p.method, p.txid, p.network)}
+								/>
 							{/if}
 						</div>
 						<button

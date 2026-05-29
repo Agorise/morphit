@@ -347,6 +347,104 @@ export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
  *  MORPHIT_FRONTEND_XRP_CHAT_LINK_URL. */
 export const BUNDLED_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
+/** cp167 — best→worst ordered lists of bundled explorer templates
+ *  per asset.  The first element is the same string as the singular
+ *  `BUNDLED_<ASSET>_CHAT_LINK_URL` constant above; the rest are
+ *  alternatives the frontend offers in a "Open in other explorer"
+ *  dropdown so users who don't trust (or can't reach) the primary
+ *  have grandma-friendly options ready to click.
+ *
+ *  Selection criteria for secondaries:
+ *    - No auth required, no captcha, no JS-mandatory wall
+ *    - Direct deep-link from txid to transaction page
+ *    - Project-maintained or community-vetted (not scraper-bait)
+ *    - Independent infrastructure from the primary (different
+ *      operator, ideally different jurisdiction) so a censorship
+ *      event taking down the primary doesn't take down the
+ *      whole list
+ *
+ *  Operators who configure a single override URL via
+ *  MORPHIT_FRONTEND_<ASSET>_CHAT_LINK_URL prepend that to the
+ *  list at lookup time (see externalExplorerUrls in urls.ts);
+ *  the bundled list provides the fallback chain. */
+export const BUNDLED_BTC_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_BTC_CHAT_LINK_URL,
+	'https://mempool.observer/tx/{txid}',
+	'https://blockstream.info/tx/{txid}',
+	'https://btcscan.org/tx/{txid}'
+];
+
+export const BUNDLED_XMR_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_XMR_CHAT_LINK_URL,
+	'https://localmonero.co/blocks/tx/{txid}',
+	'https://moneroblocks.info/tx/{txid}',
+	'https://monero.com/tx/{txid}'
+];
+
+export const BUNDLED_BCH_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_BCH_CHAT_LINK_URL,
+	'https://blockchair.com/bitcoin-cash/transaction/{txid}',
+	'https://3xpl.com/bitcoin-cash/transaction/{txid}'
+];
+
+export const BUNDLED_LTC_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_LTC_CHAT_LINK_URL,
+	'https://blockchair.com/litecoin/transaction/{txid}',
+	'https://live.blockcypher.com/ltc/tx/{txid}'
+];
+
+export const BUNDLED_DASH_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_DASH_CHAT_LINK_URL,
+	'https://blockchair.com/dash/transaction/{txid}',
+	'https://live.blockcypher.com/dash/tx/{txid}'
+];
+
+export const BUNDLED_DOGE_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_DOGE_CHAT_LINK_URL,
+	'https://dogechain.info/tx/{txid}',
+	'https://live.blockcypher.com/doge/tx/{txid}'
+];
+
+export const BUNDLED_ZEC_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_ZEC_CHAT_LINK_URL,
+	'https://blockchair.com/zcash/transaction/{txid}',
+	'https://zcash.tokenview.io/en/tx/{txid}'
+];
+
+export const BUNDLED_ARRR_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_ARRR_CHAT_LINK_URL
+	// Pirate Chain has limited public explorer coverage; the
+	// official one is the only widely-used choice.  Adding fallback
+	// candidates requires verifying independent infrastructure.
+];
+
+export const BUNDLED_DCR_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_DCR_CHAT_LINK_URL,
+	'https://explorer.dcrdata.org/tx/{txid}',
+	'https://blockchair.com/decred/transaction/{txid}'
+];
+
+export const BUNDLED_SOL_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_SOL_CHAT_LINK_URL,
+	'https://solscan.io/tx/{txid}',
+	'https://solana.fm/tx/{txid}',
+	'https://xray.helius.xyz/tx/{txid}'
+];
+
+export const BUNDLED_ETH_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_ETH_CHAT_LINK_URL,
+	'https://etherscan.io/tx/{txid}',
+	'https://ethplorer.io/tx/{txid}',
+	'https://3xpl.com/ethereum/transaction/{txid}'
+];
+
+export const BUNDLED_XRP_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_XRP_CHAT_LINK_URL,
+	'https://xrpscan.com/tx/{txid}',
+	'https://bithomp.com/explorer/{txid}',
+	'https://blockchair.com/xrp-ledger/transaction/{txid}'
+];
+
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who
  *  somehow bypassed the validator on the way in), append

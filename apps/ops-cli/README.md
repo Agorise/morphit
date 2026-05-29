@@ -19,7 +19,7 @@ keystore to disk. See "First-time setup" below.
 ## First-time setup
 
 Run on a fresh checkout to generate your `morphit.config.env`
-and posting-key keystore:
+and active-key keystore:
 
 ```sh
 cd apps/ops-cli
@@ -187,7 +187,7 @@ If your relay's account name isn't `morphit-relay`, set
 
 **Failed-broadcasts list is empty but the relay's logs show errors.**
 The CLI sees only persisted DB state. In-flight or never-queued
-errors (e.g., the relay's posting-key unlock failed at startup)
+errors (e.g., the relay's active-key unlock failed at startup)
 don't appear here. Check the relay's structured logs for those.
 
 **Color is wrong / glyphs are blank.**
