@@ -120,7 +120,7 @@ export const tamperedAssets: Readable<readonly AssetMismatch[]> = derived(assetC
  *  engineer alternative addresses).
  */
 export const chainPinnedTreasury: Readable<
-	import('$net/release').ReleaseTreasuryBlock | null
+	import('@morphit/release-schema').ReleaseTreasuryBlock | null
 > = derived(releaseStore, ($r) => {
 	if ($r.kind !== 'ok') return null;
 	return $r.release.payload.treasury ?? null;

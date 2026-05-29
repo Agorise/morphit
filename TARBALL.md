@@ -4,6 +4,40 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
+**Last touched:** cp170 **CLOSED** — root-caused a long-standing CI failure and fixed it architecturally by extracting the release validator into a shared package.
+
+**The CI failure (vitest-must-pass red on main).** The `run-smokes` job reported `apps/indexer` at 445 passing vs the 456 baseline. Stitching two CI runs showed the real cause: `apps/indexer/test/handlers/release.test.ts` (exactly 30 tests) was failing to *collect* — a `TSConfckParseError`. That test imports the frontend validator (`apps/web/src/lib/net/releaseValidate.ts`) to prove byte-for-byte parity between the indexer handler and the frontend validator (Part 106/107 invariant). When vitest transformed that web source file, vite auto-discovered `apps/web/tsconfig.json`, which `extends ./.svelte-kit/tsconfig.json` — a SvelteKit-*generated* file that only exists after `svelte-kit sync`. The `run-smokes` CI job never runs sync (only the separate `web-check` job does), so the file was absent and collection failed, dropping 30 tests. This was **exactly** the unexplained "stable -30" CI gap the cp83 baseline comment flagged with a cp84+ TODO to chase down. The indexer SCRIPTS that import the same validator never hit it because they run through tsx with an explicit `tsconfig.smoke.json` (no auto-discovery); only the vitest path auto-discovers.
+
+**The fix (architectural, not a workaround).** Extracted `release.ts` (schema types) + `releaseValidate.ts` (validator) into a new standalone package **`@morphit/release-schema`** (`packages/release-schema/`). Both the frontend (`apps/web`) and the indexer (its release-handler parity test + the release-build / release-validator scripts) now import the validator from this one canonical package — which has its own plain tsconfig, no SvelteKit `extends` — so `release.test.ts` collects in every environment with no sync step. The cross-app reach into `apps/web` source is gone entirely. (A first-pass interim fix added an `ensureWebSynced()` step to the vitest smoke; it was REMOVED once the package extraction made it unnecessary.)
+
+**Wiring (everything checked):**
+- New package: `packages/release-schema/{package.json, tsconfig.json, src/{index.ts, release.ts, releaseValidate.ts}}`. Internal `./release` → `./release.js` (NodeNext). tsconfig mirrors asset-registry (pure package, no node types).
+- Root `workspaces` += `packages/release-schema`; `apps/indexer` + `apps/web` deps += `@morphit/release-schema: "*"`.
+- All 7 import sites rewritten (4 indexer-side relative paths → package; `releaseFetch.ts` ×2 + `stores/release.ts` inline `import('$net/release')` type → package).
+- `scripts/typecheck-sweep.sh` += release-schema project (now 14 projects).
+- `indexer-result-shape-smoke.ts` `.value`/`.error.kind` allowlists updated `$net/releaseValidate` → `@morphit/release-schema`.
+- `package-lock.json` workspace + symlink entries added (`npm ci --dry-run` passes).
+- Originals deleted from `apps/web/src/lib/net/`.
+- `apps/web/scripts/vitest-must-pass-smoke.ts` indexer baseline restored 456 → **475** (the true floor; CI now matches local).
+- Active docs updated: ADR-0019, ADR-0011, REVISIT-LIST (new package path; historical audit/archive entries left as-is recording past state).
+
+### Verified clean (cp170 sentinel)
+
+- Triple-pulse **6,335 × 3 = 19,005 scenarios, 0 failures** across all three pulses
+- TypeScript: 0 errors across **14** projects (release-schema added to the sweep)
+- svelte-check: 0 errors, 0 warnings
+- The root-cause proof: `release.test.ts` collects all 30 tests with `.svelte-kit` ABSENT (fresh-checkout simulation)
+- Package-structure gates: workspace-membership 26/26, package-files-exist 3/3, workspace-deps-pin 38/38, lockfile-sync 3/3
+- release-validator-smoke 69/69, indexer-result-shape 26/26
+
+### No cleanup script this checkpoint
+
+cp170 deletes two files (`apps/web/src/lib/net/{release,releaseValidate}.ts`). Operator confirmed they nuke-and-extract fresh, so a `cpNN-cleanup.sh` is unnecessary (tar can't communicate deletions only matters when extracting *over* an existing tree). A fresh extract never had the deleted files.
+
+---
+
+## 🔄 PRIOR HANDOFF — cp167
+
 **Last touched:** cp167 **CLOSED** — a security finding plus an outstanding UX deferral plus the MCP runtime wiring all converged in one checkpoint.
 
 **Security finding (relay key mislabel).** A code audit found that `apps/ops-cli/src/init/steps.ts` step 5 prompted operators to "Paste the relay's **posting key**" — wrong on every count.  The relay broadcasts `create_claimed_account`, `transfer`, `transfer_to_vesting`, and `delegate_vesting_shares` — all active-authority operations.  Signing them with a posting key gets `missing required active authority` from chain and the relay refuses to broadcast.  cp167 renames every `posting` reference in the relay context to `active` throughout the codebase (wizard, render, CLI commands, README, comments, locales) and ships a clear operator-facing explanation of why.

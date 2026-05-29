@@ -2,7 +2,7 @@
 	"name": "morphit",
 	"version": "1.0.0-beta.1",
 	"private": true,
-	"description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
+	"description": "Morphit \u2014 non-custodial, no-KYC P2P fiat\u2194BTC/XMR/BLURT marketplace",
 	"license": "AGPL-3.0-only",
 	"workspaces": [
 		"apps/web",
@@ -15,6 +15,7 @@
 		"packages/relay-client",
 		"packages/operator-config",
 		"packages/asset-registry",
+		"packages/release-schema",
 		"packages/net-defense",
 		"packages/rpc-pool"
 	],

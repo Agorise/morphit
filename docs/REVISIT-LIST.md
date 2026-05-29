@@ -238,7 +238,7 @@ Re-walk of all four personas against every checkpoint since cp148, plus two cros
 Twelve phases walked.  **Clean across all phases.**
 
 - **Architecture eliminates the threat by design.**  Part 109 removed the indexer's view-key dependency entirely; per-payment `tx_proof` replaced view-key decryption.  The env var `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` is fully deprecated and no code path reads it.
-- **Defense in depth (legacy paths):** `validateReleasePayload` in `apps/web/src/lib/net/releaseValidate.ts` silently ignores any `viewkey` field in incoming release payloads (forward-compat for any historical release op).  Same silent-ignore behavior in the indexer's release handler — never persists to the `treasury` JSONB column.
+- **Defense in depth (legacy paths):** `validateReleasePayload` in `@morphit/release-schema` (cp170; formerly `apps/web/src/lib/net/releaseValidate.ts`) silently ignores any `viewkey` field in incoming release payloads (forward-compat for any historical release op).  Same silent-ignore behavior in the indexer's release handler — never persists to the `treasury` JSONB column.
 - **Proof-verifier input shape:** strict prefix check (`OutProofV1`/`OutProofV2`), max 4096 chars, base62-ish charset.  A 64-char hex view key is rejected by the prefix check alone.
 - **Frontend UI surface:** zero view-key fields, prompts, labels, or local-storage entries anywhere in `apps/web/src/`.
 - **`privateKeyDetector`** (`apps/web/src/lib/security/privateKeyDetector.ts`): explicitly catches 64-char hex strings, which the docblock names as "Monero private view key" (line 24).  If a user accidentally pastes a view key into chat or feedback, they're stopped before sending.

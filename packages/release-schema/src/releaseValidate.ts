@@ -16,7 +16,7 @@
  * Smoke-testable.  No I/O, no DOM.
  */
 
-import type { ReleasePayloadV1 } from './release';
+import type { ReleasePayloadV1 } from './release.js';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
@@ -219,7 +219,7 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
  *   { ok: false, reason } when present and structurally invalid
  */
 export function validateTreasury(t: unknown):
-	| { ok: true; value: import('./release').ReleaseTreasuryBlock | null }
+	| { ok: true; value: import('./release.js').ReleaseTreasuryBlock | null }
 	| { ok: false; reason: ReleaseValidateError } {
 	if (t === undefined || t === null) return { ok: true, value: null };
 	if (!isPlainObject(t)) return { ok: false, reason: 'treasury_not_object' };
@@ -278,7 +278,7 @@ export function validateTreasury(t: unknown):
 	// never trip with valid btc + xmr fields above (max payload
 	// is well under 1 KB), but it's a defense-in-depth bound for
 	// hostile inputs that pad the object with unknown fields.
-	const value: import('./release').ReleaseTreasuryBlock = { btc, xmr };
+	const value: import('./release.js').ReleaseTreasuryBlock = { btc, xmr };
 	if (byteLengthOfJson(value) > 4096) {
 		return { ok: false, reason: 'treasury_too_large' };
 	}

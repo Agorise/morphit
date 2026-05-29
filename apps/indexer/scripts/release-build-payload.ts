@@ -56,8 +56,8 @@
 import * as readline from 'node:readline';
 import * as fs from 'node:fs';
 import { stdin as input, stdout as output } from 'node:process';
-import { validateReleasePayload, validateTreasury } from '../../web/src/lib/net/releaseValidate';
-import type { ReleasePayloadV1, ReleaseTreasuryBlock } from '../../web/src/lib/net/release';
+import { validateReleasePayload, validateTreasury } from '@morphit/release-schema';
+import type { ReleasePayloadV1, ReleaseTreasuryBlock } from '@morphit/release-schema';
 
 function fail(reason: string): never {
 	process.stderr.write(`\n✗ ${reason}\n`);
