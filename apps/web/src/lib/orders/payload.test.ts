@@ -292,9 +292,23 @@ describe('buildOrderPayload — structural fields', () => {
 // ─── Permlink generator (separate helper) ──────────────────────
 
 describe('makeOrderPermlink', () => {
-	it('produces a permlink in the expected charset', () => {
+	it('produces an OPAQUE permlink (cp175 F-012: no side/asset/fiat embedded)', () => {
 		const p = makeOrderPermlink('sell', 'BTC', 'USD');
-		expect(/^sell-btc-usd-[a-z0-9]+$/.test(p)).toBe(true);
+		// New opaque form: order-<random>, matching the indexer PERMLINK_RE.
+		expect(/^order-[a-z0-9]+$/.test(p)).toBe(true);
+		// Privacy invariant: the asset/side/fiat must NOT appear in the
+		// permlink (it leaks into URLs, RSS GUIDs, explorers). They live in
+		// the structured payload only.
+		expect(p).not.toContain('sell');
+		expect(p).not.toContain('btc');
+		expect(p).not.toContain('usd');
+	});
+
+	it('does not leak the asset for a privacy-sensitive asset (XMR)', () => {
+		const p = makeOrderPermlink('buy', 'XMR', 'EUR');
+		expect(p).not.toContain('xmr');
+		expect(p).not.toContain('buy');
+		expect(p).not.toContain('eur');
 	});
 
 	it('produces distinct permlinks across calls (random suffix)', () => {

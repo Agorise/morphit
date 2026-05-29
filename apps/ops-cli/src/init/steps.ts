@@ -50,14 +50,21 @@ const TOTAL_STEPS = 20;
 export async function stepInstanceName(): Promise<string> {
 	step(1, TOTAL_STEPS, 'Instance name');
 	explain(
-		'This is the name people will see in the title bar and footer\n' +
-			'of YOUR Morphit instance.  Most operators name it after\n' +
-			'themselves or their location.\n' +
+		'This is your instance\'s public display name. It is shown:\n' +
+			'  • in the browser tab/title bar and the site header\n' +
+			'  • on your homepage\n' +
+			'  • on the federated /instances directory — the public list\n' +
+			'    EVERY other Morphit instance shows, so users on other\n' +
+			'    nodes see your instance by this name when choosing where\n' +
+			'    to trade\n' +
+			'  • in search-engine results and link previews (SEO)\n' +
 			'\n' +
-			'It only needs to be memorable to you and your users — there\n' +
-			'is no central registry; you can change it later.'
+			'So pick something a stranger would recognize and trust at a\n' +
+			'glance. Most operators name it after themselves, their\n' +
+			'location, or a short brand. There is no central registry; it\n' +
+			'need not be globally unique, and you can change it later.'
 	);
-	examples(['alice-morphit', 'morphit.berlin', 'free-morphit-canada']);
+	examples(['alice-morphit', 'Morphit Berlin', 'Free Morphit Canada']);
 
 	while (true) {
 		const name = await ask('Instance name (required)');
@@ -84,9 +91,14 @@ export async function stepInstanceName(): Promise<string> {
 export async function stepTagline(): Promise<string> {
 	step(2, TOTAL_STEPS, 'Instance tagline');
 	explain(
-		'A one-line subtitle shown under the instance name on the\n' +
-			'homepage.  Optional, but a friendly tagline helps your\n' +
-			"users feel they're in the right place."
+		'A one-line subtitle shown beneath your instance name. It\n' +
+			'appears under the name on your homepage AND under your\n' +
+			'instance in the federated /instances directory (so users on\n' +
+			'other nodes see it when browsing where to trade), and it is\n' +
+			'used as the description in search results and link previews.\n' +
+			'\n' +
+			'Optional but recommended — one friendly sentence saying what\n' +
+			'your instance is or who runs it. Keep it short.'
 	);
 	examples([
 		'P2P Bitcoin & Monero trading, no KYC.',
@@ -486,25 +498,32 @@ export interface AltNetworkResult {
 export async function stepOrigin(): Promise<string | null> {
 	step(9, TOTAL_STEPS, 'Public origin URL (optional but recommended)');
 	explain(
-		'The HTTPS URL where your Morphit instance is reachable on the\n' +
-			'public web.  Just the scheme + host, no path:\n' +
+		'This is the public web address of YOUR instance — the domain\n' +
+			'name you registered (and pointed at this server) with\n' +
+			'`https://` in front. It is simply where people type to reach\n' +
+			'your site. Enter the scheme + host only, no path:\n' +
 			'\n' +
-			'Examples:\n' +
-			'  https://alice-morphit.example\n' +
-			'  https://morphit.berlin\n' +
+			'  If your domain is   alice-morphit.example\n' +
+			'  you enter           https://alice-morphit.example\n' +
 			'\n' +
-			'Why this matters: the origin is what gets published on-chain\n' +
-			'when you register your operator account.  Other Morphit\n' +
-			"instances' indexers see the registration and add you to\n" +
-			'their /instances directory automatically.  Without an origin,\n' +
-			"your instance won't appear in the federation directory and\n" +
-			'users on other Morphit instances will not discover you.\n' +
+			'  If your domain is   morphit.berlin\n' +
+			'  you enter           https://morphit.berlin\n' +
+			'\n' +
+			'(Hosting at home on a DuckDNS-style hostname? Use that:\n' +
+			'e.g. https://myinstance.duckdns.org.)\n' +
+			'\n' +
+			'Why this matters: this exact URL is what gets published\n' +
+			'on-chain when you register your operator account.  Other\n' +
+			"Morphit instances' indexers see the registration and add you\n" +
+			'to their /instances directory automatically, linking to this\n' +
+			"URL.  Without it, your instance won't appear in the federation\n" +
+			'directory and users on other Morphit instances cannot find you.\n' +
 			'\n' +
 			'You can skip this step and set MORPHIT_INSTANCE_ORIGIN later;\n' +
 			"the wizard won't ask again.\n" +
 			'\n' +
-			'NOTE: this is your indexer/frontend origin (the URL users\n' +
-			'visit), NOT a Blurt RPC endpoint.'
+			"NOTE: this is your own site's address (the URL users visit),\n" +
+			'NOT a Blurt RPC endpoint and NOT a block explorer.'
 	);
 
 	while (true) {
@@ -1280,86 +1299,98 @@ export function parseChatLinkTemplate(raw: string): string | string {
 }
 
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
-	step(12, TOTAL_STEPS, 'Chat-link external explorer URLs');
+	step(12, TOTAL_STEPS, 'Block explorer links (clickable TxIDs in chat)');
 	explain(
-		'When a counterparty sends a txid for any tradable asset\n' +
-			'in chat, the Morphit frontend renders it as a clickable\n' +
-			'link that opens a third-party block explorer in a new\n' +
-			'tab.  This is separate from the FEE-VERIFIER explorer\n' +
-			'URLs (which are server-side and used for cross-checking\n' +
-			'payment claims).\n' +
+		'These are the BLOCK EXPLORER URLs Morphit uses to turn a\n' +
+			'transaction ID into a clickable link. When a counterparty\n' +
+			'pastes a txid in chat for any asset, the frontend renders it\n' +
+			'as a link that opens that asset\'s block explorer in a new\n' +
+			'tab so your user can confirm the transaction.\n' +
 			'\n' +
-			'The URLs you set here are the ones YOUR USERS click.\n' +
+			'("Chat-link" is just the internal name for this — they are\n' +
+			'ordinary block explorers, e.g. mempool.space for BTC,\n' +
+			'xmrchain.net for XMR.)\n' +
+			'\n' +
+			'This is SEPARATE from the previous step\'s "fee-verifier"\n' +
+			'explorers: those run server-side to cross-check fee payments\n' +
+			'and can be a LIST of several per asset; the ones here are\n' +
+			'what YOUR USERS click, and there is exactly ONE per asset\n' +
+			'(per network, for multi-network assets).\n' +
+			'\n' +
+			'For each one you can keep the bundled default, change it to\n' +
+			'a different explorer (including one you self-host), or reset\n' +
+			'it back to the default. A URL is required for every asset\n' +
+			'(so TxID links always work); you cannot leave one blank.\n' +
 			'Privacy note: each click sends the user\'s IP and browser\n' +
-			'fingerprint to the third-party explorer.  Default values\n' +
-			'use well-known privacy-respecting explorers, but operators\n' +
-			'who run their own explorers (or trust different ones) can\n' +
-			'override here.\n' +
+			'fingerprint to that third-party explorer, so the defaults are\n' +
+			'well-known privacy-respecting explorers.\n' +
 			'\n' +
 			'Format: an https:// URL template containing the placeholder\n' +
 			'{txid}, which Morphit substitutes at render time.\n' +
 			'\n' +
 			'Single-network assets (one URL each):\n' +
-			'  • BTC, XMR, BCH, LTC, DASH\n' +
+			'  • BTC, XMR, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL,\n' +
+			'    ETH, XRP\n' +
 			'\n' +
 			'Multi-network assets (one URL per network):\n' +
 			'  • USDT: ERC-20, TRC-20, SPL, BEP-20\n' +
 			'  • USDC: ERC-20, SPL, Base, Polygon\n' +
 			'  • DAI:  ERC-20, Polygon, Base, Arbitrum\n' +
 			'\n' +
-			'You can change these later by editing morphit.config.env.\n' +
+			'You can change any of these later by re-running the wizard\n' +
+			'or editing morphit.config.env.\n' +
 			'\n' +
 			'The wizard will run a quick reachability check on each\n' +
 			'host before continuing.'
 	);
 
 	// ─── BTC ──
-	console.log('  ── BTC chat-link URL ──\n');
-	const btc = await editChatLinkUrl('BTC chat-link URL', DEFAULT_BTC_CHAT_LINK_URL);
+	console.log('  ── BTC block explorer URL ──\n');
+	const btc = await editChatLinkUrl('BTC block explorer URL', DEFAULT_BTC_CHAT_LINK_URL);
 
 	// ─── XMR ──
-	console.log('\n  ── XMR chat-link URL ──\n');
-	const xmr = await editChatLinkUrl('XMR chat-link URL', DEFAULT_XMR_CHAT_LINK_URL);
+	console.log('\n  ── XMR block explorer URL ──\n');
+	const xmr = await editChatLinkUrl('XMR block explorer URL', DEFAULT_XMR_CHAT_LINK_URL);
 
 	// ─── BCH (Part 122 cp21) ──
-	console.log('\n  ── BCH chat-link URL ──\n');
-	const bch = await editChatLinkUrl('BCH chat-link URL', DEFAULT_BCH_CHAT_LINK_URL);
+	console.log('\n  ── BCH block explorer URL ──\n');
+	const bch = await editChatLinkUrl('BCH block explorer URL', DEFAULT_BCH_CHAT_LINK_URL);
 
 	// ─── LTC (Part 122 cp24) ──
-	console.log('\n  ── LTC chat-link URL ──\n');
-	const ltc = await editChatLinkUrl('LTC chat-link URL', DEFAULT_LTC_CHAT_LINK_URL);
+	console.log('\n  ── LTC block explorer URL ──\n');
+	const ltc = await editChatLinkUrl('LTC block explorer URL', DEFAULT_LTC_CHAT_LINK_URL);
 
 	// ─── DASH (Part 122 cp27) ──
-	console.log('\n  ── DASH chat-link URL ──\n');
-	const dash = await editChatLinkUrl('DASH chat-link URL', DEFAULT_DASH_CHAT_LINK_URL);
+	console.log('\n  ── DASH block explorer URL ──\n');
+	const dash = await editChatLinkUrl('DASH block explorer URL', DEFAULT_DASH_CHAT_LINK_URL);
 
 	// ─── DOGE (Part 122 cp33) ──
-	console.log('\n  ── DOGE chat-link URL ──\n');
-	const doge = await editChatLinkUrl('DOGE chat-link URL', DEFAULT_DOGE_CHAT_LINK_URL);
+	console.log('\n  ── DOGE block explorer URL ──\n');
+	const doge = await editChatLinkUrl('DOGE block explorer URL', DEFAULT_DOGE_CHAT_LINK_URL);
 
 	// ─── ZEC (Part 122 cp39) ──
-	console.log('\n  ── ZEC chat-link URL ──\n');
-	const zec = await editChatLinkUrl('ZEC chat-link URL', DEFAULT_ZEC_CHAT_LINK_URL);
+	console.log('\n  ── ZEC block explorer URL ──\n');
+	const zec = await editChatLinkUrl('ZEC block explorer URL', DEFAULT_ZEC_CHAT_LINK_URL);
 
 	// ─── ARRR (Part 122 cp41) ──
-	console.log('\n  ── ARRR chat-link URL ──\n');
-	const arrr = await editChatLinkUrl('ARRR chat-link URL', DEFAULT_ARRR_CHAT_LINK_URL);
+	console.log('\n  ── ARRR block explorer URL ──\n');
+	const arrr = await editChatLinkUrl('ARRR block explorer URL', DEFAULT_ARRR_CHAT_LINK_URL);
 
 	// ─── DCR (Part 122 cp43) ──
-	console.log('\n  ── DCR chat-link URL ──\n');
-	const dcr = await editChatLinkUrl('DCR chat-link URL', DEFAULT_DCR_CHAT_LINK_URL);
+	console.log('\n  ── DCR block explorer URL ──\n');
+	const dcr = await editChatLinkUrl('DCR block explorer URL', DEFAULT_DCR_CHAT_LINK_URL);
 
 	// ─── SOL (Part 122 cp45) ──
-	console.log('\n  ── SOL chat-link URL ──\n');
-	const sol = await editChatLinkUrl('SOL chat-link URL', DEFAULT_SOL_CHAT_LINK_URL);
+	console.log('\n  ── SOL block explorer URL ──\n');
+	const sol = await editChatLinkUrl('SOL block explorer URL', DEFAULT_SOL_CHAT_LINK_URL);
 
 	// ─── ETH (Part 122 cp47) ──
-	console.log('\n  ── ETH chat-link URL ──\n');
-	const eth = await editChatLinkUrl('ETH chat-link URL', DEFAULT_ETH_CHAT_LINK_URL);
+	console.log('\n  ── ETH block explorer URL ──\n');
+	const eth = await editChatLinkUrl('ETH block explorer URL', DEFAULT_ETH_CHAT_LINK_URL);
 
 	// ─── XRP (Part 122 cp49) ──
-	console.log('\n  ── XRP chat-link URL ──\n');
-	const xrp = await editChatLinkUrl('XRP chat-link URL', DEFAULT_XRP_CHAT_LINK_URL);
+	console.log('\n  ── XRP block explorer URL ──\n');
+	const xrp = await editChatLinkUrl('XRP block explorer URL', DEFAULT_XRP_CHAT_LINK_URL);
 
 	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
@@ -1369,7 +1400,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	// than 4 separate prompts.  Operators wanting to point any
 	// network at a self-hosted explorer can choose "Customize"
 	// or edit morphit.config.env directly.
-	console.log('\n  ── USDT per-network chat-link URLs (4 networks) ──\n');
+	console.log('\n  ── USDT per-network block explorer URLs (4 networks) ──\n');
 	explain(
 		'USDT is multi-network: a trade on USDT is actually a trade\n' +
 			'on Ethereum (ERC-20), Tron (TRC-20), Solana (SPL), or\n' +
@@ -1395,10 +1426,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			bep20: DEFAULT_USDT_BEP20_CHAT_LINK_URL
 		}
 		: {
-			erc20: await editChatLinkUrl('USDT ERC-20 chat-link URL', DEFAULT_USDT_ERC20_CHAT_LINK_URL),
-			trc20: await editChatLinkUrl('USDT TRC-20 chat-link URL', DEFAULT_USDT_TRC20_CHAT_LINK_URL),
-			spl: await editChatLinkUrl('USDT SPL chat-link URL', DEFAULT_USDT_SPL_CHAT_LINK_URL),
-			bep20: await editChatLinkUrl('USDT BEP-20 chat-link URL', DEFAULT_USDT_BEP20_CHAT_LINK_URL)
+			erc20: await editChatLinkUrl('USDT ERC-20 block explorer URL', DEFAULT_USDT_ERC20_CHAT_LINK_URL),
+			trc20: await editChatLinkUrl('USDT TRC-20 block explorer URL', DEFAULT_USDT_TRC20_CHAT_LINK_URL),
+			spl: await editChatLinkUrl('USDT SPL block explorer URL', DEFAULT_USDT_SPL_CHAT_LINK_URL),
+			bep20: await editChatLinkUrl('USDT BEP-20 block explorer URL', DEFAULT_USDT_BEP20_CHAT_LINK_URL)
 		};
 
 	// ─── USDC multi-network (Part 122 cp30) ──
@@ -1406,7 +1437,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	// Solana, Base, Polygon).  BEP-20 intentionally not supported
 	// (ADR-0028 §1: Binance-Peg is a 2-custodian wrapper + 18-
 	// decimal precision divergence).
-	console.log('\n  ── USDC per-network chat-link URLs (4 networks) ──\n');
+	console.log('\n  ── USDC per-network block explorer URLs (4 networks) ──\n');
 	explain(
 		'USDC is multi-network: ERC-20 (Ethereum), SPL (Solana),\n' +
 			'Base, or Polygon PoS.  No BEP-20 — that variant is\n' +
@@ -1430,10 +1461,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			polygon: DEFAULT_USDC_POLYGON_CHAT_LINK_URL
 		}
 		: {
-			erc20: await editChatLinkUrl('USDC ERC-20 chat-link URL', DEFAULT_USDC_ERC20_CHAT_LINK_URL),
-			spl: await editChatLinkUrl('USDC SPL chat-link URL', DEFAULT_USDC_SPL_CHAT_LINK_URL),
-			base: await editChatLinkUrl('USDC Base chat-link URL', DEFAULT_USDC_BASE_CHAT_LINK_URL),
-			polygon: await editChatLinkUrl('USDC Polygon chat-link URL', DEFAULT_USDC_POLYGON_CHAT_LINK_URL)
+			erc20: await editChatLinkUrl('USDC ERC-20 block explorer URL', DEFAULT_USDC_ERC20_CHAT_LINK_URL),
+			spl: await editChatLinkUrl('USDC SPL block explorer URL', DEFAULT_USDC_SPL_CHAT_LINK_URL),
+			base: await editChatLinkUrl('USDC Base block explorer URL', DEFAULT_USDC_BASE_CHAT_LINK_URL),
+			polygon: await editChatLinkUrl('USDC Polygon block explorer URL', DEFAULT_USDC_POLYGON_CHAT_LINK_URL)
 		};
 
 	// ─── DAI multi-network (Part 122 cp31) ──
@@ -1443,7 +1474,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	// chains; existing wrapped/bridged variants defeat DAI's
 	// decentralization rationale.  All four explorers are
 	// -scan-style (etherscan/polygonscan/basescan/arbiscan).
-	console.log('\n  ── DAI per-network chat-link URLs (4 networks) ──\n');
+	console.log('\n  ── DAI per-network block explorer URLs (4 networks) ──\n');
 	explain(
 		'DAI is multi-network: ERC-20 (Ethereum), Polygon (PoS),\n' +
 			'Base, or Arbitrum One.  All four are EVM-family; no SPL\n' +
@@ -1468,10 +1499,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			arbitrum: DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
 		}
 		: {
-			erc20: await editChatLinkUrl('DAI ERC-20 chat-link URL', DEFAULT_DAI_ERC20_CHAT_LINK_URL),
-			polygon: await editChatLinkUrl('DAI Polygon chat-link URL', DEFAULT_DAI_POLYGON_CHAT_LINK_URL),
-			base: await editChatLinkUrl('DAI Base chat-link URL', DEFAULT_DAI_BASE_CHAT_LINK_URL),
-			arbitrum: await editChatLinkUrl('DAI Arbitrum chat-link URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
+			erc20: await editChatLinkUrl('DAI ERC-20 block explorer URL', DEFAULT_DAI_ERC20_CHAT_LINK_URL),
+			polygon: await editChatLinkUrl('DAI Polygon block explorer URL', DEFAULT_DAI_POLYGON_CHAT_LINK_URL),
+			base: await editChatLinkUrl('DAI Base block explorer URL', DEFAULT_DAI_BASE_CHAT_LINK_URL),
+			arbitrum: await editChatLinkUrl('DAI Arbitrum block explorer URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
 		};
 
 	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, xrp, usdt, usdc, dai };

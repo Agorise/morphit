@@ -37,6 +37,84 @@ Indexer tsc 0 errors. Smokes green: order 40, stranger-fee 18, feedback, feature
 ### Session 3 verified
 matrix-bot + mcp-server tsc 0 errors with the stricter flag. Smokes green: sidecar-envelope 26, noble-tx 5, signer-consistency 3, order 40, confusables-parity 2, persona 170, brag-parity 79.
 
+### Session 4 — doc accuracy (env vars + FAQ)
+- **F-008 (MED):** the USDT multi-network explorer chat-link override env vars were documented in OPERATIONS.md (lines 9095–9098) with the network token AFTER `CHAT_LINK_URL` (`MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_ERC20`) but the code's zod env schema reads it BEFORE (`MORPHIT_FRONTEND_USDT_ERC20_CHAT_LINK_URL`). An operator copying the docs would set a var the indexer never reads → self-hosted explorer override silently no-ops. Fixed the 4 doc lines to match code (code = runtime authority). Added **`apps/indexer/scripts/frontend-chatlink-env-doc-parity-smoke.ts`** (REGISTERED, negative-tested: fails on the divergence, passes when correct) asserting every `MORPHIT_FRONTEND_*_CHAT_LINK_URL` named in operator docs exists in the indexer config.
+- **Env-var doc accuracy verified clean otherwise:** ~50 "documented-not-in-.ts" vars are all read by ops/shell scripts (`ops/scripts/morphit-*-monitor.sh`, canary/release-sign) — not stale; 100 in-code-undocumented vars are optional per-asset chat-link overrides + zod-defaulted tuning knobs + hardcoded frontend constants (`MORPHIT_ACCOUNT`/`MORPHIT_COMMUNITY` aren't env vars); the one required no-default var `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` IS present in `ops/env/indexer.env.example` (which the setup doc points to).
+- **FAQ accuracy verified clean:** spot-checked every drift-prone numeric claim (fees $0.25/$0.125 + 60 BLURT listing fee; first-order-free ≥500 BLURT; welcome bonus 1 BP + milestones 100/500/2000/10000→10/50/200/1000 BP; order timeout 90d + 15-min replace window) — all match code (config defaults, WAIVER_MIN_BLURT=500, loyalty.ts, REPLACE_WINDOW_MS). FAQ smokes (4) green.
+
+### Session 4 verified
+Doc-parity gates green: fenced-path 247, cross-doc 21, brag-parity 79. New chat-link sentinel 3, FAQ smokes 4.
+
+### Session 5 — orphan/staleness + smoke currency + F-007 + outside-pentest writeup (PLANNED SCOPE COMPLETE)
+- **F-007 (LOW) RESOLVED:** account-name regex divergence — `registry.ts` used `/^[a-z][a-z0-9-]{1,14}[a-z0-9]$/` while all ~14 other validators + canonical `isValidBlurtAccount` used `/^[a-z][a-z0-9.-]{2,15}$/`. Aligned registry.ts to canonical (more permissive toward real dotted Blurt names; not security — chain + extractSigner is the authority). Added **`apps/web/scripts/blurt-account-regex-parity-smoke.ts`** (REGISTERED, negative-tested) asserting all 15 account-name regex literals are byte-identical.
+- **F-010 (LOW):** `apps/web/scripts/locale-source-of-truth-smoke.ts` existed but was NOT registered → never ran. It's a real guard (enforces SUPPORTED_LOCALES single-source-of-truth). Registered it. Now ZERO unregistered smoke files (258 on disk, all run).
+- **Orphan/staleness COMPLETE clean:** all 72 components imported; no dead routes (/dev is intentional diagnostics); snapshot docs are intentional audit-trail (guarded by db-password-placeholder path-existence smoke); the "101 orphan exports" are within-file/dynamic-import symbols, no real dead code (mass export-stripping deliberately NOT done — churn risk, zero runtime impact).
+- **Smoke currency COMPLETE:** all 260 registrations resolve to files; zero unregistered.
+- **Outside-pentest assessment (Part N):** updated `AUDIT-OUTSIDE-SCOPE.md` — signing migration RAISES crypto-review priority (dual dblurt/noble signer = classic bug site; audit noble path + cutover before the flip); added cp175 addendum + concrete recommended sequence (finish static → staging → cheap self-serve [libFuzzer on payload parsers / ZAP / bug bounty] → specialist crypto + DAST). Honest launch line: "extensively self-audited; independent third-party review pending."
+
+### cp175 PLANNED SCOPE COMPLETE — findings summary
+F-001 (HIGH) + F-002/F-005/F-006/F-007/F-008/F-010 fixed; F-003 (INFO) doc fix; F-004 false alarm; F-009 verified-clean. Six new guard smokes (signer-backend-consistency, comment-op proof extension, frontend-chatlink-env-doc-parity, blurt-account-regex-parity, locale-source-of-truth registration). All 14 projects 0 tsc errors; doc-parity gates green; hostile-op sweep clean across all 17 handlers; memory-leak/fallback/orphan sweeps clean.
+
+**Optional residual (not blocking):** README/OPERATIONS/RUN-A-NODE prose-level read beyond env-vars+paths+FAQ (the structured/parity surfaces are all covered + smoke-guarded); optional unused-`export` cleanliness pass.
+
+### Session 5 verified
+11/11 broad-sweep smokes green (incl. 3 new guards); web typecheck 0 errors; doc gates green (cross-doc 21, fenced-path 247). 262 smoke registrations.
+
+### Session 6 — full-suite run + relay audit + SQL sweep (pushed past planned scope)
+- **Ran the ENTIRE suite end-to-end** (first time this campaign — prior sessions ran slices): **262/262 registered smokes PASS** + **1,413 unit tests PASS** (indexer 475/0fail/1skip, relay 244/0fail, web 694/0fail/5skip via vitest-must-pass-smoke). Triple-pulsed the security-critical + historically-flaky set (drain-defense-live-fire, noble proofs, quorum, peer-price) — stable.
+- **Corrected a stale belief:** the handoff summary said indexer vitest can't run (native better-sqlite3); it DOES run here (475 passing, pg-path mocks). 
+- **Relay hot-key drainer audited — clean.** (`drainer-defense-smoke` prints expected `Error:` lines as part of NEGATIVE-path assertions; run in isolation it's "✓ all 17 scenarios passed" — a naive grep for "Error:" mis-flags it.)
+- **SQL-injection sweep COMPLETE — clean.** No string-concat queries. 14 interpolation sites all safe: cursor pagination interpolates a fixed clause with `$2/$3`-bound values; the dynamic-WHERE builder uses `p(v)`→`$N` placeholder helper (all user filter values parameterized, region escapeLike'd); signals/decay interpolate only module constants. No user input reaches SQL via interpolation.
+- **F-011 (LOW):** `reputationDecayWeightSql()` unused while the decay formula `(365 * 86400.0)` is hand-inlined 10× across api/feedback.ts (×6) + orderbook.ts (×2) + orderbookStream.ts (×2) with 365 as a magic number. JS decay path was guarded vs the constant; SQL path wasn't (drift would diverge the verifiable-receipt from the live rating query). Added `reputation-decay-sql-constant-parity-smoke` (REGISTERED, negative-tested). Annotated the helper as intentionally-retained. 
+
+### Session 6 verified
+Indexer tsc 0 errors. Full suite 262/262 + 1,413 unit tests green. 263 smoke registrations. cp175 has added 7 guard smokes total (signer-consistency, comment-op proof ext, chatlink-env-doc-parity, account-regex-parity, locale-source-of-truth registration, decay-sql-constant-parity).
+
+### Session 7 — handler deep-read + persona traces + privacy/Monero push + operator-doc prose
+Completed all 4 requested deep-dives plus the Monero metadata-leak reduction push.
+- **Handler deep-read (all 4 biggest, line-by-line business logic):**
+  - **order.ts (974L):** waiver branch race-safe (atomic claim); multi-network validation correct. **F-013 (LOW, fixed):** per-asset network allowlists hardcoded as Sets in order.ts AND orderReplace.ts (3 copies w/ registry) with no parity guard → a registry network-add would cause silent `asset_network_unknown` rejection. Added **`apps/indexer/scripts/asset-network-set-registry-parity-smoke.ts`** (REGISTERED, negative-tested: 6 checks = 2 handlers × 3 assets vs registry).
+  - **featureBid.ts (516L):** CLEAN — auction logic correct (hours∈[6,168] validated before division, anti-pennywise max(1/hr,5%), block-time expiry, anti-snipe soft-close).
+  - **orderReplace.ts (434L):** CLEAN, notably strong — FORBIDS side/asset/fiat/asset_network change on replace (blocks settlement-chain bait-and-switch); `replace_below_waiver_floor` blocks waiver abuse; created_at preserved.
+  - **chat.ts (545L):** CLEAN, privacy-correct — stores ciphertext-only + opaque header; layered anti-abuse (block→stranger-gate→fan-in cap); order_permlink is opaque validated lookup, F-012-compatible, doesn't bypass gates.
+- **Persona traces (end-to-end, not via smokes):**
+  - **Charlie/MCP:** read-only BY CONSTRUCTION — 5 read tools, ZERO signing/broadcast/key capability in code, hardened fetch (redirect-refusal+body-cap), CI-guarded by mcp-server-read-only-invariant-smoke.
+  - **Sally-operator:** init wizard NEVER touches the XMR view key (Part 109 removal holds through tooling); active key stored encrypted at rest (scrypt N=2^17 + AES-GCM, one-passphrase-per-instance).
+- **Privacy/Monero metadata reductions:**
+  - **F-012 (MED, fixed):** opaque order permlinks (`order-<rand>` not `sell-xmr-usd-…`) — asset no longer leaks into permlink/URL/RSS GUIDs/explorers; structured payload unchanged; unit-test invariant locks it in.
+  - **F-015 (LOW, fixed):** UTC-day-floored expiry via `makeExpiryFlooredUtcDay()` — `expires_at` no longer leaks the submit moment to ms precision on chain; both call sites wired; **`order-expiry-day-floor-smoke`** (REGISTERED, negative-tested).
+  - **xmr_txid FAQ disclosure** across all 10 locales: the one honest cross-chain fact (paying listing fee in XMR records that fee's TxID on public Blurt — only place XMR touches Blurt, it's a fee not the settlement) + the BLURT-fee opt-out for zero linkage. Parity 3094×10.
+  - **F-014 (INFO, fixed):** OPERATIONS.md clarified that the explorer's `viewkey=` URL param carries the single-use tx_proof (not a real view key) — was potentially alarming to Monero operators; confirmed in code (moneroProofVerifier passes `viewkey: txProof`).
+  - Verified existing posture STRONG: view-key never on-chain/in-API/logged, Monero-native tx_proof selective disclosure, amount jitter (piconero), XMR-fee opt-in (default BLURT).
+  - METADATA-LEAK-CATALOG.md updated (B.2 + Sealings list F-012/F-015).
+- **Operator-doc prose read:** OPERATIONS.md (9768L) + RUN-A-MORPHIT-NODE.md (2343L) — all numeric + Monero claims accurate/consistent; F-014 the only fix.
+
+### Session 7 verified
+web + indexer typecheck 0 errors; 15/15 broad-sweep green; web vitest 695 passing; doc gates green (fenced-path 247, cross-doc 21, privacy-features 103). 265 smoke registrations. cp175 has added 10 guard smokes total.
+
+### Session 8 — privacy-coin parity + catalog simplification + FAQ/brag/comparison + 4-bullet closeout
+The user asked to: simplify the metadata-leak catalog; mention privacy-coin protections in FAQ/brag/comparison; extend the XMR privacy treatment to all privacy coins; and confirm the original 4 bullets are wrapped.
+- **Privacy-coin parity (key finding):** the on-chain protections are ALREADY asset-agnostic and cover all 5 privacy coins (XMR/ZEC/ARRR/DASH/DCR) uniformly — F-012 opaque permlinks, F-015 day-floored expiry, amount jitter (jitterUtxoAmount covers ZEC/ARRR/DASH/DCR; jitterMoneroAmount for XMR), shielded-address validation (ZEC zs1/u1, ARRR zs1-only). Because `fee_method` is frozen at blurt|btc|xmr, ZEC/ARRR/DASH/DCR can NEVER pay fees → their TxIDs never touch Blurt at all (cleaner than XMR's single opt-out-able fee-link). Per-asset /privacy/{asset} guides + what_is_<asset> FAQ already cover each coin.
+- **New FAQ entry `privacy_coins_onchain`** across all 10 locales (parity now **3096×10**), registered in faqIndex.ts §7 + related-map. One canonical "how Morphit keeps privacy-coin trades private" answer.
+- **METADATA-LEAK-CATALOG.md massively simplified: 554 → 161 lines.** Three-part structure: (1) what does NOT leak + why (table), (2) what DOES leak + why (on-chain/network/server/client), (3) privacy coins — how far we've gone. Old version backed up at /tmp/catalog-old.md (this session only).
+- **Brag list:** entry 113 enhanced (no renumber, footer stays 329) — opaque permlinks, floored expiry, XMR opt-out fee-link, ZEC/ARRR/DASH/DCR TxID-never-on-Blurt. **Media kit regenerated** (`scripts/build-mediakit.sh`).
+- **Comparison image:** +2 rows in "Privacy & anonymity" (privacy coins first-class; opaque order IDs). **PNG + fingerprint + SVG rebuilt** (`scripts/comparison-image/build_comparison.py`; installed cairosvg + pngquant in sandbox).
+- **4 original bullets CONFIRMED complete:** handler deep-read (F-013), Charlie/Sally traces, privacy pass, operator-doc prose read. This session finished the RUN-A-MORPHIT-NODE.md prose (§8–12) — all accurate; verified the welcome-bonus "20 BLURT (10 liquid + 10 vesting)" claim against feedback.ts:435-436 (exact match); §11 candor section accurate.
+
+### Session 8 verified
+web tsc 0 errors; web vitest 695 passing; locale parity 3096×10 HOLDS; ZERO unregistered smoke files (265 registrations, all 10 cp175 guards live); session-8 surfaces triple-pulsed green (locale-parity, faq-themed-section, faq-jsonld, comparison-freshness, mediakit-freshness, brag-parity). **NO TARBALL YET — per user instruction; awaiting go-ahead.**
+
+### Session 9 — operator setup-wizard clarity + upgrade-doc (4 operator asks)
+Operator-experience pass on the ops-cli init wizard + upgrade docs.
+- **Upgrade doc:** docs/UPGRADING.md ALREADY EXISTS (346L, sysadmin-focused — `morphit-ops upgrade` w/ auto-rollback, manual procedure, automated mode, release-monitor, GPG verify, dedicated Rollback §). De-staled scenario count; ADDED "What if my instance is several releases behind?" section (cumulative tarballs → jump straight to latest; read all intermediate notes; confirm not crossing a major; schema migrations auto-apply on indexer restart; data/config untouched).
+- **instance name + tagline:** rewrote both wizard prompts (steps.ts step 1/2) to enumerate ALL display surfaces — title bar, header, homepage, support page, the FEDERATED /instances directory, and SEO/JSON-LD — emphasizing other-node visibility; improved examples.
+- **public origin:** rewrote step-9 prompt to tie it explicitly to "the domain you registered + https://" with if-X-enter-https://X examples + DuckDNS note; clarified NOT a Blurt RPC / block explorer.
+- **"chat-link" URLs → block explorers:** confirmed they ARE block explorer tx-URL templates. Renamed step-12 title to "Block explorer links (clickable TxIDs in chat)" + all 39 admin-visible per-asset labels/headers "X chat-link URL" → "X block explorer URL" (BTC/XMR/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP + USDT/USDC/DAI per-network). Clarified one-per-asset, editable/resettable/required-not-blank, SEPARATE from the fee-verifier multi-URL LIST (step 11, where Edit-comma-separated = add/delete). Kept env-var names MORPHIT_FRONTEND_*_CHAT_LINK_URL for config + doc-parity compat.
+- **Caught + fixed a latent S8 regression:** wizard-step-count-doc-parity-smoke wants METADATA-LEAK-CATALOG.md to carry /roughly \\d+ prompts/ == TOTAL_STEPS=20; the S8 rewrite had "~20 prompts" → restored "roughly 20 prompts."
+
+### Session 9 verified
+ALL 6 projects typecheck clean (web svelte-check 0, indexer/relay/ops-cli/matrix-bot/mcp-server tsc 0); locale parity 3096×10 HOLDS; final broad smoke pulse 18/18 green across signer/regex/decay/asset-network/expiry/chatlink-doc/locale/faq/comparison/mediakit/brag/operator-doc/wizard-step-count/init/cross-doc/mcp-readonly; session-9 touched smokes triple-pulse green. Snapshot is known-good.
+
 ### Remaining (subsequent sessions) — see docs/AUDIT-cp175-DEEP-DEEP.md
 Per-handler unicode/confusable + oversized-payload + numeric-precision + auth-context classes; FAQ/README/OPERATIONS/RUN-A-MORPHIT-NODE accuracy; DB dead-field sweep; regex-accuracy pass; type-strictness across 14 projects; orphan/staleness; memory-leak pass; fallback/failover completeness; smoke/gate currency; "what outside pentest adds" writeup.
 

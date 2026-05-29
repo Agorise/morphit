@@ -80,6 +80,23 @@ things a generalist source reviewer cannot:
 is the cheapest time to discover that a primitive choice was wrong;
 post-launch every key in existence becomes legacy.
 
+**cp175 update — signing migration RAISES this item's priority.**
+Since cp173–cp174 Morphit carries TWO chain-signing implementations:
+the incumbent `@beblurt/dblurt` ECDSA (elliptic-based, the
+CVE-2025-14505 exposure) and a new `@noble/secp256k1` signer, selected
+by the `SIGNER_BACKEND` flag (default still `dblurt`; cutover gated on
+a real chain broadcast — see ADR-0046 + SECURITY.md). Dual-signer
+periods are a classic site for subtle cryptographic bugs:
+nonce-generation differences (dblurt uses a bespoke per-attempt nonce,
+noble uses RFC-6979), low-S / canonical-S enforcement, recovery-id
+computation, and digest-binding. Static review here proved
+byte-recovery equivalence against dblurt's own verifier
+(`scripts/blurt-noble-*-proof.ts`, transfer/order/comment/custom_json),
+but a cryptographer should independently audit the noble signing path
++ the cutover plan BEFORE the `SIGNER_BACKEND='noble'` flip. The new
+signer (`apps/web/src/lib/blurt/nobleSigner.ts`) and the two signing
+chokepoints (`sign.ts`, `ops/comment.ts`) are the specific targets.
+
 ### 4. Threat modeling workshop
 
 **What it is.** A 1-2 day session where security engineers run STRIDE
@@ -262,3 +279,45 @@ launching project that's a large bill. Realistic alternatives:
 - **Academic crypto review.** Some university research groups will
   review crypto designs for free if the work is publishable. AGPL +
   novel threat model could attract this.
+
+---
+
+## cp175 addendum — what this static deep-deep covered, and the recommended sequence
+
+The cp175 deep-deep (this audit campaign) was the most exhaustive STATIC
+pass to date: a full five-persona walkthrough, a hostile-op sweep across
+all 17 indexer handlers (authz / money-parsing / replay / auth-context /
+oversized-payload / unicode-confusable / numeric-precision — all verified
+clean), a DB dead-field sweep, a memory-leak sweep, type-strictness across
+all 14 projects, a regex-accuracy pass, fallback/failover completeness, and
+a doc-accuracy pass (env vars + FAQ). Findings F-001..F-010 fixed or
+documented; full ledger in `AUDIT-cp175-DEEP-DEEP.md`.
+
+**None of that changes the answer to Ken's question: yes, an outside firm
+would still run tests this static review cannot.** The deep-deep is
+necessary-not-sufficient. The static pass maximizes the value an outside
+engagement then delivers (they don't burn budget on issues already fixed)
+and narrows their focus to the genuinely dynamic/adversarial surface.
+
+**Recommended sequence (unchanged, now concrete):**
+1. **Finish the static deep-deep** (this campaign) — DONE through cp175 for
+   the security core; a couple of doc/cleanliness items remain.
+2. **Stand up a staging deploy** — this is the single biggest unlock. It
+   converts ~8 of the 10 deployment-gated items (#95–104) from "impossible"
+   to "runnable," and it's a prerequisite for the operator personas to be
+   tested against reality rather than source.
+3. **Run the cheap-but-high-yield self-serve passes first:** a 24h libFuzzer
+   pass on the chain-op payload parsers (highest priority — untrusted input
+   → DB writes), a ZAP/Nuclei baseline scan against staging, and a public
+   bug-bounty (HackerOne/Bugcrowd, ~$5k) for breadth.
+4. **THEN engage a specialist for the two things money buys best:** a
+   cryptographer for the signing migration + keystore (now elevated — see
+   §3 cp175 update), and a DAST/threat-model team for the federation +
+   operator-stack surface. Pre-launch timing is cheapest; post-launch every
+   key and every deployed instance becomes legacy you can't easily change.
+
+Bottom line for Ken: the code is in unusually good static shape for a
+pre-launch project, but "static-clean" and "pentested" are different
+claims. Don't conflate them in launch messaging. The honest public line is
+"extensively self-audited; independent third-party review pending" — which
+is both true and the right posture.

@@ -34,9 +34,10 @@ push, in this order:
    GPG key (the public keys live in `.forgejo/release-signers/`
    in the repo — anyone with repo read access can audit who's
    authorized).
-2. Runs the **full validation gate**: typecheck across all 10
+2. Runs the **full validation gate**: typecheck across all
    workspaces, ansible-lint in production profile, and the
-   triple-pulse smoke suite (~3,300+ scenarios).
+   complete triple-pulse smoke suite (thousands of self-checking
+   scenarios).
 3. Builds the **release tarball** and **SHA-256 checksum file**.
 4. Bakes a **provenance manifest** (`release-info.json`) into the
    tarball recording the tag, commit SHA, and CI build time.
@@ -48,6 +49,46 @@ download to the announced version, and `release-info.json` chains
 that to the signed commit. If you want one more layer (defense
 against a compromised Forgejo), see the "Belt-and-braces
 verification" section below.
+
+## What if my instance is several releases behind?
+
+Common case: you stood up an instance, didn't touch it for a
+while, and now you're a number of releases out of date. **You do
+not need to apply each intermediate release in order.** Morphit
+releases are cumulative tarballs (a full install, not a diff), so
+`morphit-ops upgrade` jumps you straight from whatever you're
+running to the latest published release in one step — the same
+check → backup → apply → `npm ci` → restart → auto-rollback flow.
+Run exactly the same command no matter how far behind you are:
+
+```
+sudo -u morphit npx morphit-ops upgrade
+```
+
+Two things to do first when you've been away a while:
+
+1. **Read the release notes for every version between yours and
+   the latest**, not just the newest one. The upgrade prints the
+   latest release's notes, but if you've skipped several, any
+   manual step or behavior change called out in an *intermediate*
+   release still applies to you. The notes for each tag are linked
+   from the Forgejo release page; `--check-only` prints the URL.
+2. **Confirm you're not crossing a major version.** This tool
+   assumes same-major upgrades (e.g. `v1.x → v1.y`). A
+   major-version bump (`v1.x → v2.0`) may have manual migration
+   steps that the release notes for that major will spell out — do
+   those by hand before/after as instructed. Within a major,
+   schema changes apply automatically: the indexer runs any
+   pending migrations on startup, which the upgrade flow triggers
+   when it restarts services, so there's no separate migration
+   command.
+
+If you're so far behind that you're unsure what changed, the
+safest path is: take a database backup (see `OPERATIONS.md`),
+read the notes for each skipped release, then run the upgrade.
+Your data and config (`/etc/morphit/*.env`, your keystore) are
+untouched by an upgrade — only the application code in the install
+directory is replaced.
 
 ## Recommended: `morphit-ops upgrade`
 

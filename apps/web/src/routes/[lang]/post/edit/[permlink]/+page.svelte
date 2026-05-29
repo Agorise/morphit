@@ -50,6 +50,7 @@
 	import { KeystoreError } from '$crypto/keystore';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import type { OrderFormInput } from '$lib/orders/payload';
+	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import type { OrderRecord } from '@morphit/indexer-client';
 	import type { PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
@@ -459,7 +460,7 @@
 			// we re-anchor it off NOW so the user's "make it last 14d
 			// from now" intent is respected, not "14d from the original
 			// post time."
-			expiresAt: new Date(Date.now() + expiresDays * 86_400_000),
+			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			// cp36 Bob-3 fix — emit the active multi-network asset's
 			// network in the replace payload. buildOrderPayload (in
 			// $lib/orders/payload.ts) reads this and writes the wire-

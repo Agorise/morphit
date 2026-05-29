@@ -108,6 +108,21 @@ export const REPUTATION_DECAY_HALF_LIFE_DAYS = 365;
  *      `as_of` parameter so callers can pin the wall-clock for
  *      deterministic comparison.
  */
+/**
+ * SQL fragment generator for the time-decay weight, parameterized by the
+ * created-at column name (must be a trusted literal column name, never user
+ * input — callers pass 'created_at' / 'f.created_at').
+ *
+ * cp175 F-011 NOTE: the live API queries (api/feedback.ts, api/orderbook.ts,
+ * api/orderbookStream.ts) currently INLINE this formula by hand rather than
+ * calling this helper (10 occurrences total), because they embed it inside
+ * multi-line aggregate CASE expressions where a string-concat call site reads
+ * worse. To keep the inlined literals from drifting away from
+ * REPUTATION_DECAY_HALF_LIFE_DAYS, `reputation-decay-sql-constant-parity-smoke`
+ * asserts every inlined `(N * 86400` literal equals the constant. This helper
+ * is retained as the canonical reference (and for any future caller that wants
+ * the fragment directly) — it is intentionally kept, not dead code.
+ */
 export function reputationDecayWeightSql(createdAtCol: string): string {
 	return `POWER(0.5, EXTRACT(EPOCH FROM (NOW() - ${createdAtCol})) / (${REPUTATION_DECAY_HALF_LIFE_DAYS} * 86400.0))`;
 }

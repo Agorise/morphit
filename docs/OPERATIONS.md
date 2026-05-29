@@ -8227,6 +8227,18 @@ is API compatibility: the URL must expose
 returning JSON with `status: "success"` and
 `data.outputs[*]: {amount, match}`.
 
+> **Monero note — that `viewkey=` parameter does NOT carry a real
+> view key.** It is the `onion-monero-blockchain-explorer`'s own
+> API naming. Combined with `txprove=1`, the explorer interprets
+> the value as a **single-use transaction proof** (the
+> `OutProof…` string the payer generated with `get_tx_proof`),
+> NOT a wallet view key. Morphit never holds, transmits, or logs
+> a treasury view key — there isn't one (see §12 and §40.2). The
+> indexer puts the payer's per-payment proof in that slot; it
+> reveals only "this txid paid this address this amount" and
+> nothing else about any wallet. (The indexer also logs only the
+> explorer's base URL, never the full URL with the proof.)
+
 **Explorers known to be API-compatible (5):**
 - `https://xmrchain.net` (reference instance, run by
   moneroexamples)
@@ -9092,10 +9104,10 @@ Operator-config example for a privacy-conscious operator:
 
 ```bash
 # Override all four — point at self-hosted instances
-MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_ERC20="https://my-self-hosted-blockscout.example.org/tx/{txid}"
-MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_TRC20="https://my-self-hosted-tron.example.org/#/transaction/{txid}"
-MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_SPL="https://my-self-hosted-solana.example.org/tx/{txid}"
-MORPHIT_FRONTEND_USDT_CHAT_LINK_URL_BEP20="https://my-self-hosted-bsc.example.org/tx/{txid}"
+MORPHIT_FRONTEND_USDT_ERC20_CHAT_LINK_URL="https://my-self-hosted-blockscout.example.org/tx/{txid}"
+MORPHIT_FRONTEND_USDT_TRC20_CHAT_LINK_URL="https://my-self-hosted-tron.example.org/#/transaction/{txid}"
+MORPHIT_FRONTEND_USDT_SPL_CHAT_LINK_URL="https://my-self-hosted-solana.example.org/tx/{txid}"
+MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL="https://my-self-hosted-bsc.example.org/tx/{txid}"
 ```
 
 `{txid}` is the placeholder substituted at render time with

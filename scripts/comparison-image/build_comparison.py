@@ -102,6 +102,8 @@ SECTIONS = [
         ('Real-time streaming chat (no polling)',                            ['Y','-','-','-','-'], None),
         ('Immutable on-chain chat history (operator cannot delete)',         ['Y','-','-','-','-'], None),
         ('Chain-analysis defenses (amount jitter, address-reuse warnings)',  ['Y','-','-','-','-'], None),
+        ('Privacy coins first-class (XMR/ZEC/ARRR/DASH/DCR; TxIDs off-chain)', ['Y','-','-','-','Y'], None),
+        ('Opaque order IDs — asset name never on the coordination chain',    ['Y','-','-','-','-'], None),
         ('Solicitor / spammer-message protection (proof-of-work + caps)',    ['Y','-','-','-','-'], None),
         ('Per-message ephemeral key (X25519 + ChaCha20-Poly1305)',           ['Y','-','-','-','-'], None),
         ('Block explorer built in (no third-party tracking)',                ['Y','-','-','-','-'], None),

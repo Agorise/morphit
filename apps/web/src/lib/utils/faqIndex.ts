@@ -104,6 +104,7 @@ export const FAQ_KEYS = [
 	'data_collection',
 	'use_vpn',
 	'monero_amount_jitter',
+	'privacy_coins_onchain',
 	'why_fresh_addresses',
 	'push_notifications_privacy',
 	'block_privacy',
@@ -342,6 +343,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'monero_amount_jitter'
 	],
 	monero_amount_jitter: ['chat_privacy', 'data_collection', 'why_fresh_addresses', 'privacy_practices'],
+	privacy_coins_onchain: ['monero_amount_jitter', 'why_fresh_addresses', 'xmr_txid', 'what_is_blurt'],
 	chat_key_loss: ['chat_identity_key', 'backup_practices'],
 
 	// Chain-anchored TOFU pin (Option 5 / S2 mitigation, ADR-0015):
