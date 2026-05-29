@@ -150,9 +150,12 @@ async function sha256(input: string): Promise<Uint8Array> {
  *  session is locked or signing fails.  cp14 (subscribe) +
  *  cp131 MED-009 (unsubscribe).
  *
- *  The signature is what the relay's posting-key signature
+ *  The signature is what the relay's user-posting-key signature
  *  verifier expects: a BLURT-prefix base58 string produced by
- *  dblurt's Signature.toString().
+ *  dblurt's Signature.toString().  The relay holds an active
+ *  key (not a posting key) — this signature is the USER's
+ *  posting-key signature on their own subscribe request, which
+ *  the relay verifies against the on-chain posting authority.
  *
  *  ACTION is part of the canonical message so a captured
  *  subscribe signature cannot be replayed as an unsubscribe

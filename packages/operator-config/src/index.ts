@@ -190,6 +190,15 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_MATRIX_BOT_ALERT_MXID',
 	'MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM',
 
+	// ─── MCP server advertisement (cp167) ─────────────────────
+	// When true, /v1/instance reports an mcp_url field so AI
+	// agent operators can configure their clients to query this
+	// instance.  The MCP service runs (or not) regardless of
+	// this flag — the flag is purely about public discoverability.
+	// Default false; the wizard sets true when the operator
+	// opted in at step 20.
+	'MORPHIT_MCP_ADVERTISE',
+
 	// ─── Blurt account creation fee ───────────────────────────
 	// The chain fee, in BLURT, that the relay includes with each
 	// account-creation broadcast.  Set by Blurt witness consensus;

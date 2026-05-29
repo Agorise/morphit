@@ -12,10 +12,12 @@
  *   - You want to tweak SEO copy for your audience (task #4).
  *
  * What this command does NOT touch:
- *   - apps/relay/keystore.* (the posting key — re-run init if
- *     you need to rotate it; that's a much heavier ceremony).
+ *   - apps/relay/keystore.* (the relay's active key — use the
+ *     dedicated `edit-active-key` subcommand for rotation; that
+ *     ceremony has its own atomic rename + relay-restart
+ *     reminder).
  *   - morphit.env (the critical-infra env file — database URL,
- *     account names, posting-key path don't change post-launch).
+ *     account names, active-key path don't change post-launch).
  *   - Any allowlisted key not covered by the menu (signup
  *     ceiling, fee floors, etc. — edit morphit.config.env by
  *     hand for those).

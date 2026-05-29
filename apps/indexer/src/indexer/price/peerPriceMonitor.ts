@@ -389,6 +389,32 @@ export async function runPeerPriceSampleCycle(
 	// Step 2: query each peer in parallel.  Failures are silent
 	// (peer offline, denomination-mismatch, etc.) — they just
 	// don't contribute an observation.
+	//
+	// cp167 design decision — kept on Promise.allSettled, NOT
+	// migrated to @morphit/rpc-pool's quorumCall.  Rationale:
+	//
+	//   - EndpointPool / quorumCall are optimized for "give me
+	//     ONE answer (or early-return on consensus)" — they're
+	//     ideal for choosing among multiple equivalent BTC/XMR
+	//     explorers serving the SAME function.
+	//
+	//   - peerPriceMonitor needs the OPPOSITE: every peer's
+	//     observation, including failures.  The median calculation
+	//     downstream IS the consensus mechanism, and the
+	//     disagreement signal (one peer vs the rest) is the entire
+	//     point — early-returning on partial agreement would
+	//     defeat the alert.
+	//
+	//   - Per-peer health tracking already happens via the
+	//     federation prober (last_probe_status IN ('good','quiet')
+	//     above); EWMA latency wouldn't change behavior because
+	//     all healthy peers get queried regardless of latency.
+	//
+	// Promise.allSettled stays.  If a future requirement emerges
+	// for partial-result early-return (e.g. for /v1/health
+	// real-time peer-consensus on the request path), revisit
+	// then; the current ~30-minute background cycle has no
+	// latency budget that pool integration would help with.
 	const observations: PeerObservation[] = [];
 	const fetchResults = await Promise.allSettled(
 		peers.map((origin) => fetchPeerReceipt(origin, asset, denominationFiat, fetchTimeoutMs))

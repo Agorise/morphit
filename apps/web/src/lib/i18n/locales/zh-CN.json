@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "其他应用",
         "native_unknown": "其他链操作"
       }
-    }
+    },
+    "more_explorers": "+{count} 个",
+    "more_explorers_aria": "{count} 个备用浏览器"
   },
   "faq": {
     "title": "帮助与常见问答",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "第 1 阶段 — 基础",
     "phase_1_body": "外壳、十种语言、密钥生成流程、可搜索的帮助 — 第一次访问者需要的一切,无需任何服务器端账户。",
     "phase_2_title": "第 2 阶段 — Blurt 集成",
-    "phase_2_body": "连接 Blurt 节点。交付广播用户签名操作的 posting 中继。发布发现指针落到链上。",
+    "phase_2_body": "连接 Blurt 节点。交付广播用户签名操作的中继服务。发布发现指针落到链上。",
     "phase_3_title": "第 3 阶段 — 实时订单簿",
     "phase_3_body": "索引器上线。浏览、筛选、发布订单。15 分钟替换窗口。抗女巫的费用升级。自交易检测。",
     "phase_4_title": "第 4 阶段 — 聊天、反馈、信誉",

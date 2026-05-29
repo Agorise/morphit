@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "其他應用",
         "native_unknown": "其他鏈操作"
       }
-    }
+    },
+    "more_explorers": "+{count} 個",
+    "more_explorers_aria": "{count} 個備用瀏覽器"
   },
   "faq": {
     "title": "幫助同常見問題",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "第 1 階段 — 基礎",
     "phase_1_body": "外殼、十種語言、密鑰生成流程、可搜索嘅幫助 — 第一次訪問者所需嘅一切,毋須任何服務器端帳戶。",
     "phase_2_title": "第 2 階段 — Blurt 整合",
-    "phase_2_body": "連接 Blurt 節點。交付廣播用戶簽名操作嘅 posting 中繼。發佈發現指針落到鏈上。",
+    "phase_2_body": "連接 Blurt 節點。交付廣播用戶簽名操作嘅中繼服務。發佈發現指針落到鏈上。",
     "phase_3_title": "第 3 階段 — 即時訂單簿",
     "phase_3_body": "索引器上線。瀏覽、篩選、發佈訂單。15 分鐘替換窗口。抗女巫嘅費用升級。自交易檢測。",
     "phase_4_title": "第 4 階段 — 聊天、反饋、信譽",

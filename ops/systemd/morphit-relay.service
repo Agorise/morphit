@@ -1,5 +1,5 @@
 [Unit]
-Description=Morphit posting relay
+Description=Morphit relay (broadcasts user-signed chain ops with the relay account active key)
 Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
 After=network-online.target
 Wants=network-online.target

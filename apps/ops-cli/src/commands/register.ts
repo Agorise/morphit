@@ -73,12 +73,12 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		return 0;
 	}
 
-	// ─── 3. Load posting key ────
+	// ─── 3. Load relay account key (active key, per MORPHIT_RELAY_ACTIVE_KEY_FILE) ────
 	let wif: string;
 	try {
-		wif = await loadPostingKey(keyFile);
+		wif = await loadKeyWif(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
+		console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -112,8 +112,9 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		console.log('    MORPHIT_INSTANCE_NAME and re-run.');
 		console.log('  - This account already registered.  Use a future');
 		console.log('    `morphit-ops update` subcommand once it ships.');
-		console.log('  - Posting-key mismatch.  Check the key file points');
-		console.log("    at this account's posting key, not active or owner.");
+		console.log('  - Key-signature mismatch.  Check that');
+		console.log("    MORPHIT_RELAY_ACTIVE_KEY_FILE points at the active");
+		console.log("    key for this account on chain.");
 		console.log('  - Insufficient resource credits.  Wait a few minutes');
 		console.log("    or top up the account's BLURT balance.");
 		return 1;
@@ -152,8 +153,10 @@ function printHeader(): void {
 	console.log('');
 	console.log(
 		'This posts a morphit_operator_register_v1 op signed by\n' +
-			'your relay posting key.  After it lands on-chain, your\n' +
-			'instance becomes discoverable across the federation.\n'
+			"your relay account's active key (the same key the relay\n" +
+			'already holds for chain broadcasts).  After it lands\n' +
+			'on-chain, your instance becomes discoverable across the\n' +
+			'federation.\n'
 	);
 }
 
@@ -194,7 +197,7 @@ function readEnv(): ValidEnv | { error: string } {
 	};
 }
 
-async function loadPostingKey(keyFile: string): Promise<string> {
+async function loadKeyWif(keyFile: string): Promise<string> {
 	const raw = readFileSync(keyFile, 'utf8').trim();
 	// Heuristic: encrypted envelopes are JSON.  Plaintext WIFs start
 	// with '5'.  This matches the relay's looksLikeEnvelope check.

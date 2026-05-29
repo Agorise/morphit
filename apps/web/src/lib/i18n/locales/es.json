@@ -1097,7 +1097,9 @@
         "custom_json_unknown": "Otra aplicación",
         "native_unknown": "Otra operación en cadena"
       }
-    }
+    },
+    "more_explorers": "+{count} más",
+    "more_explorers_aria": "{count} exploradores alternativos"
   },
   "faq": {
     "title": "Ayuda y preguntas frecuentes",
@@ -2830,7 +2832,7 @@
     "phase_1_title": "Fase 1 — bases",
     "phase_1_body": "El armazón, los diez idiomas, el flujo de generación de claves, la ayuda buscable — todo lo que un visitante por primera vez necesita, sin ninguna cuenta del lado del servidor.",
     "phase_2_title": "Fase 2 — integración con Blurt",
-    "phase_2_body": "Conectar con nodos de Blurt. Enviar el relé de posting que difunde operaciones firmadas por usuarios. El puntero de descubrimiento de releases llega a la cadena.",
+    "phase_2_body": "Conectar con nodos de Blurt. Enviar el servicio de relé que difunde operaciones firmadas por usuarios. El puntero de descubrimiento de releases llega a la cadena.",
     "phase_3_title": "Fase 3 — libro de órdenes en vivo",
     "phase_3_body": "El indexador entra en producción. Navega, filtra y publica órdenes. Ventana de reemplazo de 15 minutos. Escalado de comisiones resistente a Sybil. Detección de operaciones consigo mismo.",
     "phase_4_title": "Fase 4 — chat, feedback, reputación",

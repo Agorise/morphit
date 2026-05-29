@@ -270,7 +270,9 @@ export class BlurtClient {
 	 * nonexistent names).
 	 *
 	 * cp165 USER-FACING — called during signup availability check
-	 * and posting-key verification.  Hedging on: when the primary
+	 * and user-posting-key verification (NOT the relay's key — the relay
+	 * holds an active key; this method only fetches the inbound user's
+	 * posting pubkey for signature verification).  Hedging on: when the primary
 	 * endpoint is slow, fire a parallel request to the next-best so
 	 * the user doesn't wait on the slow node.  withSignal lets the
 	 * pool cancel-and-rotate within the per-call budget even though

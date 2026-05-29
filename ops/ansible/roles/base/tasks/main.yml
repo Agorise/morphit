@@ -115,6 +115,24 @@
     system: true
     state: present
 
+# cp167 — MCP server (ops/systemd/morphit-mcp.service).  Same shape
+# as morphit-relay: dedicated system user, no shell, no home, member
+# of morphit_service_group so it can read /etc/morphit/*.env.  The
+# MCP server holds no keys (it's read-only over the indexer's
+# orderbook) so the user needs no privileged group memberships
+# beyond config-file read access.
+- name: Create morphit-mcp system user
+  ansible.builtin.user:
+    name: morphit-mcp
+    group: morphit-mcp
+    groups: "{{ morphit_service_group }}"
+    append: true
+    home: /var/lib/morphit-mcp
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+
 - name: Create /etc/morphit directory for env files + keystore
   ansible.builtin.file:
     path: /etc/morphit

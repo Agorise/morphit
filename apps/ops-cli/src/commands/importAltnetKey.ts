@@ -14,7 +14,7 @@
  * decides whether to shred it (recommended) or back it up
  * elsewhere (also fine; the encrypted form is the runtime path).
  *
- * The same passphrase that protects the relay's posting key
+ * The same passphrase that protects the relay's active key
  * also protects this keystore.  ADR-0010 §4 envelope, with a
  * per-network AAD binding so an attacker who steals all three
  * files can't swap their contents.

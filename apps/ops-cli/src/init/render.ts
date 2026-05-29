@@ -8,7 +8,7 @@
  *                               what most operators will edit later.
  *
  *   2. morphit.env              Critical infrastructure (database URL,
- *                               relay/fees account names, posting-key
+ *                               relay/fees account names, active-key
  *                               file path).  These bind a Morphit
  *                               instance to the chain; typos cause data
  *                               corruption.  Operator's systemd unit
@@ -16,7 +16,7 @@
  *                               this file BEFORE running the indexer
  *                               and relay.
  *
- *   3. apps/relay/keystore.{wif,json}   The posting key itself.
+ *   3. apps/relay/keystore.{wif,json}   The active key itself.
  *
  * All three are written with 0600 permissions (user-only read/write).
  *
@@ -35,14 +35,15 @@ import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { join, isAbsolute, resolve } from 'node:path';
 import type {
 	RelayAccountResult,
-	PostingKeyResult,
+	ActiveKeyResult,
 	AltNetworkResult,
 	FeeExplorersResult,
 	ChatLinkExplorersResult,
 	DisabledAssetsResult,
 	SeoResult,
 	BackupResult,
-	OperatorTagResult
+	OperatorTagResult,
+	McpServerResult
 } from './steps.ts';
 
 export interface WizardAnswers {
@@ -51,7 +52,7 @@ export interface WizardAnswers {
 	readonly databaseUrl: string;
 	readonly blurtRpcEndpoints: readonly string[];
 	readonly relayAccount: RelayAccountResult;
-	readonly postingKey: PostingKeyResult;
+	readonly activeKey: ActiveKeyResult;
 	readonly feesAccount: string;
 	readonly dailyCeiling: number;
 	readonly contactUrl: string | null;
@@ -83,6 +84,11 @@ export interface WizardAnswers {
 	 *  config load time + via persona sentinels.
 	 */
 	readonly matrix: MatrixSurfacesResult;
+	/** cp167 — Model Context Protocol server install opt-in.
+	 *  Default is enabled (AI agents become the new search layer;
+	 *  read-only, non-custodial, zero abuse surface).  Disabling
+	 *  removes the morphit-mcp systemd unit from rendered artifacts. */
+	readonly mcpServer: McpServerResult;
 }
 
 /** Matrix-surfaces wizard result.  Both fields are optional
@@ -166,17 +172,17 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 	const envPath = join(repoRoot, 'morphit.env');
 	const keystoreDir = join(repoRoot, 'apps', 'relay');
 	const keystoreFilename =
-		answers.postingKey.mode === 'encrypted' ? 'keystore.json' : 'keystore.wif';
+		answers.activeKey.mode === 'encrypted' ? 'keystore.json' : 'keystore.wif';
 	const keystorePath = join(keystoreDir, keystoreFilename);
 
 	mkdirSync(keystoreDir, { recursive: true });
 
 	// ─── Keystore ──
 	let keystoreContent: string;
-	if (answers.postingKey.mode === 'encrypted') {
-		keystoreContent = JSON.stringify(answers.postingKey.envelope, null, 2);
+	if (answers.activeKey.mode === 'encrypted') {
+		keystoreContent = JSON.stringify(answers.activeKey.envelope, null, 2);
 	} else {
-		keystoreContent = answers.postingKey.plaintextWif ?? '';
+		keystoreContent = answers.activeKey.plaintextWif ?? '';
 	}
 	writeFileSync(keystorePath, keystoreContent, { mode: 0o600 });
 	chmodSync(keystorePath, 0o600);
@@ -237,7 +243,7 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('# but do not override anything you set in the OS environment.');
 	lines.push('#');
 	lines.push('# Critical infrastructure (database URL, relay/fees accounts,');
-	lines.push('# posting-key file path) lives in the SEPARATE morphit.env file');
+	lines.push('# active-key file path) lives in the SEPARATE morphit.env file');
 	lines.push('# generated alongside this one.  See morphit.config.env.example');
 	lines.push('# for the full list of allowed keys.');
 	lines.push('');
@@ -361,6 +367,39 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('');
 	}
 
+	// ─── MCP server (cp167) ─────────────────────────────────────────
+	// Renders the operator's wizard answer about whether to install
+	// the morphit-mcp service.  No secret material here — just an
+	// enable flag the operator can flip later, plus comments telling
+	// them how to start the service.
+
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# MCP server (Model Context Protocol for AI agents)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Set to true to publicly advertise that this instance');
+	lines.push('# runs an MCP endpoint (changes /v1/instance.mcp_url so');
+	lines.push('# AI agent operators can discover it).  Setting to false');
+	lines.push('# does NOT stop the morphit-mcp systemd service — disable');
+	lines.push('# the unit if you want to turn it off:');
+	lines.push('#   sudo systemctl disable --now morphit-mcp.service');
+	lines.push('#');
+	lines.push('# Default bind: 127.0.0.1:8124 (loopback).  Reverse-proxy');
+	lines.push('# via nginx at /mcp/* if you want public exposure.');
+	lines.push('# See docs/OPERATIONS.md §41 for the full setup.');
+	if (answers.mcpServer.enabled) {
+		lines.push('MORPHIT_MCP_ADVERTISE=true');
+		lines.push('');
+		lines.push('# To start the MCP service after first install:');
+		lines.push('#   sudo systemctl enable --now morphit-mcp.service');
+	} else {
+		lines.push('MORPHIT_MCP_ADVERTISE=false');
+		lines.push('');
+		lines.push('# Operator opted out of MCP at wizard time.  To enable later,');
+		lines.push('# flip MORPHIT_MCP_ADVERTISE=true above and run:');
+		lines.push('#   sudo systemctl enable --now morphit-mcp.service');
+	}
+	lines.push('');
+
 	return lines.join('\n') + '\n';
 }
 
@@ -375,7 +414,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# This file holds settings you should NOT change casually:');
 	lines.push('#   - database URL (typo = corrupted state)');
 	lines.push('#   - relay/fees account names (typo = chain ops fail)');
-	lines.push('#   - posting key file path (typo = relay refuses to start)');
+	lines.push('#   - active key file path (typo = relay refuses to start)');
 	lines.push('#');
 	lines.push('# Source this file BEFORE running the indexer and relay.  In a');
 	lines.push('# systemd unit:');
@@ -679,7 +718,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_RELAY_ACCOUNT=${quote(answers.relayAccount.name)}`);
 	lines.push(`MORPHIT_INDEXER_RELAY_ACCOUNT=${quote(answers.relayAccount.name)}`);
 	lines.push(`MORPHIT_RELAY_ACTIVE_KEY_FILE=${quote(keystorePath)}`);
-	if (answers.postingKey.mode === 'encrypted') {
+	if (answers.activeKey.mode === 'encrypted') {
 		lines.push('# Posting key is in the file above as an encrypted v1 envelope');
 		lines.push('# (scrypt + AES-256-GCM).  Relay prompts for the unlock passphrase');
 		lines.push('# at startup.');

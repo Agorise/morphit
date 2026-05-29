@@ -8,7 +8,7 @@
  * swap their contents — GCM auth-fail rejects a ciphertext
  * decrypted under the wrong network's AAD.
  *
- * Same passphrase that unlocks the relay's posting key unlocks
+ * Same passphrase that unlocks the relay's active key unlocks
  * these files (per Morphit's "one passphrase per instance"
  * operator UX).  This is an explicit tradeoff: convenience
  * over compartmentalization.  Operators who want different
@@ -44,7 +44,7 @@ import {
  *  filename map below. */
 export type AltNetwork = 'tor' | 'lokinet' | 'i2p';
 
-/** Same scrypt parameters as the relay's posting-key envelope.
+/** Same scrypt parameters as the relay's active-key envelope.
  *  Bump together if hardware ever makes these too slow. */
 const SCRYPT_N = 131_072;
 const SCRYPT_R = 8;
@@ -54,7 +54,7 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 
 /** Envelope wire format.  Distinct version namespace from the
- *  posting-key envelope (`v: 1`) so a future change to either
+ *  active-key envelope (`v: 1`) so a future change to either
  *  doesn't accidentally cross-decrypt.  We start at 1; if we
  *  ever bump, both must stay distinguishable. */
 export interface AltKeyEnvelope {

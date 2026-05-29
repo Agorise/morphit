@@ -145,6 +145,12 @@ export interface Config {
 	 *  time by parseRoomAlias from @morphit/operator-config.
 	 *  null when not configured (frontend hides the link). */
 	readonly operatorMatrixRoom: string | null;
+	/** cp167 — When true, /v1/instance includes an mcp_url field
+	 *  constructed from publicOrigin so AI agents can discover this
+	 *  instance's MCP endpoint.  The morphit-mcp service runs (or
+	 *  not) independently of this flag — this is strictly about
+	 *  public discoverability. */
+	readonly mcpAdvertise: boolean;
 	/** Tolerance band for fee-amount verification — fee transfers
 	 *  within ±feeTolerance of the expected amount are accepted.
 	 *  Default: 0.001 (0.1%). After the BLURT-native refactor this
@@ -785,6 +791,20 @@ const envSchema = z.object({
 			return parsed;
 		}),
 
+	/** cp167 — Public advertisement of the MCP endpoint.  When true,
+	 *  /v1/instance includes an `mcp_url` field constructed from
+	 *  the public origin so AI agent operators can discover this
+	 *  instance.  False means /v1/instance omits mcp_url entirely.
+	 *  The morphit-mcp systemd service runs (or not) independently
+	 *  of this flag — this is strictly about public discoverability. */
+	MORPHIT_MCP_ADVERTISE: z
+		.string()
+		.default('false')
+		.transform((s) => {
+			const v = s.trim().toLowerCase();
+			return v === 'true' || v === '1' || v === 'yes';
+		}),
+
 	// Account-creation fee fallback — used by /v1/chain-fee
 	// when condenser_api.get_chain_properties is unreachable.
 	// Set to the current witness-consensus value (default 100).
@@ -1385,6 +1405,7 @@ export function loadConfig(): Config {
 		feeBaseBlurt: e.MORPHIT_INDEXER_FEE_BASE_BLURT,
 		disabledAssets: e.MORPHIT_INDEXER_DISABLED_ASSETS,
 		operatorMatrixRoom: e.MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM,
+		mcpAdvertise: e.MORPHIT_MCP_ADVERTISE,
 		feeTolerance: e.MORPHIT_INDEXER_FEE_TOLERANCE,
 		accountCreationFeeBlurtFallback: e.MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT,
 		attestationPhase: e.MORPHIT_INDEXER_ATTESTATION_PHASE,

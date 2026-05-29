@@ -203,7 +203,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile =
-		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE ?? process.env.MORPHIT_RELAY_POSTING_KEY_FILE;
+		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
 		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set.');
 		return 1;
@@ -237,7 +237,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 
 	let wif: string;
 	try {
-		wif = await loadPostingKey(keyFile);
+		wif = await loadKeyWif(keyFile);
 	} catch (err) {
 		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
@@ -302,7 +302,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile =
-		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE ?? process.env.MORPHIT_RELAY_POSTING_KEY_FILE;
+		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
 		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set.');
 		return 1;
@@ -330,7 +330,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 
 	let wif: string;
 	try {
-		wif = await loadPostingKey(keyFile);
+		wif = await loadKeyWif(keyFile);
 	} catch (err) {
 		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
@@ -429,7 +429,7 @@ function errMsg(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-async function loadPostingKey(keyFile: string): Promise<string> {
+async function loadKeyWif(keyFile: string): Promise<string> {
 	const raw = readFileSync(keyFile, 'utf8').trim();
 	if (!raw.startsWith('{')) return raw;
 	const envelope = JSON.parse(raw);

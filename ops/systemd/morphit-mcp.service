@@ -1,0 +1,81 @@
+[Unit]
+Description=Morphit MCP server (Model Context Protocol — read-only orderbook surface for AI agents)
+Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
+After=network-online.target morphit-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=morphit-mcp
+Group=morphit-mcp
+
+# Working directory holds the morphit-mcp source + node_modules.
+# Service user must own it with 0750 perms.
+WorkingDirectory=/opt/morphit-mcp
+
+# Same environment file as the indexer — MCP needs MORPHIT_PG_URL
+# (read-only) and the public origin URL to construct deeplinks.
+# See ops/env/relay.env.example for the schema.
+EnvironmentFile=/etc/morphit/relay.env
+
+# Default port + bind from the morphit-mcp source (127.0.0.1:8124).
+# Operators who want public exposure should reverse-proxy via nginx
+# at /mcp/* with auth if desired (see OPERATIONS.md §41).
+ExecStart=/usr/bin/env npm start --silent
+
+# No passphrase, no tty — MCP holds no keys.
+# StandardInput intentionally NOT tty-force (unlike the relay).
+
+# Graceful shutdown.  MCP holds no in-flight chain ops; 10s is plenty.
+KillSignal=SIGTERM
+TimeoutStopSec=10s
+
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=10
+StartLimitIntervalSec=120
+
+# ─── Hardening ───────────────────────────────────────────────────────
+# Defence-in-depth: MCP is the most exposed surface (AI agents reach it
+# from anywhere) so we lock it down even harder than the relay.  It
+# is strictly read-only — no chain broadcasts, no key handling.
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=/etc/morphit /opt/morphit-mcp
+PrivateDevices=yes
+
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+LockPersonality=yes
+# Same V8 JIT carve-out as the relay.
+MemoryDenyWriteExecute=no
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+# Network: TCP only.  No raw sockets, no AF_PACKET.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — MCP is lighter than the relay because it doesn't
+# parse chain blocks.  256 MiB is comfortable for a few concurrent
+# tool invocations.
+MemoryMax=256M
+TasksMax=128
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=morphit-mcp
+
+[Install]
+WantedBy=multi-user.target
