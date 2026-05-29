@@ -79,7 +79,7 @@ interface ExistingConfig {
 }
 
 /** Just the slice of morphit.env that this command can edit.
- *  Everything else (DB URL, account names, posting key path)
+ *  Everything else (DB URL, account names, active key path)
  *  stays manual-edit-only by design — those keys are critical
  *  infrastructure and the operator-config package excludes them
  *  from the allowlist on purpose. */
@@ -113,7 +113,7 @@ const EDITABLE_KEYS = [
 	// operator-config package's intentional whitelist exclusion of
 	// "critical infrastructure" keys.  The edit command opens
 	// morphit.env in a tightly-scoped second pass for THIS key only;
-	// other morphit.env keys (DB URL, account names, posting key path)
+	// other morphit.env keys (DB URL, account names, active key path)
 	// stay manual-edit-only.
 	'MORPHIT_INDEXER_RPC_ENDPOINTS'
 ] as const;
@@ -726,7 +726,7 @@ function printGreeting(): void {
 		'This re-prompts only the launch-tunable sections of your\n' +
 			'morphit.config.env: primary origin, alt-network addresses,\n' +
 			"and homepage SEO copy.  It will NOT touch your relay's\n" +
-			'posting key, database URL, or any other critical infra.\n' +
+			'active key, database URL, or any other critical infra.\n' +
 			'\n' +
 			'A backup of the existing config is written before any\n' +
 			'changes are applied.\n'

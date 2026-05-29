@@ -719,13 +719,14 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_INDEXER_RELAY_ACCOUNT=${quote(answers.relayAccount.name)}`);
 	lines.push(`MORPHIT_RELAY_ACTIVE_KEY_FILE=${quote(keystorePath)}`);
 	if (answers.activeKey.mode === 'encrypted') {
-		lines.push('# Posting key is in the file above as an encrypted v1 envelope');
+		lines.push('# Active key is in the file above as an encrypted v1 envelope');
 		lines.push('# (scrypt + AES-256-GCM).  Relay prompts for the unlock passphrase');
 		lines.push('# at startup.');
 	} else {
-		lines.push('# Posting key is in the file above as a plaintext WIF.  Anyone');
-		lines.push('# reading the file can post as your relay.  Consider switching to');
-		lines.push("# encrypted via 'morphit-ops init' on a fresh checkout.");
+		lines.push('# Active key is in the file above as a plaintext WIF.  Anyone');
+		lines.push('# reading the file can spend BLURT and create accounts as your');
+		lines.push("# relay.  Consider switching to encrypted via 'morphit-ops init'");
+		lines.push('# on a fresh checkout.');
 	}
 	lines.push('');
 

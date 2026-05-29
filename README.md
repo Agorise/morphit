@@ -30,7 +30,7 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/relay/` | Holds the operator's relay posting key; signup broadcasts, welcome-bonus payouts, ACT minting, Web Push delivery |
 | `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
-| `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config`, `net-defense` |
+| `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config`, `release-schema`, `net-defense`, `rpc-pool` |
 | `docs/` | ADRs (`docs/adr/0001-…` through `0045-…`), audit logs, operator runbooks |
 | `ops/` | Ansible role, systemd units, env templates, nginx/Caddy snippets, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
@@ -42,7 +42,7 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 1. Provision a $5/mo Ubuntu 24.04 VPS with Postgres reachable.
 2. `git clone` this repo (or extract a signed release tarball — see `docs/UPGRADING.md`).
 3. `npm ci` from the repo root (workspace install — must be run from the root).
-4. `npx morphit-ops init` to walk the setup wizard (~18 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
+4. `npx morphit-ops init` to walk the setup wizard (~20 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
 5. `bash scripts/run-smokes.sh` to confirm the self-checks (~150 runners, several thousand scenarios) pass against your environment.
 6. Follow **[`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md)** and **[`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md)** before opening to traffic.
 

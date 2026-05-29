@@ -520,7 +520,7 @@ indexer eliminates the entire server-stored class (C.*) for
 your own users, gives you control over whose indexer sees
 your SSE traffic, and lets you point at a self-hosted Blurt
 RPC. The wizard at `morphit-ops init` walks you through the
-setup in roughly 18 prompts; the operator runbook lives at
+setup in roughly 20 prompts; the operator runbook lives at
 `docs/RUN-A-MORPHIT-NODE.md`.
 
 If you find a leak surface this catalog doesn't cover, open
