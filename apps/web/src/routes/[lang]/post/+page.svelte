@@ -78,6 +78,7 @@
 	} from '$lib/orders/listingFee';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
+	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import { publishOrderPost } from '$lib/syndication/publish';
 	import { redactPrivateKeys, type PrivateKeyMatch } from '$lib/security/privateKeyDetector';
 	import { saveDraft, loadDraftWithMeta, clearDraft } from '$lib/drafts';
@@ -1147,7 +1148,7 @@
 			locationRegion: region.trim() ? redactPrivateKeys(region.trim()) : null,
 			paymentMethods: paymentMethods.map((pm) => redactPrivateKeys(pm)),
 			terms: terms.trim() || null,
-			expiresAt: new Date(Date.now() + expiresDays * 86_400_000),
+			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			feeMethod: feeMethodChoice,
 			externalTxId:
 				feeMethodChoice === 'btc' || feeMethodChoice === 'xmr'

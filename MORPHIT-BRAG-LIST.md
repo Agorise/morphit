@@ -267,7 +267,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 112. **Morphit won't accept your view key.** Ever. For any reason. The Monero verification flow is explicitly designed to NOT require it.
 
-113. **Morphit never proxies your XMR transactions.** They go directly between the two parties' wallets — Morphit doesn't even broadcast on your behalf.
+113. **Morphit never proxies your XMR transactions.** They go directly between the two parties' wallets — Morphit doesn't even broadcast on your behalf. And the public order that *does* live on Blurt no longer leaks the asset: order permlinks are opaque random tokens (`order-…`), not `sell-xmr-usd-…`, so "xmr" never appears in the on-chain permlink, order URLs, RSS feeds, or block explorers — and the order's expiry is floored to the day so it can't fingerprint your exact posting moment. The only place an XMR TxID ever touches Blurt is an *optional* listing-fee payment you can avoid entirely by paying the fee in Blurt (the default, and half the price). The other privacy coins — Zcash, Pirate Chain, Dash, Decred — can't pay fees at all, so their TxIDs **never touch Blurt under any circumstances**.
 
 114. **Amount randomization (jitter) defeats correlation attacks.** When you share your XMR address, Morphit can append cryptographic-RNG randomness to the trailing 6 decimals of the amount — up to ~0.000001 XMR (1 microXMR ≈ $0.0002 trivial cost) — so two "0.5 XMR" trades produce distinct on-chain amounts. Defeats the well-known view-key amount-correlation attack.
 

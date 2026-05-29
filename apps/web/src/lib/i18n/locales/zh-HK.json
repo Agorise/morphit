@@ -1367,7 +1367,7 @@
       },
       "xmr_txid": {
         "q": "什麼是 Monero TxID,在哪裡找到?",
-        "a": "Monero TxID(交易 ID)是一個 64 字元的十六進制字串,在 XMR 區塊鏈上唯一標識單筆 Monero 交易。看起來像:`c1a2b3…deadbeef`。Morphit 在你需要證明發送或接收了 Monero 付款時要求 TxID — 例如證明對方聲稱的 XMR 轉帳真的到帳了。\n\n在哪裡找到:\n• 在 **Monero GUI 錢包**:打開交易,點擊需要的交易,TxID 是詳情面板頂部的長十六進制字串。複製按鈕就在那裡。\n• 在 **Cake Wallet / Monero.com 手機版**:點擊歷史中的交易;TxID 出現在頂部,帶複製圖示。\n• 在 **Feather Wallet**:Transactions 標籤 → 右鍵或點擊一行 → Copy → Transaction ID。\n• 在 **monero-wallet-cli 命令列**:執行 `show_transfers out` 時會印出 TxID。\n\nTxID 是公開資訊。在 Morphit 上發布它來證明交易,不會透露你是誰、你的 view key 或你的餘額 — 只是某個特定交易發生了。"
+        "a": "Monero TxID(交易 ID)是一個 64 字元的十六進制字串,在 XMR 區塊鏈上唯一標識單筆 Monero 交易。看起來像:`c1a2b3…deadbeef`。Morphit 在你需要證明發送或接收了 Monero 付款時要求 TxID — 例如證明對方聲稱的 XMR 轉帳真的到帳了。\n\n在哪裡找到:\n• 在 **Monero GUI 錢包**:打開交易,點擊需要的交易,TxID 是詳情面板頂部的長十六進制字串。複製按鈕就在那裡。\n• 在 **Cake Wallet / Monero.com 手機版**:點擊歷史中的交易;TxID 出現在頂部,帶複製圖示。\n• 在 **Feather Wallet**:Transactions 標籤 → 右鍵或點擊一行 → Copy → Transaction ID。\n• 在 **monero-wallet-cli 命令列**:執行 `show_transfers out` 時會印出 TxID。\n\nTxID 是公開資訊。在 Morphit 上發布它來證明交易,不會透露你是誰、你的 view key 或你的餘額 — 只是某個特定交易發生了。\n\n**俾隱私至上者嘅一句老實話。**如果你揀用門羅幣畀*掛單費*，嗰筆費用交易嘅 TxID 會記錄喺你發佈到公開 Blurt 鏈上嘅訂單操作入面（咁任何索引器都可以喺唔持有金庫檢視密鑰嘅情況下驗證費用）。呢個係門羅幣 TxID 唯一會接觸 Blurt 嘅地方——而且佢只係畀公開金庫地址嘅約 0.25 美元手續費，絕對唔係你實際嘅交易結算（你賣畀對手方嘅 XMR 係點對點轉移，永遠唔會接觸 Blurt）。如果你想門羅幣同 Blurt 鏈之間*零*關聯，只需用 BLURT 畀掛單費就得——呢個係預設選項，價錢只係一半，而且根本唔會廣播任何門羅幣 TxID。"
       },
       "xmr_tx_proof": {
         "q": "咩係 Monero tx_proof,點解 Morphit 要求佢?",
@@ -1648,6 +1648,10 @@
       "totp_2fa_why_not_google_authenticator": {
         "q": "點解 Morphit 唔推薦 Google Authenticator?",
         "a": "三個原因。第一:閉源。我哋無法驗證佢對你嘅密鑰做咗乜,你亦都無法驗證。第二:雲備份。由 2023 年起,Google Authenticator 默認將你嘅 2FA 密鑰同步到你嘅 Google 帳戶 — opt-OUT,唔係 opt-IN — 呢啲密鑰唔係用你控制嘅密碼端對端加密。即係話任何破壞你 Google 帳戶嘅人(網絡釣魚、SIM 卡交換、Google 唔見咗密鑰、傳票)都會一次過獲得你所有 2FA 密鑰。第三:喺尊重隱私嘅市場上 2FA 嘅全部意義在於第二個因素同你嘅主要帳戶保持分離。推薦同 Google 同步嘅身份驗證器會違背為咗完全選擇 Morphit 嚟避免嗰種模式嘅確切用戶群體(注重隱私嘅 Bitcoin 同 Monero 交易者)嘅目的。Morphit 推薦你控制備份位置嘅開源應用程式:Aegis(Android,加密本地備份)、2FAS(iOS + Android,可選 opt-in 雲備份)或者 Ente Auth(跨平台,端對端加密同步)。如果你已經有一個唔喺我哋列表中你信任嘅身份驗證器 — KeePassXC TOTP、Bitwarden Authenticator、Yubico Authenticator、andOTP — 冇問題。建議係\"我哋建議新用戶用乜\",唔係其他任何嘢嘅拒絕列表。"
+      },
+      "privacy_coins_onchain": {
+        "q": "Morphit 點樣保護我用隱私幣交易嘅私隱？",
+        "a": "Morphit 交易多種隱私幣——門羅幣（XMR）、Zcash（ZEC）、海盜鏈（ARRR）、達世幣（DASH）同 Decred（DCR）——並且對佢哋全部採用相同嘅鏈上足跡保護。\n\n**你嘅實際結算永遠唔會接觸 Blurt。**當你交易隱私幣嘅時候，啲幣係喺你同對手方嘅錢包之間點對點轉移，直接喺該幣自己嘅鏈上完成。嗰筆轉賬永遠唔會廣播到、記錄喺 Morphit 用嚟協調嘅 Blurt 區塊鏈上，亦都無法從中睇到。Blurt 只係承載公開嘅訂單（廣告）同埋端到端加密嘅聊天。\n\n**訂單喺 Blurt 上披露啲乜——以及我哋從中剝走咗啲乜：**\n• 訂單係一則廣告，所以佢嘅方向/資產/金額範圍/付款方式必然係公開嘅（買家就係咁搵到你嘅賣單）。呢個係任何公開訂單簿嘅固有屬性。\n• 但係我哋移除咗所有唔需要存在嘅內容：訂單嘅 permlink 而家係一個唔透明嘅隨機令牌（`order-…`），而唔係 `sell-xmr-usd-…`，所以資產名稱唔再洩漏到鏈上 permlink、訂單 URL、RSS 源或者區塊瀏覽器入面。到期時間戳被取整到日，所以無法識別你發佈嘅確切時刻。永遠唔會附加 IP、時區、語言或者瀏覽器指紋——你喺表單入面填寫嘅就係上鏈嘅全部內容。\n\n**每種幣都有金額抖動。**當你喺聊天入面分享一個收款金額嘅時候，Morphit 會加一條微小嘅隨機尾數（精確到該幣嘅最小單位——XMR 用皮可門羅，其他用聰級），令鏈上金額無法同你發佈嘅訂單匹配。預設開啟。\n\n**ZEC、ARRR、DASH 同 DCR 只供交易——佢哋嘅 TxID 根本唔會出現喺 Blurt 上。**你唔可以用佢哋畀 Morphit 嘅掛單費，而結算係點對點嘅，所以呢啲幣嘅交易 ID 唔存在任何被寫入公開鏈嘅時刻。對呢四種幣嚟講，鏈上情況甚至比門羅幣仲要乾淨。\n\n**門羅幣啱啱有一處可選嘅跨鏈接觸，而且可以揀唔用。**XMR 係三種資產之一（同 BLURT 同 BTC 一齊），你*可以*用佢畀嗰筆小額掛單費；如果你咁做，該費用支付嘅 TxID 會記錄喺你 Blurt 上嘅訂單裡面（咁任何營運者都可以用門羅幣 tx_proof 驗證費用——唔需要檢視密鑰，參見門羅幣 TxID 常見問題）。嗰度係門羅幣 TxID 唯一接觸 Blurt 嘅地方，而且只係一筆畀公開地址嘅約 0.25 美元手續費，絕對唔係你嘅交易。想要門羅幣同 Blurt 之間零關聯？用 BLURT 畀掛單費就得——呢個係預設選項，價錢只係一半。\n\n每種幣嘅完整指南見 /privacy/{asset}（例如 /privacy/xmr、/privacy/zec），完整嘅洩漏清單喺項目嘅元數據洩漏目錄入面。"
       }
     },
     "share_link": "分享連結",

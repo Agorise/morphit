@@ -6,10 +6,14 @@
  * lowercase alphanumeric with dashes, 1-32 chars, no consecutive
  * dashes.
  *
- * We generate them client-side with a human-readable prefix
- * (`sell-btc-usd-`) plus a random suffix, so a user browsing
- * their own order list sees meaningful strings rather than
- * opaque tokens.
+ * We generate them client-side as an OPAQUE token (`order-<random>`).
+ * cp175 F-012: an earlier version embedded `<side>-<asset>-<fiat>` so a
+ * user browsing their own order list saw meaningful strings — but that
+ * leaked the asset (e.g. "xmr") into the permanent on-chain permlink, order
+ * URLs, RSS GUIDs, and block explorers, with no functional benefit (nothing
+ * parses the permlink — side/asset/fiat come from the structured payload).
+ * Privacy wins over the cosmetic readability; the order list derives its
+ * labels from the structured fields, not the permlink.
  *
  * Security note: every free-text field in the payload is run
  * through `redactPrivateKeys()` before it leaves this builder.
@@ -37,19 +41,41 @@ function randomSuffix(len: number): string {
 	return out;
 }
 
-/** Build a permlink like "sell-btc-usd-kx2mq7". The random
- *  suffix has 6 chars drawn from a 30-char alphabet, giving
- *  ~30 bits of entropy — enough that two concurrent users
+/** Build an opaque permlink like "order-kx2mq7p4n8za". The random
+ *  suffix has 12 chars drawn from a 30-char alphabet, giving
+ *  ~59 bits of entropy — enough that two concurrent users
  *  don't collide on the same side/asset/fiat combo. */
-export function makeOrderPermlink(side: 'buy' | 'sell', asset: AssetTicker, fiat: string): string {
-	const safeFiat = fiat
-		.toLowerCase()
-		.replace(/[^a-z0-9]/g, '')
-		.slice(0, 8);
-	const suffix = randomSuffix(6);
-	const permlink = `${side}-${asset.toLowerCase()}-${safeFiat}-${suffix}`;
+/**
+ * Order permlink — an OPAQUE random identifier.
+ *
+ * cp175 F-012 (Monero/privacy hardening): the permlink used to embed
+ * `<side>-<asset>-<fiat>` (e.g. `sell-xmr-usd-ab12cd`). That string is
+ * permanently public on the Blurt chain AND is spread into order URLs
+ * (`/[account]/[permlink]`), RSS feed GUIDs + links, and block-explorer
+ * displays — so the asset name (e.g. "xmr") leaked into many human-readable,
+ * widely-syndicated, permanent surfaces. But NOTHING parses meaning out of the
+ * permlink: the indexer reads side/asset/fiat from the structured op payload
+ * (`payload.asset`, `payload.side`, ...), the orderbook UI renders from those
+ * structured fields, and every other reference treats the permlink as an
+ * opaque token (keyed as `account/permlink`). So embedding the asset was pure
+ * redundant leakage.
+ *
+ * The asset/side/fiat still travel in the structured payload (the orderbook
+ * needs them to match buyers and sellers — that's inherent and unavoidable for
+ * a public orderbook). This change stops DUPLICATING them into the permlink
+ * string, shrinking the gratuitous footprint: an on-chain observer / RSS
+ * consumer / explorer no longer sees "xmr" in the permlink, URL, or feed.
+ *
+ * `side`/`asset`/`fiat` are still accepted as params for call-site
+ * compatibility but are no longer encoded into the returned string. 12 random
+ * base36 chars (~62 bits) keeps collisions negligible now that the
+ * distinguishing prefix is gone; uniqueness is still enforced by the indexer's
+ * (account, permlink) primary key regardless.
+ */
+export function makeOrderPermlink(_side: 'buy' | 'sell', _asset: AssetTicker, _fiat: string): string {
+	const suffix = randomSuffix(12);
+	const permlink = `order-${suffix}`;
 	// Sanity: the result must match the indexer's PERMLINK_RE.
-	// If fiat was empty, the `--` gap would fail that check.
 	if (!PERMLINK_RE.test(permlink)) {
 		throw new Error(`Generated invalid permlink: ${permlink}`);
 	}
@@ -236,4 +262,26 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 			? { operator_tag: input.operatorTag }
 			: {})
 	};
+}
+
+/**
+ * Compute an order-expiry Date `expiresDays` whole days from now, FLOORED to
+ * the start of that UTC day (00:00:00.000Z).
+ *
+ * cp175 F-015 (metadata-leak reduction): the previous call sites used
+ * `new Date(Date.now() + expiresDays * 86_400_000)`, whose `.toISOString()`
+ * carries the submit moment to MILLISECOND precision (e.g. `…T14:23:47.831Z`).
+ * That value is broadcast on the public Blurt chain in `expires_at`. Because
+ * the interval is a round number of days, an observer can subtract it to
+ * recover the client's exact wall-clock reading at submit time — a secondary
+ * timing/clock-skew fingerprint independent of (and finer than) the block
+ * time. Flooring to UTC midnight strips all sub-day precision; expiry is only
+ * ever used in `>` liveness comparisons and shown as "expires in N days," so
+ * nothing functional is lost. We floor (never round up) so the result can't
+ * cross the indexer's MAX_EXPIRES_AT_DAYS ceiling.
+ */
+export function makeExpiryFlooredUtcDay(expiresDays: number): Date {
+	const target = Date.now() + expiresDays * 86_400_000;
+	const floored = Math.floor(target / 86_400_000) * 86_400_000;
+	return new Date(floored);
 }
