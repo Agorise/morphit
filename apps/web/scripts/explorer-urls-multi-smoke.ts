@@ -46,6 +46,7 @@ import {
 	BUNDLED_XRP_CHAT_LINK_URLS,
 	BUNDLED_BTC_CHAT_LINK_URL,
 	BUNDLED_XMR_CHAT_LINK_URL,
+	TOKEN_NETWORK_EXPLORER_URLS,
 	BTC_TXID_RE,
 	XMR_TXID_RE,
 	substituteTxidIntoTemplate,
@@ -228,6 +229,113 @@ scenario('uppercase txid is lowercased in output URLs', () => {
 	assertTrue(result.length >= 1, 'expected at least one URL');
 	assertContains(result[0]!, 'a'.repeat(64));
 	if (result[0]!.includes('A'.repeat(64))) throw new Error('uppercase leaked');
+});
+
+// ─── cp174 — multi-network token explorer widening (USDT/USDC/DAI) ───
+//
+// Mirrors urls.ts tokenExplorerUrls(): per-network normalization
+// (SPL case-sensitive; TRC-20 lowercase-no-prefix; EVM lowercase+0x),
+// operator override first (re-validated), then bundled alternatives,
+// deduped.  Tested against the pure TOKEN_NETWORK_EXPLORER_URLS map.
+
+function normalizeTokenTxidClone(network: string, txid: string): string {
+	if (network === 'spl') return txid;
+	if (network === 'trc20') return txid.toLowerCase();
+	const lc = txid.toLowerCase();
+	return lc.startsWith('0x') ? lc : `0x${lc}`;
+}
+
+function computeTokenUrls(
+	network: string,
+	txid: string,
+	override: string | null
+): readonly string[] {
+	const normalized = normalizeTokenTxidClone(network, txid);
+	const alternatives = TOKEN_NETWORK_EXPLORER_URLS[network] ?? [];
+	const seen = new Set<string>();
+	const result: string[] = [];
+	const push = (tpl: string): void => {
+		const url = substituteTxidIntoTemplate(tpl, normalized);
+		if (url === null) return;
+		if (seen.has(url)) return;
+		seen.add(url);
+		result.push(url);
+	};
+	if (override !== null && isValidChatLinkTemplate(override)) push(override);
+	for (const tpl of alternatives) push(tpl);
+	return result;
+}
+
+const EVM_TXID = '0x' + 'a'.repeat(64);
+const TRON_TXID = 'c'.repeat(64);
+const SPL_TXID = '5'.repeat(88); // base58, 88 chars
+
+scenario('every token network has a non-empty alternatives list', () => {
+	for (const net of ['erc20', 'trc20', 'spl', 'bep20', 'base', 'polygon', 'arbitrum']) {
+		const list = TOKEN_NETWORK_EXPLORER_URLS[net];
+		assertTrue(Array.isArray(list) && list.length >= 1, `network ${net} has alternatives`);
+	}
+});
+
+scenario('token alternatives are all https + contain {txid} template', () => {
+	for (const net of Object.keys(TOKEN_NETWORK_EXPLORER_URLS)) {
+		for (const tpl of TOKEN_NETWORK_EXPLORER_URLS[net]!) {
+			assertTrue(tpl.startsWith('https://'), `https: ${tpl}`);
+			assertTrue(tpl.includes('{txid}'), `has {txid}: ${tpl}`);
+		}
+	}
+});
+
+scenario('erc20 (EVM) widening: multiple URLs, lowercased + 0x preserved', () => {
+	const result = computeTokenUrls('erc20', EVM_TXID, null);
+	assertTrue(result.length >= 2, 'expected dropdown (≥2 explorers)');
+	assertContains(result[0]!, '0x' + 'a'.repeat(64));
+});
+
+scenario('spl txid is NOT lowercased (base58 case-sensitive)', () => {
+	const mixed = 'AbCdEf' + '5'.repeat(82); // 88 chars, mixed case
+	const result = computeTokenUrls('spl', mixed, null);
+	assertTrue(result.length >= 1, 'expected ≥1 explorer');
+	assertContains(result[0]!, 'AbCdEf'); // case preserved
+});
+
+scenario('trc20 txid lowercased, no 0x prefix added', () => {
+	const result = computeTokenUrls('trc20', TRON_TXID.toUpperCase(), null);
+	assertTrue(result.length >= 1, 'expected ≥1 explorer');
+	assertContains(result[0]!, 'c'.repeat(64));
+	if (result[0]!.includes('0x')) throw new Error('trc20 must not get 0x prefix');
+});
+
+scenario('operator override prepends the token alternatives list', () => {
+	const override = 'https://my-evm-explorer.example/tx/{txid}';
+	const result = computeTokenUrls('erc20', EVM_TXID, override);
+	assertContains(result[0]!, 'my-evm-explorer.example');
+	assertEqual(
+		result.length,
+		TOKEN_NETWORK_EXPLORER_URLS['erc20']!.length + 1,
+		'override + bundled alternatives'
+	);
+});
+
+scenario('malicious token override (javascript:) is rejected; bundled list only', () => {
+	const evil = 'javascript:alert(1)//{txid}';
+	const result = computeTokenUrls('erc20', EVM_TXID, evil);
+	assertEqual(result.length, TOKEN_NETWORK_EXPLORER_URLS['erc20']!.length, 'override discarded');
+	for (const url of result) {
+		if (url.includes('javascript')) throw new Error('XSS leak: ' + url);
+	}
+});
+
+scenario('token alternatives de-duplicate (override equal to primary)', () => {
+	const primary = TOKEN_NETWORK_EXPLORER_URLS['spl']![0]!; // solscan template
+	const result = computeTokenUrls('spl', SPL_TXID, primary);
+	// override == primary → after substitution the URL is identical → deduped
+	assertEqual(result.length, TOKEN_NETWORK_EXPLORER_URLS['spl']!.length, 'no duplicate');
+});
+
+scenario('unknown token network → empty alternatives (graceful)', () => {
+	const result = computeTokenUrls('nonexistent-net', EVM_TXID, null);
+	assertEqual(result.length, 0, 'empty for unknown network');
 });
 
 // ─── End ──────────────────────────────────────────────────────

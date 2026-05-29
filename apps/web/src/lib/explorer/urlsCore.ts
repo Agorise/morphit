@@ -445,6 +445,72 @@ export const BUNDLED_XRP_CHAT_LINK_URLS: readonly string[] = [
 	'https://blockchair.com/xrp-ledger/transaction/{txid}'
 ];
 
+/** cp174 — per-NETWORK ordered explorer-alternative lists for the
+ *  multi-network tokens (USDT, USDC, DAI).  Keyed by network rather
+ *  than by asset because the explorer for a given chain is the same
+ *  regardless of which token rides on it: an ERC-20 USDT tx and an
+ *  ERC-20 DAI tx both resolve on Ethereum explorers, so the fallback
+ *  chain is shared.
+ *
+ *  The first element of each list is the SAME template as the
+ *  per-network `bundledExplorerUrl` in `lib/assets/networks.ts`
+ *  (the primary); the rest are independent-infrastructure
+ *  alternatives selected by the same criteria as the native-chain
+ *  `BUNDLED_<ASSET>_CHAT_LINK_URLS` lists above (no auth/captcha/
+ *  JS-wall, direct txid deep-link, project- or community-vetted,
+ *  different operator from the primary).  The erc20 and spl lists
+ *  reuse the exact alternatives already vetted for ETH and SOL.
+ *
+ *  Consumed by usdt/usdc/daiExplorerUrls() in urls.ts (the plural
+ *  builders), which prepend any operator override and then walk
+ *  this list.  Singular usdt/usdc/daiExplorerUrl() are unchanged
+ *  and still return just the primary for callers that want one URL. */
+export const TOKEN_NETWORK_EXPLORER_URLS: Readonly<Record<string, readonly string[]>> =
+	Object.freeze({
+		// EVM — Ethereum mainnet (erc20)
+		erc20: Object.freeze([
+			'https://etherscan.io/tx/{txid}',
+			'https://ethplorer.io/tx/{txid}',
+			'https://3xpl.com/ethereum/transaction/{txid}'
+		]),
+		// Tron (trc20)
+		trc20: Object.freeze([
+			'https://tronscan.org/#/transaction/{txid}',
+			'https://tronscan.io/#/transaction/{txid}',
+			'https://3xpl.com/tron/transaction/{txid}'
+		]),
+		// Solana (spl) — reuses the SOL-vetted alternatives
+		spl: Object.freeze([
+			'https://solscan.io/tx/{txid}',
+			'https://solana.fm/tx/{txid}',
+			'https://explorer.solana.com/tx/{txid}'
+		]),
+		// BNB Smart Chain (bep20)
+		bep20: Object.freeze([
+			'https://bscscan.com/tx/{txid}',
+			'https://3xpl.com/bnb/transaction/{txid}',
+			'https://bscscan.io/tx/{txid}'
+		]),
+		// Base (USDC, DAI)
+		base: Object.freeze([
+			'https://basescan.org/tx/{txid}',
+			'https://base.blockscout.com/tx/{txid}',
+			'https://3xpl.com/base/transaction/{txid}'
+		]),
+		// Polygon (USDC, DAI)
+		polygon: Object.freeze([
+			'https://polygonscan.com/tx/{txid}',
+			'https://polygon.blockscout.com/tx/{txid}',
+			'https://3xpl.com/polygon/transaction/{txid}'
+		]),
+		// Arbitrum One (DAI)
+		arbitrum: Object.freeze([
+			'https://arbiscan.io/tx/{txid}',
+			'https://arbitrum.blockscout.com/tx/{txid}',
+			'https://3xpl.com/arbitrum-one/transaction/{txid}'
+		])
+	});
+
 /** Substitute `{txid}` into a template.  Defensive: if the
  *  template doesn't contain `{txid}` (e.g. an operator who
  *  somehow bypassed the validator on the way in), append

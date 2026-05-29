@@ -184,7 +184,7 @@ row's title is a link to the order detail page (`/@<seller>/<permlink>`).
 - **Message composer** (`<textarea>`) — `ProtectedTextarea` wrapper
   detects pasted private keys and redacts before sending (✓ verified
   via `privateKeyDetector.ts`).
-- **`[Send]`** button — broadcasts `morphit_chat_message_v1`.
+- **`[Send]`** button — broadcasts `morphit_chat_v1`.
 - **`[Encrypt]` indicator** — shows ChaCha20-Poly1305 padlock when E2E
   enabled (default for both parties having published their chat identity).
 - **`[Verify peer]`** button → opens `VerifyPeerPanel` (3 interactives:

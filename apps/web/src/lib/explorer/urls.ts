@@ -63,6 +63,7 @@ import {
 	BUNDLED_SOL_CHAT_LINK_URLS,
 	BUNDLED_ETH_CHAT_LINK_URLS,
 	BUNDLED_XRP_CHAT_LINK_URLS,
+	TOKEN_NETWORK_EXPLORER_URLS,
 	substituteTxidIntoTemplate,
 	isValidChatLinkTemplate
 } from './urlsCore';
@@ -400,6 +401,90 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 	}
 
 	return bundledDaiExplorerUrl(network, txid);
+}
+
+// ──────────────────────────────────────────────────────────────
+// cp174 — plural explorer builders for the multi-network tokens.
+//
+// The singular usdt/usdc/daiExplorerUrl() above return ONE URL
+// (operator override, else bundled default).  These plural
+// variants return the FULL ordered list — operator override first
+// (re-validated for XSS the same way), then the bundled primary +
+// independent-infrastructure alternatives from
+// TOKEN_NETWORK_EXPLORER_URLS — so the funds-sent UI can offer the
+// same "+N more explorers" dropdown the native-chain assets get via
+// externalExplorerUrls().  This closes the cp166 deferral for the
+// three tokens that the cp167 widening didn't cover.
+// ──────────────────────────────────────────────────────────────
+
+/** Per-network txid normalization, shared by the plural builders.
+ *  Identical rules to the singular builders' bundled-default path
+ *  (cp30-DD-DD SEC-4): SPL is base58 case-sensitive (no change);
+ *  EVM-family (erc20, bep20, base, polygon, arbitrum) lowercase +
+ *  require leading 0x; TRC-20 lowercase, no prefix. */
+function normalizeTokenTxid(network: string, txid: string): string {
+	if (network === 'spl') return txid;
+	if (network === 'trc20') return txid.toLowerCase();
+	// EVM family
+	const lc = txid.toLowerCase();
+	return lc.startsWith('0x') ? lc : `0x${lc}`;
+}
+
+/** Shared list-builder: operator override (re-validated) first,
+ *  then the per-network bundled alternatives, deduped, with the
+ *  txid normalized per network.  Mirrors externalExplorerUrls(). */
+function tokenExplorerUrls(
+	network: string,
+	txid: string,
+	override: string | null | undefined
+): readonly string[] {
+	const normalized = normalizeTokenTxid(network, txid);
+	const alternatives = TOKEN_NETWORK_EXPLORER_URLS[network] ?? [];
+	const seen = new Set<string>();
+	const result: string[] = [];
+	const push = (tpl: string): void => {
+		const url = substituteTxidIntoTemplate(tpl, normalized);
+		if (url === null) return;
+		if (seen.has(url)) return;
+		seen.add(url);
+		result.push(url);
+	};
+	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the operator
+	// template before use, exactly as the singular builders do.  A
+	// hostile/compromised indexer serving a `javascript:` template is
+	// rejected here and we fall through to the bundled list.
+	if (override !== null && override !== undefined && isValidChatLinkTemplate(override)) {
+		push(override);
+	}
+	for (const tpl of alternatives) push(tpl);
+	return result;
+}
+
+/** Plural USDT explorer URLs (best→worst) for the funds-sent
+ *  dropdown.  Returns [] on validation failure. */
+export function usdtExplorerUrls(network: UsdtNetwork, txid: string): readonly string[] {
+	if (typeof txid !== 'string') return [];
+	if (!validateUsdtTxid(network, txid)) return [];
+	const overrides = getInstanceSnapshot().chat_link_urls.usdt;
+	return tokenExplorerUrls(network, txid, overrides ? overrides[network] : null);
+}
+
+/** Plural USDC explorer URLs (best→worst).  Returns [] on
+ *  validation failure. */
+export function usdcExplorerUrls(network: UsdcNetwork, txid: string): readonly string[] {
+	if (typeof txid !== 'string') return [];
+	if (!validateUsdcTxid(network, txid)) return [];
+	const overrides = getInstanceSnapshot().chat_link_urls.usdc;
+	return tokenExplorerUrls(network, txid, overrides ? overrides[network] : null);
+}
+
+/** Plural DAI explorer URLs (best→worst).  Returns [] on
+ *  validation failure. */
+export function daiExplorerUrls(network: DaiNetwork, txid: string): readonly string[] {
+	if (typeof txid !== 'string') return [];
+	if (!validateDaiTxid(network, txid)) return [];
+	const overrides = getInstanceSnapshot().chat_link_urls.dai;
+	return tokenExplorerUrls(network, txid, overrides ? overrides[network] : null);
 }
 
 /** Builds the Morphit explorer URL for a Blurt account.

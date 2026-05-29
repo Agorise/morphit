@@ -360,7 +360,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 155. **Source code at git.agorise.net/agorise/morphit.** Self-hosted Forgejo (Git forge), not GitHub. The project's own infrastructure is decentralized too.
 
-156. **44 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0045 (0016 retracted, that work shipped as ADR-0022). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), and shared network-defense primitives (0045).
+156. **45 ADRs** (Architectural Decision Records) in `docs/adr/`, files numbered 0001 through 0046 (0016 retracted, that work shipped as ADR-0022). Each records a major design choice, the alternatives considered, and the tradeoff rationale. Topics span key custody (0010), chat reputation + crypto (0014, 0015), YubiKey unlock (0017), release trust anchor (0019), QR pairing (0022), one ADR per tradable-asset addition (0023–0036), cash-by-mail (0037), reputation hardening (0038), self-sovereign pricing (0039–0042), opt-in TOTP 2FA (0043), AI-agent integration via Model Context Protocol (0044), shared network-defense primitives (0045), and migrating Blurt signing off the unmaintained `elliptic` library (0046).
 
 157. **49 design and operations documents** in `docs/`. Architecture, operations runbook, security model, fees-and-rewards reference, threat model, metadata-leak catalog, integration test design, automation audit — all public.
 
@@ -734,7 +734,7 @@ Every claim in this document is verifiable. The repository is at **git.agorise.n
 
 - **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~150 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
-- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0045-*.md` (44 ADRs; 0016 was retracted and the number isn't reused)
+- **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0046-*.md` (45 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
 - **Public API**: `docs/API.md`
 - **Operator runbook**: `docs/OPERATIONS.md`

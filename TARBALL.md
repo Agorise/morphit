@@ -4,7 +4,89 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp171 **CLOSED** — a fresh-session deep review of the cp170 tarball. Verified the cp170 state holds under real tooling (npm ci --ignore-scripts populates node_modules + @morphit links; the native better-sqlite3 build fails on this host because nodejs.org headers are blocked, which only affects the indexer vitest path — every tsx smoke runs fine). Then found and fixed three real issues, the first of which is the important one.
+**Last touched:** cp174 **CLOSED** — three independent tasks executed end-to-end in one pass: (1) wire the @noble signer into the live signing path (flag-gated), (2) widen explorer fallback to the multi-network tokens, (3) resolve the peerPriceMonitor rpc-pool question.
+
+### Task 1 — sign.ts noble signer WIRED (flag-gated; default still dblurt)
+The cp173 feasibility spike is now wired into the real path, behind a flag, with the digest-equivalence gap closed.
+- **`apps/web/src/lib/blurt/nobleSigner.ts`** (new): `signDigestWithNoble(digest32, priv) → 65-byte wire hex`.  Canonical (low-S via noble + low-R via high-bit retry with LE32 extra-entropy counter), recovery byte +31.  Uses `@noble/hashes/sha2` + `/hmac` (matches an existing app file's convention) and sets `secp.etc.hmacSha256Sync` for the browser bundle.  Type-correct noble v2 API: `sig.toCompactRawBytes()`, guard `sig.recovery === undefined`, hex via `secp.etc.bytesToHex` (no Buffer global).
+- **`apps/web/src/lib/net/config.ts`**: new `export const SIGNER_BACKEND: 'dblurt' | 'noble' = 'dblurt'` (frontend config convention is module-level constants, not env vars).  **DEFAULT IS dblurt — do not flip without a real chain broadcast.**
+- **`sign.ts`**: `signTransactionWithKey(tx, key, rawScalar)` now branches on `SIGNER_BACKEND`.  Noble path computes the digest via dblurt's own `cryptoUtils.transactionDigest(tx)` (so serialization + chain-id binding stay dblurt's code — the ONLY thing that changes is which lib runs the ECDSA over the identical digest), signs with noble, appends the wire sig to a cloned tx's `signatures`.  dblurt path unchanged.  Threaded the raw scalar (already in scope as `activePriv`/`postingPriv`/`live.posting.privateKey`) through all 3 call sites so the noble path never touches dblurt's private `PrivateKey.key`.
+- **`scripts/blurt-noble-tx-signature-proof.ts`** (new, registered): closes the gap the cp173 recovery proof left (it signed arbitrary digests).  Exercises the FULL tx path (custom_json / transfer / order-with-fee), digest via `cryptoUtils.transactionDigest`, noble-sign, assert recovers to the signing key under dblurt.  180/180 + digest-determinism = 4/4 scenarios.
+- **KEY dblurt internals discovered** (lib/crypto.js): `cryptoUtils.transactionDigest(tx, chainId)` = `sha256(chainId || serialized_tx)` is PUBLICLY EXPOSED; default chainId = DEFAULT_CHAIN_ID (Blurt mainnet `cd8d90f2…`), matching the no-arg signing client.  dblurt's `PrivateKey.sign` uses a BESPOKE per-attempt nonce (`sha256(message || attemptByte)`), NOT standard RFC-6979 — this is *why* byte-equivalence with noble is impossible (and irrelevant, since the chain verifies by recovery).
+- **Still NOT shipped:** flipping to `'noble'` needs one real Blurt broadcast per op class (sandbox has no chain access).  The in-sandbox half (recovery over real tx digests) is now proven.  See ADR-0046.
+
+### Task 2 — explorer widening for USDT / USDC / DAI
+cp167 gave the 12 native-chain assets a multi-explorer dropdown; the 3 multi-network tokens still returned a single URL per network.  Now they get the same dropdown.
+- **`urlsCore.ts`**: new `TOKEN_NETWORK_EXPLORER_URLS` — per-NETWORK (not per-asset, since the explorer for a chain is shared across tokens on it) ordered alternatives for `erc20, trc20, spl, bep20, base, polygon, arbitrum`.  erc20/spl reuse the ETH/SOL-vetted alternatives.
+- **`urls.ts`**: new plural `usdtExplorerUrls` / `usdcExplorerUrls` / `daiExplorerUrls` mirroring `externalExplorerUrls` — operator-override-first (re-validated via `isValidChatLinkTemplate` for XSS, cp30-DD-DD SEC-1) + per-network normalization (SPL case-sensitive; TRC-20 lowercase-no-prefix; EVM lowercase+0x) + bundled alternatives, deduped.  Singular builders unchanged.
+- **`ChatMessage.svelte`**: the plural `explorerLinksForTxid` now routes usdt/usdc/dai to the new plural builders (was: singular wrapped in a 1-element array → no dropdown).  Network guards already imported.
+- **No new user-facing strings** → no locale change (host names derived at runtime; only label is the existing `view_on_explorer` key).
+- **`explorer-urls-multi-smoke.ts`**: +9 scenarios (now 20 total) — per-network normalization, override-prepend, **javascript: override rejected (XSS)**, dedup, unknown-network graceful.  `href-xss-smoke` still green (no injection regression).
+
+### Task 3 — peerPriceMonitor: correctly NOT migrated (decision locked)
+Investigated migrating `apps/indexer/src/indexer/price/peerPriceMonitor.ts` to `@morphit/rpc-pool`.  **Conclusion: do NOT** — and cp167 already decided this, with in-source rationale.  `quorumCall` early-returns on N-agreement among INTERCHANGEABLE endpoints; peerPriceMonitor fans out to DISTINCT federation peers and needs EVERY observation (the median + disagreement signal is the entire point — early-return would defeat the alert).  The pool exposes no fan-out-all primitive because it's built for interchangeable endpoints.  Forcing the migration would degrade the alert.
+- **`peer-price-monitor-smoke.ts`**: +2 source-sentinel guards (PPM-10) — assert the source still uses `Promise.allSettled` and does NOT import `@morphit/rpc-pool` or invoke `quorumCall` (regexes match real imports/calls, not the comment mention; tamper-tested).  Locks the cp167 decision against a future "helpful" regression.  39/39 scenarios.
+
+### Verified clean (cp174 sentinel)
+- Web typecheck: 0 errors, 0 warnings (only app with source changes).
+- Smokes: noble-recovery 3/3, noble-tx 4/4, explorer-multi 20/20, peer-price 39/39, href-xss 1/1.
+- Safety invariant: `SIGNER_BACKEND` default still `'dblurt'`; `sign.ts` still has the dblurt `broadcast.sign` path intact.
+- No new locale strings; no temp files left in the tree.
+
+### No cleanup script this checkpoint
+cp174 adds two files (nobleSigner.ts + the tx-proof smoke), edits seven source/smoke files and the meta-docs; no deletions.  Ships a full consolidated tarball (as always).
+
+---
+
+## 🔄 PRIOR HANDOFF — cp173
+
+**Last touched:** cp173 **CLOSED** — elliptic-migration feasibility spike (the highest-value follow-up flagged at the end of cp172). Goal: determine — and PROVE, not assert — whether Morphit can move Blurt signing off the unmaintained, CVE-2025-14505-bearing `elliptic` library.
+
+**What was mapped.** All frontend signing funnels through `apps/web/src/lib/blurt/sign.ts` → `signTransactionWithKey()` → `getSigningClient().broadcast.sign(tx, key)`, which delegates ECDSA to `@beblurt/dblurt` (which signs with `elliptic` via `ecurve` + the `secp256k1` native package's pure-JS fallback). `@noble/secp256k1` is already a direct `apps/web` dependency (keygen, ADR-0007); the gap is signing.
+
+**The decisive insight — recovery, NOT byte-equality.** Replicating dblurt's exact signature bytes with noble is the WRONG invariant and a dead end: dblurt's elliptic RFC-6979 `k`-derivation does not match noble byte-for-byte (confirmed — 200/200 vectors differed; I probed single/double-hash, LE/BE nonce counters, extra-entropy formats, lowS toggle, none matched). It is ALSO unnecessary: graphene chains (Blurt/Steem/Hive) verify by PUBLIC-KEY RECOVERY (dblurt's `Signature` exposes `.recover(digest)` → signer pubkey). Any valid CANONICAL (low-S + low-R) ECDSA signature in the 65-byte wire format `[recovery+31]++r++s` that recovers to an authorized key is accepted. So the migration's correctness question is just "does a noble sig recover to the signer's key?"
+
+**What was PROVEN (in-sandbox).** dblurt loads and signs here via its elliptic fallback (native secp256k1 not required). New `scripts/blurt-noble-signer-recovery-proof.ts` (registered in `scripts/run-smokes.sh`) proves against dblurt's OWN parser+recovery: **300/300** random vectors — noble-signed → `dblurt.Signature.fromBuffer()` + `.recover()` → recovers to the CORRECT signer pubkey, 0 mismatches; **100/100** satisfy canonical form; **50/50** round-trip-verify. Conclusion: a noble-based signer can produce chain-valid Blurt signatures. Full design + cutover plan in `docs/adr/0046-elliptic-signing-migration.md`.
+
+**Cleanup of the misframed harness.** The earlier `scripts/blurt-noble-signer-equivalence.mjs` asserted byte-exact equivalence (wrong invariant) and FAILED. Deleted and replaced with the correctly-framed, passing `scripts/blurt-noble-signer-recovery-proof.ts`. No failing smoke left in the tree.
+
+**NOT shipped — cutover DEFERRED (honest scope).** This is a feasibility spike. `apps/web/src/lib/blurt/sign.ts` is UNCHANGED. Shipping requires: (1) wire the noble signer into sign.ts replacing `broadcast.sign` (keep dblurt for serialization/RPC); (2) keep dblurt as the recovery reference in the proof smoke; (3) ONE real Blurt chain broadcast of each op class (`custom_json`, `transfer`, order-with-fee) to confirm end-to-end acceptance — the sandbox CANNOT do this (no chain access) and it is the gate before "shipped"; (4) re-run persona walkthrough + full suite, triple-pulse. Until then `elliptic` stays in-tree (transitive via dblurt) and its advisories remain accepted risk per the SECURITY.md threat model.
+
+### Verified clean (cp173 sentinel)
+- New smoke `blurt-noble-signer-recovery-proof` → all 3 scenarios pass (300/300 + 100/100 + 50/50) under tsx; registered in run-smokes.sh.
+- No production source touched (sign.ts unchanged) → typecheck unchanged from cp172's 0×14.
+- Doc/registration deltas only: new `docs/adr/0046-elliptic-signing-migration.md`, REVISIT-LIST cp173 section + standing-item refresh, run-smokes.sh +1 entry.
+- cp172 results still stand (persona-walkthrough 170/170, npm-audit-gate green, locale parity 3,094×10).
+
+### No cleanup script this checkpoint
+cp173 adds two files (the proof smoke + the ADR), edits three docs, and the run-smokes registration; it deletes the misframed `.mjs`. A delta tarball can't communicate the deletion, so this checkpoint ships a FULL consolidated tarball (which it does anyway).
+
+---
+
+## 🔄 PRIOR HANDOFF — cp172
+
+**Last touched:** cp172 **CLOSED** — continuation of the cp171 fresh-session review. Three workstreams: (1) audit other "renamed/fixed X across the codebase" sweep-claims for the same incompleteness class as cp167; (2) re-check the `elliptic` supply-chain situation; (3) decide whether to swap `matrix-bot-sdk` off the deprecated `request` chain.
+
+**1 — Sweep-claim audit (the cp167-class hunt).** Extracted every "across the codebase / every occurrence / repo-wide / in lockstep" claim from REVISIT-LIST + AUDIT docs and verified each against the live tree. Result: the codebase's rename discipline is sound — cp167 was the outlier, not the norm. Verified CLEAN: the cp128 listing-fee API rename (`base_fee_usd`→`base_fee_fiat`, `blurt_price_usd`→`blurt_price_fiat`) — every doc hit is a rename-history comment, ADR-0040 mapping table, or historical migration narrative; zero live `base_fee_usd`/`blurtPriceUsd` in source. Also verified no live `config.blurtPriceUsd` remains (PHASE-5-BACKLOG refs are past-tense narrative). Found and fixed exactly ONE genuine residual: `docs/THREE-PERSONA-WALKTHROUGH-cp137.md:187` made a live behavioral claim "`[Send]` button — broadcasts `morphit_chat_message_v1`" using the OLD chat op id; cp131-LOW-008 renamed it to `morphit_chat_v1` in PHASE-5-PLAN/BACKLOG but missed this walkthrough. Canonical confirmed `morphit_chat_v1` in dispatcher OP_IDS. Fixed. Cross-checked ALL `morphit_*_v1` op-ids in current docs against the canonical dispatcher set: remaining mismatches are all legitimate (future/proposed ops like `morphit_order_v2` in PHASE-5-PLAN; the "no `morphit_feedback_replace_v1` op exists" negation in PLAN.md; informal shorthand in the FROZEN cp138 audit plan where the handler CODE uses correct ids). NOTE: `apps/indexer/test/indexer/listingFee.test.ts` LOOKS broken (imports a nonexistent `$indexer/listingFee`) but is a deliberately `describe.skip`'d documented stale-test placeholder (Part 47 "not silently dropped" trail) — the broken import sits INSIDE the retained `/* */` comment block (lines 24–167), so line 1 is the only live code; vitest loads it fine. NOT a bug — do not "fix" it.
+
+**2 — `elliptic` re-check (material new finding).** Web-checked the current state. There is a NEWER advisory the project's SECURITY.md had NOT recorded: **CVE-2025-14505** (published 2026-01-08), an ECDSA flaw distinct from the timing-side-channel one already documented — `elliptic` may mis-truncate the RFC-6979 nonce `k` when it has leading zeros, producing invalid signatures; and given a faulty + a correct signature over the SAME input+key, an attacker could potentially derive the secret key. It affects ALL published versions (≤6.6.1, the latest), no fix available; `elliptic` is now effectively unmaintained (~12mo no release). Confirmed Morphit is already on the latest `@beblurt/dblurt` (0.10.9) — no newer release drops the chain; elliptic enters via dblurt's `ecurve` dep + the `secp256k1` native package's pure-JS fallback (NOT a direct dblurt dep). Updated `docs/SECURITY.md`: corrected the elliptic entry to document CVE-2025-14505 accurately, fixed the dependency-path description, added a CVE-specific threat-model bullet (the paired-signature key-derivation precondition does not arise — Morphit never re-signs the same op+key twice; nonces/permlinks/timestamps differ; the chain rejects malformed sigs), and rewrote the project-practice paragraph (elliptic unmaintained → durable path is to move off it; `@noble/secp256k1` already a direct frontend dep; chain-client side is the open item). Added a standing REVISIT item. The npm-audit-gate does NOT currently flag elliptic (it gates HIGH/CRITICAL; this is Medium) — left as-is.
+
+**3 — matrix-bot-sdk swap: DELIBERATELY DEFERRED (my call, premise verified).** Before deciding, VERIFIED the threat-model premise in code (it's the load-bearing assumption for both the SECURITY.md accepted-risk rationale AND the npm-audit-gate allowlist): the bot's entire I/O surface is (a) one healthcheck HTTP server bound to `127.0.0.1` only (not off-box), (b) `client.crypto.prepare([])` with an EMPTY room list and NO sync loop / NO `.on('message')` / NO autojoin — the bot is send-only, never receives Matrix events, and (c) its only data source is the operator's own `journalctl` stream, classified locally, sent outbound to the operator's own homeserver. So no untrusted party drives the `request`-based HTTP layer; the form-data/qs/tough-cookie/SSRF advisories require attacker-influenced requests/boundaries that have no path here. Conclusion: swapping a working, security-reviewed, OPT-IN component's entire transport to chase a cosmetic `npm audit` number — when the advisories are correctly assessed below-threat-bar, CI-gated green, and unfixable upstream (matrix-bot-sdk@0.8.0 still pins request) — is exactly the churn that risks breaking something that works. Deferred as a DELIBERATE decision (not a forgotten one) so a future session doesn't re-litigate from zero. If the bot ever grows an inbound/command surface, revisit immediately.
+
+### Verified clean (cp172 sentinel)
+- Edits this turn were DOCS-ONLY (`THREE-PERSONA-WALKTHROUGH-cp137.md` 1 line + `docs/SECURITY.md` elliptic section). No source touched → no typecheck delta from cp171's 0×14.
+- persona-walkthrough 170/170 (asserts SECURITY.md content — passed after the SECURITY.md rewrite); operator-doc-fenced-path-existence 243/243; brag-list-claim-parity 79/79; cross-document-value-invariants 21/21; npm-audit-gate GREEN against live registry (2 allowlisted CRITICALs, 0 new).
+- Locale parity unchanged 3,094 × 10; brag list unchanged (all internal/doc work).
+- cp171 results still stand (TS 0×14, full tsx suite 254/254 6,334 scenarios) — no code changed since.
+
+### No cleanup script, no new files this checkpoint
+cp172 edits two existing docs and adds zero files. No `cpNN-cleanup.sh` needed.
+
+---
+
+## 🔄 PRIOR HANDOFF — cp171
+
+**Last touched:** cp171 **CLOSED** — a fresh-session deep review of the cp170 tarball. Found and fixed that cp167's relay-context "posting key"→"active key" rename was incomplete (11 downstream mislabels), root-fixed the recurring wizard step-count drift with a self-synchronizing smoke, and synced the README package list + SECURITY.md supply-chain snapshot.
 
 **1 — cp167 security-rename was INCOMPLETE (the main find).** cp167's REVISIT entry claimed it renamed "every `posting` reference in the relay context to `active` throughout the codebase (wizard, render, CLI commands, README, comments, locales)." It fixed the wizard *prompt* (`steps.ts` step 5) but MISSED the entire downstream surface that describes the same relay key:
   - `apps/ops-cli/src/commands/init.ts` — JSDoc ("relay account + posting key") + 5 review/storage strings (review-output label "Posting key:", source-env hint, backup "stored at" line, the plaintext-backup warning, and the backup-automation note). The plaintext-warning ALSO had the wrong *consequence* ("anyone… can post on behalf of your account") — an active key spends BLURT / creates accounts, it doesn't post; fixed both label and consequence.

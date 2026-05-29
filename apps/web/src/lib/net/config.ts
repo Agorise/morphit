@@ -197,3 +197,22 @@ export const RPC_MAX_CONSECUTIVE_FAILURES = 3;
  *  up a single call. Prevents a bad-weather scenario from turning into a
  *  multi-minute retry cascade on the user's screen. */
 export const RPC_MAX_RETRIES_PER_CALL = 3;
+
+/** Which library performs the secp256k1 ECDSA when signing Blurt
+ *  transactions.
+ *
+ *  - `'dblurt'` (default): @beblurt/dblurt's bundled signer, which uses
+ *    `elliptic`.  Battle-tested against the live chain, but `elliptic` is
+ *    unmaintained and carries CVE-2025-14505 (see docs/SECURITY.md).
+ *  - `'noble'`: a @noble/secp256k1-based signer (constant-time, maintained;
+ *    already this app's keygen library).  Proven equivalent for chain
+ *    acceptance — the chain verifies by public-key recovery, and noble
+ *    signatures recover to the correct key under dblurt's own verifier
+ *    (scripts/blurt-noble-signer-recovery-proof.ts: 300/300).  See ADR-0046.
+ *
+ *  DEFAULT IS `'dblurt'` ON PURPOSE.  Flipping to `'noble'` is gated on a
+ *  real Blurt chain broadcast confirming end-to-end acceptance, which can't
+ *  be done in a code-review sandbox.  Both paths reuse dblurt's serializer +
+ *  chain-id binding to compute the digest, so the only difference is which
+ *  library runs the ECDSA over that identical digest. */
+export const SIGNER_BACKEND: 'dblurt' | 'noble' = 'dblurt';

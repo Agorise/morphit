@@ -534,16 +534,30 @@ this list deserves immediate triage.
 
 | Package | Severity | Status |
 |---|---|---|
-| `elliptic <=6.6.1` (via `secp256k1` via `@beblurt/dblurt`) | Low (CVSS 5.6) | Accepted |
+| `elliptic <=6.6.1` (via `ecurve` + the `secp256k1` JS fallback, both under `@beblurt/dblurt`) | Medium (CVSS ~5.6) | Accepted |
 
-`elliptic` has a long-standing advisory
-([GHSA-848j-6mx2-7j84](https://github.com/advisories/GHSA-848j-6mx2-7j84))
-about timing-side-channel vulnerabilities in its secp256k1
-implementation. **No fix is available** — `elliptic` is a
-foundational JS crypto library used across the entire BLURT/
-STEEM/HIVE ecosystem; replacing it would mean replacing
-`@beblurt/dblurt` and all of its upstream dependencies, which
-is out of scope.
+`elliptic` carries two relevant advisory classes:
+- The long-standing timing-side-channel advisory
+  ([GHSA-848j-6mx2-7j84](https://github.com/advisories/GHSA-848j-6mx2-7j84))
+  in its secp256k1 implementation.
+- **CVE-2025-14505** (published 2026-01-08), an ECDSA flaw: when
+  computing the nonce `k` per RFC 6979, `elliptic` may incorrectly
+  truncate `k` if the interim value has leading zeros (the
+  byte-length of `k` is mis-computed), producing invalid
+  signatures. The serious tail: given both a faulty signature and
+  a correct signature over the same input + key, an attacker could
+  potentially derive the secret key.
+
+**No fix is available** — CVE-2025-14505 affects ALL published
+versions of `elliptic` (≤ 6.6.1, which is the latest), and the
+package is effectively unmaintained (no release in ~12 months).
+`elliptic` is a foundational JS crypto library used across the
+entire BLURT/STEEM/HIVE ecosystem; it reaches Morphit transitively
+through `@beblurt/dblurt`'s `ecurve` dependency and the `secp256k1`
+native package's pure-JS fallback. Removing it would mean replacing
+`@beblurt/dblurt` and its upstream chain, which is out of scope.
+Morphit is already pinned to the latest `@beblurt/dblurt` (0.10.9);
+no newer release drops the chain.
 
 **Threat model assessment for Morphit:**
 - *Browser signing* (frontend, user's keys): exploitation requires
@@ -558,6 +572,18 @@ is out of scope.
   rate-limited at multiple layers. Network-level jitter
   dominates any signing-time signal. Not reasonably exploitable.
 - *Indexer*: read-only, no signing, no exposure.
+- *CVE-2025-14505 specifically* (paired-signature key derivation):
+  the key-extraction path requires an attacker to obtain BOTH a
+  faulty signature AND a correct signature over the **same**
+  message + key. Morphit never re-signs the same operation with
+  the same key twice (each chain op is unique — nonces, permlinks,
+  and timestamps differ), so the "same input, two signatures"
+  precondition does not arise in normal operation. The invalid-
+  signature failure mode (a mis-truncated `k` producing a
+  rejected op) is a liveness nuisance, not a key-disclosure event,
+  and the chain rejects the malformed signature rather than acting
+  on it. Re-evaluate if any future feature signs identical payloads
+  repeatedly with a long-lived key.
 
 **Build/test (not in production bundles):**
 
@@ -637,11 +663,17 @@ The build/test advisories above are real but exposed only on the
 build host (CI or dev machine), which should already be
 isolated from production.
 
-**Recommended Morphit-project practice:** monitor
-`@beblurt/dblurt` upstream for a maintained fork that swaps
-`elliptic` for `@noble/secp256k1` (which uses constant-time
-field arithmetic). Until then, the `elliptic` advisory is
-accepted risk per the threat model above.
+**Recommended Morphit-project practice:** `elliptic` is now
+effectively unmaintained (no release in ~12 months) and
+CVE-2025-14505 is unfixed across all published versions, so the
+durable path is to move off it rather than wait for a patch.
+The frontend already depends directly on `@noble/secp256k1`
+(constant-time, actively maintained); the open item is the
+chain-client side. Monitor `@beblurt/dblurt` upstream for a
+release that drops `ecurve`/`elliptic` in favor of a `@noble`-
+based signer, or evaluate a maintained dblurt fork. Until then,
+the `elliptic` advisories are accepted risk per the threat model
+above. Tracked as a standing REVISIT item.
 
 ### Legal considerations for operators
 
