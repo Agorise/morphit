@@ -2,28 +2,40 @@
  * Morphit indexer — Bitcoin fee verifier (ADR-0011 sub-phase 4b).
  *
  * Reads public block explorers to confirm a Bitcoin transaction
- * paid the Morphit fee address. Two explorers are queried in
- * parallel for cross-check — if they disagree on the transaction
- * or its outputs, we treat that as suspicious and reject.
+ * paid the Morphit fee address.  Multiple explorers are queried in
+ * parallel for cross-check; quorum forms when ≥minSuccessfulResponses
+ * agree on the amount paid to the fee address.
  *
  * Why public explorers instead of a self-hosted Bitcoin node:
  * ADR-0011 §8 — self-hosted nodes are an operator burden (disk,
  * sync time, attack surface) that most community operators won't
- * accept. Public explorers are a pragmatic default; operators
+ * accept.  Public explorers are a pragmatic default; operators
  * who prefer self-hosting can substitute a custom verifier via
  * config.
  *
  * Tolerance: BTC has no on-chain fee mechanism that Morphit sets;
  * the PAYER is responsible for setting an on-chain fee to confirm
- * their tx. We check the output amount to Morphit's address,
- * which is not affected by miner fees. So the check is exact
+ * their tx.  We check the output amount to Morphit's address,
+ * which is not affected by miner fees.  So the check is exact
  * (no tolerance), modulo the rare case where a payer pays a few
  * extra satoshis by accident — we accept overpayment but not
  * underpayment.
+ *
+ * cp166 — migrated from `Promise.allSettled` + CircuitBreaker to
+ * `@morphit/rpc-pool` + `quorumCall`.  The key behavioral change:
+ * verification returns the moment ≥minSuccessfulResponses agree on
+ * the same fee-address amount, instead of waiting for every
+ * candidate explorer (or its timeout) to respond.  Same trust model
+ * (cross-source agreement still required), much better latency
+ * under degraded-explorer conditions.  Under the old behavior a
+ * single dissenting explorer could DoS a legitimate trade by
+ * forcing rejection on disagreement; under the new behavior that
+ * dissenter is outvoted by the agreeing majority — strict
+ * improvement on the attack surface too.
  */
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
-import { CircuitBreaker } from '$indexer/fee/circuitBreaker';
+import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { logger } from '$log';
 
 const log = logger('btc-verify');
@@ -81,17 +93,17 @@ interface ExplorerTxResponse {
 
 export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 	readonly name = 'btc-explorer';
-	private readonly breaker: CircuitBreaker;
+	private readonly pool: EndpointPool;
 
 	constructor(
 		private readonly config: BitcoinExplorerFeeVerifierConfig,
 		private readonly fetchImpl: typeof fetch = fetch,
-		breaker?: CircuitBreaker
+		pool?: EndpointPool
 	) {
 		if (config.explorerUrls.length === 0) {
 			throw new Error('BitcoinExplorerFeeVerifier: at least one explorer URL required');
 		}
-		this.breaker = breaker ?? new CircuitBreaker();
+		this.pool = pool ?? new EndpointPool({ endpoints: [...config.explorerUrls] });
 	}
 
 	/** The address the verifier was constructed with.  Surfaced
@@ -99,6 +111,14 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 	 *  the address and rebuild — see Part 106. */
 	get currentAddress(): string {
 		return this.config.feeAddress;
+	}
+
+	/** Expose pool state for `/v1/health?verbose=1` diagnostics.
+	 *  Returns per-explorer EWMA latency, consecutive failures, and
+	 *  cooldown deadline — strict superset of what the old breaker
+	 *  exposed (which had no latency tracking). */
+	endpointSnapshot(): readonly EndpointState[] {
+		return this.pool.snapshot();
 	}
 
 	async verify(claim: FeeClaim): Promise<FeeVerifyResult> {
@@ -123,113 +143,86 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		// Filter explorers by circuit-breaker state. Any URL in
-		// cooldown is skipped entirely — saves us hammering a
-		// rate-limited or down node, and avoids tripping
-		// further alarms.
-		const openUrls = this.config.explorerUrls.filter((u) => !this.breaker.shouldAttempt(u));
-		const candidateUrls = this.config.explorerUrls.filter((u) => this.breaker.shouldAttempt(u));
+		// cp166: quorum-with-early-return.  Fire to all healthy
+		// explorers in parallel; return the moment
+		// `minSuccessfulResponses` agree on the amount paid to the
+		// fee address.  Slow / dead explorers don't gate completion.
+		//
+		// Equivalence key = the satoshi amount paid to our fee
+		// address as reported by that explorer.  Explorers that
+		// agree on the amount form a quorum bucket.  Explorers that
+		// disagree end up in their own buckets and need their own
+		// quorum to overrule.
+		//
+		// Response classification mapped onto the quorumCall protocol:
+		//   ok                → return the tx body
+		//   data_not_found    → return null (healthy, non-contributing)
+		//   data_malformed    → return null (healthy, non-contributing)
+		//   transport_failure → throw (penalize endpoint cooldown)
+		const totalUrls = this.config.explorerUrls.length;
+		// Generous timeout: requestTimeoutMs is per-explorer; we
+		// allow up to 2× that for the whole quorum call so a slow
+		// (but eventually responding) explorer can still arrive
+		// while we wait for the quorum to coalesce.
+		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
 
-		// If every configured explorer is in cooldown, there's
-		// nothing to query. Land as pending_external so the
-		// attestation path can resolve the order.
-		if (candidateUrls.length === 0) {
-			return {
-				kind: 'pending_external',
-				reason: `all ${this.config.explorerUrls.length} explorers in cooldown`
-			};
-		}
-
-		// Query candidate explorers in parallel. Each branch
-		// records success/failure into the breaker based on
-		// whether we got a TRANSPORT failure (network / 5xx /
-		// timeout) — NOT a data failure (404 / malformed body).
-		// Per Finding S12: a flood of bogus user-supplied txids
-		// would 404 across explorers and open the circuit, DoS-ing
-		// the BTC verifier path for legitimate users.  The breaker
-		// should only count health-of-explorer signals, not
-		// validity-of-claim signals.
-		const responses = await Promise.allSettled(
-			candidateUrls.map(async (base) => {
-				const r = await this.fetchTx(base, claim.externalTxId!);
+		const quorumResult = await this.pool.quorumCall<{
+			base: string;
+			body: ExplorerTxResponse;
+		}>(
+			async (base, signal) => {
+				const r = await this.fetchTx(base, claim.externalTxId!, signal);
 				switch (r.kind) {
 					case 'ok':
-						this.breaker.recordSuccess(base);
 						return { base, body: r.body };
 					case 'transport_failure':
-						this.breaker.recordFailure(base);
-						return null;
+						// Penalize the endpoint via the pool's cooldown ladder.
+						throw new Error('transport_failure');
 					case 'data_not_found':
 					case 'data_malformed':
-						// Explorer responded; it's healthy.  The DATA
-						// (or absence thereof) is the user's problem.
-						// Don't penalize the explorer's reputation.
-						this.breaker.recordSuccess(base);
+						// Explorer responded healthily; the data is the
+						// user's problem.  Don't penalize the endpoint
+						// (per Finding S12) and don't bucket this response.
 						return null;
 				}
-			})
+			},
+			{
+				// The amount paid to the fee address is the
+				// agreement key.  Explorers that compute the same
+				// amount end up in the same bucket.
+				equivalenceKey: (pair) => String(this.sumOutputsToFeeAddress(pair.body)),
+				minAgree: this.config.minSuccessfulResponses,
+				timeoutMs: quorumTimeoutMs
+			}
 		);
 
-		const successfulPairs = responses
-			.filter(
-				(
-					r
-				): r is PromiseFulfilledResult<{
-					base: string;
-					body: ExplorerTxResponse;
-				}> => r.status === 'fulfilled' && r.value !== null
-			)
-			.map((r) => r.value);
-		const successful = successfulPairs.map((p) => p.body);
-		// Total "didn't contribute a valid response" count for the
-		// operator log — includes candidates that threw OR candidates
-		// that returned null (tx shape issue) plus explorers skipped
-		// entirely by the breaker.
-		const failureCount = responses.length - successful.length + openUrls.length;
-
-		// All explorers failed or skipped → pending_external. The
-		// attestation path can promote the order if the counterparty
-		// cosigns.
-		if (successful.length === 0) {
+		// All explorers in cooldown.
+		if (quorumResult.kind === 'no_endpoints') {
 			return {
 				kind: 'pending_external',
-				reason: `${responses.length} explorers queried, ${openUrls.length} in cooldown, none returned usable data`
+				reason: `all ${totalUrls} explorers in cooldown`
 			};
 		}
 
-		// Part 109 quorum gate.  When the operator has configured
-		// minSuccessfulResponses > 1, we require at least that many
-		// agreeing responses before promoting to `verified`.  When
-		// fewer than the threshold respond (degraded outage), return
-		// `pending_external` so the attestation path can promote the
-		// order if the counterparty cosigns — same fallback semantics
-		// as "none returned usable data" above.  Note that defending
-		// against agreement disagreement (multiple successful but
-		// disagreeing amounts) happens AFTER this check; we want to
-		// surface a quorum failure before a disagreement decision,
-		// because a 1-of-2 result is structurally weaker even when
-		// the single source happens to agree with itself.
-		if (successful.length < this.config.minSuccessfulResponses) {
+		// Quorum not met.  Either the responses disagreed (no group
+		// reached minSuccessfulResponses) or too many transport-failed
+		// or returned null.  Either way the verdict is pending.
+		if (quorumResult.kind === 'all_responses_in') {
 			return {
 				kind: 'pending_external',
-				reason: `quorum not met: ${successful.length}/${this.config.minSuccessfulResponses} explorers returned usable data (${responses.length} queried, ${openUrls.length} in cooldown)`
+				reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${quorumResult.cooledDown} in cooldown)`
 			};
 		}
 
-		// At least one explorer fetched. Cross-check: if we got >1
-		// response and they disagree on the output paying our fee
-		// address, reject. One explorer being wrong is a bigger
-		// worry than one being down.
-		const amountsToFeeAddress = successful.map((tx) => this.sumOutputsToFeeAddress(tx));
-		const allMatch = amountsToFeeAddress.every((a) => a === amountsToFeeAddress[0]);
-		if (!allMatch) {
-			return {
-				kind: 'rejected',
-				reason: `explorer disagreement on output amounts: ${amountsToFeeAddress.join(' vs ')}`
-			};
-		}
+		// Quorum met.  We have ≥minSuccessfulResponses explorers
+		// agreeing on the same fee-address amount.  Use that bucket.
+		const agreedSats = Number(quorumResult.agreedKey);
+		const agreeingResponses = quorumResult.responses.filter(
+			(p) => this.sumOutputsToFeeAddress(p.body) === agreedSats
+		);
+		const successful = agreeingResponses.map((p) => p.body);
 
-		const observedSats = amountsToFeeAddress[0]!;
+		const observedSats = agreedSats;
 		if (observedSats < claim.expectedAmount) {
 			return {
 				kind: 'rejected',
@@ -237,7 +230,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		// Check confirmations.
+		// Check confirmations across the agreeing-bucket responses.
 		const minConfirmed = successful.every((tx) => tx.status.confirmed);
 		if (!minConfirmed) {
 			return {
@@ -284,7 +277,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			// a divergent tip is normal (one explorer trails by a
 			// block) and we want to be lenient here, not introduce
 			// false-pending failures from explorer lag.
-			const tipBase = successfulPairs[0]!.base;
+			const tipBase = agreeingResponses[0]!.base;
 			const tipResult = await this.fetchTipHeight(tipBase);
 			if (tipResult.kind !== 'ok') {
 				return {
@@ -302,12 +295,19 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		}
 
 		// Flag partial explorer agreement in the reason log if
-		// we had any failures — useful for operators debugging
-		// "why did this verify slower than usual" concerns.
-		if (failureCount > 0) {
+		// not every explorer contributed to the agreeing bucket —
+		// useful for operators debugging "why did this verify
+		// slower than usual" concerns.  Under cp166's quorumCall,
+		// `quorumResult.contacted` counts explorers we actually
+		// reached out to, `quorumResult.responses.length` is total
+		// usable responses (across all buckets), and
+		// `successful.length` is the agreeing-bucket size.
+		const usableContributors = quorumResult.responses.length;
+		if (usableContributors < quorumResult.contacted) {
 			log.info('partial_explorer_agreement', {
 				permlink: claim.permlink,
-				failures: failureCount,
+				contacted: quorumResult.contacted,
+				cooledDown: quorumResult.cooledDown,
 				agreed: successful.length
 			});
 		}
@@ -319,7 +319,8 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 
 	private async fetchTx(
 		baseUrl: string,
-		txid: string
+		txid: string,
+		poolSignal?: AbortSignal
 	): Promise<
 		| { kind: 'ok'; body: ExplorerTxResponse }
 		| { kind: 'transport_failure' }
@@ -329,6 +330,15 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const url = `${baseUrl.replace(/\/+$/, '')}/tx/${txid}`;
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
+		// cp166 — wire the pool's AbortSignal through to fetch so
+		// quorum-met cancellation aborts in-flight fetches and
+		// frees up the socket.  Belt-and-braces: also abort on the
+		// per-call timeout.
+		const onPoolAbort = (): void => ac.abort();
+		if (poolSignal !== undefined) {
+			if (poolSignal.aborted) ac.abort();
+			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
+		}
 		try {
 			const res = await this.fetchImpl(url, {
 				method: 'GET',
@@ -384,6 +394,9 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
+			if (poolSignal !== undefined) {
+				poolSignal.removeEventListener('abort', onPoolAbort);
+			}
 		}
 	}
 

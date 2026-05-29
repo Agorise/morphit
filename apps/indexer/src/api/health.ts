@@ -66,20 +66,43 @@ export function healthRoute(
 		// when the server-side flag is off.
 		const verbose = config.verboseHealth && c.req.query('verbose') === '1';
 		if (verbose) {
-			const snap = poller.explorerBreaker.snapshot();
+			// cp166 — explorer health was previously sourced from a
+			// shared CircuitBreaker; each fee verifier now owns its
+			// own EndpointPool with latency-aware ordering, and the
+			// poller's `explorerHealthSnapshot` accessor merges
+			// both verifiers' snapshots into one list keyed by URL.
+			// New field: `ewma_latency_ms` — the rolling-average
+			// successful-call latency in ms; `null` until the
+			// endpoint has succeeded at least once.  Strict superset
+			// of the old breaker output (which had no latency view).
+			const snap = poller.explorerHealthSnapshot;
 			const now = Date.now();
 			const explorers: Array<{
 				url: string;
 				state: string;
 				consecutive_failures: number;
 				cooldown_remaining_ms: number;
+				ewma_latency_ms: number | null;
 			}> = [];
-			for (const [url, s] of snap) {
+			for (const s of snap) {
+				const cooldownRemaining = Math.max(0, s.cooldownUntil - now);
+				// Derive a human-readable state from the same three
+				// signals the old breaker exposed: `open` while
+				// cooldown active, `closed` once back to zero
+				// consecutive failures, `half_open` during the brief
+				// window between cooldown expiry and the next attempt.
+				const state =
+					cooldownRemaining > 0
+						? 'open'
+						: s.consecutiveFailures > 0
+							? 'half_open'
+							: 'closed';
 				explorers.push({
-					url,
-					state: poller.explorerBreaker.stateOf(url),
+					url: s.url,
+					state,
 					consecutive_failures: s.consecutiveFailures,
-					cooldown_remaining_ms: Math.max(0, s.cooldownUntil - now)
+					cooldown_remaining_ms: cooldownRemaining,
+					ewma_latency_ms: s.ewmaLatencyMs
 				});
 			}
 

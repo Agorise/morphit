@@ -97,7 +97,7 @@
  */
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
-import { CircuitBreaker } from '$indexer/fee/circuitBreaker';
+import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { logger } from '$log';
 
 const log = logger('xmr-verify');
@@ -176,12 +176,12 @@ interface ExplorerProofResponse {
 
 export class MoneroProofFeeVerifier implements FeeVerifier {
 	readonly name = 'xmr-proof';
-	private readonly breaker: CircuitBreaker;
+	private readonly pool: EndpointPool;
 
 	constructor(
 		private readonly config: MoneroProofFeeVerifierConfig,
 		private readonly fetchImpl: typeof fetch = fetch,
-		breaker?: CircuitBreaker
+		pool?: EndpointPool
 	) {
 		if (config.explorerUrls.length === 0) {
 			throw new Error('MoneroProofFeeVerifier: at least one explorer URL required');
@@ -199,7 +199,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				);
 			}
 		}
-		this.breaker = breaker ?? new CircuitBreaker();
+		this.pool = pool ?? new EndpointPool({ endpoints: [...config.explorerUrls] });
 	}
 
 	/** The address the verifier was constructed with.  Surfaced
@@ -207,6 +207,11 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 	 *  the address and rebuild — see Part 106. */
 	get currentAddress(): string {
 		return this.config.feeAddress;
+	}
+
+	/** Expose pool state for `/v1/health?verbose=1` diagnostics. */
+	endpointSnapshot(): readonly EndpointState[] {
+		return this.pool.snapshot();
 	}
 
 	async verify(claim: FeeClaim): Promise<FeeVerifyResult> {
@@ -252,85 +257,65 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		// Filter explorers by circuit-breaker state.
-		const openUrls = this.config.explorerUrls.filter((u) => !this.breaker.shouldAttempt(u));
-		const candidateUrls = this.config.explorerUrls.filter((u) => this.breaker.shouldAttempt(u));
+		// cp166: quorum-with-early-return.  Fire to all healthy
+		// explorers in parallel; return the moment
+		// `minSuccessfulResponses` agree on the proven piconero
+		// amount.  Slow / dead explorers don't gate completion.
+		const totalUrls = this.config.explorerUrls.length;
+		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
 
-		if (candidateUrls.length === 0) {
-			return {
-				kind: 'pending_external',
-				reason: `all ${this.config.explorerUrls.length} explorers in cooldown`
-			};
-		}
-
-		const responses = await Promise.allSettled(
-			candidateUrls.map(async (base) => {
+		const quorumResult = await this.pool.quorumCall<ExplorerProofResponse>(
+			async (base, signal) => {
 				const r = await this.fetchProofVerification(
 					base,
 					claim.externalTxId!,
-					claim.txProof!
+					claim.txProof!,
+					signal
 				);
 				switch (r.kind) {
 					case 'ok':
-						this.breaker.recordSuccess(base);
 						return r.body;
 					case 'transport_failure':
-						this.breaker.recordFailure(base);
-						return null;
+						throw new Error('transport_failure');
 					case 'data_not_found':
 					case 'data_malformed':
-						// Per Finding S12 (BTC verifier rationale): the
-						// explorer responded with structured data; the
-						// data issue is the user's claim, not the
-						// explorer's health.  Don't open the breaker.
-						this.breaker.recordSuccess(base);
+						// Explorer responded healthily; data issue is
+						// the user's problem.  Don't penalize the
+						// endpoint (per Finding S12); don't bucket.
 						return null;
 				}
-			})
+			},
+			{
+				// Agreement key = proven piconero amount.  Explorers
+				// that compute the same matched-output sum end up in
+				// the same bucket.  BigInt → string for keying.
+				equivalenceKey: (r) => this.sumMatchedOutputs(r).toString(),
+				minAgree: this.config.minSuccessfulResponses,
+				timeoutMs: quorumTimeoutMs
+			}
 		);
 
-		const successful = responses
-			.filter(
-				(r): r is PromiseFulfilledResult<ExplorerProofResponse> =>
-					r.status === 'fulfilled' && r.value !== null
-			)
-			.map((r) => r.value);
-		const failureCount = responses.length - successful.length + openUrls.length;
-
-		if (successful.length === 0) {
+		if (quorumResult.kind === 'no_endpoints') {
 			return {
 				kind: 'pending_external',
-				reason: `${responses.length} explorers queried, ${openUrls.length} in cooldown, none returned usable data`
+				reason: `all ${totalUrls} explorers in cooldown`
 			};
 		}
 
-		// Part 109 quorum gate.  When operator has configured
-		// minSuccessfulResponses > 1, require at least that many
-		// agreeing responses before promoting to `verified`.  Same
-		// semantics as the BTC verifier: a 1-of-5 result during a
-		// degraded outage is structurally weaker than the operator
-		// signed up for, so return `pending_external` and let the
-		// indexer's attestation path / next polling cycle pick it
-		// up when more explorers come back.
-		if (successful.length < this.config.minSuccessfulResponses) {
+		if (quorumResult.kind === 'all_responses_in') {
 			return {
 				kind: 'pending_external',
-				reason: `quorum not met: ${successful.length}/${this.config.minSuccessfulResponses} explorers returned usable data (${responses.length} queried, ${openUrls.length} in cooldown)`
+				reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${quorumResult.cooledDown} in cooldown)`
 			};
 		}
 
-		// Sum matched outputs from each successful response.  BigInt
-		// throughout — piconero can exceed Number.MAX_SAFE_INTEGER.
-		const amounts: bigint[] = successful.map((r) => this.sumMatchedOutputs(r));
-		const allMatch = amounts.every((a) => a === amounts[0]);
-		if (!allMatch) {
-			return {
-				kind: 'rejected',
-				reason: `explorer disagreement on proven amounts: ${amounts.map((a) => a.toString()).join(' vs ')}`
-			};
-		}
+		// Quorum met.  Filter responses down to the agreeing bucket.
+		const agreedKey = quorumResult.agreedKey!;
+		const successful = quorumResult.responses.filter(
+			(r) => this.sumMatchedOutputs(r).toString() === agreedKey
+		);
 
-		const observed = amounts[0]!;
+		const observed = BigInt(agreedKey);
 		if (observed === 0n) {
 			// Proof verified to an existing tx but no outputs matched
 			// our address — the proof is for a different payment, or
@@ -356,10 +341,12 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		if (failureCount > 0) {
+		const usableContributors = quorumResult.responses.length;
+		if (usableContributors < quorumResult.contacted) {
 			log.info('partial_explorer_agreement', {
 				permlink: claim.permlink,
-				failures: failureCount,
+				contacted: quorumResult.contacted,
+				cooledDown: quorumResult.cooledDown,
 				agreed: successful.length
 			});
 		}
@@ -372,7 +359,8 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 	private async fetchProofVerification(
 		baseUrl: string,
 		txid: string,
-		txProof: string
+		txProof: string,
+		poolSignal?: AbortSignal
 	): Promise<
 		| { kind: 'ok'; body: ExplorerProofResponse }
 		| { kind: 'transport_failure' }

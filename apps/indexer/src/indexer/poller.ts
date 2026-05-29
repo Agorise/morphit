@@ -34,7 +34,7 @@ import { buildSignupAnomalyProbe } from '$indexer/signupAnomalyProbe';
 import type { FeeVerifier } from '$indexer/fee/verifier';
 import { BitcoinExplorerFeeVerifier } from '$indexer/fee/bitcoinExplorerVerifier';
 import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
-import { CircuitBreaker } from '$indexer/fee/circuitBreaker';
+import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
 import { logger } from '$log';
@@ -144,8 +144,8 @@ export class Poller {
 	 *  rejects orders claiming an unconfigured method with a
 	 *  clear reason code. */
 	private feeVerifiers: {
-		btc?: FeeVerifier;
-		xmr?: FeeVerifier;
+		btc?: BitcoinExplorerFeeVerifier;
+		xmr?: MoneroProofFeeVerifier;
 	};
 	/** Tracks the address each active verifier was constructed
 	 *  with, so refreshFeeVerifiersFromTreasury() can detect
@@ -170,10 +170,29 @@ export class Poller {
 	 *  over env, with env as bootstrap fallback.  See
 	 *  treasurySource.ts for the resolution policy. */
 	private readonly treasurySource: TreasurySource;
-	/** Shared circuit breaker used by both fee verifiers to track
-	 *  per-explorer health. Public-readonly so /v1/health can
-	 *  snapshot it for operator visibility. */
-	readonly explorerBreaker: CircuitBreaker;
+
+	/** Snapshot of every configured explorer's health (EWMA latency,
+	 *  consecutive failures, cooldown deadline) merged across the
+	 *  BTC and XMR verifiers.  `/v1/health?verbose=1` calls this to
+	 *  render the per-explorer health table for the operator.
+	 *
+	 *  cp166 — replaces the old shared `explorerBreaker` field
+	 *  (CircuitBreaker).  Each verifier now owns its own EndpointPool
+	 *  with latency-aware ordering; this accessor merges their
+	 *  snapshots into one list keyed by URL.  Strict superset of
+	 *  what the breaker exposed — adds EWMA latency. */
+	get explorerHealthSnapshot(): readonly EndpointState[] {
+		const out: EndpointState[] = [];
+		const btc = this.feeVerifiers.btc;
+		if (btc !== undefined) {
+			out.push(...btc.endpointSnapshot());
+		}
+		const xmr = this.feeVerifiers.xmr;
+		if (xmr !== undefined) {
+			out.push(...xmr.endpointSnapshot());
+		}
+		return out;
+	}
 
 	constructor(
 		private readonly config: Config,
@@ -245,15 +264,12 @@ export class Poller {
 
 		// ADR-0011 sub-phase 4b: fee verifiers. Build each only if
 		// an address is available — initially from env-var
-		// fallback, subsequently re-read from chain-pinned
-		// treasury (Part 106) on each poller cycle.
-		//
-		// Both verifiers share ONE CircuitBreaker instance so the
-		// breaker state is globally consistent per-URL across the
-		// verifier pool. The breaker is keyed by URL, and BTC/XMR
-		// explorers never share URLs, so there's no collision.
-		// Sharing means /v1/health can render a unified view.
-		this.explorerBreaker = new CircuitBreaker();
+		// cp166 — each verifier now owns its own EndpointPool with
+		// per-explorer latency tracking + cooldown ladder.  The
+		// poller no longer instantiates a shared CircuitBreaker;
+		// the `explorerHealthSnapshot` accessor above merges both
+		// verifiers' pool snapshots into the unified per-URL view
+		// `/v1/health?verbose=1` exposes.
 
 		// TreasurySource is the resolution layer between "what
 		// address should the verifier check?" and the two
@@ -310,9 +326,7 @@ export class Poller {
 					minConfirmations: 1,
 					requestTimeoutMs: 5_000,
 					minSuccessfulResponses: this.config.btcMinSuccessfulResponses
-				},
-				undefined,
-				this.explorerBreaker
+				}
 			);
 			this.feeVerifierAddresses.btc = envBtcAddress;
 			this.feeAmounts.btcSatoshis = envBtcSatoshis;
@@ -332,9 +346,7 @@ export class Poller {
 					minConfirmations: 1,
 					requestTimeoutMs: 10_000,
 					minSuccessfulResponses: this.config.xmrMinSuccessfulResponses
-				},
-				undefined,
-				this.explorerBreaker
+				}
 			);
 			this.feeVerifierAddresses.xmr = this.config.xmrFeeAddress;
 			this.feeAmounts.xmrPiconero = this.config.xmrFeePiconero;
@@ -391,9 +403,7 @@ export class Poller {
 						minConfirmations: 1,
 						requestTimeoutMs: 5_000,
 						minSuccessfulResponses: this.config.btcMinSuccessfulResponses
-					},
-					undefined,
-					this.explorerBreaker
+					}
 				);
 				this.feeVerifierAddresses.btc = btcWanted;
 				log.info('btc_verifier_rebuilt', {
@@ -439,9 +449,7 @@ export class Poller {
 						minConfirmations: 1,
 						requestTimeoutMs: 10_000,
 						minSuccessfulResponses: this.config.xmrMinSuccessfulResponses
-					},
-					undefined,
-					this.explorerBreaker
+					}
 				);
 				this.feeVerifierAddresses.xmr = xmrWanted;
 				log.info('xmr_verifier_rebuilt', {

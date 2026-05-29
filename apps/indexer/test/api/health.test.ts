@@ -16,10 +16,10 @@
  *   - Response has cache-control: no-store
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { healthRoute } from '$api/health';
-import { CircuitBreaker } from '$indexer/fee/circuitBreaker';
+import type { EndpointState } from '@morphit/rpc-pool';
 import type { Config } from '$config';
 import type { Poller } from '$indexer/poller';
 import type { BlurtPriceSource } from '$indexer/price/source';
@@ -44,8 +44,11 @@ function fakeConfig(overrides: Partial<Config> = {}): Config {
 
 /**
  * Build a Poller stand-in with the minimal surface healthRoute
- * uses: getStatus() + explorerBreaker. The breaker is a real
- * instance so we exercise the real state-transition logic.
+ * uses: getStatus() + explorerHealthSnapshot.  cp166 — the old
+ * shared CircuitBreaker was replaced by per-verifier EndpointPool
+ * instances; the poller now merges their snapshots into one list.
+ * For tests, we inject the merged list directly so the diagnostic
+ * output shape can be exercised without spinning up real verifiers.
  */
 function fakePoller(
 	opts: {
@@ -54,10 +57,10 @@ function fakePoller(
 		lastError?: string | null;
 		lastErrorAt?: Date | null;
 		startedAt?: Date;
-		breaker?: CircuitBreaker;
+		explorerSnapshot?: EndpointState[];
 	} = {}
 ): Poller {
-	const breaker = opts.breaker ?? new CircuitBreaker();
+	const snapshot = opts.explorerSnapshot ?? [];
 	return {
 		getStatus() {
 			return {
@@ -69,7 +72,9 @@ function fakePoller(
 				lastErrorAt: opts.lastErrorAt ?? null
 			};
 		},
-		explorerBreaker: breaker,
+		get explorerHealthSnapshot(): readonly EndpointState[] {
+			return snapshot;
+		},
 		getOperatorBalanceState() {
 			// Empty map = no monitored accounts configured. Tests that
 			// exercise operator_balances rendering should pass a custom
@@ -255,30 +260,49 @@ describe('healthRoute — verbose diagnostics', () => {
 	});
 });
 
-describe('healthRoute — explorer diagnostics reflect CircuitBreaker state', () => {
-	let breaker: CircuitBreaker;
+describe('healthRoute — explorer diagnostics reflect EndpointPool state', () => {
+	// cp166 — was driven by a real CircuitBreaker; the breaker
+	// class is gone (per-verifier EndpointPool replaces it).
+	// Diagnostic state is now sourced from the poller's
+	// `explorerHealthSnapshot` accessor which is a merged list of
+	// EndpointState records across the BTC and XMR verifiers.
+	// Tests construct synthetic EndpointState objects directly.
 
-	beforeEach(() => {
-		breaker = new CircuitBreaker();
-	});
+	function ep(
+		url: string,
+		overrides: Partial<EndpointState> = {}
+	): EndpointState {
+		return {
+			url,
+			ewmaLatencyMs: null,
+			consecutiveFailures: 0,
+			cooldownUntil: 0,
+			lastSuccessAt: 0,
+			...overrides
+		};
+	}
 
-	it('reports an empty explorers list when no keys have been tracked', async () => {
+	it('reports an empty explorers list when no endpoints are tracked', async () => {
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: true }),
-			fakePoller({ breaker }),
+			fakePoller({ explorerSnapshot: [] }),
 			'verbose=1'
 		);
 		const d = body.diagnostics as { explorers: unknown[] };
 		expect(d.explorers).toEqual([]);
 	});
 
-	it('reports tracked explorers with their closed state', async () => {
-		// One failure — below the default threshold (3 by default), so
-		// state is still closed.
-		breaker.recordFailure('https://btc.example.com');
+	it('reports closed state for endpoints with no failures or cooldown', async () => {
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: true }),
-			fakePoller({ breaker }),
+			fakePoller({
+				explorerSnapshot: [
+					ep('https://btc.example.com', {
+						ewmaLatencyMs: 120,
+						lastSuccessAt: Date.now() - 5_000
+					})
+				]
+			}),
 			'verbose=1'
 		);
 		const d = body.diagnostics as {
@@ -287,37 +311,71 @@ describe('healthRoute — explorer diagnostics reflect CircuitBreaker state', ()
 				state: string;
 				consecutive_failures: number;
 				cooldown_remaining_ms: number;
+				ewma_latency_ms: number | null;
 			}>;
 		};
 		expect(d.explorers).toHaveLength(1);
 		expect(d.explorers[0]!.url).toBe('https://btc.example.com');
 		expect(d.explorers[0]!.state).toBe('closed');
-		expect(d.explorers[0]!.consecutive_failures).toBe(1);
+		expect(d.explorers[0]!.consecutive_failures).toBe(0);
+		expect(d.explorers[0]!.ewma_latency_ms).toBe(120);
 	});
 
-	it('reports open state after enough consecutive failures', async () => {
-		for (let i = 0; i < 5; i++) {
-			breaker.recordFailure('https://xmr.example.com');
-		}
+	it('reports open state when an endpoint is in active cooldown', async () => {
+		const cooldownFor = 30_000;
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: true }),
-			fakePoller({ breaker }),
+			fakePoller({
+				explorerSnapshot: [
+					ep('https://xmr.example.com', {
+						consecutiveFailures: 5,
+						cooldownUntil: Date.now() + cooldownFor
+					})
+				]
+			}),
 			'verbose=1'
 		);
 		const d = body.diagnostics as {
-			explorers: Array<{ url: string; state: string; consecutive_failures: number }>;
+			explorers: Array<{ url: string; state: string; consecutive_failures: number; cooldown_remaining_ms: number }>;
 		};
 		expect(d.explorers[0]!.state).toBe('open');
 		expect(d.explorers[0]!.consecutive_failures).toBe(5);
+		expect(d.explorers[0]!.cooldown_remaining_ms).toBeGreaterThan(0);
+	});
+
+	it('reports half_open state for past-cooldown endpoint with prior failures', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({
+				explorerSnapshot: [
+					ep('https://recovering.example.com', {
+						consecutiveFailures: 2,
+						// Cooldown deadline has passed — endpoint is
+						// eligible for retry but hasn't succeeded yet.
+						cooldownUntil: Date.now() - 1_000
+					})
+				]
+			}),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			explorers: Array<{ state: string; cooldown_remaining_ms: number }>;
+		};
+		expect(d.explorers[0]!.state).toBe('half_open');
+		expect(d.explorers[0]!.cooldown_remaining_ms).toBe(0);
 	});
 
 	it('exposes cooldown_remaining_ms as a non-negative number', async () => {
-		for (let i = 0; i < 5; i++) {
-			breaker.recordFailure('https://xmr.example.com');
-		}
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: true }),
-			fakePoller({ breaker }),
+			fakePoller({
+				explorerSnapshot: [
+					ep('https://xmr.example.com', {
+						consecutiveFailures: 5,
+						cooldownUntil: Date.now() + 60_000
+					})
+				]
+			}),
 			'verbose=1'
 		);
 		const d = body.diagnostics as {
@@ -327,16 +385,17 @@ describe('healthRoute — explorer diagnostics reflect CircuitBreaker state', ()
 	});
 
 	it('tracks multiple explorers independently', async () => {
-		// Per the CircuitBreaker contract, recordSuccess on a key
-		// with no prior failures is a no-op (no state to clear).
-		// To get 'a' into the map, record one failure then success
-		// — landing back at closed/healthy state.
-		breaker.recordFailure('https://a.example.com');
-		breaker.recordSuccess('https://a.example.com');
-		for (let i = 0; i < 5; i++) breaker.recordFailure('https://b.example.com');
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: true }),
-			fakePoller({ breaker }),
+			fakePoller({
+				explorerSnapshot: [
+					ep('https://a.example.com', { ewmaLatencyMs: 50, lastSuccessAt: Date.now() }),
+					ep('https://b.example.com', {
+						consecutiveFailures: 5,
+						cooldownUntil: Date.now() + 30_000
+					})
+				]
+			}),
 			'verbose=1'
 		);
 		const d = body.diagnostics as {

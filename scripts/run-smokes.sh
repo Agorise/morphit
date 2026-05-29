@@ -102,6 +102,7 @@ SMOKES=(
 	"packages/net-defense:net-defense-smoke"
 	"packages/rpc-pool:rpc-pool-smoke"
 	"apps/indexer:blurt-client-rpc-pool-smoke"
+	"apps/indexer:btc-quorum-call-integration-smoke"
 	"apps/web:balance-bus-smoke"
 	"apps/web:chain-op-verify-smoke"
 	"apps/web:yubikey-error-classifier-smoke"

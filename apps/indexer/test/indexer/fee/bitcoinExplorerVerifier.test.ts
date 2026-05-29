@@ -200,7 +200,59 @@ describe('BitcoinExplorerFeeVerifier — rejection paths', () => {
 });
 
 describe('BitcoinExplorerFeeVerifier — explorer disagreement', () => {
-	it('two explorers report different amounts → rejected (suspicious)', async () => {
+	it('majority agrees, single dissenter is outvoted → verified', async () => {
+		// cp166 — under the old "any disagreement = reject" model,
+		// a single misbehaving explorer could DoS a legitimate trade.
+		// Under the new quorum-with-early-return model, the dissenter
+		// is outvoted by the agreeing majority.  Strict improvement
+		// on the attack surface.
+		const fetchImpl = mockFetchByUrl({
+			blockstream: {
+				body: {
+					txid: VALID_TXID,
+					vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+					status: { confirmed: true }
+				}
+			},
+			'mempool.space': {
+				body: {
+					txid: VALID_TXID,
+					vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+					status: { confirmed: true }
+				}
+			},
+			'blockchair.com': {
+				body: {
+					txid: VALID_TXID,
+					// Dissenting amount — outvoted by the other two.
+					vout: [{ value: 1_000, scriptpubkey_address: FEE_ADDRESS }],
+					status: { confirmed: true }
+				}
+			}
+		});
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({
+				explorerUrls: [
+					'https://blockstream.info/api',
+					'https://mempool.space/api',
+					'https://blockchair.com/bitcoin/api'
+				],
+				minSuccessfulResponses: 2
+			}),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('verified');
+		if (result.kind === 'verified') {
+			expect(result.observedAmount).toBe(2_500);
+		}
+	});
+
+	it('only two explorers configured, they disagree → pending_external (no quorum)', async () => {
+		// With minSuccessfulResponses=2 and only 2 disagreeing explorers,
+		// no bucket reaches the quorum threshold.  Result is pending,
+		// not rejected — same effective outcome (trade doesn't go live)
+		// but the order remains attestable.
 		const fetchImpl = mockFetchByUrl({
 			blockstream: {
 				body: {
@@ -217,11 +269,14 @@ describe('BitcoinExplorerFeeVerifier — explorer disagreement', () => {
 				}
 			}
 		});
-		const verifier = new BitcoinExplorerFeeVerifier(baseConfig(), fetchImpl);
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({ minSuccessfulResponses: 2 }),
+			fetchImpl
+		);
 		const result = await verifier.verify(claim());
-		expect(result.kind).toBe('rejected');
-		if (result.kind === 'rejected') {
-			expect(result.reason).toContain('disagreement');
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') {
+			expect(result.reason).toContain('quorum not met');
 		}
 	});
 });
@@ -236,10 +291,11 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 		const result = await verifier.verify(claim());
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
-			// Reason wording was tightened — now reports total queried,
-			// in-cooldown, and "none returned usable data" instead of
-			// the older "N explorers failed".
-			expect(result.reason).toContain('none returned usable data');
+			// cp166 — reason wording changed to surface the quorum-
+			// gate language uniformly.  When everyone transport-fails,
+			// no equivalence bucket forms, so the all_responses_in
+			// branch reports "quorum not met" with 0 usable responses.
+			expect(result.reason).toContain('quorum not met');
 		}
 	});
 
@@ -355,7 +411,10 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
 			expect(result.reason).toMatch(/quorum not met/);
-			expect(result.reason).toMatch(/1\/2/);
+			// cp166 — new reason wording references the agreeing-bucket
+			// size in plain language ("best group had < N agreeing")
+			// rather than the old "N/M" fraction.
+			expect(result.reason).toMatch(/< 2 agreeing/);
 		}
 	});
 

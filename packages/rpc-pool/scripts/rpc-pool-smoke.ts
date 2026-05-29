@@ -377,6 +377,177 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	);
 }
 
+/* ---------------- scenario 9: quorumCall — single match satisfies minAgree=1 ---------------- */
+{
+	const pool = new EndpointPool({ endpoints: ['a', 'b', 'c'] });
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			await sleep(40);
+			return u;
+		},
+		{
+			equivalenceKey: () => 'shared-key',
+			minAgree: 1
+		}
+	);
+	if (
+		r.kind === 'quorum_met' &&
+		r.responses.length >= 1 &&
+		r.agreedKey === 'shared-key' &&
+		r.contacted === 3
+	) {
+		pass(
+			`quorumCall: minAgree=1 returns on first success (responses=${r.responses.length})`
+		);
+	} else {
+		fail(
+			'quorumCall minAgree=1',
+			`kind=${r.kind} responses=${r.responses.length} agreedKey=${r.agreedKey}`
+		);
+	}
+}
+
+/* ---------------- scenario 10: quorumCall — quorum-of-2 returns BEFORE the slow endpoint ---------------- */
+{
+	const pool = new EndpointPool({ endpoints: ['fast1', 'fast2', 'slow'] });
+	const callTimes = new Map<string, number>();
+	const t0 = Date.now();
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			const latency = u === 'slow' ? 3_000 : 30;
+			await sleep(latency);
+			callTimes.set(u, Date.now() - t0);
+			// All three return the SAME canonical answer so any 2 form quorum.
+			return 'consensus-answer';
+		},
+		{
+			equivalenceKey: (v) => v,
+			minAgree: 2,
+			timeoutMs: 5_000
+		}
+	);
+	const elapsed = Date.now() - t0;
+	if (
+		r.kind === 'quorum_met' &&
+		r.responses.length === 2 &&
+		elapsed < 500 &&
+		!callTimes.has('slow') // slow shouldn't have completed
+	) {
+		pass(
+			`quorumCall: 2-of-3 quorum returns in ${elapsed} ms without waiting for slow endpoint`
+		);
+	} else {
+		fail(
+			'quorumCall early return',
+			`kind=${r.kind} responses=${r.responses.length} elapsed=${elapsed} slowCompleted=${callTimes.has('slow')}`
+		);
+	}
+}
+
+/* ---------------- scenario 11: quorumCall — transport failures don't stall the call ---------------- */
+{
+	const pool = new EndpointPool({ endpoints: ['ok1', 'ok2', 'dead1', 'dead2'] });
+	const t0 = Date.now();
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			if (u === 'dead1' || u === 'dead2') {
+				throw new Error('ECONNREFUSED');
+			}
+			await sleep(30);
+			return 'consensus';
+		},
+		{
+			equivalenceKey: (v) => v,
+			minAgree: 2
+		}
+	);
+	const elapsed = Date.now() - t0;
+	if (
+		r.kind === 'quorum_met' &&
+		r.responses.length === 2 &&
+		elapsed < 200
+	) {
+		pass(
+			`quorumCall: 2 transport failures + 2 successes → quorum met fast (${elapsed} ms)`
+		);
+	} else {
+		fail(
+			'quorumCall with transport failures',
+			`kind=${r.kind} responses=${r.responses.length} elapsed=${elapsed}`
+		);
+	}
+}
+
+/* ---------------- scenario 12: quorumCall — responses disagree, no quorum forms ---------------- */
+{
+	const pool = new EndpointPool({ endpoints: ['x', 'y', 'z'] });
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			await sleep(30);
+			// Each endpoint returns a DIFFERENT value — no two agree.
+			return `answer-from-${u}`;
+		},
+		{
+			equivalenceKey: (v) => v,
+			minAgree: 2
+		}
+	);
+	if (
+		r.kind === 'all_responses_in' &&
+		r.responses.length === 3 &&
+		r.agreedKey === undefined
+	) {
+		pass(
+			'quorumCall: disagreeing responses → all_responses_in without quorum'
+		);
+	} else {
+		fail(
+			'quorumCall disagreement',
+			`kind=${r.kind} responses=${r.responses.length} agreedKey=${r.agreedKey}`
+		);
+	}
+}
+
+/* ---------------- scenario 13: quorumCall — null returns are healthy-but-non-contributing ---------------- */
+{
+	const pool = new EndpointPool({ endpoints: ['p', 'q', 'r'] });
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			// q + r return null FAST (30 ms); p returns "canonical" SLOW (80 ms).
+			// This ordering ensures q + r have already recorded their
+			// healthy-no-contribution state before p triggers quorum.
+			if (u === 'p') {
+				await sleep(80);
+				return 'canonical';
+			}
+			await sleep(30);
+			return null;
+		},
+		{
+			equivalenceKey: (v) => v,
+			minAgree: 1
+		}
+	);
+	const snap = pool.snapshot();
+	// All three endpoints should now have ewmaLatencyMs set
+	// (a null-but-healthy response still records latency / resets
+	// the breaker) and zero cooldownUntil.
+	const allHealthy = snap.every(
+		(s) => s.ewmaLatencyMs !== null && s.cooldownUntil === 0
+	);
+	if (r.kind === 'quorum_met' && r.responses.length === 1 && allHealthy) {
+		pass('quorumCall: null-return endpoints stay healthy + bucketless');
+	} else {
+		const detail = snap
+			.map((s) => `${s.url}:ewma=${s.ewmaLatencyMs}cd=${s.cooldownUntil}`)
+			.join(',');
+		fail(
+			'quorumCall null returns',
+			`kind=${r.kind} responses=${r.responses.length} allHealthy=${allHealthy} snap=[${detail}]`
+		);
+	}
+}
+
 /* ---------------- report ---------------- */
 
 let failed = 0;
