@@ -4,6 +4,40 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
+**Last touched:** cp171 **CLOSED** — a fresh-session deep review of the cp170 tarball. Verified the cp170 state holds under real tooling (npm ci --ignore-scripts populates node_modules + @morphit links; the native better-sqlite3 build fails on this host because nodejs.org headers are blocked, which only affects the indexer vitest path — every tsx smoke runs fine). Then found and fixed three real issues, the first of which is the important one.
+
+**1 — cp167 security-rename was INCOMPLETE (the main find).** cp167's REVISIT entry claimed it renamed "every `posting` reference in the relay context to `active` throughout the codebase (wizard, render, CLI commands, README, comments, locales)." It fixed the wizard *prompt* (`steps.ts` step 5) but MISSED the entire downstream surface that describes the same relay key:
+  - `apps/ops-cli/src/commands/init.ts` — JSDoc ("relay account + posting key") + 5 review/storage strings (review-output label "Posting key:", source-env hint, backup "stored at" line, the plaintext-backup warning, and the backup-automation note). The plaintext-warning ALSO had the wrong *consequence* ("anyone… can post on behalf of your account") — an active key spends BLURT / creates accounts, it doesn't post; fixed both label and consequence.
+  - `apps/ops-cli/src/init/render.ts` — 2 generated-`morphit.config.env` comments that literally sit on the line after `MORPHIT_RELAY_ACTIVE_KEY_FILE` yet said "Posting key" (consequence text fixed too).
+  - `apps/ops-cli/src/commands/edit.ts` — 2 comments + the user-facing "It will NOT touch your relay's posting key" warning.
+  11 relay-context mislabels corrected. Each occurrence was classified by hand FIRST; LEFT UNTOUCHED (verified correct): `paymentMethod.ts` (operator's genuine posting key — it broadcasts a `custom_json` with `required_posting_auths`, so posting authority is correct; `MORPHIT_OPERATOR_POSTING_KEY_FILE` is a real, distinct env var), `steps.ts` lines 246/256/274 (educational "NOT the posting key" + the @morphit-project-account-signs-release-ops-with-POSTING-key aside — both accurate), `editActiveKey.ts` line 8 (historical reference to the pre-cp167 bug it recovers from), and the relay/indexer/web user-posting-key verification paths. Verification grep confirms only legitimate posting references remain in ops-cli.
+
+**2 — recurring wizard step-count drift, fixed at the root.** cp167 bumped `TOTAL_STEPS` 18 → 20 but updated only the F14b sentinel; the prose count stayed at 18/19 in README, PRE-LAUNCH-CHECKLIST, METADATA-LEAK-CATALOG, and the init.ts JSDoc ("19 ELI5", whose enumeration was also missing the MCP step). TWO persona-walkthrough scenarios (So-4 "19 ELI5", D-9 "~18 prompts") were *pinning the stale values*, keeping the suite green against wrong numbers — a self-consistent stale pair. Fixed all four docs + the init.ts JSDoc (now "20 ELI5", MCP step added) + both persona pins. Then closed the recurring class with a NEW self-synchronizing smoke `scripts/wizard-step-count-doc-parity-smoke.ts` (8 scenarios): it reads `const TOTAL_STEPS = N` from steps.ts at runtime, cross-checks the step() call count + highest step number, and fails the instant README / PRE-LAUNCH-CHECKLIST / METADATA-LEAK-CATALOG / RUN-A-MORPHIT-NODE / init.ts quote a different number. The F14b sentinel catches an *undeclared* change to the constant; this smoke catches the *doc drift that follows a declared change* — the gap that let cp167's miss survive. Registered in run-smokes.sh.
+
+**3 — two doc/snapshot syncs.**
+  - `README.md` repo-layout table listed only 5 packages; the repo has 7. Added `release-schema` (cp170) and `rpc-pool` (cp165). No smoke pinned the list (which is why it drifted).
+  - `docs/SECURITY.md` "Known supply-chain advisories" documented only `elliptic` (runtime) + the build/test cluster, omitting the entire `matrix-bot-sdk → request` runtime cluster (CRITICAL `form-data`, CRITICAL `request` SSRF, moderate `qs`/`tough-cookie`/`uuid`). The CI gate `apps/web/scripts/npm-audit-gate-smoke.ts` ALREADY allowlists the two criticals with rationale and is GREEN (ran it live: "0 HIGH + 2 CRITICAL", both allowlisted) — so this was a doc-vs-enforcement sync, not a new exposure. Added the cluster as an "optional sidecar" accepted-risk category (the bot is opt-in, holds no keys, no fund path, only talks to the operator's own homeserver; `matrix-bot-sdk@0.8.0` latest still pins `request`, so no upstream fix) with a cross-reference to the enforcing gate. Updated the "anything beyond elliptic" guidance accordingly.
+
+**Money-path audit (no change — verified safe).** Deep-read `quorumCall` (`@morphit/rpc-pool`) and its BTC/XMR fee-verifier wiring. The documented bound (`minSuccessfulResponses ≤ explorer-URL count`) is ENFORCED as a hard throw at config-parse time ("Quorum can never be met…"), the lower bound by zod `.positive()`, and the empty-URL case is guarded at both the poller (skips instantiation) and the verifier constructor (throws). Abort-vs-genuine-failure attribution, timeout cleanup, and single-threaded bucket updates all check out. No defect.
+
+### Verified clean (cp171 sentinel)
+- TypeScript: **0 errors across 14 projects** (real — modules resolved, not the noise-filtered fallback)
+- `workspace-typecheck-smoke`: 7 workspaces compile-clean incl. svelte-check
+- Full tsx smoke suite: **254/254 pass, 6,334 scenarios, 0 genuine failures.** (The only two non-runs in the 60s-cap batch harness — `vitest-must-pass-smoke` and `workspace-typecheck-smoke` — are slow-pole timeouts, both verified green standalone; `vitest-must-pass` additionally needs the native sqlite this host can't build.)
+- New `wizard-step-count-doc-parity-smoke` 8/8; persona-walkthrough 170/170 (re-run after every edit incl. SECURITY.md); ops-cli init-smoke 43/43, edit-active-key-smoke 19/19, disabled-assets-wizard-smoke 22/22; brag-list-claim-parity 79/79, KISS-budget 2/2; version-consistency 18/18; cross-document-value-invariants 21/21; operator-doc-fenced-path-existence 243/243
+- `npm-audit-gate-smoke` GREEN against the live registry (2 allowlisted CRITICALs, 0 new)
+- Locale parity unchanged at **3,094 × 10** (no user-facing locale strings touched — ops-cli is not localized; all edits were CLI console strings, comments, docs, or smoke pins)
+
+### No cleanup script this checkpoint
+cp171 adds one file (`scripts/wizard-step-count-doc-parity-smoke.ts`) and deletes none, so a `cpNN-cleanup.sh` is unnecessary even for extract-over-existing-tree operators.
+
+### Brag list — no new entry
+All cp171 work is internal hardening + doc/label correctness; nothing strangerworthy. Per the brag-list discipline, internal plumbing stays in REVISIT-LIST / TARBALL only. Trailer unchanged.
+
+---
+
+## 🔄 PRIOR HANDOFF — cp170
+
 **Last touched:** cp170 **CLOSED** — root-caused a long-standing CI failure and fixed it architecturally by extracting the release validator into a shared package, completed the package family (trust-anchor moved in too), merged the previously-undelivered cp168/cp169 homepage work, and hardened two smokes that had latent blind spots.
 
 **⚠️ This tarball is a CONSOLIDATED checkpoint.** It carries three streams of work, now reconciled into one coherent state:

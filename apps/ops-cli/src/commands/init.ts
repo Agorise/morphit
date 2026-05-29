@@ -3,14 +3,14 @@
  *
  * The first-time setup wizard.  Walks the operator through:
  *   1. Pre-flight system check (CPU, RAM, disk, OS, network)
- *   2. 19 ELI5-style configuration prompts (instance name,
- *      tagline, database URL, relay account + posting key,
+ *   2. 20 ELI5-style configuration prompts (instance name,
+ *      tagline, database URL, relay account + active key,
  *      fees account, daily ceiling, contact URL, origin,
  *      alt-networks, fee explorers, chat-link explorers,
  *      disabled assets, listing fee, SEO copy, backup config,
- *      operator tag, Matrix surfaces, Blurt RPC endpoint list
- *      — exact count drifts as we add operator-config
- *      surface; check steps.ts for the authoritative list)
+ *      operator tag, Matrix surfaces, Blurt RPC endpoints,
+ *      MCP server — exact count drifts as we add operator-
+ *      config surface; check steps.ts for the authoritative list)
  *   3. Review and confirmation
  *   4. Write morphit.config.env + keystore
  *   5. Print next-steps with backup hint
@@ -240,7 +240,7 @@ function printReview(answers: WizardAnswers): void {
 		answers.activeKey.mode === 'encrypted'
 			? 'encrypted (passphrase prompted at startup)'
 			: 'plaintext (consider switching to encrypted later)';
-	console.log(`  Posting key:          ${keyDesc}`);
+	console.log(`  Active key:           ${keyDesc}`);
 	console.log(`  Fees account:         @${sanitizeForTerm(answers.feesAccount)}`);
 	console.log(`  Daily ceiling:        ${answers.dailyCeiling}`);
 	console.log(`  Contact URL:          ${answers.contactUrl !== null ? sanitizeForTerm(answers.contactUrl) : '(skipped)'}`);
@@ -356,7 +356,7 @@ function printNextSteps(
 	console.log('       npm install');
 	console.log('');
 	console.log('  2. Source the critical-infra env file (sets database URL,');
-	console.log('     account names, posting key path):');
+	console.log('     account names, active key path):');
 	console.log(`       set -a; . ${result.envPath}; set +a`);
 	console.log('     (or configure systemd to do it via EnvironmentFile= — see');
 	console.log('     docs/OPERATOR-RUN-BOOK.md)');
@@ -451,7 +451,7 @@ function printNextSteps(
 	console.log('Backup');
 	console.log('━'.repeat(58));
 	console.log('');
-	console.log(`Your posting key is now stored at:`);
+	console.log(`Your active key is now stored at:`);
 	console.log(`  ${sanitizeForTerm(result.keystorePath)}`);
 	console.log('');
 	if (answers.activeKey.mode === 'encrypted') {
@@ -461,17 +461,18 @@ function printNextSteps(
 		);
 	} else {
 		console.log(
-			'Back up this file securely.  It is your raw posting key —\n' +
-				'anyone with read access can post on behalf of your account.\n' +
-				"Don't email it, don't put it in a public git repo, don't\n" +
-				'paste it into a chat.  A USB stick stored offline is good.'
+			'Back up this file securely.  It is your raw active key —\n' +
+				'anyone with read access can spend BLURT and create accounts\n' +
+				"on behalf of your relay account.  Don't email it, don't put\n" +
+				'it in a public git repo, don\'t paste it into a chat.  A USB\n' +
+				'stick stored offline is good.'
 		);
 	}
 	console.log('');
 	if (answers.backup.enabled) {
 		console.log(
 			'Note: the backup automation you just configured covers the\n' +
-				'database, NOT the posting key.  Back up the keystore\n' +
+				'database, NOT the active key.  Back up the keystore\n' +
 				'separately as described above.'
 		);
 		console.log('');

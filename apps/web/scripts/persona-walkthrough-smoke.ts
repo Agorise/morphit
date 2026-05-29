@@ -453,7 +453,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'So-4 — init.ts JSDoc has realistic step count + disclaimer',
 		file: 'apps/ops-cli/src/commands/init.ts',
 		rootRelative: true,
-		mustHave: ['19 ELI5', 'check steps.ts'],
+		mustHave: ['20 ELI5', 'check steps.ts'],
 		// Pre-fix said "Nine ELI5-style configuration prompts."
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
@@ -894,7 +894,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'D-9 — PRE-LAUNCH wizard step-count realistic',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
-		mustHave: ['~18 prompts', 'steps.ts'],
+		mustHave: ['~20 prompts', 'steps.ts'],
 		mustNotHave: ['covers all 14 steps']
 	},
 	{

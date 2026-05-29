@@ -568,10 +568,72 @@ is out of scope.
 | `vite`, `vite-node`, `@vitest/mocker`, `vitest` | Moderate | Test/build tooling; never in production |
 | `@sveltejs/vite-plugin-svelte`, `svelte-i18n` | Moderate | Build deps; not runtime |
 
+**Optional sidecar — only if the operator enables the Matrix
+incident-pager bot (`apps/matrix-bot`):**
+
+The Matrix bot is an OPTIONAL operator component (see
+OPERATIONS.md §16 "Routing alerts elsewhere").  Operators who
+don't run it ship NONE of the advisories below.  When it IS
+installed it is a *runtime* dependency, so these surface under
+`npm audit --omit=dev` too.
+
+| Package | Severity | Status |
+|---|---|---|
+| `request *` (deprecated; via `matrix-bot-sdk`) | Critical — SSRF (GHSA in `request`) | Accepted (optional sidecar) |
+| `form-data <2.5.4` (via `request`) | Critical (GHSA-fjxv-7rqg-78g4) | Accepted (optional sidecar) |
+| `qs <=6.15.1` (via `request`) | Moderate | Accepted (optional sidecar) |
+| `tough-cookie <4.1.3` (via `request`/`request-promise`) | Moderate | Accepted (optional sidecar) |
+| `uuid <11.1.1` (via `request`) | Moderate | Accepted (optional sidecar) |
+
+All of these chain from `matrix-bot-sdk`'s dependency on the
+deprecated `request` HTTP library.  **No fix is available** —
+`matrix-bot-sdk@0.8.0` (the latest release as of this audit)
+still pins `request: ^2.88.2` + `request-promise: ^4.2.6`, and
+`request` itself was deprecated in 2020 and will not be patched.
+Bumping the SDK does not remove the chain.
+
+**Enforced by CI:** the two CRITICALs here (`request` SSRF and
+`form-data` boundary) are the allowlisted entries in
+`apps/web/scripts/npm-audit-gate-smoke.ts`, which runs
+`npm audit --json` on every build and fails on any **new**
+HIGH/CRITICAL — or any new CVE title for an already-allowlisted
+package — that isn't reviewed there.  This table and that gate
+are two views of the same accepted-risk set; keep them in sync.
+
+**Threat-model assessment for Morphit:**
+- *Optionality.* The bot only runs if the operator opts into
+  Matrix alerting.  It is a sidecar, not part of the indexer or
+  relay; it holds **no Morphit keys**, touches **no user funds**,
+  and is not on any trade path.
+- *Input surface.* The bot's only inputs are the operator's own
+  `journalctl` stream (which it tails and classifies) and its
+  only outbound traffic is posting alert messages to the
+  operator's **own** Matrix homeserver.  It accepts no requests
+  from untrusted parties.
+- *`form-data` (the critical).* The advisory is a predictable
+  multipart boundary chosen with a non-cryptographic RNG — it
+  matters when an attacker can observe or inject boundaries to
+  smuggle multipart content.  The bot sends simple text alerts to
+  a trusted homeserver and accepts no untrusted multipart upload,
+  so there is no attacker-controlled boundary surface here.
+- *`qs` / `tough-cookie` / `uuid`.* Reachable only via the bot's
+  own outbound requests to its trusted homeserver; no remote
+  attacker drives the bot's HTTP layer.  Worst-case compromise is
+  scoped to the alerting path, not the indexer/relay/funds.
+
+**Recommended operator practice for the bot:** if your threat
+model can't accept a deprecated transitive HTTP dependency, route
+alerts via one of the non-bot paths in OPERATIONS.md §16 (the bot
+is the convenience option, not the only one) and don't install
+`apps/matrix-bot`.  Either way, monitor `matrix-bot-sdk` upstream
+for a `request`-free release.
+
 **Recommended operator practice:** when deploying, run
-`npm audit --omit=dev` for the runtime-only view. If anything
-beyond `elliptic` shows up, triage before deploying. The
-build/test advisories above are real but exposed only on the
+`npm audit --omit=dev` for the runtime-only view. The expected
+runtime diff is `elliptic` always, plus the `matrix-bot-sdk` /
+`request` cluster above **iff** you installed the optional Matrix
+bot. If anything beyond those shows up, triage before deploying.
+The build/test advisories above are real but exposed only on the
 build host (CI or dev machine), which should already be
 isolated from production.
 

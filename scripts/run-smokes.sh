@@ -274,6 +274,7 @@ SMOKES=(
 	".:source-marketing-prose-smoke"
 	".:strip-comments-smoke"
 	".:no-docker-latest-tag-smoke"
+	".:wizard-step-count-doc-parity-smoke"
 	".:root-shell-then-redirect-smoke"
 )
 
