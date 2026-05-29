@@ -54,24 +54,27 @@ const WORKSPACES: WorkspaceBaseline[] = [
 	{
 		path: 'apps/indexer',
 		// cp70 ship state: 481 passed + 1 skipped.  cp78-D20 added 5
-		// tip-height depth-check tests (minConfirmations > 1 path) →
-		// baseline 486 locally.  cp83-D24 lowered baseline to 456
-		// because Forgejo CI reports 456 passing where local reports
-		// 486 — a stable -30 delta.  Root cause not yet identified
-		// (release.test.ts has 30 tests and is a candidate for whole-
-		// file skip in CI; no env gates, no platform skipIf, no
-		// integration-test gate).  CI environment may have a vitest
-		// transform/resolve difference vs local that affects this one
-		// file.  cp84+ should chase down which exact tests are missing
-		// in CI and either fix the underlying gate or document why
-		// the gap is acceptable.  Until then 456 is the CI floor;
-		// going lower would surface real test deletions, which is
-		// still the smoke's load-bearing purpose.
+		// tip-height depth-check tests.  cp83-D24 LOWERED this baseline
+		// to 456 to accommodate an unexplained "stable -30" gap where
+		// Forgejo CI reported 456 passing vs 486 locally, and left a
+		// cp84+ TODO to chase down which tests were missing in CI.
 		//
-		// Local-developer note: if you see 486 passing locally, that's
-		// FINE — the smoke compares against ≥ baseline, not equality.
-		minPassing: 456,
-		notes: 'indexer handler + API tests; CI-floor baseline at cp83 (local typically 486)'
+		// cp170 ROOT-CAUSED and FIXED it: the -30 was release.test.ts
+		// (exactly 30 tests) failing to collect in CI.  That file
+		// imports apps/web/src/lib/net/releaseValidate.ts for the
+		// frontend↔indexer parity invariant; transforming that web
+		// file under vitest auto-discovers apps/web/tsconfig.json,
+		// which extends ./.svelte-kit/tsconfig.json — a generated file
+		// the run-smokes CI job never created.  ensureWebSynced()
+		// (above) now generates it before the vitest loop, so CI
+		// collects all 30 release.test.ts tests and matches local.
+		//
+		// With the gate fixed, the baseline is restored to a tight
+		// floor that reflects the true current count (475 passing + 1
+		// skipped locally and in CI).  A drop below this again means a
+		// real removal — which is the smoke's load-bearing purpose.
+		minPassing: 475,
+		notes: 'indexer handler + API tests; tight floor restored at cp170 after root-causing the release.test.ts CI collection gap'
 	},
 	{
 		path: 'apps/relay',
@@ -102,7 +105,67 @@ function fail(name: string, detail: string): void {
 	console.error(`  ✗ ${name}`); console.error(`      ${detail}`); failed++;
 }
 
+/**
+ * cp170 — ensure apps/web's SvelteKit-generated tsconfig exists
+ * before running any workspace's vitest.
+ *
+ * Root cause of the long-standing CI -30 delta (see the apps/indexer
+ * baseline comment above): the indexer's release.test.ts imports the
+ * frontend validator at apps/web/src/lib/net/releaseValidate.ts to
+ * prove byte-for-byte parity between the indexer handler and the
+ * frontend validator (Part 106/107 invariant).  When the indexer's
+ * vitest transforms that web source file, vite's esbuild plugin
+ * auto-discovers the nearest tsconfig — apps/web/tsconfig.json —
+ * which does `"extends": "./.svelte-kit/tsconfig.json"`.  That
+ * generated file only exists after `svelte-kit sync` runs.
+ *
+ * Locally, developers have run the web app (or `npm run check`), so
+ * .svelte-kit/tsconfig.json is present and release.test.ts collects
+ * all 30 of its tests.  In CI, the run-smokes job does `npm ci` then
+ * `run-smokes.sh` but never runs `svelte-kit sync` (only the separate
+ * web-check job does, on a different runner with a different
+ * checkout).  So in CI release.test.ts fails to collect with a
+ * TSConfckParseError, contributing 0 tests instead of 30 — exactly
+ * the -30 delta that forced the baseline down to 456 at cp83.
+ *
+ * The indexer SCRIPTS that import the same validator don't hit this
+ * because they run through tsx with an explicit tsconfig.smoke.json
+ * (no auto-discovery).  Only the vitest path auto-discovers.
+ *
+ * Fix: make this smoke self-bootstrapping.  If apps/web's generated
+ * tsconfig is absent, run `svelte-kit sync` once before the vitest
+ * loop.  Idempotent and cheap (type generation, not a full build);
+ * a no-op when the file already exists (local dev).
+ */
+function ensureWebSynced(): void {
+	const webDir = join(REPO_ROOT, 'apps/web');
+	const generated = join(webDir, '.svelte-kit', 'tsconfig.json');
+	if (existsSync(generated)) {
+		return;
+	}
+	console.log('  (generating apps/web/.svelte-kit via svelte-kit sync — needed by the indexer release parity test)');
+	try {
+		execSync('npx svelte-kit sync', {
+			cwd: webDir,
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'pipe'],
+			timeout: 3 * 60_000,
+			env: { ...process.env, CI: '1' }
+		});
+	} catch (e) {
+		// Non-fatal here: if sync fails, the indexer vitest will
+		// surface the underlying TSConfckParseError and this smoke
+		// fails loudly on the resulting test-count shortfall — which
+		// is the correct behaviour (don't silently pass).  We log so
+		// the cause is visible in the harness tail.
+		const msg = (e as Error).message ?? String(e);
+		console.error(`  ⚠ svelte-kit sync failed (continuing; vitest will report the consequence): ${msg.slice(0, 200)}`);
+	}
+}
+
 console.log('\n── vitest-must-pass smoke (cp71 LL #71 / O-19) ──\n');
+
+ensureWebSynced();
 
 function runVitest(workspacePath: string): { passing: number; failing: number; skipped: number; output: string } {
 	const fullPath = join(REPO_ROOT, workspacePath);
