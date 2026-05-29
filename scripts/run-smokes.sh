@@ -276,6 +276,8 @@ SMOKES=(
 	".:no-docker-latest-tag-smoke"
 	".:wizard-step-count-doc-parity-smoke"
 	".:root-shell-then-redirect-smoke"
+	".:blurt-noble-signer-recovery-proof"
+	".:blurt-noble-tx-signature-proof"
 )
 
 total=0

@@ -394,6 +394,44 @@ scenario(
 	}
 );
 
+// ─── PPM-10: fan-out-all architecture guard (cp167 decision lock) ──
+//
+// peerPriceMonitor MUST query every healthy peer and collect all
+// observations (the median + disagreement signal depend on it).  It
+// must NOT be "migrated" to @morphit/rpc-pool's quorumCall, which
+// early-returns on partial consensus and would silently defeat the
+// disagreement alert.  This sentinel fails if a future refactor
+// swaps the fan-out for the pool, forcing a re-read of the in-source
+// rationale (and this comment) before regressing the alert.
+scenario('PPM-10: fan-out uses Promise.allSettled over peers', () => {
+	const src = readFileSync(MODULE_PATH, 'utf8');
+	if (!/Promise\.allSettled\s*\(/.test(src)) {
+		throw new Error(
+			'peerPriceMonitor no longer fans out via Promise.allSettled — ' +
+				'the median/disagreement alert needs EVERY peer observation. ' +
+				'See the cp167 design-decision comment before changing this.'
+		);
+	}
+});
+
+scenario('PPM-10: peer fan-out is NOT migrated to rpc-pool quorumCall', () => {
+	const src = readFileSync(MODULE_PATH, 'utf8');
+	// quorumCall early-returns on N-agreement among INTERCHANGEABLE
+	// endpoints; peers are distinct federation members, not
+	// interchangeable.  Match an actual IMPORT of the pool or a real
+	// quorumCall INVOCATION — not the bare word, which legitimately
+	// appears in the in-source rationale explaining why it's avoided.
+	const importsPool = /\bfrom\s+['"]@morphit\/rpc-pool['"]/.test(src);
+	const callsQuorum = /\bquorumCall\s*[(<]/.test(src);
+	if (importsPool || callsQuorum) {
+		throw new Error(
+			'peerPriceMonitor imports @morphit/rpc-pool or invokes quorumCall — ' +
+				'this defeats the disagreement alert (early-return on partial ' +
+				'consensus drops peer observations). cp167 decided against this.'
+		);
+	}
+});
+
 // Settle async scenarios + report
 await new Promise((r) => setTimeout(r, 50));
 

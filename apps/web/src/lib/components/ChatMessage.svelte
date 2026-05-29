@@ -34,7 +34,7 @@
 	// cp121: O(1) carrier lookup for shipment-pill rendering.
 	// Built once at module init (CARRIERS is a frozen const array).
 	const CARRIERS_LOOKUP = new Map(CARRIERS.map((c) => [c.key, c]));
-	import { externalExplorerUrl, externalExplorerUrls, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl } from '$lib/explorer/urls';
+	import { externalExplorerUrl, externalExplorerUrls, morphitExplorerTxUrl, usdtExplorerUrl, usdcExplorerUrl, daiExplorerUrl, usdtExplorerUrls, usdcExplorerUrls, daiExplorerUrls } from '$lib/explorer/urls';
 	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
@@ -274,6 +274,23 @@
 		if (method === 'sol') return externalExplorerUrls('SOL', txid);
 		if (method === 'eth') return externalExplorerUrls('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrls('XRP', txid);
+		// cp174 — multi-network tokens now get the same "+N more
+		// explorers" dropdown as native-chain assets.  Require the
+		// wire-format `network` field to disambiguate (same contract
+		// as the singular path); fall through to [] if it's absent or
+		// invalid so older clients render the txid as plain text.
+		if (method === 'usdt') {
+			if (network !== undefined && isUsdtNetwork(network)) return usdtExplorerUrls(network, txid);
+			return [];
+		}
+		if (method === 'usdc') {
+			if (network !== undefined && isUsdcNetwork(network)) return usdcExplorerUrls(network, txid);
+			return [];
+		}
+		if (method === 'dai') {
+			if (network !== undefined && isDaiNetwork(network)) return daiExplorerUrls(network, txid);
+			return [];
+		}
 		// Single-URL paths fall through to the singular function;
 		// wrap the result in a one-element array (or empty if null).
 		const single = explorerLinkForTxid(method, txid, network);

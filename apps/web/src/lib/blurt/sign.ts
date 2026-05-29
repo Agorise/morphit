@@ -24,12 +24,14 @@
 import {
 	PrivateKey,
 	Client,
+	cryptoUtils,
 	type Transaction,
 	type SignedTransaction,
 	type Operation
 } from '@beblurt/dblurt';
 import { getBlurtClient } from './client';
-import { OP_IDS, type MorphitOpId } from '$net/config';
+import { signDigestWithNoble } from './nobleSigner';
+import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 
 /** Convert a Uint8Array (raw 32-byte secp256k1 scalar) into a dblurt
@@ -71,7 +73,34 @@ function getSigningClient(): Client {
 	}
 	return _signingClient;
 }
-function signTransactionWithKey(tx: Transaction, key: PrivateKey): SignedTransaction {
+function signTransactionWithKey(
+	tx: Transaction,
+	key: PrivateKey,
+	rawScalar: Uint8Array
+): SignedTransaction {
+	if (SIGNER_BACKEND === 'noble') {
+		// ADR-0046 opt-in path.  Reuse dblurt's serializer + chain-id binding to
+		// compute the EXACT same digest the dblurt path would sign, then run the
+		// ECDSA with @noble/secp256k1 instead of dblurt's elliptic-based signer.
+		// The chain verifies by public-key recovery, so this is accepted as long
+		// as the (canonical) signature recovers to the signing key — proven in
+		// scripts/blurt-noble-signer-recovery-proof.ts and the tx-level
+		// scripts/blurt-noble-tx-signature-proof.ts.  dblurt's signing client
+		// is constructed with no chainId, so transactionDigest's default
+		// (DEFAULT_CHAIN_ID = Blurt mainnet) matches the dblurt path's chain id.
+		const digest = cryptoUtils.transactionDigest(tx);
+		// rawScalar is the 32-byte secp256k1 private scalar the caller already
+		// holds (the same bytes rawToPrivateKey wrapped).  We pass it through
+		// rather than reading dblurt's private PrivateKey.key field.
+		const sigHex = signDigestWithNoble(Uint8Array.from(digest), Uint8Array.from(rawScalar));
+		// Non-mutating: clone and append, mirroring dblurt's signTransaction.
+		const signatures = Array.isArray((tx as SignedTransaction).signatures)
+			? [...(tx as SignedTransaction).signatures]
+			: [];
+		signatures.push(sigHex);
+		return { ...tx, signatures } as SignedTransaction;
+	}
+	// Default path (unchanged): dblurt's well-tested elliptic-based signer.
 	return getSigningClient().broadcast.sign(tx, key);
 }
 
@@ -198,7 +227,7 @@ export function signTransferWithKey(tx: Transaction, activePriv: Uint8Array): Si
 		throw new Error('signTransferWithKey: active key missing or malformed.');
 	}
 	const activeKey = rawToPrivateKey(activePriv);
-	return signTransactionWithKey(tx, activeKey);
+	return signTransactionWithKey(tx, activeKey, activePriv);
 }
 
 /** Phase F.5 audit fix (F-18) — assemble the unsigned order-with-
@@ -259,8 +288,8 @@ export function signOrderWithFeeWithKey(
 	}
 	const postingKey = rawToPrivateKey(postingPriv);
 	const activeKey = rawToPrivateKey(activePriv);
-	const signedWithPosting = signTransactionWithKey(tx, postingKey);
-	return signTransactionWithKey(signedWithPosting, activeKey);
+	const signedWithPosting = signTransactionWithKey(tx, postingKey, postingPriv);
+	return signTransactionWithKey(signedWithPosting, activeKey, activePriv);
 }
 
 /** Phase F.5 audit fix (F-18) — broadcast a pre-signed
@@ -365,7 +394,7 @@ export async function broadcastCustomJson(
 	// Sign using dblurt's primitive. This is a pure-JS operation; no
 	// network, no key-exfiltration opportunity.
 	const postingKey = rawToPrivateKey(live.posting.privateKey);
-	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey);
+	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
 
 	// Broadcast through our rotator.
 	const result = await client.call<{ block_num: number; trx_id: string }>(
