@@ -248,7 +248,7 @@ for (const spec of SIDECARS) {
 	const eventNameMatches = src.matchAll(/emit\s+(?:info|warn|error|debug)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
 	const eventNames = new Set<string>();
 	for (const m of eventNameMatches) {
-		eventNames.add(m[1]);
+		if (m[1] !== undefined) eventNames.add(m[1]);
 	}
 	scenarios.push({
 		name: `${spec.script} event names follow lowercase_snake convention`,
@@ -319,7 +319,7 @@ scenarios.push({
 				detail: 'could not locate spawnSync `timeout:` option in this smoke source'
 			};
 		}
-		const ms = Number(m[1].replaceAll('_', ''));
+		const ms = Number((m[1] ?? '').replaceAll('_', ''));
 		if (!Number.isFinite(ms) || ms < 60_000) {
 			return {
 				ok: false,

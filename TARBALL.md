@@ -4,6 +4,46 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
+**Last touched:** cp175 **IN PROGRESS** — full deep-deep + five-persona walkthrough + hostile-op sweep (Ken's pre-launch mandate: tap/type every interactive element, 94-task black-hat audit over every file, consolidated "every op hostile" sweep across all 17 handlers). **Multi-session effort**; findings accumulate in `docs/AUDIT-cp175-DEEP-DEEP.md`, which also holds the remaining-work plan.
+
+### Session 1 — fixes shipped
+- **F-001 (HIGH):** `apps/web/src/lib/blurt/ops/comment.ts` carried an ORPHAN `signTransactionWithKey` that always used dblurt `broadcast.sign` and ignored `SIGNER_BACKEND` — the cp174 noble migration missed this second signer. The syndication/cross-post path (Bob's "share my first trade") would keep signing via elliptic when an operator flips to noble. **Fixed**: comment.ts now branches on `SIGNER_BACKEND` (digest via dblurt `cryptoUtils.transactionDigest`, sign with `signDigestWithNoble`, append wire sig). New **`scripts/signer-backend-consistency-smoke.ts`** (registered) asserts EVERY `broadcast.sign` site in apps/web honors the flag. `blurt-noble-tx-signature-proof.ts` extended with the comment op (now 5 scenarios; comment 60/60 recover).
+- **F-002 (LOW):** `order.ts` fee parser now rejects `amount <= 0` (symmetry with strangerFee.ts; not exploitable, 0 → underpaid downstream).
+- **F-003 (INFO):** `docs/SECURITY.md` elliptic "recommended practice" paragraph de-staled to reflect cp173–cp174 wiring (was: "open item / monitor upstream").
+
+### Session 1 — hostile-op sweep (VERIFIED CLEAN, all 17 handlers)
+- **Authz:** every mutation scoped to `ctx.signer` (chain-bound); privileged ops (`operatorPaymentMethod`/`operatorBlock`/`release`) gate on operator/official account; self-action guards present (`block`/`chatRead`/`feedback`/`strangerFee`/`chat`); `feedbackResponse` checks `row.subject === ctx.signer`. No mutation keys off a payload-supplied account.
+- **Money parsing:** order.ts + strangerFee.ts use anchored regex `^(\d+(?:\.\d+)?)\s+BLURT$` + `typeof === 'string'` + `Number.isFinite` (+ now `> 0`). order.ts validates `amount_min` finite/non-neg/≤ MAX_AMOUNT.
+- **Replay/idempotency:** global dispatcher `ON CONFLICT (block_num, trx_in_block, op_in_trx) DO NOTHING` + per-handler unique constraints / idempotent UPDATE-with-WHERE.
+
+### Verified
+Web typecheck 0 errors; indexer tsc clean. 12/12 broad-sweep smokes green (signing proofs, consistency sentinel, explorer, href-xss, persona, sally, order, stranger-fee, feedback, peer-price, brag-parity). Doc gates: brag 79/79, cross-doc 21/21, fenced-path 247/247, version 18/18.
+
+### Session 2 — fixes + sweeps
+- **F-005 (LOW):** `stranger_fees.amount_usd_equivalent` was declared `NOT NULL` + `CHECK(>0)` in the CREATE TABLE but a later v20 section in the same collapsed baseline `DROP COLUMN IF EXISTS`'d it, and the handler's only INSERT omits it. Net-zero at runtime (create-then-drop) but self-contradictory; since schema.sql is the pre-launch v1 baseline (never deployed), removed the column decl + CHECK from CREATE, kept the v20 DROP as a documented version-parity no-op. Zero remaining `.ts` refs; schema-migration-coverage smoke green.
+- **Hostile-op sweep COMPLETED** — all 6 classes verified clean across all 17 handlers: authz (every mutation `ctx.signer`-scoped; privileged ops gate on operator/official; self-action guards), money-parsing (anchored regex + type + finite + >0), replay (dispatcher `ON CONFLICT` dedup + unique constraints), auth-context (`extractSigner` rejects active-key/empty/multi posting-auth — posting-only invariant), oversized-payload (`parseJsonPayload` 16KB cap before JSON.parse), unicode/confusable (already byte-parity-guarded by confusables-parity-smoke; F-004 suspected-drift was a false alarm — comment-only diff, codepoint sets identical), numeric-precision (feedback rating int 1..5; featureBid hours int 6..168 + bounded cost math).
+- **DB dead-field sweep COMPLETED** — 287 columns across 38 tables; F-005 the only real finding; 12 other "no indexer ref" suspects all confirmed cross-app writes (push → apps/web + apps/relay; relay-queue → apps/relay drainer; `*.detected_at` → ops-cli/abuse + scanners).
+- **Memory-leak sweep COMPLETED clean** — rate-limiter Map pruned every 5min + `.unref()`'d; SSE chat/orderbook/instances streams all `eventSource.close()` on teardown; every Svelte interval/timeout torn down (clears == teardown hooks); addEventListener/removeEventListener imbalance explained (EventSource close releases listeners; SW lifetime handlers; `{once:true}`).
+
+### Session 2 verified
+Indexer tsc 0 errors. Smokes green: order 40, stranger-fee 18, feedback, featurebid 14, confusables-parity 2, schema-migration-coverage 4, chat, noble-tx 5, signer-consistency 3.
+
+### Session 3 — type-strictness + regex + fallback
+- **F-006 (LOW):** `apps/mcp-server` + `apps/matrix-bot` were the only 2 of 14 projects MISSING `noUncheckedIndexedAccess`. Added to both. mcp-server (Charlie's surface) clean immediately; matrix-bot surfaced 2 real unchecked-index sites in `scripts/sidecar-envelope-smoke.ts` (regex `m[1]` capture-group accesses) — fixed with guards, smoke still 26/26. **All 14 projects now uniformly enforce `strict` + `noUncheckedIndexedAccess`, all at 0 errors.**
+- **Type-strictness sweep COMPLETE:** every project `tsc --noEmit` = 0 errors (web, indexer, relay, ops-cli, mcp-server, matrix-bot + all 7 packages).
+- **Regex-accuracy COMPLETE:** no ReDoS (the permlink `^[a-z0-9]+(?:-[a-z0-9]+)*$` pattern is safe — literal `-` separator, no backtracking ambiguity); all security validators anchored. F-007 (LOW, deferred): account-name regex divergence (Pattern A allows dots/trailing-punct in 10+ files; Pattern B in registry.ts forbids them) — NOT security (chain + `extractSigner` is the real authz boundary; these are client UX validators), deferred to a focused unify-on-`isValidBlurtAccount` refactor.
+- **Fallback/failover COMPLETE clean:** route surfaces use phase state machines (`loading|ready|error`) with localized error messages + Retry buttons, not bare spinners (orderbook exemplary). RPC layer has rpc-pool failover + quorum underneath. All sampled error locale keys present in 10/10 locales (a missing error key = hang-equivalent; none found).
+
+### Session 3 verified
+matrix-bot + mcp-server tsc 0 errors with the stricter flag. Smokes green: sidecar-envelope 26, noble-tx 5, signer-consistency 3, order 40, confusables-parity 2, persona 170, brag-parity 79.
+
+### Remaining (subsequent sessions) — see docs/AUDIT-cp175-DEEP-DEEP.md
+Per-handler unicode/confusable + oversized-payload + numeric-precision + auth-context classes; FAQ/README/OPERATIONS/RUN-A-MORPHIT-NODE accuracy; DB dead-field sweep; regex-accuracy pass; type-strictness across 14 projects; orphan/staleness; memory-leak pass; fallback/failover completeness; smoke/gate currency; "what outside pentest adds" writeup.
+
+---
+
+## 🔄 PRIOR HANDOFF — cp174
+
 **Last touched:** cp174 **CLOSED** — three independent tasks executed end-to-end in one pass: (1) wire the @noble signer into the live signing path (flag-gated), (2) widen explorer fallback to the multi-network tokens, (3) resolve the peerPriceMonitor rpc-pool question.
 
 ### Task 1 — sign.ts noble signer WIRED (flag-gated; default still dblurt)

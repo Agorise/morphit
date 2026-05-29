@@ -131,12 +131,31 @@ function makeTxs(account: string): unknown[] {
 			['transfer', { from: account, to: 'morphit-fees', amount: '75.000 BLURT', memo: 'listing fee' }]
 		]
 	};
-	return [customJson, transfer, orderWithFee];
+	// comment op — the syndication / cross-post path (F-001: comment.ts is a
+	// SECOND signer; prove the noble path produces a recovering sig for it too).
+	const comment = {
+		...base,
+		operations: [
+			[
+				'comment',
+				{
+					parent_author: '',
+					parent_permlink: 'blurt-176570',
+					author: account,
+					permlink: 'morphit-first-trade-' + account,
+					title: 'Traded on Morphit',
+					body: 'I just used Morphit for the first time!',
+					json_metadata: JSON.stringify({ app: 'morphit', format: 'markdown', tags: ['morphit'] })
+				}
+			]
+		]
+	};
+	return [customJson, transfer, orderWithFee, comment];
 }
 
 /* ---- Proof: each op class, many keys ---- */
-const opNames = ['custom_json', 'transfer', 'order-with-fee'];
-for (let t = 0; t < 3; t++) {
+const opNames = ['custom_json', 'transfer', 'order-with-fee', 'comment'];
+for (let t = 0; t < 4; t++) {
 	let okCount = 0;
 	let bad = 0;
 	const N = 60;

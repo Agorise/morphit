@@ -663,17 +663,32 @@ The build/test advisories above are real but exposed only on the
 build host (CI or dev machine), which should already be
 isolated from production.
 
-**Recommended Morphit-project practice:** `elliptic` is now
+**Recommended Morphit-project practice:** `elliptic` is
 effectively unmaintained (no release in ~12 months) and
 CVE-2025-14505 is unfixed across all published versions, so the
 durable path is to move off it rather than wait for a patch.
 The frontend already depends directly on `@noble/secp256k1`
-(constant-time, actively maintained); the open item is the
-chain-client side. Monitor `@beblurt/dblurt` upstream for a
-release that drops `ecurve`/`elliptic` in favor of a `@noble`-
-based signer, or evaluate a maintained dblurt fork. Until then,
-the `elliptic` advisories are accepted risk per the threat model
-above. Tracked as a standing REVISIT item.
+(constant-time, actively maintained).
+
+**Migration status (cp173–cp174):** a `@noble/secp256k1`-based
+Blurt signer has been built, proven, and **wired** into the
+frontend signing path behind the `SIGNER_BACKEND` flag in
+`apps/web/src/lib/net/config.ts` (see ADR-0046). Feasibility is
+proven against dblurt's own verifier — graphene chains verify by
+public-key recovery, and noble signatures recover to the correct
+key (`scripts/blurt-noble-signer-recovery-proof.ts`, 300/300;
+full-transaction coverage incl. transfer/order/comment/custom_json
+in `scripts/blurt-noble-tx-signature-proof.ts`). Every signer in
+`apps/web` honors the flag (enforced by
+`scripts/signer-backend-consistency-smoke.ts`). The default remains
+`'dblurt'` deliberately: flipping to `'noble'` is gated on one real
+Blurt chain broadcast per op class confirming end-to-end
+acceptance, which cannot be done without chain access. Until that
+flip, `elliptic` remains in the tree transitively and its
+advisories are accepted risk per the threat model above. Also
+monitor `@beblurt/dblurt` upstream for a `@noble`-based signer that
+would let the dependency be dropped entirely. Tracked as a standing
+REVISIT item.
 
 ### Legal considerations for operators
 
