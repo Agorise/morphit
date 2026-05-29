@@ -74,6 +74,8 @@ import { getBlurtClient } from '$blurt/client';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
+import { SIGNER_BACKEND } from '$net/config';
+import { signDigestWithNoble } from '$blurt/nobleSigner';
 
 // cp165 byte-budget: dblurt is type-only at module scope.  Runtime
 // values (PrivateKey, Client) load dynamically inside the broadcast
@@ -104,8 +106,27 @@ async function rawToPrivateKey(raw: Uint8Array): Promise<PrivateKey> {
 let _signingClient: Client | null = null;
 async function signTransactionWithKey(
 	tx: Transaction,
-	key: PrivateKey
+	key: PrivateKey,
+	rawScalar: Uint8Array
 ): Promise<SignedTransaction> {
+	if (SIGNER_BACKEND === 'noble') {
+		// ADR-0046 opt-in path, mirroring sign.ts.  Compute the digest via
+		// dblurt's own cryptoUtils.transactionDigest (so serialization +
+		// chain-id binding stay dblurt's tested code), sign it with
+		// @noble/secp256k1, and append the wire sig to a cloned tx.  Keeps the
+		// syndication/comment path consistent with the transfer + order paths
+		// when an operator selects the noble backend — without this branch the
+		// cross-post would silently keep using elliptic while everything else
+		// moved to noble.
+		const { cryptoUtils } = await import('@beblurt/dblurt');
+		const digest = cryptoUtils.transactionDigest(tx);
+		const sigHex = signDigestWithNoble(Uint8Array.from(digest), Uint8Array.from(rawScalar));
+		const signatures = Array.isArray((tx as SignedTransaction).signatures)
+			? [...(tx as SignedTransaction).signatures]
+			: [];
+		signatures.push(sigHex);
+		return { ...tx, signatures } as SignedTransaction;
+	}
 	if (_signingClient === null) {
 		const { Client: ClientCtor } = await import('@beblurt/dblurt');
 		_signingClient = new ClientCtor(['https://signing-only.invalid']);
@@ -274,7 +295,11 @@ export async function broadcastComment(
 	};
 
 	const postingKey = await rawToPrivateKey(live.posting.privateKey);
-	const signed: SignedTransaction = await signTransactionWithKey(tx, postingKey);
+	const signed: SignedTransaction = await signTransactionWithKey(
+		tx,
+		postingKey,
+		live.posting.privateKey
+	);
 
 	const result = await client.call<{ block_num: number; trx_id: string }>(
 		'condenser_api.broadcast_transaction_synchronous',

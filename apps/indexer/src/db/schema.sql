@@ -1195,12 +1195,13 @@ CREATE TABLE IF NOT EXISTS stranger_fees (
     -- enough precision for Blurt's 3-decimal-place amounts.
     amount_blurt              NUMERIC(20,3) NOT NULL,
 
-    -- What the client quoted as the USD equivalent at op time.
-    -- The indexer doesn't re-verify this (it just records what
-    -- the client claimed); the price-feed check happens in the
-    -- handler, which validates amount_blurt against the live
-    -- price with a tolerance window.
-    amount_usd_equivalent     NUMERIC(10,4) NOT NULL,
+    -- NOTE (cp175 F-005): the legacy `amount_usd_equivalent` column
+    -- (a USD echo from the pre-BLURT-denomination fee model) is
+    -- intentionally absent. It was created-then-dropped via a v20
+    -- ALTER in earlier revisions of this collapsed baseline; since
+    -- this is the pre-launch baseline (never deployed), the column is
+    -- simply not declared. The handler's INSERT does not provide it.
+    -- amount_blurt is the authoritative recorded value.
 
     PRIMARY KEY (sender, recipient),
 
@@ -1212,8 +1213,7 @@ CREATE TABLE IF NOT EXISTS stranger_fees (
     -- we don't want to reject a user who over-paid the fee
     -- (their choice); we just want to reject pathological
     -- values (zero, negative, overflow).
-    CHECK (amount_blurt > 0),
-    CHECK (amount_usd_equivalent > 0)
+    CHECK (amount_blurt > 0)
 );
 
 -- Reverse-index for "what pairs has this sender paid for?"
@@ -1357,8 +1357,9 @@ COMMENT ON COLUMN relay_pending_transfers.broadcast_attempt_at IS
 -- ─── v20 ────────────────────────────────────────────
 -- Morphit indexer — migration v20.
 --
--- BLURT-native fee refactor: drop the unused
--- `amount_usd_equivalent` column from `stranger_fees`.
+-- BLURT-native fee refactor: the `amount_usd_equivalent` column on
+-- `stranger_fees` (a USD echo from the pre-BLURT-denomination fee
+-- model) is no longer used.
 --
 -- Background: when stranger-fees were USD-denominated (anchor
 -- $0.01 doubling per first-contact within 5 min, capped at
@@ -1369,10 +1370,12 @@ COMMENT ON COLUMN relay_pending_transfers.broadcast_attempt_at IS
 -- records what was actually transferred; the USD echo was
 -- never authoritative and is now redundant.
 --
--- Operationally: the column had a NOT NULL CHECK > 0
--- constraint, which both go away.  No data migration needed
--- for a fresh deploy; for any future seed/test fixtures this
--- is purely a column drop.
+-- cp175 F-005: in this collapsed pre-launch baseline the column is
+-- simply never declared (see the stranger_fees CREATE TABLE above),
+-- so the historical DROP is a harmless no-op kept only for
+-- version-tracking parity with the archived per-version migrations.
+-- `IF EXISTS` makes it safe on the fresh baseline where the column
+-- was never created.
 
 ALTER TABLE stranger_fees
     DROP COLUMN IF EXISTS amount_usd_equivalent;

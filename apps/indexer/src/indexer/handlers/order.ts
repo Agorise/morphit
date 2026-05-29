@@ -499,7 +499,12 @@ function findFeeTransfer(
 		const match = /^(\d+(?:\.\d+)?)\s+BLURT$/.exec(b.amount);
 		if (!match) continue;
 		const amount = Number(match[1]);
-		if (!Number.isFinite(amount)) continue;
+		// Reject NaN/Infinity and non-positive amounts.  A 0-amount fee is
+		// already treated as underpaid downstream (0 < minAcceptable), but
+		// rejecting it here keeps this parser symmetric with strangerFee.ts's
+		// and means amountBlurt is always a positive finite number by
+		// construction (cp175 F-002, defense-in-depth).
+		if (!Number.isFinite(amount) || amount <= 0) continue;
 
 		return { amountBlurt: amount };
 	}

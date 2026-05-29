@@ -278,6 +278,7 @@ SMOKES=(
 	".:root-shell-then-redirect-smoke"
 	".:blurt-noble-signer-recovery-proof"
 	".:blurt-noble-tx-signature-proof"
+	".:signer-backend-consistency-smoke"
 )
 
 total=0
