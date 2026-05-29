@@ -470,4 +470,207 @@ export class EndpointPool {
 		// preferred until 4+ slow successes drag the EWMA up.
 		ep.ewmaLatencyMs = null;
 	}
+
+	/**
+	 * Quorum-with-early-return call across multiple endpoints.
+	 *
+	 * Used for cross-source verification where the trust model
+	 * requires N endpoints to AGREE before accepting an answer
+	 * (the BTC and XMR fee verifiers — multiple block explorers
+	 * must agree on a payment's existence and shape before the
+	 * indexer marks a release verified).
+	 *
+	 * Pattern: fires to all healthy endpoints in parallel (latency-
+	 * ordered so the fastest dispatches microseconds earlier),
+	 * groups successful responses by an equivalence-key function the
+	 * caller provides, and returns the moment any group reaches
+	 * `minAgree` responses.  Slow / down endpoints don't gate
+	 * completion — the call returns as soon as quorum is met
+	 * regardless of how many endpoints haven't responded yet.
+	 *
+	 * Response classification by the `fn`:
+	 *   - return T          → success; contributes to quorum
+	 *   - return null       → endpoint healthy, but data doesn't
+	 *                         contribute (404, malformed body, etc.).
+	 *                         Endpoint cooldown NOT applied; quorum
+	 *                         credit NOT given.
+	 *   - throw             → transport failure; cooldown applied.
+	 *
+	 * The four-state classification used by the existing fee verifiers
+	 * (`ok` / `transport_failure` / `data_not_found` / `data_malformed`)
+	 * maps cleanly onto this: `ok` → T, `data_*` → null, transport
+	 * failure → throw.
+	 *
+	 * cp166 — addresses the choke point in the BTC/XMR verifiers
+	 * where Promise.allSettled forced the indexer to wait for every
+	 * candidate explorer (or its 5s timeout) before checking quorum.
+	 * Now quorum check is incremental and returns early.
+	 */
+	async quorumCall<T>(
+		fn: (url: string, signal: AbortSignal) => Promise<T | null>,
+		options: {
+			/** Caller-provided equivalence-key extractor.  Responses
+			 *  with the same key are considered to agree.  Cheap to
+			 *  compute — invoked once per successful response. */
+			equivalenceKey: (response: T) => string;
+			/** Minimum number of agreeing responses required.
+			 *  Defaults to 1 (any single success satisfies). */
+			minAgree?: number;
+			/** Per-call timeout in ms.  If the deadline passes before
+			 *  quorum is met, returns whatever responses are in.
+			 *  Defaults to {@link DEFAULT_BACKGROUND_TIMEOUT_MS}. */
+			timeoutMs?: number;
+		}
+	): Promise<QuorumCallResult<T>> {
+		const minAgree = options.minAgree ?? 1;
+		if (minAgree < 1) {
+			throw new Error('quorumCall: minAgree must be >= 1');
+		}
+		const timeoutMs = options.timeoutMs ?? DEFAULT_BACKGROUND_TIMEOUT_MS;
+		const allEndpoints = this.endpoints;
+		const candidates = this.sortByLatency(
+			allEndpoints.filter((e) => Date.now() >= e.cooldownUntil)
+		);
+		const cooledDown = allEndpoints.length - candidates.length;
+
+		if (candidates.length === 0) {
+			return {
+				kind: 'no_endpoints',
+				responses: [],
+				contacted: 0,
+				cooledDown,
+				agreedKey: undefined
+			};
+		}
+
+		// Buckets by equivalence-key, plus running count of total
+		// successful responses + total finished (success/null/error).
+		const buckets = new Map<string, T[]>();
+		const allResponses: T[] = [];
+		let finished = 0;
+		let agreedKey: string | undefined;
+
+		// One AbortController per endpoint — when quorum is reached we
+		// cancel the rest so we don't keep hammering them and so the
+		// fn implementation can abort in-flight fetches.
+		const controllers = candidates.map(() => new AbortController());
+
+		// Outer controller for the overall timeout.
+		const timeoutController = new AbortController();
+		const timeoutHandle = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+		// Wrap fn in a one-per-endpoint promise that updates state when
+		// it settles.  We deliberately await Promise.allSettled at the
+		// bottom — the early-return is via a separate awaitable that
+		// resolves the instant quorum is met (or all responses are in).
+		const quorumReached = new Promise<void>((resolveQuorum) => {
+			const allDoneCheck = (): void => {
+				if (finished === candidates.length) {
+					resolveQuorum();
+				}
+			};
+
+			candidates.forEach((ep, i) => {
+				const t0 = Date.now();
+				const c = controllers[i]!;
+				// Link the per-endpoint controller to the timeout so the
+				// fn sees an abort signal in both cases.
+				const onTimeout = (): void => c.abort();
+				timeoutController.signal.addEventListener('abort', onTimeout);
+
+				fn(ep.url, c.signal).then(
+					(result) => {
+						timeoutController.signal.removeEventListener('abort', onTimeout);
+						const elapsed = Date.now() - t0;
+						if (result === null) {
+							// Healthy but non-contributing.  Reset the
+							// cooldown ladder (treat as success for
+							// breaker purposes) but don't bucket.
+							this.recordSuccess(ep, elapsed);
+							finished++;
+							allDoneCheck();
+							return;
+						}
+						// Success that contributes to quorum.
+						this.recordSuccess(ep, elapsed);
+						allResponses.push(result);
+						const key = options.equivalenceKey(result);
+						const bucket = buckets.get(key) ?? [];
+						bucket.push(result);
+						buckets.set(key, bucket);
+						if (bucket.length >= minAgree && agreedKey === undefined) {
+							agreedKey = key;
+							// Quorum reached — cancel everyone still in flight.
+							for (let j = 0; j < controllers.length; j++) {
+								if (j !== i) controllers[j]!.abort();
+							}
+							resolveQuorum();
+						}
+						finished++;
+						allDoneCheck();
+					},
+					(err) => {
+						timeoutController.signal.removeEventListener('abort', onTimeout);
+						// If we got here because WE aborted this branch
+						// (quorum already reached or overall timeout),
+						// don't count it as a transport failure — that
+						// would unfairly penalize a healthy endpoint
+						// that just hadn't responded yet.
+						if (c.signal.aborted && agreedKey !== undefined) {
+							finished++;
+							allDoneCheck();
+							return;
+						}
+						// Genuine transport / network failure — penalize.
+						if (isTransportError(err)) {
+							this.recordFailure(ep);
+						}
+						finished++;
+						allDoneCheck();
+					}
+				);
+			});
+		});
+
+		try {
+			await quorumReached;
+		} finally {
+			clearTimeout(timeoutHandle);
+		}
+
+		if (agreedKey !== undefined) {
+			return {
+				kind: 'quorum_met',
+				responses: allResponses,
+				agreedKey,
+				contacted: candidates.length,
+				cooledDown
+			};
+		}
+		return {
+			kind: 'all_responses_in',
+			responses: allResponses,
+			agreedKey: undefined,
+			contacted: candidates.length,
+			cooledDown
+		};
+	}
+}
+
+/** Result shape from {@link EndpointPool.quorumCall}.
+ *
+ * - `quorum_met` — at least minAgree responses agreed on a single
+ *   equivalence key; the call returned as soon as that threshold
+ *   was reached, even if other endpoints are still in flight.
+ * - `all_responses_in` — every contacted endpoint either responded
+ *   or transport-failed; no equivalence group reached minAgree.
+ *   The caller decides what to do (pending state, retry later, etc.).
+ * - `no_endpoints` — every configured endpoint was in cooldown when
+ *   the call started. */
+export interface QuorumCallResult<T> {
+	readonly kind: 'quorum_met' | 'all_responses_in' | 'no_endpoints';
+	readonly responses: readonly T[];
+	readonly agreedKey: string | undefined;
+	readonly contacted: number;
+	readonly cooledDown: number;
 }

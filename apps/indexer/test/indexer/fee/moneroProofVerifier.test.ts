@@ -352,10 +352,18 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 		}
 	});
 
-	it('rejects when two explorers disagree on the proven amount', async () => {
+	it('two explorers disagree on proven amount → pending_external (no quorum)', async () => {
+		// cp166 — under the old "any disagreement = reject" model,
+		// this returned `rejected`.  Under the new quorum-with-early-
+		// return model, with minAgree=2 and only 2 disagreeing
+		// explorers, no bucket reaches the threshold so the verifier
+		// returns `pending_external` (attestable) rather than killing
+		// the trade outright.  Trust property preserved — trade
+		// doesn't go live without cross-source agreement.
 		const v = new MoneroProofFeeVerifier(
 			baseConfig({
-				explorerUrls: ['https://explorer-a.test', 'https://explorer-b.test']
+				explorerUrls: ['https://explorer-a.test', 'https://explorer-b.test'],
+				minSuccessfulResponses: 2
 			}),
 			vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 				const url = typeof input === 'string' ? input : input.toString();
@@ -376,9 +384,9 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 			}) as unknown as typeof fetch
 		);
 		const r = await v.verify(claim());
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') {
-			expect(r.reason).toMatch(/disagreement/);
+		expect(r.kind).toBe('pending_external');
+		if (r.kind === 'pending_external') {
+			expect(r.reason).toMatch(/quorum not met/);
 		}
 	});
 });
@@ -502,7 +510,9 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
 			expect(result.reason).toMatch(/quorum not met/);
-			expect(result.reason).toMatch(/1\/2/);
+			// cp166 — new wording references the agreeing-bucket size
+			// in plain language rather than the old "N/M" fraction.
+			expect(result.reason).toMatch(/< 2 agreeing/);
 		}
 	});
 

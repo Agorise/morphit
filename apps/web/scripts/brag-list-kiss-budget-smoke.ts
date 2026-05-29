@@ -91,12 +91,21 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
  * embed previously #91).  Subsequent entries shift +1: old #195
  * → new #196, old #204 → new #205.
  */
-// Staccato-exempt entries: 3, 12, 197, 206, 210, 213.
+// Staccato-exempt entries: 3, 12, 197, 206, 210, 213, 215.
 // Numbers 197/206/210/213 were 196/205/209/212 before cp140's
 // AI-MCP brag entry was inserted at #99; the renumbering shifted
 // every staccato-allowlisted entry by +1.  Numbers 3 and 12 are
 // below the insertion point so they didn't shift.
-const STACCATO_ALLOWLIST = new Set(['3', '12', '197', '206', '210', '213']);
+//
+// cp165 added two new entries (#12 Lightweight pages, #79
+// RPC-pool resilience); cp166 broadened the RPC-pool entry to
+// also cover the BTC/XMR explorer pool but didn't add a new
+// entry.  Net effect: the historical "No leverage..." staccato
+// entry at #213 shifted to #215.  '215' added to track that;
+// '213' kept in the allowlist for back-compat (the entry now
+// at #213 is prose, but exemption is harmless and removes a
+// noisy bisect direction if entries get rearranged again).
+const STACCATO_ALLOWLIST = new Set(['3', '12', '197', '206', '210', '213', '215']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

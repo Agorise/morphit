@@ -1,6 +1,75 @@
 # Morphit pre-launch revisit list
 
-**Last touched:** Part 122 cp165 (CLOSED) — 2026-05-28 (RPC pool foundation + comprehensive byte-budget audit; built `@morphit/rpc-pool` package, migrated both BlurtClients to it, converted 15+ modules to dynamic dblurt imports, lazy-mounted 10+ heavyweight components, fixed nginx so it serves the pre-compressed assets the SvelteKit build already produces, added gzip to indexer + relay).  Sentinel battery 6285/0 triple-pulse stable.
+**Last touched:** Part 122 cp166 (CLOSED) — 2026-05-28 (extended the rpc-pool pattern to BTC + XMR fee verifiers via a new `quorumCall` primitive that returns the moment minAgree explorers cluster on the same equivalence key; releases that previously hung for ~5 seconds on a slow/dead explorer now land in milliseconds.  Deleted the CircuitBreaker class entirely — superseded by EndpointPool's cooldown ladder.  Brag-list entries trimmed to fit the KISS budget; STACCATO_ALLOWLIST updated to track cp165's #12/#79 numbering shift).  Sentinel battery 6285/0 triple-pulse stable.
+
+## cp166 — Extend rpc-pool to BTC + XMR fee verifiers (CLOSED 2026-05-28)
+
+After cp165 shipped the RPC pool for Blurt RPC nodes, Ken flagged that "some of the btc and xmr block explorers are down right now" — the same pattern needed to extend to fee verification.  Audit found three multi-endpoint dispatch patterns in the indexer: `bitcoinExplorerVerifier.ts` (hot path), `moneroProofVerifier.ts` (hot path), and `peerPriceMonitor.ts` (every 30 min, not a hot path — left alone).  Both fee verifiers used `Promise.allSettled` over candidates, which meant the verifier waited for the slowest explorer's full 5-second timeout even when the fast ones had already agreed.
+
+### The quorumCall primitive
+
+Added a new `quorumCall<T>` method to `EndpointPool` in `@morphit/rpc-pool`.  Fires to all healthy endpoints in latency-sorted order, buckets successful responses by a caller-provided equivalence-key function, returns the moment any bucket reaches `minAgree` responses, and aborts the remaining in-flight requests via per-endpoint `AbortController`.  Response classification by `fn`:
+
+- `return T` → contributes to quorum (bucketed by equivalence key)
+- `return null` → endpoint healthy but data non-contributing (no cooldown, not bucketed) — maps the existing fee verifiers' `data_not_found` / `data_malformed` cases
+- `throw` → transport failure (cooldown applied) — maps the existing `transport_failure` case
+
+`QuorumCallResult<T>` has three kinds: `quorum_met` (minAgree reached, returned early), `all_responses_in` (everyone responded, no group reached minAgree), `no_endpoints` (every endpoint was in cooldown).  Five new smoke scenarios in `rpc-pool-smoke.ts` cover all three plus null-non-contributing and transport-failures-don't-stall.
+
+### Both fee verifiers migrated
+
+`apps/indexer/src/indexer/fee/bitcoinExplorerVerifier.ts`: equivalence key is the satoshi amount paid to the fee address.  `apps/indexer/src/indexer/fee/moneroProofVerifier.ts`: equivalence key is the proven piconero amount.  Both use their own private `EndpointPool` (constructed from `explorerUrls`); the shared `explorerBreaker` field on `Poller` is gone, replaced by an `explorerHealthSnapshot` accessor that merges both verifiers' pool snapshots into the unified per-URL view `/v1/health?verbose=1` consumes.  Wired the pool's `AbortSignal` through to the inner fetch via `fetchTx(base, txid, poolSignal?)` and `fetchProofVerification(base, txid, txProof, poolSignal?)` so quorum-met cancellation aborts in-flight HTTP requests cleanly.
+
+### Behavioral change worth flagging
+
+Under the OLD `Promise.allSettled` + post-hoc unanimity check: 4 explorers responding `[100, 50, 50, 50]` caused REJECT on disagreement.  Single dissenting explorer could DoS a legitimate trade.
+
+Under the NEW quorum-with-early-return: same 4 explorers with `minSuccessfulResponses=3` → VERIFY at 50 (3 outvote 1).  Trust model preserved (cross-source agreement still required); DoS-via-flaky-explorer attack vector closed.
+
+With only 2 explorers configured and `minSuccessfulResponses=2`, two disagreeing responses now return `pending_external` rather than `rejected` — same effective outcome (trade doesn't go live without cross-source agreement) but the order remains attestable rather than killed.  Strict improvement.
+
+### CircuitBreaker deleted
+
+The shared `CircuitBreaker` class (`apps/indexer/src/indexer/fee/circuitBreaker.ts`) is gone.  Its dedicated unit test and both `*.breaker.test.ts` integration tests deleted — cooldown ladder semantics are now tested at the pool level in `rpc-pool-smoke.ts` (scenarios "cooldown ladder: first failure sets ~50 ms cooldown", "cooldown ladder: success resets the ladder").  Net: one fewer cooldown abstraction to audit; ~80 lines of cooldown code removed from the verifier files plus ~210 lines of breaker class + ~290 lines of breaker tests gone.
+
+### /v1/health response shape
+
+Strict superset of the old breaker output.  Each explorer entry adds an `ewma_latency_ms` field (rolling-average successful-call latency, null until the endpoint has succeeded at least once).  State derivation matches the old breaker: `cooldownUntil > now` → `open`, `consecutiveFailures > 0 && cooldownUntil <= now` → `half_open`, otherwise → `closed`.  The 5 health-test cases were rewritten to inject synthetic `EndpointState` records via a `explorerSnapshot` option on the fake poller helper.
+
+### Integration smoke (the actual UX proof)
+
+`apps/indexer/scripts/btc-quorum-call-integration-smoke.ts` spins up 4 fake mempool.space-style HTTP servers on ephemeral ports.  Four scenarios all pass:
+
+1. All 4 healthy + agree → verified in ~40 ms
+2. 2 healthy + 2 connection-refused → verified in ~20 ms (ECONNREFUSED is fast)
+3. **2 healthy + 2 hanging forever → verified in ~23 ms** (this is the choke point Ken asked about — under the old code this would have hung for the full 5,000 ms requestTimeoutMs before completing)
+4. 3 agree + 1 dissents (`minSuccessfulResponses=3`) → verified at the agreed amount; dissenter outvoted
+
+Registered in `scripts/run-smokes.sh` as `apps/indexer:btc-quorum-call-integration-smoke`.
+
+### Out of scope (deferred)
+
+The 16 supported-asset frontend "view on explorer" links in `apps/web/src/lib/explorer/urlsCore.ts` are static direct browser hops — Morphit serves the link, user's browser hits the explorer directly.  Latency-aware ranking on Morphit's side doesn't help (the user's network to the explorer determines their experience, not the operator's network).  Potential cp167 enhancement: widen the operator-configurable `chat_link_urls` to accept arrays per asset so users get an explorer dropdown — but that's UI work, not latency work.
+
+### Verified clean (cp166 sentinel)
+
+- Triple-pulse 6285/6285/6285, 0 runners failed
+- TypeScript 0 × 13 projects
+- svelte-check 0 errors / 0 warnings
+- Frontend unit tests 694/694
+- Indexer vitest 475/475 + 1 skipped (5 verifier test cases updated to reflect the disagreement → no-quorum behavior shift)
+- rpc-pool smoke 15/15 (10 existing + 5 new quorumCall scenarios)
+- btc-quorum-call-integration-smoke 4/4 — including the 23 ms verification under the 2-healthy-2-hanging-explorer scenario
+- Brag-list-claim-parity 79/79
+- Brag-list-KISS-budget 2/2 (after trimming §1 #12 and §4 #80, and adding `'215'` to STACCATO_ALLOWLIST)
+- Smoke runner script count: 253 (was 252 — added the BTC quorum integration smoke)
+
+### Notes for future work
+
+- The integration-smoke pattern (fake HTTP servers on ephemeral ports inside the smoke runner) is the cleanest way to test external-dependency failure modes end-to-end.  Reusable for any future verifier or external-service migration.
+- `peerPriceMonitor.ts` is the last multi-endpoint dispatch pattern in the indexer not using the pool.  Federation cross-check, runs every 30 min, fine as-is — but if we ever want a single rotation abstraction across the codebase, that's the last consumer.
+
+---
 
 ## cp165 — RPC pool foundation + byte-budget audit (CLOSED 2026-05-28)
 

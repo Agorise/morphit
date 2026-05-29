@@ -4,7 +4,59 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp165 **CLOSED** — RPC pool foundation + comprehensive byte-budget audit.  Built a shared latency-aware endpoint pool (`@morphit/rpc-pool`), migrated both BlurtClients to it (indexer + relay), converted 15+ modules to dynamic dblurt imports, lazy-mounted 10+ heavyweight components behind their conditional render gates, fixed nginx so it actually serves the pre-compressed assets the SvelteKit build already produces, and enabled API-response compression on indexer + relay.
+**Last touched:** cp166 **CLOSED** — extended the rpc-pool pattern to BTC + XMR fee verifiers via a new `quorumCall` primitive.  Addresses the production choke point where `Promise.allSettled` forced the indexer to wait for the slowest explorer's full timeout even when fast ones had already agreed; now releases that previously hung for ~5 seconds on a slow/dead explorer land in milliseconds.  Includes a behavioral change worth flagging: under the old `Promise.allSettled` + post-hoc unanimity check, a single dissenting explorer could DoS a legitimate trade by forcing rejection on disagreement; under the new quorum-with-early-return model, the dissenter is outvoted by the agreeing majority.  Strict improvement on the attack surface as well as the latency.
+
+**The integration smoke proves the actual UX win:** `apps/indexer/scripts/btc-quorum-call-integration-smoke.ts` spins up 4 fake mempool.space-style HTTP servers, then runs four scenarios — all 4 healthy + agree, 2 healthy + 2 connection-refused, **2 healthy + 2 hanging forever (the choke point)**, and 3-agree-1-dissents (majority outvotes the dissenter).  The hanging-explorer scenario verifies in **23 ms** instead of the 5 s timeout-hang under the old code.
+
+### What shipped
+
+- **New `quorumCall<T>` on `@morphit/rpc-pool`** — fires to all healthy endpoints (latency-sorted), groups responses by a caller-provided equivalence-key function, returns the moment `minAgree` responses cluster into one group, aborts the rest via per-endpoint `AbortController`.  Response classification by the `fn`: return `T` → contributes to quorum; return `null` → endpoint healthy but non-contributing (no cooldown, no bucket); throw → transport failure, cooldown applies.  Maps cleanly onto the four-state response classification the existing fee verifiers used (`ok` → T, `data_not_found` / `data_malformed` → null, `transport_failure` → throw).
+- **Both fee verifiers migrated** — `bitcoinExplorerVerifier.ts` (equivalence key = satoshis paid to fee address) and `moneroProofVerifier.ts` (equivalence key = proven piconero amount).  Each verifier now owns its own `EndpointPool`; the shared `explorerBreaker` field on the poller is gone, replaced by an `explorerHealthSnapshot` accessor that merges both verifiers' snapshots into the unified per-URL view `/v1/health?verbose=1` exposes.
+- **CircuitBreaker class deleted** — superseded by EndpointPool's cooldown ladder.  Its dedicated unit test + the two `*.breaker.test.ts` integration tests deleted (the cooldown ladder is now tested at the pool level in `rpc-pool-smoke.ts`).  Three `.ts` files + 3 test files removed; one fewer cooldown abstraction to audit.
+- **`/v1/health?verbose=1` shape strictly improved** — adds `ewma_latency_ms` per explorer (was previously not visible to operators).  State derivation (`open` / `half_open` / `closed`) preserved from the old breaker output.
+- **Integration smoke registered** — `apps/indexer/scripts/btc-quorum-call-integration-smoke.ts` joins the runner battery (252 → 253 smoke scripts).
+- **5 new quorumCall scenarios in `rpc-pool-smoke`** — single-success, 2-of-3 early-return, transport-failures-don't-stall, disagreement → no quorum, null-returns-stay-healthy.  Bumps that smoke from 10 to 15 scenarios.
+
+### Behavioral change (preserved trust model, improved attack surface)
+
+| Scenario | Old behavior | New behavior |
+|---|---|---|
+| 4 explorers respond [100, 50, 50, 50], `minAgree=3` | REJECT (unanimity check fails) | VERIFY at 50 (3 outvote 1 dissenter) |
+| 2 explorers respond [100, 50], `minAgree=2` | REJECT (disagreement) | PENDING (no quorum forms — attestable) |
+| 4 explorers, 2 healthy + 2 hanging, `minAgree=2` | 5-second hang | VERIFY in ~23 ms (early return) |
+| All 4 explorers in cooldown | PENDING | PENDING (unchanged) |
+
+The trust model is preserved (cross-source agreement still required); the DoS-via-flaky-explorer attack vector is closed (one dissenter can no longer block a legitimate trade by forcing a unanimity check to fail).
+
+### Out of scope for cp166 (deferred)
+
+The 16 supported-asset frontend "view on explorer" links in `apps/web/src/lib/explorer/urlsCore.ts` are direct browser hops to the explorer — Morphit serves the URL, the user's browser hits the explorer directly.  Morphit-side latency-aware ranking doesn't help here (the user's network to the explorer is what determines their experience, not the operator's network).  A potential cp167 enhancement is widening the operator-configurable `chat_link_urls` schema to accept arrays per asset so users can pick from a dropdown of explorers — but that's UI work, not latency work.
+
+### Brag-list (KISS-budget-compliant on both axes after trim)
+
+- **§4 #80 trimmed** from 119w/5s to 99w/3s — covers the broader RPC-pool resilience: now includes the new explorer quorumCall behavior (releases no longer hang on slow explorers).
+- **§1 #12 trimmed** from 110w/3s to 92w/3s (was over the 100-word budget).
+- **STACCATO_ALLOWLIST updated** in `brag-list-kiss-budget-smoke.ts` — historical "No leverage…" entry shifted from #213 to #215 due to the cp165 #12 + #79 insertions; `'215'` added.
+
+### Verified clean (cp166 sentinel)
+
+- Triple-pulse 6285/6285/6285, 0 runners failed (matched the cp165 baseline post-trim)
+- TypeScript 0 × 13 projects
+- svelte-check 0 errors / 0 warnings
+- Frontend unit tests 694/694
+- Indexer vitest 475/475 (+ 1 skipped)
+- 5 verifier tests updated to reflect the disagreement → no-quorum behavior shift
+- BTC quorum-call integration smoke 4/4 (with **23 ms** verification under the 2-healthy-2-hanging scenario — the actual UX proof)
+- Brag-list-claim-parity 79/79, brag-list-KISS-budget 2/2
+
+### Notes for future work
+
+- The integration smoke pattern (fake-HTTP servers on ephemeral ports) is reusable for any future external-service integration that needs end-to-end latency / failure-mode testing.  Copy it for any new verifier or external-dep migration.
+- `peerPriceMonitor.ts` is the only remaining multi-endpoint dispatch pattern in the indexer not using the pool.  It runs every 30 minutes (federation cross-check, not a hot path) and is fine as-is — but if we ever want to converge on a single rotation abstraction, that's the last consumer.
+
+— 2026-05-28.
+
+**Prior turn (cp165):** RPC pool foundation + comprehensive byte-budget audit.  Built a shared latency-aware endpoint pool (`@morphit/rpc-pool`), migrated both BlurtClients to it (indexer + relay), converted 15+ modules to dynamic dblurt imports, lazy-mounted 10+ heavyweight components behind their conditional render gates, fixed nginx so it actually serves the pre-compressed assets the SvelteKit build already produces, and enabled API-response compression on indexer + relay.
 
 **The single biggest find:** the SvelteKit build produces `.gz` and `.br` siblings for every `.js` / `.css` / `.html`, but nginx wasn't told to serve them.  Every visitor was downloading raw uncompressed JS — `gzip_static on; brotli_static on;` in `ops/nginx/web.conf` is a **4-6× reduction on every frontend page load** with zero CPU cost at runtime (compression happened once at build time).
 
