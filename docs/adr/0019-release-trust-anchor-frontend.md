@@ -229,10 +229,14 @@ When deploying a new release, the deploy pipeline:
 
 ## Implementation
 
-- `apps/web/src/lib/net/release.ts` — schema (reconciled to
-  indexer's canonical fields).
-- `apps/web/src/lib/net/releaseValidate.ts` — pure validator;
-  mirrors indexer's rejection reasons.
+- `packages/release-schema/src/release.ts` — schema (reconciled to
+  indexer's canonical fields).  Extracted from
+  `apps/web/src/lib/net/release.ts` into the shared
+  `@morphit/release-schema` package at cp170 so both the frontend
+  and the indexer import one canonical copy.
+- `packages/release-schema/src/releaseValidate.ts` — pure validator;
+  mirrors indexer's rejection reasons.  (Was
+  `apps/web/src/lib/net/releaseValidate.ts` pre-cp170.)
 - `apps/web/src/lib/net/releaseTrustAnchor.ts` — pure pubkey-
   authority check (carved out for smoke-testability).
 - `apps/web/src/lib/net/releaseFetch.ts` — chain-direct fetch +

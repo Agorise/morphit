@@ -239,11 +239,11 @@ describe('release handler', () => {
 //
 // These tests exercise the handler's structural validation of the
 // optional `treasury` block, AND prove byte-for-byte parity with
-// the frontend validator at apps/web/src/lib/net/releaseValidate.ts.
+// the frontend validator (now @morphit/release-schema).
 // Any payload that one accepts the other must accept; any payload
 // one rejects the other must reject with the same reason name.
 
-import { validateReleasePayload } from '../../../web/src/lib/net/releaseValidate';
+import { validateReleasePayload } from '@morphit/release-schema';
 
 const VALID_BTC_ADDR = 'bc1q' + 'a'.repeat(38);
 const VALID_XMR_ADDR = '4' + 'A'.repeat(94);
@@ -414,7 +414,7 @@ describe('release handler — Part 106 + 107 treasury validation', () => {
 // ─── Part 106 — INDEXER ↔ FRONTEND validator parity ──────────────────
 //
 // The indexer's structural validator (in handlers/release.ts) and
-// the frontend's validator (in apps/web/src/lib/net/releaseValidate.ts)
+// the frontend's validator (now @morphit/release-schema)
 // MUST agree on every payload, with matching reason names.  This
 // test runs a battery of payloads through both validators and
 // confirms identical accept/reject outcomes.

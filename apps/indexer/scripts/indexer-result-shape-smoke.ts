@@ -45,7 +45,7 @@ const WEB_SRC = join(REPO, 'apps/web/src');
 const VALUE_LEGITIMATE_IMPORTS = [
 	'$crypto/runWithActiveKey',
 	'$net/releaseFetch',
-	'$net/releaseValidate',
+	'@morphit/release-schema',
 	'$net/releaseHashCheck',
 	'$lib/avatar',
 	'sanitizeSvg',
@@ -57,7 +57,7 @@ const VALUE_LEGITIMATE_IMPORTS = [
 const ERROR_KIND_LEGITIMATE_IMPORTS = [
 	'$stores/release',
 	'$net/releaseFetch',
-	'$net/releaseValidate',
+	'@morphit/release-schema',
 	'$net/releaseHashCheck'
 ];
 

@@ -5,7 +5,7 @@
  * release the indexer stores as valid passes here too.
  */
 
-import { validateReleasePayload } from '../../web/src/lib/net/releaseValidate';
+import { validateReleasePayload } from '@morphit/release-schema';
 import { checkPinnedKeyInAuthority } from '../../web/src/lib/net/releaseTrustAnchor';
 
 let scenarios = 0;

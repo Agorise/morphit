@@ -700,7 +700,8 @@ required.
 
 The frontend reads the same chain-pinned addresses from
 `/v1/release` (validated by
-`apps/web/src/lib/net/releaseValidate.ts` with rules that
+`@morphit/release-schema` (cp170; formerly
+`apps/web/src/lib/net/releaseValidate.ts`) with rules that
 mirror the indexer's), and renders them on the post-order
 page (`ListingFeeAddressPanel.svelte`) with copy-button +
 QR code + "chain-pinned by @morphit" badge.  This closes
