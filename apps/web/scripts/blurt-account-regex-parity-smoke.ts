@@ -26,21 +26,53 @@
  * divergence can't recur.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const WEB_SRC = resolve(HERE, '..', 'src');
+const REPO = resolve(HERE, '..', '..', '..');
+
+// cp176: the guard now spans EVERY workspace that inlines the Blurt
+// account-name shape — not just apps/web/src.  The cp175 divergence
+// (registry.ts) slipped through because the old guard walked only
+// apps/web AND matched only NAMED `*_RE` consts, so it never saw the
+// indexer/relay/mcp-server copies nor the inline `.test()`/`.regex()`
+// uses.  (A repo-wide audit confirmed the only OTHER `/^[a-z][a-z0-9…`
+// literals — KEY_RE `[a-z0-9_]+`, NUMERIC_SUFFIX_RE, a URI-scheme
+// matcher — share neither the `*ACCOUNT*_RE` name nor the dot-dash
+// `[a-z0-9.-]{` class signature, so neither matcher below trips them.)
+const SRC_ROOTS = [
+	'apps/web/src',
+	'apps/indexer/src',
+	'apps/relay/src',
+	'apps/mcp-server/src',
+	'apps/ops-cli/src',
+	'apps/matrix-bot/src'
+]
+	.map((p) => resolve(REPO, p))
+	.filter((p) => existsSync(p));
 
 const CANONICAL = '/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/';
 
-// Match a `const NAME = /regex/;` where NAME ends in ACCOUNT_RE /
-// ACCOUNT_NAME_RE / BROADCAST_ACCOUNT_RE and the regex anchors an
-// account-name-shaped pattern (starts with ^[a-z]). We compare the
-// raw literal text.
-const DEF_RE =
-	/\b(?:const|let)\s+([A-Z_]*ACCOUNT(?:_NAME)?_RE|BROADCAST_ACCOUNT_RE)\s*=\s*(\/\^\[a-z\][^;\n]*\/)/g;
+// Two complementary matchers, run over comment-stripped source:
+//  (1) NAMED — `const NAME_RE = /…/` where NAME is *ACCOUNT*_RE /
+//      *ACCOUNT_NAME_RE / BROADCAST_ACCOUNT_RE.  Name-gated, so it
+//      stays robust even if a copy diverged to a different CHARACTER
+//      CLASS (e.g. dropped the dot) — the cp175-style regression.
+//  (2) INLINE — any account-shaped literal carrying the dot-dash
+//      class+quantifier signature `[a-z0-9.-]{`, confirmed UNIQUE to
+//      the account regex.  Catches the nameless `/…/.test(x)` and
+//      `.regex(/…/)` forms.
+const NAMED_RE =
+	/\b(?:const|let)\s+([A-Z_]*ACCOUNT(?:_NAME)?_RE|BROADCAST_ACCOUNT_RE)\s*=\s*(\/\^\[a-z\][^;\n]*?\/)/g;
+const INLINE_RE = /(\/\^\[a-z\]\[a-z0-9\.-\]\{[^/\n]*\/)/g;
+
+function stripComments(src: string): string {
+	return src
+		.replace(/\/\*[\s\S]*?\*\//g, '') // block comments
+		.replace(/(^|[^:])\/\/[^\n]*/g, '$1'); // line comments (preserve `://`)
+}
 
 function walk(dir: string): string[] {
 	const out: string[] = [];
@@ -71,19 +103,35 @@ function bad(name: string, detail: string): void {
 console.log('\n── blurt-account-regex-parity (cp175 F-007 guard) ──\n');
 
 const found: Array<{ file: string; name: string; literal: string }> = [];
-for (const f of walk(WEB_SRC)) {
-	const src = readFileSync(f, 'utf8');
-	let m: RegExpExecArray | null;
-	DEF_RE.lastIndex = 0;
-	while ((m = DEF_RE.exec(src)) !== null) {
-		found.push({ file: relative(WEB_SRC, f), name: m[1] ?? '?', literal: (m[2] ?? '').trim() });
+const seen = new Set<string>(); // dedup by file + literal's byte offset
+for (const root of SRC_ROOTS) {
+	for (const f of walk(root)) {
+		const code = stripComments(readFileSync(f, 'utf8'));
+		const rel = relative(REPO, f);
+		let m: RegExpExecArray | null;
+		NAMED_RE.lastIndex = 0;
+		while ((m = NAMED_RE.exec(code)) !== null) {
+			const lit = (m[2] ?? '').trim();
+			const pos = m.index + m[0].indexOf(m[2] ?? '');
+			const key = `${rel}::${pos}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			found.push({ file: rel, name: m[1] ?? '?', literal: lit });
+		}
+		INLINE_RE.lastIndex = 0;
+		while ((m = INLINE_RE.exec(code)) !== null) {
+			const key = `${rel}::${m.index}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			found.push({ file: rel, name: '(inline)', literal: (m[1] ?? '').trim() });
+		}
 	}
 }
 
-if (found.length < 8) {
-	bad('discovery', `expected ≥8 account-name regex definitions, found ${found.length}. If validators were refactored to a shared module, update/retire this sentinel.`);
+if (found.length < 25) {
+	bad('discovery', `expected ≥25 account-name regex literals across web/indexer/relay/mcp-server, found ${found.length}. If validators were refactored to a shared module, update/retire this sentinel.`);
 } else {
-	ok(`discovered ${found.length} Blurt account-name regex definition(s) across the frontend`);
+	ok(`discovered ${found.length} Blurt account-name regex literal(s) across web/indexer/relay/mcp-server`);
 }
 
 // Every literal must equal the canonical form.
@@ -92,7 +140,7 @@ if (divergent.length === 0) {
 	ok(`all ${found.length} account-name regexes are byte-identical to the canonical ${CANONICAL}`);
 } else {
 	for (const d of divergent) {
-		bad(`${d.file} (${d.name})`, `is ${d.literal}, expected canonical ${CANONICAL} — see cp175 F-007`);
+		bad(`${d.file} (${d.name})`, `is ${d.literal}, expected canonical ${CANONICAL} — see cp175 F-007 / cp176`);
 	}
 }
 
