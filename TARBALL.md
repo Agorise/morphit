@@ -4,7 +4,21 @@
 
 ## 🔄 CROSS-SESSION HANDOFF — read this first if you're a fresh chat session
 
-**Last touched:** cp175 **IN PROGRESS** — full deep-deep + five-persona walkthrough + hostile-op sweep (Ken's pre-launch mandate: tap/type every interactive element, 94-task black-hat audit over every file, consolidated "every op hostile" sweep across all 17 handlers). **Multi-session effort**; findings accumulate in `docs/AUDIT-cp175-DEEP-DEEP.md`, which also holds the remaining-work plan.
+**Current artifact:** `morphit-cp176-ci-runner-fixes-HANDOFF-FULL-STATE.tar.gz` (the latest tarball; load this). Prior session tarballs were deleted on creation per the standing rule — this one is the single source of truth.
+
+**cp176 (newest):** Fixed the 3 Forgejo smoke-runner failures from CI run #492 that slipped past cp175's sandbox verification. (1) Tightened the canonical Blurt account regex to reject trailing `-`/`.` (`/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/`) across all 30 copies + parity guard; (2) fixed a latent `\Z`-isn't-a-JS-anchor bug in `brag-list-kiss-budget-smoke` that had been silently truncating entry bodies at the first capital "Z", then fixed the 4 over-budget brag entries it surfaced (#113/#101/#236 rewritten, #14 allowlisted) + regenerated the mediakit; (3) added the missing `^✓ all` canonical line to `locale-source-of-truth-smoke`. Also closed a gate gap: added `apps/mcp-server` to `workspace-typecheck-smoke` (now 8/8 compile-clean). In-sandbox verification: 263/265 smokes pass (only the better-sqlite3-dependent `vitest-must-pass-smoke` un-runnable here), 8/8 tsc/svelte-check clean. One follow-up logged in REVISIT (broaden the parity smoke to the non-web + inline regex copies — deferred to avoid adding false-positive risk to a make-green change). Full detail: `docs/REVISIT-LIST.md` cp176 section.
+
+**Status:** cp175 deep-deep campaign — the **sandbox/static-completable scope is COMPLETE** through session 9. Findings F-001…F-015 all fixed/resolved; the five-persona walkthrough, the "every op hostile" sweep across all 17 handlers, the DB/memory/type/regex/SQL-injection sweeps, the privacy-coin metadata-leak reduction, the handler business-logic deep-reads, the MCP/operator persona traces, the operator-doc prose read, and the operator setup-wizard clarity pass are all done. Full per-session detail accumulates below (append-only log) and in `docs/AUDIT-cp175-DEEP-DEEP.md` (Parts A–T + session 8/9 addenda).
+
+**Verified end-state (session 9):** ALL 6 projects typecheck clean (web svelte-check 0; indexer/relay/ops-cli/matrix-bot/mcp-server tsc 0); locale parity **3096 × 10**; **265** registered smokes, **zero** unregistered; the 10 cp175 guard smokes live; web vitest 695 passing; final broad smoke pulse 18/18 green; touched surfaces triple-pulsed. Repo swept clean of stale leftovers (removed an untracked `apps/web/static/sitemap.xml.bak` that diverged from the live sitemap).
+
+**The only genuinely-remaining work is deployment-gated** (cannot be done in this sandbox): items #95–110 (`docs/AUDIT-ITEMS-95-110.md`) need a staging deploy, and an independent third-party security review is still pending (`docs/AUDIT-OUTSIDE-SCOPE.md`). Honest launch line: "extensively self-audited; independent review pending." Natural next-session start: the deployment-gated batch once a staging box exists.
+
+---
+
+## Historical handoff note (pre-session-9, retained for provenance)
+
+**Was:** cp175 **IN PROGRESS** — full deep-deep + five-persona walkthrough + hostile-op sweep (Ken's pre-launch mandate: tap/type every interactive element, 94-task black-hat audit over every file, consolidated "every op hostile" sweep across all 17 handlers). **Multi-session effort**; findings accumulate in `docs/AUDIT-cp175-DEEP-DEEP.md`, which also holds the remaining-work plan.
 
 ### Session 1 — fixes shipped
 - **F-001 (HIGH):** `apps/web/src/lib/blurt/ops/comment.ts` carried an ORPHAN `signTransactionWithKey` that always used dblurt `broadcast.sign` and ignored `SIGNER_BACKEND` — the cp174 noble migration missed this second signer. The syndication/cross-post path (Bob's "share my first trade") would keep signing via elliptic when an operator flips to noble. **Fixed**: comment.ts now branches on `SIGNER_BACKEND` (digest via dblurt `cryptoUtils.transactionDigest`, sign with `signDigestWithNoble`, append wire sig). New **`scripts/signer-backend-consistency-smoke.ts`** (registered) asserts EVERY `broadcast.sign` site in apps/web honors the flag. `blurt-noble-tx-signature-proof.ts` extended with the comment op (now 5 scenarios; comment 60/60 recover).

@@ -30,7 +30,7 @@ const log = logger('feedback');
 // dot-separated multi-segment.  Canonicalized to match
 // $api/shared.ts isAccountName — see REVISIT-LIST.md
 // "C-19 follow-on consistency pass" for context.
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Max comment length in USER-PERCEIVED characters (code points).

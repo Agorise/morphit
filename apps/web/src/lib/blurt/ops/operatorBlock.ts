@@ -79,7 +79,7 @@ export function validateOperatorBlockPayload(p: unknown): string | null {
 	if (u.v !== 1) return `unsupported version: ${String(u.v)}`;
 	if (typeof u.blocked !== 'string') return 'blocked must be a string';
 	// Mirror the account-name regex used elsewhere in the codebase.
-	if (!/^[a-z][a-z0-9.-]{2,15}$/.test(u.blocked)) {
+	if (!/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/.test(u.blocked)) {
 		return 'blocked has an invalid account-name shape';
 	}
 	if (u.action !== 'block' && u.action !== 'unblock') {

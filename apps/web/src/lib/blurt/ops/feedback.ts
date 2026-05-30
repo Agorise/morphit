@@ -36,7 +36,7 @@ import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
  *  names per Blurt's is_valid_account_name are dot-separated
  *  multi-segment.  Canonicalized to allow dots — see
  *  REVISIT-LIST.md "C-19 follow-on consistency pass" for context. */
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Must match the indexer handler's PERMLINK_RE. Lowercase alnum
  *  segments separated by single hyphens. */

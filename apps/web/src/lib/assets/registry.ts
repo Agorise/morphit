@@ -103,14 +103,16 @@ const XMR_INTEGRATED_RE = /^4[1-9A-HJ-NP-Za-km-z]{105}$/;
 // Blurt account name — validates as the recipient identifier
 // since BLURT transfers are routed by account name, not a hex
 // address.  cp175 F-007: aligned to the CANONICAL Morphit account
-// pattern (the same /^[a-z][a-z0-9.-]{2,15}$/ used by
+// pattern (the same /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/ used by
 // isValidBlurtAccount in $lib/chat/payload and the ops/ validators)
 // so all account-name validators in the frontend agree. Multi-
-// segment dotted names are accepted; this is a client-side UX shape
-// check only — the authoritative account check is the chain +
-// indexer extractSigner. Parity across copies is enforced by
-// blurt-account-regex-parity-smoke.
-const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+// segment dotted names are accepted, but the name must end
+// alphanumeric — cp176 tightened the canonical so a trailing dash or
+// dot is rejected (real Blurt names can't end in punctuation). This
+// is a client-side UX shape check only — the authoritative account
+// check is the chain + indexer extractSigner. Parity across copies
+// is enforced by blurt-account-regex-parity-smoke.
+const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 const validateBtc: AddressValidator = (s) =>
 	BTC_P2PKH_RE.test(s) || BTC_P2SH_RE.test(s) || BTC_BECH32_RE.test(s);

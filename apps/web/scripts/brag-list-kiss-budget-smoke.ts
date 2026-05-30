@@ -105,7 +105,14 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
 // '213' kept in the allowlist for back-compat (the entry now
 // at #213 is prose, but exemption is harmless and removes a
 // noisy bisect direction if entries get rearranged again).
-const STACCATO_ALLOWLIST = new Set(['3', '12', '197', '206', '210', '213', '215']);
+// cp176: '14' added.  Entry #14's "Period. Zero." is deliberate
+// punchy emphasis — the same staccato style as the allowlisted "No
+// leverage. No margin..." entry — not sprawl.  It is well within the
+// word budget; only the sentence-count heuristic trips on it, so it
+// belongs here.  (Surfaced when the parser's end-of-input bug was
+// fixed: #14 contains "Zero", whose capital Z used to truncate its
+// body before the sentence counter ever saw the staccato tail.)
+const STACCATO_ALLOWLIST = new Set(['3', '12', '14', '197', '206', '210', '213', '215']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;
@@ -127,7 +134,12 @@ function parseEntries(src: string): Entry[] {
 	// Use `[\s:.]*` so the parser consumes optional terminal punctuation
 	// AND/OR whitespace before the body.  The body capture itself is
 	// non-greedy so it stops at the next entry or section heading.
-	const re = /^(\d+[a-z]?)\.\s+(\*\*[^*]+\*\*)[\s:.]*(.*?)(?=\n\d+[a-z]?\.|\n## |\Z)/gms;
+	// Body terminator: next entry, a section heading, or end-of-input.
+	// NOTE: JS regex has no `\Z`; an earlier version used it and it was
+	// silently treated as the literal char "Z", truncating any entry
+	// body at its first capital Z (e.g. "Zcash"/"Zero") and undercounting
+	// words/sentences.  `(?![\s\S])` is the correct end-of-input assert.
+	const re = /^(\d+[a-z]?)\.\s+(\*\*[^*]+\*\*)[\s:.]*(.*?)(?=\n\d+[a-z]?\.|\n## |(?![\s\S]))/gms;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(src)) !== null) {
 		entries.push({

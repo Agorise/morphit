@@ -19,6 +19,6 @@
 
 import type { ParamMatcher } from '@sveltejs/kit';
 
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 export const match: ParamMatcher = (param) => ACCOUNT_NAME_RE.test(param);

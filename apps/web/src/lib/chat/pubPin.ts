@@ -47,7 +47,7 @@
 import { safeLocal } from '$utils/safeStorage';
 
 const KEY = 'morphit.chat.pub_pins';
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const TRX_ID_RE = /^[a-f0-9]{40}$/;
 
 /** A pinned chat-pub reference.  All three fields together

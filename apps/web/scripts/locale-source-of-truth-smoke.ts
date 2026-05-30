@@ -224,7 +224,7 @@ if (violations.length === 0 && pairedMissing.length === 0) {
 	}
 	console.log('');
 	console.log('2 passed, 0 failed (2 total)');
-	console.log('✓ locale-source-of-truth smoke holds');
+	console.log('✓ all 2 scenarios passed');
 	process.exit(0);
 }
 

@@ -45,7 +45,7 @@ import { validateOrderPermlink } from '$indexer/permlink';
 // dot-separated multi-segment.  Canonicalized to match
 // $api/shared.ts isAccountName — see REVISIT-LIST.md
 // "C-19 follow-on consistency pass" for context.
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

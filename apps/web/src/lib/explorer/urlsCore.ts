@@ -79,7 +79,7 @@ export const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
 /** Account-name format used elsewhere in the codebase. */
-export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Bundled defaults used when an operator hasn't overridden
  *  the per-instance template (via

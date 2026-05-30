@@ -9,12 +9,21 @@
  * authoritative account check is the chain + indexer extractSigner.
  *
  * F-007: registry.ts had DIVERGED to /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/
- * (no dots, alnum-end) while every other site used the canonical
- * /^[a-z][a-z0-9.-]{2,15}$/. A name valid on one validator could be
- * rejected by another — not a security hole (chain is the authority)
- * but an inconsistent UX. F-007 aligned registry.ts to the canonical
- * form; this sentinel asserts every Blurt-account-name regex literal
- * in the frontend is byte-identical so the divergence can't recur.
+ * (no dots) while every other site used /^[a-z][a-z0-9.-]{2,15}$/.
+ * A name valid on one validator could be rejected by another — not a
+ * security hole (chain is the authority) but an inconsistent UX, so
+ * F-007 aligned every copy to one canonical form.
+ *
+ * cp176: that canonical form had a latent flaw — its final character
+ * class still admitted a trailing dash or dot, but real Blurt account
+ * names must end alphanumeric (the indexer asset-registry smoke caught
+ * `addressValidator('trailing-')` returning true).  The canonical was
+ * tightened to /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/: same 3–16 length
+ * window, dotted multi-segment names still accepted, but a trailing
+ * '-' or '.' is now rejected.  Every frontend copy was updated in
+ * lockstep.  This sentinel asserts every Blurt-account-name regex
+ * literal in the frontend is byte-identical to that canonical so the
+ * divergence can't recur.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -24,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_SRC = resolve(HERE, '..', 'src');
 
-const CANONICAL = '/^[a-z][a-z0-9.-]{2,15}$/';
+const CANONICAL = '/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/';
 
 // Match a `const NAME = /regex/;` where NAME ends in ACCOUNT_RE /
 // ACCOUNT_NAME_RE / BROADCAST_ACCOUNT_RE and the regex anchors an

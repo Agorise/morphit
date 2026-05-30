@@ -59,7 +59,7 @@ const log = logger('relay-push-api');
 
 /** Loose Blurt account name regex.  Mirrors the one in
  *  queue/drainer.ts — same dotted-segment rules. */
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Caps on the freeform fields to bound row size + bound abuse.
  *  Endpoint URLs are typically <500 chars; we allow up to 2 KB

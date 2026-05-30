@@ -117,9 +117,10 @@ function isValidPairedSession(x: unknown): x is PairedSession {
 	const r = x as Record<string, unknown>;
 	if (r.v !== 1) return false;
 	if (typeof r.account !== 'string') return false;
-	// Blurt account regex: lowercase letter, then [a-z0-9.-]{2,15}.  Match
-	// the same constraint payload validators use everywhere else.
-	if (!/^[a-z][a-z0-9.-]{2,15}$/.test(r.account)) return false;
+	// Blurt account regex: lowercase letter, then 1–14 of [a-z0-9.-],
+	// ending alphanumeric (no trailing dash/dot).  Match the same
+	// constraint payload validators use everywhere else.
+	if (!/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/.test(r.account)) return false;
 	if (typeof r.chatPubkey !== 'string') return false;
 	// Chat pubkey is base64-or-pem encoded.  No need to fully parse
 	// here — it's never used as the basis for any signing operation

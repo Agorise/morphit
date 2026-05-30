@@ -48,7 +48,7 @@ const log = logger('relay-drainer');
  *  dots — see REVISIT-LIST.md "C-19 follow-on consistency pass"
  *  for context. Without dot allowance, any dotted-account user's
  *  welcome bonus would fail to deliver. */
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 interface PendingTransferRow {
 	id: number;
