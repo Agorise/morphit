@@ -37,7 +37,7 @@ import { safeLocal } from '$utils/safeStorage';
 
 const KEY = 'morphit.chat.read_state';
 const MAX_PEERS = 500;
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Shape in storage: peer → ISO timestamp of last visit. */
 type ReadStateMap = Record<string, string>;

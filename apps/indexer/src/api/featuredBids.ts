@@ -43,7 +43,7 @@ const MAX_SLOTS = 5;
 
 /** Valid Blurt account name pattern.  Same regex used elsewhere
  *  in the indexer for input validation. */
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 const queryParams = z.object({
 	account: z.string().regex(ACCOUNT_NAME_RE, 'invalid account name')

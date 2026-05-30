@@ -271,7 +271,7 @@
 	}
 
 	// ── Account-name verify + save (closes C-24) ────────────────────
-	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 	async function verifyAndSaveAccountName(): Promise<void> {
 		const live = $liveIdentity;

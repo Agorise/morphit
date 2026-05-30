@@ -80,7 +80,7 @@ import { localize, normalizeLocale } from '$indexer/pushLocalize';
 
 const log = logger('chat');
 
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 /** Hard cap on ciphertext envelope size.
  *
  *  UX budget: chat messages are capped at 256 code points of

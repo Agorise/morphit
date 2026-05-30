@@ -388,7 +388,7 @@ const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
  *  names.  The chain enforces stricter rules (no consecutive
  *  dots etc.) but the user's wallet does the final validation
  *  when they actually send. */
-const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Order permlink: matches the orderbook's permlink shape — a
  *  Blurt permlink, lowercase alphanumeric + dash, 3..256 chars.

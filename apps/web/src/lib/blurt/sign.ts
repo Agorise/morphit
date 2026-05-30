@@ -108,7 +108,7 @@ function signTransactionWithKey(
  *  Defense-in-depth: callers should validate upstream, but this
  *  guard at the broadcast boundary catches future regressions.
  *  Same regex as the chat-payload BLURT_ACCOUNT_RE. */
-const BROADCAST_ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const BROADCAST_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Phase F.5 audit fix (F-16) — canonical chain-asset string.
  *  BLURT is a 3-decimal asset.  The wallet's broadcast must be in

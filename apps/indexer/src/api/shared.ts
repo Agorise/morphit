@@ -23,7 +23,7 @@
  *  block handler accepted blocks against them, and the
  *  /v1/chat/:a/:b path 400'd.  Canonicalized to dot-allowing
  *  here in 2026-04-27 audit close-out. */
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 export function isAccountName(s: unknown): s is string {
 	return typeof s === 'string' && ACCOUNT_NAME_RE.test(s);

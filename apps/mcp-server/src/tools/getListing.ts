@@ -23,7 +23,7 @@ export const GetListingInputSchema = z.object({
 		.string()
 		.min(3)
 		.max(16)
-		.regex(/^[a-z][a-z0-9.-]{2,15}$/)
+		.regex(/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/)
 		.describe(
 			'The Blurt account that posted the listing. Lowercase letters, ' +
 				'digits, hyphens, periods only — Blurt account-name rules.'

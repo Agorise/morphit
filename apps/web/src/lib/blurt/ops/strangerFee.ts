@@ -36,7 +36,7 @@ import { OP_IDS } from '$net/config';
 import { FEE_RECIPIENT, formatBlurtAmount } from '$lib/orders/fee';
 import type { LiveIdentity } from '$crypto/keygen';
 
-const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 export interface StrangerFeePayload {
 	readonly v: 1;

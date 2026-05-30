@@ -51,7 +51,11 @@ const WORKSPACES_TSC = [
 	'apps/indexer',
 	'apps/relay',
 	'apps/ops-cli',
-	'apps/matrix-bot'
+	'apps/matrix-bot',
+	// cp176: apps/mcp-server was missing from this gate even though it
+	// is one of the 8 TS projects and ships account-name validators
+	// (getListing.ts).  Added so a tsc error there can't slip through.
+	'apps/mcp-server'
 ];
 
 const WORKSPACES_SVELTE = ['apps/web'];

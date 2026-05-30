@@ -68,7 +68,7 @@
 		return $_(`onboarding.import.posting_only.error.wif.${code}`);
 	}
 
-	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 	async function unlockSeedOrKeyfile(): Promise<void> {
 		let full: FullIdentity | null = null;
