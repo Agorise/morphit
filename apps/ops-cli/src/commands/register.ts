@@ -32,6 +32,8 @@
 import { readFileSync } from 'node:fs';
 import { ask, askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { printChainErrorHelp, classifyChainError, SUGGESTED_BP_FLOOR } from './chainErrors.ts';
+import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -53,7 +55,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		console.log(`✗ ${sanitizeForTerm(env.error)}`);
 		return 1;
 	}
-	const { account, keyFile, instanceName, origin, contactUrl } = env;
+	const { account, keyFile, instanceName, origin, contactUrl, operatorTag } = env;
 
 	console.log(`  Account:      @${sanitizeForTerm(account)}`);
 	console.log(`  Origin:       ${sanitizeForTerm(origin)}`);
@@ -61,7 +63,51 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	if (contactUrl !== null) {
 		console.log(`  Contact URL:  ${sanitizeForTerm(contactUrl)}`);
 	}
+	// The tag we register MUST be the same tag the relay attributes
+	// earnings to — MORPHIT_INSTANCE_OPERATOR_TAG, set by the wizard.
+	// Registering anything else would mean your on-chain identity and
+	// your earning identity diverge (you'd register one tag but your
+	// orders would carry another, so payouts wouldn't match).  Only if
+	// that var is unset (older configs predating the wizard's tag step)
+	// do we fall back to slugging the display name, and we say so.
+	let tag: string;
+	if (operatorTag !== null) {
+		tag = operatorTag;
+		console.log(`  Federation tag: ${sanitizeForTerm(tag)}`);
+		console.log('    (from MORPHIT_INSTANCE_OPERATOR_TAG — the same tag your');
+		console.log('     relay uses to attribute order earnings to you)');
+	} else {
+		tag = sluggifyTag(instanceName);
+		console.log(`  Federation tag: ${sanitizeForTerm(tag)}`);
+		console.log('    (MORPHIT_INSTANCE_OPERATOR_TAG is not set, so this was');
+		console.log('     derived from your display name.  Set that variable — via');
+		console.log('     `npx morphit-ops init` or `edit` — so your registered tag');
+		console.log('     and your earnings tag are guaranteed to match.)');
+	}
 	console.log('');
+	console.log('  (The "tag" is your instance\'s unique, PERMANENT federation');
+	console.log('   identity. It is what attributes orders to you for fee');
+	console.log('   earnings, and — once registered — what other nodes list you');
+	console.log('   under in the public /instances directory and on your');
+	console.log('   /about-this-instance page. It cannot be changed once');
+	console.log('   registered, only superseded by a future update op.)');
+	console.log('');
+
+	// Pre-flight: reject a project-reserved tag NOW, before the
+	// irreversible confirm and before paying any mana.  The on-chain
+	// handler would reject it too (reason 'tag_reserved'), but
+	// catching it here saves the operator a confusing round-trip.
+	if (isReservedTag(tag)) {
+		console.log(`✗ The tag "${sanitizeForTerm(tag)}" is reserved by the Morphit project`);
+		console.log('  (names like morphit, morphit-relay, agorise are held back so');
+		console.log('  nobody can squat a canonical identity).  Nobody else has');
+		console.log('  claimed it — it is simply not available to register.');
+		console.log('');
+		console.log('  Change your federation tag to one that identifies YOUR node');
+		console.log('  (your domain is a good choice) by re-running');
+		console.log('  `npx morphit-ops edit` (Operator tag), then re-run register.');
+		return 1;
+	}
 
 	// ─── 2. Confirm ────
 	const ok = await askYesNo(
@@ -73,53 +119,124 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		return 0;
 	}
 
-	// ─── 3. Load relay account key (active key, per MORPHIT_RELAY_ACTIVE_KEY_FILE) ────
-	let wif: string;
-	try {
-		wif = await loadKeyWif(keyFile);
-	} catch (err) {
-		console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
-		return 1;
+	// ─── 3-5. Load key → preview → broadcast, with a mana-aware retry
+	//         loop ────
+	//
+	// On an 'insufficient_rc' failure we DON'T make the operator re-run
+	// the whole command: we explain how much to power up and then offer
+	// an in-place retry.  Crucial security property: the decrypted
+	// active key is loaded fresh for EACH attempt and wiped immediately
+	// after the broadcast call, so it is NOT resident in memory during
+	// the (possibly minutes-long) power-up wait between attempts.  The
+	// cost is re-entering the passphrase per retry for an encrypted
+	// keystore — the right trade for a high-value active key.
+	let result: { block_num: number; trx_id: string } | null = null;
+	let attempt = 0;
+	for (;;) {
+		attempt++;
+
+		// Load the key for THIS attempt.
+		let wif: string;
+		try {
+			wif = await loadKeyWif(keyFile);
+		} catch (err) {
+			console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
+			return 1;
+		}
+
+		// On the first attempt only, show which key will sign (public
+		// key only) so the operator can eyeball that the right key is
+		// in play.  Never prints the private key.
+		if (attempt === 1) {
+			try {
+				const dblurtPk = (await import('@beblurt/dblurt')) as unknown as {
+					PrivateKey: {
+						fromString(wif: string): { createPublic(prefix?: string): { toString(): string } };
+					};
+				};
+				const pub = dblurtPk.PrivateKey.fromString(wif).createPublic('BLT').toString();
+				console.log(`  Signing with the active key for @${sanitizeForTerm(account)} →`);
+				console.log(`    public key: ${pub}`);
+				console.log(`    (verify this matches @${sanitizeForTerm(account)}'s active authority on a`);
+				console.log('     Blurt explorer; run `npx morphit-ops show-key` anytime to');
+				console.log('     re-check.  A wrong key here is the #1 cause of failure.)');
+				console.log('');
+			} catch {
+				// Non-fatal: a derivation failure will resurface as a
+				// key error from the broadcast, with full diagnostics.
+			}
+		}
+
+		// Build + sign + broadcast.  Wrap so `wif` is wiped on every
+		// path (success, mana-retry, or hard failure).  JS strings are
+		// immutable so this drops our reference rather than scrubbing
+		// the bytes — but it ensures the secret is not held across the
+		// retry prompt's wait.
+		let broadcastErr: unknown = null;
+		try {
+			result = await broadcastRegister({
+				account,
+				wif,
+				tag,
+				instanceName,
+				origin,
+				contactUrl
+			});
+		} catch (err) {
+			broadcastErr = err;
+		} finally {
+			wif = '';
+		}
+
+		if (broadcastErr === null) break; // success
+
+		// Classify.  Only 'insufficient_rc' is retryable in place; for
+		// everything else we print full guidance and exit.
+		const kind = classifyChainError(errMsg(broadcastErr));
+		if (kind !== 'insufficient_rc') {
+			printChainErrorHelp(errMsg(broadcastErr), {
+				opLabel: 'morphit_operator_register_v1',
+				account,
+				tag,
+				keyFile,
+				nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+			});
+			return 1;
+		}
+
+		// Insufficient mana — print the specific power-up guidance (which
+		// account, how much BP), then offer an in-place retry.  The key
+		// is already wiped (above); the operator can take their time.
+		printChainErrorHelp(errMsg(broadcastErr), {
+			opLabel: 'morphit_operator_register_v1',
+			account,
+			tag,
+			keyFile,
+			nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+		});
+		console.log('');
+		const retry = await askYesNo(
+			`Once you've powered up BLURT into BP on @${account} (~${SUGGESTED_BP_FLOOR} BP ` +
+				`recommended), retry the broadcast now? (No need to re-run setup — ` +
+				`answer No to quit and run \`npx morphit-ops register\` later)`,
+			false
+		);
+		if (!retry) {
+			console.log('Stopped.  Re-run `npx morphit-ops register` when ready.');
+			return 1;
+		}
+		console.log('');
+		console.log(`Retrying broadcast for @${sanitizeForTerm(account)}…`);
+		console.log('');
+		// loop continues — key is re-loaded fresh at the top
 	}
 
-	// ─── 4. Verify the op-register handler still slots @account
-	//      into a free tag (sanity-check before broadcasting; the
-	//      chain-side check happens too, but we'd rather catch
-	//      'account_already_registered' before paying RC).
-	// (No-op stub — the on-chain handler is the canonical check;
-	//  we don't duplicate state lookup here.  If chain rejects,
-	//  we surface the rejection to the operator.)
-
-	// ─── 5. Build + sign + broadcast ────
-	// Audit 2026-05 hardening (NEW-9-13): wrap broadcast in
-	// try/finally so `wif` clears even on error path. JS strings
-	// are immutable; reassignment minimizes lifetime of the
-	// reference even if the underlying memory persists until GC.
-	let result: { block_num: number; trx_id: string };
-	try {
-		result = await broadcastRegister({
-			account,
-			wif,
-			instanceName,
-			origin,
-			contactUrl
-		});
-	} catch (err) {
-		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
-		console.log('');
-		console.log('Common causes:');
-		console.log('  - Tag already claimed by another account.  Edit');
-		console.log('    MORPHIT_INSTANCE_NAME and re-run.');
-		console.log('  - This account already registered.  Use a future');
-		console.log('    `morphit-ops update` subcommand once it ships.');
-		console.log('  - Key-signature mismatch.  Check that');
-		console.log("    MORPHIT_RELAY_ACTIVE_KEY_FILE points at the active");
-		console.log("    key for this account on chain.");
-		console.log('  - Insufficient resource credits.  Wait a few minutes');
-		console.log("    or top up the account's BLURT balance.");
+	if (result === null) {
+		// Defensive: the loop only breaks on success (result set) or
+		// returns on failure, so this is unreachable — but keep the
+		// type-narrowing honest.
+		console.log('✗ Broadcast did not complete.');
 		return 1;
-	} finally {
-		wif = '';
 	}
 
 	console.log('');
@@ -166,6 +283,10 @@ interface ValidEnv {
 	readonly instanceName: string;
 	readonly origin: string;
 	readonly contactUrl: string | null;
+	/** The operator's configured federation tag
+	 *  (MORPHIT_INSTANCE_OPERATOR_TAG) — the SAME value the relay uses
+	 *  to attribute order earnings.  null if unset (older configs). */
+	readonly operatorTag: string | null;
 }
 
 function readEnv(): ValidEnv | { error: string } {
@@ -174,6 +295,7 @@ function readEnv(): ValidEnv | { error: string } {
 	const instanceName = process.env.MORPHIT_INSTANCE_NAME;
 	const origin = process.env.MORPHIT_INSTANCE_ORIGIN;
 	const contactUrl = process.env.MORPHIT_INSTANCE_CONTACT_URL;
+	const operatorTag = process.env.MORPHIT_INSTANCE_OPERATOR_TAG;
 
 	const missing: string[] = [];
 	if (!account) missing.push('MORPHIT_RELAY_ACCOUNT');
@@ -193,7 +315,8 @@ function readEnv(): ValidEnv | { error: string } {
 		keyFile: keyFile!,
 		instanceName: instanceName!,
 		origin: origin!,
-		contactUrl: contactUrl ?? null
+		contactUrl: contactUrl ?? null,
+		operatorTag: operatorTag && operatorTag.trim().length > 0 ? operatorTag.trim() : null
 	};
 }
 
@@ -218,6 +341,7 @@ async function loadKeyWif(keyFile: string): Promise<string> {
 async function broadcastRegister(args: {
 	account: string;
 	wif: string;
+	tag: string;
 	instanceName: string;
 	origin: string;
 	contactUrl: string | null;
@@ -241,17 +365,25 @@ async function broadcastRegister(args: {
 	let dblurt: DblurtModule;
 	try {
 		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
-	} catch {
+	} catch (err) {
+		// The package is a build dependency and is bundled into the
+		// compiled CLI; a failure here is almost always a module-eval /
+		// ESM-CJS-interop problem inside the bundle, NOT a missing
+		// install.  Surface the real cause so the diagnostics layer can
+		// classify it correctly (and so reinstalling isn't mis-suggested).
 		throw new Error(
-			'@beblurt/dblurt is not installed.  Run `npm install` from the repo root first.'
+			`could not load the Blurt broadcast library: ${
+				err instanceof Error ? err.message : String(err)
+			}`
 		);
 	}
 
-	// Build the registration payload.  `tag` is reused as
-	// instanceName, lower-cased and slugged to match the on-chain
-	// validator (lowercase alphanumeric + dot/dash/underscore).
-	// display_name is the friendlier free-form variant.
-	const tag = sluggifyTag(args.instanceName);
+	// Build the registration payload.  `tag` is the resolved
+	// federation tag (MORPHIT_INSTANCE_OPERATOR_TAG, or a display-name
+	// slug fallback) computed by the caller — the SAME tag the relay
+	// attributes earnings to.  display_name is the friendlier
+	// free-form variant.
+	const tag = args.tag;
 	const payload: Record<string, unknown> = {
 		v: 1,
 		tag,

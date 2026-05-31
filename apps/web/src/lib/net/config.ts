@@ -20,9 +20,10 @@ export const NETWORK = 'blurt-mainnet';
  *  Registered 2026-04-18. */
 export const MORPHIT_ACCOUNT = 'morphit';
 
-/** The posting relay's own account. It pays RC costs on behalf of new
- *  users during account creation, and broadcasts signed ops they hand
- *  it. It never holds user private keys.
+/** The posting relay's own account. It spends Mana (Blurt's
+ *  transaction fuel) on behalf of new users during account creation,
+ *  and broadcasts signed ops they hand it. It never holds user
+ *  private keys.
  *
  *  Registered 2026-04-18. */
 export const MORPHIT_RELAY_ACCOUNT = 'morphit-relay';

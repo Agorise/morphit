@@ -19,6 +19,8 @@
  *   export-altnet-key --network=tor|lokinet|i2p [--out=PATH]
  *                                       Decrypt an alt-network service key (passphrase prompted)
  *   register                            Publish operator registration on-chain (run after init)
+ *   show-key                            Show the PUBLIC key your saved active key derives to (verify
+ *                                       the right key is installed; never prints the private key)
  *   payment-method add|remove|list      Manage instance-specific payment-method additions (ADR-0021)
  *   upgrade [--check-only] [--yes] [--json]
  *                                       Check for and apply a newer Morphit release
@@ -64,6 +66,7 @@ import { runAttestations } from './commands/attestations.ts';
 import { runFlags } from './commands/flags.ts';
 import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
+import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
@@ -161,6 +164,9 @@ function printHelp(): void {
 		'  export-altnet-key --network=tor|lokinet|i2p [--out=PATH]',
 		'                                  Decrypt an alt-network service key (passphrase prompted)',
 		'  register                        Publish operator registration on-chain (run after init)',
+		'  show-key                        Show the public key your saved active key derives to',
+		'                                  (verify the correct key is installed; never prints the',
+		'                                  private key)',
 		'  payment-method add|remove|list  Manage instance-specific payment-method additions (ADR-0021)',
 		'  upgrade [--check-only] [--yes] [--json]',
 		'                                  Check for and apply a newer Morphit release (manual-only',
@@ -252,6 +258,22 @@ async function main(): Promise<number> {
 	if (args.subcommand === 'register') {
 		try {
 			return await runRegister({
+				flags: args.flags,
+				positional: args.positional
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `show-key` displays the PUBLIC key derived from the saved
+	// active key (plus a masked private-key fingerprint) so operators
+	// can verify the right key is in place without opening files or
+	// exposing secrets.  Reads MORPHIT_RELAY_* env; no DB needed.
+	if (args.subcommand === 'show-key') {
+		try {
+			return await runShowKey({
 				flags: args.flags,
 				positional: args.positional
 			});

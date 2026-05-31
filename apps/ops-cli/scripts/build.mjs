@@ -60,6 +60,29 @@ await build({
 	format: 'esm',
 	// Keep these resolved from node_modules at runtime, not inlined.
 	external: ['pg'],
+	// cp178 — CRITICAL ESM/CJS interop fix.  We bundle to `format:
+	// 'esm'`, but several inlined deps are CommonJS and call
+	// `require(...)` at module-eval time — notably the broadcast
+	// path's @beblurt/dblurt → cross-fetch → node-fetch, which does
+	// `require('stream')`.  esbuild replaces `require` in an ESM
+	// bundle with a `__require` shim that THROWS ("Dynamic require of
+	// 'stream' is not supported") for Node builtins unless a real
+	// `require` exists in scope.  Without this banner the operator's
+	// `register` step dies at `await import('@beblurt/dblurt')` with a
+	// require error that the catch-block then mis-reports as "dblurt
+	// is not installed" — un-fixable by reinstalling, since the
+	// package IS installed; the bundle just can't evaluate it.  The
+	// `createRequire(import.meta.url)` banner gives the bundle a real
+	// CJS `require`, so `__require` falls through to it for builtins.
+	// This is esbuild's documented ESM-output interop pattern.
+	// NOTE: the banner is plain JS (no leading `#!`), so it does NOT
+	// interfere with the shebang handling below — esbuild emits the
+	// entry's own shebang FIRST, then this banner; the post-process
+	// strips that first shebang line and prepends the Node one,
+	// leaving the banner intact.
+	banner: {
+		js: "import { createRequire as __ops_createRequire } from 'node:module';\nimport { fileURLToPath as __ops_fileURLToPath } from 'node:url';\nimport { dirname as __ops_dirname } from 'node:path';\nconst require = __ops_createRequire(import.meta.url);\nconst __filename = __ops_fileURLToPath(import.meta.url);\nconst __dirname = __ops_dirname(__filename);"
+	},
 	// NOTE: we deliberately do NOT use esbuild's `banner` for the
 	// shebang.  esbuild preserves the entry file's own leading
 	// shebang (`#!/usr/bin/env -S npx tsx` in src/main.ts — kept

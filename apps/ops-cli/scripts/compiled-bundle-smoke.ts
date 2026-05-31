@@ -27,7 +27,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -155,6 +155,60 @@ if (shimPrefersDist && shimRun.status === 0 && /morphit-ops/.test(shimRun.stdout
 		'launcher shim prefers compiled dist + runs',
 		`shimPrefersDist=${shimPrefersDist} exit=${shimRun.status} stdout=${(shimRun.stdout ?? '').slice(0, 150)}`
 	);
+}
+
+/* ------ scenario 7: bundle can EVALUATE the dblurt broadcast dep (cp178) ------ */
+
+// cp178 regression guard.  The bundle is ESM but @beblurt/dblurt (via
+// cross-fetch → node-fetch) does CommonJS `require('stream')` at
+// module-eval time.  Without the createRequire banner in build.mjs,
+// esbuild's `__require` shim throws "Dynamic require of 'stream' is
+// not supported" the moment `register` does `await import(...)` — and
+// the old catch mis-reported it as "@beblurt/dblurt is not installed".
+// We drive `register` with a syntactically-plausible-but-bogus key and
+// dummy env: it must get PAST the import (reaching a key/RPC error),
+// never a dependency-load error.  This proves dblurt evaluates inside
+// the bundle under plain node.
+{
+	const fakeKey = resolve(pkgRoot, 'dist', '.dblurt-eval-test.key');
+	try {
+		writeFileSync(fakeKey, '5JfakefakefakefakefakefakefakefakefakefakefakefakeFAKE\n');
+	} catch {
+		/* ignore */
+	}
+	const regRun = spawnSync(process.execPath, [distEntry, 'register'], {
+		encoding: 'utf8',
+		timeout: 60_000,
+		input: 'y\nN\n',
+		env: {
+			...process.env,
+			MORPHIT_RELAY_ACCOUNT: 'bundle-eval-test',
+			MORPHIT_RELAY_ACTIVE_KEY_FILE: fakeKey,
+			MORPHIT_INSTANCE_NAME: 'Bundle Eval Test',
+			MORPHIT_INSTANCE_ORIGIN: 'https://bundle-eval-test.example',
+			MORPHIT_INSTANCE_OPERATOR_TAG: 'bundle-eval-test.example'
+		}
+	});
+	try {
+		unlinkSync(fakeKey);
+	} catch {
+		/* ignore */
+	}
+	const out = `${regRun.stdout ?? ''}\n${regRun.stderr ?? ''}`;
+	const sawRequireError = /Dynamic require of|is not supported/i.test(out);
+	const sawNotInstalled = /is not installed|Cannot find package|ERR_MODULE_NOT_FOUND/i.test(out);
+	// It SHOULD have reached the broadcast/key stage (a key or RPC
+	// error), proving the import resolved + evaluated.
+	const reachedBroadcast = /broadcast failed|network|rpc|posting authority|private key/i.test(out);
+	if (!sawRequireError && !sawNotInstalled && reachedBroadcast) {
+		pass('bundle evaluates @beblurt/dblurt (no Dynamic-require / not-installed; reaches broadcast)');
+	} else {
+		fail(
+			'bundle evaluates @beblurt/dblurt',
+			`sawRequireError=${sawRequireError} sawNotInstalled=${sawNotInstalled} ` +
+				`reachedBroadcast=${reachedBroadcast}; out=${out.slice(0, 400)}`
+		);
+	}
 }
 
 /* ---------------- report ---------------- */

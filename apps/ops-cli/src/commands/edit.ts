@@ -191,7 +191,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		);
 	}
 	if (choice === 'operator-tag' || choice === 'all') {
-		const op = await stepOperatorTag();
+		const op = await stepOperatorTag(existing.origin ?? null);
 		configUpdates.set('MORPHIT_INSTANCE_OPERATOR_TAG', op.tag);
 	}
 	if (choice === 'rpc') {
