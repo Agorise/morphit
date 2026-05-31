@@ -107,7 +107,7 @@ all of them.
 | Role | Env var (indexer / relay) | What it does |
 |---|---|---|
 | **Operator** | `MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME` | Signs release-discovery ops. Posting-key pubkey is pinned on each instance's frontend build. |
-| **Relay** | (relay's own Blurt keypair loaded at boot) | Pays Resource Credits to broadcast user-signed ops on the user's behalf. Hot wallet. |
+| **Relay** | (relay's own Blurt keypair loaded at boot) | Spends Mana (Blurt's transaction fuel; "Resource Credits"/"RC" in older docs) to broadcast user-signed ops on the user's behalf. Hot wallet. |
 | **Fees** | `MORPHIT_INDEXER_FEE_RECIPIENT` | Receives listing-fee BLURT transfers. Cold wallet in practice — operator sweeps periodically. |
 
 **Why the canonical operator chose three separate accounts:**
@@ -140,7 +140,7 @@ beyond you personally: less keys to track, one account to
 fund, one to secure. The "relay + fees separate from
 operator" middle variant is a common compromise — hot
 wallet isolated from release-signing, but fee accumulation
-in the same account that pays RC.
+in the same account that spends Mana.
 
 Pick the separation level that matches your threat model
 and operational overhead tolerance. **You can always
@@ -3989,7 +3989,7 @@ places:
 | Component | Purpose | Config |
 |---|---|---|
 | Frontend | User signs + queries from their browser | `DEFAULT_RPC_ENDPOINTS` in `apps/web/src/lib/net/config.ts`, overridable in Settings per-user |
-| Relay | Broadcasts user-signed ops, pays RC | `MORPHIT_RELAY_BLURT_RPC` env var (comma-separated) |
+| Relay | Broadcasts user-signed ops, spends Mana | `MORPHIT_RELAY_BLURT_RPC` env var (comma-separated) |
 | Indexer | Follows the block stream | (indexer's own env, see ADR-0010 deployment notes) |
 
 Each component has its own rotation logic (latency-based
@@ -8738,17 +8738,38 @@ For a community operator standing up
 `example-community.com`:
 
 1. **Pick your operator tag.**  Wizard step 16
-   prompts.  Constraints: lowercase letters,
-   digits, dots, underscores, hyphens; 1..64
-   chars.  Cannot equal an already-registered
-   operator's tag.
-2. **Register on chain.**  Broadcast
-   `morphit_operator_register_v1` from your
-   operator account claiming the tag.  First-come-
-   first-served; once claimed, no other operator
-   can use it.  See the morphit_operator_register_v1
-   handler in apps/indexer/src/indexer/handlers
-   for the op shape.
+   prompts, and now defaults it to your domain
+   (e.g. `example-community.com`) — a great choice
+   since it's unique and recognizable.  Constraints:
+   lowercase letters, digits, dots, underscores,
+   hyphens; 1..64 chars.  Cannot equal an
+   already-registered operator's tag, and cannot be
+   a project-reserved name (`morphit`, `agorise`,
+   etc.) — the wizard blocks those up front.  This
+   tag is also what's shown publicly: your entry in
+   the federated `/instances` directory and on your
+   `/about-this-instance` page.  It's permanent once
+   registered.
+2. **Register on chain.**  Run `npx morphit-ops
+   register`.  It broadcasts
+   `morphit_operator_register_v1` from your operator
+   account claiming the tag — using
+   `MORPHIT_INSTANCE_OPERATOR_TAG` (so the registered
+   tag and your earnings tag match by construction).
+   First-come-first-served; once claimed, no other
+   operator can use it.  Before broadcasting it shows
+   the public key your active key derives to; if the
+   account is low on **mana** (Blurt's transaction
+   fuel) it tells you how much BLURT Power to add
+   (≈50 BP floor) and lets you retry in place after
+   powering up — no full re-run.  See the
+   morphit_operator_register_v1 handler in
+   apps/indexer/src/indexer/handlers for the op shape.
+   - To verify the saved key at any time:
+     `npx morphit-ops show-key` prints the public key
+     it derives to (never the private key) so you can
+     compare it to your account's active authority on
+     a Blurt explorer.
 3. **Restart the indexer.**  It will pick up the
    new env var and start queueing payouts for ops
    carrying your tag.

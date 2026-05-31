@@ -32,6 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { printChainErrorHelp } from './chainErrors.ts';
 
 /** Codepoint sanitization — same as operatorBlock + the indexer.
  *  See the operator-block command for rationale. */
@@ -266,7 +267,13 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 			}
 		});
 	} catch (err) {
-		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
+		printChainErrorHelp(errMsg(err), {
+			opLabel: 'morphit_payment_method_addition_v1',
+			account,
+			tag: null,
+			keyFile,
+			nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+		});
 		return 1;
 	} finally {
 		wif = '';
@@ -345,7 +352,13 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 			payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
 		});
 	} catch (err) {
-		console.log(`✗ Broadcast failed: ${sanitizeForTerm(errMsg(err))}`);
+		printChainErrorHelp(errMsg(err), {
+			opLabel: 'morphit_payment_method_addition_v1',
+			account,
+			tag: null,
+			keyFile,
+			nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+		});
 		return 1;
 	} finally {
 		wif = '';
@@ -460,8 +473,12 @@ async function broadcastPaymentMethod(args: {
 	let dblurt: DblurtModule;
 	try {
 		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
-	} catch {
-		throw new Error('@beblurt/dblurt is not installed.');
+	} catch (err) {
+		throw new Error(
+			`could not load the Blurt broadcast library: ${
+				err instanceof Error ? err.message : String(err)
+			}`
+		);
 	}
 
 	const endpoints = [

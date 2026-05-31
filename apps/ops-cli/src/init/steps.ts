@@ -28,6 +28,7 @@ import {
 	examples
 } from './prompt.ts';
 import { lookupBlurtAccount, validateBlurtAccountName, type AccountInfo } from './chainCheck.ts';
+import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -80,6 +81,23 @@ export async function stepInstanceName(): Promise<string> {
 		// Disallow shell-meta to avoid escaping headaches downstream.
 		if (!/^[\w. -]+$/u.test(name)) {
 			console.log('  ✗ Use letters, numbers, spaces, dashes, dots, or underscores only.\n');
+			continue;
+		}
+		// cp179: catch reserved-name impersonation HERE, the same check
+		// the on-chain operator-register handler applies to display_name
+		// (reason `display_name_impersonates_reserved`).  Without this,
+		// a name like "Morphit Official" passes the wizard but fails the
+		// register broadcast later — exactly the kind of late surprise
+		// we're trying to eliminate.  Exact reserved names (e.g. the
+		// literal "morphit") are allowed through by impersonatesReserved-
+		// Name's byte-equality escape, but the TAG check still blocks
+		// registering them, so there's no usable bypass.
+		if (impersonatesReservedName(name.trim())) {
+			console.log(
+				'  ✗ That looks like a reserved Morphit/Agorise name. Pick a\n' +
+					'    name that identifies your own instance (the on-chain\n' +
+					'    registration rejects impersonations of reserved names).\n'
+			);
 			continue;
 		}
 		return name;
@@ -1911,7 +1929,12 @@ export interface OperatorTagResult {
 	readonly tag: string;
 }
 
-const DEFAULT_OPERATOR_TAG = 'morphit';
+// cp178: the wizard no longer defaults the tag to the reserved
+// canonical `morphit` (community operators can't register it — the
+// on-chain handler rejects it as tag_reserved).  When a public
+// origin is set we default to its domain; otherwise this neutral
+// placeholder, which the operator is prompted to change.
+const DEFAULT_FALLBACK_TAG = 'my-morphit-node';
 const OPERATOR_TAG_PATTERN = /^[a-z0-9._-]+$/;
 const OPERATOR_TAG_MAX = 64;
 
@@ -1936,32 +1959,58 @@ const OPERATOR_TAG_MAX = 64;
  * launch — otherwise their indexer recognizes no incoming
  * ops as "ours" and queues nothing.
  */
-export async function stepOperatorTag(): Promise<OperatorTagResult> {
+export async function stepOperatorTag(origin: string | null): Promise<OperatorTagResult> {
 	step(17, TOTAL_STEPS, 'Operator tag');
+
+	// Derive a sensible default from the public origin's hostname.
+	// A domain like morphit.io makes a perfect tag: it is unique,
+	// memorable, fits the tag charset (lowercase + . - _), and ties
+	// your federation identity to the site users already see.  If no
+	// origin was set (federation-invisible install) we fall back to a
+	// neutral placeholder rather than the reserved canonical `morphit`.
+	const domainTag = origin !== null ? tagFromOrigin(origin) : null;
+	const suggestedDefault =
+		domainTag !== null && domainTag.length > 0 ? domainTag : DEFAULT_FALLBACK_TAG;
+
 	explain(
-		'Your operator tag identifies this instance in the\n' +
-			'federation.  Each Morphit order op carries it, and\n' +
-			'each indexer in the federation uses it to decide\n' +
-			'which payouts (welcome bonus, dust refill, operator\n' +
-			'90% share, loyalty BP) to queue to ITS relay.\n' +
+		'Your operator tag is your instance\'s unique, PERMANENT\n' +
+			'identity in the federation.  Two things use it:\n' +
 			'\n' +
-			'Canonical morphit.io uses `morphit`.  Community\n' +
-			'operators MUST pick a unique tag (you can register\n' +
-			'it on chain via `morphit_operator_register_v1` after\n' +
-			'wizard setup).\n' +
+			'  • EARNINGS: every order placed through your site carries\n' +
+			'    this tag, and each indexer uses it to decide which\n' +
+			'    payouts (operator 90% share of BLURT fees, welcome\n' +
+			'    bonus, dust refill, loyalty BP) to queue.  If it is\n' +
+			'    wrong or unregistered, your relay pays out NOTHING and\n' +
+			'    the treasury keeps 100%.\n' +
+			'  • PUBLIC IDENTITY: after you register it on chain, your\n' +
+			'    tag is shown publicly — it appears as your instance\'s\n' +
+			'    entry in the federated /instances directory that every\n' +
+			'    other node displays, and on your own /about-this-\n' +
+			'    instance page (e.g. "Operator: ' + suggestedDefault + '").\n' +
+			'    It is NOT secret, but it IS permanent: once registered\n' +
+			'    on chain it cannot be changed (only superseded later by\n' +
+			'    an update op).  So choose one you are happy to keep.\n' +
 			'\n' +
-			'Without this set correctly, your relay will pay\n' +
-			'NOTHING — every op will look like it belongs to a\n' +
-			'different operator.  This is the conservative\n' +
-			'default; "if I do not know who I am, I pay for\n' +
-			'nothing."\n' +
+			(domainTag !== null && domainTag.length > 0
+				? 'We have defaulted it to your domain (' +
+					suggestedDefault +
+					'), which\n' +
+					'is a great choice — unique and recognizable.  Press Enter\n' +
+					'to accept it, or type a different tag.\n'
+				: 'Pick a unique tag (no public origin was set, so we cannot\n' +
+					'suggest your domain).  Do NOT use the reserved canonical\n' +
+					'name.\n') +
 			'\n' +
-			'Constraints: lowercase letters, digits, dots,\n' +
-			'underscores, hyphens; 1..64 characters.'
+			'Canonical morphit.io uses `morphit` (reserved — community\n' +
+			'operators cannot register it).  After wizard setup, register\n' +
+			'your tag on chain with `npx morphit-ops register`.\n' +
+			'\n' +
+			'Constraints: lowercase letters, digits, dots, underscores,\n' +
+			'hyphens; 1..64 characters.'
 	);
 
 	while (true) {
-		const raw = await ask('  Operator tag', DEFAULT_OPERATOR_TAG);
+		const raw = await ask('  Operator tag', suggestedDefault);
 		const trimmed = raw.trim();
 		if (trimmed.length === 0) {
 			console.log('  ✗ Empty.  Try again.\n');
@@ -1977,17 +2026,49 @@ export async function stepOperatorTag(): Promise<OperatorTagResult> {
 			);
 			continue;
 		}
-		console.log(`\n  ✓ Operator tag: ${trimmed}\n`);
-		if (trimmed !== DEFAULT_OPERATOR_TAG) {
+		// Block the reserved canonical name(s) at wizard time — the
+		// on-chain register handler rejects them anyway (reason
+		// `tag_reserved`), so catching it here saves the operator a
+		// failed broadcast later.
+		if (isReservedTag(trimmed)) {
 			console.log(
-				'  ⚠ Remember to register this tag on chain via\n' +
-					'    `morphit_operator_register_v1` before launch,\n' +
-					'    otherwise your instance will not receive\n' +
-					'    operator-payout (90% of BLURT-paid fees).\n'
+				`  ✗ "${trimmed}" is reserved by the Morphit project and cannot\n` +
+					'    be registered by community operators.  Pick a tag that\n' +
+					'    identifies YOUR node (your domain is a good choice).\n'
 			);
+			continue;
 		}
+		console.log(`\n  ✓ Operator tag: ${trimmed}\n`);
+		console.log(
+			'  ⚠ Remember to register this tag on chain via\n' +
+				'    `npx morphit-ops register` before launch, otherwise your\n' +
+				'    instance will not receive operator-payout (90% of\n' +
+				'    BLURT-paid fees).\n'
+		);
 		return { tag: trimmed };
 	}
+}
+
+/** Derive a tag from a public origin URL by taking the hostname,
+ *  lower-casing, stripping a leading `www.`, and keeping only the
+ *  tag charset.  Returns '' if nothing usable remains. */
+export function tagFromOrigin(origin: string): string {
+	let host = origin;
+	try {
+		host = new URL(origin).hostname;
+	} catch {
+		// Not a full URL — treat the raw string as a host-ish token.
+		host = origin.replace(/^[a-z]+:\/\//i, '').split('/')[0] ?? origin;
+	}
+	host = host.toLowerCase().replace(/^www\./, '');
+	// Keep only tag-legal chars; drop anything else.
+	let out = '';
+	for (const ch of host) {
+		if (/[a-z0-9._-]/.test(ch)) out += ch;
+	}
+	out = out.replace(/^[._-]+|[._-]+$/g, '');
+	if (out.length > OPERATOR_TAG_MAX) out = out.slice(0, OPERATOR_TAG_MAX);
+	return out;
 }
 
 // ─── Step 18: Matrix surfaces ────────────────────────────────────

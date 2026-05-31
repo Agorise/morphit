@@ -45,7 +45,7 @@ Let's go.
 A "Morphit node" is three pieces of software running on one server:
 
 - **The indexer.** Reads the Blurt blockchain and remembers every Morphit-related thing that happens (orders posted, feedback left, chat messages). Serves that data to the web app.
-- **The relay.** Helps your users do things on the Blurt blockchain by paying the tiny "stamp fee" (called Resource Credits, but think postage stamps) on their behalf. This is what lets users sign up without owning any BLURT first.
+- **The relay.** Helps your users do things on the Blurt blockchain by spending the tiny "stamp fee" (Blurt calls this **Mana** — you may see it called "Resource Credits" or "RC" in older Blurt docs; think postage stamps) on their behalf. This is what lets users sign up without owning any BLURT first.
 - **The web app.** The thing that runs in your users' browsers when they visit your site. Same code as morphit.io.
 
 All three live on one server. They talk to each other locally, and to the public Blurt blockchain over the internet.
@@ -708,7 +708,7 @@ Go to **morphit.io/onboarding** (or any other Morphit instance) and follow the s
 The seed gives you all four Blurt key types:
 
 - **Owner key** — the master key. Almost never used. Keep this offline.
-- **Active key** — used for transferring BLURT and changing other keys. Used by the relay (because it pays Resource Credits, which is an active-key operation).
+- **Active key** — used for transferring BLURT and changing other keys. Used by the relay (because spending Mana to broadcast on a user's behalf is an active-key operation).
 - **Posting key** — used for posting orders, leaving feedback, sending chat messages. The lowest-risk key.
 - **Memo key** — for encrypting memos in transfers. Morphit doesn't really use this.
 
@@ -1343,29 +1343,95 @@ broadcast:
   Origin:       https://yourdomain.com
   Display name: Your Display Name
   Contact URL:  https://yourdomain.com/about
+  Federation tag: yourdomain.com
+    (from MORPHIT_INSTANCE_OPERATOR_TAG — the same tag your
+     relay uses to attribute order earnings to you)
 ```
 
-The tool prompts for confirmation, then loads your posting
+The **federation tag** is the important one: it's your
+instance's unique, permanent identity. It's what attributes
+orders to you for fee earnings, and — once registered — what
+other nodes list you under in the public `/instances`
+directory and on your `/about-this-instance` page. The
+register tool uses the tag you set as
+`MORPHIT_INSTANCE_OPERATOR_TAG` (the wizard defaults this to
+your domain, e.g. `yourdomain.com`), so the tag you register
+on chain and the tag your relay earns under are guaranteed to
+match. (If that variable isn't set — e.g. an older config —
+the tool falls back to a slug of your display name and tells
+you to set the variable so the two can't drift.)
+
+The tool prompts for confirmation, then loads your **active**
 key from `MORPHIT_RELAY_ACTIVE_KEY_FILE` (prompting for the
-unlock passphrase if the keystore is encrypted) and
-broadcasts a single `morphit_operator_register_v1` op on
-chain.  Your instance now appears in `/operators` on every
+unlock passphrase if the keystore is encrypted), shows you
+the public key that key derives to so you can sanity-check
+it, and broadcasts a single `morphit_operator_register_v1` op
+on chain. Your instance now appears in `/instances` on every
 Morphit instance worldwide.
 
-Once this op confirms, you're a registered operator.  **You
+Once this op confirms, you're a registered operator. **You
 can never reuse this tag from a different account, and the
 tag is forever associated with this account on chain.**
 That's by design — operators have a permanent, verifiable
 identity.
 
 If the values shown by the prompt aren't what you expected,
-abort the prompt, re-run `morphit-ops edit` to fix the
+abort the prompt, re-run `npx morphit-ops edit` to fix the
 values in `morphit.config.env`, then re-run
-`morphit-ops register`.
+`npx morphit-ops register`.
+
+**If the broadcast fails**, the tool now tells you exactly
+why and what to do — it no longer prints a generic checklist.
+The common cases:
+
+- **"the tag … is reserved by the Morphit project"** — you
+  chose a tag like `morphit` or `agorise` that the project
+  holds back. Pick a tag that identifies your node (your
+  domain is ideal) via `npx morphit-ops edit` → Operator tag,
+  then re-run. (The wizard now blocks reserved tags up front,
+  so you'll usually only hit this on a hand-edited config.)
+- **"this account is already registered"** — you already
+  registered this account. Nothing to do; check any node's
+  `/instances` page to confirm you're listed.
+- **"the signing key did not satisfy … posting authority"** —
+  the key on disk isn't your account's active key (a common
+  mix-up is saving a *posting* key instead). Run
+  `npx morphit-ops show-key` to see the **public** key your
+  saved key derives to (it never prints the private key), and
+  compare it against your account's active authority on a
+  Blurt block explorer. If they differ, run
+  `npx morphit-ops edit-active-key` and supply the correct
+  active key.
+- **"does not have enough mana"** — your account is low on
+  mana (Blurt's transaction fuel, which comes from BLURT
+  Power and refills over ~5 days). The tool tells you roughly
+  how much BLURT Power to add (≈50 BP is a comfortable floor)
+  and then offers to **retry in place** — power up in any
+  Blurt wallet (Wallet → Power Up), come back to the prompt,
+  and answer yes. No need to re-run the whole setup.
+
+### Verifying your saved key any time
+
+You don't have to wait for a failure to check your key. Run:
+
+```
+npx morphit-ops show-key
+```
+
+It prints the **public** key your saved active key
+corresponds to (and a short masked fingerprint of the private
+key — never the full key). Compare the public key against
+your account's active authority on a Blurt explorer; if they
+match, the right key is installed.
 
 ### 9.2 Wire your instance to attribute orders to your tag
 
-Add this line to your `ops/env/indexer.env` (or wherever you keep your instance-config env vars):
+The wizard already wrote `MORPHIT_INSTANCE_OPERATOR_TAG` for
+you (defaulting to your domain). This is the SAME tag the
+register step above publishes on chain, so they match by
+construction. If you're configuring by hand, add this line to
+your `ops/env/indexer.env` (or wherever you keep your
+instance-config env vars):
 
 ```
 MORPHIT_INSTANCE_OPERATOR_TAG=yourtag
@@ -1879,7 +1945,7 @@ You'll see something like `"lag_blocks": 5`. Fewer than 100 is fine. Higher than
 
 ### "My relay is out of BLURT"
 
-The relay pays Resource Credits when users do things on the chain. Each new signup costs about 100 BLURT. If your relay's balance hits zero, signups will fail.
+The relay spends Mana (Blurt's transaction fuel) when users do things on the chain. Each new signup costs about 100 BLURT. If your relay's balance hits zero, signups will fail.
 
 Check the balance via any working Blurt RPC node (the four
 defaults shipped with Morphit's frontend are listed in

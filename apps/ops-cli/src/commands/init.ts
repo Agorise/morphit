@@ -128,7 +128,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const listingFee = await stepListingFee();
 	const seo = await stepSeo();
 	const backup = await stepBackup();
-	const operatorTag = await stepOperatorTag();
+	const operatorTag = await stepOperatorTag(origin);
 	const matrix = await stepMatrixSurfaces();
 	// 19th step (F-2 from the cp136 walkthrough): RPC endpoints.
 	// Defaults to DEFAULT_BLURT_RPC_ENDPOINTS — operators with a

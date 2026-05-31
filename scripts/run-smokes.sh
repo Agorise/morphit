@@ -95,6 +95,7 @@ SMOKES=(
 	"apps/relay:trusted-proxy-smoke"
 	"apps/relay:squatter-defense-smoke"
 	"apps/ops-cli:ops-cli-smoke"
+	"apps/ops-cli:register-diagnostics-smoke"
 	"apps/ops-cli:init-smoke"
 	"apps/ops-cli:edit-smoke"
 	"apps/ops-cli:edit-rpc-smoke"
