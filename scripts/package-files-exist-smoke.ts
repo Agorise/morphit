@@ -14,8 +14,18 @@
  * package.json declares a `files` field):
  *
  *   1. Every non-glob entry in `files` exists in the working
- *      tree.  Globs (`dist/`, `src/**\/*.ts`) are accepted as-is
- *      because globbing is npm's job at publish time.
+ *      tree.  Globs (`src/**\/*.ts`) are skipped — globbing is
+ *      npm's job at publish time.  Build-output directories
+ *      (`dist/`) are also accepted when the workspace declares a
+ *      `build` script: they're materialized by `npm run build`
+ *      (which `npm publish` runs via its prepublish lifecycle, and
+ *      which CI runs before packaging), so they're legitimately
+ *      absent on a fresh source checkout — the exact state a
+ *      sysadmin receives the repo in at handoff.  This mirrors
+ *      invariant 2's dist/-buildable carve-out; the two invariants
+ *      must agree on what `dist/` means.  A missing LICENSE,
+ *      README, `src/`, or `bin/` entry is NOT a build output and
+ *      still hard-fails (the F-mcp-30 class this smoke exists for).
  *
  *   2. If `bin` is declared, every bin target file exists (or
  *      its containing directory exists, for dist/-flavored
@@ -97,6 +107,7 @@ for (const dir of workspaceDirs()) {
 	if (!pkg.files || pkg.files.length === 0) continue;
 	publishedWorkspaces.push(rel);
 
+	const hasBuildScript = !!pkg.scripts?.build;
 	const missing: string[] = [];
 	for (const entry of pkg.files) {
 		// Globs are npm's responsibility at publish time.  Skip
@@ -104,12 +115,26 @@ for (const dir of workspaceDirs()) {
 		if (/[*?[\]]/.test(entry)) continue;
 		// Directory entries (trailing /) — the directory must exist.
 		// Non-directory entries — the file must exist.
-		// Either way, existsSync is correct.
 		const target = entry.endsWith('/') ? entry.slice(0, -1) : entry;
 		const fullPath = join(dir, target);
-		if (!existsSync(fullPath)) {
-			missing.push(entry);
-		}
+		if (existsSync(fullPath)) continue;
+
+		// Build-output directories (dist/) legitimately don't exist
+		// on a fresh source checkout — `npm run build` materializes
+		// them, and `npm publish` runs that build via its prepublish
+		// lifecycle (CI builds before packaging too).  Accept them
+		// when the workspace declares a `build` script.  This is the
+		// SAME "buildable but not yet built" carve-out invariant 2
+		// applies to dist/-flavored bin targets below — the two
+		// invariants must agree, or the smoke red-flags every
+		// un-built checkout (including the handoff state) despite
+		// there being no packaging defect.  A missing LICENSE,
+		// README, src/, or bin/ entry is NOT a build output and
+		// still falls through to `missing` (F-mcp-30 class).
+		const isBuildOutputDir = target === 'dist' || target.endsWith('/dist');
+		if (isBuildOutputDir && hasBuildScript) continue;
+
+		missing.push(entry);
 	}
 	if (missing.length > 0) {
 		filesMisses.push({ workspace: rel, missing });

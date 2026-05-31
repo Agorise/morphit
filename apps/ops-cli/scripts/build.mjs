@@ -95,6 +95,22 @@ await build({
 	// Minification off: operator-facing tool, readable stack traces
 	// matter more than a few KB.
 	minify: false,
+	// esbuild reads each bundled file's nearest tsconfig.json and
+	// emits an advisory "Unrecognized target environment ES2023"
+	// for TypeScript's capitalized `target` value (esbuild expects
+	// the lowercase form, e.g. `es2023`).  It is purely advisory:
+	// esbuild IGNORES the tsconfig `target` because we set our own
+	// (`target: 'node22'` above), so the emitted bundle is byte-for-
+	// byte unaffected.  tsc — run authoritatively via
+	// workspace-typecheck-smoke — is what actually validates these
+	// tsconfigs, which makes esbuild's tsconfig advisories redundant
+	// here.  Silence just that message class so the operator's first
+	// `npm run build` is clean instead of showing 5 scary ▲ WARNINGs
+	// about a non-issue (cp181 handoff-hygiene polish).  `logOverride`
+	// is scoped to the `tsconfig.json` message id only; real build
+	// errors (syntax, unresolved imports, the cp178 dynamic-require
+	// class) are unaffected and still surface.
+	logOverride: { 'tsconfig.json': 'silent' },
 	logLevel: 'info'
 });
 
