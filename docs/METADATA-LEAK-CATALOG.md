@@ -30,7 +30,7 @@ must expose — and we've stripped that to the bone.
 | **Monero/privacy-coin view keys** | The XMR treasury **view key does not exist on any Morphit indexer** — it was removed entirely (no chain field, no API, no logs, no env var). Fee verification uses Monero's own selective-disclosure `tx_proof` instead (see section 3). |
 
 **Federation is the meta-protection:** because anyone can run an indexer
-(`morphit-ops init`, roughly 20 prompts), you can be the only party that sees your own
+(`morphit-ops init`, roughly 22 prompts), you can be the only party that sees your own
 SSE traffic and point at your own Blurt RPC — removing the entire
 server-stored and network-observable surface for your own users.
 

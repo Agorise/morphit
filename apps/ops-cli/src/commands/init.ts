@@ -3,14 +3,15 @@
  *
  * The first-time setup wizard.  Walks the operator through:
  *   1. Pre-flight system check (CPU, RAM, disk, OS, network)
- *   2. 20 ELI5-style configuration prompts (instance name,
+ *   2. 22 ELI5-style configuration prompts (instance name,
  *      tagline, database URL, relay account + active key,
  *      fees account, daily ceiling, contact URL, origin,
  *      alt-networks, fee explorers, chat-link explorers,
  *      disabled assets, listing fee, SEO copy, backup config,
  *      operator tag, Matrix surfaces, Blurt RPC endpoints,
- *      MCP server — exact count drifts as we add operator-
- *      config surface; check steps.ts for the authoritative list)
+ *      MCP server, BunkerWeb WAF, hardening checklist — exact
+ *      count drifts as we add operator-config surface;
+ *      check steps.ts for the authoritative list)
  *   3. Review and confirmation
  *   4. Write morphit.config.env + keystore
  *   5. Print next-steps with backup hint
@@ -44,7 +45,10 @@ import {
 	stepOperatorTag,
 	stepMatrixSurfaces,
 	stepRpcEndpoints,
-	stepMcpServer
+	stepMcpServer,
+	stepBunkerWeb,
+	stepHardening,
+	TOTAL_STEPS
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
 import type { WizardAnswers } from '../init/render.ts';
@@ -111,7 +115,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		}
 	}
 
-	// ─── Run the 19 steps ────
+	// ─── Run the configuration steps (see TOTAL_STEPS in steps.ts) ────
 	const instanceName = await stepInstanceName();
 	const tagline = await stepTagline();
 	const databaseUrl = await stepDatabase();
@@ -142,6 +146,14 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	// discover the operator's instance and surface it in user queries.
 	const mcpServer = await stepMcpServer();
 
+	// Step 21 — BunkerWeb WAF / reverse-proxy decision.  Drives
+	// MORPHIT_RELAY_TRUSTED_PROXY_IPS (set only when opted in).
+	const bunkerWeb = await stepBunkerWeb();
+
+	// Step 22 — host hardening checklist.  Tailored to the BunkerWeb
+	// choice; optionally writes a personalized morphit-hardening-checklist.md.
+	const hardening = await stepHardening(bunkerWeb.enabled);
+
 	const answers: WizardAnswers = {
 		instanceName,
 		tagline,
@@ -162,7 +174,9 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		backup,
 		operatorTag,
 		matrix,
-		mcpServer
+		mcpServer,
+		bunkerWeb,
+		hardening
 	};
 
 	// ─── Review ────
@@ -196,6 +210,11 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	} else {
 		console.log('  ✓ permissions set to 600 on all three (only you can read them)');
 	}
+	if (result.hardeningChecklistPath) {
+		console.log(
+			`  ✓ wrote ${result.hardeningChecklistBytes} bytes to ${sanitizeForTerm(result.hardeningChecklistPath)} (0644 — readable runbook, no secrets)`
+		);
+	}
 
 	printNextSteps(answers, result);
 
@@ -215,8 +234,9 @@ function printGreeting(): void {
 		'Welcome.  This wizard will walk you through setting up your\n' +
 			'Morphit instance — about 5-10 minutes of prompts.\n' +
 			'\n' +
-			"First we'll check your system, then we'll ask 9 questions to\n" +
-			'configure your relay and instance identity.\n' +
+			`First we'll check your system, then we'll walk through about\n` +
+			`${TOTAL_STEPS} short questions to configure your relay, instance identity,\n` +
+			'and optional services (Matrix alerts, MCP, BunkerWeb).\n' +
 			'\n' +
 			'You can press Ctrl+C at any time to cancel without writing\n' +
 			'anything to disk.\n'
@@ -342,6 +362,7 @@ function printNextSteps(
 		envPath: string;
 		keystorePath: string;
 		backupEnvPath: string | null;
+		hardeningChecklistPath: string | null;
 	}
 ): void {
 	const rule = '━'.repeat(58);
@@ -359,7 +380,7 @@ function printNextSteps(
 	console.log('     account names, active key path):');
 	console.log(`       set -a; . ${result.envPath}; set +a`);
 	console.log('     (or configure systemd to do it via EnvironmentFile= — see');
-	console.log('     docs/OPERATOR-RUN-BOOK.md)');
+	console.log('     docs/OPERATIONS.md)');
 	console.log('');
 	console.log('  3. Run database migrations:');
 	console.log('       npm run migrate -w apps/indexer');
@@ -373,19 +394,23 @@ function printNextSteps(
 		console.log("       (it'll prompt for your unlock passphrase)");
 	}
 	console.log('');
-	console.log('  6. In another terminal, build and serve the frontend:');
+	console.log('  6. Build the frontend (it compiles to static files — there is no');
+	console.log('     separate web service; your web server serves the build output):');
 	console.log('       npm run build -w apps/web');
-	console.log('       npm run preview -w apps/web');
+	console.log('     Then point nginx (or Caddy / BunkerWeb) at apps/web/build and');
+	console.log('     reverse-proxy /v1/* to the relay + indexer.  Ready-to-use');
+	console.log('     server configs ship in ops/nginx/ and ops/bunkerweb/; see');
+	console.log('     docs/RUN-A-MORPHIT-NODE.md §6.');
 	console.log('');
 	console.log('  7. Verify everything is healthy:');
-	console.log('       npx tsx apps/ops-cli/src/main.ts status');
+	console.log('       morphit-ops status');
 	console.log('');
 
 	let stepNum = 8;
 	if (answers.origin !== null) {
 		console.log(`  ${stepNum}. Once your indexer + frontend are reachable at your public origin,`);
 		console.log('     publish your operator registration on-chain:');
-		console.log('       npx tsx apps/ops-cli/src/main.ts register');
+		console.log('       morphit-ops register');
 		console.log('     This makes your instance discoverable by every other Morphit');
 		console.log("     instance's /instances directory.");
 		console.log('');
@@ -442,7 +467,8 @@ function printNextSteps(
 	}
 
 	console.log(
-		'For systemd unit files and reverse-proxy configs, see\n' + 'docs/OPERATOR-RUN-BOOK.md.'
+		'For systemd unit files and reverse-proxy configs, see\n' +
+			'docs/RUN-A-MORPHIT-NODE.md §6 (web server) and docs/OPERATIONS.md.'
 	);
 	console.log('');
 
@@ -478,27 +504,35 @@ function printNextSteps(
 		console.log('');
 	}
 
-	// ─── Optional hardening pointer ─────────────────────────────
+	// ─── Hardening ──────────────────────────────────────────────
 	console.log('━'.repeat(58));
-	console.log('Optional next layer — recommended hardening');
+	console.log('Server hardening — do this before going public');
 	console.log('━'.repeat(58));
 	console.log('');
-	console.log('Your instance is secure as-is for typical traffic.  If');
-	console.log('you want extra layers (none required, all optional)');
-	console.log('see docs/RUN-A-MORPHIT-NODE.md §10c, which covers:');
+	if (result.hardeningChecklistPath) {
+		console.log('A personalized hardening checklist was written to:');
+		console.log(`  ${sanitizeForTerm(result.hardeningChecklistPath)}`);
+		console.log('');
+		console.log('Work through it before you expose this instance.  It sequences');
+		console.log('SSH lockdown (with lockout-safety), UFW + fail2ban, automatic');
+		console.log('security updates, TLS, and your web edge —');
+		console.log(
+			answers.bunkerWeb.enabled
+				? '    BunkerWeb in your case —'
+				: '    nginx (ops/nginx/) in your case —'
+		);
+		console.log('with the exact commands and your domain already filled in.');
+	} else {
+		console.log('You skipped the generated checklist.  Harden the host before');
+		console.log('going public: SSH key-only login, UFW + fail2ban, unattended-');
+		console.log('upgrades, and TLS.  See docs/OPERATIONS.md §34 (UFW + fail2ban),');
+		console.log('§35 (TLS), and §37 (the full hardening reference).');
+	}
 	console.log('');
-	console.log('  • BunkerWeb — open-source WAF in front of (or instead of)');
-	console.log('    Caddy, with OWASP Top-10 + bot detection + DDoS rules');
-	console.log('    pre-configured.');
-	console.log('  • Docker — running indexer/relay/web/Postgres in containers');
-	console.log('    if your fleet is already containerized.');
-	console.log('  • Stronger UFW + fail2ban — SSH rate-limiting, a Morphit-');
-	console.log('    relay-specific filter that bans repeat 429s on signup.');
-	console.log('  • TLS auto-renewal — quarterly verification + how to');
-	console.log('    troubleshoot when auto-renewal silently breaks.');
-	console.log('');
-	console.log('All four are cross-referenced from docs/OPERATIONS.md');
-	console.log('§32-35 with full install commands and Morphit-specific tuning.');
+	console.log('Fastest fully-automated path either way: the Ansible playbook at');
+	console.log('ops/ansible/ applies all of the above idempotently (set the');
+	console.log('enable_* flags in ops/ansible/group_vars/all.yml).  Overview in');
+	console.log('docs/RUN-A-MORPHIT-NODE.md §11.');
 	console.log('');
 
 	console.log('Have fun.');

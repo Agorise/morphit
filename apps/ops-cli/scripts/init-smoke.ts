@@ -220,7 +220,14 @@ const sampleAnswers: WizardAnswers = {
 	// baseline fixture.  Per-scenario overrides exercise the
 	// populated paths.
 	matrix: { alertMxid: null, groupRoomAlias: null },
-	mcpServer: { enabled: true }
+	mcpServer: { enabled: true },
+	// cp182 — BunkerWeb decision.  Baseline fixture is opted-out;
+	// the BunkerWeb-on/off rendering paths are exercised by the
+	// dedicated trusted-proxy scenarios below.
+	bunkerWeb: { enabled: false },
+	// cp182 — hardening checklist.  Baseline does not generate the
+	// file; the dedicated hardening scenarios exercise generation.
+	hardening: { generateChecklist: false }
 };
 
 scenario('writeWizardOutput: writes config + env + keystore at expected paths', () => {
@@ -853,6 +860,134 @@ scenario('writeWizardOutput: both Matrix surfaces populated → both env lines e
 		assertTrue(
 			roomLine !== undefined && !/=(['"]?)@/.test(roomLine),
 			'room line must NOT carry an @ value (the @↔# footgun)'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+// ─── cp182 — BunkerWeb trusted-proxy wiring ──────────────────────
+
+scenario('writeWizardOutput: BunkerWeb enabled → MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 emitted', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			bunkerWeb: { enabled: true }
+		};
+		writeWizardOutput(answers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		assertTrue(
+			env.includes('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16'),
+			'active trusted-proxy line present when BunkerWeb chosen'
+		);
+		assertTrue(
+			env.includes('Reverse proxy / trusted client IPs'),
+			'reverse-proxy section heading present'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: BunkerWeb disabled → trusted-proxy stays commented (no spoofable phantom range)', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			bunkerWeb: { enabled: false }
+		};
+		writeWizardOutput(answers, tmp);
+		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		// The active (uncommented) assignment must NOT be present — a
+		// direct client could otherwise spoof X-Forwarded-For.  The
+		// commented hint line (# MORPHIT_RELAY_TRUSTED_PROXY_IPS=) is fine.
+		assertTrue(
+			!/^MORPHIT_RELAY_TRUSTED_PROXY_IPS=/m.test(env),
+			'no active trusted-proxy assignment when serving direct'
+		);
+		assertTrue(
+			env.includes('# MORPHIT_RELAY_TRUSTED_PROXY_IPS='),
+			'commented trusted-proxy hint present for the direct-serve case'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+// ─── cp182 — hardening checklist generation ──────────────────────
+
+scenario('writeWizardOutput: hardening opted-in → morphit-hardening-checklist.md written with safety + domain', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			hardening: { generateChecklist: true }
+		};
+		const result = writeWizardOutput(answers, tmp);
+		assertTrue(result.hardeningChecklistPath !== null, 'result reports the checklist path');
+		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+		assertTrue(md.includes('# Hardening checklist'), 'checklist title present');
+		assertTrue(md.includes('SSH LOCKOUT SAFETY'), 'SSH lockout-safety callout present');
+		// origin is null in the baseline fixture → placeholder domain.
+		assertTrue(md.includes('<your-domain>'), 'domain placeholder when origin not set');
+		assertTrue(md.includes('OPERATIONS.md §34'), 'points at the UFW/fail2ban reference');
+		// 0644, not 0600 — it is a runbook with no secrets.
+		const mode = statSync(join(tmp, 'morphit-hardening-checklist.md')).mode & 0o777;
+		assertTrue(mode === 0o644, `checklist is 0644 (got ${mode.toString(8)})`);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: hardening + BunkerWeb → checklist covers the BunkerWeb edge, not nginx', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			bunkerWeb: { enabled: true },
+			hardening: { generateChecklist: true }
+		};
+		writeWizardOutput(answers, tmp);
+		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+		assertTrue(md.includes('AUTO_LETS_ENCRYPT'), 'BunkerWeb TLS path present');
+		assertTrue(md.includes('/etc/bunkerweb'), 'BunkerWeb copy step present');
+		assertTrue(!md.includes('ops/nginx/web.conf'), 'nginx placement omitted when BunkerWeb chosen');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: hardening + no BunkerWeb → checklist covers nginx + certbot, not BunkerWeb', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			bunkerWeb: { enabled: false },
+			hardening: { generateChecklist: true }
+		};
+		writeWizardOutput(answers, tmp);
+		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+		assertTrue(md.includes('ops/nginx/web.conf'), 'nginx placement present for direct-serve');
+		assertTrue(md.includes('certbot'), 'certbot TLS path present for direct-serve');
+		assertTrue(!md.includes('AUTO_LETS_ENCRYPT'), 'BunkerWeb TLS path omitted when serving direct');
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+scenario('writeWizardOutput: hardening opted-out → no checklist file written', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			hardening: { generateChecklist: false }
+		};
+		const result = writeWizardOutput(answers, tmp);
+		assertTrue(result.hardeningChecklistPath === null, 'result reports no checklist path');
+		assertTrue(
+			!existsSync(join(tmp, 'morphit-hardening-checklist.md')),
+			'no checklist file on disk when opted out'
 		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
