@@ -788,7 +788,7 @@ The migration runner reads `MORPHIT_INDEXER_DATABASE_URL` from your environment,
 ### 8.0 The recommended path — `morphit-ops init` (interactive wizard)
 
 The fastest, lowest-error setup path is the interactive wizard.
-It walks you through 20 steps in plain English and generates
+It walks you through 22 steps in plain English and generates
 correctly-shaped `morphit.config.env` + `morphit.env` files plus
 your encrypted relay keystore.
 
@@ -831,6 +831,26 @@ What it asks you, in order:
     recommended on; lets AI agents like Claude Desktop, Cursor,
     etc. discover your instance and answer user queries from
     your orderbook).  See OPERATIONS.md §45 for details.
+21. **BunkerWeb WAF / reverse proxy** (recommended for any
+    public instance — answer yes if BunkerWeb terminates TLS and
+    fronts your stack, and the wizard sets
+    `MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16` for you; answer
+    no if you serve directly behind nginx/Caddy).  See §11 of this
+    guide and OPERATIONS.md §32.
+22. **Server hardening checklist** (strongly recommended — the
+    wizard offers to write a personalized
+    `morphit-hardening-checklist.md` with your domain and your
+    BunkerWeb-vs-nginx choice baked in, sequencing SSH lockdown,
+    UFW + fail2ban, unattended-upgrades, and TLS in a safe order).
+    See §11 of this guide and OPERATIONS.md §34/§35/§37.
+
+Don't be put off by the length of that list.  Most steps have a
+safe default: anything marked *optional* or *defaults are fine* can
+be accepted by just pressing Enter.  To get to a running instance
+you really only have to answer a handful of required questions —
+instance name, database connection, your relay account + its active
+key, and the fees account.  Everything else can be left at its
+default and revisited later by re-running `morphit-ops init`.
 
 The wizard writes three files atomically:
 

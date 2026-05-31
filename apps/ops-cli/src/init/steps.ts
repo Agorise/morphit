@@ -44,7 +44,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import type { ListingFeeResult } from './render.ts';
 
-const TOTAL_STEPS = 20;
+export const TOTAL_STEPS = 22;
 
 // ─── Step 1: Instance name ───────────────────────────────────────
 
@@ -740,7 +740,7 @@ export async function stepBackup(): Promise<BackupResult> {
 	if (!enabled) {
 		console.log(
 			'  ⚠  Backups disabled.  You can enable later by running\n' +
-				'     `morphit ops init` again, or follow the manual recipe\n' +
+				'     `morphit-ops init` again, or follow the manual recipe\n' +
 				'     in docs/RUN-A-MORPHIT-NODE.md §10.\n'
 		);
 		return { enabled: false, backupDir: null, retainDays: null };
@@ -2087,7 +2087,7 @@ import type { MatrixSurfacesResult } from './render.ts';
  *  @morphit/operator-config parsers so the @-vs-# distinction
  *  is enforced consistently across wizard, indexer, and bot. */
 export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
-	step(18, TOTAL_STEPS, 'Matrix surfaces (optional)');
+	step(18, TOTAL_STEPS, 'Matrix alerting + public contact (recommended)');
 	explain(
 		'Morphit can use Matrix for two distinct purposes:\n\n' +
 			'  1. PRIVATE alerts to you (the operator) — low balance,\n' +
@@ -2105,7 +2105,11 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 			'the bot validates the @ vs # prefix at startup and the\n' +
 			'frontend only exposes the room (never the MXID) via the\n' +
 			'public /v1/instance API.\n\n' +
-			'Skip either or both with Enter if you don\'t use Matrix.'
+			'RECOMMENDED for any production instance — operator alerts are\n' +
+			'how you learn about a low relay balance, a squatter attack, or\n' +
+			'a stale price feed before your users do.  This is part of the\n' +
+			'default setup; set the admin MXID below.  Press Enter on a\n' +
+			'field only if you are sure you want to skip it.'
 	);
 
 	// MXID prompt
@@ -2202,7 +2206,29 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 				'    NOT receive operator alerts via Matrix (no admin\n' +
 				'    MXID set) — alerts will only go to the structured\n' +
 				'    logger.  Run a journalctl-based monitoring setup, or\n' +
-				'    re-run `morphit ops init` to add an admin MXID.\n'
+				'    re-run `morphit-ops init` to add an admin MXID.\n'
+		);
+	}
+
+	if (alertMxid !== null) {
+		console.log(
+			'  ──────────────────────────────────────────────────────\n' +
+				'  Finish bringing up the Matrix bot.  It runs as a sidecar\n' +
+				'  with its OWN env file (it does not read morphit.config.env):\n' +
+				'\n' +
+				'    1. Copy the example env file into place:\n' +
+				'         sudo install -m 600 ops/env/matrix-bot.env.example \\\n' +
+				'           /etc/morphit/matrix-bot.env\n' +
+				'    2. Edit /etc/morphit/matrix-bot.env and set:\n' +
+				'         MORPHIT_MATRIX_BOT_HOMESERVER    e.g. https://matrix.org\n' +
+				"         MORPHIT_MATRIX_BOT_ACCESS_TOKEN  the bot account's access\n" +
+				'           token (log in once as a dedicated bot account and copy\n' +
+				'           its token — never reuse your personal account token)\n' +
+				`         MORPHIT_MATRIX_BOT_ALERT_MXID    ${alertMxid}  (already chosen)\n` +
+				'    3. Enable the service:\n' +
+				'         sudo systemctl enable --now morphit-matrix-bot.service\n' +
+				'\n' +
+				'  Full reference: docs/RUN-A-MORPHIT-NODE.md §11 (Matrix sidecar).\n'
 		);
 	}
 
@@ -2239,7 +2265,7 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 //   - Binds to 127.0.0.1:8124 (loopback only — operators
 //     who want public exposure configure their reverse proxy)
 //   - Documents the MCP install URL in the operator's
-//     `morphit ops doctor` output so AI agent configurators
+//     `morphit-ops status` output so AI agent configurators
 //     can copy-paste it
 
 export interface McpServerResult {
@@ -2283,16 +2309,167 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 			'\n' +
 			'  • ~30 MB RAM, negligible CPU.  Binds to 127.0.0.1:8124\n' +
 			'    by default (loopback only); operators who want public\n' +
-			'    exposure proxy it via nginx.  See OPERATIONS.md §41.'
+			'    exposure proxy it via nginx.  See OPERATIONS.md §45.'
 	);
 	const enabled = await askYesNo('Install the MCP server alongside the relay + indexer?', true);
 	if (enabled) {
 		console.log('  ✓ MCP will be installed.  The systemd unit + nginx config will land\n' +
-			'    in the rendered ops artifacts.  After setup, run `morphit ops doctor`\n' +
-			'    to see the public MCP URL operators can share with AI agent users.\n');
+			'    in the rendered ops artifacts.  After setup, run `morphit-ops status`\n' +
+			'    to confirm it is healthy; the public MCP URL (once you reverse-proxy\n' +
+			'    /mcp/*) is what you share with AI-agent users.\n');
 	} else {
-		console.log('  ⓘ Skipped.  Re-run `morphit ops init` to enable later, or hand-install\n' +
+		console.log('  ⓘ Skipped.  Re-run `morphit-ops init` to enable later, or hand-install\n' +
 			'    by enabling the `morphit-mcp.service` unit.\n');
 	}
 	return { enabled };
+}
+
+// ─── Step 21: BunkerWeb — reverse-proxy / WAF in front of the stack ──
+//
+// BunkerWeb is an AGPLv3 reverse-proxy WAF.  Morphit ships a turnkey
+// deployment at ops/bunkerweb/ (paralleling ops/nginx/).  Recommended
+// for any public-facing instance: OWASP Top-10, bot detection, GeoIP,
+// per-AS rate limiting, behavioural DDoS mitigation.
+//
+// The one piece of wiring this decision drives in config: when the
+// stack sits behind BunkerWeb's pinned 172.20.0.0/16 Docker network,
+// the relay must trust that range so X-Forwarded-For client IPs are
+// honoured (rate limits, abuse defenses key off the real client IP,
+// not the proxy).  That is MORPHIT_RELAY_TRUSTED_PROXY_IPS — which
+// the wizard sets for you here, and ONLY when you opt in (trusting a
+// proxy range you don't actually have in front of you would let a
+// direct client spoof its source IP).
+export interface BunkerWebResult {
+	readonly enabled: boolean;
+}
+
+export async function stepBunkerWeb(): Promise<BunkerWebResult> {
+	step(21, TOTAL_STEPS, 'BunkerWeb WAF / reverse proxy (recommended for public instances)');
+	explain(
+		'How will the public reach your instance?  Your frontend builds\n' +
+			'to static files and the relay/indexer listen on loopback — so\n' +
+			'something has to terminate TLS and reverse-proxy /v1/* to them.\n' +
+			'\n' +
+			'BunkerWeb is an open-source (AGPLv3) reverse-proxy WAF.  Morphit\n' +
+			'ships a turnkey config at ops/bunkerweb/ that puts OWASP Top-10\n' +
+			'protection, bot detection, GeoIP/per-AS rate limiting, and\n' +
+			'behavioural DDoS mitigation in front of your whole stack.\n' +
+			'Recommended for any public-facing instance.\n' +
+			'\n' +
+			'Say NO if you are serving directly behind nginx or Caddy (the\n' +
+			'repo ships an nginx config at ops/nginx/), if you already run\n' +
+			'your own WAF/CDN, or on a tiny VPS (<1 GB RAM — BunkerWeb adds\n' +
+			'~150-250 MB resident).  You can switch later by re-running this.\n' +
+			'\n' +
+			'Saying YES wires one thing for you: MORPHIT_RELAY_TRUSTED_PROXY_IPS\n' +
+			'is set to the 172.20.0.0/16 Docker network the BunkerWeb compose\n' +
+			'pins, so the relay honours the real client IP that BunkerWeb\n' +
+			'forwards.  Full reference: docs/OPERATIONS.md §32.'
+	);
+	const enabled = await askYesNo('Put BunkerWeb in front of this instance?', false);
+	if (enabled) {
+		console.log(
+			'  ✓ BunkerWeb selected.  morphit.config.env will set\n' +
+				'    MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 for you.\n' +
+				'\n' +
+				'    To bring BunkerWeb up:\n' +
+				'      1. Copy the shipped config into place:\n' +
+				'           sudo cp -r ops/bunkerweb /etc/bunkerweb\n' +
+				'      2. Edit /etc/bunkerweb/bunkerweb.env — set SERVER_NAME to\n' +
+				'         your domain, and (optionally) BLACKLIST_* / GREYLIST_*\n' +
+				'         AS blocks.  AUTO_LETS_ENCRYPT=yes handles TLS.\n' +
+				'      3. Start it:\n' +
+				'           cd /etc/bunkerweb && docker compose up -d\n' +
+				'\n' +
+				'    BunkerWeb terminates TLS, serves your apps/web/build, and\n' +
+				'    reverse-proxies /v1/* to the relay + indexer.  Quick Start:\n' +
+				'    ops/bunkerweb/README.md.  Tuning: docs/OPERATIONS.md §32.\n'
+		);
+	} else {
+		console.log(
+			'  ⓘ No BunkerWeb.  Serve directly: point nginx (ops/nginx/) or\n' +
+				'    Caddy at apps/web/build and reverse-proxy /v1/* to the relay\n' +
+				'    + indexer.  MORPHIT_RELAY_TRUSTED_PROXY_IPS stays empty (the\n' +
+				'    relay reads the socket peer IP directly).  If you DO front it\n' +
+				'    with your own proxy/CDN, set that variable to the proxy CIDR\n' +
+				'    by hand — see docs/RUN-A-MORPHIT-NODE.md §6.\n'
+		);
+	}
+	return { enabled };
+}
+
+// ─── Step 22: Hardening checklist ────────────────────────────────
+//
+// Morphit ships a deep hardening stack already — the Ansible role
+// at ops/ansible/roles/hardening (SSH, unattended-upgrades, sysctl,
+// auditd, AppArmor, AIDE, rkhunter, UFW + fail2ban), the tls role
+// (certbot, BunkerWeb-aware), the nginx configs in ops/nginx/, and
+// the full reference in OPERATIONS.md §34/§35/§37.  What was missing
+// was anything that connected the operator going through the wizard
+// to that stack.
+//
+// This step does NOT re-implement hardening (that would duplicate
+// the Ansible role and drift from it).  Instead it offers to write
+// a PERSONALIZED checklist — morphit-hardening-checklist.md — with
+// the operator's domain + their BunkerWeb-vs-nginx choice baked in,
+// sequencing the shipped artifacts in a safe order (SSH lockout
+// safety first) with the exact apply commands.  The step itself
+// also explains the highest-stakes items inline so the operator
+// understands them even if they never open the file.
+export interface HardeningResult {
+	readonly generateChecklist: boolean;
+}
+
+export async function stepHardening(bunkerWebEnabled: boolean): Promise<HardeningResult> {
+	step(22, TOTAL_STEPS, 'Server hardening checklist (strongly recommended)');
+	explain(
+		'Your Morphit config is done.  The last thing standing between\n' +
+			'a working instance and a SAFE one is host hardening: locking\n' +
+			'down SSH, turning on a firewall + fail2ban, automatic security\n' +
+			'updates, and TLS.  None of it is Morphit-specific — it is the\n' +
+			'baseline every internet-facing Ubuntu box needs.\n' +
+			'\n' +
+			'Two ways to apply it, both already shipped in this repo:\n' +
+			'\n' +
+			'  • Fully automated — the Ansible playbook at ops/ansible/\n' +
+			'    applies SSH hardening, unattended-upgrades, sysctl, UFW +\n' +
+			'    fail2ban, and TLS idempotently.  Set the enable_* flags in\n' +
+			'    ops/ansible/group_vars/all.yml and run it.  This is the\n' +
+			'    least-error path if you are comfortable with Ansible.\n' +
+			'  • By hand — follow the checklist this wizard can generate for\n' +
+			'    you (next), which sequences the same steps with copy-paste\n' +
+			'    commands.  Full reference: OPERATIONS.md §34 (UFW +\n' +
+			'    fail2ban), §35 (TLS), §37 (the complete hardening role).\n' +
+			'\n' +
+			'ONE safety rule that matters more than all the rest: when you\n' +
+			'lock down SSH, add your key and TEST logging in with it in a\n' +
+			'SECOND terminal BEFORE you disable password login — otherwise a\n' +
+			'typo locks you out of your own server.  The checklist spells\n' +
+			'this out in the right order.\n' +
+			'\n' +
+			(bunkerWebEnabled
+				? 'Because you chose BunkerWeb, the checklist covers TLS + the\n' +
+					'web edge via BunkerWeb (AUTO_LETS_ENCRYPT) and focuses the\n' +
+					'host section on SSH + UFW + fail2ban + unattended-upgrades.\n'
+				: 'Because you are serving directly (no BunkerWeb), the checklist\n' +
+					'includes placing the shipped nginx configs (ops/nginx/) and\n' +
+					'issuing a Let\'s Encrypt cert with certbot for your domain.\n')
+	);
+	const generateChecklist = await askYesNo(
+		'Write a personalized hardening checklist (morphit-hardening-checklist.md) now?',
+		true
+	);
+	if (generateChecklist) {
+		console.log(
+			'  ✓ Checklist will be written next to your config files.  Work\n' +
+				'    through it before you expose the instance publicly.  It is\n' +
+				'    a plain Markdown file — open it in any editor.\n'
+		);
+	} else {
+		console.log(
+			'  ⓘ Skipped.  You can still harden by hand from OPERATIONS.md\n' +
+				'    §34/§35/§37, or run the Ansible playbook in ops/ansible/.\n'
+		);
+	}
+	return { generateChecklist };
 }

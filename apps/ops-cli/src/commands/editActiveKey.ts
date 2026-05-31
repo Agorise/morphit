@@ -85,7 +85,7 @@ function readCriticalEnv(configDir: string): {
 	if (!existsSync(envPath)) {
 		throw new Error(
 			`Can't find morphit.env at ${envPath}.  Are you in the right directory?  ` +
-				'edit-active-key must be run from the same directory you ran `morphit ops init` in.'
+				'edit-active-key must be run from the same directory you ran `morphit-ops init` in.'
 		);
 	}
 	const src = readFileSync(envPath, 'utf8');
@@ -111,13 +111,13 @@ function readCriticalEnv(configDir: string): {
 	if (keystorePath.length === 0) {
 		throw new Error(
 			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACTIVE_KEY_FILE.  ` +
-				"The file may be corrupted or pre-init.  Re-run `morphit ops init` instead."
+				"The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead."
 		);
 	}
 	if (relayAccount.length === 0) {
 		throw new Error(
 			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACCOUNT.  ` +
-				"The file may be corrupted or pre-init.  Re-run `morphit ops init` instead."
+				"The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead."
 		);
 	}
 	return { keystorePath, relayAccount };
@@ -130,7 +130,7 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 		throw new Error(
 			`Keystore file not found at ${keystorePath}.  ` +
 				'The path is defined in morphit.env but the file is missing.  ' +
-				'Re-run `morphit ops init` to start fresh, or restore from backup.'
+				'Re-run `morphit-ops init` to start fresh, or restore from backup.'
 		);
 	}
 	const raw = readFileSync(keystorePath, 'utf8').trim();

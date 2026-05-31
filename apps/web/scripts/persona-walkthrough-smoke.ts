@@ -453,7 +453,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'So-4 — init.ts JSDoc has realistic step count + disclaimer',
 		file: 'apps/ops-cli/src/commands/init.ts',
 		rootRelative: true,
-		mustHave: ['20 ELI5', 'check steps.ts'],
+		mustHave: ['22 ELI5', 'check steps.ts'],
 		// Pre-fix said "Nine ELI5-style configuration prompts."
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
@@ -799,11 +799,16 @@ const SCENARIOS: readonly Scenario[] = [
 		// stepMatrixSurfaces/stepRpcEndpoints explicit-numbering
 		// pass that took the orchestrator's effective step count
 		// from 18 to 20.
+		//
+		// cp182 update: now 22.  cp182 added stepBunkerWeb (the
+		// reverse-proxy/WAF decision that wires
+		// MORPHIT_RELAY_TRUSTED_PROXY_IPS, 20 → 21) and stepHardening
+		// (the host-hardening checklist generator, 21 → 22).
 		name: 'P122-CP5-F14b — wizard TOTAL_STEPS pinned (must update F14 doc reference if this changes)',
 		file: 'apps/ops-cli/src/init/steps.ts',
 		rootRelative: true,
 		mustHave: [
-			'const TOTAL_STEPS = 20;'
+			'const TOTAL_STEPS = 22;'
 		]
 	},
 	{
@@ -894,7 +899,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'D-9 — PRE-LAUNCH wizard step-count realistic',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
-		mustHave: ['~20 prompts', 'steps.ts'],
+		mustHave: ['~22 prompts', 'steps.ts'],
 		mustNotHave: ['covers all 14 steps']
 	},
 	{
@@ -2571,6 +2576,77 @@ const SCENARIOS: readonly Scenario[] = [
 			'Matrix DM',
 			'72 hours',
 			'7 days'
+		]
+	},
+	// ─── Josie (sysadmin) ────────────────────────────────────────────────
+	// cp182 — Josie joins Bob/Sally/Charlie as a standing persona.  These
+	// pins lock the setup-wizard fixes found during his walkthrough so they
+	// cannot silently regress: dead doc/command references, the opt-in→
+	// default-on Matrix reframe + sidecar wiring, and the new BunkerWeb step.
+	{
+		name: 'cp182 Josie Jo-1 — wizard next-steps cite real docs + the morphit-ops binary (no dead refs, no dev preview)',
+		file: 'apps/ops-cli/src/commands/init.ts',
+		rootRelative: true,
+		mustHave: ['morphit-ops status', 'morphit-ops register', 'RUN-A-MORPHIT-NODE.md §11'],
+		mustNotHave: ['OPERATOR-RUN-BOOK', 'npm run preview', '9 questions', '§10c', 'npx tsx apps/ops-cli/src/main.ts']
+	},
+	{
+		name: 'cp182 Josie Jo-2 — Matrix step is default-on (recommended) and walks the sidecar env setup',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: [
+			'Matrix alerting + public contact (recommended)',
+			'/etc/morphit/matrix-bot.env',
+			'MORPHIT_MATRIX_BOT_ACCESS_TOKEN',
+			'morphit-matrix-bot.service'
+		],
+		mustNotHave: ["if you don't use Matrix"]
+	},
+	{
+		name: 'cp182 Josie Jo-3 — MCP step cites the real section (§45) and a real command (no `morphit ops doctor`)',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: ['OPERATIONS.md §45'],
+		mustNotHave: ['morphit ops doctor', 'morphit ops init']
+	},
+	{
+		name: 'cp182 Josie Jo-4 — BunkerWeb wizard step exists and wires the trusted-proxy CIDR',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: [
+			'export async function stepBunkerWeb',
+			'MORPHIT_RELAY_TRUSTED_PROXY_IPS',
+			'172.20.0.0/16',
+			'OPERATIONS.md §32'
+		]
+	},
+	{
+		name: 'cp182 Josie Jo-5 — render writes trusted-proxy only when BunkerWeb chosen',
+		file: 'apps/ops-cli/src/init/render.ts',
+		rootRelative: true,
+		mustHave: ['MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16', 'answers.bunkerWeb.enabled', 'BunkerWebResult']
+	},
+	{
+		name: 'cp182 Josie Jo-6a — hardening wizard step exists and leads with SSH-lockout safety',
+		file: 'apps/ops-cli/src/init/steps.ts',
+		rootRelative: true,
+		mustHave: [
+			'export async function stepHardening',
+			'Server hardening checklist (strongly recommended)',
+			'SECOND terminal',
+			'OPERATIONS.md §34'
+		]
+	},
+	{
+		name: 'cp182 Josie Jo-6b — render emits a personalized hardening checklist tailored to BunkerWeb-vs-nginx',
+		file: 'apps/ops-cli/src/init/render.ts',
+		rootRelative: true,
+		mustHave: [
+			'function renderHardeningChecklist',
+			'morphit-hardening-checklist.md',
+			'SSH LOCKOUT SAFETY',
+			'AUTO_LETS_ENCRYPT',
+			'ops/nginx/web.conf'
 		]
 	}
 ];
