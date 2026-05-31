@@ -42,9 +42,10 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 1. Provision a $5/mo Ubuntu 24.04 VPS with Postgres reachable.
 2. `git clone` this repo (or extract a signed release tarball — see `docs/UPGRADING.md`).
 3. `npm ci` from the repo root (workspace install — must be run from the root).
-4. `npx morphit-ops init` to walk the setup wizard (~20 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
-5. `bash scripts/run-smokes.sh` to confirm the self-checks (~150 runners, several thousand scenarios) pass against your environment.
-6. Follow **[`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md)** and **[`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md)** before opening to traffic.
+4. `npm run build --workspaces --if-present` to build the artifacts: the static web app nginx serves, plus the `morphit-ops` and `morphit-mcp` bundles. (The relay and indexer run from TypeScript source and have no build step; the web app **must** be built before nginx has anything to serve.)
+5. `npx morphit-ops init` to walk the setup wizard (~20 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
+6. `bash scripts/run-smokes.sh` to confirm the self-checks (~150 runners, several thousand scenarios) pass against your environment.
+7. Follow **[`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md)** and **[`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md)** before opening to traffic.
 
 ## For developers
 
