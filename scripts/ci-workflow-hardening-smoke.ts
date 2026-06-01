@@ -246,6 +246,43 @@ if (noRunsOn.length === 0) {
 
 /* ---------------- report ---------------- */
 
+/* ---------------- invariant 4 (cp190): apt-get update is repo-scoped ----------------
+ *
+ * CI runs 523/524 died when the runner base image's third-party
+ * repo (repo.zabbix.com) served a corrupt index and `apt-get
+ * update` exited 100 — before any Morphit step ran.  We install
+ * nothing from those repos, so every `apt-get update` in a
+ * workflow must be scoped to the base Ubuntu sources with
+ * `Dir::Etc::sourceparts=-`, which makes apt ignore
+ * /etc/apt/sources.list.d/ entirely.  This pins that so a future
+ * edit can't silently reintroduce a bare, flake-prone update.
+ */
+for (const wf of workflowFiles) {
+	const text = readFileSync(wf, 'utf8');
+	const rel = relative(REPO_ROOT, wf);
+	// Find each `apt-get update` occurrence that is actual command
+	// text (skip comment lines beginning with #).
+	const updateLines = text
+		.split('\n')
+		.filter((ln) => /apt-get update/.test(ln) && !/^\s*#/.test(ln));
+	if (updateLines.length === 0) {
+		// No apt usage in this workflow — nothing to harden.
+		pass(`${rel}: no unscoped apt-get update`);
+		continue;
+	}
+	// Every workflow that runs apt-get update must also carry the
+	// sourceparts scoping somewhere in the file (the flag sits on a
+	// continuation line of the same command).
+	if (/Dir::Etc::sourceparts=-/.test(text)) {
+		pass(`${rel}: apt-get update is scoped to base repos (Dir::Etc::sourceparts=-)`);
+	} else {
+		fail(
+			`${rel}: apt-get update is scoped to base repos (Dir::Etc::sourceparts=-)`,
+			'found apt-get update without Dir::Etc::sourceparts=- — a flaky third-party repo in the runner image can fail it (see CI runs 523/524)'
+		);
+	}
+}
+
 let failed = 0;
 for (const r of results) {
 	if (r.passed) {

@@ -124,7 +124,17 @@ jobs:
 
       - name: Install build tools (for better-sqlite3 native)
         run: |
-          sudo apt-get update -qq
+          # cp190 — scope apt update to the base Ubuntu repos so a
+          # transient Hash-Sum-mismatch on a third-party repo in the
+          # runner image (e.g. repo.zabbix.com) can't fail the release
+          # build.  Matches the ci.yml hardening.
+          for i in 1 2 3; do
+            sudo apt-get update -qq \
+              -o Dir::Etc::sourceparts=- \
+              -o APT::Get::List-Cleanup=0 && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential python3 python3-pip
 
