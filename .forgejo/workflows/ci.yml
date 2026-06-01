@@ -124,7 +124,21 @@ jobs:
 
       - name: Install Python 3.12 + ansible-lint
         run: |
-          sudo apt-get update -qq
+          # cp190 — update ONLY the base Ubuntu repos, not the
+          # third-party repos in /etc/apt/sources.list.d/ that the
+          # runner base image ships (e.g. repo.zabbix.com).  We
+          # install nothing from those repos, and a transient
+          # Hash-Sum-mismatch on one of them (CI runs 523/524 died
+          # exactly this way) must not fail an unrelated apt install.
+          # `Dir::Etc::sourceparts=-` makes apt ignore sources.list.d;
+          # the retry loop rides out a brief base-mirror hiccup.
+          for i in 1 2 3; do
+            sudo apt-get update -qq \
+              -o Dir::Etc::sourceparts=- \
+              -o APT::Get::List-Cleanup=0 && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
           sudo apt-get install -y --no-install-recommends \
             python3 python3-pip python3-venv
           # Use --break-system-packages because Ubuntu 24.04 marks
@@ -165,7 +179,16 @@ jobs:
 
       - name: Install build tools (for better-sqlite3 native build)
         run: |
-          sudo apt-get update -qq
+          # cp190 — see the ansible-lint job: scope apt update to the
+          # base Ubuntu repos so a flaky third-party repo in the runner
+          # image (e.g. repo.zabbix.com) can't fail this install.
+          for i in 1 2 3; do
+            sudo apt-get update -qq \
+              -o Dir::Etc::sourceparts=- \
+              -o APT::Get::List-Cleanup=0 && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential python3
 
