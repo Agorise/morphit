@@ -32,7 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { ask, askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { printChainErrorHelp, classifyChainError, SUGGESTED_BP_FLOOR } from './chainErrors.ts';
+import { printChainErrorHelp, classifyChainError, SUGGESTED_BP_FLOOR, broadcastCustomJson, errMsg } from './chainErrors.ts';
 import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
 
 export interface RegisterCtx {
@@ -130,7 +130,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	// the (possibly minutes-long) power-up wait between attempts.  The
 	// cost is re-entering the passphrase per retry for an encrypted
 	// keystore — the right trade for a high-value active key.
-	let result: { block_num: number; trx_id: string } | null = null;
+	let result: { trx_id: string } | null = null;
 	let attempt = 0;
 	for (;;) {
 		attempt++;
@@ -157,9 +157,14 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 				const pub = dblurtPk.PrivateKey.fromString(wif).createPublic('BLT').toString();
 				console.log(`  Signing with the active key for @${sanitizeForTerm(account)} →`);
 				console.log(`    public key: ${pub}`);
-				console.log(`    (verify this matches @${sanitizeForTerm(account)}'s active authority on a`);
-				console.log('     Blurt explorer; run `npx morphit-ops show-key` anytime to');
-				console.log('     re-check.  A wrong key here is the #1 cause of failure.)');
+				console.log('');
+				console.log('    Verify this key is listed under the "Active Auth" (active');
+				console.log(`    authority) for @${sanitizeForTerm(account)} on a Blurt block explorer.`);
+				console.log('    Open this URL and look at the Active Auth public key —');
+				console.log('    it should match the line above exactly:');
+				console.log(`      https://blocks.blurtwallet.com/#/@${sanitizeForTerm(account)}`);
+				console.log('    (Run `npx morphit-ops show-key` anytime to re-check.  A');
+				console.log('     wrong key here is the #1 cause of failure.)');
 				console.log('');
 			} catch {
 				// Non-fatal: a derivation failure will resurface as a
@@ -174,13 +179,25 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 		// retry prompt's wait.
 		let broadcastErr: unknown = null;
 		try {
-			result = await broadcastRegister({
+			// Build the registration payload.  `tag` is the resolved
+			// federation tag (MORPHIT_INSTANCE_OPERATOR_TAG, or a
+			// display-name slug fallback) computed by the caller — the
+			// SAME tag the relay attributes earnings to.  display_name is
+			// the friendlier free-form variant.
+			const payload: Record<string, unknown> = {
+				v: 1,
+				tag,
+				display_name: instanceName,
+				origin
+			};
+			if (contactUrl !== null) {
+				payload.contact_url = contactUrl;
+			}
+			result = await broadcastCustomJson({
 				account,
 				wif,
-				tag,
-				instanceName,
-				origin,
-				contactUrl
+				opId: 'morphit_operator_register_v1',
+				payload
 			});
 		} catch (err) {
 			broadcastErr = err;
@@ -245,7 +262,10 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	console.log('━'.repeat(58));
 	console.log('');
 	console.log(`  Transaction:  ${result.trx_id}`);
-	console.log(`  Block:        ${result.block_num}`);
+	console.log('');
+	console.log('  (Blurt confirms asynchronously, so there is no block number');
+	console.log('   to show at broadcast time — look the transaction up on a');
+	console.log('   Blurt explorer to see the block it lands in.)');
 	console.log('');
 	console.log('Within roughly a minute every Morphit indexer will see your');
 	console.log('registration and add your instance to their /instances');
@@ -338,112 +358,6 @@ async function loadKeyWif(keyFile: string): Promise<string> {
 	return decryptEnvelope(envelope, passphrase);
 }
 
-async function broadcastRegister(args: {
-	account: string;
-	wif: string;
-	tag: string;
-	instanceName: string;
-	origin: string;
-	contactUrl: string | null;
-}): Promise<{ block_num: number; trx_id: string }> {
-	// Lazy-import dblurt so other ops-cli subcommands work without
-	// it.  Failure to import surfaces as a clean error rather than
-	// a stack trace at module load.  Typed loosely (unknown) here
-	// because dblurt's types aren't in ops-cli's resolution scope;
-	// runtime asserts cover what static types would.
-	interface DblurtModule {
-		Client: new (
-			endpoint: string,
-			opts: { addressPrefix: string; chainId: string }
-		) => {
-			broadcast: {
-				sendOperations(ops: unknown[], priv: unknown): Promise<{ block_num: number; id: string }>;
-			};
-		};
-		PrivateKey: { fromString(wif: string): unknown };
-	}
-	let dblurt: DblurtModule;
-	try {
-		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
-	} catch (err) {
-		// The package is a build dependency and is bundled into the
-		// compiled CLI; a failure here is almost always a module-eval /
-		// ESM-CJS-interop problem inside the bundle, NOT a missing
-		// install.  Surface the real cause so the diagnostics layer can
-		// classify it correctly (and so reinstalling isn't mis-suggested).
-		throw new Error(
-			`could not load the Blurt broadcast library: ${
-				err instanceof Error ? err.message : String(err)
-			}`
-		);
-	}
-
-	// Build the registration payload.  `tag` is the resolved
-	// federation tag (MORPHIT_INSTANCE_OPERATOR_TAG, or a display-name
-	// slug fallback) computed by the caller — the SAME tag the relay
-	// attributes earnings to.  display_name is the friendlier
-	// free-form variant.
-	const tag = args.tag;
-	const payload: Record<string, unknown> = {
-		v: 1,
-		tag,
-		display_name: args.instanceName,
-		origin: args.origin
-	};
-	if (args.contactUrl !== null) {
-		payload.contact_url = args.contactUrl;
-	}
-
-	// Pick a Blurt RPC endpoint to talk to.  Same canonical list
-	// shipped with the Morphit frontend (apps/web/src/lib/net/config.ts).
-	// Update this list if the frontend list changes.
-	const endpoints = [
-		'https://rpc.blurt.blog',
-		'https://blurt-rpc.saboin.com',
-		'https://rpc.beblurt.com',
-		'https://rpc.blurt.one'
-	];
-
-	let lastError: unknown = null;
-	for (const endpoint of endpoints) {
-		try {
-			const client = new dblurt.Client(endpoint, {
-				addressPrefix: 'BLT',
-				chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f'
-			});
-			const op: [
-				'custom_json',
-				{
-					required_auths: string[];
-					required_posting_auths: string[];
-					id: string;
-					json: string;
-				}
-			] = [
-				'custom_json',
-				{
-					required_auths: [],
-					required_posting_auths: [args.account],
-					id: 'morphit_operator_register_v1',
-					json: JSON.stringify(payload)
-				}
-			];
-			const priv = dblurt.PrivateKey.fromString(args.wif);
-			const result = await client.broadcast.sendOperations([op], priv);
-			return {
-				block_num: result.block_num,
-				trx_id: result.id
-			};
-		} catch (err) {
-			lastError = err;
-			continue;
-		}
-	}
-	throw new Error(
-		`all Blurt RPC endpoints rejected the broadcast.  Last error: ${errMsg(lastError)}`
-	);
-}
-
 /** Convert a free-form instance name to a tag.  Tag rules:
  *  lowercase, [a-z0-9._-] only.  We slug on '.': replace
  *  spaces and other chars with '-', strip duplicates, trim
@@ -466,8 +380,4 @@ function sluggifyTag(name: string): string {
 	if (slug.length === 0) return 'morphit-instance';
 	if (slug.length > 64) slug = slug.slice(0, 64);
 	return slug;
-}
-
-function errMsg(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
 }

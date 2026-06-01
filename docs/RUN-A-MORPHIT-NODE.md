@@ -1418,10 +1418,11 @@ The common cases:
   mix-up is saving a *posting* key instead). Run
   `npx morphit-ops show-key` to see the **public** key your
   saved key derives to (it never prints the private key), and
-  compare it against your account's active authority on a
-  Blurt block explorer. If they differ, run
-  `npx morphit-ops edit-active-key` and supply the correct
-  active key.
+  compare it against the **"Active Auth"** (active authority)
+  key shown for your account at
+  `https://blocks.blurtwallet.com/#/@YOUR-RELAY-ACCOUNT`. If
+  they differ, run `npx morphit-ops edit-active-key` and supply
+  the correct active key.
 - **"does not have enough mana"** — your account is low on
   mana (Blurt's transaction fuel, which comes from BLURT
   Power and refills over ~5 days). The tool tells you roughly
@@ -1440,8 +1441,9 @@ npx morphit-ops show-key
 
 It prints the **public** key your saved active key
 corresponds to (and a short masked fingerprint of the private
-key — never the full key). Compare the public key against
-your account's active authority on a Blurt explorer; if they
+key — never the full key). Compare that public key against the
+**"Active Auth"** key shown for your account at
+`https://blocks.blurtwallet.com/#/@YOUR-RELAY-ACCOUNT`; if they
 match, the right key is installed.
 
 ### 9.2 Wire your instance to attribute orders to your tag

@@ -32,7 +32,7 @@
 import { readFileSync } from 'node:fs';
 import { askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { printChainErrorHelp } from './chainErrors.ts';
+import { printChainErrorHelp, broadcastCustomJson, errMsg } from './chainErrors.ts';
 
 /** Codepoint sanitization — same as operatorBlock + the indexer.
  *  See the operator-block command for rationale. */
@@ -250,11 +250,12 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	// so the original byte sequence may persist in heap memory
 	// until GC, but we minimize the variable's lifetime and avoid
 	// keeping a live reference past the single use.
-	let result: { block_num: number; trx_id: string };
+	let result: { trx_id: string };
 	try {
-		result = await broadcastPaymentMethod({
+		result = await broadcastCustomJson({
 			account,
 			wif,
+			opId: 'morphit_payment_method_addition_v1',
 			payload: {
 				v: 1,
 				action: 'add',
@@ -280,7 +281,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	console.log('');
-	console.log(`✓ Posted in block ${result.block_num}.`);
+	console.log('✓ Broadcast successfully.');
 	console.log(`  Transaction: ${sanitizeForTerm(result.trx_id)}`);
 	console.log('');
 	console.log(`  Once the indexer ingests this op, the picker will offer "${sanitizeForTerm(name)}"`);
@@ -344,11 +345,12 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	// Audit 2026-05 hardening (NEW-9-13): see add() for rationale.
-	let result: { block_num: number; trx_id: string };
+	let result: { trx_id: string };
 	try {
-		result = await broadcastPaymentMethod({
+		result = await broadcastCustomJson({
 			account,
 			wif,
+			opId: 'morphit_payment_method_addition_v1',
 			payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
 		});
 	} catch (err) {
@@ -365,7 +367,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	console.log('');
-	console.log(`✓ Posted in block ${result.block_num}.`);
+	console.log('✓ Broadcast successfully.');
 	console.log(`  Transaction: ${sanitizeForTerm(result.trx_id)}`);
 	return 0;
 }
@@ -438,10 +440,6 @@ async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 
 // ─── helpers (mirror operatorBlock.ts) ──────────────────────────
 
-function errMsg(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
-
 async function loadKeyWif(keyFile: string): Promise<string> {
 	const raw = readFileSync(keyFile, 'utf8').trim();
 	if (!raw.startsWith('{')) return raw;
@@ -452,72 +450,4 @@ async function loadKeyWif(keyFile: string): Promise<string> {
 	}
 	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
 	return decryptEnvelope(envelope, passphrase);
-}
-
-async function broadcastPaymentMethod(args: {
-	account: string;
-	wif: string;
-	payload: Record<string, unknown>;
-}): Promise<{ block_num: number; trx_id: string }> {
-	interface DblurtModule {
-		Client: new (
-			endpoint: string,
-			opts: { addressPrefix: string; chainId: string }
-		) => {
-			broadcast: {
-				sendOperations(ops: unknown[], priv: unknown): Promise<{ block_num: number; id: string }>;
-			};
-		};
-		PrivateKey: { fromString(wif: string): unknown };
-	}
-	let dblurt: DblurtModule;
-	try {
-		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
-	} catch (err) {
-		throw new Error(
-			`could not load the Blurt broadcast library: ${
-				err instanceof Error ? err.message : String(err)
-			}`
-		);
-	}
-
-	const endpoints = [
-		'https://rpc.blurt.blog',
-		'https://blurt-rpc.saboin.com',
-		'https://rpc.beblurt.com',
-		'https://rpc.blurt.one'
-	];
-
-	let lastError: unknown = null;
-	for (const endpoint of endpoints) {
-		try {
-			const client = new dblurt.Client(endpoint, {
-				addressPrefix: 'BLT',
-				chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f'
-			});
-			const op: [
-				'custom_json',
-				{
-					required_auths: string[];
-					required_posting_auths: string[];
-					id: string;
-					json: string;
-				}
-			] = [
-				'custom_json',
-				{
-					required_auths: [],
-					required_posting_auths: [args.account],
-					id: 'morphit_payment_method_addition_v1',
-					json: JSON.stringify(args.payload)
-				}
-			];
-			const priv = dblurt.PrivateKey.fromString(args.wif);
-			const result = await client.broadcast.sendOperations([op], priv);
-			return { block_num: result.block_num, trx_id: result.id };
-		} catch (err) {
-			lastError = err;
-		}
-	}
-	throw new Error(`All RPC endpoints failed.  Last error: ${errMsg(lastError)}`);
 }

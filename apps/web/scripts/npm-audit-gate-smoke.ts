@@ -87,6 +87,21 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'Transitive of `request` (see above). Prototype-pollution via crafted ' +
 			'cookie names; matrix-bot only receives cookies from operator-configured ' +
 			'Matrix homeservers, so attacker-controlled cookies are not in scope.'
+	},
+	{
+		package: 'vitest',
+		maxSeverity: 'critical',
+		acceptedTitles: [
+			'When Vitest UI server is listening, arbitrary file can be read and executed'
+		],
+		lastReviewed: '2026-06-01',
+		rationale:
+			'Dev/test-only dependency (never shipped to operators). The vulnerable ' +
+			'code path is the Vitest UI server: Morphit invokes vitest only as ' +
+			'`vitest run` / `vitest` (no `--ui`), has NO `@vitest/ui` dependency, and ' +
+			'never starts the UI server in CI or locally — so the listening-server ' +
+			'file-read/exec surface is not installed or reachable here. Reviewed cp184. ' +
+			'Revisit if a vitest 2.1.x patch ships or if `@vitest/ui` is ever added.'
 	}
 ];
 

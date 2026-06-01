@@ -36,6 +36,125 @@
 
 import { sanitizeForTerm } from '../render/term.ts';
 
+/** Normalize an unknown thrown value to a string message. */
+export function errMsg(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Broadcast a single `custom_json` op to the Blurt chain, trying
+ * each RPC endpoint in turn (cp182).
+ *
+ * Returns the trx id only.  blurtd's async `broadcast_transaction`
+ * does NOT return a block number — dblurt's TransactionConfirmation
+ * is `{ id, ...errorFields }`, and `block_num` lives only on the
+ * SIGNED tx input, never on the confirmation — so any caller that
+ * tried to print `result.block_num` was always printing `undefined`.
+ *
+ * dblurt also writes its own RPC chatter straight to the console: a
+ * "Switched Blurt RPC: …" line (gated by `consoleOnFailover`, which
+ * we leave false) and an UNCONDITIONAL
+ * `console.error("Didn't failover for error …: [HTTP 429 …]")` on any
+ * non-timeout endpoint error.  dblurt only fails over internally on
+ * timeout-class errors, so an HTTP 429 from one endpoint makes it
+ * throw and THIS loop does the real failover to the next RPC — i.e.
+ * that 429 line is expected noise on a path we recover from.  Leaking
+ * it to the operator's stdout right next to "broadcast successfully"
+ * is alarming and wrong, so we capture console.log/console.error for
+ * the duration of the loop, buffer what dblurt emits, and surface it
+ * ONLY if every endpoint fails (folded into the thrown error).
+ */
+export async function broadcastCustomJson(args: {
+	account: string;
+	wif: string;
+	opId: string;
+	payload: Record<string, unknown>;
+}): Promise<{ trx_id: string }> {
+	interface DblurtModule {
+		Client: new (
+			endpoint: string,
+			opts: { addressPrefix: string; chainId: string; consoleOnFailover?: boolean }
+		) => {
+			broadcast: {
+				sendOperations(ops: unknown[], priv: unknown): Promise<{ id: string }>;
+			};
+		};
+		PrivateKey: { fromString(wif: string): unknown };
+	}
+	let dblurt: DblurtModule;
+	try {
+		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
+	} catch (err) {
+		// dblurt is bundled into the compiled CLI; an import failure
+		// here is almost always an ESM/CJS-interop problem in the
+		// bundle, NOT a missing install.  Surface the real cause so the
+		// diagnostics layer classifies it correctly.
+		throw new Error(`could not load the Blurt broadcast library: ${errMsg(err)}`);
+	}
+
+	const endpoints = [
+		'https://rpc.blurt.blog',
+		'https://blurt-rpc.saboin.com',
+		'https://rpc.beblurt.com',
+		'https://rpc.blurt.one'
+	];
+
+	const dblurtNoise: string[] = [];
+	const realConsoleLog = console.log;
+	const realConsoleError = console.error;
+	const capture =
+		(sink: (line: string) => void) =>
+		(...callArgs: unknown[]): void => {
+			sink(callArgs.map((a) => (typeof a === 'string' ? a : String(a))).join(' '));
+		};
+
+	let lastError: unknown = null;
+	try {
+		console.log = capture((l) => dblurtNoise.push(l));
+		console.error = capture((l) => dblurtNoise.push(l));
+		for (const endpoint of endpoints) {
+			try {
+				const client = new dblurt.Client(endpoint, {
+					addressPrefix: 'BLT',
+					chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
+					consoleOnFailover: false
+				});
+				const op: [
+					'custom_json',
+					{
+						required_auths: string[];
+						required_posting_auths: string[];
+						id: string;
+						json: string;
+					}
+				] = [
+					'custom_json',
+					{
+						required_auths: [],
+						required_posting_auths: [args.account],
+						id: args.opId,
+						json: JSON.stringify(args.payload)
+					}
+				];
+				const priv = dblurt.PrivateKey.fromString(args.wif);
+				const result = await client.broadcast.sendOperations([op], priv);
+				return { trx_id: result.id };
+			} catch (err) {
+				lastError = err;
+				continue;
+			}
+		}
+	} finally {
+		console.log = realConsoleLog;
+		console.error = realConsoleError;
+	}
+
+	const noise = dblurtNoise.length > 0 ? `  (RPC detail: ${dblurtNoise.join(' | ')})` : '';
+	throw new Error(
+		`all Blurt RPC endpoints rejected the broadcast.  Last error: ${errMsg(lastError)}${noise}`
+	);
+}
+
 export interface DiagnoseCtx {
 	/** The op id being broadcast, e.g. 'morphit_operator_register_v1'. */
 	readonly opLabel: string;

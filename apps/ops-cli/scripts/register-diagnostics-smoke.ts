@@ -220,6 +220,78 @@ scenarios.push({
 	}
 });
 
+// ─── 4. cp182 — broadcast output hygiene ───
+// Two operator-visible bugs in the broadcast path:
+//   (a) "Block: undefined" — code printed result.block_num, but
+//       blurtd's async broadcast_transaction returns no block (the
+//       TransactionConfirmation is { id, ...errorFields }).
+//   (b) dblurt's unconditional console.error("Didn't failover for
+//       error …: [HTTP 429 …]") leaked to stdout next to the success
+//       banner, because dblurt only fails over on timeout-class
+//       errors and OUR loop does the real failover on a 429.
+// These check the source-level invariants that fix both (the live
+// broadcast itself needs a chain, which the sandbox can't do).
+import { readFileSync as _readFileSync } from 'node:fs';
+import { fileURLToPath as _fileURLToPath } from 'node:url';
+import { dirname as _dirname, join as _join } from 'node:path';
+const _here = _dirname(_fileURLToPath(import.meta.url));
+const _opsSrc = _join(_here, '..', 'src', 'commands');
+const _read = (rel: string): string => _readFileSync(_join(_opsSrc, rel), 'utf-8');
+
+scenarios.push({
+	name: 'cp182: broadcastCustomJson is the single shared broadcast helper (exported from chainErrors)',
+	run() {
+		const ce = _read('chainErrors.ts');
+		if (!/export async function broadcastCustomJson/.test(ce))
+			return 'chainErrors.ts must export broadcastCustomJson';
+		// Both command files should call it, not roll their own client loop.
+		const reg = _read('register.ts');
+		const pm = _read('paymentMethod.ts');
+		if (!reg.includes('broadcastCustomJson(')) return 'register.ts must use broadcastCustomJson';
+		if (!pm.includes('broadcastCustomJson(')) return 'paymentMethod.ts must use broadcastCustomJson';
+		if (/async function broadcastRegister/.test(reg))
+			return 'register.ts must NOT keep a private broadcastRegister (use the shared helper)';
+		if (/async function broadcastPaymentMethod/.test(pm))
+			return 'paymentMethod.ts must NOT keep a private broadcastPaymentMethod';
+		return null;
+	}
+});
+
+scenarios.push({
+	name: 'cp182: no command prints a block number (async broadcast returns none)',
+	run() {
+		for (const f of ['register.ts', 'paymentMethod.ts']) {
+			const src = _read(f);
+			if (/block_num/.test(src)) return `${f} still references block_num (always undefined here)`;
+			if (/Posted in block|Block:\s{2,}/.test(src)) return `${f} still prints a block line`;
+		}
+		// And the helper's return type must be trx-id-only.
+		const ce = _read('chainErrors.ts');
+		if (/Promise<\{\s*id:\s*string\s*\}>/.test(ce) === false)
+			return 'broadcastCustomJson sendOperations type should resolve { id: string } (no block_num)';
+		return null;
+	}
+});
+
+scenarios.push({
+	name: 'cp182: dblurt console chatter is buffered during broadcast and consoleOnFailover is off',
+	run() {
+		const ce = _read('chainErrors.ts');
+		// The buffering mechanism: save + restore console.log/error around the loop.
+		if (!ce.includes('const realConsoleLog = console.log'))
+			return 'helper must capture console.log';
+		if (!ce.includes('const realConsoleError = console.error'))
+			return 'helper must capture console.error';
+		if (!/finally\s*\{[\s\S]*console\.log = realConsoleLog[\s\S]*console\.error = realConsoleError/.test(ce))
+			return 'helper must restore console.log/error in a finally block';
+		if (!ce.includes('consoleOnFailover: false'))
+			return 'helper must pass consoleOnFailover: false to the dblurt Client';
+		// On total failure the buffered noise is surfaced as diagnostics.
+		if (!ce.includes('RPC detail:')) return 'helper must fold buffered RPC noise into the failure error';
+		return null;
+	}
+});
+
 // ─── runner ───
 console.log(`register-diagnostics smoke (cp178): ${scenarios.length} scenarios\n`);
 let failed = 0;
