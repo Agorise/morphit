@@ -261,7 +261,7 @@ export async function runRegister(_ctx: RegisterCtx): Promise<number> {
 	console.log('Registration broadcast successfully.');
 	console.log('━'.repeat(58));
 	console.log('');
-	console.log(`  Transaction:  ${result.trx_id}`);
+	console.log(`  Transaction:  ${sanitizeForTerm(result.trx_id)}`);
 	console.log('');
 	console.log('  (Blurt confirms asynchronously, so there is no block number');
 	console.log('   to show at broadcast time — look the transaction up on a');
