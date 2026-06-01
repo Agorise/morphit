@@ -128,10 +128,10 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 		console.log('━'.repeat(58));
 		console.log('');
 		console.log('To verify this is the correct key:');
-		console.log(`  1. Open @${sanitizeForTerm(account!)} on a Blurt block explorer`);
-		console.log('     (e.g. https://blurtblock.io or your preferred explorer).');
-		console.log('  2. Find the account\'s ACTIVE authority public key.');
-		console.log('  3. It should match the "Public key" shown above.');
+		console.log(`  1. Open @${sanitizeForTerm(account!)} on a Blurt block explorer —`);
+		console.log(`     https://blocks.blurtwallet.com/#/@${sanitizeForTerm(account!)}`);
+		console.log('  2. Find the "Active Auth" (active authority) public key.');
+		console.log('  3. It should match the "Public key" shown above exactly.');
 		console.log('');
 		console.log('If they match, this server holds the right active key.');
 		console.log('If they differ, run `npx morphit-ops edit-active-key` and');
