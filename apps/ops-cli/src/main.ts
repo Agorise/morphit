@@ -68,6 +68,8 @@ import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
+import { runHarden } from './commands/harden.ts';
+import { runMainMenu } from './commands/mainMenu.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
 import { runImportAltnetKey } from './commands/importAltnetKey.ts';
@@ -171,6 +173,8 @@ function printHelp(): void {
 		'  upgrade [--check-only] [--yes] [--json]',
 		'                                  Check for and apply a newer Morphit release (manual-only',
 		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt)',
+		'  harden                          Server-hardening wizard: generate a personalized checklist and',
+		'                                  walk Ubuntu/SSH/UFW/fail2ban/TLS + BunkerWeb + backups setup',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -208,7 +212,7 @@ function printVersion(): void {
 // ─── Main ────────────────────────────────────────────────────────
 
 async function main(): Promise<number> {
-	const args = parseArgs(process.argv.slice(2));
+	let args = parseArgs(process.argv.slice(2));
 
 	// Honor --no-color before initColor so the help-print uses
 	// the right mode if the user asked for it.
@@ -226,8 +230,27 @@ async function main(): Promise<number> {
 	}
 
 	if (args.subcommand === null) {
-		printHelp();
-		return 1;
+		// cp186 — bare `morphit-ops` on an interactive terminal opens a
+		// menu so the operator can pick an action by intent instead of
+		// memorizing subcommand names.  Non-interactive (piped stdin,
+		// CI, or explicit --no-menu) keeps the old help-dump + exit 1
+		// so scripts are unaffected.
+		const interactive = process.stdin.isTTY === true && args.flags['no-menu'] !== 'true';
+		if (!interactive) {
+			printHelp();
+			return 1;
+		}
+		const selection = await runMainMenu();
+		if (selection === null) {
+			return 0;
+		}
+		// Re-enter dispatch with the chosen subcommand by rebuilding
+		// args; everything below handles it exactly as if typed.
+		args = {
+			subcommand: selection.subcommand,
+			flags: args.flags,
+			positional: selection.positional
+		};
 	}
 
 	// `init` runs BEFORE loadConfig — it's the wizard that
@@ -380,6 +403,24 @@ async function main(): Promise<number> {
 			return await runUpgrade({
 				flags: args.flags,
 				positional: args.positional
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `harden` (cp187) — the focused, re-runnable hardening wizard.
+	// Reads only a few values from morphit.config.env for the
+	// checklist; needs no DB, so it dispatches alongside init/upgrade
+	// before loadConfig.
+	if (args.subcommand === 'harden') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runHarden({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
 			});
 		} catch (err) {
 			printError(err instanceof Error ? err.message : String(err));

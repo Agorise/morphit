@@ -2648,6 +2648,49 @@ const SCENARIOS: readonly Scenario[] = [
 			'AUTO_LETS_ENCRYPT',
 			'ops/nginx/web.conf'
 		]
+	},
+	{
+		name: 'cp186 Josie Jo-7a — edit reminds re-register after origin/tag; init guards re-runs with Edit/Overwrite/Cancel',
+		file: 'apps/ops-cli/src/commands/edit.ts',
+		rootRelative: true,
+		mustHave: ['originChanged = true', 'tagChanged = true', 'morphit-ops register', 'reach the federation']
+	},
+	{
+		name: 'cp186 Josie Jo-7b — init re-run guard offers Edit (recommended) / Overwrite / Cancel and hands off',
+		file: 'apps/ops-cli/src/commands/init.ts',
+		rootRelative: true,
+		mustHave: [
+			'This instance is already set up',
+			'Edit a few settings (recommended)',
+			'Overwrite EVERYTHING',
+			'return await runEdit('
+		]
+	},
+	{
+		name: 'cp186/187 Josie Jo-7c — bare morphit-ops menu offers harden; harden is its own reuse-not-reimplement command',
+		file: 'apps/ops-cli/src/commands/harden.ts',
+		rootRelative: true,
+		mustHave: [
+			'export async function runHarden',
+			"from '../init/steps.ts'",
+			'renderHardeningChecklist',
+			'stepBunkerWeb',
+			'stepBackup'
+		]
+	},
+	{
+		name: 'cp189 Josie Jo-8 — upgrade carries the operator config + keystore + altnet forward (survives release upgrade)',
+		file: 'apps/ops-cli/src/commands/upgrade.ts',
+		rootRelative: true,
+		mustHave: [
+			'Carry the operator',
+			'morphit.config.env',
+			'morphit.env',
+			'apps/relay/keystore.json',
+			'apps/relay/altnet',
+			'copyFileSync',
+			'rollback(installDir, backupDir, tmpDir'
+		]
 	}
 ];
 

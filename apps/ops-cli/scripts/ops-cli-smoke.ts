@@ -243,6 +243,73 @@ scenario('applyThreshold: higher_worse — value at or above error is error', ()
 	assertEqual(applyThreshold(100, t), 'error', '100');
 });
 
+// ─── cp186 — wizard-UX surface (edit reminder, init re-run guard, main menu) ───
+// Source-invariant checks: these pin the operator-facing UX so the
+// affordances (re-register reminder, Edit/Overwrite/Cancel guard,
+// the menu) can't silently regress.  Runtime behaviour is exercised
+// by hand; here we lock the structural guarantees.
+import { readFileSync as _rf } from 'node:fs';
+import { fileURLToPath as _fu } from 'node:url';
+import { dirname as _dn, join as _jn } from 'node:path';
+const _cmd = _jn(_dn(_fu(import.meta.url)), '..', 'src', 'commands');
+const _src = (f: string): string => _rf(_jn(_cmd, f), 'utf-8');
+
+scenario('cp186: edit reminds operator to re-register after an origin/tag change', () => {
+	const e = _src('edit.ts');
+	assertEqual(e.includes('originChanged = true'), true, 'edit tracks origin change');
+	assertEqual(e.includes('tagChanged = true'), true, 'edit tracks tag change');
+	assertEqual(/if \(originChanged \|\| tagChanged\)/.test(e), true, 'edit gates reminder on origin/tag change');
+	assertEqual(e.includes('morphit-ops register'), true, 'edit names the re-register command');
+	assertEqual(
+		e.includes('record other Morphit') || e.includes('reach the federation'),
+		true,
+		'edit explains WHY (federation visibility)'
+	);
+});
+
+scenario('cp186: init re-run guard offers Edit/Overwrite/Cancel and can hand off to edit', () => {
+	const i = _src('init.ts');
+	assertEqual(i.includes('This instance is already set up'), true, 'init detects existing config with a heading');
+	assertEqual(i.includes('Edit a few settings (recommended)'), true, 'init offers Edit (recommended)');
+	assertEqual(i.includes('Overwrite EVERYTHING'), true, 'init offers Overwrite');
+	assertEqual(i.includes('return await runEdit('), true, 'init hands off to edit in-process');
+	// The destructive path must still double-confirm before overwriting.
+	assertEqual(/Are you sure\? This replaces your entire instance config/.test(i), true, 'init double-confirms overwrite');
+});
+
+scenario('cp186: bare morphit-ops opens a menu on a TTY but keeps help+exit1 for scripts', () => {
+	const m = _src('mainMenu.ts');
+	assertEqual(m.includes('export async function runMainMenu'), true, 'runMainMenu exported');
+	// Menu must offer the high-value actions the operator asked for.
+	for (const sub of ['edit', 'upgrade', 'register', 'init', 'status', 'harden']) {
+		assertEqual(new RegExp(`subcommand: '${sub}'`).test(m), true, `menu offers '${sub}'`);
+	}
+	const main = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'main.ts'), 'utf-8');
+	assertEqual(
+		main.includes("process.stdin.isTTY === true && args.flags['no-menu'] !== 'true'"),
+		true,
+		'main gates the menu on an interactive TTY (and --no-menu opt-out)'
+	);
+	assertEqual(/if \(!interactive\) \{\s*printHelp\(\);\s*return 1;/.test(main), true, 'non-interactive keeps help+exit1');
+});
+
+scenario('cp187: harden is a standalone subcommand that reuses the shared checklist renderer', () => {
+	const h = _src('harden.ts');
+	assertEqual(h.includes('export async function runHarden'), true, 'runHarden exported');
+	// It must REUSE the init step functions + the shared renderer, not
+	// re-implement hardening guidance (no drift from setup).
+	assertEqual(h.includes("from '../init/steps.ts'"), true, 'harden reuses init step functions');
+	assertEqual(h.includes('renderHardeningChecklist'), true, 'harden reuses the shared checklist renderer');
+	assertEqual(h.includes('stepBunkerWeb') && h.includes('stepHardening') && h.includes('stepBackup'), true, 'harden walks BunkerWeb + host + backups');
+	// The renderer must be exported from render.ts for harden to import.
+	const r = _rf(_jn(_cmd, '..', 'init', 'render.ts'), 'utf-8');
+	assertEqual(r.includes('export function renderHardeningChecklist'), true, 'renderHardeningChecklist is exported');
+	assertEqual(r.includes('export interface HardeningChecklistInput'), true, 'minimal checklist input type exported');
+	// main.ts must dispatch harden BEFORE loadConfig (no DB needed).
+	const main = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'main.ts'), 'utf-8');
+	assertEqual(main.includes("args.subcommand === 'harden'"), true, 'main dispatches harden');
+});
+
 // ─── Summary ─────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(54)}`);

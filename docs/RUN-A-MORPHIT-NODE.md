@@ -1446,6 +1446,72 @@ key — never the full key). Compare that public key against the
 `https://blocks.blurtwallet.com/#/@YOUR-RELAY-ACCOUNT`; if they
 match, the right key is installed.
 
+### 9.1.2 Managing your instance later (the menu)
+
+You will not run the full setup wizard again — `morphit-ops
+init` is a one-time, from-scratch setup, and if you run it on
+an already-configured instance it stops and warns you first,
+offering to open the edit menu instead of overwriting
+everything.
+
+For everything after first setup, just run the tool with no
+arguments:
+
+```
+npx morphit-ops
+```
+
+On an interactive terminal this opens a menu of every action —
+edit settings, **harden this server**, upgrade to the latest
+version, re-publish your registration, the status dashboard,
+recent signups, abuse alerts, key management, and more — each
+with a one-line description so you pick by what you want to do,
+not by memorizing command names. (Every item is still runnable
+directly too, e.g. `npx morphit-ops status`; run `npx
+morphit-ops --help` for the full list and flags. Scripts and
+cron are unaffected — piped/non-interactive runs print the
+help text as before.)
+
+**Hardening is its own wizard.** Securing the host — SSH
+lockdown, firewall, fail2ban, automatic security updates, TLS,
+an optional BunkerWeb WAF, and daily database backups — is the
+most important thing you do before going public, so it has a
+dedicated, re-runnable flow:
+
+```
+npx morphit-ops harden
+```
+
+(or pick **Harden this server** from the menu). It generates a
+**personalized `morphit-hardening-checklist.md`** with your
+domain and your BunkerWeb-vs-nginx choice baked in, sequenced in
+a safe order (it leads with the SSH-lockout rule: add your key
+and test it in a second terminal *before* disabling password
+login), and it can walk you through each piece on screen. None
+of it is Morphit-specific — it is the baseline every
+internet-facing Ubuntu box needs — and everything it describes
+is already shipped in the repo (the Ansible role in
+`ops/ansible/`, the nginx + BunkerWeb configs, the backup
+units). Full reference: OPERATIONS.md §34 (UFW + fail2ban), §35
+(TLS), §37 (the complete hardening role).
+
+**One rule worth remembering:** your **origin** and **operator
+tag** are part of your on-chain registration — the record other
+Morphit instances read to list you in their `/instances`
+directory. If you change either one with `morphit-ops edit`,
+the edit updates your *local* config, but the rest of the
+federation won't see it until you re-publish:
+
+```
+npx morphit-ops register
+```
+
+`morphit-ops edit` now reminds you of this automatically right
+after you change your origin or tag, so you don't have to keep
+it in your head. Changing anything else (description/SEO, RPC
+URLs, fees) is local-only — no re-register needed, just the
+service restart the tool tells you to run.
+
 ### 9.2 Wire your instance to attribute orders to your tag
 
 The wizard already wrote `MORPHIT_INSTANCE_OPERATOR_TAG` for

@@ -4026,6 +4026,12 @@ easiest to most low-level:
    who deploy via Docker/SystemD `Environment=` directives
    instead won't see this option.
 
+   (Don't remember the subcommand?  Run bare `npx morphit-ops`
+   on a terminal — cp186 — and pick **Edit settings → Blurt RPC
+   endpoints** from the menu.  The menu lists every action with
+   a one-line description; non-interactive/piped runs still
+   print help as before.)
+
    The **`morphit-ops init`** wizard (fresh setup) also
    prompts for the RPC list as its 19th step
    (cp137 F-2 — pre-cp137 this prompt was missing and

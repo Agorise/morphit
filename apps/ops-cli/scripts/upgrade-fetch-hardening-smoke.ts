@@ -158,6 +158,68 @@ if (src.includes('F-opscli-1')) {
 	fail('cp160 F-opscli-1 attribution present in source', 'no F-opscli-1 reference found');
 }
 
+/* ---------------- cp189: config/keystore carry-forward ---------------- */
+// The upgrade renames the old install to .bak then extracts a FRESH
+// tarball that does NOT contain the operator's config or signing key.
+// Without a carry-forward step the operator's config/keystore would be
+// stranded in the backup and the instance would come up empty.  These
+// pin the fix: the step must exist, must sit BETWEEN extract and npm
+// ci, must copy each operator-data path, and must rollback on failure.
+
+// 1. the preserve list names every operator-written path inside the tree
+{
+	const needs = [
+		'morphit.config.env',
+		'morphit.env',
+		'apps/relay/keystore.json',
+		'apps/relay/keystore.wif',
+		'apps/relay/altnet',
+		'morphit-hardening-checklist.md'
+	];
+	const missing = needs.filter((n) => !codeOnly.includes(n));
+	if (missing.length === 0) {
+		pass('carry-forward preserves config + keystore + altnet + checklist');
+	} else {
+		fail(
+			'carry-forward preserves config + keystore + altnet + checklist',
+			'preserve list missing: ' + missing.join(', ')
+		);
+	}
+}
+
+// 2. uses copyFileSync/cpSync (perm-preserving) — NOT a perm-losing write
+if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
+	pass('carry-forward uses copyFileSync/cpSync (preserves 0600)');
+} else {
+	fail('carry-forward uses copyFileSync/cpSync (preserves 0600)', 'expected copyFileSync + cpSync');
+}
+
+// 3. carry-forward happens AFTER extract and BEFORE npm ci
+{
+	const extractIdx = codeOnly.indexOf("'tar'");
+	const carryIdx = codeOnly.indexOf('preserve');
+	const npmCiIdx = codeOnly.indexOf("'ci'");
+	if (extractIdx !== -1 && carryIdx !== -1 && npmCiIdx !== -1 && extractIdx < carryIdx && carryIdx < npmCiIdx) {
+		pass('carry-forward sits between extract and npm ci');
+	} else {
+		fail(
+			'carry-forward sits between extract and npm ci',
+			`ordering wrong (extract=${extractIdx}, carry=${carryIdx}, npmCi=${npmCiIdx})`
+		);
+	}
+}
+
+// 4. failure during carry-forward rolls back (no half-migrated install)
+{
+	// find the carry-forward try/catch and confirm it calls rollback
+	const afterCarry = codeOnly.slice(codeOnly.indexOf('preserve'));
+	if (/catch[\s\S]{0,200}rollback\(installDir, backupDir, tmpDir/.test(afterCarry)) {
+		pass('carry-forward failure rolls back');
+	} else {
+		fail('carry-forward failure rolls back', 'no rollback() in the carry-forward catch');
+	}
+}
+
 /* ---------------- report ---------------- */
 
 let failed = 0;

@@ -52,7 +52,8 @@ import {
 } from '../init/steps.ts';
 import { writeWizardOutput, resolveOutputPath } from '../init/render.ts';
 import type { WizardAnswers } from '../init/render.ts';
-import { ask, askYesNo } from '../init/prompt.ts';
+import { ask, askYesNo, askChoice } from '../init/prompt.ts';
+import { runEdit } from './edit.ts';
 
 export interface InitCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -88,14 +89,59 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const repoRoot = resolveOutputPath(ctx.flags.out, defaultRepoRoot());
 	const existingConfig = `${repoRoot}/morphit.config.env`;
 	if (existsSync(existingConfig)) {
-		console.log(`\nA morphit.config.env already exists at ${existingConfig}.`);
-		const overwrite = await askYesNo(
-			'Overwrite it? (a backup of the existing file will be made)',
+		// cp186 — re-running the full setup wizard on a configured
+		// instance is almost never what the operator wants: it walks
+		// all ~22 steps and overwrites the whole config.  The common
+		// real intent ("I just want to change my RPC URLs / description
+		// / origin") is served by `morphit-ops edit`, which re-prompts
+		// only the safe post-launch sections and preserves everything
+		// else.  So instead of a bare overwrite y/N, recognize this as
+		// an already-configured instance, steer toward `edit`, and let
+		// the operator launch it without leaving this screen.
+		console.log('');
+		console.log('━'.repeat(58));
+		console.log('  This instance is already set up');
+		console.log('━'.repeat(58));
+		console.log('');
+		console.log(`  A configuration already exists at:`);
+		console.log(`    ${existingConfig}`);
+		console.log('');
+		console.log('  Re-running the full setup wizard walks all the setup');
+		console.log('  questions again and OVERWRITES this config.  Most of the');
+		console.log('  time you only want to change a few things — for that, use');
+		console.log('  "Edit", which changes just the section you pick (RPC URLs,');
+		console.log('  description/SEO, origin, fees, …) and leaves the rest alone.');
+		console.log('');
+		const choice = await askChoice('What would you like to do?', [
+			'Edit a few settings (recommended) — opens the edit menu now',
+			'Overwrite EVERYTHING — re-run the full setup wizard from scratch',
+			'Cancel — leave everything as it is'
+		]);
+
+		if (choice === 0) {
+			// Hand off to the edit flow in-process; its exit code
+			// becomes ours.  No second command to look up or type.
+			return await runEdit({
+				flags: ctx.flags,
+				positional: ctx.positional,
+				colorEnabled: ctx.colorEnabled
+			});
+		}
+		if (choice === 2) {
+			console.log('\nCancelled.  Existing config left unchanged.');
+			return 0;
+		}
+
+		// choice === 1 — overwrite.  Confirm once more (this is the
+		// destructive path), then back up before proceeding.
+		console.log('');
+		const reallyOverwrite = await askYesNo(
+			'Are you sure? This replaces your entire instance config (a backup will be made first)',
 			false
 		);
-		if (!overwrite) {
+		if (!reallyOverwrite) {
 			console.log('\nAborted.  Existing config left unchanged.');
-			return 1;
+			return 0;
 		}
 		// Backup with a timestamped suffix.
 		const backupPath = `${existingConfig}.bak-${Date.now()}`;
