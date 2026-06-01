@@ -62,7 +62,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -324,6 +324,69 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		]);
 	} catch (err) {
 		warn(`Extract failed; rolling back to ${backupDir}.`);
+		return rollback(installDir, backupDir, tmpDir, err);
+	}
+
+	// ─── 8b. Carry the operator's config + keys forward ────────────
+	//
+	// CRITICAL (cp189): the wizard writes the operator's config and
+	// signing key INSIDE the install tree —
+	//   - morphit.config.env            (operator-tunable knobs)
+	//   - morphit.env                   (critical infra: DB URL,
+	//                                     account names, active-key path)
+	//   - apps/relay/keystore.json or .wif (the relay ACTIVE key)
+	//   - apps/relay/altnet (dir)        (Tor/Lokinet/I2P keys)
+	//   - morphit-hardening-checklist.md  (operator runbook)
+	// The release tarball does NOT contain any of these (they're the
+	// operator's secrets/config, never committed).  Step 7 renamed the
+	// old install to backupDir and step 8 extracted a FRESH tree, so
+	// without this step the operator's config + signing key would be
+	// stranded in the .bak dir and the indexer/relay would start with
+	// nothing — a wrecked instance.  Copy them back, preserving the
+	// 0600 perms the wizard set (copyFileSync/cpSync preserve mode).
+	//
+	// We only copy files that EXIST in the backup (a first-time
+	// installer who somehow ran upgrade wouldn't have them) and never
+	// overwrite a file the new tree legitimately ships (these paths are
+	// all operator-data paths the tree never contains, so no conflict).
+	try {
+		const preserve: Array<{ rel: string; kind: 'file' | 'dir' }> = [
+			{ rel: 'morphit.config.env', kind: 'file' },
+			{ rel: 'morphit.env', kind: 'file' },
+			{ rel: 'apps/relay/keystore.json', kind: 'file' },
+			{ rel: 'apps/relay/keystore.wif', kind: 'file' },
+			{ rel: 'apps/relay/altnet', kind: 'dir' },
+			{ rel: 'morphit-hardening-checklist.md', kind: 'file' }
+		];
+		let carried = 0;
+		for (const item of preserve) {
+			const from = join(backupDir, item.rel);
+			const to = join(installDir, item.rel);
+			if (!existsSync(from)) continue;
+			mkdirSync(dirname(to), { recursive: true });
+			if (item.kind === 'dir') {
+				cpSync(from, to, { recursive: true, preserveTimestamps: true });
+			} else {
+				copyFileSync(from, to);
+			}
+			carried++;
+		}
+		if (carried > 0) {
+			info(`Carried ${carried} config/key file(s) forward from the previous install.`);
+		} else {
+			// No config in the backup is suspicious for an upgrade (vs a
+			// first install) — warn but don't fail; the operator may have
+			// a non-standard layout (e.g. systemd EnvironmentFile= pointing
+			// outside the tree).
+			warn(
+				'No config/keystore files found in the previous install to carry forward. ' +
+					'If your instance keeps its config inside the install dir, verify ' +
+					`${installDir} has morphit.config.env, morphit.env, and apps/relay/keystore.* ` +
+					'before restarting services.'
+			);
+		}
+	} catch (err) {
+		warn('Failed to carry config/keys forward; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 

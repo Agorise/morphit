@@ -157,10 +157,19 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 
 	const configUpdates: Map<string, string | null> = new Map();
 	const envUpdates: Map<string, string | null> = new Map();
+	// cp186 — track whether the operator changed anything that lives
+	// in the ON-CHAIN operator-register record (origin / tag).  Those
+	// changes only reach other instances' /instances directories after
+	// a fresh `morphit-ops register`; a local file edit alone is
+	// invisible to the federation.  We use these to print a prominent,
+	// conditional re-register reminder at the end.
+	let originChanged = false;
+	let tagChanged = false;
 
 	if (choice === 'origin' || choice === 'all') {
 		const origin = await stepOrigin();
 		configUpdates.set('MORPHIT_INSTANCE_ORIGIN', origin);
+		originChanged = true;
 	}
 	if (choice === 'alt-networks' || choice === 'all') {
 		const alt = await stepAltNetworks();
@@ -193,6 +202,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	if (choice === 'operator-tag' || choice === 'all') {
 		const op = await stepOperatorTag(existing.origin ?? null);
 		configUpdates.set('MORPHIT_INSTANCE_OPERATOR_TAG', op.tag);
+		tagChanged = true;
 	}
 	if (choice === 'rpc') {
 		// Guarded above by the pickSection helper not offering this
@@ -274,7 +284,42 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		console.log('   the indexer reads the env file once at startup.)');
 	} else {
 		console.log('  sudo systemctl restart morphit-indexer');
-		console.log('  sudo systemctl restart morphit-relay   # if origin changed');
+		if (originChanged) {
+			console.log('  sudo systemctl restart morphit-relay');
+		} else {
+			console.log('  sudo systemctl restart morphit-relay   # if origin changed');
+		}
+	}
+
+	// cp186 — the one easy-to-miss second step.  origin + operator tag
+	// are part of the ON-CHAIN operator-register record; editing the
+	// local config does NOT update what other Morphit instances show in
+	// their /instances directory.  Make the re-register step impossible
+	// to overlook when (and only when) it actually applies.
+	if (originChanged || tagChanged) {
+		const whatChanged =
+			originChanged && tagChanged
+				? 'origin and operator tag'
+				: originChanged
+					? 'origin'
+					: 'operator tag';
+		console.log('');
+		console.log('━'.repeat(58));
+		console.log('  IMPORTANT — one more step to reach the federation');
+		console.log('━'.repeat(58));
+		console.log('');
+		console.log(`  You changed your ${whatChanged}.  That value is part of your`);
+		console.log('  on-chain operator registration — the record other Morphit');
+		console.log('  instances read to list you in their /instances directory.');
+		console.log('');
+		console.log('  The local edit above does NOT update that on-chain record.');
+		console.log('  Re-publish it so the rest of the federation sees the change:');
+		console.log('');
+		console.log('      morphit-ops register');
+		console.log('');
+		console.log('  (Until you do, other instances will keep showing your old');
+		console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance uses the new value as soon as you`);
+		console.log('  restart the services above.)');
 	}
 	console.log('');
 

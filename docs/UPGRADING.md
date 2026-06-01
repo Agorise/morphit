@@ -86,9 +86,12 @@ Two things to do first when you've been away a while:
 If you're so far behind that you're unsure what changed, the
 safest path is: take a database backup (see `OPERATIONS.md`),
 read the notes for each skipped release, then run the upgrade.
-Your data and config (`/etc/morphit/*.env`, your keystore) are
-untouched by an upgrade — only the application code in the install
-directory is replaced.
+Your config and signing key (`morphit.config.env`, `morphit.env`,
+`apps/relay/keystore.*`, `apps/relay/altnet/`) live inside the
+install dir, so the upgrade explicitly **carries them forward**
+into the new release (step 8b above) with their permissions
+intact — your settings and active key survive every upgrade, and
+your PostgreSQL database is never touched.
 
 ## Recommended: `morphit-ops upgrade`
 
@@ -135,6 +138,17 @@ Steps the command takes, in order:
    **Refuses to proceed if it doesn't match.**
 7. Renames `/opt/morphit` → `/opt/morphit.bak-<timestamp>` (backup).
 8. Extracts the new tarball to `/opt/morphit`.
+8b. **Carries your config and signing key forward** from the backup
+    into the freshly-extracted tree — `morphit.config.env`,
+    `morphit.env`, `apps/relay/keystore.json` (or `.wif`),
+    `apps/relay/altnet/` (your Tor/Lokinet/I2P keys), and
+    `morphit-hardening-checklist.md`, all with their `0600`
+    permissions preserved. The release tarball deliberately does
+    **not** contain these (they're your secrets), so the upgrade
+    copies them across for you. You do **not** re-run `morphit-ops
+    init` after an upgrade, and you don't re-enter your passphrase
+    config — your instance comes back up exactly as it was, on the
+    new code.
 9. Runs `npm ci --no-audit --no-fund` in the new install dir.
 10. Restarts these systemd services if they're active:
     - `morphit-indexer.service`

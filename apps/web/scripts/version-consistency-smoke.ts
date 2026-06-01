@@ -248,6 +248,31 @@ function main(): void {
 		}
 	}
 
+	// cp188 — release-notes file MUST exist for the current version.
+	// Ken's standing rule: every release ships notes that go online
+	// with it.  The release CI uploads the tarball but does not author
+	// the release body, so nothing otherwise forces a notes file into
+	// existence on a version bump.  Tie it to the version here: bumping
+	// package.json to v1.0.0-beta.2 without creating
+	// RELEASE-NOTES-v1.0.0-beta.2.md now fails this gate.
+	const notesFile = `RELEASE-NOTES-v${expected}.md`;
+	try {
+		const notes = readFileSync(join(REPO, notesFile), 'utf8');
+		if (notes.trim().length === 0) {
+			mismatches.push({
+				label: notesFile,
+				got: '<empty>',
+				remediation: `${notesFile} exists but is empty — write the release notes that will be published online with this version`
+			});
+		}
+	} catch {
+		mismatches.push({
+			label: notesFile,
+			got: null,
+			remediation: `create ${notesFile} at the repo root — every release must ship notes for publishing online (copy the structure of the prior RELEASE-NOTES-v*.md)`
+		});
+	}
+
 	if (mismatches.length > 0) {
 		console.error(
 			`✗ version-consistency-smoke FAILED — expected '${expected}' (from root package.json), found:`
@@ -265,7 +290,7 @@ function main(): void {
 	}
 
 	console.log(
-		`✓ all ${TOUCHPOINTS.length} version-consistency scenarios pass (every touchpoint reports '${expected}')`
+		`✓ all ${TOUCHPOINTS.length} version-consistency scenarios pass (every touchpoint reports '${expected}'), and ${notesFile} exists`
 	);
 }
 
