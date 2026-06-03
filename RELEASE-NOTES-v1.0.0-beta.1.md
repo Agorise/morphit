@@ -1,4 +1,4 @@
-# Morphit v1.0.0-beta.3
+# Morphit v1.0.0-beta.1
 
 First public beta of Morphit — a federated, non-custodial, no-KYC peer-to-peer
 marketplace for fiat ↔ BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE,
@@ -22,11 +22,11 @@ For ongoing day-1-through-day-7 monitoring see
 
 ## Verify the download
 
-    sha256sum -c morphit-v1.0.0-beta.3.tar.gz.sha256
+    sha256sum -c morphit-v1.0.0-beta.1.tar.gz.sha256
 
 For belt-and-braces, see `docs/UPGRADING.md` "Belt-and-braces verification"
 — it walks you through cloning the repo separately, running
-`git tag -v v1.0.0-beta.3`, and re-deriving the manifest from a
+`git tag -v v1.0.0-beta.1`, and re-deriving the manifest from a
 clean checkout to compare against the tarball you downloaded.
 
 ## What's in the beta
@@ -251,7 +251,7 @@ back on.
 
 ---
 
-**Tag:** `v1.0.0-beta.3`
+**Tag:** `v1.0.0-beta.1`
 **Built by:** Forgejo Actions from a signed annotated tag (see
 `.forgejo/workflows/release.yml`)
 **License:** AGPL-3.0-only

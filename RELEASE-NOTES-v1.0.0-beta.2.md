@@ -4,7 +4,7 @@ Second public beta of Morphit — a federated, non-custodial, no-KYC peer-to-pee
 marketplace for fiat ↔ BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE,
 ZEC, ARRR, DCR, SOL, ETH, and XRP trades.
 
-This release builds on `v1.0.0-beta.3` and is focused almost entirely on the
+This release builds on `v1.0.0-beta.1` and is focused almost entirely on the
 **operator experience** — the part beta-testing surfaced as the roughest. If
 you ran a beta.1 node, the headline is that running and maintaining your
 instance is now a guided, menu-driven experience, and upgrades safely preserve
