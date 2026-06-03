@@ -220,6 +220,41 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 	}
 }
 
+/* ---------------- cp191: prerelease-aware release discovery ---------------- */
+// `/releases/latest` returns only the newest NON-prerelease release
+// (Forgejo API semantics).  During the beta period every release is
+// a prerelease, so that endpoint 404s and upgrade saw nothing.  The
+// fix: prefer /releases/latest, fall back to /releases?limit=1 (newest
+// of any kind) on 404.  Pin both halves so a future edit can't drop
+// the fallback and silently re-strand beta operators.
+
+// 1. still queries /releases/latest (stable-preferred default)
+// NOTE: checked against raw `src`, not `codeOnly` — the naive
+// comment-stripper treats `//` in `https://…` as a line comment and
+// would delete the URL.  These are URL literals, never in comments.
+if (src.includes('/releases/latest')) {
+	pass('upgrade still prefers /releases/latest (stable-first)');
+} else {
+	fail('upgrade still prefers /releases/latest (stable-first)', 'no /releases/latest query found');
+}
+
+// 2. falls back to the list endpoint when no stable exists
+if (/releases\?limit=1/.test(src)) {
+	pass('upgrade falls back to /releases?limit=1 for prereleases');
+} else {
+	fail(
+		'upgrade falls back to /releases?limit=1 for prereleases',
+		'no /releases?limit=1 fallback — flagged-pre-release betas would be invisible (the beta1/beta2 trap)'
+	);
+}
+
+// 3. the fallback is gated on a 404 (no stable), not fired unconditionally
+if (/status\s*!==\s*404/.test(codeOnly) || /status\s*===\s*404/.test(codeOnly)) {
+	pass('prerelease fallback is gated on 404 (no stable release)');
+} else {
+	fail('prerelease fallback is gated on 404', 'fallback should trigger only when /releases/latest 404s');
+}
+
 /* ---------------- report ---------------- */
 
 let failed = 0;

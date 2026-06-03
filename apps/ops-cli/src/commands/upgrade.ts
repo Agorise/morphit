@@ -448,8 +448,15 @@ function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
  *  few hundred KB and complete in under a second. */
 const UPGRADE_FETCH_TIMEOUT_MS = 30_000;
 
-async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRelease> {
-	const url = `https://${host}/api/v1/repos/${repo}/releases/latest`;
+// cp191 — fetch a release-metadata URL with all the safety the
+// upgrade path needs: a hard timeout, manual redirect handling
+// (a 30x to an unexpected host on the metadata call must be
+// operator-visible), and a 1 MiB body cap before parse (the host
+// is operator-configured so this isn't SSRF, but a MITM'd /
+// compromised release API returning multi-GB JSON would OOM the
+// upgrade run; Forgejo release payloads are <8 KB, so 1 MiB is
+// 100x+ headroom).  Returns the raw text; the caller parses.
+async function fetchReleaseJson(url: string): Promise<{ ok: boolean; status: number; text: string }> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
 	try {
@@ -459,17 +466,11 @@ async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRe
 			signal: controller.signal
 		});
 		if (!res.ok) {
-			throw new Error(`HTTP ${res.status} from ${url}`);
+			return { ok: false, status: res.status, text: '' };
 		}
-		// cp160 F-opscli-1 — bound the response body before parse.
-		// The host is operator-configured (defaults to git.agorise.net)
-		// so this isn't an SSRF surface, but a MITM'd or compromised
-		// release API returning a multi-GB JSON would OOM the operator's
-		// upgrade run.  Forgejo release-latest payloads are <8 KB; a
-		// 1 MiB cap is 100x+ normal and catches any pathology.  Also
-		// `redirect: 'manual'` above — a 30x to an unexpected host on
-		// the release-metadata call should be operator-visible.
 		const RELEASE_JSON_MAX_BYTES = 1024 * 1024;
+		// cp160 F-opscli-1 — bound the response body before parse (cap
+		// retained through the cp191 refactor of this fetch into a helper).
 		const cl = res.headers.get('content-length');
 		if (cl !== null) {
 			const n = Number(cl);
@@ -486,14 +487,59 @@ async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRe
 				`Forgejo release API body exceeds cap (${text.length} > ${RELEASE_JSON_MAX_BYTES}) from ${url}`
 			);
 		}
-		const body = JSON.parse(text) as ForgejoRelease;
+		return { ok: true, status: res.status, text };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRelease> {
+	// cp191 — `/releases/latest` returns the most recent
+	// NON-prerelease, non-draft release (Forgejo API semantics,
+	// confirmed in their API source).  That's the right default for
+	// an auto-upgrader: it protects operators on a stable release
+	// from being offered a newer beta.  BUT during the beta period
+	// there is NO non-prerelease release, so `/releases/latest`
+	// 404s — and historically (beta1/beta2 both flagged
+	// pre-release) that left `morphit-ops upgrade` unable to see any
+	// release at all.  So: prefer `/releases/latest`, and if it 404s
+	// (no stable exists yet), fall back to the newest release of any
+	// kind via `/releases?limit=1` (newest-first; unauthenticated,
+	// so drafts are excluded server-side).  Net: stable is preferred
+	// when one exists; otherwise the newest prerelease is found even
+	// if it carries the pre-release flag.
+	const latestUrl = `https://${host}/api/v1/repos/${repo}/releases/latest`;
+	const latestRes = await fetchReleaseJson(latestUrl);
+	if (latestRes.ok) {
+		const body = JSON.parse(latestRes.text) as ForgejoRelease;
 		if (typeof body.tag_name !== 'string') {
 			throw new Error(`Forgejo API response missing tag_name field`);
 		}
 		return body;
-	} finally {
-		clearTimeout(timer);
 	}
+	if (latestRes.status !== 404) {
+		throw new Error(`HTTP ${latestRes.status} from ${latestUrl}`);
+	}
+
+	// No stable release — fall back to the newest release of any kind
+	// (includes prereleases; the beta period lives here).
+	const listUrl = `https://${host}/api/v1/repos/${repo}/releases?limit=1`;
+	const listRes = await fetchReleaseJson(listUrl);
+	if (!listRes.ok) {
+		throw new Error(`HTTP ${listRes.status} from ${listUrl}`);
+	}
+	const list = JSON.parse(listRes.text) as ForgejoRelease[];
+	if (!Array.isArray(list) || list.length === 0) {
+		throw new Error(
+			`No releases found for ${repo} (neither a stable /releases/latest nor any prerelease). ` +
+				`If a release was just published, confirm it is not a draft.`
+		);
+	}
+	const newest = list[0];
+	if (newest === undefined || typeof newest.tag_name !== 'string') {
+		throw new Error(`Forgejo API response missing tag_name field`);
+	}
+	return newest;
 }
 
 async function downloadTo(url: string, dest: string): Promise<void> {

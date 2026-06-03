@@ -310,6 +310,27 @@ scenario('cp187: harden is a standalone subcommand that reuses the shared checkl
 	assertEqual(main.includes("args.subcommand === 'harden'"), true, 'main dispatches harden');
 });
 
+scenario('cp192: install is a guided orchestrator that reuses init/harden and offers a PATH symlink', () => {
+	const i = _src('install.ts');
+	assertEqual(i.includes('export async function runInstall'), true, 'runInstall exported');
+	// Reuses the existing wizard pieces, does not re-implement them.
+	assertEqual(i.includes("from './init.ts'") && i.includes('runInit'), true, 'install reuses runInit');
+	assertEqual(i.includes("from './harden.ts'") && i.includes('runHarden'), true, 'install reuses runHarden');
+	// Preflight checks the real prerequisites.
+	for (const tool of ['node', 'npm', 'psql', 'git']) {
+		assertEqual(new RegExp(`'${tool}`).test(i), true, `install preflight probes ${tool}`);
+	}
+	// Offers the PATH symlink that kills the npx-friction class.
+	assertEqual(i.includes('/usr/local/bin/morphit-ops') && i.includes('symlinkSync'), true, 'install offers PATH symlink');
+	// HONEST BOUNDARY: it must NOT silently run host mutation it can't
+	// validate — it points at the Ansible path / docs when prereqs are
+	// missing rather than installing Node/Postgres itself.
+	assertEqual(i.includes('ops/ansible/') || i.includes('Ansible'), true, 'install points at the Ansible path for OS-level install');
+	// main.ts dispatches it before loadConfig.
+	const main = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'main.ts'), 'utf-8');
+	assertEqual(main.includes("args.subcommand === 'install'"), true, 'main dispatches install');
+});
+
 // ─── Summary ─────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(54)}`);

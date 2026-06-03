@@ -10,6 +10,21 @@ This repository carries the full source for the indexer, relay, frontend, operat
 
 Pre-launch, versioned `v1.0.0-beta.1`. The canonical public instance is **morphit.io**; community operators are welcome to launch their own nodes alongside. There are no production deployments yet — the codebase has been through an intensive multi-month pre-launch hardening campaign documented in `docs/AUDIT-2026-05.md`.
 
+## New here? Start here 👇
+
+If you want to **run a Morphit node** (or upgrade one, or fix
+something), don't read this whole file — go straight to the
+plain-language navigation hub, which tells you exactly which guide
+to open for what you want to do:
+
+> ### 👉 [`docs/start-here/`](docs/start-here/README.md)
+
+The two commands you'll use most, from your install directory:
+`npx morphit-ops` (opens a menu of everything) and
+`npx morphit-ops upgrade` (updates to the latest version). The
+rest of *this* README is a technical overview for people
+evaluating or building the software.
+
 ## What this is, concretely
 
 - **Federated orderbook.** Orders are signed by the user's posting key and broadcast as custom-JSON ops on the underlying chain. Every Morphit indexer in the federation reads the same chain and surfaces the same orderbook.
