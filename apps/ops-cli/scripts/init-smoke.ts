@@ -298,6 +298,15 @@ scenario('writeWizardOutput: morphit.env contains critical-infra keys', () => {
 		// cp193 — these non-allowlisted keys moved here from
 		// morphit.config.env (where they crashed the indexer on boot).
 		assertContains(content, 'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25', 'signup ceiling now in morphit.env');
+		// cp194 — two REQUIRED indexer vars the wizard previously never
+		// wrote, so a wizard-configured indexer failed Zod validation at
+		// boot ("MORPHIT_INDEXER_PUBLIC_ORIGIN: Required" + posting pubkey).
+		assertContains(content, 'MORPHIT_INDEXER_PUBLIC_ORIGIN', 'indexer public origin written');
+		assertContains(
+			content,
+			'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9',
+			'official posting pubkey (network constant) written'
+		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}

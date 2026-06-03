@@ -691,6 +691,41 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_INDEXER_RPC_ENDPOINTS=${quote(answers.blurtRpcEndpoints.join(','))}`);
 	lines.push('');
 
+	// cp194 — two REQUIRED indexer vars the wizard had never written
+	// (the indexer's Zod config marks both required; ops/env/indexer.env.example
+	// and the Ansible template set them, but the wizard path didn't — so a
+	// wizard-configured indexer failed to boot with "MORPHIT_INDEXER_PUBLIC_ORIGIN:
+	// Required / MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY: Required").
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Indexer public origin (REQUIRED)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# The public https:// origin this instance is served at. Used');
+	lines.push('# in the /v1/instance API and CORS. The indexer refuses to');
+	lines.push('# start without it.');
+	if (answers.origin !== null) {
+		lines.push(`MORPHIT_INDEXER_PUBLIC_ORIGIN=${quote(answers.origin, 'parseEnv')}`);
+	} else {
+		// Origin was skipped at the wizard (it's "optional" there) but the
+		// indexer requires it — leave a placeholder the operator MUST fill,
+		// so they get this comment instead of a cryptic boot failure.
+		lines.push('# You skipped the public origin at setup. The indexer will not');
+		lines.push('# start until you set this to your real https:// origin, e.g.:');
+		lines.push('#   MORPHIT_INDEXER_PUBLIC_ORIGIN=https://yourdomain.com');
+		lines.push('MORPHIT_INDEXER_PUBLIC_ORIGIN=');
+	}
+	lines.push('');
+
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Official @morphit posting pubkey (REQUIRED, network constant)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# The public posting key of the canonical @morphit chain account.');
+	lines.push('# This is the SAME for every Morphit instance — it is how the');
+	lines.push('# indexer recognises official network posts. Do not change it');
+	lines.push('# unless you are running a private fork with its own official');
+	lines.push('# account.');
+	lines.push('MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9');
+	lines.push('');
+
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# Fee-verifier explorer URLs (indexer)');
 	lines.push('# ──────────────────────────────────────────────────────');

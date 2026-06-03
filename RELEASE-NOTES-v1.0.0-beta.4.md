@@ -19,6 +19,18 @@ defined`, this release fixes it.
   Added a startup regression test (and a repo-wide guard against
   this whole class of CommonJS-in-ESM bug) so it cannot recur.
 
+- **Setup wizard never wrote two settings the indexer requires.**
+  An instance configured with `morphit-ops init` (rather than the
+  Ansible playbook) was missing `MORPHIT_INDEXER_PUBLIC_ORIGIN` and
+  `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY`, so the indexer refused
+  to start with `config validation failed: ... Required`. The wizard
+  now writes both — the public origin (the same one it already asks
+  you for) and the official `@morphit` posting key (a fixed value,
+  the same for every instance). If you set up via the wizard and your
+  indexer won't start citing these, re-run `npx morphit-ops init` on
+  this release, or add both to your `morphit.env` by hand (see
+  `ops/env/indexer.env.example`).
+
 ## Everything from beta.3 still applies
 
 beta.3 fixed the setup wizard writing two settings into the wrong
