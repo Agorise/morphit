@@ -54,7 +54,7 @@ file (which stopped the indexer from booting with an "operator
 allowlist" error), added the guided `morphit-ops install`, the
 `docs/start-here/` navigation hub, the migrate-to-release-track
 guide, and made `morphit-ops upgrade` discover pre-release-flagged
-releases. See `RELEASE-NOTES-v1.0.0-beta.3.md` for details.
+releases. See `RELEASE-NOTES-v1.0.0-beta.4.md` for details.
 
 ## Upgrading
 
