@@ -299,16 +299,28 @@ describe('makeOrderPermlink', () => {
 		// Privacy invariant: the asset/side/fiat must NOT appear in the
 		// permlink (it leaks into URLs, RSS GUIDs, explorers). They live in
 		// the structured payload only.
-		expect(p).not.toContain('sell');
-		expect(p).not.toContain('btc');
-		expect(p).not.toContain('usd');
+		// cp194 — assert the OPAQUE SHAPE rather than substring-checking
+		// against the random suffix. The permlink is `order-<12 random
+		// chars>` from charset abcdefghjkmnpqrstuvwxyz23456789, which
+		// contains b/t/c/s/e/l/u/d — so a literal `not.toContain('btc')`
+		// etc. flakes ~1 in 750 when the random suffix happens to contain
+		// the token. What we actually require is that the inputs are not
+		// ENCODED: the permlink is exactly `order-` + suffix, nothing else.
+		expect(p).toMatch(/^order-[a-z0-9]{12}$/);
+		// And it must not contain the structured separators the old
+		// `<side>-<asset>-<fiat>` scheme used (a real encoding leak would
+		// show extra hyphen-joined segments).
+		expect(p.split('-')).toHaveLength(2);
 	});
 
 	it('does not leak the asset for a privacy-sensitive asset (XMR)', () => {
 		const p = makeOrderPermlink('buy', 'XMR', 'EUR');
-		expect(p).not.toContain('xmr');
-		expect(p).not.toContain('buy');
-		expect(p).not.toContain('eur');
+		// cp194 — opaque-shape assertion (see the BTC case above). The
+		// permlink must be `order-<12 random chars>` and must NOT encode
+		// side/asset/fiat. Substring checks like not.toContain('eur')
+		// flake because e/u/r are all in the permlink charset.
+		expect(p).toMatch(/^order-[a-z0-9]{12}$/);
+		expect(p.split('-')).toHaveLength(2);
 	});
 
 	it('produces distinct permlinks across calls (random suffix)', () => {
