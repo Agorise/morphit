@@ -21,6 +21,7 @@ fi
 
 SMOKES=(
 	"apps/indexer:block-handler-smoke"
+	"apps/indexer:indexer-config-boot-smoke"
 	"apps/indexer:chat-handler-smoke"
 	"apps/indexer:chat-identity-handler-smoke"
 	"apps/indexer:order-handler-smoke"

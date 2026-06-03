@@ -12,7 +12,7 @@
  * stale without anyone noticing.  cp111 found three real drift
  * cases that motivated this smoke:
  *
- *   1. `RELEASE-NOTES-v1.0.0-beta.3.md` claimed "3,924
+ *   1. `RELEASE-NOTES-v1.0.0-beta.1.md` claimed "3,924
  *      self-checking smoke scenarios" while the actual battery
  *      had moved to 4432.  Not in the brag list itself, but
  *      same class — stale specific number in a marketing-copy

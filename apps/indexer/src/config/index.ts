@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod';
+import { parseRoomAlias } from '@morphit/operator-config';
 
 /**
  * Sentinels that have appeared in this repo's example .env files.
@@ -770,10 +771,12 @@ const envSchema = z.object({
 		.transform((s, ctx) => {
 			const trimmed = s.trim();
 			if (trimmed === '') return null;
-			// Lazy import to avoid circular-dep risk at module load
-			// time.  Reuses the same parser as the wizard + bot.
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const { parseRoomAlias } = require('@morphit/operator-config');
+			// cp194 — parseRoomAlias is statically imported at the top
+			// of this file. It was previously loaded via require() here,
+			// which is undefined under ESM (this file runs under tsx as
+			// ESM): boot crashed with "require is not defined" the moment
+			// an operator set a non-empty MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM
+			// (empty values return above, which is why it hid so long).
 			const parsed = parseRoomAlias(trimmed);
 			if (parsed === null) {
 				ctx.addIssue({

@@ -1,0 +1,52 @@
+# Morphit v1.0.0-beta.4
+
+A small but important fix on top of beta.3: the indexer could fail
+to start on instances that set a Matrix **room** for operator
+alerts. If you are on beta.3 (or earlier) and your indexer starts
+fine, this release is still recommended but not urgent. If your
+indexer crashes at boot with `ReferenceError: require is not
+defined`, this release fixes it.
+
+## Fixed
+
+- **Indexer crashed at startup when `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM`
+  was set.** The config code validated the Matrix room alias using a
+  CommonJS `require()` call, which is undefined in the indexer's
+  ES-module runtime — so boot failed with `ReferenceError: require is
+  not defined` the moment a non-empty room value was present.
+  Instances that left the room unset were unaffected, which is why
+  it surfaced late. The validator now uses a normal module import.
+  Added a startup regression test (and a repo-wide guard against
+  this whole class of CommonJS-in-ESM bug) so it cannot recur.
+
+## Everything from beta.3 still applies
+
+beta.3 fixed the setup wizard writing two settings into the wrong
+file (which stopped the indexer from booting with an "operator
+allowlist" error), added the guided `morphit-ops install`, the
+`docs/start-here/` navigation hub, the migrate-to-release-track
+guide, and made `morphit-ops upgrade` discover pre-release-flagged
+releases. See `RELEASE-NOTES-v1.0.0-beta.3.md` for details.
+
+## Upgrading
+
+- If you installed cleanly from the beta.3 release and your indexer
+  runs, just `npx morphit-ops upgrade` to pick this up (it carries
+  your config and keys forward).
+- If your beta.3 indexer crashed at boot with the `require` error,
+  upgrade to this release and start it again — no config change
+  needed on your side.
+
+## Verify the download
+
+```
+sha256sum -c morphit-v1.0.0-beta.4.tar.gz.sha256
+```
+
+Output must say `OK` before you extract.
+
+## Status
+
+Pre-launch beta. Not yet recommended for production traffic. The
+canonical public instance is morphit.io. Community operators
+welcome — start at `docs/start-here/`.

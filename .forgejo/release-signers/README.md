@@ -44,8 +44,8 @@ git config --global tag.gpgSign true
 
 For every release:
 ```
-git tag -s v1.0.0-beta.3 -m "Morphit v1.0.0-beta.3"
-git push origin v1.0.0-beta.3
+git tag -s v1.0.0-beta.1 -m "Morphit v1.0.0-beta.1"
+git push origin v1.0.0-beta.1
 ```
 
 The CI workflow runs, verifies the tag against this directory, and
