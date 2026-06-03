@@ -70,6 +70,24 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
+	// cp194 — `--check-config`: validate operator-config + the full
+	// relay config schema (including that the active-key file exists
+	// and is shaped correctly), then exit. Runs BEFORE unlockActiveKey
+	// so it NEVER prompts for a passphrase — safe for `morphit-ops
+	// doctor` to call non-interactively. We report whether the key is
+	// an encrypted envelope (so the operator knows the relay will ask
+	// for a passphrase at real start) without decrypting it.
+	if (process.argv.includes('--check-config')) {
+		const encrypted = lockedCfg.relayActiveKeyEnvelope !== undefined;
+		// eslint-disable-next-line no-console
+		console.log(
+			`[check-config] relay config OK (active key: ${
+				encrypted ? 'encrypted — will prompt for passphrase at start' : 'plaintext'
+			})`
+		);
+		process.exit(0);
+	}
+
 	// ADR-0010 §4: if the key file was an encrypted envelope, prompt
 	// for the passphrase on stdin. Plaintext-WIF files (legacy /
 	// dev convenience) skip this step. Either way we get a Config

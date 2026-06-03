@@ -70,6 +70,7 @@ import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
 import { runHarden } from './commands/harden.ts';
 import { runInstall } from './commands/install.ts';
+import { runDoctor } from './commands/doctor.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
@@ -155,6 +156,10 @@ function printHelp(): void {
 		'Subcommands:',
 		'  install                         Guided first-time install (checks prereqs, runs setup, offers',
 		'                                  hardening, and a PATH shortcut). Start here on a fresh box.',
+		'  doctor                          Read-only check: will the indexer + relay start with the',
+		'                                  config on disk? Reports problems in plain English and changes',
+		'                                  nothing. Run this before starting services, or to diagnose a',
+		'                                  node that will not boot.',
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
 		'  edit [--out=PATH]               Re-prompt origin / alt-DNS / SEO of an existing config',
 		'  edit-active-key [--wipe-prior | --keep-backup]',
@@ -438,6 +443,25 @@ async function main(): Promise<number> {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {
 			return await runHarden({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `doctor` is a read-only config preflight: it spawns the indexer
+	// and relay with --check-config and reports whether they will
+	// start. It does NOT need the ops-cli's own DB connection (it
+	// validates the SERVICES' config), so it runs in this pre-DB group
+	// alongside init/install/harden.
+	if (args.subcommand === 'doctor') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runDoctor({
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled

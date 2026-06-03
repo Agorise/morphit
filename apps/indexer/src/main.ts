@@ -89,6 +89,19 @@ async function main(): Promise<void> {
 
 	// ─── 1. Config ──────────────────────────────────────────────
 	const config = loadConfig();
+
+	// cp194 — `--check-config`: validate operator-config + the full
+	// indexer config schema, then exit WITHOUT touching the database,
+	// running migrations, or opening a port. Used by `morphit-ops
+	// doctor` to tell an operator whether the indexer will start,
+	// before they run it. If we reached here, loadOperatorConfig +
+	// loadConfig both succeeded, so the config is bootable.
+	if (process.argv.includes('--check-config')) {
+		// eslint-disable-next-line no-console
+		console.log('[check-config] indexer config OK');
+		process.exit(0);
+	}
+
 	bootLog.info('starting', {
 		listen_host: config.listenHost,
 		listen_port: config.listenPort,
