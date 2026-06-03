@@ -24,7 +24,7 @@
 
 **cp184:** Fixed two misleading outputs in the `morphit-ops register` success screen that a sysadmin hit (the op landed on-chain fine — confirmed on the explorer — but the reporting was wrong), reworded the key-verification guidance to be concrete, and reviewed a newly-published vitest CVE. (1) **`Block: undefined`** — the code printed `result.block_num`, but blurtd's async `broadcast_transaction` returns no block (dblurt's `TransactionConfirmation` is `{ id, …errorFields }`; `block_num` exists only on the signed-tx input). Dropped it; replaced with an async-confirm note. (2) **Leaked `Didn't failover for error message: [HTTP 429]`** — that's an unconditional `console.error` *inside* dblurt (not gated by `consoleOnFailover`); dblurt only fails over internally on timeout/node-down errors, so a 429 makes it throw and *our* endpoint loop does the real hop and succeeds. It was internal noise on a recovered path — now buffered and surfaced only if every endpoint fails. (Confirms the operator's own theory: a slow/down/rate-limited RPC during the wizard is now invisible because the loop hops transparently.) Factored the broadcast loop into a shared `broadcastCustomJson` in `chainErrors.ts` and wired both `register.ts` and `paymentMethod.ts` to it (the same "Posted in block undefined" bug was in paymentMethod's add+remove flows); deleted both private copies. (3) **Active-Auth reword** — the verify text now names the **"Active Auth"** field and gives the exact URL `https://blocks.blurtwallet.com/#/@<account>`, across the register prompt, `show-key` (was pointing at a different explorer), and RUN-A ×2; OPERATIONS already matched. (4) **vitest CVE** — the sweep's `npm-audit-gate` flagged a new CRITICAL ("Vitest UI server … arbitrary file read/exec"); verified it's a dev-only dep with the UI server never used here (no `--ui`, no `@vitest/ui`), added a reviewed allowlist entry rather than silently suppressing. Operator-flow plumbing + a dev-dep advisory → not the brag list; no locale work. Verified: 8/8 typecheck, register-diagnostics 46/46, ops-cli 35/35, compiled-bundle 7/7, fenced-path 247/247, npm-audit-gate 4/4, full sweep 264 PASS / 0 FAIL (+ the 2 slow meta-runners). Detail: `docs/REVISIT-LIST.md` cp184 section.
 
-**cp183:** README.md full accuracy pass (Ken flagged drift on the stranger-facing front door). Audited every falsifiable claim against the repo; fixed six, all doc-only: (1) the apps enumeration omitted **mcp-server** → added it; (2) "Approaching `v1.0.0-beta.1` (~2026-05-22)" was stale (package.json is already at that version and the date passed) → "Pre-launch, versioned `v1.0.0-beta.1`."; (3) the `apps/relay/` row said the relay holds its **posting** key — it holds the **active** key (the cp171 posting→active rename had missed this README row); (4) the `ops/` row claimed "nginx/**Caddy** snippets" but no Caddy file ships → "nginx + BunkerWeb configs"; (5) the smoke self-check count had drifted to "~150 runners" while run-smokes.sh registers **266** → "~266"; (6) the privacy bullet called the chain list "every **transparent** chain … XMR" → dropped "transparent" (XMR is the privacy chain). Verified accurate and left unchanged: the 7-package list, the ADR range "through 0046", the version string, the "§16 of the form" reference, and all 17 referenced paths. Verified after the edits: fenced-path 247/247, wizard-step-count-parity 8/8, version-consistency 18/18, source-marketing-prose 4/4, brag-list-claim-parity 79/79, package-files-exist 3/3. No code, no brag-list, no locale, no mediakit. Detail: `docs/REVISIT-LIST.md` cp183 section.
+**cp183:** README.md full accuracy pass (Ken flagged drift on the stranger-facing front door). Audited every falsifiable claim against the repo; fixed six, all doc-only: (1) the apps enumeration omitted **mcp-server** → added it; (2) "Approaching `v1.0.0-beta.3` (~2026-05-22)" was stale (package.json is already at that version and the date passed) → "Pre-launch, versioned `v1.0.0-beta.3`."; (3) the `apps/relay/` row said the relay holds its **posting** key — it holds the **active** key (the cp171 posting→active rename had missed this README row); (4) the `ops/` row claimed "nginx/**Caddy** snippets" but no Caddy file ships → "nginx + BunkerWeb configs"; (5) the smoke self-check count had drifted to "~150 runners" while run-smokes.sh registers **266** → "~266"; (6) the privacy bullet called the chain list "every **transparent** chain … XMR" → dropped "transparent" (XMR is the privacy chain). Verified accurate and left unchanged: the 7-package list, the ADR range "through 0046", the version string, the "§16 of the form" reference, and all 17 referenced paths. Verified after the edits: fenced-path 247/247, wizard-step-count-parity 8/8, version-consistency 18/18, source-marketing-prose 4/4, brag-list-claim-parity 79/79, package-files-exist 3/3. No code, no brag-list, no locale, no mediakit. Detail: `docs/REVISIT-LIST.md` cp183 section.
 
 **cp182:** Josie sysadmin walkthrough — the standing persona set is now Bob/Sally/Charlie/**Josie**, and his walkthrough of the ops-cli `init` wizard + the two operator docs was the audit vehicle. Fixed real sysadmin-blocking wizard bugs: a dead `docs/OPERATOR-RUN-BOOK.md` the next-steps told operators to read (3×) → real docs; `npm run preview` masquerading as a production serve → "build static `apps/web/build`, serve via nginx/Caddy/BunkerWeb"; a dead `morphit ops doctor` command + 8 wrong `morphit ops X` invocations → `morphit-ops X` (the actual bin); wrong section anchors (BunkerWeb §10c→§11, MCP §41→§45); and a "9 questions" greeting for a 20-step wizard → now derived from an exported `TOTAL_STEPS` so it can't drift. Reframed Matrix from opt-in to **default-on** (matching MCP) and added the missing sidecar setup steps (it reads its own `/etc/morphit/matrix-bot.env` with homeserver + bot token). Added the **BunkerWeb wizard step** (step 21; wires `MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16` only on opt-in, so no spoofable phantom-proxy range) and the **hardening step** (step 22) the operator asked for: it explains each item tailored to the BunkerWeb-vs-nginx choice, leads with SSH-lockout safety, and generates a personalized `morphit-hardening-checklist.md` sequencing the shipped Ansible/nginx/TLS/monitor artifacts — doing the assembly *for* the admin without duplicating the Ansible hardening role. `TOTAL_STEPS` 20→22 cascaded through all parity-tracked docs, the §8.0 enumeration, the JSDoc, and every count sentinel. Caught + fixed two self-introduced regressions via the full sweep (the `disabled-assets` literal sentinel; `init-smoke` fixtures missing the new `bunkerWeb`/`hardening` fields — 27 scenarios, added 6 new behavioural ones). Josie sentinels Jo-1..Jo-6b lock it all against regression. Operator plumbing → not the brag list; ops-cli prompts are operator-English so no locale work. Verified: 8/8 typecheck, parity 8/8, init-smoke 49/49, disabled-assets 22/22, persona-walkthrough 177/177, full sweep 264 PASS / 0 FAIL (+ the 2 slow meta-runners: workspace-typecheck verified 8/8, vitest env-blocked = 265/266). Detail: `docs/REVISIT-LIST.md` cp182 section.
 
@@ -607,7 +607,7 @@ The 16 supported-asset frontend "view on explorer" links in `apps/web/src/lib/ex
 - **Canonical counts:** 16 tradable assets · 10 supported locales · 45 active ADRs · 327+ brag-list entries · 3097 i18n keys/locale.
 - **Blurt casing convention:** "Blurt" = chain/brand; "BLURT" = currency-unit ticker (like BTC/ETH) in code (`ASSET_TICKERS`) + UI ticker contexts. FAQ/brag/comparison content surfaces use "Blurt" in prose (cp163 Ken directive), preserving "BLURT" only inside ticker-enumeration lists.
 - **Working dir:** `/home/claude/morphit/morphit/`
-- **v1.0.0-beta.1 published** 2026-05-25 (cp139); cp140–cp164 will ship in the next beta release.
+- **v1.0.0-beta.3 published** 2026-05-25 (cp139); cp140–cp164 will ship in the next beta release.
 - **ops-cli build:** compiles to self-contained `dist/main.js` (esbuild); `bin` is a launcher shim (compiled-when-present, tsx-fallback). `dist/` gitignored, built on install.
 - **cp146 lens audit:** COMPLETE (cp160).  **cp161/cp162** closed the operator install-fragility class.  **cp163** content pass.  **cp164** four-persona walkthrough + themed deep-deeps (view-key, internal-host-leak) — clean across both, two manual-install doc footguns caught + fixed.  Remaining pre-launch: deployment-gated cp138 items #95-104 + A1/A14 cp113 items needing Ken's scope clarification.
 - **Permanently rejected brag claims (cp163):** TEE-attested (no enclave) + anonymous-LLM-proxy (not Morphit's category) — do not add.
@@ -1530,7 +1530,7 @@ Audited 7 TS source files (~1230 LOC) + README + package.json + tsconfig + ADR-0
 
 - **F30** (real packaging defect): `package.json:files` listed `LICENSE` but no `LICENSE` file existed → `npm publish` would silently ship the tarball without a license, leaving npmjs.com showing "No license."  Fixed by adding `apps/mcp-server/LICENSE` (copy of root AGPL-3.0).
 - **F2 + F3** (LOW SEC): `indexerClient.fetchJson` had two SSRF-adjacent gaps.  (a) Error messages echoed the full URL including userinfo, so `https://user:pass@morphit.io/` would leak creds into chat transcripts.  (b) Default `redirect: 'follow'` allowed a malicious instance to redirect to internal addresses.  Fixed: added `redactUserinfo()` helper (clears `.username`/`.password` then `.toString()`), set `redirect: 'manual'`, and added the opaqueredirect-detection branch with a clear "unexpected redirect from {url}" message.
-- **F4** (INFO): Hardcoded `User-Agent: morphit-mcp/1.0.0-beta.1` replaced with version read from `package.json` via `createRequire` — version never drifts on bump.
+- **F4** (INFO): Hardcoded `User-Agent: morphit-mcp/1.0.0-beta.3` replaced with version read from `package.json` via `createRequire` — version never drifts on bump.
 - **F6 + F13 + F17** (LOW): 3 places in 3 different tools (`searchOrders`, `getListing`, `describeMorphit`) read `process.env.MORPHIT_MCP_INSTANCE_URL` directly, bypassing `getInstanceUrl()`'s scheme validation and trailing-slash normalization.  All consolidated to call `getInstanceUrl()`.
 - **F12** (LOW SEC, defense in depth): `getListing` deeplink was built via raw string concat (`${base}/en/@${account}/${permlink}`).  Zod regexes already constrain inputs, but the URL builder is the structural defense.  Now uses `new URL(...)`.
 - **F16** (LOW privacy/copy): `describeMorphit` summary said "no IP logging by design" — could read as "no IP visible" which is misleading.  Tightened to "Instance operators see the connecting IP at the HTTP layer; Morphit's data model retains no per-user IP log of its own, and instances expose Tor onions for users who want IP-level unlinkability."  AI agent will repeat this verbatim to users; matters for the #1 Privacy & anonymity priority.
@@ -1623,7 +1623,7 @@ Discovered when Ken sent the failing typecheck task #421 log directly.  The rele
 ```
 npm error code EUSAGE
 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync.
-npm error Missing: morphit-mcp@1.0.0-beta.1 from lock file
+npm error Missing: morphit-mcp@1.0.0-beta.3 from lock file
 npm error Missing: @modelcontextprotocol/sdk@1.29.0 from lock file
 ... (30+ more missing packages)
 ```
@@ -1632,14 +1632,14 @@ Empirical confirmation of which lockfile was stale: the cp141 tarball's `package
 
 Fixes shipped:
 
-1. **`package-lock.json` regenerated** in the working tree (and present in the cp144 tarball).  Adds entries for `apps/mcp-server` workspace, `morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, and ~30 transitive dependencies.  Lockfile size goes 308 KB → 327 KB (+19 KB).
+1. **`package-lock.json` regenerated** in the working tree (and present in the cp144 tarball).  Adds entries for `apps/mcp-server` workspace, `morphit-mcp@1.0.0-beta.3`, `@modelcontextprotocol/sdk@1.29.0`, and ~30 transitive dependencies.  Lockfile size goes 308 KB → 327 KB (+19 KB).
 
 2. **`scripts/lockfile-sync-smoke.ts`** (NEW, ~190 lines) — runs `npm ci --dry-run --no-audit --no-fund --prefer-offline` against the working tree and asserts exit-zero.  Three scenarios:
    - **Scenario 1 (authoritative):** npm ci dry-run succeeds → lockfile in sync.  This IS the exact CI invocation that catches the drift, so the smoke speaks the CI's own language.
    - **Scenario 2 (precondition):** package-lock.json exists at repo root and parses as valid npm schema with a recognized lockfileVersion.
    - **Scenario 3 (fast offline cross-check):** every workspace declared in root package.json appears in package-lock.json's `packages` map.  This catches the cp140 specific class even without network access — names the missing workspace by path.
 
-   On failure, the smoke emits a class-of-bug message with the fix command: "run `npm install --package-lock-only` from repo root, commit the updated package-lock.json, and push."  Tamper-tested by re-staging the cp141 stale lockfile: smoke correctly identifies missing packages (`morphit-mcp@1.0.0-beta.1`, `@modelcontextprotocol/sdk@1.29.0`, …) AND missing workspace (`apps/mcp-server`).  Restored, all 3 scenarios pass.
+   On failure, the smoke emits a class-of-bug message with the fix command: "run `npm install --package-lock-only` from repo root, commit the updated package-lock.json, and push."  Tamper-tested by re-staging the cp141 stale lockfile: smoke correctly identifies missing packages (`morphit-mcp@1.0.0-beta.3`, `@modelcontextprotocol/sdk@1.29.0`, …) AND missing workspace (`apps/mcp-server`).  Restored, all 3 scenarios pass.
 
 3. **`scripts/run-smokes.sh`** — `.:lockfile-sync-smoke` registered as the 236th entry.
 
@@ -1701,7 +1701,7 @@ Translator UX confirmed already excellent: `i18n-translator-diff.ts` produces pe
 
 **cp140 (2026-05-26, this session):** `morphit-mcp` shipped — new workspace `apps/mcp-server/` exposing the federated orderbook to MCP-compatible AI agents (Claude Desktop, Cline, Cursor, Continue, Windsurf, Zed, local-LLM stacks). 5 read-only tools, deeplink-handoff posture preserves zero-KYC + non-custodial. ADR-0044, brag #99, 8-scenario `mcp-server-smoke.ts`, integration recipes in `apps/mcp-server/README.md`. Comparison-table corrections + 1 new row for MCP also shipped in this checkpoint.
 
-**cp139 (2026-05-25, prior session):** v1.0.0-beta.1 release published. 5 CI bugs fixed during release publish (annotated-tag restore, tar-self-read excludes, mktemp staging, actions/upload-artifact downgrade, Forgejo zip-wrapping). 94-task workspace-by-workspace audit closed with 32 findings shipped.
+**cp139 (2026-05-25, prior session):** v1.0.0-beta.3 release published. 5 CI bugs fixed during release publish (annotated-tag restore, tar-self-read excludes, mktemp staging, actions/upload-artifact downgrade, Forgejo zip-wrapping). 94-task workspace-by-workspace audit closed with 32 findings shipped.
 
 ### What's NOT in the repo (intentionally)
 
@@ -2189,7 +2189,7 @@ cp130 scope: item #5 only. Items #6 and #2 retired; item #3 collapsed.
 
 - `MORPHIT-BRAG-LIST.md` — new brag entry #91 in §4 (decentralization) framing multi-asset self-sovereign pricing; entry #147 ADR count 40 → 41; ADR-range descriptor 0001-0041 → 0001-0042; trailer ADR range updated; STACCATO_ALLOWLIST shifted +1 (cp129's [3,12,195,204] → cp130's [3,12,196,205]); sequential renumber 317 → 318 entries.
 
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — ADR count + range updated.
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — ADR count + range updated.
 
 - `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — appended cp130 note (mostly invisible to grandma but unlocks future UI; what grandma might one day see; deliberately-NOT-doing list including the retired items #2 and #6).
 
@@ -2268,7 +2268,7 @@ cp129 ships items #1 + #4.
 
 - `MORPHIT-BRAG-LIST.md` — new brag entry #90 in §4 (decentralization) framing Defense F as closing cp127's 8-defense black-hat table; entry #146 ADR count 39 → 40; ADR-range descriptor 0001-0040 → 0001-0041; trailer ADR range updated; STACCATO_ALLOWLIST shifted +1 (cp128's `[3,12,194,203]` → cp129's `[3,12,195,204]`); sequential renumber 316 → 317 entries
 
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — ADR count + range updated
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — ADR count + range updated
 
 - `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — appended cp129 note (T2/T3 backlog: /v1/health surface for alert state, weighted peer median, Tor/I2P/Lokinet peer-query support; deliberately-NOT-doing list)
 
@@ -2357,7 +2357,7 @@ Brag list:
 - STACCATO_ALLOWLIST corrected to `['3', '12', '194', '203']` (the §4 insert at position 89 shifted old #193 → #194 and old #202 → #203)
 - Entry #145 ADR count updated 38 → 39; ADR-range descriptor 0001-0039 → 0001-0040; new ADR-0040 entry added to topic list
 - Trailer ADR range updated to 0001-0040
-- `RELEASE-NOTES-v1.0.0-beta.1.md` ADR count + range updated
+- `RELEASE-NOTES-v1.0.0-beta.3.md` ADR count + range updated
 
 Mediakit rebuilt with cp128 brag list (316 entries, 44871 bytes).
 
@@ -2542,7 +2542,7 @@ Result: tiered anchor architecture with USD-direct primary + stablecoin suppleme
 - D-13: Final battery 5,373/0/0/0 quadruple-pulse stable
 
 **Mid-stream fixes:**
-- Stale `36 ADRs` references in MORPHIT-BRAG-LIST.md (trailer + entry #142) and RELEASE-NOTES-v1.0.0-beta.1.md (both spots) — fixed via sed + str_replace
+- Stale `36 ADRs` references in MORPHIT-BRAG-LIST.md (trailer + entry #142) and RELEASE-NOTES-v1.0.0-beta.3.md (both spots) — fixed via sed + str_replace
 - Mediakit rebuilt after each round of brag-list edits
 - STACCATO_ALLOWLIST in `apps/web/scripts/brag-list-kiss-budget-smoke.ts` updated for the 4-entry renumber (#186→#190, #195→#199)
 
@@ -2671,7 +2671,7 @@ Result: tiered anchor architecture with USD-direct primary + stablecoin suppleme
 - D-13: triple-pulse battery 5,349/0/0/0 stable
 
 **Mid-stream fixes:**
-- 2 stale `35 ADRs`/`35 architecture decision records` references in MORPHIT-BRAG-LIST.md + RELEASE-NOTES-v1.0.0-beta.1.md — fixed via sed + manual str_replace for the long-form text
+- 2 stale `35 ADRs`/`35 architecture decision records` references in MORPHIT-BRAG-LIST.md + RELEASE-NOTES-v1.0.0-beta.3.md — fixed via sed + manual str_replace for the long-form text
 - Mediakit re-rebuilt after the 35→36 ADR text fix touched the brag list
 
 **Translation-quality flag (cp120-cp122 totals):** cp120 +30 strings (cash rename + by_mail category × 10), cp121 +590 strings (modal + pill keys × 10), cp122 +20 strings (FAQ q+a × 10) — 640 new auto-translated strings across 9 non-EN locales added in cp120-cp122. Cumulative cp108-cp122: ~1,231 strings awaiting native-speaker polish.
@@ -3309,10 +3309,10 @@ Possible SEO follow-ups for a future checkpoint (not blocking launch):
 Five tasks Ken queued, all closed end-to-end:
 
 1. **CI explicitness — new `web-check` job** in `.forgejo/workflows/ci.yml`. Runs `npx svelte-kit sync` then `npx svelte-check --tsconfig ./tsconfig.json --threshold error` against apps/web directly. The same protection has been in CI since Part 70 via `workspace-typecheck-smoke` (which `bash scripts/run-smokes.sh` invokes inside the `smokes` job), but it was indirect — a reader of `ci.yml` couldn't tell `svelte-kit sync` ran without spelunking into the smoke. Now it's a named job. The smoke is retained as defense-in-depth and for local runs.
-2. **`RELEASE-NOTES-v1.0.0-beta.1.md` line 197** — was "**3,924 self-checking smoke scenarios**" (stale; current count 4,432 pre-cp111, 4,513 post). Rewritten to "**Several thousand self-checking smoke scenarios** ship with the source — the exact count grows release-over-release as defenses are added." No fixed number to drift.
+2. **`RELEASE-NOTES-v1.0.0-beta.3.md` line 197** — was "**3,924 self-checking smoke scenarios**" (stale; current count 4,432 pre-cp111, 4,513 post). Rewritten to "**Several thousand self-checking smoke scenarios** ship with the source — the exact count grows release-over-release as defenses are added." No fixed number to drift.
 3. **`docs/AUDIT-2026-05-FINAL-REPORT.md` §147–150** — claimed "CI runs `npm run check` which invokes svelte-kit sync + svelte-check + tsc across all workspaces." That literal command doesn't appear in any workflow. Rewritten to describe the actual wiring (smoke-based since Part 70, explicit `web-check` job added cp111).
 4. **`TARBALL.md` handoff section** — listed 5 "standing pre-launch operator-actions still open." Three were closed long ago (the `CHANGE_ME` placeholder is denylisted, `package-lock.json` is committed, the CI typecheck is wired). Trimmed to the 2 genuinely open items (FAQ translation polish + persona walk-through) with a note explaining what the 3 closed items actually look like in the current code, so a fresh chat session doesn't burn cycles "fixing" things that are already fixed.
-5. **New structural defense #38 — `scripts/brag-list-claim-parity-smoke.ts`** — walks the three "marketing-class" docs (`MORPHIT-BRAG-LIST.md`, `README.md`, `RELEASE-NOTES-v1.0.0-beta.1.md`) checking 7 classes of claim against canonical source-of-truth:
+5. **New structural defense #38 — `scripts/brag-list-claim-parity-smoke.ts`** — walks the three "marketing-class" docs (`MORPHIT-BRAG-LIST.md`, `README.md`, `RELEASE-NOTES-v1.0.0-beta.3.md`) checking 7 classes of claim against canonical source-of-truth:
     - **A.** Every backtick-quoted file path under `scripts/|apps/|ops/|packages/|docs/` must resolve on disk
     - **B.** Every backtick-quoted `morphit_<name>_v<N>` op ID must appear in `apps/indexer/src`, `apps/relay/src`, or `apps/web/src/lib`
     - **C.** Every backtick-quoted `MORPHIT_<NAME>` env-var (with optional `=value` suffix) must appear in code or ops configs
@@ -3339,7 +3339,7 @@ Five tasks Ken queued, all closed end-to-end:
 | `tsx scripts/brag-list-claim-parity-smoke.ts` | ✓ 81/81 PASS |
 | 7 deliberate mutations introduced → smoke fails with clean message → restore → green | ✓ all 7 caught |
 | `.forgejo/workflows/ci.yml` parses as valid YAML, 4 jobs (typecheck/web-check/ansible-lint/smokes) | ✓ verified |
-| `RELEASE-NOTES-v1.0.0-beta.1.md` no longer contains the literal "3,924" | ✓ confirmed |
+| `RELEASE-NOTES-v1.0.0-beta.3.md` no longer contains the literal "3,924" | ✓ confirmed |
 | `docs/AUDIT-2026-05-FINAL-REPORT.md` no longer claims `npm run check` | ✓ confirmed |
 | `TARBALL.md` handoff lists 2 open items (not 5) | ✓ confirmed |
 | Brag list state (304 entries, footer matches, 16 assets, 10 locales, 35 ADRs) | ✓ smoke confirms all anchors |
@@ -3349,7 +3349,7 @@ Five tasks Ken queued, all closed end-to-end:
 - `scripts/brag-list-claim-parity-smoke.ts` (new, 633 lines incl. ~100-line docstring) — the smoke
 - `scripts/run-smokes.sh` — added `.:brag-list-claim-parity-smoke` to SMOKES array
 - `.forgejo/workflows/ci.yml` — added `web-check` job between `typecheck` and `ansible-lint`; header comment updated from "Three gates" to "Four gates"
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — line 197 rewritten ("3,924" → "Several thousand")
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — line 197 rewritten ("3,924" → "Several thousand")
 - `docs/AUDIT-2026-05-FINAL-REPORT.md` §147–150 — corrected wiring description
 - `TARBALL.md` — handoff section trimmed (5 → 2 open items + explanation of 3 closed); cp111 entry inserted above (this entry)
 - `docs/REVISIT-LIST.md` — cp111 header
@@ -4910,7 +4910,7 @@ Total: 5,266 lines walked, 1 finding (cp85-A1), 0 outstanding.
 | Check | Result | Note |
 |---|---|---|
 | `npx tsx scripts/release-notes-asset-count-parity-smoke.ts` | 3/3 pass | Defense #36 green |
-| Defense #36 trial-by-fire (reintroduce "Seven tradable assets") | trips correctly | flags RELEASE-NOTES-v1.0.0-beta.1.md with `Seven` vs registry `sixteen` |
+| Defense #36 trial-by-fire (reintroduce "Seven tradable assets") | trips correctly | flags RELEASE-NOTES-v1.0.0-beta.3.md with `Seven` vs registry `sixteen` |
 | `npx tsx scripts/now-in-handler-sql-smoke.ts` | 17/17 pass | Defense #37 green (one scenario per handler file) |
 | Defense #37 trial-by-fire (reintroduce cp85-A1 `NOW()` in featureBid.ts) | trips correctly | flags `apps/indexer/src/indexer/handlers/featureBid.ts:350` with fix suggestion |
 | `bash scripts/typecheck-sweep.sh` | 7/7 clean | LL #52 40th consecutive HW-verified post-cp85-A1 fix |
@@ -5069,10 +5069,10 @@ Part 85's fix was scoped to the smoke that surfaced the bug.  At fix time it did
 
 ### Front 7 — RELEASE-NOTES + locale FAQ drift fixes (cp84-A1..A7 + cp84-L1..L4)
 
-`RELEASE-NOTES-v1.0.0-beta.1.md` carried "Seven tradable assets" through 9 asset additions (ADRs 0028-0036).  Symptom: reader of the tagged repo sees a 7-asset claim contradicted by the asset registry's 16 entries.  Same class also affected `plan.phase_1_body` across all 10 locales ("seven languages" claim vs. 10 SUPPORTED_LOCALES) and 4 FAQ entries (`where_to_buy_blurt.a`, `blurt_benefits.a`, `welcome_bonus.a`, `why_usdt_warning.a`) all containing 9-asset enumerations.
+`RELEASE-NOTES-v1.0.0-beta.3.md` carried "Seven tradable assets" through 9 asset additions (ADRs 0028-0036).  Symptom: reader of the tagged repo sees a 7-asset claim contradicted by the asset registry's 16 entries.  Same class also affected `plan.phase_1_body` across all 10 locales ("seven languages" claim vs. 10 SUPPORTED_LOCALES) and 4 FAQ entries (`where_to_buy_blurt.a`, `blurt_benefits.a`, `welcome_bonus.a`, `why_usdt_warning.a`) all containing 9-asset enumerations.
 
 Closed via:
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — 5 sections rewritten (intro, Trading bullet, setup-wizard list, privacy framework, Audit & Integrity)
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — 5 sections rewritten (intro, Trading bullet, setup-wizard list, privacy framework, Audit & Integrity)
 - `docs/adr/0026-transparent-chain-privacy-framework.md` — cp84 forward-note
 - `docs/adr/0027-dash-trade-only-addition.md` — cp84 forward-note
 - 10 locales × 4 FAQ entries + plan.phase_1_body = 60 surgical replacements with native count words (sixteen / dieciséis / seize / sechzehn / sedici / szesnastu / шестнадцати / شانزده / 十六)
@@ -5140,7 +5140,7 @@ Modified files:
 - `docs/API.md` — schema-v26.sql → schema.sql
 - `docs/FORGEJO-RUNNER-STANDUP.md` — 3 stale-pointer fixes (RELEASE-CEREMONY.md ×2, MIRROR-LIST.md)
 - `docs/REVISIT-LIST.md` — cp84 lessons + state table + fix enumeration + carryover closures
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — 5 sections rewritten for 16-asset state
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — 5 sections rewritten for 16-asset state
 - `docs/adr/0026-...md` — cp84 forward-note
 - `docs/adr/0027-...md` — cp84 forward-note
 - `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` — 60 surgical FAQ + plan body edits per locale
@@ -5241,9 +5241,9 @@ For future structural-deletion checkpoints, cp83 reinforces Memory #30 in the RE
 
 ### Forgejo runners ACTIVE — major operational milestone
 
-Until cp82, the v1.0.0-beta.1 release ceremony had Forgejo runner standup as a documented-but-unverified step.  Ken's cp82 push made them active.  cp83's CI-failure batch is the FIRST real signal from the runner pipeline.  Every push from cp83 forward gets automatic regression detection at Forgejo level.
+Until cp82, the v1.0.0-beta.3 release ceremony had Forgejo runner standup as a documented-but-unverified step.  Ken's cp82 push made them active.  cp83's CI-failure batch is the FIRST real signal from the runner pipeline.  Every push from cp83 forward gets automatic regression detection at Forgejo level.
 
-The blocker list for v1.0.0-beta.1 narrows to one: live Ansible deploy on the actual VPS (Ken's sysadmin starting now).
+The blocker list for v1.0.0-beta.3 narrows to one: live Ansible deploy on the actual VPS (Ken's sysadmin starting now).
 
 ### Verification commands (cp84 fresh-session pickup)
 
@@ -10084,7 +10084,7 @@ These were unit test failures pre-existing on cp61→cp69. The smoke battery (39
 **Item #7 (Forgejo runner standup):**
 - Authored `docs/FORGEJO-RUNNER-STANDUP.md` — full operator runbook
 - Covers: threat model, prerequisites, registration, install, configuration, systemd unit, smoke-test workflow, troubleshooting
-- Hardware-blocked (needs an actual VPS to execute), but the runbook is now ready; maintainer can execute when hardware available, unblocking v1.0.0-beta.1 release ceremony steps 8/9/10
+- Hardware-blocked (needs an actual VPS to execute), but the runbook is now ready; maintainer can execute when hardware available, unblocking v1.0.0-beta.3 release ceremony steps 8/9/10
 
 ### Structural defenses — now 20 operational (was 18)
 
@@ -11962,7 +11962,7 @@ CP41 STATE METRICS:
 - **Native-translation snapshot: 22,900 pairs** (was 22,885; +15 from ARRR native pairs).
 - **STRIDE matrix: 1,800 lines** (was 1,770; +30 from cp41 rows + LL #50).
 - **Schema head: v33** (unchanged — `asset TEXT NOT NULL` accepts ARRR without migration).
-- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 CP41 PATTERN LESSON:
 
@@ -12062,7 +12062,7 @@ CP40 STATE METRICS:
 - Mediakit: 42,550 bytes (unchanged — no brag-list change in cp40).
 - **Native-translation snapshot: 22,885 native pairs** (was 22,879; +6 from cp40 shielded-pools × 4 native locales en/es/fr/de minus the 4 EN-vs-EN baseline = net +6 new native pairs in es/fr/de/EN-baseline; actually +6 represents 2 new keys × 3 non-EN native locales).
 - Schema head: v33 (unchanged).
-- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 CP40 PATTERN LESSON:
 
@@ -12161,7 +12161,7 @@ CP39 STATE METRICS:
 - **Native-translation snapshot: 22,879 pairs** (was 22,861; +18 from new ZEC native pairs in es/fr/de).
 - **STRIDE matrix: 1,770 lines** (was 1,741; +29 lines from cp39 rows + LL #48).
 - **Schema head: v33** (unchanged).
-- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- **Two parked external-blockers unchanged**: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 CP39 PATTERN LESSONS:
 
@@ -12228,7 +12228,7 @@ CP38 STATE METRICS:
 - Pre-existing chronic failures unchanged (i18n-translation-completeness 1,150 EN-fallback debt; sally-walkthrough L13 XMR-jitter; i18n-formatters needs npm install).
 - Native-translation snapshot: 22,861 pairs (unchanged data; meta-field text reconciled).
 - Mediakit: 41,865 bytes (unchanged).
-- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 CP38 TOTALS:
 
@@ -12300,7 +12300,7 @@ CP37 STATE METRICS:
 - Smoke runners: 154 → 155 (+1 from native-translations-floor-smoke).
 - Native-translation snapshot: 22,861 (key, locale) pairs across 9 non-EN locales (~93% native coverage).
 - Mediakit: 41,865 bytes (unchanged — brag list unchanged); mediakit-freshness smoke 6/6 PASS.
-- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 ### CP36 history (sealed 2026-05-19; preserved below for archaeology):
 
@@ -12321,7 +12321,7 @@ CP36 FINDINGS BY CATEGORY:
 
 **Bob-walk (chat + order flows for multi-network assets):**
 
-- **Bob-1 (HIGH/CRITICAL)**: `AddressShareModal.svelte` tablist had 9 tabs (BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH/DOGE) and silently omitted the DAI tab.  Every other DAI hook (validator, placeholder, invalid-msg dispatch, picker block, payload field) was correctly wired since cp31 — only the user-facing tab button was missing.  `selectMethod('dai')` was never called from any onclick; DAI was unreachable through this modal UI.  Cp31 sibling-route miss class.  Pre-launch user-impact zero (Memory #6); v1.0.0-beta.1 ship-blocker.  Fixed by inserting the DAI tab between USDC and BCH.
+- **Bob-1 (HIGH/CRITICAL)**: `AddressShareModal.svelte` tablist had 9 tabs (BTC/XMR/BLURT/USDT/USDC/BCH/LTC/DASH/DOGE) and silently omitted the DAI tab.  Every other DAI hook (validator, placeholder, invalid-msg dispatch, picker block, payload field) was correctly wired since cp31 — only the user-facing tab button was missing.  `selectMethod('dai')` was never called from any onclick; DAI was unreachable through this modal UI.  Cp31 sibling-route miss class.  Pre-launch user-impact zero (Memory #6); v1.0.0-beta.3 ship-blocker.  Fixed by inserting the DAI tab between USDC and BCH.
 - **Bob-2 (HIGH)**: `FundsSentModal.svelte` had the identical bug.  9 tabs, no DAI tab.  Could be reached via `initialMethod='dai'` from a pinned address pill, but couldn't switch into/out of DAI through the tablist.  Fixed same way as Bob-1.
 - **Bob-3 (HIGH/CRITICAL)**: `/post/edit/[permlink]/+page.svelte` had ZERO multi-network wiring.  No UsdtNetworkPicker / UsdcNetworkPicker / DaiNetworkPicker imports, no usdtNetwork / usdcNetwork / daiNetwork state, no `assetNetwork` field in the OrderFormInput built at the broadcast call site.  Indexer's `orderReplace.ts:217-243` REQUIRES asset_network on USDT/USDC/DAI replaces — so editing one of those orders broadcast a payload that gets rejected with `asset_network_required_for_<asset>`.  Same severity as cp34's I-1 (cp34 closed /post but the sibling /post/edit was never walked at the same time).  Fixed: imports + state + load-hydration from `order.asset_network` with defensive typeguards + asset-change reset + canSave gate + 3 picker mounts + `assetNetwork` branch on OrderFormInput.
 - **Bob-4 (HIGH)**: 2-site fix.  `/my/orders` `relistOrder` built a prefill payload without `o.asset_network`; `/post` prefill consumer's Partial type didn't declare `assetNetwork` and didn't hydrate it.  Relisting a USDT/USDC/DAI order landed on /post with empty network picker.  Smaller UX hit than Bob-3 (works after re-pick) but same drift class.  Fixed both sites: relistOrder includes `assetNetwork: o.asset_network ?? null`; /post Partial type extended; /post hydrates the matching picker via isUsdtNetwork / isUsdcNetwork / isDaiNetwork typeguards.
@@ -12382,7 +12382,7 @@ CP36 STATE METRICS:
 - Two new smokes verified PASS against cp36 tree AND FAIL against cp35 tree.
 - Full-suite via run-smokes.sh: 2,660 standalone scenarios pass; 34 runners blocked by sandbox npm-install limitation (operator fix is `npm install`, not a code regression — exactly the case documented in PRE-LAUNCH-CHECKLIST.md L322-334).
 - Mediakit rebuilt: 41,865 bytes (was 41,716 pre-cp36; +149 bytes from brag list ADR-0030 mention growth).  mediakit-freshness smoke: 6/6 checks pass.
-- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 ### CP35 history (sealed 2026-05-19; preserved below for archaeology):
 
@@ -12457,7 +12457,7 @@ CP35 STATE METRICS:
 - FAQ entries: 117 (unchanged)
 - ADRs: 30 (ADR-0026 extended with footnote, no new ADR)
 - Brag entries: 282 (entries #176/#210 amended, no new entries — cp35 closures were internal per Memory #15)
-- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup)
+- Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup)
 
 PATTERN OUTCOME: cp35 demonstrates that comprehensive single-pass deep-deeps DO find drift that prior recursive passes missed — the asset-coverage map approach (530 files, bucketed by coverage count) surfaced 14 substantive drift bugs cp33/cp34 deep-deeps had missed, plus 2 smokes silently failing for 5+ checkpoints. The recursive-iteration anti-pattern (each pass finding bugs prior passes missed) ends when the methodology shifts from "audit files changed this checkpoint" to "audit every file in the repo by asset-coverage delta against canonical".
 
@@ -12516,7 +12516,7 @@ CP34 PATTERN LESSONS (LL #41-43):
 - **LL #42**: Wiring-completeness CHECK rows must anchor on EXACT brag-list strings.  Smoke-vs-brag phrase drift silently regresses the smoke without regressing production.  Brag edits must update CHECK rows same-turn.
 - **LL #43**: Build a defensive smoke immediately after closing the bug class it would have caught.  Cp34's narrow-union-parity smoke at cp34 closes the cp33 CODE-6 class forever.
 
-CP34 TOTALS: 12+ findings closed inline + 1 new defensive smoke + 3 new wiring-completeness CHECK rows + STRIDE +3 rows + 3 LL pattern lessons.  Locale parity unchanged at 2,730 × 10 = 27,300.  FAQ 117.  ADR 30.  Brag 282 (cp34 closures were internal smoke + bug closures, no new user-facing wins per Memory #15).  All smokes green: 42 + 14 + 38 + new narrow-union-parity.  Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+CP34 TOTALS: 12+ findings closed inline + 1 new defensive smoke + 3 new wiring-completeness CHECK rows + STRIDE +3 rows + 3 LL pattern lessons.  Locale parity unchanged at 2,730 × 10 = 27,300.  FAQ 117.  ADR 30.  Brag 282 (cp34 closures were internal smoke + bug closures, no new user-facing wins per Memory #15).  All smokes green: 42 + 14 + 38 + new narrow-union-parity.  Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 PATTERN OUTCOME: cp34 confirms that RECURSIVE deep-deep iteration finds further bugs prior deep-deeps missed — each pass walks one more layer of sibling structure outward.  Cp33 found 5 HIGH bugs cp31/cp32 missed; cp34 found 1 CRITICAL (DAI post-page) + 1 HIGH (orderbook chips) + 1 HIGH (smoke phrase) + 1 MEDIUM (cheat-sheet) + 8 docblock drifts cp33 missed.  No reason to believe cp35 wouldn't find more.
 
@@ -12558,7 +12558,7 @@ Closed all 4 atomically with canonical 10-asset union.
 
 **3 PATTERN LESSONS recorded (LL #38-40).**  **LL #38** asset-addition deep-deep must walk SIBLING files of every touched-file (cp31's payload.ts ChatAssetTicker miss + AddressShareModal placeholder miss + indexer-client mirror miss share this mechanism).  **LL #39** multi-checkpoint drift compounds geometrically — 5 HIGH bugs at cp33 trace back to incomplete sibling-file-sweeping at TWO predecessor checkpoints; each deep-deep MUST ask "did the prior asset addition's sibling-file widening get done?"  **LL #40** performance budgets revised with documentation are better than performance budgets bypassed silently — Ken's DOGE icon honestly raised ceiling with rationale in both smoke source AND ADR rather than silently bypassed.
 
-CP33 totals: 1 new asset (DOGE) + 1 network icon swap + 12 i18n leaves × 10 locales + 1 FAQ × 10 + 5 HIGH-severity bugs closed inline + 6 drift findings closed inline + 1 new smoke (doge-trade-only-smoke 13 scenarios) + 3 new wiring-completeness CHECK rows + 1 new ADR (0030) + 1 new brag entry (#282) + 3 brag entries extended + 1 STRIDE refresh + 109 STRIDE lines + 3 LL pattern lessons added.  Locale parity 2,716 → 2,730 (+14 leaves × 10).  FAQ count 116 → 117.  ADRs 29 → 30.  Brag 281 → 282.  10 tradable assets total.  Mediakit rebuilt (brag list changed).  Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup).
+CP33 totals: 1 new asset (DOGE) + 1 network icon swap + 12 i18n leaves × 10 locales + 1 FAQ × 10 + 5 HIGH-severity bugs closed inline + 6 drift findings closed inline + 1 new smoke (doge-trade-only-smoke 13 scenarios) + 3 new wiring-completeness CHECK rows + 1 new ADR (0030) + 1 new brag entry (#282) + 3 brag entries extended + 1 STRIDE refresh + 109 STRIDE lines + 3 LL pattern lessons added.  Locale parity 2,716 → 2,730 (+14 leaves × 10).  FAQ count 116 → 117.  ADRs 29 → 30.  Brag 281 → 282.  10 tradable assets total.  Mediakit rebuilt (brag list changed).  Two parked external-blockers unchanged: (a) live Ansible deploy on fresh Ubuntu 24.04 VM (hardware); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup).
 
 ---
 
@@ -12637,7 +12637,7 @@ Sandbox state holds all cp32 work.  Build cp32-FULL-STATE tarball this turn per 
 
 PARKED EXTERNAL-BLOCKERS (unchanged from cp31-DD):
 (a) Live full-stack Ansible deploy on fresh Ubuntu 24.04 VM (hardware blocker)
-(b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
+(b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
 
 ---
 
@@ -12739,7 +12739,7 @@ Sandbox state holds all cp31 + cp31-DD work.  Build cp31-DD-FULL-STATE tarball t
 
 PARKED EXTERNAL-BLOCKERS (unchanged from cp30-DD-DD):
 (a) Live full-stack Ansible deploy on fresh Ubuntu 24.04 VM (hardware blocker)
-(b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
+(b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup blocker)
 
 ---
 
@@ -12808,7 +12808,7 @@ Every row carries explicit mitigations either from cp30 design (canonical allowl
 | K STRIDE | ✓ | 15 new threat rows × 6 categories |
 | L per-subsystem | ✓ | L-1 through L-7 walked + L-4 stale-comment fix |
 
-PARKED (external-blockers — unchanged): live Ansible deploy on fresh Ubuntu 24.04 VM; v1.0.0-beta.1 release ceremony steps 8/9/10.
+PARKED (external-blockers — unchanged): live Ansible deploy on fresh Ubuntu 24.04 VM; v1.0.0-beta.3 release ceremony steps 8/9/10.
 
 REVISITS DEFERRED: (a) orderReplace `replace_asset_network_change_forbidden` test coverage; (b) DD-DD-7 0000 ADR file role clarification.
 
@@ -12918,7 +12918,7 @@ ONE FOLLOW-UP REVISIT: orderReplace `replace_asset_network_change_forbidden` pat
 
 ONE DEFERRED FINDING (DD-DD-7): docs/adr/ contains 0000-*.md in addition to 0001-0028; brag #134 says "27 ADRs / 0001-0028"; verify 0000's role next session.
 
-PARKED (external-blockers — unchanged from cp30/cp30-DD): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+PARKED (external-blockers — unchanged from cp30/cp30-DD): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
 
 ---
 
@@ -13013,7 +13013,7 @@ Audit trail:
 
 27. **Per-network env var declarations are a 16-changes-per-4-network-asset class.**  cp30-DD-12 added 8 new env vars (4 USDT + 4 USDC).  Future asset-addition checklist should bullet these out explicitly per (asset, network).
 
-PARKED (external-blockers — unchanged from cp29/cp30): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+PARKED (external-blockers — unchanged from cp29/cp30): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
 
 ---
 
@@ -13109,7 +13109,7 @@ PATTERN LESSONS RECORDED (numbered 18-22 for continuity with cp29's 16-17):
 21. External web-search verification before declining an operator-named option matters even when the option seems plausible — the BEP-20-USDC decline rested on web-found facts (Binance-Peg + 18-decimal) that prior knowledge alone wouldn't have surfaced.
 22. Cross-session continuity from mid-state tarballs requires honest in-flight inventories — verification before continuing confirmed the cp30-mid completed-list was honest and the remaining-list was real.
 
-PARKED (external-blockers — unchanged from cp29): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
+PARKED (external-blockers — unchanged from cp29): (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM; (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner standup blocker).
 
 ---
 
@@ -13168,7 +13168,7 @@ CP29 FINAL STATE:
 - Brag list 279 entries (unchanged — cp29 was about closing latent bugs, not new claims)
 - Sitemap 180 URLs (unchanged)
 - Mediakit unchanged (brag list unchanged; rebuild not required per Memory #4 freshness contract; would be a no-op anyway)
-- Two parked solo items unchanged from cp27-DD2 + cp28: (a) live Ansible deploy on a fresh Ubuntu 24.04 VM (external-blocker); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (Forgejo runner external-blocker)
+- Two parked solo items unchanged from cp27-DD2 + cp28: (a) live Ansible deploy on a fresh Ubuntu 24.04 VM (external-blocker); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (Forgejo runner external-blocker)
 
 CP29 PATTERN LESSONS (16-17 for project-wide continuity with cp27-DD2's 1-10 and cp28's 11-15):
 
@@ -13183,7 +13183,7 @@ NEXT SESSION GUIDANCE:
 1. Extract this tarball.
 2. Run `npm install` (sandbox precondition).
 3. Run `bash scripts/run-smokes.sh` to confirm cp29 didn't break anything; expect 3,327 scenarios passed, 0 runners failed (cp29 added no smokes); the i18n-parity smoke should pass with the new 2,646-keys-per-locale baseline.
-4. Two parked solo items unchanged from cp27-DD2 / cp28: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning); (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These remain external-blocker tasks.
+4. Two parked solo items unchanged from cp27-DD2 / cp28: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning); (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These remain external-blocker tasks.
 5. Remaining-open §A items in REVISIT-LIST.md (none code-fixable in-chat without operator action): Klingex endpoint URL verification, native-speaker translation QA pass for fa/zh-CN/zh-HK/ru, Federation-probe extension for peer-instance asset stance (currently DEFERRED appropriately).
 6. Cp28 Pattern Lessons 13 (CI gate for derived-artifact regen) and 14 (extend operator-doc sentinel-grep) remain open in REVISIT-LIST §E — both filed as post-launch hardening sprint items.
 
@@ -13205,7 +13205,7 @@ DD-cp28-2 LOW — `docs/ADDING-A-COIN.md` L424 single-network coin list `(BTC, X
 
 DD-cp28-3 LOW — `docs/ADDING-A-COIN.md` L470 privacy-warning null-list `(BTC, XMR, BLURT all have null)` — stale since cp21.  Fixed to `(BTC, XMR, BLURT, BCH, LTC, DASH all have null)` with framing extended to "either private, decentralized, or transparent-but-non-custodial enough that no warning is needed".
 
-DD-cp28-4 LOW — `RELEASE-NOTES-v1.0.0-beta.1.md` L171 + L174-175 — audit-log line count "~20,000 lines" (now ~21,000+) AND ADR-count claim "25 architecture decision records in `docs/adr/0001-…` through `0026-…`" — stale by 1 ADR + audit count round number.  Fixed to "26 architecture decision records" + "0001-… through 0027-…" + audit ~21,000.
+DD-cp28-4 LOW — `RELEASE-NOTES-v1.0.0-beta.3.md` L171 + L174-175 — audit-log line count "~20,000 lines" (now ~21,000+) AND ADR-count claim "25 architecture decision records in `docs/adr/0001-…` through `0026-…`" — stale by 1 ADR + audit count round number.  Fixed to "26 architecture decision records" + "0001-… through 0027-…" + audit ~21,000.
 
 DD-cp28-5 LOW — `MORPHIT-BRAG-LIST.md` verification-anchors footer "Architecture decisions: `docs/adr/0001-*.md` through `docs/adr/0026-*.md`" — stale by 1 ADR (cp27 added 0027).  Fixed.
 
@@ -13280,7 +13280,7 @@ CP28 SHIPPED:
 EDITED (file → finding):
   docs/LAUNCH-DAY.md                                                                     (DD-cp28-1)
   docs/ADDING-A-COIN.md                                                                  (DD-cp28-2 + DD-cp28-3)
-  RELEASE-NOTES-v1.0.0-beta.1.md                                                         (DD-cp28-4)
+  RELEASE-NOTES-v1.0.0-beta.3.md                                                         (DD-cp28-4)
   MORPHIT-BRAG-LIST.md                                                                   (DD-cp28-5 + DD-cp28-Bob-6)
   scripts/build-mediakit.sh                                                              (DD-cp28-7)
   apps/web/static/morphit-mediakit.zip                                                   (rebuilt × 2 per Memory #4)
@@ -13325,7 +13325,7 @@ NEXT SESSION GUIDANCE:
 1. Extract this tarball.
 2. Run `npm install` (sandbox precondition).
 3. Run `bash scripts/run-smokes.sh` to confirm cp28 didn't break anything; expect 3,327 scenarios passed, 0 runners failed (same baseline as cp27-DD2 — cp28 added no smokes).
-4. Two parked solo items unchanged from cp27-DD2: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning), (b) v1.0.0-beta.1 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These are external-blocker tasks, not code tasks.
+4. Two parked solo items unchanged from cp27-DD2: (a) live full-stack Ansible deploy on a fresh Ubuntu 24.04 VM (blocked on VM provisioning), (b) v1.0.0-beta.3 release ceremony steps 8/9/10 (blocked on Forgejo runner standup).  These are external-blocker tasks, not code tasks.
 5. Optional: extend operator-doc sentinel-grep CI to enforce Pattern Lesson 14 (OS/Postgres/Node.js recommendations vs actual CI matrices).
 6. Optional: add CI gate per Pattern Lesson 13 (regenerate every derived artifact in fresh checkout, diff against committed, fail on mismatch).
 
@@ -13393,7 +13393,7 @@ DD-cp27-DD-18 MEDIUM — DEFERRED.  `apps/web/static/sitemap.xml` is cp17-era (`
 
 DD-cp27-DD-19 — AUDIT-2026-05.md was missing cp27 + cp27-DD + cp27-DD2 entries.  Per cp26-DD2 same-checkpoint discipline (every cp needs an audit-log entry).  Appended 3 new audit entries (cp27 + cp27-DD + cp27-DD2 — this entry references itself).  Audit log line count 21,134 → 21,315 (+181 lines).
 
-DD-cp27-DD-20 MEDIUM (post-tarball — found during cross-session-handoff full sweep + persona-walkthrough-smoke run after Ken's "always check the feedback system" directive) — TWO companion sentinel pins stale from cp22 step insertion: (a) `apps/web/scripts/persona-walkthrough-smoke.ts` F14b had `mustHave: ['const TOTAL_STEPS = 17;']` but actual value is 18 (cp22 inserted trade-only-asset-policy at position 13, pushing TOTAL_STEPS to 18); (b) F14 sentinel + corresponding `docs/OPERATIONS.md` L4751 both still said "`morphit-ops init` step 15 asks: \"Enable daily DB backup automation?\"" but stepBackup is now at position 16 (cp22 step insert pushed it up by 1).  Also caught: `RELEASE-NOTES-v1.0.0-beta.1.md` L94 + `docs/PRE-LAUNCH-CHECKLIST.md` L279 both still said "~17 prompts" (variants of DD-13).  Fixed all 4 sites + updated smoke comment + added "step 15 asks" to F14 mustNotHave to prevent regression.  Persona-walkthrough-smoke now 120/120 ✓ (was 119/120).  Pattern lesson: companion sentinels pinned to constants drift silently when the constant changes — cp22 should have updated F14/F14b in the SAME checkpoint as bumping TOTAL_STEPS.  Future invariant pins must include a "co-edit sites" comment listing every file that needs to update together.
+DD-cp27-DD-20 MEDIUM (post-tarball — found during cross-session-handoff full sweep + persona-walkthrough-smoke run after Ken's "always check the feedback system" directive) — TWO companion sentinel pins stale from cp22 step insertion: (a) `apps/web/scripts/persona-walkthrough-smoke.ts` F14b had `mustHave: ['const TOTAL_STEPS = 17;']` but actual value is 18 (cp22 inserted trade-only-asset-policy at position 13, pushing TOTAL_STEPS to 18); (b) F14 sentinel + corresponding `docs/OPERATIONS.md` L4751 both still said "`morphit-ops init` step 15 asks: \"Enable daily DB backup automation?\"" but stepBackup is now at position 16 (cp22 step insert pushed it up by 1).  Also caught: `RELEASE-NOTES-v1.0.0-beta.3.md` L94 + `docs/PRE-LAUNCH-CHECKLIST.md` L279 both still said "~17 prompts" (variants of DD-13).  Fixed all 4 sites + updated smoke comment + added "step 15 asks" to F14 mustNotHave to prevent regression.  Persona-walkthrough-smoke now 120/120 ✓ (was 119/120).  Pattern lesson: companion sentinels pinned to constants drift silently when the constant changes — cp22 should have updated F14/F14b in the SAME checkpoint as bumping TOTAL_STEPS.  Future invariant pins must include a "co-edit sites" comment listing every file that needs to update together.
 
 DD-cp27-DD-21 (memory-rule update from this session) — Ken's directive "in the persona walkthroughs, always remember to fully check every facet of the feedback system too. if you didn't, always DO." → Memory #22 (standing walk-through discipline) REPLACED to explicitly include the feedback-system facet: /my/orders → PendingFeedbackReminderBanner → LeaveFeedbackForm → morphit_feedback_v1 op → indexer feedback handler → profile renders → counterparty feedbackResponse_v1.  Verified end-to-end for DASH trades: feedback path is structurally asset-agnostic, no per-asset code paths needed, full path intact.  6 feedback FAQ entries (feedback_immutable, what_is_reputation, how_to_leave_feedback, feedback_reply, chat_vs_feedback_visibility, feedback_suppressed) verified asset-agnostic by design.  Walkthrough discipline going forward: every persona pass MUST trace the feedback round-trip explicitly.
 
@@ -13657,7 +13657,7 @@ Crawler-facing:
 ### Files changed in docs sync
 
 - `README.md` — asset list
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — five→six + smoke count
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — five→six + smoke count
 - `MORPHIT-BRAG-LIST.md` — entry #273 + footer + smoke count + ADR range
 - `docs/OPERATIONS.md` — trade-only header + multi-coin examples + LTC subsection
 - `docs/RUN-A-MORPHIT-NODE.md` — operator-stance matrix
@@ -13834,7 +13834,7 @@ Chronicle:
 ### Resume directive
 
 Cp23 sealed.  Solo-parked items per memory: launch ceremony at
-T-5 days (VM Ansible deploy, real v-tag push, v1.0.0-beta.1
+T-5 days (VM Ansible deploy, real v-tag push, v1.0.0-beta.3
 ceremony).
 
 ---
@@ -13944,7 +13944,7 @@ Docs:
 - `docs/REVISIT-LIST.md` — cp22 entry prepended.
 - `MORPHIT-BRAG-LIST.md` — new entry #272; smoke count 3,200+ →
   3,217+; footer 271 → 272.
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — smoke count 3,200 → 3,217.
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — smoke count 3,200 → 3,217.
 - `TARBALL.md` — this entry.
 
 Build artifact (rebuilt after brag-list edit):
@@ -14205,7 +14205,7 @@ Logo:
 Docs:
 - `docs/adr/0024-bitcoin-cash-trade-only-addition.md` — new ADR.
 - `README.md` — asset list line.
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — Four → Five tradable
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — Four → Five tradable
   assets + BCH explanation; smoke count 3,187 → 3,200; ADR
   count 22 → 23 / range 0023 → 0024.
 - `MORPHIT-BRAG-LIST.md` — new entry #271 (BCH P2P);
@@ -14406,7 +14406,7 @@ what's deferred to a real-environment run:
 VERIFIED in-pass:
 - version-consistency-smoke: **14/14 scenarios pass** (executed
   via tsx; self-tested by tampering relay/package.json
-  1.0.0-beta.1 → 1.0.0-beta.2; smoke correctly failed with the
+  1.0.0-beta.3 → 1.0.0-beta.2; smoke correctly failed with the
   right remediation hint; restoration green)
 - All 10 locale JSON files parse cleanly + retain 3,481-line
   structural parity (newlines were inside string values, no
@@ -14451,7 +14451,7 @@ with a substantive landing doc:
 - Community Matrix room + security disclosure separation
 - AGPL note + verify-the-claims footer
 
-**2. RELEASE-NOTES-v1.0.0-beta.1.md body.**  The `## What's
+**2. RELEASE-NOTES-v1.0.0-beta.3.md body.**  The `## What's
 in the beta` section was previously the literal placeholder
 `- ...`.  Replaced with structured highlights:
 - Trading (BTC/XMR/BLURT/USDT including 4-network USDT,
@@ -14480,9 +14480,9 @@ package.json said `0.0.0-phase3b`, and the docs example
 responses repeated `0.1.0-phase3b` — four different version
 strings, none of them the release tag.  A user hitting
 morphit.io/v1/health on launch day would have seen a phase-name
-that contradicted the v1.0.0-beta.1 release notes.
+that contradicted the v1.0.0-beta.3 release notes.
 
-Touchpoints unified to `1.0.0-beta.1`:
+Touchpoints unified to `1.0.0-beta.3`:
 
 | # | Touchpoint | Was |
 |---|---|---|
@@ -14518,7 +14518,7 @@ Per-touchpoint remediation hints surface in the failure output
 ("fix: edit `version` in apps/relay/package.json", etc.) so a
 developer who hits this in CI knows exactly which file to edit.
 
-Self-tested by tampering: `1.0.0-beta.1` → `1.0.0-beta.2` in
+Self-tested by tampering: `1.0.0-beta.3` → `1.0.0-beta.2` in
 apps/relay/package.json → smoke failed correctly with the
 expected remediation hint.  Restoration → green.
 
@@ -14610,7 +14610,7 @@ Workspace metadata (all 10):
   `packages/operator-config/package.json`
 - `package-lock.json` — regenerated post-version-sweep
   (DD-cp20-1 fix) via `npm install --package-lock-only`; now
-  reports `1.0.0-beta.1` across all 11 entries
+  reports `1.0.0-beta.3` across all 11 entries
 
 Locales (all 10):
 - `apps/web/src/lib/i18n/locales/{en,es,fr,de,it,pl,ru,fa,zh-CN,zh-HK}.json` —
@@ -14620,7 +14620,7 @@ Docs:
 - `README.md` — 3-line stub → substantive landing page;
   DD-cp20-9 fixed "10 locales × 20 routes = 200 static HTML files"
   → "10 locales × 17 indexable routes = 170 static HTML files"
-- `RELEASE-NOTES-v1.0.0-beta.1.md` — `What's in the beta: ...`
+- `RELEASE-NOTES-v1.0.0-beta.3.md` — `What's in the beta: ...`
   → full body; DD-cp20-10 bumped 3,173 → 3,187 smoke count;
   DD-cp20-13 corrected "23 architecture decision records" → "22"
 - `MORPHIT-BRAG-LIST.md` — duplicate #60 fix (210 renumbered);
@@ -14658,7 +14658,7 @@ Build artifacts:
   not "non-custodial DEX with on-chain orderbook materialization");
   the brag list and "Reach" surface answer her downstream questions.
   ✓
-- **Sally-operator (downloads the v1.0.0-beta.1 tarball, reads
+- **Sally-operator (downloads the v1.0.0-beta.3 tarball, reads
   RELEASE-NOTES first):** previously saw `What's in the beta: ...`
   and would have hit the docs/RUN-A-MORPHIT-NODE.md cold.  Now sees
   what features ship + what's optional vs default + where to find
@@ -14736,7 +14736,7 @@ work — wiring sweep + walkthroughs + adversarial passes.
 - **DD-cp20-11 (LOW, VERIFIED OK).** Sally-operator README
   install short-form walkthrough end-to-end: (1) VPS provision
   unverifiable from static audit; (2) `git clone` standard;
-  (3) `npm ci` works — lockfile + manifest both at 1.0.0-beta.1
+  (3) `npm ci` works — lockfile + manifest both at 1.0.0-beta.3
   after DD-cp20-1 fix; (4) `npx morphit-ops init` resolves —
   `apps/ops-cli/package.json` declares `"name": "morphit-ops"`
   + `"bin": {"morphit-ops": "src/main.ts"}` with shebang
@@ -14759,7 +14759,7 @@ work — wiring sweep + walkthroughs + adversarial passes.
   authoritative source of truth, fail if it disagrees with the
   manifest."  Fixed by running `npm install --package-lock-only
   --no-audit --no-fund --workspaces=false`; lockfile now reports
-  `1.0.0-beta.1` across all 11 entries (root + 10 workspaces).
+  `1.0.0-beta.3` across all 11 entries (root + 10 workspaces).
   This is the kind of finding a deep-deep is FOR — the 14-touchpoint
   smoke checked package.json files but NOT the lockfile (because
   `npm ci` already enforces that invariant when actually run); in
@@ -14808,7 +14808,7 @@ work — wiring sweep + walkthroughs + adversarial passes.
   so this is fine; tomorrow's might need `fs.globSync`.
   Self-tested two ways:
   - **Tamper existing workspace:** `apps/ops-cli/package.json`
-    `1.0.0-beta.1` → `1.0.0-beta.tampered` → smoke fails with
+    `1.0.0-beta.3` → `1.0.0-beta.tampered` → smoke fails with
     correct per-touchpoint remediation hint and exit code 1.
   - **Add imaginary workspace:** appended `apps/imaginary-new-app`
     to root `workspaces` array → smoke fails with
@@ -15244,7 +15244,7 @@ The npm-audit-gate closes a quiet supply-chain risk that's been latent since mat
 ### Truly pending (post-cp16)
 
 - **Live full-stack Ansible deploy** — blocked: no VM available in this session
-- **v1.0.0-beta.1 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
+- **v1.0.0-beta.3 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
 - **Multi-key posting authority support for push subscribe (DD-11)** — accepted; no Morphit account is multisig in practice; cp17+ if real demand surfaces
 - **Replace matrix-bot-sdk@0.7.1 with a maintained library** — would drop the 3 npm-audit-gate allowlist entries; non-urgent, on the cp17+ backlog
 
@@ -15319,7 +15319,7 @@ Ken's directive: "ok, do as much of that as you can, and then deep-deep all the 
 
 - **cp16 doc-pack** — DD-2, DD-4, DD-7, DD-10 OPERATIONS clarifications; DD-13 `npm audit` gate addition
 - **Live full-stack Ansible deploy** — blocked: no VM available in this session
-- **v1.0.0-beta.1 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
+- **v1.0.0-beta.3 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
 
 **This session's arc:**
 1. cp11 (FAQ notifications_overview) — sealed
@@ -15425,7 +15425,7 @@ pushLocalize, 3 new sig-error keys present in all 10 locales.
 
 - **Deep-deep audit on cp11/cp12/cp13/cp14 work** — runs immediately after this tarball ships, in the same session if budget allows; otherwise next turn
 - **Live full-stack Ansible deploy** — blocked: no VM available in this session
-- **v1.0.0-beta.1 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
+- **v1.0.0-beta.3 release ceremony steps 8/9/10** — blocked: sysadmin's Forgejo runner not stood up yet
 - **Multi-key posting authority support for push subscribe** — surfaced as a known limitation in OPERATIONS §42.5; a future checkpoint can address it
 
 **This session's arc:**
@@ -15513,7 +15513,7 @@ Push payload `title` and `body` strings are stored in the `push_pending` table a
 
 ### Resume directive
 
-For cp14, the highest-priority items are (a) Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM, including the new Web Push path; (b) v1.0.0-beta.1 release ceremony steps 8/9/10 once sysadmin sets up the Forgejo runner; (c) optional: per-account locale-preference column + indexer-side localization of push payload strings; (d) optional: posting-key signature verification on the subscribe endpoint to close the cp13 auth trade-off.
+For cp14, the highest-priority items are (a) Live full-stack Ansible deploy against a fresh Ubuntu 24.04 VM, including the new Web Push path; (b) v1.0.0-beta.3 release ceremony steps 8/9/10 once sysadmin sets up the Forgejo runner; (c) optional: per-account locale-preference column + indexer-side localization of push payload strings; (d) optional: posting-key signature verification on the subscribe endpoint to close the cp13 auth trade-off.
 
 Memory: keep #29 (release ceremony pending Forgejo runner) and #11 (mediakit regeneration rule) current. Add to memory: cp13 shipped Web Push end-to-end; subscription endpoint auth is rate-limited-only (cp14 may upgrade); push titles/bodies are English-only at indexer-enqueue time (cp14 may localize).
 
@@ -15576,7 +15576,7 @@ Ken's "wtf, get it done" on push wiring deserves a direct response. Push *cannot
 11. **Operator docs** in OPERATIONS.md + RUN-A-MORPHIT-NODE.md + design doc Phase 3 update
 12. **Wiring-smoke registry**: promote push from `deferred` → `live`
 
-Design doc estimate: "phase 3 is 1-2 days." Half-shipping it pre-launch (6 days to v1.0.0-beta.1) would violate the WIRE EVERYTHING rule. The right move: cp13 is the dedicated push implementation, full end-to-end.
+Design doc estimate: "phase 3 is 1-2 days." Half-shipping it pre-launch (6 days to v1.0.0-beta.3) would violate the WIRE EVERYTHING rule. The right move: cp13 is the dedicated push implementation, full end-to-end.
 
 The wiring-completeness smoke makes this trade-off explicit: push appears as `⚠ DEFERRED` on every run with the rationale visible — drift cannot hide. When cp13 ships, that row gets promoted to `live` and the deferral disappears from the summary.
 
@@ -15595,7 +15595,7 @@ The wiring-completeness smoke makes this trade-off explicit: push appears as `�
 **Truly pending (post-cp12):**
 - **cp13: Web Push end-to-end implementation** (12 components above; ~one focused session)
 - **Live full-stack Ansible deploy** against fresh Ubuntu 24.04 VM
-- **v1.0.0-beta.1 release ceremony steps 8/9/10** (PENDING: sysadmin sets up Forgejo runner)
+- **v1.0.0-beta.3 release ceremony steps 8/9/10** (PENDING: sysadmin sets up Forgejo runner)
 - **Cp9-followon cleanup**: tsx/PATH-export fix for `scripts/run-smokes.sh` + `scripts/typecheck-sweep.sh`
 
 **Resume directive:** Read this block, then memory #29 (release ceremony pending) + #11 (mediakit regeneration rule). For cp13, the FAQ entry `push_notifications_privacy` is the source of truth for the user-facing design (self-hosted / standard / off); the design doc's "Decision needed from you" item 3 is functionally resolved by that FAQ entry.
@@ -15666,7 +15666,7 @@ Bidirectional linkage means a user reading any one of the three notifications-cl
 **Truly pending (post-cp11):**
 - **`push_notifications_privacy` rewrite** to match shipped reality (Ken's call — do it next checkpoint or leave for now)
 - Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM
-- v1.0.0-beta.1 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15)
+- v1.0.0-beta.3 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15)
 - Cp9 cleanup tarball: tsx/PATH-export fix for `scripts/run-smokes.sh` + `scripts/typecheck-sweep.sh`
 
 **Resume directive:** Read this block, then memory #29 (release ceremony pending) + #11 (mediakit regeneration rule).
@@ -15743,7 +15743,7 @@ This means users reading `vs_others` see a related pill leading to the BasicSwap
 
 **Truly pending (post-cp10):**
 - Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM
-- v1.0.0-beta.1 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15)
+- v1.0.0-beta.3 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15)
 - Cp9 cleanup tarball: tsx/PATH-export fix for `scripts/run-smokes.sh` + `scripts/typecheck-sweep.sh`
 - Optionally: dedicated FAQ entry for the broader notifications system (Ken's call)
 - Optionally: add markdown rendering to FAQ answers (Ken's call)
@@ -15831,7 +15831,7 @@ The insertion pushed entries 139..265 → 140..266 (renumber was mechanical via 
 
 **Truly pending (post-cp9):**
 - Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM
-- v1.0.0-beta.1 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15) — see memory entry #29
+- v1.0.0-beta.3 release ceremony steps 8/9/10 (PENDING: sysadmin sets up Forgejo runner; ETA EOD 2026-05-15) — see memory entry #29
 - Cp9-followon cleanup: tsx/PATH-export fix for `scripts/run-smokes.sh` + `scripts/typecheck-sweep.sh` (deferred until post-release)
 
 **Resume directive:** Read this block, then memory #11 (mediakit regeneration rule) + #29 (release ceremony pending steps).
@@ -15893,8 +15893,8 @@ Wired into `apps/ops-cli/src/main.ts`: dispatch case before db-requiring command
 2. **P122 cp8** — release tooling shipped (4 components + docs)
 
 **Truly pending (post-cp8):**
-- Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM (the v1.0.0-beta.1 first install, in Ken's hands now)
-- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end (Ken: this is the upcoming v1.0.0-beta.1 ceremony)
+- Live full-stack Ansible deploy against fresh Ubuntu 24.04 VM (the v1.0.0-beta.3 first install, in Ken's hands now)
+- Real `v*` tag push to validate `.forgejo/workflows/release.yml` end-to-end (Ken: this is the upcoming v1.0.0-beta.3 ceremony)
 
 **Resume directive:** Read this block, then `docs/UPGRADING.md` for the operator-facing surface.
 

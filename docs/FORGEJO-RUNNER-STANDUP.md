@@ -1,6 +1,6 @@
 # Forgejo runner standup — runbook
 
-**Audience:** the project maintainer, standing up the Forgejo Actions runner that the v1.0.0-beta.1 release ceremony depends on.
+**Audience:** the project maintainer, standing up the Forgejo Actions runner that the v1.0.0-beta.3 release ceremony depends on.
 
 **Time required:** ~30-45 minutes once you have a host machine.
 
@@ -10,7 +10,7 @@
 
 ## Why this matters
 
-The v1.0.0-beta.1 release ceremony has 10 steps. Steps 1-7 are repo-state and tag-publication actions that the maintainer performs manually (the full step-by-step ceremony lives at the head of `.forgejo/workflows/release.yml` and in the v1.0.0-beta.1 RELEASE-NOTES checklist). Steps 8, 9, and 10 are CI-driven:
+The v1.0.0-beta.3 release ceremony has 10 steps. Steps 1-7 are repo-state and tag-publication actions that the maintainer performs manually (the full step-by-step ceremony lives at the head of `.forgejo/workflows/release.yml` and in the v1.0.0-beta.3 RELEASE-NOTES checklist). Steps 8, 9, and 10 are CI-driven:
 
 - **Step 8** — On `v*` tag push, run the test matrix against a fresh checkout and produce a signed manifest of the tarball SHAs.
 - **Step 9** — On manifest verification, produce the release tarball and attach it to the Forgejo release page.
@@ -176,9 +176,9 @@ jobs:
 
 Trigger via the Forgejo UI (`Actions → runner-smoke-test → Run workflow`). Expect a green check inside 60s. If it hangs in "queued" for more than 90s, the runner labels don't match — verify `morphit-build` is in the runner's `--labels` (Step 3).
 
-## Step 7 — Re-run the v1.0.0-beta.1 release ceremony steps 8/9/10
+## Step 7 — Re-run the v1.0.0-beta.3 release ceremony steps 8/9/10
 
-With the runner registered and smoke-tested, the existing release workflows at `.forgejo/workflows/release.yml` will execute on the next `v*` tag push. The full ceremony walkthrough lives at the head of that workflow file and in the v1.0.0-beta.1 RELEASE-NOTES checklist.
+With the runner registered and smoke-tested, the existing release workflows at `.forgejo/workflows/release.yml` will execute on the next `v*` tag push. The full ceremony walkthrough lives at the head of that workflow file and in the v1.0.0-beta.3 RELEASE-NOTES checklist.
 
 ## Troubleshooting
 
@@ -192,9 +192,9 @@ With the runner registered and smoke-tested, the existing release workflows at `
 
 ## What this unblocks
 
-Once Step 7 completes successfully, the v1.0.0-beta.1 release ceremony moves from "9 of 10 steps complete, blocked on runner" to "fully shippable on next tag push". The remaining work is:
+Once Step 7 completes successfully, the v1.0.0-beta.3 release ceremony moves from "9 of 10 steps complete, blocked on runner" to "fully shippable on next tag push". The remaining work is:
 
-1. Maintainer tags `v1.0.0-beta.1` on the canonical branch.
+1. Maintainer tags `v1.0.0-beta.3` on the canonical branch.
 2. Runner picks up the tag, runs the test matrix (Step 8), produces the signed manifest.
 3. Runner produces the tarball (Step 9) and attaches to the Forgejo release page.
 4. Runner triggers mirror upload (Step 10).

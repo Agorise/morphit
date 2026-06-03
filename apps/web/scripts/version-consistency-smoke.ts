@@ -27,7 +27,7 @@
  * `0.3.0-phase3a` and `0.1.0-phase3b` while the root package.json
  * said `0.0.0-phase3b` and the docs said `0.1.0-phase3b` — four
  * different version strings, none of them the release tag.  At
- * v1.0.0-beta.1 launch a user hitting morphit.io/v1/health would
+ * v1.0.0-beta.3 launch a user hitting morphit.io/v1/health would
  * have seen a phase-name that contradicted the release notes.
  *
  * The gate.  On any version bump, the human edits ONE source of

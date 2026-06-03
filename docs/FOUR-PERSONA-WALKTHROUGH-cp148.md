@@ -8,7 +8,7 @@ agent invoking Morphit via the MCP server** — because cp140 introduced
 the AI-agent surface and that audience's flow is now persona-critical.
 
 **This walkthrough is a delta against THREE-PERSONA-WALKTHROUGH-cp139.md.**
-That cp139 doc walked the surface as it stood at the v1.0.0-beta.1 ship.
+That cp139 doc walked the surface as it stood at the v1.0.0-beta.3 ship.
 
 cp140 (MCP server + asset additions) + cp141 (locale-graduation readiness)
 + cp142 (mcp-server smoke fresh-checkout fix) + cp143 (per-smoke timeout)
@@ -204,7 +204,7 @@ user (and from there into chat transcripts).
 operator can't redirect Charlie's fetch to an internal address.
 
 **F-mcp-4 — User-Agent reads from package.json.**  Charlie identifies
-as `morphit-mcp/1.0.0-beta.1 (+https://morphit.io)` and this will
+as `morphit-mcp/1.0.0-beta.3 (+https://morphit.io)` and this will
 update correctly on version bump.
 
 **F-mcp-6/-13/-17 — three places consolidated to `getInstanceUrl()`.**
@@ -232,7 +232,7 @@ now repeats the honest version to the user verbatim.  Privacy is the
 reflect that priority truthfully.
 
 **F-mcp-23/24 — README marks npm/Docker as forthcoming.**  If the
-user follows the README in v1.0.0-beta.1, they'll see the from-source
+user follows the README in v1.0.0-beta.3, they'll see the from-source
 instructions first + the npm/Docker pipelines flagged as v1.0.0
 stable.  No more "package not found" friction.
 
