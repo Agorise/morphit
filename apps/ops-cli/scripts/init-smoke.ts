@@ -21,6 +21,7 @@ import { validateBlurtAccountName } from '../src/init/chainCheck.ts';
 import { checkPassphraseStrength } from '../src/init/encrypt.ts';
 import { resolveOutputPath, writeWizardOutput } from '../src/init/render.ts';
 import type { WizardAnswers } from '../src/init/render.ts';
+import { loadOperatorConfig } from '@morphit/operator-config';
 
 let failures = 0;
 let scenarios = 0;
@@ -256,7 +257,18 @@ scenario('writeWizardOutput: morphit.config.env contains operator-tunable keys',
 		// Single-quoted form works for everything except embedded
 		// apostrophes; "A test" has no apostrophe → single-quoted.
 		assertContains(content, "MORPHIT_INSTANCE_TAGLINE='A test'", 'tagline (parseEnv = single-quoted)');
-		assertContains(content, 'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25', 'ceiling');
+		// cp193: MORPHIT_RELAY_SIGNUP_DAILY_CEILING is NOT operator-config
+		// allowlisted — it must NOT appear in morphit.config.env (doing so
+		// made the indexer reject the config on boot).  It lives in
+		// morphit.env now; asserted in the critical-infra scenario below.
+		assertTrue(
+			!content.includes('MORPHIT_RELAY_SIGNUP_DAILY_CEILING'),
+			'signup ceiling must NOT be in morphit.config.env (not allowlisted)'
+		);
+		assertTrue(
+			!content.includes('MORPHIT_RELAY_TRUSTED_PROXY_IPS'),
+			'trusted-proxy-IPs must NOT be in morphit.config.env (not allowlisted)'
+		);
 		assertContains(content, 'MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT=100', 'fee fallback');
 		assertContains(content, 'MORPHIT_INSTANCE_CONTACT_URL=https://example.com/contact', 'contact');
 	} finally {
@@ -283,7 +295,34 @@ scenario('writeWizardOutput: morphit.env contains critical-infra keys', () => {
 		assertContains(content, 'MORPHIT_INDEXER_RELAY_ACCOUNT=testrelay', 'indexer relay account');
 		assertContains(content, 'MORPHIT_INDEXER_FEE_RECIPIENT=testrelay', 'fees account');
 		assertContains(content, 'MORPHIT_RELAY_ACTIVE_KEY_FILE=', 'key file');
+		// cp193 — these non-allowlisted keys moved here from
+		// morphit.config.env (where they crashed the indexer on boot).
+		assertContains(content, 'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25', 'signup ceiling now in morphit.env');
 	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+// cp193 — REGRESSION GUARD for the boot-crash the VPS sysadmin hit:
+// the wizard wrote MORPHIT_RELAY_SIGNUP_DAILY_CEILING (and
+// _TRUSTED_PROXY_IPS) into morphit.config.env, but those keys are not
+// on the operator-config allowlist, so loadOperatorConfig() threw
+// "[operator-config] ... contains keys not in the operator allowlist"
+// and the indexer refused to boot.  This renders the wizard's config
+// and runs it through the REAL loader to prove it is accepted.
+scenario('writeWizardOutput: generated morphit.config.env is accepted by loadOperatorConfig (cp193 boot regression)', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	const priorOverride = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+	try {
+		const result = writeWizardOutput(sampleAnswers, tmp);
+		process.env.MORPHIT_OPERATOR_CONFIG_FILE = result.configPath;
+		// Must not throw. If it throws an allowlist error, the wizard
+		// produced a config the indexer can't boot with.
+		loadOperatorConfig();
+		assertTrue(true, 'loadOperatorConfig accepted the wizard config');
+	} finally {
+		if (priorOverride === undefined) delete process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+		else process.env.MORPHIT_OPERATOR_CONFIG_FILE = priorOverride;
 		rmSync(tmp, { recursive: true, force: true });
 	}
 });
@@ -876,7 +915,9 @@ scenario('writeWizardOutput: BunkerWeb enabled → MORPHIT_RELAY_TRUSTED_PROXY_I
 			bunkerWeb: { enabled: true }
 		};
 		writeWizardOutput(answers, tmp);
-		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		// cp193 — trusted-proxy IPs moved to morphit.env (not allowlisted
+		// for morphit.config.env).
+		const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
 		assertTrue(
 			env.includes('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16'),
 			'active trusted-proxy line present when BunkerWeb chosen'
@@ -898,7 +939,8 @@ scenario('writeWizardOutput: BunkerWeb disabled → trusted-proxy stays commente
 			bunkerWeb: { enabled: false }
 		};
 		writeWizardOutput(answers, tmp);
-		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+		// cp193 — trusted-proxy IPs moved to morphit.env.
+		const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
 		// The active (uncommented) assignment must NOT be present — a
 		// direct client could otherwise spoof X-Forwarded-For.  The
 		// commented hint line (# MORPHIT_RELAY_TRUSTED_PROXY_IPS=) is fine.

@@ -495,14 +495,6 @@ function renderConfig(answers: WizardAnswers): string {
 	}
 
 	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Signup ceiling');
-	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Hard cap on accounts the relay creates per UTC day.');
-	lines.push('# Hit-the-cap → signups pause until midnight UTC.');
-	lines.push(`MORPHIT_RELAY_SIGNUP_DAILY_CEILING=${answers.dailyCeiling}`);
-	lines.push('');
-
-	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# Account-creation fee fallback');
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# The relay AND indexer read the chain value live via');
@@ -589,30 +581,11 @@ function renderConfig(answers: WizardAnswers): string {
 	}
 	lines.push('');
 
-	// ─── BunkerWeb / reverse-proxy trusted IPs (cp182) ──────────────
-	// When the stack sits behind BunkerWeb's pinned 172.20.0.0/16
-	// Docker network, the relay must trust that range so the real
-	// client IP forwarded in X-Forwarded-For is honoured by rate
-	// limits and abuse defenses.  Written ONLY when the operator
-	// opted into BunkerWeb — otherwise the relay reads the socket
-	// peer IP directly and trusting a phantom proxy range would let
-	// a direct client spoof its source IP.
-	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Reverse proxy / trusted client IPs');
-	lines.push('# ──────────────────────────────────────────────────────');
-	if (answers.bunkerWeb.enabled) {
-		lines.push('# You chose BunkerWeb at setup.  This is the Docker network');
-		lines.push('# the shipped ops/bunkerweb/ compose pins; the relay trusts');
-		lines.push('# X-Forwarded-For only from this range.  See OPERATIONS.md §32.');
-		lines.push('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16');
-	} else {
-		lines.push('# No reverse proxy was selected at setup — the relay reads the');
-		lines.push('# socket peer IP directly.  If you front this instance with your');
-		lines.push('# own proxy/CDN, set this to that proxy CIDR so the relay honours');
-		lines.push('# the forwarded client IP.  See RUN-A-MORPHIT-NODE.md §6.');
-		lines.push('# MORPHIT_RELAY_TRUSTED_PROXY_IPS=');
-	}
-	lines.push('');
+	// cp193 — MORPHIT_RELAY_TRUSTED_PROXY_IPS and the relay signup
+	// ceiling are NOT operator-config-allowlisted keys, so they are
+	// written into morphit.env (renderEnv), not here.  Putting them in
+	// morphit.config.env makes the indexer reject the whole config on
+	// boot ("contains keys not in the operator allowlist").
 
 	return lines.join('\n') + '\n';
 }
@@ -647,6 +620,42 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push(`MORPHIT_INDEXER_DATABASE_URL=${quote(answers.databaseUrl)}`);
 	lines.push(`MORPHIT_RELAY_DATABASE_URL=${quote(answers.databaseUrl)}`);
+	lines.push('');
+
+	// cp193 — relay signup ceiling. NOT an operator-config-allowlisted
+	// key, so it lives here in morphit.env (matching relay.env.example
+	// and the Ansible relay.env template), NOT in morphit.config.env.
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Signup ceiling');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Hard cap on accounts the relay creates per UTC day.');
+	lines.push('# Hit-the-cap → signups pause until midnight UTC.');
+	lines.push(`MORPHIT_RELAY_SIGNUP_DAILY_CEILING=${answers.dailyCeiling}`);
+	lines.push('');
+
+	// cp193 — reverse-proxy trusted client IPs. Also NOT allowlisted,
+	// so it belongs here. When the stack sits behind BunkerWeb's pinned
+	// 172.20.0.0/16 Docker network, the relay must trust that range so
+	// the real client IP in X-Forwarded-For is honoured by rate limits
+	// and abuse defenses. Written as a live value ONLY when the operator
+	// opted into BunkerWeb — otherwise the relay reads the socket peer
+	// IP directly, and trusting a phantom proxy range would let a direct
+	// client spoof its source IP.
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Reverse proxy / trusted client IPs');
+	lines.push('# ──────────────────────────────────────────────────────');
+	if (answers.bunkerWeb.enabled) {
+		lines.push('# You chose BunkerWeb at setup.  This is the Docker network');
+		lines.push('# the shipped ops/bunkerweb/ compose pins; the relay trusts');
+		lines.push('# X-Forwarded-For only from this range.  See OPERATIONS.md §32.');
+		lines.push('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16');
+	} else {
+		lines.push('# No reverse proxy was selected at setup — the relay reads the');
+		lines.push('# socket peer IP directly.  If you front this instance with your');
+		lines.push('# own proxy/CDN, set this to that proxy CIDR so the relay honours');
+		lines.push('# the forwarded client IP.  See RUN-A-MORPHIT-NODE.md §6.');
+		lines.push('# MORPHIT_RELAY_TRUSTED_PROXY_IPS=');
+	}
 	lines.push('');
 
 	lines.push('# ──────────────────────────────────────────────────────');
