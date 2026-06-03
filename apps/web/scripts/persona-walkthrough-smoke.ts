@@ -289,7 +289,7 @@
  *   cd apps/web && npx tsx scripts/persona-walkthrough-smoke.ts
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_WEB = join(import.meta.dirname, '..');
@@ -2691,6 +2691,29 @@ const SCENARIOS: readonly Scenario[] = [
 			'copyFileSync',
 			'rollback(installDir, backupDir, tmpDir'
 		]
+	},
+	{
+		name: 'cp192 Josie Jo-9a — guided install command reuses init/harden + offers PATH symlink',
+		file: 'apps/ops-cli/src/commands/install.ts',
+		rootRelative: true,
+		mustHave: [
+			'export async function runInstall',
+			'runInit',
+			'runHarden',
+			'/usr/local/bin/morphit-ops',
+			'ops/ansible/'
+		]
+	},
+	{
+		name: 'cp192 Josie Jo-9b — start-here hub routes operators by intent (install / upgrade / migrate)',
+		file: 'docs/start-here/README.md',
+		rootRelative: true,
+		mustHave: [
+			'RUN-A-MORPHIT-NODE.md',
+			'UPGRADING.md',
+			'MIGRATE-TO-RELEASE-TRACK.md',
+			'npx morphit-ops'
+		]
 	}
 ];
 
@@ -2777,6 +2800,39 @@ for (const sc of SCENARIOS) {
 }
 
 console.log(`\n${passed} passed, ${failed} failed (${SCENARIOS.length} total)`);
+
+// cp192 — the start-here hub is the new front door for operators; a
+// broken link there is exactly the kind of hiccup we're killing.
+// Verify every relative markdown link [text](../X.md) in the hub
+// resolves to a real file (the generic fenced-path smoke skips
+// `../`-prefixed tokens, so pin them here explicitly).
+{
+	const hubRel = 'docs/start-here/README.md';
+	const hubAbs = join(REPO_ROOT, hubRel);
+	let hubChecked = 0;
+	let hubBroken = 0;
+	try {
+		const hub = readFileSync(hubAbs, 'utf8');
+		const linkRe = /\]\((\.\.\/[A-Za-z0-9._/-]+\.md)\)/g;
+		let m: RegExpExecArray | null;
+		while ((m = linkRe.exec(hub)) !== null) {
+			const rel = m[1]!;
+			const target = join(REPO_ROOT, 'docs', 'start-here', rel);
+			hubChecked++;
+			if (!existsSync(target)) {
+				hubBroken++;
+				console.error(`  ✗ start-here hub link broken: ${rel} (resolved ${target})`);
+				failed++;
+			}
+		}
+		if (hubBroken === 0) {
+			console.log(`  ✓ start-here hub: all ${hubChecked} doc links resolve`);
+		}
+	} catch {
+		console.error(`  ✗ start-here hub not readable at ${hubRel}`);
+		failed++;
+	}
+}
 
 if (failed > 0) {
 	console.error('\npersona-walkthrough smoke FAILED');

@@ -50,6 +50,21 @@ that to the signed commit. If you want one more layer (defense
 against a compromised Forgejo), see the "Belt-and-braces
 verification" section below.
 
+> **Maintainer note — the pre-release flag and `morphit-ops
+> upgrade`.** `morphit-ops upgrade` now finds the newest release
+> even when it is flagged *pre-release* (it falls back from
+> `/releases/latest` to the newest release of any kind when no
+> stable exists). **But that fallback only runs in the version the
+> operator already has installed.** An operator on a build that
+> predates this fix (anything at or before `v1.0.0-beta.2`) is still
+> running the old logic, which only sees the newest *non*-pre-release
+> release. So until every operator has upgraded onto a build that
+> contains the fallback, **leave the release they need to upgrade
+> _to_ un-flagged as pre-release** (uncheck "pre-release" in the
+> Forgejo release UI), or their `morphit-ops upgrade` will report
+> "already on the latest" and never see it. Once operators are on a
+> fixed build, you can flag betas pre-release freely.
+
 ## What if my instance is several releases behind?
 
 Common case: you stood up an instance, didn't touch it for a
@@ -130,7 +145,15 @@ sudo -u morphit npx morphit-ops upgrade
 Steps the command takes, in order:
 
 1. Reads `/opt/morphit/release-info.json` for the current version.
-2. Fetches the latest release from `https://git.agorise.net/api/v1/repos/agorise/morphit/releases/latest`.
+2. Finds the release to offer you. It first asks Forgejo for the
+   latest **stable** release (`/releases/latest`, which by Forgejo's
+   rules returns the newest release *not* marked pre-release). If
+   there is no stable release yet — which is the case throughout the
+   beta period, when every release is a pre-release — it falls back to
+   the newest release of any kind (`/releases?limit=1`). So during
+   beta you always get the newest beta even if it's flagged
+   pre-release; once a stable ships, the stable is preferred and you
+   are not pushed onto a newer beta automatically.
 3. If you're already on it, exits 0 (no-op).
 4. Otherwise, **shows you the release notes** and prompts y/N.
 5. Downloads the tarball + `.sha256` to `/tmp/morphit-upgrade-<ts>/`.

@@ -63,12 +63,14 @@ const REPO = resolve(HERE, '..');
 // TARBALL (state log), PHASE-* (planning), DESIGN docs (RFCs).
 const OPERATOR_DOCS = [
 	'README.md',
+	'docs/start-here/README.md',
 	'docs/RUN-A-MORPHIT-NODE.md',
 	'docs/OPERATIONS.md',
 	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'docs/LAUNCH-DAY.md',
 	'docs/POST-LAUNCH-WEEK-ONE.md',
 	'docs/UPGRADING.md',
+	'docs/MIGRATE-TO-RELEASE-TRACK.md',
 	'docs/BETA-INCIDENT-RUNBOOK.md',
 	'docs/SECURITY.md',
 	'docs/ADDING-A-COIN.md',

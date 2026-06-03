@@ -53,6 +53,11 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 		heading: 'Set up & change this instance',
 		items: [
 			{
+				label: 'Install / set up a new node (guided)',
+				blurb: 'First-time install: checks prerequisites, runs setup, offers hardening and a PATH shortcut.',
+				subcommand: 'install'
+			},
+			{
 				label: 'Edit settings',
 				blurb: 'Change RPC URLs, description/SEO, origin, fees, or your operator tag.',
 				subcommand: 'edit'
