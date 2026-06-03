@@ -107,3 +107,25 @@ decisions (ADRs), audit reports, development guides? Those live in
 the main `docs/` folder and its `adr/` and `audit/` subfolders.
 This "start here" hub is for people running a node, not building
 the software.*
+
+---
+
+## For testers: validate a fresh install on a throwaway VM
+
+If you're helping prove the install is smooth before others rely on
+it, there's a non-interactive checker. On a **disposable** Ubuntu
+24.04 VM (one you'll delete afterward — it installs packages and
+writes under `/opt`):
+
+```
+git clone https://git.agorise.net/agorise/morphit.git
+cd morphit
+sudo MORPHIT_VALIDATE_YES=1 bash scripts/validate-fresh-install.sh
+```
+
+It checks prerequisites, that `morphit-ops install` and its
+preflight run, that the systemd units parse and whether they're
+installed, and that release discovery reaches the API — then prints
+a PASS/FAIL/WARN summary of the real-world rough edges. Send the
+output to the maintainers.
+
