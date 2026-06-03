@@ -7,6 +7,22 @@ fine, this release is still recommended but not urgent. If your
 indexer crashes at boot with `ReferenceError: require is not
 defined`, this release fixes it.
 
+## Added
+
+- **`morphit-ops doctor` — a read-only "will my node start?" check.**
+  Run it from your install directory and it tells you, in plain
+  English, whether the indexer and relay will start with the config
+  you have on disk — *before* you start them. It reports exactly
+  what is wrong (a missing required setting, a value in the wrong
+  file, a key-file permission) and how to fix it, and it changes
+  nothing on your system. If your node won't boot, run `morphit-ops
+  doctor` first. It also runs a short **security check**: it tells
+  you whether your relay's active key is encrypted or stored in
+  plaintext (and how to encrypt it), and flags any secret file that
+  other users on the box can read. (This security check is
+  operator-only — it is deliberately not exposed on the public
+  health endpoint.)
+
 ## Fixed
 
 - **Indexer crashed at startup when `MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM`

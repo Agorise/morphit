@@ -58,6 +58,11 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'install'
 			},
 			{
+				label: 'Check if my node will start (doctor)',
+				blurb: 'Read-only: reports whether the indexer and relay will boot with the config on disk. Changes nothing.',
+				subcommand: 'doctor'
+			},
+			{
 				label: 'Edit settings',
 				blurb: 'Change RPC URLs, description/SEO, origin, fees, or your operator tag.',
 				subcommand: 'edit'

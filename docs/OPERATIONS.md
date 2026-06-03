@@ -5533,6 +5533,65 @@ Add `~/.pgpass` to the morphit system user's home with the same password as `sec
 
 These should run on the host with the same Node version your image uses, against the running container's exposed ports.
 
+### Troubleshooting: a service won't start (use `morphit-ops doctor`)
+
+When the indexer or relay exits immediately on start with a
+configuration error — `config validation failed: … Required`,
+`[operator-config] … not in the operator allowlist`, an empty/missing
+key file, or a key-file permission complaint — the fastest path is
+the read-only preflight:
+
+```
+cd /opt/morphit          # the install directory
+npx morphit-ops doctor   # or: morphit-ops doctor, if symlinked onto PATH
+```
+
+What it does, and why it's trustworthy:
+
+- It sources `morphit.env` exactly the way a real start does
+  (`set -a; . morphit.env; set +a`) and runs each service's **own**
+  config loader via an internal `--check-config` mode that loads
+  config and exits. Because it uses the services' real loaders, its
+  verdict cannot drift from what the services actually require.
+- It reports `✓ will start` / `✗ will NOT start` per service, and for
+  a failure it surfaces the validation lines (not a stack trace) plus
+  the fix.
+- It **mutates nothing** — no files, no database, no started
+  services, no network calls. The relay check runs *before* the
+  passphrase-unlock step, so it never prompts; instead it reports
+  whether the active key is plaintext or an encrypted envelope (i.e.
+  whether the relay will ask for a passphrase at real start).
+- Exit code: `0` if both services validate, `1` if either fails, `2`
+  if you're not in an install directory. `--json` emits a structured
+  result for scripting.
+
+This is the recommended first step before `systemctl start` on a
+fresh install, and the first thing to reach for when a node that used
+to boot suddenly won't after a config change. Note that `doctor`
+validates *config*; it does not (and is not meant to) install or
+start services or systemd units — that remains a manual/Ansible step.
+
+`doctor` finishes with a read-only **security audit** (operator-only;
+this is deliberately NOT exposed on the public `/v1/health` endpoint,
+which would advertise a weak key to attackers). It reports:
+
+- **Active-key encryption** — whether the relay key is an encrypted
+  envelope (✓) or stored in **plaintext** (⚠, with the `morphit-ops
+  edit-active-key` remediation). It detects this by reading only the
+  first bytes of the key file to spot the envelope marker; it never
+  prints key material. Reminder: encrypted keys are not auto-unlocked
+  (by policy), so the relay needs a manual passphrase at each start.
+- **Active-key file permissions** — ⚠ if group/other-readable (the
+  relay also refuses to boot in that case).
+- **Secret-file permissions** — ⚠ if `morphit.env` or
+  `morphit.config.env` is group/other-readable; `morphit.env` holds
+  the database password and is not permission-checked at boot, so
+  this catches a real at-rest leak.
+
+Security findings are **advisory** — they do not change doctor's exit
+code (which reflects boot-readiness), but a hardened instance should
+show all green here. `--json` includes a `security` array.
+
 ### Troubleshooting: `morphit-ops` says "command not found"
 
 If `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once and then stopped — or never worked on a fresh clone — there are two causes, in order of how often they bite:

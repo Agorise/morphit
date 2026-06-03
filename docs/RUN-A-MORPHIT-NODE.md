@@ -1213,6 +1213,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable morphit-indexer morphit-relay
 ```
 
+> **Before you start the services, run the doctor.** From your
+> install directory, `npx morphit-ops doctor` reads your config and
+> reports whether the indexer and relay will actually start — in
+> plain English, changing nothing. Catching a missing or misplaced
+> setting here (a 10-second read-only check) is far easier than
+> reading a stack trace after a failed `systemctl start`. See the
+> "My node won't start" troubleshooting entry later in this guide.
+
 > **One-time path + user fixup (Sally-operator finding So-6,
 > Part 119).**  The shipped unit files hardcode
 > `WorkingDirectory=/opt/morphit-relay` (relay) and
@@ -2014,6 +2022,44 @@ npx morphit-ops init
 If you installed Morphit with the **Ansible playbook** (`ops/ansible/`), you don't run these commands by hand — the playbook runs `npm install` for you and (since cp161) verifies the `morphit-ops` tool is runnable before finishing. If something changed on the box, re-run the playbook rather than doing a manual `git pull` on the server.
 
 For the full explanation of *why* this happens (workspace bins, the `tsx` runtime dependency, the `NODE_ENV=production` edge case), see **OPERATIONS.md → "Troubleshooting: `morphit-ops` says command not found"** in §33.
+
+### "My node won't start"
+
+If you run the indexer or relay and it exits immediately with a
+configuration error — anything like `config validation failed: …
+Required`, `… not in the operator allowlist`, or a key-file
+permission complaint — **run the doctor first** instead of reading
+stack traces:
+
+```
+cd /opt/morphit          # your install directory
+npx morphit-ops doctor
+```
+
+It reads your `morphit.env` and `morphit.config.env` the same way
+the services do, then tells you in plain English whether the indexer
+and relay will start — and if not, exactly which setting is missing
+or wrong and how to fix it. It changes nothing on your system; it
+only reads and reports. It also tells you whether your relay key is
+encrypted (i.e. whether the relay will ask for a passphrase when it
+starts).
+
+Fix what it reports, then run `morphit-ops doctor` again until both
+services show a green check. Common fixes it points you to: a setting
+that belongs in `morphit.env` rather than `morphit.config.env`, a
+required value that is missing (re-running `morphit-ops init`
+regenerates a complete config), or a key file that needs
+`chmod 0600`.
+
+`doctor` also runs a short **security check** at the end. The most
+important item: it tells you whether your relay's active key is
+**encrypted** or stored in **plaintext**, and recommends encrypting
+it (`morphit-ops edit-active-key`). It also flags any secret file
+(`morphit.env`, the key file) that is readable by other users on the
+box. Note the deliberate trade-off: an encrypted key gives you much
+better security but **must be unlocked by hand each time the relay
+starts** — there is no automatic unlock, so the relay will not come
+back on its own after a reboot until you enter the passphrase.
 
 ### "The indexer fell behind"
 
