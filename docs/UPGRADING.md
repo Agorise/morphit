@@ -26,7 +26,7 @@ building from source.
 ## How releases work
 
 A Morphit release is an annotated git tag of the form
-`v<MAJOR>.<MINOR>.<PATCH>` (e.g. `v1.0.0-beta.1`). The release
+`v<MAJOR>.<MINOR>.<PATCH>` (e.g. `v1.0.0-beta.3`). The release
 workflow at `.forgejo/workflows/release.yml` runs on every tag
 push, in this order:
 
@@ -128,10 +128,10 @@ Add `--json` to get machine-readable output:
 ```
 sudo -u morphit npx morphit-ops upgrade --check-only --json
 {
-  "current": "v1.0.0-beta.1",
-  "latest": "v1.0.0-beta.1",
+  "current": "v1.0.0-beta.3",
+  "latest": "v1.0.0-beta.3",
   "up_to_date": true,
-  "release_url": "https://git.agorise.net/agorise/morphit/releases/tag/v1.0.0-beta.1",
+  "release_url": "https://git.agorise.net/agorise/morphit/releases/tag/v1.0.0-beta.3",
   "published_at": "2026-05-22T15:30:00Z"
 }
 ```
@@ -246,7 +246,7 @@ flow doesn't fit your environment — here's the explicit recipe.
 ```
 # 1. Download the release artifacts (replace VERSION).
 cd /tmp
-VERSION=v1.0.0-beta.1
+VERSION=v1.0.0-beta.3
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/${VERSION}/morphit-${VERSION}.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/${VERSION}/morphit-${VERSION}.tar.gz.sha256"
 
@@ -301,7 +301,7 @@ cd /tmp/morphit-verify
 gpg --import .forgejo/release-signers/*.asc
 
 # 3. Verify the tag is signed by one of those keys.
-git tag -v v1.0.0-beta.1
+git tag -v v1.0.0-beta.3
 # Output should end with "Good signature from..." and the
 # fingerprint should match an authorized signer.
 
@@ -309,7 +309,7 @@ git tag -v v1.0.0-beta.1
 #    the tag's tree.  This is brittle (depends on tar's filename
 #    ordering matching git's), so the easier check is to compare
 #    individual file contents:
-git checkout v1.0.0-beta.1
+git checkout v1.0.0-beta.3
 diff -r . /opt/morphit
 # Should show only node_modules/ and similar build-artifact paths
 # as different (those aren't in the source tree).
@@ -357,10 +357,10 @@ cd morphit
 
 # Verify the tag (optional but recommended).
 gpg --import .forgejo/release-signers/*.asc
-git tag -v v1.0.0-beta.1
+git tag -v v1.0.0-beta.3
 
 # Check out the release tag.
-git checkout v1.0.0-beta.1
+git checkout v1.0.0-beta.3
 
 # Install + run the validation gates (same gates CI runs).
 npm ci
@@ -393,7 +393,7 @@ stable and intended for operators participating in beta-testing.
 
 **"No release-info.json at /opt/morphit/release-info.json"** —
 your install predates the release-tooling provenance manifest
-(v1.0.0-beta.1+). For first-time upgrades from a manual install,
+(v1.0.0-beta.3+). For first-time upgrades from a manual install,
 copy this file manually:
 
 ```
