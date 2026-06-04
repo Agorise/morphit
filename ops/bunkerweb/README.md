@@ -71,7 +71,11 @@ sudo systemctl restart morphit-relay
 # 6. Bring BunkerWeb up.
 cd /etc/bunkerweb && sudo docker compose up -d
 
-# 7. Verify.
+# 7. Verify — the easy way: a single health check.
+npx morphit-ops bunkerweb
+#   Reports whether both containers are running + healthy, or what's
+#   wrong. (Also in the interactive menu: "Web firewall (BunkerWeb)
+#   status".)  Or inspect the raw logs directly:
 sudo docker compose logs --tail 50
 curl -v https://<your-morphit-domain>/v1/instance
 ```

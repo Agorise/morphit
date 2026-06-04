@@ -30,7 +30,7 @@
 	import Head from '$components/Head.svelte';
 	import { _ } from 'svelte-i18n';
 
-	/** The 21 terms covered by the glossary, in alphabetized
+	/** The 22 terms covered by the glossary, in alphabetized
 	 *  English order. Adding a new term: add the key here, add
 	 *  glossary.<key>.title and glossary.<key>.body to all 10
 	 *  locale JSONs, done. */
@@ -46,6 +46,7 @@
 		'feedback',
 		'fiat',
 		'indexer',
+		'instance',
 		'listing_fee',
 		'network_fee',
 		'operator',

@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "¿Pueden los operadores bloquear o banear a usuarios específicos de su instancia?",
-        "a": "Sí — un operador puede bloquear cuentas de su propia UI frontend. Esto es filtrado puramente del lado del cliente: las órdenes del usuario bloqueado no se renderizan en el /orderbook de ese operador particular, y las UIs de chat / feedback del operador pueden negarse a mostrar al usuario bloqueado.\n\nLo que esto NO hace:\n- Afectar la cadena de ninguna manera. Las órdenes de usuarios bloqueados siguen existiendo on-chain y son visibles vía cualquier otra instancia de operador o consulta directa a la cadena.\n- Prevenir que el usuario bloqueado opere. Pueden usar un operador diferente, o su propia instancia auto-hospedada, o herramientas crudas de cadena — sin restricción a nivel de protocolo.\n\nEste es el balance correcto: los operadores moderan spam y abuso en su propia propiedad sin control centralizado. Los usuarios mantienen acceso completo al protocolo a través de cualquiera de las otras instancias listadas en /operators."
+        "a": "Sí — un operador puede revisar las señales de abuso y bloquear una cuenta en su propia instancia usando las herramientas de moderación de `morphit-ops`. El bloqueo se aplica en el servidor: el indexador deja de servir los anuncios de esa cuenta en todos los lugares donde esta instancia los muestra — el orderbook, la vista por cuenta, los espacios destacados, los feeds RSS y el stream en vivo. Cuando la persona bloqueada inicia sesión aquí, ve un aviso claro que explica que sus publicaciones están ocultas solo en esta instancia.\n\nLo que esto NO hace:\n- Afectar la blockchain. Los anuncios de la cuenta bloqueada siguen existiendo on-chain y permanecen visibles a través de cualquier otra instancia de operador o una consulta directa a la cadena.\n- Tocar los fondos, las claves o la identidad de la cuenta — y no tiene ningún efecto en ninguna otra instancia de Morphit. Es totalmente reversible.\n- Impedir que la persona bloqueada comercie. Puede usar otra instancia, su propia instancia autoalojada o las herramientas directas de la cadena — no hay ninguna restricción a nivel de protocolo.\n\nLos operadores pueden moderar el spam y el abuso solo en su propia instancia, de forma transparente (ningún operador puede censurar en silencio). Por ejemplo, la venta de productos o servicios que iniciarían un daño. #donoharm #agorism Los operadores tampoco pueden borrar a nadie de la federación — las publicaciones de los usuarios siguen siendo visibles a través de cualquiera de las otras instancias listadas en /instances."
       },
       "chat_identity_key": {
         "q": "¿Necesito configurar una clave aparte para usar el chat?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexador",
       "body": "El componente de una instancia de Morphit que observa la cadena, decodifica las operaciones relevantes para Morphit (órdenes, feedback, sobres de chat) y se las sirve al frontend web en una forma utilizable. La cadena es la fuente de verdad; el indexador es solo un caché rápido. Lo opera el operador, no tú."
+    },
+    "instance": {
+      "title": "Instancia",
+      "body": "Un único sitio web de Morphit, gestionado por un operador — el sitio en el que estás ahora mismo es una instancia. Como Morphit está federado, muchas instancias independientes leen la misma blockchain y muestran los mismos pedidos, operaciones y reputaciones. Si una instancia te bloquea o se cae, puedes cambiar a cualquier otra instancia y continuar exactamente donde lo dejaste."
     },
     "listing_fee": {
       "title": "Tarifa de listado",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "Has sido bloqueado en esta instancia de Morphit",
+      "title": "Tus publicaciones están bloqueadas en esta instancia",
       "body": "@{operator}, el operador de esta instancia, bloqueó tu cuenta el {since}. Es una decisión de moderación de ESTA instancia — tus fondos, identidad e historial en cadena no se ven afectados, y otras instancias de Morphit tampoco.",
       "reason_label": "Motivo",
       "no_reason_provided": "El operador no dio un motivo.",
+      "still_visible_elsewhere": "Tus publicaciones están bloqueadas solo en esta instancia — siguen visibles en todas las demás instancias de Morphit.",
+      "contact_prefix": "Si crees que esto es un error, puedes contactar con la comunidad en Matrix:",
+      "contact_link": "Sala de Agorise en Matrix",
       "what_it_means_expand": "¿Qué significa? (mostrar detalles)",
       "what_it_means_collapse": "Ocultar detalles",
       "what_it_does_not_do": "Lo que este bloqueo NO hace",

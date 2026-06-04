@@ -87,7 +87,10 @@ function runDoctor(dir: string): { code: number; out: string } {
 	const childEnv = { ...process.env };
 	delete childEnv.NODE_OPTIONS;
 	delete (childEnv as Record<string, string | undefined>).TSX_TSCONFIG_PATH;
-	const r = spawnSync('node', [join(REPO, 'apps', 'ops-cli', 'dist', 'main.js'), 'doctor', '--no-color'], {
+	// --no-rpc: doctor-smoke validates the config-check contract, not
+	// network reachability (the RPC probe logic is covered by
+	// rpc-endpoint-probe-smoke). Keeps this smoke offline + deterministic.
+	const r = spawnSync('node', [join(REPO, 'apps', 'ops-cli', 'dist', 'main.js'), 'doctor', '--no-color', '--no-rpc'], {
 		cwd: dir,
 		env: childEnv,
 		encoding: 'utf8',

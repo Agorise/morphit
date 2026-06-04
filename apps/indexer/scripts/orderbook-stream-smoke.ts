@@ -110,6 +110,21 @@ scenario('buildWhereClauses: empty filter → base clauses only', () => {
 	assertEqual(params, [], 'no params');
 });
 
+scenario('buildWhereClauses: operator account adds the block-exclusion clause', () => {
+	const { where, params } = buildWhereClauses({}, 0, 'morphit');
+	assertTrue(where.length === 4, 'base clauses + block exclusion');
+	assertTrue(
+		where[3]!.includes('operator_blocks') && where[3]!.includes("ob.state = 'blocked'"),
+		'block exclusion clause present'
+	);
+	assertEqual(params, ['morphit'], 'operator bound as a param');
+});
+
+scenario('buildWhereClauses: empty operator account skips the block clause', () => {
+	const { where } = buildWhereClauses({}, 0, '');
+	assertTrue(where.length === 3, 'no block clause when no operator supplied');
+});
+
 scenario('buildWhereClauses: asset filter binds correctly', () => {
 	const { where, params } = buildWhereClauses({ asset: 'BTC' });
 	assertTrue(where.length === 4, 'four clauses (3 base + asset)');

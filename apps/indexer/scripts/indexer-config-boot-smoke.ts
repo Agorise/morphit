@@ -25,6 +25,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
@@ -147,6 +148,58 @@ try {
 	for (const [k, v] of Object.entries(prior)) {
 		if (v === undefined) delete process.env[k];
 		else process.env[k] = v;
+	}
+}
+
+// ─── Guard 3 (beta5 D): indexer RPC endpoints fall back to the
+//     shared canonical set when MORPHIT_INDEXER_RPC_ENDPOINTS is unset.
+//     Before beta5 this var was REQUIRED while the relay's equivalent
+//     had a default — the asymmetry that let one real node's relay
+//     survive while its indexer froze. Now both fall back to the same
+//     canonical set. ────────────────────────────────────────────────
+{
+	const prior3: Record<string, string | undefined> = {};
+	const set3 = (k: string, v: string) => {
+		prior3[k] = process.env[k];
+		process.env[k] = v;
+	};
+	// A complete, valid required env — EXCEPT MORPHIT_INDEXER_RPC_ENDPOINTS,
+	// which we leave unset so the schema default must supply it.
+	set3('MORPHIT_INDEXER_DATABASE_URL', 'postgres://u:arealpassword@localhost:5432/morphit_indexer');
+	set3('MORPHIT_INDEXER_RELAY_ACCOUNT', 'tester');
+	set3('MORPHIT_INDEXER_FEE_RECIPIENT', 'tester');
+	set3('MORPHIT_INDEXER_CHAIN_ID', 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f');
+	set3('MORPHIT_INDEXER_PUBLIC_ORIGIN', 'https://idx.example.com');
+	set3('MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY', 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9');
+	prior3['MORPHIT_INDEXER_RPC_ENDPOINTS'] = process.env.MORPHIT_INDEXER_RPC_ENDPOINTS;
+	delete process.env.MORPHIT_INDEXER_RPC_ENDPOINTS;
+	prior3['MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM'] = process.env.MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM;
+	delete process.env.MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM;
+
+	try {
+		const mod = await import('../src/config/index.ts');
+		const cfg = mod.loadConfig() as { blurtRpcEndpoints: readonly string[] };
+		const got = new Set(cfg.blurtRpcEndpoints);
+		const canon = new Set(DEFAULT_BLURT_RPC_ENDPOINTS);
+		const eq = got.size === canon.size && [...canon].every((u) => got.has(u));
+		if (eq) {
+			ok('indexer falls back to the canonical RPC set when MORPHIT_INDEXER_RPC_ENDPOINTS is unset');
+		} else {
+			bad(
+				'indexer RPC fallback does not match the canonical set',
+				`got=[${[...got].sort().join(', ')}] canon=[${[...canon].sort().join(', ')}]`
+			);
+		}
+	} catch (e) {
+		bad(
+			'loadConfig threw with RPC endpoints unset (the fallback default did not apply)',
+			(e instanceof Error ? e.message : String(e)).split('\n')[0]!
+		);
+	} finally {
+		for (const [k, v] of Object.entries(prior3)) {
+			if (v === undefined) delete process.env[k];
+			else process.env[k] = v;
+		}
 	}
 }
 

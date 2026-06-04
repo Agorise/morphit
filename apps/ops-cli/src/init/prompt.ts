@@ -102,22 +102,35 @@ export async function askYesNo(question: string, defaultYes: boolean): Promise<b
 
 /** Ask a numbered single-select question.  Renders each choice
  *  on its own line with a 1-indexed number, accepts a number
- *  in the response, returns the choice's index (0-indexed). */
+ *  in the response, returns the choice's index (0-indexed).
+ *
+ *  `opts.showList` (default true) prints the numbered choice list.
+ *  Pass `false` when the caller has already printed its own
+ *  richer catalog (e.g. the main menu) so we don't redundantly
+ *  re-list every item and make the screen too tall — in that case
+ *  the `question` text itself is used as the input prompt. */
 export async function askChoice(
 	question: string,
 	choices: readonly string[],
-	defaultIdx?: number
+	defaultIdx?: number,
+	opts?: { showList?: boolean }
 ): Promise<number> {
 	if (choices.length === 0) {
 		throw new Error('askChoice requires at least one choice');
 	}
-	console.log(question);
-	for (let i = 0; i < choices.length; i++) {
-		const marker = defaultIdx !== undefined && i === defaultIdx ? ' (default)' : '';
-		console.log(`  ${i + 1}. ${choices[i]}${marker}`);
+	const showList = opts?.showList !== false;
+	if (showList) {
+		console.log(question);
+		for (let i = 0; i < choices.length; i++) {
+			const marker = defaultIdx !== undefined && i === defaultIdx ? ' (default)' : '';
+			console.log(`  ${i + 1}. ${choices[i]}${marker}`);
+		}
 	}
+	// When the list is suppressed, use the question itself as the
+	// prompt so there isn't a second generic "Choose" line.
+	const promptLabel = showList ? 'Choose' : question;
 	while (true) {
-		const raw = await ask('Choose', defaultIdx !== undefined ? String(defaultIdx + 1) : undefined);
+		const raw = await ask(promptLabel, defaultIdx !== undefined ? String(defaultIdx + 1) : undefined);
 		const n = parseInt(raw, 10);
 		if (isNaN(n) || n < 1 || n > choices.length) {
 			console.log(`  ✗ Please enter a number between 1 and ${choices.length}.  Try again.\n`);

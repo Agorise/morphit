@@ -13,6 +13,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { z } from 'zod';
 import { looksLikeEnvelope } from '../crypto/keyEnvelope.ts';
+import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 /**
  * Sentinels that have appeared in this repo's example .env files.
@@ -61,16 +62,10 @@ const envSchema = z.object({
 	MORPHIT_RELAY_PUBLIC_ORIGIN: z.string().url().default('https://relay.morphit.io'),
 
 	// Comma-separated lists — parsed below.
-	MORPHIT_RELAY_BLURT_RPC: z
-		.string()
-		.default(
-			[
-				'https://rpc.blurt.blog',
-				'https://rpc.beblurt.com',
-				'https://rpc.blurt.one',
-				'https://blurt-rpc.saboin.com'
-			].join(',')
-		),
+	// beta5 item D: default is the shared canonical set (single source
+	// of truth in @morphit/operator-config), identical to the indexer's
+	// fallback — no more divergent hardcoded lists.
+	MORPHIT_RELAY_BLURT_RPC: z.string().default([...DEFAULT_BLURT_RPC_ENDPOINTS].join(',')),
 	MORPHIT_RELAY_ALLOWED_ORIGINS: z.string().default('https://morphit.io'),
 
 	// Rate limits.

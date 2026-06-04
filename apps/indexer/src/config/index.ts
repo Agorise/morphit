@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { parseRoomAlias } from '@morphit/operator-config';
+import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 /**
  * Sentinels that have appeared in this repo's example .env files.
@@ -630,6 +630,14 @@ export interface Config {
 	readonly instanceSeoTwitterSite: string | undefined;
 }
 
+/**
+ * Morphit genesis block default for MORPHIT_INDEXER_START_BLOCK
+ * comes from the shared @morphit/operator-config constant
+ * (MORPHIT_GENESIS_BLOCK) so the indexer default and the ops-cli
+ * wizard-written value can never drift. See that package for the
+ * full rationale.
+ */
+
 const envSchema = z.object({
 	MORPHIT_INDEXER_DATABASE_URL: z
 		.string()
@@ -651,7 +659,12 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_CHAIN_ID: z.string().length(64, 'chain ID must be 64-char hex'),
 	MORPHIT_INDEXER_RPC_ENDPOINTS: z
 		.string()
-		.min(1)
+		// beta5 item D: was REQUIRED with no default, while the relay's
+		// MORPHIT_RELAY_BLURT_RPC had a 4-endpoint default. That asymmetry
+		// is exactly why one real node's relay survived a bad-endpoint
+		// situation while its indexer froze. Now both fall back to the
+		// same shared canonical set when unset.
+		.default([...DEFAULT_BLURT_RPC_ENDPOINTS].join(','))
 		.transform((s) =>
 			s
 				.split(',')
@@ -662,7 +675,7 @@ const envSchema = z.object({
 			(arr) => arr.length > 0 && arr.every((u) => u.startsWith('https://')),
 			'all RPC endpoints must be https:// URLs'
 		),
-	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(0),
+	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
 	MORPHIT_INDEXER_ERROR_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
 	MORPHIT_INDEXER_STALE_LAG_THRESHOLD: z.coerce.number().int().positive().default(30),

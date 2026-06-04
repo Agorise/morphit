@@ -25,7 +25,10 @@
 
 import {
 	EndpointPool,
-	DEFAULT_HEDGE_THRESHOLD_MS
+	DEFAULT_HEDGE_THRESHOLD_MS,
+	isTransportError,
+	isDblurtConsoleNoise,
+	suppressDblurtConsoleNoise
 } from '../src/index.ts';
 
 const ANSI_GREEN = '\x1b[32m';
@@ -544,6 +547,178 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		fail(
 			'quorumCall null returns',
 			`kind=${r.kind} responses=${r.responses.length} allHealthy=${allHealthy} snap=[${detail}]`
+		);
+	}
+}
+
+/* ---------------- scenario 14: call() rotates past a dead (ENOTFOUND) endpoint to a healthy one ---------------- */
+// This is the exact invariant from the beta5 firefight: one endpoint
+// whose host stopped resolving must NOT stall the indexer — a single
+// call() must rotate to a healthy endpoint within the same call.
+{
+	const pool = new EndpointPool({ endpoints: ['dead', 'good'] });
+	let goodHits = 0;
+	let deadHits = 0;
+	try {
+		const r = await pool.call(async (u) => {
+			if (u === 'dead') {
+				deadHits++;
+				// Shape mirrors Node's real DNS failure so isTransportError matches.
+				throw new Error('getaddrinfo ENOTFOUND rpc.dead.example');
+			}
+			goodHits++;
+			return 'OK';
+		});
+		if (r === 'OK' && deadHits >= 1 && goodHits === 1) {
+			pass('call(): one dead (ENOTFOUND) endpoint → rotates to healthy, returns result (no stall)');
+		} else {
+			fail('call(): dead-endpoint rotation', `result=${r} deadHits=${deadHits} goodHits=${goodHits}`);
+		}
+	} catch (err) {
+		fail('call(): dead-endpoint rotation threw', err instanceof Error ? err.message : String(err));
+	}
+	// The dead endpoint should now be in cooldown, so a second call goes
+	// straight to the healthy one without re-hitting the dead host.
+	const deadBefore = results.length; // marker only
+	void deadBefore;
+	const snap = pool.snapshot();
+	const deadEp = snap.find((s) => s.url === 'dead');
+	if (deadEp && deadEp.cooldownUntil > Date.now()) {
+		pass('call(): the dead endpoint was put into cooldown after the transport failure');
+	} else {
+		fail('call(): dead endpoint cooldown', `cooldownUntil=${deadEp?.cooldownUntil ?? 'n/a'} now=${Date.now()}`);
+	}
+}
+
+/* ---------------- scenario 15: call() with ALL endpoints dead → clear "all unavailable" error ---------------- */
+// Tonight's actual freeze: every configured endpoint dead. There is no
+// healthy endpoint to rotate to, so call() must throw a single, clear
+// error (which the indexer/relay surface to the operator — beta5 item C)
+// rather than hang.
+{
+	const pool = new EndpointPool({ endpoints: ['dead1', 'dead2'] });
+	let threw = false;
+	let msg = '';
+	try {
+		await pool.call(async (u) => {
+			throw new Error(`getaddrinfo ENOTFOUND ${u}.example`);
+		});
+	} catch (err) {
+		threw = true;
+		msg = err instanceof Error ? err.message : String(err);
+	}
+	if (threw && /all RPC endpoints unavailable/i.test(msg)) {
+		pass('call(): all endpoints dead → throws a single clear "all RPC endpoints unavailable" error');
+	} else {
+		fail('call(): all-dead error', `threw=${threw} msg=${msg}`);
+	}
+}
+
+/* ---------------- scenario 16: dblurt console-noise predicate ---------------- */
+// Matches the two exact lines @beblurt/dblurt prints; must NOT match
+// anything the operator actually needs to see.
+{
+	const noise = [
+		"Didn't failover for error code: [ENOTFOUND]",
+		"Didn't failover for error code: [ETIMEDOUT]",
+		"Didn't failover for error message: [socket hang up]",
+		'Switched Blurt RPC: https://rpc.blurt.one (previous: https://rpc.blurt.blog)'
+	];
+	const real = [
+		'all RPC endpoints unavailable: getaddrinfo ENOTFOUND rpc.x',
+		'indexer: applied block 59441299',
+		'relay-boot starting',
+		"failover succeeded", // contains 'failover' but is not the dblurt line
+		42,
+		null
+	];
+	const noiseOk = noise.every((l) => isDblurtConsoleNoise(l));
+	const realOk = real.every((l) => !isDblurtConsoleNoise(l));
+	if (noiseOk && realOk) {
+		pass('dblurt-noise predicate: matches the 2 dblurt patterns, spares real log lines');
+	} else {
+		fail('dblurt-noise predicate', `noiseOk=${noiseOk} realOk=${realOk}`);
+	}
+}
+
+/* ---------------- scenario 17: suppressor drops dblurt noise, keeps real errors ---------------- */
+{
+	const captured: string[] = [];
+	const realErr = console.error;
+	console.error = (...a: unknown[]) => {
+		captured.push(String(a[0]));
+	};
+	// Install ON TOP of the capture wrapper, then emit one noise line and
+	// one genuine error; only the genuine one should reach capture.
+	suppressDblurtConsoleNoise();
+	console.error("Didn't failover for error code: [ENOTFOUND]");
+	console.error('a genuine error the operator must see');
+	// Idempotent: a second install must not double-wrap or change behavior.
+	suppressDblurtConsoleNoise();
+	console.error("Didn't failover for error code: [ECONNRESET]");
+	console.error = realErr;
+	if (captured.length === 1 && captured[0] === 'a genuine error the operator must see') {
+		pass('suppressDblurtConsoleNoise: drops dblurt lines, preserves real errors (idempotent)');
+	} else {
+		fail('suppressDblurtConsoleNoise install', `captured=${JSON.stringify(captured)}`);
+	}
+}
+
+/* ---------------- scenario 18: retryable HTTP statuses are transport errors ---------------- */
+// beta5 item E. dblurt formats HTTP failures as `HTTP <status>: <text>`.
+// Rate-limit / server / gateway statuses must rotate + back off; 4xx
+// client errors must NOT (they'd fail identically everywhere).
+{
+	const retryable = [
+		'HTTP 429: Too Many Requests',
+		'HTTP 502: Bad Gateway',
+		'HTTP 503: Service Unavailable',
+		'HTTP 504: Gateway Timeout',
+		'HTTP 500: Internal Server Error',
+		'HTTP 408: Request Timeout'
+	];
+	const clientErrors = [
+		'HTTP 400: Bad Request',
+		'HTTP 401: Unauthorized',
+		'HTTP 403: Forbidden',
+		'HTTP 404: Not Found'
+	];
+	const retryOk = retryable.every((s) => isTransportError(new Error(s)));
+	const clientOk = clientErrors.every((s) => !isTransportError(new Error(s)));
+	if (retryOk && clientOk) {
+		pass('isTransportError: 408/429/500/502/503/504 are transport; 4xx client errors are not');
+	} else {
+		fail(
+			'HTTP status classification',
+			`retryable-all-transport=${retryOk} client-none-transport=${clientOk}`
+		);
+	}
+}
+
+/* ---------------- scenario 19: a 429 endpoint rotates + backs off ---------------- */
+// The exact relay symptom from the firefight: a rate-limited endpoint
+// must no longer dead-end the call — rotate to a healthy one and put
+// the rate-limited endpoint into cooldown so we stop hammering it.
+{
+	const pool = new EndpointPool({ endpoints: ['ratelimited', 'good'] });
+	let goodHits = 0;
+	let result: string | null = null;
+	try {
+		result = await pool.call(async (u) => {
+			if (u === 'ratelimited') throw new Error('HTTP 429: Too Many Requests');
+			goodHits++;
+			return 'OK';
+		});
+	} catch (err) {
+		fail('429 rotation threw', err instanceof Error ? err.message : String(err));
+	}
+	const cooled = pool.snapshot().find((s) => s.url === 'ratelimited');
+	if (result === 'OK' && goodHits === 1 && cooled && cooled.cooldownUntil > Date.now()) {
+		pass('call(): a 429 (rate-limited) endpoint rotates to a healthy one and is cooled down (backoff)');
+	} else {
+		fail(
+			'429 rotation+cooldown',
+			`result=${result} goodHits=${goodHits} cooldownUntil=${cooled?.cooldownUntil ?? 'n/a'} now=${Date.now()}`
 		);
 	}
 }

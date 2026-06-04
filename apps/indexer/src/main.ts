@@ -69,6 +69,7 @@ import { activityRoute } from '$api/activity';
 import { instancePaymentMethodsRoute } from '$api/instancePaymentMethods';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { logger } from '$log';
+import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
 
 const bootLog = logger('boot');
 const httpLog = logger('http');
@@ -77,6 +78,12 @@ const procLog = logger('process');
 const pollerLog = logger('poller');
 
 async function main(): Promise<void> {
+	// Drop @beblurt/dblurt's redundant internal failover chatter
+	// ("Didn't failover for error code: [...]") — our EndpointPool does
+	// the real failover and /v1/health -> rpc_endpoints is the real
+	// signal. Installed first so even boot-time RPC noise is filtered.
+	suppressDblurtConsoleNoise();
+
 	// ─── 0. Operator config file (optional) ─────────────────────
 	// Reads morphit.config.env (a small operator-friendly key=value
 	// file) if present, projecting whitelisted keys into
@@ -251,12 +258,12 @@ async function main(): Promise<void> {
 	// Long-lived SSE connections shouldn't share a per-minute
 	// budget with REST GETs.  Per-IP open-connection caps belong
 	// at the reverse-proxy layer, not here.
-	app.route('/v1/orderbook/stream', orderbookStreamRoute(db, poller));
+	app.route('/v1/orderbook/stream', orderbookStreamRoute(db, poller, config.officialAccountName));
 
 	const orderbookApp = new Hono();
 	orderbookApp.use('*', rateLimit('list', config.listRatePerMin));
-	orderbookApp.route('/', orderbookRoute(db, poller));
-	orderbookApp.route('/featured', featuredRoute(db));
+	orderbookApp.route('/', orderbookRoute(db, poller, config.officialAccountName));
+	orderbookApp.route('/featured', featuredRoute(db, config.officialAccountName));
 	// Clearing-price history sits under /featured/clearing-price-history
 	// (closely related; lets clients fetch in one base URL).  Same
 	// 'list' rate-limit tier inherited from orderbookApp.
@@ -283,7 +290,7 @@ async function main(): Promise<void> {
 
 	const ordersApp = new Hono();
 	ordersApp.use('*', rateLimit('list', config.listRatePerMin));
-	ordersApp.route('/', ordersByAccountRoute(db));
+	ordersApp.route('/', ordersByAccountRoute(db, config.officialAccountName));
 	// Task #14 — private viewcounts.  Same /v1/orders namespace
 	// because the routes are :account/:permlink/view{,s}.  Inherits
 	// the existing 'list' rate-limit tier; nginx limit_req_zone is

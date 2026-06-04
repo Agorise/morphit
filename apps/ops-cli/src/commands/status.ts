@@ -27,9 +27,8 @@ import { section, row, blank, info, fmt } from '../render/term.ts';
 // ─── Query result types ──────────────────────────────────────────
 
 interface IndexerStateRow {
-	last_block_num: string;
-	last_block_at: Date | null;
-	updated_at: Date;
+	last_applied_block: string;
+	last_applied_at: Date | null;
 }
 
 interface DrainQueueRow {
@@ -129,9 +128,8 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 	] = await Promise.all([
 		ctx.db.query<IndexerStateRow>(
 			`SELECT
-			   last_block_num::text,
-			   last_block_at,
-			   updated_at
+			   last_applied_block::text,
+			   last_applied_at
 			 FROM indexer_state
 			 WHERE id = 1`
 		),
@@ -208,8 +206,8 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 	const related = relatedResult.rows[0];
 	const failed = failedResult.rows[0];
 
-	const indexerLastBlockNum = indexer !== undefined ? parseInt(indexer.last_block_num, 10) : 0;
-	const indexerLastBlockAt = indexer?.last_block_at ?? null;
+	const indexerLastBlockNum = indexer !== undefined ? parseInt(indexer.last_applied_block, 10) : 0;
+	const indexerLastBlockAt = indexer?.last_applied_at ?? null;
 
 	return {
 		indexer: {

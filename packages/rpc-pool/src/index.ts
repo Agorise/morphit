@@ -113,6 +113,19 @@ export function isTransportError(err: unknown): boolean {
 	if (m.includes('socket hang up')) return true;
 	if (m.includes('network')) return true;
 	if (m.includes('aborted')) return true;
+	// beta5 item E: HTTP statuses that mean "this endpoint is rate-
+	// limited / overloaded / having a server-side moment right now" —
+	// treat them like a transport failure so the pool ROTATES to another
+	// endpoint and applies the cooldown ladder (backoff). This is the
+	// fix for the firefight's relay 429/502: previously these surfaced
+	// as application errors, so the pool propagated them WITHOUT trying
+	// another endpoint. @beblurt/dblurt formats them as
+	// `HTTP <status>: <statusText>` (utils.js). We deliberately do NOT
+	// match 4xx CLIENT errors (400/401/403/404 etc.) — those would fail
+	// identically on every endpoint, so rotating is pointless and would
+	// just mask the real cause. The matched set is the standard
+	// retryable list: 408, 429, 500, 502, 503, 504.
+	if (/\bhttp (?:408|429|500|502|503|504)\b/.test(m)) return true;
 	return false;
 }
 
@@ -673,4 +686,51 @@ export interface QuorumCallResult<T> {
 	readonly agreedKey: string | undefined;
 	readonly contacted: number;
 	readonly cooledDown: number;
+}
+
+// ─── @beblurt/dblurt console-noise suppression ──────────────────────
+//
+// @beblurt/dblurt logs its own internal round-robin chatter through
+// raw console.* with no option to disable it:
+//   - console.error("Didn't failover for error code: [ENOTFOUND]")
+//   - console.log("Switched Blurt RPC: <url> (previous: <url>)")
+//
+// Because we drive failover with EndpointPool over SINGLE-URL dblurt
+// clients, dblurt's own multi-node failover never applies — so on every
+// transport error it prints "Didn't failover", which is pure noise: the
+// real failover happens one level up in EndpointPool, and the real
+// operator signal is on /v1/health -> rpc_endpoints. In the beta5
+// firefight this spam made a stalled sync look like an unhandled crash.
+//
+// suppressDblurtConsoleNoise() installs a one-time console filter that
+// drops ONLY those two exact patterns; every other console line passes
+// through untouched. Apps call it once at startup.
+
+const DBLURT_NOISE_PATTERNS: readonly RegExp[] = [
+	/Didn't failover for error (?:code|message): \[/,
+	/^Switched Blurt RPC: /
+];
+
+/** True if `line` is one of dblurt's redundant internal log lines.
+ *  Exported so it can be unit-tested without patching console. */
+export function isDblurtConsoleNoise(line: unknown): boolean {
+	return typeof line === 'string' && DBLURT_NOISE_PATTERNS.some((re) => re.test(line));
+}
+
+let dblurtNoiseSuppressed = false;
+
+/** Install a one-time console filter dropping @beblurt/dblurt's
+ *  redundant internal failover chatter. Idempotent; safe to call from
+ *  multiple entry points. Only the two known dblurt patterns are
+ *  dropped — all other console output is preserved. */
+export function suppressDblurtConsoleNoise(): void {
+	if (dblurtNoiseSuppressed) return;
+	dblurtNoiseSuppressed = true;
+	for (const method of ['error', 'log'] as const) {
+		const original = console[method].bind(console);
+		console[method] = (...args: unknown[]): void => {
+			if (isDblurtConsoleNoise(args[0])) return;
+			original(...(args as Parameters<typeof original>));
+		};
+	}
 }

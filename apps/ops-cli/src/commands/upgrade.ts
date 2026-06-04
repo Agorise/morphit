@@ -28,20 +28,34 @@
  *                                  prompt.  Required for cron use.
  *   MORPHIT_RELEASE_HOST          (default: git.agorise.net)
  *   MORPHIT_RELEASE_REPO          (default: agorise/morphit)
+ *   MORPHIT_RELEASE_MIRRORS       (default unset) — comma-separated
+ *                                  fallback sources, each `host` (reuse
+ *                                  the primary repo) or `host/owner/repo`.
+ *                                  Tried in order after the primary.
  *   MORPHIT_INSTALL_DIR           (default: /opt/morphit)
  *   MORPHIT_BACKUP_KEEP           (default: 3) — backups to retain
  *
+ * Mirror + integrity model (beta5):
+ *
+ *   - GPG detached signature.  If the release carries a
+ *     `*.tar.gz.asc`, it is verified against the release-signer PUBLIC
+ *     keys that ship in the install at `.forgejo/release-signers/*.asc`
+ *     (a LOCAL, code-reviewed trust anchor — not fetched from the
+ *     download source).  A tarball that passes is trusted no matter
+ *     which mirror served the bytes — this is what makes a fully
+ *     standalone mirror safe (Morphit priority #2, unstoppable).
+ *     Publishing the signature requires a CI signing key — see
+ *     `.forgejo/workflows/release.yml` + docs/UPGRADING.md.
+ *
+ *   - Anchored SHA-256.  When there's no signature, the `.tar.gz.sha256`
+ *     is always taken from the TRUSTED PRIMARY over HTTPS; the tarball
+ *     bytes may be mirrored; the bytes are verified against the
+ *     primary's hash.  A hostile mirror can't forge this.  If the
+ *     primary is fully unreachable AND the release is unsigned, the
+ *     upgrade REFUSES — checking a mirror's tarball against that same
+ *     mirror's checksum proves nothing.
+ *
  * What `morphit-ops upgrade` does NOT do (intentionally):
- *
- *   - GPG tag-signature verify.  The CI already verifies that
- *     the tag is signed by an authorized key before building the
- *     tarball, so the SHA-256 chain (Forgejo HTTPS → release
- *     listing → tarball SHA → matches downloaded tarball) is
- *     sufficient for the post-CI path.  Operators who want
- *     belt-and-braces can verify the tag signature themselves
- *     with `git clone && git tag -v vX.Y.Z`.  Documented in
- *     docs/UPGRADING.md.
- *
  *   - Schema migrations.  This release tooling is pre-launch;
  *     post-launch schema changes will land as MIGRATIONS[] entries
  *     and `runMigrations()` will apply them at indexer start.
@@ -62,7 +76,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -118,6 +132,170 @@ const SERVICES_TO_RESTART = [
 	'morphit-matrix-bot.service'
 ];
 
+// ─── Mirror fallback + source-independent integrity (beta5) ─────────
+//
+// Two layers, in trust order:
+//
+//   1. GPG detached signature (`*.tar.gz.asc`) verified against the
+//      release-signer PUBLIC keys that ship IN the install at
+//      `.forgejo/release-signers/*.asc`. Because the trust anchor is
+//      local (already-running, code-reviewed) and not fetched from the
+//      download source, a tarball that passes this check is trusted no
+//      matter which mirror served the bytes — true unstoppable upgrades.
+//
+//   2. Anchored SHA-256: the tiny `.tar.gz.sha256` is always taken from
+//      the TRUSTED PRIMARY over HTTPS; the big tarball bytes may come
+//      from a mirror; we verify the bytes against the primary's hash.
+//      A hostile mirror can't forge this (it doesn't control the hash).
+//      If the primary is fully unreachable AND there's no valid
+//      signature, we REFUSE — verifying a mirror's tarball against that
+//      same mirror's checksum proves nothing.
+
+interface ReleaseSource {
+	readonly host: string;
+	readonly repo: string;
+	readonly isPrimary: boolean;
+}
+
+/** Parse the primary host/repo + the MORPHIT_RELEASE_MIRRORS env into an
+ *  ordered, de-duplicated source list (primary always first + trusted).
+ *  Each mirror entry is `host` (reuse primary repo) or `host/owner/repo`.
+ *  PURE. */
+export function parseReleaseSources(
+	primaryHost: string,
+	primaryRepo: string,
+	mirrorsEnv: string | undefined
+): ReleaseSource[] {
+	const sources: ReleaseSource[] = [{ host: primaryHost, repo: primaryRepo, isPrimary: true }];
+	for (const raw of (mirrorsEnv ?? '').split(',')) {
+		const spec = raw.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+		if (spec === '') continue;
+		const slash = spec.indexOf('/');
+		const host = slash === -1 ? spec : spec.slice(0, slash);
+		const repo = slash === -1 ? primaryRepo : spec.slice(slash + 1);
+		if (host === '' || repo === '') continue;
+		if (sources.some((s) => s.host === host && s.repo === repo)) continue;
+		sources.push({ host, repo, isPrimary: false });
+	}
+	return sources;
+}
+
+interface SelectedAssets {
+	readonly tarball: ForgejoReleaseAsset;
+	readonly sha: ForgejoReleaseAsset;
+	readonly sig: ForgejoReleaseAsset | null;
+}
+
+/** Pick the tarball + sha256 + (optional) detached GPG signature out of a
+ *  release's assets. Returns null if the required tarball+sha pair is
+ *  missing. PURE. */
+export function selectReleaseAssets(
+	assets: readonly ForgejoReleaseAsset[]
+): SelectedAssets | null {
+	const tarball = assets.find(
+		(a) => a.name.endsWith('.tar.gz') && !a.name.endsWith('.sha256.tar.gz')
+	);
+	const sha = assets.find((a) => a.name.endsWith('.tar.gz.sha256'));
+	const sig = assets.find((a) => a.name.endsWith('.tar.gz.asc')) ?? null;
+	if (!tarball || !sha) return null;
+	return { tarball, sha, sig };
+}
+
+type IntegrityProof = 'gpg-signature' | 'primary-https-hash' | 'primary-anchored-hash';
+
+interface TrustDecision {
+	readonly allowed: boolean;
+	readonly proof: IntegrityProof | null;
+	readonly reason: string;
+}
+
+/** Decide whether a downloaded tarball may be installed. PURE.
+ *  - A verified GPG signature trusts ANY byte source.
+ *  - Otherwise the SHA-256 must match a hash that came from the trusted
+ *    primary (bytes may still have been mirrored).
+ *  - Otherwise REFUSE. */
+export function decideTrust(args: {
+	bytesFromPrimary: boolean;
+	sigVerified: boolean;
+	hashMatched: boolean;
+	hashFromPrimary: boolean;
+}): TrustDecision {
+	if (args.sigVerified) {
+		return {
+			allowed: true,
+			proof: 'gpg-signature',
+			reason: 'GPG signature verified against the release-signer keys shipped in the install.'
+		};
+	}
+	if (args.hashMatched && args.hashFromPrimary) {
+		return {
+			allowed: true,
+			proof: args.bytesFromPrimary ? 'primary-https-hash' : 'primary-anchored-hash',
+			reason: args.bytesFromPrimary
+				? 'SHA-256 verified against the trusted primary over HTTPS.'
+				: 'SHA-256 verified against the trusted primary (tarball bytes came from a mirror).'
+		};
+	}
+	return {
+		allowed: false,
+		proof: null,
+		reason:
+			'No trusted integrity proof: the release is unsigned and the trusted primary could not ' +
+			'provide the expected hash. Refusing to install a mirror-supplied tarball that can only ' +
+			'be checked against the mirror\u2019s own checksum.'
+	};
+}
+
+/** True iff `gpg` is on PATH. */
+function gpgAvailable(): boolean {
+	return spawnSync('which', ['gpg'], { stdio: 'pipe', timeout: 3000 }).status === 0;
+}
+
+/** Verify a detached signature against the release-signer pubkeys shipped
+ *  at <installDir>/.forgejo/release-signers/*.asc, using a throwaway
+ *  keyring (never touches the operator's ~/.gnupg). Returns true only if
+ *  gpg reports a GOOD signature from one of the shipped keys. */
+export function verifyDetachedSignature(
+	installDir: string,
+	tarballPath: string,
+	sigPath: string
+): boolean {
+	if (!gpgAvailable()) {
+		warn('gpg not found on PATH — cannot verify the release signature (will fall back to hash anchoring).');
+		return false;
+	}
+	const signersDir = join(installDir, '.forgejo', 'release-signers');
+	if (!existsSync(signersDir)) return false;
+	const keyFiles = readdirSync(signersDir).filter((f) => f.endsWith('.asc'));
+	if (keyFiles.length === 0) return false;
+
+	const gnupgHome = mkdtempSync(join(tmpdir(), 'morphit-gpg-'));
+	try {
+		// Lock down the throwaway home (gpg insists on 0700).
+		spawnSync('chmod', ['700', gnupgHome], { stdio: 'ignore' });
+		for (const kf of keyFiles) {
+			const imp = spawnSync('gpg', ['--homedir', gnupgHome, '--batch', '--import', join(signersDir, kf)], {
+				stdio: 'pipe',
+				timeout: 15000
+			});
+			if (imp.status !== 0) {
+				warn(`Could not import release-signer key ${kf}.`);
+			}
+		}
+		const res = spawnSync(
+			'gpg',
+			['--homedir', gnupgHome, '--batch', '--status-fd', '1', '--verify', sigPath, tarballPath],
+			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }
+		);
+		const status = typeof res.stdout === 'string' ? res.stdout : '';
+		// A trustworthy result = a GOODSIG/VALIDSIG line AND a zero exit.
+		return res.status === 0 && /\bVALIDSIG\b/.test(status);
+	} finally {
+		rmSync(gnupgHome, { recursive: true, force: true });
+	}
+}
+
+
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const checkOnly = opts.flags['check-only'] === 'true';
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
@@ -126,6 +304,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const host = process.env.MORPHIT_RELEASE_HOST ?? DEFAULT_HOST;
 	const repo = process.env.MORPHIT_RELEASE_REPO ?? DEFAULT_REPO;
 	const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
+	const sources = parseReleaseSources(host, repo, process.env.MORPHIT_RELEASE_MIRRORS);
 
 	// ─── 1. Read locally-installed version ──────────────────────
 	const localInfo = readLocalReleaseInfo(installDir);
@@ -138,16 +317,32 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return 5;
 	}
 
-	// ─── 2. Fetch latest release from Forgejo ───────────────────
-	let latest: ForgejoRelease;
-	try {
-		latest = await fetchLatestRelease(host, repo);
-	} catch (err) {
+	// ─── 2. Discover the latest release across sources ──────────
+	// The PRIMARY is the trusted hash anchor. We fetch each source's
+	// release listing; `primaryRelease` (if reachable) anchors the
+	// SHA-256, while a mirror release lets us still SEE + (if signed)
+	// install when the primary is down. Discovery order = source order.
+	let primaryRelease: ForgejoRelease | null = null;
+	const releasesBySource: Array<{ src: ReleaseSource; rel: ForgejoRelease }> = [];
+	const fetchErrors: string[] = [];
+	for (const src of sources) {
+		try {
+			const rel = await fetchLatestRelease(src.host, src.repo);
+			releasesBySource.push({ src, rel });
+			if (src.isPrimary) primaryRelease = rel;
+		} catch (err) {
+			fetchErrors.push(`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+	const latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
+	if (latest === null) {
 		printError(
-			`Could not reach Forgejo release API at https://${host}/${repo}: ` +
-				(err instanceof Error ? err.message : String(err))
+			`Could not reach any release source.\n  ` + fetchErrors.join('\n  ')
 		);
 		return 5;
+	}
+	if (primaryRelease === null) {
+		warn(`Primary (${host}/${repo}) unreachable; using mirror for discovery. A valid release signature will be REQUIRED to install.`);
 	}
 
 	const currentTag = localInfo?.tag ?? '(unknown)';
@@ -196,10 +391,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return 1;
 	}
 
-	// ─── 3. Locate tarball + sha256 asset URLs ──────────────────
-	const tarballAsset = latest.assets.find((a) => a.name.endsWith('.tar.gz') && !a.name.endsWith('.sha256.tar.gz'));
-	const shaAsset = latest.assets.find((a) => a.name.endsWith('.tar.gz.sha256'));
-	if (!tarballAsset || !shaAsset) {
+	// ─── 3. Locate assets on the chosen release ─────────────────
+	const chosenAssets = selectReleaseAssets(latest.assets);
+	if (!chosenAssets) {
 		printError(
 			`Release ${latestTag} is missing required assets. ` +
 				`Expected one *.tar.gz and one *.tar.gz.sha256; found: ` +
@@ -221,38 +415,85 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
-	// ─── 5. Download tarball + sha256 ──────────────────────────
+	// ─── 5. Download + verify (mirror-aware, integrity-anchored) ─
 	const tmpDir = mkTempDir();
-	const tarballPath = join(tmpDir, tarballAsset.name);
-	const shaPath = join(tmpDir, shaAsset.name);
 
-	try {
-		info(`Downloading ${tarballAsset.name} (${tarballAsset.size} bytes)...`);
-		await downloadTo(tarballAsset.browser_download_url, tarballPath);
-		info(`Downloading ${shaAsset.name}...`);
-		await downloadTo(shaAsset.browser_download_url, shaPath);
-	} catch (err) {
-		printError(
-			`Download failed: ` + (err instanceof Error ? err.message : String(err))
-		);
+	// 5a. Trust anchor: the SHA-256 always comes from the PRIMARY.
+	let expectedHash: string | null = null;
+	if (primaryRelease) {
+		const primaryAssets = selectReleaseAssets(primaryRelease.assets);
+		if (primaryAssets) {
+			const primaryShaPath = join(tmpDir, 'primary.tar.gz.sha256');
+			try {
+				await downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath);
+				expectedHash = parseShaFile(primaryShaPath);
+			} catch (err) {
+				warn(`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+	}
+
+	// 5b. Download the tarball BYTES — primary first, then mirrors.
+	const tarballPath = join(tmpDir, chosenAssets.tarball.name);
+	let bytesFromPrimary = false;
+	let bytesSource: ReleaseSource | null = null;
+	let sigPath: string | null = null;
+	const dlErrors: string[] = [];
+	for (const { src, rel } of releasesBySource) {
+		const a = selectReleaseAssets(rel.assets);
+		if (!a) continue;
+		try {
+			info(`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`);
+			await downloadTo(a.tarball.browser_download_url, tarballPath);
+			bytesFromPrimary = src.isPrimary;
+			bytesSource = src;
+			// Pull the detached signature from the SAME source, if present.
+			if (a.sig) {
+				sigPath = join(tmpDir, a.sig.name);
+				try {
+					await downloadTo(a.sig.browser_download_url, sigPath);
+				} catch {
+					sigPath = null; // signature optional; trust logic handles absence
+				}
+			}
+			break;
+		} catch (err) {
+			dlErrors.push(`${src.host}: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+	if (bytesSource === null) {
+		printError(`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`);
 		cleanupTmp(tmpDir);
 		return 5;
 	}
 
-	// ─── 6. Verify SHA256 ──────────────────────────────────────
-	const expectedHash = parseShaFile(shaPath);
+	// ─── 6. Verify integrity + decide trust ─────────────────────
+	const sigVerified = sigPath !== null && verifyDetachedSignature(installDir, tarballPath, sigPath);
 	const actualHash = computeSha256(tarballPath);
-	if (expectedHash !== actualHash) {
+	const hashMatched = expectedHash !== null && expectedHash === actualHash;
+	if (expectedHash !== null && !hashMatched && !sigVerified) {
 		printError(
 			`SHA-256 mismatch on downloaded tarball.\n` +
-				`  Expected: ${expectedHash}\n` +
-				`  Actual:   ${actualHash}\n` +
+				`  Expected (from primary): ${expectedHash}\n` +
+				`  Actual:                  ${actualHash}\n` +
 				`Refusing to proceed.  The tarball was tampered with in transit, or the SHA file is stale.`
 		);
 		cleanupTmp(tmpDir);
 		return 5;
 	}
-	info('✓ SHA-256 verified.');
+	const trust = decideTrust({
+		bytesFromPrimary,
+		sigVerified,
+		hashMatched,
+		hashFromPrimary: expectedHash !== null
+	});
+	if (!trust.allowed) {
+		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
+		cleanupTmp(tmpDir);
+		return 5;
+	}
+	info(`\u2713 Integrity verified (${trust.proof}). ${trust.reason}`);
+
 
 	// ─── 7. Backup current install ──────────────────────────────
 	const backupDir = `${installDir}.bak-${Date.now()}`;
@@ -271,7 +512,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// ─── 8. Extract new tarball ────────────────────────────────
 	try {
 		mkdirSync(installDir, { recursive: true });
-		info(`Extracting ${tarballAsset.name} to ${installDir}...`);
+		info(`Extracting ${chosenAssets.tarball.name} to ${installDir}...`);
 		// cp131 LOW-010 — defense-in-depth tar flags.
 		//
 		// GNU tar's documented defaults already refuse two of

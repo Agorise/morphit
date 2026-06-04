@@ -46,12 +46,13 @@ before relying on any of it.**
 4. [Responding to a witness fee change alert](#4-responding-to-a-witness-fee-change-alert)
 5. [Responding to a relay-queue-stuck alert](#5-responding-to-a-relay-queue-stuck-alert)
 6. [Responding to a signup velocity spike](#6-responding-to-a-signup-velocity-spike)
+6a. [Moderating accounts — reviewing flags and blocking](#6a-moderating-accounts--reviewing-flags-and-blocking)
 7. [Suspected relay compromise](#7-suspected-relay-compromise)
 8. [Owner-key rotation ceremony](#8-owner-key-rotation-ceremony)
 9. [Paper-key backup protocol](#9-paper-key-backup-protocol)
 10. [Escalation](#10-escalation)
 11. [Running integration tests](#11-running-integration-tests)
-12. [XMR viewkey pre-deploy check (retired Part 110)](#12-xmr-viewkey-pre-deploy-check-retired-part-110)
+12. [XMR viewkey pre-deploy check (retired)](#12-xmr-viewkey-pre-deploy-check-retired)
 13. [Responding to a stale BLURT/USD price feed](#13-responding-to-a-stale-blurtusd-price-feed)
 14. [Deployment topology requirement — apps MUST be behind a loopback proxy](#14-deployment-topology-requirement--apps-must-be-behind-a-loopback-proxy)
 15. [Frontend CSP + security headers for operators](#15-frontend-csp--security-headers-for-operators)
@@ -81,10 +82,11 @@ before relying on any of it.**
 39. [Operating a home-hosted instance — concerns specific to running on residential internet](#39-operating-a-home-hosted-instance--concerns-specific-to-running-on-residential-internet)
 40. [Treasury chain-pin + XMR per-payment proofs — broadcasting and verifying](#40-treasury-chain-pin--xmr-per-payment-proofs--broadcasting-and-verifying)
 41. [Federation-cost attribution — only paying for ops served by YOUR instance](#41-federation-cost-attribution--only-paying-for-ops-served-by-your-instance)
+Trade-only asset configuration — enabling/disabling tradable assets [(jump)](#trade-only-asset-configuration)
 42. [Web Push notifications — VAPID setup and the push-sender worker](#42-web-push-notifications--vapid-setup-and-the-push-sender-worker)
-43. [SEO override env vars — homepage title/description/keywords + Twitter card](#43-seo-override-env-vars--homepage-titledescriptionkeywords--twitter-card-part-122-cp119)
+43. [SEO override env vars — homepage title/description/keywords + Twitter card](#43-seo-override-env-vars--homepage-titledescriptionkeywords--twitter-card)
 44. [User-side optional TOTP 2FA — operator-side notes](#44-user-side-optional-totp-2fa--operator-side-notes)
-45. [MCP server — AI agent surface (cp167)](#45-mcp-server--ai-agent-surface-cp167)
+45. [MCP server — AI agent surface](#45-mcp-server--ai-agent-surface)
 
 ---
 
@@ -254,8 +256,9 @@ level:
    posting, and memo keys for each in an offline backup
    (paper + encrypted digital copy).
 2. Fund the operator and relay accounts with enough
-   BLURT to cover initial RC needs — the relay especially
-   will be broadcasting on users' behalf.
+   BLURT to cover initial Mana needs (Mana, formerly called
+   Resource Credits) — the relay especially will be
+   broadcasting on users' behalf.
 3. Publish the operator's posting pubkey as
    `MORPHIT_OFFICIAL_POSTING_PUBKEY` in your frontend
    build's `$net/config.ts`. This is the release-signing
@@ -469,6 +472,89 @@ scripts.
 > mode is operator-opt-in to keep attackers from timing
 > drain attempts against unhardened instances).  Surfaced
 > Part 119 (Sally-operator finding So-3).
+
+### Monitoring RPC endpoint health
+
+Both the indexer and the relay depend on a pool of public
+Blurt RPC endpoints.  When **all** of them stop responding
+(a DNS change, an upstream outage, a rate-limit wall), the
+indexer stops advancing and the relay can't broadcast — but
+the process keeps running, so the failure is easy to
+misread.  `/v1/health` makes this visible without verbose
+mode:
+
+```
+curl -s http://127.0.0.1:8081/v1/health \
+  | jq '{rpc_endpoints_healthy, rpc_endpoints_total, lag_blocks}'
+```
+
+`rpc_endpoints_healthy` is how many endpoints are currently
+reachable (out of cooldown), out of `rpc_endpoints_total`.
+**If this reads `0` while the node is behind, RPC — not the
+indexer — is the problem;** check your
+`MORPHIT_INDEXER_RPC_ENDPOINTS` (indexer) /
+`MORPHIT_RELAY_BLURT_RPC` (relay) list.  A non-zero count
+with growing `lag_blocks` is normal during the initial
+back-fill.
+
+For deep triage, verbose mode adds per-endpoint detail:
+
+```
+curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
+  | jq '.diagnostics.rpc_endpoints'
+# [{ url, state: open|half_open|closed, consecutive_failures,
+#    cooldown_remaining_ms, ewma_latency_ms, last_success_age_s }]
+```
+
+`state` is `open` while an endpoint is in cooldown after
+transport failures, `half_open` just after cooldown expires
+(eligible to retry, not yet proven), `closed` when healthy.
+A rate-limited (`HTTP 429`) or overloaded (`HTTP 502/503/504`)
+response counts as a transport failure too, so a throttled
+endpoint shows `open`, the node rotates away from it, and the
+cooldown ladder backs off automatically instead of hammering
+it — which is what the relay needed during the firefight.
+A single dead endpoint is harmless — the pool rotates to a
+healthy one within the same call; the count and the `state`
+fields exist so you can spot a *degrading* endpoint before
+it takes the whole list down.  (Endpoint URLs appear only in
+the verbose block, which is env-opt-in per the note above.)
+
+> dblurt's own internal "Didn't failover for error code:
+> [...]" console line is **suppressed** — that pool does the
+> real failover for us, and this `/v1/health` view is the
+> authoritative signal.  If you still see that line, you're
+> on a pre-beta5 build.
+
+**Catch dead endpoints before they bite.**  You don't have
+to wait for a stalled sync to discover an endpoint is gone:
+
+- `morphit-ops doctor` probes every configured endpoint
+  (`MORPHIT_INDEXER_RPC_ENDPOINTS` + `MORPHIT_RELAY_BLURT_RPC`)
+  with a real `get_dynamic_global_properties` call and reports
+  which are reachable, as part of its normal run.  Pass
+  `--no-rpc` for a purely-local check (no network).  The RPC
+  result is advisory — it does not change doctor's
+  boot-readiness exit code (a node still *starts* with dead
+  endpoints; it just can't sync), but an `All N endpoints
+  unreachable` line is your cue to fix the list.
+- `morphit-ops init` probes the list you enter during setup
+  and warns (offering to edit) if any endpoint doesn't
+  respond — so a typo or a decommissioned node is caught at
+  config time, not at 3 a.m.
+
+**Sensible defaults, shared by both services.**  If you leave
+`MORPHIT_INDEXER_RPC_ENDPOINTS` and `MORPHIT_RELAY_BLURT_RPC`
+unset, the indexer and relay both fall back to the *same*
+vetted set of independent public nodes — so a fresh node can
+never end up with one service pointed at working endpoints
+and the other pointed at nothing (an asymmetry that bit a
+real operator).  The wizard also writes that same set to both
+explicitly.  The list is defined in one place
+(`@morphit/operator-config`); to change it project-wide, edit
+that constant — adding more independent nodes increases your
+resilience against the simultaneous rate-limiting that public
+RPC nodes occasionally hit under load.
 
 When the relay runs out of BLURT, signups silently
 start failing (the user sees a generic error in the
@@ -990,6 +1076,81 @@ hour is not.
 
 ---
 
+## 6a. Moderating accounts — reviewing flags and blocking
+
+The indexer raises two account-level abuse signals as it follows
+the chain:
+
+- **suspicious_reciprocity** (Self-trade Signal B) — two accounts
+  mutually exchanging high-star reviews with no other
+  counterparties (a likely self-trade ring inflating reputation).
+- **related_accounts** (Self-trade Signal A) — accounts created
+  in close temporal proximity by the same creator.
+
+A flag is a *signal, not a verdict.* Investigate before acting —
+many legitimate users review each other or sign up together.
+
+### Reviewing flags
+
+```bash
+morphit-ops moderation              # last 7d, both signals
+morphit-ops moderation --since=30d  # wider window
+morphit-ops moderation --type=related
+morphit-ops moderation --json       # machine-readable, no prompt
+```
+
+Or run bare `morphit-ops` on a terminal and pick **Moderation —
+review flags & block accounts** from the menu. The menu also shows
+a `⚠ N to review` marker next to that item when there are recent
+flags with no block applied to either named account.
+
+The screen lists each flag annotated with the involved accounts'
+current block status (`[BLOCKED]`). On an interactive terminal it
+then offers block/unblock as the resolution action.
+
+### Blocking an account (instance-local)
+
+```bash
+morphit-ops block <account> "optional reason"
+morphit-ops unblock <account>
+```
+
+Blocking is **instance-local and reversible.** It is NOT a chain
+ban and requires no posting key — nothing is broadcast. It records
+a row in `operator_blocks` (origin `local`) that hides the
+account's listings everywhere this instance serves them:
+
+- the public orderbook (`/v1/orderbook`)
+- the per-account view (`/v1/orders/:account`)
+- featured slots, the RSS feeds, and the live SSE stream
+
+What blocking does **NOT** do:
+
+- It does not touch the account's BLURT, BTC, XMR, or any funds.
+- It does not affect the account on the Blurt chain.
+- It does not follow the account to other Morphit instances — the
+  whole point of federation is that another operator can serve a
+  user you've blocked, and vice-versa. Your block applies to
+  **your instance only.**
+
+A blocked user who visits your instance sees a banner explaining
+that their posts are blocked on *this* instance, that they remain
+visible on every other Morphit instance, and a link to the Agorise
+Matrix room to appeal. The optional reason you pass is shown to
+them.
+
+> **Fees:** a listing fee already paid (BLURT/BTC/XMR) is not
+> refunded on block — the fee bought a listing that is now hidden
+> here but still visible on other instances. Blocking is a curation
+> choice, not a billing action.
+
+The legacy `morphit-ops abuse` (broadcast failures + signals, 24h)
+and `morphit-ops flags` (signals + evidence) subcommands remain
+available from the CLI for scripting/JSON, but the menu now routes
+moderation through the unified screen above.
+
+---
+
 ## 7. Suspected relay compromise
 
 If you have reason to believe the relay VM has been
@@ -1244,7 +1405,7 @@ or "duplicate milestones", open an issue — do not ship.
 
 ---
 
-## 12. XMR viewkey pre-deploy check (retired Part 110)
+## 12. XMR viewkey pre-deploy check (retired)
 
 This section previously documented a `verify-xmr-viewkey.ts`
 helper script for sanity-checking a `(XMR address, view key)`
@@ -1752,6 +1913,17 @@ auto-renewing those certificates. **Operators using Caddy can
 skip this section** — Caddy handles TLS automatically when the
 config has a public hostname (this is what RUN-A-MORPHIT-NODE.md
 recommends).
+
+> **`morphit-ops ssl` surfaces all of this.** Run `morphit-ops
+> ssl` (or the "SSL/TLS certificate (HTTPS)" menu item) for a
+> read-only status — whether you have a valid cert for your
+> domain, when it expires, and whether the auto-renewal timer is
+> actually running. `morphit-ops ssl setup` checks prerequisites
+> and prints the exact certbot commands below, tailored to your
+> configured domain. (It does not run certbot or edit nginx for
+> you — cert issuance changes your web server, so you run the
+> steps and review the changes, the same reason service install
+> is a hands-on step.)
 
 #### Prerequisites
 
@@ -5085,6 +5257,8 @@ The local timer keeps a 30-day rolling backup. If the server burns down, you los
 [BunkerWeb](https://www.bunkerweb.io) is an open-source AGPLv3-licensed reverse proxy with built-in Web Application Firewall (WAF) features. Same license as Morphit; no licensing concern. **Recommended for any public-facing Morphit instance** — the morphit repo ships a canonical, tested-shape BunkerWeb deployment at `ops/bunkerweb/` (paralleling `ops/nginx/`, `ops/systemd/`, etc.).  Copy + edit + `docker compose up -d` and you have a WAF-fronted instance with OWASP CRS at paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly to the relay's trusted-proxy chain, and a fixed Docker network CIDR (`172.20.0.0/16`) you can hard-code into `MORPHIT_RELAY_TRUSTED_PROXY_IPS` without re-inspecting after rebuilds.
 
 The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operators not using Ansible follow the Quick Start in `ops/bunkerweb/README.md`.
+
+> **Checking it's actually up:** `morphit-ops bunkerweb` (or the "Web firewall (BunkerWeb) status" menu item) reports whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy, and prints the bring-up commands if they aren't. It's read-only — it never runs `docker compose` for you (bringing the stack up is a hands-on step you run and review). BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
 Reasons you might NOT want BunkerWeb:
 
@@ -8974,7 +9148,7 @@ of demand.
 
 ---
 
-## Trade-only asset configuration (Part 121 USDT, Part 122 cp21 BCH, Part 122 cp22 wizard step, Part 122 cp24 LTC, Part 122 cp27 DASH, Part 122 cp30 USDC, Part 122 cp31 DAI, Part 122 cp33 DOGE, Part 122 cp39 ZEC, Part 122 cp41 ARRR, Part 122 cp43 DCR, Part 122 cp45 SOL, Part 122 cp47 ETH, Part 122 cp49 XRP, future additions)
+## Trade-only asset configuration
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
@@ -9631,7 +9805,7 @@ instance — users will need to re-subscribe.  Procedure:
 6. Users re-subscribe via the Settings UI.
 
 
-## 43. SEO override env vars — homepage title/description/keywords + Twitter card (Part 122 cp119)
+## 43. SEO override env vars — homepage title/description/keywords + Twitter card
 
 **Audience:** operators who want to override the bundled homepage SEO copy with
 something tailored to their audience without forking the frontend.  All fields
@@ -9753,7 +9927,7 @@ automatic date/time in their system settings.
 - `apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte`
   — user-facing UI
 
-## 45. MCP server — AI agent surface (cp167)
+## 45. MCP server — AI agent surface
 
 The Morphit MCP server (`apps/mcp-server`) exposes this instance's
 federated orderbook to MCP-compatible AI agents — Claude Desktop,

@@ -45,6 +45,12 @@ export interface Config {
 	 *  — falls back to `morphit-fees` if unset. */
 	readonly feesAccount: string;
 
+	/** This operator's official chain account — the `operator` key
+	 *  in `operator_blocks`. Instance-local blocks written by
+	 *  `morphit-ops block` are keyed on this, matching the on-chain
+	 *  block handler. Default `morphit`. */
+	readonly officialAccount: string;
+
 	/** This operator's daily signup ceiling.  Snapshot of the
 	 *  relay's MORPHIT_RELAY_SIGNUP_DAILY_CEILING.  CLI uses
 	 *  this to compute "X / Y today" on the dashboard.  Default
@@ -105,6 +111,10 @@ export function loadConfig(): Config {
 		databaseUrl: readDatabaseUrl(),
 		relayAccount: envStr('MORPHIT_OPS_RELAY_ACCOUNT', 'morphit-relay'),
 		feesAccount: envStr('MORPHIT_OPS_FEES_ACCOUNT', 'morphit-fees'),
+		// The operator's official chain account — the `operator` key in
+		// operator_blocks (and what the on-chain block handler gates on).
+		// Same env var the indexer reads, so they agree.
+		officialAccount: envStr('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME', 'morphit'),
 		signupDailyCeiling: envInt('MORPHIT_RELAY_SIGNUP_DAILY_CEILING', 50),
 		thresholds: {
 			relayBalance: {

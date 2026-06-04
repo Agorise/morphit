@@ -131,6 +131,26 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c "
   SELECT COUNT(*) FROM orders
   WHERE fee_status = 'pending_external';
 "
+
+# Abuse flags raised today (self-trade reciprocity rings /
+# related accounts).  Week one is when the first abuse
+# patterns tend to show up.  Review them — and optionally
+# block an account on this instance — from the moderation
+# screen:
+#   npx morphit-ops moderation
+# A flag is a SIGNAL, not a verdict; investigate before
+# acting.  Blocking is instance-local + reversible (it hides
+# the account's listings on YOUR instance only, broadcasts
+# nothing to the chain).  Full workflow: OPERATIONS.md §6a.
+psql "$MORPHIT_INDEXER_DATABASE_URL" -c "
+  SELECT 'reciprocity' AS signal, COUNT(*)
+    FROM suspicious_reciprocity
+   WHERE detected_at > NOW() - INTERVAL '1 day'
+  UNION ALL
+  SELECT 'related', COUNT(*)
+    FROM related_accounts
+   WHERE detected_at > NOW() - INTERVAL '1 day';
+"
 ```
 
 If any of these numbers look *very* different from

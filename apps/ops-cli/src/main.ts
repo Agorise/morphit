@@ -64,6 +64,9 @@ import { runFailedBroadcasts } from './commands/failedBroadcasts.ts';
 import { runLoyalty } from './commands/loyalty.ts';
 import { runAttestations } from './commands/attestations.ts';
 import { runFlags } from './commands/flags.ts';
+import { runFastForward } from './commands/fastForward.ts';
+import { runBlock, runUnblock } from './commands/block.ts';
+import { runModeration } from './commands/moderation.ts';
 import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
 import { runShowKey } from './commands/showKey.ts';
@@ -71,7 +74,10 @@ import { runEdit } from './commands/edit.ts';
 import { runHarden } from './commands/harden.ts';
 import { runInstall } from './commands/install.ts';
 import { runDoctor } from './commands/doctor.ts';
+import { runSsl } from './commands/ssl.ts';
+import { runBunkerWeb } from './commands/bunkerweb.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
+import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
 import { runImportAltnetKey } from './commands/importAltnetKey.ts';
@@ -158,8 +164,9 @@ function printHelp(): void {
 		'                                  hardening, and a PATH shortcut). Start here on a fresh box.',
 		'  doctor                          Read-only check: will the indexer + relay start with the',
 		'                                  config on disk? Reports problems in plain English and changes',
-		'                                  nothing. Run this before starting services, or to diagnose a',
-		'                                  node that will not boot.',
+		'                                  nothing. Also probes the configured Blurt RPC endpoints for',
+		'                                  reachability (--no-rpc skips that). Run before starting',
+		'                                  services, or to diagnose a node that will not boot.',
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
 		'  edit [--out=PATH]               Re-prompt origin / alt-DNS / SEO of an existing config',
 		'  edit-active-key [--wipe-prior | --keep-backup]',
@@ -183,6 +190,10 @@ function printHelp(): void {
 		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt)',
 		'  harden                          Server-hardening wizard: generate a personalized checklist and',
 		'                                  walk Ubuntu/SSH/UFW/fail2ban/TLS + BunkerWeb + backups setup',
+		'  ssl [status|setup] [domain]     SSL/TLS certificate (HTTPS): check cert expiry + auto-renewal,',
+		'                                  or print the exact certbot steps to obtain one',
+		'  bunkerweb                       BunkerWeb WAF status: are the containers running + healthy?',
+		'                                  (read-only; prints bring-up commands if not running)',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -190,7 +201,11 @@ function printHelp(): void {
 		'  failed-broadcasts [--since=DUR] Relay broadcasts that errored',
 		'  loyalty [--since=DUR]           Loyalty milestones triggered',
 		'  attestations                    Pending fee-attestation queue',
+		'  moderation [--type=...] [--since=DUR]  Review abuse flags + block/unblock accounts (interactive)',
 		'  flags [--type=reciprocity|related]  Moderation flags raised',
+		'  block <account> [reason]        Hide an account\u2019s listings on THIS instance (local; no posting key)',
+		'  unblock <account>               Un-hide an account\u2019s listings on this instance',
+		'  fast-forward [BLOCK]            Advance the indexer cursor to a recent block (skip a long sync)',
 		'',
 		'Global flags:',
 		'  --json          Emit JSON instead of human-formatted output',
@@ -248,7 +263,10 @@ async function main(): Promise<number> {
 			printHelp();
 			return 1;
 		}
-		const selection = await runMainMenu();
+		// Best-effort annotations (live version on Upgrade, attention marker
+		// on Moderation). Never throws or hangs — bounded by short timeouts.
+		const annotations = await gatherMenuAnnotations();
+		const selection = await runMainMenu(annotations);
 		if (selection === null) {
 			return 0;
 		}
@@ -472,6 +490,37 @@ async function main(): Promise<number> {
 		}
 	}
 
+	// `ssl` — SSL/TLS (HTTPS) status + guided setup. Read-only by
+	// default; never runs certbot itself. No DB, so it runs here.
+	if (args.subcommand === 'ssl') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runSsl({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `bunkerweb` — read-only WAF status. No DB; never runs docker itself.
+	if (args.subcommand === 'bunkerweb') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runBunkerWeb({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
 	// Now load config — only after we've handled help/version
 	// and init, because those work without DATABASE_URL set.
 	let config;
@@ -503,6 +552,14 @@ async function main(): Promise<number> {
 				return await runAttestations(ctx);
 			case 'flags':
 				return await runFlags(ctx);
+			case 'fast-forward':
+				return await runFastForward(ctx);
+			case 'block':
+				return await runBlock(ctx);
+			case 'unblock':
+				return await runUnblock(ctx);
+			case 'moderation':
+				return await runModeration(ctx);
 			default:
 				printError(`Unknown subcommand: ${args.subcommand}`);
 				info('');

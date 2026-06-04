@@ -182,10 +182,11 @@ export async function globalFeedHandler(db: Database, config: Config): Promise<H
 		  FROM orders o
 		 WHERE o.status = 'live'
 		   AND o.fee_status IN ('verified', 'verified_by_attestation')
+		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $2 AND ob.blocked = o.account AND ob.state = 'blocked')
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT $1`;
 
-	const result = await db.query<OrderRow>(sql, [FEED_LIMIT]);
+	const result = await db.query<OrderRow>(sql, [FEED_LIMIT, config.officialAccountName]);
 
 	const xml = renderFeed(
 		result.rows,
@@ -245,10 +246,11 @@ export async function perAssetFeedHandler(
 		 WHERE o.status = 'live'
 		   AND o.fee_status IN ('verified', 'verified_by_attestation')
 		   AND o.asset = $1
+		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $3 AND ob.blocked = o.account AND ob.state = 'blocked')
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT $2`;
 
-	const result = await db.query<OrderRow>(sql, [asset, FEED_LIMIT]);
+	const result = await db.query<OrderRow>(sql, [asset, FEED_LIMIT, config.officialAccountName]);
 
 	const xml = renderFeed(
 		result.rows,
@@ -297,10 +299,11 @@ export async function perAccountFeedHandler(
 		 WHERE o.status = 'live'
 		   AND o.fee_status IN ('verified', 'verified_by_attestation')
 		   AND o.account = $1
+		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $3 AND ob.blocked = o.account AND ob.state = 'blocked')
 		 ORDER BY o.updated_at DESC, o.permlink ASC
 		 LIMIT $2`;
 
-	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT]);
+	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT, config.officialAccountName]);
 
 	const xml = renderFeed(
 		result.rows,

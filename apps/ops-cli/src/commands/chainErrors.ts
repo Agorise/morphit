@@ -35,6 +35,7 @@
  */
 
 import { sanitizeForTerm } from '../render/term.ts';
+import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 /** Normalize an unknown thrown value to a string message. */
 export function errMsg(err: unknown): string {
@@ -92,12 +93,7 @@ export async function broadcastCustomJson(args: {
 		throw new Error(`could not load the Blurt broadcast library: ${errMsg(err)}`);
 	}
 
-	const endpoints = [
-		'https://rpc.blurt.blog',
-		'https://blurt-rpc.saboin.com',
-		'https://rpc.beblurt.com',
-		'https://rpc.blurt.one'
-	];
+	const endpoints = [...DEFAULT_BLURT_RPC_ENDPOINTS];
 
 	const dblurtNoise: string[] = [];
 	const realConsoleLog = console.log;

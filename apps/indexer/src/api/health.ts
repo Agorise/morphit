@@ -46,6 +46,16 @@ export function healthRoute(
 		const lagBlocks = Math.max(0, status.chainHeadBlock - status.indexedBlock);
 		const stale = lagBlocks > config.staleLagThreshold;
 
+		// Compact RPC-pool health for at-a-glance triage on the PUBLIC
+		// body: how many of the configured Blurt RPC endpoints are
+		// currently reachable (out of cooldown). If this reads 0 while
+		// the node is behind, RPC — not the indexer — is the problem
+		// (exactly the beta5 firefight). Per-endpoint URLs/detail stay
+		// in the gated verbose block below.
+		const rpcSnap = poller.rpcEndpointSnapshot;
+		const nowMs = Date.now();
+		const rpcEndpointsHealthy = rpcSnap.filter((e) => e.cooldownUntil <= nowMs).length;
+
 		const body: Record<string, unknown> = {
 			status: stale ? ('degraded' as const) : ('ok' as const),
 			version: INDEXER_VERSION,
@@ -53,7 +63,9 @@ export function healthRoute(
 			chain_head_block: status.chainHeadBlock,
 			indexed_block: status.indexedBlock,
 			lag_blocks: lagBlocks,
-			stale
+			stale,
+			rpc_endpoints_healthy: rpcEndpointsHealthy,
+			rpc_endpoints_total: rpcSnap.length
 		};
 
 		// Audit 2026-05 finding NEW-9-8: verbose mode now requires
@@ -155,10 +167,35 @@ export function healthRoute(
 				};
 			});
 
+			// The Blurt RPC pool that polls blocks — the feed whose
+			// total failure froze sync in the beta5 firefight. Same
+			// per-endpoint shape as `explorers` above, plus the age of
+			// the last successful response. Operators triaging a
+			// stalled sync read this to see which endpoints are dead.
+			const rpc_endpoints = rpcSnap.map((s) => {
+				const cooldownRemaining = Math.max(0, s.cooldownUntil - now);
+				const state =
+					cooldownRemaining > 0
+						? 'open'
+						: s.consecutiveFailures > 0
+							? 'half_open'
+							: 'closed';
+				return {
+					url: s.url,
+					state,
+					consecutive_failures: s.consecutiveFailures,
+					cooldown_remaining_ms: cooldownRemaining,
+					ewma_latency_ms: s.ewmaLatencyMs,
+					last_success_age_s:
+						s.lastSuccessAt > 0 ? Math.floor((now - s.lastSuccessAt) / 1000) : null
+				};
+			});
+
 			body.diagnostics = {
 				last_error: status.lastError,
 				last_error_at: status.lastErrorAt ? status.lastErrorAt.toISOString() : null,
 				started_at: status.startedAt.toISOString(),
+				rpc_endpoints,
 				explorers,
 				price,
 				operator_balances,

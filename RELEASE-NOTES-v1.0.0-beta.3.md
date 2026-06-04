@@ -1,4 +1,4 @@
-# Morphit v1.0.0-beta.4
+# Morphit v1.0.0-beta.3
 
 Third public beta. This release is focused on **install and upgrade
 reliability** — fixing a setup bug that could stop a fresh node from
@@ -84,7 +84,7 @@ change what an already-installed node has on disk. So:
 ## Verify the download
 
 ```
-sha256sum -c morphit-v1.0.0-beta.4.tar.gz.sha256
+sha256sum -c morphit-v1.0.0-beta.3.tar.gz.sha256
 ```
 
 Output must say `OK` before you extract.

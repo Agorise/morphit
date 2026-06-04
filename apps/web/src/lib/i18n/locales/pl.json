@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "Czy operatorzy mogą blokować konkretnych użytkowników?",
-        "a": "Tak — operator może blokować konta w swoim własnym interfejsie frontendu. To czysto filtrowanie po stronie klienta: zlecenia zablokowanego użytkownika nie renderują się na /orderbook tego konkretnego operatora, a interfejsy czatu / opinii operatora mogą odmówić pokazywania zablokowanego użytkownika.\n\nCzego to NIE robi:\n- Nie wpływa na łańcuch w żaden sposób. Zlecenia zablokowanych użytkowników nadal istnieją on-chain i są widoczne przez każdą inną instancję operatora lub bezpośrednie zapytanie do łańcucha.\n- Nie zapobiega handlowaniu zablokowanego użytkownika. Może użyć innego operatora, własnej samodzielnie hostowanej instancji lub surowych narzędzi łańcuchowych — bez ograniczeń na poziomie protokołu.\n\nTo właściwy balans: operatorzy moderują spam i nadużycia na własnej własności bez scentralizowanej kontroli. Użytkownicy zachowują pełny dostęp do protokołu przez dowolną z innych aktywnych instancji na /operators."
+        "a": "Tak — operator może przejrzeć sygnały nadużyć i zablokować konto na swojej własnej instancji za pomocą narzędzi moderacji `morphit-ops`. Blokada jest egzekwowana po stronie serwera: indekser przestaje udostępniać ogłoszenia tego konta wszędzie tam, gdzie ta instancja je pokazuje — w orderbooku, widoku konta, miejscach wyróżnionych, kanałach RSS i strumieniu na żywo. Gdy zablokowana osoba jest tu zalogowana, widzi wyraźny baner wyjaśniający, że jej ogłoszenia są ukryte tylko na tej instancji.\n\nCzego to NIE robi:\n- Nie wpływa na blockchain. Ogłoszenia zablokowanego konta nadal istnieją on-chain i pozostają widoczne przez każdą inną instancję operatora lub bezpośrednie zapytanie do łańcucha.\n- Nie narusza środków, kluczy ani tożsamości konta — i nie ma wpływu na żadną inną instancję Morphit. Jest w pełni odwracalne.\n- Nie uniemożliwia zablokowanej osobie handlu. Może użyć innej instancji, własnej samodzielnie hostowanej instancji lub bezpośrednich narzędzi łańcucha — nie ma żadnego ograniczenia na poziomie protokołu.\n\nOperatorzy mogą moderować spam i nadużycia tylko na swojej własnej instancji, w sposób przejrzysty (żaden operator nie może cenzurować po cichu). Na przykład sprzedaż produktów lub usług, które inicjowałyby szkodę. #donoharm #agorism Operatorzy również nie mogą nikogo wymazać z federacji — posty użytkowników pozostają widoczne przez dowolną z innych instancji wymienionych na /instances."
       },
       "chat_identity_key": {
         "q": "Czy muszę skonfigurować osobny klucz, aby korzystać z czatu?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexer",
       "body": "Komponent instancji Morphit, który obserwuje łańcuch, dekoduje operacje istotne dla Morphit (zlecenia, opinie, koperty czatu) i podaje je frontendowi webowemu w użytecznej formie. Łańcuch jest źródłem prawdy; indexer to tylko szybki cache. Prowadzony przez operatora, nie przez Ciebie."
+    },
+    "instance": {
+      "title": "Instancja",
+      "body": "Pojedyncza witryna Morphit, prowadzona przez jednego operatora — strona, na której teraz jesteś, to jedna instancja. Ponieważ Morphit jest sfederowany, wiele niezależnych instancji czyta tę samą blockchain i pokazuje te same zlecenia, transakcje i reputacje. Jeśli jedna instancja cię zablokuje lub przejdzie w tryb offline, możesz przełączyć się na dowolną inną instancję i kontynuować dokładnie w miejscu, w którym skończyłeś."
     },
     "listing_fee": {
       "title": "Opłata za listing",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "Zostałeś zablokowany na tej instancji Morphit",
+      "title": "Twoje ogłoszenia są zablokowane na tej instancji",
       "body": "@{operator}, operator tej instancji, zablokował twoje konto dnia {since}. To decyzja moderacyjna TEJ instancji — twoje środki, tożsamość i historia na chainie pozostają nietknięte, podobnie jak inne instancje Morphit.",
       "reason_label": "Powód",
       "no_reason_provided": "Operator nie podał powodu.",
+      "still_visible_elsewhere": "Twoje ogłoszenia są zablokowane tylko na tej instancji — pozostają widoczne na wszystkich innych instancjach Morphit.",
+      "contact_prefix": "Jeśli uważasz, że to pomyłka, możesz skontaktować się ze społecznością na Matrix:",
+      "contact_link": "Pokój Agorise na Matrix",
       "what_it_means_expand": "Co to oznacza? (pokaż szczegóły)",
       "what_it_means_collapse": "Ukryj szczegóły",
       "what_it_does_not_do": "Czego ta blokada NIE robi",
