@@ -508,19 +508,36 @@ out.append(f'<text x="{W//2}" y="{y_footer - 22}" text-anchor="middle" '
 # which is semantically what "As of X" actually means here (the
 # comparison data, not today's wall clock).
 def _read_brag_trailer_date(brag_path: Path) -> str:
-    """Find the most-recent ISO date in the trailer line of the brag
-    list.  The trailer format is canonical and pinned by the
-    brag-list-trailer-invariants smoke; we look for `Last updated
-    YYYY-MM-DD`.  Falls back to today() ONLY if the trailer is
-    missing or malformed, with a stderr warning so the operator
-    sees the regression."""
+    """Return the brag-list trailer's "Last updated" date as an ISO
+    YYYY-MM-DD string (used verbatim in the footer, so the SVG/PNG is
+    deterministic — it changes only when the brag list's date moves).
+
+    The trailer date is written out verbatim as "<day> <FullMonth>,
+    <year>" (e.g. "Last updated: 4 June, 2026."), the canonical form
+    pinned by the brag-list-trailer-invariants smoke.  We parse that
+    and normalise it to ISO for the footer (so the footer text and the
+    committed PNG are unchanged by the trailer's display format).  A
+    legacy ISO "Last updated YYYY-MM-DD" trailer is still accepted as
+    a fallback.  Falls back to today() ONLY if the trailer is missing
+    or malformed, with a stderr warning so the operator sees the
+    regression."""
     import re
+    months = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December']
     try:
         text = brag_path.read_text(encoding='utf-8')
-        m = re.search(r'Last updated (\d{4}-\d{2}-\d{2})', text)
+        # Canonical verbatim form: "Last updated: 4 June, 2026."
+        m = re.search(r'Last updated:\s+(\d{1,2})\s+([A-Z][a-z]+),\s+(\d{4})', text)
+        if m and m.group(2) in months:
+            day = int(m.group(1))
+            month = months.index(m.group(2)) + 1
+            year = int(m.group(3))
+            return f'{year:04d}-{month:02d}-{day:02d}'
+        # Fallback: legacy ISO form "Last updated 2026-06-04".
+        m = re.search(r'Last updated:?\s+(\d{4}-\d{2}-\d{2})', text)
         if m:
             return m.group(1)
-        sys.stderr.write(f'WARNING: brag-list trailer "Last updated YYYY-MM-DD" not found at {brag_path}; falling back to date.today()\n')
+        sys.stderr.write(f'WARNING: brag-list trailer "Last updated: <day> <Month>, <year>" not found at {brag_path}; falling back to date.today()\n')
     except OSError as e:
         sys.stderr.write(f'WARNING: cannot read brag list at {brag_path}: {e}; falling back to date.today()\n')
     return date.today().isoformat()

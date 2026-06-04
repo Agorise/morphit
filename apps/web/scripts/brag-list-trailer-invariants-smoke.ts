@@ -25,8 +25,9 @@
  *
  * Invariants checked:
  *   I-1: trailer-count == actual `^N. \*\*` numbered-bold entries
- *   I-2: trailer "Last updated YYYY-MM-DD" date ≥ today
- *        (allows back-dated test reproductions; rejects stale)
+ *   I-2: trailer "Last updated: <day> <FullMonth>, <year>" date is
+ *        in that verbatim form (ISO YYYY-MM-DD is rejected) AND is
+ *        ≥ the latest ISO date cited in any entry (rejects stale)
  *   I-3: trailer ADR range claim "ADR-XXXX-*.md through ADR-YYYY-*.md"
  *        matches max numbered ADR in docs/adr/ (template excluded)
  *   I-4: no duplicate entry numbers within the body (TOC excluded).
@@ -37,7 +38,8 @@
  *
  * Self-test (M-146):
  *   - Change trailer "299" → "287" → smoke fires.
- *   - Change "2026-05-20" → "2026-04-01" → smoke fires.
+ *   - Change trailer "4 June, 2026" → "1 April, 2026" → smoke fires.
+ *   - Change trailer to ISO "2026-06-04" → smoke fires (not verbatim).
  *   - Change "0036" → "0099" → smoke fires.
  *   - Add ADR-0037 without trailer bump → smoke fires.
  *
@@ -96,47 +98,76 @@ if (!trailerCountMatch) {
 	}
 }
 
-// ── I-2: trailer "Last updated" date is fresh ───────────────────
-// Acceptable date is today's date in YYYY-MM-DD format, OR a date
-// up to 365 days in the past (lets a checkpoint that doesn't touch
-// the brag list keep its existing date — only flags stale-after-
-// edits).  The KEY drift catch is when an entry was added but the
-// date didn't move.  We approximate "did the file change since the
-// date claim" by comparing trailer date to file mtime.
-const trailerDateMatch = bragSrc.match(/Last updated\s+(\d{4}-\d{2}-\d{2})/);
+// ── I-2: trailer "Last updated" date is fresh + in the canonical
+//     VERBATIM format ────────────────────────────────────────────
+// The trailer date is written out verbatim as "<day> <FullMonth>,
+// <year>" — day number, full month name, then year — e.g.
+// "Last updated: 4 June, 2026."  This invariant ENFORCES that
+// verbatim format (an ISO "YYYY-MM-DD" trailer fails here, so the
+// format cannot silently revert) AND that the date is not stale: it
+// must be ≥ the latest ISO date cited anywhere in the file's entry
+// text (some entries cite their own dates, e.g. "as of 2026-05-03",
+// so the trailer's "Last updated" should be at least as fresh as any
+// of them).  The verbatim date is normalised to a UTC timestamp for
+// that comparison.
+const MONTHS = [
+	'January', 'February', 'March', 'April', 'May', 'June',
+	'July', 'August', 'September', 'October', 'November', 'December'
+];
+const trailerDateMatch = bragSrc.match(
+	/Last updated:\s+(\d{1,2})\s+([A-Z][a-z]+),\s+(\d{4})\b/
+);
 if (!trailerDateMatch) {
-	fail('I-2 trailer date exists', 'No "Last updated YYYY-MM-DD" sentence found in trailer.');
+	fail(
+		'I-2 trailer date exists in verbatim form',
+		'No "Last updated: <day> <FullMonth>, <year>" sentence found in trailer ' +
+			'(e.g. "Last updated: 4 June, 2026."). The date must be written out ' +
+			'verbatim — day number, full month name, then year — not ISO YYYY-MM-DD.'
+	);
 } else {
-	const claimedDate = trailerDateMatch[1]!;
-	// Parse without timezone to avoid off-by-one at UTC midnight.
-	const [yStr, mStr, dStr] = claimedDate.split('-');
-	const claimedTs = Date.UTC(parseInt(yStr!, 10), parseInt(mStr!, 10) - 1, parseInt(dStr!, 10));
-	// File mtime check would require fs.statSync; we instead check
-	// for staleness vs the LATEST DATE mentioned ANYWHERE in the
-	// file's brag entries themselves.  Many entries cite their own
-	// dates (e.g. "cp74 2026-05-20") so the trailer's "Last updated"
-	// should be ≥ any of them.
-	const allDates = Array.from(bragSrc.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g))
-		.map((m) => m[1]!)
-		.filter((d) => d !== claimedDate);
-	let latestOtherDate: string | null = null;
-	let latestOtherTs = -Infinity;
-	for (const d of allDates) {
-		const [y, mo, day] = d.split('-');
-		const ts = Date.UTC(parseInt(y!, 10), parseInt(mo!, 10) - 1, parseInt(day!, 10));
-		if (ts > latestOtherTs) {
-			latestOtherTs = ts;
-			latestOtherDate = d;
-		}
-	}
-	if (latestOtherDate !== null && latestOtherTs > claimedTs) {
+	const dayNum = parseInt(trailerDateMatch[1]!, 10);
+	const monthName = trailerDateMatch[2]!;
+	const yearNum = parseInt(trailerDateMatch[3]!, 10);
+	const monthIdx = MONTHS.indexOf(monthName);
+	if (monthIdx < 0) {
 		fail(
-			'I-2 trailer date is fresh',
-			`Trailer "Last updated ${claimedDate}" but file contains newer date ${latestOtherDate} ` +
-				`in entry text. Bump trailer to ${latestOtherDate} (or later if you're editing today).`
+			'I-2 trailer month is a full month name',
+			`Trailer month "${monthName}" is not a full English month name ` +
+				`(expected one of: ${MONTHS.join(', ')}).`
 		);
+	} else if (dayNum < 1 || dayNum > 31) {
+		fail('I-2 trailer day is valid', `Trailer day "${dayNum}" is out of range 1-31.`);
 	} else {
-		pass(`I-2 trailer date is fresh (${claimedDate}, no newer dates cited in file)`);
+		const claimedHuman = `${dayNum} ${monthName}, ${yearNum}`;
+		const claimedTs = Date.UTC(yearNum, monthIdx, dayNum);
+		// Staleness check: compare to the LATEST ISO date mentioned in
+		// any entry's text.  The trailer itself is no longer ISO, so it
+		// can never accidentally match this scan.
+		const allDates = Array.from(bragSrc.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)).map(
+			(m) => m[1]!
+		);
+		let latestOtherDate: string | null = null;
+		let latestOtherTs = -Infinity;
+		for (const d of allDates) {
+			const [y, mo, day] = d.split('-');
+			const ts = Date.UTC(parseInt(y!, 10), parseInt(mo!, 10) - 1, parseInt(day!, 10));
+			if (ts > latestOtherTs) {
+				latestOtherTs = ts;
+				latestOtherDate = d;
+			}
+		}
+		if (latestOtherDate !== null && latestOtherTs > claimedTs) {
+			fail(
+				'I-2 trailer date is fresh',
+				`Trailer "Last updated: ${claimedHuman}" but file contains newer date ` +
+					`${latestOtherDate} in entry text. Bump the trailer to at least that date, ` +
+					`written verbatim (e.g. "Last updated: 3 May, 2026.").`
+			);
+		} else {
+			pass(
+				`I-2 trailer date is fresh + verbatim ("${claimedHuman}", no newer dates cited in file)`
+			);
+		}
 	}
 }
 

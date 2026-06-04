@@ -24,7 +24,11 @@ export interface LocalBlockPlan {
 	readonly summary: string;
 }
 
-const ACCOUNT_RE = /^[a-z][a-z0-9.-]{2,15}$/;
+// Canonical Blurt account-name regex — identical across every
+// workspace (rejects a trailing '.'/'-'; 3–16 chars).  Pinned by
+// blurt-account-regex-parity-smoke (cp175 F-007 / cp176); do not
+// re-simplify to the old `{2,15}$` form (it admitted trailing punct).
+const ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 import type { Database } from '../db.ts';
 

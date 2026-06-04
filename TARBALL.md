@@ -2,6 +2,18 @@
 
 ---
 
+## ✅ cp198 — beta5 release candidate (FULL tarball) — 2026-06-04
+
+**Artifact:** `morphit-cp198-beta5-release-candidate-FULL-STATE.tar.gz` (FULL state — supersedes cp197). Fresh-session deep review + complete 5-persona walkthrough + repo-wide deep-deep, fix-as-you-go. **This is the beta5 release candidate**; greens verified end-to-end here: **281/281 smokes** + vitest (indexer 478 / relay 244 / web 695, 0 failing) + whole-tree `tsc`/`svelte-check` clean. **package.json LEFT at beta.1** — Ken's bump to beta.5 + the 2 health constants + tag/sign/push is the release ceremony.
+
+Changes this session:
+1. **localBlock ACCOUNT_RE fix (REAL release-blocker — was failing CI):** `apps/ops-cli/src/lib/localBlock.ts` shipped (cp196) with the OLD permissive Blurt account regex `/^[a-z][a-z0-9.-]{2,15}$/` instead of canonical `/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/`. `blurt-account-regex-parity-smoke` (a CI gate) was RED on the last Forgejo push (task 572). Fixed + re-verified (parity 2/2, local-block 12/12, ops-cli tsc clean).
+2. **Brag trailer date → verbatim** ("Last updated: 4 June, 2026." — day, full month, year) across `MORPHIT-BRAG-LIST.md` + the I-2 parser in `brag-list-trailer-invariants-smoke` (now ENFORCES verbatim; ISO fails) + `scripts/comparison-image/build_comparison.py` (reads verbatim, returns ISO so the committed PNG is byte-identical). Mediakit regenerated.
+3. **`composite-price-provider-smoke` (NEW, 24 scenarios, bite-tested):** anchors `createCompositeProvider` — the one source file with no importer (Phase-3 scaffolding). **Smoke total 280→281.**
+4. **Josie (sysadmin) added as the 5th standing persona** (ongoing `morphit-ops` ops, distinct from Sally-operator setup) — walkthrough sound (27/27 commands wired, `--help` complete, no-IP-in-DB privacy, terminal-injection-safe via the `info()`/`row()` `sanitizeForTerm` funnel). No fixes needed.
+
+**Two corrections to recorded state:** (a) `vitest-must-pass-smoke` is NOT blocked by better-sqlite3 (that's matrix-bot's runtime dep only) — it RUNS + passes in-sandbox, so the genuine green state is **281/281 incl. vitest**, not "280 with vitest blocked"; (b) the CoinGecko brag claims are accurate/scoped (disclosed as a price tier in #99; "no CoinGecko" scoped to the BLURT-APR path in #237). Detail: `docs/REVISIT-LIST.md` cp198.
+
 ## ✅ cp197 — cross-session handoff finalization (FULL tarball) — 2026-06-04
 
 **Artifact:** `morphit-cp197-beta5-handoff-FULL-STATE.tar.gz` (FULL state — supersedes cp196). The cp196 beta5 release snapshot with this session's cross-session-handoff hygiene folded in: swept TARBALL.md + REVISIT-LIST.md and made every stale leftover current — the “read this first” handoff and the REVISIT “BETA5 — RPC … (PLANNED — build tonight)” section both still framed beta5 as future/in-progress and pointed at the **cp195** artifact; now corrected to beta5-SHIPPED-in-cp196, with the build-logs relabeled CLOSED and retained as history. NO code / locale / brag / smoke change. **package.json LEFT at beta.1** — Ken's bump to beta.5 + the 2 health constants is the release step. Smoke total **280**. Detail: `docs/REVISIT-LIST.md` cp197.

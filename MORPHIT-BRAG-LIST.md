@@ -750,4 +750,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-06-04.*
+*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 4 June, 2026.*
