@@ -674,6 +674,8 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 
 nginx is now installed and running on port 80 with a default landing page. We'll replace the default config with Morphit's in step 8. certbot (the Let's Encrypt client) is installed but won't issue a certificate until step 8 either — you need a valid DNS record and the nginx config in place first.
 
+> **Tip — let `morphit-ops` walk you through the certificate.** Once your domain points at this server and nginx is serving it, run `npx morphit-ops ssl setup` from your install directory. It checks the prerequisites and prints the exact certbot command for *your* domain, so you don't have to adapt the examples by hand. Afterwards, `npx morphit-ops ssl` tells you at a glance whether the certificate is valid, when it expires, and — the part people forget — whether automatic renewal is actually turned on. It's also in the interactive menu as **"SSL/TLS certificate (HTTPS)."**
+
 > **Optional — Brotli compression module:** Morphit's `web.conf` enables both `gzip_static` (always works) and `brotli_static` (requires an extra module). gzip alone is fine for production. If you want the extra 15–20% smaller payload Brotli gives on JS/CSS, install `libnginx-mod-brotli` from your distro (Debian/Ubuntu) or the `nginx-mod-http-brotli` package on Fedora/RHEL. If you skip this, comment out the single `brotli_static on;` line in `ops/nginx/web.conf` to silence the "unknown directive" warning — your operator still wins compression via gzip. See [§9 Configure nginx](#configure-nginx) for the full config walkthrough.
 
 That's all the system prep done. The actual Morphit install is shorter than this section.
@@ -1216,10 +1218,13 @@ sudo systemctl enable morphit-indexer morphit-relay
 > **Before you start the services, run the doctor.** From your
 > install directory, `npx morphit-ops doctor` reads your config and
 > reports whether the indexer and relay will actually start — in
-> plain English, changing nothing. Catching a missing or misplaced
-> setting here (a 10-second read-only check) is far easier than
-> reading a stack trace after a failed `systemctl start`. See the
-> "My node won't start" troubleshooting entry later in this guide.
+> plain English, changing nothing. It also pings the Blurt RPC
+> endpoints your node will use and tells you if any are unreachable
+> (the most common reason a node runs but never catches up). Catching
+> a missing or misplaced setting here (a quick read-only check) is far
+> easier than reading a stack trace after a failed `systemctl start`.
+> See the "My node won't start" troubleshooting entry later in this
+> guide.
 
 > **One-time path + user fixup (Sally-operator finding So-6,
 > Part 119).**  The shipped unit files hardcode
@@ -1335,7 +1340,19 @@ If you see Morphit but it says "Indexer unreachable":
 - Check `sudo systemctl status morphit-indexer` and look at the logs.
 - Most common cause: database password mismatch in `indexer.env`.
 
-If both work but the orderbook is empty: **that's normal**. Your indexer is starting from the latest Blurt block and building up state. The first orders to appear will be ones posted after your indexer caught up to chain head. To see existing orders, the indexer needs to backfill — it does this automatically over a few hours. Just wait.
+If both work but the orderbook is empty: **that's normal**. Your indexer starts at the **Morphit genesis block** — the point on the Blurt chain where Morphit data first appears — and catches up from there to the current chain head. That's a small slice of the chain (not the whole multi-year history), so a fresh node is usually current within a few minutes to about an hour. The orderbook fills in as it catches up; existing orders appear once it reaches the blocks they were posted in. Just wait.
+
+**To check it's actually catching up** (and not stuck), ask the indexer directly:
+
+```
+curl -s http://127.0.0.1:8081/v1/health \
+  | jq '{indexed_block, chain_head_block, lag_blocks, rpc_endpoints_healthy, rpc_endpoints_total}'
+```
+
+Run it twice a minute apart — `indexed_block` should be climbing and `lag_blocks` shrinking. **If `rpc_endpoints_healthy` is `0`, that's your problem:** the public Blurt servers your node talks to aren't reachable, so it can't catch up. Fix the `MORPHIT_INDEXER_RPC_ENDPOINTS` list (see OPERATIONS.md "Monitoring RPC endpoint health") and restart the indexer. A healthy count with a big `lag_blocks` just means it's still catching up — leave it be.
+
+> Already synced from too far back and don't want to wait? `morphit-ops fast-forward` jumps the indexer to a recent block (stop the indexer first). It's safe before launch — there's no Morphit data in the skipped blocks yet.
+
 
 ---
 
@@ -1471,14 +1488,29 @@ npx morphit-ops
 
 On an interactive terminal this opens a menu of every action —
 edit settings, **harden this server**, upgrade to the latest
-version, re-publish your registration, the status dashboard,
-recent signups, abuse alerts, key management, and more — each
-with a one-line description so you pick by what you want to do,
-not by memorizing command names. (Every item is still runnable
-directly too, e.g. `npx morphit-ops status`; run `npx
-morphit-ops --help` for the full list and flags. Scripts and
-cron are unaffected — piped/non-interactive runs print the
-help text as before.)
+version (the menu shows your installed version and the latest
+available release right on that item), re-publish your
+registration, the status dashboard, recent signups,
+**moderation** (review abuse flags and block or unblock
+accounts), key management, and more — each with a one-line
+description so you pick by what you want to do, not by memorizing
+command names. The Moderation item shows a `⚠ N to review` marker
+when there are recent abuse flags you haven't acted on. (Every
+item is still runnable directly too, e.g. `npx morphit-ops
+status`; run `npx morphit-ops --help` for the full list and
+flags. Scripts and cron are unaffected — piped/non-interactive
+runs print the help text as before.)
+
+**Moderation is instance-local.** From the Moderation screen (or
+directly with `npx morphit-ops block <account> "reason"` /
+`npx morphit-ops unblock <account>`) you can hide a misbehaving
+account's listings on *your* instance. It is reversible, needs no
+posting key, and broadcasts nothing to the chain — the account
+stays on Blurt and remains visible on every other Morphit
+instance; your block applies only to what your instance serves.
+The blocked user sees a banner explaining that, with a Matrix
+link to appeal. Full details, plus the abuse signals behind the
+flags, are in OPERATIONS.md §6a.
 
 **Hardening is its own wizard.** Securing the host — SSH
 lockdown, firewall, fail2ban, automatic security updates, TLS,
@@ -1580,7 +1612,7 @@ Other federated marketplaces typically use either monthly invoicing (operator su
 
 Morphit's immediate-per-order payout works because Blurt has 3-second blocks and effectively zero per-transfer fees (mana-based). The relay account's mana easily covers dozens of micro-transfers per day. Operators see real BLURT in their wallets within seconds of users clicking "Post" — closer to a card-processor's instant-settlement experience than to a typical platform's "we'll Venmo you next month."
 
-### 9.6 Part 111 — federation-cost attribution: only YOU pay for YOUR ops
+### 9.6 Federation-cost attribution: only YOU pay for YOUR ops
 
 Pre-Part-111, every operator's relay queued payouts on every chain-op it saw — meaning if you and I both ran indexers, and a user on your instance triggered a welcome bonus, BOTH our relays would queue and broadcast that 20 BLURT. The federation paid 2× (or N× for N operators) for every payout-triggering op.
 
@@ -2237,7 +2269,7 @@ double-spend, halved abuse defenses), see
 
 ---
 
-## Trade-only assets: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and your operator stance (Part 121, Part 122 cp21, cp24, cp27, cp30, cp31, cp33)
+## Trade-only assets: USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and your operator stance
 
 Morphit ships with **USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP enabled by default**
 as trade-only assets on a new node.  Users can buy/sell USDT
@@ -2343,17 +2375,17 @@ Reasonable positions for an operator:
    # coin to their users; DOGE itself is technically sound, this
    # is a brand/audience choice; see ADR-0030)
    MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"
-# Refuse only ZEC trades (cp39):
+# Refuse only ZEC trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="ZEC"
-# Refuse only ARRR trades (cp41):
+# Refuse only ARRR trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="ARRR"
-# Refuse only DCR trades (cp43):
+# Refuse only DCR trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="DCR"
-# Refuse only SOL trades (cp45):
+# Refuse only SOL trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="SOL"
-# Refuse only ETH trades (cp47):
+# Refuse only ETH trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
-# Refuse only XRP trades (cp49):
+# Refuse only XRP trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="XRP"
    ```
 

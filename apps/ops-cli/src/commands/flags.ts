@@ -70,8 +70,12 @@ export async function runFlags(ctx: CommandCtx): Promise<number> {
 					   account_a,
 					   account_b,
 					   detected_at,
-					   reason,
-					   evidence
+					   'mutual reviews: ' || mutual_review_count
+					     || ' (avg rating ' || round(avg_rating::numeric, 2) || ')' AS reason,
+					   jsonb_build_object(
+					     'mutual_review_count', mutual_review_count,
+					     'avg_rating', avg_rating
+					   ) AS evidence
 					 FROM suspicious_reciprocity
 					 WHERE detected_at >= $1
 					 ORDER BY detected_at DESC

@@ -33,6 +33,7 @@
 
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { join, isAbsolute, resolve } from 'node:path';
+import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
 import type {
 	RelayAccountResult,
 	ActiveKeyResult,
@@ -689,6 +690,29 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# so when adding/removing nodes, edit one at a time and watch');
 	lines.push('# the journald log on restart.');
 	lines.push(`MORPHIT_INDEXER_RPC_ENDPOINTS=${quote(answers.blurtRpcEndpoints.join(','))}`);
+	// beta5 item D: write the SAME list to the relay, so the indexer and
+	// relay can never end up pointed at different endpoint sets (the
+	// asymmetry behind the firefight — one survived, the other froze).
+	lines.push(`MORPHIT_RELAY_BLURT_RPC=${quote(answers.blurtRpcEndpoints.join(','))}`);
+	lines.push('');
+
+	// Genesis start block — make a fresh node current within minutes
+	// instead of replaying years of pre-Morphit Blurt history that
+	// contains zero Morphit data. 59441298 is the block in which the
+	// core accounts (morphit / morphit-relay / morphit-fees) were
+	// created, so nothing Morphit-related exists before it.
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# First block to index (Morphit genesis)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# A fresh indexer starts here, NOT at block 0 — there are no');
+	lines.push('# Morphit ops before this block, so starting earlier just');
+	lines.push('# replays years of unrelated Blurt history (multi-day waste,');
+	lines.push('# and your instance would not be current at launch).');
+	lines.push('# Higher = faster first sync, less history; lower = more history,');
+	lines.push('# slower sync. Only affects a FRESH database; an already-running');
+	lines.push('# indexer resumes from where it left off (use `morphit-ops');
+	lines.push('# fast-forward` to advance an existing node).');
+	lines.push(`MORPHIT_INDEXER_START_BLOCK=${MORPHIT_GENESIS_BLOCK}`);
 	lines.push('');
 
 	// cp194 — two REQUIRED indexer vars the wizard had never written

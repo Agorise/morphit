@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "Können Operator bestimmte Nutzer auf ihrer Instanz blockieren?",
-        "a": "Ja — ein Operator kann Konten auf seiner eigenen Frontend-UI blockieren. Das ist rein client-seitiges Filtern: Orders des blockierten Nutzers erscheinen nicht auf dem /orderbook dieses Operators, und die Chat-/Feedback-UIs können sich weigern, den blockierten Nutzer zu zeigen.\n\nWas das NICHT tut:\n- Die Chain irgendwie beeinflussen. Orders blockierter Nutzer existieren weiterhin on-chain und sind über jede andere Operator-Instanz oder direkte Chain-Abfrage sichtbar.\n- Den blockierten Nutzer am Handeln hindern. Sie können einen anderen Operator, ihre eigene selbst-gehostete Instanz oder rohe Chain-Tools verwenden — keine Beschränkung auf Protokoll-Ebene.\n\nDas ist die richtige Balance: Operator moderieren Spam und Missbrauch auf ihrem eigenen Eigentum ohne zentrale Kontrolle. Nutzer behalten vollen Zugang zum Protokoll über jede der anderen live-Instanzen, die auf /operators gelistet sind."
+        "a": "Ja — ein Betreiber kann Missbrauchssignale prüfen und ein Konto auf seiner eigenen Instanz mit den `morphit-ops`-Moderationswerkzeugen blockieren. Die Blockierung wird serverseitig durchgesetzt: Der Indexer liefert die Anzeigen dieses Kontos nirgendwo mehr aus, wo diese Instanz sie zeigt — den Orderbook, die Kontoansicht, die hervorgehobenen Plätze, die RSS-Feeds und den Live-Stream. Wenn die blockierte Person hier angemeldet ist, sieht sie ein klares Banner, das erklärt, dass ihre Beiträge nur auf dieser Instanz ausgeblendet sind.\n\nWas dies NICHT tut:\n- Die Blockchain beeinflussen. Die Anzeigen des blockierten Kontos existieren weiterhin on-chain und bleiben über jede andere Betreiber-Instanz oder eine direkte Chain-Abfrage sichtbar.\n- Die Gelder, Schlüssel oder Identität des Kontos berühren — und es hat keine Auswirkung auf irgendeine andere Morphit-Instanz. Es ist vollständig umkehrbar.\n- Die blockierte Person am Handeln hindern. Sie kann eine andere Instanz, ihre eigene selbst gehostete Instanz oder die direkten Chain-Werkzeuge nutzen — es gibt keine Einschränkung auf Protokollebene.\n\nBetreiber können Spam und Missbrauch nur auf ihrer eigenen Instanz moderieren, transparent (kein Betreiber kann heimlich zensieren). Zum Beispiel der Verkauf von Produkten oder Dienstleistungen, die Schaden auslösen würden. #donoharm #agorism Betreiber können auch niemanden aus der Föderation löschen — die Beiträge der Nutzer bleiben über jede der anderen unter /instances aufgeführten Instanzen sichtbar."
       },
       "chat_identity_key": {
         "q": "Muss ich einen separaten Schlüssel einrichten, um den Chat zu nutzen?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexer",
       "body": "Die Komponente einer Morphit-Instanz, die die Chain beobachtet, Morphit-relevante Operationen (Orders, Feedback, Chat-Envelopes) dekodiert und sie dem Web-Frontend in nutzbarer Form bereitstellt. Die Chain ist die Source of Truth; der Indexer ist nur ein schneller Cache. Vom Betreiber betrieben, nicht von dir."
+    },
+    "instance": {
+      "title": "Instanz",
+      "body": "Eine einzelne Morphit-Website, betrieben von einem Betreiber — die Seite, auf der du gerade bist, ist eine Instanz. Da Morphit föderiert ist, lesen viele unabhängige Instanzen dieselbe Blockchain und zeigen dieselben Aufträge, Trades und Reputationen. Wenn eine Instanz dich blockiert oder offline geht, kannst du zu jeder anderen Instanz wechseln und genau dort weitermachen, wo du aufgehört hast."
     },
     "listing_fee": {
       "title": "Listing-Gebühr",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "Du wurdest auf dieser Morphit-Instanz gesperrt",
+      "title": "Deine Beiträge sind auf dieser Instanz blockiert",
       "body": "@{operator}, der Betreiber dieser Instanz, hat dein Konto am {since} gesperrt. Es ist eine Kurationsentscheidung DIESER Instanz — deine Mittel, deine Identität und dein Chain-Verlauf sind nicht betroffen, und andere Morphit-Instanzen ebenfalls nicht.",
       "reason_label": "Grund",
       "no_reason_provided": "Der Betreiber hat keinen Grund angegeben.",
+      "still_visible_elsewhere": "Deine Beiträge sind nur auf dieser Instanz blockiert — auf allen anderen Morphit-Instanzen bleiben sie sichtbar.",
+      "contact_prefix": "Wenn du denkst, dass dies ein Fehler ist, erreichst du die Community auf Matrix:",
+      "contact_link": "Agorise-Raum auf Matrix",
       "what_it_means_expand": "Was bedeutet das? (Details anzeigen)",
       "what_it_means_collapse": "Details ausblenden",
       "what_it_does_not_do": "Was diese Sperre NICHT tut",

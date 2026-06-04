@@ -40,6 +40,7 @@ import { requireJsonContentType } from './middleware/content_type.ts';
 import { maxBodyBytes, securityHeaders } from './middleware/security.ts';
 import { accessLog } from './middleware/access_log.ts';
 import { logger } from '$log';
+import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
 
 // Scoped loggers per phase so operators can filter journalctl by
 // module rather than grepping free-form prefixes.
@@ -50,6 +51,11 @@ const shutdownLog = logger('relay-shutdown');
 const procLog = logger('relay-process');
 
 async function main(): Promise<void> {
+	// Drop @beblurt/dblurt's redundant internal failover chatter — our
+	// EndpointPool handles failover and /v1/health -> rpc_endpoints is
+	// the real signal. Installed first so boot-time noise is filtered.
+	suppressDblurtConsoleNoise();
+
 	const started = process.hrtime.bigint();
 	bootLog.info('starting');
 

@@ -194,6 +194,17 @@ export class Poller {
 		return out;
 	}
 
+	/** Health of the Blurt RPC endpoint pool that polls blocks — the
+	 *  pool whose endpoints all going dead froze sync in the beta5
+	 *  firefight.  Distinct from `explorerHealthSnapshot` (external
+	 *  BTC/XMR fee-verification explorers); this is the chain feed the
+	 *  indexer itself depends on.  Exposed on /v1/health so an operator
+	 *  triaging a stalled sync can see at a glance whether their RPC
+	 *  endpoints are reachable. */
+	get rpcEndpointSnapshot(): readonly EndpointState[] {
+		return this.blurt.endpointSnapshot();
+	}
+
 	constructor(
 		private readonly config: Config,
 		private readonly db: Database,

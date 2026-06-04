@@ -97,7 +97,7 @@ function rowToWire(r: OrderRow) {
 	};
 }
 
-export function ordersByAccountRoute(db: Database): Hono {
+export function ordersByAccountRoute(db: Database, officialAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/:account', async (c) => {
@@ -131,6 +131,10 @@ export function ordersByAccountRoute(db: Database): Hono {
 		}
 		params.push(limit + 1);
 		const limitParam = `$${params.length}`;
+		// beta5 — instance-local block: if the requested account is
+		// blocked on THIS instance, its listings are hidden here too.
+		params.push(officialAccount);
+		const opParam = `$${params.length}`;
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
@@ -167,6 +171,7 @@ export function ordersByAccountRoute(db: Database): Hono {
 			    GROUP BY subject
 			 ) f ON f.subject = o.account
 			 WHERE o.account = $1${cursorClause}
+			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')
 			 ORDER BY o.updated_at DESC, o.permlink ASC
 			 LIMIT ${limitParam}`;
 

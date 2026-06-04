@@ -91,7 +91,8 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
  *  passes startIndex=2). */
 export function buildWhereClauses(
 	q: OrderbookStreamQuery,
-	startIndex = 0
+	startIndex = 0,
+	officialAccount = ''
 ): { where: string[]; params: unknown[] } {
 	const where: string[] = [
 		`o.status = 'live'`,
@@ -111,6 +112,18 @@ export function buildWhereClauses(
 		params.push(v);
 		return `$${startIndex + params.length}`;
 	};
+
+	// beta5 — instance-local block: never surface (snapshot, live emit,
+	// or fallback poll) a listing from an account this operator blocked.
+	// buildWhereClauses is the single chokepoint for all three SSE
+	// paths, so the live stream can't leak a blocked account's new order.
+	// Skipped only when no operator account is supplied (direct unit
+	// calls); every production caller passes config.officialAccountName.
+	if (officialAccount !== '') {
+		where.push(
+			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(officialAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+		);
+	}
 
 	if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
 	if (q.side) where.push(`o.side = ${p(q.side)}`);

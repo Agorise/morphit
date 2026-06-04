@@ -135,7 +135,9 @@ Liveness check — also exposes block lag and indexer version.
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
   "lag_blocks": 2,
-  "stale": false
+  "stale": false,
+  "rpc_endpoints_healthy": 4,
+  "rpc_endpoints_total": 4
 }
 ```
 
@@ -153,6 +155,13 @@ parsing the status enum.
 on the Blurt RPC pool; `indexed_block` is the most recent block
 the indexer has fully written to its database.  `lag_blocks` is
 the difference.
+
+`rpc_endpoints_healthy` and `rpc_endpoints_total` report how many
+of the operator's configured Blurt RPC endpoints are currently
+reachable (out of cooldown) versus configured in total.  If
+`rpc_endpoints_healthy` reads `0` while the node is behind, the
+RPC endpoints — not the indexer — are the problem.  Per-endpoint
+URLs and detail stay in the operator-opt-in verbose block below.
 
 Operators who set `MORPHIT_INDEXER_VERBOSE_HEALTH=1` may also see
 a `_diagnostics` block in the response with breaker snapshots,
@@ -398,6 +407,66 @@ Summary of `:account`'s reputation:
 ---
 
 ### Federation
+
+#### `GET /v1/operator-blocks/by-blocked/:account`
+
+Tier: `resource`
+
+Whether `:account` is currently operator-blocked **on this
+instance**, and if so by whom and why.  The frontend banner uses
+this to tell a signed-in user that their listings are hidden here.
+
+When there is no block:
+
+```json
+{ "account": "alice", "blocked": false }
+```
+
+When the operator has an active block:
+
+```json
+{
+  "account": "alice",
+  "blocked": true,
+  "operator": "acme-operator",
+  "reason": "repeated payment-method spam",
+  "since_block_num": 17234001,
+  "since_trx_id": "a1b2c3...",
+  "created_at": "2026-06-01T12:00:00.000Z",
+  "updated_at": "2026-06-01T12:00:00.000Z"
+}
+```
+
+#### `GET /v1/operator-blocks/by-operator/:operator`
+
+Tier: `resource`
+
+Every account `:operator` currently has blocked on this instance
+(capped at 10,000 rows).
+
+```json
+{
+  "operator": "acme-operator",
+  "items": [
+    {
+      "blocked": "alice",
+      "reason": "repeated payment-method spam",
+      "since_block_num": 17234001,
+      "since_trx_id": "a1b2c3...",
+      "created_at": "2026-06-01T12:00:00.000Z",
+      "updated_at": "2026-06-01T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Both endpoints are **unauthenticated** and the data is
+**instance-local**.  Moderation on Morphit is transparent by
+design: a blocked user — and anyone else — can see what an
+operator has blocked on their instance and the operator's stated
+reason, so an operator cannot censor silently.  A block here has
+no effect on any other Morphit instance; a user blocked here
+remains fully visible everywhere else.
 
 #### `GET /v1/instances`
 

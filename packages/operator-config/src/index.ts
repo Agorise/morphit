@@ -49,6 +49,58 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 
+/**
+ * Morphit genesis block — the Blurt block in which the network's
+ * core accounts (`morphit`, `morphit-relay`, `morphit-fees`) were
+ * created.  No Morphit on-chain op can exist before this block.
+ *
+ * It is the correct DEFAULT starting point for a fresh indexer:
+ * starting earlier (e.g. block 0) replays years of pre-Morphit
+ * Blurt history that contains zero Morphit data — a multi-day
+ * waste that also leaves a fresh instance un-current at launch.
+ * Starting here makes a fresh node current within minutes.
+ *
+ * NETWORK CONSTANT — identical on every instance.  Lives here in
+ * the one package both the indexer config loader and the ops-cli
+ * wizard import, so the default and the wizard-written value can
+ * never drift.  Operators may override via
+ * MORPHIT_INDEXER_START_BLOCK (higher = faster first sync / less
+ * history; lower = more history / slower).  Changing it affects
+ * only a FRESH database; a running indexer resumes from its
+ * stored indexer_state.last_applied_block.
+ */
+export const MORPHIT_GENESIS_BLOCK = 59441298;
+
+/**
+ * Canonical default Blurt RPC endpoint set — the SINGLE SOURCE OF
+ * TRUTH for the public RPC nodes the indexer, relay, ops-cli, and
+ * frontend talk to. Lives here in the one package every node-side
+ * component imports, so the relay's default, the indexer's default,
+ * the wizard-written value, and the account-lookup fallback can never
+ * drift apart (they did before beta5: the wizard wrote a 3-endpoint
+ * set including `rpc.blurt.world` while the relay used a different 4,
+ * which is how one real node's INDEXER froze on dead endpoints while
+ * its RELAY survived). A drift smoke also pins the frontend copy and
+ * the env examples to this list.
+ *
+ * Each endpoint is an independently-operated public node:
+ *   - rpc.blurt.blog       — Blurt Foundation
+ *   - rpc.beblurt.com      — BeBlurt frontend's node
+ *   - rpc.blurt.one        — Witness @tekraze
+ *   - blurt-rpc.saboin.com — Witness @saboin
+ *
+ * To change the set, edit THIS list only — every component follows.
+ * More independent endpoints = more resilience against the kind of
+ * simultaneous rate-limiting seen in the beta5 firefight; add any
+ * additional reliable community node here.
+ */
+export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
+	'https://rpc.blurt.blog',
+	'https://rpc.beblurt.com',
+	'https://rpc.blurt.one',
+	'https://blurt-rpc.saboin.com'
+] as const;
+
 /** Inline sanitize for any string this package prints to the
  *  operator's terminal at boot time.  Strips C0/C1/DEL + all
  *  non-SGR ESC sequences.  Mirror of

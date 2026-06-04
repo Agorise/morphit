@@ -111,7 +111,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 3. Security and audits — receipts, not slogans
 
-38. **Several thousand self-checking smoke scenarios across ~150 runners** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh` (and triple-pulse it for flake filtering). They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
+38. **Several thousand self-checking smoke scenarios across ~280 runners** ship with the source code. Run them yourself: `bash scripts/run-smokes.sh` (and triple-pulse it for flake filtering). They cover the indexer, relay, ops CLI, frontend bus, payments, federation probe, fee verification, chat encryption, and more.
 
 39. **A running audit document** (`docs/AUDIT-2026-05.md`) — currently 20,000+ lines across 60+ numbered parts, organized by date and subsystem, listing every security review pass, every finding, every severity rating, every fix or accepted-risk rationale. Public, in the repo, anyone can read it. Plus per-batch audit files in `docs/audit/` (Batch I YubiKey unlock, Batch J release trust anchor, Batch K block explorer, Batch L payment methods).
 
@@ -372,7 +372,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 161. **OPERATOR-TRUST-DESIGN.md.** Explicit threat model treating operators as untrusted by default. Users can verify what an operator is actually serving against the on-chain manifest.
 
-162. **OPERATIONS.md** — full ongoing runbook for operators (currently 27 sections). Covers backups, RPC management, signup-drain defenses, fee-recipient accounts, release signing, and more.
+162. **OPERATIONS.md** — full ongoing runbook for operators (40-plus sections). Covers backups, RPC management, signup-drain defenses, fee-recipient accounts, release signing, and more.
 
 163. **API.md** — a public, documented HTTP API contract. Stable shape, stable URLs, free, read-only — designed for block explorers, federation aggregators, third-party clients, academic research.
 
@@ -728,11 +728,15 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 329. **Ripple (XRP) peer-to-peer with Federated Byzantine Agreement consensus.** Trade XRP peer to peer — non-custodial, no KYC. Native XRP cannot be frozen by any central authority (only IOU-token variants on XRPL can; native XRP cannot), and Morphit's post-flow surfaces the two XRPL gotchas — destination tags (required when sending to exchange-hosted addresses) and the 1-XRP base reserve (first receive needs ≥1 XRP). Trade-only on Morphit.
 
+330. **Moderate your own instance without becoming a censor.** An operator can review the abuse signals the indexer already collects — reciprocity rings and likely-same-person accounts — and hide a troublesome account's listings from their own instance. A block is instance-local: it broadcasts nothing to the chain, touches no funds or keys, is fully reversible, and has zero effect on any other Morphit instance. The blocked person stays fully visible on every other instance and sees a plain-English banner saying exactly that — no single operator can erase anyone from the federation.
+
+331. **Check your Blurt RPC health before you rely on it — and one dead node never freezes your instance.** `morphit-ops doctor` and the setup wizard probe every configured RPC endpoint with a real chain query — not just DNS — and report which are reachable before you depend on them; `/v1/health` shows how many are healthy at a glance. The indexer now ships the same vetted default node list the relay always had, so a missing or stale config falls back to working nodes instead of stalling — and a dead, rate-limited, or flapping node is routed around automatically.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
 
-- **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~150 runners, triple-pulse stable
+- **Smoke suite**: `bash scripts/run-smokes.sh` — runs several thousand self-checks across ~280 runners, triple-pulse stable
 - **Audit log**: `docs/AUDIT-2026-05.md`
 - **Architecture decisions**: `docs/adr/0001-*.md` through `docs/adr/0046-*.md` (45 ADRs; 0016 was retracted and the number isn't reused)
 - **Fees and rewards**: `docs/FEES-AND-REWARDS.md` (line-cited to source)
@@ -746,4 +750,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*329 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-05-29.*
+*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated 2026-06-04.*

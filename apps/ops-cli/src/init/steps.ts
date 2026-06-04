@@ -27,7 +27,13 @@ import {
 	explain,
 	examples
 } from './prompt.ts';
-import { lookupBlurtAccount, validateBlurtAccountName, type AccountInfo } from './chainCheck.ts';
+import {
+	lookupBlurtAccount,
+	validateBlurtAccountName,
+	probeRpcEndpoints,
+	formatRpcProbeLines,
+	type AccountInfo
+} from './chainCheck.ts';
 import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
@@ -775,16 +781,14 @@ export async function stepBackup(): Promise<BackupResult> {
 // Comma-separated input is the standard env-var format, matching
 // what the indexer actually parses.
 
-/** The canonical default RPC list shipped with the project.  Kept
- *  in sync with the env example by `MORPHIT_INDEXER_RPC_ENDPOINTS`
- *  in ops/env/indexer.env.example.  If you update this list,
- *  update the env example too — there's a smoke that'll catch
- *  drift if you forget. */
-export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
-	'https://rpc.beblurt.com',
-	'https://rpc.blurt.world',
-	'https://blurt-rpc.saboin.com'
-] as const;
+// beta5 item D: re-exported from the single source of truth in
+// @morphit/operator-config (imported below with the other operator-config
+// symbols). This was previously a DIVERGENT 3-endpoint list
+// (rpc.beblurt.com, rpc.blurt.world, blurt-rpc.saboin.com) — the wizard
+// wrote that into the indexer config while the relay used a different
+// 4-endpoint default, the asymmetry that let one node's relay survive
+// while its indexer froze on dead endpoints.
+export { DEFAULT_BLURT_RPC_ENDPOINTS };
 
 /** Parse and validate a comma-separated RPC endpoint list.  Used
  *  by the wizard step and also exposed for tests.  Returns the
@@ -866,7 +870,39 @@ export async function stepRpcEndpoints(
 			console.log(`  ✗ ${result}  Try again.\n`);
 			continue;
 		}
-		return result;
+
+		// Reachability probe (beta5 item B): a real
+		// get_dynamic_global_properties call to each endpoint, so the
+		// operator finds out NOW — not after a silent stalled sync —
+		// whether the list actually works from this box.
+		console.log('\n  Checking the endpoints are reachable…\n');
+		const summary = await probeRpcEndpoints(result);
+		for (const line of formatRpcProbeLines(summary)) {
+			console.log(`  ${line}`);
+		}
+		console.log('');
+
+		if (summary.healthy === summary.total) {
+			return result; // all good
+		}
+		if (summary.healthy === 0) {
+			// None reachable — the indexer cannot sync with this list.
+			// Default to editing; allow override (they may be on a
+			// temporarily-offline box and know the endpoints are fine).
+			const keep = await askYesNo(
+				'None of these endpoints responded. Use this list anyway?',
+				false
+			);
+			if (!keep) {
+				console.log('');
+				continue;
+			}
+			return result;
+		}
+		// Some reachable — workable, reduced redundancy. Default to keep.
+		const keep = await askYesNo('Keep this list (you can add more later)?', true);
+		if (keep) return result;
+		console.log('');
 	}
 }
 
@@ -2077,7 +2113,8 @@ import {
 	parseMxid,
 	parseRoomAlias,
 	MATRIX_EXAMPLE_MXID,
-	MATRIX_EXAMPLE_ROOM_ALIAS
+	MATRIX_EXAMPLE_ROOM_ALIAS,
+	DEFAULT_BLURT_RPC_ENDPOINTS
 } from '@morphit/operator-config';
 import type { MatrixSurfacesResult } from './render.ts';
 
@@ -2380,6 +2417,8 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 				'         AS blocks.  AUTO_LETS_ENCRYPT=yes handles TLS.\n' +
 				'      3. Start it:\n' +
 				'           cd /etc/bunkerweb && docker compose up -d\n' +
+				'      4. Confirm it came up healthy:\n' +
+				'           npx morphit-ops bunkerweb\n' +
 				'\n' +
 				'    BunkerWeb terminates TLS, serves your apps/web/build, and\n' +
 				'    reverse-proxies /v1/* to the relay + indexer.  Quick Start:\n' +

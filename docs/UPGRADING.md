@@ -216,10 +216,46 @@ sudo -u morphit npx morphit-ops upgrade --yes
 | Env var | Default | What it does |
 |---|---|---|
 | `MORPHIT_AUTO_UPGRADE` | unset | Set to `1` to skip the y/N prompt |
-| `MORPHIT_RELEASE_HOST` | `git.agorise.net` | Forgejo host |
+| `MORPHIT_RELEASE_HOST` | `git.agorise.net` | primary Forgejo host (trusted hash anchor) |
 | `MORPHIT_RELEASE_REPO` | `agorise/morphit` | repo path |
+| `MORPHIT_RELEASE_MIRRORS` | unset | comma-separated fallback sources, each `host` or `host/owner/repo`, tried after the primary |
 | `MORPHIT_INSTALL_DIR` | `/opt/morphit` | install location |
 | `MORPHIT_BACKUP_KEEP` | `3` | how many `.bak-*` backups to retain |
+
+### Mirrors and how integrity is protected
+
+`upgrade` can fall back to mirrors if the primary is slow or down, set via
+`MORPHIT_RELEASE_MIRRORS` (e.g. `MORPHIT_RELEASE_MIRRORS=mirror.example,codeberg.org/agorise/morphit`).
+Crucially, **a mirror is never trusted just because it served the bytes** —
+verifying a mirror's tarball against that same mirror's checksum proves
+nothing. Two integrity paths apply, in trust order:
+
+1. **GPG signature (source-independent).** If the release carries a
+   `*.tar.gz.asc`, `upgrade` verifies it against the release-signer public
+   keys that ship in your install at `.forgejo/release-signers/*.asc`. The
+   trust anchor is local and code-reviewed, so a signed tarball is
+   trustworthy no matter which mirror served it — this is what makes a
+   fully standalone mirror safe, even if the primary is censored or gone.
+
+2. **Anchored SHA-256.** When there's no signature, the tiny `.sha256` is
+   always fetched from the **trusted primary** over HTTPS; the big tarball
+   bytes may come from a mirror; the bytes are checked against the
+   primary's hash. A hostile mirror can't forge this. If the primary is
+   completely unreachable **and** the release is unsigned, `upgrade`
+   refuses rather than trust a mirror blindly.
+
+**To publish signed releases** (recommended — it's what enables fully
+independent mirrors), set two repo secrets in Forgejo → repo → Settings →
+Actions → Secrets:
+
+- `MORPHIT_RELEASE_SIGNING_KEY` — an ASCII-armored **private** signing key
+  whose **public** half is committed under `.forgejo/release-signers/` (so
+  every operator can verify it).
+- `MORPHIT_RELEASE_SIGNING_PASSPHRASE` — its passphrase (or empty).
+
+If those secrets are absent, CI still publishes a working release, but
+unsigned — mirror installs then rely on the anchored-SHA-256 path only.
+
 
 ## Get notified about new releases — `morphit-release-monitor`
 

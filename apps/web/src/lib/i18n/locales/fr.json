@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "Les opérateurs peuvent-ils bloquer certains utilisateurs de leur instance ?",
-        "a": "Oui — un opérateur peut bloquer des comptes de sa propre UI frontend. C'est purement du filtrage côté client : les ordres de l'utilisateur bloqué ne se rendent pas sur le /orderbook de cet opérateur particulier, et les UI chat / retours de l'opérateur peuvent refuser de montrer l'utilisateur bloqué.\n\nCe que cela NE fait PAS :\n- Affecter la chaîne de quelque manière. Les ordres des utilisateurs bloqués existent toujours on-chain et sont visibles via n'importe quelle autre instance d'opérateur ou requête directe à la chaîne.\n- Empêcher l'utilisateur bloqué de trader. Il peut utiliser un opérateur différent, sa propre instance auto-hébergée, ou des outils chaîne bruts — aucune restriction au niveau protocolaire.\n\nC'est le bon équilibre : les opérateurs modèrent le spam et l'abus sur leur propre propriété sans contrôle centralisé. Les utilisateurs conservent l'accès complet au protocole via n'importe laquelle des autres instances live listées sur /operators."
+        "a": "Oui — un opérateur peut examiner les signaux d'abus et bloquer un compte sur sa propre instance à l'aide des outils de modération de `morphit-ops`. Le blocage est appliqué côté serveur : l'indexeur cesse de servir les annonces de ce compte partout où cette instance les affiche — le carnet d'ordres, la vue par compte, les emplacements en vedette, les flux RSS et le flux en direct. Lorsque la personne bloquée est connectée ici, elle voit une bannière claire expliquant que ses annonces sont masquées sur cette instance uniquement.\n\nCe que cela ne fait PAS :\n- Affecter la blockchain. Les annonces du compte bloqué existent toujours sur la chaîne et restent visibles via n'importe quelle autre instance d'opérateur ou une requête directe à la chaîne.\n- Toucher aux fonds, aux clés ou à l'identité du compte — et cela n'a aucun effet sur aucune autre instance Morphit. C'est entièrement réversible.\n- Empêcher la personne bloquée de commercer. Elle peut utiliser une autre instance, sa propre instance auto-hébergée ou les outils directs de la chaîne — il n'y a aucune restriction au niveau du protocole.\n\nLes opérateurs peuvent modérer le spam et les abus uniquement sur leur propre instance, de manière transparente (aucun opérateur ne peut censurer en silence). Par exemple, la vente de produits ou de services qui initieraient un préjudice. #donoharm #agorism Les opérateurs ne peuvent pas non plus effacer qui que ce soit de la fédération — les publications des utilisateurs restent visibles via n'importe laquelle des autres instances listées sur /instances."
       },
       "chat_identity_key": {
         "q": "Dois-je configurer une clé séparée pour utiliser le chat ?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexeur",
       "body": "Le composant d'une instance Morphit qui surveille la chaîne, décode les opérations pertinentes pour Morphit (ordres, retours, enveloppes de chat) et les sert au frontend web sous une forme exploitable. La chaîne est la source de vérité ; l'indexeur n'est qu'un cache rapide. Exploité par l'opérateur, pas par vous."
+    },
+    "instance": {
+      "title": "Instance",
+      "body": "Un seul site web Morphit, géré par un opérateur — le site sur lequel vous êtes en ce moment est une instance. Comme Morphit est fédéré, de nombreuses instances indépendantes lisent la même blockchain et affichent les mêmes ordres, transactions et réputations. Si une instance vous bloque ou tombe en panne, vous pouvez passer à n'importe quelle autre instance et reprendre exactement là où vous en étiez."
     },
     "listing_fee": {
       "title": "Frais de listing",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "Tu as été bloqué sur cette instance Morphit",
+      "title": "Vos annonces sont bloquées sur cette instance",
       "body": "@{operator}, l'opérateur de cette instance, a bloqué ton compte le {since}. C'est un choix de curation de CETTE instance — tes fonds, ton identité et ton historique sur la chaîne ne sont pas affectés, et les autres instances Morphit non plus.",
       "reason_label": "Motif",
       "no_reason_provided": "L'opérateur n'a pas fourni de motif.",
+      "still_visible_elsewhere": "Vos annonces sont bloquées uniquement sur cette instance — elles restent visibles sur toutes les autres instances Morphit.",
+      "contact_prefix": "Si vous pensez qu'il s'agit d'une erreur, vous pouvez contacter la communauté sur Matrix :",
+      "contact_link": "Salon Agorise sur Matrix",
       "what_it_means_expand": "Que signifie ce blocage ? (afficher les détails)",
       "what_it_means_collapse": "Masquer les détails",
       "what_it_does_not_do": "Ce que ce blocage NE fait PAS",

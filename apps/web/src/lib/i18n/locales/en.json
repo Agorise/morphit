@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "Can operators block or ban specific users from their instance?",
-        "a": "Yes — an operator can block accounts from their own frontend UI. This is pure client-side filtering: the blocked user's orders don't render on that particular operator's /orderbook, and the operator's chat / feedback UIs may refuse to show the blocked user.\n\nWhat this does NOT do:\n- Affect the chain in any way. Blocked users' orders still exist on-chain and are visible via every other operator instance or direct chain query.\n- Prevent the blocked user from trading. They can use a different operator, or their own self-hosted instance, or the raw chain tools — no restriction at the protocol level.\n\nThis is the right balance: operators moderate spam and abuse on their own property without centralized control. Users retain full access to the protocol through any of the other live instances listed at /operators."
+        "a": "Yes — an operator can review abuse signals and block an account on their own instance using the `morphit-ops` moderation tools. The block is enforced server-side: the indexer stops serving that account's listings anywhere this instance shows them — the orderbook, the per-account view, featured slots, the RSS feeds, and the live stream. When the blocked person is signed in here, they see a clear banner explaining their posts are hidden on this instance only.\n\nWhat this does NOT do:\n- Affect the chain. The blocked account's orders still exist on-chain and stay visible via every other operator instance or a direct chain query.\n- Touch the account's funds, keys, or identity — and it has no effect on any other Morphit instance. It is fully reversible.\n- Prevent the blocked person from trading. They can use a different instance, their own self-hosted instance, or raw chain tools — there is no restriction at the protocol level.\n\nOperators can moderate spam and abuse on their own instance only, transparently (no operator can censor silently). Selling products or services that would initiate harm for example. #donoharm #agorism Operators can't erase anyone from the federation either — users posts are still visible through any of the other instances listed at /instances."
       },
       "chat_identity_key": {
         "q": "Do I need to set up a separate key to use chat?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexer",
       "body": "The component of a Morphit instance that watches the chain, decodes Morphit-relevant operations (orders, feedback, chat envelopes), and serves them to the web frontend in a usable shape. The chain is the source of truth; the indexer is just a fast cache. Run by the operator, not by you."
+    },
+    "instance": {
+      "title": "Instance",
+      "body": "A single Morphit website, run by one operator — the site you're on right now is one instance. Because Morphit is federated, many independent instances all read the same blockchain and show the same orders, trades, and reputations. If one instance blocks you or goes offline, you can switch to any other instance and pick up exactly where you left off."
     },
     "listing_fee": {
       "title": "Listing fee",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "You've been blocked on this Morphit instance",
+      "title": "Your posts are blocked on this instance",
       "body": "@{operator}, the operator of this instance, blocked your account on {since}. This is a curation choice by THIS instance — your funds, identity, and chain history are unaffected, and other Morphit instances are not.",
       "reason_label": "Reason",
       "no_reason_provided": "The operator did not provide a reason.",
+      "still_visible_elsewhere": "Your posts are blocked only on this instance — they’re still visible on every other Morphit instance.",
+      "contact_prefix": "If you think this is a mistake, you can reach the community on Matrix:",
+      "contact_link": "Agorise chatroom on Matrix",
       "what_it_means_expand": "What does this mean? (show details)",
       "what_it_means_collapse": "Hide details",
       "what_it_does_not_do": "What this block does NOT do",

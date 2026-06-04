@@ -20,10 +20,13 @@
  *     (state='blocked').  Used by the orderbook view to filter,
  *     and by future transparency-page tooling.
  *
- * Authentication: none.  These are derived views over public
- * on-chain custom_json ops; anyone scraping the chain could
- * aggregate the same information.  We surface the operator's
- * stated reason verbatim — it's already public on chain.
+ * Authentication: none — by design.  Operator moderation on
+ * Morphit is transparent: a blocked user (and anyone else) can
+ * see that they're blocked here and the operator's stated reason,
+ * so an operator cannot censor silently.  Chain-origin blocks are
+ * additionally already public on chain; instance-local blocks
+ * (origin='local') are NOT on chain, but the same transparency
+ * principle is why they're exposed unauthenticated too.
  *
  * The data is OPERATOR-INSTANCE LEVEL.  Other instances see other
  * blocks; a user blocked here is unaffected on instance-B.

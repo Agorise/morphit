@@ -22,6 +22,8 @@
  */
 
 import { askChoice } from '../init/prompt.ts';
+import { fmt } from '../render/term.ts';
+import type { MenuAnnotations } from '../lib/menuAnnotations.ts';
 
 export interface MenuSelection {
 	/** The subcommand to dispatch, e.g. 'edit', 'upgrade', 'status'. */
@@ -78,19 +80,29 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'harden'
 			},
 			{
+				label: 'SSL/TLS certificate (HTTPS)',
+				blurb: 'Check your HTTPS certificate expiry + auto-renewal, or get the exact steps to obtain a free Let\u2019s Encrypt cert.',
+				subcommand: 'ssl'
+			},
+			{
+				label: 'Web firewall (BunkerWeb) status',
+				blurb: 'Check whether the optional BunkerWeb WAF is running and healthy, or get the commands to bring it up.',
+				subcommand: 'bunkerweb'
+			},
+			{
 				label: 'Re-publish my registration on-chain',
 				blurb: 'Push your current origin/tag to the federation directory (run after changing either).',
 				subcommand: 'register'
 			},
 			{
-				label: 'Run the first-time setup wizard',
-				blurb: 'Full from-scratch setup.  On an already-configured instance this warns first.',
-				subcommand: 'init'
+				label: 'Fast-forward the sync',
+				blurb: 'Jump the indexer to a recent block so it is current in minutes instead of replaying old history.  Stop the indexer first.',
+				subcommand: 'fast-forward'
 			}
 		]
 	},
 	{
-		heading: 'Check on the instance (read-only)',
+		heading: 'Check on the instance',
 		items: [
 			{
 				label: 'Status dashboard',
@@ -103,11 +115,6 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'signups'
 			},
 			{
-				label: 'Abuse alerts',
-				blurb: 'Abuse signals raised in the last 24h.',
-				subcommand: 'abuse'
-			},
-			{
 				label: 'Failed broadcasts',
 				blurb: 'Relay broadcasts that errored.',
 				subcommand: 'failed-broadcasts'
@@ -118,9 +125,9 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'drain-queue'
 			},
 			{
-				label: 'Moderation flags',
-				blurb: 'Reciprocity / related-account flags raised for review.',
-				subcommand: 'flags'
+				label: 'Moderation — review flags & block accounts',
+				blurb: 'Review reciprocity / related-account abuse flags, and block or unblock accounts on this instance.',
+				subcommand: 'moderation'
 			}
 		]
 	},
@@ -148,11 +155,41 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 ];
 
 /**
+ * A short, optional suffix appended to a menu item's label from the
+ * best-effort annotations: the live version on Upgrade, and an
+ * attention marker on Moderation when there are unresolved flags.
+ * Colored segments are concatenated (never nested) to keep ANSI codes
+ * well-formed. Returns '' when there's nothing to add.
+ */
+export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
+	if (ann === undefined) return '';
+	if (subcommand === 'upgrade') {
+		const { currentVersion: cur, latestVersion: latest } = ann;
+		if (cur === null && latest === null) return '';
+		const parts: string[] = [];
+		if (cur !== null) parts.push(`now: ${cur}`);
+		if (latest !== null) parts.push(`latest: ${latest}`);
+		let s = '  ' + fmt.dim(`(${parts.join('  ')})`);
+		if (cur !== null && latest !== null && cur !== latest) {
+			s += '  ' + fmt.yellow('\u25cf update available');
+		}
+		return s;
+	}
+	if (subcommand === 'moderation') {
+		const n = ann.unresolvedFlags;
+		if (n !== null && n > 0) {
+			return '  ' + fmt.yellow(`\u26a0 ${n} to review`);
+		}
+	}
+	return '';
+}
+
+/**
  * Show the menu and return the operator's selection, or null if
  * they chose to quit.  Caller dispatches the returned subcommand
  * through the normal main() path.
  */
-export async function runMainMenu(): Promise<MenuSelection | null> {
+export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSelection | null> {
 	console.log('');
 	console.log('━'.repeat(58));
 	console.log('  morphit-ops — what would you like to do?');
@@ -172,7 +209,7 @@ export async function runMainMenu(): Promise<MenuSelection | null> {
 		lines.push(`  — ${group.heading} —`);
 		for (const item of group.items) {
 			flat.push(item);
-			lines.push(`    ${flat.length}. ${item.label}`);
+			lines.push(`    ${flat.length}. ${item.label}${itemSuffix(item.subcommand, annotations)}`);
 			lines.push(`        ${item.blurb}`);
 		}
 		lines.push('');
@@ -182,15 +219,20 @@ export async function runMainMenu(): Promise<MenuSelection | null> {
 	lines.push(`    ${flat.length + 1}. Quit`);
 	lines.push('        Exit without doing anything.');
 
-	// Print our richly-formatted catalog, then use askChoice purely
-	// for validated numeric entry.  askChoice re-renders a compact
-	// list too, but the rich blurbs above are what the operator
-	// reads; the compact list is harmless reinforcement.
+	// Print our richly-formatted catalog above, then ask only for a
+	// validated number — we pass showList:false so askChoice does NOT
+	// re-print all the items (that redundant second list made the
+	// screen too tall).
 	console.log(lines.join('\n'));
 	console.log('');
 
 	const choiceLabels = [...flat.map((i) => i.label), 'Quit'];
-	const idx = await askChoice('Enter a number', choiceLabels);
+	const idx = await askChoice(
+		`Enter the number of your choice (1-${choiceLabels.length})`,
+		choiceLabels,
+		undefined,
+		{ showList: false }
+	);
 
 	if (idx === quitIndex) {
 		return null;

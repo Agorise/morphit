@@ -307,6 +307,14 @@ scenario('writeWizardOutput: morphit.env contains critical-infra keys', () => {
 			'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9',
 			'official posting pubkey (network constant) written'
 		);
+		// beta5 — fresh installs index from the Morphit genesis block, not
+		// block 0, so a new node is current within minutes instead of
+		// replaying years of pre-Morphit Blurt history.
+		assertContains(
+			content,
+			'MORPHIT_INDEXER_START_BLOCK=59441298',
+			'genesis start block written (current-in-minutes default)'
+		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}

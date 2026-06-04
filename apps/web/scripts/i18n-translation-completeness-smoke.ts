@@ -142,6 +142,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'glossary.indexer.title', locale: 'de', reason: '(b) "Indexer" adopted as German tech loanword' },
 	{ key: 'glossary.indexer.title', locale: 'it', reason: '(b) "Indexer" adopted as Italian tech loanword' },
 	{ key: 'glossary.indexer.title', locale: 'pl', reason: '(b) "Indexer" adopted as Polish tech loanword' },
+	{ key: 'glossary.instance.title', locale: 'fr', reason: '(a) "Instance" is also French' },
 	{ key: 'glossary.operator.title', locale: 'pl', reason: '(a) "Operator" is also Polish' },
 	{ key: 'glossary.password.title', locale: 'it', reason: '(b) "Password" adopted as Italian tech loanword' },
 	{ key: 'glossary.relay.title', locale: 'de', reason: '(b) "Relay" adopted as German tech loanword' },

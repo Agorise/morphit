@@ -58,9 +58,11 @@ function fakePoller(
 		lastErrorAt?: Date | null;
 		startedAt?: Date;
 		explorerSnapshot?: EndpointState[];
+		rpcSnapshot?: EndpointState[];
 	} = {}
 ): Poller {
 	const snapshot = opts.explorerSnapshot ?? [];
+	const rpcSnapshot = opts.rpcSnapshot ?? [];
 	return {
 		getStatus() {
 			return {
@@ -74,6 +76,9 @@ function fakePoller(
 		},
 		get explorerHealthSnapshot(): readonly EndpointState[] {
 			return snapshot;
+		},
+		get rpcEndpointSnapshot(): readonly EndpointState[] {
+			return rpcSnapshot;
 		},
 		getOperatorBalanceState() {
 			// Empty map = no monitored accounts configured. Tests that
@@ -363,6 +368,82 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 		};
 		expect(d.explorers[0]!.state).toBe('half_open');
 		expect(d.explorers[0]!.cooldown_remaining_ms).toBe(0);
+	});
+
+	// ── beta5: the Blurt RPC pool (block feed) exposed on /v1/health ──
+	it('reports compact rpc_endpoints_healthy / _total on the PUBLIC body', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: false }),
+			fakePoller({
+				rpcSnapshot: [
+					ep('https://rpc.blurt.blog', { lastSuccessAt: Date.now() - 1_000 }),
+					ep('https://rpc.beblurt.com', { lastSuccessAt: Date.now() - 2_000 }),
+					// one endpoint in active cooldown = not currently healthy
+					ep('https://rpc.dead.example', {
+						consecutiveFailures: 3,
+						cooldownUntil: Date.now() + 30_000
+					})
+				]
+			})
+		);
+		// Available even without verbose (this is the at-a-glance triage signal).
+		expect(body.rpc_endpoints_total).toBe(3);
+		expect(body.rpc_endpoints_healthy).toBe(2);
+		// Per-endpoint detail must NOT leak onto the public body.
+		expect(body.diagnostics).toBeUndefined();
+	});
+
+	it('reports 0 healthy when every RPC endpoint is cooled down (the firefight case)', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: false }),
+			fakePoller({
+				rpcSnapshot: [
+					ep('https://rpc.a.example', { cooldownUntil: Date.now() + 10_000 }),
+					ep('https://rpc.b.example', { cooldownUntil: Date.now() + 10_000 })
+				]
+			})
+		);
+		expect(body.rpc_endpoints_total).toBe(2);
+		expect(body.rpc_endpoints_healthy).toBe(0);
+	});
+
+	it('exposes full rpc_endpoints detail (url/state/latency) in the verbose block', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ verboseHealth: true }),
+			fakePoller({
+				rpcSnapshot: [
+					ep('https://rpc.blurt.blog', {
+						ewmaLatencyMs: 95,
+						lastSuccessAt: Date.now() - 4_000
+					}),
+					ep('https://rpc.dead.example', {
+						consecutiveFailures: 4,
+						cooldownUntil: Date.now() + 20_000
+					})
+				]
+			}),
+			'verbose=1'
+		);
+		const d = body.diagnostics as {
+			rpc_endpoints: Array<{
+				url: string;
+				state: string;
+				consecutive_failures: number;
+				cooldown_remaining_ms: number;
+				ewma_latency_ms: number | null;
+				last_success_age_s: number | null;
+			}>;
+		};
+		expect(d.rpc_endpoints).toHaveLength(2);
+		const live = d.rpc_endpoints.find((e) => e.url === 'https://rpc.blurt.blog')!;
+		expect(live.state).toBe('closed');
+		expect(live.ewma_latency_ms).toBe(95);
+		expect(live.last_success_age_s).toBeGreaterThanOrEqual(3);
+		const dead = d.rpc_endpoints.find((e) => e.url === 'https://rpc.dead.example')!;
+		expect(dead.state).toBe('open');
+		expect(dead.consecutive_failures).toBe(4);
+		expect(dead.cooldown_remaining_ms).toBeGreaterThan(0);
+		expect(dead.last_success_age_s).toBeNull();
 	});
 
 	it('exposes cooldown_remaining_ms as a non-negative number', async () => {

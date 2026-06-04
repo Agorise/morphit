@@ -187,7 +187,7 @@ function rowToWire(r: OrderRow) {
 	};
 }
 
-export function orderbookRoute(db: Database, poller: Poller): Hono {
+export function orderbookRoute(db: Database, poller: Poller, officialAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/', async (c) => {
@@ -234,6 +234,14 @@ export function orderbookRoute(db: Database, poller: Poller): Hono {
 			params.push(v);
 			return `$${params.length}`;
 		};
+
+		// beta5 — instance-local moderation: hide listings from accounts
+		// this operator has blocked (operator_blocks, state='blocked';
+		// local OR chain-origin both apply). Keeps blocked sellers out of
+		// the public orderbook on THIS instance only.
+		where.push(
+			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(officialAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+		);
 
 		if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
 		if (q.side) where.push(`o.side = ${p(q.side)}`);

@@ -140,7 +140,19 @@ export class HealthService {
 
 	register(app: Hono): void {
 		app.get('/v1/health', (c) => {
-			const body: Record<string, unknown> = { status: 'ok' };
+			// Compact Blurt RPC-pool health for at-a-glance triage. The
+			// relay broadcasts through this pool; if every endpoint is
+			// unreachable, signups/listings can't post. Per-endpoint
+			// detail stays in the gated verbose block.
+			const rpcSnap = this.blurt.endpointSnapshot();
+			const nowMs = Date.now();
+			const rpcEndpointsHealthy = rpcSnap.filter((e) => e.cooldownUntil <= nowMs).length;
+
+			const body: Record<string, unknown> = {
+				status: 'ok',
+				rpc_endpoints_healthy: rpcEndpointsHealthy,
+				rpc_endpoints_total: rpcSnap.length
+			};
 			if (this.cfg.verboseHealth) {
 				const elapsedNs = process.hrtime.bigint() - this.startedHrTime;
 				body.version = VERSION;
@@ -150,6 +162,27 @@ export class HealthService {
 				body.pending_claimed_accounts = this.snapshot.pending_claimed_accounts;
 				body.last_refresh_unix = this.snapshot.last_refresh_unix;
 				if (this.snapshot.stale) body.stale = true;
+
+				// Full per-endpoint RPC health (same shape the indexer
+				// exposes) for deep triage of broadcast failures.
+				body.rpc_endpoints = rpcSnap.map((s) => {
+					const cooldownRemaining = Math.max(0, s.cooldownUntil - nowMs);
+					const state =
+						cooldownRemaining > 0
+							? 'open'
+							: s.consecutiveFailures > 0
+								? 'half_open'
+								: 'closed';
+					return {
+						url: s.url,
+						state,
+						consecutive_failures: s.consecutiveFailures,
+						cooldown_remaining_ms: cooldownRemaining,
+						ewma_latency_ms: s.ewmaLatencyMs,
+						last_success_age_s:
+							s.lastSuccessAt > 0 ? Math.floor((nowMs - s.lastSuccessAt) / 1000) : null
+					};
+				});
 
 				// Signup-drain-prevention stats. Present only when
 				// setSignupContext() has wired the ceiling in — the

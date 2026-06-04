@@ -260,6 +260,53 @@ jobs:
           sha256sum "$TARBALL" > "$TARBALL.sha256"
           cat "$TARBALL.sha256"
 
+      - name: Sign release tarball (detached GPG signature)
+        # beta5 — source-independent integrity for mirror downloads.
+        # `morphit-ops upgrade` verifies this `*.tar.gz.asc` against the
+        # release-signer PUBLIC keys shipped in the install at
+        # `.forgejo/release-signers/*.asc`, so a tarball fetched from ANY
+        # mirror is trustworthy (no need to trust the mirror).
+        #
+        # Requires two repo secrets (set them in Forgejo → repo →
+        # Settings → Actions → Secrets):
+        #   MORPHIT_RELEASE_SIGNING_KEY         — ASCII-armored PRIVATE
+        #     key whose PUBLIC half is committed under
+        #     .forgejo/release-signers/ (so operators can verify).
+        #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (or
+        #     empty if the key has none).
+        #
+        # If the secret is not set, signing is SKIPPED (CI still passes,
+        # the release is published unsigned) — but mirror installs will
+        # then fall back to primary-anchored-hash only.  See
+        # docs/UPGRADING.md.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          SIGNING_KEY: ${{ secrets.MORPHIT_RELEASE_SIGNING_KEY }}
+          SIGNING_PASSPHRASE: ${{ secrets.MORPHIT_RELEASE_SIGNING_PASSPHRASE }}
+        run: |
+          set -eu
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::warning::MORPHIT_RELEASE_SIGNING_KEY not set — publishing UNSIGNED release (mirror installs limited to primary-anchored-hash). See docs/UPGRADING.md."
+            exit 0
+          fi
+          SIGN_HOME="$(mktemp -d)"
+          chmod 700 "$SIGN_HOME"
+          export GNUPGHOME="$SIGN_HOME"
+          printf '%s' "$SIGNING_KEY" | gpg --batch --import
+          KEYID="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')"
+          if [ -z "$KEYID" ]; then
+            echo "ERROR: no secret key found after import" >&2
+            rm -rf "$SIGN_HOME"; exit 1
+          fi
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "${SIGNING_PASSPHRASE:-}" \
+            --local-user "$KEYID" \
+            --armor --detach-sign --output "$TARBALL.asc" "$TARBALL"
+          # Sanity: verify what we just produced before publishing.
+          gpg --batch --verify "$TARBALL.asc" "$TARBALL"
+          echo "Signed $TARBALL with key $KEYID."
+          rm -rf "$SIGN_HOME"
+
       - name: Upload release artifact
         # AUDIT-CI-2 — Forgejo Actions does not implement the
         # `@actions/artifact` v2 backend that upload-artifact@v4+
@@ -280,4 +327,6 @@ jobs:
           path: |
             ${{ steps.ver.outputs.tarball }}
             ${{ steps.ver.outputs.tarball }}.sha256
+            ${{ steps.ver.outputs.tarball }}.asc
           retention-days: 90
+          if-no-files-found: warn

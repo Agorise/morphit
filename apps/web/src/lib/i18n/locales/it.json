@@ -1391,7 +1391,7 @@
       },
       "operator_moderation": {
         "q": "Gli operatori possono bloccare o bannare utenti specifici dalla loro istanza?",
-        "a": "Sì — un operatore può bloccare account dalla propria UI frontend. Questo è puramente filtraggio lato client: gli ordini dell'utente bloccato non si renderizzano sul /orderbook di quel particolare operatore, e le UI chat / feedback dell'operatore possono rifiutarsi di mostrare l'utente bloccato.\n\nCosa NON fa:\n- Influenzare la chain in alcun modo. Gli ordini degli utenti bloccati esistono ancora on-chain e sono visibili tramite qualsiasi altra istanza operatore o query diretta alla chain.\n- Impedire all'utente bloccato di tradare. Può usare un operatore diverso, la propria istanza auto-ospitata, o strumenti chain grezzi — nessuna restrizione a livello di protocollo.\n\nÈ il giusto equilibrio: gli operatori moderano spam e abusi sulla propria proprietà senza controllo centralizzato. Gli utenti mantengono pieno accesso al protocollo tramite qualsiasi delle altre istanze live elencate su /operators."
+        "a": "Sì — un operatore può esaminare i segnali di abuso e bloccare un account sulla propria istanza usando gli strumenti di moderazione di `morphit-ops`. Il blocco viene applicato lato server: l'indexer smette di servire gli annunci di quell'account ovunque questa istanza li mostri — l'orderbook, la vista per account, gli spazi in evidenza, i feed RSS e lo stream dal vivo. Quando la persona bloccata accede qui, vede un avviso chiaro che spiega che i suoi annunci sono nascosti solo su questa istanza.\n\nCosa NON fa:\n- Influire sulla blockchain. Gli annunci dell'account bloccato esistono ancora on-chain e restano visibili tramite qualsiasi altra istanza di operatore o una query diretta alla catena.\n- Toccare i fondi, le chiavi o l'identità dell'account — e non ha alcun effetto su nessun'altra istanza Morphit. È completamente reversibile.\n- Impedire alla persona bloccata di commerciare. Può usare un'altra istanza, la propria istanza self-hosted o gli strumenti diretti della catena — non c'è alcuna restrizione a livello di protocollo.\n\nGli operatori possono moderare spam e abusi solo sulla propria istanza, in modo trasparente (nessun operatore può censurare in silenzio). Ad esempio, la vendita di prodotti o servizi che inizierebbero un danno. #donoharm #agorism Anche gli operatori non possono cancellare qualcuno dalla federazione — i post degli utenti restano visibili tramite una qualsiasi delle altre istanze elencate su /instances."
       },
       "chat_identity_key": {
         "q": "Devo configurare una chiave separata per usare la chat?",
@@ -1870,6 +1870,10 @@
     "indexer": {
       "title": "Indexer",
       "body": "Il componente di un'istanza Morphit che osserva la catena, decodifica le operazioni rilevanti per Morphit (ordini, feedback, buste di chat) e le serve al frontend web in una forma utilizzabile. La chain è la fonte di verità; l'indexer è solo una cache veloce. Gestito dall'operatore, non da te."
+    },
+    "instance": {
+      "title": "Istanza",
+      "body": "Un singolo sito web Morphit, gestito da un operatore — il sito su cui ti trovi in questo momento è un'istanza. Poiché Morphit è federato, molte istanze indipendenti leggono la stessa blockchain e mostrano gli stessi ordini, scambi e reputazioni. Se un'istanza ti blocca o va offline, puoi passare a qualsiasi altra istanza e riprendere esattamente da dove avevi lasciato."
     },
     "listing_fee": {
       "title": "Tariffa di listing",
@@ -2452,10 +2456,13 @@
   },
   "operator_block": {
     "banner": {
-      "title": "Sei stato bloccato su questa istanza Morphit",
+      "title": "I tuoi annunci sono bloccati su questa istanza",
       "body": "@{operator}, l'operatore di questa istanza, ha bloccato il tuo account il {since}. È una scelta di curatela di QUESTA istanza — i tuoi fondi, la tua identità e la cronologia su chain non sono toccati, e nemmeno le altre istanze Morphit.",
       "reason_label": "Motivo",
       "no_reason_provided": "L'operatore non ha fornito un motivo.",
+      "still_visible_elsewhere": "I tuoi annunci sono bloccati solo su questa istanza — restano visibili su tutte le altre istanze Morphit.",
+      "contact_prefix": "Se pensi che si tratti di un errore, puoi contattare la community su Matrix:",
+      "contact_link": "Stanza Agorise su Matrix",
       "what_it_means_expand": "Cosa significa? (mostra dettagli)",
       "what_it_means_collapse": "Nascondi dettagli",
       "what_it_does_not_do": "Cosa NON fa questo blocco",

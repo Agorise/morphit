@@ -124,6 +124,10 @@
 				})}
 			</p>
 
+			<p class="mt-2 text-sm font-semibold">
+				{$_('operator_block.banner.still_visible_elsewhere')}
+			</p>
+
 			{#if status.reason && status.reason.length > 0}
 				<p class="mt-2 text-sm">
 					<span class="font-semibold">{$_('operator_block.banner.reason_label')}:</span>
@@ -134,6 +138,16 @@
 					{$_('operator_block.banner.no_reason_provided')}
 				</p>
 			{/if}
+
+			<p class="mt-2 text-sm">
+				{$_('operator_block.banner.contact_prefix')}
+				<a
+					href="https://matrix.to/#/#agorise:matrix.org"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="underline hover:no-underline focus:outline focus:outline-2 focus:outline-rose-300"
+				>{$_('operator_block.banner.contact_link')}</a>
+			</p>
 
 			<button
 				type="button"

@@ -89,13 +89,17 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 		ctx.db.query<ReciprocityRow>(
 			// suspicious_reciprocity may not always have these
 			// optional columns; the actual indexer schema uses
-			// 'reason' + an evidence JSONB.  Fall back gracefully.
+			// suspicious_reciprocity stores the signal as a mutual-review
+			// count + average rating (no free-text reason column — that
+			// lives on related_accounts). Synthesize a human reason +
+			// score from the real columns so the unified row shape holds.
 			`SELECT
 			   account_a,
 			   account_b,
 			   detected_at,
-			   reason,
-			   NULL::text AS score
+			   'mutual reviews: ' || mutual_review_count
+			     || ' (avg rating ' || round(avg_rating::numeric, 2) || ')' AS reason,
+			   round(avg_rating::numeric, 2)::text AS score
 			 FROM suspicious_reciprocity
 			 WHERE detected_at >= $1
 			 ORDER BY detected_at DESC

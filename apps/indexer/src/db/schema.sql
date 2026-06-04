@@ -1560,6 +1560,15 @@ CREATE TABLE operator_blocks (
     -- self-reported ts, which a malicious operator could backdate).
     created_at             timestamptz  NOT NULL,
     updated_at             timestamptz  NOT NULL,
+    -- origin distinguishes a federated, on-chain block (the
+    -- morphit_operator_block_v1 op — the default for handler writes)
+    -- from an INSTANCE-LOCAL block written directly by `morphit-ops
+    -- block` (no posting key, never broadcast, affects only THIS
+    -- instance's view, and not clobbered by chain replay).  For a
+    -- local block since_trx_id is the sentinel 'local' and
+    -- since_block_num is the indexer's last-applied block at write time.
+    origin                 varchar(8)   NOT NULL DEFAULT 'chain'
+                                        CHECK (origin IN ('chain', 'local')),
     PRIMARY KEY (operator, blocked),
     CHECK (operator <> blocked),
     CHECK (length(reason) <= 500)

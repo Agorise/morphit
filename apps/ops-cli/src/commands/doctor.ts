@@ -13,7 +13,12 @@
  *
  * SAFETY (this is the whole point of the command):
  *   - It MUTATES NOTHING. No files written, no services started, no
- *     database touched, no network calls of our own.
+ *     database touched. The ONLY network calls are READ-ONLY,
+ *     side-effect-free RPC probes (condenser_api.get_dynamic_global_properties)
+ *     to check whether the configured Blurt endpoints are reachable —
+ *     each with a hard timeout. Worst case for a probe is that it times
+ *     out and doctor reports the endpoint as unreachable. Pass
+ *     `--no-rpc` to skip the probes for a purely-local check.
  *   - It validates by running each service's REAL config loader via
  *     `--check-config`, which loads config and exits. That means the
  *     checks can never drift from what the services actually require
@@ -29,6 +34,11 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+	probeRpcEndpoints,
+	formatRpcProbeLines,
+	type RpcProbeSummary
+} from '../init/chainCheck.ts';
 
 export interface DoctorCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -191,6 +201,12 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	// code, which reflects boot-readiness).
 	const security = await securityAudit(installDir, envPath, configEnvPath);
 
+	// RPC reachability (read-only probes, advisory). Skipped with
+	// --no-rpc for a purely-local check. Catches the all-endpoints-dead
+	// case that froze a real node's sync before it ever stalls.
+	const skipRpc = ctx.flags['no-rpc'] === 'true';
+	const rpc = skipRpc ? null : await probeConfiguredEndpoints(envPath, cfgPath);
+
 	if (json) {
 		console.log(
 			JSON.stringify(
@@ -198,7 +214,23 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 					ok: allOk,
 					install_dir: installDir,
 					services: results.map((r) => ({ name: r.name, ok: r.ok, detail: r.detail })),
-					security: security.map((s) => ({ level: s.level, label: s.label, detail: s.detail }))
+					security: security.map((s) => ({ level: s.level, label: s.label, detail: s.detail })),
+					rpc:
+						rpc === null
+							? { checked: false }
+							: {
+									checked: true,
+									healthy: rpc.healthy,
+									total: rpc.total,
+									head_block: rpc.headBlock,
+									endpoints: rpc.results.map((r) => ({
+										url: r.url,
+										ok: r.ok,
+										latency_ms: r.latencyMs,
+										head_block: r.headBlock,
+										error: r.error
+									}))
+								}
 				},
 				null,
 				2
@@ -244,6 +276,38 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	console.log('━'.repeat(60));
 	console.log('');
 
+	// ─── RPC reachability (advisory) ────────────────────────────
+	if (skipRpc) {
+		console.log(`  RPC endpoints ${c.dim('(skipped — --no-rpc)')}`);
+		console.log('');
+		console.log('━'.repeat(60));
+		console.log('');
+	} else if (rpc === null) {
+		console.log(`  RPC endpoints ${c.yellow('(none configured to probe)')}`);
+		console.log(
+			`    ${c.dim('MORPHIT_INDEXER_RPC_ENDPOINTS is required — if this is blank, run `morphit-ops init`.')}`
+		);
+		console.log('');
+		console.log('━'.repeat(60));
+		console.log('');
+	} else {
+		const verdictColor =
+			rpc.healthy === 0 ? c.red : rpc.healthy < rpc.total ? c.yellow : c.green;
+		console.log(
+			`  RPC endpoints ${verdictColor(`(${rpc.healthy} of ${rpc.total} reachable)`)}`
+		);
+		const lines = formatRpcProbeLines(rpc);
+		// Last line is the verdict; the rest are per-endpoint.
+		for (const line of lines.slice(0, -1)) {
+			const tagged = line.includes('DEAD') ? c.red(line) : c.green(line);
+			console.log(`  ${tagged}`);
+		}
+		console.log(`    ${verdictColor(lines[lines.length - 1]!)}`);
+		console.log('');
+		console.log('━'.repeat(60));
+		console.log('');
+	}
+
 	if (allOk) {
 		console.log(`  ${c.green('Looks good.')} Both services validate. To start them:`);
 		console.log('');
@@ -286,6 +350,48 @@ async function resolveKeyPath(envPath: string): Promise<string | null> {
 	);
 	const p = (r.stdout ?? '').trim();
 	return p === '' ? null : p;
+}
+
+/** Read one env var by sourcing morphit.env (+ morphit.config.env if
+ *  present) the same faithful way the services do. Returns '' if unset. */
+async function readEnvVar(
+	envPath: string,
+	configEnvPath: string | null,
+	name: string
+): Promise<string> {
+	if (!existsSync(envPath)) return '';
+	const { spawnSync } = await import('node:child_process');
+	const cfgPart =
+		configEnvPath !== null && existsSync(configEnvPath) ? `. ${shq(configEnvPath)}; ` : '';
+	const r = spawnSync(
+		'bash',
+		['-c', `set -a; . ${shq(envPath)}; ${cfgPart}set +a; printf '%s' "$${name}"`],
+		{ encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] }
+	);
+	return (r.stdout ?? '').trim();
+}
+
+/** Gather the union of the indexer's and relay's configured Blurt RPC
+ *  endpoints, then probe each. Returns null when no endpoints are
+ *  configured (so the caller can skip the section cleanly). */
+async function probeConfiguredEndpoints(
+	envPath: string,
+	configEnvPath: string | null
+): Promise<RpcProbeSummary | null> {
+	const raw = [
+		await readEnvVar(envPath, configEnvPath, 'MORPHIT_INDEXER_RPC_ENDPOINTS'),
+		await readEnvVar(envPath, configEnvPath, 'MORPHIT_RELAY_BLURT_RPC')
+	];
+	const urls = Array.from(
+		new Set(
+			raw
+				.flatMap((v) => v.split(','))
+				.map((u) => u.trim())
+				.filter((u) => u !== '')
+		)
+	);
+	if (urls.length === 0) return null;
+	return probeRpcEndpoints(urls);
 }
 
 /** Read-only security audit. Inspects the active-key file (encryption

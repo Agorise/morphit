@@ -281,9 +281,16 @@ scenario('cp186: bare morphit-ops opens a menu on a TTY but keeps help+exit1 for
 	const m = _src('mainMenu.ts');
 	assertEqual(m.includes('export async function runMainMenu'), true, 'runMainMenu exported');
 	// Menu must offer the high-value actions the operator asked for.
-	for (const sub of ['edit', 'upgrade', 'register', 'init', 'status', 'harden']) {
+	// (`init` is intentionally NOT a menu item — `install` wraps the
+	// wizard and does the full setup; init stays a CLI-only command.)
+	for (const sub of ['install', 'edit', 'upgrade', 'register', 'status', 'harden', 'ssl', 'bunkerweb', 'moderation']) {
 		assertEqual(new RegExp(`subcommand: '${sub}'`).test(m), true, `menu offers '${sub}'`);
 	}
+	assertEqual(/subcommand: 'init'/.test(m), false, 'menu does NOT offer init (install wraps it)');
+	// beta5: abuse + flags folded into the unified `moderation` screen;
+	// both remain CLI-only subcommands but are no longer menu items.
+	assertEqual(/subcommand: 'abuse'/.test(m), false, 'menu does NOT offer abuse (folded into moderation)');
+	assertEqual(/subcommand: 'flags'/.test(m), false, 'menu does NOT offer flags (folded into moderation)');
 	const main = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'main.ts'), 'utf-8');
 	assertEqual(
 		main.includes("process.stdin.isTTY === true && args.flags['no-menu'] !== 'true'"),
