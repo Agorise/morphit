@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "Si una instancia de Morphit cae, ¿pierdo mis órdenes y reputación?",
-        "a": "No — ese es el punto de todo el diseño federado. Tus órdenes, perfil, feedback e historial de chat viven en la blockchain de Blurt, no en ninguna instancia de Morphit. Si morphit.io cae, `morphit.agorise.world` o cualquier otra instancia de operador te muestra los mismos datos, de la misma cadena, sin pasos de migración. Ni siquiera necesitas iniciar sesión de nuevo — tus llaves descifran el mismo contenido en todas partes. La instancia es una vista a la cadena; la cadena es la fuente de verdad. Los operadores vienen y van; tu reputación es tuya para siempre."
+        "a": "No — ese es el punto de todo el diseño federado. Tus órdenes, perfil, feedback e historial de chat viven en la blockchain de Blurt, no en ninguna instancia de Morphit. Si morphit.io cae, cualquier otra instancia de operador te muestra los mismos datos, de la misma cadena, sin pasos de migración. Ni siquiera necesitas iniciar sesión de nuevo — tus llaves descifran el mismo contenido en todas partes. La instancia es una vista a la cadena; la cadena es la fuente de verdad. Los operadores vienen y van; tu reputación es tuya para siempre."
       },
       "backup_practices": {
         "q": "¿Cómo respaldo mi cuenta Morphit? ¿Qué debo anotar?",
@@ -3546,8 +3546,8 @@
       "description": "Compara lo que muestran dos instancias de Morphit. Ve de un vistazo si una instancia está ocultando órdenes que otra tiene."
     },
     "download": {
-      "title": "Descargar Morphit para Android",
-      "description": "Morphit para Android se distribuye a través de F-Droid, Aptoide, APKPure, Uptodown, APKMirror, AlternativeTo, Obtainium y APK directo — con verificación SHA-256 en la cadena Blurt."
+      "title": "Obtén Morphit",
+      "description": "Instala Morphit como app directamente desde tu navegador — en Android, iPhone, iPad o escritorio. Sin tienda de apps, sin APK, sin registro. El código open source está replicado en muchos hosts de código independientes y es verificable por SHA-256 en la cadena Blurt."
     },
     "backup_keys": {
       "title": "Respalda tus claves de Morphit — sin ellas no hay recuperación",

@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "Si une instance Morphit tombe, est-ce que je perds mes ordres et ma réputation ?",
-        "a": "Non — c'est tout l'intérêt du design fédéré. Vos ordres, profil, évaluations et historique de chat vivent sur la blockchain Blurt, pas sur une instance Morphit particulière. Si morphit.io tombe, `morphit.agorise.world` ou toute autre instance d'opérateur vous montre les mêmes données, depuis la même chaîne, sans étape de migration. Vous n'avez même pas besoin de vous reconnecter — vos clés déchiffrent le même contenu partout. L'instance est une vue sur la chaîne ; la chaîne est la source de vérité. Les opérateurs vont et viennent ; votre réputation vous appartient pour toujours."
+        "a": "Non — c'est tout l'intérêt du design fédéré. Vos ordres, profil, évaluations et historique de chat vivent sur la blockchain Blurt, pas sur une instance Morphit particulière. Si morphit.io tombe, toute autre instance d'opérateur vous montre les mêmes données, depuis la même chaîne, sans étape de migration. Vous n'avez même pas besoin de vous reconnecter — vos clés déchiffrent le même contenu partout. L'instance est une vue sur la chaîne ; la chaîne est la source de vérité. Les opérateurs vont et viennent ; votre réputation vous appartient pour toujours."
       },
       "backup_practices": {
         "q": "Comment sauvegarder mon compte Morphit ? Que dois-je noter ?",
@@ -3546,8 +3546,8 @@
       "description": "Comparez ce que montrent deux instances Morphit. Voyez d'un coup d'œil si une instance cache des ordres qu'une autre a."
     },
     "download": {
-      "title": "Télécharger Morphit pour Android",
-      "description": "Morphit pour Android est distribué via F-Droid, Aptoide, APKPure, Uptodown, APKMirror, AlternativeTo, Obtainium et APK direct — avec vérification SHA-256 sur la chaîne Blurt."
+      "title": "Obtenir Morphit",
+      "description": "Installez Morphit comme une app directement depuis votre navigateur — sur Android, iPhone, iPad ou ordinateur. Sans store, sans APK, sans inscription. Le code open source est dupliqué sur de nombreux hébergeurs de code indépendants et vérifiable par SHA-256 sur la chaîne Blurt."
     },
     "backup_keys": {
       "title": "Sauvegardez vos clés Morphit — sans elles, aucune récupération",

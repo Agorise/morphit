@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "Wenn eine Morphit-Instanz ausfällt, verliere ich meine Orders und Reputation?",
-        "a": "Nein — das ist der ganze Sinn des föderierten Designs. Deine Orders, dein Profil, Feedback und Chat-Verlauf leben auf der Blurt-Blockchain, nicht auf einer einzelnen Morphit-Instanz. Wenn morphit.io ausfällt, zeigen dir `morphit.agorise.world` oder jede andere Betreiber-Instanz dieselben Daten, von derselben Chain, ohne Migrationsschritt. Du musst dich nicht einmal neu anmelden — deine Schlüssel entschlüsseln denselben Inhalt überall. Die Instanz ist eine Sicht auf die Chain; die Chain ist die Wahrheitsquelle. Betreiber kommen und gehen; deine Reputation gehört dir für immer."
+        "a": "Nein — das ist der ganze Sinn des föderierten Designs. Deine Orders, dein Profil, Feedback und Chat-Verlauf leben auf der Blurt-Blockchain, nicht auf einer einzelnen Morphit-Instanz. Wenn morphit.io ausfällt, zeigt dir jede andere Betreiber-Instanz dieselben Daten, von derselben Chain, ohne Migrationsschritt. Du musst dich nicht einmal neu anmelden — deine Schlüssel entschlüsseln denselben Inhalt überall. Die Instanz ist eine Sicht auf die Chain; die Chain ist die Wahrheitsquelle. Betreiber kommen und gehen; deine Reputation gehört dir für immer."
       },
       "backup_practices": {
         "q": "Wie sichere ich mein Morphit-Konto? Was sollte ich aufschreiben?",
@@ -3546,8 +3546,8 @@
       "description": "Vergleiche, was zwei Morphit-Instanzen zeigen. Siehe auf einen Blick, ob eine Instanz Orders versteckt, die eine andere hat."
     },
     "download": {
-      "title": "Morphit für Android herunterladen",
-      "description": "Morphit für Android wird über F-Droid, Aptoide, APKPure, Uptodown, APKMirror, AlternativeTo, Obtainium und Direkt-APK verteilt — mit SHA-256-Verifikation auf der Blurt-Chain."
+      "title": "Morphit holen",
+      "description": "Installiere Morphit als App direkt aus deinem Browser — auf Android, iPhone, iPad oder Desktop. Kein App-Store, kein APK, keine Anmeldung. Der Open-Source-Code wird auf vielen unabhängigen Code-Hosts gespiegelt und ist per SHA-256 auf der Blurt-Chain verifizierbar."
     },
     "backup_keys": {
       "title": "Sichere deine Morphit-Schlüssel — ohne sie gibt es keine Wiederherstellung",

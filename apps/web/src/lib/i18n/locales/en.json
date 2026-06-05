@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "If one Morphit instance goes down, do I lose my orders and reputation?",
-        "a": "No — that's the whole point of the federated design. Your orders, profile, feedback, and chat history live on the underlying blockchain, not on any single Morphit instance. If morphit.io goes down, `morphit.agorise.world` or any other operator's instance shows you the same data, from the same chain, with zero migration step. You don't even need to sign in again — your keys decrypt the same content everywhere. The instance is a view into the chain; the chain is the source of truth. Operators come and go; your reputation is yours forever."
+        "a": "No — that's the whole point of the federated design. Your orders, profile, feedback, and chat history live on the underlying blockchain, not on any single Morphit instance. If morphit.io goes down, any other operator's instance shows you the same data, from the same chain, with zero migration step. You don't even need to sign in again — your keys decrypt the same content everywhere. The instance is a view into the chain; the chain is the source of truth. Operators come and go; your reputation is yours forever."
       },
       "backup_practices": {
         "q": "How do I back up my Morphit account? What should I write down?",
@@ -3546,8 +3546,8 @@
       "description": "Compare what two Morphit instances show. See at a glance if an instance is hiding orders that another has."
     },
     "download": {
-      "title": "Download Morphit for Android",
-      "description": "Morphit for Android is distributed through F-Droid, Aptoide, APKPure, Uptodown, APKMirror, AlternativeTo, Obtainium, and direct APK — with SHA-256 verification on the Blurt chain."
+      "title": "Get Morphit",
+      "description": "Install Morphit as an app straight from your browser — on Android, iPhone, iPad, or desktop. No app store, no APK, no sign-up. The open-source code is mirrored across many independent code hosts and verifiable by SHA-256 on the Blurt chain."
     },
     "backup_keys": {
       "title": "Back up your Morphit keys — no recovery without them",

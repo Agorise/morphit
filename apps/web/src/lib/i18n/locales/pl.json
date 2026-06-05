@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "Jeśli jedna instancja Morphit padnie, czy stracę moje oferty i reputację?",
-        "a": "Nie — o to chodzi w całym sfederowanym designie. Twoje oferty, profil, oceny i historia czatu żyją na blockchainie Blurt, nie na żadnej pojedynczej instancji Morphit. Jeśli morphit.io padnie, `morphit.agorise.world` lub dowolna inna instancja operatora pokazuje Ci te same dane, z tego samego łańcucha, bez kroków migracji. Nie musisz nawet znowu się logować — Twoje klucze deszyfrują tę samą zawartość wszędzie. Instancja jest widokiem na łańcuch; łańcuch jest źródłem prawdy. Operatorzy przychodzą i odchodzą; Twoja reputacja jest Twoja na zawsze."
+        "a": "Nie — o to chodzi w całym sfederowanym designie. Twoje oferty, profil, oceny i historia czatu żyją na blockchainie Blurt, nie na żadnej pojedynczej instancji Morphit. Jeśli morphit.io padnie, dowolna inna instancja operatora pokazuje Ci te same dane, z tego samego łańcucha, bez kroków migracji. Nie musisz nawet znowu się logować — Twoje klucze deszyfrują tę samą zawartość wszędzie. Instancja jest widokiem na łańcuch; łańcuch jest źródłem prawdy. Operatorzy przychodzą i odchodzą; Twoja reputacja jest Twoja na zawsze."
       },
       "backup_practices": {
         "q": "Jak zrobić kopię zapasową konta Morphit? Co zapisać?",
@@ -3546,8 +3546,8 @@
       "description": "Porównaj, co pokazują dwie instancje Morphit. Zobacz na pierwszy rzut oka, czy instancja ukrywa zlecenia, które ma inna."
     },
     "download": {
-      "title": "Pobierz Morphit na Android",
-      "description": "Morphit na Android jest dystrybuowany przez F-Droid, Aptoide, APKPure, Uptodown, APKMirror, AlternativeTo, Obtainium i bezpośrednie APK — z weryfikacją SHA-256 na łańcuchu Blurt."
+      "title": "Pobierz Morphit",
+      "description": "Zainstaluj Morphit jako aplikację bezpośrednio z przeglądarki — na Androidzie, iPhonie, iPadzie lub komputerze. Bez sklepu z aplikacjami, bez APK, bez rejestracji. Kod open source jest powielony na wielu niezależnych hostach kodu i weryfikowalny przez SHA-256 na łańcuchu Blurt."
     },
     "backup_keys": {
       "title": "Zabezpiecz swoje klucze Morphit — bez nich nie ma odzyskania",
