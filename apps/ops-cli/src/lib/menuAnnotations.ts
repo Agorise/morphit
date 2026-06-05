@@ -13,17 +13,22 @@
  *   - unresolvedFlags: recent abuse flags where NEITHER named account
  *     is blocked on this instance (i.e. the operator hasn't acted) —
  *     best-effort DB read, null if config/DB unavailable.
+ *   - relayBalanceStatus: the relay account's liquid BLURT graded
+ *     against thresholds.relayBalance ('warn'/'error' when running low),
+ *     via a short-timeout chain read; null if config/chain unavailable.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig } from '../config.ts';
+import { loadConfig, applyThreshold } from '../config.ts';
 import { createDatabase } from '../db.ts';
+import { lookupBlurtAccount } from '../init/chainCheck.ts';
 
 export interface MenuAnnotations {
 	readonly currentVersion: string | null;
 	readonly latestVersion: string | null;
 	readonly unresolvedFlags: number | null;
+	readonly relayBalanceStatus: 'ok' | 'warn' | 'error' | null;
 }
 
 const DEFAULT_INSTALL_DIR = '/opt/morphit';
@@ -134,15 +139,49 @@ export async function unresolvedFlagCount(timeoutMs = 2500): Promise<number | nu
 	}
 }
 
+/** Best-effort relay-balance health for the menu: fetch the relay
+ *  account's liquid BLURT and grade it against thresholds.relayBalance
+ *  (lower is worse). Bounded by `timeoutMs`; returns null if config or
+ *  the chain are unavailable. Never throws. */
+export async function relayBalanceStatus(timeoutMs = 2500): Promise<'ok' | 'warn' | 'error' | null> {
+	const work = (async (): Promise<'ok' | 'warn' | 'error' | null> => {
+		let config;
+		try {
+			config = loadConfig();
+		} catch {
+			return null; // not configured yet (pre-install menu)
+		}
+		try {
+			const acct = await lookupBlurtAccount(config.relayAccount);
+			if (acct === null) return null; // account not found
+			return applyThreshold(acct.balanceBlurt, config.thresholds.relayBalance);
+		} catch {
+			return null; // transport failure / all endpoints down
+		}
+	})();
+
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<'ok' | 'warn' | 'error' | null>((resolve) => {
+		timer = setTimeout(() => resolve(null), timeoutMs);
+	});
+	try {
+		return await Promise.race([work, timeout]);
+	} finally {
+		if (timer !== undefined) clearTimeout(timer);
+	}
+}
+
 /** Gather all menu annotations in parallel, best-effort. Never throws. */
 export async function gatherMenuAnnotations(): Promise<MenuAnnotations> {
-	const [latestVersion, unresolvedFlags] = await Promise.all([
+	const [latestVersion, unresolvedFlags, relayBalance] = await Promise.all([
 		fetchLatestVersion().catch(() => null),
-		unresolvedFlagCount().catch(() => null)
+		unresolvedFlagCount().catch(() => null),
+		relayBalanceStatus().catch(() => null)
 	]);
 	return {
 		currentVersion: readCurrentVersion(),
 		latestVersion,
-		unresolvedFlags
+		unresolvedFlags,
+		relayBalanceStatus: relayBalance
 	};
 }

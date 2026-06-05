@@ -121,44 +121,6 @@
   "app": {
     "tagline": "Achetez et vendez des cryptos, à votre façon."
   },
-  "app_stores": {
-    "fdroid": {
-      "name": "F-Droid",
-      "blurb": "Apps libres, sans pistage, builds reproductibles."
-    },
-    "aptoide": {
-      "name": "Aptoide",
-      "blurb": "Store Android indépendant, catalogue ouvert."
-    },
-    "aptoide_connect": {
-      "name": "Aptoide Connect",
-      "blurb": "Catalogue entreprise/vérification améliorée d'Aptoide."
-    },
-    "apkpure": {
-      "name": "APKPure",
-      "blurb": "Téléchargements APK avec historique des versions."
-    },
-    "uptodown": {
-      "name": "Uptodown",
-      "blurb": "Dépôt multiplateforme d'applications."
-    },
-    "apkmirror": {
-      "name": "APKMirror",
-      "blurb": "Miroir APK tiers, largement fiable."
-    },
-    "alternativeto": {
-      "name": "AlternativeTo",
-      "blurb": "Découverte de logiciels et répertoire d'alternatives."
-    },
-    "obtainium": {
-      "name": "Obtainium",
-      "blurb": "Auto-mises-à-jour depuis les releases GitHub — open source."
-    },
-    "direct": {
-      "name": "APK direct",
-      "blurb": "APK signés depuis la page officielle des versions Morphit sur git.agorise.net."
-    }
-  },
   "assets": {
     "privacy_warnings": {
       "usdt_centralized": "Deux choses à savoir sur l'USDT avant de trader : Tether Inc. émet et administre l'USDT et a la capacité technique de geler des adresses (et l'a utilisée). Les transactions sont publiquement visibles sur chaque réseau pris en charge (Ethereum, Tron, Solana, BNB Smart Chain) — une propriété de ces chaînes. Choisissez l'actif qui correspond à votre trade.",
@@ -897,35 +859,16 @@
     }
   },
   "download": {
-    "title": "Obtenir Morphit pour Android",
-    "subtitle": "Morphit est disponible via plusieurs app stores — pas seulement Google Play. Un canal est un seul point de censure ; huit canaux ne le sont pas.",
-    "verify_heading": "Vérifiez ce que vous avez téléchargé",
-    "verify_body": "Le hash SHA-256 de chaque build est publié sur la chaîne Blurt. Peu importe de quel store vous avez téléchargé, vous pouvez vérifier que l'APK n'a pas été altéré.",
-    "verify_cta": "Voir la vérification de cette instance",
-    "app_stores_faq_cta": "Pourquoi 8 stores ?",
-    "graphene_heading": "Meilleur chemin : GrapheneOS sur un Pixel",
-    "graphene_body": "GrapheneOS est l'Android axé sur la vie privée que nous recommandons réellement aux utilisateurs Morphit. Pas de restrictions de sideload Google, pas de compte Google requis, compatibilité totale avec toutes les applis Android. Tourne sur les téléphones Google Pixel.",
-    "graphene_cta": "Obtenir GrapheneOS",
-    "sideload_faq_cta": "Pourquoi le sideload est difficile sur Android stock",
-    "web_heading": "Préférez ne rien installer ?",
-    "web_body": "Morphit fonctionne pleinement dans tout navigateur mobile. Firefox, Brave, Tor Browser pour Android — choisissez-en un et partez. Pas d'installation, pas de permissions, aucune relation avec un app store.",
+    "title": "Obtenez Morphit",
+    "subtitle": "Installez Morphit comme une app sur n'importe quel appareil, ou récupérez le code source. Pas de magasin d'applications, pas de gardien — et le code est mis en miroir sur tout le web pour qu'il ne puisse pas être supprimé.",
     "web_cta": "Ouvrir Morphit dans le navigateur",
-    "web_faq_cta": "Détails du support mobile/desktop",
-    "iphone_heading": "iPhone et iPad",
-    "iphone_body": "Oui, les utilisateurs iPhone peuvent utiliser Morphit pleinement — pas besoin de jailbreak. L'App Store d'Apple ne liste pas les applis P2P crypto sans KYC, donc pas d'application iOS native. À la place, tu installes Morphit comme une Progressive Web App (PWA) via Safari. Le résultat se comporte comme une appli normale : icône sur l'écran d'accueil, lancement plein écran, navigation hors-ligne possible.",
-    "iphone_step_1": "Ouvre ce site dans Safari (pas Chrome ou Firefox — seul Safari peut installer des PWA sur iOS).",
-    "iphone_step_2": "Touche l'icône Partager (le carré avec la flèche vers le haut en bas de l'écran).",
-    "iphone_step_3": "Fais défiler et touche « Sur l'écran d'accueil ».",
-    "iphone_step_4": "Touche « Ajouter » en haut à droite. L'icône Morphit est maintenant sur ton écran d'accueil et se lance en plein écran.",
-    "iphone_jailbreak_note": "iOS 16.4 ou plus récent recommandé pour le support PWA complet (service workers, notifications push). Les versions iOS plus anciennes fonctionnent toujours — l'icône s'installe et le site charge — mais avec une capacité hors-ligne réduite.",
-    "iphone_faq_cta": "En savoir plus dans la FAQ",
     "operator_section_title": "Exécutez votre propre instance Morphit",
     "operator_section_subtitle": "Tout le monde peut exécuter un nœud Morphit — votre propre marque, vos propres utilisateurs, vos propres revenus de frais. La fédération vous trouve automatiquement. Tout ce dont vous avez besoin est ci-dessous.",
     "operator_source_heading": "Code source et versions",
     "operator_source_body": "Morphit est AGPL-3.0. Clonez le dépôt, lancez la suite de tests, déployez. Chaque version est signée et son manifeste SHA-256 est publié sur la chaîne Blurt pour que vous puissiez vérifier que ce que vous avez cloné correspond à ce que le projet a publié.",
     "operator_source_cta": "Ouvrir le dépôt",
     "operator_releases_cta": "Voir les versions",
-    "operator_verify_note": "Chaque artefact de version (APK, archive source, image de conteneur) a son hash SHA-256 enregistré sur la chaîne Blurt via une opération `morphit_release_v1`. Vérifiez tout téléchargement en re-hachant localement et en comparant au manifeste on-chain.",
+    "operator_verify_note": "Chaque artefact de version (archive source, image de conteneur) a son hash SHA-256 enregistré sur la chaîne Blurt via une opération `morphit_release_v1`. Vérifiez tout téléchargement en re-hachant localement et en comparant au manifeste on-chain.",
     "operator_setup_heading": "Guide d'installation",
     "operator_setup_body": "Nous ne distribuons pas de paquets `.deb` ou `.rpm` pré-construits — Morphit est un serveur multi-composants (Postgres + indexeur Node.js + relais + reverse proxy), et les installations en un seul paquet vous cacheraient l'architecture. À la place, le manuel de l'opérateur vous guide pas à pas.",
     "operator_setup_doc_run": "RUN-A-MORPHIT-NODE.md — guide complet de premier déploiement",
@@ -939,7 +882,16 @@
     "operator_join_heading": "Rejoignez la fédération",
     "operator_join_body": "Une fois votre instance en ligne et diffusant `morphit_operator_register_v1`, elle apparaît automatiquement dans le répertoire de toutes les autres instances Morphit. Pas de candidature, pas de permission, pas de liste centrale.",
     "operator_join_cta": "Voir le modèle de revenus de l'opérateur",
-    "operator_instances_cta": "Parcourir le répertoire de fédération"
+    "operator_instances_cta": "Parcourir le répertoire de fédération",
+    "pwa_heading": "Installez Morphit",
+    "pwa_body": "Morphit s'installe directement depuis votre navigateur comme une app — sur Android, iPhone, iPad et ordinateur. Pas de magasin d'applications, pas d'inscription et aucun gardien qui puisse la retirer. Une fois installée, elle fonctionne hors ligne et se met à jour seule. Nous ne créons pas de paquets natifs APK / iOS / Flatpak — la PWA couvre toutes les plateformes.",
+    "pwa_platforms": "Android (Chrome, Brave…) : ouvrez le menu du navigateur et choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil ». iPhone et iPad (Safari) : touchez Partager, puis « Sur l'écran d'accueil ». Ordinateur (Chrome, Edge, Brave) : cliquez sur l'icône d'installation dans la barre d'adresse.",
+    "mirrors_heading": "Code source et miroirs",
+    "mirrors_body": "Morphit est entièrement open source (AGPL-3.0). Le dépôt canonique se trouve sur notre propre serveur Forgejo et est mis en miroir sur tout le web, afin que le code reste accessible même si un hôte est bloqué ou disparaît. Les miroirs marqués « Bientôt » ne sont pas encore en place — pour l'instant, cherchez « morphit » sur ce site.",
+    "mirror_primary": "Dépôt principal",
+    "mirror_open": "Ouvrir le dépôt",
+    "mirror_pending": "Bientôt",
+    "why_mirrors": "Pourquoi {count} miroirs ?"
   },
   "edit_order": {
     "heading": "Modifier votre ordre",
@@ -1274,8 +1226,8 @@
         "a": "L'entiercement (escrow), c'est une baby-sitter qui garde ton argent jusqu'à la fin de l'échange. Si toi et l'autre personne se disputent, l'arbitre est l'arbitre qui décide qui reçoit les jouets.\n\nLe risque :\nTu as arrêté de faire confiance à l'autre personne... et maintenant tu dois faire confiance à la baby-sitter ET à l'arbitre à la place. Les deux centralisent — ils deviennent le nouvel intermédiaire avec pouvoir sur ton argent. S'ils sont malhonnêtes, lents, biaisés ou piratés, ton argent peut quand même disparaître.\n\nConclusion :\nL'entiercement + l'arbitrage ne font que déplacer le problème de confiance vers une autre personne/groupe.\n\nNe fais pas confiance. Vérifie.\n#reputation"
       },
       "no_js_limits": {
-        "q": "À quoi sert le lien « Sans JS » du pied de page ?",
-        "a": "En ce moment : rien de fonctionnel — c'est un placeholder qui pointe ici pour expliquer l'état.\n\nCe qu'il fera : charger le site sans script de boot JavaScript, donc rien ne tourne dans ton navigateur au-delà de ce que le serveur a envoyé. La navigation (orderbook, FAQ, profils) fonctionne déjà ainsi — les pages sont rendues statiquement, et tu peux le vérifier en désactivant JS dans ton navigateur et en rechargeant. Ce que JavaScript ajoute, c'est la couche interactive : passer des ordres, déchiffrer le chat, signer du feedback, changer de langue sans recharger la page.\n\nPourquoi ce n'est pas encore câblé : Morphit livre actuellement chaque page en HTML prérendu plus un script d'hydratation. Un commutateur par requête `?nojs=1` qui supprime l'hydratation nécessite un changement architectural (SSR par requête au lieu de prerender + hydrate) qui est sur la roadmap mais pas encore construit. En attendant, désactiver JS dans les réglages de ton propre navigateur te donne le même résultat — le HTML statique est déjà là.\n\nDonc : la navigation sans JS fonctionne déjà aujourd'hui ; désactive-le dans ton navigateur si tu veux le confirmer. La pastille devient fonctionnelle une fois que le SSR par requête sera livré."
+        "q": "Que fait le lien « No JS » dans le pied de page ?",
+        "a": "Il mène ici, pour expliquer comment Morphit se comporte sans JavaScript — ce n'est pas un interrupteur qui désactive JS (un lien ne peut pas ; c'est votre navigateur qui contrôle JavaScript).\n\nVous n'avez pas besoin d'un mode spécial : la navigation fonctionne déjà avec JavaScript désactivé. Chaque page — carnet d'ordres, FAQ, profils, avis — est rendue statiquement, donc désactivez JS dans votre navigateur et rechargez et les pages s'afficheront toujours. JavaScript n'anime que la couche interactive (passer des ordres, déchiffrer la messagerie, signer les avis, changer de langue sans rechargement), car cette cryptographie s'exécute dans votre navigateur, jamais sur un serveur.\n\nMorphit est un site statique pré-rendu sans serveur par requête, il n'y a donc pas d'URL « sans JS » en un clic — mais désactiver JavaScript dans votre navigateur vous donne ce résultat dès aujourd'hui."
       },
       "how_to_run_node": {
         "q": "Comment exécuter un nœud Morphit ?",
@@ -1373,13 +1325,13 @@
         "q": "Qu'est-ce qu'une preuve de transaction Monero (tx_proof) et pourquoi Morphit la demande-t-elle ?",
         "a": "Une preuve de transaction Monero (tx_proof) est une courte chaîne issue de votre propre portefeuille qui prouve que vous avez payé une transaction spécifique à une adresse spécifique — sans rien révéler d'autre de votre portefeuille. Elle a la forme `OutProofV2…` suivie d'une longue chaîne base58.\n\n**Pourquoi Morphit la demande.** Morphit vérifie votre frais XMR en consultant la blockchain pour confirmer que votre paiement est bien arrivé à l'adresse de la trésorerie avec le bon montant. Pour le faire sans détenir la clé de vue (view key) de la trésorerie (publier la clé de vue désanonymiserait chaque paiement de frais à jamais — voir l'invariant de confidentialité dans OPERATIONS.md §40.2), chaque instance Morphit VOUS demande de générer une preuve par paiement depuis votre propre portefeuille. N'importe quel indexeur peut vérifier votre preuve avec des données publiques ; aucune partie privilégiée n'est nécessaire.\n\n**Ce qu'elle révèle.** La preuve révèle uniquement :\n• Que cette transaction précise (le txid que vous avez fourni) a payé cette adresse précise (la trésorerie de Morphit), et\n• Le montant payé.\n\n**Ce qu'elle NE révèle PAS.**\n• Vos autres transactions\n• Le solde de votre portefeuille\n• Vos autres adresses\n• Aucune métadonnée de portefeuille\n• Rien sur les paiements futurs\n\nLa preuve est à usage unique et par paiement. La détenir ne révèle rien à un tiers sur d'autres paiements à l'adresse (les vôtres ou d'autres personnes) ni sur toute autre activité de portefeuille.\n\n**Comment en générer une.**\n• **Monero CLI** : `get_tx_proof <txid> <adresse-trésorerie>`\n• **Monero GUI** : Advanced → Prove transaction → remplir txid + adresse → Generate\n• **Cake Wallet** : Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet** : Tools → Prove/check transaction → Generate\n\nVous obtiendrez une chaîne commençant par `OutProofV1` ou `OutProofV2`. Collez-la dans le champ Preuve de paiement.\n\n**Pourquoi c'est mieux qu'une clé de vue.** Une clé de vue permettrait à quiconque la détenant de voir tous les paiements à l'adresse à jamais. Une tx_proof révèle un seul paiement, point. Cela signifie que toute instance Morphit — la vôtre, la canonique, celle d'un opérateur communautaire — peut vérifier les frais XMR de façon indépendante sans secret partagé. C'est la fédération qui fonctionne comme prévu."
       },
-      "app_stores": {
-        "q": "Dans quels app stores trouve-t-on Morphit pour Android ?",
-        "a": "Morphit est distribué via plusieurs app stores Android — pas seulement Google Play. C'est délibéré : un seul point de distribution est un seul point de censure, et Morphit est conçu pour y survivre.\n\nDisponible sur :\n• **F-Droid** (apps libres, sans pistage, builds reproductibles)\n• **Aptoide** (aptoide.com + connect.aptoide.com)\n• **APKPure** (apkpure.com)\n• **Uptodown** (uptodown.com)\n• **APKMirror** (apkmirror.com — tiers mais largement fiable)\n• **AlternativeTo** (alternativeto.net)\n• **Obtainium** (obtainium.imranr.dev — auto-mises-à-jour depuis les releases GitHub)\n• **Téléchargement APK direct** depuis morphit.io/download\n\nToutes les builds sont signées avec la même clé, et leurs hashs SHA-256 sont publiés dans l'op release sur la chaîne Blurt — peu importe de quel store vous avez téléchargé, vous pouvez vérifier que l'APK n'a pas été altéré.\n\nNous ne publions délibérément PAS sur Google Play. Voir l'entrée FAQ suivante pour pourquoi."
+      "morphit_mirrors": {
+        "q": "Pourquoi le code source de Morphit est-il mis en miroir sur autant d'hébergeurs ?",
+        "a": "Décentralisation — c'est la priorité n°2 de la conception de Morphit, juste après la confidentialité. Un projet qui vit à un seul endroit peut être tué à un seul endroit : une plateforme peut suspendre le compte, un gouvernement peut ordonner un retrait, un hébergeur peut tout simplement disparaître. C'est pourquoi le code source de Morphit (AGPL-3.0) est mis en miroir sur de nombreux hébergeurs de code indépendants — notre propre serveur Forgejo sur git.agorise.net est la copie canonique, GitHub est en ligne, et d'autres s'ajoutent (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus une copie adressée par contenu sur IPFS qu'aucun hébergeur ne contrôle. Si l'un d'eux bloque ou supprime Morphit, toutes les autres copies sont toujours là — et comme c'est de l'AGPL, n'importe qui peut le ré-héberger, l'auditer ou le forker. La liste complète et à jour est sur la page Obtenir Morphit.\n\n(Il n'y a rien à installer depuis un magasin d'applications — Morphit fonctionne comme une Progressive Web App que vous ajoutez directement depuis votre navigateur. Les miroirs concernent le code source, afin que le projet ne puisse pas être réduit au silence en retirant un seul dépôt.)\n\nVous pouvez confirmer que n'importe quelle instance en cours sert du code non altéré : les empreintes SHA-256 de chaque version sont publiées sur la chaîne Blurt — voir /about-this-instance."
       },
       "android_sideload": {
-        "q": "Pourquoi je ne peux pas juste installer Morphit sur mon appareil Android ?",
-        "a": "À partir de septembre 2026, Google pousse une mise à jour silencieuse d'Android qui bloque l'installation de toute app dont le développeur ne s'est pas enregistré auprès de Google, n'a pas signé leurs CGU, payé une redevance, et fourni une ID gouvernementale. Chaque appareil Android dans le monde — pas d'opt-out.\n\nMorphit ne s'enregistre délibérément pas auprès de Google. Cet enregistrement signifierait qu'une seule entité (Google) a un kill switch sur toute la distribution Android de Morphit. L'intérêt même de Morphit est que personne n'a de kill switch.\n\nPour installer Morphit (ou n'importe quelle app non enregistrée) sur un appareil Android verrouillé, vous devez :\n1. Paramètres → À propos → toucher le Numéro de build **7 fois** pour activer le Mode développeur\n2. Dismisser les écrans d'avertissement sur la \"coercition\" et les \"risques\"\n3. Entrer le PIN de l'appareil\n4. Redémarrer l'appareil\n5. Attendre **24 heures** (cooldown obligatoire — oui, vraiment)\n6. Revenir, dismisser plus d'écrans d'avertissement\n7. Choisir \"autoriser temporairement\" (7 jours) ou \"autoriser indéfiniment\"\n8. Confirmer, encore, que vous comprenez \"les risques\"\n9. Installer l'APK\n\nNeuf étapes, une période de cooldown obligatoire de 24 heures, des écrans de peur répétés — pour installer du logiciel sur un appareil que vous possédez.\n\n**Voies plus faciles** :\n• **GrapheneOS** (grapheneos.org) — Android compatible Google axé sur la vie privée, sans ces restrictions. Tourne sur téléphones Pixel.\n• **F-Droid** — a les permissions intégrées si vous l'activez une fois à la première installation.\n• **ROM personnalisée** comme LineageOS — pareil.\n• **Utilisez juste la version web** — morphit.io fonctionne entièrement dans n'importe quel navigateur mobile, y compris Firefox, Brave et Tor Browser pour Android. Aucune installation nécessaire."
+        "q": "Comment installer Morphit sur Android ?",
+        "a": "Ouvrez Morphit dans Chrome, Brave ou n'importe quel navigateur, ouvrez le menu (⋮) et touchez « Installer l'application » (ou « Sur l'écran d'accueil »). L'icône arrive sur votre écran d'accueil, se lance en plein écran, fonctionne hors ligne et se met à jour seule.\n\nIl n'y a pas d'APK, donc les obstacles de sideloading de Google ne s'appliquent pas — et cela contourne le verrouillage d'installation Android que Google a commencé à déployer en 2026 (les développeurs doivent s'enregistrer auprès de Google, accepter ses conditions, payer des frais et fournir une pièce d'identité avant que leurs applications puissent s'installer). Une PWA s'installe directement depuis le web, sans enregistrement de développeur ni gardien capable de la retirer."
       },
       "operator_registration": {
         "q": "Comment devient-on opérateur Morphit ?",
@@ -1522,8 +1474,8 @@
         "a": "Étonnamment modestes. Morphit est construit pour fonctionner sur du matériel que la plupart des gens possèdent déjà.\n\n**Loisir — Raspberry Pi 4 / 5 (4 Go).** Indexeur, relais et frontend tournent confortablement. Utilisez un SSD USB-3, pas une carte SD. Consommation ~5–7 W. Adapté à une petite communauté.\n\n**Sérieux — mini-PC (Beelink, NUC, occasion).** Intel N100 / Ryzen avec 8 Go RAM et SSD. 6–20 W. 150–250 USD. Confortable pour des centaines d'utilisateurs.\n\n**Portable de rechange — n'importe quel laptop qui démarre encore Linux.** Vieux ThinkPad ou portable de la dernière décennie avec au moins 4 Go RAM. Bonus : UPS intégré (la batterie).\n\n**Minimums concrets (x86-64, ARM64, ou Apple silicon) :**\n\n• **CPU :** 2 cœurs à 1 GHz ou plus rapide.\n• **RAM :** 2 Go minimum, 4 Go confortable.\n• **Disque :** 20 Go libres sur SSD.\n• **Réseau :** 1 Mbit/s en débit montant et descendant.\n• **OS :** Linux moderne (Debian 12, Ubuntu 22.04+, Arch, Alpine, NixOS).\n• **Disponibilité :** 95% est un objectif raisonnable — Morphit est fédéré.\n\n**Ce dont vous n'avez PAS besoin :** un nœud Blurt, une IP statique, un nom de domaine, ou un VPS de datacenter.\n\nLa répartition des frais d'opérateur couvre les coûts même sur un Pi."
       },
       "iphone_install": {
-        "q": "Puis-je utiliser Morphit sur mon iPhone sans jailbreak ?",
-        "a": "Oui — complètement, sans jailbreak. Voici la situation honnête :\n\n**Pourquoi pas d'application native sur l'App Store.** Les directives de l'App Store d'Apple rejettent les apps qui facilitent les échanges P2P de cryptomonnaies sans KYC. Toute la conception de Morphit — non-custodiale, sans vérification d'identité, fédérée entre opérateurs — est exactement ce qu'ils refusent de publier. Donc nous ne prétendons pas avoir une app iOS native ; ce serait mentir.\n\n**Ce qui fonctionne parfaitement : installation Progressive Web App (PWA).** Safari moderne supporte l'installation de sites web comme apps autonomes. L'icône va sur ton écran d'accueil, l'app se lance en plein écran (sans la barre d'URL Safari), les service workers cachent les ressources pour la navigation hors-ligne, et l'app retient l'état entre les lancements.\n\n**Le flux d'installation** (environ 15 secondes) :\n1. Ouvre ce site dans Safari. Pas Chrome ni Firefox — ceux-là utilisent le moteur web de Safari sur iOS mais n'exposent pas le chemin d'installation PWA.\n2. Touche l'icône Partager en bas de l'écran (un carré avec une flèche vers le haut).\n3. Fais défiler dans la feuille de partage et touche « Sur l'écran d'accueil ».\n4. Confirme le nom (« Morphit » par défaut) et touche « Ajouter » en haut à droite.\n\nFini. L'icône est sur ton écran d'accueil à côté de tes autres apps. Touche pour lancer en plein écran.\n\n**Notes de version iOS.** iOS 16.4+ a un support PWA complet : service workers (cache hors-ligne), notifications push, compteurs de badge, Web Share Target. Les versions iOS plus anciennes s'installent toujours — l'icône fonctionne, le site charge — mais sans ces fonctions avancées.\n\n**Comparaison avec Android.** Les utilisateurs Android ont plus d'options : installer notre APK directement, via F-Droid / Aptoide / APKPure, via GrapheneOS (sans Google Play). iOS n'offre que le chemin PWA à cause de l'écosystème plus strict d'Apple. L'expérience PWA elle-même est comparable à une app native pour le cas d'usage de Morphit.\n\n**TestFlight.** Nous ne distribuons pas actuellement via TestFlight. L'expiration de 90 jours, la limite de 10 000 testeurs, et les mêmes directives App Store s'appliquent aux revues TestFlight — Apple rejetterait toujours une app P2P crypto sans KYC. Le chemin PWA est la réponse durable.\n\n**Sideloading via AltStore / etc.** AltStore permet aux développeurs de sideloader des fichiers IPA avec un compte développeur Apple gratuit. Ça marche mais nécessite que l'utilisateur re-signe l'app tous les 7 jours (le certificat développeur gratuit d'Apple expire). Pour une app sensible à la sécurité comme Morphit, exiger une re-signature hebdomadaire crée une fenêtre d'attaque où une mise à jour malveillante pourrait se glisser. L'installation PWA est en un toucher, gratuite et n'expire pas.\n\n**En résumé pour grand-mère :** Ouvre Morphit dans Safari sur ton iPhone. Touche Partager, puis « Sur l'écran d'accueil ». Fini. Ton iPhone traitera Morphit comme une app à partir de là."
+        "q": "Puis-je utiliser Morphit sur mon iPhone ou iPad ?",
+        "a": "Oui — entièrement, sans jailbreak et sans App Store. Apple rejette les applications qui facilitent l'échange de crypto pair-à-pair sans KYC (exactement ce qu'est Morphit), donc au lieu d'une app native nous proposons une Progressive Web App.\n\nInstallez-la en ~15 secondes :\n1. Ouvrez ce site dans **Safari** (Chrome/Firefox sur iOS n'affichent pas l'option d'installation).\n2. Touchez **Partager** (le carré avec une flèche vers le haut).\n3. Touchez **« Sur l'écran d'accueil ».**\n4. Confirmez le nom et touchez **Ajouter**.\n\nL'icône se lance en plein écran comme n'importe quelle app. Sur iOS 16.4+, elle met en cache pour une utilisation hors ligne et prend en charge les notifications ; les versions plus anciennes s'installent sans ces extras. Pas d'APK, d'IPA, de TestFlight ni de sideloading sur aucune plateforme."
       },
       "block_explorer": {
         "q": "Y a-t-il un explorateur de blocs pour Morphit ?",
@@ -1803,7 +1755,7 @@
     "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "Sans JS",
-    "no_js_title": "Charger la version sans JavaScript de Morphit",
+    "no_js_title": "Comment Morphit fonctionne sans JavaScript",
     "rss": "RSS",
     "rss_title": "Flux RSS des nouvelles entrées du carnet d'ordres",
     "operators": "Opérateurs",
@@ -1811,7 +1763,7 @@
     "contact_operator": "Contacter cet opérateur",
     "alt_network_disabled": "Cet opérateur n'a pas configuré d'adresse pour ce réseau.",
     "alt_network_address": "Adresse : {address}",
-    "instances": "Autres instances",
+    "instances": "Instances",
     "explorer": "Explorateur de blocs",
     "download": "Télécharger",
     "i2p_b32": "I2P (.b32.i2p)",
@@ -2844,7 +2796,9 @@
     "phase_4_title": "Phase 4 — chat, feedback, réputation",
     "phase_4_body": "Chat chiffré de bout en bout. Feedback signé avec rôles acheteur/vendeur. Profils de réputation publics.",
     "phase_5_title": "Phase 5 — paiements et inarrêtabilité",
-    "phase_5_body": "Flux de paiement BTC / XMR / BLURT en direct. Services cachés Tor, Lokinet et I2P. Miroir de release IPFS. Distribution PWA + APK + Flatpak.",
+    "phase_5_body": "Flux de paiement BTC / XMR / BLURT en direct. Services cachés Tor, Lokinet et I2P. Miroir de release IPFS. PWA + intégration des instances fédérées.",
+    "phase_6_title": "Phase 6 — intégrations d'API et marketing",
+    "phase_6_body": "Les développeurs peuvent intégrer un écran de carnet d'ordres délimité dans leur interface. Les utilisateurs peuvent rechercher, parcourir et répondre aux offres sans quitter l'interface en laquelle ils ont confiance.",
     "status_in_progress": "en cours",
     "footer_prefix": "Le plan complet et versionné vit dans",
     "status_badge": {

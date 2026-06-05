@@ -200,12 +200,24 @@ body {
 
 	.btn-primary {
 		@apply btn text-white shadow-morphit-glow;
-		background: var(--morphit-gradient);
-		background-size: 200% 100%;
+		/* Solid emerald face; the brand gradient animates ONLY on the 1px
+		 * border. padding-box layer = the face, border-box layer = the
+		 * moving gradient. Far subtler than sweeping the gradient across
+		 * the whole button face. */
+		border: 1px solid transparent;
+		background:
+			linear-gradient(var(--morphit-emerald), var(--morphit-emerald)) padding-box,
+			var(--morphit-gradient) border-box;
+		background-size:
+			100% 100%,
+			200% 100%;
+		background-repeat: no-repeat;
+		background-position:
+			0 0,
+			0 50%;
 		animation: morphit-shimmer 6s linear infinite;
 	}
 	.btn-primary:hover {
-		background-position: 100% 50%;
 		animation-play-state: paused;
 	}
 
@@ -246,36 +258,36 @@ body {
 		@apply inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1 text-sm font-medium text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200;
 	}
 
+	/* Text inputs.  Mirrors the inline-Tailwind inputs on login /
+	 * onboarding so every text field reads the same on the dark-only
+	 * theme.  /compare and /settings referenced this class before it
+	 * existed, so their fields fell back to the unstyled (light)
+	 * browser default — glaringly off-theme. */
+	.input {
+		@apply block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900;
+	}
+
 	/*
 	 * Subtle motion — gives the page life without demanding attention.
 	 *   - morphit-hue-shift (8s): rotates the hue of SVGs that use the brand
 	 *     gradient by ±15°, so the green/teal/blue "breathes".
-	 *   - morphit-shimmer  (6s): sweeps the gradient horizontally across a
-	 *     CSS-gradient background; used by .btn-primary.
-	 *   - morphit-shine    (4s): a diagonal white highlight sweeping left-to-
-	 *     right once per cycle; stacked on .btn-primary via .btn-shine.
+	 *   - morphit-shimmer  (6s): sweeps the brand gradient along the 1px
+	 *     border of .btn-primary (the button face stays a solid emerald).
 	 *   - morphit-pulse    (4s): slow opacity pulse for atmospheric glows.
 	 *
-	 * All four respect prefers-reduced-motion: they pause for users who ask.
+	 * All respect prefers-reduced-motion: they pause for users who ask.
 	 */
 	.animate-morphit-hue-shift {
 		animation: morphit-hue-shift 8s ease-in-out infinite;
 	}
 
+	/* .btn-shine previously layered a full-face white "shine" sweep on
+	 * top of .btn-primary. That full-face motion was removed in favour
+	 * of the subtle 1px animated-gradient border on .btn-primary itself.
+	 * The class is kept as a harmless no-op so existing markup using
+	 * `btn-primary btn-shine` doesn't need touching. */
 	.btn-shine {
 		position: relative;
-		overflow: hidden;
-	}
-	.btn-shine::after {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: -100%;
-		width: 100%;
-		height: 100%;
-		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-		animation: morphit-shine-sweep 4s ease-in-out infinite;
-		pointer-events: none;
 	}
 
 	.animate-morphit-pulse {
@@ -294,21 +306,17 @@ body {
 }
 
 @keyframes morphit-shimmer {
+	/* Two background layers: layer 1 (the solid face) stays put at 0 0;
+	 * layer 2 (the gradient border) sweeps horizontally. */
 	0% {
-		background-position: -200% center;
+		background-position:
+			0 0,
+			-200% 50%;
 	}
 	100% {
-		background-position: 200% center;
-	}
-}
-
-@keyframes morphit-shine-sweep {
-	0% {
-		left: -100%;
-	}
-	60%,
-	100% {
-		left: 200%;
+		background-position:
+			0 0,
+			200% 50%;
 	}
 }
 
@@ -326,7 +334,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
 	.btn-primary,
 	.animate-morphit-hue-shift,
-	.btn-shine::after,
 	.animate-morphit-pulse {
 		animation: none !important;
 	}

@@ -32,7 +32,7 @@
 	 *   - Focus trapped inside menu while open (tab cycles)
 	 */
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { identiconDataUri, identiconDataUriFromString } from '$crypto/identicon';
 	import {
 		liveIdentity,
@@ -118,12 +118,12 @@
 
 	function goToPostOrder(): void {
 		close();
-		void goto(lp('/post'));
+		void gotoLocale('/post');
 	}
 
 	function goToOrders(): void {
 		close();
-		void goto(lp('/my/orders'));
+		void gotoLocale('/my/orders');
 	}
 
 	function goToMyProfile(): void {
@@ -135,7 +135,7 @@
 		// (the menu item is hidden via canViewProfile below).
 		close();
 		const me = getUserBlurtAccount();
-		if (me) void goto(`/@${me}`);
+		if (me) void gotoLocale(`/@${me}`);
 	}
 
 	function goToEditProfile(): void {
@@ -144,22 +144,22 @@
 		// all profile fields (display name, Blurt.media URL, Nostr URL)
 		// live. If/when a dedicated /profile/edit route ships, this
 		// changes to point at it directly.
-		void goto(lp('/settings#display-name-heading'));
+		void gotoLocale('/settings#display-name-heading');
 	}
 
 	function goToBackupKeys(): void {
 		close();
-		void goto(lp('/backup-keys'));
+		void gotoLocale('/backup-keys');
 	}
 
 	function goToSettings(): void {
 		close();
-		void goto(lp('/settings'));
+		void gotoLocale('/settings');
 	}
 
 	function goToSupport(): void {
 		close();
-		void goto(lp('/support'));
+		void gotoLocale('/support');
 	}
 
 	/** User clicked Sign Out — close the menu and raise the
@@ -180,7 +180,7 @@
 	async function confirmSignOut(): Promise<void> {
 		showSignOutConfirm = false;
 		resetIdentity();
-		await goto('/');
+		await gotoLocale('/');
 	}
 
 	function cancelSignOut(): void {
@@ -208,7 +208,7 @@
 		showLockConfirm = false;
 		runExplicitLockExtras();
 		lockSession();
-		await goto(lp('/login'));
+		await gotoLocale('/login');
 	}
 
 	function cancelLock(): void {

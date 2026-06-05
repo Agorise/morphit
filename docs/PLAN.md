@@ -287,17 +287,18 @@ part of an order where someone will be paying them):
 - Multi-mirror by default, automatic failover
 - PWA + service worker cache (installed app survives host outages)
 - IPFS release mirror (IPNS address)
-- APK / Flatpak / signed tarball distribution
+- Signed source-tarball distribution for self-hosting operators (the PWA
+  install covers end users — no separate APK / Flatpak)
 - Blurt `custom_json` release-discovery op (metadata only — version + IPFS
   CID + mirror list)
 - RSS consumable independent of frontend
 - Two-way indexer gossip
 - Four parallel network transports
 
-### Origin decoupling (applies to PWA and APK alike)
+### Origin decoupling (the installed PWA)
 
-Once a Morphit client is installed — whether as a PWA from `morphit.io` or
-as an APK / F-Droid package — it never depends on `morphit.io` again:
+Once a Morphit client is installed as a PWA from any instance, it never
+depends on `morphit.io` again:
 
 - **Every static asset** (HTML, JS, CSS, fonts, icons, locale bundles) is
   precached by the service worker on install. The running app has zero
@@ -311,9 +312,10 @@ as an APK / F-Droid package — it never depends on `morphit.io` again:
   serve from the current one until the user consents to switch. This
   prevents a compromised edge host from silently replacing the bundle.
 
-The design implication: the APK / Flatpak distribution (Phase 5) is
-structurally the same app — it just arrives via a different channel.
-`morphit.io` is a distribution convenience, not a runtime dependency.
+The design implication: `morphit.io` is a distribution convenience, not a
+runtime dependency — once installed, the PWA runs entirely from its own
+precached assets and the in-app configurable endpoint list, so any instance
+(or none) can serve the next launch.
 
 ## No-JS & performance
 
@@ -437,10 +439,10 @@ Generated on operator hardware, keys never transmitted:
    ISO-pill language switcher, lazy-loaded locale bundles, FAQ share
    links, SEO foundations, provider-swappable price feeds with
    hardcoded fallback + "prices updated X ago" UI indicator (ADR-0004)
-3. **Phase 3 — Relay, indexer, orderbook.** Split into three subphases,
+3. **Phase 3 — Relay, indexer, orderbook** (complete). Split into three subphases,
    each shipping a standalone tarball so progress is testable as it
    lands rather than at the end:
-   - **3a (this subphase): Posting relay + account creation.** Go
+   - **3a: Posting relay + account creation.** Go
      relay service (`apps/relay/`) that accepts owner-signed
      `account_create_with_delegation` ops from clients and pays the
      Blurt RC cost. Client-side account-registration UI that checks
@@ -472,12 +474,17 @@ Generated on operator hardware, keys never transmitted:
      see it. End of this subphase: Morphit has a functional,
      minimum-viable P2P orderbook visible across multiple
      community-run indexer instances.
-4. **Phase 4**: encrypted chat, feedback with roles, reputation display,
+4. **Phase 4** (complete): encrypted chat, feedback with roles, reputation display,
    attack-surface log
-5. **Phase 5**: payment flow (BTC / XMR / BLURT), featured-bump auction,
-   payment watcher, Matrix bot, Zabbix monitoring, Tor / Lokinet / I2P
-   vhosts, IPFS release pipeline, APK / Flatpak, klingex research,
+5. **Phase 5** (complete): payment flow (BTC / XMR / BLURT), featured-bump
+   auction, payment watcher, Matrix bot, Zabbix monitoring, Tor / Lokinet /
+   I2P vhosts, IPFS release pipeline, federated-instance onboarding (PWA
+   install — no separate APK / Flatpak packaging needed), klingex research,
    WhaleVault / Gravity browser-extension signing path
+6. **Phase 6 — API integrations & marketing** (in progress): a scoped,
+   embeddable orderbook screen developers can drop into their own UI, so
+   users can search / browse / respond to offers without leaving an
+   interface they already trust; plus the public launch and marketing push
 
 ## Operator action items (outside this repo)
 

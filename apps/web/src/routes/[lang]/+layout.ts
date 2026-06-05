@@ -19,11 +19,15 @@
  *     might not visit every locale (it follows links from the root
  *     redirect shell, which only knows one locale at build time).
  *
- *   - `load({params})` validates the `lang` URL segment against
- *     SUPPORTED_LOCALES and calls `initI18nFor(lang)` +
+ *   - `load({params, url})` validates the `lang` URL segment
+ *     against SUPPORTED_LOCALES and calls `initI18nFor(lang)` +
  *     `waitLocale(lang)` so every `$_('…')` call below has the
- *     right bundle loaded before the page renders.  Invalid
- *     `lang` (e.g. `/xx/orderbook`) → 404.
+ *     right bundle loaded before the page renders.  A `lang` that
+ *     isn't a supported locale — e.g. a shared link with the
+ *     `/<lang>/` prefix stripped, `/faq?q=…` — is treated as a
+ *     locale-less path: detect the visitor's preferred language
+ *     and redirect to the proper prefixed URL (`/en/faq?q=…`),
+ *     preserving query + fragment, instead of 404-ing.
  *
  *   - Returns `{ lang }` for downstream pages and components to
  *     read via `$page.data.lang` — used by `localePath()` call
@@ -36,9 +40,11 @@
  * redirect logic).
  */
 
-import { error } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
+import { browser } from '$app/environment';
 import { waitLocale } from 'svelte-i18n';
-import { SUPPORTED_LOCALES, type LocaleCode } from '$i18n/locales';
+import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+import { localePath, pickLocaleFromAcceptLanguages } from '$i18n/path';
 import { initI18nFor } from '$i18n';
 
 export const prerender = true;
@@ -61,10 +67,34 @@ export const trailingSlash = 'never';
  *  routes (e.g. /<lang>/orderbook) are discovered by the
  *  prerender crawler following links from the locale-root page
  *  at /<lang>/. */
-export async function load({ params }: { params: { lang: string } }): Promise<{ lang: LocaleCode }> {
+export async function load({
+	params,
+	url
+}: {
+	params: { lang: string };
+	url: URL;
+}): Promise<{ lang: LocaleCode }> {
 	const code = SUPPORTED_LOCALES.find((l) => l.code === params.lang)?.code;
 	if (!code) {
-		throw error(404, `Unknown locale: ${params.lang}`);
+		// The `[lang]` segment isn't a supported locale.  This is almost
+		// always a shared link with the `/<lang>/` prefix stripped (e.g.
+		// `/faq?q=how_morphit_protects_me` instead of `/en/faq?q=…`).
+		// Rather than 404, detect the visitor's preferred language from
+		// their browser/device and redirect to the proper locale-prefixed
+		// URL, preserving the query string and fragment.  The unmatched
+		// segment is treated as the first path segment, so localePath
+		// prepends the locale: `/faq?q=…` → `/en/faq?q=…`.
+		//
+		// Detection runs client-side via navigator.languages — this load
+		// is reached at runtime through the SPA fallback (`fallback:
+		// index.html`) for any path that wasn't prerendered.  During
+		// prerender there's no navigator and only valid-locale entries
+		// are ever crawled, so the DEFAULT_LOCALE branch isn't exercised
+		// there.
+		const detected = browser
+			? pickLocaleFromAcceptLanguages(navigator.languages ?? [])
+			: DEFAULT_LOCALE;
+		throw redirect(307, localePath(url.pathname + url.search + url.hash, detected));
 	}
 	initI18nFor(code);
 	await waitLocale(code);

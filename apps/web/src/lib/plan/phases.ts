@@ -36,7 +36,7 @@
 export type PhaseStatus = 'shipped' | 'in_progress' | 'planned';
 
 export interface Phase {
-	readonly number: 1 | 2 | 3 | 4 | 5;
+	readonly number: 1 | 2 | 3 | 4 | 5 | 6;
 	readonly status: PhaseStatus;
 	/** Title key in i18n (`plan.phase_N_title`). */
 	readonly titleKey: string;
@@ -47,15 +47,13 @@ export interface Phase {
 /**
  * Current phase manifest.  Order matches /plan rendering order.
  *
- * Last reviewed: 2026-05-07 (Part 70).  Pre-launch: phases 1
- * and 2 shipped during the design/spec/protocol phase; phase 3
- * (a-c) is the current implementation campaign and is in
- * progress; phases 4 and 5 are planned but not started.
+ * Last reviewed: 2026-06-05 (cp200).  Phases 1–5 are
+ * code-complete (shipped); phase 6 (API integrations &
+ * marketing) is the current campaign and is in progress.
  *
  * NOTE: "shipped" here means the phase's deliverables are
  * code-complete; it doesn't mean Morphit is publicly launched.
- * Pre-launch hardening (the current campaign) sits under
- * phase 3c.
+ * Pre-launch hardening sits under the shipped phases.
  */
 export const PHASES: readonly Phase[] = [
 	{
@@ -72,21 +70,27 @@ export const PHASES: readonly Phase[] = [
 	},
 	{
 		number: 3,
-		status: 'in_progress',
+		status: 'shipped',
 		titleKey: 'plan.phase_3_title',
 		bodyKey: 'plan.phase_3_body'
 	},
 	{
 		number: 4,
-		status: 'planned',
+		status: 'shipped',
 		titleKey: 'plan.phase_4_title',
 		bodyKey: 'plan.phase_4_body'
 	},
 	{
 		number: 5,
-		status: 'planned',
+		status: 'shipped',
 		titleKey: 'plan.phase_5_title',
 		bodyKey: 'plan.phase_5_body'
+	},
+	{
+		number: 6,
+		status: 'in_progress',
+		titleKey: 'plan.phase_6_title',
+		bodyKey: 'plan.phase_6_body'
 	}
 ];
 

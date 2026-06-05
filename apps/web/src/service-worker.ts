@@ -103,6 +103,28 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
 	);
 });
 
+/**
+ * A top-level navigation request has redirect mode "manual" — the
+ * browser, not the SW, is meant to follow any redirect. Returning a
+ * *followed* redirect response (`redirected === true`) for such a
+ * request is a hard network error ("a redirected response was used for
+ * a request whose redirect mode is not 'follow'") and the page fails
+ * with ERR_FAILED. That can happen when a prerendered route got cached
+ * during a deploy window in which the server briefly 301'd it (e.g. a
+ * trailing-slash redirect). Rebuild any redirected response as a plain,
+ * non-redirected one so the navigation still resolves. `opaqueredirect`
+ * responses have `redirected === false`, so they pass through untouched
+ * and the browser follows them normally.
+ */
+function cleanRedirect(res: Response): Response {
+	if (!res.redirected) return res;
+	return new Response(res.body, {
+		status: res.status,
+		statusText: res.statusText,
+		headers: res.headers
+	});
+}
+
 self.addEventListener('fetch', (event: FetchEvent) => {
 	const req = event.request;
 
@@ -120,13 +142,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 			// SW; the next build will rebuild the cache under a new key.
 			// This is what gives us total origin-decoupling after install.
 			const precached = await cache.match(req, { ignoreSearch: true });
-			if (precached) return precached;
+			if (precached) return req.mode === 'navigate' ? cleanRedirect(precached) : precached;
 
 			// Anything else: try network, fall back to cached shell for
 			// navigations so the user still sees something coherent.
 			try {
 				const fresh = await fetch(req);
-				return fresh;
+				return req.mode === 'navigate' ? cleanRedirect(fresh) : fresh;
 			} catch {
 				if (req.mode === 'navigate') {
 					// Prefer the exact route HTML if we have it; otherwise root.

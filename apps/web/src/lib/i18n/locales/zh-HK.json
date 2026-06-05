@@ -121,44 +121,6 @@
   "app": {
     "tagline": "用你嘅方式買賣加密貨幣。"
   },
-  "app_stores": {
-    "fdroid": {
-      "name": "F-Droid",
-      "blurb": "自由/免費應用,無追蹤,可重現建構。"
-    },
-    "aptoide": {
-      "name": "Aptoide",
-      "blurb": "獨立 Android 應用商店,開放目錄。"
-    },
-    "aptoide_connect": {
-      "name": "Aptoide Connect",
-      "blurb": "Aptoide 的企業/增強驗證目錄。"
-    },
-    "apkpure": {
-      "name": "APKPure",
-      "blurb": "帶版本歷史的 APK 下載。"
-    },
-    "uptodown": {
-      "name": "Uptodown",
-      "blurb": "多平台應用倉庫。"
-    },
-    "apkmirror": {
-      "name": "APKMirror",
-      "blurb": "第三方但廣受信任的 APK 鏡像。"
-    },
-    "alternativeto": {
-      "name": "AlternativeTo",
-      "blurb": "軟體發現和替代品目錄。"
-    },
-    "obtainium": {
-      "name": "Obtainium",
-      "blurb": "從 GitHub release 自動更新 — 開源。"
-    },
-    "direct": {
-      "name": "直接 APK",
-      "blurb": "來自 git.agorise.net 上 Morphit 官方發行頁面的簽名 APK。"
-    }
-  },
   "assets": {
     "privacy_warnings": {
       "usdt_centralized": "交易 USDT 之前要知嘅兩件事：Tether 公司發行同管理 USDT，並有凍結地址嘅技術能力（而且曾經用過）。交易喺每條支持嘅網絡（以太坊、波場、索拉納、BNB 智能鏈）上面都係公開可見嘅 — 呢個係嗰啲鏈嘅特性。揀啱你交易嘅資產。",
@@ -897,35 +859,16 @@
     }
   },
   "download": {
-    "title": "取得 Morphit Android 版",
-    "subtitle": "Morphit 透過多個應用商店提供 — 不只是 Google Play。一個通道是單一審查點;八個通道不是。",
-    "verify_heading": "驗證你下載的內容",
-    "verify_body": "每個建構的 SHA-256 雜湊都發布在 Blurt 鏈上。無論你從哪個商店下載,都可以驗證 APK 未被篡改。",
-    "verify_cta": "查看此實例的驗證",
-    "app_stores_faq_cta": "為什麼有 8 家商店?",
-    "graphene_heading": "最佳路徑:Pixel 上的 GrapheneOS",
-    "graphene_body": "GrapheneOS 是我們實際推薦給 Morphit 使用者的以隱私為重心的 Android。沒有 Google sideload 限制,不需要 Google 帳戶,與所有 Android 應用完全相容。在 Google Pixel 手機上執行。",
-    "graphene_cta": "取得 GrapheneOS",
-    "sideload_faq_cta": "為什麼在原生 Android 上 sideload 困難",
-    "web_heading": "寧可完全不安裝?",
-    "web_body": "Morphit 在任何行動瀏覽器中完整執行。Firefox、Brave、Android 版 Tor Browser — 選一個就走。無需安裝、無需權限、與應用商店沒有任何關係。",
+    "title": "獲取 Morphit",
+    "subtitle": "喺任何裝置上將 Morphit 安裝為應用程式，或者獲取原始碼。冇應用程式商店，冇把關人——而且代碼喺全網都有鏡像，無法被下架。",
     "web_cta": "在瀏覽器中開啟 Morphit",
-    "web_faq_cta": "行動/桌面支援詳情",
-    "iphone_heading": "iPhone 和 iPad",
-    "iphone_body": "是的,iPhone 用戶可以完全使用 Morphit — 無需越獄。蘋果應用商店不列出非 KYC 的 P2P 加密應用,所以沒有原生 iOS 應用。相反,你通過 Safari 將 Morphit 作為漸進式 Web 應用(PWA)安裝。結果表現得像普通應用:主屏幕圖標、全屏啟動、離線瀏覽能力。",
-    "iphone_step_1": "在 Safari 中打開此站點(不是 Chrome 或 Firefox — 只有 Safari 可以在 iOS 上安裝 PWA)。",
-    "iphone_step_2": "點擊共享圖標(屏幕底部帶向上箭頭的方塊)。",
-    "iphone_step_3": "向下捲動並點擊「加入主畫面」。",
-    "iphone_step_4": "點擊右上角的「加入」。Morphit 圖標現在在你的主畫面上,並以全屏模式啟動。",
-    "iphone_jailbreak_note": "建議 iOS 16.4 或更新版本以獲得完整的 PWA 支援(service workers、推送通知)。較舊的 iOS 版本仍可工作 — 圖標安裝並載入站點 — 但離線能力降低。",
-    "iphone_faq_cta": "在 FAQ 中閱讀更多",
     "operator_section_title": "運行您自己的 Morphit 實例",
     "operator_section_subtitle": "任何人都可以運行 Morphit 節點 — 您自己的品牌、您自己的用戶、您自己的費用收入。聯邦自動找到您。下面是您需要的一切。",
     "operator_source_heading": "源碼與發佈",
     "operator_source_body": "Morphit 採用 AGPL-3.0 牌照。克隆 repo、運行 smoke 測試套件、部署。每個發佈版本都經過簽名，其 SHA-256 清單發佈喺 Blurt 鏈上，等您可以驗證克隆嘅嘢同項目發佈嘅一致。",
     "operator_source_cta": "打開 repo",
     "operator_releases_cta": "睇發佈",
-    "operator_verify_note": "每個發佈製品（APK、源碼 tarball、容器映像）嘅 SHA-256 哈希透過 `morphit_release_v1` 操作記錄喺 Blurt 鏈上。本地重新哈希同鏈上清單比較即可驗證任何下載。",
+    "operator_verify_note": "每個發佈製品（源碼 tarball、容器映像）嘅 SHA-256 哈希透過 `morphit_release_v1` 操作記錄喺 Blurt 鏈上。本地重新哈希同鏈上清單比較即可驗證任何下載。",
     "operator_setup_heading": "安裝指南",
     "operator_setup_body": "我哋唔發佈預建嘅 `.deb` 或 `.rpm` 包 — Morphit 係多組件服務器（Postgres + Node.js 索引器 + 中繼 + 反向代理），單包安裝會隱藏架構。營運手冊會帶您逐步完成。",
     "operator_setup_doc_run": "RUN-A-MORPHIT-NODE.md — 完整嘅首次部署指南",
@@ -939,7 +882,16 @@
     "operator_join_heading": "加入聯邦",
     "operator_join_body": "一旦您嘅實例上線同廣播 `morphit_operator_register_v1`，佢就會自動出現喺每個其他 Morphit 實例嘅目錄入面。唔使申請、唔使許可、唔使中心化列表。",
     "operator_join_cta": "睇營運者收益模型",
-    "operator_instances_cta": "瀏覽聯邦目錄"
+    "operator_instances_cta": "瀏覽聯邦目錄",
+    "pwa_heading": "安裝 Morphit",
+    "pwa_body": "Morphit 直接從你的瀏覽器安裝為應用程式——支援 Android、iPhone、iPad 同桌面端。冇應用程式商店、無需註冊，亦冇任何把關人可以將佢下架。安裝後可離線使用並自動更新。我哋唔會構建原生 APK / iOS / Flatpak 安裝包——PWA 覆蓋所有平台。",
+    "pwa_platforms": "Android（Chrome、Brave…）：開啟瀏覽器選單，選擇「安裝應用程式」或「加入主畫面」。iPhone 同 iPad（Safari）：㩒「分享」，再揀「加入主畫面」。桌面端（Chrome、Edge、Brave）：㩒地址列中嘅安裝圖示。",
+    "mirrors_heading": "原始碼同鏡像",
+    "mirrors_body": "Morphit 完全開源（AGPL-3.0）。規範代碼庫託管喺我哋自己嘅 Forgejo 伺服器上，並喺全網鏡像，因此即使某個主機被封鎖或消失，代碼依然可以獲取。標註為「即將上線」嘅鏡像尚未建立——目前請喺相應網站搜尋「morphit」。",
+    "mirror_primary": "主代碼庫",
+    "mirror_open": "開啟代碼庫",
+    "mirror_pending": "即將上線",
+    "why_mirrors": "點解有 {count} 個鏡像？"
   },
   "edit_order": {
     "heading": "編輯訂單",
@@ -1274,8 +1226,8 @@
         "a": "託管就似一個保姆,喺交易完成之前幫你保管錢。如果你同另一個人嗌交,仲裁者就係決定邊個攞到玩具嘅裁判。\n\n風險：\n你唔再信任對方……而家你反而要信任保姆同裁判。兩者都係集中化 — 佢哋成為咗對你嘅錢有權力嘅新中間人。如果佢哋唔誠實、反應慢、有偏見或者被駭客攻擊,你嘅錢仍然可能消失。\n\n結論：\n託管 + 仲裁只係將信任問題轉移到另一個人/團體。\n\n唔好信任。去驗證。\n#reputation"
       },
       "no_js_limits": {
-        "q": "頁腳嘅「無 JS」鏈接做乜嘢？",
-        "a": "而家:冇任何功能 — 呢個係指向呢度以解釋狀態嘅佔位符。\n\n佢將會做乜嘢:加載網站時唔運行 JavaScript 啟動腳本,所以除咗伺服器發送嘅內容之外,你嘅瀏覽器入面冇任何嘢運行。瀏覽(訂單簿、FAQ、個人資料)已經係噉工作嘅 — 頁面係靜態渲染嘅,你可以通過喺瀏覽器入面禁用 JS 同重新加載嚟驗證呢一點。JavaScript 添加嘅係交互層:下單、解密聊天、簽署反饋、唔需要重新加載頁面就可以切換語言。\n\n點解仲未接通:Morphit 目前將每個頁面作為預渲染嘅 HTML 加一個水合腳本嚟發送。一個抑制水合嘅每請求 `?nojs=1` 開關需要架構更改(每請求 SSR 而非預渲染 + 水合),呢個喺路線圖上但未建構。與此同時,喺你自己瀏覽器嘅設置入面禁用 JS 會得到相同嘅結果 — 靜態 HTML 已經喺嗰度。\n\n所以:無 JS 瀏覽今日已經可以工作;如果你想確認,喺瀏覽器入面關閉佢。一旦每請求 SSR 發布,呢個藥丸就會變得可用。"
+        "q": "頁尾嘅「No JS」連結有咩用？",
+        "a": "佢連結到呢度，解釋 Morphit 喺冇 JavaScript 嗰陣嘅行為——佢唔係一個關閉 JS 嘅開關（連結做唔到；JavaScript 由你嘅瀏覽器控制）。\n\n你唔需要特殊模式：喺停用 JavaScript 嘅情況下瀏覽本來就得。每個頁面——訂單簿、FAQ、個人檔案、評價——都係靜態渲染嘅，所以喺瀏覽器入面熄咗 JS 再重新載入，頁面依然會顯示。JavaScript 淨係驅動互動層（落單、解密聊天、簽署評價、唔使重新載入就切換語言），因為呢啲加密都喺你嘅瀏覽器入面運行，絕不會喺伺服器上。\n\nMorphit 係一個靜態、預先渲染嘅網站，冇按請求運行嘅伺服器，所以冇一㩒就得嘅「冇 JS」網址——但喺你自己嘅瀏覽器入面停用 JavaScript，今日就可以得到同樣嘅效果。"
       },
       "how_to_run_node": {
         "q": "點樣運行 Morphit 節點？",
@@ -1373,13 +1325,13 @@
         "q": "咩係 Monero tx_proof,點解 Morphit 要求佢?",
         "a": "Monero tx_proof(交易證明)係嚟自你自己錢包嘅一段短字串,可以證明你向特定地址支付咗特定交易 —— 而唔會洩漏你錢包嘅其他任何資訊。形式係 `OutProofV2…` 加上一長串 base58 字元。\n\n**Morphit 點解要求佢。** Morphit 透過喺區塊鏈上確認你嘅付款已經以正確金額到達國庫地址,嚟驗證你嘅 XMR 手續費。要喺唔持有國庫嘅查看密鑰(view key)嘅前提下做到呢樣(發布查看密鑰會將每一筆手續費付款永遠去匿名化 —— 見 OPERATIONS.md §40.2 嘅私隱不變量),每個 Morphit 實例都會要求你親自喺自己嘅錢包度為每筆付款產生一個證明。任何索引器都可以用公開數據驗證你嘅證明;唔需要特權方參與。\n\n**佢會披露啲咩。** 證明只披露:\n• 嗰一筆具體交易(你提供嘅 txid)有向嗰個具體地址(Morphit 國庫)付款,以及\n• 支付嘅金額。\n\n**佢唔會披露啲咩。**\n• 你嘅其他交易\n• 錢包餘額\n• 你嘅其他地址\n• 任何錢包元資料\n• 關於未來付款嘅任何資訊\n\n證明係一次性、每筆付款獨立。擁有佢唔會令外人知道呢個地址上嘅其他付款(無論你嘅或者其他人嘅),或者任何其他錢包活動。\n\n**點樣產生。**\n• **Monero CLI**:`get_tx_proof <txid> <國庫地址>`\n• **Monero GUI**:Advanced → Prove transaction → 填 txid + 地址 → Generate\n• **Cake Wallet**:Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet**:Tools → Prove/check transaction → Generate\n\n你會得到一個以 `OutProofV1` 或 `OutProofV2` 開頭嘅字串。將佢貼到付款證明欄。\n\n**點解呢個比查看密鑰好。** 查看密鑰會令任何持有人永遠睇到該地址上所有付款。tx_proof 只揭示一筆付款,就係咁。即係話每個 Morphit 實例 —— 你嘅、官方嘅、或者社區營運者嘅 —— 都可以獨立驗證 XMR 手續費,唔需要共享秘密。呢個就係聯邦化嘅正確運作。"
       },
-      "app_stores": {
-        "q": "哪些應用商店有 Morphit Android 版?",
-        "a": "Morphit 透過多個 Android 應用商店分發 — 不只是 Google Play。這是有意的:單一分發點是單一審查點,而 Morphit 就是為了抵禦這一點而建構的。\n\n可用於:\n• **F-Droid**(自由應用,無追蹤,可重現建構)\n• **Aptoide**(aptoide.com + connect.aptoide.com)\n• **APKPure**(apkpure.com)\n• **Uptodown**(uptodown.com)\n• **APKMirror**(apkmirror.com — 第三方但廣受信任)\n• **AlternativeTo**(alternativeto.net)\n• **Obtainium**(obtainium.imranr.dev — 自動從 GitHub release 更新)\n• **直接下載 APK** 從 morphit.io/download\n\n所有建構都用相同的金鑰簽署,其 SHA-256 雜湊發布在 Blurt 鏈上的 release op 中 — 無論你從哪個商店下載,都可以驗證 APK 未被篡改。\n\n我們故意不在 Google Play 發布。請看下一條 FAQ 了解原因。"
+      "morphit_mirrors": {
+        "q": "點解 Morphit 嘅原始碼要鏡像到咁多個代碼託管網站？",
+        "a": "去中心化——呢個係 Morphit 設計入面嘅第 2 優先項，僅次於私隱。一個淨係存在於一處嘅項目，可以喺一處被扼殺：平台可以封禁帳號，政府可以下令落架，主機可能索性消失。所以 Morphit 嘅原始碼（AGPL-3.0）鏡像喺好多獨立嘅代碼託管網站——我哋自己嘅 Forgejo 伺服器 git.agorise.net 係規範副本，GitHub 已上線，仲有更多正在加入（Codeberg、GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），再加一份冇任何主機可以控制、基於內容尋址嘅 IPFS 副本。如果其中任何一個封鎖或刪除 Morphit，其餘每一份副本都仲喺度——而且因為佢係 AGPL，任何人都可以重新託管、審計或分叉佢。完整嘅最新清單喺「獲取 Morphit」頁面。\n\n（冇任何嘢需要由應用程式商店安裝——Morphit 作為 Progressive Web App 運行，你直接由瀏覽器加入。呢啲鏡像針對嘅係原始碼，咁項目就冇辦法靠刪除單一個倉庫嚟被噤聲。）\n\n你可以確認任何正在運行嘅實例提供嘅係未被竄改嘅代碼：每個版本嘅 SHA-256 雜湊都會發佈到 Blurt 鏈上——見 /about-this-instance。"
       },
       "android_sideload": {
-        "q": "為什麼我不能直接在我的 Android 裝置上安裝 Morphit?",
-        "a": "從 2026 年 9 月開始,Google 推送一個靜默的 Android 更新,會阻擋任何未在 Google 註冊、未簽署其條款、未支付費用、未提交政府 ID 的開發者的應用程式。全球每台 Android 裝置 — 無法退出。\n\nMorphit 故意不在 Google 註冊。這種註冊意味著一個實體(Google)對整個 Morphit Android 分發擁有終止開關。Morphit 的全部意義就是沒有任何人擁有終止開關。\n\n要在鎖定的 Android 裝置上安裝 Morphit(或任何未註冊的應用),你需要:\n1. 設定 → 關於 → 點擊建構號 **7 次** 啟用開發者模式\n2. 忽略關於「脅迫」和「風險」的警告畫面\n3. 輸入裝置 PIN\n4. 重啟裝置\n5. 等待 **24 小時**(強制冷卻期 — 是的,真的)\n6. 回來,忽略更多警告畫面\n7. 選擇「臨時允許」(7 天)或「無限期允許」\n8. 再次確認你理解「風險」\n9. 安裝 APK\n\n九個步驟、強制 24 小時冷卻期、重複的恐嚇畫面 — 只為在你擁有的裝置上安裝軟體。\n\n**更簡單的途徑**:\n• **GrapheneOS**(grapheneos.org)— 以隱私為重心、Google 相容的 Android,沒有這些限制。在 Pixel 手機上執行。\n• **F-Droid** — 如果你在首次安裝時啟用一次,權限就已內建。\n• **自訂 ROM** 比如 LineageOS — 同樣。\n• **直接使用 Web 版** — morphit.io 在任何行動瀏覽器中完整執行,包括 Firefox、Brave 和 Android 版 Tor Browser。無需安裝。"
+        "q": "我點樣喺 Android 上面安裝 Morphit？",
+        "a": "喺 Chrome、Brave 或任何瀏覽器入面開啟 Morphit，開啟選單（⋮），㩒「安裝應用程式」（或「加入主畫面」）。圖示會出現喺主畫面，全螢幕啟動，可以離線使用並自動更新。\n\n冇 APK，所以 Google 嘅側載門檻都唔適用——呢個亦繞開咗 Google 由 2026 年開始推行嘅 Android 安裝鎖定（開發者必須向 Google 註冊、接受佢嘅條款、繳費並提交政府身份證件，應用先可以安裝）。PWA 直接由網絡安裝，無需開發者註冊，亦冇可以將佢落架嘅把關人。"
       },
       "operator_registration": {
         "q": "如何成為 Morphit 操作員?",
@@ -1522,8 +1474,8 @@
         "a": "出人意料地適度。Morphit 的構建使其能在大多數人已經擁有的硬件上運行。\n\n**業餘級——樹莓派 4 / 5（4 GB）。** 索引器、中繼和前端可以一起舒適地運行。使用 USB-3 SSD 而不是 SD 卡。功耗 ~5–7 W。適合小型社區。\n\n**認真級——迷你 PC（Beelink、NUC、二手）。** Intel N100 / Ryzen 配 8 GB 記憶體和 SSD。6–20 W。150–250 美元。可舒適服務數百活躍用戶。\n\n**備用手提電腦——任何還能啟動 Linux 的手提電腦。** 舊 ThinkPad 或最近十年的手提電腦，至少 4 GB 記憶體。額外好處：內置 UPS（電池）。\n\n**具體最低要求（x86-64、ARM64 或 Apple silicon）：**\n\n• **CPU：** 2 核 1 GHz 或更快。\n• **記憶體：** 2 GB 最低，4 GB 舒適。\n• **硬盤：** SSD 上 20 GB 空閒。\n• **網絡：** 上下行各 1 Mbit/s。\n• **作業系統：** 現代 Linux（Debian 12、Ubuntu 22.04+、Arch、Alpine、NixOS）。\n• **可用性：** 95% 是合理目標——Morphit 是聯邦化的。\n\n**你不需要：** Blurt 節點、靜態 IP、域名或數據中心 VPS。\n\n運營商分成的設計使得即使在 Pi 上也能覆蓋成本。"
       },
       "iphone_install": {
-        "q": "我可以在不越獄的情況下在 iPhone 上使用 Morphit 嗎?",
-        "a": "是的 — 完全可以,無需越獄。以下是誠實的情況:\n\n**為什麼沒有原生 App Store 應用。**蘋果的 App Store 準則拒絕了便利非 KYC 點對點加密貨幣交易的應用。Morphit 的整個設計 — 非託管、無身份驗證、營運商之間聯邦化 — 正是他們拒絕發布的。所以我們不假裝有原生 iOS 應用;那會是撒謊。\n\n**完美工作的方法:漸進式 Web 應用(PWA)安裝。**現代 Safari 支援將網站作為獨立應用安裝。圖標進入主畫面,應用全屏啟動(沒有 Safari URL 欄),service workers 快取資源以供離線瀏覽,應用在啟動之間記住狀態。\n\n**安裝流程**(大約需要 15 秒):\n1. 在 Safari 中打開此站點。不是 Chrome 或 Firefox — 那些在 iOS 上使用 Safari 的 Web 引擎,但不公開 PWA 安裝路徑。\n2. 點擊屏幕底部的共享圖標(帶向上箭頭的方塊)。\n3. 在共享表中向下捲動並點擊「加入主畫面」。\n4. 確認名稱(預設為「Morphit」)並點擊右上角的「加入」。\n\n完成。圖標在你的主畫面上,與其他應用一起。點擊以全屏啟動。\n\n**iOS 版本說明。** iOS 16.4+ 有完整的 PWA 支援:service workers(離線快取)、推送通知、徽章計數、Web Share Target。較舊的 iOS 版本仍可安裝 — 圖標工作、站點載入 — 但沒有這些進階功能。\n\n**與 Android 的比較。** Android 用戶有更多選項:直接安裝我們的 APK,透過 F-Droid / Aptoide / APKPure 安裝,透過 GrapheneOS(無 Google Play)安裝。iOS 由於蘋果更嚴格的生態系統只提供 PWA 路徑。PWA 體驗本身在 Morphit 的用例中可以與原生應用相比。\n\n**TestFlight。**我們目前不透過 TestFlight 分發。TestFlight 建置的 90 日到期、10,000 測試者上限,以及相同的 App Store 準則適用於 TestFlight 審查 — 蘋果仍會拒絕非 KYC P2P 加密應用。PWA 路徑是持久的答案。\n\n**透過 AltStore 等側載。** AltStore 讓開發者使用免費蘋果開發者帳戶側載 IPA 文件。它有效但要求用戶每 7 日重新簽署應用(蘋果的免費開發者證書過期)。對於像 Morphit 這樣的安全敏感應用,要求每週重新簽署建立了一個攻擊視窗,惡意更新可能被插入。PWA 安裝是一鍵、免費、不過期的。\n\n**給奶奶的總結:**在 iPhone 上的 Safari 中打開 Morphit。點擊共享,然後「加入主畫面」。完成。從那時起你的 iPhone 會像應用一樣對待 Morphit。"
+        "q": "我可唔可以喺 iPhone 或 iPad 上面用 Morphit？",
+        "a": "可以——完全可以，無需越獄，亦唔使 App Store。蘋果會拒絕便利無 KYC 點對點加密貨幣交易嘅應用（呢個正正就係 Morphit），所以我哋唔做原生應用，而係提供一個 Progressive Web App。\n\n約 15 秒就可以安裝：\n1. 喺 **Safari** 入面開啟本站（iOS 上嘅 Chrome/Firefox 唔會顯示安裝選項）。\n2. 㩒**分享**圖示（有向上箭嘴嘅方塊）。\n3. 㩒**「加入主畫面」**。\n4. 確認名稱並㩒**加入**。\n\n圖示會好似任何應用一樣全螢幕啟動。喺 iOS 16.4+ 上佢仲會快取以供離線使用並支援通知；舊版本亦可以安裝，只係冇呢啲額外功能。任何平台上都冇 APK、IPA、TestFlight 或側載。"
       },
       "block_explorer": {
         "q": "Morphit 有區塊瀏覽器嗎?",
@@ -1803,7 +1755,7 @@
     "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "無 JS",
-    "no_js_title": "載入無 JavaScript 版本嘅 Morphit",
+    "no_js_title": "Morphit 點樣喺冇 JavaScript 嘅情況下運作",
     "rss": "RSS",
     "rss_title": "新訂單簿項目嘅 RSS 訂閱",
     "operators": "運營者",
@@ -1811,7 +1763,7 @@
     "contact_operator": "聯絡本站營運者",
     "alt_network_disabled": "本營運者未為此網絡配置地址。",
     "alt_network_address": "地址:{address}",
-    "instances": "其他實例",
+    "instances": "實例",
     "explorer": "區塊瀏覽器",
     "download": "下載",
     "i2p_b32": "I2P (.b32.i2p)",
@@ -2844,7 +2796,9 @@
     "phase_4_title": "第 4 階段 — 聊天、反饋、信譽",
     "phase_4_body": "端到端加密聊天。帶買家/賣家角色嘅簽名反饋。公開信譽檔案。",
     "phase_5_title": "第 5 階段 — 支付同無法阻止",
-    "phase_5_body": "即時 BTC / XMR / BLURT 支付流。Tor、Lokinet 同 I2P 隱藏服務。IPFS 發佈鏡像。PWA + APK + Flatpak 發行。",
+    "phase_5_body": "即時 BTC / XMR / BLURT 支付流。Tor、Lokinet 同 I2P 隱藏服務。IPFS 發佈鏡像。PWA + 聯邦實例接入引導。",
+    "phase_6_title": "第 6 階段 — API 整合與市場推廣",
+    "phase_6_body": "開發者可以將一個範圍受限的訂單簿畫面嵌入到自己的介面中。用戶無需離開他們信任的介面，即可搜尋、瀏覽同回應報價。",
     "status_in_progress": "進行中",
     "footer_prefix": "完整嘅版本化計劃喺",
     "status_badge": {

@@ -4,7 +4,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -69,7 +69,7 @@
 		// If the user is already unlocked (e.g. navigated to /login by
 		// mistake while signed in), send them home.
 		if ($isUnlocked) {
-			void goto('/');
+			void gotoLocale('/');
 			return;
 		}
 
@@ -93,7 +93,7 @@
 			// User previously chose seed-only — they explicitly opted
 			// out of persistent unlock. Send straight to the import
 			// route, which handles seed-phrase entry.
-			void goto('/onboarding/import');
+			void gotoLocale('/onboarding/import');
 		} else {
 			// No mode recorded at all → this is a fresh device or
 			// someone who signed out completely. Offer import + new
@@ -111,7 +111,7 @@
 	 *  follow to upgrade. */
 	function upgradeWithKeys(): void {
 		reset();
-		void goto('/onboarding/import');
+		void gotoLocale('/onboarding/import');
 	}
 
 	/** Handler for the "continue" affordance on the paired-readonly
@@ -119,7 +119,7 @@
 	 *  send him to the orderbook (same destination as a successful
 	 *  fresh QR-pair). */
 	function continuePaired(): void {
-		void goto('/orderbook');
+		void gotoLocale('/orderbook');
 	}
 
 	async function handleUnlock(): Promise<void> {
@@ -172,7 +172,7 @@
 			needTotp = false;
 			totpFailCount = 0;
 			// Send them home.
-			await goto('/');
+			await gotoLocale('/');
 		} catch (err) {
 			// Audit 2026-05 finding 1-10: typed dispatch on
 			// KeystoreError.kind instead of regex on the message
@@ -241,7 +241,7 @@
 	}
 
 	function switchToImport(): void {
-		void goto('/onboarding/import');
+		void gotoLocale('/onboarding/import');
 	}
 
 	async function handleUnlockYubikey(): Promise<void> {
@@ -269,7 +269,7 @@
 			ykPhase = 'tap';
 			await bootFromEnvelopeWithYubikey(env, device.hmac);
 			ykPhase = 'finalizing';
-			await goto('/');
+			await gotoLocale('/');
 		} catch (err) {
 			// REVISIT-LIST item 3 — classifier-driven branching.
 			// Covers transport errors (webhid_unsupported, no_device,

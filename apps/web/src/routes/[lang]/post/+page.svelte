@@ -27,7 +27,7 @@
 
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
@@ -1466,7 +1466,7 @@
 				{$_('post_order.no_account.body')}
 			</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/onboarding/register-name')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/register-name')}>
 					{$_('post_order.no_account.cta')}
 				</BusyButton>
 			</div>
@@ -1492,7 +1492,7 @@
 			<h2 class="font-display text-xl font-bold">{$_('post_order.locked.title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/onboarding/import')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
 					{$_('post_order.locked.unlock')}
 				</BusyButton>
 			</div>
@@ -2484,12 +2484,12 @@
 				{#if successPermlink && blurtAccount}
 					<BusyButton
 						variant="primary"
-						onclick={() => goto(`/@${blurtAccount}/${successPermlink}`)}
+						onclick={() => gotoLocale(`/@${blurtAccount}/${successPermlink}`)}
 					>
 						{$_('post_order.success.view_my_order_cta')}
 					</BusyButton>
 				{:else}
-					<BusyButton variant="primary" onclick={() => goto('/orderbook')}>
+					<BusyButton variant="primary" onclick={() => gotoLocale('/orderbook')}>
 						{$_('post_order.success.view_cta')}
 					</BusyButton>
 				{/if}
@@ -2501,7 +2501,7 @@
 					<div class="flex flex-col items-center gap-1 sm:flex-row">
 						<BusyButton
 							variant="ghost"
-							onclick={() => goto(`/post/edit/${successPermlink}`)}
+							onclick={() => gotoLocale(`/post/edit/${successPermlink}`)}
 							disabled={remaining === null}
 						>
 							{$_('post_order.success.edit_cta')}

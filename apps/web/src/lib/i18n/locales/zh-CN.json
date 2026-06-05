@@ -121,44 +121,6 @@
   "app": {
     "tagline": "按你的方式买卖加密货币。"
   },
-  "app_stores": {
-    "fdroid": {
-      "name": "F-Droid",
-      "blurb": "自由/免费应用,无跟踪,可重现构建。"
-    },
-    "aptoide": {
-      "name": "Aptoide",
-      "blurb": "独立 Android 应用商店,开放目录。"
-    },
-    "aptoide_connect": {
-      "name": "Aptoide Connect",
-      "blurb": "Aptoide 的企业/增强验证目录。"
-    },
-    "apkpure": {
-      "name": "APKPure",
-      "blurb": "带版本历史的 APK 下载。"
-    },
-    "uptodown": {
-      "name": "Uptodown",
-      "blurb": "多平台应用仓库。"
-    },
-    "apkmirror": {
-      "name": "APKMirror",
-      "blurb": "第三方但广受信任的 APK 镜像。"
-    },
-    "alternativeto": {
-      "name": "AlternativeTo",
-      "blurb": "软件发现和替代品目录。"
-    },
-    "obtainium": {
-      "name": "Obtainium",
-      "blurb": "从 GitHub release 自动更新 — 开源。"
-    },
-    "direct": {
-      "name": "直接 APK",
-      "blurb": "来自 git.agorise.net 上 Morphit 官方发行页面的签名 APK。"
-    }
-  },
   "assets": {
     "privacy_warnings": {
       "usdt_centralized": "交易 USDT 前需要知道的两件事：Tether 公司发行和管理 USDT，并具有冻结地址的技术能力（且曾使用过）。交易在每个支持的网络（以太坊、波场、索拉纳、BNB 智能链）上都是公开可见的 — 这是那些链的特性。选择适合你交易的资产。",
@@ -897,35 +859,16 @@
     }
   },
   "download": {
-    "title": "获取 Morphit Android 版",
-    "subtitle": "Morphit 通过多个应用商店提供 — 不只是 Google Play。一个渠道是单一审查点;八个渠道不是。",
-    "verify_heading": "验证你下载的内容",
-    "verify_body": "每个构建的 SHA-256 哈希都发布在 Blurt 链上。无论你从哪个商店下载,都可以验证 APK 未被篡改。",
-    "verify_cta": "查看此实例的验证",
-    "app_stores_faq_cta": "为什么有 8 家商店?",
-    "graphene_heading": "最佳路径:Pixel 上的 GrapheneOS",
-    "graphene_body": "GrapheneOS 是我们实际推荐给 Morphit 用户的以隐私为重心的 Android。没有 Google sideload 限制,不需要 Google 账户,与所有 Android 应用完全兼容。在 Google Pixel 手机上运行。",
-    "graphene_cta": "获取 GrapheneOS",
-    "sideload_faq_cta": "为什么在原生 Android 上 sideload 困难",
-    "web_heading": "宁可完全不安装?",
-    "web_body": "Morphit 在任何移动浏览器中完整运行。Firefox、Brave、Android 版 Tor Browser — 选一个就走。无需安装、无需权限、与应用商店没有任何关系。",
+    "title": "获取 Morphit",
+    "subtitle": "在任何设备上将 Morphit 安装为应用，或获取源代码。没有应用商店，没有把关人——而且代码在全网都有镜像，无法被下架。",
     "web_cta": "在浏览器中打开 Morphit",
-    "web_faq_cta": "移动/桌面支持详情",
-    "iphone_heading": "iPhone 和 iPad",
-    "iphone_body": "是的,iPhone 用户可以完全使用 Morphit — 无需越狱。苹果应用商店不列出非 KYC 的 P2P 加密应用,所以没有原生 iOS 应用。相反,你通过 Safari 将 Morphit 作为渐进式 Web 应用(PWA)安装。结果表现得像普通应用:主屏幕图标、全屏启动、离线浏览能力。",
-    "iphone_step_1": "在 Safari 中打开此站点(不是 Chrome 或 Firefox — 只有 Safari 可以在 iOS 上安装 PWA)。",
-    "iphone_step_2": "点击共享图标(屏幕底部带向上箭头的方块)。",
-    "iphone_step_3": "向下滚动并点击「添加到主屏幕」。",
-    "iphone_step_4": "点击右上角的「添加」。Morphit 图标现在在你的主屏幕上,并以全屏模式启动。",
-    "iphone_jailbreak_note": "建议 iOS 16.4 或更新版本以获得完整的 PWA 支持(service workers、推送通知)。较旧的 iOS 版本仍可工作 — 图标安装并加载站点 — 但离线能力降低。",
-    "iphone_faq_cta": "在 FAQ 中阅读更多",
     "operator_section_title": "运行您自己的 Morphit 实例",
     "operator_section_subtitle": "任何人都可以运行 Morphit 节点 — 您自己的品牌、您自己的用户、您自己的费用收入。联邦自动找到您。下面是您需要的一切。",
     "operator_source_heading": "源代码与发布",
     "operator_source_body": "Morphit 采用 AGPL-3.0 许可证。克隆仓库、运行冒烟测试套件、部署。每个发布版本都经过签名，其 SHA-256 清单发布在 Blurt 链上，以便您验证克隆的内容与项目发布的内容一致。",
     "operator_source_cta": "打开仓库",
     "operator_releases_cta": "查看发布",
-    "operator_verify_note": "每个发布工件（APK、源代码 tarball、容器镜像）的 SHA-256 哈希通过 `morphit_release_v1` 操作记录在 Blurt 链上。本地重新哈希并与链上清单对比即可验证任何下载。",
+    "operator_verify_note": "每个发布工件（源代码 tarball、容器镜像）的 SHA-256 哈希通过 `morphit_release_v1` 操作记录在 Blurt 链上。本地重新哈希并与链上清单对比即可验证任何下载。",
     "operator_setup_heading": "安装指南",
     "operator_setup_body": "我们不发布预构建的 `.deb` 或 `.rpm` 包 — Morphit 是多组件服务器（Postgres + Node.js 索引器 + 中继 + 反向代理），单包安装会向您隐藏架构。运营手册将带您逐步完成。",
     "operator_setup_doc_run": "RUN-A-MORPHIT-NODE.md — 完整的首次部署指南",
@@ -939,7 +882,16 @@
     "operator_join_heading": "加入联邦",
     "operator_join_body": "一旦您的实例上线并广播 `morphit_operator_register_v1`，它就会自动出现在每个其他 Morphit 实例的目录中。无需申请、无需许可、无需中心化列表。",
     "operator_join_cta": "查看运营者收益模型",
-    "operator_instances_cta": "浏览联邦目录"
+    "operator_instances_cta": "浏览联邦目录",
+    "pwa_heading": "安装 Morphit",
+    "pwa_body": "Morphit 直接从你的浏览器安装为应用——支持 Android、iPhone、iPad 和桌面端。没有应用商店、无需注册，也没有任何把关人能将它下架。安装后可离线使用并自动更新。我们不构建原生 APK / iOS / Flatpak 安装包——PWA 覆盖所有平台。",
+    "pwa_platforms": "Android（Chrome、Brave…）：打开浏览器菜单，选择「安装应用」或「添加到主屏幕」。iPhone 和 iPad（Safari）：点按「分享」，再选「添加到主屏幕」。桌面端（Chrome、Edge、Brave）：点击地址栏中的安装图标。",
+    "mirrors_heading": "源代码与镜像",
+    "mirrors_body": "Morphit 完全开源（AGPL-3.0）。规范代码库托管在我们自己的 Forgejo 服务器上，并在全网镜像，因此即使某个主机被封锁或消失，代码依然可获取。标注为「即将上线」的镜像尚未建立——目前请在相应站点搜索「morphit」。",
+    "mirror_primary": "主代码库",
+    "mirror_open": "打开代码库",
+    "mirror_pending": "即将上线",
+    "why_mirrors": "为什么有 {count} 个镜像？"
   },
   "edit_order": {
     "heading": "编辑订单",
@@ -1274,8 +1226,8 @@
         "a": "托管就像一个保姆,在交易完成之前替你保管钱。如果你和另一个人争执,仲裁者就是决定谁拿到玩具的裁判。\n\n风险：\n你不再信任对方……现在你却必须改为信任保姆和裁判。两者都是在中心化 — 他们成为了对你的钱拥有权力的新中间人。如果他们不诚实、反应慢、有偏见或被黑客攻击,你的钱仍然可能消失。\n\n结论：\n托管 + 仲裁只是把信任问题转移到了另一个人/团体。\n\n不要信任。去验证。\n#reputation"
       },
       "no_js_limits": {
-        "q": "页脚的\"无 JS\"链接做什么？",
-        "a": "现在:没有任何功能 — 这是一个指向这里以解释状态的占位符。\n\n它将会做什么:加载站点时不运行 JavaScript 启动脚本,所以除了服务器发送的内容之外,你的浏览器中什么都不运行。浏览(订单簿、FAQ、个人资料)已经是这样工作的 — 页面是静态渲染的,你可以通过在浏览器中禁用 JS 并重新加载来验证这一点。JavaScript 添加的是交互层:下单、解密聊天、签署反馈、无需重新加载页面即可切换语言。\n\n为什么还没有接通:Morphit 目前将每个页面作为预渲染的 HTML 加一个水合脚本来发送。一个抑制水合的每请求 `?nojs=1` 开关需要架构更改(每请求 SSR 而非预渲染 + 水合),这在路线图上但尚未构建。与此同时,在你自己浏览器的设置中禁用 JS 会得到相同的结果 — 静态 HTML 已经在那里了。\n\n所以:无 JS 浏览今天已经可以工作;如果你想确认,在浏览器中关闭它。一旦每请求 SSR 发布,这个药丸就会变得可用。"
+        "q": "页脚的「No JS」链接有什么用？",
+        "a": "它链接到这里，解释 Morphit 在没有 JavaScript 时的行为——它不是一个关闭 JS 的开关（链接做不到；JavaScript 由你的浏览器控制）。\n\n你不需要特殊模式：在禁用 JavaScript 的情况下浏览本来就可用。每个页面——订单簿、FAQ、个人资料、评价——都是静态渲染的，所以在浏览器中关闭 JS 并刷新，页面依然会显示。JavaScript 只驱动交互层（下单、解密聊天、签署评价、无刷新切换语言），因为这些加密都在你的浏览器中运行，绝不在服务器上。\n\nMorphit 是一个静态的、预渲染的站点，没有按请求运行的服务器，所以没有一键「无 JS」网址——但在你自己的浏览器中禁用 JavaScript，今天就能得到同样的效果。"
       },
       "how_to_run_node": {
         "q": "如何运行 Morphit 节点？",
@@ -1373,13 +1325,13 @@
         "q": "什么是 Monero tx_proof,为什么 Morphit 要求它?",
         "a": "Monero tx_proof(交易证明)是来自你自己钱包的一段简短字符串,可以证明你向特定地址支付了特定的交易 —— 而不会泄漏关于你钱包的任何其他信息。它的形式是 `OutProofV2…` 后跟一长串 base58 字符。\n\n**Morphit 为什么要求它。** Morphit 通过在区块链上确认你的付款已以正确金额到达国库地址来验证你的 XMR 手续费。要在不持有国库的查看密钥(view key)的前提下做到这一点(发布查看密钥会让每一笔手续费付款永远去匿名化 —— 详见 OPERATIONS.md §40.2 的隐私不变量),每个 Morphit 实例都要求由你自己用钱包生成每笔付款的证明。任何索引器都可以使用公开数据来验证你的证明;无需任何特权方参与。\n\n**它会披露什么。** 证明仅披露:\n• 该具体交易(你提供的 txid)向该具体地址(Morphit 国库)进行了付款,以及\n• 支付的金额。\n\n**它不会披露什么。**\n• 你的其他交易\n• 钱包余额\n• 你的其他地址\n• 任何钱包元数据\n• 任何关于未来付款的信息\n\n该证明是一次性的、按付款生成。拥有它不会让外人了解关于此地址的其他付款(无论是你的还是别人的)或任何其他钱包活动的任何信息。\n\n**如何生成。**\n• **Monero CLI**:`get_tx_proof <txid> <国库地址>`\n• **Monero GUI**:Advanced → Prove transaction → 填入 txid + 地址 → Generate\n• **Cake Wallet**:Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet**:Tools → Prove/check transaction → Generate\n\n你将得到一个以 `OutProofV1` 或 `OutProofV2` 开头的字符串。把它粘贴到付款证明字段。\n\n**为什么这比查看密钥更好。** 查看密钥会让任何持有者永远看到该地址上的所有付款。tx_proof 只揭示一笔付款,仅此而已。这意味着每个 Morphit 实例 —— 你的、官方的或社区运营者的 —— 都可以独立验证 XMR 手续费,而无需共享秘密。这才是联邦化按预期工作的样子。"
       },
-      "app_stores": {
-        "q": "哪些应用商店有 Morphit Android 版?",
-        "a": "Morphit 通过多个 Android 应用商店分发 — 不只是 Google Play。这是有意的:单一分发点是单一审查点,而 Morphit 就是为了抵御这一点而构建的。\n\n可用于:\n• **F-Droid**(自由应用,无跟踪,可复现构建)\n• **Aptoide**(aptoide.com + connect.aptoide.com)\n• **APKPure**(apkpure.com)\n• **Uptodown**(uptodown.com)\n• **APKMirror**(apkmirror.com — 第三方但广受信任)\n• **AlternativeTo**(alternativeto.net)\n• **Obtainium**(obtainium.imranr.dev — 自动从 GitHub release 更新)\n• **直接下载 APK** 从 morphit.io/download\n\n所有构建都用相同的密钥签名,其 SHA-256 哈希发布在 Blurt 链上的 release op 中 — 无论你从哪个商店下载,都可以验证 APK 未被篡改。\n\n我们故意不在 Google Play 发布。请看下一条 FAQ 了解原因。"
+      "morphit_mirrors": {
+        "q": "为什么 Morphit 的源代码要镜像到这么多代码托管站点？",
+        "a": "去中心化——这是 Morphit 设计中的第 2 优先项，仅次于隐私。一个只存在于一处的项目，可以在一处被扼杀：平台可以封禁账号，政府可以下令下架，主机可能干脆消失。所以 Morphit 的源代码（AGPL-3.0）镜像在许多独立的代码托管站点——我们自己的 Forgejo 服务器 git.agorise.net 是规范副本，GitHub 已上线，还有更多正在添加（Codeberg、GitLab、Bitbucket、SourceForge、Gitee、Launchpad、GitFlic、SourceHut、Radicle），外加一份没有任何主机能控制的、基于内容寻址的 IPFS 副本。如果其中任何一个封锁或删除 Morphit，其余每一份副本都还在——而且因为它是 AGPL，任何人都可以重新托管、审计或分叉它。完整的最新列表在「获取 Morphit」页面。\n\n（没有任何东西需要从应用商店安装——Morphit 作为 Progressive Web App 运行，你直接从浏览器添加。这些镜像针对的是源代码，这样项目就无法靠删除单个仓库来被噤声。）\n\n你可以确认任何正在运行的实例提供的是未被篡改的代码：每个版本的 SHA-256 哈希都会发布到 Blurt 链上——见 /about-this-instance。"
       },
       "android_sideload": {
-        "q": "为什么我不能直接在我的 Android 设备上安装 Morphit?",
-        "a": "从 2026 年 9 月开始,Google 推送一个静默的 Android 更新,会屏蔽任何未在 Google 注册、未签署其条款、未支付费用、未提交政府 ID 的开发者的应用程序。全球每台 Android 设备 — 无法退出。\n\nMorphit 故意不在 Google 注册。这种注册意味着一个实体(Google)对整个 Morphit Android 分发拥有终止开关。Morphit 的全部意义就是没有任何人拥有终止开关。\n\n要在锁定的 Android 设备上安装 Morphit(或任何未注册的应用),你需要:\n1. 设置 → 关于 → 点击构建号 **7 次** 启用开发者模式\n2. 忽略关于\"胁迫\"和\"风险\"的警告屏幕\n3. 输入设备 PIN\n4. 重启设备\n5. 等待 **24 小时**(强制冷却期 — 是的,真的)\n6. 回来,忽略更多警告屏幕\n7. 选择\"临时允许\"(7 天)或\"无限期允许\"\n8. 再次确认你理解\"风险\"\n9. 安装 APK\n\n九个步骤、强制 24 小时冷却期、重复的恐吓屏幕 — 只为在你拥有的设备上安装软件。\n\n**更简单的途径**:\n• **GrapheneOS**(grapheneos.org)— 以隐私为重心、Google 兼容的 Android,没有这些限制。在 Pixel 手机上运行。\n• **F-Droid** — 如果你在首次安装时启用一次,权限就已内置。\n• **自定义 ROM** 比如 LineageOS — 同样。\n• **直接使用 Web 版** — morphit.io 在任何移动浏览器中完整运行,包括 Firefox、Brave 和 Android 版 Tor Browser。无需安装。"
+        "q": "我如何在 Android 上安装 Morphit？",
+        "a": "在 Chrome、Brave 或任意浏览器中打开 Morphit，打开菜单（⋮），点按「安装应用」（或「添加到主屏幕」）。图标会出现在主屏幕，全屏启动，可离线使用并自动更新。\n\n没有 APK，所以 Google 的旁加载门槛都不适用——这也绕开了 Google 从 2026 年开始推行的 Android 安装锁定（开发者必须向 Google 注册、接受其条款、缴费并提交政府身份证件，应用才能安装）。PWA 直接从网络安装，无需开发者注册，也没有可以将其下架的把关人。"
       },
       "operator_registration": {
         "q": "如何成为 Morphit 操作员?",
@@ -1522,8 +1474,8 @@
         "a": "出人意料地适度。Morphit 的构建使其能在大多数人已经拥有的硬件上运行。\n\n**业余级——树莓派 4 / 5（4 GB）。** 索引器、中继和前端可以一起舒适地运行。使用 USB-3 SSD 而不是 SD 卡。功耗 ~5–7 W。适合小型社区。\n\n**认真级——迷你 PC（Beelink、NUC、二手）。** Intel N100 / Ryzen 配 8 GB 内存和 SSD。6–20 W。150–250 美元。可舒适服务数百活跃用户。\n\n**备用笔记本——任何还能启动 Linux 的笔记本。** 旧 ThinkPad 或最近十年的笔记本，至少 4 GB 内存。额外好处：内置 UPS（电池）。\n\n**具体最低要求（x86-64、ARM64 或 Apple silicon）：**\n\n• **CPU：** 2 核 1 GHz 或更快。\n• **内存：** 2 GB 最低，4 GB 舒适。\n• **硬盘：** SSD 上 20 GB 空闲。\n• **网络：** 上下行各 1 Mbit/s。\n• **操作系统：** 现代 Linux（Debian 12、Ubuntu 22.04+、Arch、Alpine、NixOS）。\n• **可用性：** 95% 是合理目标——Morphit 是联邦化的。\n\n**你不需要：** Blurt 节点、静态 IP、域名或数据中心 VPS。\n\n运营商分成的设计使得即使在 Pi 上也能覆盖成本。"
       },
       "iphone_install": {
-        "q": "我可以在不越狱的情况下在 iPhone 上使用 Morphit 吗?",
-        "a": "是的 — 完全可以,无需越狱。以下是诚实的情况:\n\n**为什么没有原生 App Store 应用。**苹果的 App Store 准则拒绝了便利非 KYC 点对点加密货币交易的应用。Morphit 的整个设计 — 非托管、无身份验证、运营商之间联邦化 — 正是他们拒绝发布的。所以我们不假装有原生 iOS 应用;那会是撒谎。\n\n**完美工作的方法:渐进式 Web 应用(PWA)安装。**现代 Safari 支持将网站作为独立应用安装。图标进入主屏幕,应用全屏启动(没有 Safari URL 栏),service workers 缓存资源以供离线浏览,应用在启动之间记住状态。\n\n**安装流程**(大约需要 15 秒):\n1. 在 Safari 中打开此站点。不是 Chrome 或 Firefox — 那些在 iOS 上使用 Safari 的 Web 引擎,但不公开 PWA 安装路径。\n2. 点击屏幕底部的共享图标(带向上箭头的方块)。\n3. 在共享表中向下滚动并点击「添加到主屏幕」。\n4. 确认名称(默认为「Morphit」)并点击右上角的「添加」。\n\n完成。图标在你的主屏幕上,与其他应用一起。点击以全屏启动。\n\n**iOS 版本说明。** iOS 16.4+ 有完整的 PWA 支持:service workers(离线缓存)、推送通知、徽章计数、Web Share Target。较旧的 iOS 版本仍可安装 — 图标工作、站点加载 — 但没有这些高级功能。\n\n**与 Android 的比较。** Android 用户有更多选项:直接安装我们的 APK,通过 F-Droid / Aptoide / APKPure 安装,通过 GrapheneOS(无 Google Play)安装。iOS 由于苹果更严格的生态系统只提供 PWA 路径。PWA 体验本身在 Morphit 的用例中可以与原生应用相比。\n\n**TestFlight。**我们目前不通过 TestFlight 分发。TestFlight 构建的 90 天到期、10,000 测试者上限,以及相同的 App Store 准则适用于 TestFlight 审查 — 苹果仍会拒绝非 KYC P2P 加密应用。PWA 路径是持久的答案。\n\n**通过 AltStore 等侧载。** AltStore 让开发者使用免费苹果开发者帐户侧载 IPA 文件。它有效但要求用户每 7 天重新签署应用(苹果的免费开发者证书过期)。对于像 Morphit 这样的安全敏感应用,要求每周重新签署创建了一个攻击窗口,恶意更新可能被插入。PWA 安装是一键、免费、不过期的。\n\n**给奶奶的总结:**在 iPhone 上的 Safari 中打开 Morphit。点击共享,然后「添加到主屏幕」。完成。从那时起你的 iPhone 会像应用一样对待 Morphit。"
+        "q": "我可以在 iPhone 或 iPad 上使用 Morphit 吗？",
+        "a": "可以——完全可以，无需越狱，也不需要 App Store。苹果会拒绝便利无 KYC 点对点加密货币交易的应用（这正是 Morphit），所以我们不做原生应用，而是提供一个 Progressive Web App。\n\n约 15 秒即可安装：\n1. 在 **Safari** 中打开本站（iOS 上的 Chrome/Firefox 不会显示安装选项）。\n2. 点按**分享**图标（带向上箭头的方块）。\n3. 点按**「添加到主屏幕」**。\n4. 确认名称并点按**添加**。\n\n图标会像任何应用一样全屏启动。在 iOS 16.4+ 上它还会缓存以供离线使用并支持通知；更旧的版本也能安装，只是没有这些额外功能。任何平台上都没有 APK、IPA、TestFlight 或旁加载。"
       },
       "block_explorer": {
         "q": "Morphit 有区块浏览器吗?",
@@ -1803,7 +1755,7 @@
     "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "无 JS",
-    "no_js_title": "加载无 JavaScript 版本的 Morphit",
+    "no_js_title": "Morphit 如何在没有 JavaScript 的情况下工作",
     "rss": "RSS",
     "rss_title": "新订单簿条目的 RSS 订阅",
     "operators": "运营者",
@@ -1811,7 +1763,7 @@
     "contact_operator": "联系本站运营者",
     "alt_network_disabled": "本运营者未为该网络配置地址。",
     "alt_network_address": "地址:{address}",
-    "instances": "其他实例",
+    "instances": "实例",
     "explorer": "区块浏览器",
     "download": "下载",
     "i2p_b32": "I2P (.b32.i2p)",
@@ -2844,7 +2796,9 @@
     "phase_4_title": "第 4 阶段 — 聊天、反馈、信誉",
     "phase_4_body": "端到端加密聊天。带买家/卖家角色的签名反馈。公开信誉档案。",
     "phase_5_title": "第 5 阶段 — 支付和不可阻挡性",
-    "phase_5_body": "实时 BTC / XMR / BLURT 支付流。Tor、Lokinet 和 I2P 隐藏服务。IPFS 发布镜像。PWA + APK + Flatpak 发行。",
+    "phase_5_body": "实时 BTC / XMR / BLURT 支付流。Tor、Lokinet 和 I2P 隐藏服务。IPFS 发布镜像。PWA + 联邦实例接入引导。",
+    "phase_6_title": "第 6 阶段 — API 集成与营销",
+    "phase_6_body": "开发者可以将一个范围受限的订单簿界面嵌入到自己的界面中。用户无需离开他们信任的界面，即可搜索、浏览和响应报价。",
     "status_in_progress": "进行中",
     "footer_prefix": "完整的版本化计划在",
     "status_badge": {

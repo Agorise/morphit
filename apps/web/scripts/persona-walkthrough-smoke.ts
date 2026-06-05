@@ -44,7 +44,7 @@
  *   D-9   PRE-LAUNCH wizard step-count realistic ("~17"/disclaimer)
  *   D-10  Postgres-version doc claim not over-restrictive
  *   D-11  Operator-register CLI command matches real subcommand
- *   D-12  Indexer nginx path /api/indexer/ in §12 troubleshooting
+ *   D-12  Indexer nginx path /v1/ in §12 troubleshooting
  *   D-13  /v1/health field name "lag_blocks" not "head_lag_blocks"
  *
  * Part 120 additions:
@@ -923,11 +923,18 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'D-12 — RUN-A-NODE §12 troubleshooting curl uses nginx path /api/indexer/',
+		name: 'D-12 — RUN-A-NODE §12 troubleshooting curl uses nginx path /v1/ (indexer)',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',
 		rootRelative: true,
-		mustHave: ['curl https://yourdomain.com/api/indexer/v1/health'],
-		mustNotHave: ['curl https://yourdomain.com/indexer/v1/health']
+		mustHave: ['curl https://yourdomain.com/v1/health'],
+		// The indexer client issues absolute /v1/* requests, so the
+		// colocated nginx routes /v1/ -> indexer (NOT /api/indexer/,
+		// which the leading-slash URL semantics drop, and NOT the bare
+		// /indexer/ a naive reader might guess).
+		mustNotHave: [
+			'curl https://yourdomain.com/api/indexer/v1/health',
+			'curl https://yourdomain.com/indexer/v1/health'
+		]
 	},
 	{
 		name: 'D-13 — RUN-A-NODE references real /v1/health field "lag_blocks"',
@@ -1151,7 +1158,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['$app/environment', 'svelte-i18n', 'svelte/store']
 	},
 	{
-		name: 'P121-CP7-1 — [lang]/+layout.ts carries prerender + ssr=true + load() that validates lang and initI18nFor',
+		name: 'P121-CP7-1 — [lang]/+layout.ts carries prerender + ssr=true + load() that validates lang, initI18nFor, and (cp201) redirects an unknown prefix-stripped segment to the detected locale instead of 404ing',
 		file: 'apps/web/src/routes/[lang]/+layout.ts',
 		rootRelative: true,
 		mustHave: [
@@ -1159,7 +1166,8 @@ const SCENARIOS: readonly Scenario[] = [
 			'export const ssr = true',
 			'initI18nFor',
 			'waitLocale',
-			"throw error(404"
+			'pickLocaleFromAcceptLanguages',
+			'throw redirect(307'
 		]
 	},
 	{

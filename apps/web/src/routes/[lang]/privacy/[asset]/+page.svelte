@@ -31,7 +31,7 @@
 
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { ASSETS, type AssetTicker } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
 	import { breadcrumbListSchema, type BreadcrumbItem } from '$seo/jsonld';
@@ -47,7 +47,7 @@
 		// alternative (404) loses the user's locale prefix; redirect
 		// preserves it.
 		if (asset === undefined) {
-			goto(`/${$page.params.lang ?? 'en'}/privacy`);
+			gotoLocale('/privacy');
 		}
 	});
 

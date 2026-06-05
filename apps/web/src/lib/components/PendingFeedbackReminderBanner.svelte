@@ -24,7 +24,7 @@
 	import { _ } from 'svelte-i18n';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import LeaveFeedbackForm from './LeaveFeedbackForm.svelte';
 	import IdentityLabel from './IdentityLabel.svelte';
 	import { identity } from '$stores/identity';
@@ -230,7 +230,7 @@
 								<button
 									type="button"
 									class="btn-secondary text-sm"
-									onclick={() => goto(`/my/orders#feedback=${reminder.orderPermlink}`)}
+									onclick={() => gotoLocale(`/my/orders#feedback=${reminder.orderPermlink}`)}
 								>
 									{$_('feedback_reminder.cta_navigate')}
 								</button>

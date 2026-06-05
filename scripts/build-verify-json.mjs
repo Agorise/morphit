@@ -95,7 +95,13 @@ function readGitCommit() {
 			.trim();
 	} catch {
 		// Not a git checkout (e.g. running in a release tarball).
-		// Acceptable; verify.json still has meaningful content.
+		// Fall back to MORPHIT_GIT_COMMIT if the release pipeline (or
+		// the operator) injected the source commit; otherwise null —
+		// acceptable, verify.json still has meaningful content.
+		const raw = process.env.MORPHIT_GIT_COMMIT;
+		if (raw && /^[0-9a-fA-F]{7,64}$/.test(raw.trim())) {
+			return raw.trim();
+		}
 		return null;
 	}
 }

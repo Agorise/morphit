@@ -181,6 +181,33 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
+// ─── 8. fetch handler rebuilds redirected responses on navigations ───
+//
+// A navigation request has redirect mode "manual"; returning a
+// `redirected === true` response for it is a hard network error
+// ("a redirected response was used for a request whose redirect mode is
+// not 'follow'") and the page dies with ERR_FAILED.  This bit a real
+// user whose SW had cached a prerendered route during a deploy window in
+// which the server briefly 301'd it (e.g. a trailing-slash redirect).
+// The fetch handler must rebuild any redirected response as a plain one
+// before returning it for a navigation — on BOTH the precached and the
+// fresh-network return paths.
+{
+	const path = resolve(root, 'src/service-worker.ts');
+	const text = readFileSync(path, 'utf8');
+	const definesCleaner = /function cleanRedirect\b/.test(text) && /\.redirected\b/.test(text);
+	const wiredOnNavigation =
+		(text.match(/mode === 'navigate'\s*\?\s*cleanRedirect\(/g) ?? []).length >= 2;
+	const ok = definesCleaner && wiredOnNavigation;
+	results.push({
+		name: 'service-worker.ts rebuilds redirected responses on the navigation path (ERR_FAILED guard)',
+		ok,
+		detail: ok
+			? undefined
+			: `defines cleanRedirect + checks .redirected: ${definesCleaner}; wired on >=2 navigation returns: ${wiredOnNavigation}. Without this, a redirected response cached during a deploy-time 301 window fails every navigation with ERR_FAILED.`
+	});
+}
+
 // ─── Report ──────────────────────────────────────────────────
 console.log('\n── service-worker-single-registration smoke (cp81 LL #81 / O-27) ──\n');
 let passed = 0;

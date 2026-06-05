@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import type { FaqKey } from '$utils/faqIndex';
 
 	interface Props {
@@ -27,7 +27,7 @@
 
 	function openFaq(): void {
 		if (!faqKey) return;
-		goto(`/faq#${faqKey}`);
+		gotoLocale(`/faq#${faqKey}`);
 	}
 </script>
 

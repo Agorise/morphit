@@ -122,7 +122,7 @@
 			bind:this={menuEl}
 			role="listbox"
 			aria-label={$_('nav.language')}
-			class="absolute end-0 z-50 mt-2 w-56 origin-top-right overflow-hidden rounded-xl border border-ink-200 bg-white shadow-morphit-card dark:border-ink-700 dark:bg-ink-900 ltr:origin-top-right rtl:origin-top-left"
+			class="absolute end-0 z-50 mt-2 grid max-h-[min(70vh,30rem)] w-[min(92vw,30rem)] origin-top-right grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-ink-200 bg-white p-1.5 shadow-morphit-card sm:grid-cols-3 dark:border-ink-700 dark:bg-ink-900 ltr:origin-top-right rtl:origin-top-left"
 		>
 			{#each SUPPORTED_LOCALES as loc (loc.code)}
 				{@const active = loc.code === $currentLocale}
@@ -130,20 +130,20 @@
 					type="button"
 					role="option"
 					aria-selected={active}
-					class="flex w-full items-center gap-3 px-4 py-3 text-left text-base hover:bg-ink-50 focus:bg-ink-50 focus:outline-none dark:hover:bg-ink-800 dark:focus:bg-ink-800 {active
-						? 'bg-ink-50 font-semibold text-morphit-emerald dark:bg-ink-800'
+					class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-ink-50 focus:bg-ink-50 focus:outline-none dark:hover:bg-ink-800 dark:focus:bg-ink-800 {active
+						? 'bg-ink-50 font-semibold text-morphit-emerald ring-1 ring-inset ring-morphit-emerald/50 dark:bg-ink-800'
 						: ''}"
 					onclick={() => choose(loc.code)}
 				>
 					<span class="flex min-w-0 flex-1 flex-col">
-						<span>{loc.nativeName}</span>
-						<span class="text-xs text-ink-500 dark:text-ink-400">{loc.englishName}</span>
+						<span class="truncate">{loc.nativeName}</span>
+						<span class="truncate text-xs text-ink-500 dark:text-ink-400">{loc.englishName}</span>
 					</span>
 					{#if active}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							width="18"
-							height="18"
+							width="16"
+							height="16"
 							viewBox="0 0 24 24"
 							fill="none"
 							stroke="currentColor"

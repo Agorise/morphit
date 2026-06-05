@@ -8,7 +8,7 @@
  * here with no DB.
  */
 
-import { planFastForward } from '../src/commands/fastForward.ts';
+import { planFastForward, indexerLooksRunning, INDEXER_LIVE_WINDOW_MS } from '../src/commands/fastForward.ts';
 
 let pass = 0;
 let fail = 0;
@@ -68,6 +68,26 @@ function expect(name: string, cond: boolean, detail = '') {
 		const p = planFastForward(100, t);
 		expect(`invalid(${label}): kind=invalid`, p.kind === 'invalid', `got ${p.kind}`);
 	}
+}
+
+// indexerLooksRunning — the liveness guard's PURE core (beta6).
+// The poller writes last_applied_at on every applied block; a fresh
+// timestamp means it is live and a fast-forward would race it.
+{
+	const now = new Date('2026-06-04T12:00:00.000Z');
+	const fresh = new Date(now.getTime() - 5_000); // 5s ago
+	const justInside = new Date(now.getTime() - (INDEXER_LIVE_WINDOW_MS - 1_000));
+	const justPast = new Date(now.getTime() - (INDEXER_LIVE_WINDOW_MS + 1_000));
+	const longAgo = new Date(now.getTime() - 3_600_000); // 1h ago
+	const future = new Date(now.getTime() + 10_000); // clock skew
+
+	expect('liveness: null (never applied) → not running', indexerLooksRunning(null, now) === false);
+	expect('liveness: 5s ago → running (refuse)', indexerLooksRunning(fresh, now) === true);
+	expect('liveness: just inside window → running', indexerLooksRunning(justInside, now) === true);
+	expect('liveness: just past window → not running', indexerLooksRunning(justPast, now) === false);
+	expect('liveness: 1h ago → not running (proceed)', indexerLooksRunning(longAgo, now) === false);
+	expect('liveness: future timestamp (skew) → not running', indexerLooksRunning(future, now) === false);
+	expect('liveness: window is the documented 90s', INDEXER_LIVE_WINDOW_MS === 90_000, `got ${INDEXER_LIVE_WINDOW_MS}`);
 }
 
 console.log('');

@@ -101,46 +101,68 @@
 
 	const PARTICLES: Particle[] = [];
 
-	// Tunables — physical constants for the 3-body simulation.
+	// Tunables — a slow, BOUNDED three-body gravity dance. The famed
+	// "three-body problem": three masses pulling on each other under
+	// mutual gravity, whose motion is chaotic — never settling into tidy
+	// repeating orbits. Tuned for the logo: gravity is the star of the
+	// show, but the dance is confined to the wordmark box and kept calm.
+	// (These are eyeball-tuned knobs — adjustable to taste.)
 	//
-	//   PARTICLE_PULL: gravitational constant between particles.  Too
-	//     low → particles drift apart and clamp on bounds; too high →
-	//     they collapse into a single point.  This value was hand-
-	//     tuned to give visible 3-body chaos without runaway.
-	//   CENTROID_PULL: how strongly particles fall toward the
-	//     wordmark's geometric center.  Acts as a soft potential well
-	//     that keeps the system bound near the logo.
-	//   DAMPING: per-frame velocity multiplier <1 to prevent energy
-	//     accumulation over long sessions.  0.998 lets the chaotic
-	//     dance continue indefinitely; <0.99 visibly slows the system.
-	//   MIN_DIST: minimum inter-particle distance for force calc, in
-	//     px.  Avoids 1/r^2 singularity when two particles overlap.
-	//   MAX_VELOCITY: hard cap so a chance close encounter doesn't
-	//     fling a particle off-canvas before damping catches up.
-	const PARTICLE_PULL = 0.08;
-	const CENTROID_PULL = 0.0012;
-	const DAMPING = 0.998;
-	const MIN_DIST = 6;
-	const MAX_VELOCITY = 0.9;
+	//   PARTICLE_PULL: mutual gravitational constant — each dot is pulled
+	//     toward the other two (∝ 1/r²). They drift together, swing past,
+	//     slingshot apart, get pulled back. This is the three-body core.
+	//   CENTROID_PULL: a WEAK tether toward the wordmark centre — just
+	//     enough to keep the dance roughly centred (and stop a dot being
+	//     ejected for good) WITHOUT overpowering the mutual gravity. A
+	//     strong well would turn the chaos into regular harmonic orbits.
+	//   JITTER: a tiny per-frame perturbation. Two jobs — it keeps the
+	//     system off any periodic orbit, and it replaces the sliver of
+	//     energy DAMPING bleeds so the dots never spiral into a still
+	//     cluster over a long session.
+	//   DAMPING: light per-frame velocity bleed so close-encounter
+	//     slingshots can't accelerate without bound.
+	//   MIN_DIST: softening floor for the 1/r² force — a near-collision
+	//     gives a gentle slingshot, not an infinite fling.
+	//   MAX_VELOCITY: speed cap — keeps the whole dance slow (the earlier
+	//     version felt too fast).
+	//   EDGE_PAD: soft margin so the dots use nearly the full box and
+	//     bounce back in rather than escaping.
+	const PARTICLE_PULL = 6.0;
+	const CENTROID_PULL = 0.0003;
+	const JITTER = 0.008;
+	const DAMPING = 0.99;
+	const MIN_DIST = 10;
+	const MAX_VELOCITY = 0.4;
+	const EDGE_PAD = 0.04;
 
 	function initParticles(boxW: number, boxH: number): void {
 		PARTICLES.length = 0;
-		const cx = boxW / 2;
-		const cy = boxH / 2;
-		// Place the three particles in a triangle around the centroid
-		// with a small tangential kick each, so the initial state has
-		// non-zero angular momentum — the system starts moving.
-		const radius = Math.min(boxW, boxH) * 0.35;
 		const stops = ['#8EEF26', '#00DA69', '#02A6B2'];
+		const r = Math.max(1.8, boxH * 0.085);
+		// Deterministic but deliberately ASYMMETRIC starting state —
+		// uneven positions spread across the width, and uneven velocities
+		// that DON'T point at the common centre (so the system carries
+		// angular momentum and the dots swing past each other instead of
+		// collapsing radially). The asymmetry is what tips the mutual-
+		// gravity system into chaos rather than the tidy symmetric
+		// "choreography" orbit the old equilateral-triangle start produced
+		// (which is why the dots looked like they were just circling). It
+		// also spreads them across the wordmark on the first frame, and is
+		// exactly what gets drawn in reduced-motion mode (no RAF).
+		const seeds = [
+			{ fx: 0.2, fy: 0.38, vx: 0.05, vy: 0.1 },
+			{ fx: 0.56, fy: 0.62, vx: -0.08, vy: 0.04 },
+			{ fx: 0.85, fy: 0.46, vx: 0.03, vy: -0.09 }
+		];
 		for (let i = 0; i < 3; i++) {
-			const angle = (i / 3) * Math.PI * 2;
+			const s = seeds[i]!;
 			PARTICLES.push({
-				x: cx + Math.cos(angle) * radius,
-				y: cy + Math.sin(angle) * radius * 0.5, // squashed orbits look better on a wide wordmark
-				vx: -Math.sin(angle) * 0.4,
-				vy: Math.cos(angle) * 0.2,
+				x: boxW * s.fx,
+				y: boxH * s.fy,
+				vx: s.vx,
+				vy: s.vy,
 				color: stops[i] as string,
-				radius: 2.2
+				radius: r
 			});
 		}
 	}
@@ -148,12 +170,17 @@
 	function step(boxW: number, boxH: number): void {
 		const cx = boxW / 2;
 		const cy = boxH / 2;
-		// Compute forces (O(n²) — only 3 particles, so 9 iterations).
+		const padX = boxW * EDGE_PAD;
+		const padY = boxH * EDGE_PAD;
+		// Forces (O(n²) — only 3 dots, so 9 iterations).
 		for (let i = 0; i < PARTICLES.length; i++) {
 			const p = PARTICLES[i]!;
 			let fx = 0;
 			let fy = 0;
-			// Mutual particle attraction.
+			// Mutual gravitational ATTRACTION (the three-body core): each
+			// dot is pulled toward the other two, ∝ 1/r² (softened by
+			// MIN_DIST). Close approaches slingshot; this is what makes
+			// the motion chaotic rather than a fixed loop.
 			for (let j = 0; j < PARTICLES.length; j++) {
 				if (j === i) continue;
 				const q = PARTICLES[j]!;
@@ -164,13 +191,18 @@
 				fx += dx * force;
 				fy += dy * force;
 			}
-			// Centroid pull (always toward the wordmark's center).
+			// Weak tether toward the wordmark centre — keeps the dance
+			// bound to the box without overpowering the mutual gravity.
 			fx += (cx - p.x) * CENTROID_PULL;
 			fy += (cy - p.y) * CENTROID_PULL;
-			// Integrate.
+			// Tiny perturbation (keeps it off any periodic orbit and
+			// replaces the energy DAMPING bleeds, so it never collapses).
+			fx += (Math.random() - 0.5) * JITTER;
+			fy += (Math.random() - 0.5) * JITTER;
+			// Integrate (semi-implicit Euler) with light damping.
 			p.vx = (p.vx + fx) * DAMPING;
 			p.vy = (p.vy + fy) * DAMPING;
-			// Clamp velocity.
+			// Speed cap so slingshots stay slow.
 			const vmag = Math.hypot(p.vx, p.vy);
 			if (vmag > MAX_VELOCITY) {
 				p.vx = (p.vx / vmag) * MAX_VELOCITY;
@@ -178,21 +210,22 @@
 			}
 			p.x += p.vx;
 			p.y += p.vy;
-			// Clamp to bounds with a tiny bounce so a particle near the
-			// edge isn't pinned indefinitely.
-			if (p.x < p.radius) {
-				p.x = p.radius;
-				p.vx = -p.vx * 0.6;
-			} else if (p.x > boxW - p.radius) {
-				p.x = boxW - p.radius;
-				p.vx = -p.vx * 0.6;
+			// Soft-bounce off the box edges (with a margin) so a dot flung
+			// outward by a close encounter is re-injected into the dance
+			// rather than escaping — they use nearly the full box.
+			if (p.x < padX + p.radius) {
+				p.x = padX + p.radius;
+				p.vx = Math.abs(p.vx) * 0.7;
+			} else if (p.x > boxW - padX - p.radius) {
+				p.x = boxW - padX - p.radius;
+				p.vx = -Math.abs(p.vx) * 0.7;
 			}
-			if (p.y < p.radius) {
-				p.y = p.radius;
-				p.vy = -p.vy * 0.6;
-			} else if (p.y > boxH - p.radius) {
-				p.y = boxH - p.radius;
-				p.vy = -p.vy * 0.6;
+			if (p.y < padY + p.radius) {
+				p.y = padY + p.radius;
+				p.vy = Math.abs(p.vy) * 0.7;
+			} else if (p.y > boxH - padY - p.radius) {
+				p.y = boxH - padY - p.radius;
+				p.vy = -Math.abs(p.vy) * 0.7;
 			}
 		}
 	}

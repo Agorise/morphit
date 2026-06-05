@@ -48,7 +48,7 @@
 	} from '$lib/auth/desktopPairing';
 	import { isUnlocked } from '$stores/identity';
 	import { fetchWithTimeout } from '$net/fetchWithTimeout';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 
 	type Phase =
 		| 'requesting_camera'
@@ -228,7 +228,7 @@
 
 	function deny(): void {
 		validatedQr = null;
-		void goto('/');
+		void gotoLocale('/');
 	}
 
 	function navigatorDeviceLabel(): string {
@@ -414,7 +414,7 @@
 			<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
 				{$_('scan_login.delivered_body')}
 			</p>
-			<button type="button" class="btn-primary mt-4" onclick={() => goto('/')}>
+			<button type="button" class="btn-primary mt-4" onclick={() => gotoLocale('/')}>
 				{$_('scan_login.delivered_done')}
 			</button>
 		</div>
@@ -446,7 +446,7 @@
 			     instead so the user isn't stuck on a button that
 			     does nothing useful. -->
 			{#if failureReason === 'multisig_unsupported' || failureReason === 'posting_key_not_authorized' || failureReason === 'account_not_found'}
-				<button type="button" class="btn-primary mt-4" onclick={() => goto('/')}>
+				<button type="button" class="btn-primary mt-4" onclick={() => gotoLocale('/')}>
 					{$_('scan_login.failed_back_home')}
 				</button>
 			{:else}
