@@ -1303,7 +1303,7 @@
       },
       "switching_instances": {
         "q": "如果一个 Morphit 实例下线,我会失去订单和声誉吗?",
-        "a": "不会 — 这就是联邦式设计的全部意义。你的订单、资料、评价和聊天历史都存在 Blurt 区块链上,不在任何单一 Morphit 实例上。如果 morphit.io 下线,`morphit.agorise.world` 或任何其他运营者的实例都能显示相同数据,来自相同链,无需任何迁移步骤。你甚至不需要重新登录 — 你的密钥在任何地方都能解密相同内容。实例只是链的一个视图;链才是真实源。运营者来来去去;你的声誉永远是你的。"
+        "a": "不会 — 这就是联邦式设计的全部意义。你的订单、资料、评价和聊天历史都存在 Blurt 区块链上,不在任何单一 Morphit 实例上。如果 morphit.io 下线,任何其他运营者的实例都能显示相同数据,来自相同链,无需任何迁移步骤。你甚至不需要重新登录 — 你的密钥在任何地方都能解密相同内容。实例只是链的一个视图;链才是真实源。运营者来来去去;你的声誉永远是你的。"
       },
       "backup_practices": {
         "q": "如何备份我的 Morphit 账户?应该记下什么?",
@@ -3546,8 +3546,8 @@
       "description": "比较两个 Morphit 实例显示的内容。一目了然地查看某实例是否在隐藏另一个拥有的订单。"
     },
     "download": {
-      "title": "下载 Morphit Android 版",
-      "description": "Morphit Android 版通过 F-Droid、Aptoide、APKPure、Uptodown、APKMirror、AlternativeTo、Obtainium 和直接 APK 分发 — 在 Blurt 链上进行 SHA-256 验证。"
+      "title": "获取 Morphit",
+      "description": "直接从浏览器将 Morphit 安装为应用 — 支持 Android、iPhone、iPad 和桌面。无需应用商店、无需 APK、无需注册。开源代码镜像在许多独立的代码托管平台上,并可通过 Blurt 链上的 SHA-256 校验。"
     },
     "backup_keys": {
       "title": "备份你的 Morphit 密钥 — 没有它们就无法恢复",

@@ -63,7 +63,7 @@ const ALLOW_LIST = new Set<string>([
 	// would harm UX (e.g. SW retry-on-network-restore, EventSource
 	// open which has its own keepalive).
 	// Format: relpath:lineHint (line is approximate, just for human ref).
-	'apps/web/src/service-worker.ts:127', // navigation fetch managed by browser
+	'apps/web/src/service-worker.ts:150', // navigation/asset fetch in the SW fetch handler — browser manages the timeout via the request's own signal; a blanket AbortController would prematurely 503 a slow-but-working asset (cp199's cleanRedirect shifted this from line 127)
 	// fetchWithTimeout itself wraps fetch() — the signal it adds IS
 	// the timeout, but the smoke can't see that the `signal` variable
 	// it passes was just constructed from an AbortController.

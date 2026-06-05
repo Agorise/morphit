@@ -1,5 +1,0 @@
-# Working files emitted by i18n-translator-diff.ts.
-# Translators merge what they need into apps/web/src/lib/i18n/locales/<code>.json
-# and then discard these — they're per-run artifacts, not project source.
-*.json5
-*.txt

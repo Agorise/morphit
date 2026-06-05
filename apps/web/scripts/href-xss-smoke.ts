@@ -131,8 +131,11 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/routes/[lang]/download/+page.svelte',
-		// `store.url` — local STORES config in /download; site-controlled.
-		new Set(['store.url'])
+		// `m.url` — local MIRRORS config in /download: hardcoded `https://`
+		// repo/host URLs (Forgejo, GitHub, Codeberg, …), site-controlled.
+		// cp201's PWA-only rework replaced the old STORES grid (`store.url`)
+		// with this source-mirrors grid.
+		new Set(['m.url'])
 	],
 	[
 		'apps/web/src/lib/components/WriteBlockedReadOnly.svelte',
