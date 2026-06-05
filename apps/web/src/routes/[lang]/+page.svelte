@@ -3,11 +3,11 @@
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
-	import MorphitMark from '$components/MorphitMark.svelte';
+	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
 	import Head from '$components/Head.svelte';
 	// cp169 byte-budget — everything below the fold is lazy-loaded.
 	// On a 1024×768 desktop the hero block ends at ~760px (py-24 +
-	// 96px MorphitMark + eyebrow + italic tagline + H1 + hero body +
+	// 64px wordmark (MorphitLogoBling) + eyebrow + italic tagline + H1 + hero body +
 	// CTAs + py-24 bottom), placing the FeaturedOrders wrapper at
 	// ~824px — below the 768px fold.  PrioritiesSection sits after
 	// FeaturedOrders (or after its empty wrapper on fresh-install
@@ -83,7 +83,7 @@
 	<div class="mx-auto max-w-6xl px-4 py-16 md:px-6 md:py-24">
 		<div class="flex flex-col items-center text-center">
 			<div class="mb-6 animate-fade-up">
-				<MorphitMark size={96} animate />
+				<MorphitLogoBling heightPx={64} />
 			</div>
 
 			{#if $instance.name}

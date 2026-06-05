@@ -5174,6 +5174,10 @@ ops/systemd/morphit-backup.service  # systemd oneshot service
 ops/systemd/morphit-backup.timer    # daily at 04:00 local
 ```
 
+### Verifying backups ran (status dashboard)
+
+`morphit-ops status` (main-menu item #10, "Status dashboard") ends with a **Backups** section that lists the backup directory and the **3 most recent** backup files — each with its age and size — so you can confirm at a glance that the timer is actually producing backups. It resolves the directory from `MORPHIT_BACKUP_DIR`, else `BACKUP_DIR` in `/etc/morphit/backup.env`, else the default `/home/morphit/backups`. The section prints the on-disk path so you can copy a file off the host (e.g. `scp`) to download it or hand it to a developer. It is read-only — it never creates, deletes, or rotates backups; rotation stays the timer's job. (`--json` includes the same data under a `backups` key for scripting.)
+
 ### Wizard flow
 
 `morphit-ops init` step 16 asks: "Enable daily DB backup automation?" — default **Yes**. If yes, also asks for:

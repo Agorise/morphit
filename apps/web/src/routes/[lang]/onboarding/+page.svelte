@@ -4,6 +4,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import { goto, beforeNavigate } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import Head from '$components/Head.svelte';
@@ -248,7 +249,7 @@
 			// the heap-residency window.
 			password = '';
 			stage = 'done';
-			await goto('/onboarding/register-name');
+			await gotoLocale('/onboarding/register-name');
 		} catch (err) {
 			console.warn('[onboarding] quiz submit failed:', err);
 			errorMsg = $_('onboarding.error.quiz_submit_failed');

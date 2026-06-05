@@ -13,8 +13,7 @@
 	  2. Asset icons (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC,
 	     DASH, DOGE, YubiKey)
 	  3. Alt-network icons (Tor, Lokinet, I2P, Nostr, Blurt)
-	  4. App store glyphs (F-Droid, Aptoide, etc.)
-	  5. UI icon components (in-context samples)
+	  4. UI icon components (in-context samples)
 
 	Each icon is shown at three sizes (16px, 24px, 48px) and
 	on both light + dark backgrounds (the dark background is
@@ -25,7 +24,6 @@
 <script lang="ts">
 	import Head from '$components/Head.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
-	import AppStoreIcon from '$components/AppStoreIcon.svelte';
 	import MorphitMark from '$components/MorphitMark.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
@@ -34,17 +32,6 @@
 	import PriceFreshnessIndicator from '$components/PriceFreshnessIndicator.svelte';
 
 	const ALT_NETWORKS = ['tor', 'lokinet', 'i2p', 'nostr', 'blurt'] as const;
-	const APP_STORES = [
-		'fdroid',
-		'aptoide',
-		'aptoide_connect',
-		'apkpure',
-		'uptodown',
-		'apkmirror',
-		'alternativeto',
-		'obtainium',
-		'direct'
-	] as const;
 	// Asset icon dev surface.  All 16 tradable assets + the
 	// yubikey ancillary icon.  All icons live at
 	// /icons/icon-<lower-ticker>.svg per cp115 convention cleanup;
@@ -335,32 +322,10 @@
 		</div>
 	</section>
 
-	<!-- ─── App store glyphs ──────────────────────────────────── -->
-	<section class="mb-12">
-		<h2 class="mb-4 font-display text-2xl font-bold">4. App store glyphs</h2>
-		<p class="mb-4 text-sm text-ink-500">
-			Text-based glyphs in currentColor — render in whatever color the parent sets. Verify each is
-			centered and the label fits the 24px-square viewBox.
-		</p>
-		<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-			{#each APP_STORES as store (store)}
-				<div class="rounded-xl border border-ink-200 bg-ink-950 p-4 dark:border-ink-800">
-					<p class="mb-2 text-xs uppercase tracking-widest text-ink-400">
-						{store}
-					</p>
-					<div class="flex items-center justify-around text-morphit-emerald">
-						{#each SIZES as sz (sz)}
-							<AppStoreIcon {store} size={sz} />
-						{/each}
-					</div>
-				</div>
-			{/each}
-		</div>
-	</section>
 
 	<!-- ─── In-component UI icons ─────────────────────────────── -->
 	<section class="mb-12">
-		<h2 class="mb-4 font-display text-2xl font-bold">5. UI components with inline SVGs</h2>
+		<h2 class="mb-4 font-display text-2xl font-bold">4. UI components with inline SVGs</h2>
 		<p class="mb-4 text-sm text-ink-500">
 			Components that include their own glyphs. Inspect for alignment with surrounding text +
 			correct contextual color (success/warn/error).

@@ -291,6 +291,11 @@ scenario('cp186: bare morphit-ops opens a menu on a TTY but keeps help+exit1 for
 	// both remain CLI-only subcommands but are no longer menu items.
 	assertEqual(/subcommand: 'abuse'/.test(m), false, 'menu does NOT offer abuse (folded into moderation)');
 	assertEqual(/subcommand: 'flags'/.test(m), false, 'menu does NOT offer flags (folded into moderation)');
+	// beta6: fast-forward demoted to a CLI-only recovery command — the
+	// indexer auto-starts at the Morphit genesis block and resumes from
+	// its cursor, so the normal flow never needs it; a menu entry only
+	// invited a footgun. Still a dispatched `morphit-ops fast-forward`.
+	assertEqual(/subcommand: 'fast-forward'/.test(m), false, 'menu does NOT offer fast-forward (CLI-only recovery tool)');
 	const main = _rf(_jn(_dn(_fu(import.meta.url)), '..', 'src', 'main.ts'), 'utf-8');
 	assertEqual(
 		main.includes("process.stdin.isTTY === true && args.flags['no-menu'] !== 'true'"),

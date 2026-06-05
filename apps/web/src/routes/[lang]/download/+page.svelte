@@ -4,42 +4,55 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
-	import AppStoreIcon from '$components/AppStoreIcon.svelte';
 
-	// Store metadata: ID (matches AppStoreIcon store prop + i18n keys),
-	// URL, and a hint about whether the URL goes direct to the Morphit
-	// listing or to the store's root (which the user then searches).
+	// Source mirrors.  Morphit's canonical repository is our own Forgejo
+	// server; it's mirrored across the web so the code stays reachable
+	// even if one host is blocked or disappears.  `status`:
+	//   'primary' — the canonical Forgejo repo (direct link)
+	//   'live'    — mirror is up; link straight to the Morphit repo
+	//   'pending' — mirror not created yet; link to the SITE ROOT (never a
+	//               broken link) and the section copy tells the visitor to
+	//               search "morphit" there.  Flip to 'live' + a direct repo
+	//               URL once each mirror exists.
 	//
-	// URLs are placeholders here — an operator running their own build
-	// substitutes their Morphit listing URLs at build time. The
-	// hard-coded defaults point at each store's root.
+	// NB: Morphit ships ONLY as a PWA — there is no APK / IPA / Flatpak /
+	// native package, by design (the PWA installs on every platform from
+	// the browser).  So this page has no app-store listings.
 	//
-	// Sally finding DL1 (Part 69): the 'direct' entry used to point
-	// at /morphit.apk on the current instance's origin.  That file
-	// is NOT shipped in the repo and most operator instances won't
-	// host it manually — Sally clicking "direct download" got a
-	// 404 with no explanation.  Pointed at the Forgejo releases page
-	// instead: every release ships a signed APK there, and the
-	// link works regardless of whether this instance hosts a
-	// local copy.  Operators who DO host /morphit.apk locally can
-	// still override at build time.
-	const STORES = [
-		{ id: 'fdroid', url: 'https://f-droid.org/' },
-		{ id: 'aptoide', url: 'https://aptoide.com/' },
-		{ id: 'aptoide_connect', url: 'https://connect.aptoide.com/' },
-		{ id: 'apkpure', url: 'https://apkpure.com/' },
-		{ id: 'uptodown', url: 'https://uptodown.com/' },
-		{ id: 'apkmirror', url: 'https://apkmirror.com/' },
-		{ id: 'alternativeto', url: 'https://alternativeto.net/' },
-		{ id: 'obtainium', url: 'https://obtainium.imranr.dev/' },
-		{ id: 'direct', url: 'https://git.agorise.net/agorise/morphit/releases' }
+	// Sally finding DL1: there is NO /morphit.apk direct-download link
+	// anymore (PWA-only, per the note above) — the old broken APK link
+	// that 404'd on instances without a manually-dropped APK is gone.
+	const MIRRORS = [
+		{
+			id: 'forgejo',
+			name: 'git.agorise.net',
+			url: 'https://git.agorise.net/agorise/morphit',
+			status: 'primary'
+		},
+		{ id: 'github', name: 'GitHub', url: 'https://github.com/Agorise/morphit', status: 'live' },
+		{ id: 'codeberg', name: 'Codeberg', url: 'https://codeberg.org/', status: 'pending' },
+		{ id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/', status: 'pending' },
+		{ id: 'bitbucket', name: 'Bitbucket', url: 'https://bitbucket.org/', status: 'pending' },
+		{ id: 'sourceforge', name: 'SourceForge', url: 'https://sourceforge.net/', status: 'pending' },
+		{ id: 'gitee', name: 'Gitee', url: 'https://gitee.com/', status: 'pending' },
+		{ id: 'launchpad', name: 'Launchpad', url: 'https://launchpad.net/', status: 'pending' },
+		{ id: 'gitflic', name: 'GitFlic', url: 'https://gitflic.ru/', status: 'pending' },
+		{ id: 'sourcehut', name: 'SourceHut', url: 'https://sr.ht/', status: 'pending' },
+		{ id: 'radicle', name: 'Radicle', url: 'https://radicle.xyz/', status: 'pending' },
+		{ id: 'kycnot', name: 'kycnot.me', url: 'https://kycnot.me/', status: 'pending' },
+		{ id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
 	] as const;
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
-	// $i18n/path.localePath() + the analogous helper in
-	// [lang]/+layout.svelte for design rationale.
+	// $i18n/path.localePath() for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	function mirrorLabel(status: string): string {
+		if (status === 'primary') return $_('download.mirror_primary');
+		if (status === 'live') return $_('download.mirror_open');
+		return $_('download.mirror_pending');
+	}
 </script>
 
 <Head routeKey="download" />
@@ -54,138 +67,91 @@
 		</p>
 	</header>
 
-	<!-- App store grid. Cards are opt-in interactive via .card-interactive
-	     so hover/focus affordance matches the rest of the app. -->
-	<ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-		{#each STORES as store (store.id)}
-			<li>
-				<a
-					href={store.url}
-					target={store.url.startsWith('http') ? '_blank' : undefined}
-					rel={store.url.startsWith('http') ? 'noopener noreferrer external' : undefined}
-					class="card-interactive flex items-start gap-4"
-				>
-					<AppStoreIcon store={store.id} size={40} class="flex-none text-morphit-emerald" />
-					<div class="min-w-0 flex-1">
-						<h2 class="font-display text-lg font-bold">
-							{$_(`app_stores.${store.id}.name`)}
-						</h2>
-						<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
-							{$_(`app_stores.${store.id}.blurb`)}
-						</p>
-						<p class="mt-2 break-all font-mono text-xs text-ink-500">
-							{store.url}
-						</p>
-					</div>
-				</a>
-			</li>
-		{/each}
-	</ul>
-
-	<!-- Verification reminder. Every build's SHA-256 hash manifest is
-	     published in the morphit_release_v1 op on the Blurt chain, so
-	     regardless of which store you downloaded from, you can verify
-	     the APK hasn't been tampered with. -->
-	<section class="card mt-10">
+	<!-- Install Morphit (PWA).  Morphit installs from the browser on every
+	     platform — no app store, no native package. -->
+	<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
 		<h2 class="font-display text-xl font-bold">
-			{$_('download.verify_heading')}
+			{$_('download.pwa_heading')}
 		</h2>
 		<p class="mt-2 text-ink-700 dark:text-ink-300">
-			{$_('download.verify_body')}
+			{$_('download.pwa_body')}
+		</p>
+		<p class="mt-3 text-sm text-ink-600 dark:text-ink-400">
+			{$_('download.pwa_platforms')}
 		</p>
 		<div class="mt-4 flex flex-wrap gap-3">
-			<a href={lp('/about-this-instance')} class="btn-secondary">
-				{$_('download.verify_cta')}
-			</a>
-			<a href={lp('/faq#app_stores')} class="btn-ghost">
-				{$_('download.app_stores_faq_cta')}
-			</a>
-		</div>
-	</section>
-
-	<!-- GrapheneOS + Pixel callout. This is the "MOST important"
-	     path per the directive — the one that doesn't need the 9-step
-	     sideload dance and doesn't need any Google relationship at
-	     all. We surface it prominently so users who'd benefit don't
-	     have to dig into the FAQ to find it. -->
-	<section class="card mt-6 border-morphit-emerald/40 bg-morphit-emerald/5">
-		<h2 class="font-display text-xl font-bold">
-			{$_('download.graphene_heading')}
-		</h2>
-		<p class="mt-2 text-ink-700 dark:text-ink-300">
-			{$_('download.graphene_body')}
-		</p>
-		<div class="mt-4 flex flex-wrap gap-3">
-			<a
-				href="https://grapheneos.org/"
-				target="_blank"
-				rel="noopener noreferrer external"
-				class="btn-secondary"
-			>
-				{$_('download.graphene_cta')}
-			</a>
-			<a href={lp('/faq#android_sideload')} class="btn-ghost">
-				{$_('download.sideload_faq_cta')}
-			</a>
-		</div>
-	</section>
-
-	<!-- iPhone / iPad section.  Item 6.  Apple's App Store does not
-	     list non-KYC P2P-crypto apps and would reject Morphit; you do
-	     NOT need to jailbreak to use Morphit on iOS, you use the PWA
-	     install path through Safari.  This section makes that path
-	     explicit so iPhone users don't think they're locked out. -->
-	<section class="card mt-6 border-blue-400/40 bg-blue-400/5">
-		<h2 class="font-display text-xl font-bold">
-			{$_('download.iphone_heading')}
-		</h2>
-		<p class="mt-2 text-ink-700 dark:text-ink-300">
-			{$_('download.iphone_body')}
-		</p>
-		<ol class="mt-4 list-decimal space-y-1 pl-6 text-ink-700 dark:text-ink-300">
-			<li>{$_('download.iphone_step_1')}</li>
-			<li>{$_('download.iphone_step_2')}</li>
-			<li>{$_('download.iphone_step_3')}</li>
-			<li>{$_('download.iphone_step_4')}</li>
-		</ol>
-		<p class="mt-3 text-sm text-ink-500 dark:text-ink-400">
-			{$_('download.iphone_jailbreak_note')}
-		</p>
-		<div class="mt-4 flex flex-wrap gap-3">
-			<a href={lp('/faq#iphone_install')} class="btn-ghost">
-				{$_('download.iphone_faq_cta')}
-			</a>
-		</div>
-	</section>
-
-	<!-- Web version pointer — for users who'd rather skip any install
-	     at all. The FAQ covers this extensively but it's worth a direct
-	     CTA here because the whole point of listing 8 app stores is
-	     "we're not locked to any one of them," and the zero-install
-	     option completes that story. -->
-	<section class="card mt-6">
-		<h2 class="font-display text-xl font-bold">
-			{$_('download.web_heading')}
-		</h2>
-		<p class="mt-2 text-ink-700 dark:text-ink-300">
-			{$_('download.web_body')}
-		</p>
-		<div class="mt-4 flex flex-wrap gap-3">
-			<a href="/" class="btn-primary btn-shine">
+			<a href="/" class="btn-primary">
 				{$_('download.web_cta')}
 			</a>
-			<a href={lp('/faq#mobile_desktop')} class="btn-ghost">
-				{$_('download.web_faq_cta')}
-			</a>
 		</div>
+	</section>
+
+	<!-- Source code & mirrors.  Canonical Forgejo repo + web mirrors;
+	     pending mirrors link to the site root (no broken links) and the
+	     body copy says to search "morphit" there for now. -->
+	<section class="mt-6">
+		<h2 class="font-display text-xl font-bold">
+			{$_('download.mirrors_heading')}
+		</h2>
+		<p class="mt-2 text-ink-700 dark:text-ink-300">
+			{$_('download.mirrors_body')}
+		</p>
+		<p class="mt-3 text-sm">
+			<a
+				href={lp('/faq#morphit_mirrors')}
+				class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
+			>
+				{$_('download.why_mirrors', { values: { count: MIRRORS.length } })}
+			</a>
+		</p>
+		<ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+			{#each MIRRORS as m (m.id)}
+				<li>
+					<a
+						href={m.url}
+						target="_blank"
+						rel="noopener noreferrer external"
+						class="card-interactive flex items-center justify-between gap-3 {m.status ===
+						'primary'
+							? 'border-morphit-emerald/40 bg-morphit-emerald/5'
+							: ''}"
+					>
+						<span class="min-w-0">
+							<span class="block font-display font-bold">{m.name}</span>
+							<span
+								class="block text-xs {m.status === 'pending'
+									? 'text-ink-500 dark:text-ink-400'
+									: 'text-morphit-emerald'}"
+							>
+								{mirrorLabel(m.status)}
+							</span>
+						</span>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							class="flex-none text-ink-400"
+						>
+							<path d="M7 17 17 7" />
+							<path d="M7 7h10v10" />
+						</svg>
+					</a>
+				</li>
+			{/each}
+		</ul>
 	</section>
 
 	<!-- Visual divider — everything above is for END USERS who want to
 	     trade.  Everything below is for OPERATORS who want to run their
 	     own Morphit instance.  These are different audiences with
-	     different needs (PWA install vs. server deployment).  The
-	     directive in #4 of 2026-05-02 user request was explicit about
-	     keeping these visually separated. -->
+	     different needs (PWA install vs. server deployment). -->
 	<div class="mt-12 border-t border-ink-200 pt-12 dark:border-ink-800">
 		<header class="mb-8 text-center">
 			<h2 class="font-display text-3xl font-extrabold md:text-4xl">
@@ -223,9 +189,8 @@
 				</a>
 			</div>
 			<!-- Verification: every release has a SHA-256 manifest +
-			     optionally a GPG signature.  This applies to BOTH end-user
-			     APKs (above) AND operator source tarballs.  Same chain
-			     publishes both. -->
+			     optionally a GPG signature, recorded on-chain.  Applies to
+			     the source tarballs + container images operators run. -->
 			<p class="mt-4 text-sm text-ink-500 dark:text-ink-400">
 				{$_('download.operator_verify_note')}
 			</p>

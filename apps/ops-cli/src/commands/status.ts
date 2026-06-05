@@ -23,6 +23,8 @@ import { applyThreshold } from '../config.ts';
 import { ageSeconds, utcMidnightToday, formatDuration } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, row, blank, info, fmt } from '../render/term.ts';
+import { readdirSync, statSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // ─── Query result types ──────────────────────────────────────────
 
@@ -94,6 +96,18 @@ interface StatusSnapshot {
 	};
 	failed_broadcasts_24h: {
 		count: number;
+	};
+	/** The most recent on-disk DB backups, read from the filesystem
+	 *  (not the DB), so the operator can confirm backups are actually
+	 *  running and grab the file path to download or hand to a dev. */
+	backups: {
+		/** Directory the backups live in — where to scp/download from. */
+		dir: string;
+		dir_exists: boolean;
+		/** Up to the 3 most recent backup files, newest first. */
+		recent: { name: string; modified_at: string; size_bytes: number }[];
+		/** Set when there is nothing to list (no dir yet / none found). */
+		note: string | null;
 	};
 }
 
@@ -245,8 +259,100 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 		},
 		failed_broadcasts_24h: {
 			count: failed !== undefined ? parseInt(failed.count, 10) : 0
-		}
+		},
+		backups: collectBackups()
 	};
+}
+
+// ─── Backups (filesystem, not DB) ────────────────────────────────
+
+/** Backup files are named `morphit-YYYYMMDD-HHMMSS.sql.gz` (or
+ *  `.sql.gz.age` when age-encrypted) by ops/backup/morphit-backup.sh. */
+const BACKUP_FILE_RE = /^morphit-\d{8}-\d{6}\.sql\.gz(\.age)?$/;
+
+/** Resolve the backup directory the way the operator configured it:
+ *  an explicit MORPHIT_BACKUP_DIR override wins, else BACKUP_DIR from
+ *  /etc/morphit/backup.env (root-owned — unreadable is fine, we fall
+ *  through), else the wizard default. */
+export function resolveBackupDir(): string {
+	const override = process.env.MORPHIT_BACKUP_DIR;
+	if (override !== undefined && override.trim() !== '') return override.trim();
+	try {
+		const text = readFileSync('/etc/morphit/backup.env', 'utf8');
+		for (const line of text.split('\n')) {
+			const m = /^\s*BACKUP_DIR\s*=\s*(.+?)\s*$/.exec(line);
+			if (m !== null && m[1] !== undefined) {
+				let v = m[1].trim();
+				if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+					v = v.slice(1, -1);
+				}
+				if (v !== '') return v;
+			}
+		}
+	} catch {
+		// backup.env absent or not readable by this user — use the default.
+	}
+	return '/home/morphit/backups';
+}
+
+/** Read-only: the up-to-3 most recent backup files in the backup dir.
+ *  Never throws and never mutates — pure filesystem inspection. */
+export function collectBackups(): StatusSnapshot['backups'] {
+	const dir = resolveBackupDir();
+	let isDir = false;
+	try {
+		isDir = statSync(dir).isDirectory();
+	} catch {
+		isDir = false;
+	}
+	if (!isDir) {
+		return { dir, dir_exists: false, recent: [], note: 'backup directory not found' };
+	}
+	let names: string[];
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return { dir, dir_exists: true, recent: [], note: 'backup directory not readable' };
+	}
+	const stamped: { name: string; modified_at: string; size_bytes: number; mtimeMs: number }[] = [];
+	for (const name of names) {
+		if (!BACKUP_FILE_RE.test(name)) continue;
+		try {
+			const st = statSync(join(dir, name));
+			if (!st.isFile()) continue;
+			stamped.push({
+				name,
+				modified_at: st.mtime.toISOString(),
+				size_bytes: st.size,
+				mtimeMs: st.mtimeMs
+			});
+		} catch {
+			// entry vanished / unreadable mid-scan — skip it.
+		}
+	}
+	stamped.sort((a, b) => b.mtimeMs - a.mtimeMs);
+	const recent = stamped
+		.slice(0, 3)
+		.map((f) => ({ name: f.name, modified_at: f.modified_at, size_bytes: f.size_bytes }));
+	return {
+		dir,
+		dir_exists: true,
+		recent,
+		note: recent.length === 0 ? 'no backups found yet' : null
+	};
+}
+
+/** Compact human size (B/KB/MB/…), for the dashboard only. */
+function humanSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = ['KB', 'MB', 'GB', 'TB'];
+	let v = bytes / 1024;
+	let i = 0;
+	while (v >= 1024 && i < units.length - 1) {
+		v /= 1024;
+		i++;
+	}
+	return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
 }
 
 // ─── Human render ────────────────────────────────────────────────
@@ -371,6 +477,35 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 		value: snap.attestations.pending_external.toString(),
 		detail: snap.attestations.pending_external > 0 ? '`morphit-ops attestations`' : undefined
 	});
+	blank();
+
+	// ── Backups ──
+	section('Backups');
+	row({ label: 'Backup directory:', value: snap.backups.dir });
+	if (!snap.backups.dir_exists) {
+		row({ label: 'Recent backups:', value: '(directory not found)', status: 'warn' });
+		info(fmt.dim('  No backups yet — set up daily DB backups via `morphit-ops harden`.'));
+	} else if (snap.backups.recent.length === 0) {
+		row({ label: 'Recent backups:', value: '(none found yet)', status: 'warn' });
+		info(
+			fmt.dim(
+				'  Expecting files like morphit-YYYYMMDD-HHMMSS.sql.gz — ' +
+					'check `journalctl -u morphit-backup.service`.'
+			)
+		);
+	} else {
+		let i = 1;
+		for (const b of snap.backups.recent) {
+			row({
+				label: `Backup ${i}:`,
+				value: formatDuration(ageSeconds(new Date(b.modified_at))) + ' ago',
+				status: 'ok',
+				detail: `${humanSize(b.size_bytes)} — ${b.name}`
+			});
+			i++;
+		}
+		info(fmt.dim('  Download or send a backup: copy <directory>/<filename> off this host (e.g. scp).'));
+	}
 	blank();
 
 	// Footer hint.

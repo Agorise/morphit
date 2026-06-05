@@ -36,7 +36,7 @@ export const FAQ_KEYS = [
 	'kyc_requirement',
 	'supported_countries',
 	'supported_fiat_currencies',
-	'app_stores',
+	'morphit_mirrors',
 	'iphone_install',
 	'android_sideload',
 	'mobile_desktop',
@@ -535,7 +535,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	user_hide_accounts: ['chat_inbox_features', 'privacy_practices'],
 
 	// Device + offline cluster
-	mobile_desktop: ['offline_caching', 'app_stores', 'no_js'],
+	mobile_desktop: ['offline_caching', 'morphit_mirrors', 'no_js'],
 
 	// Activity-level signal
 	activity_level: ['sybil_protection', 'new_trader_badge', 'verified_chat_badge'],

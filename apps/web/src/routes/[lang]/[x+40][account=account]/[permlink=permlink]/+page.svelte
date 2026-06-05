@@ -27,7 +27,7 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
@@ -595,7 +595,7 @@
 				{:else}
 					<div class="flex flex-col gap-2 sm:flex-row">
 						{#if withinEditWindow(order)}
-							<BusyButton variant="secondary" onclick={() => goto(`/post/edit/${order!.permlink}`)}>
+							<BusyButton variant="secondary" onclick={() => gotoLocale(`/post/edit/${order!.permlink}`)}>
 								{$_('my_orders.order.action_edit')}
 							</BusyButton>
 						{:else}

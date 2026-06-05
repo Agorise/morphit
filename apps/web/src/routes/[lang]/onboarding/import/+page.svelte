@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import {
@@ -151,7 +151,7 @@
 			// prompted to set their account name and we verify it
 			// against on-chain posting.key_auths.  Without this step,
 			// 70+ surfaces silently treat the user as signed-out.
-			await goto('/settings#account-name-heading');
+			await gotoLocale('/settings#account-name-heading');
 		} catch (err) {
 			// Map known error messages to localized keys.  The
 			// raw err.message text is English (e.g. "Seed must be
@@ -222,7 +222,7 @@
 			} catch {
 				// Private/Incognito — fall through.
 			}
-			await goto('/settings#account-name-heading');
+			await gotoLocale('/settings#account-name-heading');
 			return;
 		}
 
@@ -277,7 +277,7 @@
 			} catch {
 				// Private/Incognito — fall through.
 			}
-			await goto('/settings#account-name-heading');
+			await gotoLocale('/settings#account-name-heading');
 		} catch (err) {
 			console.warn('[import] remember-me persist failed:', err);
 			errorMsg = $_('onboarding.import.error.generic');
@@ -402,7 +402,7 @@
 			postingWif = '';
 			postingNewPassword = '';
 			postingNewPasswordConfirm = '';
-			await goto('/orderbook');
+			await gotoLocale('/orderbook');
 		} catch (err) {
 			// Same localization rationale as the seed/keyfile
 			// catch above — raw exception text is English.

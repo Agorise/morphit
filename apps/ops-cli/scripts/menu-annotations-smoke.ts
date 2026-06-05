@@ -11,7 +11,7 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { itemSuffix } from '../src/commands/mainMenu.ts';
+import { itemSuffix, itemEmphasis } from '../src/commands/mainMenu.ts';
 import { readCurrentVersion } from '../src/lib/menuAnnotations.ts';
 
 const strip = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, '');
@@ -31,31 +31,54 @@ const truthy = (n: string, c: boolean, d = '') => {
 
 // ── itemSuffix: Upgrade item ──
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.4', latestVersion: 'v1.0.0-beta.5', unresolvedFlags: null }));
+	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.4', latestVersion: 'v1.0.0-beta.5', unresolvedFlags: null, relayBalanceStatus: null }));
 	truthy('upgrade: shows now + latest', s.includes('now: v1.0.0-beta.4') && s.includes('latest: v1.0.0-beta.5'), s);
 	truthy('upgrade: flags update available when they differ', s.includes('update available'), s);
 }
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.5', unresolvedFlags: null }));
+	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.5', unresolvedFlags: null, relayBalanceStatus: null }));
 	truthy('upgrade: same version → no "update available"', s.includes('now: v1.0.0-beta.5') && !s.includes('update available'), s);
 }
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: null, unresolvedFlags: null }));
+	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: null, unresolvedFlags: null, relayBalanceStatus: null }));
 	truthy('upgrade: latest unknown → "now:" only, graceful', s.includes('now: v1.0.0-beta.5') && !s.includes('latest:'), s);
 }
-truthy('upgrade: both unknown → empty suffix', itemSuffix('upgrade', { currentVersion: null, latestVersion: null, unresolvedFlags: null }) === '');
+truthy('upgrade: both unknown → empty suffix', itemSuffix('upgrade', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: null }) === '');
 
 // ── itemSuffix: Moderation item ──
 {
-	const s = strip(itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: 3 }));
+	const s = strip(itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: 3, relayBalanceStatus: null }));
 	truthy('moderation: ⚠ marker + count when unresolved > 0', s.includes('\u26a0') && s.includes('3 to review'), s);
 }
-truthy('moderation: 0 unresolved → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: 0 }) === '');
-truthy('moderation: null count → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: null }) === '');
+truthy('moderation: 0 unresolved → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: 0, relayBalanceStatus: null }) === '');
+truthy('moderation: null count → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: null }) === '');
 
 // ── itemSuffix: unrelated items + missing annotations ──
-truthy('status item → no suffix', itemSuffix('status', { currentVersion: 'v1', latestVersion: 'v2', unresolvedFlags: 5 }) === '');
+truthy('status item → no suffix', itemSuffix('status', { currentVersion: 'v1', latestVersion: 'v2', unresolvedFlags: 5, relayBalanceStatus: null }) === '');
 truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
+
+// ── itemSuffix: Status relay-balance (beta6) ──
+{
+	const err = strip(itemSuffix('status', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: 'error' }));
+	truthy('status: error → red-flag + "relay balance very low"', err.includes('\u{1F6A9}') && /very low/i.test(err), err);
+	const warn = strip(itemSuffix('status', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: 'warn' }));
+	truthy('status: warn → ⚠ + "relay balance low"', warn.includes('\u26a0') && /relay balance low/i.test(warn), warn);
+	truthy('status: ok → no suffix', itemSuffix('status', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: 'ok' }) === '');
+	truthy('status: null balance → no suffix', itemSuffix('status', { currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: null }) === '');
+}
+
+// ── itemEmphasis: whole-label coloring signal (beta6) ──
+{
+	const A = (o: Partial<{ currentVersion: string | null; latestVersion: string | null; unresolvedFlags: number | null; relayBalanceStatus: 'ok' | 'warn' | 'error' | null }>) =>
+		({ currentVersion: null, latestVersion: null, unresolvedFlags: null, relayBalanceStatus: null, ...o });
+	truthy('emphasis: upgrade w/ newer latest → "update"', itemEmphasis('upgrade', A({ currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.6' })) === 'update');
+	truthy('emphasis: upgrade same version → null', itemEmphasis('upgrade', A({ currentVersion: 'v1.0.0-beta.6', latestVersion: 'v1.0.0-beta.6' })) === null);
+	truthy('emphasis: status balance error → "balance-error"', itemEmphasis('status', A({ relayBalanceStatus: 'error' })) === 'balance-error');
+	truthy('emphasis: status balance warn → "balance-warn"', itemEmphasis('status', A({ relayBalanceStatus: 'warn' })) === 'balance-warn');
+	truthy('emphasis: status balance ok → null', itemEmphasis('status', A({ relayBalanceStatus: 'ok' })) === null);
+	truthy('emphasis: moderation flags → null (suffix-only, no label color)', itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === null);
+	truthy('emphasis: no annotations → null', itemEmphasis('upgrade', undefined) === null);
+}
 
 // ── readCurrentVersion ──
 {

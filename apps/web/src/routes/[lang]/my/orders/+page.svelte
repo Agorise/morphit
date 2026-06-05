@@ -18,7 +18,7 @@
 
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
@@ -392,7 +392,7 @@
 			reason: 'relist'
 		};
 		safeSession.set('morphit.post.prefill', JSON.stringify(payload));
-		void goto('/post');
+		void gotoLocale('/post');
 	}
 
 	// ─── Cancel flow ───────────────────────────────────────────────
@@ -496,7 +496,7 @@
 				{$_('post_order.no_account.body')}
 			</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/onboarding/register-name')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/register-name')}>
 					{$_('post_order.no_account.cta')}
 				</BusyButton>
 			</div>
@@ -514,7 +514,7 @@
 			<h2 class="font-display text-xl font-bold">{$_('post_order.locked.title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/onboarding/import')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
 					{$_('post_order.locked.unlock')}
 				</BusyButton>
 			</div>
@@ -542,7 +542,7 @@
 			<h2 class="font-display text-lg font-bold">{$_('my_orders.empty_title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('my_orders.empty_body')}</p>
 			<div class="mt-6">
-				<BusyButton variant="primary" onclick={() => goto('/post')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/post')}>
 					{$_('my_orders.empty_cta')}
 				</BusyButton>
 			</div>
@@ -701,7 +701,7 @@
 							{#if o.status === 'live'}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
-									<BusyButton variant="secondary" onclick={() => goto(`/post/edit/${o.permlink}`)}>
+									<BusyButton variant="secondary" onclick={() => gotoLocale(`/post/edit/${o.permlink}`)}>
 										{$_('my_orders.order.action_edit')}
 									</BusyButton>
 									<!-- Sally finding M1/M8 (Part 68): live

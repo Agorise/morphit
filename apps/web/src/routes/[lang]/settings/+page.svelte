@@ -43,7 +43,7 @@
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, loadBlocks, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 
 	const STORAGE_KEY = 'morphit.displayName';
 	const NOSTR_URL_STORAGE_KEY = 'morphit.nostrUrl';
@@ -682,7 +682,7 @@
 	}
 	function confirmSignOut(): void {
 		resetIdentity();
-		goto('/');
+		gotoLocale('/');
 	}
 
 	// Auto-lock timeout handler. Parses the <select> value — the

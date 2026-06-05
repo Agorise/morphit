@@ -1091,6 +1091,20 @@ roll out a new frontend before the relay (rare), set
 `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=false` temporarily. Full
 operator reference at `docs/OPERATIONS.md` §42.
 
+### How your homepage actually loads (the big picture)
+
+Here's the mental model that makes the next steps click: **your homepage isn't a program that "runs."** It's a folder of plain files — HTML, CSS, JavaScript — that a web server hands to a browser on each visit. Nothing about the frontend needs to be "started"; you build the folder once (and re-build on each upgrade), and nginx serves it.
+
+Three things have to line up for **https://yourdomain.com** to show the homepage (and `/post`, and every other page):
+
+1. **The name points at the box** — the DNS `A`/`AAAA` records you set in §4, sending your domain at this server's public IP.
+2. **The built files are where the web server can reach them** — the next step ("Build the frontend"): `npm run build` produces `apps/web/build/`, which you copy to `/var/www/morphit-frontend/`.
+3. **nginx serves those files over HTTPS** — "Configure nginx" below: it serves `/var/www/morphit-frontend` at `/` (with a fallback so deep links like `/post` work), proxies the relay + indexer API to loopback, and terminates TLS with your Let's Encrypt cert (run `morphit-ops ssl` for the exact steps to get one). Reload nginx, open the URL, and the homepage is live.
+
+**If you run BunkerWeb, read this carefully.** The BunkerWeb config Morphit ships is an **API gateway**: it proxies the relay/indexer (`/v1/…`) and runs the WAF, but it does **not** serve your static homepage. nginx is what serves the site at `/`. So with BunkerWeb alone on `:443`, `https://yourdomain.com/` has nothing to return. Two clean setups: keep **nginx** serving the static files with BunkerWeb in front of it as the WAF, or point BunkerWeb's own web root at `/var/www/morphit-frontend` so it serves the files too. See "BunkerWeb — recommended WAF" later in this guide and `docs/OPERATIONS.md` §32 ("BunkerWeb instead of nginx vs. in front of nginx") for the wiring.
+
+One last thing: make sure the **relay and indexer are running** first. If they're not, the pages still load (they're just static files) — but anything you click that fetches live data (the orderbook, signing in, posting) will error.
+
 ### Build the frontend (static files)
 
 The frontend is a SvelteKit app that builds to a directory of static files. There is no separate "web service" to run — nginx serves the static files directly. Build it now:
@@ -1113,7 +1127,7 @@ Re-run these three commands every time you update Morphit (`git pull` followed b
 
 ### Configure nginx
 
-Morphit ships nginx server-block templates in `ops/nginx/`. The recommended deployment is **single-hostname** — frontend, indexer, and relay all reachable under one domain (`yourdomain.com`) via path prefixes (`/api/indexer/`, `/relay/`). This means you do NOT need separate DNS entries for the indexer or relay; the frontend reaches them via same-origin paths.
+Morphit ships nginx server-block templates in `ops/nginx/`. The recommended deployment is **single-hostname** — frontend, indexer, and relay all reachable under one domain (`yourdomain.com`) via path prefixes — the indexer at `/v1/`, the relay at `/relay/`. This means you do NOT need separate DNS entries for the indexer or relay; the frontend reaches them via same-origin paths.
 
 Create `/etc/nginx/sites-available/morphit.conf`:
 
@@ -1154,13 +1168,26 @@ server {
     add_header X-Frame-Options "DENY" always;
 
     # Frontend — static files from the SvelteKit build output.
+    #
+    # The build uses trailingSlash:'never', so prerendered pages are
+    # flat files: `en.html`, `en/login.html` (NOT `en/index.html`).
+    # The `$uri.html` step maps the extensionless route `/en/login` to
+    # `en/login.html`. Without it, nginx matches the `en/` directory
+    # (autoindex off -> 403) and never tries `en.html`. The trailing
+    # `/index.html` is the SPA fallback for any route that wasn't
+    # prerendered. Always navigate to extensionless URLs (`/en`,
+    # `/en/login`) — never the `.html` files directly.
     root /var/www/morphit-frontend;
     index index.html;
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri.html $uri/index.html /index.html;
     }
 
     # Relay — fund-spending endpoints. Proxied to loopback.
+    #
+    # The frontend calls the relay at same-origin `/relay/v1/*` (e.g.
+    # `/relay/v1/account/create`). The rewrite strips the `/relay`
+    # prefix so the relay process sees `/v1/account/create`.
     location /relay/ {
         rewrite ^/relay/(.*)$ /$1 break;
         proxy_pass http://127.0.0.1:8080;
@@ -1173,8 +1200,13 @@ server {
     }
 
     # Indexer — read-only public API. Proxied to loopback.
-    location /api/indexer/ {
-        rewrite ^/api/indexer/(.*)$ /$1 break;
+    #
+    # The frontend calls the indexer at same-origin `/v1/*` (e.g.
+    # `/v1/orderbook`, `/v1/instance`). The indexer serves those paths
+    # as-is, so forward them unchanged — do NOT add a rewrite here.
+    # (`/relay/v1/*` is matched by the longer `/relay/` prefix above,
+    # so it never falls into this block.)
+    location /v1/ {
         proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
@@ -1351,7 +1383,7 @@ curl -s http://127.0.0.1:8081/v1/health \
 
 Run it twice a minute apart — `indexed_block` should be climbing and `lag_blocks` shrinking. **If `rpc_endpoints_healthy` is `0`, that's your problem:** the public Blurt servers your node talks to aren't reachable, so it can't catch up. Fix the `MORPHIT_INDEXER_RPC_ENDPOINTS` list (see OPERATIONS.md "Monitoring RPC endpoint health") and restart the indexer. A healthy count with a big `lag_blocks` just means it's still catching up — leave it be.
 
-> Already synced from too far back and don't want to wait? `morphit-ops fast-forward` jumps the indexer to a recent block (stop the indexer first). It's safe before launch — there's no Morphit data in the skipped blocks yet.
+> Already synced from too far back and don't want to wait? `morphit-ops fast-forward` jumps the indexer to a recent block. **Stop the indexer first** — the command guards against this by refusing if the cursor looks live (updated in the last ~90s), and you can override with `--force` if you're sure it's stopped. It's safe before launch — there's no Morphit data in the skipped blocks yet. (It's a recovery command, not a menu item: a normal node auto-starts at the Morphit genesis block and resumes from its cursor, so you'd only need this if it was started from too far back.)
 
 
 ---
@@ -1678,6 +1710,8 @@ Three things:
 ### Daily DB backup
 
 The indexer's database is rebuildable from the Blurt blockchain in case of total loss, but a same-day snapshot saves you hours of catch-up time when you actually need to recover. Set this up once and forget it.
+
+Once it's running, you can confirm it any time without digging through the filesystem: `npx morphit-ops status` (or the **Status dashboard** menu item) ends with a **Backups** section showing the backup directory and your **last 3 backup files** with their age and size — the quick "are my backups actually happening?" check. It also prints the path so you can grab a file to download or send to a developer if you ever need help. (See OPERATIONS.md §31.)
 
 #### Did you run `morphit-ops init` and answer Yes to backup automation?
 
@@ -2100,7 +2134,7 @@ The indexer's job is to read every Blurt block as it confirms. Sometimes it gets
 To check:
 
 ```
-curl https://yourdomain.com/api/indexer/v1/health
+curl https://yourdomain.com/v1/health
 ```
 
 You'll see something like `"lag_blocks": 5`. Fewer than 100 is fine. Higher than 500 means it's significantly behind — usually it'll catch up on its own. If it's been over 1000 for more than an hour, something is wrong:

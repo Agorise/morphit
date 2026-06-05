@@ -308,27 +308,32 @@ if (existsSync(PNG)) {
 	}
 }
 
-// ─── SVG footer "As of YYYY-MM-DD" date is present ──────────────
-// The footer says "As of 2026-MM-DD" — auto-populated by
-// `date.today()` in build_comparison.py.  Freshness of this date
-// relative to the build time is already covered by the SHA-256
-// fingerprint check above: if the date changes, the SVG hashes
-// differently, and the fingerprint sidecar diverges.  All this
-// check has to do is structural — assert the line is still there
-// and well-formed, so a future build-script edit can't silently
-// drop it.
+// ─── SVG footer "As of <day> <Month>, <year>" date is present ──
+// The footer says "As of 4 June, 2026." — derived from the brag-list
+// trailer's "Last updated" date by build_comparison.py (NOT date.today(),
+// so it's deterministic).  Freshness relative to the build is already
+// covered by the SHA-256 fingerprint check above: if the date changes,
+// the SVG hashes differently and the fingerprint sidecar diverges.  This
+// check is structural — assert the verbatim "<day> <FullMonth>, <year>"
+// stamp is present and well-formed, so a future build-script edit can't
+// silently drop it OR regress it back to the old ISO form.
 if (existsSync(SVG)) {
 	const svgSrc = readFileSync(SVG, 'utf8');
-	const dateMatch = svgSrc.match(/As of (\d{4})-(\d{2})-(\d{2})\./);
-	if (!dateMatch) {
+	const MONTHS = [
+		'January', 'February', 'March', 'April', 'May', 'June',
+		'July', 'August', 'September', 'October', 'November', 'December'
+	];
+	const dateMatch = svgSrc.match(/As of (\d{1,2}) ([A-Z][a-z]+), (\d{4})\./);
+	if (!dateMatch || !MONTHS.includes(dateMatch[2]!)) {
 		fail(
-			`SVG footer is missing the "As of YYYY-MM-DD" date stamp`,
-			`The build script always emits this line.  If the SVG was hand-edited, ` +
+			`SVG footer is missing a well-formed "As of <day> <Month>, <year>" date stamp`,
+			`The build script always emits this verbatim line (e.g. "As of 4 June, 2026."). ` +
+				`If the SVG was hand-edited or the format regressed to ISO, ` +
 				`re-run scripts/comparison-image/build_comparison.py.`
 		);
 	} else {
-		const [, yyyy, mm, dd] = dateMatch;
-		pass(`SVG footer carries an "As of YYYY-MM-DD" date stamp (${yyyy}-${mm}-${dd})`);
+		const [, d, mon, y] = dateMatch;
+		pass(`SVG footer carries a verbatim "As of <day> <Month>, <year>" date stamp (${d} ${mon}, ${y})`);
 	}
 }
 

@@ -34,7 +34,8 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { fetchWithTimeout } from '$net/fetchWithTimeout';
-	import { goto, beforeNavigate } from '$app/navigation';
+	import { beforeNavigate } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 
 	import Head from '$components/Head.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
@@ -73,11 +74,11 @@
 		// with the parent's posting/active key) is not something the
 		// paired desktop can do anyway.
 		if ($isPairedReadOnly) {
-			goto('/orderbook');
+			gotoLocale('/orderbook');
 			return;
 		}
 		if (!live) {
-			goto('/onboarding');
+			gotoLocale('/onboarding');
 		}
 	});
 
@@ -203,7 +204,7 @@
 
 	async function submitRegistration(): Promise<void> {
 		if (!live) {
-			goto('/onboarding');
+			gotoLocale('/onboarding');
 			return;
 		}
 		// Posting-only sessions (Batch H) genuinely lack owner/active/memo
@@ -213,7 +214,7 @@
 		// anyway, send them home with a polite no-op rather than letting
 		// formatPublicKeyBLT crash on null.
 		if (live.origin === 'posting-only') {
-			goto('/');
+			gotoLocale('/');
 			return;
 		}
 		if (!canSubmit) return;
@@ -295,7 +296,7 @@
 			// Give the user a moment to see the success state before
 			// we route them on. 3s per UX-STANDARD rule #7 — grandma
 			// needs time to register the win.
-			setTimeout(() => goto('/orderbook'), 3000);
+			setTimeout(() => gotoLocale('/orderbook'), 3000);
 		} catch (err) {
 			const signupErr = err as SignupError;
 			const messageKey = mapErrorCode(signupErr.code);
@@ -401,7 +402,7 @@
 	function skipForNow(): void {
 		// The user keeps their generated identity and enters a read-only
 		// exploration mode. Settings will nudge them to register later.
-		goto('/orderbook');
+		gotoLocale('/orderbook');
 	}
 
 	// ─── Voucher-path link splitter ──────────────────────────────────

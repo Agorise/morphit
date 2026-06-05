@@ -301,6 +301,9 @@
 			<p class="mt-4 text-xs text-ink-500">
 				<a
 					href="/verify.json"
+					target="_blank"
+					rel="noopener"
+					data-sveltekit-reload
 					class="text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
 				>
 					{$_('about_this_instance.integrity.raw_link')}
@@ -340,17 +343,6 @@
 						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
 					>
 						morphit.io
-					</a>
-					<span class="ml-2 text-ink-500">
-						{$_('about_this_instance.worried.known_good_note')}
-					</span>
-				</li>
-				<li>
-					<a
-						href="https://morphit.agorise.world"
-						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:decoration-solid"
-					>
-						morphit.agorise.world
 					</a>
 					<span class="ml-2 text-ink-500">
 						{$_('about_this_instance.worried.known_good_note')}

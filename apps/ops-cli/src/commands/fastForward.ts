@@ -13,9 +13,17 @@
  * only (it refuses to rewind — re-indexing from an earlier block is a
  * separate, destructive "reset the DB" operation, not a fast-forward).
  *
+ * Recovery command — NOT in the morphit-ops menu (beta6). A normal
+ * install auto-starts the indexer at the Morphit genesis block and
+ * resumes from its saved cursor on every restart, so the usual flow
+ * never needs this. It exists only for a node mistakenly started from
+ * too far back (e.g. block 0). Run it as `morphit-ops fast-forward`.
+ *
  * The cursor + how to find a target:
  *   - The indexer must be STOPPED first, so the poller doesn't fight
- *     this change.
+ *     this change. As a guard, the command REFUSES if the indexer's
+ *     cursor was touched within the last 90s (it looks live); pass
+ *     --force to override that check.
  *   - Get the current chain head from `curl <indexer>/v1/health`
  *     (chain_head_block) or any Blurt block explorer, and pass it
  *     (or a little less) as the target.
@@ -86,9 +94,34 @@ export function planFastForward(current: number, target: number): FastForwardPla
 	};
 }
 
+/** Liveness window for the fast-forward guard. The indexer's poller
+ *  writes indexer_state.last_applied_at = NOW() in the same transaction
+ *  it applies blocks — every ~3s block while following the chain, far
+ *  more often while catching up (the only time fast-forward does real
+ *  work). So a cursor touched within this window means the poller is
+ *  live and a fast-forward would race it. 90s sits well above the block
+ *  interval (margin for slow polling) while keeping the post-stop wait
+ *  short. */
+export const INDEXER_LIVE_WINDOW_MS = 90_000;
+
+/** PURE — does the indexer look like it is still running, judging only
+ *  by how recently it applied a block? `lastAppliedAt === null` means it
+ *  has never applied one (safe). A future timestamp (clock skew) is
+ *  treated as not-running. `now` is explicit so this is unit-testable. */
+export function indexerLooksRunning(
+	lastAppliedAt: Date | null,
+	now: Date,
+	windowMs: number = INDEXER_LIVE_WINDOW_MS
+): boolean {
+	if (lastAppliedAt === null) return false;
+	const ageMs = now.getTime() - lastAppliedAt.getTime();
+	return ageMs >= 0 && ageMs < windowMs;
+}
+
 interface StateRow {
 	last_applied_block: string;
 	chain_id: string;
+	last_applied_at: string | null;
 }
 
 export async function runFastForward(ctx: CommandCtx): Promise<number> {
@@ -96,7 +129,7 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 
 	// Read the current cursor.
 	const res = await ctx.db.query<StateRow>(
-		`SELECT last_applied_block::text, chain_id FROM indexer_state WHERE id = 1`
+		`SELECT last_applied_block::text, chain_id, last_applied_at FROM indexer_state WHERE id = 1`
 	);
 	if (res.rowCount === 0) {
 		const msg =
@@ -112,6 +145,20 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 	const current = parseInt(res.rows[0]!.last_applied_block, 10);
+
+	// Liveness-guard inputs. The poller writes last_applied_at = NOW() in
+	// the same transaction it applies blocks, so a recent timestamp means
+	// it is still running and would fight a cursor write. Captured once,
+	// here at command start (a later prompt delay does not change them).
+	const now = new Date();
+	const lastAppliedAt = res.rows[0]!.last_applied_at
+		? new Date(res.rows[0]!.last_applied_at)
+		: null;
+	const looksRunning = indexerLooksRunning(lastAppliedAt, now);
+	const ageS = lastAppliedAt
+		? Math.max(0, Math.round((now.getTime() - lastAppliedAt.getTime()) / 1000))
+		: 0;
+	const force = ctx.flags.force === 'true';
 
 	// Determine target: positional arg, else interactive prompt.
 	let target: number;
@@ -138,6 +185,7 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 		emitJson({
 			ok: plan.kind === 'advance' || plan.kind === 'noop',
 			applied: false,
+			indexer_looks_running: looksRunning,
 			plan: {
 				kind: plan.kind,
 				current: plan.current,
@@ -162,7 +210,17 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 
-	// kind === 'advance' — confirm, then apply.
+	// kind === 'advance' — guard against a live indexer, then confirm + apply.
+	if (looksRunning && !force) {
+		blank();
+		info('  ✋ The indexer looks like it is still RUNNING — its sync cursor was');
+		info(`     updated ${ageS}s ago.  Fast-forwarding now would fight the live poller`);
+		info('     and may not stick.  Stop the indexer first, then run this again.');
+		info('     (Just stopped it?  Give it a moment to settle.  To override this');
+		info('     check anyway, re-run with --force.)');
+		blank();
+		return 1;
+	}
 	blank();
 	info('  ⚠ Before continuing, make sure the indexer is STOPPED, so it does');
 	info('    not fight this change (stop its screen/service first).');

@@ -27,7 +27,7 @@
 
 	import { onDestroy, onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 
@@ -531,7 +531,7 @@
 			<h2 class="font-display text-xl font-bold">{$_('post_order.locked.title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/onboarding/import')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
 					{$_('post_order.locked.unlock')}
 				</BusyButton>
 			</div>
@@ -545,7 +545,7 @@
 			<h2 class="font-display text-lg font-bold">{$_('edit_order.not_found_title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_found_body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="secondary" onclick={() => goto('/orderbook')}>
+				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
 					← {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
@@ -555,7 +555,7 @@
 			<h2 class="font-display text-lg font-bold">{$_('edit_order.not_yours_title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_yours_body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="secondary" onclick={() => goto('/orderbook')}>
+				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
 					← {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
@@ -565,7 +565,7 @@
 			<h2 class="font-display text-lg font-bold">{$_('edit_order.not_live_title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_live_body')}</p>
 			<div class="mt-4">
-				<BusyButton variant="primary" onclick={() => goto('/post')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/post')}>
 					{$_('post_order.heading')}
 				</BusyButton>
 			</div>
@@ -579,10 +579,10 @@
 				{$_('edit_order.expired_body')}
 			</p>
 			<div class="mt-4 flex flex-col gap-3 sm:flex-row">
-				<BusyButton variant="secondary" onclick={() => goto('/my/orders')}>
+				<BusyButton variant="secondary" onclick={() => gotoLocale('/my/orders')}>
 					{$_('my_orders.heading')}
 				</BusyButton>
-				<BusyButton variant="primary" onclick={() => goto('/post')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/post')}>
 					{$_('post_order.heading')}
 				</BusyButton>
 			</div>
@@ -611,7 +611,7 @@
 				{$_('edit_order.save_success_body')}
 			</p>
 			<div class="mt-6">
-				<BusyButton variant="primary" onclick={() => goto('/orderbook')}>
+				<BusyButton variant="primary" onclick={() => gotoLocale('/orderbook')}>
 					{$_('post_order.success.view_cta')}
 				</BusyButton>
 			</div>
@@ -942,7 +942,7 @@
 		<p class="mb-4 text-sm text-ink-500">{$_('edit_order.fee_note')}</p>
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
-			<BusyButton variant="ghost" onclick={() => goto('/orderbook')}>
+			<BusyButton variant="ghost" onclick={() => gotoLocale('/orderbook')}>
 				← {$_('post_order.back_to_orderbook')}
 			</BusyButton>
 			<BusyButton

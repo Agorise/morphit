@@ -93,11 +93,6 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				label: 'Re-publish my registration on-chain',
 				blurb: 'Push your current origin/tag to the federation directory (run after changing either).',
 				subcommand: 'register'
-			},
-			{
-				label: 'Fast-forward the sync',
-				blurb: 'Jump the indexer to a recent block so it is current in minutes instead of replaying old history.  Stop the indexer first.',
-				subcommand: 'fast-forward'
 			}
 		]
 	},
@@ -106,7 +101,7 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 		items: [
 			{
 				label: 'Status dashboard',
-				blurb: 'Relay balance, queue depth, and health at a glance.',
+				blurb: 'Relay balance, queue depth, health, and your last 3 DB backups (with the file path) at a glance.',
 				subcommand: 'status'
 			},
 			{
@@ -181,7 +176,33 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 			return '  ' + fmt.yellow(`\u26a0 ${n} to review`);
 		}
 	}
+	if (subcommand === 'status') {
+		const st = ann.relayBalanceStatus;
+		if (st === 'error') return '  ' + fmt.red('\u{1F6A9} relay balance very low');
+		if (st === 'warn') return '  ' + fmt.yellow('\u26a0 relay balance low');
+	}
 	return '';
+}
+
+/** Which attention state (if any) an item's whole LABEL should be
+ *  colored for, from the best-effort annotations. Separate from
+ *  itemSuffix so the render loop can color the label without nesting
+ *  ANSI codes inside the (already-colored) suffix. Returns null when
+ *  the line should render in the default color. */
+export function itemEmphasis(
+	subcommand: string,
+	ann?: MenuAnnotations
+): 'update' | 'balance-warn' | 'balance-error' | null {
+	if (ann === undefined) return null;
+	if (subcommand === 'upgrade') {
+		const { currentVersion: cur, latestVersion: latest } = ann;
+		if (cur !== null && latest !== null && cur !== latest) return 'update';
+	}
+	if (subcommand === 'status') {
+		if (ann.relayBalanceStatus === 'error') return 'balance-error';
+		if (ann.relayBalanceStatus === 'warn') return 'balance-warn';
+	}
+	return null;
 }
 
 /**
@@ -209,7 +230,16 @@ export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSe
 		lines.push(`  — ${group.heading} —`);
 		for (const item of group.items) {
 			flat.push(item);
-			lines.push(`    ${flat.length}. ${item.label}${itemSuffix(item.subcommand, annotations)}`);
+			const emphasis = itemEmphasis(item.subcommand, annotations);
+			const label =
+				emphasis === 'update'
+					? fmt.bold(fmt.yellow(item.label))
+					: emphasis === 'balance-error'
+						? fmt.bold(fmt.red(item.label))
+						: emphasis === 'balance-warn'
+							? fmt.yellow(item.label)
+							: item.label;
+			lines.push(`    ${flat.length}. ${label}${itemSuffix(item.subcommand, annotations)}`);
 			lines.push(`        ${item.blurb}`);
 		}
 		lines.push('');

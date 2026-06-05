@@ -37,7 +37,7 @@
 	import type { Component } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
@@ -118,12 +118,12 @@
 			// User hasn't registered a Blurt account. Chat is
 			// meaningless without a sender identity. Send them to
 			// onboarding.
-			goto('/onboarding');
+			gotoLocale('/onboarding');
 			return;
 		}
 		if (myAccount === peer) {
 			// Self-chat. Route to the inbox instead.
-			goto('/chat');
+			gotoLocale('/chat');
 			return;
 		}
 		me = myAccount;
