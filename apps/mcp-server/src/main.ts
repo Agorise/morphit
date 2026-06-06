@@ -154,7 +154,7 @@ async function main() {
 	const server = new Server(
 		{
 			name: 'morphit-mcp',
-			version: '1.0.0-beta.1'
+			version: '1.0.0-beta.6'
 		},
 		{
 			capabilities: {
