@@ -75,8 +75,12 @@ recommended for all operators.
   documented nginx recipe now serves the prerendered site correctly
   (it was returning a 403 on locale pages) and routes the indexer and
   relay APIs to the right place (signup and the orderbook were
-  failing). If you run the indexer, relay, and web app on one box,
-  re-check `RUN-A-MORPHIT-NODE.md` §8.
+  failing). Live updates (the orderbook, chat, and instances streams)
+  and the RSS feeds now route correctly on a single host too, and the
+  `OPERATIONS.md` reference config plus the bundled BunkerWeb config
+  are aligned with it. If you run the indexer, relay, and web app on
+  one box, re-check `RUN-A-MORPHIT-NODE.md` §8 (and §24/§32 of
+  `OPERATIONS.md` if you front it with BunkerWeb).
 
 - **Deploys can no longer leave the app showing a blank page.** The
   service worker now rebuilds redirected responses on navigations, so

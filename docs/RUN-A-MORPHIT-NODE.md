@@ -1127,7 +1127,7 @@ Re-run these three commands every time you update Morphit (`git pull` followed b
 
 ### Configure nginx
 
-Morphit ships nginx server-block templates in `ops/nginx/`. The recommended deployment is **single-hostname** — frontend, indexer, and relay all reachable under one domain (`yourdomain.com`) via path prefixes — the indexer at `/v1/`, the relay at `/relay/`. This means you do NOT need separate DNS entries for the indexer or relay; the frontend reaches them via same-origin paths.
+Morphit ships nginx server-block templates in `ops/nginx/`. The recommended deployment is **single-hostname** — frontend, indexer, and relay all reachable under one domain (`yourdomain.com`) via path prefixes — the indexer at `/v1/`, the relay at `/relay/` (and the indexer's RSS feeds at `/rss/`). This means you do NOT need separate DNS entries for the indexer or relay; the frontend reaches them via same-origin paths.
 
 Create `/etc/nginx/sites-available/morphit.conf`:
 
@@ -1214,6 +1214,38 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         client_max_body_size 4k;
+    }
+
+    # SSE live-update streams (orderbook / chat / instances). These
+    # are long-lived; the indexer sends a `:keepalive` comment every
+    # 25s, so nginx's default 60s read timeout won't sever a healthy
+    # stream — but proxy buffering MUST be off or events arrive in
+    # laggy batches instead of live. This regex matches the
+    # `.../stream` paths ahead of the `/v1/` prefix above, so the live
+    # endpoints get the streaming treatment and everything else keeps
+    # normal buffering.
+    location ~ ^/v1/.*/stream$ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+    }
+
+    # RSS/Atom orderbook feeds — the same loopback indexer, served
+    # under `/rss/*` (the page footer and `<head>` link to
+    # `/rss/orderbook.xml` plus the by-asset / by-account feeds).
+    # Forward unchanged, like `/v1/`.
+    location /rss/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
@@ -1901,7 +1933,7 @@ Skip BunkerWeb only if:
 - Tor-only or Lokinet-only deployment (squatters don't route through anonymity networks; .onion has natural friction).
 - Resource-constrained VPS (<1 GB RAM) — BunkerWeb + scheduler add ~150–250 MB resident.
 
-Full configuration reference, architecture options (BunkerWeb instead of nginx vs. in front of nginx), and Morphit-specific tuning (the `/v1/relay/*` and SSE endpoints) in `OPERATIONS.md` §32.
+Full configuration reference, architecture options (BunkerWeb instead of nginx vs. in front of nginx), and Morphit-specific tuning (the `/relay/v1/*` and SSE endpoints) in `OPERATIONS.md` §32.
 
 #### Matrix alerting — recommended bot sidecar
 

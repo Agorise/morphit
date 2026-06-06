@@ -34,7 +34,7 @@ BunkerWeb source code.
   can be hard-coded without re-inspecting after rebuilds.
 - `bunkerweb.env.example` — environment variables with sensible
   defaults: OWASP CRS paranoia level 3, anti-`Referer: none` rule
-  on `/v1/relay/account/invite` (§38.6 item d), ASN-block stubs
+  on `/relay/v1/account/invite` (§38.6 item d), ASN-block stubs
   for cheap-VPS providers (§38.6 item c, commented in; uncomment
   to activate), Real-IP forwarding wired for the relay's
   trusted-proxy chain.

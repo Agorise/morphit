@@ -5,7 +5,7 @@
 	import Head from '$components/Head.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
-	import { MORPHIT_INDEXER_ORIGIN } from '$net/config';
+	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { getInstances } from '$indexer/client';
 	import { instance } from '$stores/instance';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
@@ -68,7 +68,7 @@
 			}, 30_000);
 			return;
 		}
-		const url = `${MORPHIT_INDEXER_ORIGIN}/v1/instances/stream`;
+		const url = new URL('/v1/instances/stream', resolveOrigin(MORPHIT_INDEXER_ORIGIN)).href;
 		eventSource = new EventSource(url);
 
 		eventSource.addEventListener('snapshot', (ev: MessageEvent) => {

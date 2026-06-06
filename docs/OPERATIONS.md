@@ -1766,11 +1766,12 @@ off-host-proxy deployments.
 ### Recommended single-hostname layout (zero DNS for relay/indexer)
 
 The frontend's default `MORPHIT_RELAY_ORIGIN` is `/relay` and
-`MORPHIT_INDEXER_ORIGIN` is `/api/indexer` — both are
-**same-origin relative paths**. With the recommended nginx
-config below, your users reach everything under one public
-hostname and you do NOT need separate DNS entries for the
-relay or indexer.
+`MORPHIT_INDEXER_ORIGIN` is empty (same origin) — both resolve
+to **same-origin paths**: the relay is reached under `/relay/`,
+the indexer under `/v1/` (plus its RSS feeds under `/rss/`).
+With the recommended nginx config below, your users reach
+everything under one public hostname and you do NOT need
+separate DNS entries for the relay or indexer.
 
 ```nginx
 # Public HTTPS virtual host — the only hostname users see.
@@ -1788,7 +1789,7 @@ server {
     root /var/www/morphit-frontend;
     index index.html;
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri.html $uri/index.html /index.html;
     }
 
     # Relay — fund-spending endpoints. Proxied to loopback.
@@ -1803,18 +1804,23 @@ server {
     }
 
     # Indexer — read-only public API. Proxied to loopback.
-    location /api/indexer/ {
-        rewrite ^/api/indexer/(.*)$ /$1 break;
+    # The frontend hits the indexer at same-origin `/v1/*`
+    # (e.g. `/v1/orderbook`, `/v1/instance`). The indexer serves
+    # those paths as-is, so forward them unchanged — NO rewrite.
+    # (`/relay/v1/*` is caught by the longer `/relay/` prefix
+    # above, so it never falls into this block.) For the SSE
+    # stream endpoints (`/v1/.../stream`) add the streaming +
+    # connection-cap block from §24.
+    location /v1/ {
         proxy_pass http://127.0.0.1:8081;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # Indexer RSS feeds. Same backend as /api/indexer, but
-    # mounted at the bare /rss/ path because feed readers
-    # expect /rss/orderbook.xml (not /v1/rss/orderbook.xml or
-    # /api/indexer/rss/orderbook.xml). Without this block,
+    # Indexer RSS feeds. Same backend as `/v1/`, but mounted at
+    # the bare `/rss/` path because feed readers expect
+    # `/rss/orderbook.xml` (not `/v1/rss/...`). Without this block,
     # the RSS pill in the frontend footer and the per-trader /
     # per-asset subscribe links return 404.
     location /rss/ {
@@ -1861,9 +1867,9 @@ page-loading origin). See §17 for details.
 The indexer exposes three Server-Sent Events endpoints used by
 the frontend for real-time updates:
 
-- `/api/indexer/v1/orderbook/stream` — orderbook changes
-- `/api/indexer/v1/chat/:a/:b/stream` — chat messages
-- `/api/indexer/v1/instances/stream` — federation directory
+- `/v1/orderbook/stream` — orderbook changes
+- `/v1/chat/:a/:b/stream` — chat messages
+- `/v1/instances/stream` — federation directory
 
 These endpoints are deliberately **not** behind the per-minute
 rate-limit middleware. A long-lived SSE connection is one HTTP
@@ -1880,16 +1886,21 @@ http {
     limit_conn_zone $binary_remote_addr zone=sse_per_ip:10m;
 }
 
-# Inside the indexer location block.
+# Add a stream-specific location. As a regex it is matched
+# ahead of the general `/v1/` prefix block from §14, so only the
+# long-lived SSE connections get the connection cap + streaming
+# tuning — normal REST under `/v1/` keeps default buffering and
+# is unaffected by the cap.
 server {
-    location /api/indexer/ {
-        rewrite ^/api/indexer/(.*)$ /$1 break;
+    location ~ ^/v1/.*/stream$ {
         proxy_pass http://127.0.0.1:8081;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
-        # SSE-specific tuning.
+        # SSE-specific tuning. The indexer sends a `:keepalive`
+        # comment every 25s, so 5m is ample headroom; buffering
+        # off is REQUIRED or events arrive in batches, not live.
         proxy_read_timeout 5m;
         proxy_buffering off;
         proxy_cache off;
@@ -3408,7 +3419,7 @@ header for POSTs even when same-origin.
 In this topology — which is what the frontend defaults to (see
 §14 "Recommended single-hostname layout") — the relay and
 indexer do **not** need their own DNS entries. The frontend
-hits `/relay/*` and `/api/indexer/*` as relative paths on the
+hits `/relay/*`, `/v1/*`, and `/rss/*` as relative paths on the
 same origin, and nginx reverse-proxies them to loopback. Your
 allowlist needs only the one public hostname:
 
@@ -5351,8 +5362,8 @@ services:
 Morphit serves three classes of traffic that need slightly different rules:
 
 1. **Browser GET to /, /orderbook, /post**, etc. — normal web pages. Default ModSecurity + bot detection works.
-2. **JSON API to /relay/v1/*, /indexer/v1/*** — rate limits should be MORE generous because a single browser may make 3-10 calls per second during normal use. Recommend `LIMIT_REQ_RATE=30r/s` and exclude these paths from the JS-challenge antibot (a JS challenge breaks JSON API calls).
-3. **Server-Sent Events at /relay/v1/notifications** — long-lived connections. ModSecurity must NOT inspect the streaming response body (it'll buffer and break the SSE), and rate limiting must be by NEW connection, not by ongoing connection.
+2. **JSON API to /relay/v1/*, /v1/*** — rate limits should be MORE generous because a single browser may make 3-10 calls per second during normal use. Recommend `LIMIT_REQ_RATE=30r/s` and exclude these paths from the JS-challenge antibot (a JS challenge breaks JSON API calls).
+3. **Server-Sent Events at the indexer's `/v1/.../stream` endpoints** (`/v1/orderbook/stream`, `/v1/chat/:a/:b/stream`, `/v1/instances/stream`) — long-lived connections. ModSecurity must NOT inspect the streaming response body (it'll buffer and break the SSE), and rate limiting must be by NEW connection, not by ongoing connection.
 
 Sample BunkerWeb config carving these out (paste in `variables.env`):
 
@@ -5365,14 +5376,16 @@ USE_ANTIBOT=auto
 LIMIT_REQ_URL_1=/relay/v1
 LIMIT_REQ_RATE_1=30r/s
 
-LIMIT_REQ_URL_2=/indexer/v1
+LIMIT_REQ_URL_2=/v1
 LIMIT_REQ_RATE_2=30r/s
 
-ANTIBOT_IGNORE_URI=/relay/v1 /indexer/v1
+ANTIBOT_IGNORE_URI=/relay/v1 /v1
 
-# SSE: don't buffer the response body
+# SSE: don't buffer the indexer's streaming responses. BunkerWeb
+# matches *_URL_* values as a regex, so this covers all three
+# stream endpoints (orderbook / chat / instances).
 USE_PROXY_BUFFERING_3=no
-PROXY_BUFFERING_URL_3=/relay/v1/notifications
+PROXY_BUFFERING_URL_3=^/v1/.*/stream$
 ```
 
 ### What BunkerWeb does NOT do
@@ -5528,7 +5541,7 @@ Tune the rate to your traffic — too tight breaks legitimate users from large I
 
 ```yaml
 USE_ANTIBOT=auto
-ANTIBOT_IGNORE_URI=/v1/account/create /relay/v1 /indexer/v1
+ANTIBOT_IGNORE_URI=/v1/account/create /relay/v1 /v1
 ```
 
 **7. Bigger request-body limit ONLY for canary verification.** The canary endpoint at `/canary.txt` returns a few KB; defaults are fine. But if you ever serve large operator-disclosure documents (e.g., `/operator-disclosure.pdf`), bump `MAX_CLIENT_SIZE` to allow them:
@@ -7522,7 +7535,7 @@ peer, not the XFF):
 # Replace the URL with your relay's actual rate-limited endpoint
 for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sI -H "X-Forwarded-For: 198.51.100.$i" \
-         https://yourinstance.example/v1/relay/account/availability/test
+         https://yourinstance.example/relay/v1/account/availability/test
 done | grep -E 'HTTP|x-ratelimit'
 # Expect: 429 (or rate-limit header decrementing) after a few
 # requests, NOT 200 for all 10 with a fresh counter per XFF.
@@ -7569,7 +7582,7 @@ ssh host 'sudo systemctl show morphit-relay -p Environment | tr " " "\n" | grep 
 ssh host 'sudo grep -E "SIGNUP_DAILY_CEILING|CREATE_SPACING_MINUTES|ALTCHA_TRIGGER_COUNT|ALTCHA_MAXNUMBER|HIGHVALUE_NAME_POLICY|HIGHVALUE_SHORT_NAME_THRESHOLD|SEQUENTIAL_DETECTOR_ENABLED|SEQUENTIAL_THRESHOLD|SEQUENTIAL_WINDOW_MS|SEQUENTIAL_MIN_PREFIX" /etc/morphit/relay.env'
 # Expect: 10 lines matching the §38.7 diamond-hardened values.
 
-# Confirm the relay actually parsed them — hit /v1/relay/limits or
+# Confirm the relay actually parsed them — hit /relay/v1/limits or
 # whatever your relay's introspection endpoint surfaces.  At
 # minimum, journalctl should show the relay logging its loaded
 # config on boot:
@@ -7600,7 +7613,7 @@ curl -sf https://yourinstance.example/v1/instance | jq '.disabled_assets'
 # /v1/instance is responding, and the cp6 disabled_assets field is
 # wired.
 
-curl -sf https://yourinstance.example/v1/relay/health
+curl -sf https://yourinstance.example/relay/v1/health
 # Expect: 200 + JSON; confirms BunkerWeb is proxying to the relay
 # and the relay is alive.
 ```
@@ -8787,12 +8800,12 @@ its `/v1/release` response.  Verify by polling:
 
 ```
 # Canonical
-curl https://morphit.io/api/indexer/v1/release | jq .treasury
+curl https://morphit.io/v1/release | jq .treasury
 
 # Community operators (from /v1/instances list)
 for instance in alice.example.com bob.example.org; do
     echo "== $instance =="
-    curl -sS "https://$instance/api/indexer/v1/release" | jq .treasury
+    curl -sS "https://$instance/v1/release" | jq .treasury
 done
 ```
 

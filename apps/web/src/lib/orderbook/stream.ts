@@ -24,7 +24,7 @@
  */
 
 import { browser } from '$app/environment';
-import { MORPHIT_INDEXER_ORIGIN } from '$net/config';
+import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { OrderRecord, OrderbookQuery } from '@morphit/indexer-client';
 
 export interface OrderbookSnapshot {
@@ -75,8 +75,12 @@ function buildStreamUrl(query: OrderbookQuery): string {
 		params.set('min_trades', String(query.min_trades));
 	}
 	const qs = params.toString();
-	const sep = qs ? '?' : '';
-	return `${MORPHIT_INDEXER_ORIGIN}/v1/orderbook/stream${sep}${qs}`;
+	// Root-absolute path + new URL() → `<origin>/v1/orderbook/stream`,
+	// discarding any path on the configured origin. Append the query
+	// via the URL object so we never string-concat a stale prefix.
+	const u = new URL('/v1/orderbook/stream', resolveOrigin(MORPHIT_INDEXER_ORIGIN));
+	u.search = qs;
+	return u.href;
 }
 
 export function createOrderbookStream(handlers: OrderbookStreamHandlers): OrderbookStreamHandle {

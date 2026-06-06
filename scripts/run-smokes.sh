@@ -168,6 +168,7 @@ SMOKES=(
 	"apps/web:path-adversarial-smoke"
 	"apps/web:no-stale-top-level-routes-smoke"
 	"apps/web:no-bare-path-goto-smoke"
+	"apps/web:indexer-url-composition-smoke"
 	"apps/matrix-bot:classifier-smoke"
 	"apps/matrix-bot:rate-limiter-smoke"
 	"apps/matrix-bot:surface-invariant-smoke"
