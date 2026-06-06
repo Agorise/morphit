@@ -85,12 +85,29 @@ export const MORPHIT_RELAY_ORIGIN = '/relay';
  * includes `Cache-Control: max-age=3` which matches the
  * indexer's chain-polling cadence.
  *
- * Default is a same-origin relative path ('/api/indexer') for
- * the colocated topology; operators can override to an absolute
- * URL for split deployments. Same semantics as
- * MORPHIT_RELAY_ORIGIN — see that docstring for details.
+ * This is a BUILD-TIME constant (the bundle reads no runtime
+ * env — vite bakes only `__MORPHIT_VERSION__`). As shipped it is
+ * the empty string = same origin, which is correct for the
+ * colocated single-host topology where one reverse proxy serves
+ * the SPA and proxies `/v1/*` and `/rss/*` to the loopback-bound
+ * indexer (see docs/RUN-A-MORPHIT-NODE.md §8).
+ *
+ * Operators running a split topology (indexer on its own
+ * subdomain like `indexer.example.com`) set this to that
+ * absolute URL and rebuild, and must add the origin to the
+ * frontend CSP `connect-src` (see ops/nginx/web.conf).
+ *
+ * IMPORTANT — only the *origin* (scheme + host + port) of this
+ * value is ever used. Every consumer composes requests as
+ * `new URL('/v1/...', resolveOrigin(MORPHIT_INDEXER_ORIGIN))`,
+ * and a root-absolute first arg discards any path on the base.
+ * A stray path here (e.g. the old '/api/indexer') is therefore
+ * silently dropped — but it WAS a trap for SSE/RSS/view builders
+ * that string-concatenated the origin (those now use new URL
+ * too). Do not reintroduce a path: keep this '' or a bare
+ * absolute URL with no path.
  */
-export const MORPHIT_INDEXER_ORIGIN = '/api/indexer';
+export const MORPHIT_INDEXER_ORIGIN = '';
 
 /**
  * Resolve a configured origin (which may be a relative path or

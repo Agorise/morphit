@@ -38,7 +38,7 @@
  */
 
 import { browser } from '$app/environment';
-import { MORPHIT_INDEXER_ORIGIN } from '$net/config';
+import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
 
 export interface ChatSnapshot {
@@ -79,7 +79,14 @@ interface BufferedEvent {
 const MAX_BUFFER_SIZE = 500;
 
 function buildStreamUrl(me: string, peer: string): string {
-	return `${MORPHIT_INDEXER_ORIGIN}/v1/chat/${encodeURIComponent(me)}/${encodeURIComponent(peer)}/stream`;
+	// Root-absolute path + new URL() resolves to `<origin>/v1/...`,
+	// discarding any path on the configured origin (correct for both
+	// colocated and split topologies). String-concat would re-introduce
+	// a stale prefix on single-host deploys.
+	return new URL(
+		`/v1/chat/${encodeURIComponent(me)}/${encodeURIComponent(peer)}/stream`,
+		resolveOrigin(MORPHIT_INDEXER_ORIGIN)
+	).href;
 }
 
 export function createChatStream(args: {

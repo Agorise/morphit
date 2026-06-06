@@ -32,8 +32,14 @@ import type { OrderViewsResponse } from '@morphit/indexer-client';
  *  on render. */
 export async function recordOrderView(account: string, permlink: string): Promise<void> {
 	try {
-		const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
-		const url = `${origin}/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/view`;
+		// Root-absolute path + new URL() → discards any path on the
+		// configured origin and resolves to `<origin>/v1/...`. Do NOT
+		// string-concatenate onto resolveOrigin(...) — that would retain
+		// a path prefix and break colocated single-host deploys.
+		const url = new URL(
+			`/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/view`,
+			resolveOrigin(MORPHIT_INDEXER_ORIGIN)
+		).href;
 		await fetchWithTimeout(url, {
 			method: 'POST',
 			credentials: 'omit',
@@ -56,8 +62,10 @@ export async function fetchOrderViews(
 	permlink: string
 ): Promise<OrderViewsResponse | null> {
 	try {
-		const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
-		const url = `${origin}/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/views`;
+		const url = new URL(
+			`/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/views`,
+			resolveOrigin(MORPHIT_INDEXER_ORIGIN)
+		).href;
 		const res = await fetchWithTimeout(url, {
 			credentials: 'omit',
 			headers: { Accept: 'application/json' }

@@ -43,7 +43,7 @@ describe('resolveOrigin', () => {
 
 	it('resolves a nested relative path against window.location.origin', () => {
 		withWindowOrigin('https://morphit.example.com');
-		expect(resolveOrigin('/api/indexer')).toBe('https://morphit.example.com/api/indexer');
+		expect(resolveOrigin('/some/nested/path')).toBe('https://morphit.example.com/some/nested/path');
 	});
 
 	it('defensively prepends a leading slash if one was omitted', () => {
