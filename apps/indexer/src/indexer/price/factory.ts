@@ -173,6 +173,7 @@ export function createAssetPriceSource(
 				denominationFiat: config.priceFeedDenominationFiat,
 				stablecoinKeys: config.priceFeedStablecoinKeys,
 				db,
+				officialAccountName: config.officialAccountName,
 				minPlausibleUsd: config.priceFeedNativePlausibleMin,
 				maxPlausibleUsd: config.priceFeedNativePlausibleMax
 			})

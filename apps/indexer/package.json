@@ -1,9 +1,9 @@
 {
 	"name": "morphit-indexer",
-	"version": "1.0.0-beta.6",
+	"version": "1.0.0-beta.7",
 	"private": true,
 	"type": "module",
-	"description": "Morphit chain indexer \u2014 reads morphit_* ops from Blurt, maintains queryable state in Postgres",
+	"description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",
 	"license": "AGPL-3.0-only",
 	"engines": {
 		"node": ">=22.0.0"

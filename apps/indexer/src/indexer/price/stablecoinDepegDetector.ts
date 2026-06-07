@@ -130,6 +130,17 @@ export interface DepegDetectorConfig {
 	 *  Pass fewer if the operator has disabled some, or pass more
 	 *  when new stablecoins enter the registry. */
 	readonly stablecoinKeys: ReadonlyArray<string>;
+	/** This instance's official/operator account name (the
+	 *  `operator` column in operator_blocks).  Orders authored by
+	 *  accounts this operator has blocked (state='blocked') are
+	 *  excluded from the depeg ratio, mirroring the orderbook's
+	 *  instance-local moderation (cp209): a blocked seller's
+	 *  listings are hidden on this instance, so their prices must
+	 *  not influence this instance's derived native price either.
+	 *  Pass `config.officialAccountName`.  An empty string makes
+	 *  the exclusion inert (no operator matches '') — used by the
+	 *  early-return < 2-stablecoin paths in structural tests. */
+	readonly officialAccountName: string;
 	/** Optional override of window / threshold / floor — primarily
 	 *  for tests.  Production uses the constants above. */
 	readonly windowHours?: number;
@@ -197,7 +208,8 @@ export async function detectStablecoinDepeg(
 	//
 	// Sybil filtering: each contributing trader must NOT appear in
 	// suspicious_reciprocity, related_accounts, one_way_pile_on, or
-	// review_concentration tables (cp123-cp125 defenses).
+	// review_concentration tables (cp123-cp125 defenses), and must
+	// NOT be blocked by this operator (operator_blocks, cp209).
 	//
 	// Order-age grace: only orders that have existed for ≥10 minutes
 	// AND are still status='live' count.  Defeats post-and-cancel
@@ -268,6 +280,17 @@ export async function detectStablecoinDepeg(
 				       SELECT 1 FROM review_concentration rc
 				        WHERE rc.reviewer = o.account
 				   )
+				   -- cp209 — instance-local moderation: exclude orders
+				   -- from accounts THIS operator has blocked, so a
+				   -- manually-blocked (not just signal-flagged) seller
+				   -- can't move this instance's derived native price.
+				   -- Inert when $3 is '' (no operator matches '').
+				   AND NOT EXISTS (
+				       SELECT 1 FROM operator_blocks ob
+				        WHERE ob.operator = $3
+				          AND ob.blocked = o.account
+				          AND ob.state = 'blocked'
+				   )
 			),
 			per_trader AS (
 				SELECT account,
@@ -289,13 +312,15 @@ export async function detectStablecoinDepeg(
 		// dollar-value sense: A's worth, expressed in B units).
 		const dir1 = await db.query<{ price_str: string; account: string }>(queryDir1, [
 			tickerA,
-			payB
+			payB,
+			config.officialAccountName
 		]);
 		// Direction 2: asset=B, accept payment in A.  Trader-medians
 		// of (A per B) — we flip to B/A then invert to A/B.
 		const dir2 = await db.query<{ price_str: string; account: string }>(queryDir2, [
 			tickerB,
-			payA
+			payA,
+			config.officialAccountName
 		]);
 
 		// Combine into per-trader contributions (A/B), deduping

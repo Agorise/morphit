@@ -1124,6 +1124,9 @@ account's listings everywhere this instance serves them:
 - the public orderbook (`/v1/orderbook`)
 - the per-account view (`/v1/orders/:account`)
 - featured slots, the RSS feeds, and the live SSE stream
+- the instance's own derived `morphit_native` / depeg price feeds
+  (a blocked seller's orders are dropped from the median, so they
+  can't move the price your instance computes from its orderbook)
 
 What blocking does **NOT** do:
 

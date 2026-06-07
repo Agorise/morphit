@@ -290,6 +290,7 @@ SMOKES=(
 	"apps/indexer:stablecoin-depeg-detector-smoke"
 	"apps/indexer:morphit-native-fetcher-smoke"
 	"apps/indexer:price-source-hardening-smoke"
+	"apps/indexer:price-input-block-enforcement-smoke"
 	"apps/indexer:peer-price-monitor-smoke"
 	"apps/indexer:price-fetch-util-smoke"
 	"apps/indexer:multi-asset-factory-smoke"
