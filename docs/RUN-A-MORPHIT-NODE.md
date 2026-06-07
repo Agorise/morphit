@@ -790,7 +790,7 @@ The migration runner reads `MORPHIT_INDEXER_DATABASE_URL` from your environment,
 ### 8.0 The recommended path — `morphit-ops init` (interactive wizard)
 
 The fastest, lowest-error setup path is the interactive wizard.
-It walks you through 22 steps in plain English and generates
+It walks you through 23 steps in plain English and generates
 correctly-shaped `morphit.config.env` + `morphit.env` files plus
 your encrypted relay keystore.
 
@@ -2639,3 +2639,66 @@ sentinel smokes (`fee-method-enum-frozen-smoke`,
 The Part 121 schema bump adds `orders.asset_network TEXT` —
 applies automatically on indexer startup.  Idempotent.  No
 operator action.
+
+---
+
+## Payment methods: offering or disabling Barter (and other canonical methods)
+
+Morphit ships with **every canonical payment method enabled** on a
+new node — PayPal, Zelle, Wise, Revolut, cash in person, cash by
+mail, the crypto "pay-with" methods, and **Barter**
+(products/services, e.g. "sell XMR for a used bicycle" or a box of
+kittens). Some operators prefer to keep their
+instance money-only and not host goods-for-crypto trades; this
+section is how you turn Barter — or any canonical method — off.
+
+### Decide your operator stance
+
+Two paths, both writing the same
+`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=...` line:
+
+1. **CLI wizard** (the path this guide walks you through) — the
+   `morphit-ops init` wizard, step 14 "Payment-method policy",
+   asks whether to offer Barter on your instance (the method
+   operators most often disable). Default is YES. Answering "no"
+   writes `barter_goods` into `morphit.config.env`. To disable
+   methods *other* than Barter, use the direct env edit.
+
+2. **Direct env-file edit** — open `morphit.config.env`, find or
+   add the `MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=` line, set a
+   comma-separated list of canonical payment-method **keys**
+   (lowercase), and restart the indexer
+   (`docker compose restart indexer`). Browsers see the change at
+   most 5 minutes after restart.
+
+```bash
+# Offer everything (default)
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=""
+
+# Money-only instance — no Barter
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods"
+
+# Disable several (note: online methods have NO pay_ prefix —
+# it's "paypal", not "pay_paypal"; only crypto methods do)
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods,paypal,zelle"
+```
+
+The full list of canonical keys (in-person, online/bank, and the
+`pay_*` crypto methods) is in **docs/OPERATIONS.md
+§"Payment-method configuration"**. Your own region-specific
+additions (`morphit-ops payment-method add`) are managed with
+`morphit-ops payment-method remove`, not this knob.
+
+### What disabling does
+
+A disabled method disappears from your users' post-order payment
+picker and the orderbook payment filter. The indexer refuses a
+NEW order only when **all** of its payment methods are disabled —
+an order that still offers one enabled method is kept. Like
+disabled assets, this is operator-scoped: peer-instance orders
+that use a method you disabled still appear in your read-only
+orderbook (the chain history is shared across the federation);
+your users just can't post orders that offer only disabled
+methods. Users who want Barter (or any method you turned off) can
+self-route to a different Morphit operator — federation is the
+point.

@@ -16,7 +16,8 @@
       "instance": "Instance identity",
       "asset_stance": "This instance's asset policy",
       "integrity": "Bundle integrity",
-      "worried": "Worried about where you are?"
+      "worried": "Worried about where you are?",
+      "payment_stance": "Payment-method policy"
     },
     "field": {
       "origin": "You are on",
@@ -50,6 +51,12 @@
       "compare_tool_label": "orderbook comparison tool",
       "type_warning_heading": "Type these into your browser bar — don't click",
       "type_warning_body": "If you suspect this instance is rogue, the links here can't be trusted either — a hostile instance can render visible text saying \"morphit.io\" while the underlying URL points elsewhere. Type the addresses by hand into a clean browser tab."
+    },
+    "payment_stance": {
+      "explain": "Every operator also chooses which payment methods their instance offers. The default is every method in the canonical registry; an operator can turn off any of them — most often Barter (products/services) — to keep their instance money-only or focused. This is YOUR instance's current stance. Federation note: orders from other instances that use a disabled method still appear in your orderbook; the gate is only on new orders posted from here.",
+      "disabled_label": "Disabled methods",
+      "disabled_none": "None — this instance offers every payment method.",
+      "disabled_suffix": "(operator-disabled on this instance; usable on peer instances)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "From the directory where you installed Morphit. You'll be prompted to confirm before the chain op is broadcast.",
         "output_pending": "Enter the machine key of an instance-specific method to generate the remove command.",
         "orders_safety": "Existing orders that reference this method continue to display correctly after removal — the on-chain key persists in those orders' history. Remove just means new orders can't pick it."
+      },
+      "payment_disable": {
+        "heading": "Offered payment methods",
+        "intro": "Choose which payment methods your instance offers. Unchecking a method hides it from the post-order picker and the orderbook filter. Disabling Barter (products/services) is the common case — some operators keep their instance money-only.",
+        "legend_sr": "Payment method enable/disable selection",
+        "current_state_all_enabled": "All payment methods offered"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} alternate explorers"
   },
   "faq": {
+    "search_dismiss": "Dismiss search results",
     "title": "Help & FAQ",
     "subtitle": "Short answers. Ask the search box anything.",
     "search_placeholder": "Search for an answer…",
@@ -2485,18 +2499,23 @@
       "heading": "Filter",
       "asset_label": "Asset",
       "asset_any": "Any",
-      "side_label": "I want to",
-      "side_any": "Any",
+      "payment_no_matches": "No matching payment method",
+      "fiat_search_placeholder": "Search by name or code",
+      "fiat_no_matches": "No matching currency",
+      "fiat_remove": "Remove",
+      "asset_barter": "Barter (products/services)",
+      "side_buy_goods": "Posts wanting to buy products/services",
+      "side_sell_goods": "Posts wanting to sell products/services",
+      "side_label": "I want to see",
+      "side_any": "Everything",
       "side_buy": "Posts wanting to buy crypto",
       "side_sell": "Posts wanting to sell crypto",
       "fiat_label": "Fiat currency",
-      "fiat_placeholder": "e.g. USD",
       "region_label": "Region",
-      "region_placeholder": "e.g. North America",
       "clear": "Clear filters",
       "payment_methods_label": "Payment methods accepted",
       "payment_methods_placeholder": "paypal, zelle, cash",
-      "payment_methods_hint": "Comma-separated. Shows orders accepting any of these. Case doesn't matter.",
+      "payment_methods_hint": "Shows orders accepting any of these. Leave the field empty to view all.",
       "min_trades_label": "Trader experience",
       "min_trades_any": "Any — include new traders",
       "min_trades_5": "At least 5 completed trades",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Higher values hide less-experienced traders. Default includes everyone.",
       "sort_label": "Sort by",
       "sort_recent": "Most recent",
-      "sort_rating": "Highest-rated first",
-      "sort_trades": "Most-experienced first",
+      "sort_rating": "⭐ Highest rated users first",
+      "sort_trades": "Most experienced users first",
       "rss_asset_label": "RSS — {asset} orders",
       "rss_asset_title": "Get notified via RSS when a new {asset} order is posted.",
       "side_help": "Tip: if you want to buy crypto, look for posts wanting to sell. If you want to sell crypto, look for posts wanting to buy."
@@ -2514,7 +2533,7 @@
     "empty_title": "No orders match your filters",
     "empty_body": "Try relaxing a filter, or check back soon — the orderbook updates every few seconds.",
     "error_title": "Can't reach the indexer",
-    "error_body": "The indexer is offline or unreachable. Try again in a moment.",
+    "error_body": "The indexer is unreachable at the moment. Please try again in a little while.",
     "retry": "Try again",
     "load_more": "Load more",
     "load_more_pending": "Loading…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Every release is tagged; every asset is fingerprinted; SRI protects every script. You can rebuild from source and compare — we publish the hashes alongside each release.",
     "open_source_title": "Open-source, open threat model.",
     "open_source_body": "The full threat model is in the repo's {security_doc}. We're explicit about what we protect against and what we don't — because pretending otherwise would be worse than honesty.",
-    "footer_body": "Found an issue? Please report via the public Forgejo repo, or (in Phase 5) via an encrypted message to the {morphit_account} chain account.",
+    "footer_body": "Found an issue? Please report via the public Forgejo repo, or via an encrypted message to the {morphit_account} chain account.",
     "bounty_title": "Bug bounty program",
     "bounty_body": "We run a discretionary security recognition program. Every actionable finding gets reviewed by a real engineer, gets an answer, and — if it materially improves Morphit's security posture — gets rewarded in BLURT (paid from @morphit-fees) or BTC, scaled to severity and the report's quality. No fixed tier table; case-by-case adjudication. Hall of fame credit available even when payment isn't. The full scope, severity guidance, payment workflow, and what we won't do (no NDA, no exclusive disclosure) is documented in SECURITY.md.",
     "bounty_link": "Read the full bounty program scope and rules →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Trade in progress"
   },
   "update": {
-    "title": "A new version of Morphit is available",
-    "body": "It will install the next time you reload. We don't apply it automatically — your call.",
-    "apply": "Install now",
+    "title": "A Morphit update is available",
+    "body": "Reloading this page will apply the update. It only takes a second or two. Load it?",
+    "apply": "Load it now",
     "later": "Later"
   },
   "welcome_first_buy": {

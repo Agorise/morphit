@@ -18,7 +18,7 @@
 	import ToastRegion from '$components/ToastRegion.svelte';
 	import { startAmbientChannels } from '$lib/notifications/ambient';
 	import { bannerTriggered, clearBannerTrigger } from '$lib/notifications/native';
-	import { isUnlocked, hasAnySession, lockSession } from '$stores/identity';
+	import { isUnlocked, lockSession } from '$stores/identity';
 	import { startAutoLockTimer } from '$stores/autoLock';
 	import { instance, initInstance } from '$stores/instance';
 	import { resetForRoute as resetGlossarySeen } from '$stores/glossarySeen';
@@ -278,27 +278,14 @@
 						{$_(link.key)}
 					</a>
 				{/each}
-				<!-- Sign-in CTA for signed-out mobile users.  When the
-				     user has ANY active session (unlocked OR paired-
-				     readonly) this is hidden — the AvatarMenu in the
-				     header (visible on mobile too; no md:hidden on it)
-				     carries the post-signin actions: notifications
-				     fly-out, View profile, My orders, Settings, Lock
-				     session, Sign out.  The primary navLinks above
-				     (Orderbook, FAQ, Messages, Post now) stay the same
-				     signed-in or signed-out.  Part 116: gate widened
-				     from !$isUnlocked to !$hasAnySession so paired-
-				     readonly users don't see a redundant "Log in /
-				     register" link beneath their already-rendered
-				     AvatarMenu pill. -->
-				{#if !$hasAnySession}
-					<a
-						href={lp('/login')}
-						class="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-morphit-emerald"
-					>
-						{$_('nav.login_register')}
-					</a>
-				{/if}
+				<!-- No sign-in link here on purpose. The AvatarMenu in the
+				     header is visible on mobile too (no md:hidden) and already
+				     renders the "Sign in / Register" CTA when signed out — a
+				     mobile-nav link as well showed the same label twice (the
+				     bright button top-right PLUS a text link right under it).
+				     The header AvatarMenu is the single canonical entry point;
+				     the primary navLinks above (Orderbook, FAQ, Messages, Post
+				     now) stay the same signed-in or signed-out. -->
 			</div>
 		</nav>
 	</header>

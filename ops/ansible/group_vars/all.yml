@@ -159,6 +159,12 @@ morphit_indexer_blurt_rpc_endpoints: "https://rpc.blurt.world,https://blurt-rpc.
 # Empty string = no assets disabled (default-everything posture).
 morphit_indexer_disabled_assets: ""
 
+# Canonical payment-method KEYS this instance will NOT offer (cp208).
+# Comma-separated, lowercase.  Empty = offer every method (default).
+# Most operators leave this empty or set "barter_goods" for a
+# money-only instance.  See OPERATIONS.md §"Payment-method configuration".
+morphit_indexer_disabled_payment_methods: ""
+
 # Attestation phase: 'launch' or 'steady'.  See §20.
 morphit_indexer_attestation_phase: launch
 

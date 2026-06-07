@@ -150,6 +150,10 @@ export interface InstanceState {
 	 *  by `/run-a-node` to render this instance's stance and
 	 *  by `/operators` to label federated instances. */
 	readonly disabled_assets: readonly string[];
+	/** Canonical payment-method keys the operator disabled on this
+	 *  instance (e.g. "barter_goods").  Picker + orderbook filter
+	 *  hide them; absent on older indexers → defaults to []. */
+	readonly disabled_payment_methods: readonly string[];
 	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
 	 *  contact (format: `#room:server`).  Rendered on /support,
 	 *  /about-this-instance, and footer as a "Contact via Matrix"
@@ -203,6 +207,7 @@ const FALLBACK: InstanceState = {
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
 	},
 	disabled_assets: [],
+	disabled_payment_methods: [],
 	operator_matrix_room: null,
 	loaded: false
 };
@@ -335,6 +340,7 @@ export function initInstance(): Promise<void> {
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }
 							},
 					disabled_assets: result.data.disabled_assets ?? [],
+					disabled_payment_methods: result.data.disabled_payment_methods ?? [],
 				operator_matrix_room: result.data.operator_matrix_room ?? null,
 					loaded: true
 				});

@@ -239,9 +239,9 @@ const scenarios: Scenario[] = [
 				m.readFile(new URL('../src/init/steps.ts', import.meta.url), 'utf-8')
 			);
 			return (
-				stepsSrc.includes('const TOTAL_STEPS = 22;') &&
+				stepsSrc.includes('const TOTAL_STEPS = 23;') &&
 				stepsSrc.includes("step(13, TOTAL_STEPS, 'Trade-only asset policy')") &&
-				stepsSrc.includes("step(14, TOTAL_STEPS, 'Listing fee + fallback BLURT price')")
+				stepsSrc.includes("step(15, TOTAL_STEPS, 'Listing fee + fallback BLURT price')")
 			);
 		}
 	}

@@ -16,7 +16,8 @@
       "instance": "Identité de l'instance",
       "asset_stance": "Politique d'actifs de cette instance",
       "integrity": "Intégrité du bundle",
-      "worried": "Inquiet de savoir où vous êtes ?"
+      "worried": "Inquiet de savoir où vous êtes ?",
+      "payment_stance": "Politique des moyens de paiement"
     },
     "field": {
       "origin": "Vous êtes sur",
@@ -50,6 +51,12 @@
       "disabled_none": "Aucun — cette instance accepte tous les actifs négociables.",
       "disabled_suffix": "(désactivé par l'opérateur sur cette instance ; négociable sur les instances pairs)",
       "federation_note": "Vous voulez une posture différente ? Parcourez /operators pour trouver une instance dont la politique correspond à votre préférence, ou exécutez la vôtre — voir /run-a-node."
+    },
+    "payment_stance": {
+      "explain": "Chaque opérateur choisit aussi quels moyens de paiement son instance propose. Par défaut, tous les moyens du registre canonique sont activés ; un opérateur peut en désactiver n'importe lequel — le plus souvent le troc (produits/services) — pour garder son instance uniquement monétaire ou ciblée. Voici la position actuelle de VOTRE instance. Note sur la fédération : les ordres d'autres instances utilisant un moyen désactivé apparaissent quand même dans votre carnet d'ordres ; la restriction ne concerne que les nouveaux ordres publiés ici.",
+      "disabled_label": "Moyens désactivés",
+      "disabled_none": "Aucun — cette instance propose tous les moyens de paiement.",
+      "disabled_suffix": "(désactivé par l'opérateur sur cette instance ; utilisable sur les instances pairs)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "Depuis le répertoire où vous avez installé Morphit. Vous serez invité à confirmer avant la diffusion de l'opération sur la chaîne.",
         "output_pending": "Entrez la clé machine d'une méthode spécifique à l'instance pour générer la commande de suppression.",
         "orders_safety": "Les ordres existants qui font référence à cette méthode continuent de s'afficher correctement après la suppression — la clé persiste dans l'historique de ces ordres. Supprimer signifie simplement que les nouveaux ordres ne peuvent plus la choisir."
+      },
+      "payment_disable": {
+        "heading": "Moyens de paiement proposés",
+        "intro": "Choisissez les moyens de paiement que propose votre instance. Décocher un moyen le masque du sélecteur lors de la publication d'un ordre et du filtre du carnet d'ordres. Désactiver le troc (produits/services) est le cas courant — certains opérateurs gardent leur instance uniquement monétaire.",
+        "legend_sr": "Sélection d'activation/désactivation des moyens de paiement",
+        "current_state_all_enabled": "Tous les moyens de paiement proposés"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} explorateurs alternatifs"
   },
   "faq": {
+    "search_dismiss": "Fermer les résultats de recherche",
     "title": "Aide & FAQ",
     "subtitle": "Réponses courtes. Demandez dans la barre de recherche.",
     "search_placeholder": "Cherchez une réponse…",
@@ -2485,18 +2499,23 @@
       "heading": "Filtrer",
       "asset_label": "Actif",
       "asset_any": "Peu importe",
-      "side_label": "Je veux",
-      "side_any": "N'importe lequel",
+      "payment_no_matches": "Aucun moyen de paiement correspondant",
+      "fiat_search_placeholder": "Rechercher par nom ou code",
+      "fiat_no_matches": "Aucune devise correspondante",
+      "fiat_remove": "Retirer",
+      "asset_barter": "Troc (produits/services)",
+      "side_buy_goods": "Annonces cherchant à acheter des produits/services",
+      "side_sell_goods": "Annonces cherchant à vendre des produits/services",
+      "side_label": "Je veux voir",
+      "side_any": "Tout",
       "side_buy": "Annonces voulant acheter de la crypto",
       "side_sell": "Annonces voulant vendre de la crypto",
       "fiat_label": "Monnaie fiat",
-      "fiat_placeholder": "ex. EUR",
       "region_label": "Région",
-      "region_placeholder": "ex. Europe",
       "clear": "Effacer les filtres",
       "payment_methods_label": "Moyens de paiement acceptés",
       "payment_methods_placeholder": "paypal, sepa, espèces",
-      "payment_methods_hint": "Séparés par des virgules. Affiche les ordres acceptant l'un de ces moyens. La casse n'a pas d'importance.",
+      "payment_methods_hint": "Affiche les ordres acceptant l'un de ces moyens. Laisse le champ vide pour tout voir.",
       "min_trades_label": "Expérience du trader",
       "min_trades_any": "Toute — inclure les nouveaux traders",
       "min_trades_5": "Au moins 5 trades complétés",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Des valeurs plus élevées masquent les traders moins expérimentés. Par défaut, tout le monde est inclus.",
       "sort_label": "Trier par",
       "sort_recent": "Plus récents",
-      "sort_rating": "Mieux notés en premier",
-      "sort_trades": "Plus expérimentés en premier",
+      "sort_rating": "⭐ Utilisateurs les mieux notés en premier",
+      "sort_trades": "Utilisateurs les plus expérimentés en premier",
       "rss_asset_label": "RSS — ordres {asset}",
       "rss_asset_title": "Reçois des notifications par RSS quand un nouvel ordre {asset} est publié.",
       "side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter."
@@ -2514,7 +2533,7 @@
     "empty_title": "Aucun ordre ne correspond à vos filtres",
     "empty_body": "Essayez de relâcher un filtre, ou revenez bientôt — le carnet se met à jour toutes les quelques secondes.",
     "error_title": "Impossible de joindre l'indexeur",
-    "error_body": "L'indexeur est hors ligne ou injoignable. Réessayez dans un instant.",
+    "error_body": "L'indexeur est injoignable pour le moment. Réessaie dans un petit moment.",
     "retry": "Réessayer",
     "load_more": "Charger plus",
     "load_more_pending": "Chargement…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Chaque release est taggée ; chaque asset a une empreinte ; SRI protège chaque script. Tu peux reconstruire depuis les sources et comparer — on publie les hashes avec chaque release.",
     "open_source_title": "Open-source, modèle de menaces ouvert.",
     "open_source_body": "Le modèle de menaces complet est dans le {security_doc} du dépôt. On est explicite sur contre quoi on protège et contre quoi pas — prétendre autrement serait pire que l'honnêteté.",
-    "footer_body": "Tu as trouvé un problème ? Rapporte-le via le dépôt public Forgejo, ou (en Phase 5) par message chiffré au compte {morphit_account} de la chaîne.",
+    "footer_body": "Tu as trouvé un problème ? Rapporte-le via le dépôt public Forgejo, ou par message chiffré au compte {morphit_account} de la chaîne.",
     "bounty_title": "Programme de prime aux bugs",
     "bounty_body": "Nous opérons un programme discrétionnaire de reconnaissance de sécurité. Chaque découverte exploitable est examinée par un véritable ingénieur, reçoit une réponse et — si elle améliore matériellement la posture de sécurité de Morphit — est récompensée en BLURT (payé depuis @morphit-fees) ou BTC, calibré sur la sévérité et la qualité du rapport. Pas de tableau de niveaux fixe ; jugement au cas par cas. Crédit au tableau d'honneur disponible même sans paiement. La portée complète, le guide de sévérité, le flux de paiement et ce que nous ne ferons pas (pas de NDA, pas de divulgation exclusive) est documenté dans SECURITY.md.",
     "bounty_link": "Lire la portée et les règles complètes →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Échange en cours"
   },
   "update": {
-    "title": "Une nouvelle version de Morphit est disponible",
-    "body": "Elle s'installera au prochain rechargement. On ne l'applique pas automatiquement — c'est vous qui décidez.",
-    "apply": "Installer maintenant",
+    "title": "Une mise à jour de Morphit est disponible",
+    "body": "Recharger cette page appliquera la mise à jour. Cela ne prend qu'une seconde ou deux. On la charge ?",
+    "apply": "Charger maintenant",
     "later": "Plus tard"
   },
   "welcome_first_buy": {

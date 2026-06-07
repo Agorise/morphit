@@ -140,8 +140,8 @@ scenario('buildWhereClauses: side filter binds correctly', () => {
 
 scenario('buildWhereClauses: fiat_currency filter binds correctly', () => {
 	const { where, params } = buildWhereClauses({ fiat_currency: 'USD' });
-	assertEqual(where[3], 'o.fiat_currency = $1', 'fiat clause');
-	assertEqual(params, ['USD'], 'params');
+	assertEqual(where[3], 'o.fiat_currency = ANY($1::text[])', 'fiat clause');
+	assertEqual(params, [['USD']], 'params');
 });
 
 scenario('buildWhereClauses: location_region uses ILIKE prefix match', () => {
@@ -204,9 +204,9 @@ scenario('buildWhereClauses: combined filter binds in order', () => {
 	});
 	assertEqual(where[3], 'o.asset = $1', 'asset $1');
 	assertEqual(where[4], 'o.side = $2', 'side $2');
-	assertEqual(where[5], 'o.fiat_currency = $3', 'fiat $3');
+	assertEqual(where[5], 'o.fiat_currency = ANY($3::text[])', 'fiat $3');
 	assertEqual(where[6], 'COALESCE(f.c, 0) >= $4', 'min_trades $4');
-	assertEqual(params, ['BTC', 'sell', 'EUR', 2], 'params in order');
+	assertEqual(params, ['BTC', 'sell', ['EUR'], 2], 'params in order');
 });
 
 scenario('buildWhereClauses: startIndex offsets parameter numbering', () => {

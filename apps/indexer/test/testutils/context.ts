@@ -69,6 +69,7 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		// instance-wide disable gate override with e.g.
 		// `{ disabledAssets: ['USDT'] }`.
 		disabledAssets: [],
+		disabledPaymentMethods: [],
 		priceFeedEnabled: false,
 		priceFeedStaticFloor: 0.002,
 		// cp128: default to USD for backwards-compatibility with

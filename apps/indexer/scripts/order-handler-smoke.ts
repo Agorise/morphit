@@ -836,6 +836,46 @@ await scenario('accepts price_model with unknown kind (forward-compat)', async (
 	assertEqual(r, { ok: true }, 'result');
 });
 
+// ─── Disabled payment methods (cp208) ───────────────────────────
+
+await scenario(
+	'disabled payment methods: order offering ONLY a disabled method rejects',
+	async () => {
+		const ctx = makeCtx({
+			signer: 'alice',
+			payload: makePayload({
+				permlink: 'order-2026-04-25-bar',
+				payment_methods: ['barter_goods']
+			}),
+			config: { ...makeCtx().config, disabledPaymentMethods: ['barter_goods'] }
+		});
+		const mock = makeMockClient([]);
+		const r = await handler(ctx, mock.client);
+		assertEqual(r, { ok: false, reason: 'payment_methods_all_disabled' }, 'result');
+	}
+);
+
+await scenario(
+	'disabled payment methods: order keeping one enabled method is NOT rejected',
+	async () => {
+		const signer = 'alice';
+		const permlink = 'order-2026-04-25-mix';
+		const ctx = makeCtx({
+			signer,
+			payload: makePayload({
+				permlink,
+				fee_method: 'blurt',
+				payment_methods: ['barter_goods', 'sepa']
+			}),
+			siblingOps: feeTransfer(signer, permlink, 60),
+			config: { ...makeCtx().config, disabledPaymentMethods: ['barter_goods'] }
+		});
+		const mock = makeMockClient(expectationsForBlurtFeePath(0, 1, true));
+		const r = await handler(ctx, mock.client);
+		assertEqual(r, { ok: true }, 'result');
+	}
+);
+
 // ─── Final report ───────────────────────────────────────────────
 
 console.log();

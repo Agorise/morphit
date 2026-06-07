@@ -873,7 +873,7 @@
 		<div class="chat-unread-pill pointer-events-none relative">
 			<button
 				type="button"
-				class="pointer-events-auto absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-morphit-emerald px-4 py-1.5 text-sm font-semibold text-ink-950 shadow-lg transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				class="pointer-events-auto absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-[var(--morphit-btn-face)] px-4 py-1.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 				onclick={() => scrollToBottom(true)}
 				aria-label={$_('chat.new_messages_pill_aria', {
 					values: { n: unreadWhileScrolledUp }
@@ -1000,7 +1000,7 @@
 					type="button"
 					onclick={onPayToMessage}
 					disabled={locked}
-					class="hover:bg-morphit-green rounded-xl border-2 border-morphit-emerald bg-morphit-emerald px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+					class="rounded-xl border-2 border-morphit-emerald bg-[var(--morphit-btn-face)] px-4 py-2 font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{$_('chat.stranger_fee.pill_cta')}
 				</button>

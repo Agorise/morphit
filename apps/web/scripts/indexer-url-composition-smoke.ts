@@ -98,7 +98,8 @@ const RAW = /\$\{\s*MORPHIT_INDEXER_ORIGIN\s*\}\//;
 // `${resolveOrigin(MORPHIT_INDEXER_ORIGIN)}/...`  (inline, Style 2 one-liner)
 const INLINE = /\$\{\s*resolveOrigin\(\s*MORPHIT_INDEXER_ORIGIN\s*\)\s*\}\//;
 // const X = resolveOrigin(MORPHIT_INDEXER_ORIGIN)  → then `${X}/...`  (Style 2 via var)
-const ASSIGN = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*resolveOrigin\(\s*MORPHIT_INDEXER_ORIGIN\s*\)/g;
+const ASSIGN =
+	/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*resolveOrigin\(\s*MORPHIT_INDEXER_ORIGIN\s*\)/g;
 
 for (const f of files) {
 	const src = readFileSync(f, 'utf8');
@@ -130,9 +131,12 @@ else for (const o of rawConcat) bad(o.file, `raw indexer-origin concat — use n
 
 if (inlineResolveConcat.length === 0)
 	ok('no `${resolveOrigin(MORPHIT_INDEXER_ORIGIN)}/…` inline concatenation');
-else for (const o of inlineResolveConcat) bad(o.file, `inline resolveOrigin concat — use new URL(): ${o.text}`);
+else
+	for (const o of inlineResolveConcat)
+		bad(o.file, `inline resolveOrigin concat — use new URL(): ${o.text}`);
 
-if (varConcat.length === 0) ok('no resolved-indexer-origin variable is string-concatenated with a path');
+if (varConcat.length === 0)
+	ok('no resolved-indexer-origin variable is string-concatenated with a path');
 else for (const o of varConcat) bad(o.file, `resolveOrigin var concat — use new URL(): ${o.text}`);
 
 // ── Scenarios 5-8: the SSE/view builders use new URL + resolveOrigin ─

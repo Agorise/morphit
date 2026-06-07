@@ -3,7 +3,7 @@
  *
  * The first-time setup wizard.  Walks the operator through:
  *   1. Pre-flight system check (CPU, RAM, disk, OS, network)
- *   2. 22 ELI5-style configuration prompts (instance name,
+ *   2. 23 ELI5-style configuration prompts (instance name,
  *      tagline, database URL, relay account + active key,
  *      fees account, daily ceiling, contact URL, origin,
  *      alt-networks, fee explorers, chat-link explorers,
@@ -39,6 +39,7 @@ import {
 	stepFeeExplorers,
 	stepChatLinkExplorers,
 	stepDisabledAssets,
+	stepDisabledPaymentMethods,
 	stepListingFee,
 	stepSeo,
 	stepBackup,
@@ -91,7 +92,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	if (existsSync(existingConfig)) {
 		// cp186 — re-running the full setup wizard on a configured
 		// instance is almost never what the operator wants: it walks
-		// all ~22 steps and overwrites the whole config.  The common
+		// all ~23 steps and overwrites the whole config.  The common
 		// real intent ("I just want to change my RPC URLs / description
 		// / origin") is served by `morphit-ops edit`, which re-prompts
 		// only the safe post-launch sections and preserves everything
@@ -175,6 +176,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const feeExplorers = await stepFeeExplorers();
 	const chatLinkExplorers = await stepChatLinkExplorers();
 	const disabledAssets = await stepDisabledAssets();
+	const disabledPaymentMethods = await stepDisabledPaymentMethods();
 	const listingFee = await stepListingFee();
 	const seo = await stepSeo();
 	const backup = await stepBackup();
@@ -216,6 +218,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		feeExplorers,
 		chatLinkExplorers,
 		disabledAssets,
+		disabledPaymentMethods,
 		seo,
 		backup,
 		operatorTag,

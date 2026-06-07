@@ -122,7 +122,7 @@
 			bind:this={menuEl}
 			role="listbox"
 			aria-label={$_('nav.language')}
-			class="absolute end-0 z-50 mt-2 grid max-h-[min(70vh,30rem)] w-[min(92vw,30rem)] origin-top-right grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-ink-200 bg-white p-1.5 shadow-morphit-card sm:grid-cols-3 dark:border-ink-700 dark:bg-ink-900 ltr:origin-top-right rtl:origin-top-left"
+			class="fixed inset-x-3 top-16 z-50 grid max-h-[min(70vh,30rem)] grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-ink-200 bg-white p-1.5 shadow-morphit-card sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-[min(92vw,30rem)] sm:origin-top-right sm:grid-cols-3 dark:border-ink-700 dark:bg-ink-900 ltr:sm:origin-top-right rtl:sm:origin-top-left"
 		>
 			{#each SUPPORTED_LOCALES as loc (loc.code)}
 				{@const active = loc.code === $currentLocale}

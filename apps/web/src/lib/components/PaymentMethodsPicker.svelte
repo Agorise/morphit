@@ -105,9 +105,16 @@
 		return v;
 	}
 
-	/** Combined entries: canonical + instance additions.  Used by
-	 *  the search helper. */
-	const allEntries = $derived([...PAYMENT_METHODS, ...instanceAdditions]);
+	/** Canonical payment-method keys the operator disabled on this
+	 *  instance — hidden from the picker so sellers can't OFFER a
+	 *  method the instance doesn't support (e.g. "barter_goods"). */
+	const disabledMethods = $derived($instance?.disabled_payment_methods ?? []);
+
+	/** Combined entries: canonical + instance additions, minus any
+	 *  the operator disabled.  Used by the search helper. */
+	const allEntries = $derived(
+		[...PAYMENT_METHODS, ...instanceAdditions].filter((e) => !disabledMethods.includes(e.key))
+	);
 
 	/** Search-filtered entries with score.  Empty query → all
 	 *  entries with score 0 (caller renders by category +
@@ -134,9 +141,11 @@
 		const out = new Map<PaymentCategory, PaymentMethodEntry[]>();
 		for (const cat of PAYMENT_CATEGORIES_ORDERED) {
 			const entries = g.get(cat)!;
-			const filtered = excludeForAsset
-				? entries.filter((e) => e.assetExclusion !== excludeForAsset)
-				: entries.slice();
+			const filtered = (
+				excludeForAsset
+					? entries.filter((e) => e.assetExclusion !== excludeForAsset)
+					: entries.slice()
+			).filter((e) => !disabledMethods.includes(e.key));
 			out.set(cat, filtered);
 		}
 		return out;

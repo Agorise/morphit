@@ -16,7 +16,8 @@
       "instance": "實例身份",
       "asset_stance": "本實例嘅資產政策",
       "integrity": "套件完整性",
-      "worried": "擔心你在哪裡?"
+      "worried": "擔心你在哪裡?",
+      "payment_stance": "付款方式政策"
     },
     "field": {
       "origin": "你正在",
@@ -50,6 +51,12 @@
       "disabled_none": "冇 — 呢個實例接受所有可交易資產。",
       "disabled_suffix": "(運營方喺呢個實例上停用咗;喺對等實例上可交易)",
       "federation_note": "想要唔同嘅立場?瀏覽 /operators 搵政策符合你偏好嘅實例,或者運行你自己嘅實例 — 見 /run-a-node。"
+    },
+    "payment_stance": {
+      "explain": "每位營運者亦會選擇其實例提供哪些付款方式。預設啟用規範註冊表中的所有方式；營運者可以關閉其中任何一種——最常見的是易貨（商品/服務）——以令其實例只限貨幣或更專注。這是您實例的目前立場。聯邦說明：其他實例中使用已停用方式的訂單仍會顯示在您的訂單簿中；限制只針對由此處發佈的新訂單。",
+      "disabled_label": "已停用的方式",
+      "disabled_none": "無——此實例提供所有付款方式。",
+      "disabled_suffix": "（營運者已在此實例停用；在對等實例上仍可使用）"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "喺你裝咗 Morphit 嘅目錄執行。喺鏈上廣播之前會要求你確認。",
         "output_pending": "輸入實例特定方式嘅機器鍵嚟生成移除命令。",
         "orders_safety": "引用呢個方式嘅現有訂單喺移除之後繼續正常顯示 — 個鍵喺嗰啲訂單嘅歷史記錄入面持續存在。移除淨係意味住新訂單唔可以揀佢。"
+      },
+      "payment_disable": {
+        "heading": "提供的付款方式",
+        "intro": "選擇您的實例提供哪些付款方式。取消勾選某方式會將其從發佈訂單的選擇器及訂單簿篩選器中隱藏。停用易貨（商品/服務）是常見做法——有些營運者讓其實例只限貨幣。",
+        "legend_sr": "付款方式啟用/停用選擇",
+        "current_state_all_enabled": "提供所有付款方式"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} 個備用瀏覽器"
   },
   "faq": {
+    "search_dismiss": "關閉搜尋結果",
     "title": "幫助同常見問題",
     "subtitle": "簡短答案。直接喺搜尋欄問。",
     "search_placeholder": "搵個答案……",
@@ -2485,18 +2499,23 @@
       "heading": "篩選",
       "asset_label": "資產",
       "asset_any": "全部",
-      "side_label": "我想",
-      "side_any": "任意",
+      "payment_no_matches": "沒有匹配嘅付款方式",
+      "fiat_search_placeholder": "按名稱或代碼搜尋",
+      "fiat_no_matches": "沒有匹配嘅貨幣",
+      "fiat_remove": "移除",
+      "asset_barter": "易貨（商品/服務）",
+      "side_buy_goods": "想購買商品/服務嘅帖子",
+      "side_sell_goods": "想出售商品/服務嘅帖子",
+      "side_label": "我想睇",
+      "side_any": "全部",
       "side_buy": "想買加密貨幣嘅訂單",
       "side_sell": "想賣加密貨幣嘅訂單",
       "fiat_label": "法幣",
-      "fiat_placeholder": "如 USD",
       "region_label": "地區",
-      "region_placeholder": "如 亞洲",
       "clear": "清除篩選",
       "payment_methods_label": "接受的支付方式",
       "payment_methods_placeholder": "paypal, 微信, 現金",
-      "payment_methods_hint": "用逗號分隔。顯示接受其中任何一種方式的訂單。大小寫不敏感。",
+      "payment_methods_hint": "顯示接受其中任何一種方式嘅訂單。留空即可查看全部。",
       "min_trades_label": "交易者經驗",
       "min_trades_any": "任意 — 包括新交易者",
       "min_trades_5": "至少 5 次完成的交易",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "較高的值會隱藏經驗較少的交易者。預設顯示所有人。",
       "sort_label": "排序",
       "sort_recent": "最新優先",
-      "sort_rating": "評分最高優先",
-      "sort_trades": "經驗最豐富優先",
+      "sort_rating": "⭐ 評分最高嘅用戶優先",
+      "sort_trades": "經驗最豐富嘅用戶優先",
       "rss_asset_label": "RSS — {asset} 訂單",
       "rss_asset_title": "當有新嘅 {asset} 訂單發布時透過 RSS 收到通知。",
       "side_help": "提示：如果你想買加密貨幣，搵想賣嘅訂單。如果你想賣，搵想買嘅訂單。"
@@ -2514,7 +2533,7 @@
     "empty_title": "沒有訂單符合您的篩選",
     "empty_body": "試著放寬某個篩選,或稍後再看 — 訂單簿每幾秒就會更新。",
     "error_title": "無法連線到索引器",
-    "error_body": "索引器離線或無法存取。請稍後重試。",
+    "error_body": "索引器暫時無法存取。請稍後再試。",
     "retry": "重試",
     "load_more": "載入更多",
     "load_more_pending": "正在載入…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "每個發佈都打 tag;每個資源都有指紋;SRI 保護每個腳本。你可以由源碼重新構建並比較 — 我哋喺每個發佈旁邊發佈 hash。",
     "open_source_title": "開源,開放威脅模型。",
     "open_source_body": "完整威脅模型喺 repo 嘅 {security_doc} 入面。我哋明確講保護乜嘢同唔保護乜嘢 — 扮唔知比誠實仲衰。",
-    "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或(喺第 5 階段)通過加密訊息發俾 {morphit_account} 鏈帳戶。",
+    "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或通過加密訊息發俾 {morphit_account} 鏈帳戶。",
     "bounty_title": "漏洞賞金計劃",
     "bounty_body": "我們運行一個酌情決定的安全識別計劃。每一個可操作的發現都由真實的工程師審查,獲得答覆,並且 — 如果它實質上改善了 Morphit 的安全態勢 — 將在 BLURT(從 @morphit-fees 支付)或 BTC 中獲得獎勵,根據嚴重程度和報告質量進行調整。沒有固定的等級表;按個案裁定。即使沒有付款,名人堂榮譽也可用。完整範圍、嚴重程度指導、付款流程以及我們不會做的事情(沒有保密協議,沒有獨家披露)記錄在 SECURITY.md 中。",
     "bounty_link": "閱讀完整範圍和規則 →",
@@ -4233,9 +4252,9 @@
     "in_progress": "交易進行中"
   },
   "update": {
-    "title": "Morphit 有新版本",
-    "body": "下次 reload 嗰陣會裝。我哋唔會自動幫你換——你自己決定。",
-    "apply": "即刻裝",
+    "title": "Morphit 有更新",
+    "body": "重新載入呢一版就會套用更新，只係一兩秒。即刻載入？",
+    "apply": "即刻載入",
     "later": "遲啲先"
   },
   "welcome_first_buy": {

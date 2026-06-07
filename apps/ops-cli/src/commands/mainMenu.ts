@@ -66,7 +66,7 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Edit settings',
-				blurb: 'Change RPC URLs, description/SEO, origin, fees, or your operator tag.',
+				blurb: 'Change RPC and other URLs, description/SEO, origin, fees, or your operator tag.',
 				subcommand: 'edit'
 			},
 			{

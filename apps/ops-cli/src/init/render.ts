@@ -41,6 +41,7 @@ import type {
 	FeeExplorersResult,
 	ChatLinkExplorersResult,
 	DisabledAssetsResult,
+	DisabledPaymentMethodsResult,
 	SeoResult,
 	BackupResult,
 	OperatorTagResult,
@@ -69,6 +70,7 @@ export interface WizardAnswers {
 	 *  morphit.config.env.  Empty means accept everything
 	 *  (default posture). */
 	readonly disabledAssets: DisabledAssetsResult;
+	readonly disabledPaymentMethods: DisabledPaymentMethodsResult;
 	readonly seo: SeoResult;
 	readonly backup: BackupResult;
 	/** Part 111 — operator tag for federation-scoped payouts. */
@@ -914,6 +916,39 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# configuration" for the full operator playbook.');
 	lines.push(
 		`MORPHIT_INDEXER_DISABLED_ASSETS=${quote(answers.disabledAssets.disabledTickers.join(','))}`
+	);
+	lines.push('');
+
+	// ── Disabled payment methods (canonical) ──
+	lines.push('# ─────────────────────────────────────────────────────────');
+	lines.push('# DISABLED PAYMENT METHODS (operator-scoped)');
+	lines.push('# ─────────────────────────────────────────────────────────');
+	lines.push('# Canonical payment-method keys you do NOT want to offer on');
+	lines.push('# this instance.  Hidden from the post-order picker and the');
+	lines.push('# orderbook payment filter; the indexer refuses a NEW order');
+	lines.push('# only when ALL of its payment methods are disabled (an order');
+	lines.push('# that still offers one enabled method is kept).');
+	lines.push('#');
+	lines.push('# Peer-instance orders that use a method you disabled still');
+	lines.push('# appear in your read-only orderbook — chain history is shared');
+	lines.push('# across the federation.');
+	lines.push('#');
+	lines.push('# Comma-separated, LOWERCASE keys.  Parser tolerates');
+	lines.push('# whitespace, case, and trailing commas.');
+	lines.push('#');
+	lines.push('# Examples:');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=""              (offer all — default)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods" (no Barter / money-only instance)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="paypal"   (no PayPal)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods,paypal,zelle"');
+	lines.push('#');
+	lines.push('# Canonical method keys (barter_goods, paypal, zelle,');
+	lines.push('# …) are listed in docs/OPERATIONS.md §"Payment-method');
+	lines.push('# configuration".  Change your mind later by editing this line');
+	lines.push('# and restarting the indexer (browsers see the change at most');
+	lines.push('# 5 minutes after restart).');
+	lines.push(
+		`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=${quote(answers.disabledPaymentMethods.disabledKeys.join(','))}`
 	);
 	lines.push('');
 

@@ -16,7 +16,8 @@
       "instance": "Identità dell'istanza",
       "asset_stance": "Politica degli asset di questa istanza",
       "integrity": "Integrità del bundle",
-      "worried": "Preoccupato per dove sei?"
+      "worried": "Preoccupato per dove sei?",
+      "payment_stance": "Politica dei metodi di pagamento"
     },
     "field": {
       "origin": "Sei su",
@@ -50,6 +51,12 @@
       "disabled_none": "Nessuno — questa istanza accetta tutti gli asset negoziabili.",
       "disabled_suffix": "(disabilitato dall'operatore su questa istanza; negoziabile su istanze peer)",
       "federation_note": "Vuoi una postura diversa? Esplora /operators per trovare un'istanza la cui politica corrisponda alla tua preferenza, o gestisci la tua — vedi /run-a-node."
+    },
+    "payment_stance": {
+      "explain": "Ogni operatore sceglie anche quali metodi di pagamento offre la propria istanza. L'impostazione predefinita è ogni metodo del registro canonico; un operatore può disattivarne uno qualsiasi — più spesso il baratto (prodotti/servizi) — per mantenere la propria istanza solo monetaria o focalizzata. Questa è la posizione attuale della TUA istanza. Nota sulla federazione: gli ordini di altre istanze che usano un metodo disattivato compaiono comunque nel tuo book ordini; il blocco riguarda solo i nuovi ordini pubblicati da qui.",
+      "disabled_label": "Metodi disattivati",
+      "disabled_none": "Nessuno — questa istanza offre tutti i metodi di pagamento.",
+      "disabled_suffix": "(disattivato dall'operatore su questa istanza; utilizzabile su istanze peer)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "Dalla directory in cui hai installato Morphit. Ti verrà chiesto di confermare prima di trasmettere l'operazione alla chain.",
         "output_pending": "Inserisci la chiave macchina di un metodo specifico dell'istanza per generare il comando di rimozione.",
         "orders_safety": "Gli ordini esistenti che fanno riferimento a questo metodo continuano a mostrarsi correttamente dopo la rimozione — la chiave persiste nella cronologia di quegli ordini. Rimuovere significa solo che i nuovi ordini non possono sceglierla."
+      },
+      "payment_disable": {
+        "heading": "Metodi di pagamento offerti",
+        "intro": "Scegli quali metodi di pagamento offre la tua istanza. Deselezionando un metodo lo nascondi dal selettore di pubblicazione ordine e dal filtro del book ordini. Disattivare il baratto (prodotti/servizi) è il caso più comune — alcuni operatori mantengono la propria istanza solo monetaria.",
+        "legend_sr": "Selezione di attivazione/disattivazione dei metodi di pagamento",
+        "current_state_all_enabled": "Tutti i metodi di pagamento offerti"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} explorer alternativi"
   },
   "faq": {
+    "search_dismiss": "Chiudi i risultati della ricerca",
     "title": "Aiuto e FAQ",
     "subtitle": "Risposte brevi. Chiedi al box di ricerca quello che vuoi.",
     "search_placeholder": "Cerca una risposta…",
@@ -2485,18 +2499,23 @@
       "heading": "Filtro",
       "asset_label": "Asset",
       "asset_any": "Qualsiasi",
-      "side_label": "Voglio",
-      "side_any": "Qualsiasi",
+      "payment_no_matches": "Nessun metodo di pagamento corrispondente",
+      "fiat_search_placeholder": "Cerca per nome o codice",
+      "fiat_no_matches": "Nessuna valuta corrispondente",
+      "fiat_remove": "Rimuovi",
+      "asset_barter": "Baratto (prodotti/servizi)",
+      "side_buy_goods": "Annunci che vogliono comprare prodotti/servizi",
+      "side_sell_goods": "Annunci che vogliono vendere prodotti/servizi",
+      "side_label": "Voglio vedere",
+      "side_any": "Tutto",
       "side_buy": "Annunci che vogliono comprare crypto",
       "side_sell": "Annunci che vogliono vendere crypto",
       "fiat_label": "Valuta fiat",
-      "fiat_placeholder": "es. EUR",
       "region_label": "Regione",
-      "region_placeholder": "es. Europa",
       "clear": "Azzera filtri",
       "payment_methods_label": "Metodi di pagamento accettati",
       "payment_methods_placeholder": "paypal, sepa, contanti",
-      "payment_methods_hint": "Separati da virgola. Mostra ordini che accettano uno qualsiasi di questi. Maiuscole/minuscole non contano.",
+      "payment_methods_hint": "Mostra ordini che accettano uno qualsiasi di questi. Lascia il campo vuoto per vederli tutti.",
       "min_trades_label": "Esperienza del trader",
       "min_trades_any": "Qualsiasi — includi i nuovi trader",
       "min_trades_5": "Almeno 5 scambi completati",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Valori più alti nascondono i trader meno esperti. Per impostazione predefinita sono inclusi tutti.",
       "sort_label": "Ordina per",
       "sort_recent": "Più recenti",
-      "sort_rating": "Meglio valutati per primi",
-      "sort_trades": "Più esperti per primi",
+      "sort_rating": "⭐ Utenti con valutazione più alta per primi",
+      "sort_trades": "Utenti più esperti per primi",
       "rss_asset_label": "RSS — ordini {asset}",
       "rss_asset_title": "Ricevi notifiche via RSS quando viene pubblicato un nuovo ordine {asset}.",
       "side_help": "Suggerimento: se vuoi comprare crypto, cerca annunci che vogliono vendere. Se vuoi vendere, cerca annunci che vogliono comprare."
@@ -2514,7 +2533,7 @@
     "empty_title": "Nessun ordine corrisponde ai tuoi filtri",
     "empty_body": "Allenta un filtro o torna tra poco — il libro si aggiorna ogni pochi secondi.",
     "error_title": "Impossibile raggiungere l'indexer",
-    "error_body": "L'indexer è offline o irraggiungibile. Riprova tra un momento.",
+    "error_body": "L'indexer al momento è irraggiungibile. Riprova tra poco.",
     "retry": "Riprova",
     "load_more": "Carica altri",
     "load_more_pending": "Caricamento…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Ogni release è taggata; ogni asset ha impronta; SRI protegge ogni script. Puoi ricompilare dal sorgente e confrontare — pubblichiamo gli hash accanto a ogni release.",
     "open_source_title": "Open source, threat model aperto.",
     "open_source_body": "Il threat model completo è nel {security_doc} del repo. Siamo espliciti su cosa proteggiamo e cosa no — fingere il contrario sarebbe peggio della sincerità.",
-    "footer_body": "Trovato un problema? Segnalalo nel repo pubblico Forgejo, o (in Fase 5) con messaggio cifrato all'account {morphit_account} della catena.",
+    "footer_body": "Trovato un problema? Segnalalo nel repo pubblico Forgejo, o con messaggio cifrato all'account {morphit_account} della catena.",
     "bounty_title": "Programma di ricompensa per bug",
     "bounty_body": "Operiamo un programma discrezionale di riconoscimento della sicurezza. Ogni scoperta perseguibile viene revisionata da un ingegnere reale, riceve una risposta e — se migliora materialmente la postura di sicurezza di Morphit — viene ricompensata in BLURT (pagato da @morphit-fees) o BTC, scalato in base alla severità e alla qualità del rapporto. Nessuna tabella di livelli fissa; giudizio caso per caso. Credito nella hall of fame disponibile anche senza pagamento. L'ambito completo, la guida alla severità, il flusso di pagamento e cosa non faremo (nessun NDA, nessuna divulgazione esclusiva) è documentato in SECURITY.md.",
     "bounty_link": "Leggere l'ambito e le regole complete →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Operazione in corso"
   },
   "update": {
-    "title": "È disponibile una nuova versione di Morphit",
-    "body": "Si installerà al prossimo ricaricamento. Non la applichiamo automaticamente — decidi tu.",
-    "apply": "Installa ora",
+    "title": "È disponibile un aggiornamento di Morphit",
+    "body": "Ricaricando questa pagina verrà applicato l'aggiornamento. Bastano un paio di secondi. La carichiamo?",
+    "apply": "Carica ora",
     "later": "Dopo"
   },
   "welcome_first_buy": {

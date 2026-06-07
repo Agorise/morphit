@@ -63,6 +63,7 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { ASSETS } from '$lib/assets/registry';
+	import { PAYMENT_METHODS } from '$lib/payments/registry';
 	import Head from '$components/Head.svelte';
 	import { instance } from '$lib/stores/instance';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
@@ -84,6 +85,12 @@
 	// coins do you want listed?") than the env-var-shape ("which do
 	// you want disabled?").
 	let disabledTickers = $state<Set<string>>(new Set());
+
+	// Canonical payment-method disable set (cp208) — the payment-method
+	// analogue of disabledTickers.  Same inverted UI convention:
+	// checked = offered, unchecked = disabled.  Hydrated from
+	// $instance.disabled_payment_methods alongside disabled_assets.
+	let disabledMethods = $state<Set<string>>(new Set());
 
 	// cp117 V3 #1: live config preview.  On mount, hydrate the
 	// asset-disable state from the indexer's `/v1/instance` response
@@ -121,6 +128,7 @@
 			// That's fine: empty=empty produces the same env line.
 			if (state.disabled_assets) {
 				disabledTickers = new Set(state.disabled_assets);
+				disabledMethods = new Set(state.disabled_payment_methods ?? []);
 				hydrated = true;
 			}
 		});
@@ -143,6 +151,23 @@
 			return 'MORPHIT_INDEXER_DISABLED_ASSETS=';
 		}
 		return `MORPHIT_INDEXER_DISABLED_ASSETS=${sorted.join(',')}`;
+	});
+
+	function toggleMethod(key: string): void {
+		const next = new Set(disabledMethods);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		disabledMethods = next;
+	}
+
+	// Format the payment-method env var line (cp208).  Empty when
+	// nothing is disabled (signals "all offered" cleanly).
+	const methodEnvLine = $derived.by(() => {
+		const sorted = [...disabledMethods].sort();
+		if (sorted.length === 0) {
+			return 'MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=';
+		}
+		return `MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=${sorted.join(',')}`;
 	});
 
 	// Payment-method form state.
@@ -286,6 +311,18 @@
 		}
 	}
 
+	let methodEnvCopied = $state(false);
+	async function copyMethodEnv(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(methodEnvLine);
+			methodEnvCopied = true;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => { methodEnvCopied = false; }, 2000);
+		} catch {
+			// Clipboard blocked — the code block is selectable manually.
+		}
+	}
+
 	async function copyCli(): Promise<void> {
 		try {
 			await navigator.clipboard.writeText(cliCommand);
@@ -414,7 +451,90 @@
 		</div>
 	</section>
 
-	<!-- ─── Section 2: Payment-method add ───────────────────── -->
+	<!-- ─── Section 2: Payment-method enable/disable (cp208) ── -->
+	<section class="mb-12 rounded-2xl border border-ink-100 bg-white p-6 md:p-8 dark:border-ink-800 dark:bg-ink-900">
+		<h2 class="font-display text-xl font-bold">
+			{$_('admin.setup_wizard.payment_disable.heading')}
+		</h2>
+		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+			{$_('admin.setup_wizard.payment_disable.intro')}
+		</p>
+
+		<!-- live config preview — current disabled payment methods -->
+		<div
+			class="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3 text-xs dark:border-ink-700 dark:bg-ink-950"
+			aria-live="polite"
+		>
+			<span class="font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.assets.current_state_label')}
+			</span>
+			{#if !hydrated}
+				<span class="ml-1 text-ink-500">{$_('admin.setup_wizard.assets.current_state_loading')}</span>
+			{:else if $instance.disabled_payment_methods.length === 0}
+				<span class="ml-1 text-ink-600 dark:text-ink-300">
+					{$_('admin.setup_wizard.payment_disable.current_state_all_enabled')}
+				</span>
+			{:else}
+				<span class="ml-1 font-mono text-ink-600 dark:text-ink-300">
+					{$instance.disabled_payment_methods.join(', ')}
+				</span>
+				<span class="ml-1 text-ink-500">
+					{$_('admin.setup_wizard.assets.current_state_count', {
+						values: { count: $instance.disabled_payment_methods.length }
+					})}
+				</span>
+			{/if}
+		</div>
+
+		<fieldset class="mt-6">
+			<legend class="sr-only">{$_('admin.setup_wizard.payment_disable.legend_sr')}</legend>
+			<ul class="grid gap-2 sm:grid-cols-2">
+				{#each PAYMENT_METHODS as m (m.key)}
+					{@const offered = !disabledMethods.has(m.key)}
+					<li>
+						<label
+							class="flex cursor-pointer items-center gap-3 rounded-lg border border-ink-100 px-4 py-3 hover:border-morphit-emerald dark:border-ink-800
+								{offered ? '' : 'opacity-60'}"
+						>
+							<input
+								type="checkbox"
+								checked={offered}
+								onchange={() => toggleMethod(m.key)}
+								class="h-4 w-4 rounded text-morphit-emerald focus:ring-morphit-emerald"
+							/>
+							<span class="font-semibold">{m.name}</span>
+							<span class="ml-auto font-mono text-xs text-ink-500">{m.key}</span>
+						</label>
+					</li>
+				{/each}
+			</ul>
+		</fieldset>
+
+		<div class="mt-6">
+			<p class="text-sm font-semibold text-ink-700 dark:text-ink-200">
+				{$_('admin.setup_wizard.assets.output_heading')}
+			</p>
+			<p class="mt-1 text-xs text-ink-500">
+				{$_('admin.setup_wizard.assets.output_subtitle')}
+			</p>
+			<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+				<code
+					class="flex-1 rounded-lg border border-ink-200 bg-ink-50 p-3 font-mono text-sm break-all dark:border-ink-700 dark:bg-ink-950"
+					aria-live="polite"
+				>{methodEnvLine}</code>
+				<button
+					type="button"
+					onclick={copyMethodEnv}
+					class="btn-secondary whitespace-nowrap"
+					aria-label={$_('admin.setup_wizard.copy_button_aria')}
+				>
+					{methodEnvCopied ? $_('admin.setup_wizard.copied') : $_('admin.setup_wizard.copy_button')}
+				</button>
+			</div>
+		</div>
+	</section>
+
+	<!-- ─── Section 3: Payment-method add ───────────────────── -->
 	<section class="rounded-2xl border border-ink-100 bg-white p-6 md:p-8 dark:border-ink-800 dark:bg-ink-900">
 		<h2 class="font-display text-xl font-bold">
 			{$_('admin.setup_wizard.payment.heading')}

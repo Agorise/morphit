@@ -192,6 +192,12 @@ export interface InstanceResponse {
 	 *  read-only visibility is preserved regardless of operator
 	 *  stance. */
 	disabled_assets: readonly string[];
+	/** Canonical payment-method keys disabled on this instance
+	 *  (e.g. "barter_goods").  Frontend hides them from the picker +
+	 *  orderbook filter; the gate on NEW orders is only enforced
+	 *  for orders whose methods are ALL disabled.  Cross-instance
+	 *  read-only visibility is preserved. */
+	disabled_payment_methods: readonly string[];
 	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
 	 *  contact.  Rendered on /support, /about-this-instance, and
 	 *  the site footer as a "Contact via Matrix" link.  Format:
@@ -285,6 +291,7 @@ export function instanceRoute(config: Config): Hono {
 				}
 			},
 			disabled_assets: config.disabledAssets,
+			disabled_payment_methods: config.disabledPaymentMethods,
 			operator_matrix_room: config.operatorMatrixRoom,
 			mcp_url: config.mcpAdvertise && config.publicOrigin !== ''
 				? `${config.publicOrigin.replace(/\/$/, '')}/mcp`
