@@ -16,7 +16,8 @@
       "instance": "Identidad de la instancia",
       "asset_stance": "Política de activos de esta instancia",
       "integrity": "Integridad del paquete",
-      "worried": "¿Preocupado por dónde estás?"
+      "worried": "¿Preocupado por dónde estás?",
+      "payment_stance": "Política de métodos de pago"
     },
     "field": {
       "origin": "Estás en",
@@ -50,6 +51,12 @@
       "disabled_none": "Ninguno — esta instancia acepta todos los activos negociables.",
       "disabled_suffix": "(deshabilitado por el operador en esta instancia; negociable en instancias pares)",
       "federation_note": "¿Quieres una postura diferente? Explora /operators para encontrar una instancia cuya política coincida con tu preferencia, o ejecuta la tuya — ver /run-a-node."
+    },
+    "payment_stance": {
+      "explain": "Cada operador también elige qué métodos de pago ofrece su instancia. El valor predeterminado es todos los métodos del registro canónico; un operador puede desactivar cualquiera de ellos —con mayor frecuencia el trueque (productos/servicios)— para mantener su instancia solo con dinero o más enfocada. Esta es la postura actual de TU instancia. Nota sobre la federación: los pedidos de otras instancias que usan un método desactivado siguen apareciendo en tu libro de órdenes; la restricción solo afecta a los nuevos pedidos publicados desde aquí.",
+      "disabled_label": "Métodos desactivados",
+      "disabled_none": "Ninguno: esta instancia ofrece todos los métodos de pago.",
+      "disabled_suffix": "(desactivado por el operador en esta instancia; utilizable en instancias pares)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "Desde el directorio donde instalaste Morphit. Se te pedirá confirmación antes de emitir la operación a la cadena.",
         "output_pending": "Introduce la clave de máquina de un método específico de la instancia para generar el comando de eliminación.",
         "orders_safety": "Las órdenes existentes que hacen referencia a este método siguen mostrándose correctamente tras la eliminación — la clave persiste en el historial de esas órdenes. Eliminar significa solo que las nuevas órdenes no pueden elegirla."
+      },
+      "payment_disable": {
+        "heading": "Métodos de pago ofrecidos",
+        "intro": "Elige qué métodos de pago ofrece tu instancia. Al desmarcar un método, se oculta del selector al publicar una orden y del filtro del libro de órdenes. Desactivar el trueque (productos/servicios) es el caso más común: algunos operadores mantienen su instancia solo con dinero.",
+        "legend_sr": "Selección de activación/desactivación de métodos de pago",
+        "current_state_all_enabled": "Todos los métodos de pago ofrecidos"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} exploradores alternativos"
   },
   "faq": {
+    "search_dismiss": "Cerrar resultados de búsqueda",
     "title": "Ayuda y preguntas frecuentes",
     "subtitle": "Respuestas breves. Pregunta lo que necesites en el buscador.",
     "search_placeholder": "Busca una respuesta…",
@@ -2485,18 +2499,23 @@
       "heading": "Filtrar",
       "asset_label": "Activo",
       "asset_any": "Cualquiera",
-      "side_label": "Quiero",
-      "side_any": "Cualquiera",
+      "payment_no_matches": "Ningún método de pago coincide",
+      "fiat_search_placeholder": "Buscar por nombre o código",
+      "fiat_no_matches": "Ninguna moneda coincide",
+      "fiat_remove": "Quitar",
+      "asset_barter": "Trueque (productos/servicios)",
+      "side_buy_goods": "Publicaciones que quieren comprar productos/servicios",
+      "side_sell_goods": "Publicaciones que quieren vender productos/servicios",
+      "side_label": "Quiero ver",
+      "side_any": "Todo",
       "side_buy": "Publicaciones que quieren comprar cripto",
       "side_sell": "Publicaciones que quieren vender cripto",
       "fiat_label": "Moneda fiat",
-      "fiat_placeholder": "ej. USD",
       "region_label": "Región",
-      "region_placeholder": "ej. Sudamérica",
       "clear": "Limpiar filtros",
       "payment_methods_label": "Métodos de pago aceptados",
       "payment_methods_placeholder": "paypal, zelle, efectivo",
-      "payment_methods_hint": "Separados por coma. Muestra órdenes que acepten cualquiera. Las mayúsculas no importan.",
+      "payment_methods_hint": "Muestra órdenes que acepten cualquiera de estos. Deja el campo vacío para verlas todas.",
       "min_trades_label": "Experiencia del operador",
       "min_trades_any": "Cualquiera — incluir operadores nuevos",
       "min_trades_5": "Al menos 5 operaciones completadas",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Valores más altos ocultan operadores con menos experiencia. Por defecto se incluye a todos.",
       "sort_label": "Ordenar por",
       "sort_recent": "Más recientes",
-      "sort_rating": "Mejor valorados primero",
-      "sort_trades": "Más experimentados primero",
+      "sort_rating": "⭐ Usuarios mejor valorados primero",
+      "sort_trades": "Usuarios más experimentados primero",
       "rss_asset_label": "RSS — órdenes {asset}",
       "rss_asset_title": "Recibe notificaciones por RSS cuando se publique una nueva orden de {asset}.",
       "side_help": "Consejo: si quieres comprar cripto, busca publicaciones que quieren vender. Si quieres vender cripto, busca publicaciones que quieren comprar."
@@ -2514,7 +2533,7 @@
     "empty_title": "Ninguna orden coincide con tus filtros",
     "empty_body": "Prueba a relajar algún filtro o vuelve pronto — el libro se actualiza cada pocos segundos.",
     "error_title": "No se puede contactar el indexador",
-    "error_body": "El indexador no responde. Vuelve a intentarlo en un momento.",
+    "error_body": "El indexador no está disponible en este momento. Vuelve a intentarlo dentro de un rato.",
     "retry": "Reintentar",
     "load_more": "Cargar más",
     "load_more_pending": "Cargando…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Cada release lleva tag; cada asset tiene huella; SRI protege cada script. Puedes reconstruir desde fuentes y comparar — publicamos los hashes junto a cada release.",
     "open_source_title": "Código abierto, modelo de amenazas abierto.",
     "open_source_body": "El modelo de amenazas completo está en {security_doc} del repo. Somos explícitos sobre contra qué protegemos y contra qué no — fingir lo contrario sería peor que la honestidad.",
-    "footer_body": "¿Encontraste un problema? Repórtalo en el repo público de Forgejo, o (en Fase 5) por mensaje cifrado a la cuenta {morphit_account} de la cadena.",
+    "footer_body": "¿Encontraste un problema? Repórtalo en el repo público de Forgejo, o por mensaje cifrado a la cuenta {morphit_account} de la cadena.",
     "bounty_title": "Programa de recompensas por errores",
     "bounty_body": "Operamos un programa discrecional de reconocimiento de seguridad. Cada hallazgo accionable es revisado por un ingeniero real, recibe una respuesta y — si mejora materialmente la postura de seguridad de Morphit — es recompensado en BLURT (pagado desde @morphit-fees) o BTC, escalado por severidad y calidad del informe. Sin tabla de niveles fija; adjudicación caso por caso. Crédito en el salón de la fama disponible incluso cuando no hay pago. El alcance completo, la guía de severidad, el flujo de pago y lo que no haremos (sin NDA, sin divulgación exclusiva) está documentado en SECURITY.md.",
     "bounty_link": "Leer el alcance y las reglas completas →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Operación en curso"
   },
   "update": {
-    "title": "Hay una nueva versión de Morphit",
-    "body": "Se instalará la próxima vez que recargues. No la aplicamos automáticamente — tú decides.",
-    "apply": "Instalar ahora",
+    "title": "Hay una actualización de Morphit disponible",
+    "body": "Recargar esta página aplicará la actualización. Solo tarda uno o dos segundos. ¿La cargamos?",
+    "apply": "Cargar ahora",
     "later": "Más tarde"
   },
   "welcome_first_buy": {

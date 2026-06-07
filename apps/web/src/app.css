@@ -61,6 +61,18 @@
 	--morphit-teal: #02a6b2;
 	--morphit-gradient: linear-gradient(90deg, #8eef26 0%, #00da69 50%, #02a6b2 100%);
 
+	/* Button face — a DEEPENED brand teal. The pure brand teal
+	 * (--morphit-teal #02a6b2, the gradient's right-hand stop) is only
+	 * ~2.96:1 against white text — below WCAG AA's 4.5:1 for normal
+	 * text — so the .btn-primary face is darkened to #027c86 (white
+	 * text ≈5:1, clears AA) while the vivid #02a6b2 still lives in the
+	 * animated gradient border + brand accents.
+	 * NOTE: do NOT try to get "darker" via opacity here. The face layer
+	 * sits OVER the bright gradient (border-box covers the whole box),
+	 * so a translucent face bleeds the gradient THROUGH the interior
+	 * and LIGHTENS it. Deepen this hex instead. */
+	--morphit-btn-face: #027c86;
+
 	--focus-ring: 0 0 0 3px rgba(0, 218, 105, 0.35);
 
 	/* Motion — honor user preference */
@@ -200,13 +212,12 @@ body {
 
 	.btn-primary {
 		@apply btn text-white shadow-morphit-glow;
-		/* Solid emerald face; the brand gradient animates ONLY on the 1px
-		 * border. padding-box layer = the face, border-box layer = the
-		 * moving gradient. Far subtler than sweeping the gradient across
-		 * the whole button face. */
+		/* Brand-teal face; the brand gradient animates ONLY on the 1px border.
+		 * padding-box layer = the (teal) face, border-box layer = the moving
+		 * gradient. */
 		border: 1px solid transparent;
 		background:
-			linear-gradient(var(--morphit-emerald), var(--morphit-emerald)) padding-box,
+			linear-gradient(var(--morphit-btn-face), var(--morphit-btn-face)) padding-box,
 			var(--morphit-gradient) border-box;
 		background-size:
 			100% 100%,
@@ -272,7 +283,7 @@ body {
 	 *   - morphit-hue-shift (8s): rotates the hue of SVGs that use the brand
 	 *     gradient by ±15°, so the green/teal/blue "breathes".
 	 *   - morphit-shimmer  (6s): sweeps the brand gradient along the 1px
-	 *     border of .btn-primary (the button face stays a solid emerald).
+	 *     border of .btn-primary (the button face stays a solid teal).
 	 *   - morphit-pulse    (4s): slow opacity pulse for atmospheric glows.
 	 *
 	 * All respect prefers-reduced-motion: they pause for users who ask.

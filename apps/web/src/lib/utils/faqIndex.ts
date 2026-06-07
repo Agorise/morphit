@@ -216,6 +216,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	fees: [
 		'first_order_free',
 		'blurt_benefits',
+		'loyalty_milestones',
 		'welcome_bonus',
 		'order_fee_rejected',
 		'trade_goods_services'

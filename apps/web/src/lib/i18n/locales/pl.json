@@ -16,7 +16,8 @@
       "instance": "Tożsamość instancji",
       "asset_stance": "Polityka aktywów tej instancji",
       "integrity": "Integralność pakietu",
-      "worried": "Martwisz się, gdzie jesteś?"
+      "worried": "Martwisz się, gdzie jesteś?",
+      "payment_stance": "Zasady metod płatności"
     },
     "field": {
       "origin": "Jesteś na",
@@ -50,6 +51,12 @@
       "disabled_none": "Brak — ta instancja akceptuje wszystkie aktywa handlowe.",
       "disabled_suffix": "(wyłączone przez operatora na tej instancji; handlowalne na instancjach partnerskich)",
       "federation_note": "Chcesz innej postawy? Przeglądaj /operators, aby znaleźć instancję, której polityka odpowiada Twoim preferencjom, lub uruchom własną — zobacz /run-a-node."
+    },
+    "payment_stance": {
+      "explain": "Każdy operator wybiera również, które metody płatności oferuje jego instancja. Domyślnie włączone są wszystkie metody z kanonicznego rejestru; operator może wyłączyć dowolną z nich — najczęściej barter (produkty/usługi) — aby zachować instancję wyłącznie pieniężną lub wyspecjalizowaną. To jest bieżące stanowisko TWOJEJ instancji. Uwaga o federacji: zlecenia z innych instancji korzystające z wyłączonej metody nadal pojawiają się w Twojej księdze zleceń; ograniczenie dotyczy tylko nowych zleceń publikowanych stąd.",
+      "disabled_label": "Wyłączone metody",
+      "disabled_none": "Brak — ta instancja oferuje wszystkie metody płatności.",
+      "disabled_suffix": "(wyłączone przez operatora na tej instancji; dostępne na instancjach równorzędnych)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "Z katalogu, w którym zainstalowałeś Morphit. Zostaniesz poproszony o potwierdzenie przed emisją operacji na łańcuch.",
         "output_pending": "Wprowadź klucz maszynowy metody specyficznej dla instancji, aby wygenerować polecenie usunięcia.",
         "orders_safety": "Istniejące zlecenia odnoszące się do tej metody nadal wyświetlają się poprawnie po usunięciu — klucz pozostaje w historii tych zleceń. Usunięcie oznacza tylko, że nowe zlecenia nie mogą jej wybrać."
+      },
+      "payment_disable": {
+        "heading": "Oferowane metody płatności",
+        "intro": "Wybierz, które metody płatności oferuje Twoja instancja. Odznaczenie metody ukrywa ją z selektora przy publikowaniu zlecenia oraz z filtra księgi zleceń. Wyłączenie barteru (produkty/usługi) to typowy przypadek — niektórzy operatorzy utrzymują instancję wyłącznie pieniężną.",
+        "legend_sr": "Wybór włączania/wyłączania metod płatności",
+        "current_state_all_enabled": "Wszystkie metody płatności oferowane"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} alternatywne eksploratory"
   },
   "faq": {
+    "search_dismiss": "Zamknij wyniki wyszukiwania",
     "title": "Pomoc i FAQ",
     "subtitle": "Krótkie odpowiedzi. Zapytaj wyszukiwarkę.",
     "search_placeholder": "Szukaj odpowiedzi…",
@@ -2485,18 +2499,23 @@
       "heading": "Filtr",
       "asset_label": "Aktywo",
       "asset_any": "Dowolne",
-      "side_label": "Chcę",
-      "side_any": "Dowolne",
+      "payment_no_matches": "Brak pasującej metody płatności",
+      "fiat_search_placeholder": "Szukaj wg nazwy lub kodu",
+      "fiat_no_matches": "Brak pasującej waluty",
+      "fiat_remove": "Usuń",
+      "asset_barter": "Barter (produkty/usługi)",
+      "side_buy_goods": "Ogłoszenia chcące kupić produkty/usługi",
+      "side_sell_goods": "Ogłoszenia chcące sprzedać produkty/usługi",
+      "side_label": "Chcę zobaczyć",
+      "side_any": "Wszystko",
       "side_buy": "Ogłoszenia chcące kupić kryptowaluty",
       "side_sell": "Ogłoszenia chcące sprzedać kryptowaluty",
       "fiat_label": "Waluta fiat",
-      "fiat_placeholder": "np. EUR",
       "region_label": "Region",
-      "region_placeholder": "np. Europa",
       "clear": "Wyczyść filtry",
       "payment_methods_label": "Akceptowane metody płatności",
       "payment_methods_placeholder": "paypal, blik, gotówka",
-      "payment_methods_hint": "Oddzielone przecinkami. Pokazuje zlecenia akceptujące którąkolwiek z nich. Wielkość liter nie ma znaczenia.",
+      "payment_methods_hint": "Pokazuje zlecenia akceptujące którąkolwiek z nich. Zostaw pole puste, aby zobaczyć wszystkie.",
       "min_trades_label": "Doświadczenie tradera",
       "min_trades_any": "Dowolne — uwzględnij nowych traderów",
       "min_trades_5": "Co najmniej 5 ukończonych transakcji",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Wyższe wartości ukrywają mniej doświadczonych traderów. Domyślnie wszyscy są uwzględnieni.",
       "sort_label": "Sortuj według",
       "sort_recent": "Najnowsze",
-      "sort_rating": "Najwyżej oceniani najpierw",
-      "sort_trades": "Najbardziej doświadczeni najpierw",
+      "sort_rating": "⭐ Najwyżej oceniani użytkownicy najpierw",
+      "sort_trades": "Najbardziej doświadczeni użytkownicy najpierw",
       "rss_asset_label": "RSS — zlecenia {asset}",
       "rss_asset_title": "Powiadomienia przez RSS, gdy zostanie opublikowane nowe zlecenie {asset}.",
       "side_help": "Wskazówka: jeśli chcesz kupić kryptowaluty, szukaj ogłoszeń chcących sprzedać. Jeśli chcesz sprzedać, szukaj ogłoszeń chcących kupić."
@@ -2514,7 +2533,7 @@
     "empty_title": "Żadne zlecenie nie pasuje do twoich filtrów",
     "empty_body": "Spróbuj złagodzić filtr albo zajrzyj wkrótce — księga odświeża się co kilka sekund.",
     "error_title": "Nie można połączyć się z indekserem",
-    "error_body": "Indekser jest offline lub nieosiągalny. Spróbuj za chwilę.",
+    "error_body": "Indekser jest w tej chwili nieosiągalny. Spróbuj ponownie za chwilę.",
     "retry": "Spróbuj ponownie",
     "load_more": "Załaduj więcej",
     "load_more_pending": "Ładowanie…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Każde wydanie jest otagowane; każdy asset ma odcisk; SRI chroni każdy skrypt. Możesz przebudować ze źródła i porównać — publikujemy hashe obok każdego wydania.",
     "open_source_title": "Open source, otwarty model zagrożeń.",
     "open_source_body": "Pełny model zagrożeń jest w {security_doc} repo. Jesteśmy jednoznaczni co do tego przed czym chronimy a przed czym nie — udawanie byłoby gorsze niż szczerość.",
-    "footer_body": "Znalazłeś problem? Zgłoś przez publiczne repo Forgejo, lub (w Fazie 5) szyfrowaną wiadomością na konto {morphit_account} łańcucha.",
+    "footer_body": "Znalazłeś problem? Zgłoś przez publiczne repo Forgejo, lub szyfrowaną wiadomością na konto {morphit_account} łańcucha.",
     "bounty_title": "Program nagród za błędy",
     "bounty_body": "Prowadzimy uznaniowy program uznawania bezpieczeństwa. Każde wykonalne odkrycie jest sprawdzane przez prawdziwego inżyniera, otrzymuje odpowiedź i — jeśli istotnie poprawia postawę bezpieczeństwa Morphit — jest nagradzane w BLURT (płacone z @morphit-fees) lub BTC, skalowane według powagi i jakości raportu. Brak stałej tabeli poziomów; ocena indywidualna. Kredyt w hall of fame dostępny nawet bez płatności. Pełny zakres, wytyczne dotyczące powagi, przepływ płatności i czego nie zrobimy (brak NDA, brak ekskluzywnego ujawnienia) jest udokumentowane w SECURITY.md.",
     "bounty_link": "Przeczytaj pełny zakres i zasady →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Transakcja w toku"
   },
   "update": {
-    "title": "Dostępna jest nowa wersja Morphita",
-    "body": "Zainstaluje się przy następnym odświeżeniu. Nie robimy tego automatycznie — to Twoja decyzja.",
-    "apply": "Zainstaluj teraz",
+    "title": "Dostępna jest aktualizacja Morphita",
+    "body": "Odświeżenie tej strony zastosuje aktualizację. Zajmuje to tylko sekundę lub dwie. Załadować?",
+    "apply": "Załaduj teraz",
     "later": "Później"
   },
   "welcome_first_buy": {

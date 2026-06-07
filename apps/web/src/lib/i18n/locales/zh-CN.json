@@ -16,7 +16,8 @@
       "instance": "实例身份",
       "asset_stance": "本实例的资产政策",
       "integrity": "包完整性",
-      "worried": "担心你在哪里?"
+      "worried": "担心你在哪里?",
+      "payment_stance": "支付方式政策"
     },
     "field": {
       "origin": "你正在",
@@ -50,6 +51,12 @@
       "disabled_none": "无 — 此实例接受所有可交易资产。",
       "disabled_suffix": "(运营方在此实例上禁用；在对等实例上可交易)",
       "federation_note": "想要不同的立场?浏览 /operators 寻找政策符合您偏好的实例,或运行您自己的实例 — 见 /run-a-node。"
+    },
+    "payment_stance": {
+      "explain": "每个运营者还会选择其实例提供哪些支付方式。默认启用规范注册表中的所有方式；运营者可以关闭其中任意一种——最常见的是易货（商品/服务）——以使其实例仅限货币或更专注。这是您实例的当前立场。联邦说明：其他实例中使用已禁用方式的订单仍会显示在您的订单簿中；限制仅针对从这里发布的新订单。",
+      "disabled_label": "已禁用的方式",
+      "disabled_none": "无——此实例提供所有支付方式。",
+      "disabled_suffix": "（运营者已在此实例禁用；在对等实例上仍可使用）"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "从你安装 Morphit 的目录运行。在链上广播之前会要求你确认。",
         "output_pending": "输入实例特定方式的机器键以生成移除命令。",
         "orders_safety": "引用此方式的现有订单在移除后继续正常显示 — 键在那些订单的历史记录中持续存在。移除仅意味着新订单不能选择它。"
+      },
+      "payment_disable": {
+        "heading": "提供的支付方式",
+        "intro": "选择您的实例提供哪些支付方式。取消勾选某方式会将其从发布订单的选择器和订单簿筛选器中隐藏。禁用易货（商品/服务）是常见做法——有些运营者让其实例仅限货币。",
+        "legend_sr": "支付方式启用/禁用选择",
+        "current_state_all_enabled": "提供所有支付方式"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} 个备用浏览器"
   },
   "faq": {
+    "search_dismiss": "关闭搜索结果",
     "title": "帮助与常见问答",
     "subtitle": "简短的答案。直接在搜索框里问。",
     "search_placeholder": "搜索问题……",
@@ -2485,18 +2499,23 @@
       "heading": "筛选",
       "asset_label": "资产",
       "asset_any": "全部",
-      "side_label": "我想",
-      "side_any": "任意",
+      "payment_no_matches": "没有匹配的支付方式",
+      "fiat_search_placeholder": "按名称或代码搜索",
+      "fiat_no_matches": "没有匹配的货币",
+      "fiat_remove": "移除",
+      "asset_barter": "易货（商品/服务）",
+      "side_buy_goods": "想购买商品/服务的帖子",
+      "side_sell_goods": "想出售商品/服务的帖子",
+      "side_label": "我想看",
+      "side_any": "全部",
       "side_buy": "想买加密货币的订单",
       "side_sell": "想卖加密货币的订单",
       "fiat_label": "法币",
-      "fiat_placeholder": "如 USD",
       "region_label": "地区",
-      "region_placeholder": "如 亚洲",
       "clear": "清除筛选",
       "payment_methods_label": "接受的支付方式",
       "payment_methods_placeholder": "paypal, 微信, 现金",
-      "payment_methods_hint": "用逗号分隔。显示接受其中任何一种方式的订单。大小写不敏感。",
+      "payment_methods_hint": "显示接受其中任何一种方式的订单。留空即可查看全部。",
       "min_trades_label": "交易者经验",
       "min_trades_any": "任意 — 包括新交易者",
       "min_trades_5": "至少 5 次完成的交易",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "较高的值会隐藏经验较少的交易者。默认显示所有人。",
       "sort_label": "排序",
       "sort_recent": "最新优先",
-      "sort_rating": "评分最高优先",
-      "sort_trades": "经验最丰富优先",
+      "sort_rating": "⭐ 评分最高的用户优先",
+      "sort_trades": "经验最丰富的用户优先",
       "rss_asset_label": "RSS — {asset} 订单",
       "rss_asset_title": "当有新的 {asset} 订单发布时通过 RSS 收到通知。",
       "side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。"
@@ -2514,7 +2533,7 @@
     "empty_title": "没有订单符合您的筛选",
     "empty_body": "试着放宽某个筛选,或稍后再看 — 订单簿每几秒就会更新。",
     "error_title": "无法连接索引器",
-    "error_body": "索引器离线或无法访问。请稍后重试。",
+    "error_body": "索引器暂时无法访问。请稍后再试。",
     "retry": "重试",
     "load_more": "加载更多",
     "load_more_pending": "正在加载…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "每个发布都打标签;每个资源都有指纹;SRI 保护每个脚本。你可以从源码重新构建并比较 — 我们在每个发布旁边发布哈希。",
     "open_source_title": "开源,开放威胁模型。",
     "open_source_body": "完整威胁模型在仓库的 {security_doc} 中。我们明确说明保护什么和不保护什么 — 假装否则比诚实更糟。",
-    "footer_body": "发现问题?请通过公共 Forgejo 仓库报告,或(在第 5 阶段)通过加密消息发给 {morphit_account} 链账户。",
+    "footer_body": "发现问题?请通过公共 Forgejo 仓库报告,或通过加密消息发给 {morphit_account} 链账户。",
     "bounty_title": "漏洞赏金计划",
     "bounty_body": "我们运行一个酌情决定的安全识别计划。每一个可操作的发现都由真实的工程师审查,获得答复,并且 — 如果它实质上改善了 Morphit 的安全态势 — 将在 BLURT(从 @morphit-fees 支付)或 BTC 中获得奖励,根据严重程度和报告质量进行调整。没有固定的等级表;按个案裁定。即使没有付款,名人堂荣誉也可用。完整范围、严重程度指导、付款流程以及我们不会做的事情(没有保密协议,没有独家披露)记录在 SECURITY.md 中。",
     "bounty_link": "阅读完整范围和规则 →",
@@ -4233,9 +4252,9 @@
     "in_progress": "交易进行中"
   },
   "update": {
-    "title": "Morphit 有新版本可用",
-    "body": "下次重新加载页面时会安装。我们不会自动替换——由你决定。",
-    "apply": "立即安装",
+    "title": "Morphit 有可用更新",
+    "body": "重新加载此页面即可应用更新，只需一两秒。要现在加载吗？",
+    "apply": "立即加载",
     "later": "稍后"
   },
   "welcome_first_buy": {

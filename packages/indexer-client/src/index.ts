@@ -881,6 +881,11 @@ export interface InstanceResponse {
 	 *  render the instance's asset-policy stance so prospective
 	 *  users can self-select. */
 	readonly disabled_assets?: readonly string[];
+	/** Canonical payment-method keys the operator has disabled on
+	 *  this instance (e.g. "barter_goods").  The picker + orderbook
+	 *  filter hide these; the indexer refuses orders whose methods
+	 *  are ALL disabled.  Absent on older indexers → treat as []. */
+	readonly disabled_payment_methods?: readonly string[];
 	/** Part 121 cp9 — public Matrix room alias for user→operator
 	 *  contact (format: `#room:server`).  Optional for back-compat
 	 *  with pre-cp9 indexers — older instances omit the field

@@ -16,7 +16,8 @@
       "instance": "Instanz-Identität",
       "asset_stance": "Asset-Richtlinie dieser Instanz",
       "integrity": "Bundle-Integrität",
-      "worried": "Besorgt darüber, wo du bist?"
+      "worried": "Besorgt darüber, wo du bist?",
+      "payment_stance": "Zahlungsmethoden-Richtlinie"
     },
     "field": {
       "origin": "Du bist auf",
@@ -50,6 +51,12 @@
       "compare_tool_label": "Orderbook-Vergleichstool",
       "type_warning_heading": "Tippe sie in die Browserleiste — nicht klicken",
       "type_warning_body": "Wenn du diese Instanz für bösartig hältst, kannst du auch den Links hier nicht trauen — eine feindliche Instanz kann den Text \"morphit.io\" anzeigen, während die URL woandershin zeigt. Tippe die Adressen per Hand in einen sauberen Tab."
+    },
+    "payment_stance": {
+      "explain": "Jeder Betreiber wählt außerdem, welche Zahlungsmethoden seine Instanz anbietet. Standardmäßig sind alle Methoden aus der kanonischen Registry aktiv; ein Betreiber kann jede davon deaktivieren – am häufigsten Tausch (Waren/Dienstleistungen) –, um seine Instanz rein geldbasiert oder fokussiert zu halten. Dies ist die aktuelle Haltung DEINER Instanz. Föderations-Hinweis: Aufträge von anderen Instanzen, die eine deaktivierte Methode nutzen, erscheinen trotzdem in deinem Orderbuch; die Sperre gilt nur für neue, hier veröffentlichte Aufträge.",
+      "disabled_label": "Deaktivierte Methoden",
+      "disabled_none": "Keine – diese Instanz bietet alle Zahlungsmethoden an.",
+      "disabled_suffix": "(vom Betreiber auf dieser Instanz deaktiviert; auf Peer-Instanzen nutzbar)"
     }
   },
   "admin": {
@@ -115,6 +122,12 @@
         "output_subtitle": "Aus dem Verzeichnis, in dem Sie Morphit installiert haben. Sie werden vor dem Senden der Chain-Operation um Bestätigung gebeten.",
         "output_pending": "Geben Sie den Maschinenschlüssel einer instanzspezifischen Methode ein, um den Entfernungsbefehl zu generieren.",
         "orders_safety": "Bestehende Aufträge, die auf diese Methode verweisen, werden nach dem Entfernen weiterhin korrekt angezeigt — der Schlüssel bleibt in der Historie dieser Aufträge bestehen. Entfernen bedeutet nur, dass neue Aufträge sie nicht mehr auswählen können."
+      },
+      "payment_disable": {
+        "heading": "Angebotene Zahlungsmethoden",
+        "intro": "Wähle, welche Zahlungsmethoden deine Instanz anbietet. Wird eine Methode abgewählt, verschwindet sie aus der Auswahl beim Aufgeben eines Auftrags und aus dem Orderbuch-Filter. Tausch (Waren/Dienstleistungen) zu deaktivieren ist der häufigste Fall – manche Betreiber halten ihre Instanz rein geldbasiert.",
+        "legend_sr": "Auswahl zum Aktivieren/Deaktivieren von Zahlungsmethoden",
+        "current_state_all_enabled": "Alle Zahlungsmethoden angeboten"
       }
     }
   },
@@ -1054,6 +1067,7 @@
     "more_explorers_aria": "{count} alternative Explorer"
   },
   "faq": {
+    "search_dismiss": "Suchergebnisse schließen",
     "title": "Hilfe & FAQ",
     "subtitle": "Kurze Antworten. Frag einfach in der Suche.",
     "search_placeholder": "Suche nach einer Antwort…",
@@ -2485,18 +2499,23 @@
       "heading": "Filter",
       "asset_label": "Asset",
       "asset_any": "Beliebig",
-      "side_label": "Ich möchte",
-      "side_any": "Beliebig",
+      "payment_no_matches": "Keine passende Zahlungsmethode",
+      "fiat_search_placeholder": "Nach Name oder Code suchen",
+      "fiat_no_matches": "Keine passende Währung",
+      "fiat_remove": "Entfernen",
+      "asset_barter": "Tauschhandel (Waren/Dienstleistungen)",
+      "side_buy_goods": "Angebote, die Waren/Dienstleistungen kaufen wollen",
+      "side_sell_goods": "Angebote, die Waren/Dienstleistungen verkaufen wollen",
+      "side_label": "Ich möchte sehen",
+      "side_any": "Alles",
       "side_buy": "Beiträge, die Krypto kaufen möchten",
       "side_sell": "Beiträge, die Krypto verkaufen möchten",
       "fiat_label": "Fiat-Währung",
-      "fiat_placeholder": "z. B. EUR",
       "region_label": "Region",
-      "region_placeholder": "z. B. Europa",
       "clear": "Filter zurücksetzen",
       "payment_methods_label": "Akzeptierte Zahlungsmethoden",
       "payment_methods_placeholder": "paypal, sepa, bar",
-      "payment_methods_hint": "Kommagetrennt. Zeigt Orders, die eine dieser Methoden akzeptieren. Groß-/Kleinschreibung egal.",
+      "payment_methods_hint": "Zeigt Orders, die eine dieser Methoden akzeptieren. Lass das Feld leer, um alle zu sehen.",
       "min_trades_label": "Händler-Erfahrung",
       "min_trades_any": "Beliebig — neue Händler einschließen",
       "min_trades_5": "Mindestens 5 abgeschlossene Trades",
@@ -2504,8 +2523,8 @@
       "min_trades_hint": "Höhere Werte blenden unerfahrenere Händler aus. Die Standardeinstellung zeigt alle.",
       "sort_label": "Sortieren nach",
       "sort_recent": "Neueste zuerst",
-      "sort_rating": "Am besten bewertet zuerst",
-      "sort_trades": "Erfahrenste zuerst",
+      "sort_rating": "⭐ Bestbewertete Nutzer zuerst",
+      "sort_trades": "Erfahrenste Nutzer zuerst",
       "rss_asset_label": "RSS — {asset}-Orders",
       "rss_asset_title": "Benachrichtigungen via RSS, wenn eine neue {asset}-Order gepostet wird.",
       "side_help": "Tipp: Wenn du Krypto kaufen willst, suche Beiträge, die verkaufen möchten. Wenn du verkaufen willst, suche Beiträge, die kaufen möchten."
@@ -2514,7 +2533,7 @@
     "empty_title": "Keine Orders passen zu deinen Filtern",
     "empty_body": "Lockere einen Filter oder schau gleich wieder vorbei — das Buch aktualisiert sich alle paar Sekunden.",
     "error_title": "Indexer nicht erreichbar",
-    "error_body": "Der Indexer ist offline oder nicht erreichbar. Versuche es gleich nochmal.",
+    "error_body": "Der Indexer ist momentan nicht erreichbar. Bitte versuche es in Kürze noch einmal.",
     "retry": "Erneut versuchen",
     "load_more": "Mehr laden",
     "load_more_pending": "Lädt…",
@@ -3455,7 +3474,7 @@
     "reproducible_body": "Jeder Release ist getaggt; jedes Asset hat einen Fingerprint; SRI schützt jedes Skript. Du kannst aus dem Source neu bauen und vergleichen — wir veröffentlichen die Hashes neben jedem Release.",
     "open_source_title": "Open-Source, offenes Threat-Model.",
     "open_source_body": "Das vollständige Threat-Model steht in der {security_doc} des Repos. Wir sind explizit darüber, wogegen wir schützen und wogegen nicht — anders zu tun wäre schlechter als Ehrlichkeit.",
-    "footer_body": "Problem gefunden? Bitte melde es im öffentlichen Forgejo-Repo, oder (in Phase 5) per verschlüsselter Nachricht an das Chain-Konto {morphit_account}.",
+    "footer_body": "Problem gefunden? Bitte melde es im öffentlichen Forgejo-Repo, oder per verschlüsselter Nachricht an das Chain-Konto {morphit_account}.",
     "bounty_title": "Bug-Bounty-Programm",
     "bounty_body": "Wir betreiben ein diskretionäres Sicherheits-Anerkennungsprogramm. Jeder umsetzbare Befund wird von einem echten Ingenieur überprüft, erhält eine Antwort und — wenn er Morphits Sicherheitslage materiell verbessert — wird in BLURT (gezahlt von @morphit-fees) oder BTC belohnt, skaliert nach Schweregrad und Berichtsqualität. Keine feste Stufentabelle; Einzelfallentscheidung. Hall-of-Fame-Anerkennung verfügbar auch ohne Zahlung. Der vollständige Umfang, die Schweregrad-Führung, der Zahlungsablauf und was wir nicht tun werden (kein NDA, keine exklusive Offenlegung) ist in SECURITY.md dokumentiert.",
     "bounty_link": "Vollständigen Umfang und Regeln lesen →",
@@ -4233,9 +4252,9 @@
     "in_progress": "Handel läuft"
   },
   "update": {
-    "title": "Eine neue Morphit-Version ist verfügbar",
-    "body": "Sie wird beim nächsten Neuladen installiert. Wir tun das nicht automatisch — deine Entscheidung.",
-    "apply": "Jetzt installieren",
+    "title": "Ein Morphit-Update ist verfügbar",
+    "body": "Durch Neuladen dieser Seite wird das Update angewendet. Das dauert nur ein, zwei Sekunden. Laden?",
+    "apply": "Jetzt laden",
     "later": "Später"
   },
   "welcome_first_buy": {

@@ -32,6 +32,7 @@
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
+	import { findPaymentMethod } from '$lib/payments/registry';
 
 	interface VerifyPayload {
 		schema_version: number;
@@ -263,6 +264,45 @@
 							<span class="font-mono">{$instance.disabled_assets.join(', ')}</span>
 							<span class="ml-2 text-ink-500">
 								{$_('about_this_instance.asset_stance.disabled_suffix')}
+							</span>
+						{/if}
+					</dd>
+				</div>
+			</dl>
+			<p class="mt-4 text-xs text-ink-500">
+				{$_('about_this_instance.asset_stance.federation_note')}
+			</p>
+		</section>
+
+		<!-- cp208 — payment-method stance, parity with the asset stance
+		     above.  Data source: $instance.disabled_payment_methods from
+		     /v1/instance.  Canonical keys are mapped to display names via
+		     the payments registry; unknown keys fall back to the raw key. -->
+		<section class="card mb-6">
+			<h2 class="font-display text-xl font-bold">
+				{$_('about_this_instance.section.payment_stance')}
+			</h2>
+			<p class="mt-2 text-ink-700 dark:text-ink-200">
+				{$_('about_this_instance.payment_stance.explain')}
+			</p>
+			<dl class="mt-4 space-y-3 text-sm">
+				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
+					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-40">
+						{$_('about_this_instance.payment_stance.disabled_label')}
+					</dt>
+					<dd>
+						{#if $instance.disabled_payment_methods.length === 0}
+							<span class="text-morphit-emerald">
+								{$_('about_this_instance.payment_stance.disabled_none')}
+							</span>
+						{:else}
+							<span>
+								{$instance.disabled_payment_methods
+									.map((k) => findPaymentMethod(k)?.name ?? k)
+									.join(', ')}
+							</span>
+							<span class="ml-2 text-ink-500">
+								{$_('about_this_instance.payment_stance.disabled_suffix')}
 							</span>
 						{/if}
 					</dd>

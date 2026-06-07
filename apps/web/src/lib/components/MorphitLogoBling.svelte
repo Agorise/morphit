@@ -1,7 +1,8 @@
 <!--
 	MorphitLogoBling — wraps the Morphit wordmark with three orbiting
-	particles that drift under soft mutual + logo-centroid gravity, a
-	"3-body problem" feel rather than rigid circles.
+	particles. The three are spring-coupled (so they always stay a
+	visible distance apart) and slowly rotate about the wordmark centre,
+	giving a soft organic drift rather than rigid clockwork circles.
 
 	WHY THIS COMPONENT EXISTS (Part 122 cp115)
 
@@ -15,14 +16,15 @@
 	IMPLEMENTATION
 
 	Three Particle objects (mass = 1 each).  Each frame:
-	  1. Compute force on every particle from every other particle
-	     (Newton's 1/r^2, softened with a min-distance to avoid
-	     singularities).
-	  2. Compute attraction toward the wordmark's center (a stronger
-	     constant pull that keeps particles bound to the logo).
-	  3. Integrate velocity (semi-implicit Euler) with light damping
-	     so the system doesn't explode after a few seconds.
-	  4. Clamp position to the bling-box bounds so a runaway particle
+	  1. Pairwise SPRING force toward a fixed rest length, so every pair
+	     settles a visible distance apart — the three can never collapse
+	     onto each other into a single blob.
+	  2. A gentle tangential push about the wordmark centre (rotation) so
+	     the trio orbits slowly, plus a weak centripetal tether that keeps
+	     the dance centred and bound to the logo.
+	  3. Integrate velocity (semi-implicit Euler) with light damping and a
+	     speed cap so the system stays slow and never explodes.
+	  4. Clamp / soft-bounce position at the bling-box bounds so a particle
 	     can't drift off screen.
 
 	BUDGET DISCIPLINE (priorities #4 + #3)
@@ -45,9 +47,8 @@
 	PARTICLE COLORS
 
 	Match the brand gradient stops exactly: lime (#8EEF26), green
-	(#00DA69), teal (#02A6B2).  Three is deliberate — it's the
-	minimum N for the 3-body chaos visual.  Two particles would
-	just orbit each other in stable ellipses; four would smear into
+	(#00DA69), teal (#02A6B2).  Three is deliberate — one dot per
+	gradient stop.  Two would read as a pair; four would smear into
 	an indistinct blur.
 
 	ACCESSIBILITY
@@ -66,6 +67,12 @@
 		wordmarkSrc?: string;
 		/** Display height of the wordmark in CSS pixels (matches Tailwind h-7 default). */
 		heightPx?: number;
+		/** Responsive height via Tailwind classes (e.g. "h-11 sm:h-16 lg:h-24").
+		 *  When set, this WINS over heightPx — the wordmark + canvas size from
+		 *  these classes instead of the inline pixel height, so the logo can
+		 *  scale across breakpoints (used by the homepage hero). The canvas
+		 *  measures its rendered box on mount, so the particles adapt. */
+		heightClass?: string;
 		/** Extra classes for the wrapping <a>-targetable container. */
 		class?: string;
 	}
@@ -73,6 +80,7 @@
 	const {
 		wordmarkSrc = '/brand/morphit-wordmark.svg',
 		heightPx = 28,
+		heightClass = '',
 		class: cls = ''
 	}: Props = $props();
 
@@ -101,54 +109,57 @@
 
 	const PARTICLES: Particle[] = [];
 
-	// Tunables — a slow, BOUNDED three-body gravity dance. The famed
-	// "three-body problem": three masses pulling on each other under
-	// mutual gravity, whose motion is chaotic — never settling into tidy
-	// repeating orbits. Tuned for the logo: gravity is the star of the
-	// show, but the dance is confined to the wordmark box and kept calm.
-	// (These are eyeball-tuned knobs — adjustable to taste.)
+	// Tunables — a slow, BOUNDED dance of three mutually-sprung dots that
+	// also orbit the wordmark centre. The earlier build used pure mutual
+	// gravity, but under damping the three masses collapse onto their common
+	// centre and overlap into a single visible blob (which is why only one
+	// dot appeared to fly around). A spring with a fixed rest length keeps
+	// the three a visible distance apart at all times, while a gentle
+	// rotation keeps them perpetually "flying around". (Eyeball-tuned knobs
+	// — adjustable to taste.)
 	//
-	//   PARTICLE_PULL: mutual gravitational constant — each dot is pulled
-	//     toward the other two (∝ 1/r²). They drift together, swing past,
-	//     slingshot apart, get pulled back. This is the three-body core.
-	//   CENTROID_PULL: a WEAK tether toward the wordmark centre — just
-	//     enough to keep the dance roughly centred (and stop a dot being
-	//     ejected for good) WITHOUT overpowering the mutual gravity. A
-	//     strong well would turn the chaos into regular harmonic orbits.
-	//   JITTER: a tiny per-frame perturbation. Two jobs — it keeps the
-	//     system off any periodic orbit, and it replaces the sliver of
-	//     energy DAMPING bleeds so the dots never spiral into a still
-	//     cluster over a long session.
-	//   DAMPING: light per-frame velocity bleed so close-encounter
-	//     slingshots can't accelerate without bound.
-	//   MIN_DIST: softening floor for the 1/r² force — a near-collision
-	//     gives a gentle slingshot, not an infinite fling.
-	//   MAX_VELOCITY: speed cap — keeps the whole dance slow (the earlier
-	//     version felt too fast).
-	//   EDGE_PAD: soft margin so the dots use nearly the full box and
-	//     bounce back in rather than escaping.
-	const PARTICLE_PULL = 6.0;
-	const CENTROID_PULL = 0.0003;
-	const JITTER = 0.008;
+	//   SPRING_K: pairwise spring stiffness. Each dot is pulled toward / pushed
+	//     away from the others so every pair settles near `sep` apart — this is
+	//     what guarantees all three stay separated and never merge.
+	//   ROT_K: a small tangential (perpendicular-to-radius) push about the
+	//     centroid. Spins the trio so the dots orbit slowly instead of freezing
+	//     into a static triangle — the "flying around" motion.
+	//   CENTROID_PULL: a weak tether toward the wordmark centre; the centripetal
+	//     pull that keeps the rotating trio roughly centred and bound.
+	//   JITTER: a tiny per-frame perturbation — keeps the motion organic (off
+	//     any clean periodic orbit) and tops up the energy DAMPING bleeds.
+	//   DAMPING: light per-frame velocity bleed so the dance can't accelerate
+	//     without bound.
+	//   MIN_DIST: softening floor for the spring direction — a near-collision
+	//     still resolves to a finite push, never a divide-by-zero.
+	//   MAX_VELOCITY: speed cap — keeps the whole dance slow and calm.
+	//   EDGE_PAD: soft margin so the dots use nearly the full box and bounce
+	//     back in rather than escaping.
+	// `sep` (the spring rest length) is computed from the box height in
+	// initParticles so the spacing scales with the logo size.
+	const SPRING_K = 0.004;
+	const ROT_K = 0.0013;
+	const CENTROID_PULL = 0.0012;
+	const JITTER = 0.018;
 	const DAMPING = 0.99;
 	const MIN_DIST = 10;
-	const MAX_VELOCITY = 0.4;
+	const MAX_VELOCITY = 0.5;
 	const EDGE_PAD = 0.04;
+	let sep = 0;
 
 	function initParticles(boxW: number, boxH: number): void {
 		PARTICLES.length = 0;
+		// Spring rest length — scales with the logo height so the three dots
+		// stay proportionally separated at any size (header 32px → hero ~96px).
+		sep = boxH * 0.9;
 		const stops = ['#8EEF26', '#00DA69', '#02A6B2'];
 		const r = Math.max(1.8, boxH * 0.085);
 		// Deterministic but deliberately ASYMMETRIC starting state —
-		// uneven positions spread across the width, and uneven velocities
-		// that DON'T point at the common centre (so the system carries
-		// angular momentum and the dots swing past each other instead of
-		// collapsing radially). The asymmetry is what tips the mutual-
-		// gravity system into chaos rather than the tidy symmetric
-		// "choreography" orbit the old equilateral-triangle start produced
-		// (which is why the dots looked like they were just circling). It
-		// also spreads them across the wordmark on the first frame, and is
-		// exactly what gets drawn in reduced-motion mode (no RAF).
+		// uneven positions spread across the width and uneven velocities, so
+		// the spring-coupled trio starts mid-motion (already drifting and
+		// rotating) rather than snapping out from a tidy symmetric triangle.
+		// This is also exactly what gets drawn in reduced-motion mode (no
+		// RAF): three dots at rest, visibly spread across the wordmark.
 		const seeds = [
 			{ fx: 0.2, fy: 0.38, vx: 0.05, vy: 0.1 },
 			{ fx: 0.56, fy: 0.62, vx: -0.08, vy: 0.04 },
@@ -177,26 +188,32 @@
 			const p = PARTICLES[i]!;
 			let fx = 0;
 			let fy = 0;
-			// Mutual gravitational ATTRACTION (the three-body core): each
-			// dot is pulled toward the other two, ∝ 1/r² (softened by
-			// MIN_DIST). Close approaches slingshot; this is what makes
-			// the motion chaotic rather than a fixed loop.
+			// Pairwise SPRING toward a fixed rest length `sep`: pulls a pair
+			// together when they drift past `sep`, pushes them apart when they
+			// close inside `sep`. This is what keeps all three dots a visible
+			// distance apart — they can never collapse into a single blob.
 			for (let j = 0; j < PARTICLES.length; j++) {
 				if (j === i) continue;
 				const q = PARTICLES[j]!;
 				const dx = q.x - p.x;
 				const dy = q.y - p.y;
 				const distSq = Math.max(dx * dx + dy * dy, MIN_DIST * MIN_DIST);
-				const force = PARTICLE_PULL / distSq;
-				fx += dx * force;
-				fy += dy * force;
+				const dist = Math.sqrt(distSq);
+				const f = SPRING_K * (dist - sep);
+				fx += (dx / dist) * f;
+				fy += (dy / dist) * f;
 			}
-			// Weak tether toward the wordmark centre — keeps the dance
-			// bound to the box without overpowering the mutual gravity.
+			// Gentle ROTATION about the centroid (tangential to the radius) so
+			// the trio orbits slowly instead of settling into a static triangle
+			// — this is the perpetual "flying around" motion.
+			fx += -(p.y - cy) * ROT_K;
+			fy += (p.x - cx) * ROT_K;
+			// Weak tether toward the wordmark centre — the centripetal pull
+			// that keeps the rotating trio roughly centred in the box.
 			fx += (cx - p.x) * CENTROID_PULL;
 			fy += (cy - p.y) * CENTROID_PULL;
-			// Tiny perturbation (keeps it off any periodic orbit and
-			// replaces the energy DAMPING bleeds, so it never collapses).
+			// Tiny perturbation — keeps the motion organic (off any clean
+			// periodic orbit) and tops up the energy DAMPING bleeds.
 			fx += (Math.random() - 0.5) * JITTER;
 			fy += (Math.random() - 0.5) * JITTER;
 			// Integrate (semi-implicit Euler) with light damping.
@@ -331,8 +348,8 @@
 
 <div
 	bind:this={containerEl}
-	class={`morphit-logo-bling-host ${cls}`}
-	style="height: {heightPx}px;"
+	class={`morphit-logo-bling-host ${heightClass} ${cls}`}
+	style={heightClass ? '' : `height: ${heightPx}px;`}
 >
 	<canvas
 		bind:this={canvasEl}
@@ -342,8 +359,8 @@
 	<img
 		src={wordmarkSrc}
 		alt="Morphit"
-		class="morphit-logo-bling-wordmark"
-		style="height: {heightPx}px;"
+		class={`morphit-logo-bling-wordmark ${heightClass}`}
+		style={heightClass ? '' : `height: ${heightPx}px;`}
 		decoding="async"
 	/>
 </div>

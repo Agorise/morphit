@@ -105,8 +105,9 @@ const orderbookStreamQuerySchema = z.object({
 	fiat_currency: z
 		.string()
 		.min(1)
-		.max(8)
-		.regex(/^[A-Z]+$/)
+		.max(120)
+		// One or more uppercase ISO codes, comma-separated (see REST).
+		.regex(/^[A-Z]+(,[A-Z]+)*$/)
 		.optional(),
 	location_region: z.string().min(1).max(128).optional(),
 	payment_methods: z.string().min(1).max(256).optional(),

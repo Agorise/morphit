@@ -217,6 +217,10 @@ const sampleAnswers: WizardAnswers = {
 	// "accept all assets" instance.  Per-scenario overrides exercise
 	// the populated paths.
 	disabledAssets: { disabledTickers: [] },
+	// cp208 — disabledPaymentMethods fixture field.  Added when the
+	// canonical-payment-method disable step (step 14) landed; without
+	// it every writeWizardOutput-based scenario fails to typecheck.
+	disabledPaymentMethods: { disabledKeys: [] },
 	// Part 121 cp9 — both Matrix surfaces opted-out in the
 	// baseline fixture.  Per-scenario overrides exercise the
 	// populated paths.

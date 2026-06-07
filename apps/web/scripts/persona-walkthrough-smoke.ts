@@ -453,7 +453,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'So-4 — init.ts JSDoc has realistic step count + disclaimer',
 		file: 'apps/ops-cli/src/commands/init.ts',
 		rootRelative: true,
-		mustHave: ['22 ELI5', 'check steps.ts'],
+		mustHave: ['23 ELI5', 'check steps.ts'],
 		// Pre-fix said "Nine ELI5-style configuration prompts."
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
@@ -804,11 +804,17 @@ const SCENARIOS: readonly Scenario[] = [
 		// reverse-proxy/WAF decision that wires
 		// MORPHIT_RELAY_TRUSTED_PROXY_IPS, 20 → 21) and stepHardening
 		// (the host-hardening checklist generator, 21 → 22).
+		//
+		// cp208 update: now 23.  cp208 inserted step 14
+		// "Payment-method policy" (the Barter enable/disable toggle,
+		// writing MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS) right
+		// after the trade-only asset policy step, bumping the later
+		// steps by one (22 → 23).
 		name: 'P122-CP5-F14b — wizard TOTAL_STEPS pinned (must update F14 doc reference if this changes)',
 		file: 'apps/ops-cli/src/init/steps.ts',
 		rootRelative: true,
 		mustHave: [
-			'const TOTAL_STEPS = 22;'
+			'const TOTAL_STEPS = 23;'
 		]
 	},
 	{
@@ -899,7 +905,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'D-9 — PRE-LAUNCH wizard step-count realistic',
 		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
 		rootRelative: true,
-		mustHave: ['~22 prompts', 'steps.ts'],
+		mustHave: ['~23 prompts', 'steps.ts'],
 		mustNotHave: ['covers all 14 steps']
 	},
 	{

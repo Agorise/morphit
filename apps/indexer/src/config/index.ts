@@ -140,6 +140,15 @@ export interface Config {
 	 *  preserved; the operator just refuses to accept NEW orders
 	 *  from their own users for the disabled assets. */
 	readonly disabledAssets: readonly string[];
+	/** Operator-level instance-wide payment-method disable list —
+	 *  the payment-method analogue of disabledAssets.  Lowercase
+	 *  canonical keys (e.g. "barter_goods" for an operator who
+	 *  doesn't want Barter on their site).  The order handler
+	 *  rejects an order whose payment methods are ALL disabled; the
+	 *  frontend's picker + orderbook filter hide the disabled
+	 *  methods.  Default empty (every canonical method is offered).
+	 *  Federation: cross-instance read-only visibility preserved. */
+	readonly disabledPaymentMethods: readonly string[];
 	/** Part 121 cp9 — public Matrix room alias for user→operator
 	 *  contact, exposed via /v1/instance.operator_matrix_room.
 	 *  Parsed and validated as `#room:server` at config load
@@ -749,6 +758,26 @@ const envSchema = z.object({
 			s
 				.split(',')
 				.map((t) => t.trim().toUpperCase())
+				.filter((t) => t.length > 0)
+		),
+
+	/** Operator-level instance-wide payment-method disable list —
+	 *  the payment-method analogue of MORPHIT_INDEXER_DISABLED_ASSETS.
+	 *  Comma-separated canonical payment-method keys, LOWERCASE
+	 *  (e.g. `MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods"`
+	 *  to turn Barter off on this instance).  The order handler
+	 *  rejects an order whose payment methods are ALL disabled; the
+	 *  frontend picker + orderbook filter hide the disabled methods.
+	 *  Default empty (every canonical method offered).  Parser is
+	 *  whitespace / case / trailing-comma tolerant.  Federation:
+	 *  cross-instance read-only visibility preserved. */
+	MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS: z
+		.string()
+		.default('')
+		.transform((s) =>
+			s
+				.split(',')
+				.map((t) => t.trim().toLowerCase())
 				.filter((t) => t.length > 0)
 		),
 
@@ -1420,6 +1449,7 @@ export function loadConfig(): Config {
 		feeRecipient: e.MORPHIT_INDEXER_FEE_RECIPIENT,
 		feeBaseBlurt: e.MORPHIT_INDEXER_FEE_BASE_BLURT,
 		disabledAssets: e.MORPHIT_INDEXER_DISABLED_ASSETS,
+		disabledPaymentMethods: e.MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS,
 		operatorMatrixRoom: e.MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM,
 		mcpAdvertise: e.MORPHIT_MCP_ADVERTISE,
 		feeTolerance: e.MORPHIT_INDEXER_FEE_TOLERANCE,

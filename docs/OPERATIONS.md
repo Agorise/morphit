@@ -83,6 +83,7 @@ before relying on any of it.**
 40. [Treasury chain-pin + XMR per-payment proofs — broadcasting and verifying](#40-treasury-chain-pin--xmr-per-payment-proofs--broadcasting-and-verifying)
 41. [Federation-cost attribution — only paying for ops served by YOUR instance](#41-federation-cost-attribution--only-paying-for-ops-served-by-your-instance)
 Trade-only asset configuration — enabling/disabling tradable assets [(jump)](#trade-only-asset-configuration)
+Payment-method configuration — enabling/disabling canonical payment methods incl. Barter [(jump)](#payment-method-configuration)
 42. [Web Push notifications — VAPID setup and the push-sender worker](#42-web-push-notifications--vapid-setup-and-the-push-sender-worker)
 43. [SEO override env vars — homepage title/description/keywords + Twitter card](#43-seo-override-env-vars--homepage-titledescriptionkeywords--twitter-card)
 44. [User-side optional TOTP 2FA — operator-side notes](#44-user-side-optional-totp-2fa--operator-side-notes)
@@ -9571,6 +9572,103 @@ DAI orders carry one of `'erc20'|'polygon'|'base'|'arbitrum'`.
 The migration is idempotent (`ADD COLUMN IF NOT EXISTS`) and
 applied automatically on indexer startup.  No operator action
 required beyond the standard `npm run migrate` flow.
+
+## Payment-method configuration
+
+**Audience:** operators deciding which canonical payment methods
+their instance offers — most commonly whether to allow **Barter**
+(products/services, e.g. trading crypto for goods).
+
+This is the payment-method analogue of "Trade-only asset
+configuration" above.  Every canonical payment method ships
+ENABLED by default; an operator can turn any of them off so they
+don't appear in the post-order payment picker or the orderbook
+payment filter.
+
+### How to set this (two paths)
+
+**At install time:** the `morphit-ops init` wizard, step 14
+"Payment-method policy", asks whether to offer Barter
+(products/services) on your instance — the one method operators
+most often disable.  Answering "no" writes `barter_goods` into the
+`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=` line in
+`morphit.config.env`.  To disable methods *other* than Barter, set
+the env var directly (next).
+
+**On a running instance:** edit
+`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS` in
+`/etc/morphit/morphit.config.env` (or wherever your
+`EnvironmentFile=` points) and restart the indexer
+(`docker compose restart indexer`).  Browsers see the change at
+most 5 minutes after restart (the `/v1/instance` response carries
+a 5-minute `Cache-Control` header).
+
+### `MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS`
+
+Comma-separated list of canonical payment-method **keys**,
+**lowercase**.  Default empty (every canonical method is offered).
+The parser tolerates whitespace, mixed case, and trailing commas.
+
+```bash
+# Offer everything (default — same as omitting the var)
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=""
+
+# Money-only instance — no Barter
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods"
+
+# No PayPal
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="paypal"
+
+# Disable several
+MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods,paypal,zelle"
+```
+
+### Canonical payment-method keys
+
+These come from the canonical registry
+(`apps/web/src/lib/payments/registry.ts`).  Use the **key**, not
+the display name. Note the asymmetry: crypto "pay-with" methods
+carry a `pay_` prefix; the online/bank methods do **not**
+(`paypal`, not `pay_paypal`).
+
+- **In person / by mail:** `barter_goods` (Barter —
+  products/services), `cash_in_person`, `precious_metals`,
+  `cash_by_mail`
+- **Online / bank:** `airwallex`, `alipay`, `amazon_pay`,
+  `apple_pay`, `bancontact`, `bitso`, `bizum`, `blik`,
+  `brics_pay`, `cash_app`, `gcash`, `google_pay`, `ideal`,
+  `interac_etransfer`, `klarna`, `mercado_pago`, `mir`, `mpesa`,
+  `mtn_momo`, `oxxo_pay`, `payoneer`, `paypal`, `paytm`, `payu`,
+  `pix`, `przelewy24`, `revolut`, `shaparak`, `shebapay`,
+  `sofort`, `spei`, `square_cash`, `unionpay`, `venmo`,
+  `wechat_pay`, `wise`, `zelle`
+- **Crypto (pay-with):** `pay_btc`, `pay_xmr`, `pay_blurt`,
+  `pay_bch`, `pay_ltc`, `pay_dash`, `pay_doge`, `pay_zec`,
+  `pay_arrr`, `pay_dcr`, `pay_sol`, `pay_eth`, `pay_xrp`,
+  `pay_usdt`, `pay_usdc`, `pay_dai`
+
+Operator **additions** (your own region-specific methods added via
+`morphit-ops payment-method add`) can't be disabled with this
+knob — remove them with `morphit-ops payment-method remove`
+instead.  This knob is for canonical methods only.
+
+### Ingest + federation semantics
+
+The indexer rejects a NEW order only when **all** of its payment
+methods are disabled (`reason: 'payment_methods_all_disabled'`).
+An order that still offers at least one enabled method is accepted
+as-is. Like disabled assets, this is OPERATOR-scoped: peer-instance
+orders that use a method you disabled still appear in your
+read-only orderbook (chain history is shared across the
+federation); your users simply can't post orders that offer ONLY
+disabled methods, and the picker + orderbook filter hide the
+disabled methods.
+
+The parser tolerance is pinned in CI by
+`apps/indexer/scripts/disabled-payment-methods-parse-smoke.ts` (12
+scenarios), and the ingest gate by two scenarios in
+`apps/indexer/scripts/order-handler-smoke.ts` (all-disabled →
+reject; one-enabled-remaining → accepted).
 
 ## 42. Web Push notifications — VAPID setup and the push-sender worker
 

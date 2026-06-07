@@ -50,7 +50,7 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import type { ListingFeeResult } from './render.ts';
 
-export const TOTAL_STEPS = 22;
+export const TOTAL_STEPS = 23;
 
 // ─── Step 1: Instance name ───────────────────────────────────────
 
@@ -650,7 +650,7 @@ export interface SeoResult {
 }
 
 export async function stepSeo(): Promise<SeoResult> {
-	step(15, TOTAL_STEPS, 'Homepage SEO meta tags (optional)');
+	step(16, TOTAL_STEPS, 'Homepage SEO meta tags (optional)');
 	explain(
 		'Out of the box, your homepage advertises itself with generic\n' +
 			"Morphit copy in the <title>, <meta description>, and\n" +
@@ -696,7 +696,7 @@ export async function stepSeo(): Promise<SeoResult> {
 	};
 }
 
-// ─── Step 16: Daily DB backup automation ─────────────────────────
+// ─── Step 17: Daily DB backup automation ─────────────────────────
 //
 // Default = enabled.  An operator who's never set up backups
 // before will have backups by default; one who wants to
@@ -729,7 +729,7 @@ export interface BackupResult {
 }
 
 export async function stepBackup(): Promise<BackupResult> {
-	step(16, TOTAL_STEPS, 'Daily DB backup');
+	step(17, TOTAL_STEPS, 'Daily DB backup');
 	explain(
 		"The indexer's PostgreSQL database is rebuildable from the\n" +
 			'Blurt blockchain in case of total loss, but a same-day\n' +
@@ -836,7 +836,7 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 export async function stepRpcEndpoints(
 	current: readonly string[] | null
 ): Promise<readonly string[]> {
-	step(19, TOTAL_STEPS, 'Blurt RPC endpoints (defaults are fine for most operators)');
+	step(20, TOTAL_STEPS, 'Blurt RPC endpoints (defaults are fine for most operators)');
 	const defaultDisplay =
 		current !== null && current.length > 0
 			? current.join(',')
@@ -1747,7 +1747,87 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 	};
 }
 
-// ─── Step 14: Listing fee + fallback BLURT price ─────────────────
+// ─── Step 14: Payment-method policy ──────────────────────────────
+
+/** Result of step 14 — canonical payment-method keys the operator
+ *  disabled on this instance.  Empty = every canonical method is
+ *  offered (the default).  Renders into
+ *  MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS (lowercase keys,
+ *  alphabetized for stable env-file output). */
+export interface DisabledPaymentMethodsResult {
+	readonly disabledKeys: readonly string[];
+}
+
+/**
+ * Lets the operator turn OFF canonical payment methods their
+ * instance doesn't want to offer.  The headline case is Barter
+ * (products/services) — some operators prefer to keep their node
+ * money-only and not host goods-for-crypto trades.  Every
+ * canonical method ships ENABLED by default; this step toggles
+ * Barter directly and points operators at
+ * MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS for the long tail
+ * (PayPal, Zelle, …).  Mirrors the trade-only asset policy step.
+ *
+ * Federation note (same as assets): disabling is operator-scoped.
+ * Peer-instance orders that use a disabled method still appear in
+ * this instance's read-only orderbook; the gate only blocks NEW
+ * orders whose payment methods are ALL disabled, and the picker +
+ * orderbook filter hide the disabled methods.
+ */
+export async function stepDisabledPaymentMethods(): Promise<DisabledPaymentMethodsResult> {
+	step(14, TOTAL_STEPS, 'Payment-method policy');
+	explain(
+		'Payment methods (PayPal, Zelle, cash by mail, Barter, …) all\n' +
+			'ship ENABLED by default.  You can turn any of them off so they\n' +
+			"don't appear in your users' post-order picker or orderbook\n" +
+			'filter.\n' +
+			'\n' +
+			'The one most operators consider disabling is BARTER\n' +
+			'(products/services) — trading crypto for goods (e.g. "sell\n' +
+			'XMR for a used bicycle").  Perfectly legitimate, but some\n' +
+			'operators prefer to keep their instance money-only.\n' +
+			'\n' +
+			'Federation note (same as assets): turning a method off is\n' +
+			"operator-scoped.  Peer instances' orders that use it still\n" +
+			'show in your read-only orderbook; your users just cannot post\n' +
+			'NEW orders whose payment methods are ALL disabled.\n' +
+			'\n' +
+			'To disable methods OTHER than Barter, set\n' +
+			'MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS in morphit.config.env\n' +
+			'(documented inline in that file with examples) and restart\n' +
+			'the indexer.'
+	);
+
+	const disabledKeys: string[] = [];
+	const offerBarter = await askYesNo(
+		'Offer Barter (products/services) trading on this instance?',
+		true
+	);
+	if (!offerBarter) {
+		disabledKeys.push('barter_goods');
+		console.log(
+			"    ↳ Barter will be DISABLED.  Your users won't see it in the\n" +
+				'      payment picker or orderbook filter; peer-instance Barter\n' +
+				'      orders still appear in the read-only orderbook.\n'
+		);
+	} else {
+		console.log('    ↳ Barter stays enabled (default).\n');
+	}
+
+	if (disabledKeys.length === 0) {
+		console.log('  ✓ All payment methods remain enabled (default posture).');
+	} else {
+		const list = disabledKeys.slice().sort().join(', ');
+		console.log(`  ✓ Disabling ${disabledKeys.length} payment method(s): ${list}`);
+		console.log(
+			'    Written to MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS\n    in morphit.config.env.'
+		);
+	}
+
+	return { disabledKeys: disabledKeys.slice().sort() };
+}
+
+// ─── Step 15: Listing fee + fallback BLURT price ─────────────────
 
 /**
  * Part 110 — operator-configurable listing fee USD target and
@@ -1777,7 +1857,7 @@ const DEFAULT_LISTING_FEE_XMR_PICONERO = 781_250_000;
 const DEFAULT_FALLBACK_BLURT_PRICE_USD = 0.002;
 
 export async function stepListingFee(): Promise<ListingFeeResult> {
-	step(14, TOTAL_STEPS, 'Listing fee + fallback BLURT price');
+	step(15, TOTAL_STEPS, 'Listing fee + fallback BLURT price');
 	explain(
 		'Two operator-tunable amounts:\n' +
 			'\n' +
@@ -1953,9 +2033,9 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	};
 }
 
-// ─── Step 17: Operator tag (Part 111) ────────────────────────────
+// ─── Step 18: Operator tag (Part 111) ────────────────────────────
 
-/** Result of step 16 — the operator tag for this instance. */
+/** Result of step 18 — the operator tag for this instance. */
 export interface OperatorTagResult {
 	/** The operator tag, an identifier matching the regex
 	 *  `^[a-z0-9._-]+$`, 1..64 chars.  Canonical morphit.io uses
@@ -1996,7 +2076,7 @@ const OPERATOR_TAG_MAX = 64;
  * ops as "ours" and queues nothing.
  */
 export async function stepOperatorTag(origin: string | null): Promise<OperatorTagResult> {
-	step(17, TOTAL_STEPS, 'Operator tag');
+	step(18, TOTAL_STEPS, 'Operator tag');
 
 	// Derive a sensible default from the public origin's hostname.
 	// A domain like morphit.io makes a perfect tag: it is unique,
@@ -2107,7 +2187,7 @@ export function tagFromOrigin(origin: string): string {
 	return out;
 }
 
-// ─── Step 18: Matrix surfaces ────────────────────────────────────
+// ─── Step 19: Matrix surfaces ────────────────────────────────────
 
 import {
 	parseMxid,
@@ -2124,7 +2204,7 @@ import type { MatrixSurfacesResult } from './render.ts';
  *  @morphit/operator-config parsers so the @-vs-# distinction
  *  is enforced consistently across wizard, indexer, and bot. */
 export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
-	step(18, TOTAL_STEPS, 'Matrix alerting + public contact (recommended)');
+	step(19, TOTAL_STEPS, 'Matrix alerting + public contact (recommended)');
 	explain(
 		'Morphit can use Matrix for two distinct purposes:\n\n' +
 			'  1. PRIVATE alerts to you (the operator) — low balance,\n' +
@@ -2272,7 +2352,7 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 	return { alertMxid, groupRoomAlias };
 }
 
-// ─── Step 20: MCP (Model Context Protocol) server ────────────────
+// ─── Step 21: MCP (Model Context Protocol) server ────────────────
 //
 // Default = enabled.  The morphit-mcp server exposes Morphit's
 // federated orderbook to any MCP-compatible AI agent (Claude
@@ -2310,7 +2390,7 @@ export interface McpServerResult {
 }
 
 export async function stepMcpServer(): Promise<McpServerResult> {
-	step(20, TOTAL_STEPS, 'MCP server for AI agents (recommended)');
+	step(21, TOTAL_STEPS, 'MCP server for AI agents (recommended)');
 	explain(
 		'MCP (Model Context Protocol) is an open standard that lets AI\n' +
 			'agents discover and use external tools.  Morphit ships a\n' +
@@ -2361,7 +2441,7 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 	return { enabled };
 }
 
-// ─── Step 21: BunkerWeb — reverse-proxy / WAF in front of the stack ──
+// ─── Step 22: BunkerWeb — reverse-proxy / WAF in front of the stack ──
 //
 // BunkerWeb is an AGPLv3 reverse-proxy WAF.  Morphit ships a turnkey
 // deployment at ops/bunkerweb/ (paralleling ops/nginx/).  Recommended
@@ -2381,7 +2461,7 @@ export interface BunkerWebResult {
 }
 
 export async function stepBunkerWeb(): Promise<BunkerWebResult> {
-	step(21, TOTAL_STEPS, 'BunkerWeb WAF / reverse proxy (recommended for public instances)');
+	step(22, TOTAL_STEPS, 'BunkerWeb WAF / reverse proxy (recommended for public instances)');
 	explain(
 		'How will the public reach your instance?  Your frontend builds\n' +
 			'to static files and the relay/indexer listen on loopback — so\n' +
@@ -2437,7 +2517,7 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 	return { enabled };
 }
 
-// ─── Step 22: Hardening checklist ────────────────────────────────
+// ─── Step 23: Hardening checklist ────────────────────────────────
 //
 // Morphit ships a deep hardening stack already — the Ansible role
 // at ops/ansible/roles/hardening (SSH, unattended-upgrades, sysctl,
@@ -2460,7 +2540,7 @@ export interface HardeningResult {
 }
 
 export async function stepHardening(bunkerWebEnabled: boolean): Promise<HardeningResult> {
-	step(22, TOTAL_STEPS, 'Server hardening checklist (strongly recommended)');
+	step(23, TOTAL_STEPS, 'Server hardening checklist (strongly recommended)');
 	explain(
 		'Your Morphit config is done.  The last thing standing between\n' +
 			'a working instance and a SAFE one is host hardening: locking\n' +

@@ -38,7 +38,6 @@
 	import OrderExpiryChip from '$components/OrderExpiryChip.svelte';
 	import RatingChip from '$components/RatingChip.svelte';
 	import UsdtPriceSubline from '$components/UsdtPriceSubline.svelte';
-	import { ASSET_TICKERS } from '@morphit/asset-registry';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
 	// lazy-imported below.  Both render below the orderbook fold
@@ -51,10 +50,14 @@
 	// import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
 	import RelativeTime from '$components/RelativeTime.svelte';
+	import AssetFilterSelect from '$components/AssetFilterSelect.svelte';
+	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
+	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
 
 	import { getOrderbook } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
+	import { instance } from '$lib/stores/instance';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { createOrderbookStream } from '$lib/orderbook/stream';
@@ -69,13 +72,46 @@
 	import { isUnlocked, hasAnySession } from '$stores/identity';
 
 	// ─── Filter state ────────────────────────────────────────────────
-	type AssetFilter = '' | AssetTicker;
-	type SideFilter = '' | 'buy' | 'sell';
+	type AssetFilter = '' | AssetTicker | 'barter';
+	type SideFilter = '' | 'buy' | 'sell' | 'buy_goods' | 'sell_goods';
 
 	let asset = $state<AssetFilter>('');
 	let side = $state<SideFilter>('');
-	let fiat = $state('');
+	let fiatList = $state<string[]>([]);
 	let region = $state('');
+	// Region filter: animated cycling placeholder. These are
+	// proper-noun place names — deliberately NOT translated, so
+	// "北京" / "Москва" / "München" appear verbatim in every UI
+	// locale. Plain text bound to the native input placeholder, so
+	// RTL scripts, CJK, accents, and spaces all render correctly.
+	// Cycles every 3s and stops the moment the user starts typing
+	// (resumes if they clear via the Clear-filters button).
+	const REGION_PLACEHOLDERS = [
+		'North America',
+		'Polska',
+		'Sydney',
+		'Berlin',
+		'Fort Myers Beach',
+		'Россия',
+		'San Francisco',
+		'北京',
+		'Nigeria',
+		'Москва',
+		'Kraków Nowa Huta',
+		'München'
+	] as const;
+	let regionPlaceholder = $state<string>(REGION_PLACEHOLDERS[0]);
+	let regionUserTyped = $state(false);
+	$effect(() => {
+		// Re-runs (and tears down the interval) once the user types.
+		if (regionUserTyped) return;
+		let i = 0;
+		const id = setInterval(() => {
+			i = (i + 1) % REGION_PLACEHOLDERS.length;
+			regionPlaceholder = REGION_PLACEHOLDERS[i] ?? REGION_PLACEHOLDERS[0];
+		}, 3000);
+		return () => clearInterval(id);
+	});
 
 	// cp165 byte-budget: lazy-load below-the-fold featured components.
 	// Each kicks off a network fetch in its onMount, so deferring the
@@ -105,7 +141,7 @@
 	 *  on the indexer side). Case-insensitive match — the indexer
 	 *  lowercases both sides, so "paypal" here finds orders posted
 	 *  with "PayPal". */
-	let paymentFilter = $state('');
+	let paymentMethods = $state<string[]>([]);
 
 	/** Discrete minimum-trades filter: show only orders from
 	 *  accounts that have received at least this many feedback
@@ -224,14 +260,30 @@
 		// the assignment back to OrderbookQuery on return is a
 		// type-level no-op (the values are identical).
 		const q: { -readonly [K in keyof OrderbookQuery]: OrderbookQuery[K] } = {};
-		if (asset) q.asset = asset;
-		if (side) q.side = side;
-		const fiatTrim = fiat.trim().toUpperCase();
-		if (fiatTrim) q.fiat_currency = fiatTrim;
+		// 'barter' is a payment method (barter_goods), not a tradable
+		// asset, so it never goes on q.asset.
+		if (asset && asset !== 'barter') q.asset = asset;
+		// The "products/services" side options are the normal buy/sell
+		// side PLUS a barter payment-method constraint (added below).
+		const sideForQuery = side === 'buy_goods' ? 'buy' : side === 'sell_goods' ? 'sell' : side;
+		if (sideForQuery) q.side = sideForQuery;
+		// One or more ISO codes (already uppercase from the dataset);
+		// the indexer matches orders in ANY of them.
+		if (fiatList.length) q.fiat_currency = fiatList.join(',');
 		const regionTrim = region.trim();
 		if (regionTrim) q.location_region = regionTrim;
-		const paymentTrim = paymentFilter.trim();
-		if (paymentTrim) q.payment_methods = paymentTrim;
+		// Barter selection (asset=barter, or a products/services side)
+		// maps to payment_methods ⊇ barter_goods. The indexer matches
+		// orders accepting ANY listed method, so combining with a typed
+		// payment filter ORs them (broadens) — acceptable; an exclude
+		// filter (to make a "crypto" view hide barter-only orders) would
+		// need indexer support and is intentionally not done here.
+		const wantsBarter = asset === 'barter' || side === 'buy_goods' || side === 'sell_goods';
+		const paymentTokens: string[] = [];
+		if (wantsBarter) paymentTokens.push('barter_goods');
+		paymentTokens.push(...paymentMethods);
+		const uniquePayment = [...new Set(paymentTokens)];
+		if (uniquePayment.length) q.payment_methods = uniquePayment.join(',');
 		if (minTrades > 0) q.min_trades = minTrades;
 		if (sortMode !== 'recent') q.sort = sortMode;
 		return q;
@@ -341,9 +393,9 @@
 	$effect(() => {
 		void asset;
 		void side;
-		void fiat;
+		void fiatList;
 		void region;
-		void paymentFilter;
+		void paymentMethods;
 		void minTrades;
 		void sortMode;
 		scheduleRefetch();
@@ -452,9 +504,10 @@
 	function clearFilters(): void {
 		asset = '';
 		side = '';
-		fiat = '';
+		fiatList = [];
 		region = '';
-		paymentFilter = '';
+		regionUserTyped = false;
+		paymentMethods = [];
 		minTrades = 0;
 		sortMode = 'recent';
 	}
@@ -604,6 +657,8 @@
 					<option value="">{$_('orderbook.filters.side_any')}</option>
 					<option value="buy">{$_('orderbook.filters.side_buy')}</option>
 					<option value="sell">{$_('orderbook.filters.side_sell')}</option>
+					<option value="buy_goods">{$_('orderbook.filters.side_buy_goods')}</option>
+					<option value="sell_goods">{$_('orderbook.filters.side_sell_goods')}</option>
 				</select>
 				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 					{$_('orderbook.filters.side_help')}
@@ -614,29 +669,14 @@
 				<span class="mb-1 block text-sm font-semibold">
 					{$_('orderbook.filters.asset_label')}
 				</span>
-				<select
-					bind:value={asset}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-				>
-					<option value="">{$_('orderbook.filters.asset_any')}</option>
-					{#each ASSET_TICKERS as t (t)}
-						<option value={t}>{t}</option>
-					{/each}
-				</select>
+				<AssetFilterSelect bind:value={asset} />
 			</label>
 
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">
 					{$_('orderbook.filters.fiat_label')}
 				</span>
-				<input
-					type="text"
-					bind:value={fiat}
-					maxlength="8"
-					autocomplete="off"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 uppercase focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-					placeholder={$_('orderbook.filters.fiat_placeholder')}
-				/>
+				<FiatCurrencySelect bind:value={fiatList} />
 			</label>
 
 			<label class="block">
@@ -646,10 +686,11 @@
 				<input
 					type="text"
 					bind:value={region}
+					oninput={() => (regionUserTyped = true)}
 					maxlength="128"
 					autocomplete="off"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-					placeholder={$_('orderbook.filters.region_placeholder')}
+					placeholder={regionPlaceholder}
 				/>
 			</label>
 		</div>
@@ -658,13 +699,10 @@
 			<span class="mb-1 block text-sm font-semibold">
 				{$_('orderbook.filters.payment_methods_label')}
 			</span>
-			<input
-				type="text"
-				bind:value={paymentFilter}
-				maxlength="256"
-				autocomplete="off"
-				class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-				placeholder={$_('orderbook.filters.payment_methods_placeholder')}
+			<PaymentFilterSelect
+				bind:value={paymentMethods}
+				additions={$instanceAdditions}
+				disabled={$instance.disabled_payment_methods}
 			/>
 			<p class="mt-1 text-xs text-ink-500">
 				{$_('orderbook.filters.payment_methods_hint')}
@@ -709,7 +747,7 @@
 			</label>
 		</div>
 
-		{#if asset || side || fiat || region || paymentFilter || minTrades > 0 || sortMode !== 'recent'}
+		{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent'}
 			<div class="mt-4 flex flex-wrap items-center gap-3">
 				<BusyButton variant="ghost" onclick={clearFilters}>
 					{$_('orderbook.filters.clear')}
@@ -722,7 +760,7 @@
 					asset feeds) so a passive observer learns at most "this
 					subscriber cares about <asset>."
 					Privacy and use case documented in rss_feeds FAQ. -->
-				{#if asset}
+				{#if asset && asset !== 'barter'}
 					<a
 						href={`/rss/orderbook/by-asset/${asset.toLowerCase()}.xml`}
 						title={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}

@@ -39,7 +39,6 @@
 		{ id: 'gitflic', name: 'GitFlic', url: 'https://gitflic.ru/', status: 'pending' },
 		{ id: 'sourcehut', name: 'SourceHut', url: 'https://sr.ht/', status: 'pending' },
 		{ id: 'radicle', name: 'Radicle', url: 'https://radicle.xyz/', status: 'pending' },
-		{ id: 'kycnot', name: 'kycnot.me', url: 'https://kycnot.me/', status: 'pending' },
 		{ id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
 	] as const;
 

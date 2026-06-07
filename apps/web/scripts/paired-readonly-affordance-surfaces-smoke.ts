@@ -164,11 +164,18 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: '10 — +layout mobile-nav sign-in link widened to $hasAnySession',
+		// cp205 intentionally REMOVED the duplicate mobile-nav sign-in
+		// link: the header <AvatarMenu/> (no md:hidden, so visible on
+		// mobile too) already renders the "Sign in / Register" CTA when
+		// signed out, and a mobile-nav text link showed that label
+		// twice.  The paired-readonly sign-in affordance now lives in
+		// AvatarMenu.  This pins the decision so a regression can't
+		// silently re-introduce the duplicate link.
+		name: '10 — +layout mobile-nav has NO duplicate sign-in link (AvatarMenu is the single CTA)',
 		file: 'src/routes/[lang]/+layout.svelte',
 		mustHave: [
-			"import { isUnlocked, hasAnySession, lockSession } from '$stores/identity'",
-			'{#if !$hasAnySession}'
+			'No sign-in link here on purpose',
+			'<AvatarMenu />'
 		]
 	},
 	{

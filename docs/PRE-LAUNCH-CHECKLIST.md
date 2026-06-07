@@ -283,7 +283,7 @@ file in the same turn.
 
 - [ ] **[blocking]** Run the setup wizard:
       `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
-      covers ~22 prompts including the fee-verifier
+      covers ~23 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
       URLs (BTC + XMR + BCH + LTC + DASH + DOGE + ZEC + ARRR + DCR + SOL + ETH + XRP; USDT, USDC, DAI have per-network explorers configured separately) with live health-checks,
       plus the trade-only asset policy step.  (Exact

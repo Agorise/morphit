@@ -127,7 +127,10 @@ export function buildWhereClauses(
 
 	if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
 	if (q.side) where.push(`o.side = ${p(q.side)}`);
-	if (q.fiat_currency) where.push(`o.fiat_currency = ${p(q.fiat_currency)}`);
+	if (q.fiat_currency) {
+		const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
+		where.push(`o.fiat_currency = ANY(${p(fiats)}::text[])`);
+	}
 	if (q.location_region) {
 		const normalizedRegion = q.location_region.normalize('NFC');
 		where.push(`o.location_region ILIKE ${p(escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`);

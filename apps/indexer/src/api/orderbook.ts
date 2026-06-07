@@ -4,7 +4,7 @@
  * Filtered list of live orders, cursor-paginated. Query parameters:
  *   - asset:            AssetTicker (optional)
  *   - side:             'buy' | 'sell' (optional)
- *   - fiat_currency:    string 1..8 (optional)
+ *   - fiat_currency:    comma-separated ISO codes, order matches any of (optional)
  *   - location_region:  string up to 128, prefix-matched (optional)
  *   - payment_methods:  comma-separated list, order matches any of (optional)
  *   - min_trades:       integer ≥0, filter to traders with ≥N received-feedback rows (optional)
@@ -45,9 +45,11 @@ const querySchema = z.object({
 	fiat_currency: z
 		.string()
 		.min(1)
-		.max(8)
-		// Uppercase letters only — aligned with ISO-4217 shape.
-		.regex(/^[A-Z]+$/)
+		.max(120)
+		// One or more uppercase ISO-4217 codes, comma-separated (no
+		// spaces). The strict shape guarantees ≥1 valid token, so the
+		// handler can split on ',' without further validation.
+		.regex(/^[A-Z]+(,[A-Z]+)*$/)
 		.optional(),
 	location_region: z.string().min(1).max(128).optional(),
 	payment_methods: z
@@ -245,7 +247,11 @@ export function orderbookRoute(db: Database, poller: Poller, officialAccount: st
 
 		if (q.asset) where.push(`o.asset = ${p(q.asset)}`);
 		if (q.side) where.push(`o.side = ${p(q.side)}`);
-		if (q.fiat_currency) where.push(`o.fiat_currency = ${p(q.fiat_currency)}`);
+		if (q.fiat_currency) {
+			// One or more ISO codes — match orders in ANY of them.
+			const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
+			where.push(`o.fiat_currency = ANY(${p(fiats)}::text[])`);
+		}
 		if (q.location_region) {
 			// U2.1 — NFC-normalize filter input so it byte-matches
 			// the NFC-stored values from order/orderReplace handlers

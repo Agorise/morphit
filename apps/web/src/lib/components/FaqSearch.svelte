@@ -166,6 +166,10 @@
 	}
 
 	function handleKey(e: KeyboardEvent): void {
+		if (e.key === 'Escape') {
+			query = '';
+			return;
+		}
 		if (!hits.length) return;
 		if (e.key === 'ArrowDown') {
 			e.preventDefault();
@@ -208,7 +212,15 @@
 		<p class="mt-3 text-ink-600 dark:text-ink-300">{$_('faq.subtitle')}</p>
 	</header>
 
-	<div class="relative">
+	{#if query}
+		<button
+			type="button"
+			aria-label={$_('faq.search_dismiss')}
+			onclick={() => (query = '')}
+			class="fixed inset-0 z-20 cursor-default bg-ink-900/5 backdrop-blur-sm"
+		></button>
+	{/if}
+	<div class="relative z-30 mx-auto w-full sm:w-3/4">
 		<label for="faq-search" class="sr-only">{$_('faq.search_placeholder')}</label>
 		<div class="relative">
 			<span

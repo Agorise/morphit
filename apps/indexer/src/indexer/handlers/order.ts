@@ -551,6 +551,23 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'asset_disabled_on_instance' };
 	}
 
+	// Payment-method analogue of the asset gate.  If EVERY payment
+	// method the order offers is disabled on this instance, the
+	// order is meaningless here (nothing it accepts is offered), so
+	// refuse to write the row — same posture as a disabled asset.
+	// An order that still carries at least one enabled method is
+	// kept as-is; the frontend separately hides disabled methods
+	// from the picker + orderbook filter.  Compare lowercase; the
+	// config-loader normalizes disabledPaymentMethods to lowercase.
+	if (
+		ctx.config.disabledPaymentMethods.length > 0 &&
+		v.payment_methods.every((m) =>
+			ctx.config.disabledPaymentMethods.includes(m.toLowerCase())
+		)
+	) {
+		return { ok: false, reason: 'payment_methods_all_disabled' };
+	}
+
 	// Part 111 — operator-attribution tag for federation-scoped
 	// payout queueing.  Same value the operator-earnings module
 	// validates downstream.  We pull it once here and thread it
