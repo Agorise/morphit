@@ -93,7 +93,7 @@ Minimum files:
 ```json
 {
   "name": "morphit-<name>",          // or "@morphit/<name>" for packages/
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.7",
   "type": "module",
   "license": "AGPL-3.0-only",
   "private": false,                  // or true for packages/

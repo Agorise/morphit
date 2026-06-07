@@ -1,13 +1,15 @@
 {
 	"name": "@morphit/operator-config",
-	"version": "1.0.0-beta.6",
+	"version": "1.0.0-beta.7",
 	"private": true,
 	"type": "module",
 	"description": "Loads morphit.config.env and projects its values into process.env for the indexer and relay to consume.",
 	"license": "AGPL-3.0-only",
 	"main": "src/index.ts",
 	"types": "src/index.ts",
-	"files": ["src"],
+	"files": [
+		"src"
+	],
 	"scripts": {
 		"typecheck": "tsc --noEmit"
 	},

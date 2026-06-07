@@ -1572,6 +1572,9 @@ account's listings on *your* instance. It is reversible, needs no
 posting key, and broadcasts nothing to the chain — the account
 stays on Blurt and remains visible on every other Morphit
 instance; your block applies only to what your instance serves.
+(A blocked seller is also dropped from the median behind your
+instance's own derived price feed, so they can't skew the price
+you compute from your orderbook.)
 The blocked user sees a banner explaining that, with a Matrix
 link to appeal. Full details, plus the abuse signals behind the
 flags, are in OPERATIONS.md §6a.

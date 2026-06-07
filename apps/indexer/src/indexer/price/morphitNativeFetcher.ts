@@ -80,9 +80,12 @@
  *   - related_accounts
  *   - one_way_pile_on attacking_reviewers
  *   - review_concentration reviewers
+ *   - operator_blocks (accounts THIS operator has blocked — cp209;
+ *     mirrors the orderbook's instance-local moderation so a
+ *     manually-blocked seller can't influence this instance's price)
  *
- * These are the same cp123-cp125 reputation filter tables.  Reusing
- * them ensures price manipulation requires the same level of
+ * The first four are the same cp123-cp125 reputation filter tables.
+ * Reusing them ensures price manipulation requires the same level of
  * sophistication as reputation manipulation — a high bar by design.
  *
  * Price-model handling
@@ -154,6 +157,13 @@ export interface MorphitNativeFetcherConfig {
 	readonly denominationFiat: string; // e.g., 'USD'
 	readonly stablecoinKeys: ReadonlyArray<string>; // e.g., ['usdt', 'usdc', 'dai']
 	readonly db: Database;
+	/** This instance's official/operator account name (the
+	 *  `operator` column in operator_blocks).  Orders from accounts
+	 *  this operator has blocked (state='blocked') are excluded from
+	 *  every derivation tier AND from the depeg detector, mirroring
+	 *  the orderbook's instance-local moderation (cp209).  Pass
+	 *  `config.officialAccountName`; '' makes the exclusion inert. */
+	readonly officialAccountName: string;
 	/** Per-asset plausibility envelope.  Will be clamped to
 	 *  HARDCODED_OUTER_MIN_USD..HARDCODED_OUTER_MAX_USD before use. */
 	readonly minPlausibleUsd: number;
@@ -230,6 +240,7 @@ export async function deriveMorphitNativePrice(
 	// stablecoins are eligible for Tier 2.
 	const depegReport = await detectStablecoinDepeg(config.db, {
 		stablecoinKeys: config.stablecoinKeys,
+		officialAccountName: config.officialAccountName,
 		windowHours,
 		orderAgeGraceMinutes: graceMinutes
 	});
@@ -488,8 +499,19 @@ async function queryTier1Orders(
 		    AND NOT EXISTS (
 		        SELECT 1 FROM review_concentration rc
 		         WHERE rc.reviewer = o.account
+		    )
+		    -- cp209 — instance-local moderation: exclude orders from
+		    -- accounts THIS operator has blocked (operator_blocks,
+		    -- state='blocked'), so a manually-blocked seller can't
+		    -- move this instance's derived native price.  Inert when
+		    -- $3 is '' (no operator matches '').
+		    AND NOT EXISTS (
+		        SELECT 1 FROM operator_blocks ob
+		         WHERE ob.operator = $3
+		           AND ob.blocked = o.account
+		           AND ob.state = 'blocked'
 		    )`,
-		[config.asset.toUpperCase(), config.denominationFiat.toUpperCase()]
+		[config.asset.toUpperCase(), config.denominationFiat.toUpperCase(), config.officialAccountName]
 	);
 
 	const rows: RawOrderRow[] = [];
@@ -573,8 +595,18 @@ async function queryTier2Orders(
 		    AND NOT EXISTS (
 		        SELECT 1 FROM review_concentration rc
 		         WHERE rc.reviewer = o.account
+		    )
+		    -- cp209 — instance-local moderation: exclude orders from
+		    -- accounts THIS operator has blocked (operator_blocks,
+		    -- state='blocked').  Inert when $3 is '' (no operator
+		    -- matches '').
+		    AND NOT EXISTS (
+		        SELECT 1 FROM operator_blocks ob
+		         WHERE ob.operator = $3
+		           AND ob.blocked = o.account
+		           AND ob.state = 'blocked'
 		    )`,
-		[config.asset.toUpperCase(), payKeys]
+		[config.asset.toUpperCase(), payKeys, config.officialAccountName]
 	);
 
 	const rows: Array<RawOrderRow & { via_stablecoin: string }> = [];
