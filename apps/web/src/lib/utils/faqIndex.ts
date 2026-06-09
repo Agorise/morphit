@@ -345,7 +345,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	],
 	monero_amount_jitter: ['chat_privacy', 'data_collection', 'why_fresh_addresses', 'privacy_practices'],
 	privacy_coins_onchain: ['monero_amount_jitter', 'why_fresh_addresses', 'xmr_txid', 'what_is_blurt'],
-	chat_key_loss: ['chat_identity_key', 'backup_practices'],
+	chat_key_loss: ['chat_identity_key', 'backup_practices', 'lost_keys'],
 
 	// Chain-anchored TOFU pin (Option 5 / S2 mitigation, ADR-0015):
 	// the user-facing explainer for the four "We couldn't safely
@@ -369,6 +369,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	chat_vs_feedback_visibility: [
 		'chat_privacy',
 		'feedback_immutable',
+		'reviews_given_visibility',
 		'what_is_morphit_chat',
 		'chat_dispute_recourse'
 	],
@@ -460,12 +461,18 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'data_collection'
 	],
 	how_morphit_protects_me: [
-		'security_attack_vectors',
-		'security_engineering_rigor',
+		// Pills mirror the six articles this answer explicitly says "See 'X'"
+		// for, in the order the answer introduces them (scanner → stranger
+		// gates → block/hide → fake-review defense → web hardening → social
+		// engineering). security_engineering_rigor / chat_key_changed /
+		// data_collection were topical-but-unreferenced and are reachable from
+		// their own clusters; kept this list aligned to the answer's links.
 		'private_key_warning',
 		'chat_anti_spam',
-		'chat_key_changed',
-		'data_collection'
+		'chat_inbox_features',
+		'sybil_protection',
+		'security_attack_vectors',
+		'scam_patterns'
 	],
 	no_escrow_arbitration: ['counterparty_disappears', 'chat_dispute_recourse', 'feedback_immutable'],
 	privacy_mode: ['lock_vs_signout', 'auto_lock_timeout'],
@@ -578,7 +585,38 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	what_is_bch: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_ltc: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
 	what_is_dash: ['privacy_practices', 'how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_blurt'],
-	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell']
+	arbitrage_morphit_vs_exchanges: ['fees', 'trade_size_limits', 'how_to_buy', 'how_to_sell'],
+
+	// cp218 — backfill: every FAQ key now has a related cluster, so no
+	// expanded article is a dead end ("keep people reading"). These are the
+	// 18 keys that previously had no FAQ_RELATED entry. Targets chosen for
+	// topical adjacency; cross-links are bidirectional where natural.
+	video_tutorial: ['how_to_trade_walkthrough', 'what_is_morphit', 'how_to_buy'],
+	signup_requirements: ['signup_stuck', 'kyc_requirement', 'welcome_bonus'],
+	supported_fiat_currencies: ['supported_countries', 'how_to_buy', 'kyc_requirement'],
+	morphit_mirrors: ['help_make_unstoppable', 'run_your_own', 'who_runs_it'],
+	iphone_install: ['android_sideload', 'mobile_desktop', 'offline_caching'],
+	android_sideload: ['iphone_install', 'mobile_desktop', 'offline_caching'],
+	how_to_stake_blurt: ['blurt_benefits', 'what_is_mana', 'what_is_blurt'],
+	totp_2fa_what_is_it: [
+		'totp_2fa_lost_authenticator',
+		'totp_2fa_why_not_google_authenticator',
+		'how_morphit_protects_me'
+	],
+	totp_2fa_lost_authenticator: [
+		'totp_2fa_what_is_it',
+		'totp_2fa_why_not_google_authenticator',
+		'lost_keys'
+	],
+	totp_2fa_why_not_google_authenticator: ['totp_2fa_what_is_it', 'totp_2fa_lost_authenticator'],
+	xmr_txid: ['xmr_tx_proof', 'block_explorer', 'privacy_coins_onchain'],
+	block_explorer: ['xmr_txid', 'xmr_tx_proof', 'public_api'],
+	taxes: ['data_collection', 'arbitrage_morphit_vs_exchanges', 'public_api'],
+	no_js: ['no_js_limits', 'offline_caching', 'rss_feeds'],
+	no_js_limits: ['no_js', 'offline_caching', 'rss_feeds'],
+	offline_caching: ['no_js', 'mobile_desktop', 'no_js_limits'],
+	node_technical_skills: ['how_to_run_node', 'node_minimum_requirements', 'node_hosting_costs'],
+	node_hosting_costs: ['node_minimum_requirements', 'how_to_run_node', 'how_operators_earn']
 };
 
 export interface FaqEntry {
@@ -687,6 +725,12 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	protection: ['security', 'safe', 'protect'],
 	defenses: ['security', 'protect', 'protection'],
 	defense: ['security', 'protect', 'protection'],
+	// "Is my money safe?" — on a non-custodial exchange this is the
+	// custody/safety question, not the fiat-currency list. money≈funds,
+	// which is_it_safe uses ("platforms that hold your funds"). Needed
+	// after the verbatim FAQ pass dropped the word "money" from
+	// what_is_morphit, shifting term rarity toward supported_fiat.
+	money: ['funds', 'safe'],
 	// Security engineering process — surfacing the new
 	// `security_engineering_rigor` entry on rigor-flavored queries
 	// Code review / audit

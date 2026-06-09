@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import { afterNavigate } from '$app/navigation';
 	import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
+	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import UpdateBanner from '$components/UpdateBanner.svelte';
 	import StaleBuildBanner from '$components/StaleBuildBanner.svelte';
 	import TamperAlertBanner from '$components/TamperAlertBanner.svelte';
@@ -219,20 +220,18 @@
 		class="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md dark:border-ink-800 dark:bg-ink-950/80"
 	>
 		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-			<!-- Wide wordmark logo + 3-body bling, hyperlinked to home.
-				 The MorphitLogoBling component renders a <canvas> behind
-				 the wordmark with 3 particles drifting under mutual +
-				 centroid gravity, visible at all times.  Honors
-				 prefers-reduced-motion (draws particles statically),
-				 IntersectionObserver-pauses when out-of-viewport, and
-				 caches via the standard Vite hashed-asset pipeline so
-				 it never re-fetches after the first paint. -->
+			<!-- Wide wordmark logo, hyperlinked to home.  `shine` enables
+				 a subtle occasional glint (every ~9s) that traces the
+				 wordmark letterforms to draw the eye — pure CSS, masked to
+				 the wordmark shape, and removed under prefers-reduced-motion.
+				 (The hero logo on the homepage uses the same component
+				 WITHOUT `shine`, so it stays completely static.) -->
 			<a
 				href="/"
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 				aria-label="Morphit — home"
 			>
-				<MorphitLogoBling heightPx={32} />
+				<MorphitLogoBling heightPx={32} shine />
 			</a>
 
 			<nav aria-label="Primary" class="hidden gap-1 md:flex">
@@ -562,32 +561,13 @@
 						Privacy tradeoff documented in FAQ entry `rss_feeds`.
 					-->
 					<li>
-						<a href="/rss/orderbook.xml" title={$_('footer.rss_title')} class="chip">
-							<svg
-								class="h-4 w-4"
-								viewBox="0 0 24 24"
-								xmlns="http://www.w3.org/2000/svg"
-								aria-hidden="true"
-							>
-								<rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#F26522" />
-								<circle cx="6.5" cy="17.5" r="2" fill="#fff" />
-								<path
-									d="M5 8.5 A 10.5 10.5 0 0 1 15.5 19"
-									stroke="#fff"
-									stroke-width="2.4"
-									fill="none"
-									stroke-linecap="round"
-								/>
-								<path
-									d="M5 4.5 A 14.5 14.5 0 0 1 19.5 19"
-									stroke="#fff"
-									stroke-width="2.4"
-									fill="none"
-									stroke-linecap="round"
-								/>
-							</svg>
-							{$_('footer.rss')}
-						</a>
+						<RssFeedPicker
+							base="/rss/orderbook"
+							label={$_('footer.rss_title')}
+							text={$_('footer.rss')}
+							triggerClass="chip"
+							iconClass="h-4 w-4"
+						/>
 					</li>
 				</ul>
 			</div>

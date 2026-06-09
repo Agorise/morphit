@@ -57,7 +57,14 @@ const ALLOWED_TOP_LEVEL_FILES: ReadonlySet<string> = new Set([
 ]);
 
 const ALLOWED_TOP_LEVEL_DIRS: ReadonlySet<string> = new Set([
-	'[lang]'
+	'[lang]',
+	// `pair/` is the QR-pairing landing shell — deliberately
+	// language-agnostic (a scanned QR code carries no locale), so it
+	// lives OUTSIDE [lang]/ alongside the root locale-detection shell.
+	// prerender=true + ssr=false + trailingSlash='never'; it bounces
+	// client-side off window.location.search. There is no [lang]/pair
+	// counterpart, so this is not a stale top-level duplicate.
+	'pair'
 ]);
 
 interface Scenario {

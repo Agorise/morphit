@@ -31,24 +31,34 @@ export function stripMarkdown(input: string): string {
 	if (!input) return '';
 	let s = input;
 
+	// Protect inline-code content first so its literal characters — e.g. the
+	// `*` wildcard in `/v1/*` — are never treated as emphasis. Stashed as the
+	// inner text (backticks dropped) and restored after emphasis stripping.
+	const code: string[] = [];
+	s = s.replace(/`([^`]+)`/g, (_m, c: string) => {
+		code.push(c);
+		return `\u0000C${code.length - 1}\u0000`;
+	});
+
 	// Strip `[link text](url)` → "link text (url)".  Keeping the
 	// URL in parens preserves accessibility info for users who
 	// can't click (which describes every SERP rich-snippet —
 	// search results are inert text).
 	s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
 
-	// Strip `**bold**` and `__bold__` → "bold".  Strict: must be
-	// double-asterisk on both sides; single-asterisk italic NOT
-	// stripped here (single asterisk appears in some non-markdown
-	// contexts like math notation; better to leave alone).
+	// Strip `**bold**` and `__bold__` → "bold".
 	s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
 	s = s.replace(/__([^_]+)__/g, '$1');
 
-	// Strip `\`code\`` → "code" (single-backtick inline code).
-	// Multi-backtick code fences (```…```) aren't used in FAQ
-	// copy; if they appear, this regex leaves them alone (good —
-	// caller should flag those, not strip silently).
-	s = s.replace(/`([^`]+)`/g, '$1');
+	// Strip `*italic*` → "italic" (single-asterisk emphasis).  The content
+	// excludes `/` so a bare API-path wildcard (e.g. `/v1/*` … `/v2/*`, once
+	// its code span has been unwrapped) can never be mistaken for an italic
+	// span — this also keeps the function idempotent on its own output.  Code
+	// spans (the legitimate home of `*`) are already stashed out of reach.
+	s = s.replace(/\*([^*\n/]+)\*/g, '$1');
+
+	// Restore the stashed inline-code text (plain, backticks already dropped).
+	s = s.replace(/\u0000C(\d+)\u0000/g, (_m, i: string) => code[Number(i)] ?? '');
 
 	// Bullet-list normalization: "\n • item" → ". item" so the
 	// list reads as a flowing sentence stream.  Plaintext FAQ

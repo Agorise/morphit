@@ -127,8 +127,14 @@ sysadmin should expect to debug rather than copy-paste:
   `bunkerweb` role pins to a specific tag in
   `group_vars/all.yml`; verify against the BunkerWeb docs at
   release time.
-- **Ubuntu 24.04 specifics.**  Tested-shape on this distro;
-  may need apt-package-name adjustments on derivatives.
+- **Ubuntu 24.04 base.**  The playbook gates on the Ubuntu base
+  codename (`noble`) in `/etc/os-release`, so it runs on Ubuntu
+  24.04 LTS AND on 24.04-based derivatives (Linux Mint 22 — any
+  edition, Pop!_OS 24.04, Zorin 17).  The codename-pinned apt
+  repos (Docker, Trivy) key off that base codename, not the
+  derivative's own.  It still hard-fails on Debian/LMDE, the
+  older 22.04 "jammy" base (Ubuntu 22.04 / Mint 21), and
+  non-Ubuntu distros.
 - **PostgreSQL major version.**  The repo's existing
   `ops/postgres/init.sql` targets PG 17 (per §33 reference).
   The playbook installs `postgresql` (whatever's in the

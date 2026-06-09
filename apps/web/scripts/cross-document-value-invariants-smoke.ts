@@ -24,8 +24,8 @@
  *   3. postgres_port                (ansible/group_vars → env.examples DATABASE_URL)
  *   4. treasury_fee_account         (indexer config default → operator-facing docs
  *                                    that name the default by string)
- *   5. indexer_bind_port            (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_2)
- *   6. relay_bind_port              (ansible group_vars → bunkerweb REVERSE_PROXY_HOST_1)
+ *   5. indexer_bind_port            (ansible group_vars → bunkerweb frontend nginx.conf /v1/)
+ *   6. relay_bind_port              (ansible group_vars → bunkerweb frontend nginx.conf /relay/)
  *   7. bunkerweb_net_name           (canonical compose → ansible role template +
  *                                    ansible verification task)
  *   8. relay_listen_port_default    (relay config Zod default → env.example + nginx)
@@ -36,9 +36,12 @@
  *                                    trusted_proxy_ips)  [cp69; slim cousin of
  *                                    cp61-O14, which also checks docs]
  *
- * NOTE: 5-6 are the BunkerWeb-fronted bind ports (4000/4001); 8-9 are the
- * BARE-METAL nginx-fronted listen ports (8080/8081).  Both are deploy-mode
- * defaults, and both can drift independently — operators get a different
+ * NOTE: 5-6 are the BunkerWeb-fronted bind ports and 8-9 are the bare-metal
+ * nginx-fronted listen ports.  As of cp224 both deploy modes are unified on
+ * the code defaults (relay 8080 / indexer 8081), but they are still checked
+ * independently — the ansible group_vars bind port and the frontend nginx.conf
+ * proxy port must agree (5-6), and the Zod default and the bare-metal nginx
+ * upstream must agree (8-9) — so a drift in either path gets a distinct
  * default depending on whether they `docker compose up` from ops/bunkerweb/
  * or `apt install nginx` from ops/nginx/.  Each set MUST be internally
  * consistent.
@@ -242,7 +245,7 @@ const INVARIANTS: Invariant[] = [
 	{
 		name: 'indexer_bind_port',
 		description:
-			"Indexer HTTP bind port for the BunkerWeb-fronted deploy — defined by ansible/group_vars; consumed by bunkerweb.env.example's REVERSE_PROXY_HOST_2 (BunkerWeb reverse-proxies the indexer at this port). If they drift, BunkerWeb 502s the indexer service.",
+			"Indexer HTTP bind port — defined by ansible/group_vars (unified to the code default 8081); consumed by ops/bunkerweb/frontend/nginx.conf's /v1/ proxy_pass (the frontend nginx reverse-proxies the indexer at this port behind BunkerWeb). If they drift, the frontend 502s the indexer service.",
 		source: {
 			file: 'ops/ansible/group_vars/all.yml',
 			regex: /^morphit_indexer_bind_port:\s*(\d+)/m,
@@ -250,16 +253,16 @@ const INVARIANTS: Invariant[] = [
 		},
 		consumers: [
 			{
-				file: 'ops/bunkerweb/bunkerweb.env.example',
-				regex: /REVERSE_PROXY_HOST_2=http:\/\/[^:]+:(\d+)/,
-				context: 'bunkerweb REVERSE_PROXY_HOST_2 (indexer)',
+				file: 'ops/bunkerweb/frontend/nginx.conf',
+				regex: /location \/v1\/ \{[\s\S]*?proxy_pass http:\/\/host\.docker\.internal:(\d+)/,
+				context: 'bunkerweb frontend nginx.conf /v1/ proxy_pass (indexer)',
 			},
 		],
 	},
 	{
 		name: 'relay_bind_port',
 		description:
-			"Relay HTTP bind port for the BunkerWeb-fronted deploy — defined by ansible/group_vars; consumed by bunkerweb.env.example's REVERSE_PROXY_HOST_1 (BunkerWeb reverse-proxies the relay at this port). If they drift, BunkerWeb 502s the relay service.",
+			"Relay HTTP bind port — defined by ansible/group_vars (unified to the code default 8080); consumed by ops/bunkerweb/frontend/nginx.conf's /relay/ proxy_pass (the frontend nginx reverse-proxies the relay at this port behind BunkerWeb). If they drift, the frontend 502s the relay service.",
 		source: {
 			file: 'ops/ansible/group_vars/all.yml',
 			regex: /^morphit_relay_bind_port:\s*(\d+)/m,
@@ -267,9 +270,9 @@ const INVARIANTS: Invariant[] = [
 		},
 		consumers: [
 			{
-				file: 'ops/bunkerweb/bunkerweb.env.example',
-				regex: /REVERSE_PROXY_HOST_1=http:\/\/[^:]+:(\d+)/,
-				context: 'bunkerweb REVERSE_PROXY_HOST_1 (relay)',
+				file: 'ops/bunkerweb/frontend/nginx.conf',
+				regex: /location \/relay\/ \{[\s\S]*?proxy_pass http:\/\/host\.docker\.internal:(\d+)/,
+				context: 'bunkerweb frontend nginx.conf /relay/ proxy_pass (relay)',
 			},
 		],
 	},
@@ -303,7 +306,7 @@ const INVARIANTS: Invariant[] = [
 	{
 		name: 'relay_listen_port_default',
 		description:
-			"Relay HTTP listen port (bare-metal deploy default) — defined by apps/relay/src/config/index.ts Zod default; consumed by env.example default + nginx reverse-proxy upstream. If they drift, the bare-metal nginx deploy 502s. Note: this is DIFFERENT from relay_bind_port (4001) which is the BunkerWeb-fronted port; bare-metal uses 8080.",
+			"Relay HTTP listen port (bare-metal deploy default) — defined by apps/relay/src/config/index.ts Zod default; consumed by env.example default + nginx reverse-proxy upstream. If they drift, the bare-metal nginx deploy 502s. As of cp224 this equals relay_bind_port (the BunkerWeb-fronted path is unified on the same 8080 default), but the two are still checked independently against their own consumers.",
 		source: {
 			file: 'apps/relay/src/config/index.ts',
 			regex: /MORPHIT_RELAY_LISTEN_PORT:[^,;\n]*\.default\((\d+)\)/,
@@ -325,7 +328,7 @@ const INVARIANTS: Invariant[] = [
 	{
 		name: 'indexer_listen_port_default',
 		description:
-			"Indexer HTTP listen port (bare-metal deploy default) — defined by apps/indexer/src/config/index.ts Zod default; consumed by env.example default + nginx upstream server. If they drift, the bare-metal nginx deploy 502s. Note: this is DIFFERENT from indexer_bind_port (4000) which is the BunkerWeb-fronted port; bare-metal uses 8081.",
+			"Indexer HTTP listen port (bare-metal deploy default) — defined by apps/indexer/src/config/index.ts Zod default; consumed by env.example default + nginx upstream server. If they drift, the bare-metal nginx deploy 502s. As of cp224 this equals indexer_bind_port (the BunkerWeb-fronted path is unified on the same 8081 default), but the two are still checked independently against their own consumers.",
 		source: {
 			file: 'apps/indexer/src/config/index.ts',
 			regex: /MORPHIT_INDEXER_LISTEN_PORT:[^,;\n]*\.default\((\d+)\)/,

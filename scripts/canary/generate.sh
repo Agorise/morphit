@@ -54,7 +54,6 @@ required MORPHIT_CANARY_PGP_KEY_ID
 required MORPHIT_CANARY_OPERATOR_NAME
 required MORPHIT_CANARY_INSTANCE_ORIGIN
 required MORPHIT_CANARY_OPERATOR_ACCOUNT
-required MORPHIT_CANARY_POSTING_WIF
 
 BLURT_RPC="${MORPHIT_CANARY_BLURT_RPC:-https://rpc.blurt.blog}"
 NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://feeds.bbci.co.uk/news/rss.xml}"
@@ -182,66 +181,6 @@ awk \
 # Drop everything from the BEGIN PGP SIGNATURE block onward — gpg
 # will append its own signature block to the cleartext.
 sed -i '/-----BEGIN PGP SIGNATURE-----/,$d' "$UNSIGNED"
-
-# ─── Posting-key attestation ─────────────────────────────────────
-#
-# Sign the canary sub-content (everything up to but NOT including
-# the BEGIN MORPHIT POSTING-KEY ATTESTATION block) with the
-# operator's Blurt posting key.  This binds the canary to the
-# operator's on-chain identity — independently from the PGP
-# signature.
-#
-# The signed payload is the file as it stands RIGHT NOW (with
-# the BEGIN PGP block stripped above, but with the posting-key
-# attestation block still containing its placeholders).  We
-# slice out everything before "-----BEGIN MORPHIT POSTING-KEY
-# ATTESTATION-----" so the signed bytes don't include the
-# placeholders themselves — the verifier reconstructs the same
-# slice and recomputes the digest.
-
-echo "canary: signing with operator posting key..." >&2
-
-POSTING_PAYLOAD="$(mktemp -t morphit-canary-payload-XXXXXX.txt)"
-trap 'rm -f "$UNSIGNED" "$POSTING_PAYLOAD"' EXIT
-sed -n '1,/-----BEGIN MORPHIT POSTING-KEY ATTESTATION-----/p' "$UNSIGNED" \
-	| sed '$d' \
-	> "$POSTING_PAYLOAD"
-
-POSTING_SIG_OUT="$(MORPHIT_CANARY_POSTING_WIF="$MORPHIT_CANARY_POSTING_WIF" \
-	npx --no-install tsx "$REPO_ROOT/scripts/canary/sign-with-posting-key.ts" \
-	"$MORPHIT_CANARY_OPERATOR_ACCOUNT" \
-	< "$POSTING_PAYLOAD")"
-
-# 3-line output: account / public_key / signature
-POSTING_PUBKEY="$(echo "$POSTING_SIG_OUT" | awk '/^public_key:/{print $2}')"
-POSTING_SIG_BASE64="$(echo "$POSTING_SIG_OUT" | awk '/^signature:/{print $2}')"
-
-if [ -z "$POSTING_PUBKEY" ] || [ -z "$POSTING_SIG_BASE64" ]; then
-	echo "canary: posting-key signer produced empty output" >&2
-	echo "$POSTING_SIG_OUT" >&2
-	exit 1
-fi
-
-# Compute sha256 of the same payload for human-readable display.
-# The signature itself is over sha256(payload), but we surface the
-# hash separately so verifiers can spot-check without rerunning
-# the whole pipeline.
-POSTING_SIG_SHA256="$(sha256sum "$POSTING_PAYLOAD" | awk '{print $1}')"
-
-# Second awk pass: substitute the posting-key placeholders.
-awk \
-	-v posting_account="$MORPHIT_CANARY_OPERATOR_ACCOUNT" \
-	-v posting_pub="$POSTING_PUBKEY" \
-	-v posting_sha="$POSTING_SIG_SHA256" \
-	-v posting_b64="$POSTING_SIG_BASE64" \
-	'{
-		gsub(/\{\{OPERATOR_POSTING_ACCOUNT\}\}/, posting_account);
-		gsub(/\{\{OPERATOR_POSTING_PUBKEY\}\}/,  posting_pub);
-		gsub(/\{\{POSTING_SIG_SHA256\}\}/,       posting_sha);
-		gsub(/\{\{POSTING_SIG_BASE64\}\}/,       posting_b64);
-		print
-	}' "$UNSIGNED" > "$UNSIGNED.tmp"
-mv "$UNSIGNED.tmp" "$UNSIGNED"
 
 # ─── Sign ────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@
 	    loading="lazy" decoding="async", so a visitor who never opens
 	    the menu pays zero bytes for the coin icons (priorities #1/#4).
 
-	"Barter (products/services)" is appended last with the bundled
+	"Barter (goods/services)" is appended last with the bundled
 	gold-bars icon.  Barter is a PAYMENT METHOD (`barter_goods`), not a
 	tradable asset, so selecting it sets the sentinel value 'barter';
 	the orderbook page maps that to `payment_methods ⊇ barter_goods`
@@ -34,6 +34,7 @@
 	let { value = $bindable('' as AssetFilterValue) } = $props();
 
 	let open = $state(false);
+	let focused = $state(false);
 	let rootEl = $state<HTMLDivElement>();
 	let buttonEl = $state<HTMLButtonElement>();
 
@@ -87,7 +88,11 @@
 		aria-haspopup="listbox"
 		aria-expanded={open}
 		onclick={() => (open = !open)}
-		class="flex w-full items-center gap-2 rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-left focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+		onfocus={() => (focused = true)}
+		onblur={() => (focused = false)}
+		class="flex w-full items-center gap-2 rounded-xl border-2 {focused || open
+			? 'border-morphit-emerald'
+			: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 text-left focus:outline-none dark:bg-ink-900"
 	>
 		{#if selected.icon}
 			<img src={selected.icon} alt="" width="20" height="20" class="h-5 w-5 shrink-0 rounded-full" />
@@ -113,7 +118,7 @@
 					type="button"
 					onclick={() => choose('')}
 					class="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-ink-100 dark:hover:bg-ink-800 {value === ''
-						? 'font-semibold text-morphit-emerald'
+						? 'bg-ink-100 font-medium dark:bg-ink-800'
 						: ''}"
 				>
 					<span class="h-5 w-5 shrink-0"></span>
@@ -127,7 +132,7 @@
 						onclick={() => choose(a.displayTicker as AssetFilterValue)}
 						class="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-ink-100 dark:hover:bg-ink-800 {value ===
 						a.displayTicker
-							? 'font-semibold text-morphit-emerald'
+							? 'bg-ink-100 font-medium dark:bg-ink-800'
 							: ''}"
 					>
 						<img
@@ -149,7 +154,7 @@
 					onclick={() => choose('barter')}
 					class="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-ink-100 dark:hover:bg-ink-800 {value ===
 					'barter'
-						? 'font-semibold text-morphit-emerald'
+						? 'bg-ink-100 font-medium dark:bg-ink-800'
 						: ''}"
 				>
 					<img

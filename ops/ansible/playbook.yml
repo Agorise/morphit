@@ -44,16 +44,43 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Verify target is Ubuntu 24.04
+    - name: Read /etc/os-release (to find the Ubuntu base codename)
+      ansible.builtin.slurp:
+        src: /etc/os-release
+      register: morphit_os_release
+      check_mode: false
+
+    - name: Determine the Ubuntu base codename
+      # Ubuntu AND its derivatives (Linux Mint, Pop!_OS, Zorin, elementary,
+      # …) carry UBUNTU_CODENAME in /etc/os-release naming their Ubuntu
+      # base — e.g. Linux Mint 22 (any edition: Cinnamon/MATE/Xfce) →
+      # "noble".  We key the codename-pinned apt repos (Docker, Trivy) off
+      # THIS, not ansible_distribution_release, which on a derivative is the
+      # derivative's OWN codename (e.g. Mint's "wilma") that the Ubuntu
+      # repos don't publish.  Appending [''] keeps the list non-empty so
+      # `first` is safe when UBUNTU_CODENAME is absent (Debian/LMDE).
+      ansible.builtin.set_fact:
+        morphit_ubuntu_codename: >-
+          {{ (morphit_os_release.content | b64decode
+              | regex_findall('^UBUNTU_CODENAME=(.*)$', multiline=True)
+              + ['']) | first | trim }}
+
+    - name: Verify target is Ubuntu 24.04 LTS or an Ubuntu-24.04-based derivative
       ansible.builtin.assert:
         that:
-          - ansible_distribution == "Ubuntu"
-          - ansible_distribution_version == "24.04"
+          - morphit_ubuntu_codename == "noble"
         fail_msg: >
-          This playbook is written for Ubuntu 24.04 LTS.  Target
-          is {{ ansible_distribution }} {{ ansible_distribution_version }}.
-          Some package names and config paths will differ on other
-          distros.  Adjust the playbook before continuing.
+          This playbook targets Ubuntu 24.04 LTS (codename "noble") OR an
+          Ubuntu-24.04-based derivative such as Linux Mint 22 (any edition —
+          Cinnamon/MATE/Xfce), Pop!_OS 24.04, or Zorin OS 17.  Detected
+          {{ ansible_distribution }} {{ ansible_distribution_version }} with
+          Ubuntu base codename "{{ morphit_ubuntu_codename }}".  Earlier
+          Ubuntu LTS (22.04 "jammy" / Linux Mint 21), Debian, LMDE, and
+          non-Ubuntu distros are not supported — package names and config
+          paths differ.  See RUN-A-MORPHIT-NODE.md §4.
+        success_msg: >
+          Target is {{ ansible_distribution }} {{ ansible_distribution_version }}
+          on the Ubuntu 24.04 "noble" base — supported.
 
     - name: Verify there is a sudo-capable non-root user with SSH key
       ansible.builtin.assert:

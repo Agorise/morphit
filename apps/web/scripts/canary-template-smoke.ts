@@ -44,7 +44,7 @@ if (failures.length === 0) {
 	const gen = readFileSync(GENERATOR, 'utf8');
 
 	// Find all {{NAME}} placeholders in the template.
-	// Names may contain digits (e.g. POSTING_SIG_SHA256) — match
+	// Names may contain digits — match
 	// `[A-Z0-9_]+`, NOT `[A-Z_]+`, or the smoke silently misses
 	// any placeholder that has a digit in its name.
 	const tplPlaceholders = new Set<string>();
@@ -110,8 +110,6 @@ if (failures.length === 0) {
 		'FRESHNESS PROOFS',
 		'HOW TO VERIFY',
 		"IF THIS CANARY DOESN'T UPDATE",
-		'-----BEGIN MORPHIT POSTING-KEY ATTESTATION-----',
-		'-----END MORPHIT POSTING-KEY ATTESTATION-----',
 		'-----BEGIN PGP SIGNATURE-----',
 		'-----END PGP SIGNATURE-----'
 	];

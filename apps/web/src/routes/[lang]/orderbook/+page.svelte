@@ -30,6 +30,7 @@
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
+	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
@@ -79,13 +80,20 @@
 	let side = $state<SideFilter>('');
 	let fiatList = $state<string[]>([]);
 	let region = $state('');
-	// Region filter: animated cycling placeholder. These are
-	// proper-noun place names — deliberately NOT translated, so
-	// "北京" / "Москва" / "München" appear verbatim in every UI
-	// locale. Plain text bound to the native input placeholder, so
-	// RTL scripts, CJK, accents, and spaces all render correctly.
-	// Cycles every 3s and stops the moment the user starts typing
-	// (resumes if they clear via the Clear-filters button).
+	// Region filter: an animated "someone is typing" placeholder. These
+	// are proper-noun place names — deliberately NOT translated, so
+	// "北京" / "Москва" / "München" appear verbatim in every UI locale.
+	// Plain text bound to the native input placeholder, so RTL scripts,
+	// CJK, accents, and spaces all render correctly.
+	//
+	// The typewriter types each place name out one character at a time,
+	// holds it, backspaces it, then types the next — so it reads like a
+	// person typing into the field rather than whole strings swapping in.
+	// It runs only while the field is EMPTY: it stops the instant the
+	// field has any text (driven by `regionHasText`, NOT a one-way flag)
+	// and RESUMES the moment the field goes empty again — whether the
+	// user deleted their text by hand or hit Clear-filters. prefers-
+	// reduced-motion shows a single static place name with no animation.
 	const REGION_PLACEHOLDERS = [
 		'North America',
 		'Polska',
@@ -101,16 +109,59 @@
 		'München'
 	] as const;
 	let regionPlaceholder = $state<string>(REGION_PLACEHOLDERS[0]);
-	let regionUserTyped = $state(false);
+	// True whenever the field has real text — the typewriter pauses while
+	// true and resumes (the $effect re-runs) when it flips back to false.
+	const regionHasText = $derived(region.trim().length > 0);
 	$effect(() => {
-		// Re-runs (and tears down the interval) once the user types.
-		if (regionUserTyped) return;
-		let i = 0;
-		const id = setInterval(() => {
-			i = (i + 1) % REGION_PLACEHOLDERS.length;
-			regionPlaceholder = REGION_PLACEHOLDERS[i] ?? REGION_PLACEHOLDERS[0];
-		}, 3000);
-		return () => clearInterval(id);
+		// Pause while the user has typed something; resume when empty.
+		if (regionHasText) return;
+		// Respect reduced-motion: a single static place name, no typing.
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			regionPlaceholder = REGION_PLACEHOLDERS[0];
+			return;
+		}
+		const TYPE_MS = 70; // per-character typing speed
+		const DELETE_MS = 35; // per-character backspacing speed (snappier)
+		const HOLD_MS = 1600; // pause on the fully-typed name
+		const GAP_MS = 450; // blank beat before the next name
+		let cityIdx = 0;
+		let charIdx = 0;
+		let phase: 'typing' | 'holding' | 'deleting' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const city = REGION_PLACEHOLDERS[cityIdx] ?? REGION_PLACEHOLDERS[0];
+			if (phase === 'typing') {
+				charIdx += 1;
+				regionPlaceholder = city.slice(0, charIdx);
+				if (charIdx >= city.length) {
+					phase = 'holding';
+					timer = setTimeout(tick, HOLD_MS);
+				} else {
+					timer = setTimeout(tick, TYPE_MS);
+				}
+			} else if (phase === 'holding') {
+				phase = 'deleting';
+				timer = setTimeout(tick, DELETE_MS);
+			} else {
+				charIdx -= 1;
+				regionPlaceholder = city.slice(0, Math.max(charIdx, 0));
+				if (charIdx <= 0) {
+					phase = 'typing';
+					charIdx = 0;
+					cityIdx = (cityIdx + 1) % REGION_PLACEHOLDERS.length;
+					timer = setTimeout(tick, GAP_MS);
+				} else {
+					timer = setTimeout(tick, DELETE_MS);
+				}
+			}
+		};
+		// Start by typing the first name in from an empty field.
+		regionPlaceholder = '';
+		timer = setTimeout(tick, GAP_MS);
+		return () => clearTimeout(timer);
 	});
 
 	// cp165 byte-budget: lazy-load below-the-fold featured components.
@@ -506,7 +557,6 @@
 		side = '';
 		fiatList = [];
 		region = '';
-		regionUserTyped = false;
 		paymentMethods = [];
 		minTrades = 0;
 		sortMode = 'recent';
@@ -686,7 +736,6 @@
 				<input
 					type="text"
 					bind:value={region}
-					oninput={() => (regionUserTyped = true)}
 					maxlength="128"
 					autocomplete="off"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
@@ -761,38 +810,13 @@
 					subscriber cares about <asset>."
 					Privacy and use case documented in rss_feeds FAQ. -->
 				{#if asset && asset !== 'barter'}
-					<a
-						href={`/rss/orderbook/by-asset/${asset.toLowerCase()}.xml`}
-						title={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
-						class="chip text-xs"
-						rel="alternate"
-						type="application/rss+xml"
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							viewBox="0 0 24 24"
-							xmlns="http://www.w3.org/2000/svg"
-							aria-hidden="true"
-						>
-							<rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#F26522" />
-							<circle cx="6.5" cy="17.5" r="2" fill="#fff" />
-							<path
-								d="M5 8.5 A 10.5 10.5 0 0 1 15.5 19"
-								stroke="#fff"
-								stroke-width="2.4"
-								fill="none"
-								stroke-linecap="round"
-							/>
-							<path
-								d="M5 4.5 A 14.5 14.5 0 0 1 19.5 19"
-								stroke="#fff"
-								stroke-width="2.4"
-								fill="none"
-								stroke-linecap="round"
-							/>
-						</svg>
-						{$_('orderbook.filters.rss_asset_label', { values: { asset } })}
-					</a>
+					<RssFeedPicker
+						base={`/rss/orderbook/by-asset/${asset.toLowerCase()}`}
+						label={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
+						text={$_('orderbook.filters.rss_asset_label', { values: { asset } }) as string}
+						triggerClass="chip text-xs"
+						iconClass="h-3.5 w-3.5"
+					/>
 				{/if}
 			</div>
 		{/if}

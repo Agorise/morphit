@@ -36,6 +36,7 @@
 
 	let query = $state('');
 	let open = $state(false);
+	let focused = $state(false);
 	let activeIndex = $state(0);
 	let rootEl = $state<HTMLDivElement>();
 	let inputEl = $state<HTMLInputElement>();
@@ -50,7 +51,9 @@
 		return searchPaymentMethods(all, query, () => null)
 			.map((r) => r.entry)
 			.filter((e) => !value.includes(e.key))
-			.slice(0, 8);
+			// 50 (not 8): scrollable list, so an empty-focus browse shows a
+			// generous set and typing narrows it.
+			.slice(0, 50);
 	});
 
 	function nameFor(key: string): string {
@@ -99,7 +102,11 @@
 
 <div class="relative" bind:this={rootEl}>
 	<div
-		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 bg-white px-2 py-1.5 focus-within:border-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+		onfocusin={() => (focused = true)}
+		onfocusout={() => (focused = false)}
+		class="flex flex-wrap items-center gap-1 rounded-xl border-2 {focused || open
+			? 'border-morphit-emerald'
+			: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>
 		{#each value as key (key)}
 			<span
@@ -150,11 +157,29 @@
 							type="button"
 							onclick={() => add(e.key)}
 							onmousemove={() => (activeIndex = i)}
-							class="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800 {i ===
+							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800 {i ===
 							activeIndex
 								? 'bg-ink-100 dark:bg-ink-800'
 								: ''}"
 						>
+							{#if e.category === 'crypto'}
+								<!-- Crypto methods carry a `pay_<ticker>` key and every
+								     ticker has a matching /icons/icon-<ticker>.svg, so the
+								     coin icon is derived straight from the key. -->
+								<img
+									src={`/icons/icon-${e.key.slice(4)}.svg`}
+									alt=""
+									loading="lazy"
+									decoding="async"
+									width="20"
+									height="20"
+									class="h-5 w-5 shrink-0 rounded-full"
+								/>
+							{:else}
+								<!-- Non-crypto (fiat rails, in-person, by-mail): no coin
+								     icon, but keep a spacer so names stay column-aligned. -->
+								<span class="h-5 w-5 shrink-0"></span>
+							{/if}
 							{e.name}
 						</button>
 					</li>

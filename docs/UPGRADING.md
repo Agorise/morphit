@@ -13,7 +13,8 @@ sudo -u morphit npx morphit-ops upgrade
 
 That command checks for a new release, shows you the notes, asks
 for confirmation, backs up your current install, applies the new
-tarball, runs `npm ci`, and restarts services. If anything fails,
+tarball, runs `npm ci`, rebuilds and redeploys the web frontend,
+and restarts services. If anything fails,
 it rolls back automatically.
 
 The rest of this doc covers the details: how the trust chain
@@ -98,6 +99,20 @@ Two things to do first when you've been away a while:
    when it restarts services, so there's no separate migration
    command.
 
+> **Beta note (pre-1.0):** during the beta the database layout is a
+> single baseline that we sometimes edit *in place* between versions
+> rather than as a separate numbered migration. Because the upgrade
+> never touches your database (see the carry-forward note below), an
+> existing database won't pick up such an in-place change on its own —
+> so after a beta upgrade that crossed a schema change, the indexer can
+> be missing a new table or column. This is harmless to fix: the indexer
+> database is rebuilt from the chain, so you reset and re-sync it.
+> `morphit-ops upgrade` prints a reminder when it crosses a schema
+> change, and `morphit-ops doctor` detects a drifted database and points
+> you at the fix. Full steps: **OPERATIONS.md §46**. (This caveat goes
+> away at 1.0, when every schema change ships as its own migration that
+> *does* apply automatically on restart.)
+
 If you're so far behind that you're unsure what changed, the
 safest path is: take a database backup (see `OPERATIONS.md`),
 read the notes for each skipped release, then run the upgrade.
@@ -173,6 +188,18 @@ Steps the command takes, in order:
     config — your instance comes back up exactly as it was, on the
     new code.
 9. Runs `npm ci --no-audit --no-fund` in the new install dir.
+9b. **Rebuilds and redeploys the web frontend.** The indexer, relay,
+    and matrix-bot run straight from TypeScript source via `tsx`, so
+    `npm ci` is all they need — but the website is a static SvelteKit
+    build that nginx serves from a folder, and the release tarball does
+    **not** ship a prebuilt frontend. So the upgrade runs the web build
+    (`npm run build` in `apps/web`) and copies the result into your web
+    root (`MORPHIT_WEB_ROOT`, default `/var/www/morphit-frontend`),
+    preserving that folder's ownership. nginx serves the new static
+    files immediately — no nginx reload needed. If `MORPHIT_WEB_ROOT`
+    doesn't exist (a non-standard serving setup), this step is **skipped
+    with a warning** and the backend still upgrades; set
+    `MORPHIT_WEB_ROOT` or rebuild + copy `apps/web/build` yourself.
 10. Restarts these systemd services if they're active:
     - `morphit-indexer.service`
     - `morphit-relay.service`
@@ -184,6 +211,7 @@ If **any** step from 7 onwards fails, the command:
 
 - Removes the partial extract at `/opt/morphit`
 - Renames the backup back to `/opt/morphit`
+- Restores the previous web frontend (if it had already redeployed)
 - Restarts services on the previous version
 - Exits with code 3 ("upgrade failed, rolled back")
 
@@ -220,6 +248,7 @@ sudo -u morphit npx morphit-ops upgrade --yes
 | `MORPHIT_RELEASE_REPO` | `agorise/morphit` | repo path |
 | `MORPHIT_RELEASE_MIRRORS` | unset | comma-separated fallback sources, each `host` or `host/owner/repo`, tried after the primary |
 | `MORPHIT_INSTALL_DIR` | `/opt/morphit` | install location |
+| `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | where nginx serves the static frontend from; `upgrade` rebuilds `apps/web` and redeploys here. Set it for a custom serving path; if the dir is absent the frontend redeploy is skipped (with a warning) |
 | `MORPHIT_BACKUP_KEEP` | `3` | how many `.bak-*` backups to retain |
 
 ### Mirrors and how integrity is protected
@@ -305,6 +334,13 @@ sudo chown -R morphit:morphit /opt/morphit  # adjust to match your install
 # 6. Install workspace dependencies.
 cd /opt/morphit
 sudo -u morphit npm ci --no-audit --no-fund
+
+# 6b. Rebuild the static web frontend and deploy it to your web root.
+#     (indexer/relay/matrix-bot run from TS source via tsx and need no
+#     build step; the website is static files nginx serves from a folder.)
+(cd apps/web && sudo -u morphit npm run build)
+sudo cp -r apps/web/build/* /var/www/morphit-frontend/
+sudo chown -R www-data:www-data /var/www/morphit-frontend  # match your web root's owner
 
 # 7. Verify the new version's release-info.json matches what you downloaded.
 cat /opt/morphit/release-info.json

@@ -2,13 +2,25 @@
 # https://docs.bunkerweb.io/.  Verify against your BunkerWeb
 # version at deploy time; this template targets 1.5.x.
 #
-# Two services:
-#   bunkerweb         — the reverse proxy + WAF
+# Three services:
+#   bunkerweb         — public entry: TLS + WAF, proxies every path to
+#                       `frontend` (REVERSE_PROXY_HOST)
 #   bunkerweb-scheduler — config management agent
+#   frontend          — plain nginx that serves the SvelteKit static
+#                       build AND reverse-proxies /v1/, /relay/, /rss/
+#                       + SSE to the relay + indexer on the host
+#                       (the frontend/ build context is copied from
+#                       {{ morphit_repo_path }}/ops/bunkerweb/frontend
+#                       by tasks/main.yml)
 #
-# The morphit relay + indexer run on the HOST (not in this
-# compose), reachable from the container via host.docker.internal
-# (Linux: 172.17.0.1 by default).
+# Topology:  client ──TLS──> bunkerweb ──> frontend ──> host relay/indexer
+#
+# The morphit relay + indexer run on the HOST (not in this compose),
+# reachable from the `frontend` container via host.docker.internal
+# (Linux: host-gateway).  They bind on all interfaces (group_vars
+# morphit_*_bind_host) because a loopback-only bind is unreachable
+# from the bridge; UFW (default-deny + the bunkerweb-role bridge
+# allow) keeps the public out.
 
 services:
   bunkerweb:
@@ -44,6 +56,28 @@ services:
       - bw-data:/data
     networks:
       - bunkerweb_net
+
+  # Serves the built SvelteKit site + reverse-proxies the API paths to
+  # the relay + indexer on the host.  BunkerWeb proxies everything here
+  # (REVERSE_PROXY_HOST=http://frontend:80).  The build context is
+  # copied to /etc/bunkerweb/frontend by tasks/main.yml.
+  frontend:
+    build:
+      context: ./frontend
+    container_name: morphit-frontend
+    restart: unless-stopped
+    volumes:
+      # The SvelteKit production build from the cloned repo, read-only.
+      - {{ morphit_repo_path }}/apps/web/build:/usr/share/nginx/html:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - bunkerweb_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   bw-data:

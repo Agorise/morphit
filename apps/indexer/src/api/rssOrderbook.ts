@@ -5,7 +5,10 @@
  * rssOrderbookHandlers.ts (split out so smoke tests can
  * import the handlers without a Hono dep).
  *
- * Three RSS 2.0 feeds of live, fee-verified orders:
+ * Three feeds of live, fee-verified orders. Each feed is
+ * served in three formats, selected by the file extension —
+ * RSS 2.0 (.xml), Atom 1.0 (.atom), JSON Feed 1.1 (.json) —
+ * carrying byte-identical order data:
  *
  *   /rss/orderbook.xml
  *     The original global feed. 50 most recent orders.
@@ -77,18 +80,25 @@ export function rssOrderbookRoute(db: Database, config: Config): Hono {
 	const app = new Hono();
 
 	app.get('/orderbook.xml', async (c) => {
-		const r = await globalFeedHandler(db, config);
-		return applyResult(c as never, r);
+		return applyResult(c as never, await globalFeedHandler(db, config, 'rss'));
+	});
+	app.get('/orderbook.atom', async (c) => {
+		return applyResult(c as never, await globalFeedHandler(db, config, 'atom'));
+	});
+	app.get('/orderbook.json', async (c) => {
+		return applyResult(c as never, await globalFeedHandler(db, config, 'json'));
 	});
 
+	// Per-asset / per-account: the path parameter carries the file
+	// extension (e.g. "btc.atom", "@alice.json"); the handler parses
+	// .xml | .atom | .json off the end and serializes accordingly,
+	// so these two routes cover all three formats without fan-out.
 	app.get('/orderbook/by-asset/:asset', async (c) => {
-		const r = await perAssetFeedHandler(c.req.param('asset'), db, config);
-		return applyResult(c as never, r);
+		return applyResult(c as never, await perAssetFeedHandler(c.req.param('asset'), db, config));
 	});
 
 	app.get('/orderbook/by-account/:account', async (c) => {
-		const r = await perAccountFeedHandler(c.req.param('account'), db, config);
-		return applyResult(c as never, r);
+		return applyResult(c as never, await perAccountFeedHandler(c.req.param('account'), db, config));
 	});
 
 	return app;

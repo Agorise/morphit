@@ -122,7 +122,7 @@ A VPS ("Virtual Private Server") is a small computer that lives in a datacenter 
 
 **What to order:** the smallest "shared CPU" instance that has 2 GB of RAM and 20 GB of disk. That's all you need. The provider's website will list it as something like "Cloud Server 1" or "Cloud Compute 1GB" — pick the second-smallest tier (the smallest is usually only 1 GB RAM, which works but is tight). Spend the extra dollar.
 
-**Operating system:** choose **Ubuntu 24.04 LTS**. This is the only OS the Morphit Ansible playbook (at `ops/ansible/playbook.yml`, invoked via `ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass` — see §13 below) currently supports — it hard-fails on anything else, including Debian and earlier Ubuntu LTS releases. Debian and Ubuntu 22.04 will *almost certainly* work in principle (the underlying packages and systemd units are not Ubuntu-24-specific), but you'd be off-piste and would need to fork the playbook. For your first instance, stick with Ubuntu 24.04 LTS. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
+**Operating system:** **Ubuntu 24.04 LTS** is the recommended, best-tested choice. The Morphit Ansible playbook (at `ops/ansible/playbook.yml`, invoked via `ansible-playbook -i inventory/hosts.yml playbook.yml --ask-vault-pass` — see §13 below) now accepts **any Ubuntu-24.04-based system**: Ubuntu 24.04 itself, OR a derivative built on it — **Linux Mint 22** (any edition: Cinnamon, MATE, or Xfce — the desktop environment doesn't matter for a server), Pop!_OS 24.04, Zorin OS 17, etc. It detects this from the Ubuntu base codename (`noble`) in `/etc/os-release`, so the apt repos it adds (Docker, Trivy) resolve correctly even on a derivative. It still **hard-fails** on anything NOT built on the 24.04 base — Debian, LMDE (Debian-based), Ubuntu 22.04 / Linux Mint 21 (the older "jammy" base), and non-Ubuntu distros — because package names and config paths differ there. If you're on one of those, you'd need to fork the playbook. **Don't pick anything labeled "minimal" or "container"** — those skip parts you'll need.
 
 **SSH key vs password:** the provider will ask whether you want to log in with a password or with an "SSH key". **Pick SSH key.** It's safer and easier. We'll cover how to make one in step 5. If you're feeling intimidated by the SSH key step, you can use a password to start and switch later, but plan to do that switch within a week.
 
@@ -1101,7 +1101,7 @@ Three things have to line up for **https://yourdomain.com** to show the homepage
 2. **The built files are where the web server can reach them** — the next step ("Build the frontend"): `npm run build` produces `apps/web/build/`, which you copy to `/var/www/morphit-frontend/`.
 3. **nginx serves those files over HTTPS** — "Configure nginx" below: it serves `/var/www/morphit-frontend` at `/` (with a fallback so deep links like `/post` work), proxies the relay + indexer API to loopback, and terminates TLS with your Let's Encrypt cert (run `morphit-ops ssl` for the exact steps to get one). Reload nginx, open the URL, and the homepage is live.
 
-**If you run BunkerWeb, read this carefully.** The BunkerWeb config Morphit ships is an **API gateway**: it proxies the relay/indexer (`/v1/…`) and runs the WAF, but it does **not** serve your static homepage. nginx is what serves the site at `/`. So with BunkerWeb alone on `:443`, `https://yourdomain.com/` has nothing to return. Two clean setups: keep **nginx** serving the static files with BunkerWeb in front of it as the WAF, or point BunkerWeb's own web root at `/var/www/morphit-frontend` so it serves the files too. See "BunkerWeb — recommended WAF" later in this guide and `docs/OPERATIONS.md` §32 ("BunkerWeb instead of nginx vs. in front of nginx") for the wiring.
+**If you run BunkerWeb, read this carefully.** The BunkerWeb config Morphit ships now serves the **whole site**, not just the API — it runs a small `frontend` nginx container that serves your static homepage AND proxies the relay/indexer API (`/v1/`, `/relay/`, `/rss/`), with BunkerWeb in front as the TLS terminator + WAF. So you do NOT separately set up the host nginx in this section if you're going the BunkerWeb route; the `frontend` container is your web server. Two things differ from the bare-metal nginx path: (1) the SvelteKit build is mounted into the container read-only from `/opt/morphit/apps/web/build` (so `npm run build` is still required, but you don't `cp` it to `/var/www/...`), and (2) the relay + indexer must bind on an address the Docker bridge can reach (NOT `127.0.0.1` only — the canonical setup binds `0.0.0.0` and the shipped UFW rules let only the `172.20.0.0/16` bridge CIDR reach the service ports). See "BunkerWeb — recommended WAF" later in this guide, `ops/bunkerweb/README.md`, and `docs/OPERATIONS.md` §32 for the full wiring. (If you'd rather keep the bare-metal host nginx and just put BunkerWeb in front of it as a pure WAF, that also works — point BunkerWeb at your host nginx instead of the `frontend` container.)
 
 One last thing: make sure the **relay and indexer are running** first. If they're not, the pages still load (they're just static files) — but anything you click that fetches live data (the orderbook, signing in, posting) will error.
 
@@ -1123,7 +1123,7 @@ sudo cp -r apps/web/build/* /var/www/morphit-frontend/
 sudo chown -R www-data:www-data /var/www/morphit-frontend
 ```
 
-Re-run these three commands every time you update Morphit (`git pull` followed by `npm run build` followed by the `cp`). Section 12 below shows how to do it as a single update procedure.
+Re-run these three commands every time you update Morphit **by hand** (`git pull` followed by `npm run build` followed by the `cp`). Section 12 below shows how to do it as a single update procedure. (If you update via a release with `morphit-ops upgrade` instead, you do **not** do this by hand — the upgrade rebuilds `apps/web` and redeploys it to your web root for you. See `docs/UPGRADING.md`.)
 
 ### Configure nginx
 
@@ -1900,7 +1900,7 @@ Short version: **once per month is the design target**, and most weeks you shoul
   cd /opt/morphit
   npm exec --workspace apps/ops-cli morphit-ops -- edit
   ```
-  Pick "Blurt RPC endpoints" from the menu, paste the new comma-separated list, confirm. The wizard validates each URL, backs up your previous `morphit.env`, and writes atomically. Then `sudo systemctl restart morphit-indexer` to pick it up. Watch `journalctl -u morphit-indexer -f` on restart — if the indexer fails to connect it'll log which endpoint refused, fix that one, and try again.
+  Pick "Blurt RPC endpoints" from the menu, paste the new comma-separated list, confirm. The wizard validates each URL, backs up your previous `morphit.env`, writes atomically, then **offers to restart the indexer for you** (just press Enter) so the new endpoints take effect. Watch `journalctl -u morphit-indexer -f` on restart — if the indexer fails to connect it'll log which endpoint refused, fix that one, and try again.
 
 - **Once-per-month review**: glance at `journalctl -u morphit-relay-mint-acts` (did the timer fire successfully every Sunday?), glance at the witness-fee-divergence log, glance at your nightly backup directory. ~5 minutes total. If everything's normal, you do nothing.
 
@@ -1922,11 +1922,29 @@ Everything in §1–§10 gets you to a running, public Morphit instance with TLS
 
 ### Recommended additions
 
+#### Extra private addresses — Tor / Lokinet / I2P (one wizard does it)
+
+Besides your normal web address, you can give people a *private* way to reach your instance over Tor, Lokinet, or I2P. Each one shows up as a little pill in your site footer. This is optional — your normal address works fine on its own — but it's the most on-brand thing you can add.
+
+You don't have to know how any of these networks work. Run:
+
+```
+npx morphit-ops
+```
+
+…and pick **"Set up a Tor / Lokinet / I2P address"** (or run `npx morphit-ops alt-address` directly). It walks you through it in plain English. The short version:
+
+- **Tor (`.onion`)** and **I2P (`.b32.i2p`)** — you can pick the **first few letters** of your address. A helper tries random keys until it finds one that starts with your letters (short = seconds, long = much slower). You run that helper **on your own computer, not the server**, so the secret key is born somewhere you control; then you copy the key to the server over SSH and paste the address into the wizard. The helpers are `scripts/generate-onion.sh` and `scripts/generate-i2p.sh`.
+- **Lokinet (`.loki`)** — you **can't** pick the letters; Lokinet makes the address for you. You just add one `keyfile=` line to `lokinet.ini`, restart Lokinet, and paste the `.loki` it prints. Want a short, readable name like `yourname.loki`? That's **ONS** — you buy it with OXEN coin in the Oxen wallet (optional, costs money). The `scripts/generate-lokinet.sh` helper prints these steps.
+
+After you paste an address, the wizard saves it and **offers to restart the indexer for you** (just press Enter) so the change goes live. Reload your site and the new footer pill appears — no manual restart needed. The secret keys are **never** committed to the repo. Full reference (env vars, exact mechanics, why Lokinet differs): `OPERATIONS.md` §23.
+
+
 #### BunkerWeb — recommended WAF (canonical config shipped)
 
 [BunkerWeb](https://www.bunkerweb.io) is an AGPLv3 reverse-proxy WAF.  Adds OWASP Top-10 protection, bot detection, GeoIP filtering, per-AS rate limiting, and behavioral DDoS mitigation in front of your Morphit stack.  Recommended for **any public-facing instance**.
 
-The morphit repo ships a turnkey BunkerWeb deployment at `ops/bunkerweb/` — paralleling `ops/nginx/` and `ops/systemd/`.  Copy to `/etc/bunkerweb/`, edit the operator-tunable values (your domain, ASN block list if any), `docker compose up -d`.  The compose pins a `172.20.0.0/16` Docker network so the relay's `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without re-inspecting after rebuilds.  See `ops/bunkerweb/README.md` for the Quick Start.
+The morphit repo ships a turnkey BunkerWeb deployment at `ops/bunkerweb/` — paralleling `ops/nginx/` and `ops/systemd/`.  Copy to `/etc/bunkerweb/`, edit the operator-tunable values (your domain, ASN block list if any), `docker compose up -d`.  The shipped compose serves the **whole site**: a small `frontend` nginx container serves your static build (mounted read-only from `/opt/morphit/apps/web/build`) AND proxies the API (`/v1/`, `/relay/`, `/rss/`) to the relay + indexer, with BunkerWeb in front for TLS + WAF — so you don't run a separate host nginx, and the relay/indexer bind bridge-reachable (not loopback-only).  The compose pins a `172.20.0.0/16` Docker network so the relay's `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without re-inspecting after rebuilds.  See `ops/bunkerweb/README.md` for the Quick Start.
 
 Operators using the Ansible playbook get this deployment automatically.
 
@@ -2161,6 +2179,15 @@ box. Note the deliberate trade-off: an encrypted key gives you much
 better security but **must be unlocked by hand each time the relay
 starts** — there is no automatic unlock, so the relay will not come
 back on its own after a reboot until you enter the passphrase.
+
+`doctor` also does a quick **database-schema** check: it tells you
+whether your database is missing anything this version expects. That
+can happen if you upgraded across a schema change during the beta (an
+existing database doesn't pick up in-place schema edits on its own). If
+it reports `Database schema (drift detected)`, follow the reset steps in
+`OPERATIONS.md` §46 — it's safe, because the indexer rebuilds its
+database from the chain. Pass `--no-db` to skip this check (e.g. when
+Postgres is intentionally down).
 
 ### "The indexer fell behind"
 

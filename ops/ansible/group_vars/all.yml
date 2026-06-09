@@ -99,9 +99,16 @@ morphit_relay_keystore_path: /etc/morphit/relay.keystore
 # leaking their passphrase to a 0640 disk file out of misplaced
 # template-completionism.
 
-# Relay's HTTP bind.  127.0.0.1 only — BunkerWeb proxies to it.
-morphit_relay_bind_host: 127.0.0.1
-morphit_relay_bind_port: 4001
+# Relay's HTTP bind.  Behind the BunkerWeb + frontend-container
+# topology (§32) the frontend nginx reaches the relay from the Docker
+# bridge via host.docker.internal, so a 127.0.0.1-only bind would be
+# UNREACHABLE (every proxied call 502s).  Bind on all interfaces and
+# let the firewall restrict it: the hardening role's UFW default-deny
+# blocks the public from this port, and the bunkerweb role adds an
+# allow for the bunkerweb_net CIDR only.  Port 8080 is the morphit
+# default (MORPHIT_RELAY_LISTEN_PORT).
+morphit_relay_bind_host: 0.0.0.0
+morphit_relay_bind_port: 8080
 
 # Diamond-hardened squatter defense preset per §38.7.  These are
 # NOT dummy values — they're the canonical preset.  Relax only
@@ -144,9 +151,14 @@ morphit_relay_trusted_proxy_ips: "172.20.0.0/16"
 
 # ─── Indexer environment (§18, §23) ──────────────────────────────
 
-# Indexer's HTTP bind.  127.0.0.1 only — BunkerWeb proxies to it.
-morphit_indexer_bind_host: 127.0.0.1
-morphit_indexer_bind_port: 4000
+# Indexer's HTTP bind.  Same bridge-reachability requirement as the
+# relay (§32) — the frontend container proxies to it via
+# host.docker.internal, so bind on all interfaces.  UFW default-deny
+# blocks the public from this port and the bunkerweb role allows only
+# the bunkerweb_net CIDR.  Port 8081 is the morphit default
+# (MORPHIT_INDEXER_LISTEN_PORT).
+morphit_indexer_bind_host: 0.0.0.0
+morphit_indexer_bind_port: 8081
 
 # Blurt RPC endpoints — see §22 for selection criteria.  The
 # canonical primary is rpc.blurt.world; configure failover for

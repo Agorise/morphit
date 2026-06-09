@@ -67,8 +67,34 @@ function rfc822Date(d: Date): string {
 	return d.toUTCString();
 }
 
-/** Format a single order row as an <item> element. */
-function renderItem(row: OrderRow, frontendOrigin: string): string {
+/** Feed-format selector. `rss` = RSS 2.0 (.xml), `atom` =
+ *  Atom 1.0 (.atom), `json` = JSON Feed 1.1 (.json). Every feed
+ *  surface offers all three; the underlying order data is
+ *  identical and only the serialization differs. */
+export type FeedFormat = 'rss' | 'atom' | 'json';
+
+/** URL/file extension for a format (rss → "xml"). */
+export function feedExt(format: FeedFormat): string {
+	return format === 'rss' ? 'xml' : format;
+}
+
+/** Structured, format-agnostic feed item. buildItem derives it
+ *  once from an OrderRow; the three serializers each render it
+ *  in their own syntax, so the human-readable strings (title,
+ *  summary) can never drift between RSS / Atom / JSON. */
+interface FeedItem {
+	readonly title: string;
+	readonly link: string;
+	readonly summary: string;
+	/** Stable, globally-unique id. Reused verbatim as the RSS
+	 *  <guid isPermaLink="false">, the Atom <entry><id>, and the
+	 *  JSON Feed item `id`. Never changes across rebuilds. */
+	readonly id: string;
+	readonly published: Date;
+	readonly updated: Date;
+}
+
+function buildItem(row: OrderRow, frontendOrigin: string): FeedItem {
 	const titleParts = [row.side === 'buy' ? 'Buy' : 'Sell', row.asset, 'for', row.fiat_currency];
 	if (row.location_region) {
 		titleParts.push('·', row.location_region);
@@ -80,7 +106,7 @@ function renderItem(row: OrderRow, frontendOrigin: string): string {
 			? `${row.amount_min ?? '?'} – ${row.amount_max ?? '?'} ${row.fiat_currency}`
 			: 'any amount';
 
-	const descriptionLines = [
+	const summaryLines = [
 		`${row.side === 'buy' ? 'Buying' : 'Selling'} ${row.asset} for ${row.fiat_currency}`,
 		`Amount: ${amountLine}`,
 		`Payment: ${row.payment_methods.join(', ')}`,
@@ -88,23 +114,30 @@ function renderItem(row: OrderRow, frontendOrigin: string): string {
 		`Posted by @${row.account}`
 	];
 	if (row.location_region) {
-		descriptionLines.push(`Region: ${row.location_region}`);
+		summaryLines.push(`Region: ${row.location_region}`);
 	}
-	const description = descriptionLines.join('\n');
 
-	const link = `${frontendOrigin}/orderbook#@${encodeURIComponent(
-		row.account
-	)}/${encodeURIComponent(row.permlink)}`;
+	return {
+		title,
+		link: `${frontendOrigin}/orderbook#@${encodeURIComponent(
+			row.account
+		)}/${encodeURIComponent(row.permlink)}`,
+		summary: summaryLines.join('\n'),
+		id: `morphit:order:${row.account}:${row.permlink}`,
+		published: row.created_at,
+		updated: row.updated_at
+	};
+}
 
-	const guid = `morphit:order:${row.account}:${row.permlink}`;
-
+/** Render one item as an RSS 2.0 <item> element. */
+function renderRssItem(item: FeedItem): string {
 	return [
 		'    <item>',
-		`      <title>${xmlEscape(title)}</title>`,
-		`      <link>${xmlEscape(link)}</link>`,
-		`      <description>${xmlEscape(description)}</description>`,
-		`      <guid isPermaLink="false">${xmlEscape(guid)}</guid>`,
-		`      <pubDate>${rfc822Date(row.updated_at)}</pubDate>`,
+		`      <title>${xmlEscape(item.title)}</title>`,
+		`      <link>${xmlEscape(item.link)}</link>`,
+		`      <description>${xmlEscape(item.summary)}</description>`,
+		`      <guid isPermaLink="false">${xmlEscape(item.id)}</guid>`,
+		`      <pubDate>${rfc822Date(item.updated)}</pubDate>`,
 		'    </item>'
 	].join('\n');
 }
@@ -116,13 +149,15 @@ interface FeedMeta {
 	readonly humanLink: string;
 }
 
-/** Render a complete RSS feed. */
-function renderFeed(rows: readonly OrderRow[], meta: FeedMeta, frontendOrigin: string): string {
+/** RSS 2.0 feed. Wire format is unchanged from the original
+ *  single-format implementation — feed readers and the
+ *  rss-orderbook-xml-validate smoke depend on it byte-for-byte. */
+function renderRss(items: readonly FeedItem[], meta: FeedMeta): string {
 	// Empty feed → "now" for lastBuildDate so feed readers
 	// don't flag the channel as broken.
-	const lastBuild = rows.length > 0 ? rows[0]!.updated_at : new Date();
+	const lastBuild = items.length > 0 ? items[0]!.updated : new Date();
 
-	const itemsXml = rows.map((row) => renderItem(row, frontendOrigin)).join('\n');
+	const itemsXml = items.map(renderRssItem).join('\n');
 
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -138,6 +173,81 @@ ${itemsXml}
   </channel>
 </rss>
 `;
+}
+
+/** Render one item as an Atom 1.0 <entry>. Dates are RFC 3339
+ *  (toISOString), which Atom requires — do NOT swap for
+ *  toUTCString() (that's RFC 822, an RSS-only format). */
+function renderAtomEntry(item: FeedItem): string {
+	return [
+		'  <entry>',
+		`    <title>${xmlEscape(item.title)}</title>`,
+		`    <link rel="alternate" href="${xmlEscape(item.link)}" />`,
+		`    <id>${xmlEscape(item.id)}</id>`,
+		`    <published>${item.published.toISOString()}</published>`,
+		`    <updated>${item.updated.toISOString()}</updated>`,
+		`    <summary type="text">${xmlEscape(item.summary)}</summary>`,
+		'  </entry>'
+	].join('\n');
+}
+
+/** Atom 1.0 feed (RFC 4287). A single feed-level <author> is
+ *  emitted so entries inherit it without repeating it per entry.
+ *  The feed <id> is the self URL (a stable, unique https IRI). */
+function renderAtom(items: readonly FeedItem[], meta: FeedMeta): string {
+	const updated = (items.length > 0 ? items[0]!.updated : new Date()).toISOString();
+	const entriesXml = items.map(renderAtomEntry).join('\n');
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>${xmlEscape(meta.title)}</title>
+  <subtitle>${xmlEscape(meta.description)}</subtitle>
+  <link rel="self" href="${xmlEscape(meta.selfUrl)}" />
+  <link rel="alternate" href="${xmlEscape(meta.humanLink)}" />
+  <id>${xmlEscape(meta.selfUrl)}</id>
+  <updated>${updated}</updated>
+  <author><name>Morphit</name></author>
+${entriesXml}
+</feed>
+`;
+}
+
+/** JSON Feed 1.1 (jsonfeed.org/version/1.1). Uses content_text
+ *  (not content_html) because the summary is plain text. No
+ *  manual escaping — JSON.stringify handles it. */
+function renderJson(items: readonly FeedItem[], meta: FeedMeta): string {
+	const feed = {
+		version: 'https://jsonfeed.org/version/1.1',
+		title: meta.title,
+		home_page_url: meta.humanLink,
+		feed_url: meta.selfUrl,
+		description: meta.description,
+		language: 'en',
+		items: items.map((item) => ({
+			id: item.id,
+			url: item.link,
+			title: item.title,
+			content_text: item.summary,
+			date_published: item.published.toISOString(),
+			date_modified: item.updated.toISOString()
+		}))
+	};
+	return `${JSON.stringify(feed, null, 2)}\n`;
+}
+
+/** Single entry point: build the feed body in the requested
+ *  format. Keeps every handler format-agnostic — they fetch
+ *  rows, build meta, and hand both to this. */
+function serializeFeed(
+	rows: readonly OrderRow[],
+	meta: FeedMeta,
+	frontendOrigin: string,
+	format: FeedFormat
+): string {
+	const items = rows.map((row) => buildItem(row, frontendOrigin));
+	if (format === 'atom') return renderAtom(items, meta);
+	if (format === 'json') return renderJson(items, meta);
+	return renderRss(items, meta);
 }
 
 const PRIVACY_NOTE_GLOBAL =
@@ -159,10 +269,20 @@ export interface HandlerResult {
 	readonly body: string;
 }
 
-const RSS_HEADERS: Record<string, string> = {
-	'content-type': 'application/rss+xml; charset=utf-8',
-	'cache-control': `public, max-age=${CACHE_TTL_SECONDS}`
+const CONTENT_TYPE: Readonly<Record<FeedFormat, string>> = {
+	rss: 'application/rss+xml; charset=utf-8',
+	atom: 'application/atom+xml; charset=utf-8',
+	json: 'application/feed+json; charset=utf-8'
 };
+
+/** Response headers for a given feed format. Cache-Control is
+ *  identical across formats — the cap and TTL are format-agnostic. */
+function headersFor(format: FeedFormat): Record<string, string> {
+	return {
+		'content-type': CONTENT_TYPE[format],
+		'cache-control': `public, max-age=${CACHE_TTL_SECONDS}`
+	};
+}
 
 const errorJson = (code: string, status: number): HandlerResult => ({
 	status,
@@ -172,7 +292,11 @@ const errorJson = (code: string, status: number): HandlerResult => ({
 
 /** /rss/orderbook.xml — global feed of all live, fee-verified
  *  orders, capped at 50, ordered by recency. */
-export async function globalFeedHandler(db: Database, config: Config): Promise<HandlerResult> {
+export async function globalFeedHandler(
+	db: Database,
+	config: Config,
+	format: FeedFormat = 'rss'
+): Promise<HandlerResult> {
 	const frontendOrigin = frontendOriginFrom(config);
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
@@ -188,18 +312,19 @@ export async function globalFeedHandler(db: Database, config: Config): Promise<H
 
 	const result = await db.query<OrderRow>(sql, [FEED_LIMIT, config.officialAccountName]);
 
-	const xml = renderFeed(
+	const body = serializeFeed(
 		result.rows,
 		{
 			title: 'Morphit — New orderbook entries',
 			description: `The ${FEED_LIMIT} most recent live orders on Morphit with an established listing fee. ${PRIVACY_NOTE_GLOBAL}`,
-			selfUrl: `${config.publicOrigin}/rss/orderbook.xml`,
+			selfUrl: `${config.publicOrigin}/rss/orderbook.${feedExt(format)}`,
 			humanLink: `${frontendOrigin}/orderbook`
 		},
-		frontendOrigin
+		frontendOrigin,
+		format
 	);
 
-	return { status: 200, headers: RSS_HEADERS, body: xml };
+	return { status: 200, headers: headersFor(format), body };
 }
 
 /** /rss/orderbook/by-asset/<asset>.xml — `rawSegment` is the
@@ -225,11 +350,13 @@ export async function perAssetFeedHandler(
 	// Derive allow-set from canonical ASSET_TICKERS (lowercased).
 	// LL #38 sibling-file pattern: any future asset addition to
 	// ASSET_TICKERS automatically unlocks its per-asset feed.
-	const m = rawSegment.match(/^([a-z]+)\.xml$/);
+	const m = rawSegment.match(/^([a-z]+)\.(xml|atom|json)$/);
 	if (m === null) {
 		return errorJson('invalid_asset', 400);
 	}
 	const lower = m[1]!;
+	const ext = m[2]!;
+	const format: FeedFormat = ext === 'xml' ? 'rss' : (ext as FeedFormat);
 	const upper = lower.toUpperCase();
 	if (!(ASSET_TICKERS as readonly string[]).includes(upper)) {
 		return errorJson('invalid_asset', 400);
@@ -252,18 +379,19 @@ export async function perAssetFeedHandler(
 
 	const result = await db.query<OrderRow>(sql, [asset, FEED_LIMIT, config.officialAccountName]);
 
-	const xml = renderFeed(
+	const body = serializeFeed(
 		result.rows,
 		{
 			title: `Morphit — New ${asset} orderbook entries`,
 			description: `The ${FEED_LIMIT} most recent live ${asset} orders on Morphit. ${PRIVACY_NOTE_GLOBAL}`,
-			selfUrl: `${config.publicOrigin}/rss/orderbook/by-asset/${m[1]!}.xml`,
+			selfUrl: `${config.publicOrigin}/rss/orderbook/by-asset/${lower}.${ext}`,
 			humanLink: `${frontendOrigin}/orderbook?asset=${asset}`
 		},
-		frontendOrigin
+		frontendOrigin,
+		format
 	);
 
-	return { status: 200, headers: RSS_HEADERS, body: xml };
+	return { status: 200, headers: headersFor(format), body };
 }
 
 /** /rss/orderbook/by-account/@<acct>.xml — `rawSegment` is
@@ -280,11 +408,13 @@ export async function perAccountFeedHandler(
 	db: Database,
 	config: Config
 ): Promise<HandlerResult> {
-	const m = rawSegment.match(/^@?([a-z0-9.-]+)\.xml$/i);
+	const m = rawSegment.match(/^@?([a-z0-9.-]+)\.(xml|atom|json)$/i);
 	if (m === null) {
 		return errorJson('invalid_account', 400);
 	}
 	const account = m[1]!.toLowerCase();
+	const ext = m[2]!.toLowerCase();
+	const format: FeedFormat = ext === 'xml' ? 'rss' : (ext as FeedFormat);
 	if (!isAccountName(account)) {
 		return errorJson('invalid_account', 400);
 	}
@@ -305,16 +435,17 @@ export async function perAccountFeedHandler(
 
 	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT, config.officialAccountName]);
 
-	const xml = renderFeed(
+	const body = serializeFeed(
 		result.rows,
 		{
 			title: `Morphit — Orders by @${account}`,
 			description: `The ${FEED_LIMIT} most recent live orders posted by @${account}. ${PRIVACY_NOTE_PER_TRADER}`,
-			selfUrl: `${config.publicOrigin}/rss/orderbook/by-account/@${account}.xml`,
-			humanLink: `${frontendOrigin}/u/${account}`
+			selfUrl: `${config.publicOrigin}/rss/orderbook/by-account/@${account}.${ext}`,
+			humanLink: `${frontendOrigin}/@${account}`
 		},
-		frontendOrigin
+		frontendOrigin,
+		format
 	);
 
-	return { status: 200, headers: RSS_HEADERS, body: xml };
+	return { status: 200, headers: headersFor(format), body };
 }

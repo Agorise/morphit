@@ -28,23 +28,52 @@ BunkerWeb source code.
 
 ## What's in this directory
 
-- `docker-compose.yml` — pinned BunkerWeb + scheduler images, with
-  a dedicated `bunkerweb_net` Docker network whose CIDR is fixed
-  at `172.20.0.0/16` so the relay's `MORPHIT_RELAY_TRUSTED_PROXY_IPS`
-  can be hard-coded without re-inspecting after rebuilds.
+- `docker-compose.yml` — pinned BunkerWeb + scheduler images plus a
+  `frontend` nginx service, on a dedicated `bunkerweb_net` Docker
+  network whose CIDR is fixed at `172.20.0.0/16` so the relay's
+  `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without
+  re-inspecting after rebuilds.
+- `frontend/` — the build context for the `frontend` nginx container:
+  a `Dockerfile` (stock `nginx:alpine`) and `nginx.conf`.  This
+  container serves the built SvelteKit static site AND reverse-proxies
+  the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream`
+  paths) to the relay + indexer on the host.  Its routing mirrors
+  `ops/nginx/web.conf` minus the TLS + security headers (BunkerWeb owns
+  those).
 - `bunkerweb.env.example` — environment variables with sensible
-  defaults: OWASP CRS paranoia level 3, anti-`Referer: none` rule
-  on `/relay/v1/account/invite` (§38.6 item d), ASN-block stubs
-  for cheap-VPS providers (§38.6 item c, commented in; uncomment
-  to activate), Real-IP forwarding wired for the relay's
-  trusted-proxy chain.
+  defaults: a single `REVERSE_PROXY_HOST` pointing BunkerWeb at the
+  `frontend` container, OWASP CRS paranoia level 3, anti-`Referer:
+  none` rule on `/relay/v1/account/invite` (§38.6 item d), ASN-block
+  stubs for cheap-VPS providers (§38.6 item c, commented in; uncomment
+  to activate), Real-IP forwarding wired for the relay's trusted-proxy
+  chain.
 - This README.
+
+## Topology
+
+```
+client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)
+                (WAF, TLS,     (static build +
+                 real-IP)       /v1 /relay /rss /SSE proxy)
+```
+
+BunkerWeb is the only public entry point.  It terminates TLS, runs the
+WAF + rate limits, sets the real client IP, then proxies **every** path
+to the `frontend` container.  The `frontend` nginx serves the SvelteKit
+pages and forwards the API paths to the relay + indexer.  Keeping all
+the path routing in one nginx (the same shape as the bare-metal
+`ops/nginx/web.conf`) is far easier to get right than expressing
+static-serving + SPA fallback + per-path proxy + SSE in BunkerWeb env
+vars — which is why this directory ships a `frontend` container instead
+of pointing BunkerWeb's reverse proxy straight at the services.
 
 ## Quick start
 
 ```sh
-# 1. Copy this directory's contents to a deploy location.
+# 1. Copy this directory (INCLUDING the frontend/ build context) to a
+#    deploy location.
 sudo mkdir -p /etc/bunkerweb
+sudo cp -r ops/bunkerweb/frontend /etc/bunkerweb/
 sudo cp ops/bunkerweb/docker-compose.yml /etc/bunkerweb/
 sudo cp ops/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env
 
@@ -57,35 +86,49 @@ sudoedit /etc/bunkerweb/bunkerweb.env
 #    OPERATIONS.md §35).  BunkerWeb mounts this read-only.
 sudo certbot certonly --standalone -d <your-morphit-domain>
 
-# 4. Ensure morphit relay + indexer are running on the host
-#    (NOT in this compose — see "Why morphit isn't in this
-#    compose" below) and bound to 127.0.0.1.
+# 4. Build the web app and ensure morphit relay + indexer are running
+#    on the host (NOT in this compose — see "Why the morphit services
+#    aren't in this compose" below).  The frontend container mounts the
+#    build read-only from /opt/morphit/apps/web/build (edit the path in
+#    docker-compose.yml if you cloned morphit elsewhere).
+#
+#    CRITICAL: the relay + indexer must listen on an address the Docker
+#    bridge can reach (NOT 127.0.0.1 only) — bind them to the host's
+#    docker-gateway address or 0.0.0.0 and firewall the ports so only
+#    the bridge can reach them.  A loopback-only bind is unreachable
+#    from the frontend container and every proxied call returns 502.
 
 # 5. CRITICAL: set MORPHIT_RELAY_TRUSTED_PROXY_IPS in
 #    /etc/morphit/relay.env to the Docker network CIDR
-#    (172.20.0.0/16 by default in this compose):
+#    (172.20.0.0/16 by default in this compose — it covers BOTH the
+#    BunkerWeb and frontend containers):
 sudoedit /etc/morphit/relay.env
 #   Add:  MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
 sudo systemctl restart morphit-relay
 
-# 6. Bring BunkerWeb up.
+# 6. Bring the stack up.  `up -d` builds the frontend image on first
+#    run.  After editing frontend/nginx.conf, rebuild it explicitly:
 cd /etc/bunkerweb && sudo docker compose up -d
+#   (after an nginx.conf change:)  sudo docker compose up -d --build
 
 # 7. Verify — the easy way: a single health check.
 npx morphit-ops bunkerweb
-#   Reports whether both containers are running + healthy, or what's
+#   Reports whether the containers are running + healthy, or what's
 #   wrong. (Also in the interactive menu: "Web firewall (BunkerWeb)
-#   status".)  Or inspect the raw logs directly:
+#   status".)  Or inspect directly — the site root should serve the
+#   app, and the API paths should reach the services:
 sudo docker compose logs --tail 50
-curl -v https://<your-morphit-domain>/v1/instance
+curl -v https://<your-morphit-domain>/                  # SvelteKit app
+curl -v https://<your-morphit-domain>/v1/instance       # indexer JSON
 ```
 
-## Why morphit isn't in this compose
+## Why the morphit services aren't in this compose
 
 `docs/OPERATIONS.md` §33 documents Docker as an OPTIONAL deployment
 path for the morphit services themselves.  The canonical path is
 bare-metal systemd (`ops/systemd/*.service`).  This compose
-deliberately includes ONLY BunkerWeb so:
+deliberately includes ONLY BunkerWeb + the lightweight `frontend`
+nginx (which just serves static files + proxies) so:
 
 - Operators get BunkerWeb's value (WAF, OWASP CRS, real-IP) without
   having to commit to Dockerizing morphit.
@@ -96,7 +139,8 @@ deliberately includes ONLY BunkerWeb so:
 - Backup paths stay simple (Postgres on the host, not in a
   container volume that needs separate handling).
 
-BunkerWeb reaches the host-resident relay + indexer via
+BunkerWeb proxies everything to the `frontend` container, and the
+`frontend` nginx reaches the host-resident relay + indexer via
 `host.docker.internal:<port>` (Linux: `host-gateway`).  The compose
 sets this up automatically.
 
@@ -105,7 +149,12 @@ sets this up automatically.
 The relay only trusts `X-Forwarded-For` from IPs in
 `MORPHIT_RELAY_TRUSTED_PROXY_IPS`.  Behind this BunkerWeb compose,
 that value MUST be `172.20.0.0/16` (or whatever CIDR you change
-the `bunkerweb_net` network to use).
+the `bunkerweb_net` network to use).  The relay's immediate peer is
+the `frontend` container (requests flow BunkerWeb → frontend →
+relay), and BOTH containers live on `172.20.0.0/16`, so that one CIDR
+is all the relay needs.  BunkerWeb sets the real client as the
+leftmost `X-Forwarded-For` entry and the frontend appends to the
+chain, so the relay reads the real client from `XFF[0]`.
 
 **Too narrow:** the relay sees every user as the BunkerWeb
 container's IP → one abuser exhausts the daily rate limit for

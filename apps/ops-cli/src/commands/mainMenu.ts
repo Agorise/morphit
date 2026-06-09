@@ -70,6 +70,11 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'edit'
 			},
 			{
+				label: 'Set up a Tor / Lokinet / I2P address',
+				blurb: 'Guided: make a privacy-network address (pick the first letters where possible) and show it in your site footer.',
+				subcommand: 'alt-address'
+			},
+			{
 				label: 'Upgrade to the latest version',
 				blurb: 'Check for a newer Morphit release and apply it (with backup + rollback).',
 				subcommand: 'upgrade'

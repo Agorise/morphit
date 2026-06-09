@@ -4240,8 +4240,10 @@ easiest to most low-level:
    package's loading order), so this is the right path
    for deployment automation.
 
-**After ANY change**: restart the indexer to pick up the
-new list:
+**After ANY change**: the indexer must restart to pick up the
+new values. `morphit-ops edit` and `alt-address` now OFFER to do
+this for you (press Enter at the prompt); for a hand-edit of the
+env file, restart it yourself:
 ```sh
 sudo systemctl restart morphit-indexer
 ```
@@ -4588,6 +4590,28 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c \
 # Fee-status filter regression guard (run in CI or pre-deploy)
 cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 ```
+
+### Alt-network addresses (Tor / Lokinet / I2P) — the `alt-address` wizard
+
+`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided wizard that helps an operator *generate* a privacy-network address and then writes it into `morphit.config.env`. The relevant knobs:
+
+| Variable | Footer field | Notes |
+| --- | --- | --- |
+| `MORPHIT_INSTANCE_TOR_ADDRESS` | `tor` | v3 `.onion` |
+| `MORPHIT_INSTANCE_LOKINET_ADDRESS` | `lokinet` | full `.loki` **or** an ONS name |
+| `MORPHIT_INSTANCE_I2P_B32_ADDRESS` | `i2p_b32` | always-resolvable `.b32.i2p` (preferred) |
+| `MORPHIT_INSTANCE_I2P_NAME_ADDRESS` | `i2p_name` | optional readable `name.i2p` (addressbook-dependent) |
+| `MORPHIT_INSTANCE_I2P_ADDRESS` | — | legacy single var; still honored, routed to `i2p_b32`/`i2p_name` by suffix |
+
+The indexer reads these at startup and includes them in its instance announce; the frontend renders the footer pills from that announce at runtime. So a new/changed address appears after the indexer restarts — the `alt-address` / `edit` wizard **offers to do that for you** (press Enter at the prompt) — **no frontend rebuild needed.**
+
+**Vanity reality differs per network** (the wizard is explicit about this):
+
+- **Tor** — full prefix vanity via `mkp224o` (`scripts/generate-onion.sh <prefix>`). Time grows exponentially with prefix length.
+- **I2P** — prefix vanity via `i2pd-tools`' `vain` (`scripts/generate-i2p.sh <prefix>`), but the `.b32.i2p` is `base32(sha256(destination))`, so only a *short* prefix is feasible (~1–5 chars quick, 6 ≈ minutes, 7+ hours). `vain` writes a `private.dat` that i2pd reads directly. A readable `name.i2p` is a registrar step (`reg.i2p`/`stats.i2p`), not local key-grinding.
+- **Lokinet** — **no prefix vanity.** A `.loki` is the SNApp's ed25519 pubkey and Lokinet generates that keyfile itself (set `keyfile=` in `lokinet.ini` `[network]`, restart, read the address). There is no vanity-key import path and no `lokinet-vanity` tool. A readable `name.loki` is **ONS**: burn OXEN on-chain via the Oxen wallet (1–10 yr). `scripts/generate-lokinet.sh` prints the setup + ONS steps.
+
+**Key-security model** (unchanged, matches `generate-onion.sh`'s long-standing design): vanity keys are generated on **operator hardware**, never committed (`hidden-services/` is git-ignored), and hand-carried to the box over SSH. Only the **public address** ever enters `morphit.config.env` → footer. For encrypting an alt-network service key at rest under the relay passphrase, see `import-altnet-key` / `export-altnet-key`.
 
 ---
 
@@ -5277,6 +5301,8 @@ The local timer keeps a 30-day rolling backup. If the server burns down, you los
 
 The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operators not using Ansible follow the Quick Start in `ops/bunkerweb/README.md`.
 
+**Canonical topology (what `ops/bunkerweb/` ships):** `client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)`. BunkerWeb is the only public entry — it terminates TLS, runs the WAF + rate limits, sets the real client IP, then proxies EVERY path (a single `REVERSE_PROXY_HOST=http://frontend:80`) to a lightweight `frontend` nginx container. That container serves the built SvelteKit site for page routes AND reverse-proxies the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream` paths) to the relay + indexer on the host — its routing mirrors `ops/nginx/web.conf` minus the TLS + security headers BunkerWeb owns (see `ops/bunkerweb/frontend/nginx.conf`). Doing all the static-serving + SPA fallback + per-path proxy + SSE in one nginx is far easier to get right than expressing it in BunkerWeb env vars. The relay + indexer therefore bind on an address the Docker bridge can reach (NOT loopback-only — a `127.0.0.1` bind is unreachable from the `frontend` container and every proxied call 502s); UFW's default-deny keeps the public out and the `bunkerweb` role adds an allow for the `172.20.0.0/16` bridge CIDR only. The illustrative BunkerWeb env-var snippets further down show BunkerWeb's setting shapes; the authoritative morphit config is `ops/bunkerweb/` + its `README.md`.
+
 > **Checking it's actually up:** `morphit-ops bunkerweb` (or the "Web firewall (BunkerWeb) status" menu item) reports whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy, and prints the bring-up commands if they aren't. It's read-only — it never runs `docker compose` for you (bringing the stack up is a hands-on step you run and review). BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
 Reasons you might NOT want BunkerWeb:
@@ -5309,7 +5335,7 @@ Each layer is additive to Morphit's own defenses (signup-drain stack §18, index
 
 ### Architecture choice
 
-**Option A — BunkerWeb instead of Caddy.** Simplest; BunkerWeb terminates TLS and proxies to the indexer/relay/web on localhost. Use this if you're starting fresh.
+**Option A — BunkerWeb instead of Caddy.** Simplest, and what `ops/bunkerweb/` ships: BunkerWeb terminates TLS and proxies everything to the `frontend` nginx container (canonical topology above), which serves the static build + proxies the API paths to the indexer/relay on the host. Use this if you're starting fresh.
 
 **Option B — BunkerWeb in front of Caddy.** Use if you're already running Caddy and want to add WAF without changing the existing config. Slightly higher latency (~1-2ms per request from the second hop). Caddy listens on `127.0.0.1:8443`, BunkerWeb proxies to it from port 443.
 
@@ -5425,7 +5451,7 @@ To fix the Docker-compose case, set `MORPHIT_RELAY_TRUSTED_PROXY_IPS` to the Doc
 MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
 ```
 
-The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds.
+The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds. In the canonical topology the relay's immediate socket peer is the `frontend` container (requests flow BunkerWeb → frontend → relay), but BOTH containers live on `172.20.0.0/16`, so the single pinned CIDR is all the relay needs; BunkerWeb sets the real client as the leftmost `X-Forwarded-For` entry and the `frontend` appends to the chain, so the relay reads the real client from `XFF[0]`.
 
 **If you deploy your OWN compose** with a different network CIDR, the default Docker bridge networks are typically `172.17.0.0/16` (the default `bridge` network) and `172.18.0.0/16` through `172.31.0.0/16` for user-defined networks. To find YOUR bridge network's CIDR:
 
@@ -5518,7 +5544,7 @@ LIMIT_REQ_BURST_3=10
 BLACKLIST_IP=203.0.113.0/24,198.51.100.50
 ```
 
-**4. GeoIP-block from countries with disproportionate squatter activity.** This is operator's-call — Morphit is a global service, blocking entire countries denies access to legitimate users. But if you're in incident response and an attacker is concentrated in one CC, you can:
+**4. GeoIP-block from countries with disproportionate squatter activity.** This is operator's-call — Morphit is a worldwide service, blocking entire countries denies access to legitimate users. But if you're in incident response and an attacker is concentrated in one CC, you can:
 
 ```yaml
 USE_GEOIP=yes
@@ -6090,34 +6116,42 @@ Then investigate WHY auto-renewal broke. Most common causes:
 
 ## 36. Warrant canary — weekly automated regeneration
 
-Morphit ships a weekly warrant canary at `/canary.txt`.  The
-canary explicitly declares no NSL / FISA / gag-order / backdoor
-demand has been served, with freshness proofs from the Blurt
-chain head, the Bitcoin chain head, and a current news headline.
-PGP-signed by the operator's release key.
+### What this is (plain language)
 
-A canary that stops updating for >14 days is the silent signal
-to users.  Automating the weekly regen via cron is essential:
-if the cron breaks, the canary goes stale, users notice, and
-they switch operators (which is the federation working as
-designed).
+A **warrant canary** is a small signed text file your instance
+publishes at `https://YOUR-DOMAIN/canary.txt`, re-published every
+week. In it you state, in plain words, that nobody has secretly
+forced you to spy on users or weaken Morphit (no NSL, no FISA
+order, no gag order, no backdoor demand).
 
-### Setup
+The trick: in many places the law can force you to spy AND forbid
+you from saying so — but it generally cannot force you to keep
+*actively lying* on a schedule. So if you are ever served such an
+order, you simply **stop updating the canary**. After 14 days of
+staleness, Morphit's frontend shows your users a warning banner
+and they move to another instance. You never have to say a word.
 
-Operator does this once.
+So your only ongoing job is boring: keep the weekly file fresh. A
+cron job does that for you. The file is **PGP-signed by your
+release key** and carries freshness proofs (the current Blurt
+chain head, the current Bitcoin chain head, and a current news
+headline) so readers can confirm it was generated recently and
+not replayed from an old copy.
 
-1. **Generate or pick a PGP signing key.**  If you don't already
-   have a release/canary key:
+### Setup (done once)
+
+1. **Make (or pick) a PGP signing key.** If you already have a
+   release/canary key, skip to step 2.
 
    ```sh
    gpg --quick-gen-key 'Morphit Operator <op@morphit.example>' \
        ed25519 sign 5y
    ```
 
-   Note the fingerprint in the gpg output.
+   Note the **fingerprint** from the output — you will need it.
 
-2. **Export the public key to the static directory** so users
-   can verify signatures without contacting key servers:
+2. **Publish your PGP public key** so users can verify signatures
+   without contacting a key server:
 
    ```sh
    FINGERPRINT="<from step 1>"
@@ -6125,29 +6159,39 @@ Operator does this once.
      > /opt/morphit/apps/web/static/pgp_keys.asc
    ```
 
-3. **Set the canary env vars in your operator profile** (or
-   in a dedicated `/etc/morphit/canary.env`):
+3. **Put the canary settings in `/etc/morphit/canary.env`.** All
+   four are required:
 
    ```sh
-   export MORPHIT_CANARY_PGP_KEY_ID="<your fingerprint>"
-   export MORPHIT_CANARY_OPERATOR_NAME="<your operator display name, e.g. morphit.io>"
+   export MORPHIT_CANARY_PGP_KEY_ID="<your PGP fingerprint>"
+   export MORPHIT_CANARY_OPERATOR_NAME="<display name, e.g. morphit.io>"
    export MORPHIT_CANARY_INSTANCE_ORIGIN="https://morphit.example.com"
-   export MORPHIT_CANARY_OPERATOR_ACCOUNT="<your Blurt account, e.g. morphit-fees>"
-   # Optional overrides:
+   # Only shown in the canary text to identify which operator it is —
+   # your relay account (MORPHIT_RELAY_ACCOUNT), e.g. morphit-relay.
+   # No key is needed for it; the canary is signed only with PGP.
+   export MORPHIT_CANARY_OPERATOR_ACCOUNT="<your relay account, e.g. morphit-relay>"
+
+   # Optional — sensible defaults are used if you omit these:
    # export MORPHIT_CANARY_BLURT_RPC="https://rpc.blurt.blog"
    # export MORPHIT_CANARY_NEWS_RSS="https://feeds.bbci.co.uk/news/rss.xml"
    ```
 
-4. **Run the generator manually once** to confirm everything
-   is wired:
+   **No Blurt private key sits on the box for the canary** — the
+   only signing key it uses is your PGP key, which gpg manages.
+   Keep `canary.env` root-owned and `chmod 600` anyway, out of the
+   web root, and never commit it.
+
+4. **Run it once by hand** to confirm everything is wired:
 
    ```sh
    cd /opt/morphit
+   . /etc/morphit/canary.env
    bash scripts/canary/generate.sh
    ```
 
-   You should see output ending with `canary: wrote
-   /opt/morphit/apps/web/static/canary.txt`.  Verify:
+   Success ends with `canary: wrote
+   /opt/morphit/apps/web/static/canary.txt`. Then check the
+   signature is good:
 
    ```sh
    curl https://morphit.example.com/canary.txt | gpg --verify
@@ -6158,67 +6202,56 @@ Operator does this once.
 
    ```cron
    # Weekly canary regeneration — Sundays at 03:14 UTC.
-   # Output goes to /var/log/morphit/canary.log; rotate this
-   # file with logrotate or systemd-tmpfiles as you prefer.
+   # Logs to /var/log/morphit/canary.log (rotate as you like).
    14 3 * * 0  cd /opt/morphit && \
                . /etc/morphit/canary.env && \
                bash scripts/canary/generate.sh \
                >> /var/log/morphit/canary.log 2>&1
    ```
 
-6. **Set up a freshness alert** so you know if the canary stops
-   updating.  Two layers:
+   It sources `canary.env` every run, so your PGP key id and the
+   other settings are always in scope.
 
-   - **Operator-side**: a daily cron that checks the canary's
-     `Generated:` timestamp and pages you if it's >7 days old.
-     This is YOUR safety net (catches: cron broke, gpg key
-     expired, RPC endpoint changed).
+6. **Add a freshness alarm for yourself** so you find out before
+   your users do (catches: cron broke, PGP key expired, RPC
+   changed):
 
-     ```sh
-     # /etc/cron.daily/morphit-canary-freshness
-     #!/usr/bin/env bash
-     cd /opt/morphit
-     if ! npx tsx scripts/canary/verify.ts apps/web/static/canary.txt; then
-         # Canary failed verify — wire this to your alerting.
-         echo "Morphit canary stale or malformed" \
-           | mail -s "morphit canary FAILED on $(hostname)" your-pager@example.com
-     fi
-     ```
+   ```sh
+   # /etc/cron.daily/morphit-canary-freshness
+   #!/usr/bin/env bash
+   cd /opt/morphit
+   if ! npx tsx scripts/canary/verify.ts apps/web/static/canary.txt; then
+       echo "Morphit canary stale or malformed" \
+         | mail -s "morphit canary FAILED on $(hostname)" your-pager@example.com
+   fi
+   ```
 
-   - **User-side**: Morphit's frontend (the page users load)
-     fetches /canary.txt automatically on page load and shows
-     a banner if it's >14 days old.  This is the documented
-     contract; nothing for you to do beyond keeping the file
-     fresh.
+   (The user-facing 14-day banner is automatic in the frontend —
+   nothing to set up there.)
 
-### What to do if you're served with a gag order
+### What to do if you are served with a gag order
 
-This is the canary's whole point.  Don't actively lie.  Stop
-updating the canary.  Your users will switch to other operators
-(the federation), and Morphit's marketplace continues without
-you.  This is by design.
-
-If you can't even tell anyone you've stopped (some legal
-regimes go that far), the cron simply continues to fail — the
-canary file's `Generated:` date stops advancing — and after 14
-days users see the banner and switch.
+This is the canary's whole point. **Do not lie.** Stop updating
+the canary. Your users switch to other operators (the
+federation), and Morphit's marketplace continues without you.
+That is by design. If you cannot even tell anyone you have
+stopped, just let the cron lapse — the `Generated:` date stops
+advancing, and after 14 days users see the banner and switch.
 
 ### Privacy considerations
 
-The canary.txt fetches three external resources:
+The generator fetches three external resources WHEN THE CRON RUNS
+(on your server, never on user devices):
 
-- Blurt RPC for chain head (default rpc.blurt.blog) — a Blurt
-  RPC anywhere works; you can use your own
-- blockstream.info for Bitcoin chain head — currently
-  hardcoded; file an issue if you need to swap to your own
-  bitcoind
-- An RSS feed for news entropy (default BBC news) — choose any
-  high-frequency public feed you trust
+- a Blurt RPC for the chain head (default rpc.blurt.blog — any
+  Blurt RPC works; use your own if you prefer),
+- blockstream.info for the Bitcoin chain head (currently
+  hardcoded; file an issue if you need your own bitcoind),
+- an RSS feed for news entropy (default BBC — choose any
+  high-frequency public feed you trust).
 
-These outbound requests happen ON YOUR SERVER, not on user
-devices, when the cron runs.  Users fetching /canary.txt only
-hit your own static file, so the canary doesn't leak user IPs
-to third parties.
+Users who fetch /canary.txt only hit your own static file, so the
+canary never leaks user IPs to third parties.
 
 ## 37. Comprehensive server hardening — defense-in-depth checklist
 
@@ -6568,7 +6601,7 @@ similar for `morphit-relay.service`):
 
 > **The web frontend has no systemd unit.**  The frontend is
 > static HTML/CSS/JS built by `npm run build`; nginx serves it
-> from `/var/www/morphit-web` (root path set in
+> from `/var/www/morphit-frontend` (root path set in
 > `ops/nginx/web.conf`).  Hardening for the web tier is an
 > nginx-config concern, not a systemd one.
 
@@ -8187,7 +8220,7 @@ Layer 7-8 defenses run AFTER an attacker reaches the relay. Network-layer defens
 Squatters typically don't route through anonymity networks because the latency disrupts their automation. A relay only reachable via Tor onion address has natural friction. The clearnet mirror (BunkerWeb terminating TLS, proxying to localhost relay) gives normal users a fast path; the Tor address gives privacy-conscious users a private path. Both are documented in `RUN-A-MORPHIT-NODE.md` §11.
 
 **b. Country-block from low-cost residential-proxy markets.**  
-This is operator's-call and ethically fraught — Morphit serves global users. But if you're under active attack from a specific country and your user base is regional, a temporary `BLACKLIST_COUNTRY` (BunkerWeb) or geoip-based UFW rule narrows the attacker's options without breaking your real users.
+This is operator's-call and ethically fraught — Morphit serves worldwide users. But if you're under active attack from a specific country and your user base is regional, a temporary `BLACKLIST_COUNTRY` (BunkerWeb) or geoip-based UFW rule narrows the attacker's options without breaking your real users.
 
 **c. ASN-block from cheap-VPS providers.**  
 Some hosting providers (DigitalOcean, Hetzner, OVH on certain ranges) are over-represented in attack traffic because they're cheap and don't scrutinize signups. Block their ASNs at the BunkerWeb layer (§32 advanced WAF tuning, item 5) if you see concentrated traffic from one. Real users almost never connect from a hosting provider's ASN — they're on residential ISPs.
@@ -10156,3 +10189,85 @@ Two switches:
 - `apps/indexer/src/api/instance.ts` — `/v1/instance.mcp_url` field
 - `packages/operator-config/src/index.ts` — `MORPHIT_MCP_ADVERTISE`
   allowlist entry
+
+## 46. Resetting the indexer database (schema drift after an upgrade)
+
+**You only need this if `morphit-ops doctor` reports a database-schema
+problem, or the indexer logs errors about missing columns/tables right
+after an upgrade.** On a healthy node you can ignore this section.
+
+### Why this can happen
+
+Before the 1.0 launch, the database layout lives in a single baseline file
+(`apps/indexer/src/db/schema.sql`) that we edit *in place* between versions
+rather than shipping a separate numbered migration each time. Your database
+records that it already ran that baseline once, so when you upgrade to a
+version whose baseline gained a new table or column, the indexer does **not**
+re-run the baseline on your existing database — and the newer code can end up
+expecting structures the database doesn't have.
+
+Two things now tell you when this is the case:
+
+- **`morphit-ops upgrade`** prints a one-line reminder at the end when the
+  upgrade you just applied crossed a schema change.
+- **`morphit-ops doctor`** runs a read-only check and reports
+  `Database schema (drift detected)` with the exact tables/columns that are
+  missing. (Pass `--no-db` to skip this check, e.g. when Postgres is down.)
+
+### Why it's safe to fix by resetting
+
+The indexer database is a **derived cache**, not a system of record. Every
+order, feedback entry, and operator action lives on the Blurt chain; the
+indexer just reads the chain and rebuilds its tables from it. Dropping and
+recreating the database loses nothing permanent — the indexer re-derives
+everything on its next sync. Your relay account and signing key are stored
+separately and are **not** touched by any of this.
+
+### The reset
+
+1. **Stop the indexer:**
+
+   ```
+   sudo systemctl stop morphit-indexer
+   ```
+
+2. **Drop and recreate its database.** Use the database name + owner from
+   your `MORPHIT_INDEXER_DATABASE_URL` (in `morphit.env`). If your URL is
+   `postgresql://morphit:…@localhost/morphit`, the database is `morphit` and
+   the owner is `morphit`:
+
+   ```
+   sudo -u postgres psql -c "DROP DATABASE morphit;" \
+                         -c "CREATE DATABASE morphit OWNER morphit;"
+   ```
+
+   (Substitute your own names. This is the same drop-and-recreate you'd do to
+   switch chains — see §25.)
+
+3. **Start the indexer again:**
+
+   ```
+   sudo systemctl start morphit-indexer
+   ```
+
+   On boot it creates the current schema from scratch, then begins syncing
+   from the chain. A fresh indexer reports `degraded` until it catches up —
+   that's normal.
+
+4. **(Optional) Skip the long re-sync.** A full re-sync from genesis can take
+   a while. To jump the cursor close to the chain head instead:
+
+   ```
+   morphit-ops fast-forward
+   ```
+
+   (You can pass a specific block number — `morphit-ops fast-forward BLOCK` —
+   but with no argument it advances to a recent block for you.)
+
+5. **Confirm:**
+
+   ```
+   morphit-ops doctor
+   ```
+
+   You want `Database schema (matches this version)`.

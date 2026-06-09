@@ -27,6 +27,7 @@
 
 	let query = $state('');
 	let open = $state(false);
+	let focused = $state(false);
 	let activeIndex = $state(0);
 	let rootEl = $state<HTMLDivElement>();
 	let inputEl = $state<HTMLInputElement>();
@@ -47,7 +48,10 @@
 
 	const hits = $derived.by<Currency[]>(() => {
 		if (!mod) return [];
-		return mod.searchCurrencies(query, 8).filter((c) => !value.includes(c.code));
+		// 50 (not 8): the field is scrollable (max-h-72), so an empty-focus
+		// browse shows a generous list and typing narrows it — the old cap
+		// of 8 made the field look like it only held 8 currencies.
+		return mod.searchCurrencies(query, 50).filter((c) => !value.includes(c.code));
 	});
 
 	function nameFor(code: string): string {
@@ -101,7 +105,11 @@
 
 <div class="relative" bind:this={rootEl}>
 	<div
-		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 bg-white px-2 py-1.5 focus-within:border-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+		onfocusin={() => (focused = true)}
+		onfocusout={() => (focused = false)}
+		class="flex flex-wrap items-center gap-1 rounded-xl border-2 {focused || open
+			? 'border-morphit-emerald'
+			: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>
 		{#each value as code (code)}
 			<span
