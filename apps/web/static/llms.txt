@@ -27,7 +27,7 @@ The design priorities are privacy (no KYC, optional Tor, encrypted messaging), t
 
 ## Technical primer
 
-- [GitHub / source repo](https://git.agorise.net/agorise/morphit) — AGPL-3.0 licensed, all code public
+- [Source repository](https://git.agorise.net/agorise/morphit) — canonical self-hosted Forgejo, AGPL-3.0 licensed, all code public
 - [Blurt blockchain](https://blurt.blog) — the underlying chain
 - [Agorise](https://agorise.world) — the organization operating the canonical instance
 

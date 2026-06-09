@@ -11,7 +11,7 @@
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Morphit never holds your money and never asks who you are. It is a bulletin board, not a bank.
+Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It is a bulletin board, not a bank.
 
 ---
 
@@ -19,7 +19,9 @@ Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency
 
 **FAQ key:** `is_it_safe`
 
-Safer than platforms that hold your funds — because Morphit can't lose or freeze what it never had. The real risk is your trading partner, so always check their reputation before agreeing to trade. Morphit shows you their completed trades, feedback, and how long they've been around.
+Much safer than platforms that hold your funds — because Morphit can't lose or freeze what it never had. The real risk is your trading partner, so always check their reputation score before agreeing to trade.
+
+Reputation is everything; even when the only thing that Morphit "knows" about them is that their name is @scooby. If you want to build your reputation around the name @dingleberry, go for it. Morphit shows the completed trades, feedback, and how long a user has been around.
 
 ---
 
@@ -29,7 +31,7 @@ Safer than platforms that hold your funds — because Morphit can't lose or free
 
 Short version: Morphit goes further on decentralization, privacy, and non-custody than any of them — and deliberately does less in exchange.
 
-LocalBitcoins (RIP, 2023) and LocalMonero (closed 2024) were centralized companies with custodial escrow. When a trade went wrong, their human arbitrators held the coins and decided who got them. When the companies shut down — by regulator pressure or business decision — their entire user base, reputations, dispute history, and ongoing trades vanished overnight. Morphit cannot be shut down in the same way: there are no central arbitrators, no custodial wallets, no company bank account to freeze. Every order lives on Blurt, every trade is peer-to-peer, and anyone can run an indexer or frontend. Multiple instances on four networks (clearnet, Tor, Lokinet, I2P) mean blocking one node does nothing.
+LocalBitcoins (RIP, 2023) and LocalMonero (closed 2024) were centralized companies with custodial escrow. When a trade went wrong, their human arbitrators held the coins and decided who got them. When the companies shut down — by regulator pressure or business decision — their entire user base, reputations, dispute history, and ongoing trades vanished overnight. Morphit cannot be shut down in the same way: there are no central arbitrators, no custodial wallets, no company bank account to freeze. Every order lives on-chain, every trade is peer-to-peer, and anyone can run an indexer or frontend. Multiple instances on four networks (clearnet, Tor, Lokinet, I2P) mean blocking one node does nothing.
 
 Haveno (and its fork Retoswap) is much closer in spirit — non-custodial, P2P, no KYC. The big differences: Haveno is a desktop-only Java/JavaFX application tied to the Monero blockchain for its 2-of-3 multisig escrow, and needs you to run (or connect to) a seednode. Morphit runs in any browser, on any phone, with no install; uses Blurt (not Monero) for its on-chain coordination layer, which is faster and far cheaper per action (~free vs. Monero's per-op fees); and ships with built-in Tor, Lokinet, and I2P reachability rather than relying on you to configure it. Haveno trades involve arbitrated escrow, which is strong but requires trusted arbitrators per market. Morphit v1 is pure reputation-based bulletin board — no escrow, no arbitrator, full responsibility on the traders to pick partners with real track records. That's a more conservative safety model, but also fewer centralized choke points and no arbitrator role that a government could pressure.
 
@@ -39,7 +41,7 @@ OpenMonero (a LocalMonero clone) has lost user funds twice in 12 months. On June
 
 On privacy: Morphit pushes harder than any of the above on transport, storage, and chat.
 • Transport: four parallel networks, all first-class (not just an 'onion mode').
-• Storage: nothing about you lives on Morphit's servers — keys are in your browser, orders are on Blurt, chats are on Blurt as ciphertext only. Haveno stores trade history on your desktop; Morphit matches that while also letting you move to any device with just your 12-word seed.
+• Storage: nothing about you lives on Morphit's servers — keys are in your browser, orders are on-chain, chats are on-chain as ciphertext only. Haveno stores trade history on your desktop; Morphit matches that while also letting you move to any device with just your 12-word seed.
 • Chat: end-to-end encrypted using X25519 key agreement plus ChaCha20-Poly1305 (from libsodium), with a per-message ephemeral key. LocalBitcoins/LocalMonero chats were visible to staff. Haveno chats are end-to-end encrypted. Morphit chat is encrypted on your device, stored as ciphertext on the Blurt blockchain, and decryptable only by the two participants — operators and chain observers see nothing. We deliberately chose a simple, fast, low-bundle-weight ECIES design.
 
 On non-custody: LocalBitcoins/LocalMonero held your coins during a trade. Haveno/Retoswap lock your coins in multisig during a trade. Morphit never touches them at any point, period — the seller sends directly to the buyer when payment is confirmed. That is more trust placed on reputation, less on cryptography; honest about the tradeoff.
@@ -72,11 +74,11 @@ Bisq and BasicSwap are kindred projects in the no-middleman peer-to-peer space, 
 
 • Both parties online during the swap. The atomic-swap protocol requires both wallets to be live for the full multi-step exchange; if your counterparty stalls or disappears mid-swap, you wait out the refund timelock (often hours) to recover your coins. Morphit trades don't require simultaneous presence — you post an order, the counterparty acts when they're ready, and either party can return to the trade on their own schedule.
 
-• Crypto-only, no fiat. BasicSwap trades crypto-to-crypto only. Morphit supports fiat ↔ crypto in whatever payment method two parties agree on (bank transfer, cash, gift card, in-game currency, whatever they prefer).
+• Crypto-only, no fiat. BasicSwap trades crypto-to-crypto only. Morphit additionally supports fiat ↔ crypto in whatever payment method two parties agree on (bank transfer, cash, gift card, in-game currency, whatever they prefer), plus bartering (gold bars, banana trees, whatever).
 
 • Mandatory client updates. BasicSwap users must keep their client current to stay compatible with peers, and updates can involve resync work. Morphit auto-updates in the browser like any web page; operators upgrade their server-side instance independently.
 
-BasicSwap's strength — true cross-chain atomic swaps with no middleman — is real and a beautiful piece of cryptographic engineering. Morphit makes a different choice: a coordination + reputation layer that works for fiat and crypto, accessible from any browser on any device, where the privacy work happens in transport (Tor/Lokinet/I2P) and chat (E2EE) rather than in the swap protocol itself. Both designs are valid; they serve different users.
+BasicSwap's strength — true cross-chain atomic swaps with no middleman — is real and a beautiful piece of cryptographic engineering. Morphit makes a different choice: a coordination + reputation layer that works for fiat, crypto and barter, accessible from any browser on any device, where the privacy work happens in transport (Tor/Lokinet/I2P) and chat (E2EE) rather than in a swap protocol alone. Both designs are valid; they serve different users.
 
 ---
 
@@ -84,7 +86,7 @@ BasicSwap's strength — true cross-chain atomic swaps with no middleman — is 
 
 **FAQ key:** `video_tutorial`
 
-Yes — we host short video tutorials on blurt.media, the decentralized PeerTube instance for the Blurt community. Watch at https://blurt.media (search for "Morphit"). We link out rather than embed because video embeds come with trade-offs for privacy: a PeerTube iframe would expose your IP to other viewers in the P2P swarm. Opening blurt.media in a new tab keeps you in control. If you use a VPN or Tor Browser (recommended), your IP is already protected and the embed trade-off disappears.
+Yes — we host short video tutorials on Blurt.media, a decentralized PeerTube/Peerhub instance, also syndicated to the Fediverse and multiple networks. Watch at https://blurt.media (search for "Morphit"). We link out rather than embed because video embeds come with trade-offs for privacy: a PeerTube iframe would expose your IP to other viewers in the P2P swarm. Opening Blurt.media in a new tab keeps you in control. If you use a VPN or Tor Browser (recommended), your IP is already protected and the embed trade-off disappears.
 
 ---
 
@@ -100,7 +102,7 @@ Nothing. No email, no phone number, no name. Your browser generates a cryptograp
 
 **FAQ key:** `how_to_buy`
 
-Open the orderbook, filter by the coin you want and your country. Pick a seller with good reputation, open a chat, agree on the details. You pay the seller in your chosen fiat method (cash, bank transfer, etc.), and they send you the crypto. The trade timer gives you several days to complete payment.
+Open the orderbook, filter by the coin you want and your country. Pick a seller with good reputation, open a chat, agree on the details. You pay the seller in your chosen fiat method (cash, bank transfer, etc.), and they send you the crypto. Or just Barter, it's your call. They're all interchangeable. The trade timer gives you several days to complete payment.
 
 ---
 
@@ -108,7 +110,7 @@ Open the orderbook, filter by the coin you want and your country. Pick a seller 
 
 **FAQ key:** `how_to_sell`
 
-Post an order listing what you're selling, where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto. Leave honest feedback when done — it helps everyone.
+Post an order listing what you're selling, where you are, and which payment methods you accept. A buyer will open a chat with you to agree on details. When you confirm you received their payment, you send them the crypto (or whatever you guys agreed to exchange). Leave honest feedback when done — it helps everyone.
 
 ---
 
@@ -123,7 +125,7 @@ Three things to know:
 2. Posting an order costs a small network fee:
  • **$0.25 USD-equivalent** if you pay in BTC or XMR (full price)
  • **$0.125 USD-equivalent** if you pay in Blurt (a deliberate 50% discount)
- The discount exists because Morphit's coordination layer runs on Blurt, and we want the Blurt economy to thrive. Paying in Blurt is the default option, costs half as much, and counts toward loyalty-milestone Blurt Power rewards (see "How loyalty rewards work"). The compose screen shows the exact amount in your chosen currency before you sign — no surprises.
+ The discount exists because Morphit's coordination layer runs on Blurt's blockchain with 3-second confirmation times. Paying in Blurt is the default option, costs half as much, and counts toward loyalty-milestone Blurt Power (BP) rewards (see "How loyalty rewards work"). The compose screen shows the exact amount in your chosen currency before you sign — no surprises.
 
 3. Your very first buy order is free. We waive the network fee on your first-ever buy — a small welcome gift so new traders can try Morphit risk-free. See "Is my first order really free?" for the details.
 
@@ -159,7 +161,7 @@ Yes — but with a specific shape that takes a moment to grasp. Morphit's order 
 
 **About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. "Bitso transfer for moringa trees" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.
 
-**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of BTC/XMR/Blurt/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
+**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of Morphit's supported cryptocurrencies. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:
 
 • Buy/sell BTC for USD via PayPal
 • Buy/sell XMR for cash in person
@@ -241,7 +243,7 @@ What's private:
 • Any payment details, addresses, or negotiation you exchange
 
 What's not private (metadata, visible on chain):
-• Your counterparty's account handle
+• Your counterparty's account handle (@scooby, @dingleberry, etc)
 • Timestamps of when each message was sent
 • Approximate message size
 
@@ -250,7 +252,7 @@ Cryptography used:
 • ChaCha20-Poly1305 authenticated encryption
 • Fresh ephemeral key per message
 
-These are standard, well-audited primitives (from libsodium). The protocol is a simple ECIES design documented in ADR-0015. If your threat model requires stronger properties like per-message forward secrecy, use a dedicated secure messenger — good options include **Matrix/Element**, **Session**, **Keybase**, and **Signal**. (Morphit complements but doesn't replace a dedicated secure messenger.)
+These are standard, well-audited primitives (from libsodium). The protocol is a simple ECIES design documented in ADR-0015. If your threat model requires different properties like per-message forward secrecy, use a dedicated secure messenger — good options include **Matrix/Element**, **Session**, **Keybase**, and **Signal**. (Morphit complements but doesn't replace a dedicated secure messenger.)
 
 ---
 
@@ -298,7 +300,7 @@ None. Zero cookies. Zero analytics. Zero tracking scripts. No logs of your IP. N
 
 **FAQ key:** `lost_keys`
 
-Your account is gone, and we cannot get it back. This is not a mistake — it's the core design. If there were any recovery mechanism, someone would have access to your keys. We refuse to be that someone. Write down your seed on paper.
+Your account is inaccessible, and we cannot get it back for you. This is not a mistake — it's the core design. If there were any recovery mechanism, someone would have access to your keys. We refuse to be that someone. Secure those 12-words like your life depends on it.
 
 ---
 
@@ -354,7 +356,7 @@ Yes! In fact, we recommend it. Privacy and security are imperative. Our favorite
 
 **FAQ key:** `activity_level`
 
-Live site-wide activity statistics aren't wired up yet. When they ship, this entry will show total successful trades, current active users, and rolled-up activity across every Morphit frontend (morphit.io plus community mirrors). Because the orderbook lives on the Blurt blockchain, those numbers will be verifiable by anyone running their own indexer against the same data.
+Live site-wide activity statistics aren't wired up yet. When they ship, this entry will show total successful trades, current active users, and rolled-up activity across every Morphit frontend (morphit.io plus community mirrors). Because the orderbook lives on the underlying blockchain, those numbers will be verifiable by anyone running their own indexer against the same data.
 
 If you're curious about raw activity right now, you can search the Blurt chain directly for `custom_json` operations with id `morphit_order_v1` — every Morphit order is a signed on-chain op, so anyone can count them without needing our permission or our servers.
 
@@ -380,22 +382,22 @@ Yes, for browsing. You can read the orderbook, profiles, and feedback with JS of
 
 **FAQ key:** `rss_feeds`
 
-Yes, in three forms. Each is a standard RSS 2.0 feed of live, fee-verified orders. Any feed reader can subscribe. No account needed.
+Yes — three feeds, and each comes in three formats: RSS 2.0 (`.xml`), Atom (`.atom`), and JSON Feed (`.json`). Click any orange RSS pill on the site to copy a feed's URL in whichever format your reader prefers. Any feed reader can subscribe. No account needed.
 
-**Global feed — `/rss/orderbook.xml`**
+**Worldwide feed — `/rss/orderbook.xml`**
 The 50 most recent live orders across all assets and traders. Linked from the site footer (the orange RSS pill). Use this when you want to see everything that's posted.
 
 **Per-asset feed — `/rss/orderbook/by-asset/<asset>.xml`**
-Filtered to a single asset: `btc.xml`, `xmr.xml`, or `blurt.xml`. Subscribe to only the trades you care about. To find the link, filter the orderbook to the asset you want and look beside the Clear-filters button.
+Filtered to a single asset: `btc.xml`, `xmr.xml`, and likewise for every supported asset. Subscribe to only the trades you care about. To find the link, filter the orderbook to the asset you want and look beside the Clear-filters button.
 
 **Per-trader feed — `/rss/orderbook/by-account/@<account>.xml`**
 Filtered to a single trader's orders. Subscribe to a counterparty you trust so you're notified the moment they post a new buy or sell order. Find the subscribe link on any trader's profile page beneath their active orders.
 
 **What RSS is good for**: monitoring new orders without keeping a tab open, getting notifications when the main site is slow or blocked in your network, and piping the feed into IFTTT / n8n / a home script for push-notifications the moment something matches.
 
-**Privacy tradeoff — global and per-asset**: Blurt is a public chain, so nothing in these feeds is information a determined observer couldn't already get by running their own chain indexer. But RSS makes that effort drop to zero — anyone polling the feed can build a timeline of who posts when, in which region, for what. The set of valid URLs is small and enumerable (one global + three per-asset), so a passive observer learns at most "this subscriber cares about BTC."
+**Privacy tradeoff — worldwide and per-asset**: Blurt is a public chain, so nothing in these feeds is information a determined observer couldn't already get by running their own chain indexer. But RSS makes that effort drop to zero — anyone polling the feed can build a timeline of who posts when, in which region, for what. The set of valid URLs is small and enumerable (one worldwide + one per asset), so a passive observer learns at most "this subscriber cares about BTC."
 
-**Privacy tradeoff — per-trader (slightly more revealing)**: A per-trader URL maps one-to-one to one identified subject of interest. A network observer who sees you polling `/rss/orderbook/by-account/@alice.xml` learns specifically that you're watching @alice — slightly more revealing than the global or per-asset feeds. If timing correlation matters in your threat model, poll over Tor.
+**Privacy tradeoff — per-trader (slightly more revealing)**: A per-trader URL maps one-to-one to one identified subject of interest. A network observer who sees you polling `/rss/orderbook/by-account/@alice.xml` learns specifically that you're watching @alice — slightly more revealing than the worldwide or per-asset feeds. If timing correlation matters in your threat model, poll over Tor.
 
 We ship all three feeds because orderbook transparency is a core Morphit property — and because following a trusted counterparty is something traders genuinely want — not despite the tradeoffs, but with them documented honestly so you can decide what's right for your situation.
 
@@ -419,7 +421,7 @@ For Bitcoin, we recommend a new address — but we won't block you if you reuse 
 
 **FAQ key:** `who_runs_it`
 
-The project is open-source; the indexer, posting relay, and support bot can all be run by anyone. The morphit.io instance is operated by Agorise, but the whole design assumes morphit.io might go offline — your app keeps working from cache, from mirrors, from Tor, or from Lokinet.
+The project is open-source; the indexer, posting relay, and support bot can all be run by anyone. The morphit.io instance is operated by Agorise (four geeky agorists), but the whole design assumes morphit.io might go offline — your app keeps working from cache, from mirrors, from Tor, or from Lokinet.
 
 ---
 
@@ -431,15 +433,15 @@ Yes, and please do — Morphit only stays unstoppable if lots of people run piec
 
 • A front-end mirror — clone the repo, run one command, and you have a full Morphit at your own domain (or .onion, or .loki). Same code, same orders, your rules about who can reach it. Great for communities that want a curated presence.
 
-• An indexer — watches the Blurt chain, serves the orderbook as REST + RSS, gossips with other indexers. Your indexer's RSS feeds become another path for everyone; your REST API becomes a fallback when others are slow.
+• An indexer — watches the chain, serves the orderbook as REST + RSS, gossips with other indexers. Your indexer's RSS feeds become another path for everyone; your REST API becomes a fallback when others are slow.
 
-• A posting relay — pays the small Blurt network fees so your users don't have to think about them. Run one for your community and make onboarding frictionless.
+• A posting relay — pays the small chain network fees so your users don't have to think about them. Run one for your community and make onboarding frictionless.
 
 • A payment watcher, a support bot, or an avatar server — smaller pieces, all useful.
 
 Why it matters: every mirror, every indexer, every relay is an extra path that a censor, a bankrupt host, or a bad court order cannot shut down at once. One instance is a target. Fifty is a movement. Morphit's core promise — non-custodial, no-KYC, uncensorable — only holds as long as enough people are willing to run a copy. If you have a VPS, a Raspberry Pi, a spare laptop, or even a mid-range phone, you can contribute. All the services are single-binary Go programs with plain config files; the README walks you through it in minutes, not hours.
 
-The more people who run Morphit, the harder it is for anyone to take it away from the rest of us.
+The more people who run Morphit, the harder it is for anyone to take it away from the rest of us. Running a Morphit node also earns you 90% of the Blurt-paid listing fees there.
 
 ---
 
@@ -487,7 +489,7 @@ Morphit's resilience grows with every independent operator. You can help in any 
 
 • Host on Tor, Lokinet, or I2P. A .onion, .loki, or .b32.i2p mirror lets users reach Morphit from jurisdictions where clearnet access is blocked. These are cheap to run — they don't need TLS certificates or DNS — and the impact is enormous for users in censored networks.
 
-• Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We'll document the exact list in the operator runbook.
+• Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We document the exact list in the operator runbook.
 
 • Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps their account-creation tokens topped up. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.
 
@@ -571,7 +573,7 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtex
 
 **The chain, in priority order:**
 
-1. **Klingex.io** — A Blurt-ecosystem CEX run by Agorise. Provides Blurt/USDT live prices. First choice because it's directly priced in the Blurt market.
+1. **Klingex.io** — A Centralised Exchange (CEX). Provides Blurt/USDT live prices.
 
 2. **Coingecko** — Aggregates Blurt prices across multiple exchanges. Used when Klingex is unavailable or rate-limited.
 
@@ -623,12 +625,12 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.12" subtex
 
 **FAQ key:** `first_order_free`
 
-Yes — and it's a really generous one. Your first order on Morphit is a free buy of at least 500 Blurt (≈$1). We cover the listing fee. One free order per account, for life.
+Yes — and it's a really generous one. Your first order on Morphit is a free buy of at least 500 Blurt (~$1). We cover the listing fee. One free order per account, for life.
 
 **Why Blurt specifically, and not BTC or XMR?** Because the Blurt in your wallet is what makes you an active participant in everything else on Morphit. With 500+ Blurt, you can:
 
 - Pay listing fees on ~8 future orders at the discounted Blurt rate (60 Blurt each — 50% off the BTC/XMR rate)
-- Vote on Blurt social content at blurt.blog, blurt.media, etc. and earn curation rewards
+- Vote on Blurt social content at blurt.blog, blurt.media, etc. and earn curation rewards. You also earn Blurt coins when people click "Like" on your posts.
 - Receive a 1 BP delegation as your welcome stake (fires automatically on your first Blurt-paid listing fee)
 - After your first completed trade, receive 10 Blurt liquid + 10 Blurt Power as the welcome bonus
 
@@ -710,13 +712,11 @@ Don't trust. Verify.
 
 **FAQ key:** `no_js_limits`
 
-Right now: nothing functional — it's a placeholder pointing here, to explain the state.
+It links here, to explain how Morphit behaves without JavaScript — it isn't a switch that turns JS off (a link can't; your browser controls JavaScript).
 
-What it will do: load the site with no JavaScript boot script, so nothing runs in your browser beyond what the server sent. Browsing (orderbook, FAQ, profiles) already works this way — the pages are statically rendered, and you can verify this by disabling JS in your browser and reloading. What JavaScript adds is the interactive layer: placing orders, decrypting chat, signing feedback, switching languages without a page reload.
+You don't need a special mode: browsing already works with JavaScript disabled. Every page — orderbook, FAQ, profiles, feedback — is statically rendered, so turn JS off in your browser and reload and the pages still render. JavaScript only powers the interactive layer (placing orders, decrypting chat, signing feedback, switching language without a reload), because that cryptography runs in your browser, never on a server.
 
-Why it isn't wired up yet: Morphit currently ships every page as prerendered HTML plus a hydration script. A per-request `?nojs=1` switch that suppresses hydration needs an architectural change (per-request SSR instead of prerender + hydrate) that's on the roadmap but not yet built. In the meantime, disabling JS in your browser's own settings gets you the same outcome — the static HTML is already there.
-
-So: browsing without JS already works today; turn it off in your browser if you want to confirm. The pill becomes functional once per-request SSR ships.
+Morphit is a static, prerendered site with no per-request server, so there's no one-click "no-JS" URL — but disabling JavaScript in your browser gives you that result today.
 
 ---
 
@@ -738,7 +738,7 @@ Running a node lets you register as an operator and earn a generous share of the
 
 **FAQ key:** `how_operators_earn`
 
-Every Morphit order costs a small listing fee — $0.25 base if paid in BTC or XMR, or $0.125 if paid in Blurt (a deliberate 50% discount for Blurt-paid fees, because we want the Blurt economy to thrive). When a user posts an order through your operator-branded frontend, your operator tag is included in the order op, and you earn a generous share of the fee.
+Every Morphit order costs a small listing fee — $0.25 base if paid in BTC or XMR, or $0.125 if paid in Blurt (a deliberate 50% discount for Blurt-paid fees, because we want freemarket economies to thrive). #agorism When a user posts an order through your operator-branded frontend, your operator tag is included in the order op, and you instantly earn a 90% share of the Blurt listing fees paid by your users.
 
 **The split is asymmetric — and it's asymmetric on purpose, in your favor.**
 
@@ -810,11 +810,11 @@ What you get:
 
 What's visible on chain (not private):
 
-• Who you chatted with, and when. Sender, recipient, and timestamp are on-chain metadata, not encrypted.
+• Who you chatted with, and when. Sender, recipient, and timestamp are on-chain metadata, not encrypted. (ie: @scooby chatted (something illegible) with @dingleberry)
 
-• Rough message size — an attacker can tell you sent a 50-character message vs a 500-character one.
+• Rough message size — an attacker can see roughly the size of the message that they sent.
 
-If you need fully metadata-private messaging, use something like Signal out-of-band alongside Morphit for sensitive details.
+If you need fully metadata-private messaging, use something like Session (getsession.org) or Signal out-of-band alongside Morphit for sensitive details.
 
 ---
 
@@ -829,9 +829,9 @@ If you lose access to your posting key:
 • You can't decrypt past chat messages sent to you.
 • Morphit cannot help recover — we don't custody keys.
 
-The only safety net is your 12-word seed phrase, written down at onboarding. If you have it, sign back in with it and everything (including past chat) is recoverable. If you don't, the account is gone.
+The only safety net is your 12-word seed phrase, written down at onboarding. If you have it, sign back in with it and everything (including past chat) is recoverable. If you don't, the account is inaccessible to you.
 
-See 'What is a seed phrase?' and 'How do I back up my Morphit account?' for the canonical instructions.
+See 'What if I lose my password or recovery seed?' and 'How do I back up my Morphit account?' for the canonical instructions.
 
 ---
 
@@ -857,7 +857,7 @@ On-chain chat instead means:
 
 • There's exactly one source of truth. No sync headaches between Morphit's copy and yours.
 
-The tradeoff is block latency: messages confirm in ~3 seconds (Blurt's block time) rather than instantly. For trade coordination — the main use case — this is fine. For casual real-time chat, it's a noticeable delay, and a dedicated messenger is a better fit.
+The tradeoff is block latency: messages confirm in ~3 seconds (Blurt's block time) rather than instantly. For trade coordination — the main use case — this is fine. For casual real-time chat, it's a semi-noticeable delay.
 
 ---
 
@@ -873,7 +873,7 @@ No. Morphit never asks for your identity, your name, your phone number, your gov
 
 **FAQ key:** `how_to_trade_walkthrough`
 
-Here's the full flow from start to finish. **Step 1:** Create a free Blurt account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly.
+Here's the full flow from start to finish. **Step 1:** Create a free Blurt account (one click, no email, no ID). **Step 2:** Write down your 12-word recovery phrase on paper (and/or encrypted in an offline password manager like KeePass) and store it somewhere safe. **Step 3:** Browse the orderbook and find a counterparty whose offer matches what you want — the right asset, the right price, a payment method you can use, good feedback history. **Step 4:** Open a chat with them using the encrypted chat button on their order. **Step 5:** Agree on specifics (exact amount, meetup if cash-in-person, which bank account for transfer, etc). **Step 6:** One of you sends the fiat/crypto first depending on your agreement; the other sees it arrive and sends the other side. **Step 7:** Leave each other feedback so future traders can see you're trustworthy. That's it. Morphit is just the bulletin board that connects you; the actual trade happens between the two of you directly.
 
 ---
 
@@ -881,7 +881,7 @@ Here's the full flow from start to finish. **Step 1:** Create a free Blurt accou
 
 **FAQ key:** `supported_countries`
 
-Yes. Morphit works in every country because Morphit doesn't operate from any specific country — it's a decentralized bulletin board published to a public blockchain. You can browse, post, and trade from anywhere with an internet connection. There are no IP blocks, no country-of-residence checks, no geographic restrictions built into the software. If your country blocks access to crypto services, the Tor / Lokinet / I2P mirrors let you reach Morphit anyway (see the footer icons). That said: please understand your own country's laws about crypto trading. Morphit doesn't enforce any country's rules — that's between you and your government.
+Yes. Morphit works in every country because Morphit doesn't operate from any specific country — it's a decentralized bulletin board published to a public blockchain. You can browse, post, and trade from anywhere with an internet connection. There are no IP blocks, no country-of-residence checks, no geographic restrictions built into the software. If your country blocks access to crypto services, the Tor / Lokinet / I2P mirrors let you reach Morphit anyway (see the footer icons). That said: please understand your own country's laws about crypto trading. Morphit doesn't enforce any country/corporation's rules — that's between you and the government that you consent to (govern = control, ment = mind. Mind Control). Their flag is their corporate logo. You are a living male or female, not a corpse (hence the term corporation). Starve the beast. #agorism #freemarkets #countereconomics
 
 ---
 
@@ -897,7 +897,7 @@ All of them. Morphit doesn't restrict fiat currencies; when you post an order yo
 
 **FAQ key:** `counterparty_disappears`
 
-This is why reputation matters. Morphit has no escrow, no arbitration, no customer service that can reverse a trade — so if someone sends crypto first and then the counterparty vanishes without paying, the crypto is gone. Protect yourself: (1) only trade with accounts that have strong feedback history and visible trade volume, (2) for larger amounts, split the trade into smaller pieces and check feedback between each, (3) use the encrypted chat to confirm every step so there's a trail if things go wrong, (4) if you're the seller, wait for the fiat to fully clear before releasing crypto (bank transfers can be reversed for days). If someone scams you, leave detailed honest feedback so the next person sees the warning. Feedback is on-chain and permanent.
+This is why reputation matters. Morphit has no escrow, no arbitration, no customer service that can reverse a trade — so if someone sends crypto first and then the counterparty vanishes without paying, the crypto is gone. Protect yourself: (1) only trade with accounts that have strong feedback history and visible trade volume, (2) for larger amounts, split the trade into smaller pieces and check feedback between each, (3) use the immutable, encrypted chat to confirm every step so there's a trail if things go wrong, (4) if you're the seller, wait for the fiat to fully clear before releasing crypto (bank transfers can be reversed for days). If someone scams you, leave provable, sourced, detailed, honest feedback so the next person sees the warning. You only get one feedback field per trade, so make it count. Feedback is on-chain and permanent.
 
 **If people are going to trust you, your reputation is everything.**
 
@@ -974,7 +974,7 @@ Very little. A small VPS (1GB RAM, 20GB disk) runs Morphit comfortably and costs
 
 **FAQ key:** `switching_instances`
 
-No — that's the whole point of the federated design. Your orders, profile, feedback, and chat history live on the Blurt blockchain, not on any single Morphit instance. If morphit.io goes down, `morphit.agorise.world` or any other operator's instance shows you the same data, from the same chain, with zero migration step. You don't even need to sign in again — your keys decrypt the same content everywhere. The instance is a view into the chain; the chain is the source of truth. Operators come and go; your reputation is yours forever.
+No — that's the whole point of the federated design. Your orders, profile, feedback, and chat history live on the underlying blockchain, not on any single Morphit instance. If morphit.io goes down, any other operator's instance shows you the same data, from the same chain, with zero migration step. You don't even need to sign in again — your keys decrypt the same content everywhere. The instance is a view into the chain; the chain is the source of truth. Operators come and go; your reputation is yours forever.
 
 ---
 
@@ -982,7 +982,7 @@ No — that's the whole point of the federated design. Your orders, profile, fee
 
 **FAQ key:** `backup_practices`
 
-Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.
+Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.
 
 ---
 
@@ -1028,6 +1028,8 @@ Where to find it:
 
 The TxID is public information (it's visible to anyone with a blockchain explorer). Posting it to Morphit to attest a trade does NOT reveal who you are, your view key, or your balance — just that a specific transaction happened.
 
+**One honest note for privacy maximalists.** If you choose to pay your *listing fee* in Monero, the fee transaction's TxID is recorded in your order op on the public Blurt chain (so any indexer can verify the fee without the treasury view key). That is the only place a Monero TxID ever touches Blurt — and it's a ~$0.25 fee to the public treasury address, never your actual trade settlement (the XMR you sell to a counterparty moves peer-to-peer and never touches Blurt). If you want *zero* linkage between Monero and the Blurt chain, simply pay your listing fee in BLURT — it's the default, it's half the price, and no XMR TxID is broadcast at all.
+
 ---
 
 ## What is a Monero tx_proof and why does Morphit ask for one?
@@ -1063,54 +1065,25 @@ You'll get a string starting with `OutProofV1` or `OutProofV2`. Paste that into 
 
 ---
 
-## Which app stores have Morphit for Android?
+## Why is Morphit's source mirrored to so many code hosts?
 
-**FAQ key:** `app_stores`
+**FAQ key:** `morphit_mirrors`
 
-Morphit is distributed through multiple Android app stores — not just Google Play. This is deliberate: a single point of distribution is a single point of censorship, and Morphit is built to survive that.
+Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub is live, and more are being added (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Get Morphit page.
 
-Available from:
-• **F-Droid** (free/libre apps, no tracking, reproducible builds)
-• **Aptoide** (aptoide.com + connect.aptoide.com)
-• **APKPure** (apkpure.com)
-• **Uptodown** (uptodown.com)
-• **APKMirror** (apkmirror.com — third-party but widely trusted)
-• **AlternativeTo** (alternativeto.net listing)
-• **Obtainium** (obtainium.imranr.dev — autoupdates from GitHub releases)
-• **Direct APK download** from morphit.io/download
+(There's nothing to install from an app store — Morphit runs as a Progressive Web App you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)
 
-All builds are signed by the same key and their SHA-256 hashes are published in the release op on the Blurt chain — so regardless of which store you downloaded from, you can verify the APK hasn't been tampered with. Check the /about-this-instance page on any web frontend to see the pinned hash.
-
-We deliberately do NOT publish to Google Play. See the next FAQ entry for why that matters (Google sideload restrictions).
+You can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the Blurt chain — see /about-this-instance.
 
 ---
 
-## Why can't I just install Morphit on my Android device?
+## How do I install Morphit on Android?
 
 **FAQ key:** `android_sideload`
 
-Starting September 2026, Google is pushing a silent Android update that blocks installing any app whose developer hasn't registered with Google, signed their terms, paid a fee, and handed over government ID. Every Android device worldwide — no opt-out.
+Open Morphit in Chrome, Brave, or any browser, open the menu (⋮), and tap "Install app" (or "Add to Home screen"). The icon lands on your home screen, runs fullscreen, works offline, and updates itself.
 
-Morphit deliberately does not register with Google. That registration would mean a single entity (Google) having a kill switch over the entire Morphit Android distribution. The whole point of Morphit is that no one has a kill switch.
-
-To install Morphit (or any non-registered app) on a locked-down Android device, you need to:
-1. Go to Settings → About → tap the Build Number **7 times** to enable Developer Mode
-2. Dismiss the warning screens about "coercion" and "risks"
-3. Enter your device PIN
-4. Restart the device
-5. Wait **24 hours** (mandatory cooldown — yes, really)
-6. Come back, dismiss more warning screens
-7. Pick "allow temporarily" (7 days) or "allow indefinitely"
-8. Confirm, again, that you understand "the risks"
-9. Install the APK
-
-Nine steps, a 24-hour cooling-off period, repeated scare screens — for installing software on a device you own. This is by design: Google wants you to give up and install only from Google Play.
-
-**Easier paths**:
-• **GrapheneOS** (graphene OS.org) — Google-compatible privacy-focused Android that doesn't have these restrictions. Runs on Pixel phones.
-• **F-Droid** — has the permissions baked in if you enable it once on first install.
-• **A custom ROM** like LineageOS — same.
-• **Just use the web version** — morphit.io works fully in any mobile browser, including Firefox, Brave, and Tor Browser for Android. No install required.
+There's no APK, so Google's sideloading hurdles don't apply — and that sidesteps the Android install lockdown Google began rolling out in 2026 (developers must register with Google, accept its terms, pay a fee, and hand over government ID before their apps can install). A PWA installs straight from the web, with no developer registration and no gatekeeper who can pull it.
 
 ---
 
@@ -1144,13 +1117,14 @@ This is one of the clearest non-custodial advantages over traditional exchange p
 
 **FAQ key:** `operator_moderation`
 
-Yes — an operator can block accounts from their own frontend UI. This is pure client-side filtering: the blocked user's orders don't render on that particular operator's /orderbook, and the operator's chat / feedback UIs may refuse to show the blocked user.
+Yes — an operator can review abuse signals and block an account on their own instance using the `morphit-ops` moderation tools. The block is enforced server-side: the indexer stops serving that account's listings anywhere this instance shows them — the orderbook, the per-account view, featured slots, the RSS feeds, and the live stream. When the blocked person is signed in here, they see a clear banner explaining their posts are hidden on this instance only.
 
 What this does NOT do:
-- Affect the chain in any way. Blocked users' orders still exist on-chain and are visible via every other operator instance or direct chain query.
-- Prevent the blocked user from trading. They can use a different operator, or their own self-hosted instance, or the raw chain tools — no restriction at the protocol level.
+- Affect the chain. The blocked account's orders still exist on-chain and stay visible via every other operator instance or a direct chain query.
+- Touch the account's funds, keys, or identity — and it has no effect on any other Morphit instance. It is fully reversible.
+- Prevent the blocked person from trading. They can use a different instance, their own self-hosted instance, or raw chain tools — there is no restriction at the protocol level.
 
-This is the right balance: operators moderate spam and abuse on their own property without centralized control. Users retain full access to the protocol through any of the other live instances listed at /operators.
+Operators can moderate spam and abuse on their own instance only, transparently (no operator can censor silently). Selling goods or services that would initiate harm for example. #donoharm #agorism Operators can't erase anyone from the federation either — users posts are still visible through any of the other instances listed at /instances.
 
 ---
 
@@ -1170,7 +1144,7 @@ How it works:
 
 4. Your chat private key never leaves your browser. It's re-derived deterministically each time you open chat (so refreshing the page, or unlocking on a new device, gives you the same key back).
 
-The tradeoff: because your chat key is derived from your posting key, someone who gets your posting key (e.g. through seed phrase theft) can also decrypt your past chats. This is acceptable because posting-key compromise already means the attacker can impersonate you on Morphit anyway. Back up your seed phrase, don't leak your password, and you're fine.
+The tradeoff: because your chat key is derived from your posting key, someone who gets your posting key (e.g. through seed phrase theft) can also decrypt your past chats. This is acceptable because posting-key compromise already means the attacker can impersonate you on Morphit anyway. Back up and secure your 12-word seed phrase, don't leak your password either, and you're fine.
 
 ---
 
@@ -1178,12 +1152,13 @@ The tradeoff: because your chat key is derived from your posting key, someone wh
 
 **FAQ key:** `syndicate_trade_announcement`
 
-On the order-posting form, you can tick "Syndicate my order to my Blog too (Free)". If checked, Morphit publishes a short announcement of your order to your own Blurt blog (blurt.blog, blurt.media, etc.) the moment your order is successfully broadcast. The post includes a link back to your order's page on Morphit and uses the #morphit tag so it shows up in the Morphit community feed.
+On the order-posting form, you can tick "Syndicate my order to my Blog too (Free)". If checked, Morphit publishes a short announcement of your order to your own Blurt blog (blurt.blog, beblurt.com, etc) the moment your order is successfully broadcast. The post includes a link back to your order's page on Morphit and uses the #morphit tag so it shows up in the Morphit community feed.
 
 The post is signed with YOUR posting key — not Morphit's, not the operator's, yours. This means:
 - The post is authentically from you, not marketing spam.
 - Morphit the project holds no keys that can sign social content on your behalf.
 - You can edit or delete the post later just like any other post on your Blurt account.
+- "Likes" that you receive on blog posts earn you more Blurt for trading and staking.
 
 There's a separate, automatic post that fires once in your lifetime: when you complete your FIRST Morphit trade, Morphit publishes a short "I joined Morphit" announcement to the @morphit community (not your personal blog). That post is part of the onboarding flow; there's no checkbox for it because it only fires once and marks the milestone. After the first one, only the per-order opt-in you see on /post controls future posts.
 
@@ -1287,7 +1262,7 @@ What hiding does NOT do:
 
 **FAQ key:** `what_is_reputation`
 
-Every completed trade lets both sides leave feedback: a 1-5 star rating and an optional comment. The feedback is posted on-chain, so it's permanent and public — anyone can read it on a trader's profile page. The profile shows a weighted average rating, a count of reviews, and a breakdown by star rating so you can see at a glance whether a trader has a consistent track record or a few outliers. There's no central arbiter; the community's own reviews are the reputation signal.
+Every completed trade lets both sides leave one feedback: a 1-5 star rating and an optional comment. The feedback is posted on-chain, so it's permanent and public — anyone can read it on a trader's profile page. The profile shows a weighted average rating, a count of reviews, and a breakdown by star rating so you can see at a glance whether a trader has a consistent track record or a few outliers. There's no central arbiter; the community's own reviews are the reputation signal.
 
 **If people are going to trust you, your reputation is everything.**
 
@@ -1299,7 +1274,7 @@ Morphit doesn't have arbitrators, escrow agents, or chargebacks. The only thing 
 
 **FAQ key:** `how_to_build_high_reputation`
 
-Reputation on Morphit is built **organically** — by trading consistently, getting real feedback from real counterparties, and avoiding patterns that the system flags as suspicious. There is no shortcut. Here's exactly what factors into your score and what you should do.
+Reputation on Morphit is built **organically** — by trading consistently, getting real feedback from real counterparties, and avoiding patterns that the code flags as suspicious. There is no shortcut. Here's exactly what factors into your score and what you should do.
 
 **What counts toward your score** (in order of impact):
 
@@ -1424,7 +1399,7 @@ Short answer: partial — and we made that tradeoff deliberately, for reasons we
 
 **What we have.** Every outgoing message generates a fresh sender-side ephemeral keypair for the ECDH key agreement. The ephemeral private key is used once, then wiped from memory. So if your *posting* key is later compromised, the attacker still can't go back and read messages YOU SENT in the past — those ephemerals are gone.
 
-**What we don't have.** Per-message rotation of the receiver's long-term key. Your long-term chat identity key (deterministically derived from your Blurt posting key) is the same forever, until you rotate the posting key. So if your chat-priv ever leaks, the attacker CAN decrypt every past message they have a ciphertext for. Protocols that rotate per message protect against this; we don't.
+**What we don't have.** Per-message rotation of the receiver's long-term key. Your long-term chat identity key (deterministically derived from your Blurt posting key) is the same forever, until you change your posting key for some reason. So if your chat-priv ever leaks (ie: gets stolen), the attacker CAN decrypt every past message they have a ciphertext for. Protocols that rotate per message protect against this; we don't.
 
 **Why we chose this design.** Five reasons we're proud of:
 
@@ -1440,7 +1415,7 @@ Short answer: partial — and we made that tradeoff deliberately, for reasons we
 
 **The PFS we DO have is one-sided** — sender's outbound messages stay safe even if their posting key leaks later (because the ephemerals are wiped). For two-sided PFS, both parties would need to rotate posting keys after each conversation. Blurt allows that, but we don't expect normal users to do it.
 
-**When this tradeoff is wrong for you.** If you're coordinating activism that may be investigated years from now, or corresponding with someone under active state-level surveillance, or exchanging information that stays sensitive long-term, please use a dedicated secure messenger. Some good options: **Matrix/Element**, **Session**, **Signal**. Morphit chat is for coordinating a trade — short conversations about payment details that are also going to land in your bank statements anyway.
+**When this tradeoff is wrong for you.** If you're coordinating activism that may be investigated years from now, or corresponding with someone under active state-level surveillance, or exchanging information that stays sensitive long-term, please use a dedicated secure messenger. Some good options: **Matrix/Element**, **Session**, **Signal**. Morphit chat is usually just for coordinating a trade — conversations about payment details and getting to know your trading buddy a little bit.
 
 ---
 
@@ -1486,13 +1461,11 @@ Morphit splits your trading footprint into two very different layers, on purpose
 
 **Public (plaintext, anyone can read):**
 
-• **Your orders and their prices.** Your live orderbook entries are posts on Blurt anyone can read without even running Morphit. That's how the global orderbook works.
+• **Your orders and their prices.** Your live orderbook entries are posts on Blurt anyone can read without even running Morphit. That's how the worldwide-accessible orderbook works.
 
 • **Feedback and reputation.** Star ratings, review comments, and replies to reviews are **plaintext on chain** and visible to everyone. This is deliberate — reputation only works as a public signal. See 'Can feedback be edited or deleted?' and 'Who can see the reviews I've left for other traders?'.
 
-• **Chat metadata.** Who you chatted with, when, and roughly how big the messages were. The content is encrypted; the fact of communication isn't.
-
-**Shared property: both are permanent.**
+• **Chat metadata.** Who (@scooby) chatted with whom (@dingleberry), when, and roughly how big the messages were. The content of the messages though is totally encrypted; the fact of communication isn't.
 
 Everything above — private chat ciphertext, public feedback, public orders — lives on the Blurt blockchain and cannot be edited, deleted, or retroactively censored. The difference is who can read the plaintext, not whether it exists.
 
@@ -1636,7 +1609,7 @@ This is a safeguard against a compromised indexer trying to feed you the wrong c
 
 1. **Try retrying once.** Transient indexer hiccups can produce a false alarm.
 
-2. **Switch Morphit instance.** Settings → RPC endpoints → pick a different one. Different instances run different indexers; if yours is misbehaving, another is fine.
+2. **Switch Morphit instance.** Just pick a different one from the instances link at the bottom of this page. Different instances run different indexers; if yours is misbehaving, another is fine.
 
 3. **Confirm with the recipient out-of-band.** If they recently rotated their Blurt posting key (rare — that's an Owner-key operation), the legitimate new chat key will eventually settle. Asking them directly is the safest way to know.
 
@@ -1682,17 +1655,17 @@ If you see a non-verified status that doesn't resolve itself, the simplest fix i
 
 Signup goes through a relay that consumes one of its pre-minted Account Creation Tokens to create your account, so it has to push back on abuse. Most errors you might see are temporary and resolve on their own; a few need you to wait or pick a different relay. The most common cases:
 
-**"Verifying you're human" stuck.** The relay is asking your browser to solve a small proof-of-work puzzle (Altcha). It usually takes 1-2 seconds. If it hangs much longer, your browser may have throttled the background work — try closing other tabs or switching to a different browser. Refreshing the page restarts the puzzle with a fresh challenge.
+**"Verifying you're not a name-squatting bot" stuck.** The relay is asking your browser to solve a small proof-of-work puzzle (Altcha). It usually takes 1-2 seconds. If it hangs much longer, your browser may have throttled the background work — try closing other tabs or switching to a different browser. Refreshing the page restarts the puzzle with a fresh challenge.
 
 **"Too many requests from this client" / "rate-limited."** This relay caps signups per IP address per hour. If you're sharing a network (school, office, public WiFi) with others who recently signed up, you'll hit the cap even though you personally haven't signed up. Wait an hour, or try from a different network.
 
-**"Daily signup limit reached on this relay."** Each relay sets a daily signup ceiling to bound how many of its pre-minted Account Creation Tokens it will spend per day. The cap resets at UTC midnight. You can wait it out, or — if you're impatient — try a different Morphit instance via Settings → RPC endpoints.
+**"Daily signup limit reached on this relay."** Each relay sets a daily signup ceiling to bound how many of its pre-minted Account Creation Tokens it will spend per day. The cap resets at UTC midnight. You can wait it out, or — if you're impatient — try a different Morphit instance (linked at the bottom of this page).
 
 **"You recently created an account. Wait N minutes."** A spacing rule: even within the daily cap, the relay enforces a minimum gap between signups from the same IP address. This catches scripted attempts. If you're a real human signing up your second device, just wait.
 
 **"Signup token was issued to a different connection" (invite_ip_mismatch).** Your network address changed between when the relay issued you a signup token and when you submitted the signup. Common on mobile when you switch between WiFi and cellular, or when your home connection's address rotates. Refresh and try again from a stable connection.
 
-**"Signup is currently unavailable on this relay."** The operator has paused signups, usually because they're investigating a potential abuse spike or topping up the relay's Blurt balance. You can wait or switch instances.
+**"Signup is currently unavailable on this relay."** The operator has paused signups, usually because they're investigating a potential abuse spike or topping up the relay's Blurt balance. You can wait, or just switch to a different instance (linked at the bottom of this page).
 
 **"The relay is temporarily unable to fund new accounts."** The relay has run out of pre-minted Account Creation Tokens. The operator mints these in a weekly batch and consumes one per signup; if signups outpace the weekly mint, the pool empties early. The operator gets an alert when this happens; usually it's resolved within hours. Switching instances also works.
 
@@ -1708,7 +1681,7 @@ Signup goes through a relay that consumes one of its pre-minted Account Creation
 
 1. Wait an hour and try again — most rate-limits are short-lived.
 2. Try a different network if the issue is IP-based (rate_limited, invite_ip_mismatch).
-3. Try a different Morphit instance via Settings → RPC endpoints — operators run their own relays and might not share rate-limit state.
+3. Try a different Morphit instance — operators run their own relays and might not share rate-limit state.
 4. If you're seeing repeated chain errors with no obvious cause, the Blurt network itself may be having a moment. Check the Blurt block explorer or wait it out.
 
 See also 'What do I need to sign up?' for the requirements check, and 'What is the welcome bonus?' for the next step after registering.
@@ -1744,7 +1717,7 @@ Morphit runs two pattern detectors on the public feedback table to spot reviews 
 
 **Two patterns we flag:**
 
-1. **Same-creator close-timing.** Two accounts created by the same Blurt creator (other than @morphit-relay, which onboards most legitimate users) whose first Morphit activities are within 5 minutes of each other. This pattern matches the typical sock-puppet farm setup where one operator creates multiple accounts via blurt-cli and immediately starts using them. Real users who happen to share a creator (a friend who helped onboard them via blurt-cli) and start using Morphit minutes apart can occasionally trip this — operator-side appeal is possible.
+1. **Same-creator close-timing.** Two accounts created by the same Blurt creator (other than @morphit-relay, which onboards most legitimate users) whose first Morphit activities are within 5 minutes of each other. This pattern matches the typical sock-puppet farm setup where one operator creates multiple accounts via blurt-cli and immediately starts using them. Real users who happen to share a creator (a friend who helped onboard them via blurt-cli) and start using Morphit minutes apart can occasionally trip this.
 
 2. **Mutual high-star with no third party.** Two accounts that exchange 3+ five-star reviews of each other in 7 days AND have not reviewed any third party in that window. This pattern matches a sock-puppet farm doing wash trades to inflate ratings. Real heavy-traders almost always have third-party reviews mixed in, so this rarely false-positives on legitimate users. If you have been flagged and you are a real user, complete a few trades with different counterparties — the rolling 7-day window will let the flag fall off naturally next time the detector runs.
 
@@ -1838,33 +1811,19 @@ The operator-earnings split is sized so that even a Pi-tier instance covers its 
 
 ---
 
-## Can I use Morphit on my iPhone without jailbreaking?
+## Can I use Morphit on my iPhone or iPad?
 
 **FAQ key:** `iphone_install`
 
-Yes — fully, without jailbreaking. Here's the honest situation:
+Yes — fully, no jailbreak and no App Store needed. Apple rejects apps that facilitate non-KYC peer-to-peer crypto (exactly what Morphit is), so instead of a native app we ship a Progressive Web App.
 
-**Why no native App Store app.** Apple's App Store guidelines reject apps that facilitate non-KYC peer-to-peer cryptocurrency exchange. Morphit's whole design — non-custodial, no identity verification, federated across operators — is exactly what they refuse to publish. So we don't pretend to have a native iOS app; we'd be lying if we did.
+Install it in ~15 seconds:
+1. Open this site in **Safari** (Chrome/Firefox on iOS don't show the install option).
+2. Tap **Share** (the square with an up-arrow).
+3. Tap **"Add to Home Screen."**
+4. Confirm the name and tap **Add**.
 
-**What works perfectly: Progressive Web App (PWA) install.** Modern Safari supports installing websites as standalone apps. The icon goes on your Home Screen, the app launches fullscreen (no Safari URL bar), service workers cache assets for offline browsing, and the app remembers state between launches.
-
-**The install flow** (takes about 15 seconds):
-1. Open this site in Safari. Not Chrome or Firefox — those use Safari's web engine on iOS but don't expose the PWA install path.
-2. Tap the Share icon at the bottom of the screen (a square with an up-arrow).
-3. Scroll down in the share sheet and tap "Add to Home Screen."
-4. Confirm the name ("Morphit" by default) and tap "Add" in the top-right.
-
-Done. The icon is on your Home Screen alongside your other apps. Tap to launch fullscreen.
-
-**iOS version notes.** iOS 16.4+ has full PWA support: service workers (offline caching), push notifications, badge counts, Web Share Target. Older iOS versions still install — the icon works, the site loads — but without those advanced features. iOS 14-16.3 launches the PWA fullscreen but won't cache for offline use.
-
-**Comparison to Android.** Android users have more options: install our APK directly, install through F-Droid / Aptoide / APKPure, install through GrapheneOS (without Google Play). iOS only offers the PWA path because of Apple's stricter ecosystem. The PWA experience itself is comparable to a native app for Morphit's use case — you're trading, chatting, and reading the orderbook, all of which are HTTP-and-crypto operations that don't benefit from native APIs.
-
-**TestFlight.** We don't currently distribute via TestFlight (Apple's developer beta tool). Reasons: the 90-day expiration on TestFlight builds means we'd be re-distributing on a schedule, the 10,000-tester cap doesn't fit a public app, and the same App Store guidelines apply to TestFlight reviews as to public store listings — Apple would still reject a non-KYC P2P crypto app. The PWA path is the lasting answer.
-
-**Sideloading via AltStore / etc.** AltStore lets developers sideload IPA files using a free Apple Developer account. It works but requires the user to re-sign the app every 7 days (Apple's free developer cert expires). For a security-sensitive app like Morphit, requiring users to weekly re-sign creates an attack window where a malicious update could be slipped in. The PWA install is one-tap, free, and doesn't expire.
-
-**Bottom line for grandma:** Open Morphit in Safari on your iPhone. Tap Share, then "Add to Home Screen." Done. Your iPhone treats Morphit like an app from then on.
+The icon launches fullscreen like any app. On iOS 16.4+ it caches for offline use and supports notifications; older versions still install without those extras. No APK, IPA, TestFlight, or sideloading on any platform.
 
 ---
 
@@ -1975,7 +1934,7 @@ There's still one window where TOFU is theoretically vulnerable: the very first 
 2. Tap the ⋮ menu next to the Block button → **Verify peer**.
 3. You'll see 8 words. Your counterparty does the same on their device.
 4. Compare the words **out of band** — voice call, in person, or another platform you both already trust. **Do NOT compare them in this chat.**
-5. If both sides see the **exact same 8 words**, no MITM occurred. You're done.
+5. If both sides see the **exact same 8 words**, you've got your proof that no MITM occurred. You're good to go.
 6. If even one word differs, treat the conversation as compromised. Don't continue.
 
 **What the fingerprint protects against:**
@@ -2084,7 +2043,7 @@ DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (
 
 **FAQ key:** `arbitrage_morphit_vs_exchanges`
 
-Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or DEX (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the global price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
+Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or DEX (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
 
 ---
 
@@ -2297,7 +2256,7 @@ Word of mouth is the entire growth strategy. Morphit doesn't advertise, doesn't 
 - Don't pitch Morphit to people who already have a CEX account and are happy with it; pitch to the unbanked, the privacy-conscious, the people who've had CEX accounts frozen
 - Don't promise things Morphit doesn't promise (no instant arbitration, no escrow, no guaranteed liquidity) — overselling drives churn
 
-The federation model means every successful local promotion grows the network for everyone. A meetup attendee who joins through your operator instance is a counterparty available on every other operator's instance simultaneously. Local growth is global growth.
+The federation model means every successful local promotion grows the network for everyone. A meetup attendee who joins through your operator instance is a counterparty available on every other operator's instance simultaneously. Local growth is worldwide growth.
 
 ---
 
@@ -2325,9 +2284,31 @@ Three reasons. First: closed source. We can't verify what it does with your secr
 
 ---
 
+## How does Morphit keep my privacy-coin trades private?
+
+**FAQ key:** `privacy_coins_onchain`
+
+Morphit trades several privacy coins — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH), and Decred (DCR) — and applies the same on-chain-footprint protections to all of them.
+
+**Your actual settlement never touches Blurt.** When you trade a privacy coin, the coins move peer-to-peer between your wallet and your counterparty's, directly on that coin's own chain. That transfer is never broadcast to, recorded on, or visible from the Blurt blockchain Morphit coordinates on. Blurt only carries the public order (the advertisement) and the end-to-end-encrypted chat.
+
+**What the order on Blurt reveals — and what we've stripped from it:**
+• The order is an advertisement, so its side/asset/amount-range/payment-methods are necessarily public (that's how a buyer finds your sell). This is inherent to any public orderbook.
+• But we removed everything that didn't need to be there: the order's permlink is now an opaque random token (`order-…`), not `sell-xmr-usd-…`, so the asset name no longer leaks into the on-chain permlink, order URLs, RSS feeds, or block explorers. The expiry timestamp is floored to the day, so it can't fingerprint the exact moment you posted. No IP, no timezone, no language, no browser fingerprint is ever attached — what you type into the "Post Now" form is all that goes on chain.
+
+**Amount jitter on every coin.** When you share a receive amount in chat, Morphit adds a tiny random tail (down to the coin's smallest unit — piconero for XMR, satoshi-scale for the others) so the on-chain amount can't be matched to your posted order. On by default.
+
+**ZEC, ARRR, DASH, and DCR are trade-only — their TxID never appears on Blurt at all.** You can't pay Morphit's listing fee with them, and the settlement is peer-to-peer, so there is no point at which any of those coins' transaction IDs are written to the public chain. For these four, the on-chain story is even cleaner than Monero's.
+
+**Monero has exactly one optional cross-chain touch, with an opt-out.** XMR is one of three assets (with BLURT and BTC) you *may* use to pay the small listing fee; if you do, that fee payment's TxID is recorded in your order on Blurt (so any operator can verify the fee using a Monero tx_proof — no view key, see the Monero TxID FAQ). That is the only place an XMR TxID ever touches Blurt, and it's a ~$0.25 fee to a public address, never your trade. Want zero Monero-to-Blurt linkage? Pay the listing fee in BLURT — it's the default and half the price.
+
+For the full per-coin guidance see /privacy/{asset} (e.g. /privacy/xmr, /privacy/zec), and the complete leak inventory lives in the project's metadata-leak catalog.
+
+---
+
 ## Metadata
 
-Total FAQ entries: 135
+Total FAQ entries: 136
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

@@ -67,7 +67,15 @@
 <Head
 	routeKey="home"
 	{jsonLd}
-	feeds={[{ title: $_('seo.site_name') + ' — orderbook', href: '/rss/orderbook.xml' }]}
+	feeds={[
+		{ title: $_('seo.site_name') + ' — orderbook (RSS)', href: '/rss/orderbook.xml' },
+		{ title: $_('seo.site_name') + ' — orderbook (Atom)', href: '/rss/orderbook.atom', type: 'atom' },
+		{
+			title: $_('seo.site_name') + ' — orderbook (JSON Feed)',
+			href: '/rss/orderbook.json',
+			type: 'json'
+		}
+	]}
 />
 
 <section class="relative overflow-hidden">

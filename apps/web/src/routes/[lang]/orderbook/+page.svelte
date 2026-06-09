@@ -604,7 +604,15 @@
 
 <Head
 	routeKey="orderbook"
-	feeds={[{ title: $_('seo.site_name') + ' — orderbook', href: '/rss/orderbook.xml' }]}
+	feeds={[
+		{ title: $_('seo.site_name') + ' — orderbook (RSS)', href: '/rss/orderbook.xml' },
+		{ title: $_('seo.site_name') + ' — orderbook (Atom)', href: '/rss/orderbook.atom', type: 'atom' },
+		{
+			title: $_('seo.site_name') + ' — orderbook (JSON Feed)',
+			href: '/rss/orderbook.json',
+			type: 'json'
+		}
+	]}
 />
 
 <div class="mx-auto max-w-4xl px-4 py-10 md:py-14">

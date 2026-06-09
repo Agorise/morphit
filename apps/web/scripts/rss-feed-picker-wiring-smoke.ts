@@ -12,7 +12,10 @@
  *      with the correct feed base path (no .xml suffix — the
  *      picker appends the extension per chosen format),
  *   2. the picker references all eight rss.* i18n keys,
- *   3. those keys exist with full parity across all 10 locales.
+ *   3. those keys exist with full parity across all 10 locales,
+ *   4. (cp229) Head.svelte emits all three feed MIME types and the
+ *      home + orderbook pages advertise all three formats via
+ *      <link rel="alternate"> auto-discovery.
  *
  * Usage (from apps/web):
  *   tsx scripts/rss-feed-picker-wiring-smoke.ts
@@ -144,6 +147,53 @@ scenario('format-name keys are the same proper nouns in every locale', () => {
 		}
 	}
 });
+
+// ── Head <link rel="alternate"> auto-discovery (cp229) ──────────────
+// Separate from the on-page RssFeedPicker: feed readers and SEO
+// crawlers probe <head> for rel="alternate" links.  Head.svelte
+// emits one per entry in its `feeds` prop.  The picker surfaces all
+// three formats interactively; the <head> must advertise all three
+// statically too, or a reader landing on the page only auto-discovers
+// RSS and misses Atom / JSON.  Pin both the Head emission and the
+// call sites so a refactor can't silently drop a format.
+const HEAD = 'src/lib/components/Head.svelte';
+const HEAD_PAGES: { file: string; label: string }[] = [
+	{ file: 'src/routes/[lang]/+page.svelte', label: 'homepage' },
+	{ file: 'src/routes/[lang]/orderbook/+page.svelte', label: 'orderbook page' }
+];
+
+scenario('Head.svelte advertises all 3 feed MIME types', () => {
+	const src = read(HEAD);
+	// type union accepts json
+	if (!/type\?:\s*'rss'\s*\|\s*'atom'\s*\|\s*'json'/.test(src)) {
+		throw new Error("Head.svelte feeds type union must include 'json'");
+	}
+	// emission maps each format to the Content-Type the indexer serves
+	for (const mime of ['application/rss+xml', 'application/atom+xml', 'application/feed+json']) {
+		if (!src.includes(mime)) {
+			throw new Error(`Head.svelte does not emit ${mime}`);
+		}
+	}
+});
+
+for (const p of HEAD_PAGES) {
+	scenario(`${p.label}: <Head> advertises all 3 feed formats`, () => {
+		const src = read(p.file);
+		if (!src.includes('feeds={[')) {
+			throw new Error(`${p.file}: no feeds={[…]} passed to <Head>`);
+		}
+		// RSS (default type — no explicit type needed), Atom, JSON.
+		if (!src.includes('/rss/orderbook.xml')) {
+			throw new Error(`${p.file}: missing RSS feed (/rss/orderbook.xml)`);
+		}
+		if (!(src.includes('/rss/orderbook.atom') && src.includes("type: 'atom'"))) {
+			throw new Error(`${p.file}: missing Atom feed (/rss/orderbook.atom, type: 'atom')`);
+		}
+		if (!(src.includes('/rss/orderbook.json') && src.includes("type: 'json'"))) {
+			throw new Error(`${p.file}: missing JSON Feed (/rss/orderbook.json, type: 'json')`);
+		}
+	});
+}
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {

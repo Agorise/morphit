@@ -37,12 +37,15 @@
 		 */
 		noindex?: boolean;
 		/**
-		 * Optional RSS / Atom feeds for `<link rel="alternate" type="...">`
-		 * auto-discovery.  Feed readers (NetNewsWire, Feedly, Inoreader,
-		 * etc.) probe HTML <head> for these tags and surface a "subscribe"
-		 * affordance when present.  Also a documented SEO signal for
-		 * news/blog crawlers.  Pass empty/undefined on pages with no
-		 * matching feed.
+		 * Optional RSS / Atom / JSON Feed links for
+		 * `<link rel="alternate" type="...">` auto-discovery.  Feed
+		 * readers (NetNewsWire, Feedly, Inoreader, etc.) probe HTML
+		 * <head> for these tags and surface a "subscribe" affordance
+		 * when present.  Also a documented SEO signal for news/blog
+		 * crawlers.  Pass empty/undefined on pages with no matching
+		 * feed.  `type` defaults to 'rss'; pass 'atom' or 'json' to
+		 * advertise the Atom / JSON Feed variants (the type values map
+		 * to exactly what the indexer's RSS handler serves).
 		 *
 		 * **SECURITY CONSTRAINT (cp114):** the `href` field MUST be a
 		 * SITE-CONTROLLED URL (literal string or relative path), NEVER
@@ -53,10 +56,14 @@
 		 * `$lib/utils/safeContactUrl` and update the allowlist comment
 		 * to reflect that the constraint has changed.
 		 *
-		 * Example for the orderbook page:
-		 *   feeds={[{ title: 'Morphit orderbook', href: '/rss/orderbook.xml' }]}
+		 * Example advertising all three formats for the orderbook:
+		 *   feeds={[
+		 *     { title: 'Morphit orderbook (RSS)', href: '/rss/orderbook.xml' },
+		 *     { title: 'Morphit orderbook (Atom)', href: '/rss/orderbook.atom', type: 'atom' },
+		 *     { title: 'Morphit orderbook (JSON Feed)', href: '/rss/orderbook.json', type: 'json' }
+		 *   ]}
 		 */
-		feeds?: Array<{ title: string; href: string; type?: 'rss' | 'atom' }>;
+		feeds?: Array<{ title: string; href: string; type?: 'rss' | 'atom' | 'json' }>;
 	}
 
 	let {
@@ -205,15 +212,21 @@
 		<link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
 	{/each}
 
-	<!-- RSS / Atom feed auto-discovery (cp112).  Feed readers and
-	     some SEO crawlers probe the head for `rel="alternate"
-	     type="application/rss+xml"` tags.  Only emitted on pages
-	     that pass a `feeds` prop. -->
+	<!-- RSS / Atom / JSON Feed auto-discovery (cp112; 3-format cp229).
+	     Feed readers and some SEO crawlers probe the head for
+	     `rel="alternate" type="application/rss+xml"` (and the Atom /
+	     JSON Feed equivalents) tags.  Only emitted on pages that pass
+	     a `feeds` prop.  The `type` values mirror exactly what the
+	     indexer's RSS handler serves as Content-Type per format. -->
 	{#if feeds && feeds.length > 0}
 		{#each feeds as feed}
 			<link
 				rel="alternate"
-				type={feed.type === 'atom' ? 'application/atom+xml' : 'application/rss+xml'}
+				type={feed.type === 'atom'
+					? 'application/atom+xml'
+					: feed.type === 'json'
+						? 'application/feed+json'
+						: 'application/rss+xml'}
 				title={feed.title}
 				href={feed.href}
 			/>
