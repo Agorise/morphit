@@ -2,39 +2,43 @@
 /**
  * logo-bling-invariants-smoke.ts
  *
- * Verifies that MorphitLogoBling.svelte preserves its 5 load-bearing
- * invariants:
+ * MorphitLogoBling was reworked in cp228: the old <canvas> 3-body
+ * particle animation was removed entirely.  The component is now a PURE
+ * presentational wrapper — a static wordmark <img> plus an OPTIONAL
+ * letterform-tracing "shine" (a masked CSS sweep) that only the small
+ * header wordmark opts into.  The homepage hero uses the same component
+ * WITHOUT the shine, so it is fully static.
  *
- *   I-1  Exactly 3 particles in the simulation (the "3-body chaos"
- *        choice — 2 particles orbit deterministically, 4+ smear into
- *        an indistinct blur).
+ * These invariants pin that new design (rewritten from the cp115
+ * canvas-era invariants, the same way asset-select-coverage was
+ * rewritten for the cp208 listbox):
  *
- *   I-2  `prefers-reduced-motion: reduce` is honored — the component
- *        bails out to a static fallback rather than running the RAF
- *        loop.  Without this, the component fails the vestibular-
- *        disorder accessibility guarantee AND the grandma-friendliness
- *        priority's "no jittery motion on low-end devices" rule.
+ *   I-1  The retired animation is GONE — no canvas element, no
+ *        requestAnimationFrame loop, no IntersectionObserver, no
+ *        PARTICLES physics.  (A regression that re-introduced the canvas
+ *        would reintroduce the per-frame CPU cost priority #4 rejected.)
  *
- *   I-3  IntersectionObserver pauses the RAF loop when the header is
- *        scrolled out of viewport.  Without this, a long page with a
- *        sticky header still pays per-frame CPU for the simulation
- *        that nobody can see.  CPU = battery on mobile (priority #4).
+ *   I-2  The wordmark <img> keeps alt="Morphit" — screen-reader output is
+ *        unchanged from every prior header.
  *
- *   I-4  The canvas is aria-hidden="true".  Decorative motion should
- *        not generate screen-reader noise.  The wordmark <img> retains
- *        its alt so accessibility output is unchanged from the prior
- *        plain-image header.
+ *   I-3  The shine is OPTIONAL: a `shine` prop (default false) gates an
+ *        `{#if shine}` block.  This is what lets the hero stay static
+ *        while the header glints — without it the effect would be
+ *        unconditional.
  *
- *   I-5  Particles are painted BEHIND the wordmark (canvas z-index 0,
- *        wordmark z-index 1).  Reversed stacking would put the
- *        particles on top of the letterforms, breaking legibility.
+ *   I-4  The shine layer is decorative (aria-hidden="true") AND MASKED to
+ *        the wordmark shape (mask-image / -webkit-mask-image driven by the
+ *        wordmark src), so the moving highlight traces the letterforms
+ *        rather than sweeping a bare rectangle.
  *
- * Why grep-of-source rather than DOM-driven test: this component
- * uses canvas + RAF + IntersectionObserver, all of which require a
- * full DOM environment + animation timing to test behaviorally.
- * Pre-launch budget says: structural defenses prove the source has
- * the invariants the design demands; running the actual simulation
- * is a humans-eyes-on-it task during the persona walk-through.
+ *   I-5  `prefers-reduced-motion: reduce` removes the shine (a static
+ *        wordmark) — vestibular-disorder accessibility + the grandma-
+ *        friendliness "no jittery motion on low-end devices" rule.
+ *
+ * Why grep-of-source rather than DOM-driven test: the shine is a pure CSS
+ * animation; whether the glint LOOKS right is a humans-eyes-on-it task in
+ * the persona walk-through.  These checks prove the source carries the
+ * structural guarantees the design demands.
  */
 
 import { readFileSync } from 'node:fs';
@@ -54,80 +58,83 @@ interface Scenario {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'I-1: initParticles creates exactly 3 particles',
+		name: 'I-1: retired canvas/RAF/observer/physics animation is gone',
 		test: () => {
-			// The init loop is `for (let i = 0; i < 3; i++)`.  Anything
-			// other than 3 breaks the design rationale.
-			const m = src.match(/for\s*\(\s*let\s+i\s*=\s*0\s*;\s*i\s*<\s*(\d+)\s*;\s*i\s*\+\+\s*\)\s*\{[\s\S]*?PARTICLES\.push/);
+			const banned: [RegExp, string][] = [
+				[/<canvas/, 'a <canvas> element'],
+				[/requestAnimationFrame\s*\(/, 'a requestAnimationFrame loop'],
+				[/new\s+IntersectionObserver/, 'an IntersectionObserver'],
+				[/\bPARTICLES\b/, 'the PARTICLES physics array']
+			];
+			const found = banned.filter(([re]) => re.test(src)).map(([, label]) => label);
+			if (found.length) {
+				return `the 3-body animation should be removed, but found: ${found.join(', ')}`;
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-2: wordmark <img> retains alt="Morphit"',
+		test: () => {
+			if (!/<img[\s\S]{0,200}?alt="Morphit"/.test(src)) {
+				return 'wordmark <img> with alt="Morphit" not found';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-3: shine is optional — `shine` prop gates an {#if shine} block',
+		test: () => {
+			if (!/\bshine\??\s*:\s*boolean/.test(src) && !/\bshine\b[\s\S]{0,40}?\$props/.test(src)) {
+				return 'no `shine` prop declared on the component';
+			}
+			if (!/\{#if\s+shine\s*\}/.test(src)) {
+				return 'the shine layer is not gated behind {#if shine} (so the hero could not stay static)';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-4: shine layer is aria-hidden AND masked to the wordmark shape',
+		test: () => {
+			// The shine <span> must be decorative.
+			if (!/morphit-logo-bling-shine[\s\S]{0,200}?aria-hidden="true"/.test(src) &&
+				!/aria-hidden="true"[\s\S]{0,200}?morphit-logo-bling-shine/.test(src)) {
+				return 'shine layer is not aria-hidden="true"';
+			}
+			// And clipped to the letterforms via a wordmark-driven mask.
+			if (!/mask-image:\s*var\(--morphit-wordmark\)/.test(src)) {
+				return 'shine is not masked to the wordmark (mask-image: var(--morphit-wordmark) missing)';
+			}
+			if (!/-webkit-mask-image:\s*var\(--morphit-wordmark\)/.test(src)) {
+				return 'shine mask missing the -webkit-mask-image prefix (Safari/WebKit)';
+			}
+			if (!/--morphit-wordmark:\s*url\(/.test(src)) {
+				return 'the --morphit-wordmark mask source url is not set from the wordmark src';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-5: prefers-reduced-motion removes the shine',
+		test: () => {
+			const m = src.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{([\s\S]*?)\}\s*\}/);
 			if (!m) {
-				return 'could not locate the initParticles for-loop';
+				return 'no @media (prefers-reduced-motion: reduce) block found';
 			}
-			const n = parseInt(m[1] ?? '', 10);
-			if (n !== 3) {
-				return `expected exactly 3 particles, found ${n}`;
+			const block = m[1] ?? '';
+			if (!/morphit-logo-bling-shine/.test(block)) {
+				return 'reduced-motion block does not target the shine layer';
 			}
-			return null;
-		}
-	},
-	{
-		name: 'I-2: prefers-reduced-motion is matched + honored',
-		test: () => {
-			if (!src.includes("'(prefers-reduced-motion: reduce)'")) {
-				return 'matchMedia query for prefers-reduced-motion not found';
-			}
-			if (!src.includes('drawStaticFallback')) {
-				return 'drawStaticFallback function (reduced-motion path) not found';
-			}
-			// Verify the static fallback is actually called when
-			// reducedMotion is true.  Look for the conditional path.
-			if (!/reducedMotion\s*\)\s*\{[\s\S]*?drawStaticFallback\(\)/.test(src)) {
-				return 'drawStaticFallback is defined but not invoked from the reduced-motion conditional';
-			}
-			return null;
-		}
-	},
-	{
-		name: 'I-3: IntersectionObserver pauses RAF on viewport exit',
-		test: () => {
-			if (!src.includes('IntersectionObserver(')) {
-				return 'IntersectionObserver instantiation not found';
-			}
-			// The observer's callback should call stopLoop() on isIntersecting=false.
-			if (!/isIntersecting[\s\S]{0,200}?stopLoop\(\)/.test(src)) {
-				return 'IntersectionObserver callback does not call stopLoop() on viewport exit';
-			}
-			return null;
-		}
-	},
-	{
-		name: 'I-4: canvas carries aria-hidden="true"',
-		test: () => {
-			if (!/<canvas[\s\S]{0,200}?aria-hidden="true"/.test(src)) {
-				return 'canvas element does not have aria-hidden="true"';
-			}
-			return null;
-		}
-	},
-	{
-		name: 'I-5: canvas painted BEHIND wordmark (z-index ordering)',
-		test: () => {
-			// Both rules must be present in the <style> block:
-			//   .morphit-logo-bling-canvas { z-index: 0; }
-			//   .morphit-logo-bling-wordmark { z-index: 1; }
-			const canvasRule = /\.morphit-logo-bling-canvas\s*\{[\s\S]*?z-index:\s*0/;
-			const wordmarkRule = /\.morphit-logo-bling-wordmark\s*\{[\s\S]*?z-index:\s*1/;
-			if (!canvasRule.test(src)) {
-				return 'canvas z-index: 0 rule missing or has different value';
-			}
-			if (!wordmarkRule.test(src)) {
-				return 'wordmark z-index: 1 rule missing or has different value';
+			if (!/(display:\s*none|animation:\s*none)/.test(block)) {
+				return 'reduced-motion block does not disable the shine (no display:none / animation:none)';
 			}
 			return null;
 		}
 	}
 ];
 
-console.log('\n── logo-bling-invariants smoke (cp115) ──────────────────\n');
+console.log('\n── logo-bling-invariants smoke (cp228 — static wordmark + masked shine) ──\n');
 
 let failed = 0;
 let passed = 0;

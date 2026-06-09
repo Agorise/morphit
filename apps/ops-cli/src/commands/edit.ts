@@ -41,6 +41,7 @@ import {
 } from 'node:fs';
 import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { offerRestart } from '../lib/restartServices.ts';
 import {
 	stepAltNetworks,
 	stepOrigin,
@@ -277,19 +278,17 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	}
 	console.log('  ✓ permissions 600 preserved');
 	console.log('');
-	console.log('Restart the affected services to pick up the changes:');
-	if (envUpdates.has('MORPHIT_INDEXER_RPC_ENDPOINTS')) {
-		console.log('  sudo systemctl restart morphit-indexer');
-		console.log('  (RPC endpoint changes require an indexer restart;');
-		console.log('   the indexer reads the env file once at startup.)');
-	} else {
-		console.log('  sudo systemctl restart morphit-indexer');
-		if (originChanged) {
-			console.log('  sudo systemctl restart morphit-relay');
-		} else {
-			console.log('  sudo systemctl restart morphit-relay   # if origin changed');
-		}
-	}
+
+	// The indexer + relay read these env files ONCE at boot, so a change
+	// only goes live after a restart.  Don't make the operator remember
+	// that and run `systemctl` by hand (grandma-friendly, priority #3):
+	// offer to restart the affected service(s) now — default yes — and do
+	// it.  e.g. setting the Tor/Lokinet/I2P footer address here lights up
+	// the footer pill with no further steps.  Origin changes also touch
+	// the relay; RPC changes are indexer-only.
+	const unitsToRestart = ['morphit-indexer'];
+	if (originChanged) unitsToRestart.push('morphit-relay');
+	const restarted = await offerRestart(unitsToRestart);
 
 	// cp186 — the one easy-to-miss second step.  origin + operator tag
 	// are part of the ON-CHAIN operator-register record; editing the
@@ -318,8 +317,13 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		console.log('      morphit-ops register');
 		console.log('');
 		console.log('  (Until you do, other instances will keep showing your old');
-		console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance uses the new value as soon as you`);
-		console.log('  restart the services above.)');
+		if (restarted) {
+			console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance is already using the new value —`);
+			console.log('  the service restart above applied it locally.)');
+		} else {
+			console.log(`  ${originChanged ? 'origin' : 'tag'}.  Your own instance picks up the new value once the`);
+			console.log('  service restart above runs.)');
+		}
 	}
 	console.log('');
 
@@ -343,7 +347,10 @@ interface AtomicWriteFailure {
 }
 type AtomicWriteResult = AtomicWriteSuccess | AtomicWriteFailure;
 
-function atomicEnvWrite(
+// Exported so the alt-address wizard (commands/altAddress.ts) persists its
+// one MORPHIT_INSTANCE_*_ADDRESS update through the SAME atomic backup →
+// fsync → rename → 600 path, rather than duplicating this delicate write.
+export function atomicEnvWrite(
 	path: string,
 	originalText: string,
 	updates: Map<string, string | null>,

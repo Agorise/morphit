@@ -13,6 +13,14 @@
 		SUPPORTED_LOCALES.find((l) => l.code === $currentLocale) ?? SUPPORTED_LOCALES[0]
 	);
 
+	// A compact 2-letter badge per locale. For unambiguous languages this is
+	// the ISO 639-1 code (en→EN, es→ES, …). The two Chinese locales both map
+	// to 639-1 "zh", so we fall back to the region subtag (zh-CN→CN, zh-HK→HK)
+	// to keep them distinguishable in the list.
+	function displayCode(code: string): string {
+		return code.includes('-') ? code.split('-')[1]!.toUpperCase() : code.toUpperCase();
+	}
+
 	async function choose(code: LocaleCode): Promise<void> {
 		// Part 121 cp7 — language switch is now a navigation, not
 		// a runtime locale swap.  Each locale has its own
@@ -79,28 +87,10 @@
 			open = !open;
 		}}
 	>
-		<!-- Minimalist globe glyph; no language name or code shown.
-		     The current language is conveyed via aria-label (for
-		     screen readers) and title (for sighted hover users).
-		     The dropdown chevron is the only secondary affordance. -->
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			width="18"
-			height="18"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<circle cx="12" cy="12" r="10" />
-			<path d="M2 12h20" />
-			<path
-				d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-			/>
-		</svg>
+		<!-- Current language shown as its 2-letter code (replaces the old
+		     globe glyph). The full language name is still conveyed via the
+		     aria-label and title for screen readers + hover. -->
+		<span class="font-semibold tabular-nums">{displayCode(currentMeta?.code ?? 'en')}</span>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			width="10"
@@ -135,6 +125,9 @@
 						: ''}"
 					onclick={() => choose(loc.code)}
 				>
+					<span
+						class="flex-none rounded-md bg-ink-100 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+						aria-hidden="true">{displayCode(loc.code)}</span>
 					<span class="flex min-w-0 flex-1 flex-col">
 						<span class="truncate">{loc.nativeName}</span>
 						<span class="truncate text-xs text-ink-500 dark:text-ink-400">{loc.englishName}</span>

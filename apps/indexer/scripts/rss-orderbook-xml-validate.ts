@@ -245,6 +245,55 @@ await scenario('atom:link href is a self-closing element with proper attrs', asy
 	if (!attrs.includes('type="application/rss+xml"')) throw new Error('atom:link missing type attr');
 });
 
+// ─── Atom 1.0 well-formedness (same validator — Atom is XML) ─
+
+await scenario('global Atom feed (normal) is well-formed XML', async () => {
+	const r = await globalFeedHandler(makeMockDb(NORMAL_ROWS), FAKE_CONFIG, 'atom');
+	assertValidXml(r.body, 'global atom normal');
+});
+
+await scenario('global Atom feed (hostile chars in all fields) is well-formed XML', async () => {
+	const r = await globalFeedHandler(makeMockDb(HOSTILE_ROWS), FAKE_CONFIG, 'atom');
+	assertValidXml(r.body, 'global atom hostile');
+});
+
+await scenario('global Atom feed (empty) is well-formed XML', async () => {
+	const r = await globalFeedHandler(makeMockDb([]), FAKE_CONFIG, 'atom');
+	assertValidXml(r.body, 'global atom empty');
+});
+
+await scenario('per-asset Atom feed (btc, hostile) is well-formed XML', async () => {
+	const r = await perAssetFeedHandler('btc.atom', makeMockDb(HOSTILE_ROWS), FAKE_CONFIG);
+	assertValidXml(r.body, 'per-asset atom hostile');
+});
+
+await scenario('per-account Atom feed (@alice, hostile) is well-formed XML', async () => {
+	const r = await perAccountFeedHandler('@alice.atom', makeMockDb(HOSTILE_ROWS), FAKE_CONFIG);
+	assertValidXml(r.body, 'per-account atom hostile');
+});
+
+await scenario('Atom self link is a self-closing <link rel="self"> with href', async () => {
+	const r = await globalFeedHandler(makeMockDb(NORMAL_ROWS), FAKE_CONFIG, 'atom');
+	const m = r.body.match(/<link\s+rel="self"\s+href="[^"]*"\s*\/>/);
+	if (!m) throw new Error(`atom self link missing/not self-closing:\n${r.body.slice(0, 500)}`);
+});
+
+// ─── JSON Feed parseability (hostile data must stay valid JSON) ─
+
+await scenario('global JSON feed (hostile chars) parses as valid JSON', async () => {
+	const r = await globalFeedHandler(makeMockDb(HOSTILE_ROWS), FAKE_CONFIG, 'json');
+	const parsed = JSON.parse(r.body) as { items: unknown[] };
+	if (!Array.isArray(parsed.items) || parsed.items.length !== 1) {
+		throw new Error('JSON feed items malformed for hostile row');
+	}
+});
+
+await scenario('per-account JSON feed (empty) parses with zero items', async () => {
+	const r = await perAccountFeedHandler('@alice.json', makeMockDb([]), FAKE_CONFIG);
+	const parsed = JSON.parse(r.body) as { items: unknown[] };
+	if (parsed.items.length !== 0) throw new Error('expected zero items');
+});
+
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

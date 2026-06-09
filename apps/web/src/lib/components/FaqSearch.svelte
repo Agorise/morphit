@@ -13,6 +13,8 @@
 		type FaqKey
 	} from '$utils/faqIndex';
 	import { SUPPORTED_LOCALES, setLocale, currentLocale, type LocaleCode } from '$i18n';
+	import { renderFaqInline } from '$lib/faq/renderInline';
+	import { stripMarkdown } from '$lib/seo/stripMarkdown';
 
 	let query = $state('');
 	let activeIndex = $state(0);
@@ -287,7 +289,7 @@
 					>
 						<span class="font-semibold">{hit.entry.question}</span>
 						<span class="line-clamp-2 text-sm text-ink-500 dark:text-ink-400"
-							>{hit.entry.answer}</span
+							>{stripMarkdown(hit.entry.answer)}</span
 						>
 					</button>
 				{/each}
@@ -405,7 +407,7 @@
 						id="faq-body-{entry.key}"
 						class="animate-fade-up px-5 pb-5 text-ink-700 dark:text-ink-200"
 					>
-						<p class="whitespace-pre-line leading-relaxed">{entry.answer}</p>
+						<p class="whitespace-pre-line leading-relaxed">{@html renderFaqInline(entry.answer)}</p>
 
 						{#if entry.related.length > 0}
 							<!-- ─── Related row ───
@@ -455,7 +457,7 @@
 						>
 							<button
 								type="button"
-								class="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200"
+								class="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition hover:border-morphit-emerald hover:bg-emerald-50 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
 								aria-label={$_('faq.share_aria', { values: { question: entry.question } })}
 								onclick={(e) => copyShareLink(entry, e)}
 							>

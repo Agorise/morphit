@@ -394,7 +394,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 11. Internationalization done right
 
-172. **10 locales shipped at v0.** English, Spanish, French, German, Italian, Polish, Russian, Persian/Farsi, Mandarin (Simplified), Cantonese (Traditional). Many platforms ship English-only and consider it "global."
+172. **10 locales shipped at v0.** English, Spanish, French, German, Italian, Polish, Russian, Persian/Farsi, Mandarin (Simplified), Cantonese (Traditional). Many platforms ship English-only and consider it "worldwide."
 
 173. **Right-to-left support for Persian.** Layout flips, numerals localize (Persian uses ۱۰ not 10), text flow respects RTL conventions.
 
@@ -568,7 +568,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 249. **One-command deployment.** Once the config is written, a single command brings up the indexer, relay, and database in one shot.
 
-250. **Federation registration is one CLI broadcast.** After setup, a single chain op puts you in the federation directory globally — you show up on every other Morphit instance's `/instances` page within seconds.
+250. **Federation registration is one CLI broadcast.** After setup, a single chain op puts you in the federation directory worldwide — you show up on every other Morphit instance's `/instances` page within seconds.
 
 251. **Operational runbook with concrete cron snippets.** `OPERATIONS.md` ships copy-pasteable cron snippets for the operational tasks that should be automated (weekly ACT minting, TLS certificate renewal monitoring). Set up once, the runbook walks you through verifying each.
 
@@ -586,7 +586,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 258. **Discretionary bug bounty program.** Find a real security bug — privacy leak, signup-drain vulnerability, cryptographic flaw — disclose responsibly via `@agorise:matrix.org`, and the operator may compensate you in BTC, XMR, or Blurt at their discretion. No formal program scope, no rigid payout grid — the operator decides based on severity, novelty, and demonstrability. Honest framing: this isn't HackerOne, it's a thanks-with-money for genuinely good security research.
 
-259. **Weekly automated warrant canary.** Every Monday at 00:00 UTC the canonical operator signs a short statement ("no warrants received this week") and broadcasts it as a chain op. If the signature stops appearing for two consecutive weeks, the chain itself surfaces the missing signal — no operator can be compelled to lie because the silence is the message. Federated instances run their own canaries on their own schedules.
+259. **Weekly automated warrant canary.** Every week the operator regenerates a PGP-signed statement at `/canary.txt` ("no NSL, FISA order, gag order, or backdoor demand") carrying live freshness proofs — the current Blurt and Bitcoin chain heads and a fresh news headline — so it can't be replayed from an old copy. If it stops updating for two weeks, the frontend flags the silence to users: an operator under a gag order can stop publishing instead of being forced to lie. Federated instances run their own, so coordinated suppression shows up as simultaneous silence.
 
 260. **PGP keys link in the footer for canary verification.** Operators publish their release-signing keys as a downloadable `.asc` file. Anyone can import and verify operator-signed canaries and releases. Footer link translated to all 10 locales.
 
@@ -696,7 +696,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 313. **No default USDT network — every USDT trade is an explicit network commit.** Cross-network sends are unrecoverable (USDT-ERC20 to a TRC-20 address loses the funds, period). Morphit's UI refuses to let the user default into that mistake: every USDT trade picks the network deliberately, every USDT address shared in chat carries a bold per-network header and a permanent per-message reminder of which chain it's for, and the post-order form won't submit until the network is chosen. Friction by design — the right kind of friction.
 
-314. **Arbitrage between Morphit and exchanges is built for, not built against.** Morphit's listing fee is a fraction of a dollar; no taker fee, no withdrawal fee, no withdrawal limit. The price-model picker lets a trader run a thin-spread arbitrage strategy on their own listings (set `spread: 0.5%` and let the orderbook fill at-or-above CoinGecko mid). As liquidity grows, arbitrageurs pull the P2P prices into line with global market — good for everyone.
+314. **Arbitrage between Morphit and exchanges is built for, not built against.** Morphit's listing fee is a fraction of a dollar; no taker fee, no withdrawal fee, no withdrawal limit. The price-model picker lets a trader run a thin-spread arbitrage strategy on their own listings (set `spread: 0.5%` and let the orderbook fill at-or-above CoinGecko mid). As liquidity grows, arbitrageurs pull the P2P prices into line with the worldwide market — good for everyone.
 
 315. **Each instance's asset policy is visible up front.** Open `/about-this-instance` on any Morphit and you see which assets that operator accepts at a glance — green for "accepts everything," amber for "accepts most," red for "tight policy." No surprises after you've already posted an order.
 
@@ -750,4 +750,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 4 June, 2026.*
+*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 9 June, 2026.*

@@ -2,48 +2,37 @@
 /**
  * scripts/canary/verify.ts
  *
- * Verify a Morphit canary file for freshness, structural sanity,
- * and (Part 89) posting-key signature integrity.  Used by:
+ * Verify a Morphit canary file for freshness and structural
+ * sanity.  Used by:
  *
  *   1. CI on every PR that modifies the canary template — fails
  *      the build if the template is missing required placeholders.
  *
  *   2. Operators running `npx tsx scripts/canary/verify.ts <url>`
- *      against another operator's canary as a quick "are they
- *      still publishing AND is the on-chain attestation valid?"
- *      check.  This script verifies the BLURT posting-key
- *      attestation locally (no network beyond the optional
- *      fetch) by parsing the embedded `public_key:` line and
- *      recovering the same key from the signature; matching
- *      that public key against the operator's
- *      `morphit_operator_register_v1` chain record is the
- *      operator's responsibility.
+ *      against their own (or another operator's) canary as a quick
+ *      "is it still being published, and is it fresh?" check.
  *
- *      PGP signature verification still requires the operator's
- *      release pubkey in the local keyring; this script reports
- *      the signature presence/absence but doesn't itself run
- *      gpg --verify.
+ *      The cryptographic check is the PGP signature: verify it
+ *      out-of-band with `gpg --verify` against the operator's
+ *      release public key (published at /pgp_keys.asc on the same
+ *      instance).  This script confirms the PGP signature block is
+ *      PRESENT and the freshness window is intact; it does not
+ *      itself run gpg.
  *
- *   3. The frontend's degraded-canary banner pulls /canary.txt
- *      and applies similar logic in JS.  This script is the
+ *   3. The frontend's degraded-canary banner pulls /canary.txt and
+ *      applies similar freshness logic in JS.  This script is the
  *      authoritative reference for what "fresh" means.
  *
  * Exit codes:
- *   0  — canary is structurally valid, posting-key attestation
- *        verifies, and the freshness window is intact.
- *   1  — canary is missing, malformed, the posting-key
- *        attestation fails to verify, or the freshness window
- *        has expired.
- *   2  — canary is structurally valid AND the posting-key
- *        attestation verifies, but the PGP signature block is
- *        missing.  Treated as a warning, not a hard fail,
- *        because the posting-key attestation is the stronger
- *        check (it's tied to on-chain identity).
+ *   0  — structurally valid, PGP signature block present, and the
+ *        freshness window is intact.
+ *   1  — missing, malformed, no PGP signature block, or the
+ *        freshness window has expired (treat as silent).
+ *   2  — valid but with non-fatal warnings (e.g. a future-dated
+ *        Generated: timestamp).
  */
 
 import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-import { Signature } from '@beblurt/dblurt';
 
 const REQUIRED_PLACEHOLDERS_OR_FILLED = [
 	'OPERATOR_NAME',
@@ -55,12 +44,7 @@ const REQUIRED_PLACEHOLDERS_OR_FILLED = [
 	'BLURT_HEAD_HASH',
 	'BTC_HEAD_HEIGHT',
 	'BTC_HEAD_HASH',
-	'NEWS_HEADLINE',
-	// Part 89 — posting-key attestation block.
-	'OPERATOR_POSTING_ACCOUNT',
-	'OPERATOR_POSTING_PUBKEY',
-	'POSTING_SIG_SHA256',
-	'POSTING_SIG_BASE64'
+	'NEWS_HEADLINE'
 ];
 
 const STALE_DAYS = 14;
@@ -71,119 +55,6 @@ interface Verification {
 	readonly errors: readonly string[];
 	readonly generatedAt: string | null;
 	readonly ageDays: number | null;
-	/** Posting-key attestation result, when one was present. */
-	readonly postingKey: PostingKeyResult | null;
-}
-
-interface PostingKeyResult {
-	/** The `account:` line value from inside the attestation block. */
-	readonly account: string;
-	/** The `public_key:` line value (BLT5...). */
-	readonly declaredPublicKey: string;
-	/** The public key recovered from the signature.  Must match
-	 *  `declaredPublicKey` for the attestation to verify. */
-	readonly recoveredPublicKey: string;
-	/** Did the recovered key match the declared key? */
-	readonly verified: boolean;
-}
-
-/**
- * Slice the canary into the bytes that the posting-key signer
- * actually signed.  Mirrors the slice in `scripts/canary/generate.sh`:
- *
- *   `sed -n '1,/-----BEGIN MORPHIT POSTING-KEY ATTESTATION-----/p'`
- *   followed by `sed '$d'`
- *
- * which is "everything from line 1 up to and INCLUDING the line
- * matching the BEGIN marker, then drop the last line (the BEGIN
- * marker itself)."  Returns the bytes the signer hashed; the
- * verifier hashes the same bytes and recovers the public key.
- */
-function extractSignedPayload(text: string): Buffer | null {
-	const marker = '-----BEGIN MORPHIT POSTING-KEY ATTESTATION-----';
-	const idx = text.indexOf(marker);
-	if (idx === -1) return null;
-	// Everything BEFORE the marker line.  generate.sh's
-	// sed-then-`$d` keeps the trailing newline before the marker
-	// (since sed lines are newline-terminated and the `$d` drops
-	// the marker line itself, the previous newline survives).
-	const before = text.slice(0, idx);
-	return Buffer.from(before, 'utf8');
-}
-
-function verifyPostingKey(text: string, errors: string[]): PostingKeyResult | null {
-	const blockMatch = text.match(
-		/-----BEGIN MORPHIT POSTING-KEY ATTESTATION-----\s*([\s\S]*?)\s*-----END MORPHIT POSTING-KEY ATTESTATION-----/
-	);
-	if (blockMatch === null) {
-		errors.push('posting-key attestation block is missing');
-		return null;
-	}
-	const body = blockMatch[1]!;
-
-	const accountMatch = body.match(/^account:\s*(\S+)/m);
-	const pubMatch = body.match(/^public_key:\s*(\S+)/m);
-	const sigMatch = body.match(/^signature:\s*(\S+)/m);
-
-	if (accountMatch === null || pubMatch === null || sigMatch === null) {
-		errors.push(
-			'posting-key attestation block is malformed — must contain ' +
-				'`account:`, `public_key:`, and `signature:` lines'
-		);
-		return null;
-	}
-
-	const account = accountMatch[1]!;
-	const declaredPublicKey = pubMatch[1]!;
-	const sigB64 = sigMatch[1]!;
-
-	const sigBuf = Buffer.from(sigB64, 'base64');
-	if (sigBuf.length !== 65) {
-		errors.push(
-			`posting-key signature has wrong wire length: ${sigBuf.length} bytes ` +
-				'(expected 65 = recovery byte || 64-byte ECDSA data)'
-		);
-		return null;
-	}
-
-	let sig: Signature;
-	try {
-		sig = Signature.fromBuffer(sigBuf);
-	} catch (e) {
-		errors.push(
-			`posting-key signature failed to parse: ${e instanceof Error ? e.message : String(e)}`
-		);
-		return null;
-	}
-
-	const payload = extractSignedPayload(text);
-	if (payload === null) {
-		errors.push('could not extract signed payload (BEGIN marker not found)');
-		return null;
-	}
-
-	const digest = createHash('sha256').update(payload).digest();
-	let recoveredPublicKey: string;
-	try {
-		recoveredPublicKey = sig.recover(digest, 'BLT').toString();
-	} catch (e) {
-		errors.push(
-			`posting-key signature recover() failed: ${e instanceof Error ? e.message : String(e)}`
-		);
-		return null;
-	}
-
-	const verified = recoveredPublicKey === declaredPublicKey;
-	if (!verified) {
-		errors.push(
-			`posting-key attestation does NOT verify — recovered ${recoveredPublicKey} ` +
-				`but declared ${declaredPublicKey}.  Either the canary content was ` +
-				`tampered with after signing, or the signature was forged with a ` +
-				`different key than declared.`
-		);
-	}
-
-	return { account, declaredPublicKey, recoveredPublicKey, verified };
 }
 
 function verify(text: string): Verification {
@@ -204,7 +75,7 @@ function verify(text: string): Verification {
 		}
 	}
 
-	// ── Extract Generated date.
+	// ── Extract Generated date and check the freshness window.
 	let generatedAt: string | null = null;
 	let ageDays: number | null = null;
 	const m = text.match(/^Generated:\s*(\S+)/m);
@@ -229,20 +100,15 @@ function verify(text: string): Verification {
 		errors.push('no Generated: line found');
 	}
 
-	// ── Posting-key attestation (Part 89).  Stronger than PGP
-	// because it's tied to on-chain identity.  An adversary who
-	// has compromised the operator's web server but NOT their
-	// Blurt posting key cannot forge this.
-	const postingKey = verifyPostingKey(text, errors);
-
-	// ── PGP signature presence (warning, not error — the
-	// posting-key attestation is the load-bearing signature now,
-	// PGP is the convenience-grade familiar verification path).
+	// ── PGP signature is the canary's cryptographic anchor, so its
+	// ABSENCE is a hard error (an unsigned canary proves nothing).
+	// Signature VALIDITY is checked out-of-band with `gpg --verify`;
+	// here we only confirm the block is present and closed.
 	if (!text.includes('-----BEGIN PGP SIGNATURE-----')) {
-		warnings.push('no PGP signature block — canary is unsigned with PGP');
+		errors.push('no PGP signature block — canary is unsigned');
 	}
 	if (!text.includes('-----END PGP SIGNATURE-----')) {
-		warnings.push('PGP signature block is not closed');
+		errors.push('PGP signature block is not closed');
 	}
 
 	return {
@@ -250,8 +116,7 @@ function verify(text: string): Verification {
 		warnings,
 		errors,
 		generatedAt,
-		ageDays,
-		postingKey
+		ageDays
 	};
 }
 
@@ -290,12 +155,6 @@ async function main(): Promise<void> {
 	}
 	if (v.ageDays !== null) {
 		console.log(`age: ${v.ageDays.toFixed(1)} days`);
-	}
-	if (v.postingKey !== null) {
-		console.log(`posting-key account: ${v.postingKey.account}`);
-		console.log(`posting-key declared: ${v.postingKey.declaredPublicKey}`);
-		console.log(`posting-key recovered: ${v.postingKey.recoveredPublicKey}`);
-		console.log(`posting-key verified: ${v.postingKey.verified ? 'YES' : 'NO'}`);
 	}
 	for (const w of v.warnings) console.log(`  warn: ${w}`);
 	for (const e of v.errors) console.log(`  error: ${e}`);

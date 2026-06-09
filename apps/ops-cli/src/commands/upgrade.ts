@@ -18,8 +18,9 @@
  *   morphit-ops upgrade
  *     Full flow: check → download → SHA-256 verify → show
  *     release notes → prompt for confirmation → backup current
- *     install → extract new tarball → `npm ci` → restart
- *     services → roll back on any error.
+ *     install → extract new tarball → `npm ci` → rebuild +
+ *     redeploy the static web frontend → restart services →
+ *     roll back on any error.
  *
  * Environment:
  *
@@ -33,6 +34,13 @@
  *                                  the primary repo) or `host/owner/repo`.
  *                                  Tried in order after the primary.
  *   MORPHIT_INSTALL_DIR           (default: /opt/morphit)
+ *   MORPHIT_WEB_ROOT              (default: /var/www/morphit-frontend)
+ *                                  — where nginx serves the static
+ *                                  frontend from; the upgrade rebuilds
+ *                                  apps/web and redeploys here. Set this
+ *                                  if your site is served from a custom
+ *                                  path. If the dir doesn't exist, the
+ *                                  frontend redeploy is skipped (warned).
  *   MORPHIT_BACKUP_KEEP           (default: 3) — backups to retain
  *
  * Mirror + integrity model (beta5):
@@ -121,6 +129,7 @@ interface ForgejoReleaseAsset {
 const DEFAULT_HOST = 'git.agorise.net';
 const DEFAULT_REPO = 'agorise/morphit';
 const DEFAULT_INSTALL_DIR = '/opt/morphit';
+const DEFAULT_WEB_ROOT = '/var/www/morphit-frontend';
 const DEFAULT_BACKUP_KEEP = 3;
 
 // Services to restart on upgrade.  Listed in dependency order
@@ -296,6 +305,56 @@ export function verifyDetachedSignature(
 }
 
 
+/** Resolve the directory nginx serves the static frontend from.
+ *  `MORPHIT_WEB_ROOT` overrides; default matches docs/RUN-A-MORPHIT-NODE.md
+ *  §8 (`/var/www/morphit-frontend`). PURE. */
+export function resolveWebRoot(env: { MORPHIT_WEB_ROOT?: string }): string {
+	const v = (env.MORPHIT_WEB_ROOT ?? '').trim();
+	return v === '' ? DEFAULT_WEB_ROOT : v;
+}
+
+/** True if this version's indexer `schema.sql` differs from the one in the
+ *  previous install (now the backup) — i.e. the upgrade crossed a schema
+ *  change. Reads two files; returns false if either is missing/unreadable
+ *  (can't tell → don't nag the operator). cp217. */
+export function schemaBaselineChanged(oldInstallDir: string, newInstallDir: string): boolean {
+	const rel = join('apps', 'indexer', 'src', 'db', 'schema.sql');
+	const oldP = join(oldInstallDir, rel);
+	const newP = join(newInstallDir, rel);
+	if (!existsSync(oldP) || !existsSync(newP)) return false;
+	try {
+		return readFileSync(oldP, 'utf8') !== readFileSync(newP, 'utf8');
+	} catch {
+		return false;
+	}
+}
+
+/** Copy a freshly-built SvelteKit static site (`buildDir`, e.g.
+ *  <install>/apps/web/build) into the web root nginx serves. Overwrites
+ *  same-named files and leaves any other existing files in place — the
+ *  same end-state as the documented `cp -r apps/web/build/* <webRoot>/`.
+ *  Throws if the build is missing/empty or if `index.html` didn't land
+ *  (a wrecked deploy we must NOT leave live — the caller rolls back).
+ *  Side-effectful but self-contained, so it's unit-tested directly. */
+export function deployFrontendBuild(buildDir: string, webRoot: string): void {
+	if (!existsSync(buildDir) || !existsSync(join(buildDir, 'index.html'))) {
+		throw new Error(
+			`Web build not found at ${buildDir} (expected an index.html). ` +
+				`Did 'npm run build' in apps/web succeed?`
+		);
+	}
+	mkdirSync(webRoot, { recursive: true });
+	// cpSync mirrors buildDir's CONTENTS into webRoot (webRoot/index.html,
+	// not webRoot/build/index.html); force:true overwrites existing files.
+	cpSync(buildDir, webRoot, { recursive: true, force: true });
+	if (!existsSync(join(webRoot, 'index.html'))) {
+		throw new Error(
+			`Frontend deploy did not produce ${join(webRoot, 'index.html')}.`
+		);
+	}
+}
+
+
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const checkOnly = opts.flags['check-only'] === 'true';
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
@@ -304,6 +363,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const host = process.env.MORPHIT_RELEASE_HOST ?? DEFAULT_HOST;
 	const repo = process.env.MORPHIT_RELEASE_REPO ?? DEFAULT_REPO;
 	const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
+	const webRoot = resolveWebRoot(process.env);
 	const sources = parseReleaseSources(host, repo, process.env.MORPHIT_RELEASE_MIRRORS);
 
 	// ─── 1. Read locally-installed version ──────────────────────
@@ -406,7 +466,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (!forceYes) {
 		const ok = await promptYes(
 			`Apply upgrade from ${currentTag} to ${latestTag}?\n` +
-				`This will: backup ${installDir}, extract new tarball, run npm ci, restart services.\n` +
+				`This will: backup ${installDir}, extract new tarball, run npm ci, rebuild + redeploy the web frontend, restart services.\n` +
 				`Set MORPHIT_AUTO_UPGRADE=1 to skip this prompt in future runs.`
 		);
 		if (!ok) {
@@ -631,6 +691,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
+	// cp217 — detect whether this upgrade crossed an indexer schema.sql
+	// change. Both the old tree (now backupDir) and the new tree are on disk
+	// at this point. If the baseline changed, an existing DB won't pick up
+	// the in-place schema edits on its own, so we remind the operator at the
+	// end to reset + re-sync the (chain-derived) indexer DB.
+	const schemaChanged = schemaBaselineChanged(backupDir, installDir);
+
 	// ─── 9. Install workspace dependencies ─────────────────────
 	try {
 		info('Running npm ci in installed dir (this can take a minute)...');
@@ -638,6 +705,62 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	} catch (err) {
 		warn('npm ci failed; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);
+	}
+
+	// ─── 9b. Rebuild + redeploy the static web frontend ────────
+	//
+	// The Node services (indexer/relay/matrix-bot) run from TS source via
+	// tsx — no build step — so `npm ci` above is all they need. The WEB app
+	// is different: it's a static SvelteKit build (`vite build` → apps/web/
+	// build) that nginx serves from <webRoot>. `npm ci` doesn't rebuild it
+	// and the release tarball doesn't ship a prebuilt build, so without this
+	// step the site visitors load would stay on the OLD version after an
+	// upgrade. Build it and copy it into the web root so `upgrade` is truly
+	// one-and-done.
+	//
+	// Skipped (with a clear warning, not a failure) only if <webRoot> doesn't
+	// exist — that means a non-standard serving setup (e.g. a different path,
+	// or a build pipeline the operator runs elsewhere); they should set
+	// MORPHIT_WEB_ROOT or redeploy manually. Backend services still upgrade.
+	let webRootBackup: string | null = null;
+	if (!existsSync(webRoot)) {
+		warn(
+			`Web root ${webRoot} does not exist — skipping the frontend redeploy. ` +
+				`If your site is served from a different path, set MORPHIT_WEB_ROOT; ` +
+				`otherwise rebuild apps/web and copy its build/ to your web root by hand. ` +
+				`The backend services are still being upgraded.`
+		);
+	} else {
+		try {
+			info('Building the web frontend (apps/web)...');
+			runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') });
+		} catch (err) {
+			// The web root hasn't been touched yet (build writes to apps/web/
+			// build inside the install), so a build failure rolls back cleanly.
+			warn('Frontend build failed; rolling back.');
+			return rollback(installDir, backupDir, tmpDir, err);
+		}
+		try {
+			// Snapshot the current web root so a deploy failure (or a later
+			// step's rollback) can restore the previous site.
+			webRootBackup = join(tmpDir, 'web-root-backup');
+			cpSync(webRoot, webRootBackup, { recursive: true });
+			info(`Redeploying ${join(installDir, 'apps', 'web', 'build')} → ${webRoot}...`);
+			deployFrontendBuild(join(installDir, 'apps', 'web', 'build'), webRoot);
+			// Preserve the operator's web-root ownership (www-data, or whatever
+			// the web server runs as) so the freshly-copied files stay readable.
+			// Best-effort: vite output is world-readable anyway.
+			try {
+				const st = statSync(webRoot);
+				spawnSync('chown', ['-R', `${st.uid}:${st.gid}`, webRoot], { stdio: 'ignore' });
+			} catch {
+				// non-fatal
+			}
+		} catch (err) {
+			warn('Frontend redeploy failed; rolling back.');
+			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup });
+		}
+		info('\u2713 Web frontend rebuilt and redeployed.');
 	}
 
 	// ─── 10. Restart services ──────────────────────────────────
@@ -652,7 +775,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			runOrThrow('systemctl', ['restart', svc]);
 		} catch (err) {
 			warn(`Service restart failed for ${svc}; rolling back.`);
-			return rollback(installDir, backupDir, tmpDir, err);
+			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup });
 		}
 	}
 
@@ -663,6 +786,15 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	info('');
 	info(`✓ Upgrade complete: ${currentTag} → ${latestTag}`);
 	info(`Previous install kept at: ${backupDir}`);
+
+	if (schemaChanged) {
+		info('');
+		info('⚠ The database schema changed in this version.');
+		info('  Existing indexer data is rebuilt from the chain, so this is safe to');
+		info('  fix. Run `morphit-ops doctor` — it now checks whether your DB needs');
+		info('  a reset, and OPERATIONS.md §46 has the reset + re-sync steps.');
+	}
+
 	return 0;
 }
 
@@ -838,7 +970,13 @@ function runOrThrow(cmd: string, args: readonly string[], opts: { cwd?: string }
 	}
 }
 
-function rollback(installDir: string, backupDir: string, tmpDir: string, err: unknown): number {
+function rollback(
+	installDir: string,
+	backupDir: string,
+	tmpDir: string,
+	err: unknown,
+	web?: { webRoot: string; webRootBackup: string | null }
+): number {
 	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
 	info(`Rolling back: removing partial extract at ${installDir}`);
 	try {
@@ -860,6 +998,21 @@ function rollback(installDir: string, backupDir: string, tmpDir: string, err: un
 		printError(`Manual intervention needed: ${backupDir} contains the prior install; manually move it back to ${installDir}.`);
 		cleanupTmp(tmpDir);
 		return 4;
+	}
+	// Restore the previous web frontend if we'd already redeployed a new one,
+	// so the served site matches the rolled-back backend (best-effort).
+	if (web && web.webRootBackup !== null && existsSync(web.webRootBackup)) {
+		try {
+			cpSync(web.webRootBackup, web.webRoot, { recursive: true, force: true });
+			info(`Restored the previous web frontend at ${web.webRoot}.`);
+		} catch (webErr) {
+			warn(
+				`Could not restore the previous web frontend at ${web.webRoot}: ` +
+					`${webErr instanceof Error ? webErr.message : String(webErr)}. ` +
+					`Your site may be on the new build while services rolled back; ` +
+					`rebuild apps/web and copy build/ to ${web.webRoot} to realign.`
+			);
+		}
 	}
 	// Best-effort: restart services after rollback so the old version is running.
 	for (const svc of SERVICES_TO_RESTART) {

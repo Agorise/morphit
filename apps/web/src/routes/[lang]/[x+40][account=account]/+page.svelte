@@ -30,6 +30,7 @@
 	import { page } from '$app/stores';
 
 	import Head from '$components/Head.svelte';
+	import RssFeedPicker from '$components/RssFeedPicker.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
@@ -687,38 +688,14 @@
 			rss_feeds FAQ entry; tooltip surfaces the hint inline. -->
 		{#if ordersState !== 'loading' && ordersState !== 'error'}
 			<div class="mt-4 flex justify-end">
-				<a
-					href={`/rss/orderbook/by-account/@${account}.xml`}
-					title={$_('profile.rss_subscribe_title') as string}
-					class="chip text-xs"
-					rel="alternate"
-					type="application/rss+xml"
-				>
-					<svg
-						class="h-3.5 w-3.5"
-						viewBox="0 0 24 24"
-						xmlns="http://www.w3.org/2000/svg"
-						aria-hidden="true"
-					>
-						<rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#F26522" />
-						<circle cx="6.5" cy="17.5" r="2" fill="#fff" />
-						<path
-							d="M5 8.5 A 10.5 10.5 0 0 1 15.5 19"
-							stroke="#fff"
-							stroke-width="2.4"
-							fill="none"
-							stroke-linecap="round"
-						/>
-						<path
-							d="M5 4.5 A 14.5 14.5 0 0 1 19.5 19"
-							stroke="#fff"
-							stroke-width="2.4"
-							fill="none"
-							stroke-linecap="round"
-						/>
-					</svg>
-					{$_('profile.rss_subscribe_label')}
-				</a>
+				<RssFeedPicker
+					base={`/rss/orderbook/by-account/@${account}`}
+					label={$_('profile.rss_subscribe_title') as string}
+					text={$_('profile.rss_subscribe_label') as string}
+					triggerClass="chip text-xs"
+					iconClass="h-3.5 w-3.5"
+					align="right"
+				/>
 			</div>
 		{/if}
 	</section>

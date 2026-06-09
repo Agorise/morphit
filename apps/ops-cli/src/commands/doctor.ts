@@ -12,13 +12,19 @@
  * single self-service check.
  *
  * SAFETY (this is the whole point of the command):
- *   - It MUTATES NOTHING. No files written, no services started, no
- *     database touched. The ONLY network calls are READ-ONLY,
+ *   - It MUTATES NOTHING. No files written, no services started, and the
+ *     database is only ever READ. The ONLY network calls are READ-ONLY,
  *     side-effect-free RPC probes (condenser_api.get_dynamic_global_properties)
  *     to check whether the configured Blurt endpoints are reachable —
  *     each with a hard timeout. Worst case for a probe is that it times
  *     out and doctor reports the endpoint as unreachable. Pass
  *     `--no-rpc` to skip the probes for a purely-local check.
+ *   - It also runs the indexer's `--check-schema` (a single READ-ONLY
+ *     SELECT against information_schema) to flag a database whose schema
+ *     predates an in-place schema.sql change shipped in this version —
+ *     the pre-launch upgrade hazard. This reads the DB but never writes
+ *     it, and is advisory (it does not change the exit code). Pass
+ *     `--no-db` to skip it.
  *   - It validates by running each service's REAL config loader via
  *     `--check-config`, which loads config and exits. That means the
  *     checks can never drift from what the services actually require
@@ -63,7 +69,8 @@ async function checkService(
 	name: 'indexer' | 'relay',
 	installDir: string,
 	envPath: string,
-	configEnvPath: string | null
+	configEnvPath: string | null,
+	checkFlag: '--check-config' | '--check-schema' = '--check-config'
 ): Promise<ServiceResult> {
 	const { spawnSync } = await import('node:child_process');
 	const appDir = join(installDir, 'apps', name);
@@ -81,7 +88,7 @@ async function checkService(
 	const childEnv: NodeJS.ProcessEnv = { ...process.env };
 	if (configEnvPath) childEnv.MORPHIT_OPERATOR_CONFIG_FILE = configEnvPath;
 	const sourcePart = existsSync(envPath) ? `set -a; . ${shq(envPath)}; set +a; ` : '';
-	const script = `${sourcePart}cd ${shq(appDir)} && npm start -- --check-config`;
+	const script = `${sourcePart}cd ${shq(appDir)} && npm start -- ${checkFlag}`;
 	const r = spawnSync('bash', ['-c', script], {
 		env: childEnv,
 		encoding: 'utf8',
@@ -207,6 +214,23 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	const skipRpc = ctx.flags['no-rpc'] === 'true';
 	const rpc = skipRpc ? null : await probeConfiguredEndpoints(envPath, cfgPath);
 
+	// Database schema drift (read-only, advisory). Skipped with --no-db.
+	// Delegates to the indexer's own `--check-schema` (so the expectation
+	// can't drift from the code) — catches the pre-launch case where an
+	// existing DB didn't pick up an in-place schema.sql change shipped in a
+	// newer version. Advisory: never changes the boot-readiness exit code.
+	const skipDb = ctx.flags['no-db'] === 'true';
+	const schema = skipDb
+		? null
+		: await checkService('indexer', installDir, envPath, cfgPath, '--check-schema');
+	const schemaLines = (detail: string): string =>
+		detail
+			.split('\n')
+			.map((l) => l.trim())
+			.filter((l) => l.includes('[check-schema]'))
+			.map((l) => l.replace('[check-schema]', '').trim())
+			.join(' ');
+
 	if (json) {
 		console.log(
 			JSON.stringify(
@@ -230,7 +254,11 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 										head_block: r.headBlock,
 										error: r.error
 									}))
-								}
+								},
+					schema:
+						schema === null
+							? { checked: false }
+							: { checked: true, drift: !schema.ok, detail: schemaLines(schema.detail) }
 				},
 				null,
 				2
@@ -307,6 +335,29 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 		console.log('━'.repeat(60));
 		console.log('');
 	}
+
+	// ─── Database schema (advisory) ─────────────────────────────
+	if (skipDb) {
+		console.log(`  Database schema ${c.dim('(skipped — --no-db)')}`);
+	} else if (schema !== null && schema.ok) {
+		const detail = schemaLines(schema.detail);
+		if (detail.toLowerCase().includes('could not reach')) {
+			console.log(`  Database schema ${c.yellow('(could not check — database not reachable)')}`);
+		} else {
+			console.log(`  Database schema ${c.green('(matches this version)')}`);
+		}
+	} else if (schema !== null) {
+		console.log(`  Database schema ${c.yellow('(drift detected)')}`);
+		for (const l of schema.detail
+			.split('\n')
+			.map((x) => x.trim())
+			.filter((x) => x.includes('[check-schema]'))) {
+			console.log(`    ${c.yellow('\u26a0')} ${l.replace('[check-schema]', '').trim()}`);
+		}
+	}
+	console.log('');
+	console.log('━'.repeat(60));
+	console.log('');
 
 	if (allOk) {
 		console.log(`  ${c.green('Looks good.')} Both services validate. To start them:`);

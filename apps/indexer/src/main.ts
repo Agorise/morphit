@@ -22,6 +22,7 @@ import { serve, type ServerType } from '@hono/node-server';
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { loadConfig } from '$config';
 import { createDatabase } from '$db/pool';
+import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
@@ -107,6 +108,42 @@ async function main(): Promise<void> {
 		// eslint-disable-next-line no-console
 		console.log('[check-config] indexer config OK');
 		process.exit(0);
+	}
+
+	// cp217 — `--check-schema`: connect READ-ONLY, compare the live DB's
+	// structure against what this version's schema.sql expects, and report
+	// anything missing. Catches the pre-launch hazard where an existing DB
+	// (v1 already applied) doesn't pick up in-place schema.sql edits shipped
+	// in a later version. Used by `morphit-ops doctor`. Only a SELECT against
+	// information_schema — changes nothing.
+	if (process.argv.includes('--check-schema')) {
+		const db = createDatabase(config);
+		let code = 0;
+		try {
+			const res = await checkSchemaDrift(db);
+			if (!res.dbReachable) {
+				// eslint-disable-next-line no-console
+				console.log('[check-schema] could not reach the database (skipped)');
+			} else if (res.ok) {
+				// eslint-disable-next-line no-console
+				console.log('[check-schema] database schema matches this version');
+			} else {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[check-schema] DRIFT — your database is missing structures this version expects: ${formatDriftReport(
+						res.diff
+					)}`
+				);
+				// eslint-disable-next-line no-console
+				console.log(
+					'[check-schema] This usually means you upgraded across a schema change. The indexer DB is rebuilt from the chain, so the fix is to reset + re-sync it (see OPERATIONS.md §46).'
+				);
+				code = 1;
+			}
+		} finally {
+			await db.close();
+		}
+		process.exit(code);
 	}
 
 	bootLog.info('starting', {

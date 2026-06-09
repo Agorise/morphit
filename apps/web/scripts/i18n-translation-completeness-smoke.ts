@@ -89,6 +89,20 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── cp229 RSS feed-format names: "RSS 2.0", "Atom", "JSON" are
+	//     proper-noun / technical format identifiers, byte-identical in
+	//     every locale by design (the 3-format RSS feature). The
+	//     surrounding copied-to-clipboard sentences ARE translated;
+	//     only the bare format names are invariant. ──────────────────
+	{ key: 'rss.format_rss2', locale: 'de', reason: '(c) "RSS 2.0" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_rss2', locale: 'es', reason: '(c) "RSS 2.0" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_rss2', locale: 'fr', reason: '(c) "RSS 2.0" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_atom', locale: 'de', reason: '(c) "Atom" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_atom', locale: 'es', reason: '(c) "Atom" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_atom', locale: 'fr', reason: '(c) "Atom" is a feed-format name (proper noun); identical in every locale' },
+	{ key: 'rss.format_json', locale: 'de', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
+	{ key: 'rss.format_json', locale: 'es', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
+	{ key: 'rss.format_json', locale: 'fr', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
 	// ─── cp115 network product names: Latin-script brand names that
 	//     legitimately do NOT translate.  Arbitrum, Base, Polygon are
 	//     Layer-2 network product names (registered marks).  BEP-20

@@ -71,6 +71,7 @@ import { runInit } from './commands/init.ts';
 import { runRegister } from './commands/register.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
+import { runAltAddress } from './commands/altAddress.ts';
 import { runHarden } from './commands/harden.ts';
 import { runInstall } from './commands/install.ts';
 import { runDoctor } from './commands/doctor.ts';
@@ -165,10 +166,14 @@ function printHelp(): void {
 		'  doctor                          Read-only check: will the indexer + relay start with the',
 		'                                  config on disk? Reports problems in plain English and changes',
 		'                                  nothing. Also probes the configured Blurt RPC endpoints for',
-		'                                  reachability (--no-rpc skips that). Run before starting',
-		'                                  services, or to diagnose a node that will not boot.',
+		'                                  reachability (--no-rpc skips that), and checks the database',
+		'                                  schema against this version (--no-db skips that). Run before',
+		'                                  starting services, or to diagnose a node that will not boot.',
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
 		'  edit [--out=PATH]               Re-prompt origin / alt-DNS / SEO of an existing config',
+		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address: helps you',
+		'                                  generate one (vanity prefix where possible), then saves it',
+		'                                  to the footer. Lokinet has no vanity prefix (ONS for names).',
 		'  edit-active-key [--wipe-prior | --keep-backup]',
 		'                                  Rotate the relay account ACTIVE key (no full re-init needed;',
 		'                                  use this when an operator pasted the wrong key, or for routine',
@@ -376,6 +381,24 @@ async function main(): Promise<number> {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {
 			return await runEdit({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `alt-address` — guided wizard to generate + save a Tor /
+	// Lokinet / I2P address (the "how do I make one?" layer on top
+	// of edit's paste field).  Writes one MORPHIT_INSTANCE_*_ADDRESS
+	// to morphit.config.env via the same atomic write.  No DB needed.
+	if (args.subcommand === 'alt-address') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runAltAddress({
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled

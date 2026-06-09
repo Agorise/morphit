@@ -121,22 +121,20 @@
 		return v && v !== keywordsKey ? v : '';
 	});
 
-	/** OG image (cp112).
+	/** OG image (cp112; cp213: PNG-only).
 	 *
-	 *  We emit BOTH the PNG and SVG variants:
-	 *    - PNG is the primary `og:image` and `twitter:image`.  Twitter/X,
-	 *      LinkedIn, Slack, Discord, and several Mastodon link-preview
-	 *      crawlers do not reliably render SVG OG images (Twitter rejects
-	 *      SVG outright per their card spec).
-	 *    - SVG is emitted as a second `og:image` entry — sharp on
-	 *      high-DPI displays for crawlers that DO support it (modern
-	 *      Facebook, Pleroma, ActivityPub-aware tooling).
+	 *  `og:image` and `twitter:image` are the PNG. SVG is deliberately
+	 *  NOT advertised as an og:image: no major link-preview consumer
+	 *  (Facebook, X/Twitter, LinkedIn, Slack, Discord, iMessage,
+	 *  WhatsApp) renders SVG OG images, and emitting a second SVG
+	 *  og:image risks a scraper picking the entry it can't render — a
+	 *  broken preview. The SVG lives on as the SOURCE that og-image.png
+	 *  is rasterized from (scripts/build-og-image-png.sh +
+	 *  og-image-freshness-smoke), not as a crawler-facing asset.
 	 *
 	 *  Specs followed: 1200×630 (Twitter `summary_large_image` + Facebook
-	 *  OG recommended sizes; same canvas for both).  File size 61 KB —
-	 *  under Twitter's 5 MB cap by three orders of magnitude. */
+	 *  OG recommended size).  ~61 KB — well under Twitter's 5 MB cap. */
 	const ogImagePng = `${CANONICAL_ORIGIN}/og-image.png`;
-	const ogImageSvg = `${CANONICAL_ORIGIN}/og-image.svg`;
 	const ogImageAlt = $derived($_('seo.og_image_alt'));
 
 	/** Onion-Location meta tag.  When this instance has a Tor
@@ -228,19 +226,15 @@
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
 	<meta property="og:url" content={canonical} />
-	<!-- Primary og:image is PNG (universal compat across X/Twitter,
-	     LinkedIn, Slack, Discord, FB).  SVG fallback emitted as a
-	     secondary og:image for crawlers that prefer vector.
-	     cp119-A6: each og:image is followed by its own og:image:alt
-	     so crawlers that pick the SVG (Pleroma, ActivityPub tooling)
-	     also receive alt text. -->
+	<!-- og:image is the PNG (universal compat across X/Twitter,
+	     LinkedIn, Slack, Discord, Facebook, iMessage). We do NOT emit an
+	     SVG og:image: no major link-preview consumer renders SVG, and a
+	     second SVG entry risks a scraper picking an image it can't show.
+	     The SVG remains the build SOURCE for this PNG, not a meta tag. -->
 	<meta property="og:image" content={ogImagePng} />
 	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
-	<meta property="og:image:alt" content={ogImageAlt} />
-	<meta property="og:image" content={ogImageSvg} />
-	<meta property="og:image:type" content="image/svg+xml" />
 	<meta property="og:image:alt" content={ogImageAlt} />
 	<!-- og:locale (cp112 audit A10): emit Facebook-conformant
 	     `language_TERRITORY` form via ogLocale() rather than the bare

@@ -239,9 +239,21 @@
 		display: grid;
 		gap: 1rem;
 		grid-template-columns: 1fr;
+		/* All rows the SAME height (sized to the tallest row), so every
+		 * card matches the tallest card regardless of how much text a
+		 * given locale puts in it (Ken cp228 — multilingual-safe equal
+		 * heights without a brittle fixed min-height). */
+		grid-auto-rows: 1fr;
 		list-style: none;
 		padding: 0;
 		margin: 0;
+	}
+
+	/* Each <li> is a single-cell grid so its <a> card stretches to fill the
+	 * li in BOTH axes; combined with grid-auto-rows:1fr above, every card
+	 * ends up identical in height across the whole 7-card set. */
+	.priorities-grid > li {
+		display: grid;
 	}
 
 	@media (min-width: 640px) {

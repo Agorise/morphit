@@ -226,6 +226,9 @@ await scenario('per-account feed accepts @alice.xml and queries with alice', asy
 	assertEqual(r.status, 200, 'status');
 	assertContains(r.body, 'Morphit — Orders by @alice', 'channel title');
 	assertContains(r.body, 'polling a per-trader URL reveals', 'privacy note');
+	// Human link must point at the real profile route /@<account>,
+	// not a nonexistent /u/<account> (cp229 broken-ref fix).
+	assertContains(r.body, '<link>https://example.com/@alice</link>', 'human link → profile');
 	if (mock.queries[0]!.params[0] !== 'alice') {
 		throw new Error(`expected alice, got ${mock.queries[0]?.params[0]}`);
 	}
@@ -285,6 +288,132 @@ await scenario('hostile row data is escaped, not emitted raw', async () => {
 	assertNotContains(r.body, '<script>alert', 'raw script tag');
 	assertContains(r.body, '&lt;script&gt;alert', 'script escaped');
 	assertContains(r.body, 'X&amp;Y', 'ampersand escaped');
+});
+
+// ─── Atom 1.0 + JSON Feed 1.1 (same data, three formats) ────
+
+interface JsonFeedItem {
+	readonly id: string;
+	readonly url: string;
+	readonly title: string;
+	readonly content_text: string;
+	readonly date_published: string;
+	readonly date_modified: string;
+}
+interface JsonFeed {
+	readonly version: string;
+	readonly feed_url: string;
+	readonly items: JsonFeedItem[];
+}
+function parseJsonFeed(body: string): JsonFeed {
+	return JSON.parse(body) as JsonFeed;
+}
+
+await scenario('global Atom feed: content-type + well-formed Atom 1.0', async () => {
+	const mock = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'atom');
+	assertEqual(r.status, 200, 'status');
+	assertEqual(r.headers['content-type'], 'application/atom+xml; charset=utf-8', 'content-type');
+	assertContains(r.body, '<feed xmlns="http://www.w3.org/2005/Atom"', 'atom root');
+	assertContains(r.body, '<entry>', 'has entry');
+	// Same human-readable title text as the RSS feed (shared buildItem).
+	assertContains(r.body, '<title>Sell BTC for EUR · EU</title>', 'entry title parity');
+	assertContains(r.body, '<id>morphit:order:alice:sell-btc-eur-12345</id>', 'entry id reuses stable urn');
+	assertContains(r.body, '<updated>2026-04-20T13:00:00.000Z</updated>', 'RFC 3339 updated (not RFC 822)');
+	assertContains(r.body, '<published>2026-04-20T12:00:00.000Z</published>', 'RFC 3339 published');
+	assertContains(r.body, '<author><name>Morphit</name></author>', 'feed-level author');
+	assertContains(r.body, 'href="https://indexer.example.com/rss/orderbook.atom"', 'self link .atom');
+});
+
+await scenario('global JSON feed: content-type + valid JSON Feed 1.1', async () => {
+	const mock = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'json');
+	assertEqual(r.status, 200, 'status');
+	assertEqual(r.headers['content-type'], 'application/feed+json; charset=utf-8', 'content-type');
+	const feed = parseJsonFeed(r.body);
+	assertEqual(feed.version, 'https://jsonfeed.org/version/1.1', 'jsonfeed version');
+	assertEqual(feed.feed_url, 'https://indexer.example.com/rss/orderbook.json', 'feed_url .json');
+	assertEqual(feed.items.length, 1, 'one item');
+	assertEqual(feed.items[0]!.id, 'morphit:order:alice:sell-btc-eur-12345', 'item id');
+	assertEqual(feed.items[0]!.title, 'Sell BTC for EUR · EU', 'item title parity');
+	assertEqual(feed.items[0]!.date_modified, '2026-04-20T13:00:00.000Z', 'date_modified');
+	assertEqual(feed.items[0]!.date_published, '2026-04-20T12:00:00.000Z', 'date_published');
+	assertContains(feed.items[0]!.content_text, 'Selling BTC for EUR', 'content_text body');
+});
+
+await scenario('per-asset .atom + .json: 200, correct query + self-reference', async () => {
+	const ma = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const ra = await perAssetFeedHandler('btc.atom', ma.db, FAKE_CONFIG);
+	assertEqual(ra.status, 200, 'atom status');
+	assertEqual(ra.headers['content-type'], 'application/atom+xml; charset=utf-8', 'atom ct');
+	assertContains(
+		ra.body,
+		'href="https://indexer.example.com/rss/orderbook/by-asset/btc.atom"',
+		'atom self link'
+	);
+	assertEqual(ma.queries[0]!.params[0], 'BTC', 'atom queried BTC');
+
+	const mj = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const rj = await perAssetFeedHandler('btc.json', mj.db, FAKE_CONFIG);
+	assertEqual(rj.status, 200, 'json status');
+	const feed = parseJsonFeed(rj.body);
+	assertEqual(
+		feed.feed_url,
+		'https://indexer.example.com/rss/orderbook/by-asset/btc.json',
+		'json feed_url'
+	);
+	assertEqual(mj.queries[0]!.params[0], 'BTC', 'json queried BTC');
+});
+
+await scenario('per-account .atom + .json: 200, correct query + self-reference', async () => {
+	const ma = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const ra = await perAccountFeedHandler('@alice.atom', ma.db, FAKE_CONFIG);
+	assertEqual(ra.status, 200, 'atom status');
+	assertContains(
+		ra.body,
+		'href="https://indexer.example.com/rss/orderbook/by-account/@alice.atom"',
+		'atom self link'
+	);
+	assertEqual(ma.queries[0]!.params[0], 'alice', 'atom queried alice');
+
+	const mj = makeMockDb([{ match: 'FROM orders', rows: [SAMPLE_ROW] }]);
+	const rj = await perAccountFeedHandler('@alice.json', mj.db, FAKE_CONFIG);
+	assertEqual(rj.status, 200, 'json status');
+	const feed = parseJsonFeed(rj.body);
+	assertEqual(
+		feed.feed_url,
+		'https://indexer.example.com/rss/orderbook/by-account/@alice.json',
+		'json feed_url'
+	);
+});
+
+await scenario('empty result stays valid in Atom + JSON (no entries/items)', async () => {
+	const ma = makeMockDb([{ match: 'FROM orders', rows: [] }]);
+	const ra = await globalFeedHandler(ma.db, FAKE_CONFIG, 'atom');
+	assertEqual(ra.status, 200, 'atom status');
+	assertContains(ra.body, '<updated>', 'atom feed-level updated present');
+	assertNotContains(ra.body, '<entry>', 'atom no entries');
+
+	const mj = makeMockDb([{ match: 'FROM orders', rows: [] }]);
+	const rj = await globalFeedHandler(mj.db, FAKE_CONFIG, 'json');
+	const feed = parseJsonFeed(rj.body);
+	assertEqual(feed.items.length, 0, 'json zero items');
+});
+
+await scenario('Atom escapes hostile data; JSON stays parseable', async () => {
+	const hostile = { ...SAMPLE_ROW, account: 'a<script>alert(1)</script>', fiat_currency: 'X&Y' };
+	const ma = makeMockDb([{ match: 'FROM orders', rows: [hostile] }]);
+	const ra = await globalFeedHandler(ma.db, FAKE_CONFIG, 'atom');
+	assertNotContains(ra.body, '<script>alert', 'atom raw script tag');
+	assertContains(ra.body, '&lt;script&gt;alert', 'atom script escaped');
+
+	const mj = makeMockDb([{ match: 'FROM orders', rows: [hostile] }]);
+	const rj = await globalFeedHandler(mj.db, FAKE_CONFIG, 'json');
+	// Must NOT throw — JSON.stringify produces valid JSON for any string.
+	const feed = parseJsonFeed(rj.body);
+	// In JSON, '<' need not be escaped — it is inert as application/feed+json,
+	// never HTML-interpreted. The literal is preserved, which is correct.
+	assertContains(feed.items[0]!.content_text, '<script>', 'json preserves literal (inert)');
 });
 
 console.log(`\n${'─'.repeat(54)}`);

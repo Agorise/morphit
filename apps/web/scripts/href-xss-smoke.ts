@@ -85,6 +85,19 @@ const SAFE_BUILDER_NAMES = [
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
+		'apps/web/src/lib/components/RssFeedPicker.svelte',
+		// `href={urlFor(format)}` — urlFor returns
+		// `${location.origin}${base}.${EXT[format]}`. The origin is the
+		// browser's own origin (never operator/peer-controlled), `base`
+		// is a hardcoded/validated feed path supplied by the three call
+		// sites (e.g. '/rss/orderbook', or built from the route-matched
+		// asset enum / Blurt-account param), and EXT is xml|atom|json.
+		// No scheme injection is reachable — the scheme is always the
+		// current https origin. The <a> is only a graceful-fallback /
+		// middle-click target; the click handler copies to clipboard.
+		new Set(['urlFor(format)'])
+	],
+	[
 		'apps/web/src/routes/[lang]/+layout.svelte',
 		// `link.href` — from the `navLinks` array that maps over
 		// `[ { href: lp('/orderbook'), ... }, ... ]`.  Each href

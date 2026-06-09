@@ -41,7 +41,7 @@
 
 - name: Add Aqua Security trivy apt repo
   ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb {{ ansible_distribution_release }} main"
+    repo: "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb {{ morphit_ubuntu_codename | default(ansible_distribution_release) }} main"
     filename: trivy
     state: present
     update_cache: true
