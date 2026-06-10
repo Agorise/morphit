@@ -62,7 +62,14 @@ export async function runSystemCheck(): Promise<SystemCheckResult> {
 	// ─── systemd ───────────────────────────────────────────────
 	checks.push(checkSystemd());
 
+	// ─── Docker (beta11 — needed for the BunkerWeb web firewall) ─
+	checks.push(checkDocker());
+
 	// ─── Network (slow, last) ──────────────────────────────────
+	// PostgreSQL: is the server installed (binary + version), and is
+	// the socket reachable?  Two separate signals — installed-but-not-
+	// running is a common and distinct state from not-installed.
+	checks.push(checkPostgresInstalled());
 	checks.push(await checkPostgresReachable());
 	checks.push(await checkOutboundHttps());
 	checks.push(await checkSystemTime());
@@ -234,8 +241,10 @@ function checkOperatingSystem(): Check {
 		}
 		const id = (data.ID ?? '').toLowerCase();
 		const versionId = data.VERSION_ID ?? '';
+		const idLike = (data.ID_LIKE ?? '').toLowerCase();
+		const ubuntuCodename = (data.UBUNTU_CODENAME ?? '').toLowerCase();
 		const prettyName = data.PRETTY_NAME ?? `${id} ${versionId}`;
-		return classifyOs(id, versionId, prettyName);
+		return classifyOs(id, versionId, prettyName, idLike, ubuntuCodename);
 	} catch (err) {
 		return {
 			name: 'Operating system',
@@ -247,7 +256,13 @@ function checkOperatingSystem(): Check {
 	}
 }
 
-function classifyOs(id: string, versionId: string, prettyName: string): Check {
+export function classifyOs(
+	id: string,
+	versionId: string,
+	prettyName: string,
+	idLike = '',
+	ubuntuCodename = ''
+): Check {
 	if (id === 'ubuntu') {
 		// Major.minor parse.
 		const [maj, min] = versionId.split('.').map((s) => parseInt(s, 10));
@@ -319,6 +334,38 @@ function classifyOs(id: string, versionId: string, prettyName: string): Check {
 			note: 'older Debian; upgrade recommended'
 		};
 	}
+	// Linux Mint + other Ubuntu/Debian derivatives (Pop!_OS, Zorin,
+	// elementary, …).  Mint reports ID=linuxmint with ID_LIKE=ubuntu
+	// and (on Mint 22.x) UBUNTU_CODENAME=noble; the desktop edition
+	// (Cinnamon/MATE/Xfce) is irrelevant to a server, only the Ubuntu
+	// base matters.  Pre-beta11 these fell through to the generic
+	// "unsupported distro" warn — accurate enough but vague.  Recognize
+	// them explicitly as the Ubuntu-based systems they are.  (The
+	// Ansible installer separately gates on a `noble` base — cp226 — so
+	// this systemCheck only needs to say "works, Ubuntu-based".)
+	const derivative =
+		id === 'linuxmint' ||
+		id === 'pop' ||
+		id === 'zorin' ||
+		id === 'elementary' ||
+		/\b(ubuntu|debian)\b/.test(idLike);
+	if (derivative) {
+		const base = idLike.includes('ubuntu') || id === 'linuxmint' ? 'Ubuntu-based' : 'Debian-based';
+		// UBUNTU_CODENAME tells us the real base release on a derivative.
+		const noble = ubuntuCodename === 'noble';
+		const jammy = ubuntuCodename === 'jammy';
+		return {
+			name: 'Operating system',
+			actual: prettyName,
+			recommended: 'Ubuntu 24.04 or 26.04 LTS',
+			status: 'ok',
+			note: noble
+				? `works (${base}, on the Ubuntu 24.04 "noble" base)`
+				: jammy
+					? `works (${base}, on the aging Ubuntu 22.04 "jammy" base — a 24.04-based release is recommended)`
+					: `works (${base})`
+		};
+	}
 	// Other Linux — likely works, on their own.
 	return {
 		name: 'Operating system',
@@ -347,6 +394,83 @@ function checkSystemd(): Check {
 			note: 'no systemctl on PATH; you can still run Morphit but unit-file examples in docs assume systemd'
 		};
 	}
+}
+
+/** Docker check (beta11 item 5b).  Docker is OPTIONAL — it's needed
+ *  only for the recommended BunkerWeb web-firewall deployment
+ *  (`morphit-ops bunkerweb`).  So absence is a 'warn' (with a clear
+ *  "only if you'll use BunkerWeb" note), never an 'error' — a bare-
+ *  nginx deploy needs no Docker at all. */
+function checkDocker(): Check {
+	try {
+		const out = execSync('docker --version 2>/dev/null', {
+			encoding: 'utf-8',
+			timeout: 3000
+		}).trim();
+		// `docker --version` → "Docker version 27.1.1, build ...".
+		const m = /version\s+([0-9][0-9.]*)/i.exec(out);
+		return {
+			name: 'Docker',
+			actual: m ? m[1]! : 'installed',
+			recommended: 'installed (for BunkerWeb)',
+			status: 'ok'
+		};
+	} catch {
+		return {
+			name: 'Docker',
+			actual: 'not installed',
+			recommended: 'installed (for BunkerWeb)',
+			status: 'warn',
+			note: 'only needed for the BunkerWeb web firewall — install it (or run `morphit-ops bunkerweb`, which can guide the install) if you plan to use BunkerWeb; a plain-nginx deploy needs no Docker'
+		};
+	}
+}
+
+/** PostgreSQL server-installed check (beta11 item 5b).  Detects the
+ *  server (or at least the client) binary + version via `psql` /
+ *  `pg_config` / `postgres`.  Distinct from checkPostgresReachable():
+ *  installed-but-not-listening and not-installed are different
+ *  states an operator needs to tell apart.  Best-effort, never throws;
+ *  a missing binary is a 'warn' with an install hint (the wizard can
+ *  still proceed and the DB URL is set in step 3). */
+function checkPostgresInstalled(): Check {
+	// Try the most informative tools in order.  `postgres --version`
+	// proves the SERVER is installed; `psql`/`pg_config` only prove the
+	// client/dev tools (still useful), so note that distinction.
+	const probes: ReadonlyArray<{ cmd: string; server: boolean }> = [
+		{ cmd: 'postgres --version', server: true },
+		{ cmd: 'pg_config --version', server: false },
+		{ cmd: 'psql --version', server: false }
+	];
+	for (const p of probes) {
+		try {
+			const out = execSync(`${p.cmd} 2>/dev/null`, {
+				encoding: 'utf-8',
+				timeout: 3000
+			}).trim();
+			// e.g. "psql (PostgreSQL) 16.3" / "postgres (PostgreSQL) 16.3"
+			const m = /([0-9]+(?:\.[0-9]+)*)/.exec(out);
+			const ver = m ? m[1]! : 'unknown';
+			return {
+				name: 'PostgreSQL',
+				actual: p.server ? `server ${ver}` : `client ${ver}`,
+				recommended: 'installed (server)',
+				status: 'ok',
+				note: p.server
+					? undefined
+					: 'client tools found; ensure the postgresql SERVER package is installed too (the indexer needs a running server)'
+			};
+		} catch {
+			// try the next probe
+		}
+	}
+	return {
+		name: 'PostgreSQL',
+		actual: 'not found',
+		recommended: 'installed (server)',
+		status: 'warn',
+		note: 'install with: apt-get install -y postgresql  (the indexer stores its chain-derived cache here)'
+	};
 }
 
 async function checkPostgresReachable(): Promise<Check> {

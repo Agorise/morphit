@@ -199,11 +199,14 @@ Steps the command takes, in order:
       default `/var/www/morphit-frontend`), the new build is copied in,
       preserving that folder's ownership. nginx serves the new files
       immediately — no reload needed.
-    - **BunkerWeb:** if a `morphit-frontend` container is running (it
-      bind-mounts `<install>/apps/web/build`), the upgrade recreates it
-      so it re-binds the freshly-built files. A running container would
-      otherwise keep serving the *previous* build, because the install
-      directory was renamed out from under its mount during the upgrade.
+    - **BunkerWeb (or any Docker frontend):** the upgrade finds the
+      running container that bind-mounts the build directory
+      (`<install>/apps/web/build`) — identified by the mount itself, so it
+      works no matter what the container is called (`morphit-frontend`,
+      `bunkerweb-frontend-1`, a hand-rolled stack, …) — and `docker
+      restart`s it so it re-binds the freshly-built files. No compose file
+      is required, and a container left running would otherwise keep
+      serving the *previous* build.
     - **Both** can apply (then it does both). If **neither** target is
       found — a genuinely non-standard setup — the rebuilt files are left
       on disk and the upgrade tells you exactly where to copy them from;
@@ -215,6 +218,14 @@ Steps the command takes, in order:
     > and reported success — leaving visitors on the old build (and never
     > showing the "Load it now" update prompt). The rebuild is now
     > unconditional and the publish target is auto-detected.
+    >
+    > **Update (beta.11):** the Docker publish step now identifies the
+    > frontend container by the build-dir mount it carries and `docker
+    > restart`s it, instead of recreating a container matched by name
+    > through the example compose file. Earlier releases missed custom
+    > stacks (a different container name, or no compose file on the host);
+    > mount-based detection handles them, so an operator running a
+    > bespoke reverse-proxy stack gets the new build without manual steps.
 10. Restarts these systemd services if they're active:
     - `morphit-indexer.service`
     - `morphit-relay.service`
@@ -263,7 +274,7 @@ sudo -u morphit npx morphit-ops upgrade --yes
 | `MORPHIT_RELEASE_REPO` | `agorise/morphit` | repo path |
 | `MORPHIT_RELEASE_MIRRORS` | unset | comma-separated fallback sources, each `host` or `host/owner/repo`, tried after the primary |
 | `MORPHIT_INSTALL_DIR` | `/opt/morphit` | install location |
-| `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | bare-metal nginx web root; if it exists, `upgrade` copies the freshly-built `apps/web/build` here. Set it for a custom bare-metal path. The web app is **always** rebuilt regardless; on a BunkerWeb host the `frontend` container is recreated instead, and if neither target is found the rebuilt files are left on disk with a warning |
+| `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | bare-metal nginx web root; if it exists, `upgrade` copies the freshly-built `apps/web/build` here. Set it for a custom bare-metal path. The web app is **always** rebuilt regardless; on a host running a Docker frontend the container that bind-mounts the build dir is `docker restart`ed instead (detected by the mount, any container name), and if neither target is found the rebuilt files are left on disk with a warning |
 | `MORPHIT_BACKUP_KEEP` | `3` | how many `.bak-*` backups to retain |
 
 ### Mirrors and how integrity is protected

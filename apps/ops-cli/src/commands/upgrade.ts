@@ -20,8 +20,8 @@
  *     release notes → prompt for confirmation → backup current
  *     install → extract new tarball → `npm ci` → ALWAYS rebuild the
  *     static web frontend → publish it (copy into the bare-metal web
- *     root and/or recreate the BunkerWeb `frontend` container) →
- *     restart services → roll back on any error.
+ *     root and/or `docker restart` the container that bind-mounts the
+ *     build) → restart services → roll back on any error.
  *
  * Environment:
  *
@@ -41,13 +41,14 @@
  *                                  upgrade copies the freshly-built bundle
  *                                  here. Set this if your bare-metal site is
  *                                  served from a custom path. The web app is
- *                                  ALWAYS rebuilt regardless; on a BunkerWeb
- *                                  host (where the `frontend` container
- *                                  bind-mounts <install>/apps/web/build) the
- *                                  upgrade recreates that container instead
- *                                  of copying. If NEITHER target is found,
- *                                  the rebuilt bundle is left on disk with a
- *                                  warning to publish it by hand.
+ *                                  ALWAYS rebuilt regardless; on a host
+ *                                  running a Docker frontend (the container
+ *                                  that bind-mounts <install>/apps/web/build,
+ *                                  whatever its name) the upgrade `docker
+ *                                  restart`s that container so it re-binds the
+ *                                  fresh build, instead of copying. If NEITHER
+ *                                  target is found, the rebuilt bundle is left
+ *                                  on disk with a warning to publish it by hand.
  *   MORPHIT_BACKUP_KEEP           (default: 3) — backups to retain
  *
  * Mirror + integrity model (beta5):
@@ -362,41 +363,53 @@ export function deployFrontendBuild(buildDir: string, webRoot: string): void {
 }
 
 /** How to PUBLISH a freshly-built frontend after the (always-run) build.
- *  cp236. */
+ *  beta11 (supersedes cp236). */
 export interface FrontendDeployPlan {
 	/** Copy build/ into <webRoot> — the bare-metal nginx model. */
 	readonly copyToWebRoot: boolean;
-	/** Recreate the BunkerWeb `frontend` container so it re-binds the
-	 *  freshly-built apps/web/build mount. */
-	readonly recreateBunkerwebFrontend: boolean;
+	/** Name of the container that bind-mounts the freshly-built
+	 *  apps/web/build — `docker restart` it so it re-binds the new build.
+	 *  null when no such container was found. */
+	readonly restartContainer: string | null;
 	/** Non-null when NEITHER publish path applies — a non-standard serving
 	 *  setup the operator must finish by hand.  The build is still fresh. */
 	readonly warn: string | null;
 }
 
 /** Decide how to publish the freshly-built frontend from two signals: does
- *  the bare-metal web root exist, and is a BunkerWeb `morphit-frontend`
- *  container present.  Both may apply (do both); neither is a non-standard
- *  setup that earns a loud warning.  The BUILD itself always runs before
- *  this — this only covers post-build publishing.  PURE (so the smoke can
- *  exhaust the four cases). cp236. */
+ *  the bare-metal web root exist, and is there a running container that
+ *  bind-mounts the build dir.  Both may apply (do both); neither is a
+ *  non-standard setup that earns a loud warning.  The BUILD itself always
+ *  runs before this — this only covers post-build publishing.  PURE (so the
+ *  smoke can exhaust the four cases).
+ *
+ *  beta11 — `frontendContainer` REPLACES cp236's container-present boolean.
+ *  cp236 assumed the container was named "morphit-frontend" and
+ *  recreated it via the repo's example compose file — both wrong on real
+ *  deployments (a `docker compose` project names it `<project>-frontend-1`,
+ *  e.g. `bunkerweb-frontend-1`, and recreating it with the repo's example
+ *  compose can crash-loop the container on a cert/config path the operator's
+ *  real stack doesn't share).  We now identify the container by the
+ *  apps/web/build mount it carries and just `docker restart` it (no
+ *  compose-file, no name assumption). */
 export function planFrontendDeploy(opts: {
 	webRootExists: boolean;
-	bunkerwebFrontendPresent: boolean;
+	frontendContainer: string | null;
 	webRoot: string;
 	buildDir: string;
 }): FrontendDeployPlan {
 	const copyToWebRoot = opts.webRootExists;
-	const recreateBunkerwebFrontend = opts.bunkerwebFrontendPresent;
+	const restartContainer = opts.frontendContainer;
 	const warn =
-		!copyToWebRoot && !recreateBunkerwebFrontend
+		!copyToWebRoot && restartContainer === null
 			? `Web frontend was rebuilt at ${opts.buildDir}, but no known serving target ` +
-				`was found — neither the web root ${opts.webRoot} nor a running ` +
-				`'morphit-frontend' (BunkerWeb) container. If your site is served from a ` +
-				`custom path, set MORPHIT_WEB_ROOT and re-run, or copy ${opts.buildDir}/* to ` +
-				`your web root by hand. The backend services were still upgraded.`
+				`was found — neither the web root ${opts.webRoot} nor a running container ` +
+				`bind-mounting ${opts.buildDir}. If your site is served from a custom path, ` +
+				`set MORPHIT_WEB_ROOT and re-run, or copy ${opts.buildDir}/* to your web root ` +
+				`by hand (and restart your frontend container if you run one). The backend ` +
+				`services were still upgraded.`
 			: null;
-	return { copyToWebRoot, recreateBunkerwebFrontend, warn };
+	return { copyToWebRoot, restartContainer, warn };
 }
 
 /** Best-effort: is `docker` usable on this host? IMPURE. */
@@ -404,53 +417,81 @@ function dockerAvailable(): boolean {
 	return spawnSync('docker', ['--version'], { stdio: 'pipe', timeout: 3000 }).status === 0;
 }
 
-/** True if a container named exactly `morphit-frontend` exists on this host
- *  — the BunkerWeb frontend that bind-mounts <install>/apps/web/build.
- *  Best-effort: false if docker isn't present/usable (then the upgrade
- *  treats the host as bare-metal / non-standard and warns instead). IMPURE. */
-function bunkerwebFrontendPresent(): boolean {
-	if (!dockerAvailable()) return false;
-	const res = spawnSync(
-		'docker',
-		['ps', '-a', '--filter', 'name=^/morphit-frontend$', '--format', '{{.Names}}'],
-		{ stdio: 'pipe', timeout: 5000, encoding: 'utf8' }
-	);
-	if (res.status !== 0) return false;
-	return (res.stdout ?? '')
-		.split('\n')
-		.map((s) => s.trim())
-		.includes('morphit-frontend');
+/** Normalize a filesystem path for mount comparison: drop a single
+ *  trailing slash (but keep a bare "/").  PURE. */
+export function normalizeMountPath(p: string): string {
+	const t = p.trim();
+	if (t.length > 1 && t.endsWith('/')) return t.slice(0, -1);
+	return t;
 }
 
-/** Recreate the BunkerWeb `frontend` container so it re-binds the new
- *  apps/web/build (a running container keeps serving the pre-upgrade inode
- *  after the install dir was renamed).  BEST-EFFORT — a failure here must
- *  NOT roll the upgrade back (the backend is already upgraded and the build
- *  is fresh on disk); we warn with the manual command instead. IMPURE. */
-function recreateBunkerwebFrontend(composeFile: string): void {
-	const manual = `docker compose -f ${composeFile} up -d --force-recreate frontend`;
-	if (!existsSync(composeFile)) {
-		warn(
-			`A 'morphit-frontend' container is running but ${composeFile} is missing, so ` +
-				`it can't be recreated automatically. Restart it yourself so it serves the ` +
-				`new build: docker restart morphit-frontend`
+/** Parse the newline-separated mount Sources our `docker inspect --format`
+ *  emits into a clean list.  PURE. */
+export function parseMountSources(inspectStdout: string): string[] {
+	return inspectStdout
+		.split('\n')
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
+
+/** Does a container (given its bind-mount Sources) bind-mount the build
+ *  dir?  Compares normalized paths for an exact match.  PURE.  This is the
+ *  robust, name-agnostic signal that a container serves OUR frontend build
+ *  (the canonical compose binds `<install>/apps/web/build` →
+ *  /usr/share/nginx/html; a custom stack like Ken's binds the same dir). */
+export function containerMountsBuildDir(sources: readonly string[], buildDir: string): boolean {
+	const target = normalizeMountPath(buildDir);
+	return sources.some((s) => normalizeMountPath(s) === target);
+}
+
+/** Find the RUNNING container that bind-mounts the freshly-built
+ *  apps/web/build — identified by the mount, NOT by a container name or a
+ *  compose file (cp236's two wrong assumptions).  Returns the container
+ *  name, or null if docker is absent / no running container mounts the
+ *  build dir.  IMPURE. */
+function findFrontendContainer(buildDir: string): string | null {
+	if (!dockerAvailable()) return null;
+	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], {
+		stdio: 'pipe',
+		timeout: 5000,
+		encoding: 'utf8'
+	});
+	if (ps.status !== 0) return null;
+	const names = (ps.stdout ?? '')
+		.split('\n')
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+	for (const name of names) {
+		const insp = spawnSync(
+			'docker',
+			['inspect', '--format', '{{range .Mounts}}{{.Source}}\n{{end}}', name],
+			{ stdio: 'pipe', timeout: 5000, encoding: 'utf8' }
 		);
-		return;
+		if (insp.status !== 0) continue;
+		const sources = parseMountSources(insp.stdout ?? '');
+		if (containerMountsBuildDir(sources, buildDir)) return name;
 	}
-	info('Recreating the BunkerWeb frontend container so it serves the new build...');
-	const res = spawnSync(
-		'docker',
-		['compose', '-f', composeFile, 'up', '-d', '--force-recreate', 'frontend'],
-		{ stdio: 'inherit' }
-	);
+	return null;
+}
+
+/** `docker restart <name>` so the container re-binds the freshly-built
+ *  apps/web/build on start (a running container keeps serving the
+ *  pre-upgrade inode after the install dir was renamed).  BEST-EFFORT — a
+ *  failure here must NOT roll the upgrade back (the backend is already
+ *  upgraded and the build is fresh on disk); we warn with the manual
+ *  command instead.  No compose file, no name assumption — just restart the
+ *  exact container we detected.  IMPURE. */
+function restartFrontendContainer(name: string): void {
+	info(`Restarting the frontend container "${name}" so it serves the new build...`);
+	const res = spawnSync('docker', ['restart', name], { stdio: 'inherit' });
 	if (res.status !== 0) {
 		warn(
-			`Could not recreate the BunkerWeb frontend container automatically. Run this ` +
-				`yourself so it serves the new build:\n      ${manual}`
+			`Could not restart the frontend container automatically. Run this yourself so ` +
+				`it serves the new build:\n      docker restart ${name}`
 		);
 		return;
 	}
-	info('\u2713 BunkerWeb frontend container recreated.');
+	info(`\u2713 Frontend container "${name}" restarted.`);
 }
 
 
@@ -813,12 +854,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// is different: it's a static SvelteKit build (`vite build` → apps/web/
 	// build), and the release tarball does NOT ship a prebuilt build. That
 	// build output is what BOTH deployment models serve: bare-metal nginx
-	// copies it into <webRoot>, and the BunkerWeb `frontend` container
-	// bind-mounts it from <install>/apps/web/build. So the build must ALWAYS
-	// run — regardless of whether <webRoot> exists.
+	// copies it into <webRoot>, and a containerized frontend (BunkerWeb or a
+	// custom stack) bind-mounts it from <install>/apps/web/build. So the
+	// build must ALWAYS run — regardless of whether <webRoot> exists.
 	//
 	// (Before cp236 the build lived inside an `if (webRoot exists)` branch,
-	// so on a BunkerWeb host — where the site is NOT served from
+	// so on a container-served host — where the site is NOT served from
 	// /var/www/morphit-frontend — the upgrade silently skipped the frontend
 	// rebuild, reported success, and the container kept serving the OLD
 	// build. That regression is what this unconditional build + the
@@ -838,16 +879,23 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	//
 	// Decide how to publish from two signals:
 	//   • bare-metal nginx → <webRoot> exists → copy build/ into it.
-	//   • BunkerWeb → a `morphit-frontend` container exists → recreate it so
-	//     it re-binds the new build (a running container keeps serving the
-	//     pre-upgrade inode after the install dir was renamed above).
+	//   • containerized → a RUNNING container bind-mounts the build dir →
+	//     `docker restart` it so it re-binds the new build (a running
+	//     container keeps serving the pre-upgrade inode after the install
+	//     dir was renamed above).  beta11: the container is identified by
+	//     its apps/web/build mount, NOT by a name or compose file — cp236's
+	//     `morphit-frontend`-name + repo-example-compose assumptions broke on
+	//     real deployments (a compose project names it `<proj>-frontend-1`,
+	//     and recreating it from the repo's example compose crash-looped on a
+	//     cert path the operator's real stack didn't share).
 	// Both may apply (do both); neither is a non-standard setup that earns a
 	// loud warning — the build is fresh on disk either way.
+	const buildDir = join(installDir, 'apps', 'web', 'build');
 	const plan = planFrontendDeploy({
 		webRootExists: existsSync(webRoot),
-		bunkerwebFrontendPresent: bunkerwebFrontendPresent(),
+		frontendContainer: findFrontendContainer(buildDir),
 		webRoot,
-		buildDir: join(installDir, 'apps', 'web', 'build')
+		buildDir
 	});
 
 	let webRootBackup: string | null = null;
@@ -857,8 +905,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// step's rollback) can restore the previous site.
 			webRootBackup = join(tmpDir, 'web-root-backup');
 			cpSync(webRoot, webRootBackup, { recursive: true });
-			info(`Redeploying ${join(installDir, 'apps', 'web', 'build')} → ${webRoot}...`);
-			deployFrontendBuild(join(installDir, 'apps', 'web', 'build'), webRoot);
+			info(`Redeploying ${buildDir} → ${webRoot}...`);
+			deployFrontendBuild(buildDir, webRoot);
 			// Preserve the operator's web-root ownership (www-data, or whatever
 			// the web server runs as) so the freshly-copied files stay readable.
 			// Best-effort: vite output is world-readable anyway.
@@ -874,10 +922,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup });
 		}
 	}
-	if (plan.recreateBunkerwebFrontend) {
+	if (plan.restartContainer) {
 		// Best-effort: the backend already upgraded and the build is fresh, so
 		// a docker hiccup must NOT roll the whole upgrade back.
-		recreateBunkerwebFrontend(join(installDir, 'ops', 'bunkerweb', 'docker-compose.yml'));
+		restartFrontendContainer(plan.restartContainer);
 	}
 	if (plan.warn) {
 		warn(plan.warn);

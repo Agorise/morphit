@@ -111,6 +111,8 @@ SMOKES=(
 	"apps/ops-cli:rpc-endpoint-canon-smoke"
 	"apps/ops-cli:ssl-smoke"
 	"apps/ops-cli:bunkerweb-smoke"
+	"apps/ops-cli:health-view-smoke"
+	"apps/ops-cli:system-check-os-smoke"
 	"apps/ops-cli:register-diagnostics-smoke"
 	"apps/ops-cli:init-smoke"
 	"apps/ops-cli:edit-smoke"

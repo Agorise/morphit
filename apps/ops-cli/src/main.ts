@@ -77,6 +77,7 @@ import { runInstall } from './commands/install.ts';
 import { runDoctor } from './commands/doctor.ts';
 import { runSsl } from './commands/ssl.ts';
 import { runBunkerWeb } from './commands/bunkerweb.ts';
+import { runHealth } from './commands/health.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
 import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
@@ -144,7 +145,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 /** Long-form names of flags that consume the next arg as their
  *  value.  Bare flags (--json, --help) are not in this set. */
-const VALUE_FLAGS = new Set(['since', 'age', 'type', 'out']);
+const VALUE_FLAGS = new Set(['since', 'age', 'type', 'out', 'url', 'port', 'host']);
 
 const SHORT_FLAGS: Record<string, string> = {
 	h: 'help',
@@ -197,8 +198,12 @@ function printHelp(): void {
 		'                                  walk Ubuntu/SSH/UFW/fail2ban/TLS + BunkerWeb + backups setup',
 		'  ssl [status|setup] [domain]     SSL/TLS certificate (HTTPS): check cert expiry + auto-renewal,',
 		'                                  or print the exact certbot steps to obtain one',
-		'  bunkerweb                       BunkerWeb WAF status: are the containers running + healthy?',
-		'                                  (read-only; prints bring-up commands if not running)',
+		'  bunkerweb                       BunkerWeb WAF installer + status: shows whether the WAF is',
+		'                                  running + healthy, and (if not) can install + bring up the',
+		'                                  canonical ops/bunkerweb stack for you, with confirmations.',
+		'  health [--url=URL] [--port=N]   Live indexer health via /v1/health (synced/behind, last',
+		'                                  block, lag, RPC reachability). Needs no config or DB, so it',
+		'                                  works even when `status` would hit a permission error.',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -529,11 +534,34 @@ async function main(): Promise<number> {
 		}
 	}
 
-	// `bunkerweb` — read-only WAF status. No DB; never runs docker itself.
+	// `bunkerweb` — guided BunkerWeb WAF installer + status. Detects
+	// what's running; if the WAF isn't up it can install + bring up the
+	// canonical ops/bunkerweb stack (host-mutating, with confirmations).
+	// No DB.
 	if (args.subcommand === 'bunkerweb') {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {
 			return await runBunkerWeb({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `health` (beta11) — live indexer health via the /v1/health HTTP
+	// endpoint. Needs NO config file and NO DB, so it works regardless
+	// of file permissions (unlike `status`, which reads the root-owned
+	// config + DB and can EACCES as a non-root user). One read-only
+	// HTTP GET; never touches the host. Dispatches here in the pre-DB
+	// group.
+	if (args.subcommand === 'health') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runHealth({
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled

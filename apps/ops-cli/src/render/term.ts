@@ -36,6 +36,16 @@ const DIM = '\x1b[2m';
 const FG_RED = '\x1b[31m';
 const FG_GREEN = '\x1b[32m';
 const FG_YELLOW = '\x1b[33m';
+// beta11 item 3 — the standard yellow (33) renders pale, sometimes
+// near-white, on light or low-contrast terminal themes (Solarized
+// Light, some PuTeam/Windows palettes), so the "● update available"
+// marker on the menu was easy to miss.  The BRIGHT yellow (the "aixterm"
+// 90-97 high-intensity range, widely supported by modern terminals)
+// renders as a vivid, unmistakable yellow on every common theme; the
+// bold+bright form (`1;93`) is loudest of all.  Used for the
+// update-available marker (mainMenu.ts).
+const FG_BRIGHT_YELLOW = '\x1b[93m';
+const BOLD_BRIGHT_YELLOW = '\x1b[1;93m';
 const FG_BLUE = '\x1b[34m';
 const FG_CYAN = '\x1b[36m';
 const FG_GRAY = '\x1b[90m';
@@ -180,6 +190,12 @@ export const fmt = {
 	red: (s: string): string => wrap(FG_RED, s),
 	green: (s: string): string => wrap(FG_GREEN, s),
 	yellow: (s: string): string => wrap(FG_YELLOW, s),
+	// beta11 item 3 — high-intensity yellow that stays vivid on
+	// pale/low-contrast terminal themes.  `boldBrightYellow` emits the
+	// single combined SGR `\x1b[1;93m` (bold + bright yellow) so the
+	// whole marker is one well-formed escape rather than nested codes.
+	brightYellow: (s: string): string => wrap(FG_BRIGHT_YELLOW, s),
+	boldBrightYellow: (s: string): string => wrap(BOLD_BRIGHT_YELLOW, s),
 	blue: (s: string): string => wrap(FG_BLUE, s),
 	cyan: (s: string): string => wrap(FG_CYAN, s),
 	gray: (s: string): string => wrap(FG_GRAY, s)
