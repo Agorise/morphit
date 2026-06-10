@@ -8,7 +8,7 @@ This repository carries the full source for the indexer, relay, frontend, operat
 
 ## Status
 
-Pre-launch, versioned `v1.0.0-beta.1`. The canonical public instance is **morphit.io**; community operators are welcome to launch their own nodes alongside. There are no production deployments yet — the codebase has been through an intensive multi-month pre-launch hardening campaign documented in `docs/AUDIT-2026-05.md`.
+Pre-launch, currently in the `v1.0.0-beta` release series. The canonical public instance is **morphit.io**; community operators are welcome to launch their own nodes alongside. There are no production deployments yet — the codebase has been through an intensive multi-month pre-launch hardening campaign documented in `docs/AUDIT-2026-05.md`.
 
 ## New here? Start here 👇
 
