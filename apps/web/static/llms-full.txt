@@ -1793,7 +1793,7 @@ Surprisingly modest. Morphit is built to run on hardware most people already own
 
 • **Network:** 1 Mbit/s up and down is enough. An average page load is around 100 KB. A small instance serving a few users uses a few GB of bandwidth a month, well within any home internet cap. Static IP is nice but not required — dynamic-DNS works fine.
 
-• **Operating system:** Any modern Linux (Debian 12, Ubuntu 22.04+, Arch, Alpine, NixOS — we test on Debian). FreeBSD works with minor adjustments. macOS works for development but isn't recommended for a public instance.
+• **Operating system:** Any modern Linux (Debian 12, Ubuntu 24.04 LTS, Arch, Alpine, NixOS — we test on Debian). FreeBSD works with minor adjustments. macOS works for development but isn't recommended for a public instance.
 
 • **Uptime expectation:** 95% is a reasonable target. Morphit is federated by design — when your instance is down, users fall back to other operators' instances and back to you when you return. The chain holds the data; your instance is just one of many windows into it.
 
