@@ -38,13 +38,20 @@ interface MenuItem {
 	readonly blurb: string;
 	readonly subcommand: string;
 	readonly positional?: readonly string[];
+	/** Optional ELI5 recommendation-with-tradeoff, rendered dimmed under
+	 *  the blurb. Helps a sysadmin pick by consequence, not just by name
+	 *  (e.g. "safe to run anytime", "required before BunkerWeb"). */
+	readonly tip?: string;
 }
 
-// Grouped for scanability.  Order: the things an operator reaches
-// for most often (setup, change settings, upgrade) first; the
-// read-only operational dashboards next; key/secret management
-// last.  Each line gets a one-sentence plain-English blurb so the
-// operator picks by intent, not by guessing what a name means.
+// Grouped by the operator's lifecycle so the menu reads top-to-bottom
+// the way you actually run a node: INSTALL the software -> CONFIGURE the
+// instance -> SECURE the server -> CHECK & OPERATE it. Within each group
+// the most common action is first. Every line has a plain-English blurb
+// (pick by intent, not by guessing a name) and most have a dimmed ELI5
+// tip with the recommendation/tradeoff. The three "is it OK?" commands
+// that sound alike — doctor / health / status — are deliberately
+// disambiguated in their blurbs so nobody picks the wrong one.
 interface MenuGroup {
 	readonly heading: string;
 	readonly items: readonly MenuItem[];
@@ -52,62 +59,106 @@ interface MenuGroup {
 
 const MENU_GROUPS: readonly MenuGroup[] = [
 	{
-		heading: 'Set up & change this instance',
+		heading: '1. Install & upgrade',
 		items: [
 			{
 				label: 'Install / set up a new node (guided)',
 				blurb: 'First-time install: checks prerequisites, runs setup, offers hardening and a PATH shortcut.',
-				subcommand: 'install'
-			},
-			{
-				label: 'Check if my node will start (doctor)',
-				blurb: 'Read-only: reports whether the indexer and relay will boot with the config on disk. Changes nothing.',
-				subcommand: 'doctor'
-			},
-			{
-				label: 'Edit settings',
-				blurb: 'Change RPC and other URLs, description/SEO, origin, fees, or your operator tag.',
-				subcommand: 'edit'
-			},
-			{
-				label: 'Set up a Tor / Lokinet / I2P address',
-				blurb: 'Guided: make a privacy-network address (pick the first letters where possible) and show it in your site footer.',
-				subcommand: 'alt-address'
+				subcommand: 'install',
+				tip: 'Start here on a fresh server. It can also set up firewall hardening and HTTPS for you.'
 			},
 			{
 				label: 'Upgrade to the latest version',
 				blurb: 'Check for a newer Morphit release and apply it (with backup + rollback).',
-				subcommand: 'upgrade'
-			},
-			{
-				label: 'Harden this server',
-				blurb: 'Ubuntu/SSH/firewall/fail2ban/TLS + BunkerWeb + backups — generate a personalized checklist and walk each step.',
-				subcommand: 'harden'
-			},
-			{
-				label: 'SSL/TLS certificate (HTTPS)',
-				blurb: 'Check your HTTPS certificate expiry + auto-renewal, or get the exact steps to obtain a free Let\u2019s Encrypt cert.',
-				subcommand: 'ssl'
-			},
-			{
-				label: 'Web firewall (BunkerWeb) status',
-				blurb: 'Check whether the optional BunkerWeb WAF is running and healthy, or get the commands to bring it up.',
-				subcommand: 'bunkerweb'
-			},
-			{
-				label: 'Re-publish my registration on-chain',
-				blurb: 'Push your current origin/tag to the federation directory (run after changing either).',
-				subcommand: 'register'
+				subcommand: 'upgrade',
+				tip: 'Always backs up first and rolls back on failure. A \u201c\u25cf update available\u201d marker shows here when a newer release exists.'
 			}
 		]
 	},
 	{
-		heading: 'Check on the instance',
+		heading: '2. Configure the instance',
 		items: [
 			{
+				label: 'Edit settings',
+				blurb: 'Change RPC and other URLs, description/SEO, origin, fees, or your operator tag.',
+				subcommand: 'edit',
+				tip: 'Safe to revisit anytime. After changing your origin or tag, re-run the on-chain registration below.'
+			},
+			{
+				label: 'Set up a Tor / Lokinet / I2P address',
+				blurb: 'Guided: make a privacy-network address (pick the first letters where possible) and show it in your site footer.',
+				subcommand: 'alt-address',
+				tip: 'Optional. Gives privacy-conscious users a censorship-resistant way to reach your instance.'
+			},
+			{
+				label: 'Manage payment methods',
+				blurb: 'List the instance-specific payment-method additions.',
+				subcommand: 'payment-method',
+				positional: ['list']
+			},
+			{
+				label: 'Show my active public key',
+				blurb: 'Verify the correct relay active key is installed (never prints the private key).',
+				subcommand: 'show-key',
+				tip: 'Read-only and safe — handy to confirm the relay is signing with the key you expect.'
+			},
+			{
+				label: 'Rotate the relay active key',
+				blurb: 'Replace the active key (wrong-key recovery, or routine rotation).',
+				subcommand: 'edit-active-key',
+				tip: 'Most operators never need this. Use it only for key rotation or to recover from a wrong key.'
+			},
+			{
+				label: 'Re-publish my registration on-chain',
+				blurb: 'Push your current origin/tag to the federation directory (run after changing either).',
+				subcommand: 'register',
+				tip: 'Run this after an origin/tag change so other instances and users discover you correctly.'
+			}
+		]
+	},
+	{
+		heading: '3. Secure the server',
+		items: [
+			{
+				label: 'Harden this server',
+				blurb: 'Ubuntu/SSH/firewall/fail2ban/TLS + BunkerWeb + backups — generate a personalized checklist and walk each step.',
+				subcommand: 'harden',
+				tip: 'Recommended for any public server. Safe to re-run — it re-checks what\u2019s still missing.'
+			},
+			{
+				label: 'SSL/TLS certificate (HTTPS)',
+				blurb: 'Check your HTTPS certificate expiry + auto-renewal, or get the exact steps to obtain a free Let\u2019s Encrypt cert.',
+				subcommand: 'ssl',
+				tip: 'Do this before the web firewall below — BunkerWeb needs a valid certificate or it won\u2019t start.'
+			},
+			{
+				label: 'Web firewall (BunkerWeb): install / status',
+				blurb: 'Check whether the optional BunkerWeb WAF is running + healthy, and (on a terminal) install + bring it up for you, with confirmations.',
+				subcommand: 'bunkerweb',
+				tip: 'Optional but recommended for public instances. Needs Docker + a valid HTTPS cert; the installer guides both.'
+			}
+		]
+	},
+	{
+		heading: '4. Check & operate',
+		items: [
+			{
+				label: 'Will my node start? (doctor)',
+				blurb: 'Read-only pre-flight: does the config on disk let the indexer + relay BOOT? Use this when the node won\u2019t start.',
+				subcommand: 'doctor',
+				tip: 'Changes nothing. This is the \u201cwhy won\u2019t it boot?\u201d check — it inspects config, not a running process.'
+			},
+			{
+				label: 'Is the indexer caught up? (health)',
+				blurb: 'Live check of the RUNNING indexer over HTTP (/v1/health): sync state, last indexed block vs chain head, and lag.',
+				subcommand: 'health',
+				tip: 'The quickest \u201cis it synced right now?\u201d check. Needs the indexer running; doctor checks config instead.'
+			},
+			{
 				label: 'Status dashboard',
-				blurb: 'Relay balance, queue depth, health, and your last 3 DB backups (with the file path) at a glance.',
-				subcommand: 'status'
+				blurb: 'Day-to-day operations: relay balance, queue depth, health, and your last 3 DB backups (with the file path).',
+				subcommand: 'status',
+				tip: 'Your everyday operational view. If the node won\u2019t boot at all, use doctor; for sync only, use health.'
 			},
 			{
 				label: 'Recent signups',
@@ -130,27 +181,6 @@ const MENU_GROUPS: readonly MenuGroup[] = [
 				subcommand: 'moderation'
 			}
 		]
-	},
-	{
-		heading: 'Keys & payment methods',
-		items: [
-			{
-				label: 'Show my active public key',
-				blurb: 'Verify the correct relay active key is installed (never prints the private key).',
-				subcommand: 'show-key'
-			},
-			{
-				label: 'Rotate the relay active key',
-				blurb: 'Replace the active key (wrong-key recovery, or routine rotation).',
-				subcommand: 'edit-active-key'
-			},
-			{
-				label: 'Manage payment methods',
-				blurb: 'List the instance-specific payment-method additions.',
-				subcommand: 'payment-method',
-				positional: ['list']
-			}
-		]
 	}
 ];
 
@@ -171,7 +201,10 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 		if (latest !== null) parts.push(`latest: ${latest}`);
 		let s = '  ' + fmt.dim(`(${parts.join('  ')})`);
 		if (cur !== null && latest !== null && cur !== latest) {
-			s += '  ' + fmt.yellow('\u25cf update available');
+			// beta11 item 3 — bold BRIGHT yellow (\x1b[1;93m) so the
+			// "update available" marker stays vivid on pale terminal
+			// themes where the standard yellow looked near-white.
+			s += '  ' + fmt.boldBrightYellow('\u25cf update available');
 		}
 		return s;
 	}
@@ -246,6 +279,9 @@ export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSe
 							: item.label;
 			lines.push(`    ${flat.length}. ${label}${itemSuffix(item.subcommand, annotations)}`);
 			lines.push(`        ${item.blurb}`);
+			if (item.tip !== undefined) {
+				lines.push(`        ${fmt.dim('\u21b3 ' + item.tip)}`);
+			}
 		}
 		lines.push('');
 	}

@@ -550,6 +550,18 @@ indexer — is the problem;** check your
 with growing `lag_blocks` is normal during the initial
 back-fill.
 
+> **Friendlier: `morphit-ops health`.** Rather than curling and
+> reading JSON, `morphit-ops health` (menu: "4. Check & operate" →
+> "Is the indexer caught up? (health)") hits the same `/v1/health`
+> endpoint and prints a one-line verdict — **synced**, **behind**
+> (with the lag in blocks), or **unreachable** — alongside the
+> healthy/total RPC count. It resolves the URL from `--url`, then
+> `MORPHIT_OPS_HEALTH_URL`, then `--host`/`--port` (or the indexer's
+> own `MORPHIT_INDEXER_LISTEN_HOST`/`_PORT`), defaulting to
+> `http://127.0.0.1:8081/v1/health`. Exit code is `0` when synced,
+> `1` when reachable-but-behind, and `2` when it can't reach a real
+> indexer — so it drops straight into a cron health-check.
+
 For deep triage, verbose mode adds per-endpoint detail:
 
 ```
@@ -5396,7 +5408,7 @@ The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operat
 
 **Canonical topology (what `ops/bunkerweb/` ships):** `client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)`. BunkerWeb is the only public entry — it terminates TLS, runs the WAF + rate limits, sets the real client IP, then proxies EVERY path (a single `REVERSE_PROXY_HOST=http://frontend:80`) to a lightweight `frontend` nginx container. That container serves the built SvelteKit site for page routes AND reverse-proxies the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream` paths) to the relay + indexer on the host — its routing mirrors `ops/nginx/web.conf` minus the TLS + security headers BunkerWeb owns (see `ops/bunkerweb/frontend/nginx.conf`). Doing all the static-serving + SPA fallback + per-path proxy + SSE in one nginx is far easier to get right than expressing it in BunkerWeb env vars. The relay + indexer therefore bind on an address the Docker bridge can reach (NOT loopback-only — a `127.0.0.1` bind is unreachable from the `frontend` container and every proxied call 502s); UFW's default-deny keeps the public out and the `bunkerweb` role adds an allow for the `172.20.0.0/16` bridge CIDR only. The illustrative BunkerWeb env-var snippets further down show BunkerWeb's setting shapes; the authoritative morphit config is `ops/bunkerweb/` + its `README.md`.
 
-> **Checking it's actually up:** `morphit-ops bunkerweb` (or the "Web firewall (BunkerWeb) status" menu item) reports whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy, and prints the bring-up commands if they aren't. It's read-only — it never runs `docker compose` for you (bringing the stack up is a hands-on step you run and review). BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
+> **Checking status — or installing it the easy way:** `morphit-ops bunkerweb` (menu: "3. Secure the server" → "Web firewall (BunkerWeb): install / status") inspects whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy. If they already are — or if you pass `--json`, or run it non-interactively (no TTY) — it is **read-only**: it reports status and prints the bring-up commands, nothing more. If BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
 Reasons you might NOT want BunkerWeb:
 

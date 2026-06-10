@@ -1,10 +1,9 @@
 /**
- * upgrade-frontend-deploy-smoke (cp211).
+ * upgrade-frontend-deploy-smoke (cp211; publish logic reworked beta11).
  *
- * `morphit-ops upgrade` now rebuilds + redeploys the static web frontend
- * (the Node services run from TS source via tsx, so only the SvelteKit
- * `vite build` output needs rebuilding + copying into the web root nginx
- * serves). This smoke covers the two new pieces of that logic:
+ * `morphit-ops upgrade` rebuilds + redeploys the static web frontend (the
+ * Node services run from TS source via tsx, so only the SvelteKit `vite
+ * build` output needs rebuilding + publishing). This smoke covers:
  *
  *   - resolveWebRoot: MORPHIT_WEB_ROOT override + the /var/www/morphit-frontend
  *     default (matching docs/RUN-A-MORPHIT-NODE.md §8).
@@ -13,13 +12,26 @@
  *     index.html while leaving unrelated existing files; a missing build or a
  *     build with no index.html throws (so the caller rolls back rather than
  *     leaving a wrecked site live).
+ *   - planFrontendDeploy: the publish decision matrix from two signals (web
+ *     root exists; a container bind-mounts the build dir).
+ *   - the bind-mount detection helpers (normalizeMountPath, parseMountSources,
+ *     containerMountsBuildDir) that identify the frontend container by the
+ *     apps/web/build mount it carries — NOT by a container name or compose
+ *     file. beta11 replaces cp236, whose `morphit-frontend`-name +
+ *     repo-example-compose assumptions broke on real deployments (a compose
+ *     project names the container `<project>-frontend-1`, e.g.
+ *     `bunkerweb-frontend-1`, and recreating it from the repo's example
+ *     compose crash-looped on a cert path the operator's real stack didn't
+ *     share). Restarting the exact container we detect — by its mount — fixes
+ *     both.
  *
  * Plus structural wiring assertions on upgrade.ts: the run flow actually
  * builds apps/web, calls deployFrontendBuild, honors MORPHIT_WEB_ROOT, restores
- * the previous frontend on rollback, and tells the operator (in the y/N prompt)
- * that the frontend will be redeployed. (The full upgrade flow needs a real
- * release + systemd, exercised on the operator's box; these are the portable
- * guards against the deploy logic regressing.)
+ * the previous frontend on rollback, detects the frontend container by mount,
+ * restarts it, and tells the operator (in the y/N prompt) that the frontend
+ * will be redeployed. (The full upgrade flow needs a real release + systemd +
+ * docker, exercised on the operator's box; these are the portable guards
+ * against the deploy logic regressing.)
  */
 
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
@@ -27,7 +39,14 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveWebRoot, deployFrontendBuild, planFrontendDeploy } from '../src/commands/upgrade.ts';
+import {
+	resolveWebRoot,
+	deployFrontendBuild,
+	planFrontendDeploy,
+	normalizeMountPath,
+	parseMountSources,
+	containerMountsBuildDir
+} from '../src/commands/upgrade.ts';
 
 let pass = 0;
 let fail = 0;
@@ -144,51 +163,58 @@ function tmp(prefix: string): string {
 	}
 }
 
-// ─── FD-9/10/11/12: planFrontendDeploy decision matrix (cp236) ──────
+// ─── FD-9/10/11/12: planFrontendDeploy decision matrix (beta11) ─────
 // The web build now ALWAYS runs; planFrontendDeploy decides how to PUBLISH
-// it from two signals (bare-metal web root present, BunkerWeb frontend
-// container present). Exhaust the four cases.
+// it from two signals: bare-metal web root present, and the NAME of the
+// container bind-mounting the build dir (or null). Exhaust the four cases.
 {
 	const WR = '/var/www/morphit-frontend';
 	const BD = '/opt/morphit/apps/web/build';
 
-	// FD-9 bare-metal: web root exists, no BunkerWeb container → copy only.
+	// FD-9 bare-metal: web root exists, no container → copy only.
 	const bare = planFrontendDeploy({
 		webRootExists: true,
-		bunkerwebFrontendPresent: false,
+		frontendContainer: null,
 		webRoot: WR,
 		buildDir: BD
 	});
-	if (bare.copyToWebRoot && !bare.recreateBunkerwebFrontend && bare.warn === null) {
+	if (bare.copyToWebRoot && bare.restartContainer === null && bare.warn === null) {
 		ok('FD-9 bare-metal (web root, no container) → copy to web root, no warning');
 	} else {
 		bad('FD-9', JSON.stringify(bare));
 	}
 
-	// FD-10 BunkerWeb: no web root, container present → recreate only, no warn.
-	// This is the regression case: pre-cap236 the frontend was silently
-	// skipped here.
+	// FD-10 containerized: no web root, container present → restart that
+	// container only, no warn. This is the regression case: pre-cp236 the
+	// frontend was silently skipped here. The container name is whatever
+	// `docker ps` reported — here a compose-style `bunkerweb-frontend-1`,
+	// which cp236's hardcoded `morphit-frontend` filter would have MISSED.
 	const bw = planFrontendDeploy({
 		webRootExists: false,
-		bunkerwebFrontendPresent: true,
+		frontendContainer: 'bunkerweb-frontend-1',
 		webRoot: WR,
 		buildDir: BD
 	});
-	if (!bw.copyToWebRoot && bw.recreateBunkerwebFrontend && bw.warn === null) {
-		ok('FD-10 BunkerWeb (container, no web root) → recreate container, no warning');
+	if (
+		!bw.copyToWebRoot &&
+		bw.restartContainer === 'bunkerweb-frontend-1' &&
+		bw.warn === null
+	) {
+		ok('FD-10 containerized (compose-named container, no web root) → restart that container, no warning');
 	} else {
-		bad('FD-10 (BunkerWeb frontend would be silently skipped!)', JSON.stringify(bw));
+		bad('FD-10 (frontend would be silently skipped / wrong container!)', JSON.stringify(bw));
 	}
 
-	// FD-11 both present → do both, no warning.
+	// FD-11 both present → do both, no warning. (Container named the
+	// canonical `morphit-frontend` here — also detected purely by mount.)
 	const both = planFrontendDeploy({
 		webRootExists: true,
-		bunkerwebFrontendPresent: true,
+		frontendContainer: 'morphit-frontend',
 		webRoot: WR,
 		buildDir: BD
 	});
-	if (both.copyToWebRoot && both.recreateBunkerwebFrontend && both.warn === null) {
-		ok('FD-11 both targets → copy AND recreate, no warning');
+	if (both.copyToWebRoot && both.restartContainer === 'morphit-frontend' && both.warn === null) {
+		ok('FD-11 both targets → copy AND restart container, no warning');
 	} else {
 		bad('FD-11', JSON.stringify(both));
 	}
@@ -196,13 +222,13 @@ function tmp(prefix: string): string {
 	// FD-12 neither → no publish action, and a warning that names the build dir.
 	const neither = planFrontendDeploy({
 		webRootExists: false,
-		bunkerwebFrontendPresent: false,
+		frontendContainer: null,
 		webRoot: WR,
 		buildDir: BD
 	});
 	if (
 		!neither.copyToWebRoot &&
-		!neither.recreateBunkerwebFrontend &&
+		neither.restartContainer === null &&
 		neither.warn !== null &&
 		neither.warn.includes(BD)
 	) {
@@ -212,7 +238,79 @@ function tmp(prefix: string): string {
 	}
 }
 
-// ─── FD-7/8: structural wiring assertions on upgrade.ts ─────────────
+// ─── FD-16/17/18/19: bind-mount detection helpers (beta11) ──────────
+// These are the robust, name-agnostic signal that a container serves OUR
+// frontend build: it bind-mounts <install>/apps/web/build. cp236 matched a
+// hardcoded container name instead and broke on real deployments.
+{
+	// FD-16 normalizeMountPath: strip a single trailing slash, keep bare "/",
+	// trim surrounding whitespace.
+	const n1 = normalizeMountPath('/opt/morphit/apps/web/build/');
+	const n2 = normalizeMountPath('/opt/morphit/apps/web/build');
+	const n3 = normalizeMountPath('  /opt/morphit/apps/web/build  ');
+	const n4 = normalizeMountPath('/');
+	if (
+		n1 === '/opt/morphit/apps/web/build' &&
+		n2 === '/opt/morphit/apps/web/build' &&
+		n3 === '/opt/morphit/apps/web/build' &&
+		n4 === '/'
+	) {
+		ok('FD-16 normalizeMountPath strips a trailing slash, trims, keeps bare "/"');
+	} else {
+		bad('FD-16', `n1=${n1} n2=${n2} n3=${n3} n4=${n4}`);
+	}
+
+	// FD-17 parseMountSources: split the `docker inspect --format` newline
+	// list, trim each, drop blank lines (the template emits a trailing \n).
+	const sources = parseMountSources(
+		'/etc/letsencrypt\n/opt/morphit/apps/web/build\n\n  /var/log/nginx  \n'
+	);
+	if (
+		sources.length === 3 &&
+		sources[0] === '/etc/letsencrypt' &&
+		sources[1] === '/opt/morphit/apps/web/build' &&
+		sources[2] === '/var/log/nginx'
+	) {
+		ok('FD-17 parseMountSources splits, trims, and drops blank lines');
+	} else {
+		bad('FD-17', JSON.stringify(sources));
+	}
+
+	// FD-18 containerMountsBuildDir: exact match (with trailing-slash
+	// normalization on both sides) hits; a parent, a sibling, and an
+	// unrelated mount all miss (no false positives from prefix matching).
+	const BD = '/opt/morphit/apps/web/build';
+	const hit = containerMountsBuildDir(['/etc/letsencrypt', '/opt/morphit/apps/web/build/'], BD);
+	const parentMiss = containerMountsBuildDir(['/opt/morphit/apps/web'], BD);
+	const siblingMiss = containerMountsBuildDir(['/opt/morphit/apps/web/build-old'], BD);
+	const unrelatedMiss = containerMountsBuildDir(['/etc/letsencrypt', '/var/log/nginx'], BD);
+	const emptyMiss = containerMountsBuildDir([], BD);
+	if (hit && !parentMiss && !siblingMiss && !unrelatedMiss && !emptyMiss) {
+		ok('FD-18 containerMountsBuildDir matches the exact build dir only (no parent/sibling/prefix false positives)');
+	} else {
+		bad(
+			'FD-18',
+			`hit=${hit} parentMiss=${parentMiss} siblingMiss=${siblingMiss} unrelatedMiss=${unrelatedMiss} emptyMiss=${emptyMiss}`
+		);
+	}
+
+	// FD-19 name-agnostic detection proof: a container whose inspect output
+	// lists the build dir among OTHER mounts is detected regardless of its
+	// name; a container mounting only a sibling dir is not. This is exactly
+	// what lets us find `bunkerweb-frontend-1` (or any name) by its mount.
+	const realStackInspect =
+		'/etc/letsencrypt/live/morphit.io\n/opt/morphit/apps/web/build\n/var/cache/bunkerweb\n';
+	const decoyInspect = '/opt/morphit/apps/web/build-staging\n/var/log\n';
+	const detected = containerMountsBuildDir(parseMountSources(realStackInspect), BD);
+	const notDetected = containerMountsBuildDir(parseMountSources(decoyInspect), BD);
+	if (detected && !notDetected) {
+		ok('FD-19 a container is detected by its apps/web/build mount among others, name-agnostically (and a decoy mount is not)');
+	} else {
+		bad('FD-19', `detected=${detected} notDetected=${notDetected}`);
+	}
+}
+
+// ─── FD-7/8/13/14/20: structural wiring assertions on upgrade.ts ────
 {
 	const upgradeSrc = readFileSync(
 		join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'commands', 'upgrade.ts'),
@@ -231,8 +329,8 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-7c',
-			re: /deployFrontendBuild\(\s*join\(installDir, 'apps', 'web', 'build'\),\s*webRoot\s*\)/,
-			desc: 'runUpgrade calls deployFrontendBuild(<install>/apps/web/build, webRoot)'
+			re: /deployFrontendBuild\(\s*buildDir,\s*webRoot\s*\)/,
+			desc: 'runUpgrade calls deployFrontendBuild(buildDir, webRoot)'
 		},
 		{
 			id: 'FD-7d',
@@ -246,13 +344,23 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-13',
-			re: /planFrontendDeploy\(\{/,
-			desc: 'runUpgrade decides how to publish via planFrontendDeploy({...})'
+			re: /planFrontendDeploy\(\{[\s\S]*?frontendContainer:/,
+			desc: 'runUpgrade decides how to publish via planFrontendDeploy({ frontendContainer, ... })'
 		},
 		{
-			id: 'FD-14',
-			re: /recreateBunkerwebFrontend\(/,
-			desc: 'runUpgrade recreates the BunkerWeb frontend container when present'
+			id: 'FD-14a',
+			re: /findFrontendContainer\(buildDir\)/,
+			desc: 'runUpgrade detects the frontend container by the build-dir mount (findFrontendContainer)'
+		},
+		{
+			id: 'FD-14b',
+			re: /restartFrontendContainer\(plan\.restartContainer\)/,
+			desc: 'runUpgrade restarts the detected container (restartFrontendContainer)'
+		},
+		{
+			id: 'FD-14c',
+			re: /docker['"\],\s]+inspect[\s\S]*?\.Mounts[\s\S]*?\.Source/,
+			desc: 'findFrontendContainer inspects container .Mounts .Source'
 		}
 	];
 	for (const c of checks) {
@@ -263,9 +371,27 @@ function tmp(prefix: string): string {
 		}
 	}
 
+	// FD-20 (beta11 regression guard): cp236's name/compose-based approach is
+	// fully GONE — no `recreateBunkerwebFrontend`, no `bunkerwebFrontendPresent`,
+	// no hardcoded `name=^/morphit-frontend$` docker filter, no
+	// `--force-recreate frontend`. Their presence would mean the old broken
+	// publish path crept back.
+	const ghosts: Array<{ re: RegExp; what: string }> = [
+		{ re: /recreateBunkerwebFrontend/, what: 'recreateBunkerwebFrontend()' },
+		{ re: /bunkerwebFrontendPresent/, what: 'bunkerwebFrontendPresent()' },
+		{ re: /name=\^\/morphit-frontend\$/, what: 'hardcoded morphit-frontend docker filter' },
+		{ re: /--force-recreate/, what: 'docker compose --force-recreate' }
+	];
+	const ghostHits = ghosts.filter((g) => g.re.test(upgradeSrc)).map((g) => g.what);
+	if (ghostHits.length === 0) {
+		ok('FD-20 cp236 name/compose-based publish path fully removed (no recreate/name-filter/force-recreate ghosts)');
+	} else {
+		bad('FD-20 stale cp236 publish path present', ghostHits.join(', '));
+	}
+
 	// FD-15 (cp236 regression guard): the web build must be UNCONDITIONAL.
 	// The original bug nested `npm run build` inside an `if (webRoot exists)`
-	// else, so a BunkerWeb host (no /var/www/morphit-frontend) silently
+	// else, so a container-served host (no /var/www/morphit-frontend) silently
 	// skipped the frontend rebuild. Assert (a) the old skip text is gone and
 	// (b) the build is NOT gated behind a webRoot-existence else.
 	const oldSkipText = /skipping the frontend redeploy/.test(upgradeSrc);
@@ -277,7 +403,7 @@ function tmp(prefix: string): string {
 		ok('FD-15 web build is unconditional (not skipped when the web root is absent)');
 	} else {
 		bad(
-			'FD-15 web build is conditional again — BunkerWeb hosts would silently skip it',
+			'FD-15 web build is conditional again — container-served hosts would silently skip it',
 			`oldSkipText=${oldSkipText} buildGatedBehindWebRoot=${buildGatedBehindWebRoot}`
 		);
 	}

@@ -221,9 +221,21 @@
 	});
 </script>
 
+<!--
+	dir="ltr" is FORCED here regardless of the document direction.
+	The marquee uses physical `transform: translateX()` keyframes
+	(and the left/right edge-fade gradients are physically placed),
+	but a `dir="rtl"` ancestor — set on <html> for the Farsi locale
+	in hooks.client.ts + app.html — does NOT flip CSS transforms, so
+	under RTL the track and its edge fades misalign.  The carousel's
+	content (coin icons + uppercase tickers + network names) is
+	language-neutral, so pinning it LTR is correct in every locale
+	and keeps the animation geometry consistent (beta11 item 6).
+-->
 <section
 	bind:this={containerEl}
 	class="coin-carousel"
+	dir="ltr"
 	aria-label={$_('home.coin_carousel.aria_label')}
 >
 	<!-- Screen-reader-only enumeration of slots.  Conveys the

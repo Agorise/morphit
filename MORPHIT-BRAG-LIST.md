@@ -732,6 +732,8 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 331. **Check your Blurt RPC health before you rely on it — and one dead node never freezes your instance.** `morphit-ops doctor` and the setup wizard probe every configured RPC endpoint with a real chain query — not just DNS — and report which are reachable before you depend on them; `/v1/health` shows how many are healthy at a glance. The indexer now ships the same vetted default node list the relay always had, so a missing or stale config falls back to working nodes instead of stalling — and a dead, rate-limited, or flapping node is routed around automatically.
 
+332. **Runs across the whole Debian/Ubuntu family — including hardened, lightweight servers.** The setup pre-flight (`apps/ops-cli/src/init/systemCheck.ts`) green-lights Ubuntu 24.04/26.04 LTS and Debian 12+ as first-class bases and recognizes popular derivatives automatically from their base codename — Linux Mint, Pop!_OS, Zorin OS, KDE neon, and elementary OS. Debian-minimal and hardened-Debian distros like Kicksecure make excellent lean, security-focused nodes: the one-command Ansible installer targets the Ubuntu 24.04 'noble' family, while Debian and Kicksecure install via the documented manual steps, and the recognition is locked by `apps/ops-cli/scripts/system-check-os-smoke.ts`.
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -750,4 +752,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*331 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 9 June, 2026.*
+*332 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 10 June, 2026.*

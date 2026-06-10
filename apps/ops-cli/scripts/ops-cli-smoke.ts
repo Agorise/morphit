@@ -283,8 +283,34 @@ scenario('cp186: bare morphit-ops opens a menu on a TTY but keeps help+exit1 for
 	// Menu must offer the high-value actions the operator asked for.
 	// (`init` is intentionally NOT a menu item — `install` wraps the
 	// wizard and does the full setup; init stays a CLI-only command.)
-	for (const sub of ['install', 'edit', 'upgrade', 'register', 'status', 'harden', 'ssl', 'bunkerweb', 'moderation']) {
+	for (const sub of [
+		'install',
+		'upgrade',
+		'edit',
+		'alt-address',
+		'payment-method',
+		'show-key',
+		'edit-active-key',
+		'register',
+		'harden',
+		'ssl',
+		'bunkerweb',
+		'doctor',
+		'health',
+		'status',
+		'signups',
+		'failed-broadcasts',
+		'drain-queue',
+		'moderation'
+	]) {
 		assertEqual(new RegExp(`subcommand: '${sub}'`).test(m), true, `menu offers '${sub}'`);
+	}
+	// beta11 item 5c: the menu is grouped by lifecycle (install → configure
+	// → secure → check/operate), and the live indexer health view is a
+	// first-class menu item alongside doctor + status.
+	assertEqual(/subcommand: 'health'/.test(m), true, 'menu offers the beta11 health view');
+	for (const heading of ['Install & upgrade', 'Configure the instance', 'Secure the server', 'Check & operate']) {
+		assertEqual(m.includes(heading), true, `menu has the '${heading}' lifecycle group`);
 	}
 	assertEqual(/subcommand: 'init'/.test(m), false, 'menu does NOT offer init (install wraps it)');
 	// beta5: abuse + flags folded into the unified `moderation` screen;
