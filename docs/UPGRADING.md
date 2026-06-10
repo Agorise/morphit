@@ -188,18 +188,33 @@ Steps the command takes, in order:
     config — your instance comes back up exactly as it was, on the
     new code.
 9. Runs `npm ci --no-audit --no-fund` in the new install dir.
-9b. **Rebuilds and redeploys the web frontend.** The indexer, relay,
+9b. **Rebuilds and republishes the web frontend.** The indexer, relay,
     and matrix-bot run straight from TypeScript source via `tsx`, so
     `npm ci` is all they need — but the website is a static SvelteKit
-    build that nginx serves from a folder, and the release tarball does
-    **not** ship a prebuilt frontend. So the upgrade runs the web build
-    (`npm run build` in `apps/web`) and copies the result into your web
-    root (`MORPHIT_WEB_ROOT`, default `/var/www/morphit-frontend`),
-    preserving that folder's ownership. nginx serves the new static
-    files immediately — no nginx reload needed. If `MORPHIT_WEB_ROOT`
-    doesn't exist (a non-standard serving setup), this step is **skipped
-    with a warning** and the backend still upgrades; set
-    `MORPHIT_WEB_ROOT` or rebuild + copy `apps/web/build` yourself.
+    build, and the release tarball does **not** ship a prebuilt frontend.
+    So the upgrade **always** runs the web build (`npm run build` in
+    `apps/web`) — on every upgrade, regardless of how your site is
+    served — and then publishes it to wherever it's served from:
+    - **Bare-metal nginx:** if your web root exists (`MORPHIT_WEB_ROOT`,
+      default `/var/www/morphit-frontend`), the new build is copied in,
+      preserving that folder's ownership. nginx serves the new files
+      immediately — no reload needed.
+    - **BunkerWeb:** if a `morphit-frontend` container is running (it
+      bind-mounts `<install>/apps/web/build`), the upgrade recreates it
+      so it re-binds the freshly-built files. A running container would
+      otherwise keep serving the *previous* build, because the install
+      directory was renamed out from under its mount during the upgrade.
+    - **Both** can apply (then it does both). If **neither** target is
+      found — a genuinely non-standard setup — the rebuilt files are left
+      on disk and the upgrade tells you exactly where to copy them from;
+      the backend still upgrades.
+
+    > **Why this matters (fixed in beta.10):** before beta.10 the rebuild
+    > only ran when `/var/www/morphit-frontend` existed, so a BunkerWeb
+    > host silently skipped the frontend rebuild, upgraded the backend,
+    > and reported success — leaving visitors on the old build (and never
+    > showing the "Load it now" update prompt). The rebuild is now
+    > unconditional and the publish target is auto-detected.
 10. Restarts these systemd services if they're active:
     - `morphit-indexer.service`
     - `morphit-relay.service`
@@ -248,7 +263,7 @@ sudo -u morphit npx morphit-ops upgrade --yes
 | `MORPHIT_RELEASE_REPO` | `agorise/morphit` | repo path |
 | `MORPHIT_RELEASE_MIRRORS` | unset | comma-separated fallback sources, each `host` or `host/owner/repo`, tried after the primary |
 | `MORPHIT_INSTALL_DIR` | `/opt/morphit` | install location |
-| `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | where nginx serves the static frontend from; `upgrade` rebuilds `apps/web` and redeploys here. Set it for a custom serving path; if the dir is absent the frontend redeploy is skipped (with a warning) |
+| `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | bare-metal nginx web root; if it exists, `upgrade` copies the freshly-built `apps/web/build` here. Set it for a custom bare-metal path. The web app is **always** rebuilt regardless; on a BunkerWeb host the `frontend` container is recreated instead, and if neither target is found the rebuilt files are left on disk with a warning |
 | `MORPHIT_BACKUP_KEEP` | `3` | how many `.bak-*` backups to retain |
 
 ### Mirrors and how integrity is protected

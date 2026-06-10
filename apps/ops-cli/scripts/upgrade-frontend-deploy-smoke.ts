@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveWebRoot, deployFrontendBuild } from '../src/commands/upgrade.ts';
+import { resolveWebRoot, deployFrontendBuild, planFrontendDeploy } from '../src/commands/upgrade.ts';
 
 let pass = 0;
 let fail = 0;
@@ -144,6 +144,74 @@ function tmp(prefix: string): string {
 	}
 }
 
+// ─── FD-9/10/11/12: planFrontendDeploy decision matrix (cp236) ──────
+// The web build now ALWAYS runs; planFrontendDeploy decides how to PUBLISH
+// it from two signals (bare-metal web root present, BunkerWeb frontend
+// container present). Exhaust the four cases.
+{
+	const WR = '/var/www/morphit-frontend';
+	const BD = '/opt/morphit/apps/web/build';
+
+	// FD-9 bare-metal: web root exists, no BunkerWeb container → copy only.
+	const bare = planFrontendDeploy({
+		webRootExists: true,
+		bunkerwebFrontendPresent: false,
+		webRoot: WR,
+		buildDir: BD
+	});
+	if (bare.copyToWebRoot && !bare.recreateBunkerwebFrontend && bare.warn === null) {
+		ok('FD-9 bare-metal (web root, no container) → copy to web root, no warning');
+	} else {
+		bad('FD-9', JSON.stringify(bare));
+	}
+
+	// FD-10 BunkerWeb: no web root, container present → recreate only, no warn.
+	// This is the regression case: pre-cap236 the frontend was silently
+	// skipped here.
+	const bw = planFrontendDeploy({
+		webRootExists: false,
+		bunkerwebFrontendPresent: true,
+		webRoot: WR,
+		buildDir: BD
+	});
+	if (!bw.copyToWebRoot && bw.recreateBunkerwebFrontend && bw.warn === null) {
+		ok('FD-10 BunkerWeb (container, no web root) → recreate container, no warning');
+	} else {
+		bad('FD-10 (BunkerWeb frontend would be silently skipped!)', JSON.stringify(bw));
+	}
+
+	// FD-11 both present → do both, no warning.
+	const both = planFrontendDeploy({
+		webRootExists: true,
+		bunkerwebFrontendPresent: true,
+		webRoot: WR,
+		buildDir: BD
+	});
+	if (both.copyToWebRoot && both.recreateBunkerwebFrontend && both.warn === null) {
+		ok('FD-11 both targets → copy AND recreate, no warning');
+	} else {
+		bad('FD-11', JSON.stringify(both));
+	}
+
+	// FD-12 neither → no publish action, and a warning that names the build dir.
+	const neither = planFrontendDeploy({
+		webRootExists: false,
+		bunkerwebFrontendPresent: false,
+		webRoot: WR,
+		buildDir: BD
+	});
+	if (
+		!neither.copyToWebRoot &&
+		!neither.recreateBunkerwebFrontend &&
+		neither.warn !== null &&
+		neither.warn.includes(BD)
+	) {
+		ok('FD-12 neither target → no publish, warns with the build dir path');
+	} else {
+		bad('FD-12', JSON.stringify(neither));
+	}
+}
+
 // ─── FD-7/8: structural wiring assertions on upgrade.ts ─────────────
 {
 	const upgradeSrc = readFileSync(
@@ -175,6 +243,16 @@ function tmp(prefix: string): string {
 			id: 'FD-8',
 			re: /redeploy the web frontend/,
 			desc: 'the confirmation prompt tells the operator the frontend will be redeployed'
+		},
+		{
+			id: 'FD-13',
+			re: /planFrontendDeploy\(\{/,
+			desc: 'runUpgrade decides how to publish via planFrontendDeploy({...})'
+		},
+		{
+			id: 'FD-14',
+			re: /recreateBunkerwebFrontend\(/,
+			desc: 'runUpgrade recreates the BunkerWeb frontend container when present'
 		}
 	];
 	for (const c of checks) {
@@ -183,6 +261,25 @@ function tmp(prefix: string): string {
 		} else {
 			bad(c.id, `wiring missing: ${c.desc}`);
 		}
+	}
+
+	// FD-15 (cp236 regression guard): the web build must be UNCONDITIONAL.
+	// The original bug nested `npm run build` inside an `if (webRoot exists)`
+	// else, so a BunkerWeb host (no /var/www/morphit-frontend) silently
+	// skipped the frontend rebuild. Assert (a) the old skip text is gone and
+	// (b) the build is NOT gated behind a webRoot-existence else.
+	const oldSkipText = /skipping the frontend redeploy/.test(upgradeSrc);
+	const buildGatedBehindWebRoot =
+		/if\s*\(\s*!existsSync\(webRoot\)\s*\)[\s\S]*?else[\s\S]*?runOrThrow\(\s*'npm',\s*\['run',\s*'build'\]/.test(
+			upgradeSrc
+		);
+	if (!oldSkipText && !buildGatedBehindWebRoot) {
+		ok('FD-15 web build is unconditional (not skipped when the web root is absent)');
+	} else {
+		bad(
+			'FD-15 web build is conditional again — BunkerWeb hosts would silently skip it',
+			`oldSkipText=${oldSkipText} buildGatedBehindWebRoot=${buildGatedBehindWebRoot}`
+		);
 	}
 }
 

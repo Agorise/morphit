@@ -1,6 +1,6 @@
 {
   "name": "@morphit/rpc-pool",
-  "version": "1.0.0-beta.9",
+  "version": "1.0.0-beta.10",
   "private": true,
   "type": "module",
   "description": "Shared latency-aware RPC endpoint pool with EWMA tracking, fastest-first ordering, exponential cooldown on transport failure, and optional adaptive request hedging. Used by the indexer's BlurtClient and the relay's BlurtClient to deliver instantaneous UX for user-facing chain calls (availability checks, getAccount during signup) by switching off slow nodes within ~150ms instead of waiting on a per-call timeout.",
