@@ -46,7 +46,13 @@ BunkerWeb source code.
   none` rule on `/relay/v1/account/invite` (§38.6 item d), ASN-block
   stubs for cheap-VPS providers (§38.6 item c, commented in; uncomment
   to activate), Real-IP forwarding wired for the relay's trusted-proxy
-  chain.
+  chain, and the **security headers** (`CONTENT_SECURITY_POLICY`,
+  `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`) — BunkerWeb
+  owns these since the
+  frontend nginx.conf sets none. The CSP mirrors `ops/nginx/web.conf`
+  exactly; **leave `CONTENT_SECURITY_POLICY` set**, because BunkerWeb's
+  default (`default-src 'self'`) breaks the in-browser WASM crypto. See
+  docs/OPERATIONS.md §15.
 - This README.
 
 ## Topology
@@ -186,8 +192,24 @@ testing in staging.
 - OWASP CRS paranoia level — defaults to 3.  Drop to 2 if you
   see real-user false positives in WAF rejection logs; raise to
   4 only if you can verify it doesn't break legitimate traffic.
-- `LIMIT_REQ_RATE` — defaults to 60r/m on `/v1/`.  Tune for your
-  traffic.
+- `LIMIT_REQ_RATE_1` — the COARSE edge ceiling on `/v1/`, set to
+  `1800r/m`.  This is deliberately well above the indexer's own
+  per-endpoint per-IP limits (120 r/m list / 600 r/m single-record,
+  which are the real limiter); the WAF value only catches egregious
+  abuse.  Do NOT tighten it toward the indexer's numbers: a single
+  page load fires many `/v1/*` calls at once, and a tight edge limit
+  turns that normal burst into `429`s.  `/relay/` is `120r/m` (the
+  relay enforces its own deeper signup ceilings + spacing).
+- Bad-behavior bans (`BAD_BEHAVIOR_*`) — by default BunkerWeb counts
+  `400 401 403 404 405 429 444` and bans an IP that accumulates too
+  many.  Morphit narrows the counted set to `400 401 405 444`,
+  because for a SPA + PWA + public read API the excluded codes ban
+  real users: `429` is the rate limiter's own response (a normal
+  burst), `403` is ALSO what BunkerWeb returns to an already-banned
+  IP (so counting it makes a ban self-perpetuate), and `404` is
+  normal PWA/SPA asset/manifest/icon probing.  Threshold 50, ban
+  3600s.  If you re-add any of the excluded codes, expect ordinary
+  visitors to get banned during normal browsing.
 
 ## What the Ansible playbook does
 

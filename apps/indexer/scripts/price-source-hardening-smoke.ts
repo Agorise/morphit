@@ -23,8 +23,13 @@ import {
 import {
 	DisagreementMonitor,
 	DISAGREEMENT_THRESHOLD,
-	DISAGREEMENT_ALERT_SUSTAINED_HOURS
+	DISAGREEMENT_ALERT_SUSTAINED_HOURS,
+	startDisagreementMonitor,
+	runDisagreementCheckCycle
 } from '../src/indexer/price/disagreementMonitor';
+import { CompositeCachedPriceSource } from '../src/indexer/price/compositeSource';
+import type { BlurtPriceSource } from '../src/indexer/price/source';
+import type { Database } from '../src/db/pool';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -320,6 +325,288 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 		pass('FW-3 priceReceipt route mounted at /v1/price in main.ts');
 	} else {
 		fail('FW-3', 'priceReceipt route not properly wired in main.ts');
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────
+// cp233 — defense B + C RUNTIME WIRING.  The contract checks above
+// prove the modules behave; these prove they are actually invoked in
+// the refresh path / main.ts / health, so a future refactor cannot
+// silently unwire them (precisely the failure mode these exist to
+// prevent).
+// ─────────────────────────────────────────────────────────────────
+
+// BW-1 — compositeSource invokes the drift check after a commit and
+// exposes driftStatus().
+{
+	const src = readFileSync(
+		resolve(__dirname, '..', 'src', 'indexer', 'price', 'compositeSource.ts'),
+		'utf-8'
+	);
+	if (
+		src.includes('updateAndCheckDrift') &&
+		src.includes('driftStatus()') &&
+		src.includes('this.lastDrift')
+	) {
+		pass('BW-1 compositeSource calls updateAndCheckDrift + exposes driftStatus()');
+	} else {
+		fail('BW-1', 'drift hook or driftStatus() accessor missing from compositeSource');
+	}
+}
+
+// BW-2 — factory passes db + asset + denominationFiat to the source
+// (without all three, the drift hook is dormant).
+{
+	const src = readFileSync(
+		resolve(__dirname, '..', 'src', 'indexer', 'price', 'factory.ts'),
+		'utf-8'
+	);
+	const m = src.match(/new CompositeCachedPriceSource\(\{[\s\S]*?\}\)/);
+	const ctor = m ? m[0] : '';
+	if (ctor.includes('db') && ctor.includes('asset:') && ctor.includes('denominationFiat:')) {
+		pass('BW-2 factory passes db + asset + denominationFiat into CompositeCachedPriceSource');
+	} else {
+		fail('BW-2', 'factory no longer wires db/asset/denominationFiat into the source');
+	}
+}
+
+// BW-3 — /v1/health surfaces the drift block.
+{
+	const src = readFileSync(resolve(__dirname, '..', 'src', 'api', 'health.ts'), 'utf-8');
+	if (src.includes('driftStatus?.()') && src.includes('drift:')) {
+		pass('BW-3 /v1/health surfaces the drift block');
+	} else {
+		fail('BW-3', 'health.ts no longer surfaces drift');
+	}
+}
+
+// BW-RT — the drift check actually runs on a successful refresh when
+// db/asset/fiat are wired, and is dormant (no db touch) when they are
+// not.  Catches the hook being removed or the guard inverting.
+{
+	let queries = 0;
+	const fakeDb = {
+		query: async () => {
+			queries++;
+			return { rows: [] };
+		}
+	} as unknown as Database;
+	const wired = new CompositeCachedPriceSource({
+		upstreams: [{ name: 'klingex', fetch: async () => 0.005 }],
+		staticFloor: 0.002,
+		refreshIntervalMs: 60_000,
+		setInterval: (() => 0) as unknown as typeof setInterval,
+		clearInterval: (() => {}) as unknown as typeof clearInterval,
+		db: fakeDb,
+		asset: 'BLURT',
+		denominationFiat: 'USD'
+	});
+	await wired.refreshOnce();
+	const wiredOk = queries >= 1 && wired.driftStatus() !== null;
+
+	let queries2 = 0;
+	const fakeDb2 = {
+		query: async () => {
+			queries2++;
+			return { rows: [] };
+		}
+	} as unknown as Database;
+	void fakeDb2; // referenced for symmetry; unwired source gets no db
+	const unwired = new CompositeCachedPriceSource({
+		upstreams: [{ name: 'klingex', fetch: async () => 0.005 }],
+		staticFloor: 0.002,
+		refreshIntervalMs: 60_000,
+		setInterval: (() => 0) as unknown as typeof setInterval,
+		clearInterval: (() => {}) as unknown as typeof clearInterval
+		// deliberately no db/asset/denominationFiat
+	});
+	await unwired.refreshOnce();
+	const unwiredOk = queries2 === 0 && unwired.driftStatus() === null;
+
+	if (wiredOk && unwiredOk) {
+		pass('BW-RT drift runs on refresh when wired; dormant (no db touch) when not');
+	} else {
+		fail(
+			'BW-RT',
+			`wired(queried=${queries}, status≠null=${wired.driftStatus() !== null}); ` +
+				`unwired(queried=${queries2}, status=null=${unwired.driftStatus() === null})`
+		);
+	}
+}
+
+// CW-1 — disagreementMonitor exports the loop machinery + the
+// external-source guard constant.
+{
+	const src = readFileSync(
+		resolve(__dirname, '..', 'src', 'indexer', 'price', 'disagreementMonitor.ts'),
+		'utf-8'
+	);
+	if (
+		src.includes('export function startDisagreementMonitor') &&
+		src.includes('export async function runDisagreementCheckCycle') &&
+		src.includes('EXTERNAL_MARKET_SOURCES')
+	) {
+		pass('CW-1 disagreementMonitor exports start + runCycle + EXTERNAL_MARKET_SOURCES');
+	} else {
+		fail('CW-1', 'C loop machinery missing from disagreementMonitor');
+	}
+}
+
+// CW-2 — factory builds the monitor + shares one native-fetch
+// construction with the composite upstream.
+{
+	const src = readFileSync(
+		resolve(__dirname, '..', 'src', 'indexer', 'price', 'factory.ts'),
+		'utf-8'
+	);
+	if (src.includes('export function createDisagreementMonitor') && src.includes('buildMorphitNativeFetch')) {
+		pass('CW-2 factory builds the disagreement monitor + shares buildMorphitNativeFetch');
+	} else {
+		fail('CW-2', 'factory missing createDisagreementMonitor / buildMorphitNativeFetch');
+	}
+}
+
+// CW-3 — main.ts starts C per-asset, hands monitors to /v1/health,
+// and stops them on shutdown.
+{
+	const src = readFileSync(resolve(__dirname, '..', 'src', 'main.ts'), 'utf-8');
+	const hasStart = src.includes('startDisagreementMonitor');
+	const hasBuild = src.includes('createDisagreementMonitor');
+	const hasRegistry = src.includes('disagreementMonitors');
+	const passedToHealth = /healthRoute\([^)]*disagreementMonitors/.test(src);
+	const stopsOnShutdown = src.includes('stopDisagreementMonitors');
+	if (hasStart && hasBuild && hasRegistry && passedToHealth && stopsOnShutdown) {
+		pass('CW-3 main.ts starts C per-asset, passes monitors to /v1/health, stops on shutdown');
+	} else {
+		fail(
+			'CW-3',
+			`start=${hasStart} build=${hasBuild} registry=${hasRegistry} health=${passedToHealth} stop=${stopsOnShutdown}`
+		);
+	}
+}
+
+// CW-4 — /v1/health surfaces the disagreement block.
+{
+	const src = readFileSync(resolve(__dirname, '..', 'src', 'api', 'health.ts'), 'utf-8');
+	if (src.includes('disagreementMonitors') && src.includes('disagreement:') && src.includes('lastCheck()')) {
+		pass('CW-4 /v1/health surfaces the disagreement block');
+	} else {
+		fail('CW-4', 'health.ts no longer surfaces disagreement');
+	}
+}
+
+// Minimal BlurtPriceSource fake for the C cycle runtime tests — only
+// currentDetailed() is consulted by runDisagreementCheckCycle.
+const fakeSource = (source: string, price: number): BlurtPriceSource => ({
+	current: () => price,
+	currentDetailed: () => ({ price, source, updated_at: new Date(), stale: false }),
+	start: () => {},
+	stop: () => {}
+});
+
+// CW-RT-1 — cycle reads the external (coingecko) published price and
+// the freshly-derived native price; divergence → active.
+{
+	const monitor = new DisagreementMonitor('BLURT', 'USD');
+	const r = await runDisagreementCheckCycle({
+		monitor,
+		nativeFetch: async () => 0.01,
+		priceSource: fakeSource('coingecko', 0.005)
+	});
+	if (r.active && r.external_source === 'coingecko' && r.external_price === 0.005 && r.native_price === 0.01) {
+		pass('CW-RT-1 cycle uses external (coingecko) + native → active on divergence');
+	} else {
+		fail('CW-RT-1', `expected active w/ coingecko external, got ${JSON.stringify(r)}`);
+	}
+}
+
+// CW-RT-2 — THE false-alarm guard.  When the composite is serving the
+// static floor or the native fallback, there is no external market
+// reference, so the cycle must stay inactive even though native vs
+// floor is a huge gap.  This is the property EXTERNAL_MARKET_SOURCES
+// exists to protect.
+{
+	const rFloor = await runDisagreementCheckCycle({
+		monitor: new DisagreementMonitor('BLURT', 'USD'),
+		nativeFetch: async () => 0.01,
+		priceSource: fakeSource('static_floor', 0.002)
+	});
+	const rNative = await runDisagreementCheckCycle({
+		monitor: new DisagreementMonitor('BLURT', 'USD'),
+		nativeFetch: async () => 0.01,
+		priceSource: fakeSource('morphit_native', 0.01)
+	});
+	if (!rFloor.active && rFloor.external_price === null && !rNative.active && rNative.external_price === null) {
+		pass('CW-RT-2 floor/native published source → no external ref → inactive (false-alarm guard)');
+	} else {
+		fail(
+			'CW-RT-2',
+			`expected inactive; floor=${JSON.stringify(rFloor)} native=${JSON.stringify(rNative)}`
+		);
+	}
+}
+
+// CW-RT-3 — startDisagreementMonitor schedules at the given interval
+// and the returned stop fn clears that handle.
+{
+	let cleared: unknown = null;
+	let intervalArg = -1;
+	const stop = startDisagreementMonitor(
+		{
+			monitor: new DisagreementMonitor('BLURT', 'USD'),
+			nativeFetch: async () => null,
+			priceSource: fakeSource('coingecko', 0.005),
+			setInterval: ((_fn: () => void, ms: number) => {
+				intervalArg = ms;
+				return 12345 as unknown as ReturnType<typeof setInterval>;
+			}) as unknown as typeof setInterval,
+			clearInterval: ((h: unknown) => {
+				cleared = h;
+			}) as unknown as typeof clearInterval
+		},
+		300_000
+	);
+	stop();
+	if (typeof stop === 'function' && intervalArg === 300_000 && cleared === 12345) {
+		pass('CW-RT-3 startDisagreementMonitor schedules at interval + stop() clears the handle');
+	} else {
+		fail('CW-RT-3', `interval=${intervalArg}, cleared=${String(cleared)}`);
+	}
+}
+
+// FS-1 — peer monitor (defense F) exposes its latest cycle result via
+// the startPeerPriceMonitor callback, so /v1/health can read it.
+{
+	const src = readFileSync(
+		resolve(__dirname, '..', 'src', 'indexer', 'price', 'peerPriceMonitor.ts'),
+		'utf-8'
+	);
+	if (src.includes('onResult') && /startPeerPriceMonitor\([\s\S]*?onResult/.test(src)) {
+		pass('FS-1 startPeerPriceMonitor exposes its latest cycle via onResult callback');
+	} else {
+		fail('FS-1', 'peer monitor no longer exposes its cycle result');
+	}
+}
+
+// FS-2 — main.ts captures peer results + passes them to /v1/health.
+{
+	const src = readFileSync(resolve(__dirname, '..', 'src', 'main.ts'), 'utf-8');
+	const captures = src.includes('peerMonitorResults') && src.includes('peerMonitorResults.set');
+	const passedToHealth = /healthRoute\([^)]*peerMonitorResults/.test(src);
+	if (captures && passedToHealth) {
+		pass('FS-2 main.ts captures peer results + passes them to /v1/health');
+	} else {
+		fail('FS-2', `captures=${captures} health=${passedToHealth}`);
+	}
+}
+
+// FS-3 — /v1/health surfaces the peer block; B + C + F all visible.
+{
+	const src = readFileSync(resolve(__dirname, '..', 'src', 'api', 'health.ts'), 'utf-8');
+	if (src.includes('peerMonitorResults') && src.includes('peer:') && src.includes('peer_median')) {
+		pass('FS-3 /v1/health surfaces the peer block (drift + disagreement + peer all visible)');
+	} else {
+		fail('FS-3', 'health.ts no longer surfaces the peer block');
 	}
 }
 

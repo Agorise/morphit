@@ -8,7 +8,12 @@
 	 *  their `privacyFeatures` field in the registry.
 	 *
 	 *  URL: `/[lang]/privacy/{asset}` where `{asset}` is the lower-
-	 *  case ticker.  Unknown tickers 404 via the load function.
+	 *  case ticker.  Unknown tickers redirect to the `/privacy`
+	 *  index via the client-side `$effect` below (preserving the
+	 *  locale prefix) — there is no load function; the page is
+	 *  prerendered + client-hydrated, and the whole body is gated
+	 *  on `{#if asset}` so an unknown ticker renders nothing before
+	 *  the redirect fires.
 	 *
 	 *  Content sources:
 	 *    - Asset basics (name, posture) — from registry

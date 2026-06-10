@@ -53,7 +53,7 @@ const TAG_PATTERN = /^[a-z0-9._-]+$/;
 /** Same forbidden-char class as profile display names — block
  *  control chars, bidi overrides, zero-width joiners. */
 const FORBIDDEN_DISPLAY_NAME_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

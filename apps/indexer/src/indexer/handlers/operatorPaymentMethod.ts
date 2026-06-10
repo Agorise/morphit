@@ -126,7 +126,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
  *  really attack themselves) but the defense-in-depth pattern
  *  should match.  Same range as `FORBIDDEN_TEXT_CHARS` in order.ts. */
 const STRIP_CODEPOINTS_RE =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\u2028\u2029\uFEFF]/g;
+	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
 function sanitize(s: string): string {
 	// cp138 A-4: NFC-normalize first so the codepoint-strip + trim

@@ -221,7 +221,7 @@
 	>
 		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
 			<!-- Wide wordmark logo, hyperlinked to home.  `shine` enables
-				 a subtle occasional glint (every ~9s) that traces the
+				 a subtle occasional glint (every ~15s) that traces the
 				 wordmark letterforms to draw the eye — pure CSS, masked to
 				 the wordmark shape, and removed under prefers-reduced-motion.
 				 (The hero logo on the homepage uses the same component
@@ -369,7 +369,8 @@
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.tor }
 								})}
-								rel="noopener"
+								rel="noopener noreferrer"
+								target="_blank"
 							>
 								<AltNetworkIcon
 									network="tor"
@@ -401,7 +402,8 @@
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.lokinet }
 								})}
-								rel="noopener"
+								rel="noopener noreferrer"
+								target="_blank"
 							>
 								<AltNetworkIcon
 									network="lokinet"
@@ -433,7 +435,8 @@
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.i2p_b32 }
 								})}
-								rel="noopener"
+								rel="noopener noreferrer"
+								target="_blank"
 							>
 								<AltNetworkIcon
 									network="i2p"
@@ -465,7 +468,8 @@
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.i2p_name }
 								})}
-								rel="noopener"
+								rel="noopener noreferrer"
+								target="_blank"
 							>
 								<AltNetworkIcon
 									network="i2p"
@@ -484,7 +488,8 @@
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.nostr }
 								})}
-								rel="noopener"
+								rel="noopener noreferrer"
+								target="_blank"
 							>
 								<AltNetworkIcon
 									network="nostr"

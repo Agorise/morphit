@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		faqEntries,
 		searchEntries,
@@ -20,8 +21,11 @@
 	let activeIndex = $state(0);
 	let inputEl: HTMLInputElement;
 
-	// Auto-expanded entries (by key) — a Set for quick toggles.
-	let expanded = $state(new Set<FaqKey>());
+	// Auto-expanded entries (by key). A SvelteSet so .has()/.add()/.delete()
+	// are reactive in every context — at mount (deep-link), in event
+	// handlers (toggle / related-chip / search-hit), without the awkward
+	// "mutate then reassign a fresh Set" dance the plain-$state pattern needs.
+	const expanded = new SvelteSet<FaqKey>();
 
 	// Per-entry "copied" toast state.
 	let copiedKey = $state<FaqKey | null>(null);
@@ -65,7 +69,6 @@
 		const found = $faqEntries.find((e) => e.key === target);
 		if (found) {
 			expanded.add(found.key);
-			expanded = new Set(expanded);
 			queueMicrotask(() => {
 				document.getElementById(`faq-${found.key}`)?.scrollIntoView({
 					behavior: 'smooth',
@@ -97,7 +100,6 @@
 	function toggle(entry: FaqEntry): void {
 		if (expanded.has(entry.key)) expanded.delete(entry.key);
 		else expanded.add(entry.key);
-		expanded = new Set(expanded);
 		// Keep the URL in sync for shareable state without forcing scroll.
 		if (expanded.has(entry.key)) {
 			const url = new URL(window.location.href);
@@ -118,7 +120,6 @@
 	 */
 	function goToRelated(targetKey: FaqKey): void {
 		expanded.add(targetKey);
-		expanded = new Set(expanded);
 		const url = new URL(window.location.href);
 		url.searchParams.set('q', targetKey);
 		url.searchParams.set('lang', $currentLocale);
@@ -184,7 +185,6 @@
 			const hit = hits[activeIndex];
 			if (hit) {
 				expanded.add(hit.entry.key);
-				expanded = new Set(expanded);
 				document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
 					behavior: 'smooth',
 					block: 'center'
@@ -277,7 +277,6 @@
 							: ''}"
 						onclick={() => {
 							expanded.add(hit.entry.key);
-							expanded = new Set(expanded);
 							queueMicrotask(() => {
 								document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
 									behavior: 'smooth',

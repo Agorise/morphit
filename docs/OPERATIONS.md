@@ -474,6 +474,58 @@ scripts.
 > drain attempts against unhardened instances).  Surfaced
 > Part 119 (Sally-operator finding So-3).
 
+### Monitoring the price-manipulation defenses (drift / disagreement / peer)
+
+The `morphit_native` pricing stack ships three independent
+price-manipulation defenses (ADR-0039 defenses B, C, F; ADR-0041).
+As of cp233 all three surface in the verbose price block of
+`/v1/health`, and each also log-alerts on a sustained breach, so you
+can wire them into monitoring:
+
+```
+curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
+  | jq '.diagnostics.price'
+```
+
+When the optional price feed is enabled, `diagnostics.price` carries
+`enabled`, `blurt_usd`, `source`, `updated_at`, `stale`, plus three
+defense blocks (each `null` until it has data):
+
+- **`drift` — Defense B (slow-drift).** `baseline` is the time-decayed
+  moving baseline; `deviation` is the signed fraction the current
+  price sits from it; `above_threshold` / `sustained_hours` / `alert`
+  track a sustained divergence.  `alert: true` means the published
+  price has been walking away from its own baseline for longer than
+  the sustained window — the "frog in boiling water" attack the
+  per-cycle smoothing cap can't see.  Peer-independent (works on a
+  lone instance).
+- **`disagreement` — Defense C (native vs external).** Compares the
+  published external market price against the self-sovereign
+  `morphit_native` price.  `active` / `deviation` / `sustained_hours`
+  / `alert` track a sustained divergence between the two.  A `null`
+  `external_price` means there was no external market price to compare
+  this cycle (e.g. external sources briefly unreachable) — by design C
+  stays quiet rather than comparing against the static floor (which
+  would false-alarm).  Also peer-independent.
+- **`peer` — Defense F (cross-instance).** Only meaningful once your
+  instance is federated with ≥3 reachable peers and
+  `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`.
+  `peers_queried` / `peer_median` / `my_price` / `deviation` /
+  `above_threshold` / `alert` compare your derived price against the
+  federation median.
+
+**What to do on an alert.** None of these auto-correct the price (that
+would be its own attack vector) — they make manipulation loud.  On a
+sustained `alert: true`, treat the listing-fee USD echo as suspect
+until you've investigated: check whether an external source is feeding
+a bad number (`price.source`, `price.stale`), whether your on-chain
+trade data looks manipulated (the
+`/v1/price/morphit-native/receipt` endpoint shows the full
+derivation), and — for `peer` — whether your instance is the outlier
+or the federation is.  The same alerts appear in the indexer logs
+(`price_drift_alert`, `price_source_disagreement`, and the peer
+sample-cycle warnings).
+
 ### Monitoring RPC endpoint health
 
 Both the indexer and the relay depend on a pool of public
@@ -2315,12 +2367,25 @@ to cover all 10 locale variants.
 
 ## 15. Frontend CSP + security headers for operators
 
-SvelteKit emits CSP as a `<meta http-equiv>` tag at
-build time. Browsers honor that, but HTTP-header CSP is
-more authoritative and some contexts (preflight,
-service-worker scope, extensions) only see headers.
-Operators serving the Morphit frontend MUST also set
-these headers via their web server.
+The frontend is a static (adapter-static) build served by your
+web server, so its Content-Security-Policy is delivered as an
+HTTP **response header**, not a `<meta http-equiv>` tag. As of
+cp233 the build no longer emits a meta CSP at all — earlier it
+did, via SvelteKit's `kit.csp`, but a meta CSP (a) cannot
+enforce `frame-ancestors`, (b) was stricter than the app needs
+(it blocked the in-browser WASM crypto and the inline
+bootstrap), and (c) was intersected with the header CSP by the
+browser, so the meta clobbered the working header and operators
+had to `sed` it out of the build by hand. The nginx header
+below is now the single source of truth — no meta, no manual
+stripping.
+
+The *policy string* is the same no matter how you deliver it. If you
+don't run nginx directly — e.g. you use the BunkerWeb WAF (which is
+nginx under the hood) — set the identical string via BunkerWeb's
+`CONTENT_SECURITY_POLICY` setting instead of `add_header`; the canonical
+value is pre-filled in `ops/bunkerweb/bunkerweb.env.example`. The same
+applies to Caddy, Apache, or any other front: deliver this exact header.
 
 This addresses Finding N in docs/REVISIT-LIST.md §F.
 
@@ -2342,20 +2407,18 @@ add_header Referrer-Policy "no-referrer" always;
 # Prevent embedding in iframes (clickjacking defense)
 add_header X-Frame-Options "DENY" always;
 
-# Content Security Policy — MUST match what svelte.config.js
-# emits. If you change one, change both. If you override
-# either, an XSS payload that would be blocked in the other
-# mode may not be blocked in this one.
-#
-# This is the TIGHTENED 2026-05 form (Audit Finding 6-5):
-# explicit connect-src allowlist instead of `https:` wildcard.
-# Lists the four default Blurt RPC endpoints plus the
-# CoinGecko price API. If your users add custom RPC endpoints
-# in Settings they will fail with a CSP error in the browser
-# console — that's the correct behavior; either add the
-# specific host below, or revert to `connect-src 'self' https:`
-# if your community uses a wide pool of community-run RPCs.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://rpc.blurt.blog https://blurt-rpc.saboin.com https://rpc.beblurt.com https://rpc.blurt.one https://api.coingecko.com; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'" always;
+# Permissions-Policy — microphone/geolocation/FLoC off; camera=(self)
+# so the same-origin QR-login scanner (getUserMedia) keeps working
+add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+
+# Content Security Policy — the single source of truth for the
+# frontend (the build emits no meta CSP). connect-src lists the
+# FOUR default Blurt RPC nodes from apps/web/src/lib/net/config.ts;
+# if you run a different RPC set, edit it to match or the browser
+# blocks your nodes (including failover). It lists NO price API on
+# purpose: price fetching is server-side (the indexer), the browser
+# never calls CoinGecko, so listing it would only leak visitor IPs.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.blurt.blog https://blurt-rpc.saboin.com https://rpc.beblurt.com https://rpc.blurt.one; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 ```
 
 For reference, `ops/nginx/indexer.conf` and
@@ -2368,41 +2431,71 @@ frontend's web server config, not the API nginx configs.
 
 - `default-src 'self'` — only load resources from the
   same origin by default
-- `script-src 'self'` — JS only from same origin; no
-  inline scripts, no `eval` (SvelteKit emits content
-  hashes to allow the specific inline scripts it
-  generates)
-- `style-src 'self'` — CSS only from same origin
-- `img-src 'self' data:` — images from same origin plus
-  inline `data:` URLs (identicons are base64-encoded
-  PNG data URIs)
-- `font-src 'self'` — fonts only from same origin
-- `connect-src 'self' <RPC hosts> https://api.coingecko.com`
-  — explicit allowlist tightened in audit 2026-05
-  (Finding 6-5). Previously `'self' https:` which permitted
-  any HTTPS host as a fetch target, defeating most of the
-  purpose of CSP for exfiltration defense. The new form
-  permits only the four default Blurt RPC endpoints plus
-  the CoinGecko price API. Tradeoffs:
-    - Users who add custom RPC endpoints in Settings get
-      a browser-side CSP block until you add the host to
-      this list. Operators serving community pools should
-      either pre-populate their connect-src with the
-      community's full RPC set OR revert to the looser
-      `connect-src 'self' https:` form (in which case the
-      CSP is documenting intent, not enforcing exfiltration
-      bounds).
-    - The wildcard `https:` form remains the right choice
-      if your audience pulls RPCs from a federation-wide
-      pool that you can't fully enumerate at deploy time.
-- `frame-ancestors 'none'` — this page cannot be
-  embedded in another site's iframe
-- `form-action 'self'` — form submits only to same
-  origin
+- `script-src 'self' 'unsafe-inline' 'unsafe-eval'
+  'wasm-unsafe-eval'` — JS from same origin, plus:
+    - `'unsafe-inline'` for the small inline scripts the
+      page ships (SvelteKit's hydration bootstrap and the
+      `?lang=` preflight hint in app.html). The previous
+      hash-based approach required SvelteKit to inject a
+      meta CSP; dropping that meta means falling back to
+      `'unsafe-inline'` for these. The frontend renders no
+      user-supplied HTML, so the inline-script attack
+      surface is minimal.
+    - `'wasm-unsafe-eval'` (and `'unsafe-eval'`) for the
+      in-browser cryptography: the keystore's argon2 KDF
+      and signing run as WebAssembly, which CSP blocks
+      unless one of these is present. This is non-optional
+      — without it, login / keystore unlock breaks. If you
+      confirm via testing that no dependency uses JS
+      `eval`/`Function`, you can drop `'unsafe-eval'` and
+      keep only `'wasm-unsafe-eval'` for a tighter policy.
+- `style-src 'self' 'unsafe-inline'` — CSS from same
+  origin plus the inline styles Svelte emits (scoped
+  component styles and the no-JS notice in app.html)
+- `img-src 'self' data: blob:` — images from same origin,
+  plus `data:` URIs (identicons are inline SVG data URIs)
+  and `blob:` URLs (decoded avatar bitmaps)
+- `font-src 'self'` — fonts only from same origin (the
+  self-hosted Nunito subset)
+- `connect-src 'self' <four Blurt RPC hosts>` — the
+  browser may fetch only from your own origin and the four
+  default Blurt RPC nodes
+  (`apps/web/src/lib/net/config.ts`), which it contacts
+  directly to read the chain and broadcast signed,
+  non-custodial transactions. Notes:
+    - There is deliberately **no price API** here. Price
+      data is fetched server-side by the indexer; the
+      browser never calls CoinGecko or any other price
+      host. Adding one would leak every visitor's IP to a
+      third party for no functional gain — a privacy
+      regression, not a feature.
+    - If you run a different RPC set, edit connect-src to
+      match the hosts in `config.ts`, or the browser will
+      block them (including failover to a backup node).
+      Prefer listing your specific hosts over the loose
+      `'self' https:` wildcard, which permits any HTTPS
+      host as a fetch target and defeats CSP's
+      exfiltration-defense value.
+- `worker-src 'self' blob:` — Web Workers from same origin
+  (the service worker) plus `blob:` (the altcha
+  proof-of-work worker is built from an in-memory blob);
+  without `blob:`, the anti-bot challenge on registration
+  fails to run
+- `frame-ancestors 'none'` — this page cannot be embedded
+  in another site's iframe (the header form of the
+  X-Frame-Options DENY above; it only works as a header,
+  which is one reason the CSP is not a meta tag)
 - `base-uri 'self'` — `<base>` tag only points to same
   origin
+- `form-action 'self'` — form submits only to same origin
 - `object-src 'none'` — no Flash, Java, or other
   plugins
+- `media-src 'none'`, `child-src 'none'`, `frame-src
+  'none'` — the app embeds no audio/video, iframes, or
+  nested browsing contexts, so these are locked shut as
+  defense-in-depth
+- `manifest-src 'self'` — the PWA web-app manifest loads
+  only from the same origin
 
 ### HTTPS-only requirement
 
@@ -2430,10 +2523,10 @@ server {
 From a different machine, run:
 
 ```bash
-curl -sI https://morphit.example.org/ | grep -iE "(strict-transport|x-content|referrer|x-frame|content-security)"
+curl -sI https://morphit.example.org/ | grep -iE "(strict-transport|x-content|referrer|x-frame|permissions-policy|content-security)"
 ```
 
-Expected: all five headers present. If any are missing,
+Expected: all six headers present. If any are missing,
 fix your web server config before making the deployment
 public.
 

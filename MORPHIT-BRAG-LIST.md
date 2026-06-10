@@ -4,7 +4,7 @@
 
 A reference list of 300+ specific things Morphit does — privacy, security, decentralization, Monero-friendliness, anti-Sybil economics, operator independence — written for sharing, citing, and arguing with.
 
-> Keywords: peer-to-peer crypto exchange, P2P Bitcoin marketplace, P2P Monero marketplace, P2P Bitcoin Cash marketplace, P2P Litecoin marketplace, P2P Dash marketplace, P2P Dogecoin marketplace, no-KYC exchange, non-custodial DEX, federated marketplace, Blurt, USDT P2P, USDC P2P, DAI P2P, BCH P2P, LTC P2P, DASH P2P, DOGE P2P, ZEC P2P, ARRR P2P, Pirate Chain, DCR P2P, Decred, Politeia, hybrid PoW PoS, CoinShuffle++, SOL P2P, Solana, Proof-of-History, high-throughput PoS, ETH P2P, Ethereum, The Merge, EIP-681, EIP-55, post-Merge PoS, Blockscout, XRP P2P, Ripple, XRPL, XRP Ledger, Federated Byzantine Agreement, FBA, destination tag, UNL, Unique Node List, XRPL reserves, Xaman, Xumm, Crossmark, livenet.xrpl.org, Zcash, zk-SNARKs, shielded transactions, Sapling, Orchard, Unified Address, shielded-by-default, MakerDAO, Circle USDC, Tether USDT, PrivateSend, CashAddr, Litecoin bech32, Litecoin MWEB, Dash PrivateSend, Dogecoin merge-mined, Monero subaddress, amount jitter, view key privacy, AGPL crypto exchange, censorship-resistant trading, Tor onion service, I2P b32 service, Lokinet, Nostr, GrapheneOS, F-Droid, Aptoide, decentralized orderbook, on-chain reputation, end-to-end encrypted chat, on-chain chat ciphertext, STRIDE threat model, reproducible build, multi-explorer attestation, mempool.space, xmrchain.net, blockchair.com, sock-puppet detection, Sybil-resistant, privacy guides, kycnot.me
+> Keywords: peer-to-peer crypto exchange, P2P Bitcoin marketplace, P2P Monero marketplace, P2P Bitcoin Cash marketplace, P2P Litecoin marketplace, P2P Dash marketplace, P2P Dogecoin marketplace, no-KYC exchange, non-custodial DEX, federated marketplace, Blurt, USDT P2P, USDC P2P, DAI P2P, BCH P2P, LTC P2P, DASH P2P, DOGE P2P, ZEC P2P, ARRR P2P, Pirate Chain, DCR P2P, Decred, Politeia, hybrid PoW PoS, CoinShuffle++, SOL P2P, Solana, Proof-of-History, high-throughput PoS, ETH P2P, Ethereum, The Merge, EIP-681, EIP-55, post-Merge PoS, Blockscout, XRP P2P, Ripple, XRPL, XRP Ledger, Federated Byzantine Agreement, FBA, destination tag, UNL, Unique Node List, XRPL reserves, Xaman, Xumm, Crossmark, livenet.xrpl.org, Zcash, zk-SNARKs, shielded transactions, Sapling, Orchard, Unified Address, shielded-by-default, MakerDAO, Circle USDC, Tether USDT, PrivateSend, CashAddr, Litecoin bech32, Litecoin MWEB, Dash PrivateSend, Dogecoin merge-mined, Monero subaddress, amount jitter, view key privacy, AGPL crypto exchange, censorship-resistant trading, Tor onion service, I2P b32 service, Lokinet, Nostr, GrapheneOS, decentralized orderbook, on-chain reputation, end-to-end encrypted chat, on-chain chat ciphertext, STRIDE threat model, reproducible build, multi-explorer attestation, mempool.space, xmrchain.net, blockchair.com, sock-puppet detection, Sybil-resistant, privacy guides, kycnot.me
 
 ---
 
@@ -504,9 +504,9 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 220. **Works in Tor Browser at maximum security level.** Service worker gracefully falls back to normal caching when service workers are disabled.
 
-221. **F-Droid distribution path** for Android users who want a true open-source app store experience (placeholder; reproducible-build pipeline planned).
+221. **No install required to browse.** Morphit runs in any modern browser — desktop, laptop, phone, or tablet — with nothing to download; installing the PWA is optional, for an app icon and an offline shell.
 
-222. **Aptoide, APKMirror, APKPure listings** for Android users without Google Play.
+222. **Runs on modest hardware.** The PWA is small and dependency-light, so it loads on older phones and slow connections — no flagship device required.
 
 223. **GrapheneOS callout** as the recommended privacy-first Android. No Google relationship required.
 

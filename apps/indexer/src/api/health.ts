@@ -20,6 +20,8 @@ import { Hono } from 'hono';
 import type { Config } from '$config';
 import type { Poller } from '$indexer/poller';
 import type { BlurtPriceSource } from '$indexer/price/source';
+import type { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
+import type { PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
 
@@ -35,7 +37,16 @@ const INDEXER_VERSION = '1.0.0-beta.8';
 export function healthRoute(
 	config: Config,
 	poller: Poller,
-	priceSource: BlurtPriceSource | null
+	priceSource: BlurtPriceSource | null,
+	// cp233 — Defense C: per-asset disagreement monitors, read for the
+	// verbose price block's `disagreement` surface.  Defaulted so any
+	// caller that doesn't wire it sees an empty map (→ disagreement
+	// reports null), never a crash.
+	disagreementMonitors: ReadonlyMap<string, DisagreementMonitor> = new Map(),
+	// cp233 — Defense F: latest peer-monitor cycle result per asset,
+	// read for the verbose price block's `peer` surface.  Defaulted so
+	// a caller that doesn't wire it sees an empty map (→ peer null).
+	peerMonitorResults: ReadonlyMap<string, PeerSampleCycleResult> = new Map()
 ): Hono {
 	const app = new Hono();
 	const bootTime = Date.now();
@@ -128,12 +139,72 @@ export function healthRoute(
 				priceSource !== null
 					? (() => {
 							const d = priceSource.currentDetailed();
+							// cp233 — Defense B (slow-drift) surface.
+							// driftStatus() is optional on the interface;
+							// when present and non-null (drift monitoring is
+							// wired and at least one refresh has committed),
+							// report deviation from the moving baseline and
+							// whether a sustained-divergence alert has fired.
+							// Operators watch `drift.alert` for a price being
+							// slowly walked away from baseline — the attack
+							// the per-cycle smoothing cap cannot catch.
+							const drift = priceSource.driftStatus?.() ?? null;
+							// cp233 — Defense C surface.  The price block is
+							// BLURT-scoped (blurt_usd above), so read the BLURT
+							// monitor's last check: whether the self-sovereign
+							// native price currently disagrees with the external
+							// market price, and whether a sustained-divergence
+							// alert has fired.  null when C isn't wired for BLURT
+							// (native pricing disabled) or no cycle has run yet.
+							const disagree =
+								disagreementMonitors.get('BLURT')?.lastCheck() ?? null;
+							const peerResult = peerMonitorResults.get('BLURT') ?? null;
 							return {
 								enabled: true,
 								blurt_usd: d.price,
 								source: d.source,
 								updated_at: d.updated_at.toISOString(),
-								stale: d.stale
+								stale: d.stale,
+								drift: drift
+									? {
+											baseline: drift.baseline_price,
+											deviation: drift.deviation,
+											above_threshold: drift.above_threshold,
+											sustained_hours: drift.above_threshold_sustained_hours,
+											alert: drift.alert_fired
+										}
+									: null,
+								disagreement: disagree
+									? {
+											active: disagree.active,
+											external_source: disagree.external_source,
+											external_price: disagree.external_price,
+											native_price: disagree.native_price,
+											deviation: disagree.deviation,
+											sustained_hours: disagree.sustained_hours,
+											alert: disagree.alert_fired
+										}
+									: null,
+								// cp233 — Defense F (peer) surface.  Latest
+								// peer-comparison cycle for BLURT: how many peers
+								// were queried, the peer median vs our own price,
+								// the deviation, and whether an alert fired.  null
+								// until the first cycle runs (or when the peer
+								// monitor is disabled).  Together with drift (B)
+								// and disagreement (C) above, all three price-
+								// manipulation defenses are now visible here —
+								// finally making good on the cp129 schema comment.
+								peer: peerResult
+									? {
+											peers_queried: peerResult.peersQueried,
+											compared_against_median: peerResult.comparedAgainstMedian,
+											peer_median: peerResult.peerMedian,
+											my_price: peerResult.myPrice,
+											deviation: peerResult.deviation,
+											above_threshold: peerResult.aboveThreshold,
+											alert: peerResult.alertFired
+										}
+									: null
 							};
 						})()
 					: { enabled: false };

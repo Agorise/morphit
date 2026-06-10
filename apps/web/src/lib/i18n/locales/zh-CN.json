@@ -1766,7 +1766,6 @@
     "reachable_via": "也可通过以下方式访问",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "无 JS",
     "no_js_title": "Morphit 如何在没有 JavaScript 的情况下工作",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit 让买家和卖家直接连接。无 KYC、非托管、无 Cookie、端到端加密、无日志、无托管、默认私密、开源、完全分布式",
     "cta_browse": "浏览订单簿",
     "cta_start": "开始交易",
-    "welcome_to_instance": "欢迎来到 {name}",
     "coin_carousel": {
       "aria_label": "支持的资产",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "YubiKey 解锁需要 Chrome、Edge、Brave 或其他 Chromium 浏览器。你也可以用助记词进入。",
       "use_phone_instead": "用手机登录"
     },
-    "qr_pair_cta": "已经在手机上有 Morphit?用二维码登录"
+    "qr_pair_cta": "用手机通过二维码登录"
   },
   "login_qr": {
     "title": "用手机登录",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "实时 BTC / XMR / BLURT 支付流。Tor、Lokinet 和 I2P 隐藏服务。IPFS 发布镜像。PWA + 联邦实例接入引导。",
     "phase_6_title": "第 6 阶段 — API 集成与营销",
     "phase_6_body": "开发者可以将一个范围受限的订单簿界面嵌入到自己的界面中。用户无需离开他们信任的界面，即可搜索、浏览和响应报价。",
-    "status_in_progress": "进行中",
     "footer_prefix": "完整的版本化计划在",
     "status_badge": {
       "shipped": "已完成",
@@ -4191,7 +4188,6 @@
     "sending": "发送中…"
   },
   "support": {
-    "body": "实时支持将在第 5 阶段到来,届时 Matrix 桥接已部署。目前请使用 FAQ — 它涵盖了最常见的问题。",
     "heading": "帮助与支持",
     "subtitle": "大多数问题都在常见问题中有答案。其他事项请参考下方。",
     "faq": {

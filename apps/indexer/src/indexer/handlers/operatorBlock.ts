@@ -68,7 +68,9 @@ const FORBIDDEN_REASON_CODEPOINTS = new Set<number>([
 	// Zero-width
 	0x200b, 0x200c, 0x200d, 0xfeff,
 	// Invisible math/language
-	0x2060, 0x2061, 0x2062, 0x2063, 0x2064
+	0x2060, 0x2061, 0x2062, 0x2063, 0x2064,
+	// Line/paragraph separators
+	0x2028, 0x2029
 ]);
 
 /** Strip dangerous/invisible codepoints from an operator reason.
