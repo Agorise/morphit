@@ -8,7 +8,7 @@
 	slow 3-body particle dance (mutual spring + centroid gravity).  Ken retired
 	that effect: the big hero logo on the homepage is now a plain static
 	wordmark with no animation at all, and the small top-left header
-	wordmark gets a single subtle glint every ~9s instead of perpetual
+	wordmark gets a single subtle glint every ~15s instead of perpetual
 	motion.  This component is therefore now a PURE presentational wrapper
 	— no canvas element, no requestAnimationFrame, no IntersectionObserver,
 	no physics, no script logic at all — which also drops a chunk of
@@ -29,7 +29,7 @@
 	(mask-image: <wordmark>), so the moving highlight is clipped to the
 	letterforms — the glint "traces the shape of the paths" rather than
 	sweeping a plain rectangle.  A keyframe parks the band off-screen for
-	most of the ~9s cycle and sweeps it across exactly once, so the eye is
+	most of the ~15s cycle and sweeps it across exactly once, so the eye is
 	drawn periodically without constant motion.
 
 	BUDGET / ACCESSIBILITY (priorities #4 + #3 + #1)
@@ -124,18 +124,19 @@
 		background-image: linear-gradient(
 			105deg,
 			transparent 42%,
-			rgba(255, 255, 255, 0.7) 50%,
+			rgba(255, 255, 255, 0.45) 50%,
 			transparent 58%
 		);
 		background-repeat: no-repeat;
 		background-size: 250% 100%;
 		background-position: -20% 0;
-		animation: morphit-logo-bling-sweep 9s ease-in-out infinite;
+		animation: morphit-logo-bling-sweep 15s ease-in-out infinite;
 	}
 	/* Park the highlight off the RIGHT for most of the cycle (-20%), sweep it
-	 * across once to off the LEFT (120%) over ~10%→24% of 9s (≈1.3s), then
-	 * hold off-left until the loop restarts — at which point it jumps back to
-	 * -20% while still off-screen, so only the single sweep is ever visible.
+	 * across once to off the LEFT (120%) over ~10%→19% of 15s (≈1.3s — the
+	 * same quick glint as before, just less often), then hold off-left until
+	 * the loop restarts — at which point it jumps back to -20% while still
+	 * off-screen, so only the single sweep is ever visible.
 	 * (background-size 250%: -20% ≈ band off the right edge, 120% ≈ off the
 	 * left edge, 50% ≈ band centred over the wordmark.) */
 	@keyframes morphit-logo-bling-sweep {
@@ -145,7 +146,7 @@
 		10% {
 			background-position: -20% 0;
 		}
-		24% {
+		19% {
 			background-position: 120% 0;
 		}
 		100% {

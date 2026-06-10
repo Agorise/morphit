@@ -2524,3 +2524,47 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 
 -- Cleanup: a periodic job DELETEs WHERE observed_at < now() - 7 days.
 -- Index supports the bounded scan.
+
+-- cp233 — Defense B: price drift baseline (slow-drift manipulation)
+-- ───────────────────────────────────────────────────────────────────
+--
+-- ADR-0041 / cp127 deferred "defense B".  Companion to Defense F
+-- (price_peer_observations above) and Defense C (in-process, no
+-- table).  Where F catches an instance whose price disagrees with
+-- the federation, B catches a "frog in boiling water" slow-drift
+-- attack on a SINGLE instance with no peers to compare against: an
+-- attacker nudges the price a few % per refresh — each move under
+-- the per-cycle smoothing cap — until it has drifted far from
+-- reality over many hours.  The per-cycle cap only ever sees the
+-- delta to the immediately-previous value, never back to a
+-- baseline, so it cannot catch this.
+--
+-- B maintains a time-decayed (24h half-life by default) moving
+-- baseline per (asset, denomination_fiat).  When the published
+-- price diverges from baseline beyond the threshold for a sustained
+-- window, an alert fires in the indexer logs and surfaces on
+-- /v1/health.  B does NOT auto-correct the price (auto-correction
+-- is its own attack vector — an attacker manipulates the baseline
+-- computation to force a "correction" toward their target); it
+-- makes drift loudly visible for operator response.
+--
+-- Persisted (not in-process like C) specifically to deny the
+-- "first value escapes drift checking" attack where an attacker
+-- times manipulation to an indexer restart: the baseline survives
+-- restarts.  See apps/indexer/src/indexer/price/driftMonitor.ts.
+--
+-- One row per (asset, denomination_fiat); updated every successful
+-- refresh (~5 min cadence).  Bounded by the number of priced
+-- assets — trivial.
+CREATE TABLE IF NOT EXISTS price_drift_baseline (
+    asset                  TEXT NOT NULL,
+    denomination_fiat      TEXT NOT NULL,
+    baseline_price         NUMERIC(38, 18) NOT NULL CHECK (baseline_price > 0),
+    baseline_updated_at    TIMESTAMPTZ NOT NULL,
+    -- NULL when the current price is within threshold of baseline;
+    -- set to the timestamp the price first crossed the threshold so
+    -- a sustained-divergence alert can be timed.  Cleared on the
+    -- first refresh that comes back within threshold.
+    above_threshold_since  TIMESTAMPTZ,
+    PRIMARY KEY (asset, denomination_fiat)
+);

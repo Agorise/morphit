@@ -48,11 +48,12 @@
 
 import type { Config } from '$config';
 import type { Database } from '$db/pool';
-import type { BlurtPriceSource } from '$indexer/price/source';
+import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 import { CompositeCachedPriceSource } from '$indexer/price/compositeSource';
 import { createKlingexFetcher } from '$indexer/price/klingexFetcher';
 import { createCoingeckoFetcher } from '$indexer/price/coingeckoFetcher';
 import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
+import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
 /** Per-asset configuration for one price source.
  *
@@ -165,25 +166,30 @@ export function createAssetPriceSource(
 	// sources remain primary; native fires when external is
 	// unavailable (or operators opt into preferring native via the
 	// disagreement-monitor priority flip).  See ADR-0039.
-	if (config.priceFeedNativeEnabled && db) {
-		upstreams.push({
-			name: 'morphit_native',
-			fetch: createMorphitNativeFetcher({
-				asset: options.asset,
-				denominationFiat: config.priceFeedDenominationFiat,
-				stablecoinKeys: config.priceFeedStablecoinKeys,
-				db,
-				officialAccountName: config.officialAccountName,
-				minPlausibleUsd: config.priceFeedNativePlausibleMin,
-				maxPlausibleUsd: config.priceFeedNativePlausibleMax
-			})
-		});
+	//
+	// cp233: built via the shared buildMorphitNativeFetch helper so
+	// defense C's cross-check reuses the EXACT same construction (same
+	// config args) — no drift between the upstream and the monitor.
+	// The helper returns null when native is disabled or no db is
+	// available, which folds the old `priceFeedNativeEnabled && db`
+	// guard into the null check.
+	const nativeFetch = buildMorphitNativeFetch(config, options.asset, db);
+	if (nativeFetch) {
+		upstreams.push({ name: 'morphit_native', fetch: nativeFetch });
 	}
 
 	return new CompositeCachedPriceSource({
 		upstreams,
 		staticFloor: options.staticFloor,
-		refreshIntervalMs: config.priceRefreshIntervalMs
+		refreshIntervalMs: config.priceRefreshIntervalMs,
+		// cp233 — Defense B (slow-drift) wiring: pass db + asset +
+		// denomination so each successful refresh updates the persisted
+		// drift baseline (price_drift_baseline) and surfaces sustained
+		// divergence on /v1/health.  db may be undefined for callers
+		// that don't need persistence (then drift monitoring is skipped).
+		db,
+		asset: options.asset,
+		denominationFiat: config.priceFeedDenominationFiat
 	});
 }
 
@@ -250,4 +256,50 @@ export function createMultiAssetPriceSources(
 		)
 	);
 	return sources;
+}
+
+/** Build the morphit_native price fetcher for one (asset, fiat)
+ *  pair, or null when native pricing is disabled / no db is
+ *  available.  cp233 — extracted from createAssetPriceSource so the
+ *  composite's native upstream AND defense C's cross-check share one
+ *  construction (identical config args, no drift between them). */
+function buildMorphitNativeFetch(
+	config: Config,
+	asset: string,
+	db?: Database
+): PriceFetch | null {
+	if (!config.priceFeedNativeEnabled || !db) return null;
+	return createMorphitNativeFetcher({
+		asset,
+		denominationFiat: config.priceFeedDenominationFiat,
+		stablecoinKeys: config.priceFeedStablecoinKeys,
+		db,
+		officialAccountName: config.officialAccountName,
+		minPlausibleUsd: config.priceFeedNativePlausibleMin,
+		maxPlausibleUsd: config.priceFeedNativePlausibleMax
+	});
+}
+
+/** cp233 — Defense C wiring.  Build the in-process disagreement
+ *  monitor + the native fetcher for one asset, or null when the
+ *  asset isn't eligible.
+ *
+ *  Eligibility: native pricing enabled + a db present (native
+ *  derives from on-chain trade data).  An external reference is
+ *  always available when external sources are reachable, because
+ *  coingecko is an unconditional upstream for every asset — so the
+ *  only gate is "do we have a native price to cross-check?".
+ *
+ *  Returns the monitor (held by the caller for /v1/health) and the
+ *  native fetcher (driven by the monitor loop each cycle).  The
+ *  denomination is the global operator setting (cp128). */
+export function createDisagreementMonitor(
+	config: Config,
+	asset: string,
+	db?: Database
+): { monitor: DisagreementMonitor; nativeFetch: PriceFetch } | null {
+	const nativeFetch = buildMorphitNativeFetch(config, asset, db);
+	if (!nativeFetch) return null;
+	const monitor = new DisagreementMonitor(asset, config.priceFeedDenominationFiat);
+	return { monitor, nativeFetch };
 }

@@ -390,6 +390,27 @@ scenario('writeWizardOutput: omits optional keys when null', () => {
 // cp139-C-11 first switched both to single-quoted; cp139-D-1
 // discovered the parseEnv/POSIX mismatch and split by consumer.
 
+scenario('cp231: empty tagline omits MORPHIT_INSTANCE_TAGLINE entirely', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = { ...sampleAnswers, tagline: '' };
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		// The required instance name is still written...
+		assertContains(content, 'MORPHIT_INSTANCE_NAME=test-instance', 'name still written');
+		// ...but a skipped tagline must NOT emit a line at all, so an
+		// unbranded instance carries no placeholder description into the
+		// federated /instances directory or its SEO (the old wizard
+		// default 'A Morphit instance' did exactly that).
+		assertTrue(
+			!content.includes('MORPHIT_INSTANCE_TAGLINE'),
+			'empty tagline must omit MORPHIT_INSTANCE_TAGLINE entirely'
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
 scenario('cp139-D-1: $HOME in tagline (parseEnv consumer) is single-quoted', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
 	try {

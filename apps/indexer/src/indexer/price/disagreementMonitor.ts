@@ -46,6 +46,7 @@
  */
 
 import { logger } from '$log';
+import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 
 const log = logger('price/disagree');
 
@@ -87,6 +88,10 @@ export class DisagreementMonitor {
 		disagreementSince: null,
 		lastAlertFired: null
 	};
+	/** cp233 — last check result, retained for the /v1/health
+	 *  disagreement surface (symmetric with B's drift surface).
+	 *  null until the first check() runs. */
+	private lastResult: DisagreementCheckResult | null = null;
 
 	constructor(
 		private readonly asset: string,
@@ -104,6 +109,13 @@ export class DisagreementMonitor {
 			disagreementSince: this.state.disagreementSince,
 			lastAlertFired: this.state.lastAlertFired
 		};
+	}
+
+	/** cp233 — the most recent check result, or null before the
+	 *  first check.  Read by /v1/health to show the live
+	 *  external-vs-native deviation + alert state. */
+	lastCheck(): DisagreementCheckResult | null {
+		return this.lastResult;
 	}
 
 	/**
@@ -125,7 +137,7 @@ export class DisagreementMonitor {
 		) {
 			// Can't compare; not a disagreement either way.
 			this.state.disagreementSince = null;
-			return {
+			this.lastResult = {
 				active: false,
 				external_price: externalPrice,
 				external_source: externalSourceName,
@@ -134,6 +146,7 @@ export class DisagreementMonitor {
 				sustained_hours: 0,
 				alert_fired: false
 			};
+			return this.lastResult;
 		}
 
 		const deviation = (nativePrice - externalPrice) / externalPrice;
@@ -177,7 +190,7 @@ export class DisagreementMonitor {
 			this.state.disagreementSince = null;
 		}
 
-		return {
+		this.lastResult = {
 			active,
 			external_price: externalPrice,
 			external_source: externalSourceName,
@@ -186,5 +199,104 @@ export class DisagreementMonitor {
 			sustained_hours: sustainedHoursActual,
 			alert_fired: alertFired
 		};
+		return this.lastResult;
 	}
+}
+
+/** Source names that count as a real EXTERNAL market reference for
+ *  the disagreement comparison.  The composite's published price is
+ *  reused as the external side (no extra outbound fetch) — but only
+ *  when it actually came from one of these.  When the composite is
+ *  serving the morphit_native fallback or the static floor, there is
+ *  no external reference to compare against, so the cycle passes
+ *  externalPrice=null and the monitor stays inactive.  This is what
+ *  prevents a false "disagreement" alarm from comparing the native
+ *  price against the tiny static floor while external sources are
+ *  briefly unreachable. */
+const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set(['klingex', 'coingecko']);
+
+/** Run config for the cp233 disagreement-monitor loop.  Mirrors the
+ *  shape of the peer-price monitor's config (defense F) so the two
+ *  read alike at the main.ts wiring site. */
+export interface DisagreementRunConfig {
+	readonly monitor: DisagreementMonitor;
+	/** Derives the morphit_native price for the asset.  Called every
+	 *  cycle — native is the cross-check, and (unlike the external
+	 *  price) it is NOT otherwise computed each refresh, because the
+	 *  composite only reaches its native upstream when the external
+	 *  ones fail.  PriceFetch never throws by contract; the cycle
+	 *  fences it anyway. */
+	readonly nativeFetch: PriceFetch;
+	/** Live composite price source for the asset.  Supplies the
+	 *  external side from its currently-published value (see
+	 *  EXTERNAL_MARKET_SOURCES). */
+	readonly priceSource: BlurtPriceSource;
+	/** Clock injection for tests. Defaults to Date. */
+	readonly now?: () => Date;
+	/** setInterval/clearInterval injection for tests. */
+	readonly setInterval?: typeof globalThis.setInterval;
+	readonly clearInterval?: typeof globalThis.clearInterval;
+}
+
+/** Run one disagreement check cycle: take the external side from the
+ *  composite's published price (only if it's a real external market
+ *  source), derive the native side, and feed both to the monitor.
+ *  Returns the result for testability / structural verification.
+ *  Never throws (a monitor must never crash the indexer). */
+export async function runDisagreementCheckCycle(
+	cfg: DisagreementRunConfig,
+	nowOverride?: Date
+): Promise<DisagreementCheckResult> {
+	const now = nowOverride ?? (cfg.now ? cfg.now() : new Date());
+
+	// External side — reuse the composite's published value, but only
+	// when it came from a real external market source.  Otherwise no
+	// external reference exists this cycle (→ inactive, no false alarm).
+	const detailed = cfg.priceSource.currentDetailed();
+	const isExternal = EXTERNAL_MARKET_SOURCES.has(detailed.source);
+	const externalPrice = isExternal ? detailed.price : null;
+	const externalSourceName = isExternal ? detailed.source : null;
+
+	// Native side — derived fresh each cycle.  Fenced even though
+	// PriceFetch promises not to throw.
+	let nativePrice: number | null = null;
+	try {
+		nativePrice = await cfg.nativeFetch();
+	} catch (err) {
+		log.warn('disagreement_native_fetch_failed', { err: String(err) });
+	}
+
+	return cfg.monitor.check({ externalPrice, externalSourceName, nativePrice, now });
+}
+
+/** Start the cp233 disagreement monitor.  Schedules a recurring
+ *  check at `intervalMs` (main.ts passes the price-refresh interval,
+ *  so the cross-check runs at the same cadence prices refresh).
+ *  Returns a stop function for graceful shutdown.  Mirrors
+ *  startPeerPriceMonitor (defense F). */
+export function startDisagreementMonitor(
+	cfg: DisagreementRunConfig,
+	intervalMs: number
+): () => void {
+	const setIntervalFn = cfg.setInterval ?? globalThis.setInterval;
+	const clearIntervalFn = cfg.clearInterval ?? globalThis.clearInterval;
+	let running = true;
+
+	async function tick(): Promise<void> {
+		if (!running) return;
+		try {
+			await runDisagreementCheckCycle(cfg);
+		} catch (err) {
+			log.error('disagreement_check_cycle_failed', { err: String(err) });
+		}
+	}
+
+	// Fire-and-forget initial cycle, then schedule recurring.
+	void tick();
+	const handle = setIntervalFn(() => void tick(), intervalMs);
+
+	return (): void => {
+		running = false;
+		clearIntervalFn(handle);
+	};
 }

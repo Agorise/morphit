@@ -27,8 +27,12 @@ import { runMigrations } from '$db/migrations';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
-import { createMultiAssetPriceSources } from '$indexer/price/factory';
-import { startPeerPriceMonitor } from '$indexer/price/peerPriceMonitor';
+import { createMultiAssetPriceSources, createDisagreementMonitor } from '$indexer/price/factory';
+import { startPeerPriceMonitor, type PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
+import {
+	startDisagreementMonitor,
+	type DisagreementMonitor
+} from '$indexer/price/disagreementMonitor';
 import type { BlurtPriceSource } from '$indexer/price/source';
 
 import { bodyCap } from '$api/middleware/bodyCap';
@@ -220,6 +224,10 @@ async function main(): Promise<void> {
 	// the wiring change here just calls startPeerPriceMonitor in a
 	// loop.
 	const stopPeerPriceMonitors: Array<() => void> = [];
+	// cp233 — latest peer-monitor cycle result per asset, captured so
+	// /v1/health can surface F's peer comparison alongside B and C
+	// (the cp129 schema comment always promised F would surface here).
+	const peerMonitorResults = new Map<string, PeerSampleCycleResult>();
 	if (config.priceFeedPeerMonitorEnabled && multiAssetSources.size > 0) {
 		for (const [asset, source] of multiAssetSources) {
 			const stop = startPeerPriceMonitor(
@@ -229,9 +237,40 @@ async function main(): Promise<void> {
 					asset,
 					denominationFiat: config.priceFeedDenominationFiat
 				},
-				config.priceFeedPeerSampleIntervalMinutes
+				config.priceFeedPeerSampleIntervalMinutes,
+				(result) => peerMonitorResults.set(asset, result)
 			);
 			stopPeerPriceMonitors.push(stop);
+		}
+	}
+
+	// cp233 — Defense C: single-instance native-vs-external price
+	// disagreement monitor.  Where F needs ≥3 federation peers to say
+	// anything, C protects a LONE instance with no peers — it
+	// cross-checks the published external price (klingex/coingecko)
+	// against the self-sovereign morphit_native price every refresh
+	// cycle and alerts on sustained (>4h) >25% divergence.  On by
+	// default whenever native pricing is enabled (createDisagreement-
+	// Monitor returns null for assets with no native price, skipping
+	// them).  Each monitor instance is also handed to /v1/health so
+	// operators see the live deviation.  See ADR-0041 (defense C —
+	// cp127's other deferred item).
+	const disagreementMonitors = new Map<string, DisagreementMonitor>();
+	const stopDisagreementMonitors: Array<() => void> = [];
+	if (multiAssetSources.size > 0) {
+		for (const [asset, source] of multiAssetSources) {
+			const built = createDisagreementMonitor(config, asset, db);
+			if (!built) continue;
+			disagreementMonitors.set(asset, built.monitor);
+			const stop = startDisagreementMonitor(
+				{
+					monitor: built.monitor,
+					nativeFetch: built.nativeFetch,
+					priceSource: source
+				},
+				config.priceRefreshIntervalMs
+			);
+			stopDisagreementMonitors.push(stop);
 		}
 	}
 
@@ -258,7 +297,7 @@ async function main(): Promise<void> {
 	// list, feedback list, chat history) at the lower `list` limit;
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
-	app.route('/v1/health', healthRoute(config, poller, priceSource));
+	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults));
 	app.route('/v1/instance', instanceRoute(config));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
@@ -558,6 +597,12 @@ async function main(): Promise<void> {
 		// drain, just clear the setInterval handle.
 		// cp130 extension: stop all per-asset monitors.
 		for (const stop of stopPeerPriceMonitors) {
+			stop();
+		}
+
+		// cp233 — stop the per-asset disagreement monitors (defense C).
+		// Same shape: clear the setInterval handle, no in-flight drain.
+		for (const stop of stopDisagreementMonitors) {
 			stop();
 		}
 

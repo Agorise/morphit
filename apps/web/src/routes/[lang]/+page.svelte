@@ -7,7 +7,7 @@
 	import Head from '$components/Head.svelte';
 	// cp169 byte-budget — everything below the fold is lazy-loaded.
 	// On a 1024×768 desktop the hero block ends at ~760px (py-24 +
-	// 64px wordmark (MorphitLogoBling) + eyebrow + italic tagline + H1 + hero body +
+	// 64px wordmark (MorphitLogoBling) + H1 + hero body +
 	// CTAs + py-24 bottom), placing the FeaturedOrders wrapper at
 	// ~824px — below the 768px fold.  PrioritiesSection sits after
 	// FeaturedOrders (or after its empty wrapper on fresh-install
@@ -93,23 +93,6 @@
 			<div class="mb-6 animate-fade-up">
 				<MorphitLogoBling heightClass="h-11 sm:h-16 md:h-20 lg:h-24" />
 			</div>
-
-			{#if $instance.name}
-				<p
-					class="animate-fade-up text-sm uppercase tracking-widest text-ink-500 dark:text-ink-400"
-					style="animation-delay: 30ms"
-				>
-					{$_('home.welcome_to_instance', { values: { name: $instance.name } })}
-				</p>
-				{#if $instance.tagline}
-					<p
-						class="mt-2 animate-fade-up text-base italic text-ink-600 dark:text-ink-300"
-						style="animation-delay: 45ms"
-					>
-						{$instance.tagline}
-					</p>
-				{/if}
-			{/if}
 
 			<h1
 				class="mt-4 animate-fade-up font-display text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl lg:text-6xl"

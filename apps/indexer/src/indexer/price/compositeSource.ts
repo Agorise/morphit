@@ -22,6 +22,8 @@
 
 import { logger } from '$log';
 import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
+import type { Database } from '$db/pool';
+import { updateAndCheckDrift, type DriftCheckResult } from '$indexer/price/driftMonitor';
 
 const log = logger('price');
 
@@ -52,6 +54,19 @@ export interface CompositePriceSourceConfig {
 	readonly setInterval?: typeof globalThis.setInterval;
 	/** clearInterval injection. */
 	readonly clearInterval?: typeof globalThis.clearInterval;
+	/** cp233 — Defense B (slow-drift) wiring.  When db, asset, and
+	 *  denominationFiat are ALL provided, every successful refresh
+	 *  updates the persisted drift baseline (price_drift_baseline)
+	 *  via updateAndCheckDrift() and fires a logged + /v1/health-
+	 *  surfaced alert on sustained divergence from baseline.  All
+	 *  three are optional so tests/smokes can construct the source
+	 *  without a database — drift monitoring is simply skipped then,
+	 *  and price serving behaves identically. */
+	readonly db?: Database;
+	/** Asset ticker for the drift baseline row, e.g. 'BLURT'. */
+	readonly asset?: string;
+	/** Denomination fiat for the drift baseline row, e.g. 'USD'. */
+	readonly denominationFiat?: string;
 }
 
 /** Plausibility bounds for a BLURT/USD price.  Any upstream
@@ -93,6 +108,10 @@ interface CachedEntry {
 export class CompositeCachedPriceSource implements BlurtPriceSource {
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private cached: CachedEntry | null = null;
+	/** cp233 — last Defense B drift-check result; null until the
+	 *  first successful refresh runs the check (or when drift
+	 *  monitoring is unwired). Exposed read-only via driftStatus(). */
+	private lastDrift: DriftCheckResult | null = null;
 	private readonly now: () => number;
 	private readonly setIntervalFn: typeof globalThis.setInterval;
 	private readonly clearIntervalFn: typeof globalThis.clearInterval;
@@ -138,6 +157,13 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 			updated_at: new Date(this.cached.updatedAt),
 			stale: ageMs > this.staleThresholdMs
 		};
+	}
+
+	/** cp233 — Defense B: the last drift-check result, or null if
+	 *  drift monitoring is unwired (no db/asset/fiat) or no refresh
+	 *  has committed yet.  Read by /v1/health for the drift surface. */
+	driftStatus(): DriftCheckResult | null {
+		return this.lastDrift;
 	}
 
 	start(): void {
@@ -209,6 +235,31 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 			const now = this.now();
 			this.cached = { price: value, source: up.name, updatedAt: now };
 			log.info('refreshed', { source: up.name, price: value });
+
+			// cp233 — Defense B (slow-drift / "frog in boiling water"):
+			// update the persisted drift baseline and check for a
+			// sustained divergence from it.  Observational ONLY — the
+			// value is already committed above, and a baseline-store
+			// failure must never break price serving (invariant: refresh
+			// failures are logged, not propagated), so it is fenced in
+			// its own try/catch.  Runs only when the operator wired
+			// db + asset + denomination (production path); test sources
+			// constructed without them skip it.  Reuses `now` so the
+			// baseline timestamps honor the same injected clock the rest
+			// of the source uses.
+			if (this.config.db && this.config.asset && this.config.denominationFiat) {
+				try {
+					this.lastDrift = await updateAndCheckDrift(
+						this.config.db,
+						this.config.asset,
+						this.config.denominationFiat,
+						value,
+						{ now: () => new Date(now) }
+					);
+				} catch (err) {
+					log.warn('drift_check_failed', { asset: this.config.asset }, err);
+				}
+			}
 			return;
 		}
 

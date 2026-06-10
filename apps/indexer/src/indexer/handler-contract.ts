@@ -13,9 +13,17 @@
  *     payload, missing target row, etc.) — return `{ ok: false,
  *     reason }` instead. The dispatcher marks the op rejected in
  *     the event log and continues with the next op in the block.
- *   - MAY throw for unexpected conditions (DB connection loss,
- *     bug). The dispatcher rolls back the whole block and retries
- *     on the next poll iteration.
+ *   - MAY throw for unexpected conditions (a bug, an
+ *     unanticipated payload shape that slips past the manual
+ *     narrowing). The dispatcher catches the throw per-op, rolls
+ *     back to THAT op's savepoint, logs the op rejected with
+ *     reason `handler_threw:<msg>`, and continues with the next
+ *     op — so a single throwing op can NOT wedge the block. The
+ *     only path that rolls back the whole block + retries is a
+ *     failure that ALSO breaks the dispatcher's own rollback /
+ *     event-log queries (a lost DB connection, or an
+ *     already-aborted transaction); that propagates out and the
+ *     poller retries the block on the next iteration.
  *   - Receive the transaction-scoped client. All queries inside
  *     the handler MUST use that client (not the pool) so they
  *     partake in the block's atomicity.

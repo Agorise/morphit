@@ -444,7 +444,12 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('# Instance branding');
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push(`MORPHIT_INSTANCE_NAME=${quote(answers.instanceName, 'parseEnv')}`);
-	lines.push(`MORPHIT_INSTANCE_TAGLINE=${quote(answers.tagline, 'parseEnv')}`);
+	// Tagline is optional — omit the line entirely when skipped, so an
+	// unbranded instance doesn't carry a placeholder description into
+	// the federated /instances directory or its SEO (cp231).
+	if (answers.tagline !== '') {
+		lines.push(`MORPHIT_INSTANCE_TAGLINE=${quote(answers.tagline, 'parseEnv')}`);
+	}
 	if (answers.contactUrl !== null) {
 		lines.push(`MORPHIT_INSTANCE_CONTACT_URL=${quote(answers.contactUrl, 'parseEnv')}`);
 	}

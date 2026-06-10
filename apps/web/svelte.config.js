@@ -15,40 +15,29 @@ const config = {
 			strict: true
 		}),
 
-		// Content Security Policy — enforced by SvelteKit at build time AND by
-		// nginx at serve time. Both must agree; if you change one, change
-		// docs/OPERATIONS.md §15 and docs/RUN-A-MORPHIT-NODE.md §11 to match.
+		// Content Security Policy is NOT emitted here.
 		//
-		// Audit 2026-05 finding 6-5: tightened connect-src from `'self'
-		// https:` to an explicit allowlist (the four default Blurt RPCs +
-		// CoinGecko price API). Tradeoff: users who add custom RPC
-		// endpoints in Settings will see CSP violations until the operator
-		// extends the allowlist. Operators serving community pools that
-		// can't be enumerated at build time should fork this list and
-		// add the relevant hosts (or revert to `'self', 'https:'` for
-		// maximum compatibility at the cost of weaker CSP).
-		csp: {
-			mode: 'hash',
-			directives: {
-				'default-src': ['self'],
-				'script-src': ['self'],
-				'style-src': ['self'],
-				'img-src': ['self', 'data:'],
-				'font-src': ['self'],
-				'connect-src': [
-					'self',
-					'https://rpc.blurt.blog',
-					'https://blurt-rpc.saboin.com',
-					'https://rpc.beblurt.com',
-					'https://rpc.blurt.one',
-					'https://api.coingecko.com'
-				],
-				'frame-ancestors': ['none'],
-				'form-action': ['self'],
-				'base-uri': ['self'],
-				'object-src': ['none']
-			}
-		},
+		// This is a fully static (adapter-static) build served by nginx, so
+		// there is no SvelteKit runtime to set a response header — a
+		// SvelteKit-managed CSP can only be injected as a <meta http-equiv>
+		// tag, and that is strictly worse here:
+		//   1. `frame-ancestors` (our clickjacking defense) is IGNORED by
+		//      browsers when delivered via <meta>; it only works as a
+		//      header.  X-Frame-Options + a header CSP cover it instead.
+		//   2. The app runs WebAssembly in the browser (argon2 KDF for the
+		//      keystore, signing) which needs `wasm-unsafe-eval`, and ships
+		//      inline bootstrap scripts which need `'unsafe-inline'` once
+		//      per-page hashes aren't being computed — a hash-mode meta tag
+		//      fought both and silently broke crypto + hydration.
+		//   3. A meta CSP and the nginx header CSP are INTERSECTED by the
+		//      browser, so the stricter meta clobbered the working header,
+		//      and operators had to `sed` the meta out of the build by hand.
+		//
+		// The canonical CSP is therefore a single nginx `add_header
+		// Content-Security-Policy` (see docs/RUN-A-MORPHIT-NODE.md §11 and
+		// docs/OPERATIONS.md §15).  One source of truth, no meta tag, no
+		// manual stripping.  If you change the client's Blurt RPC list
+		// (src/lib/net/config.ts) update that header's connect-src to match.
 
 		// No server-side state; prerender everything possible.
 		//

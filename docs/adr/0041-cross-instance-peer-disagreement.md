@@ -263,15 +263,20 @@ cases), and doc-comment defense manifest.
 
 - **Weighted peer median** (REVISIT cp130+) — weight peers by
   federation-prober goodness score, age, or trade volume.
-- **/v1/health surface** for the peer-disagreement state — today
-  the alert is log-only; a `/v1/health` field like
-  `peer_disagreement_alert_active: true` would surface to users
-  who check the instance's health endpoint.  Out of scope for
-  cp129 to keep the implementation contained.
-- **Cross-asset extension** — when cp130 wires morphit_native for
-  BTC/USD and XMR/USD, the monitor needs to sample all
-  configured (asset, denomination_fiat) pairs.  The schema
-  already supports this; just need the wiring.
+- ~~**/v1/health surface** for the peer-disagreement state~~ —
+  **Done, cp233.**  The latest peer-comparison cycle now surfaces on
+  `/v1/health?verbose=1` under `price.peer` (peers queried, peer
+  median vs own price, deviation, above-threshold flag, alert),
+  captured via an optional `onResult` callback on
+  `startPeerPriceMonitor` so F's core logic was untouched.  Surfaced
+  alongside the cp233-wired defenses B (`price.drift`) and C
+  (`price.disagreement`) — see ADR-0039's cp233 update.  (The cp129
+  `schema.sql` comment claimed F already surfaced here; that was
+  aspirational until cp233 — this future-work item was the accurate
+  record.)
+- ~~**Cross-asset extension**~~ — **Done, cp130.**  The monitor is
+  started per-asset for every configured (asset, denomination_fiat)
+  pair (BLURT/BTC/XMR); cp233 captures each asset's latest result.
 
 ## Related code/docs
 
@@ -279,6 +284,8 @@ cases), and doc-comment defense manifest.
 - `apps/indexer/src/db/schema.sql` — schema-v36 table
 - `apps/indexer/src/config/index.ts` — env vars + Config fields
 - `apps/indexer/src/main.ts` — startup + graceful shutdown wiring
-- `apps/indexer/scripts/peer-price-monitor-smoke.ts` — 28 scenarios
+- `apps/indexer/src/api/health.ts` — `/v1/health` `price.peer` surface (cp233)
+- `apps/indexer/scripts/peer-price-monitor-smoke.ts` — 39 scenarios
+- `apps/indexer/scripts/price-source-hardening-smoke.ts` — B/C/F wiring + surface scenarios (`BW-*`, `CW-*`, `FS-*`, cp233)
 - `ops/env/indexer.env.example` — documented env vars
 - `scripts/run-smokes.sh` — smoke registered in runner

@@ -61,7 +61,7 @@ const MAX_EXPIRES_AT_DAYS = 365;
  *  Applied to location_region, terms, and payment_methods
  *  items, all of which are rendered in orderbook UI surfaces. */
 const FORBIDDEN_TEXT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

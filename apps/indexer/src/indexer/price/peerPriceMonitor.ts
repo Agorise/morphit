@@ -581,7 +581,8 @@ export async function pruneOldObservations(
  *  graceful shutdown. */
 export function startPeerPriceMonitor(
 	cfg: PeerPriceMonitorConfig,
-	intervalMinutes: number = PEER_SAMPLE_INTERVAL_MINUTES
+	intervalMinutes: number = PEER_SAMPLE_INTERVAL_MINUTES,
+	onResult?: (result: PeerSampleCycleResult) => void
 ): () => void {
 	const intervalMs = intervalMinutes * 60 * 1000;
 	let running = true;
@@ -589,7 +590,14 @@ export function startPeerPriceMonitor(
 	async function tick(): Promise<void> {
 		if (!running) return;
 		try {
-			await runPeerPriceSampleCycle(cfg);
+			const result = await runPeerPriceSampleCycle(cfg);
+			// cp233 — surface the latest cycle result so /v1/health can
+			// show F's peer comparison alongside B (drift) and C
+			// (disagreement).  The cp129 schema comment always promised
+			// F would "surface on /v1/health"; this callback is where
+			// that finally becomes true.  Fenced from the prune below by
+			// being a pure in-memory store on the caller's side.
+			onResult?.(result);
 			await pruneOldObservations(cfg.db);
 		} catch (err) {
 			log.error('peer_price_sample_cycle_failed', { err: String(err) });

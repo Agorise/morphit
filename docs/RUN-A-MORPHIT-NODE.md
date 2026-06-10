@@ -937,6 +937,8 @@ For the full list of every env var the indexer reads (price feed, operator-balan
 
 > **About `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` (cp129 Defense F — cross-instance peer disagreement):** Default `false`. Leave it off until your instance is federated with at least 3 reachable peers (visible in `/v1/instances` with `last_probe_status` of `good` or `quiet`).  When enabled, the indexer periodically (every 30 minutes by default) queries peer instances' `/v1/price/morphit-native/receipt` and alerts on sustained median-vs-self disagreement above 25% for over 4 hours.  This defense catches the case where YOUR indexer is the one being manipulated (rather than the trader-level manipulation the cp127 sybil filters address); a healthy peer median acts as a sanity check that no single compromised indexer can fake.  See ADR-0041 for the full design + threat model.  Requires the price feed to be enabled (`MORPHIT_INDEXER_PRICE_FEED_ENABLED=true`); the monitor has nothing to compare against otherwise.
 
+> **About the slow-drift (B) and native-vs-external (C) price defenses (cp127, runtime-wired cp233):** Unlike Defense F above, these two need **no peers** — they protect a lone instance — and they are **on by default whenever `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true`** (no separate switch).  B watches the published price for a slow walk away from its own time-decayed moving baseline ("frog in boiling water"); C cross-checks the published external market price against your `morphit_native` price.  Both log-alert on a sustained breach, and — as of cp233 — all three defenses (B, C, and F) surface in the verbose price block of `/v1/health` under `price.drift`, `price.disagreement`, and `price.peer`.  Neither B nor C ever auto-corrects the price; they make manipulation loud so you can investigate.  See `docs/OPERATIONS.md` → "Monitoring the price-manipulation defenses" for what to do on an alert, and ADR-0039 for the design.
+
 > **About `MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR` + `..._XMR_STATIC_FLOOR` (cp130 multi-asset pricing):** Defaults are USD-shaped: 60000 for BTC, 200 for XMR.  These are the per-asset fallback prices that the composite source serves when all live upstreams have failed AND no value has cached since boot — they never surface in normal operation.  Operators in non-USD denominations (per cp128 `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`) should override these to match their unit — e.g. on a EUR-denominated instance, set `BTC_STATIC_FLOOR=55000` (~BTC/EUR) instead of the USD-shaped 60000.  The cp127 morphit_native price source now derives prices for BTC and XMR too (in addition to BLURT), so `/v1/price/morphit-native/receipt?asset=BTC` returns a real derivation; Klingex remains BLURT-only since it doesn't trade BTC/USDT or XMR/USDT at scale, so BTC and XMR get a 3-tier chain (Coingecko → morphit_native → static floor) rather than BLURT's 4-tier chain.  See ADR-0042.
 
 > **About `MORPHIT_INDEXER_BTC_FEE_ADDRESS` (community
@@ -1161,11 +1163,27 @@ server {
     ssl_session_timeout 1d;
     ssl_session_tickets off;
 
-    # Security headers (see OPERATIONS.md §15 for the full CSP)
+    # Security headers.  The Content-Security-Policy lives HERE (a real
+    # response header), NOT as a <meta> tag in the HTML — this is a
+    # static build, `frame-ancestors` only works as a header, and the app
+    # needs `wasm-unsafe-eval` (in-browser argon2 KDF + signing) plus
+    # `'unsafe-inline'` for SvelteKit's inline bootstrap once per-page
+    # hashes aren't computed.  The build no longer emits a meta CSP, so
+    # you do NOT need to strip one anymore.  See OPERATIONS.md §15 for the
+    # directive-by-directive rationale.
+    #
+    # IMPORTANT: connect-src lists the FOUR default Blurt RPC nodes
+    # (apps/web/src/lib/net/config.ts).  If you run a different RPC set,
+    # edit connect-src to match or the browser will block your nodes
+    # (incl. failover).  It deliberately lists NO price API: price
+    # fetching is server-side (the indexer), the browser never calls
+    # CoinGecko, so adding it here would only leak visitor IPs.
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer" always;
     add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.blurt.blog https://blurt-rpc.saboin.com https://rpc.beblurt.com https://rpc.blurt.one; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 
     # Frontend — static files from the SvelteKit build output.
     #

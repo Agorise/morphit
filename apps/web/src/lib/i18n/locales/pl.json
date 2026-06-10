@@ -1766,7 +1766,6 @@
     "reachable_via": "Dostępne też przez",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "Bez JS",
     "no_js_title": "Jak Morphit działa bez JavaScriptu",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit łączy kupujących i sprzedających bezpośrednio. Bez KYC, niedepozytowy, bez ciasteczek, E2EE, bez logów, bez escrow, prywatny domyślnie, otwarty kod, w pełni rozproszony",
     "cta_browse": "Przeglądaj księgę zleceń",
     "cta_start": "Zacznij handel",
-    "welcome_to_instance": "Witaj w {name}",
     "coin_carousel": {
       "aria_label": "Obsługiwane aktywa",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "Odblokowanie YubiKey wymaga Chrome, Edge, Brave lub innej przeglądarki Chromium. Możesz też wejść za pomocą frazy seed.",
       "use_phone_instead": "Użyj telefonu"
     },
-    "qr_pair_cta": "Masz już Morphit w telefonie? Zaloguj się QR-em"
+    "qr_pair_cta": "Zaloguj się telefonem przez kod QR"
   },
   "login_qr": {
     "title": "Zaloguj się telefonem",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "Płatności BTC / XMR / BLURT na żywo. Ukryte usługi Tor, Lokinet i I2P. Mirror wydań IPFS. PWA + wdrażanie instancji federacyjnych.",
     "phase_6_title": "Faza 6 — integracje API i marketing",
     "phase_6_body": "Deweloperzy mogą osadzić ograniczony ekran księgi zleceń w swoim interfejsie. Użytkownicy mogą wyszukiwać, przeglądać i odpowiadać na oferty bez opuszczania interfejsu, któremu ufają.",
-    "status_in_progress": "w toku",
     "footer_prefix": "Pełny, wersjonowany plan żyje w",
     "status_badge": {
       "shipped": "Dostarczone",
@@ -4191,7 +4188,6 @@
     "sending": "Wysyłanie…"
   },
   "support": {
-    "body": "Wsparcie na żywo nadejdzie w Fazie 5, po wdrożeniu mostu Matrix. Na razie użyj FAQ — pokrywa najczęstsze pytania.",
     "heading": "Pomoc i wsparcie",
     "subtitle": "Większość pytań jest w FAQ. Reszta — tutaj.",
     "faq": {

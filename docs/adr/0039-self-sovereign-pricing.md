@@ -112,7 +112,7 @@ attack scenarios surfaced in pre-implementation discussion:
 | C | Klingex compromise undetected | Cross-source disagreement detector; opt-in priority flip env var |
 | D | Post-and-cancel race | 10-minute order-age grace period before order qualifies; live status re-checked at query time |
 | E | Operator-config envelope widening | Hardcoded outer plausibility bounds (`HARDCODED_OUTER_MIN_USD = 0.00001`, `HARDCODED_OUTER_MAX_USD = 10_000_000`) that operator config can only TIGHTEN, never widen |
-| F | Cross-instance federation manipulation | DEFERRED to cp128 — peer disagreement detector |
+| F | Cross-instance federation manipulation | Peer disagreement detector — implemented cp129 (ADR-0041); surfaces on `/v1/health` as of cp233 |
 | G | Patient sock-puppet evading Sybil filters | Price-derivation receipt endpoint `/v1/price/morphit-native/receipt` for after-the-fact forensics |
 | H | Downstream oracle abuse | NOT-AN-ORACLE warning in receipt payload + listing-fee payload + ADR + FAQ |
 
@@ -232,9 +232,9 @@ Per priority #2:
 
 Tracked as REVISIT items for cp128+:
 
-- **Defense F (cross-instance peer disagreement detector)**: sample
-  prices from peer Morphit instances; alert on sustained
-  cross-instance divergence.
+- ~~**Defense F (cross-instance peer disagreement detector)**~~ —
+  **Done, cp129 (ADR-0041).**  Samples peer instances' receipts and
+  alerts on sustained cross-instance divergence.
 - **Per-asset wiring for BTC/USD, XMR/USD**: the factory is generic;
   wire additional asset/fiat instances when needed for the
   listing-fee USD-echo extension to BTC/XMR fees.
@@ -244,6 +244,37 @@ Tracked as REVISIT items for cp128+:
   today the factory hardcodes `denominationFiat: 'USD'`.  Wire it
   to an operator config field so non-USD operator instances can use
   morphit_native too.
+
+## Update — cp233 (runtime wiring of B + C; `/v1/health` surfacing for B + C + F)
+
+Defenses **B** (slow-drift) and **C** (cross-source disagreement)
+were *built* in cp127 (modules + contract smokes) but were not yet
+invoked in the live price-refresh path — only **F** (cp129) was
+runtime-wired.  cp233 closes that gap and makes all three observable:
+
+- **B** runs on every successful price refresh
+  (`compositeSource.refreshOnce` → `updateAndCheckDrift`, per-asset),
+  persisting its moving baseline to the `price_drift_baseline`
+  table.  Peer-independent.
+- **C** runs as a per-asset background monitor
+  (`startDisagreementMonitor`) that cross-checks the published
+  external price against a freshly-derived `morphit_native` price
+  each cycle.  In-process, no table.  It treats the published price
+  as an external reference **only** when it came from a real
+  external market source (klingex/coingecko) — never the static
+  floor or the native fallback — so it cannot false-alarm while
+  external sources are briefly unreachable.  On by default whenever
+  native pricing is enabled.  Peer-independent.
+- **All three (B, C, F)** now surface on `/v1/health?verbose=1`
+  under `price.drift`, `price.disagreement`, and `price.peer`, and
+  each log-alerts on a sustained breach.
+- The wiring is pinned by `price-source-hardening-smoke.ts`
+  (`BW-*`, `CW-*`, `FS-*` scenarios) so a future refactor cannot
+  silently unwire any of it.
+
+Net effect: a lone early-beta instance with no federation peers
+still gets slow-drift (B) and source-disagreement (C) protection; F
+additionally activates once ≥3 peers are reachable.
 
 ## Related
 

@@ -115,22 +115,26 @@ export async function stepInstanceName(): Promise<string> {
 export async function stepTagline(): Promise<string> {
 	step(2, TOTAL_STEPS, 'Instance tagline');
 	explain(
-		'A one-line subtitle shown beneath your instance name. It\n' +
-			'appears under the name on your homepage AND under your\n' +
+		'A one-line subtitle for your instance. It appears under your\n' +
 			'instance in the federated /instances directory (so users on\n' +
 			'other nodes see it when browsing where to trade), and it is\n' +
 			'used as the description in search results and link previews.\n' +
 			'\n' +
-			'Optional but recommended — one friendly sentence saying what\n' +
-			'your instance is or who runs it. Keep it short.'
+			'Optional — press Enter to skip. If you set one, keep it to a\n' +
+			'short, friendly sentence saying what your instance is or who\n' +
+			'runs it.'
 	);
 	examples([
 		'P2P Bitcoin & Monero trading, no KYC.',
 		"Berlin's first Morphit node.",
 		'Run by alice, for fellow Morphit traders.'
 	]);
-	const DEFAULT = 'A Morphit instance';
-	const v = await ask('Tagline', DEFAULT);
+	// No default: an empty answer means "no tagline", and render.ts
+	// omits MORPHIT_INSTANCE_TAGLINE entirely in that case.  (cp231:
+	// the old 'A Morphit instance' default was written verbatim into
+	// the env and then surfaced as a meaningless placeholder in the
+	// federated directory + SEO for every operator who pressed Enter.)
+	const v = await ask('Tagline (optional)');
 	return v.length > 200 ? v.slice(0, 200) : v;
 }
 

@@ -335,9 +335,11 @@
 		          of paired and routes to /onboarding/import) -->
 		<header class="text-center">
 			<h1 class="font-display text-3xl font-extrabold leading-tight md:text-4xl">
-				{$_('paired_readonly.welcome_back_heading', {
-					values: { account: $pairedReadOnly.account }
-				})}
+				<span class="brand-gradient-text"
+					>{$_('paired_readonly.welcome_back_heading', {
+						values: { account: $pairedReadOnly.account }
+					})}</span
+				>
 			</h1>
 			<p class="mt-3 text-ink-600 dark:text-ink-300">
 				{$_('paired_readonly.welcome_back_body')}
@@ -355,7 +357,7 @@
 		<!-- Returning user with persisted keystore — fast path. -->
 		<header class="text-center">
 			<h1 class="font-display text-3xl font-extrabold leading-tight md:text-4xl">
-				{$_('login.welcome_back.title')}
+				<span class="brand-gradient-text">{$_('login.welcome_back.title')}</span>
 			</h1>
 			<p class="mt-3 text-ink-600 dark:text-ink-300">
 				{$_('login.welcome_back.body')}
@@ -526,7 +528,7 @@
 		<!-- No persisted keystore — offer import or onboarding. -->
 		<header class="text-center">
 			<h1 class="font-display text-3xl font-extrabold leading-tight md:text-4xl">
-				{$_('login.title')}
+				<span class="brand-gradient-text">{$_('login.title')}</span>
 			</h1>
 			<p class="mt-3 text-ink-600 dark:text-ink-300">{$_('login.body')}</p>
 		</header>
@@ -540,16 +542,25 @@
 			</a>
 		</div>
 
-		<!-- ADR-0022: QR-pairing offered as a third path for users
-		     who already have Morphit on their phone.  Lower-key
-		     than the import/register choices since it requires the
-		     phone to be set up first; surfaced as a tertiary
-		     option below the primary CTAs. -->
-		<div class="mt-4 text-center">
-			<a
-				href={lp('/login/qr-pair')}
-				class="text-sm text-morphit-emerald underline hover:text-morphit-emerald/80"
-			>
+		<!-- ADR-0022: QR-pairing offered as a third sign-in path for
+		     users who already have Morphit on their phone.  cp233:
+		     promoted from a tertiary text link to a full btn-secondary
+		     button (matching "Create a new account") with the QR glyph,
+		     per Ken — easier to spot + tap.  The .btn base already
+		     centers (inline-flex items-center justify-center gap-2);
+		     `flex w-full` makes it a full-width block button.  Icon is
+		     the uploaded icon-qr.svg artwork, fill=currentColor so it
+		     inherits the button text colour in both light + dark. -->
+		<div class="mt-4">
+			<a href={lp('/login/qr-pair')} class="btn-secondary flex w-full">
+				<svg
+					viewBox="-1 -1 2002 2002"
+					fill="currentColor"
+					aria-hidden="true"
+					class="h-5 w-5 flex-none"
+				>
+					<path d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z" />
+				</svg>
 				{$_('login.qr_pair_cta')}
 			</a>
 		</div>

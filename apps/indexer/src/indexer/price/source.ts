@@ -32,6 +32,8 @@
  *   source.stop();
  */
 
+import type { DriftCheckResult } from '$indexer/price/driftMonitor';
+
 /** One attempt to fetch a live price. Returns a number or `null` if
  *  the upstream couldn't provide a value right now. Must NEVER throw. */
 export type PriceFetch = () => Promise<number | null>;
@@ -62,4 +64,13 @@ export interface BlurtPriceSource {
 
 	/** Stop background refresh. Idempotent. */
 	stop(): void;
+
+	/** cp233 — Defense B: the most recent drift-check result, or
+	 *  null when drift monitoring isn't wired (no db/asset/fiat
+	 *  configured) or no refresh has committed yet.  Surfaced on
+	 *  /v1/health so an operator can see whether the published
+	 *  price has drifted suspiciously far from its moving baseline.
+	 *  Optional on the interface because only the composite source
+	 *  computes it; other implementations may omit it. */
+	driftStatus?(): DriftCheckResult | null;
 }

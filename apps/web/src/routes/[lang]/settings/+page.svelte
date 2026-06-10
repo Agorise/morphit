@@ -1515,8 +1515,13 @@
 	<!-- Self-contained component — owns its own section card, its
 	     own state via the preferences store, and its own event
 	     handlers. Lives here because it belongs in Settings but is
-	     substantial enough that inlining would bloat this file. -->
-	<NotificationSettings />
+	     substantial enough that inlining would bloat this file.
+	     Wrapped in an id="notifications" anchor (cp233) so the
+	     AvatarMenu "Notification settings" link (/settings#notifications)
+	     actually scrolls here instead of landing at the page top. -->
+	<div id="notifications">
+		<NotificationSettings />
+	</div>
 
 	<!-- ─── Install as app ─────────────────────────────────────
 	     Item 16 phase 5.  Surfaces the "install Morphit on this

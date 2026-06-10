@@ -302,7 +302,9 @@ function printReview(answers: WizardAnswers): void {
 	console.log("Here's what we'll write to morphit.config.env:");
 	console.log('');
 	console.log(`  Instance name:        ${sanitizeForTerm(answers.instanceName)}`);
-	console.log(`  Tagline:              ${sanitizeForTerm(answers.tagline)}`);
+	console.log(
+		`  Tagline:              ${answers.tagline === '' ? '(none)' : sanitizeForTerm(answers.tagline)}`
+	);
 	console.log(`  Database URL:         ${sanitizeForTerm(maskDatabasePassword(answers.databaseUrl))}`);
 	console.log(`  Relay account:        @${sanitizeForTerm(answers.relayAccount.name)}`);
 	const keyDesc =

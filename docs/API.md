@@ -164,10 +164,21 @@ RPC endpoints — not the indexer — are the problem.  Per-endpoint
 URLs and detail stay in the operator-opt-in verbose block below.
 
 Operators who set `MORPHIT_INDEXER_VERBOSE_HEALTH=1` may also see
-a `_diagnostics` block in the response with breaker snapshots,
+a `diagnostics` block in the response with breaker snapshots,
 queue depths, etc.  This is operator-opt-in because the verbose
 data leaks below-threshold signal that a public attacker could
 use to time a drain.
+
+The `diagnostics.price` object (present only when the optional price
+feed is enabled) reports the live BLURT/USD value, the serving
+upstream, and the three price-manipulation defenses (ADR-0039 /
+ADR-0041), all surfaced as of cp233: `drift` (defense B — deviation
+from a time-decayed moving baseline), `disagreement` (defense C —
+`morphit_native` vs the external market price), and `peer` (defense F
+— own price vs federation peer median).  Each carries an `alert`
+boolean that goes true on a sustained breach and is `null` until it
+has data.  See `docs/OPERATIONS.md` → "Monitoring the
+price-manipulation defenses".
 
 Use this endpoint for federation health monitors and uptime
 probes.

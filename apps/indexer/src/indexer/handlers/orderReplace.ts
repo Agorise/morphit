@@ -31,7 +31,7 @@ const MAX_EXPIRES_AT_DAYS = 365;
 /** O3.4 — forbidden character class for user-text fields.
  *  Mirror of order.ts.  See that file for full rationale. */
 const FORBIDDEN_TEXT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B-\u200D\uFEFF]/;
+	/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);

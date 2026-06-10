@@ -1766,7 +1766,6 @@
     "reachable_via": "Raggiungibile anche tramite",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "Senza JS",
     "no_js_title": "Come funziona Morphit senza JavaScript",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit collega compratori e venditori direttamente. Nessun KYC, non custodiale, nessun cookie, E2EE, nessun log, nessun escrow, privato di default, open source, completamente distribuito",
     "cta_browse": "Sfoglia gli ordini",
     "cta_start": "Inizia a fare trading",
-    "welcome_to_instance": "Benvenuto su {name}",
     "coin_carousel": {
       "aria_label": "Asset supportati",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "Lo sblocco con YubiKey richiede Chrome, Edge, Brave o un altro browser Chromium. Puoi anche usare la tua frase seed per entrare.",
       "use_phone_instead": "Usa il telefono"
     },
-    "qr_pair_cta": "Hai già Morphit sul telefono? Accedi con QR"
+    "qr_pair_cta": "Accedi con il tuo telefono tramite QR"
   },
   "login_qr": {
     "title": "Accedi con il tuo telefono",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "Flussi di pagamento BTC / XMR / BLURT in diretta. Servizi nascosti Tor, Lokinet e I2P. Mirror di release IPFS. PWA + onboarding di istanze federate.",
     "phase_6_title": "Fase 6 — integrazioni API e marketing",
     "phase_6_body": "Gli sviluppatori possono incorporare una schermata delimitata dell'order book nella propria interfaccia. Gli utenti possono cercare, sfogliare e rispondere alle offerte senza lasciare l'interfaccia di cui si fidano.",
-    "status_in_progress": "in corso",
     "footer_prefix": "Il piano completo e versionato vive in",
     "status_badge": {
       "shipped": "Consegnato",
@@ -4191,7 +4188,6 @@
     "sending": "Invio…"
   },
   "support": {
-    "body": "Il supporto live arriva in Fase 5, una volta dispiegato il bridge Matrix. Per ora, usa il FAQ — copre le domande più comuni.",
     "heading": "Aiuto e supporto",
     "subtitle": "La maggior parte delle domande è risolta nelle FAQ. Per il resto, ecco dove rivolgersi.",
     "faq": {

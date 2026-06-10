@@ -1766,7 +1766,6 @@
     "reachable_via": "Also reachable via",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "No JS",
     "no_js_title": "How Morphit works without JavaScript",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit connects buyers and sellers directly. No KYC, non-custodial, no cookies, E2EE, no logging, no escrow, private by default, open source, fully-distributed",
     "cta_browse": "Browse the orderbook",
     "cta_start": "Start trading",
-    "welcome_to_instance": "Welcome to {name}",
     "coin_carousel": {
       "aria_label": "Supported assets",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "YubiKey unlock requires Chrome, Edge, Brave, or another Chromium browser. You can also use your seed phrase to enter.",
       "use_phone_instead": "Use phone instead"
     },
-    "qr_pair_cta": "Already have Morphit on your phone? Sign in with QR"
+    "qr_pair_cta": "Sign in with your phone via QR"
   },
   "login_qr": {
     "title": "Sign in with your phone",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "Live BTC / XMR / BLURT payment flows. Tor, Lokinet, and I2P hidden services. IPFS release mirror. PWA + Federated instances onboarding.",
     "phase_6_title": "Phase 6 — API integrations & marketing",
     "phase_6_body": "Developers can embed a scoped orderbook screen into their UI. Users can search/browse/respond to offers without leaving the UI they trust.",
-    "status_in_progress": "in progress",
     "footer_prefix": "The full, versioned plan lives in",
     "status_badge": {
       "shipped": "Shipped",
@@ -4191,7 +4188,6 @@
     "sending": "Sending…"
   },
   "support": {
-    "body": "Live support arrives in Phase 5, once the Matrix bridge is deployed. For now, please use the FAQ — it covers the most common questions.",
     "heading": "Help & support",
     "subtitle": "Most questions are answered in the FAQ. For anything else, here's how to reach the right place.",
     "faq": {

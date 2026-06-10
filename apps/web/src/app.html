@@ -1,96 +1,23 @@
 <!doctype html>
 <html lang="en" dir="ltr" class="dark">
 	<head>
+		<!-- Shell rationale + per-route SEO notes: docs/WEB-SHELL.md -->
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<!--
-			Morphit is dark-mode-only by design. We tell the UA not to try
-			to "auto-adapt" form controls or scrollbars to a light theme.
-			The `class="dark"` on <html> above causes Tailwind's `dark:*`
-			variants to fire unconditionally; the light variants remain in
-			the CSS as inert fallback should the site ever need to offer
-			a user-toggleable light theme.
-		-->
 		<meta name="color-scheme" content="dark" />
 		<meta name="theme-color" content="#00DA69" />
 
-		<!-- Privacy & security posture -->
 		<meta name="referrer" content="no-referrer" />
-		<meta http-equiv="X-Content-Type-Options" content="nosniff" />
-		<meta
-			http-equiv="Permissions-Policy"
-			content="camera=(), microphone=(), geolocation=(), interest-cohort=()"
-		/>
 
-		<!--
-			Title, description, canonical, hreflang, OpenGraph, Twitter Card,
-			and JSON-LD are emitted per-route via <Head /> in each page.
-			App.html intentionally does NOT set a default <title> or
-			<meta description>; SvelteKit will always render a route before
-			committing the HTML, so there is never a case where the page is
-			served without its localized SEO copy.
-		-->
-
-		<!-- Favicons & PWA -->
-		<!--
-			Three icon assets, distinct purposes:
-
-			- favicon.svg          — transparent background, mark only.
-			                         Used as the browser tab/bookmark
-			                         icon.  Reads on both light + dark
-			                         tab bars because the gradient mark
-			                         has its own color identity.
-			- app-icon.svg         — dark (ink-950) background, mark
-			                         centered.  The default PWA icon
-			                         used for OS app launchers, also
-			                         used as the apple-touch-icon (iOS
-			                         home-screen shortcut needs a
-			                         non-transparent square).
-			- app-icon-maskable.svg — same dark canvas as app-icon, but
-			                         the mark fits inside the inner
-			                         40% safe radius so Android
-			                         adaptive-icon masks (circle,
-			                         squircle, teardrop) never crop it.
-
-			Wordmark intentionally NOT used for any of these — the
-			wordmark is for the in-app top-left header + footer only.
-		-->
 		<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/favicon.svg" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/app-icon.svg" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
 
-		<!--
-			iOS-specific PWA hints.  iOS Safari needs these to treat
-			the site as a "real" PWA when the user does Share → Add
-			to Home Screen:
-
-			- apple-mobile-web-app-capable: tells iOS the page is OK
-			  to launch in standalone (no browser chrome).  Without
-			  this, the home-screen icon opens a regular Safari tab.
-			- apple-mobile-web-app-status-bar-style: black-translucent
-			  matches our dark theme; the status bar overlays the
-			  app's top edge instead of stealing 44pt of layout.
-			- apple-mobile-web-app-title: shorter label that appears
-			  under the home-screen icon.
-
-			Item 6 (iPhone install path verification): iOS 16.4+
-			fully supports the PWA install flow including service
-			workers and Web Share Target.  Older iOS versions still
-			install the icon and load the page; they just don't have
-			the full PWA feature set.
-		-->
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="apple-mobile-web-app-title" content="Morphit" />
-		<!--
-			mobile-web-app-capable is the standardized successor of
-			apple-mobile-web-app-capable; we emit both for forward
-			compatibility — Android Chrome reads the standard one,
-			iOS Safari still primarily reads the apple-prefixed.
-		-->
 		<meta name="mobile-web-app-capable" content="yes" />
 
-		<!-- Self-hosted font preload (Nunito subset) -->
 		<link
 			rel="preload"
 			href="%sveltekit.assets%/fonts/nunito-latin-400.woff2"
@@ -106,21 +33,8 @@
 			crossorigin="anonymous"
 		/>
 
-		<!-- Preflight locale hint.
-		     Runs synchronously before body paint. Reads the
-		     `?lang=<code>` query parameter (if present) and sets
-		     document.documentElement.lang / dir so:
-		       - screen readers announce the correct language
-		       - crawlers (some of which don't run JS at all) see
-		         the right lang attribute when indexing with
-		         Accept-Language headers
-		       - the existing svelte-i18n init() later in
-		         hooks.client.ts picks up the same value and
-		         serves the correct translations
-		     This is a best-effort hint; if the URL has no lang
-		     param, we leave the default <html lang="en"> intact
-		     and let the i18n init resolve from navigator.languages. -->
 		<script>
+			// Preflight locale hint (see docs/WEB-SHELL.md). Best-effort.
 			(function () {
 				try {
 					var q = new URLSearchParams(window.location.search);
@@ -164,32 +78,5 @@
 		</noscript>
 
 		<div id="svelte" style="display: contents">%sveltekit.body%</div>
-
-		<!--
-			Service worker registration is handled by SvelteKit's
-			built-in auto-register (svelte.config.js > kit >
-			serviceWorker > register: true).  That injects an inline
-			script at build time that does:
-
-			  if ('serviceWorker' in navigator) {
-			    addEventListener('load', function () {
-			      navigator.serviceWorker.register('/service-worker.js');
-			    });
-			  }
-
-			which registers apps/web/src/service-worker.ts (compiled
-			to /service-worker.js by SvelteKit).  Manual registration
-			of a different SW URL here would race with SvelteKit's
-			and silently replace it (same scope `/`, last register
-			wins), which was a Part 122 cp81 bug: a separate
-			/sw.js was registered manually and superseded the
-			SvelteKit SW, breaking push notifications.  Fixed in
-			cp81-D22.  See docs/SERVICE-WORKER-CACHING-DESIGN.md
-			for the full design.
-
-			UpdateBanner.svelte picks up the registration via
-			navigator.serviceWorker.getRegistration() asynchronously
-			and watches for 'updatefound' events.
-		-->
 	</body>
 </html>

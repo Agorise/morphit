@@ -1766,7 +1766,6 @@
     "reachable_via": "Auch erreichbar über",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "Kein JS",
     "no_js_title": "Wie Morphit ohne JavaScript funktioniert",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit verbindet Käufer und Verkäufer direkt. Kein KYC, nicht-verwahrend, keine Cookies, E2EE, keine Logs, kein Escrow, standardmäßig privat, Open Source, vollständig dezentralisiert",
     "cta_browse": "Orderbuch durchsuchen",
     "cta_start": "Mit dem Handel beginnen",
-    "welcome_to_instance": "Willkommen bei {name}",
     "coin_carousel": {
       "aria_label": "Unterstützte Werte",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "YubiKey-Entsperrung benötigt Chrome, Edge, Brave oder einen anderen Chromium-Browser. Du kannst auch deine Seed-Phrase verwenden, um einzusteigen.",
       "use_phone_instead": "Handy verwenden"
     },
-    "qr_pair_cta": "Schon Morphit auf dem Handy? Mit QR anmelden"
+    "qr_pair_cta": "Mit deinem Handy per QR anmelden"
   },
   "login_qr": {
     "title": "Melde dich mit deinem Handy an",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "Live BTC / XMR / BLURT Zahlungs-Flows. Tor-, Lokinet- und I2P-Hidden-Services. IPFS-Release-Mirror. PWA + Onboarding föderierter Instanzen.",
     "phase_6_title": "Phase 6 — API-Integrationen & Marketing",
     "phase_6_body": "Entwickler können einen abgegrenzten Orderbuch-Bildschirm in ihre Oberfläche einbetten. Nutzer können Angebote durchsuchen, ansehen und beantworten, ohne die Oberfläche zu verlassen, der sie vertrauen.",
-    "status_in_progress": "in Arbeit",
     "footer_prefix": "Der vollständige, versionierte Plan lebt in",
     "status_badge": {
       "shipped": "Ausgeliefert",
@@ -4191,7 +4188,6 @@
     "sending": "Senden…"
   },
   "support": {
-    "body": "Live-Support kommt in Phase 5, sobald die Matrix-Bridge ausgerollt ist. Bis dahin nutze bitte das FAQ — es deckt die häufigsten Fragen ab.",
     "heading": "Hilfe & Support",
     "subtitle": "Die meisten Fragen werden in der FAQ beantwortet. Für alles andere führt dieser Weg zur richtigen Stelle.",
     "faq": {

@@ -1766,7 +1766,6 @@
     "reachable_via": "Accessible aussi via",
     "tor": "Tor",
     "lokinet": "Lokinet",
-    "i2p": "I2P",
     "nostr": "Nostr",
     "no_js": "Sans JS",
     "no_js_title": "Comment Morphit fonctionne sans JavaScript",
@@ -1893,7 +1892,6 @@
     "hero_body": "Morphit connecte acheteurs et vendeurs directement. Sans KYC, non-custodial, sans cookies, E2EE, sans journaux, sans séquestre, privé par défaut, open source, entièrement distribué",
     "cta_browse": "Parcourir le carnet",
     "cta_start": "Commencer à trader",
-    "welcome_to_instance": "Bienvenue sur {name}",
     "coin_carousel": {
       "aria_label": "Actifs pris en charge",
       "networks": {
@@ -2043,7 +2041,7 @@
       "yubikey_browser_unsupported": "Le déverrouillage par YubiKey nécessite Chrome, Edge, Brave ou un autre navigateur Chromium. Tu peux aussi utiliser ta phrase de récupération pour entrer.",
       "use_phone_instead": "Utiliser le téléphone"
     },
-    "qr_pair_cta": "Tu as déjà Morphit sur ton téléphone ? Connecte-toi avec QR"
+    "qr_pair_cta": "Connecte-toi avec ton téléphone via QR"
   },
   "login_qr": {
     "title": "Connecte-toi avec ton téléphone",
@@ -2818,7 +2816,6 @@
     "phase_5_body": "Flux de paiement BTC / XMR / BLURT en direct. Services cachés Tor, Lokinet et I2P. Miroir de release IPFS. PWA + intégration des instances fédérées.",
     "phase_6_title": "Phase 6 — intégrations d'API et marketing",
     "phase_6_body": "Les développeurs peuvent intégrer un écran de carnet d'ordres délimité dans leur interface. Les utilisateurs peuvent rechercher, parcourir et répondre aux offres sans quitter l'interface en laquelle ils ont confiance.",
-    "status_in_progress": "en cours",
     "footer_prefix": "Le plan complet et versionné vit dans",
     "status_badge": {
       "shipped": "Livré",
@@ -4191,7 +4188,6 @@
     "sending": "Envoi…"
   },
   "support": {
-    "body": "Le support en direct arrive en Phase 5, une fois le pont Matrix déployé. Pour l'instant, utilise le FAQ — il couvre les questions les plus fréquentes.",
     "heading": "Aide et support",
     "subtitle": "La plupart des questions sont traitées dans la FAQ. Pour le reste, voici où s'adresser.",
     "faq": {
