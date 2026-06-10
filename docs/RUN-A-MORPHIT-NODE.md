@@ -1125,7 +1125,7 @@ sudo cp -r apps/web/build/* /var/www/morphit-frontend/
 sudo chown -R www-data:www-data /var/www/morphit-frontend
 ```
 
-Re-run these three commands every time you update Morphit **by hand** (`git pull` followed by `npm run build` followed by the `cp`). Section 12 below shows how to do it as a single update procedure. (If you update via a release with `morphit-ops upgrade` instead, you do **not** do this by hand — the upgrade rebuilds `apps/web` and redeploys it to your web root for you. See `docs/UPGRADING.md`.)
+Re-run these three commands every time you update Morphit **by hand** (`git pull` followed by `npm run build` followed by the `cp`). Section 12 below shows how to do it as a single update procedure. (If you update via a release with `morphit-ops upgrade` instead, you do **not** do this by hand — the upgrade rebuilds `apps/web` and republishes it for you: it copies the build into your web root on bare-metal nginx, or recreates the BunkerWeb `frontend` container so it serves the new build. See `docs/UPGRADING.md`.)
 
 ### Configure nginx
 
