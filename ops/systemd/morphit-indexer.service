@@ -1,90 +1,61 @@
 [Unit]
-Description=Morphit indexer — Blurt chain → Postgres materialisation + HTTP API
+# Morphit indexer — Blurt-chain -> Postgres materialisation + read-only REST
+# API (/v1/*). Matches the morphit-ops deployment: monorepo at /opt/morphit,
+# root-owned config, Postgres in a Docker container.
+#
+# Install (one-time, as root):
+#   cp ops/systemd/morphit-indexer.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now morphit-indexer
+#   journalctl -u morphit-indexer -f       # watch it boot + sync
+#
+# After this, `morphit-ops upgrade` restarts it automatically and it survives
+# reboots — no screen sessions.
+Description=Morphit indexer (Blurt-chain indexer and REST API)
 Documentation=https://git.agorise.net/agorise/morphit
-Requires=postgresql.service
-After=network-online.target postgresql.service
+After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=morphit
-Group=morphit
+# Matches the current deployment (install tree + operator config are
+# root-owned). To de-privilege, chown /opt/morphit's config + data to a
+# dedicated service user and set User=/Group= here instead.
+User=root
 WorkingDirectory=/opt/morphit/apps/indexer
-
-# Environment file — NEVER commit a populated version. Copy from
-# ops/env/indexer.env.example and fill in at deploy time.
-EnvironmentFile=/etc/morphit/indexer.env
-
-# Use tsx directly so we don't need a build step. Node 24+ required
-# per apps/indexer/package.json engines.
-ExecStart=/usr/bin/env node --enable-source-maps \
-    node_modules/tsx/dist/cli.mjs src/main.ts
-
-# Give the poller a chance to finish its current block tx when
-# stopping, before SIGKILL.
-KillSignal=SIGTERM
-TimeoutStopSec=15
-
-Restart=always
+# Source the operator env + config exactly like a manual start, then exec the
+# indexer. A shell wrapper (rather than EnvironmentFile=) is deliberate so env
+# files written in either `KEY=value` or `export KEY=value` form both load.
+ExecStart=/usr/bin/env bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+Restart=on-failure
 RestartSec=5
-
-# Logs go to the journal. View with:
-#   journalctl -u morphit-indexer -f
+KillSignal=SIGTERM
+TimeoutStopSec=30
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=morphit-indexer
 
-# ─── Hardening ──────────────────────────────────────────────────
-# Filesystem
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/log/morphit
-PrivateTmp=true
-
-# Process capabilities
-NoNewPrivileges=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectKernelLogs=true
-ProtectControlGroups=true
-ProtectClock=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=false  # Node's V8 JIT needs W+X
-
-# Part 107 — disable core dumps and restrict /proc visibility.
-# A core dump of the indexer process would contain the in-memory
-# XMR_FEE_VIEWKEY and any other secrets read from env at boot.
-# ProtectProc=invisible hides other processes' /proc data from
-# the indexer (the indexer doesn't need to read other processes,
-# and an attacker who somehow gets code-exec inside the indexer
-# can't snoop on relay/postgres/etc. either).
-LimitCORE=0
+# --- Hardening (safe with User=root) -------------------------------
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
 ProtectProc=invisible
 ProcSubset=pid
-
-# Network — bind on loopback per the listen config; nginx fronts the public surface
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-# Note on IP-level network policy:
-#   The indexer needs egress to multiple external services that
-#   change IPs over time:
-#     - Blurt RPC endpoints (rotating CDN-fronted hosts)
-#     - Bitcoin block explorers (blockstream.info, mempool.space)
-#     - Monero block explorers (xmrchain.net)
-#     - Optional price-feed APIs (CoinGecko, Klingex)
-#   Hardcoding an allowlist via IPAddressAllow= is fragile because
-#   these IPs rotate without notice. Network policy is enforced at
-#   the host firewall level (ufw/nftables) instead — see
-#   docs/OPERATIONS.md §14 (deployment topology) and §34 (firewall).
-
-# Syscalls
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
 SystemCallArchitectures=native
-SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources @mount @reboot @swap @module @raw-io
-
-# Namespaces
-PrivateDevices=true
-RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# A core dump could contain secrets read from env at boot.
+LimitCORE=0
+# Node's V8 JIT writes+executes in memory, so W^X must stay off.
+MemoryDenyWriteExecute=no
 
 [Install]
 WantedBy=multi-user.target

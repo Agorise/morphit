@@ -1310,88 +1310,41 @@ sudo systemctl enable morphit-indexer morphit-relay
 > See the "My node won't start" troubleshooting entry later in this
 > guide.
 
-> **One-time path + user fixup (Sally-operator finding So-6,
-> Part 119).**  The shipped unit files hardcode
-> `WorkingDirectory=/opt/morphit-relay` (relay) and
-> `/opt/morphit-indexer` (indexer), plus the relay's
-> `User=morphit-relay` / `Group=morphit-relay`.  This guide
-> clones the monorepo to `~/morphit` (i.e.
-> `/home/morphit/morphit`) under the `morphit` user — so
-> without an override, both services would fail on first
-> start ("no such directory" for relay, plus "user
-> morphit-relay doesn't exist").
->
-> Override via systemd drop-ins (the standard way to adapt
-> shipped units without editing the source files):
+> **Install path.** These shipped units target the standard
+> `morphit-ops` layout: the monorepo at **`/opt/morphit`**
+> (config `/opt/morphit/morphit.env` +
+> `/opt/morphit/morphit.config.env`, database in a Docker
+> container), running as `root` because that config is
+> root-owned. **This manual guide instead clones to
+> `~/morphit`** (e.g. `/home/morphit/morphit`), so you'll
+> need a drop-in to point the units at your actual paths —
+> don't edit the shipped files:
 >
 > ```bash
-> # Indexer drop-in
-> sudo systemctl edit morphit-indexer
+> sudo systemctl edit morphit-indexer   # then: morphit-relay
 > ```
 >
-> Paste in the editor that opens:
->
-> ```
-> [Service]
-> WorkingDirectory=
-> WorkingDirectory=/home/morphit/morphit/apps/indexer
-> ```
->
-> Save + exit.  Then for the relay:
->
-> ```bash
-> # Relay drop-in — first create the morphit-relay user if it
-> # doesn't exist, OR override User= to `morphit`.  We
-> # recommend creating the dedicated user (smaller blast
-> # radius if the relay is ever compromised):
-> sudo adduser --system --group --no-create-home morphit-relay
-> sudo chown -R morphit-relay:morphit-relay /var/lib/morphit-relay
-> sudo systemctl edit morphit-relay
-> ```
->
-> Paste:
->
-> ```
-> [Service]
-> WorkingDirectory=
-> WorkingDirectory=/home/morphit/morphit/apps/relay
-> ```
->
-> (`WorkingDirectory=` with no value first wipes the shipped
-> value before re-setting it — this is the systemd idiom for
-> overriding rather than appending.)  Also grant the new
-> `morphit-relay` user read access to its env file:
->
-> ```bash
-> sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
-> ```
->
-> The relay's `MORPHIT_RELAY_ACTIVE_KEY_FILE` path (referenced
-> earlier in this §8) must also be readable by `morphit-relay`
-> — adjust ownership the same way.
->
-> Then:
->
-> ```bash
-> sudo systemctl daemon-reload
-> ```
->
-> The override files land in
-> `/etc/systemd/system/morphit-{indexer,relay}.service.d/override.conf`
-> and persist across `git pull` updates to the shipped unit
-> files.  `systemctl cat morphit-relay` will show both the
-> shipped unit and your override merged together.
+> In the editor that opens, override `WorkingDirectory=` and
+> the `ExecStart=` line so they reference your clone's
+> `apps/indexer` (and `apps/relay`) directory and its
+> `node_modules/.bin/tsx`. The empty `WorkingDirectory=`
+> first line wipes the shipped value before re-setting it —
+> the systemd idiom for overriding rather than appending.
+> `systemctl cat morphit-indexer` shows the shipped unit and
+> your override merged, and the override survives upgrades.
 
-The relay reads its active key passphrase interactively on first start, so the first start has to happen from your SSH session (not a boot-time auto-start). Run:
+**The relay's active key is encrypted, and its passphrase must be supplied as a systemd _encrypted credential_** — never as plaintext on disk. This is what lets the relay start unattended (no prompt) while keeping the key encrypted at rest. Create the credential once (as root), using the same passphrase you set when you created the relay key:
 
 ```
-sudo systemctl start morphit-relay
+echo -n 'your-relay-passphrase' | sudo systemd-creds encrypt --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
 ```
 
-You'll be prompted for the active-key passphrase. After it's running, also start the indexer:
+systemd decrypts it automatically at every start using the machine's host key (and the TPM, if present) — so after a reboot the relay comes back and resumes posting to the chain on its own, with nothing to type. Keep the passphrase itself in your password manager: if you ever rebuild the host from scratch, re-run that one command to recreate the credential. The relay unit **refuses to start without the credential** — that's deliberate; do not fall back to a plaintext passphrase in `morphit.env`.
+
+Now start both services — they come up unattended, no passphrase prompt:
 
 ```
-sudo systemctl start morphit-indexer
+sudo systemctl start morphit-indexer morphit-relay
 ```
 
 (There's no "morphit-web" service — the frontend is static files served by nginx, no Node process. The build step above is the entire web "deployment.")

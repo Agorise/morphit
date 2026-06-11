@@ -92,7 +92,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -947,6 +947,21 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
+	// Safeguard: a manually-run indexer/relay (not the systemd units handled
+	// above) is now orphaned on the OLD code — the dir swap moved its source
+	// out from under it, and we can't restart a service we don't manage. Say
+	// so loudly so morphit.io doesn't silently keep serving stale code.
+	const orphaned = pidsWithCwdUnder(backupDir);
+	if (orphaned.length > 0) {
+		warn(
+			`${orphaned.length} process(es) are still running from the previous ` +
+				`install at ${backupDir} (PIDs ${orphaned.join(', ')}) — they are now ` +
+				`on the OLD code and are not systemd-managed, so this upgrade could not ` +
+				`restart them. Restart them from ${installDir}, or install the systemd ` +
+				`units in ops/systemd/ so future upgrades restart them automatically.`
+		);
+	}
+
 	// ─── 11. Cleanup + prune old backups ───────────────────────
 	cleanupTmp(tmpDir);
 	pruneOldBackups(installDir);
@@ -1193,6 +1208,34 @@ function rollback(
 	return 3;
 }
 
+/** PIDs whose current working directory is `dir` or a subdirectory of it.
+ *  Linux-only (reads /proc); returns [] anywhere /proc is unavailable, so
+ *  callers must treat an empty result as "best-effort / unknown", not a
+ *  hard guarantee that nothing is using the tree. Used to (a) warn when a
+ *  manually-run indexer/relay is left orphaned on stale code after the dir
+ *  swap, and (b) refuse to prune a backup a live process is still reading. */
+function pidsWithCwdUnder(dir: string): number[] {
+	const norm = (p: string): string => p.replace(/\/+$/, '') || '/';
+	const target = norm(dir);
+	const out: number[] = [];
+	let procEntries: string[];
+	try {
+		procEntries = readdirSync('/proc');
+	} catch {
+		return out; // non-Linux / no /proc — best-effort only.
+	}
+	for (const e of procEntries) {
+		if (!/^\d+$/.test(e)) continue;
+		try {
+			const cwd = norm(readlinkSync(`/proc/${e}/cwd`));
+			if (cwd === target || cwd.startsWith(`${target}/`)) out.push(Number(e));
+		} catch {
+			// process exited, or /proc/<pid>/cwd not readable — skip.
+		}
+	}
+	return out;
+}
+
 function pruneOldBackups(installDir: string): void {
 	const parent = dirname(installDir);
 	const base = installDir.split('/').pop() ?? 'morphit';
@@ -1208,6 +1251,19 @@ function pruneOldBackups(installDir: string): void {
 		}))
 		.sort((a, b) => b.mtime - a.mtime); // newest first
 	for (const ent of entries.slice(keep)) {
+		// Safeguard: never delete a backup tree that a live process is still
+		// reading its source from (e.g. a manually-run indexer/relay left on
+		// the old code). Pruning it would yank the files mid-run.
+		const livePids = pidsWithCwdUnder(ent.path);
+		if (livePids.length > 0) {
+			warn(
+				`Not pruning ${ent.path}: ${livePids.length} process(es) are still ` +
+					`running from it (PIDs ${livePids.join(', ')}). Restart those ` +
+					`processes from ${installDir} (or move them onto the systemd units) ` +
+					`first, then they'll be pruned on a later upgrade.`
+			);
+			continue;
+		}
 		try {
 			rmSync(ent.path, { recursive: true, force: true });
 			info(`Pruned old backup: ${ent.path}`);

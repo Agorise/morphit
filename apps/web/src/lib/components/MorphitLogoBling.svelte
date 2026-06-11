@@ -123,9 +123,11 @@
 		mask-position: center;
 		background-image: linear-gradient(
 			105deg,
-			transparent 42%,
-			rgba(255, 255, 255, 0.45) 50%,
-			transparent 58%
+			transparent 36%,
+			rgba(255, 255, 255, 0.6) 45%,
+			rgba(255, 255, 255, 0.97) 50%,
+			rgba(255, 255, 255, 0.6) 55%,
+			transparent 64%
 		);
 		background-repeat: no-repeat;
 		background-size: 250% 100%;

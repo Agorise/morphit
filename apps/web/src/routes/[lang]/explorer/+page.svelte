@@ -69,7 +69,7 @@
 <section class="mx-auto max-w-3xl px-4 py-12">
 	<header class="mb-8">
 		<h1 class="font-display text-3xl font-bold">
-			{$_('explorer.search.heading')}
+			<span class="brand-gradient-text">{$_('explorer.search.heading')}</span>
 		</h1>
 		<p class="mt-2 text-ink-600 dark:text-ink-300">
 			{$_('explorer.search.subheading')}

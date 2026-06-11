@@ -211,7 +211,7 @@
 <section class="card mx-auto max-w-md">
 	<header class="mb-4 text-center">
 		<h1 class="font-display text-2xl font-extrabold leading-tight">
-			{$_('login_qr.title')}
+			<span class="brand-gradient-text">{$_('login_qr.title')}</span>
 		</h1>
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 			{$_('login_qr.subtitle')}

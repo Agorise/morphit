@@ -890,9 +890,13 @@ before signups start backing up.
 ## 3. Relay reboot
 
 The relay's active key is held in process memory only (ADR-0010
-§4). After a reboot (planned or unplanned) an operator must
-enter the passphrase to unlock the key and let the service
-start.
+§4). The key file on disk is an encrypted envelope; its passphrase
+is supplied at boot by a systemd **encrypted credential**, so after
+a reboot (planned or unplanned) the relay unlocks the key and
+restarts **unattended** — no operator needs to type anything. (See
+the Prerequisites below for the one-time credential setup; the same
+steps appear in RUN-A-MORPHIT-NODE.md "Set up systemd services" for
+a fresh install.)
 
 ### In-memory key handling (2026-05-07 audit)
 
@@ -913,7 +917,7 @@ intentional for the relay's persistent-signer role — it needs to
 sign account_create ops continuously. An attacker who achieves
 process-memory read access on the relay host can extract the WIF;
 this is the threat the file-system permissions (0400 owner-only)
-+ §37 server hardening + the passphrase-at-boot ceremony are
++ §37 server hardening + the encrypted-credential key unlock are
 designed to defend against. There is no JS-level mitigation for
 the immutable-string residue beyond the existing host-level
 defenses.
@@ -949,17 +953,33 @@ Then update the relay's env to point at the new file:
 MORPHIT_RELAY_ACTIVE_KEY_FILE=/etc/morphit/keys/relay-active.enc
 ```
 
-Verify by restarting the relay with a pty attached (see below)
-and entering the passphrase. Once the service unlocks
-successfully and serves `/v1/health`, securely destroy the
-plaintext:
+Then create the systemd **encrypted credential** that unlocks the
+envelope at boot — this is what the shipped `morphit-relay.service`
+requires (it will not start without it):
+
+```sh
+echo -n 'your-passphrase' | sudo systemd-creds encrypt \
+  --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
+sudo chmod 0600 /etc/morphit/relay_passphrase.cred
+```
+
+systemd-creds binds the credential to this host's key (and the TPM,
+if present): it auto-decrypts on every start, so the relay comes up
+unattended, and the file is useless if copied off the machine. The
+relay unit's `LoadCredentialEncrypted=relay_passphrase:…` hands the
+decrypted value to the process as a tmpfs file via
+`MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE` — the passphrase never
+touches persistent disk in cleartext and never appears in the
+process environment.
+
+Verify by restarting the relay (`sudo systemctl restart
+morphit-relay`) and confirming it reaches `active (running)` and
+serves `/v1/health` with no prompt. Once it unlocks successfully,
+securely destroy any remaining plaintext key:
 
 ```sh
 sudo shred -u /etc/morphit/keys/relay-active.key
 ```
-
-The systemd unit must have `StandardInput=tty-force` so the
-service can read the passphrase from a pty.
 
 ### Planned reboot
 
@@ -968,13 +988,14 @@ service can read the passphrase from a pty.
    the queue drainer. In-flight welcome bonuses finish; the
    queue stays on disk.
 3. Reboot.
-4. `sudo systemctl start morphit-relay.service` — the service
-   will prompt for the relay active-key passphrase on stdin.
-5. Paste the passphrase. The service verifies it, loads the
-   key into memory, and begins normal operation.
-6. Check `systemctl status morphit-relay.service` — should be
+4. The enabled `morphit-relay.service` starts **automatically**
+   on boot: systemd decrypts the credential, the relay unlocks
+   its key into memory, and normal operation resumes — nothing
+   to type. (If you'd disabled the unit, start it manually with
+   `sudo systemctl start morphit-relay.service`.)
+5. Check `systemctl status morphit-relay.service` — should be
    `active (running)`.
-7. Check `/v1/health` — should report `status: ok` within a
+6. Check `/v1/health` — should report `status: ok` within a
    minute.
 
 ### Unplanned reboot (systemd crash, kernel panic, VPS

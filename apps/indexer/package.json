@@ -1,6 +1,6 @@
 {
 	"name": "morphit-indexer",
-	"version": "1.0.0-beta.11",
+	"version": "1.0.0-beta.12",
 	"private": true,
 	"type": "module",
 	"description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",

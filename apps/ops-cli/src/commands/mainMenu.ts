@@ -57,7 +57,7 @@ interface MenuGroup {
 	readonly items: readonly MenuItem[];
 }
 
-const MENU_GROUPS: readonly MenuGroup[] = [
+export const MENU_GROUPS: readonly MenuGroup[] = [
 	{
 		heading: '1. Install & upgrade',
 		items: [
@@ -244,6 +244,44 @@ export function itemEmphasis(
 }
 
 /**
+ * Subcommands that need elevated privileges (sudo / root): they read the
+ * root-owned operator config or key files, connect to the database (whose
+ * credentials live in that config), or run privileged system operations
+ * (docker / systemctl / certbot / writes under /opt/morphit). Run as an
+ * unprivileged user they fail with a permission or "no database URL" error.
+ * Only `health` (HTTP /v1/health — no config or DB) and Quit run unprivileged.
+ *
+ * Kept as an explicit allow-list (not "everything except health") so a newly
+ * added command is never silently mis-tagged either way — menu-annotations
+ * coverage asserts this set against the live menu.
+ */
+const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
+	'install',
+	'upgrade',
+	'edit',
+	'alt-address',
+	'payment-method',
+	'show-key',
+	'edit-active-key',
+	'register',
+	'harden',
+	'ssl',
+	'bunkerweb',
+	'doctor',
+	'status',
+	'signups',
+	'failed-broadcasts',
+	'drain-queue',
+	'moderation'
+]);
+
+/** A dim "(needs sudo)" tag for the FIRST LINE of menu items that require
+ *  elevated privileges. Returns '' for items that run unprivileged. */
+export function rootTag(subcommand: string): string {
+	return ROOT_REQUIRED_SUBCOMMANDS.has(subcommand) ? '  ' + fmt.dim('(needs sudo)') : '';
+}
+
+/**
  * Show the menu and return the operator's selection, or null if
  * they chose to quit.  Caller dispatches the returned subcommand
  * through the normal main() path.
@@ -277,7 +315,9 @@ export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSe
 						: emphasis === 'balance-warn'
 							? fmt.yellow(item.label)
 							: item.label;
-			lines.push(`    ${flat.length}. ${label}${itemSuffix(item.subcommand, annotations)}`);
+			lines.push(
+				`    ${flat.length}. ${label}${rootTag(item.subcommand)}${itemSuffix(item.subcommand, annotations)}`
+			);
 			lines.push(`        ${item.blurb}`);
 			if (item.tip !== undefined) {
 				lines.push(`        ${fmt.dim('\u21b3 ' + item.tip)}`);
