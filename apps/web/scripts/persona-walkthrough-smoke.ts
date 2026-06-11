@@ -28,7 +28,7 @@
  *   So-2  ops-cli main.ts JSDoc lists all 14 subcommands
  *   So-3  verbose-health env-opt-in callouts (3 docs)
  *   So-4  init.ts JSDoc step-count disclaimer
- *   So-6  systemd path + user override callout (added Part 119)
+ *   So-6  systemd install-path override callout (beta12 — drop-in for ~/morphit)
  *
  * Plus several drift-catchers added during the Part 119 docs
  * audit pass that aren't tied to a persona but matter equally:
@@ -458,15 +458,17 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
 	{
-		name: 'So-6 — RUN-A-MORPHIT-NODE.md systemd path + user override callout',
+		name: 'So-6 — RUN-A-MORPHIT-NODE.md systemd install-path override callout',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',
 		rootRelative: true,
+		// beta12: the shipped units target /opt/morphit; this manual guide
+		// clones to ~/morphit, so the callout must still tell those operators
+		// to override the unit paths with a `systemctl edit` drop-in.
 		mustHave: [
-			'Sally-operator finding So-6',
+			'This manual guide instead clones to',
+			'/home/morphit/morphit',
 			'systemctl edit morphit-indexer',
-			'systemctl edit morphit-relay',
-			'WorkingDirectory=/home/morphit/morphit/apps/indexer',
-			'WorkingDirectory=/home/morphit/morphit/apps/relay'
+			'the systemd idiom for overriding'
 		]
 	},
 	{
