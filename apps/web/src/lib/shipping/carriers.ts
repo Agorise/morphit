@@ -31,7 +31,9 @@
 
 export interface CarrierEntry {
 	/** Stable identifier — used as the on-the-wire `carrier`
-	 *  value in `morphit_shipment_v1` payloads.  Lowercase,
+	 *  value in `morphit_shipment` chat-message payloads (carried
+	 *  inside an encrypted `morphit_chat_v1` op, not a standalone
+	 *  chain op; see `$lib/chat/payload.ts`).  Lowercase,
 	 *  alphanumeric + underscore. */
 	readonly key: string;
 	/** Display name — shown in pickers and pills.  Kept in the

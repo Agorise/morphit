@@ -1,4 +1,11 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+
+	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// internal link is locale-prefixed; bare 2-segment paths 404).
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
 	 * Order detail page — /@{account}/{permlink}
 	 *
@@ -301,7 +308,7 @@
 				{$_('order_detail.not_found_body')}
 			</p>
 			<div class="mt-4">
-				<a href={`/@${account}`} class="font-semibold text-morphit-emerald hover:underline">
+				<a href={lp(`/@${account}`)} class="font-semibold text-morphit-emerald hover:underline">
 					{$_('order_detail.back_to_profile')}
 				</a>
 			</div>
@@ -378,13 +385,13 @@
 					avatarDataUri={posterLabelProps.avatarDataUri}
 					nostrUrl={posterLabelProps.nostrUrl}
 					blurtMediaUrl={posterLabelProps.blurtMediaUrl}
-					href={`/@${order.account}`}
+					href={lp(`/@${order.account}`)}
 					weight="bold"
 					avatarSize={40}
 				/>
 				{#if ratingSummary && ratingSummary.count > 0}
 					<a
-						href={`/@${order.account}`}
+						href={lp(`/@${order.account}`)}
 						class="flex items-center gap-1 text-sm text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>
 						<span class="text-morphit-emerald" aria-hidden="true">
@@ -410,7 +417,7 @@
 				     inbox is how they'd reach inbound messages. -->
 				{#if order.status === 'live' && !isOwner}
 					<a
-						href={`/chat/${order.account}?order=${encodeURIComponent(order.permlink)}`}
+						href={lp(`/chat/${order.account}?order=${encodeURIComponent(order.permlink)}`)}
 						class="ml-auto inline-flex items-center gap-1 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/10 px-3 py-1.5 text-sm font-semibold text-morphit-emerald transition hover:bg-morphit-emerald hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 						aria-label={$_('chat.message_button_aria', {
 							values: { peer: order.account }

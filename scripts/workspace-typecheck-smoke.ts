@@ -28,8 +28,8 @@
  * Discipline (LL #52): defensive smokes MUST include compiler
  * runs across all workspaces, not just runtime-behaviour checks.
  *
- * RUNTIME PERFORMANCE: tsc + svelte-check across 7 workspaces
- * takes ~30-60 seconds.  This smoke runs PRE-TARBALL not on
+ * RUNTIME PERFORMANCE: tsc + svelte-check across all 13 workspaces
+ * takes ~60-120 seconds.  This smoke runs PRE-TARBALL not on
  * every commit; for fast iteration, individual workspace
  * `tsc --noEmit` is the right granularity.
  *
@@ -55,7 +55,16 @@ const WORKSPACES_TSC = [
 	// cp176: apps/mcp-server was missing from this gate even though it
 	// is one of the 8 TS projects and ships account-name validators
 	// (getListing.ts).  Added so a tsc error there can't slip through.
-	'apps/mcp-server'
+	'apps/mcp-server',
+	// cp242: the remaining 5 workspace packages were not gated here.
+	// They compile clean and are imported transitively, but a type error
+	// in a file no app imports (or in an unused export) would slip past
+	// the per-app tsc.  Gate every workspace so nothing escapes.
+	'packages/relay-client',
+	'packages/operator-config',
+	'packages/release-schema',
+	'packages/net-defense',
+	'packages/rpc-pool'
 ];
 
 const WORKSPACES_SVELTE = ['apps/web'];

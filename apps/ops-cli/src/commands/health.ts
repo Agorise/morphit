@@ -159,7 +159,10 @@ export function classifyHealthResult(args: {
 			message:
 				'Could not reach the indexer. It may not be running yet, or it is ' +
 				'listening on a different host/port. Start it (or check the systemd ' +
-				'service), or pass --url / --port if it is not on the default 127.0.0.1:8081.'
+				'service), or pass --url / --port if it is not on the default ' +
+				'127.0.0.1:8081. Container/Docker deployments often bind the bridge ' +
+				'gateway rather than loopback — e.g. try ' +
+				'--url http://172.18.0.1:8081/v1/health. (This view never needs sudo.)'
 		};
 	}
 	if (httpStatus !== null && (httpStatus < 200 || httpStatus >= 300)) {

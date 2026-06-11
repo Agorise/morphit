@@ -22,6 +22,7 @@
  */
 
 import { resolve } from 'node:path';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { existsSync } from 'node:fs';
 import { runSystemCheck, renderSystemCheck } from '../init/systemCheck.ts';
 import { sanitizeForTerm } from '../render/term.ts';
@@ -593,30 +594,3 @@ function printNextSteps(
 /** Find the repo root.  We assume cwd is somewhere in the repo
  *  and walk up looking for the package.json with name="morphit".
  *  Falls back to cwd. */
-function defaultRepoRoot(): string {
-	let dir = process.cwd();
-	for (let i = 0; i < 8; i++) {
-		const pkg = `${dir}/package.json`;
-		if (existsSync(pkg)) {
-			try {
-				// We don't need to parse — the existence of any package.json
-				// climbing up is good enough; the topmost one is the repo
-				// root.  Continue climbing in case we're in a sub-package.
-				const parent = resolve(dir, '..');
-				if (parent === dir) break;
-				const parentPkg = `${parent}/package.json`;
-				if (!existsSync(parentPkg)) {
-					return dir;
-				}
-				dir = parent;
-				continue;
-			} catch {
-				return dir;
-			}
-		}
-		const parent = resolve(dir, '..');
-		if (parent === dir) break;
-		dir = parent;
-	}
-	return process.cwd();
-}

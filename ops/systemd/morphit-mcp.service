@@ -62,7 +62,7 @@ RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 
 # Network: TCP only.  No raw sockets, no AF_PACKET.
-RestrictAddressFamilies=AF_INET AF_INET6
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 CapabilityBoundingSet=
 AmbientCapabilities=

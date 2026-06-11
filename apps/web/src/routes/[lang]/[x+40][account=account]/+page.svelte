@@ -469,7 +469,7 @@
 		{#if !isOwnProfile}
 			<div class="mt-4">
 				<a
-					href={`/chat/${account}`}
+					href={lp(`/chat/${account}`)}
 					class="inline-flex items-center gap-1.5 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/10 px-4 py-2 text-sm font-semibold text-morphit-emerald transition hover:bg-morphit-emerald hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 					aria-label={$_('chat.message_button_aria', { values: { peer: account } }) as string}
 				>
@@ -616,7 +616,7 @@
 					)}
 					<li>
 						<a
-							href={`/@${account}/${o.permlink}`}
+							href={lp(`/@${account}/${o.permlink}`)}
 							class="card block transition hover:border-morphit-emerald/60"
 						>
 							<div class="flex flex-col gap-1">
@@ -732,7 +732,7 @@
 								avatarDataUri={reviewerProps.avatarDataUri}
 								nostrUrl={reviewerProps.nostrUrl}
 								blurtMediaUrl={reviewerProps.blurtMediaUrl}
-								href={`/@${fb.reviewer}`}
+								href={lp(`/@${fb.reviewer}`)}
 								weight="semibold"
 								avatarSize={24}
 							/>
@@ -782,7 +782,7 @@
 						{#if fb.order_permlink}
 							<p class="mt-2 text-xs text-ink-500">
 								<a
-									href={`/@${account}/${fb.order_permlink}`}
+									href={lp(`/@${account}/${fb.order_permlink}`)}
 									class="hover:text-morphit-emerald hover:underline"
 								>
 									{$_('profile.review_order_link')}
@@ -809,7 +809,7 @@
 										avatarDataUri={responderProps.avatarDataUri}
 										nostrUrl={responderProps.nostrUrl}
 										blurtMediaUrl={responderProps.blurtMediaUrl}
-										href={`/@${resp.responder}`}
+										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}
 									/>
@@ -929,7 +929,7 @@
 									avatarDataUri={subjectProps.avatarDataUri}
 									nostrUrl={subjectProps.nostrUrl}
 									blurtMediaUrl={subjectProps.blurtMediaUrl}
-									href={`/@${fb.subject}`}
+									href={lp(`/@${fb.subject}`)}
 									weight="semibold"
 									avatarSize={24}
 								/>
@@ -975,7 +975,7 @@
 						{#if fb.order_permlink}
 							<p class="mt-2 text-xs text-ink-500">
 								<a
-									href={`/@${fb.subject}/${fb.order_permlink}`}
+									href={lp(`/@${fb.subject}/${fb.order_permlink}`)}
 									class="hover:text-morphit-emerald hover:underline"
 								>
 									{$_('profile.review_order_link')}
@@ -1002,7 +1002,7 @@
 										avatarDataUri={responderProps.avatarDataUri}
 										nostrUrl={responderProps.nostrUrl}
 										blurtMediaUrl={responderProps.blurtMediaUrl}
-										href={`/@${resp.responder}`}
+										href={lp(`/@${resp.responder}`)}
 										weight="semibold"
 										avatarSize={20}
 									/>

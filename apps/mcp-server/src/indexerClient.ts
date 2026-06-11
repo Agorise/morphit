@@ -337,29 +337,55 @@ async function readBodyCapped(
 	return out;
 }
 
+/** The public-facing order fields an AI agent (and the user it serves)
+ *  actually need. This is the deliberate boundary between what the
+ *  indexer's owner-view endpoints can return and what we surface to an
+ *  agent — internal fields (fee_status, fee_method, internal ids, raw
+ *  block data, anything added later) are dropped by being absent here,
+ *  so the allowlist is forward-safe. */
+const ORDERBOOK_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
+	'account',
+	'permlink',
+	'asset',
+	'side',
+	'fiat_currency',
+	'price',
+	'amount_min',
+	'amount_max',
+	'location_region',
+	'payment_methods',
+	'terms',
+	'feedback_count',
+	'weighted_rating',
+	'is_new_trader',
+	'updated_at',
+	'created_at'
+]);
+
 /** Strip a known set of indexer-internal fields that aren't useful
  *  to an AI agent (and would just bloat the context window).  Keep
  *  the public-facing fields the agent and user actually need. */
 export function trimOrderRow(row: Record<string, unknown>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
-	const keep = new Set([
-		'account',
-		'permlink',
-		'asset',
-		'side',
-		'fiat_currency',
-		'price',
-		'amount_min',
-		'amount_max',
-		'location_region',
-		'payment_methods',
-		'terms',
-		'feedback_count',
-		'weighted_rating',
-		'is_new_trader',
-		'updated_at',
-		'created_at'
-	]);
+	for (const [k, v] of Object.entries(row)) {
+		if (ORDERBOOK_PUBLIC_FIELDS.has(k)) out[k] = v;
+	}
+	return out;
+}
+
+/** Like {@link trimOrderRow} but for the single-listing lookup, which
+ *  hits the owner-view `/v1/orders/:account` endpoint. That endpoint
+ *  returns every order regardless of status PLUS the lister's internal
+ *  fee mechanics (`fee_status`, `fee_method`) — which the public
+ *  orderbook never exposes and an agent has no use for (knowing a
+ *  lister paid their listing fee in XMR vs Blurt, or that it was their
+ *  waived first buy, is a needless pattern leak). We keep `status` and
+ *  `expires_at` (genuinely useful for a specific-listing view — the
+ *  agent can tell the user a listing is cancelled/expired or when it
+ *  lapses) and drop the rest via the same allowlist. */
+export function trimListingRow(row: Record<string, unknown>): Record<string, unknown> {
+	const keep = new Set<string>([...ORDERBOOK_PUBLIC_FIELDS, 'status', 'expires_at']);
+	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(row)) {
 		if (keep.has(k)) out[k] = v;
 	}

@@ -63,7 +63,7 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictNamespaces=yes
 SystemCallArchitectures=native
-RestrictAddressFamilies=AF_INET AF_INET6
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 AmbientCapabilities=
 # A core dump would contain the decrypted WIF in memory.

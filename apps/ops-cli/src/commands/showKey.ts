@@ -38,6 +38,8 @@
 import { readFileSync } from 'node:fs';
 import { askPassword } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 
 export interface ShowKeyCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -56,6 +58,9 @@ export function maskWif(wif: string): string {
 }
 
 export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
+	// Load the instance env so MORPHIT_RELAY_ACCOUNT is present on a systemd
+	// deploy (only the unit sources morphit.env). OS env wins; best-effort.
+	loadInstanceEnv(defaultRepoRoot());
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_FILE;
 

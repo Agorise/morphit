@@ -2,11 +2,12 @@
 	/**
 	 * NotificationSettings — the Settings > Notifications section.
 	 *
-	 * Renders all toggles across phases 1–4. Phase 1 (ambient),
-	 * Phase 2 (Notification API), and Phase 4 (audio + vibrate)
-	 * are shipped. Phase 3 (Web Push) renders with a "Coming soon"
-	 * badge and a disabled toggle — the preference IS persisted,
-	 * so when push ships, the user's intent is already recorded.
+	 * Renders all toggles across phases 1–4 — all shipped. Phase 1
+	 * (ambient), Phase 2 (Notification API), Phase 3 (Web Push —
+	 * Part 122 cp13: subscribe/unsubscribe through the relay with
+	 * capability detection + error surfacing), and Phase 4 (audio +
+	 * vibrate). The push privacy preference is persisted so the
+	 * user's choice is recorded across (re)subscribes.
 	 *
 	 * This is deliberately ONE component owning the whole section
 	 * so /settings/+page.svelte stays readable. i18n keys live
@@ -39,6 +40,8 @@
 	} from '$lib/notifications/push';
 	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import StatusLine from './StatusLine.svelte';
+	import { onMount } from 'svelte';
+	import { loadAddressHistory, clearAddressHistory } from '$lib/privacy/addressHistory';
 
 	// Feature detection — render "unsupported" hints in-place for
 	// channels the current platform can't deliver.
@@ -61,6 +64,21 @@
 	let pushSubscribed = $state(false);
 	let pushBusy = $state(false);
 	let pushError = $state<SubscribeError | null>(null);
+
+	// cp242 — shared-address-history "forget" control (wired into the
+	// Privacy section below). The data lives device-local in
+	// localStorage ($lib/privacy/addressHistory.ts); the count loads on
+	// mount and clearing is purely client-side.
+	let addressHistoryCount = $state(0);
+	let confirmingForgetAddresses = $state(false);
+	onMount(() => {
+		addressHistoryCount = loadAddressHistory().length;
+	});
+	function forgetAddressHistory(): void {
+		clearAddressHistory();
+		addressHistoryCount = 0;
+		confirmingForgetAddresses = false;
+	}
 
 	// Bootstrap: on first mount, detect support and read current
 	// subscription so the toggle reflects reality.
@@ -542,4 +560,63 @@
 			></span>
 		</button>
 	</div>
+
+	<!-- cp242 — Shared-address history (Part 122 cp26, $lib/privacy/addressHistory.ts).
+	     Wires the "forget my history" control the module was written for.
+	     The data is device-local localStorage; clearing is client-side only. -->
+	<div class="mt-4 border-t border-ink-200 pt-4 dark:border-ink-700">
+		<p class="text-sm font-medium">{$_('settings.privacy.address_history_label')}</p>
+		<p class="mt-1 text-xs text-ink-600 dark:text-ink-400">
+			{$_('settings.privacy.address_history_help')}
+		</p>
+		{#if addressHistoryCount === 0}
+			<p class="mt-2 text-xs text-ink-500">
+				{$_('settings.privacy.address_history_empty')}
+			</p>
+		{:else}
+			<p class="mt-2 text-xs text-ink-700 dark:text-ink-300">
+				{$_('settings.privacy.address_history_count', { values: { count: addressHistoryCount } })}
+			</p>
+			<div class="mt-2">
+				{#if !confirmingForgetAddresses}
+					<button
+						type="button"
+						onclick={() => (confirmingForgetAddresses = true)}
+						class="text-sm font-semibold text-red-600 hover:underline dark:text-red-400"
+					>
+						{$_('settings.privacy.address_history_forget')}
+					</button>
+				{:else}
+					<div
+						class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
+						role="alertdialog"
+						aria-live="polite"
+					>
+						<p class="text-sm text-amber-900 dark:text-amber-100">
+							{$_('settings.privacy.address_history_forget_confirm', {
+								values: { count: addressHistoryCount }
+							})}
+						</p>
+						<div class="mt-3 flex flex-wrap gap-2">
+							<button
+								type="button"
+								onclick={forgetAddressHistory}
+								class="rounded-md bg-red-600 px-3 py-1 text-sm font-semibold text-white hover:bg-red-700"
+							>
+								{$_('settings.privacy.address_history_forget_confirm_yes')}
+							</button>
+							<button
+								type="button"
+								onclick={() => (confirmingForgetAddresses = false)}
+								class="rounded-md border border-ink-300 px-3 py-1 text-sm font-semibold text-ink-800 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-100 dark:hover:bg-ink-800"
+							>
+								{$_('settings.privacy.address_history_forget_confirm_cancel')}
+							</button>
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
 </section>

@@ -21,6 +21,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { resolve } from 'node:path';
 
 import { ask, askChoice, askYesNo } from '../init/prompt.ts';
@@ -41,25 +42,6 @@ export interface AltAddressCtx {
 }
 
 /** Walk up from cwd to the repo root (matches the other commands' helper). */
-function defaultRepoRoot(): string {
-	let dir = process.cwd();
-	for (let i = 0; i < 8; i++) {
-		const pkg = `${dir}/package.json`;
-		if (existsSync(pkg)) {
-			const parent = resolve(dir, '..');
-			if (parent === dir) break;
-			const parentPkg = `${parent}/package.json`;
-			if (!existsSync(parentPkg)) return dir;
-			dir = parent;
-			continue;
-		}
-		const parent = resolve(dir, '..');
-		if (parent === dir) break;
-		dir = parent;
-	}
-	return process.cwd();
-}
-
 function rule(): void {
 	console.log('─'.repeat(58));
 }

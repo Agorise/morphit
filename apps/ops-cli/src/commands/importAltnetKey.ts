@@ -21,6 +21,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, statSync } from 'node:fs';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { resolve, dirname, join } from 'node:path';
 import { askPassword, askYesNo } from '../init/prompt.ts';
 import { encryptAltKey, altKeystoreFilename, type AltNetwork } from '../init/altKeystore.ts';
@@ -170,23 +171,3 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 	return 0;
 }
 
-function defaultRepoRoot(): string {
-	let dir = process.cwd();
-	for (let i = 0; i < 8; i++) {
-		const pkg = `${dir}/package.json`;
-		if (existsSync(pkg)) {
-			const parent = resolve(dir, '..');
-			if (parent === dir) break;
-			const parentPkg = `${parent}/package.json`;
-			if (!existsSync(parentPkg)) {
-				return dir;
-			}
-			dir = parent;
-			continue;
-		}
-		const parent = resolve(dir, '..');
-		if (parent === dir) break;
-		dir = parent;
-	}
-	return process.cwd();
-}

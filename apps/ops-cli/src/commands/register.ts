@@ -34,6 +34,8 @@ import { ask, askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, classifyChainError, SUGGESTED_BP_FLOOR, broadcastCustomJson, errMsg } from './chainErrors.ts';
 import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -41,6 +43,10 @@ export interface RegisterCtx {
 }
 
 export async function runRegister(_ctx: RegisterCtx): Promise<number> {
+	// Load the instance env so MORPHIT_RELAY_ACCOUNT / posting-key file are
+	// available on a systemd deploy (the unit sources morphit.env, the
+	// operator's interactive shell does not). OS env wins; best-effort.
+	loadInstanceEnv(defaultRepoRoot());
 	printHeader();
 
 	// ─── 1. Validate env ────

@@ -1,4 +1,12 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { page } from '$app/stores';
+
+	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// internal link is locale-prefixed; bare 2-segment paths 404).
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
 	 * ConversationView — the primary chat view.
 	 *
@@ -715,7 +723,7 @@
 					avatarDataUri={peerLabelProps.avatarDataUri}
 					nostrUrl={peerLabelProps.nostrUrl}
 					blurtMediaUrl={peerLabelProps.blurtMediaUrl}
-					href={`/@${peer}`}
+					href={lp(`/@${peer}`)}
 					weight="bold"
 					avatarSize={32}
 				/>
@@ -818,7 +826,7 @@
 			     they can re-read terms without losing chat scroll. -->
 			<div class="border-b border-morphit-emerald/20 bg-morphit-emerald/5 px-4 py-2 text-xs">
 				<a
-					href={`/@${peer}/${orderPermlink}`}
+					href={lp(`/@${peer}/${orderPermlink}`)}
 					class="flex items-center gap-2 text-morphit-emerald hover:underline"
 				>
 					<span aria-hidden="true">📌</span>

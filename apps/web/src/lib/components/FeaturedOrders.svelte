@@ -1,4 +1,12 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { page } from '$app/stores';
+
+	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// internal link is locale-prefixed; bare 2-segment paths 404).
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
 	 * FeaturedOrders — renders up to 5 featured slots.
 	 *
@@ -149,7 +157,7 @@
 								avatarDataUri={labelProps.avatarDataUri}
 								nostrUrl={labelProps.nostrUrl}
 								blurtMediaUrl={labelProps.blurtMediaUrl}
-								href={`/@${o.account}`}
+								href={lp(`/@${o.account}`)}
 							/>
 							{#if o.is_new_trader}
 								<NewTraderChip />

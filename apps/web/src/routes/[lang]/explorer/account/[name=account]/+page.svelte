@@ -313,7 +313,7 @@
 			<div>
 				<h1 class="font-display text-2xl font-bold">@{account}</h1>
 				<a
-					href="/@{account}"
+					href={lp(`/@${account}`)}
 					class="text-sm text-ink-500 hover:text-morphit-emerald dark:text-ink-400"
 				>
 					{$_('explorer.account.view_profile_link')} →

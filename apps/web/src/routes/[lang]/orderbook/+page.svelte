@@ -1061,7 +1061,7 @@
 										avatarDataUri={labelProps.avatarDataUri}
 										nostrUrl={labelProps.nostrUrl}
 										blurtMediaUrl={labelProps.blurtMediaUrl}
-										href={`/@${o.account}`}
+										href={lp(`/@${o.account}`)}
 									/>
 									{#if o.is_new_trader}
 										<NewTraderChip />
@@ -1129,7 +1129,7 @@
 									     and never surfaces errors; navigation
 									     proceeds normally. -->
 									<a
-										href={`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`}
+										href={lp(`/chat/${o.account}?order=${encodeURIComponent(o.permlink)}`)}
 										class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-morphit-emerald hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 										aria-label={$_('chat.message_button_aria', {
 											values: { peer: o.account }
