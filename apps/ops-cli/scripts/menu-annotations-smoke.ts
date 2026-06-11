@@ -11,7 +11,7 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { itemSuffix, itemEmphasis } from '../src/commands/mainMenu.ts';
+import { itemSuffix, itemEmphasis, rootTag, MENU_GROUPS } from '../src/commands/mainMenu.ts';
 import { readCurrentVersion } from '../src/lib/menuAnnotations.ts';
 
 const strip = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, '');
@@ -79,6 +79,33 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 	truthy('emphasis: moderation flags → null (suffix-only, no label color)', itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === null);
 	truthy('emphasis: no annotations → null', itemEmphasis('upgrade', undefined) === null);
 }
+
+// ── rootTag: "(needs sudo)" on the first line of privileged items ──
+{
+	// `health` is the only unprivileged menu subcommand (HTTP /v1/health, no
+	// config or DB); every other item touches config / DB / privileged ops, so
+	// it must carry the tag. Asserted against the LIVE menu so a newly added
+	// command can't silently skip (or wrongly gain) the annotation.
+	const allSubcommands = MENU_GROUPS.flatMap((g) => g.items.map((i) => i.subcommand));
+	let tagOk = true;
+	let detail = '';
+	for (const sc of allSubcommands) {
+		const tagged = strip(rootTag(sc)).includes('needs sudo');
+		const shouldTag = sc !== 'health';
+		if (tagged !== shouldTag) {
+			tagOk = false;
+			detail = `${sc}: tagged=${tagged} expected=${shouldTag}`;
+			break;
+		}
+	}
+	truthy('rootTag: every privileged menu item tagged, health not', tagOk, detail);
+}
+truthy('rootTag: status tagged', strip(rootTag('status')).includes('needs sudo'));
+truthy('rootTag: install tagged', strip(rootTag('install')).includes('needs sudo'));
+truthy('rootTag: doctor tagged', strip(rootTag('doctor')).includes('needs sudo'));
+truthy('rootTag: signups (DB view) tagged', strip(rootTag('signups')).includes('needs sudo'));
+truthy('rootTag: health NOT tagged', rootTag('health') === '');
+truthy('rootTag: unknown subcommand NOT tagged', rootTag('definitely-not-a-command') === '');
 
 // ── readCurrentVersion ──
 {

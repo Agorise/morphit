@@ -225,6 +225,20 @@
 		}
 	}
 
+	/**
+	 * Registration date, rendered "18 April, 2026". Guards against an
+	 * unset / epoch-0 `registered_at` (which would otherwise render as
+	 * "12/31/1969") — if the value is missing, unparseable, or clearly
+	 * pre-dates the project, we show an em-dash rather than a bogus 1969.
+	 */
+	function formatRegisteredDate(iso: string | null): string {
+		if (iso === null || iso === '') return '—';
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return '—';
+		const month = d.toLocaleDateString(undefined, { month: 'long' });
+		return `${d.getDate()} ${month}, ${d.getFullYear()}`;
+	}
+
 	function effectiveName(entry: InstanceDirectoryEntry): string {
 		return (
 			entry.name ?? entry.operator_display_name ?? entry.operator_tag ?? entry.operator_account
@@ -246,7 +260,7 @@
 <section class="mx-auto max-w-5xl px-4 py-12 md:px-6">
 	<header class="mb-10">
 		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
-			{$_('instances.title')}
+			<span class="brand-gradient-text">{$_('instances.title')}</span>
 		</h1>
 		<p class="mt-4 max-w-prose text-ink-700 dark:text-ink-200">
 			{$_('instances.intro')}
@@ -366,7 +380,7 @@
 								<dt>{$_('instances.operator_label')}</dt>
 								<dd class="font-mono text-ink-700 dark:text-ink-200">@{inst.operator_account}</dd>
 								<dt>{$_('instances.registered_label')}</dt>
-								<dd>{formatDate(inst.registered_at)}</dd>
+								<dd>{formatRegisteredDate(inst.registered_at)}</dd>
 								<dt>{$_('instances.last_probed_label')}</dt>
 								<dd>
 									{#if inst.last_probed_at}

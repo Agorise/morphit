@@ -1,129 +1,77 @@
 [Unit]
-Description=Morphit relay (broadcasts user-signed chain ops with the relay account active key)
+# Morphit relay — broadcasts user-signed chain ops with the relay active key,
+# plus invite/push/challenge REST endpoints. Matches the morphit-ops
+# deployment: monorepo at /opt/morphit, root-owned config, Docker Postgres.
+#
+# Unattended unlock of the encrypted active key (ADR-0010 §4):
+#   The relay active key is an encrypted envelope. Its passphrase is delivered
+#   as a systemd ENCRYPTED CREDENTIAL — never as plaintext on disk. systemd
+#   decrypts it at every start (host key / TPM); no prompt, fully unattended
+#   across reboots. This is REQUIRED — the unit refuses to start without it.
+#   Create the credential once and migrate, per docs/OPERATIONS.md.
+#
+# Install (one-time, as root) — the encrypted credential MUST exist first:
+#   echo -n 'your-relay-passphrase' | systemd-creds encrypt --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
+#   cp ops/systemd/morphit-relay.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now morphit-relay
+#   journalctl -u morphit-relay -f
+Description=Morphit relay (broadcasts user-signed chain ops; REST API)
 Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
-After=network-online.target
+After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=morphit-relay
-Group=morphit-relay
-
-# Working directory holds the relay source + node_modules. The
-# service user must own it with 0750 perms.
-WorkingDirectory=/opt/morphit-relay
-
-# Environment file is the single source of truth for configuration.
-# See ops/env/relay.env.example for the schema. Create
-# /etc/morphit/relay.env on the VPS with 0600 perms, owned by
-# morphit-relay, before starting the service.
-EnvironmentFile=/etc/morphit/relay.env
-
-# ExecStart runs the relay via npm start which invokes tsx on
-# src/main.ts. Keeping tsx as a dev dependency in package.json and
-# running it in production works because tsx is a thin wrapper over
-# esbuild — it's a stable, battle-tested production runtime, not a
-# "dev only" tool. No separate compile step, no dist/ to keep in sync.
-ExecStart=/usr/bin/env npm start --silent
-
-# ADR-0010 §4: when MORPHIT_RELAY_ACTIVE_KEY_FILE is an encrypted
-# envelope, the service prompts for the passphrase on stdin.
-# StandardInput=tty-force wires the operator's terminal into the
-# service when it's started interactively. For plaintext-key files
-# the prompt is skipped and this setting has no effect.
-#
-# OPERATIONAL NOTE: the service will only start cleanly when
-# launched interactively:
-#   sudo systemctl start morphit-relay
-# from an SSH session or console. Running under a non-tty context
-# (cron, early boot) will fail with "stdin is not a TTY" and the
-# service refuses to start — this is the intended behavior per
-# ADR-0010 §4 (the passphrase requirement is deliberate; do not
-# bypass it by embedding the plaintext key in env).
-#
-# Alternative for fully-unattended boots: use systemd-ask-password
-# (https://0pointer.de/public/systemd-man/systemd-ask-password.html)
-# via a small wrapper script. Not shipped by default because the
-# complexity isn't worth it for most operators.
-StandardInput=tty-force
-TTYPath=/dev/tty
-
-# Graceful shutdown. SIGTERM starts draining; 25s ceiling aligns with
-# the in-process 20s shutdown timeout plus a 5s margin for systemd.
-KillSignal=SIGTERM
-TimeoutStopSec=25s
-
-# Automatic restart on crash. On-success (exit 0) we don't restart —
-# that's the operator deliberately stopping.
-#
-# NOTE: with encrypted keys, automatic restart can't succeed without
-# operator intervention (the passphrase prompt has no one to answer
-# it). Restart=on-failure is still set so systemd doesn't immediately
-# give up if a transient issue causes the service to die; the operator
-# is expected to notice the service is in "activating (auto-restart)"
-# and manually run `systemctl start` from a tty.
+# Matches the current deployment (root-owned tree + config). De-privilege by
+# chowning config + data to a service user and setting User=/Group= here.
+User=root
+WorkingDirectory=/opt/morphit/apps/relay
+# ENFORCED encrypted-at-rest passphrase via systemd-creds. Create it ONCE:
+#   echo -n 'your-relay-passphrase' | systemd-creds encrypt --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
+# systemd decrypts it at every start (host key / TPM) into a memory-backed,
+# service-only file; the relay reads the passphrase from that FILE
+# (MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE) so the secret never enters the
+# process environment, and never touches persistent disk in plaintext. If the
+# credential is missing this unit FAILS to start — intentionally; do not fall
+# back to a plaintext passphrase in morphit.env. See docs/OPERATIONS.md.
+LoadCredentialEncrypted=relay_passphrase:/etc/morphit/relay_passphrase.cred
+ExecStart=/usr/bin/env bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+# With the env-var passphrase path, restart-on-crash actually succeeds now
+# (no interactive prompt to hang on).
 Restart=on-failure
-RestartSec=5s
-StartLimitBurst=10
-StartLimitIntervalSec=120
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=25
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=morphit-relay
 
-# ─── Hardening ───────────────────────────────────────────────────────
-# Defence-in-depth in case of a code-level compromise. If any single
-# directive below blocks legitimate operation, prefer fixing the code
-# over loosening the sandbox.
-
-# Filesystem: everything read-only except workdir and config dir.
-# The relay never writes to disk during normal operation (no logs, no
-# persistent state). systemd's PrivateTmp gives us a per-service /tmp.
-ProtectSystem=strict
+# --- Hardening (safe with User=root) -------------------------------
+NoNewPrivileges=yes
 ProtectHome=yes
 PrivateTmp=yes
-ReadOnlyPaths=/etc/morphit /opt/morphit-relay
-# No arbitrary device access.
-PrivateDevices=yes
-
-# Namespaces and privileges: minimum possible.
-NoNewPrivileges=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
+ProtectClock=yes
 ProtectProc=invisible
 ProcSubset=pid
-RestrictNamespaces=yes
-LockPersonality=yes
-# Node.js v24 uses an on-demand-compile JIT, which writes+executes
-# in memory. MemoryDenyWriteExecute=yes would block V8 JIT. This is
-# the ONE hardening step we can't tighten beyond the Go version —
-# statically-compiled Go binaries have no JIT, so that directive
-# could be =yes there but must be =no here.
-MemoryDenyWriteExecute=no
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
 SystemCallArchitectures=native
-
-# Network: AF_INET/AF_INET6 only (no Unix sockets needed, no AF_PACKET).
 RestrictAddressFamilies=AF_INET AF_INET6
-
-# Capabilities: none.
 CapabilityBoundingSet=
 AmbientCapabilities=
-
-# Resource limits. 512 MiB memory is ~4× what a small Node service
-# uses at idle; headroom for V8 heap spikes during JSON parsing of
-# larger responses from Blurt nodes.
+# A core dump would contain the decrypted WIF in memory.
+LimitCORE=0
+# Node's V8 JIT writes+executes in memory, so W^X must stay off.
+MemoryDenyWriteExecute=no
 MemoryMax=512M
-# Task (thread+process) ceiling. Node uses a worker pool; 256 is
-# generous enough for legitimate bursts but prevents runaway.
 TasksMax=256
-
-# Logging: stdout/stderr go to journal. Passphrase prompt is on
-# stderr (see promptPassphrase); journal captures it, which is
-# fine — the prompt TEXT isn't sensitive (the bytes typed in
-# response are, and those go through the tty, not via stdout/stderr).
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=morphit-relay
 
 [Install]
 WantedBy=multi-user.target

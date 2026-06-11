@@ -32,7 +32,7 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.11';
+const INDEXER_VERSION = '1.0.0-beta.12';
 
 export function healthRoute(
 	config: Config,

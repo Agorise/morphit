@@ -65,7 +65,7 @@
 <section class="mx-auto max-w-3xl px-4 py-12 md:py-16">
 	<header class="mb-10">
 		<h1 class="font-display text-3xl font-bold md:text-4xl">
-			{$_('glossary.heading')}
+			<span class="brand-gradient-text">{$_('glossary.heading')}</span>
 		</h1>
 		<p class="mt-3 text-base text-ink-600 dark:text-ink-300">
 			{$_('glossary.intro')}
