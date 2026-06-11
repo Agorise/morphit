@@ -99,8 +99,8 @@ expiry.
 **Recommended addition**: a weekly `cron.weekly` job that
 checks expiry and pages the operator if certs ARE near
 expiry but renewals haven't fired (catches certbot
-configuration drift). This is in OPERATIONS.md §14.5
-already.
+configuration drift). This is in OPERATIONS.md §16 (the
+`morphit-certbot-monitor` renewal-stall detector) already.
 
 **STATUS**: Already automated; the optional alert wrapper
 is documented but not shipped as a default unit.
@@ -208,7 +208,7 @@ OPERATIONS.md §21; otherwise transparent to the operator.
 
 ### 1.9 Server OS package updates — DOCUMENTED + RECOMMENDED
 
-**Today**: OPERATIONS.md §14.6 recommends `unattended-upgrades`
+**Today**: OPERATIONS.md §37.2 recommends `unattended-upgrades`
 for security patches. Operator chooses to enable.
 
 **STATUS**: Documented; not enforced by Morphit's installer
@@ -284,7 +284,7 @@ non-custodial design. Already as automated as it can be.
 
 **Cost**: 1 command in the walkthrough.
 
-**STATUS**: Documented in OPERATIONS.md §14.6. Should be
+**STATUS**: Documented in OPERATIONS.md §37.2. Should be
 flagged in `ops-cli init` as a checkbox + ufw / fail2ban /
 SSH key-only mode.
 

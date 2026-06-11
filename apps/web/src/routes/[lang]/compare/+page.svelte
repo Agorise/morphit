@@ -1,4 +1,12 @@
 <script lang="ts">
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { page } from '$app/stores';
+
+	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// internal link is locale-prefixed; bare 2-segment paths 404).
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
 	 * /compare
 	 *
@@ -284,7 +292,7 @@
 						{#each onlyHere as o (keyOf(o))}
 							<li>
 								<a
-									href={`/@${o.account}/${o.permlink}`}
+									href={lp(`/@${o.account}/${o.permlink}`)}
 									class="block break-all font-mono text-xs text-morphit-emerald hover:underline"
 								>
 									@{o.account}/{o.permlink}

@@ -33,6 +33,8 @@ import { readFileSync } from 'node:fs';
 import { askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, broadcastCustomJson, errMsg } from './chainErrors.ts';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 
 /** Codepoint sanitization — same as operatorBlock + the indexer.
  *  See the operator-block command for rationale. */
@@ -110,6 +112,11 @@ export interface PaymentMethodCtx {
 }
 
 export async function runPaymentMethod(ctx: PaymentMethodCtx): Promise<number> {
+	// Load the instance env (morphit.env + morphit.config.env) so on-chain
+	// settings (relay account, posting-key file) are present even on a
+	// systemd deploy where only the unit sources them. OS env wins; this is
+	// best-effort under non-sudo (morphit.env is typically root-only).
+	loadInstanceEnv(defaultRepoRoot());
 	const sub = ctx.positional[0];
 	if (sub === 'add') return runAdd(ctx);
 	if (sub === 'remove') return runRemove(ctx);
@@ -206,7 +213,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	const keyFile =
 		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set.');
+		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
 		return 1;
 	}
 	if (!keyFile) {
@@ -312,7 +319,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	const keyFile =
 		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set.');
+		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
 		return 1;
 	}
 	if (!keyFile) {
@@ -377,7 +384,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set.');
+		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
 		return 1;
 	}
 

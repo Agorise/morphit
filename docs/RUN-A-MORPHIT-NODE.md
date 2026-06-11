@@ -1386,6 +1386,12 @@ curl -s http://127.0.0.1:8081/v1/health \
   | jq '{indexed_block, chain_head_block, lag_blocks, rpc_endpoints_healthy, rpc_endpoints_total}'
 ```
 
+> The `morphit-ops` menu (item 13, *Indexer health*) runs this same
+> check for you and **needs no sudo**. If your indexer binds the Docker
+> bridge rather than loopback (the BunkerWeb path binds `0.0.0.0`,
+> reachable on the bridge gateway such as `172.18.0.1`), point the check
+> there: `morphit-ops health --url http://172.18.0.1:8081/v1/health`.
+
 Run it twice a minute apart — `indexed_block` should be climbing and `lag_blocks` shrinking. **If `rpc_endpoints_healthy` is `0`, that's your problem:** the public Blurt servers your node talks to aren't reachable, so it can't catch up. Fix the `MORPHIT_INDEXER_RPC_ENDPOINTS` list (see OPERATIONS.md "Monitoring RPC endpoint health") and restart the indexer. A healthy count with a big `lag_blocks` just means it's still catching up — leave it be.
 
 > Already synced from too far back and don't want to wait? `morphit-ops fast-forward` jumps the indexer to a recent block. **Stop the indexer first** — the command guards against this by refusing if the cursor looks live (updated in the last ~90s), and you can override with `--force` if you're sure it's stopped. It's safe before launch — there's no Morphit data in the skipped blocks yet. (It's a recovery command, not a menu item: a normal node auto-starts at the Morphit genesis block and resumes from its cursor, so you'd only need this if it was started from too far back.)

@@ -33,6 +33,18 @@
 	import { identity } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { getOperatorBlockStatus, type OperatorBlockStatus } from '$lib/indexer/client';
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+
+	// Part 121 cp7 — per-locale internal-link wrapper. cp242: the
+	// "contact the operator" link below was a bare `/inbox/<operator>` —
+	// a route that does not exist AND a bare 2-segment path (which the
+	// [lang]/+layout invalid-locale redirect cannot rescue, unlike a
+	// 1-segment bare path). Both bugs fixed: point at the real chat route
+	// and locale-prefix it like every other internal link.
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	const lp = $derived((path: string) => localePath(path, currentLang));
 
 	/** Latest fetched status.  Initial null = not yet fetched.
 	 *  After fetch, either the typed status object or null on
@@ -184,7 +196,7 @@
 						</ul>
 					</div>
 					<p>
-						<a href="/inbox/{status.operator}" class="font-semibold underline hover:no-underline">
+						<a href={lp(`/chat/${status.operator}`)} class="font-semibold underline hover:no-underline">
 							{$_('operator_block.banner.contact_operator', {
 								values: { operator: status.operator }
 							})}

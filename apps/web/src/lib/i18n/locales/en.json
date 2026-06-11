@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "Can I trade goods or services on Morphit, like fruit trees or vintage records?",
-        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, Blurt, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, Blurt, USDT, USDC, DAI, BCH, LTC, DASH, or DOGE) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of Morphit's supported cryptocurrencies. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell Blurt for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
+        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of Morphit's supported cryptocurrencies. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell Blurt for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
       },
       "cash_by_mail_walkthrough": {
         "q": "How do I trade cash by mail or ship physical goods through Morphit?",
@@ -3505,11 +3505,11 @@
     },
     "orderbook": {
       "title": "Orderbook — Buy & sell Bitcoin and Monero · Morphit",
-      "description": "Browse live peer-to-peer offers for Bitcoin, Monero, and BLURT. Filter by country, payment method, and reputation. No account needed to look."
+      "description": "Browse live peer-to-peer offers for Bitcoin, Monero, BLURT, and more cryptocurrencies. Filter by country, payment method, and reputation. No account needed to look."
     },
     "faq": {
       "title": "FAQ — How Morphit works · Non-custodial P2P crypto",
-      "description": "Answers about buying and selling Bitcoin, Monero, and BLURT without KYC, non-custodial trading, private chat, fees, and how Morphit compares to LocalBitcoins, LocalMonero, Haveno."
+      "description": "Answers about buying and selling Bitcoin, Monero, BLURT, and more cryptocurrencies without KYC, non-custodial trading, private chat, fees, and how Morphit compares to LocalBitcoins, LocalMonero, Haveno."
     },
     "security": {
       "title": "Security — Keys, encryption, threat model · Morphit",
@@ -3537,7 +3537,7 @@
     },
     "post_order": {
       "title": "Post an order — Morphit",
-      "description": "Create a peer-to-peer offer to buy or sell Bitcoin, Monero, or BLURT."
+      "description": "Create a peer-to-peer offer to buy or sell Bitcoin, Monero, BLURT, or other cryptocurrencies."
     },
     "edit_order": {
       "title": "Edit your order — Morphit",
@@ -3553,7 +3553,7 @@
     },
     "login": {
       "title": "Log in to Morphit",
-      "description": "Sign in to your Morphit account or register a new one to start trading Bitcoin, Monero, Blurt, and fiat currencies peer-to-peer."
+      "description": "Sign in to your Morphit account or register a new one to start trading Bitcoin, Monero, Blurt, other cryptocurrencies, and fiat currencies peer-to-peer."
     },
     "operators": {
       "title": "Morphit operators — the full directory",
@@ -3928,7 +3928,15 @@
       "heading": "Privacy",
       "cross_page_trade_events_label": "Cross-page trade events",
       "cross_page_trade_events_help": "When on, Morphit watches your recent chats for trade events (address shared, funds sent) so badges update on /my/orders without you opening the chat. This briefly decrypts incoming messages in the background. Turn off if you prefer the chat page itself to be the only place trade events are processed.",
-      "cross_page_trade_events_aria": "Toggle cross-page trade events"
+      "cross_page_trade_events_aria": "Toggle cross-page trade events",
+      "address_history_label": "Shared-address history",
+      "address_history_help": "Crypto addresses you share in chat are remembered on this device so Morphit can warn you if you reuse one. They stay in this browser only and are never sent to any server.",
+      "address_history_count": "{count} remembered on this device.",
+      "address_history_empty": "No addresses remembered on this device yet.",
+      "address_history_forget": "Forget address history",
+      "address_history_forget_confirm": "Forget all {count} remembered addresses? This clears them from this browser only and can't be undone.",
+      "address_history_forget_confirm_yes": "Yes, forget them",
+      "address_history_forget_confirm_cancel": "Keep them"
     },
     "hardware_key": {
       "heading": "Hardware key",

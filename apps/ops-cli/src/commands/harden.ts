@@ -33,6 +33,7 @@
  */
 
 import { writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { resolve, join } from 'node:path';
 
 import { askChoice } from '../init/prompt.ts';
@@ -44,12 +45,6 @@ export interface HardenCtx {
 	readonly flags: Readonly<Record<string, string>>;
 	readonly positional: readonly string[];
 	readonly colorEnabled: boolean;
-}
-
-function defaultRepoRoot(): string {
-	// Mirror init/edit: the CLI is run from the repo root by an
-	// operator, so the config files sit in the cwd by default.
-	return process.cwd();
 }
 
 interface ExistingInstance {

@@ -143,9 +143,10 @@ export function findPriorShare(
 	return null;
 }
 
-/** Clear the entire address history.  Exposed for a "forget my
- *  history" button in settings (not yet wired), and for testing.
- *  No confirmation prompt; callers should add their own. */
+/** Clear the entire address history.  Wired to the "Forget address
+ *  history" control in Settings → Privacy (NotificationSettings.svelte),
+ *  and used by tests.  No confirmation prompt of its own; the settings
+ *  control adds a two-step confirm before calling this. */
 export function clearAddressHistory(): void {
 	if (typeof localStorage === 'undefined') return;
 	try {

@@ -102,11 +102,11 @@
 				{$_('security.canary_body')}
 			</p>
 			<p class="mt-3 text-ink-700 dark:text-ink-200">
-				<a href="/canary.txt" class="text-morphit-emerald hover:underline" rel="noopener"
+				<a href="/canary.txt" data-sveltekit-reload class="text-morphit-emerald hover:underline" rel="noopener"
 					>{$_('security.canary_link')}</a
 				>
 				·
-				<a href="/pgp_keys.asc" class="text-morphit-emerald hover:underline" rel="noopener"
+				<a href="/pgp_keys.asc" data-sveltekit-reload class="text-morphit-emerald hover:underline" rel="noopener"
 					>{$_('security.canary_pgp_link')}</a
 				>
 			</p>

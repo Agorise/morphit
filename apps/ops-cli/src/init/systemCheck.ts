@@ -612,8 +612,9 @@ async function checkSystemTime(): Promise<Check> {
 
 // ─── OS hardening checks (Q9) ────────────────────────────────────
 //
-// These verify the recommended hardening from OPERATIONS.md §14.6.
-// Each one is best-effort and fails soft (returns 'warn', not
+// These verify the recommended hardening from OPERATIONS.md §37
+// (the comprehensive server-hardening checklist — e.g. §37.1 SSH,
+// §37.2 unattended-upgrades). Each one is best-effort and fails soft (returns 'warn', not
 // 'error') so a non-standard-but-equivalent config doesn't block
 // the wizard.
 

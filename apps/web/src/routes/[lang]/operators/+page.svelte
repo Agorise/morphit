@@ -193,7 +193,7 @@
 							avatarDataUri={labelProps.avatarDataUri}
 							nostrUrl={labelProps.nostrUrl}
 							blurtMediaUrl={labelProps.blurtMediaUrl}
-							href={`/@${op.account}`}
+							href={lp(`/@${op.account}`)}
 							weight="bold"
 							showCopy={false}
 							avatarSize={40}

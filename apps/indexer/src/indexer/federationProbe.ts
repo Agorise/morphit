@@ -69,6 +69,19 @@ export type ProbeStatus = 'never' | 'good' | 'quiet' | 'stale' | 'unreachable' |
 export interface FederationProbeConfig {
 	readonly intervalMs: number; // how often the scheduler ticks
 	readonly concurrency?: number;
+	/** This instance's own public origin. The scheduler never fires a
+	 *  network probe at its own origin — a box reaching its own public
+	 *  URL requires hairpin NAT / loopback that many deployments lack,
+	 *  so a self-probe spuriously reports 'unreachable'. When set, the
+	 *  matching directory row is marked reachable locally instead. */
+	readonly selfOrigin?: string;
+}
+
+/** Normalize an origin for self-comparison: trim, drop any trailing
+ *  slash(es), lowercase. `https://Morphit.IO/` and `https://morphit.io`
+ *  must compare equal. */
+function normalizeOrigin(origin: string): string {
+	return origin.trim().replace(/\/+$/, '').toLowerCase();
 }
 
 export interface KnownInstanceRow {
@@ -196,6 +209,21 @@ export class FederationProbeScheduler {
 				const i = cursor++;
 				const inst = instances[i];
 				if (inst === undefined) return;
+				// Self-origin: never probe our own public URL over the
+				// network (fragile — needs hairpin NAT/loopback). We are
+				// demonstrably up (we're the one running this probe), so
+				// mark the directory row reachable locally instead.
+				if (
+					this.config.selfOrigin !== undefined &&
+					normalizeOrigin(inst.origin) === normalizeOrigin(this.config.selfOrigin)
+				) {
+					try {
+						await this.persistSelfReachable(inst);
+					} catch (err) {
+						log.error('self_persist_threw', { origin: inst.origin }, err);
+					}
+					continue;
+				}
 				try {
 					const outcome = await probeOne(inst);
 					await this.persistOutcome(inst, outcome);
@@ -264,6 +292,23 @@ export class FederationProbeScheduler {
 				[inst.origin, outcome.status, outcome.error]
 			);
 		}
+	}
+
+	/** Self-instance reachability: the indexer IS this origin, so a
+	 *  network probe is unnecessary and unreliable. Flip status to
+	 *  'good' and clear the failure counter, but DO NOT touch the
+	 *  cached_* snapshot — the directory keeps showing the instance's
+	 *  name/tagline/contact from its last real refresh. */
+	private async persistSelfReachable(inst: KnownInstanceRow): Promise<void> {
+		await this.db.query(
+			`UPDATE known_instances SET
+				last_probed_at = NOW(),
+				last_probe_status = 'good',
+				last_probe_error = NULL,
+				consecutive_failures = 0
+			 WHERE origin = $1`,
+			[inst.origin]
+		);
 	}
 }
 

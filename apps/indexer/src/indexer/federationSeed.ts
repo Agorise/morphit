@@ -36,12 +36,24 @@ const log = logger('federation-seed');
 interface Seed {
 	readonly origin: string;
 	readonly operator_account: string;
+	/** The operator account's on-chain creation date (ISO-8601).
+	 *  Displayed on /instances as "Registered". Must be old enough
+	 *  to sit well outside the new-instance grace window so the seed
+	 *  is never treated as new. */
+	readonly registered_at_time: string;
 }
 
 /** Reference instances seeded into known_instances at boot.
  *  Each entry's operator_account is the on-chain account that
  *  claims to run the origin.  The probe layer cross-verifies. */
-const SEEDS: readonly Seed[] = [{ origin: 'https://morphit.io', operator_account: 'morphit' }];
+const SEEDS: readonly Seed[] = [
+	{
+		origin: 'https://morphit.io',
+		operator_account: 'morphit',
+		// @morphit was created on the Blurt chain on 2026-04-18.
+		registered_at_time: '2026-04-18T00:00:00Z'
+	}
+];
 
 /** Insert seeds into known_instances if not already present.
  *  Called once at indexer boot, after migrations.  Errors are
@@ -50,21 +62,24 @@ const SEEDS: readonly Seed[] = [{ origin: 'https://morphit.io', operator_account
 export async function seedFederationDirectory(db: Database): Promise<void> {
 	for (const seed of SEEDS) {
 		try {
-			// We don't have a real registration block for seeds, so we
-			// use 0 + the unix epoch.  The probe layer doesn't read
-			// these fields for seeds — only for the new-instance
-			// grace period, where age=now-registered_at_time.  Using
-			// epoch means seeds are NEVER treated as new (no grace
-			// period applies), which is correct: morphit.io should
-			// pass the orderbook-activity check on its own merits.
+			// registered_at_time is the operator account's real on-chain
+			// creation date (see the seed entry). It is old enough that the
+			// new-instance grace period never applies — morphit.io passes the
+			// orderbook-activity check on its own merits — while still
+			// rendering correctly as "Registered: <date>" on /instances.
+			// On conflict we repair a row that still carries the old
+			// epoch-0 placeholder (shipped by pre-beta13 seeds), but never
+			// overwrite a row that already has a real registration date.
 			await db.query(
 				`INSERT INTO known_instances (
 					origin, operator_account,
 					registered_at_block, registered_at_time,
 					last_probe_status
-				) VALUES ($1, $2, 0, '1970-01-01T00:00:00Z', 'never')
-				ON CONFLICT (origin) DO NOTHING`,
-				[seed.origin, seed.operator_account]
+				) VALUES ($1, $2, 0, $3, 'never')
+				ON CONFLICT (origin) DO UPDATE
+					SET registered_at_time = EXCLUDED.registered_at_time
+					WHERE known_instances.registered_at_time = '1970-01-01T00:00:00Z'`,
+				[seed.origin, seed.operator_account, seed.registered_at_time]
 			);
 		} catch (err) {
 			log.warn('seed_failed', { origin: seed.origin }, err);

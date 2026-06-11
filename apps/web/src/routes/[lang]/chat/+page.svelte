@@ -434,7 +434,7 @@
 							: 'border-ink-200 dark:border-ink-800'}"
 					>
 						<a
-							href={`/chat/${convo.peer}`}
+							href={lp(`/chat/${convo.peer}`)}
 							onclick={() => handleOpen(convo.peer)}
 							class="flex flex-1 items-center gap-3 p-3"
 							aria-label={convo.unread
@@ -503,7 +503,7 @@
 					{@const labelProps = extractLabelPropsFromProfile(profileMap[peer])}
 					<li>
 						<a
-							href={`/chat/${peer}`}
+							href={lp(`/chat/${peer}`)}
 							onclick={() => handleOpen(peer)}
 							class="flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3 transition hover:border-morphit-emerald hover:shadow-sm dark:border-ink-800 dark:bg-ink-950 dark:hover:border-morphit-emerald"
 						>

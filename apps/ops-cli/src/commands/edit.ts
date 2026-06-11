@@ -28,6 +28,7 @@
  */
 
 import { resolve } from 'node:path';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import {
 	existsSync,
 	readFileSync,
@@ -785,23 +786,3 @@ function printGreeting(): void {
 	);
 }
 
-function defaultRepoRoot(): string {
-	let dir = process.cwd();
-	for (let i = 0; i < 8; i++) {
-		const pkg = `${dir}/package.json`;
-		if (existsSync(pkg)) {
-			const parent = resolve(dir, '..');
-			if (parent === dir) break;
-			const parentPkg = `${parent}/package.json`;
-			if (!existsSync(parentPkg)) {
-				return dir;
-			}
-			dir = parent;
-			continue;
-		}
-		const parent = resolve(dir, '..');
-		if (parent === dir) break;
-		dir = parent;
-	}
-	return process.cwd();
-}

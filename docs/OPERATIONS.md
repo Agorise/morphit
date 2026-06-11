@@ -386,6 +386,16 @@ time with:
 grep MORPHIT_RELAY_ACCOUNT /etc/morphit/relay.env
 ```
 
+> **Running the on-chain `morphit-ops` commands on a systemd deploy:**
+> `payment-method`, `register`, and `show-key` read
+> `MORPHIT_RELAY_ACCOUNT` (and the operator key-file path) straight from
+> `morphit.env`. On a systemd install that file is sourced only by the
+> unit — not by your interactive shell — and is usually root-owned, so
+> run these with **sudo**. They are tagged `(needs sudo)` in the menu,
+> and `morphit-ops` now auto-loads `morphit.env` + `morphit.config.env`
+> from the install root when you run them, so `sudo morphit-ops
+> payment-method …` works without manually sourcing the env first.
+
 ### Funding the @morphit account (~10 BLURT, small fixed cost)
 
 The `@morphit` account is the **trust-anchor account**
@@ -486,6 +496,12 @@ can wire them into monitoring:
 curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
   | jq '.diagnostics.price'
 ```
+
+> **If your indexer does not bind loopback:** the `morphit-ops health`
+> view (menu item 13) defaults to `127.0.0.1:8081`. Container/Docker
+> deployments commonly bind the bridge gateway instead (e.g.
+> `172.18.0.1`), so pass `--url http://<bridge-ip>:8081/v1/health`. This
+> read-only view never needs sudo.
 
 When the optional price feed is enabled, `diagnostics.price` carries
 `enabled`, `blurt_usd`, `source`, `updated_at`, `stale`, plus three

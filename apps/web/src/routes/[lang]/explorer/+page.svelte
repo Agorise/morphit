@@ -31,19 +31,19 @@
 		switch (parsed.kind) {
 			case 'account': {
 				const url = morphitExplorerAccountUrl(parsed.account);
-				if (url) void goto(url);
+				if (url) void goto(lp(url));
 				else lastError = $_('explorer.search.error_invalid');
 				return;
 			}
 			case 'txid': {
 				const url = morphitExplorerTxUrl(parsed.txid);
-				if (url) void goto(url);
+				if (url) void goto(lp(url));
 				else lastError = $_('explorer.search.error_invalid');
 				return;
 			}
 			case 'block': {
 				const url = morphitExplorerBlockUrl(parsed.blockNumber);
-				if (url) void goto(url);
+				if (url) void goto(lp(url));
 				else lastError = $_('explorer.search.error_invalid');
 				return;
 			}

@@ -270,7 +270,14 @@ export class Poller {
 		// HTTP probe.  Median time from broadcast to peer-shows-up:
 		// ~30 seconds.
 		this.federationProbe = new FederationProbeScheduler(db, {
-			intervalMs: 15_000
+			intervalMs: 15_000,
+			// Don't network-probe our own public URL (hairpin-NAT fragile).
+			// Prefer the explicit instanceOrigin; otherwise derive the
+			// instance origin from the indexer's public origin by stripping
+			// a leading "indexer." subdomain (same transform the RSS
+			// self-URL builder uses), so this matches the directory row for
+			// both same-origin and indexer-subdomain deploys.
+			selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//')
 		});
 
 		// ADR-0011 sub-phase 4b: fee verifiers. Build each only if

@@ -11,7 +11,7 @@
  */
 
 import { z } from 'zod';
-import { buildV1Url, fetchJson, getInstanceUrl } from '../indexerClient.js';
+import { buildV1Url, fetchJson, getInstanceUrl, trimListingRow } from '../indexerClient.js';
 
 export const GET_LISTING_DESCRIPTION =
 	'Fetch the full detail of one Morphit listing by its (account, ' +
@@ -80,7 +80,7 @@ export async function getListing(input: GetListingInput): Promise<{
 	const deeplink = deeplinkUrl.toString();
 
 	return {
-		listing: match,
+		listing: trimListingRow(match),
 		deeplink,
 		note:
 			'To reply to this listing, the user should open the deeplink in ' +

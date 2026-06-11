@@ -599,7 +599,7 @@
 					rel="noopener">{$_('footer.source')}</a
 				>
 				<a
-					href="/morphit-mediakit.zip"
+					href="/morphit-mediakit.zip" data-sveltekit-reload
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					title={$_('footer.mediakit_title')}
 					rel="noopener">{$_('footer.mediakit')}</a
@@ -620,13 +620,13 @@
 					>{$_('nav.privacy_terms')}</a
 				>
 				<a
-					href="/canary.txt"
+					href="/canary.txt" data-sveltekit-reload
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					title={$_('footer.canary_title')}
 					rel="noopener">{$_('footer.canary')}</a
 				>
 				<a
-					href="/pgp_keys.asc"
+					href="/pgp_keys.asc" data-sveltekit-reload
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					title={$_('footer.pgp_keys_title')}
 					rel="noopener">{$_('footer.pgp_keys')}</a

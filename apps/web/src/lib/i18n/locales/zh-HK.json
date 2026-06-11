@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "我可以喺 Morphit 上交易商品或服務嗎，例如果樹或黑膠唱片？",
-        "a": "得——但有一種要花啲時間先領會到嘅特定形態。Morphit 嘅訂單模型永遠都係**一邊係可交易資產（BTC、XMR、Blurt、USDT、USDC、DAI、BCH、LTC、DASH 或者 DOGE），另一邊係第啲嘢**。嗰個「第啲嘢」可以係：\n\n• 一種**法幣**（USD、EUR、MXN、COP、NGN——任何國家嘅錢）\n• 一種**唔同嘅加密貨幣**（例如用 BTC 支付一筆資產係 XMR 嘅訂單）\n• **商品或者服務**，透過 `Barter (goods)` 支付方式\n\n**要用橙樹換 XMR**，你會噉樣發布：side=`buy`、asset=`XMR`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（或者你同對手方協定嘅任何計價參考），並且將具體內容寫入 `terms` 欄位——例如：`\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` 啱啱有 XMR 嘅橙樹買家會回應。\n\n**要用 BTC 換一棵車厘子樹**，發布：side=`sell`、asset=`BTC`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（參考價）、terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**你冇辦法直接建模嘅**：物物交換（橙樹換辣木樹，唔涉及加密貨幣）。每筆 Morphit 訂單嘅一邊必須係可交易資產（BTC、XMR、Blurt、USDT、USDC、DAI、BCH、LTC、DASH 或者 DOGE）——鏈就係噉樣錨定交易、反饋就係噉樣附到真實嘅鏈上動作。對於唔涉及加密貨幣嘅純物物交換，請用第個平台。\n\n**點解有呢個約束？**三個原因：\n\n1. **聲譽需要錨定。**反饋係針對 Blurt 上面一筆訂單操作簽名嘅。訂單操作引用一個特定嘅可分割資產（帶住數量、價格、費用）。純商品唔符合呢個形態——唔存在「一棵橙樹嘅幾多」呢個問題。\n\n2. **市場之所以運作，係因為大多數訂單以一個共同單位計價。**一個喺訂單簿裡面搵 `XMR/USD < $300` 嘅買家會得到一份清爽嘅列表。如果一半訂單以果樹計價、另一半以剪髮計價，搜索同撮合就會崩潰。\n\n3. **當一邊喺鏈上可證明嗰陣，糾紛更容易處理。**如果你發送咗 BTC 但係冇收到車厘子樹，嗰筆 BTC 轉賬永遠喺鏈上。賣家冇辦法否認收到咗付款。至少一邊有加密貨幣，每筆 Morphit 交易就有一半帶住硬性憑據。\n\n**關於好似 Bitso、Zelle、PayPal 噉嘅支付方式**：呢啲係**法幣側嘅軌道**——佢哋描述法幣（或者一個以法幣計價嘅參考價）係點樣轉移嘅。「用 Bitso 轉賬換辣木樹」唔符合模型：Bitso 轉移嘅係 MXN，唔係辣木樹。最接近嘅模型：發布一筆透過 Bitso 支付嘅買入 XMR 訂單，然後另外用嗰啲 XMR 喺平台外面買辣木樹。兩筆交易，而唔係一筆。\n\n**反過嚟嘅組合**：只要資產係 Morphit 支持嘅加密貨幣之一，`(side, asset, payment_methods, fiat_currency)` 嘅任何組合都可行。自由格式嘅 `terms` 欄位描述交易喺人類可讀側實際涉及咩。常見組合：\n\n• 透過 PayPal 用 USD 買入/賣出 BTC\n• 當面用現金買入/賣出 XMR\n• 用 BTC 買入/賣出 Blurt（加密貨幣換加密貨幣）\n• 透過 Wise 或者當面現金用法幣買入/賣出 USDT（喺 Tron、Ethereum、Solana 或者 BSC 上面）\n• 用橙樹買入 XMR（物物交換，以 USD 為參考價）\n• 用一棵車厘子樹賣出 BTC（物物交換，以 USD 為參考價）\n• 用生蒜頭賣出 USDT（物物交換，以 USD 為參考價）\n• 賣出 XMR 以換取當面現金交換（`payment_methods=[cash]`）"
+        "a": "得——但有一種要花啲時間先領會到嘅特定形態。Morphit 嘅訂單模型永遠都係**一邊係可交易資產（BTC、XMR、Blurt 或者 Morphit 上架嘅任何其他幣種），另一邊係第啲嘢**。嗰個「第啲嘢」可以係：\n\n• 一種**法幣**（USD、EUR、MXN、COP、NGN——任何國家嘅錢）\n• 一種**唔同嘅加密貨幣**（例如用 BTC 支付一筆資產係 XMR 嘅訂單）\n• **商品或者服務**，透過 `Barter (goods)` 支付方式\n\n**要用橙樹換 XMR**，你會噉樣發布：side=`buy`、asset=`XMR`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（或者你同對手方協定嘅任何計價參考），並且將具體內容寫入 `terms` 欄位——例如：`\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` 啱啱有 XMR 嘅橙樹買家會回應。\n\n**要用 BTC 換一棵車厘子樹**，發布：side=`sell`、asset=`BTC`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（參考價）、terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**你冇辦法直接建模嘅**：物物交換（橙樹換辣木樹，唔涉及加密貨幣）。每筆 Morphit 訂單嘅一邊必須係可交易資產（BTC、XMR、Blurt 或者 Morphit 上架嘅任何其他幣種）——鏈就係噉樣錨定交易、反饋就係噉樣附到真實嘅鏈上動作。對於唔涉及加密貨幣嘅純物物交換，請用第個平台。\n\n**點解有呢個約束？**三個原因：\n\n1. **聲譽需要錨定。**反饋係針對 Blurt 上面一筆訂單操作簽名嘅。訂單操作引用一個特定嘅可分割資產（帶住數量、價格、費用）。純商品唔符合呢個形態——唔存在「一棵橙樹嘅幾多」呢個問題。\n\n2. **市場之所以運作，係因為大多數訂單以一個共同單位計價。**一個喺訂單簿裡面搵 `XMR/USD < $300` 嘅買家會得到一份清爽嘅列表。如果一半訂單以果樹計價、另一半以剪髮計價，搜索同撮合就會崩潰。\n\n3. **當一邊喺鏈上可證明嗰陣，糾紛更容易處理。**如果你發送咗 BTC 但係冇收到車厘子樹，嗰筆 BTC 轉賬永遠喺鏈上。賣家冇辦法否認收到咗付款。至少一邊有加密貨幣，每筆 Morphit 交易就有一半帶住硬性憑據。\n\n**關於好似 Bitso、Zelle、PayPal 噉嘅支付方式**：呢啲係**法幣側嘅軌道**——佢哋描述法幣（或者一個以法幣計價嘅參考價）係點樣轉移嘅。「用 Bitso 轉賬換辣木樹」唔符合模型：Bitso 轉移嘅係 MXN，唔係辣木樹。最接近嘅模型：發布一筆透過 Bitso 支付嘅買入 XMR 訂單，然後另外用嗰啲 XMR 喺平台外面買辣木樹。兩筆交易，而唔係一筆。\n\n**反過嚟嘅組合**：只要資產係 Morphit 支持嘅加密貨幣之一，`(side, asset, payment_methods, fiat_currency)` 嘅任何組合都可行。自由格式嘅 `terms` 欄位描述交易喺人類可讀側實際涉及咩。常見組合：\n\n• 透過 PayPal 用 USD 買入/賣出 BTC\n• 當面用現金買入/賣出 XMR\n• 用 BTC 買入/賣出 Blurt（加密貨幣換加密貨幣）\n• 透過 Wise 或者當面現金用法幣買入/賣出 USDT（喺 Tron、Ethereum、Solana 或者 BSC 上面）\n• 用橙樹買入 XMR（物物交換，以 USD 為參考價）\n• 用一棵車厘子樹賣出 BTC（物物交換，以 USD 為參考價）\n• 用生蒜頭賣出 USDT（物物交換，以 USD 為參考價）\n• 賣出 XMR 以換取當面現金交換（`payment_methods=[cash]`）"
       },
       "cash_by_mail_walkthrough": {
         "q": "我如何透過 Morphit 用郵件交易現金或運送實物商品?",
@@ -3505,11 +3505,11 @@
     },
     "orderbook": {
       "title": "訂單簿 — 買賣 Bitcoin 同 Monero · Morphit",
-      "description": "睇返 Bitcoin、Monero、BLURT 嘅即時 P2P 報價。按國家、付款方式、信譽嚟 filter。唔使開戶都睇得。"
+      "description": "睇返 Bitcoin、Monero、BLURT 以及更多加密貨幣嘅即時 P2P 報價。按國家、付款方式、信譽嚟 filter。唔使開戶都睇得。"
     },
     "faq": {
       "title": "FAQ — Morphit 點用 · 非託管 P2P 加密貨幣",
-      "description": "解答唔使 KYC 買賣 Bitcoin、Monero 同 BLURT、非託管交易、私密傾偈、手續費嘅問題,同 LocalBitcoins、LocalMonero、Haveno 嘅比較。"
+      "description": "解答唔使 KYC 買賣 Bitcoin、Monero、BLURT 以及更多加密貨幣、非託管交易、私密傾偈、手續費嘅問題,同 LocalBitcoins、LocalMonero、Haveno 嘅比較。"
     },
     "security": {
       "title": "保安 — 密鑰、加密、威脅模型 · Morphit",
@@ -3537,7 +3537,7 @@
     },
     "post_order": {
       "title": "發布訂單 — Morphit",
-      "description": "建立一個點對點的報價,買賣比特幣、門羅幣或 BLURT。"
+      "description": "建立一個點對點的報價,買賣比特幣、門羅幣、BLURT 或其他加密貨幣。"
     },
     "edit_order": {
       "title": "編輯訂單 — Morphit",
@@ -3553,7 +3553,7 @@
     },
     "login": {
       "title": "登入 Morphit",
-      "description": "登入你嘅 Morphit 帳戶或註冊新帳戶，開始點對點交易比特幣、門羅幣、Blurt 及法定貨幣。"
+      "description": "登入你嘅 Morphit 帳戶或註冊新帳戶，開始點對點交易比特幣、門羅幣、Blurt、其他加密貨幣及法定貨幣。"
     },
     "operators": {
       "title": "Morphit 營運者 — 完整目錄",
@@ -3928,7 +3928,15 @@
       "heading": "私隱",
       "cross_page_trade_events_label": "跨頁面交易事件",
       "cross_page_trade_events_help": "啟用時，Morphit 監視你最近的聊天以獲取交易事件（已共享地址、已發送資金），以便 /my/orders 上的徽章無需打開聊天即可更新。這會在後台短暫解密傳入訊息。如果你希望只在聊天頁面處理事件，請關閉。",
-      "cross_page_trade_events_aria": "切換跨頁交易事件"
+      "cross_page_trade_events_aria": "切換跨頁交易事件",
+      "address_history_label": "已分享地址記錄",
+      "address_history_help": "你在聊天中分享的加密貨幣地址會儲存在此裝置上，以便 Morphit 在你重複使用某個地址時提醒你。它們只會保留在此瀏覽器中，絕不會傳送到任何伺服器。",
+      "address_history_count": "此裝置上已記住 {count} 個。",
+      "address_history_empty": "此裝置上尚未記住任何地址。",
+      "address_history_forget": "清除地址記錄",
+      "address_history_forget_confirm": "清除全部 {count} 個已記住的地址？此操作只會從此瀏覽器中刪除它們，且無法復原。",
+      "address_history_forget_confirm_yes": "是，清除",
+      "address_history_forget_confirm_cancel": "保留"
     },
     "hardware_key": {
       "heading": "硬件密鑰",
