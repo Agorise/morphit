@@ -25,13 +25,20 @@
 import {
 	ensureHealthPath,
 	resolveHealthUrl,
+	resolveRelayHealthUrl,
 	summarizeHealth,
 	classifyHealthResult,
+	bridgeGatewayHosts,
+	candidateHealthUrls,
+	hasExplicitTarget,
+	checkCanary,
 	DEFAULT_INDEXER_HOST,
-	DEFAULT_INDEXER_PORT
+	DEFAULT_INDEXER_PORT,
+	DEFAULT_RELAY_PORT
 } from '../src/commands/health.ts';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 let pass = 0;
@@ -119,7 +126,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	const full = summarizeHealth({
 		stale: false,
 		status: 'ok',
-		version: '1.0.0-beta.13',
+		version: '1.0.0-beta.14',
 		indexed_block: 1000,
 		chain_head_block: 1002,
 		lag_blocks: 2,
@@ -131,7 +138,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		'HV-3a full healthy body parsed',
 		full.synced &&
 			full.status === 'ok' &&
-			full.version === '1.0.0-beta.13' &&
+			full.version === '1.0.0-beta.14' &&
 			full.indexedBlock === 1000 &&
 			full.chainHeadBlock === 1002 &&
 			full.lagBlocks === 2 &&
@@ -263,6 +270,102 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	);
 	// help text advertises the command + the endpoint.
 	expect('HV-5f help text documents `health` and /v1/health', /health \[--url=URL\]/.test(main) || /\/v1\/health/.test(main));
+}
+
+// ─── HV-6: bridge-gateway auto-probe (the #13 fix) ──────────────────
+{
+	// bridgeGatewayHosts: non-internal IPv4 only (the docker bridge
+	// gateway), skipping loopback + IPv6 + internal interfaces.
+	const fakeIfaces = {
+		lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
+		eth0: [{ address: '203.0.113.7', family: 'IPv4', internal: false }],
+		docker0: [
+			{ address: '172.18.0.1', family: 'IPv4', internal: false },
+			{ address: 'fe80::1', family: 'IPv6', internal: false }
+		]
+	};
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const hosts = bridgeGatewayHosts(fakeIfaces as any);
+	expect(
+		'HV-6a bridgeGatewayHosts: non-internal IPv4 only (incl. docker bridge)',
+		hosts.includes('172.18.0.1') &&
+			hosts.includes('203.0.113.7') &&
+			!hosts.includes('127.0.0.1') &&
+			!hosts.includes('fe80::1')
+	);
+
+	// candidateHealthUrls: primary first, then gateways at the port; deduped.
+	const urls = candidateHealthUrls(
+		'http://127.0.0.1:8081/v1/health',
+		false,
+		'8081',
+		['172.18.0.1', '127.0.0.1']
+	);
+	expect(
+		'HV-6b candidateHealthUrls: primary first, bridge gateways appended, deduped',
+		urls[0] === 'http://127.0.0.1:8081/v1/health' &&
+			urls.includes('http://172.18.0.1:8081/v1/health') &&
+			urls.length === 2
+	);
+
+	// explicit target → no fallbacks (respect the operator's --url/--host).
+	const explicitUrls = candidateHealthUrls(
+		'http://10.0.0.5:8081/v1/health',
+		true,
+		'8081',
+		['172.18.0.1']
+	);
+	expect(
+		'HV-6c candidateHealthUrls: explicit target skips auto-probe',
+		explicitUrls.length === 1 && explicitUrls[0] === 'http://10.0.0.5:8081/v1/health'
+	);
+
+	expect('HV-6d hasExplicitTarget: --url set → true', hasExplicitTarget({ url: 'http://x:8081' }, {}) === true);
+	expect(
+		'HV-6e hasExplicitTarget: MORPHIT_INDEXER_LISTEN_HOST set → true',
+		hasExplicitTarget({}, { MORPHIT_INDEXER_LISTEN_HOST: '172.18.0.1' }) === true
+	);
+	expect('HV-6f hasExplicitTarget: nothing set → false', hasExplicitTarget({}, {}) === false);
+}
+
+// ─── HV-7: relay URL resolution ─────────────────────────────────────
+{
+	expect(
+		'HV-7a resolveRelayHealthUrl: defaults to loopback:8080',
+		resolveRelayHealthUrl({}) === `http://${DEFAULT_INDEXER_HOST}:${DEFAULT_RELAY_PORT}/v1/health`
+	);
+	expect(
+		'HV-7b resolveRelayHealthUrl: honors MORPHIT_RELAY_LISTEN_HOST/_PORT',
+		resolveRelayHealthUrl({ MORPHIT_RELAY_LISTEN_HOST: '172.18.0.1', MORPHIT_RELAY_LISTEN_PORT: '9090' }) ===
+			'http://172.18.0.1:9090/v1/health'
+	);
+}
+
+// ─── HV-8: canary freshness ─────────────────────────────────────────
+{
+	const dir = mkdtempSync(join(tmpdir(), 'canary-smoke-'));
+	const now = new Date('2026-06-11T00:00:00Z');
+	try {
+		const fresh = join(dir, 'fresh.txt');
+		writeFileSync(fresh, 'Generated: 2026-06-08T03:14:00Z\nValid through: 2026-06-15T03:14:00Z\n');
+		const f = checkCanary(fresh, now);
+		expect(
+			'HV-8a checkCanary: future "Valid through" → fresh',
+			f.state === 'fresh' && f.validThrough === '2026-06-15T03:14:00Z'
+		);
+
+		const stale = join(dir, 'stale.txt');
+		writeFileSync(stale, 'Generated: 2026-05-25T03:14:00Z\nValid through: 2026-06-01T03:14:00Z\n');
+		expect('HV-8b checkCanary: past "Valid through" → overdue', checkCanary(stale, now).state === 'overdue');
+
+		expect('HV-8c checkCanary: missing file → missing', checkCanary(join(dir, 'nope.txt'), now).state === 'missing');
+
+		const tmpl = join(dir, 'tmpl.txt');
+		writeFileSync(tmpl, 'Generated: {{GENERATED_AT_ISO}}\nValid through: {{VALID_THROUGH_ISO}}\n');
+		expect('HV-8d checkCanary: un-substituted template → unparsable', checkCanary(tmpl, now).state === 'unparsable');
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 console.log('');

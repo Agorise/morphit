@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Buono",
       "quiet": "Inattivo",
+      "syncing": "Sincronizzazione",
       "stale": "Obsoleto",
       "unreachable": "Irraggiungibile",
       "mismatch": "Discordante",
       "never": "Controllo in attesa"
+    },
+    "status_desc": {
+      "good": "Raggiungibile, integra e sincronizzata entro la soglia di ritardo.",
+      "quiet": "Integra, ma nessuna attività nel libro ordini negli ultimi 7 giorni.",
+      "syncing": "Raggiungibile e integra, ma sta ancora recuperando la catena. Diventerà «Buono» una volta sincronizzata.",
+      "stale": "Raggiungibile, ma il controllo di stato è degradato: un problema reale su quell'istanza.",
+      "unreachable": "Non raggiungibile in rete all'ultimo controllo.",
+      "mismatch": "Raggiungibile, ma l'account operatore on-chain non corrisponde a quanto dichiarato.",
+      "never": "In coda: la sonda non ha ancora controllato questa istanza."
     },
     "filter_label": "Mostra",
     "filter_all": "Tutte le istanze",
@@ -2495,6 +2505,8 @@
     "subtitle": "Ordini live da trader di tutto il mondo. Scegline uno per iniziare uno scambio.",
     "filters": {
       "heading": "Filtro",
+      "collapse": "Nascondi filtri",
+      "expand": "Mostra filtri",
       "asset_label": "Asset",
       "asset_any": "Qualsiasi",
       "payment_no_matches": "Nessun metodo di pagamento corrispondente",

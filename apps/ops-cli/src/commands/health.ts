@@ -32,6 +32,13 @@
  *   both Just Work.
  */
 
+import { networkInterfaces } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
+
 export interface HealthCtx {
 	readonly flags: Readonly<Record<string, string>>;
 	readonly positional: readonly string[];
@@ -81,6 +88,184 @@ export function resolveHealthUrl(
 	return `http://${host}:${port}/v1/health`;
 }
 
+// ─── Relay + multi-target resolution (beta14) ───────────────────────
+
+/** The relay's default loopback HTTP bind (apps/relay config
+ *  MORPHIT_RELAY_LISTEN_HOST/_PORT defaults). */
+export const DEFAULT_RELAY_PORT = '8080';
+
+/** Resolve the relay's /v1/health URL from env (no flags — `--url` is
+ *  indexer-scoped), with the same no-file-access guarantee.  PURE. */
+export function resolveRelayHealthUrl(
+	env: Readonly<Record<string, string | undefined>>
+): string {
+	const host =
+		(env.MORPHIT_RELAY_LISTEN_HOST ?? DEFAULT_INDEXER_HOST).trim() || DEFAULT_INDEXER_HOST;
+	const port =
+		(env.MORPHIT_RELAY_LISTEN_PORT ?? DEFAULT_RELAY_PORT).trim() || DEFAULT_RELAY_PORT;
+	return `http://${host}:${port}/v1/health`;
+}
+
+/** The host's own non-internal IPv4 addresses.  On a containerized
+ *  deploy the Docker bridge gateways (docker0 / br-*) live here —
+ *  which is exactly where the indexer/relay bind so the frontend
+ *  CONTAINER can reach them (and why a loopback-only probe fails even
+ *  though the service is up: the #13 symptom).  PURE given the
+ *  interface map. */
+export function bridgeGatewayHosts(
+	ifaces: ReturnType<typeof networkInterfaces>
+): string[] {
+	const out: string[] = [];
+	for (const addrs of Object.values(ifaces)) {
+		for (const a of addrs ?? []) {
+			if (a.family === 'IPv4' && !a.internal) out.push(a.address);
+		}
+	}
+	return [...new Set(out)];
+}
+
+/** Ordered list of health URLs to try: the resolved primary first,
+ *  then the same path on each bridge-gateway host at `port`.  The
+ *  fallbacks are skipped when the operator pinned an explicit target
+ *  (`explicit` true) — we never second-guess an explicit --url/--host.
+ *  PURE. */
+export function candidateHealthUrls(
+	primaryUrl: string,
+	explicit: boolean,
+	port: string,
+	gatewayHosts: string[]
+): string[] {
+	const urls = [primaryUrl];
+	if (!explicit) {
+		for (const h of gatewayHosts) urls.push(`http://${h}:${port}/v1/health`);
+	}
+	return [...new Set(urls)];
+}
+
+/** True when the operator pinned the indexer target explicitly (so
+ *  auto-probe should stay off).  PURE. */
+export function hasExplicitTarget(
+	flags: Readonly<Record<string, string>>,
+	env: Readonly<Record<string, string | undefined>>
+): boolean {
+	return (
+		(flags.url ?? '').trim() !== '' ||
+		(env.MORPHIT_OPS_HEALTH_URL ?? '').trim() !== '' ||
+		(flags.host ?? '').trim() !== '' ||
+		(env.MORPHIT_INDEXER_LISTEN_HOST ?? '').trim() !== ''
+	);
+}
+
+// ─── Service + canary checks (beta14) ───────────────────────────────
+
+export type ServiceState =
+	| 'active'
+	| 'inactive'
+	| 'failed'
+	| 'activating'
+	| 'not-installed'
+	| 'unknown';
+
+/** Read-only systemd active-state for a unit via `systemctl show`
+ *  (one call; exits 0 even for a missing unit → LoadState=not-found).
+ *  Works for any user.  Returns 'unknown' if systemctl isn't on PATH
+ *  or the call times out. */
+export function checkService(unit: string): ServiceState {
+	let out: string;
+	try {
+		out = execFileSync(
+			'systemctl',
+			['show', unit, '--property=ActiveState,LoadState', '--no-pager'],
+			{ stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, encoding: 'utf8' }
+		);
+	} catch {
+		return 'unknown';
+	}
+	const load = /LoadState=(\S+)/.exec(out)?.[1];
+	if (load === 'not-found' || load === 'masked') return 'not-installed';
+	const active = /ActiveState=(\S+)/.exec(out)?.[1];
+	switch (active) {
+		case 'active':
+			return 'active';
+		case 'failed':
+			return 'failed';
+		case 'activating':
+		case 'reloading':
+			return 'activating';
+		case 'inactive':
+		case 'deactivating':
+			return 'inactive';
+		default:
+			return 'unknown';
+	}
+}
+
+export interface CanaryStatus {
+	readonly state: 'fresh' | 'overdue' | 'missing' | 'unparsable';
+	readonly generatedAt: string | null;
+	readonly validThrough: string | null;
+	readonly detail: string;
+}
+
+/** Freshness of the operator warrant-canary (`apps/web/static/
+ *  canary.txt`, regenerated weekly by cron).  Parses the
+ *  `Valid through:` line and compares it to `now`.  PURE given the
+ *  path and clock (the only I/O is reading the file). */
+export function checkCanary(filePath: string, now: Date): CanaryStatus {
+	if (!existsSync(filePath)) {
+		return {
+			state: 'missing',
+			generatedAt: null,
+			validThrough: null,
+			detail: 'not generated yet — run scripts/canary/generate.sh (weekly via cron)'
+		};
+	}
+	let txt: string;
+	try {
+		txt = readFileSync(filePath, 'utf8');
+	} catch {
+		return {
+			state: 'unparsable',
+			generatedAt: null,
+			validThrough: null,
+			detail: 'could not read the file'
+		};
+	}
+	const generatedAt = /^Generated:\s*(.+)$/m.exec(txt)?.[1]?.trim() ?? null;
+	const validThrough = /^Valid through:\s*(.+)$/m.exec(txt)?.[1]?.trim() ?? null;
+	if (validThrough === null) {
+		return {
+			state: 'unparsable',
+			generatedAt,
+			validThrough: null,
+			detail: 'no "Valid through" date — is this still the template?'
+		};
+	}
+	const deadline = new Date(validThrough);
+	if (Number.isNaN(deadline.getTime())) {
+		return {
+			state: 'unparsable',
+			generatedAt,
+			validThrough,
+			detail: 'unrecognized "Valid through" date'
+		};
+	}
+	if (now.getTime() > deadline.getTime()) {
+		return {
+			state: 'overdue',
+			generatedAt,
+			validThrough,
+			detail: 'past its "valid through" date — regenerate it'
+		};
+	}
+	return { state: 'fresh', generatedAt, validThrough, detail: 'current' };
+}
+
+/** Resolve the canary file inside the install tree (best-effort). */
+export function canaryFilePath(): string {
+	return join(defaultRepoRoot(), 'apps', 'web', 'static', 'canary.txt');
+}
+
 /** The fields we read out of a `/v1/health` body.  Only the always-
  *  present (non-verbose) fields — the gated `diagnostics` block is
  *  not required and not read here. */
@@ -91,6 +276,7 @@ export interface HealthSummary {
 	readonly indexedBlock: number | null;
 	readonly chainHeadBlock: number | null;
 	readonly lagBlocks: number | null;
+	readonly lagNote: string | null;
 	readonly uptimeSec: number | null;
 	readonly rpcHealthy: number | null;
 	readonly rpcTotal: number | null;
@@ -120,6 +306,7 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		indexedBlock: numOrNull(b.indexed_block),
 		chainHeadBlock: numOrNull(b.chain_head_block),
 		lagBlocks: numOrNull(b.lag_blocks),
+		lagNote: typeof b.lag_blocks_note === 'string' ? b.lag_blocks_note : null,
 		uptimeSec: numOrNull(b.uptime_sec),
 		rpcHealthy,
 		rpcTotal,
@@ -279,78 +466,185 @@ function fmtUptime(sec: number | null): string {
 	return `${m}m`;
 }
 
+/** Try each candidate URL in order. Prefer a fully-valid indexer
+ *  response (connected + 2xx + JSON); else the first that merely
+ *  CONNECTED; else the last attempt (so the caller still gets a
+ *  meaningful failure to render). */
+async function probeHealth(
+	urls: readonly string[]
+): Promise<{ url: string; fetched: FetchedHealth }> {
+	let firstConnected: { url: string; fetched: FetchedHealth } | null = null;
+	let firstResult: { url: string; fetched: FetchedHealth } | null = null;
+	for (const url of urls) {
+		const fetched = await fetchHealth(url);
+		if (firstResult === null) firstResult = { url, fetched };
+		if (fetched.fetchError === null) {
+			if (
+				fetched.httpStatus !== null &&
+				fetched.httpStatus >= 200 &&
+				fetched.httpStatus < 300 &&
+				fetched.jsonOk
+			) {
+				return { url, fetched };
+			}
+			if (firstConnected === null) firstConnected = { url, fetched };
+		}
+	}
+	return (
+		firstConnected ??
+		firstResult ?? {
+			url: urls[0] ?? '',
+			fetched: { fetchError: 'no target', httpStatus: null, jsonOk: false, body: null }
+		}
+	);
+}
+
+function serviceLine(
+	c: ReturnType<typeof color>,
+	unit: string,
+	state: ServiceState
+): string {
+	const name = unit.replace(/^morphit-/, '').replace(/\.service$/, '').padEnd(13);
+	const dot = (() => {
+		switch (state) {
+			case 'active':
+				return c.green('● active');
+			case 'failed':
+				return c.red('● failed');
+			case 'activating':
+				return c.yellow('● starting');
+			case 'inactive':
+				return c.yellow('○ stopped');
+			case 'not-installed':
+				return c.dim('— not installed');
+			default:
+				return c.dim('? unknown (no systemctl?)');
+		}
+	})();
+	return `      ${name} ${dot}`;
+}
+
 export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const c = color(ctx.colorEnabled);
 	const json = ctx.flags.json === 'true';
-	const url = resolveHealthUrl(ctx.flags, process.env);
+	const now = new Date();
+	const gateways = bridgeGatewayHosts(networkInterfaces());
 
-	const fetched = await fetchHealth(url);
-	const outcome = classifyHealthResult(fetched);
+	// ── Indexer: resolve primary, then auto-probe bridge gateways ──
+	const indexerPrimary = resolveHealthUrl(ctx.flags, process.env);
+	const indexerExplicit = hasExplicitTarget(ctx.flags, process.env);
+	const indexerPort =
+		(ctx.flags.port ?? process.env.MORPHIT_INDEXER_LISTEN_PORT ?? DEFAULT_INDEXER_PORT).trim() ||
+		DEFAULT_INDEXER_PORT;
+	const indexerProbe = await probeHealth(
+		candidateHealthUrls(indexerPrimary, indexerExplicit, indexerPort, gateways)
+	);
+	const indexer = classifyHealthResult(indexerProbe.fetched);
+
+	// ── Relay: resolve primary, then auto-probe ──
+	const relayPrimary = resolveRelayHealthUrl(process.env);
+	const relayExplicit = (process.env.MORPHIT_RELAY_LISTEN_HOST ?? '').trim() !== '';
+	const relayPort =
+		(process.env.MORPHIT_RELAY_LISTEN_PORT ?? DEFAULT_RELAY_PORT).trim() || DEFAULT_RELAY_PORT;
+	const relayProbe = await probeHealth(
+		candidateHealthUrls(relayPrimary, relayExplicit, relayPort, gateways)
+	);
+	const relay = classifyHealthResult(relayProbe.fetched);
+	const relayUp = relay.kind === 'synced' || relay.kind === 'behind';
+
+	// ── Services (read-only systemctl) + canary freshness ──
+	const services = [
+		{ unit: 'morphit-matrix-bot', state: checkService('morphit-matrix-bot') },
+		{ unit: 'morphit-mcp', state: checkService('morphit-mcp') }
+	];
+	const canary = checkCanary(canaryFilePath(), now);
 
 	if (json) {
 		console.log(
 			JSON.stringify(
 				{
-					url,
-					outcome: outcome.kind,
-					message: outcome.message,
-					health: outcome.summary
+					indexer: { url: indexerProbe.url, outcome: indexer.kind, health: indexer.summary },
+					relay: {
+						url: relayProbe.url,
+						outcome: relay.kind,
+						up: relayUp,
+						version: relay.summary?.version ?? null,
+						uptime_sec: relay.summary?.uptimeSec ?? null
+					},
+					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
+					canary
 				},
 				null,
 				2
 			)
 		);
-		return outcome.exitCode;
+		return indexer.exitCode;
 	}
 
-	const tag =
-		outcome.kind === 'synced'
-			? c.green('✓')
-			: outcome.kind === 'behind'
-				? c.yellow('⚠')
-				: c.red('✗');
-
 	console.log('');
 	console.log('━'.repeat(60));
-	console.log('  Indexer health (live, via /v1/health)');
+	console.log('  Node health');
 	console.log('━'.repeat(60));
-	console.log('');
-	console.log(`  ${c.dim('Endpoint:')} ${safe(url)}`);
-	console.log('');
-	console.log(`  ${tag} ${outcome.message}`);
-	console.log('');
 
-	const s = outcome.summary;
+	// ── Indexer block ──
+	const iTag =
+		indexer.kind === 'synced' ? c.green('✓') : indexer.kind === 'behind' ? c.yellow('⚠') : c.red('✗');
+	console.log('');
+	console.log(`  ${c.bold('Indexer')}   ${c.dim(safe(indexerProbe.url))}`);
+	console.log(`  ${iTag} ${indexer.message}`);
+	const s = indexer.summary;
 	if (s !== null) {
 		const syncLabel = s.synced ? c.green('synced') : c.yellow('behind');
-		console.log(`      Sync state:     ${syncLabel}`);
-		console.log(`      Last block:     ${s.indexedBlock ?? 'unknown'}`);
-		console.log(`      Chain head:     ${s.chainHeadBlock ?? 'unknown'}`);
+		console.log(`      Sync state:    ${syncLabel}`);
+		console.log(`      Last block:    ${s.indexedBlock ?? 'unknown'}`);
+		console.log(`      Chain head:    ${s.chainHeadBlock ?? 'unknown'}`);
 		const lag = s.lagBlocks;
-		const lagStr =
-			lag === null ? 'unknown' : `${lag} block${lag === 1 ? '' : 's'}`;
-		console.log(`      Lag:            ${lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`);
+		const lagStr = lag === null ? 'unknown' : `${lag} block${lag === 1 ? '' : 's'}`;
+		console.log(`      Lag:           ${lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`);
+		if (s.lagNote !== null) console.log(`                     ${c.dim(s.lagNote)}`);
 		const rpcStr =
 			s.rpcHealthy !== null && s.rpcTotal !== null
 				? `${s.rpcHealthy}/${s.rpcTotal} reachable`
 				: 'unknown';
-		console.log(
-			`      Blurt RPC:      ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`
-		);
-		console.log(`      Uptime:         ${fmtUptime(s.uptimeSec)}`);
-		if (s.version !== null) console.log(`      Version:        ${safe(s.version)}`);
-		console.log('');
-	} else {
-		console.log(
-			`  ${c.dim('Tip:')} the Status dashboard (status) needs the config + DB and may`
-		);
-		console.log(
-			'       hit a permission error as a non-root user; this view does not.'
-		);
-		console.log('');
+		console.log(`      Blurt RPC:     ${s.rpcAllDown ? c.red(rpcStr) : rpcStr}`);
+		console.log(`      Uptime:        ${fmtUptime(s.uptimeSec)}`);
+		if (s.version !== null) console.log(`      Version:       ${safe(s.version)}`);
+	} else if (indexer.kind === 'unreachable') {
+		console.log(`      ${c.dim('Not reachable on loopback or any bridge gateway. If it binds')}`);
+		console.log(`      ${c.dim('a non-default address, pass --url or set MORPHIT_OPS_HEALTH_URL.')}`);
 	}
 
+	// ── Relay block ──
+	console.log('');
+	console.log(`  ${c.bold('Relay')}     ${c.dim(safe(relayProbe.url))}`);
+	if (relayUp) {
+		const rs = relay.summary;
+		console.log(`  ${c.green('✓')} up`);
+		if (rs?.version != null) console.log(`      Version:       ${safe(rs.version)}`);
+		console.log(`      Uptime:        ${fmtUptime(rs?.uptimeSec ?? null)}`);
+	} else if (relay.kind === 'unreachable') {
+		console.log(`  ${c.red('✗')} not reachable`);
+		console.log(`      ${c.dim('the relay is optional — only needed if your node broadcasts')}`);
+		console.log(`      ${c.dim('user-signed ops. If you run it, check its systemd service.')}`);
+	} else {
+		console.log(`  ${c.yellow('⚠')} answered, but not as the relay (${relay.kind})`);
+	}
+
+	// ── Services block ──
+	console.log('');
+	console.log(`  ${c.bold('Services')}  ${c.dim('(systemd, read-only)')}`);
+	for (const svc of services) console.log(serviceLine(c, svc.unit, svc.state));
+
+	// ── Canary block ──
+	console.log('');
+	const canaryTag =
+		canary.state === 'fresh' ? c.green('✓') : canary.state === 'overdue' ? c.red('✗') : c.yellow('⚠');
+	console.log(`  ${c.bold('Canary')}    ${canaryTag} ${canary.state}`);
+	if (canary.validThrough !== null) console.log(`      Valid through: ${safe(canary.validThrough)}`);
+	console.log(`      ${c.dim(canary.detail)}`);
+
+	console.log('');
 	console.log('━'.repeat(60));
 	console.log('');
-	return outcome.exitCode;
+	return indexer.exitCode;
 }

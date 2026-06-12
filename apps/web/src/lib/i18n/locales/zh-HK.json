@@ -1965,10 +1965,20 @@
     "status": {
       "good": "良好",
       "quiet": "冷清",
+      "syncing": "同步中",
       "stale": "滯後",
       "unreachable": "無法存取",
       "mismatch": "不匹配",
       "never": "等待探測"
+    },
+    "status_desc": {
+      "good": "可連線、健康，並已在延遲門檻內完成同步。",
+      "quiet": "健康，但過去 7 天訂單簿沒有活動。",
+      "syncing": "可連線且健康，但仍在追趕鏈。同步完成後會變為「良好」。",
+      "stale": "可連線，但其健康檢查已降級——該實例存在實際問題。",
+      "unreachable": "上次檢查時無法透過網絡連線。",
+      "mismatch": "可連線，但其鏈上營運者帳戶與所聲明的不一致。",
+      "never": "排隊中：探測尚未檢查此實例。"
     },
     "filter_label": "顯示",
     "filter_all": "所有實例",
@@ -2495,6 +2505,8 @@
     "subtitle": "來自世界各地交易者的即時訂單。挑一個開始交易。",
     "filters": {
       "heading": "篩選",
+      "collapse": "隱藏篩選",
+      "expand": "顯示篩選",
       "asset_label": "資產",
       "asset_any": "全部",
       "payment_no_matches": "沒有匹配嘅付款方式",

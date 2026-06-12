@@ -439,7 +439,7 @@
 								type="password"
 								bind:value={enrollPassword}
 								autocomplete="current-password"
-								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>
 
@@ -452,7 +452,7 @@
 								bind:value={enrollLabel}
 								placeholder={$_('settings.hardware_key.label_placeholder')}
 								maxlength={64}
-								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>
 
@@ -592,7 +592,7 @@
 								bind:value={softenPassword}
 								autocomplete="new-password"
 								minlength="8"
-								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>
 
@@ -604,7 +604,7 @@
 								type="password"
 								bind:value={softenPasswordConfirm}
 								autocomplete="new-password"
-								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>
 

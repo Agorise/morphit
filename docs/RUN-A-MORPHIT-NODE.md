@@ -1290,14 +1290,14 @@ Reference templates: separate-subdomain configurations (where the indexer and re
 
 ### Set up systemd services
 
-The two Morphit services (indexer + relay) need to keep running even when you're not logged in. Use systemd:
+The Morphit services (indexer + relay) need to keep running even when you're not logged in. Use systemd. The shipped unit files in `ops/systemd/` reference the default `/opt/morphit` path, so rather than copy them by hand and fix the paths, run the installer — it detects where you actually cloned the repo and writes the units with the correct `WorkingDirectory`/`ExecStart`, so this guide's `~/morphit` layout works with no extra steps:
 
 ```
-sudo cp ops/systemd/morphit-indexer.service /etc/systemd/system/
-sudo cp ops/systemd/morphit-relay.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable morphit-indexer morphit-relay
+sudo bash ops/scripts/install-systemd-units.sh
+sudo systemctl enable --now morphit-indexer morphit-relay
 ```
+
+The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users — set those up separately (see OPERATIONS.md) if you use them; that isolation is intentional.
 
 > **Before you start the services, run the doctor.** From your
 > install directory, `npx morphit-ops doctor` reads your config and
@@ -1310,28 +1310,14 @@ sudo systemctl enable morphit-indexer morphit-relay
 > See the "My node won't start" troubleshooting entry later in this
 > guide.
 
-> **Install path.** These shipped units target the standard
-> `morphit-ops` layout: the monorepo at **`/opt/morphit`**
-> (config `/opt/morphit/morphit.env` +
-> `/opt/morphit/morphit.config.env`, database in a Docker
-> container), running as `root` because that config is
-> root-owned. **This manual guide instead clones to
-> `~/morphit`** (e.g. `/home/morphit/morphit`), so you'll
-> need a drop-in to point the units at your actual paths —
-> don't edit the shipped files:
->
-> ```bash
-> sudo systemctl edit morphit-indexer   # then: morphit-relay
-> ```
->
-> In the editor that opens, override `WorkingDirectory=` and
-> the `ExecStart=` line so they reference your clone's
-> `apps/indexer` (and `apps/relay`) directory and its
-> `node_modules/.bin/tsx`. The empty `WorkingDirectory=`
-> first line wipes the shipped value before re-setting it —
-> the systemd idiom for overriding rather than appending.
-> `systemctl cat morphit-indexer` shows the shipped unit and
-> your override merged, and the override survives upgrades.
+> **Install path.** The installer above writes the units pointed at
+> wherever you cloned the repo — `/opt/morphit`, `~/morphit`, or
+> anywhere else — so there's no `systemctl edit` drop-in to maintain.
+> If you'd rather install by hand, copy the units from `ops/systemd/`
+> and replace `/opt/morphit` with your clone path in each
+> `WorkingDirectory=` and `ExecStart=` line; `systemctl cat
+> morphit-indexer` shows the merged result, and the units survive
+> upgrades.
 
 **The relay's active key is encrypted, and its passphrase must be supplied as a systemd _encrypted credential_** — never as plaintext on disk. This is what lets the relay start unattended (no prompt) while keeping the key encrypted at rest. Create the credential once (as root), using the same passphrase you set when you created the relay key:
 
@@ -1386,11 +1372,14 @@ curl -s http://127.0.0.1:8081/v1/health \
   | jq '{indexed_block, chain_head_block, lag_blocks, rpc_endpoints_healthy, rpc_endpoints_total}'
 ```
 
-> The `morphit-ops` menu (item 13, *Indexer health*) runs this same
-> check for you and **needs no sudo**. If your indexer binds the Docker
-> bridge rather than loopback (the BunkerWeb path binds `0.0.0.0`,
-> reachable on the bridge gateway such as `172.18.0.1`), point the check
-> there: `morphit-ops health --url http://172.18.0.1:8081/v1/health`.
+> The `morphit-ops` menu (item 13, *Node health*) runs this same check
+> for you — and now also shows the relay, the matrix-bot and mcp
+> service state, and the warrant-canary's freshness, all in one view
+> that **needs no sudo**. If your indexer binds the Docker bridge
+> rather than loopback (the BunkerWeb path binds `0.0.0.0`, reachable
+> on the bridge gateway such as `172.18.0.1`), the view auto-probes
+> that gateway for you, so it now works without a flag. To pin a
+> specific target anyway: `morphit-ops health --url http://172.18.0.1:8081/v1/health`.
 
 Run it twice a minute apart — `indexed_block` should be climbing and `lag_blocks` shrinking. **If `rpc_endpoints_healthy` is `0`, that's your problem:** the public Blurt servers your node talks to aren't reachable, so it can't catch up. Fix the `MORPHIT_INDEXER_RPC_ENDPOINTS` list (see OPERATIONS.md "Monitoring RPC endpoint health") and restart the indexer. A healthy count with a big `lag_blocks` just means it's still catching up — leave it be.
 

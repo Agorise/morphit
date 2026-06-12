@@ -623,7 +623,7 @@
 								bind:value={password}
 								autocomplete="new-password"
 								minlength="8"
-								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>
 						<p class="text-xs text-ink-500">{$_('onboarding.backup.password_hint')}</p>
@@ -731,7 +731,7 @@
 									autocapitalize="off"
 									autocorrect="off"
 									spellcheck="false"
-									class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-950"
+									class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-950"
 								/>
 							</label>
 						</li>

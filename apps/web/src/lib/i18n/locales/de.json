@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Gut",
       "quiet": "Ruhig",
+      "syncing": "Synchronisierung",
       "stale": "Veraltet",
       "unreachable": "Nicht erreichbar",
       "mismatch": "Nicht übereinstimmend",
       "never": "Prüfung ausstehend"
+    },
+    "status_desc": {
+      "good": "Erreichbar, gesund und innerhalb der Verzögerungsschwelle synchronisiert.",
+      "quiet": "Gesund, aber seit 7 Tagen keine Orderbuch-Aktivität.",
+      "syncing": "Erreichbar und gesund, holt aber noch zur Kette auf. Wechselt zu „Gut“, sobald synchronisiert.",
+      "stale": "Erreichbar, aber die Statusprüfung ist beeinträchtigt — ein echtes Problem auf dieser Instanz.",
+      "unreachable": "Bei der letzten Prüfung über das Netzwerk nicht erreichbar.",
+      "mismatch": "Erreichbar, aber das On-Chain-Betreiberkonto stimmt nicht mit den Angaben überein.",
+      "never": "In der Warteschlange: Die Prüfung hat diese Instanz noch nicht erreicht."
     },
     "filter_label": "Anzeigen",
     "filter_all": "Alle Instanzen",
@@ -2495,6 +2505,8 @@
     "subtitle": "Live-Orders von Händlern aus aller Welt. Wähle eine aus, um einen Handel zu starten.",
     "filters": {
       "heading": "Filter",
+      "collapse": "Filter ausblenden",
+      "expand": "Filter einblenden",
       "asset_label": "Asset",
       "asset_any": "Beliebig",
       "payment_no_matches": "Keine passende Zahlungsmethode",

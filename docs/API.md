@@ -130,11 +130,12 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0-beta.13",
+  "version": "1.0.0-beta.14",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
   "lag_blocks": 2,
+  "lag_blocks_note": "0–30 is normal (~90s behind; Blurt makes a block every 3s)",
   "stale": false,
   "rpc_endpoints_healthy": 4,
   "rpc_endpoints_total": 4
@@ -154,7 +155,11 @@ parsing the status enum.
 `chain_head_block` is the most recent block the indexer has seen
 on the Blurt RPC pool; `indexed_block` is the most recent block
 the indexer has fully written to its database.  `lag_blocks` is
-the difference.
+the difference.  `lag_blocks_note` is a human-readable hint for
+operators eyeballing the endpoint: a healthy indexer trails chain
+head by only a handful of blocks, so "normal" is reported as up to
+the same threshold the `stale` flag uses (default 30 blocks ≈ 90s
+at Blurt's 3-second block time).
 
 `rpc_endpoints_healthy` and `rpc_endpoints_total` report how many
 of the operator's configured Blurt RPC endpoints are currently

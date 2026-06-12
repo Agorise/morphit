@@ -42,6 +42,16 @@ const log = logger('federation-probe');
 /** Goodness threshold values. */
 const MAX_HEALTH_AGE_MS = 60 * 60 * 1000; // 1h — health response considered fresh
 const MAX_CHAIN_LAG_SEC = 90; // ~30 blocks at 3s/block
+
+/** Decide a self-reachable instance's status from its own chain lag.
+ *  We can't network-probe ourselves (hairpin NAT), but the indexer
+ *  knows its own lag directly: report 'syncing' while still catching up
+ *  (lag over the same threshold a peer probe uses), 'good' once current.
+ *  A null lag (poller not yet running / head unknown) is treated as
+ *  'good' — the pre-syncing behaviour. */
+export function selfReachableStatus(lagBlocks: number | null): ProbeStatus {
+	return lagBlocks !== null && lagBlocks * 3 > MAX_CHAIN_LAG_SEC ? 'syncing' : 'good';
+}
 const ORDERBOOK_ACTIVITY_GRACE_DAYS = 7; // newer instances exempt
 const FAILURE_DROP_DAYS = 7; // drop row after 7d of consecutive failures
 /** Probe schedule, by current status.  Picks the longest interval
@@ -50,6 +60,7 @@ const PROBE_INTERVAL_MS = {
 	never: 0,
 	good: 10 * 60 * 1000,
 	quiet: 10 * 60 * 1000,
+	syncing: 10 * 60 * 1000,
 	stale: 60 * 60 * 1000,
 	unreachable: 60 * 60 * 1000,
 	mismatch: 60 * 60 * 1000
@@ -64,7 +75,14 @@ const DEFAULT_CONCURRENCY = 10;
  *  a warning.  Won't matter for years; sized for "small federation". */
 const MAX_TRACKED_INSTANCES = 200;
 
-export type ProbeStatus = 'never' | 'good' | 'quiet' | 'stale' | 'unreachable' | 'mismatch';
+export type ProbeStatus =
+	| 'never'
+	| 'good'
+	| 'quiet'
+	| 'syncing'
+	| 'stale'
+	| 'unreachable'
+	| 'mismatch';
 
 export interface FederationProbeConfig {
 	readonly intervalMs: number; // how often the scheduler ticks
@@ -75,6 +93,11 @@ export interface FederationProbeConfig {
 	 *  so a self-probe spuriously reports 'unreachable'. When set, the
 	 *  matching directory row is marked reachable locally instead. */
 	readonly selfOrigin?: string;
+	/** Our own chain lag in blocks, read directly from the local poller
+	 *  (not over HTTP).  Lets the self-reachable path report 'syncing'
+	 *  while we're still catching up, instead of a misleading 'good'.
+	 *  Returns null when unknown (poller not yet running). */
+	readonly localLagBlocks?: () => number | null;
 }
 
 /** Normalize an origin for self-comparison: trim, drop any trailing
@@ -184,7 +207,7 @@ export class FederationProbeScheduler {
 			 WHERE last_probe_status = 'never'
 			    OR last_probed_at IS NULL
 			    OR (
-			        last_probe_status IN ('good', 'quiet')
+			        last_probe_status IN ('good', 'quiet', 'syncing')
 			        AND last_probed_at < NOW() - INTERVAL '${Math.floor(goodMs / 1000)} seconds'
 			    )
 			    OR (
@@ -251,7 +274,8 @@ export class FederationProbeScheduler {
 	}
 
 	private async persistOutcome(inst: KnownInstanceRow, outcome: ProbeOutcome): Promise<void> {
-		const isSuccess = outcome.status === 'good' || outcome.status === 'quiet';
+		const isSuccess =
+			outcome.status === 'good' || outcome.status === 'quiet' || outcome.status === 'syncing';
 		// On success: store cached snapshot, reset failure counter.
 		// On failure: leave cached_* untouched (last successful values
 		// stay visible in the directory until probe recovers), increment
@@ -300,14 +324,22 @@ export class FederationProbeScheduler {
 	 *  cached_* snapshot — the directory keeps showing the instance's
 	 *  name/tagline/contact from its last real refresh. */
 	private async persistSelfReachable(inst: KnownInstanceRow): Promise<void> {
+		// We can't network-probe our own public URL (hairpin-NAT fragile),
+		// but we ARE the indexer — so we know our own chain lag directly.
+		// Report 'syncing' while we're still catching up (same lag
+		// threshold a peer probe uses), 'good' once current.  This is why
+		// our own directory row no longer sits at a misleading 'good'
+		// during initial sync — it shows 'syncing' until caught up.
+		const lagBlocks = this.config.localLagBlocks?.() ?? null;
+		const selfStatus: ProbeStatus = selfReachableStatus(lagBlocks);
 		await this.db.query(
 			`UPDATE known_instances SET
 				last_probed_at = NOW(),
-				last_probe_status = 'good',
+				last_probe_status = $2,
 				last_probe_error = NULL,
 				consecutive_failures = 0
 			 WHERE origin = $1`,
-			[inst.origin]
+			[inst.origin, selfStatus]
 		);
 	}
 }
@@ -353,7 +385,10 @@ export async function probeOne(inst: KnownInstanceRow): Promise<ProbeOutcome> {
 	// we approximate from lag_blocks (3s per block on Blurt).
 	const chainLagSec = healthData.lag_blocks * 3;
 	if (chainLagSec > MAX_CHAIN_LAG_SEC) {
-		return mkStale(`chain_lag_sec=${chainLagSec} exceeds ${MAX_CHAIN_LAG_SEC}`);
+		// Reachable and /v1/health is 'ok' — it's just behind, i.e. catching
+		// up (initial sync or a brief fall-behind), not broken.  'stale' is
+		// reserved for degraded/malformed health (an actual problem).
+		return mkSyncing(instanceData, healthData, chainLagSec);
 	}
 
 	// Fetch /v1/orderbook?limit=1 — recent-activity check.
@@ -760,6 +795,24 @@ function mkGood(inst: InstanceShape, health: HealthShape, chainLagSec: number): 
 function mkQuiet(inst: InstanceShape, health: HealthShape, chainLagSec: number): ProbeOutcome {
 	return {
 		status: 'quiet',
+		error: null,
+		cachedName: inst.name,
+		cachedTagline: inst.tagline,
+		cachedContactUrl: inst.contact_url,
+		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
+		cachedIndexedBlock: health.indexed_block,
+		cachedChainLagSec: chainLagSec
+	};
+}
+
+/** Reachable, valid, and /v1/health is 'ok' — but the chain lag exceeds
+ *  the freshness threshold.  The instance is up and serving; it's just
+ *  catching up.  Distinct from 'stale' (degraded health / a real
+ *  problem) and 'unreachable' (HTTP failed).  Caches the snapshot like a
+ *  healthy probe since the instance data is valid. */
+function mkSyncing(inst: InstanceShape, health: HealthShape, chainLagSec: number): ProbeOutcome {
+	return {
+		status: 'syncing',
 		error: null,
 		cachedName: inst.name,
 		cachedTagline: inst.tagline,

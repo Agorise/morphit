@@ -459,7 +459,7 @@
 						type="time"
 						value={$notificationPrefs.quietHours.from}
 						onchange={(e) => setQuietHours({ from: (e.currentTarget as HTMLInputElement).value })}
-						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 				<label class="flex flex-col gap-1">
@@ -468,7 +468,7 @@
 						type="time"
 						value={$notificationPrefs.quietHours.to}
 						onchange={(e) => setQuietHours({ to: (e.currentTarget as HTMLInputElement).value })}
-						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						class="rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 			</div>

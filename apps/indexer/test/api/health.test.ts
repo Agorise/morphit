@@ -146,6 +146,7 @@ describe('healthRoute — baseline shape', () => {
 			chain_head_block: expect.any(Number),
 			indexed_block: expect.any(Number),
 			lag_blocks: expect.any(Number),
+			lag_blocks_note: expect.any(String),
 			stale: expect.any(Boolean),
 			version: expect.any(String)
 		});
@@ -159,6 +160,17 @@ describe('healthRoute — baseline shape', () => {
 		expect(body.status).toBe('ok');
 		expect(body.stale).toBe(false);
 		expect(body.lag_blocks).toBe(5);
+	});
+
+	it('lag_blocks_note reflects the configured threshold and 3s block time', async () => {
+		const { body } = await getHealth(
+			fakeConfig({ staleLagThreshold: 10 }),
+			fakePoller({ chainHeadBlock: 1000, indexedBlock: 995 })
+		);
+		// threshold 10 → "0–10 is normal (~30s behind; Blurt makes a block every 3s)"
+		expect(body.lag_blocks_note).toContain('10 is normal');
+		expect(body.lag_blocks_note).toContain('30s behind');
+		expect(body.lag_blocks_note).toContain('every 3s');
 	});
 
 	it('reports degraded status when lag exceeds threshold', async () => {

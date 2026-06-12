@@ -22,6 +22,7 @@
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { getActivityVolume, getOrderbook, type ActivityVolumeWindow } from '$lib/indexer/client';
@@ -233,7 +234,7 @@
 			</table>
 			{#if volumeGeneratedAt}
 				<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
-					{$_('explorer.activity.last_updated')}: {volumeGeneratedAt}
+					{$_("explorer.activity.last_updated")}: {formatDayMonthTime(volumeGeneratedAt)}
 				</p>
 			{/if}
 		{/if}

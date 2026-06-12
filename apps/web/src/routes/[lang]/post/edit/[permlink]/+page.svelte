@@ -737,7 +737,7 @@
 					maxlength="8"
 					aria-invalid={!!fiatError}
 					aria-describedby={fiatError ? 'edit-fiat-error' : undefined}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 uppercase focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 				{#if fiatError}
 					<StatusLine kind="warn" id="edit-fiat-error">{fiatError}</StatusLine>
@@ -756,7 +756,7 @@
 						bind:value={amountMin}
 						aria-invalid={!!amountError}
 						aria-describedby={amountError ? 'edit-amount-error' : undefined}
-						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 				<label class="block">
@@ -770,7 +770,7 @@
 						bind:value={amountMax}
 						aria-invalid={!!amountError}
 						aria-describedby={amountError ? 'edit-amount-error' : undefined}
-						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					/>
 				</label>
 			</div>
@@ -827,7 +827,7 @@
 										bind:value={spreadPercent}
 										aria-invalid={!!priceModelError}
 										aria-describedby={priceModelError ? 'edit-price-model-error' : undefined}
-										class="w-24 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+										class="w-24 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 										aria-label={$_('post_order.form.price_model_spread_aria') as string}
 									/>
 									<span class="text-sm text-ink-600 dark:text-ink-300">%</span>
@@ -868,7 +868,7 @@
 										bind:value={fixedPrice}
 										aria-invalid={!!priceModelError}
 										aria-describedby={priceModelError ? 'edit-fixed-price-error' : undefined}
-										class="w-32 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+										class="w-32 rounded-lg border-2 border-ink-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 										placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
 										aria-label={$_('post_order.form.price_model_fixed_aria') as string}
 									/>
@@ -907,7 +907,7 @@
 					type="text"
 					bind:value={region}
 					maxlength="128"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 			</label>
 
@@ -926,7 +926,7 @@
 				<span class="mb-1 block text-sm font-semibold">{$_('post_order.form.expires_label')}</span>
 				<select
 					bind:value={expiresDays}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value={1}>{$_('post_order.form.expires_1d')}</option>
 					<option value={3}>{$_('post_order.form.expires_3d')}</option>

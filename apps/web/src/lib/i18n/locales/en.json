@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Good",
       "quiet": "Quiet",
+      "syncing": "Syncing",
       "stale": "Stale",
       "unreachable": "Unreachable",
       "mismatch": "Mismatch",
-      "never": "Pending probe"
+      "never": "Pending Probe"
+    },
+    "status_desc": {
+      "good": "Reachable, healthy, and synced within the lag threshold.",
+      "quiet": "Healthy, but no orderbook activity in the last 7 days.",
+      "syncing": "Reachable and healthy, but still catching up to the chain. Turns Good once synced.",
+      "stale": "Reachable, but its health check is degraded — a real problem on that instance.",
+      "unreachable": "Couldn't be reached over the network on the last check.",
+      "mismatch": "Reachable, but its on-chain operator account doesn't match what it reports.",
+      "never": "Queued — the probe hasn't checked this instance yet."
     },
     "filter_label": "Show",
     "filter_all": "All instances",
@@ -2495,6 +2505,8 @@
     "subtitle": "Live orders from traders around the world. Pick one to start a trade.",
     "filters": {
       "heading": "Filter",
+      "collapse": "Hide filters",
+      "expand": "Show filters",
       "asset_label": "Asset",
       "asset_any": "Any",
       "payment_no_matches": "No matching payment method",

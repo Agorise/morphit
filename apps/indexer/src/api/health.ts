@@ -32,7 +32,15 @@ import { chatEventBus } from '$indexer/chatEventBus';
 // update all 10 package.json files + this constant +
 // apps/relay/src/api/health.ts VERSION + the example response
 // in docs/API.md in the same commit.
-const INDEXER_VERSION = '1.0.0-beta.13';
+const INDEXER_VERSION = '1.0.0-beta.14';
+
+// Blurt produces one block every 3 seconds. Used to translate the
+// block-lag count into a human "seconds behind" figure in the
+// /v1/health `lag_blocks_note`, so an operator eyeballing the
+// endpoint can tell at a glance whether a given lag is normal
+// (a healthy indexer trails head by only a handful of blocks —
+// network + write latency) without having to do the arithmetic.
+const BLURT_BLOCK_SECONDS = 3;
 
 export function healthRoute(
 	config: Config,
@@ -74,6 +82,16 @@ export function healthRoute(
 			chain_head_block: status.chainHeadBlock,
 			indexed_block: status.indexedBlock,
 			lag_blocks: lagBlocks,
+			// Human context for `lag_blocks` so an operator curling
+			// /v1/health knows whether the number is fine without
+			// memorising thresholds. A healthy indexer trails chain
+			// head by only a handful of blocks; we report "normal" as
+			// up to the same `staleLagThreshold` the `stale` flag uses
+			// (so the note and the flag never disagree), with the
+			// equivalent seconds-behind at Blurt's 3s block time.
+			lag_blocks_note: `0\u2013${config.staleLagThreshold} is normal (~${
+				config.staleLagThreshold * BLURT_BLOCK_SECONDS
+			}s behind; Blurt makes a block every ${BLURT_BLOCK_SECONDS}s)`,
 			stale,
 			rpc_endpoints_healthy: rpcEndpointsHealthy,
 			rpc_endpoints_total: rpcSnap.length

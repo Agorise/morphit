@@ -90,9 +90,9 @@
 		onclick={() => (open = !open)}
 		onfocus={() => (focused = true)}
 		onblur={() => (focused = false)}
-		class="flex w-full items-center gap-2 rounded-xl border-2 {focused || open
-			? 'border-morphit-emerald'
-			: 'border-ink-200 dark:border-ink-700'} bg-white px-3 py-2 text-left focus:outline-none dark:bg-ink-900"
+		class="flex w-full items-center gap-2 rounded-xl border-2 border-ink-200 dark:border-ink-700 {focused || open
+			? 'ring-2 ring-morphit-emerald'
+			: ''} bg-white px-3 py-2 text-left focus:outline-none dark:bg-ink-900"
 	>
 		{#if selected.icon}
 			<img src={selected.icon} alt="" width="20" height="20" class="h-5 w-5 shrink-0 rounded-full" />
