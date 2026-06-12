@@ -539,7 +539,7 @@
 					rows="3"
 					autocomplete="off"
 					spellcheck="false"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white p-3 font-mono text-base focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-950"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white p-3 font-mono text-base focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-950"
 				></textarea>
 				<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.seed_hint')}
@@ -564,7 +564,7 @@
 					type="password"
 					bind:value={password}
 					autocomplete="current-password"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 			</label>
 		{:else}
@@ -591,7 +591,7 @@
 					autocapitalize="none"
 					spellcheck="false"
 					placeholder={$_('onboarding.import.posting_only.account_placeholder')}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.posting_only.account_hint')}
@@ -608,7 +608,7 @@
 					autocomplete="off"
 					spellcheck="false"
 					placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.posting_only.wif_hint')}
@@ -625,7 +625,7 @@
 					type="password"
 					bind:value={postingNewPassword}
 					autocomplete="new-password"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.posting_only.new_password_hint')}
@@ -640,7 +640,7 @@
 					type="password"
 					bind:value={postingNewPasswordConfirm}
 					autocomplete="new-password"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				/>
 			</label>
 		{/if}
@@ -697,7 +697,7 @@
 							bind:value={rememberPassword}
 							autocomplete="new-password"
 							minlength="8"
-							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						/>
 						<span class="mt-1 block text-xs text-ink-500">
 							{$_('onboarding.import.remember_me.password_hint')}
@@ -723,7 +723,7 @@
 							type="password"
 							bind:value={rememberPasswordConfirm}
 							autocomplete="new-password"
-							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						/>
 					</label>
 				</div>

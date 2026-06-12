@@ -183,7 +183,7 @@
 							spellcheck="false"
 							maxlength={TAG_MAX}
 							placeholder={$_('run_a_node.register.tag_placeholder')}
-							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 font-mono focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 font-mono focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						/>
 						<p class="mt-1 text-xs text-ink-500">
 							{$_('run_a_node.register.tag_help')}
@@ -205,7 +205,7 @@
 							bind:value={displayName}
 							maxlength={DISPLAY_NAME_MAX}
 							placeholder={$_('run_a_node.register.display_name_placeholder')}
-							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						/>
 						<p class="mt-1 text-xs text-ink-500">
 							{$_('run_a_node.register.display_name_help')}
@@ -227,7 +227,7 @@
 							bind:value={contactUrl}
 							autocomplete="url"
 							placeholder="https://"
-							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 						/>
 						<p class="mt-1 text-xs text-ink-500">
 							{$_('run_a_node.register.contact_url_help')}

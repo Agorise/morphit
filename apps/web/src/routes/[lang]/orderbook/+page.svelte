@@ -27,6 +27,7 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { _ } from 'svelte-i18n';
 
 	import Head from '$components/Head.svelte';
@@ -440,6 +441,29 @@
 		}, 250);
 	}
 
+	/** Filter-card collapse.  Expanded on page load; collapses when the
+	 *  user commits a discrete filter change (frees above-the-fold space),
+	 *  and re-expands via the header toggle (the X/+ icon). */
+	let filtersExpanded = $state(true);
+	let filterCollapseArmed = false;
+	$effect(() => {
+		// Discrete selects/dropdowns.  The region TEXT input is excluded
+		// here (it collapses on its own change/blur event) so the card
+		// never folds away while the user is mid-typing.  The first run is
+		// the mount pass and must NOT collapse.
+		void side;
+		void asset;
+		void fiatList;
+		void paymentMethods;
+		void minTrades;
+		void sortMode;
+		if (!filterCollapseArmed) {
+			filterCollapseArmed = true;
+			return;
+		}
+		filtersExpanded = false;
+	});
+
 	// Re-fetch when any filter changes.
 	$effect(() => {
 		void asset;
@@ -700,9 +724,35 @@
 
 	<!-- Filters -->
 	<section class="card mb-6" aria-labelledby="filters-heading">
-		<h2 id="filters-heading" class="mb-4 font-display text-lg font-bold">
-			{$_('orderbook.filters.heading')}
-		</h2>
+		<div class="mb-4 flex items-center justify-between gap-3">
+			<h2 id="filters-heading" class="font-display text-lg font-bold">
+				{$_('orderbook.filters.heading')}
+			</h2>
+			<button
+				type="button"
+				onclick={() => (filtersExpanded = !filtersExpanded)}
+				aria-expanded={filtersExpanded}
+				aria-controls="orderbook-filters-body"
+				class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition hover:bg-emerald-50 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-ink-700"
+				title={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
+				aria-label={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
+			>
+				<svg
+					class="h-4 w-4 transition-transform duration-200 {filtersExpanded ? 'rotate-45' : ''}"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M12 5v14M5 12h14" />
+				</svg>
+			</button>
+		</div>
+		{#if filtersExpanded}
+		<div id="orderbook-filters-body" transition:slide={{ duration: 250 }}>
 		<div class="grid gap-4 sm:grid-cols-2">
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">
@@ -710,7 +760,7 @@
 				</span>
 				<select
 					bind:value={side}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value="">{$_('orderbook.filters.side_any')}</option>
 					<option value="buy">{$_('orderbook.filters.side_buy')}</option>
@@ -746,7 +796,8 @@
 					bind:value={region}
 					maxlength="128"
 					autocomplete="off"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					onchange={() => (filtersExpanded = false)}
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					placeholder={regionPlaceholder}
 				/>
 			</label>
@@ -778,7 +829,7 @@
 				</span>
 				<select
 					bind:value={minTrades}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value={0}>{$_('orderbook.filters.min_trades_any')}</option>
 					<option value={5}>{$_('orderbook.filters.min_trades_5')}</option>
@@ -795,7 +846,7 @@
 				</span>
 				<select
 					bind:value={sortMode}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value="recent">{$_('orderbook.filters.sort_recent')}</option>
 					<option value="rating">{$_('orderbook.filters.sort_rating')}</option>
@@ -827,6 +878,8 @@
 					/>
 				{/if}
 			</div>
+		{/if}
+		</div>
 		{/if}
 	</section>
 

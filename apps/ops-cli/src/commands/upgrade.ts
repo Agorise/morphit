@@ -494,6 +494,112 @@ function restartFrontendContainer(name: string): void {
 	info(`\u2713 Frontend container "${name}" restarted.`);
 }
 
+// ─── Frontend "is the new build actually served?" verification (beta14) ──
+//
+// The publish step above rebuilds + republishes the frontend, but nothing
+// confirmed the RESULT reaches browsers.  When it silently doesn't — a
+// container serving a baked-in image, a detection miss, a stale copy — the
+// new service worker never ships, so the "Load it now" update prompt never
+// fires (the recurring symptom).  This verifies the SERVED service worker's
+// build token matches the one we just built, and says exactly what's wrong
+// when it doesn't, instead of reporting a silent success.
+
+/** Extract the cache-version token (`morphit-<version>`) the service
+ *  worker pins.  SvelteKit inlines its per-build `version` into
+ *  `const CACHE = `morphit-${version}``, so this token changes every build
+ *  and is identical between the built file and what a correctly-publishing
+ *  server serves.  PURE. */
+export function parseSwCacheVersion(swSource: string): string | null {
+	const m = /morphit-([0-9A-Za-z][0-9A-Za-z._-]*)/.exec(swSource);
+	return m ? m[1]! : null;
+}
+
+export type FrontendVerifyState = 'fresh' | 'stale' | 'unknown';
+
+/** Compare the just-built SW version against the served one.  PURE. */
+export function classifyFrontendVerify(
+	builtVersion: string | null,
+	servedVersion: string | null
+): FrontendVerifyState {
+	if (builtVersion === null || servedVersion === null) return 'unknown';
+	return builtVersion === servedVersion ? 'fresh' : 'stale';
+}
+
+/** Read + parse the freshly-built service worker's version. */
+function readBuiltSwVersion(buildDir: string): string | null {
+	try {
+		const p = join(buildDir, 'service-worker.js');
+		if (!existsSync(p)) return null;
+		return parseSwCacheVersion(readFileSync(p, 'utf8'));
+	} catch {
+		return null;
+	}
+}
+
+/** The container's own bridge IP(s), so the host can fetch what the
+ *  frontend container actually serves (bypassing the public proxy/cert;
+ *  BunkerWeb has no server-side cache, so the container's bytes are what
+ *  browsers get). */
+function containerBridgeIps(name: string): string[] {
+	try {
+		const insp = spawnSync(
+			'docker',
+			['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}', name],
+			{ stdio: 'pipe', timeout: 5000, encoding: 'utf8' }
+		);
+		if (insp.status !== 0) return [];
+		return (insp.stdout ?? '')
+			.split(/\s+/)
+			.map((s) => s.trim())
+			.filter((s) => s.length > 0 && /^[0-9.]+$/.test(s));
+	} catch {
+		return [];
+	}
+}
+
+/** Fetch + parse the served service worker's version (best-effort). */
+async function fetchServedSwVersion(url: string, timeoutMs = 4000): Promise<string | null> {
+	const controller = new AbortController();
+	const t = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, { method: 'GET', signal: controller.signal, redirect: 'follow' });
+		if (!res.ok) return null;
+		return parseSwCacheVersion(await res.text());
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(t);
+	}
+}
+
+/** Resolve the served SW version for whichever publish path applied.
+ *  Bare-metal: read the copied file under webRoot.  Containerized: fetch
+ *  the just-restarted container's own :80 (with a short retry while it
+ *  comes back up).  Returns null when it can't be determined. */
+async function resolveServedSwVersion(
+	plan: { copyToWebRoot: boolean; restartContainer: string | null },
+	webRoot: string
+): Promise<string | null> {
+	if (plan.copyToWebRoot) {
+		try {
+			const p = join(webRoot, 'service-worker.js');
+			if (existsSync(p)) return parseSwCacheVersion(readFileSync(p, 'utf8'));
+		} catch {
+			// fall through to the container probe (covers "both")
+		}
+	}
+	if (plan.restartContainer) {
+		for (let attempt = 0; attempt < 5; attempt++) {
+			for (const ip of containerBridgeIps(plan.restartContainer)) {
+				const v = await fetchServedSwVersion(`http://${ip}:80/service-worker.js`);
+				if (v !== null) return v;
+			}
+			if (attempt < 4) await new Promise((r) => setTimeout(r, 1500));
+		}
+	}
+	return null;
+}
+
 
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const checkOnly = opts.flags['check-only'] === 'true';
@@ -606,7 +712,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (!forceYes) {
 		const ok = await promptYes(
 			`Apply upgrade from ${currentTag} to ${latestTag}?\n` +
-				`This will: backup ${installDir}, extract new tarball, run npm ci, rebuild + redeploy the web frontend, restart services.\n` +
+				`This will: backup ${installDir}, extract new tarball, run npm ci, rebuild + redeploy the web frontend (and verify it's actually being served), restart services.\n` +
 				`Set MORPHIT_AUTO_UPGRADE=1 to skip this prompt in future runs.`
 		);
 		if (!ok) {
@@ -929,6 +1035,51 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 	if (plan.warn) {
 		warn(plan.warn);
+	}
+
+	// ─── 9d. Verify the new frontend is actually being SERVED (beta14) ──
+	//
+	// Confirms the just-built service worker is what the live frontend
+	// serves.  When it isn't, the "Load it now" update prompt never fires
+	// for users (the recurring symptom) — so say so loudly with the
+	// specific fix, instead of reporting a silent success.  Best-effort:
+	// never fails the upgrade.
+	if (plan.copyToWebRoot || plan.restartContainer) {
+		try {
+			const builtVersion = readBuiltSwVersion(buildDir);
+			const servedVersion = await resolveServedSwVersion(plan, webRoot);
+			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
+			if (verdict === 'fresh') {
+				info(
+					`\u2713 Verified the live frontend is serving this build ` +
+						`(service worker ${builtVersion}). Returning visitors get the ` +
+						`"Load it now" update prompt within ~60s.`
+				);
+			} else if (verdict === 'stale') {
+				warn(
+					`The frontend being SERVED is still the old build (service worker ` +
+						`${servedVersion}); this upgrade built ${builtVersion}. The ` +
+						`"Load it now" update prompt will NOT appear until the served ` +
+						`build matches. ` +
+						(plan.restartContainer
+							? `Your frontend container "${plan.restartContainer}" is serving ` +
+								`a stale copy: if it bind-mounts ${buildDir}, ` +
+								`"docker restart ${plan.restartContainer}" should fix it; if ` +
+								`it BAKES the build into its image, rebuild that image so it ` +
+								`includes the new build.`
+							: `Check that ${webRoot} received the new build and that your ` +
+								`web server is not caching /service-worker.js.`)
+				);
+			} else {
+				info(
+					`(Could not auto-verify the served frontend. Check it with: ` +
+						`curl -s <your-site>/service-worker.js | grep -o 'morphit-[0-9]*' | ` +
+						`head -1 — it should match this build.)`
+				);
+			}
+		} catch {
+			// verification is best-effort; never fail the upgrade over it
+		}
 	}
 
 	// ─── 10. Restart services ──────────────────────────────────

@@ -275,7 +275,7 @@ body {
 	 * existed, so their fields fell back to the unstyled (light)
 	 * browser default — glaringly off-theme. */
 	.input {
-		@apply block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:border-morphit-emerald focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900;
+		@apply block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900;
 	}
 
 	/*

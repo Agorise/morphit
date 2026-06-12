@@ -1965,10 +1965,20 @@
     "status": {
       "good": "良好",
       "quiet": "冷清",
+      "syncing": "同步中",
       "stale": "滞后",
       "unreachable": "无法访问",
       "mismatch": "不匹配",
       "never": "等待探测"
+    },
+    "status_desc": {
+      "good": "可访问、健康，并已在延迟阈值内完成同步。",
+      "quiet": "健康，但过去 7 天订单簿没有活动。",
+      "syncing": "可访问且健康，但仍在追赶链。同步完成后会变为「良好」。",
+      "stale": "可访问，但其健康检查已降级——该实例存在实际问题。",
+      "unreachable": "上次检查时无法通过网络访问。",
+      "mismatch": "可访问，但其链上运营者账户与所声明的不一致。",
+      "never": "排队中：探测尚未检查此实例。"
     },
     "filter_label": "显示",
     "filter_all": "所有实例",
@@ -2495,6 +2505,8 @@
     "subtitle": "来自世界各地交易者的实时订单。挑一个开始交易。",
     "filters": {
       "heading": "筛选",
+      "collapse": "隐藏筛选",
+      "expand": "显示筛选",
       "asset_label": "资产",
       "asset_any": "全部",
       "payment_no_matches": "没有匹配的支付方式",

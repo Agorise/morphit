@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Dobry",
       "quiet": "Cichy",
+      "syncing": "Synchronizacja",
       "stale": "Przeterminowany",
       "unreachable": "Nieosiągalny",
       "mismatch": "Niezgodność",
       "never": "Oczekuje sprawdzenia"
+    },
+    "status_desc": {
+      "good": "Osiągalna, sprawna i zsynchronizowana w granicach progu opóźnienia.",
+      "quiet": "Sprawna, ale brak aktywności w księdze zleceń przez ostatnie 7 dni.",
+      "syncing": "Osiągalna i sprawna, ale wciąż nadrabia zaległości łańcucha. Zmieni się na „Dobra“ po zsynchronizowaniu.",
+      "stale": "Osiągalna, ale jej kontrola stanu jest pogorszona — realny problem na tej instancji.",
+      "unreachable": "Nieosiągalna w sieci podczas ostatniego sprawdzenia.",
+      "mismatch": "Osiągalna, ale jej konto operatora w łańcuchu nie zgadza się z deklarowanym.",
+      "never": "W kolejce: sonda jeszcze nie sprawdziła tej instancji."
     },
     "filter_label": "Pokaż",
     "filter_all": "Wszystkie instancje",
@@ -2495,6 +2505,8 @@
     "subtitle": "Zlecenia na żywo od traderów z całego świata. Wybierz jedno, aby rozpocząć wymianę.",
     "filters": {
       "heading": "Filtr",
+      "collapse": "Ukryj filtry",
+      "expand": "Pokaż filtry",
       "asset_label": "Aktywo",
       "asset_any": "Dowolne",
       "payment_no_matches": "Brak pasującej metody płatności",

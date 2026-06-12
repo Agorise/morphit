@@ -92,6 +92,7 @@ const HealthSchema = z.object({
 	chain_head_block: z.number(),
 	indexed_block: z.number(),
 	lag_blocks: z.number(),
+	lag_blocks_note: z.string().optional(),
 	stale: z.boolean()
 });
 

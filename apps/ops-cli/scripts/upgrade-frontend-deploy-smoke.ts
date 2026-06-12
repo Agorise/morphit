@@ -45,7 +45,9 @@ import {
 	planFrontendDeploy,
 	normalizeMountPath,
 	parseMountSources,
-	containerMountsBuildDir
+	containerMountsBuildDir,
+	parseSwCacheVersion,
+	classifyFrontendVerify
 } from '../src/commands/upgrade.ts';
 
 let pass = 0;
@@ -407,6 +409,28 @@ function tmp(prefix: string): string {
 			`oldSkipText=${oldSkipText} buildGatedBehindWebRoot=${buildGatedBehindWebRoot}`
 		);
 	}
+}
+
+// ─── FD-21/22: served-frontend freshness verification (beta14) ──────
+{
+	// parseSwCacheVersion: pull the morphit-<version> token a built SW pins.
+	const builtSw = 'const CACHE = "morphit-1718141234567";\nself.addEventListener("install", () => {});';
+	const v = parseSwCacheVersion(builtSw);
+	if (v === '1718141234567') ok('FD-21a parseSwCacheVersion extracts the build token');
+	else bad('FD-21a', `got ${v}`);
+
+	if (parseSwCacheVersion('no token here') === null) ok('FD-21b parseSwCacheVersion returns null when absent');
+	else bad('FD-21b', 'expected null');
+
+	// classifyFrontendVerify: fresh / stale / unknown.
+	if (classifyFrontendVerify('abc', 'abc') === 'fresh') ok('FD-22a equal versions → fresh (snackbar will fire)');
+	else bad('FD-22a');
+	if (classifyFrontendVerify('newbuild', 'oldbuild') === 'stale')
+		ok('FD-22b served ≠ built → stale (snackbar blocked, warn)');
+	else bad('FD-22b');
+	if (classifyFrontendVerify(null, 'x') === 'unknown' && classifyFrontendVerify('x', null) === 'unknown')
+		ok('FD-22c either version unknown → unknown (best-effort note)');
+	else bad('FD-22c');
 }
 
 console.log('');

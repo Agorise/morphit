@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	/**
 	 * Profile page — /@{account}
 	 *
@@ -388,16 +389,10 @@
 	}
 
 	/** Sally finding L10 (Part 68): absolute expiry date formatter
-	 *  for the order chip's `title` tooltip.  Locale-aware via
-	 *  toLocaleString — translators get free locale-correct dates
-	 *  without us having to do anything.  Falls through to the raw
-	 *  ISO string if Date construction fails (defense in depth). */
+	 *  for the order chip's `title` tooltip.  Uses the project's
+	 *  canonical translated day-month-year-time format. */
 	function formatAbsoluteDate(iso: string): string {
-		try {
-			return new Date(iso).toLocaleString();
-		} catch {
-			return iso;
-		}
+		return formatDayMonthTime(iso);
 	}
 
 	function starString(n: 1 | 2 | 3 | 4 | 5): string {

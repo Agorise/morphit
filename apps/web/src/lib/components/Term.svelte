@@ -94,13 +94,87 @@
 
 	let open = $state(false);
 	let triggerEl: HTMLButtonElement | undefined = $state(undefined);
+	let popoverEl: HTMLElement | undefined = $state(undefined);
+	// Computed fixed-position style (flip + viewport clamp); `positioned`
+	// keeps the popover invisible for the one measure frame so it never
+	// paints at its pre-measured spot.
+	let popStyle = $state('position: fixed;');
+	let positioned = $state(false);
 
+	// Hover-bridge: a brief close delay so moving the pointer from the
+	// trigger into the popover (across the small gap) doesn't close it
+	// before the user can click the "open glossary" link.  Entering
+	// either the trigger or the popover cancels the pending close.
+	let closeTimer: ReturnType<typeof setTimeout> | null = null;
+	function cancelClose(): void {
+		if (closeTimer) {
+			clearTimeout(closeTimer);
+			closeTimer = null;
+		}
+	}
 	function openTooltip(): void {
+		cancelClose();
 		open = true;
 	}
+	function scheduleClose(): void {
+		cancelClose();
+		closeTimer = setTimeout(() => {
+			open = false;
+			closeTimer = null;
+		}, 140);
+	}
 	function closeTooltip(): void {
+		cancelClose();
 		open = false;
 	}
+
+	// Place the popover in viewport coordinates: prefer above, flip
+	// below when there isn't room (the first-paragraph terms sit near
+	// the top of the page, so a fixed "above" placement ran off the top
+	// of the screen), and clamp horizontally so an edge-of-line word's
+	// popover stays fully on-screen.  `position: fixed` also escapes any
+	// ancestor that would clip it.
+	function reposition(): void {
+		if (!triggerEl || !popoverEl) return;
+		const t = triggerEl.getBoundingClientRect();
+		const p = popoverEl.getBoundingClientRect();
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
+		const gap = 8;
+		const margin = 8;
+		let left = t.left + t.width / 2 - p.width / 2;
+		left = Math.max(margin, Math.min(left, vw - p.width - margin));
+		const roomAbove = t.top;
+		const roomBelow = vh - t.bottom;
+		let top: number;
+		if (roomAbove >= p.height + gap || roomAbove >= roomBelow) {
+			top = t.top - p.height - gap;
+		} else {
+			top = t.bottom + gap;
+		}
+		top = Math.max(margin, Math.min(top, vh - p.height - margin));
+		popStyle = `position: fixed; left: ${Math.round(left)}px; top: ${Math.round(top)}px; right: auto; bottom: auto; margin: 0; transform: none;`;
+		positioned = true;
+	}
+
+	$effect(() => {
+		if (!open) {
+			positioned = false;
+			return;
+		}
+		// Measure after the popover has rendered; keep it pinned to the
+		// trigger if the page scrolls or the window resizes while open.
+		const raf = requestAnimationFrame(reposition);
+		const onMove = (): void => reposition();
+		window.addEventListener('scroll', onMove, true);
+		window.addEventListener('resize', onMove);
+		return () => {
+			cancelAnimationFrame(raf);
+			window.removeEventListener('scroll', onMove, true);
+			window.removeEventListener('resize', onMove);
+		};
+	});
+
 	function onKeyDown(e: KeyboardEvent): void {
 		if (e.key === 'Escape' && open) {
 			e.preventDefault();
@@ -137,6 +211,7 @@
 	});
 
 	onDestroy(() => {
+		cancelClose();
 		if (docClickHandler) {
 			document.removeEventListener('click', docClickHandler);
 			docClickHandler = null;
@@ -159,9 +234,9 @@
 			aria-describedby={open ? popoverId : undefined}
 			aria-expanded={open}
 			onmouseenter={openTooltip}
-			onmouseleave={closeTooltip}
+			onmouseleave={scheduleClose}
 			onfocus={openTooltip}
-			onblur={closeTooltip}
+			onblur={scheduleClose}
 			onclick={(e) => {
 				// On click (mobile / keyboard activation), toggle.
 				// Don't navigate — the popover's deep-link is the
@@ -176,9 +251,13 @@
 
 		{#if open}
 			<span
+				bind:this={popoverEl}
 				id={popoverId}
 				role="tooltip"
-				class="absolute bottom-full left-1/2 z-40 mb-2 w-64 max-w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-ink-200 bg-white p-3 text-sm shadow-morphit-card dark:border-ink-700 dark:bg-ink-900"
+				style={popStyle}
+				class="z-50 w-64 max-w-[min(16rem,calc(100vw-2rem))] rounded-xl border border-ink-200 bg-white p-3 text-sm shadow-morphit-card dark:border-ink-700 dark:bg-ink-900{positioned ? '' : ' invisible'}"
+				onmouseenter={openTooltip}
+				onmouseleave={scheduleClose}
 			>
 				<span class="block font-display text-base font-bold text-ink-900 dark:text-ink-50">
 					{$_(`glossary.${key}.title`)}
@@ -187,8 +266,10 @@
 					{$_(`glossary.${key}.body`)}
 				</span>
 				<a
-					href={lp('/glossary#{key}')}
+					href={lp(`/glossary#${key}`)}
 					class="mt-2 inline-block text-sm font-semibold text-morphit-emerald hover:underline"
+					onfocus={cancelClose}
+					onblur={scheduleClose}
 				>
 					{$_('glossary.tooltip.open_full')} →
 				</a>

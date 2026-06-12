@@ -9,6 +9,7 @@
 	import { getInstances } from '$indexer/client';
 	import { instance } from '$stores/instance';
 	import { safeContactUrl, safeInstanceOrigin } from '$lib/utils/safeContactUrl';
+	import { formatDayMonth, formatDayMonthTime } from '$i18n/formatters';
 	import type { InstanceDirectoryEntry, InstanceProbeStatus } from '@morphit/indexer-client';
 
 	// Map keyed by origin so SSE diffs can apply in O(1).  Filter
@@ -166,10 +167,11 @@
 	const STATUS_RANK: Record<InstanceProbeStatus, number> = {
 		good: 1,
 		quiet: 2,
-		stale: 3,
-		mismatch: 4,
-		unreachable: 5,
-		never: 6
+		syncing: 3,
+		stale: 4,
+		mismatch: 5,
+		unreachable: 6,
+		never: 7
 	};
 	const filtered = $derived.by(() => {
 		const arr = Array.from(entries.values());
@@ -185,8 +187,8 @@
 			const bIsCurrent = b.operator_account === $instance.relay_account;
 			if (aIsCurrent && !bIsCurrent) return -1;
 			if (!aIsCurrent && bIsCurrent) return 1;
-			const sa = STATUS_RANK[a.status as InstanceProbeStatus] ?? 7;
-			const sb = STATUS_RANK[b.status as InstanceProbeStatus] ?? 7;
+			const sa = STATUS_RANK[a.status as InstanceProbeStatus] ?? 8;
+			const sb = STATUS_RANK[b.status as InstanceProbeStatus] ?? 8;
 			if (sa !== sb) return sa - sb;
 			// Newer registrations first.
 			return b.registered_at.localeCompare(a.registered_at);
@@ -197,12 +199,20 @@
 		return $_(`instances.status.${status}`);
 	}
 
+	/** Brief plain-language explanation of a status, shown in the
+	 *  pill's hover tooltip (cursor turns to a question mark). */
+	function statusDescription(status: InstanceProbeStatus): string {
+		return $_(`instances.status_desc.${status}`);
+	}
+
 	function statusClass(status: InstanceProbeStatus): string {
 		switch (status) {
 			case 'good':
 				return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30';
 			case 'quiet':
 				return 'bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500/30';
+			case 'syncing':
+				return 'bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/30';
 			case 'stale':
 			case 'mismatch':
 				return 'bg-orange-500/15 text-orange-800 dark:text-orange-200 ring-1 ring-orange-500/30';
@@ -213,30 +223,6 @@
 			default:
 				return 'bg-ink-500/15 text-ink-700 dark:text-ink-200 ring-1 ring-ink-500/30';
 		}
-	}
-
-	function formatDate(iso: string | null): string {
-		if (iso === null) return $_('instances.never_probed');
-		try {
-			const d = new Date(iso);
-			return d.toLocaleString();
-		} catch {
-			return iso;
-		}
-	}
-
-	/**
-	 * Registration date, rendered "18 April, 2026". Guards against an
-	 * unset / epoch-0 `registered_at` (which would otherwise render as
-	 * "12/31/1969") — if the value is missing, unparseable, or clearly
-	 * pre-dates the project, we show an em-dash rather than a bogus 1969.
-	 */
-	function formatRegisteredDate(iso: string | null): string {
-		if (iso === null || iso === '') return '—';
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return '—';
-		const month = d.toLocaleDateString(undefined, { month: 'long' });
-		return `${d.getDate()} ${month}, ${d.getFullYear()}`;
 	}
 
 	function effectiveName(entry: InstanceDirectoryEntry): string {
@@ -279,6 +265,7 @@
 				<option value="">{$_('instances.filter_all')}</option>
 				<option value="good">{$_('instances.status.good')}</option>
 				<option value="quiet">{$_('instances.status.quiet')}</option>
+				<option value="syncing">{$_('instances.status.syncing')}</option>
 				<option value="stale">{$_('instances.status.stale')}</option>
 				<option value="unreachable">{$_('instances.status.unreachable')}</option>
 				<option value="mismatch">{$_('instances.status.mismatch')}</option>
@@ -299,7 +286,7 @@
 	{:else}
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-500">
 			<p>
-				{$_('instances.last_updated', { values: { date: formatDate(directoryUpdatedAt) } })}
+				{$_('instances.last_updated', { values: { date: formatDayMonthTime(directoryUpdatedAt) } })}
 			</p>
 			{#if streaming}
 				<span class="inline-flex items-center gap-1.5">
@@ -364,9 +351,10 @@
 									<p class="text-xs text-ink-500">{inst.origin}</p>
 								</div>
 								<span
-									class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {statusClass(
+									class="inline-flex cursor-help items-center rounded-full px-2.5 py-1 text-xs font-medium {statusClass(
 										inst.status
 									)}"
+									title={statusDescription(inst.status)}
 								>
 									{statusLabel(inst.status)}
 								</span>
@@ -380,7 +368,7 @@
 								<dt>{$_('instances.operator_label')}</dt>
 								<dd class="font-mono text-ink-700 dark:text-ink-200">@{inst.operator_account}</dd>
 								<dt>{$_('instances.registered_label')}</dt>
-								<dd>{formatRegisteredDate(inst.registered_at)}</dd>
+								<dd>{formatDayMonth(inst.registered_at)}</dd>
 								<dt>{$_('instances.last_probed_label')}</dt>
 								<dd>
 									{#if inst.last_probed_at}

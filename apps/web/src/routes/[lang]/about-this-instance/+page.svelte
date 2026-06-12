@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	/**
 	 * /about-this-instance
 	 *
@@ -85,14 +86,7 @@
 	/** Human-readable built-at. */
 	const builtAtHuman = $derived.by(() => {
 		if (!verify) return '';
-		try {
-			return new Date(verify.built_at).toLocaleString(undefined, {
-				dateStyle: 'medium',
-				timeStyle: 'short'
-			});
-		} catch {
-			return verify.built_at;
-		}
+		return formatDayMonthTime(verify.built_at);
 	});
 
 	/** Aggregate hash: SHA-256 of the manifest JSON itself.

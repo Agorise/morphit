@@ -13,9 +13,9 @@ sudo -u morphit npx morphit-ops upgrade
 
 That command checks for a new release, shows you the notes, asks
 for confirmation, backs up your current install, applies the new
-tarball, runs `npm ci`, rebuilds and redeploys the web frontend,
-and restarts services. If anything fails,
-it rolls back automatically.
+tarball, runs `npm ci`, rebuilds and redeploys the web frontend
+(then verifies it's actually being served), and restarts services.
+If anything fails, it rolls back automatically.
 
 The rest of this doc covers the details: how the trust chain
 works, the manual procedure (for operators who prefer to apply
@@ -226,6 +226,24 @@ Steps the command takes, in order:
     > stacks (a different container name, or no compose file on the host);
     > mount-based detection handles them, so an operator running a
     > bespoke reverse-proxy stack gets the new build without manual steps.
+9c. **Verifies the new frontend is actually being served (beta.14).**
+    Publishing the build and *serving* it are two different things — a
+    frontend container that bakes the build into its image (rather than
+    bind-mounting it), or any other publish gap, would leave the old site
+    live and the "Load it now" update prompt would never fire. So after
+    publishing, the upgrade reads the service-worker version it just built
+    and compares it to what the live frontend actually serves (the copied
+    file for bare-metal; the container's own port for a Docker frontend,
+    with a short retry while it restarts). It then tells you plainly:
+    - **fresh** → "Verified the live frontend is serving this build …
+      Returning visitors get the 'Load it now' update prompt within ~60s."
+    - **stale** → a loud warning naming the served-vs-built versions and
+      the specific fix (e.g. your container bakes the build in — rebuild
+      its image, or switch it to bind-mount `<install>/apps/web/build`).
+    - **can't tell** → a one-line note with the manual `curl` to check.
+
+    This check is best-effort and never fails the upgrade; it exists so a
+    silent publish failure becomes a visible, actionable one.
 10. Restarts these systemd services if they're active:
     - `morphit-indexer.service`
     - `morphit-relay.service`

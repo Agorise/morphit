@@ -104,9 +104,9 @@
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
-		class="flex flex-wrap items-center gap-1 rounded-xl border-2 {focused || open
-			? 'border-morphit-emerald'
-			: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1.5 dark:bg-ink-900"
+		class="flex flex-wrap items-center gap-1 rounded-xl border-2 border-ink-200 dark:border-ink-700 {focused || open
+			? 'ring-2 ring-morphit-emerald'
+			: ''} bg-white px-2 py-1.5 dark:bg-ink-900"
 	>
 		{#each value as key (key)}
 			<span
@@ -138,7 +138,7 @@
 			}}
 			onkeydown={onKeydown}
 			placeholder={value.length ? '' : $_('orderbook.filters.payment_methods_placeholder')}
-			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none"
+			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-0"
 		/>
 	</div>
 

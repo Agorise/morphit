@@ -497,11 +497,14 @@ curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
   | jq '.diagnostics.price'
 ```
 
-> **If your indexer does not bind loopback:** the `morphit-ops health`
-> view (menu item 13) defaults to `127.0.0.1:8081`. Container/Docker
-> deployments commonly bind the bridge gateway instead (e.g.
-> `172.18.0.1`), so pass `--url http://<bridge-ip>:8081/v1/health`. This
-> read-only view never needs sudo.
+> **If your indexer does not bind loopback:** `morphit-ops health`
+> tries `127.0.0.1:8081` first and then auto-probes your host's own
+> bridge-gateway addresses (docker0 / br-*), so a container deployment
+> that binds the bridge gateway (e.g. `172.18.0.1`) so its frontend
+> container can reach it is found automatically — no flag needed. If
+> it still can't reach it (an unusual bind address), pass
+> `--url http://<host>:8081/v1/health` or set `MORPHIT_OPS_HEALTH_URL`.
+> This read-only view never needs sudo.
 
 When the optional price feed is enabled, `diagnostics.price` carries
 `enabled`, `blurt_usd`, `source`, `updated_at`, `stale`, plus three
@@ -567,16 +570,37 @@ with growing `lag_blocks` is normal during the initial
 back-fill.
 
 > **Friendlier: `morphit-ops health`.** Rather than curling and
-> reading JSON, `morphit-ops health` (menu: "4. Check & operate" →
-> "Is the indexer caught up? (health)") hits the same `/v1/health`
-> endpoint and prints a one-line verdict — **synced**, **behind**
-> (with the lag in blocks), or **unreachable** — alongside the
-> healthy/total RPC count. It resolves the URL from `--url`, then
-> `MORPHIT_OPS_HEALTH_URL`, then `--host`/`--port` (or the indexer's
-> own `MORPHIT_INDEXER_LISTEN_HOST`/`_PORT`), defaulting to
-> `http://127.0.0.1:8081/v1/health`. Exit code is `0` when synced,
-> `1` when reachable-but-behind, and `2` when it can't reach a real
-> indexer — so it drops straight into a cron health-check.
+> reading JSON, `morphit-ops health` (menu: "Check & operate" →
+> "Node health — indexer, relay, services, canary") gives one
+> consolidated view of the whole node:
+> - **Indexer** and **Relay** — each hits its own `/v1/health` and
+>   prints synced/behind (with the lag in blocks) or unreachable,
+>   plus version, uptime, and the healthy/total RPC count. Both
+>   auto-probe the bridge gateway if loopback doesn't answer (see the
+>   note above). The relay is reported as optional.
+> - **Services** — the read-only `systemctl` active-state of
+>   `morphit-matrix-bot` and `morphit-mcp`. (The MCP server speaks the
+>   MCP stdio protocol, so there is no HTTP health endpoint to curl —
+>   the systemd service state is the signal that it's up.)
+> - **Canary** — whether `apps/web/static/canary.txt` is current
+>   (parsed from its `Valid through:` line) or overdue for its weekly
+>   regeneration.
+>
+> It resolves the indexer URL from `--url`, then `MORPHIT_OPS_HEALTH_URL`,
+> then `--host`/`--port` (or the indexer's own
+> `MORPHIT_INDEXER_LISTEN_HOST`/`_PORT`), defaulting to
+> `http://127.0.0.1:8081/v1/health`. It needs no config or DB, so it
+> works as the unprivileged `morphit` user even when the `status`
+> dashboard would EACCES. Exit code is `0` synced / `1`
+> reachable-but-behind / `2` indexer-unreachable, so it drops into a
+> cron health-check.
+>
+> The service and canary checks by hand (also read-only, no sudo):
+>
+> ```
+> systemctl is-active morphit-matrix-bot      # or morphit-mcp, morphit-relay
+> grep '^Valid through:' apps/web/static/canary.txt   # compare to today's date
+> ```
 
 For deep triage, verbose mode adds per-endpoint detail:
 
@@ -5445,7 +5469,7 @@ The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operat
 
 **Canonical topology (what `ops/bunkerweb/` ships):** `client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)`. BunkerWeb is the only public entry — it terminates TLS, runs the WAF + rate limits, sets the real client IP, then proxies EVERY path (a single `REVERSE_PROXY_HOST=http://frontend:80`) to a lightweight `frontend` nginx container. That container serves the built SvelteKit site for page routes AND reverse-proxies the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream` paths) to the relay + indexer on the host — its routing mirrors `ops/nginx/web.conf` minus the TLS + security headers BunkerWeb owns (see `ops/bunkerweb/frontend/nginx.conf`). Doing all the static-serving + SPA fallback + per-path proxy + SSE in one nginx is far easier to get right than expressing it in BunkerWeb env vars. The relay + indexer therefore bind on an address the Docker bridge can reach (NOT loopback-only — a `127.0.0.1` bind is unreachable from the `frontend` container and every proxied call 502s); UFW's default-deny keeps the public out and the `bunkerweb` role adds an allow for the `172.20.0.0/16` bridge CIDR only. The illustrative BunkerWeb env-var snippets further down show BunkerWeb's setting shapes; the authoritative morphit config is `ops/bunkerweb/` + its `README.md`.
 
-> **Checking status — or installing it the easy way:** `morphit-ops bunkerweb` (menu: "3. Secure the server" → "Web firewall (BunkerWeb): install / status") inspects whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy. If they already are — or if you pass `--json`, or run it non-interactively (no TTY) — it is **read-only**: it reports status and prints the bring-up commands, nothing more. If BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
+> **Checking status — or installing it the easy way:** `morphit-ops bunkerweb` (menu: "Secure the server" → "Web firewall (BunkerWeb): install / status") inspects whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy. If they already are — or if you pass `--json`, or run it non-interactively (no TTY) — it is **read-only**: it reports status and prints the bring-up commands, nothing more. If BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
 Reasons you might NOT want BunkerWeb:
 
@@ -6315,7 +6339,7 @@ not replayed from an old copy.
 
    # Optional — sensible defaults are used if you omit these:
    # export MORPHIT_CANARY_BLURT_RPC="https://rpc.blurt.blog"
-   # export MORPHIT_CANARY_NEWS_RSS="https://feeds.bbci.co.uk/news/rss.xml"
+   # export MORPHIT_CANARY_NEWS_RSS="https://cointelegraph.com/rss"
    ```
 
    **No Blurt private key sits on the box for the canary** — the
@@ -6389,7 +6413,7 @@ The generator fetches three external resources WHEN THE CRON RUNS
   Blurt RPC works; use your own if you prefer),
 - blockstream.info for the Bitcoin chain head (currently
   hardcoded; file an issue if you need your own bitcoind),
-- an RSS feed for news entropy (default BBC — choose any
+- an RSS feed for news entropy (default Cointelegraph — choose any
   high-frequency public feed you trust).
 
 Users who fetch /canary.txt only hit your own static file, so the

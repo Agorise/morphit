@@ -16,6 +16,7 @@
 
 import {
 	probeOne,
+	selfReachableStatus,
 	_setDnsResolverForTesting,
 	type KnownInstanceRow,
 	type ProbeStatus
@@ -271,22 +272,27 @@ await scenario('/v1/health malformed → stale', async () => {
 	assertEqual(out.status, 'stale' as ProbeStatus, 'status');
 });
 
-await scenario('chain lag > 30 blocks → stale', async () => {
+await scenario('chain lag > 30 blocks (reachable, health ok) → syncing', async () => {
 	stubRoutes({
 		'https://test.example/v1/instance': { json: goodInstance() },
 		'https://test.example/v1/health': { json: goodHealth(50) } // 50 blocks * 3s = 150s
 	});
 	const out = await probeOne(makeRow({}));
-	assertEqual(out.status, 'stale' as ProbeStatus, 'status');
+	// Reachable + health 'ok' but behind = catching up, not broken.
+	assertEqual(out.status, 'syncing' as ProbeStatus, 'status');
+	// Snapshot is cached like a healthy probe (instance data is valid).
+	assertEqual(out.cachedName, 'test-instance', 'name');
+	assertEqual(out.cachedIndexedBlock, 99_950, 'indexed_block'); // 100_000 - 50
+	assertEqual(out.cachedChainLagSec, 150, 'chain_lag_sec'); // 50 blocks * 3s
 });
 
-await scenario('chain lag exactly 30 blocks → stale (90s, threshold is < 90)', async () => {
+await scenario('chain lag 31 blocks = 93s (just over threshold) → syncing', async () => {
 	stubRoutes({
 		'https://test.example/v1/instance': { json: goodInstance() },
-		'https://test.example/v1/health': { json: goodHealth(31) } // 93s lag
+		'https://test.example/v1/health': { json: goodHealth(31) } // 93s lag > 90s threshold
 	});
 	const out = await probeOne(makeRow({}));
-	assertEqual(out.status, 'stale' as ProbeStatus, 'status');
+	assertEqual(out.status, 'syncing' as ProbeStatus, 'status');
 });
 
 await scenario('chain lag at boundary (29 blocks = 87s) → still good', async () => {
@@ -298,6 +304,39 @@ await scenario('chain lag at boundary (29 blocks = 87s) → still good', async (
 	});
 	const out = await probeOne(makeRow({ registered_at_time: justRegistered }));
 	assertEqual(out.status, 'good' as ProbeStatus, 'status');
+});
+
+// ─── Self-reachable status (own-instance hairpin path) ───────────
+//
+// We can't network-probe our own public URL, so the scheduler marks
+// the self row reachable locally — but it reads our OWN chain lag to
+// distinguish 'good' (current) from 'syncing' (still catching up).
+// This is Ken's exact scenario: our row showed a misleading status
+// during initial sync; it should read 'syncing' until caught up.
+
+await scenario('self-reachable: null lag (poller not running) → good', async () => {
+	assertEqual(selfReachableStatus(null), 'good' as ProbeStatus, 'null-lag self status');
+});
+
+await scenario('self-reachable: 0 blocks behind → good', async () => {
+	assertEqual(selfReachableStatus(0), 'good' as ProbeStatus, 'caught-up self status');
+});
+
+await scenario('self-reachable: 10 blocks behind (30s) → good', async () => {
+	assertEqual(selfReachableStatus(10), 'good' as ProbeStatus, 'small-lag self status');
+});
+
+await scenario('self-reachable: 30 blocks = 90s (at threshold) → good', async () => {
+	// 90s is NOT > 90s, so still good — matches the peer-probe boundary.
+	assertEqual(selfReachableStatus(30), 'good' as ProbeStatus, 'boundary self status');
+});
+
+await scenario('self-reachable: 31 blocks = 93s (just over) → syncing', async () => {
+	assertEqual(selfReachableStatus(31), 'syncing' as ProbeStatus, 'just-behind self status');
+});
+
+await scenario('self-reachable: huge lag (initial sync) → syncing', async () => {
+	assertEqual(selfReachableStatus(2_000_000), 'syncing' as ProbeStatus, 'initial-sync self status');
 });
 
 // ─── Cleanup ─────────────────────────────────────────────────────

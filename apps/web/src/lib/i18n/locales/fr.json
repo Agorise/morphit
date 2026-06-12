@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Bon",
       "quiet": "Calme",
+      "syncing": "Synchronisation",
       "stale": "Obsolète",
       "unreachable": "Inaccessible",
       "mismatch": "Incohérence",
       "never": "En attente de vérification"
+    },
+    "status_desc": {
+      "good": "Accessible, en bonne santé et synchronisée dans la limite de retard.",
+      "quiet": "En bonne santé, mais aucune activité du carnet d'ordres depuis 7 jours.",
+      "syncing": "Accessible et en bonne santé, mais encore en train de rattraper la chaîne. Passera à « Bon » une fois synchronisée.",
+      "stale": "Accessible, mais son contrôle de santé est dégradé — un vrai problème sur cette instance.",
+      "unreachable": "Injoignable sur le réseau lors de la dernière vérification.",
+      "mismatch": "Accessible, mais son compte opérateur sur la chaîne ne correspond pas à ce qu'elle annonce.",
+      "never": "En file d'attente : la sonde n'a pas encore vérifié cette instance."
     },
     "filter_label": "Afficher",
     "filter_all": "Toutes les instances",
@@ -2495,6 +2505,8 @@
     "subtitle": "Ordres en direct de traders du monde entier. Choisissez-en un pour lancer une transaction.",
     "filters": {
       "heading": "Filtrer",
+      "collapse": "Masquer les filtres",
+      "expand": "Afficher les filtres",
       "asset_label": "Actif",
       "asset_any": "Peu importe",
       "payment_no_matches": "Aucun moyen de paiement correspondant",

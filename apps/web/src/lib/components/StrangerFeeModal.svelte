@@ -333,7 +333,7 @@
 							void onConfirm();
 						}
 					}}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
+					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
 					placeholder={$_('chat.stranger_fee.password_placeholder') as string}
 				/>
 				{#if passwordError}

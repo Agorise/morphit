@@ -48,6 +48,7 @@
 	 */
 	import { onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import { formatDayMonthTime } from '$i18n/formatters';
 
 	interface Props {
 		/** ISO 8601 timestamp string. */
@@ -77,16 +78,11 @@
 	const then = $derived(new Date(iso).getTime());
 	const valid = $derived(Number.isFinite(then));
 
-	// Absolute display for the title tooltip — locale-aware
-	// rendering through the browser's Intl machinery. Falls back
-	// to the raw iso if Intl chokes (very old browsers).
+	// Absolute display for the title tooltip — the project's
+	// canonical translated day-month-year-time format.
 	const absTitle = $derived.by(() => {
 		if (!valid) return '';
-		try {
-			return new Date(iso).toLocaleString();
-		} catch {
-			return iso;
-		}
+		return formatDayMonthTime(iso);
 	});
 
 	const label = $derived.by(() => {

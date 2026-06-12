@@ -239,7 +239,7 @@
 		{placeholder}
 		{disabled}
 		aria-label={ariaLabel}
-		class="pk-textarea w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+		class="pk-textarea w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 	></textarea>
 
 	<!-- Inline character counter. Absolute-positioned bottom-right

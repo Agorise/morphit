@@ -22,7 +22,7 @@
 #   $MORPHIT_CANARY_BLURT_RPC      — Blurt RPC URL for chain-head
 #                                    fetch (default: https://rpc.blurt.blog).
 #   $MORPHIT_CANARY_NEWS_RSS       — RSS feed URL for news entropy
-#                                    (default: https://feeds.bbci.co.uk/news/rss.xml,
+#                                    (default: https://cointelegraph.com/rss,
 #                                    operator should pick a
 #                                    high-frequency public feed
 #                                    they trust).
@@ -56,7 +56,7 @@ required MORPHIT_CANARY_INSTANCE_ORIGIN
 required MORPHIT_CANARY_OPERATOR_ACCOUNT
 
 BLURT_RPC="${MORPHIT_CANARY_BLURT_RPC:-https://rpc.blurt.blog}"
-NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://feeds.bbci.co.uk/news/rss.xml}"
+NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://cointelegraph.com/rss}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TEMPLATE="$REPO_ROOT/apps/web/static/canary.txt.template"

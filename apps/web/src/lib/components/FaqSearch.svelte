@@ -256,7 +256,7 @@
 				aria-autocomplete="list"
 				autocomplete="off"
 				placeholder={$_('faq.search_placeholder')}
-				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 			/>
 		</div>
 

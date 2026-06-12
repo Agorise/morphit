@@ -1965,10 +1965,20 @@
     "status": {
       "good": "Bueno",
       "quiet": "Sin actividad",
+      "syncing": "Sincronizando",
       "stale": "Obsoleto",
       "unreachable": "Inalcanzable",
       "mismatch": "Discrepancia",
       "never": "Prueba pendiente"
+    },
+    "status_desc": {
+      "good": "Accesible, en buen estado y sincronizado dentro del umbral de retraso.",
+      "quiet": "En buen estado, pero sin actividad en el libro de órdenes en los últimos 7 días.",
+      "syncing": "Accesible y en buen estado, pero aún poniéndose al día con la cadena. Pasará a «Bueno» cuando se sincronice.",
+      "stale": "Accesible, pero su comprobación de estado está degradada: un problema real en esa instancia.",
+      "unreachable": "No se pudo contactar por la red en la última comprobación.",
+      "mismatch": "Accesible, pero su cuenta de operador en la cadena no coincide con lo que declara.",
+      "never": "En cola: la sonda aún no ha comprobado esta instancia."
     },
     "filter_label": "Mostrar",
     "filter_all": "Todas las instancias",
@@ -2495,6 +2505,8 @@
     "subtitle": "Órdenes en vivo de traders de todo el mundo. Elige una para iniciar un intercambio.",
     "filters": {
       "heading": "Filtrar",
+      "collapse": "Ocultar filtros",
+      "expand": "Mostrar filtros",
       "asset_label": "Activo",
       "asset_any": "Cualquiera",
       "payment_no_matches": "Ningún método de pago coincide",

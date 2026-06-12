@@ -292,7 +292,7 @@
 											void verifyAndShowSeed();
 										}
 									}}
-									class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+									class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 								/>
 							</label>
 							<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">

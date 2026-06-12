@@ -28,7 +28,7 @@
  *   So-2  ops-cli main.ts JSDoc lists all 14 subcommands
  *   So-3  verbose-health env-opt-in callouts (3 docs)
  *   So-4  init.ts JSDoc step-count disclaimer
- *   So-6  systemd install-path override callout (beta12 — drop-in for ~/morphit)
+ *   So-6  systemd install uses the path-aware installer (beta14 — retires the ~/morphit drop-in)
  *
  * Plus several drift-catchers added during the Part 119 docs
  * audit pass that aren't tied to a persona but matter equally:
@@ -458,16 +458,22 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['Nine ELI5-style configuration prompts']
 	},
 	{
-		name: 'So-6 — RUN-A-MORPHIT-NODE.md systemd install-path override callout',
+		name: 'So-6 — RUN-A-MORPHIT-NODE.md systemd install uses the path-aware installer',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',
 		rootRelative: true,
-		// beta12: the shipped units target /opt/morphit; this manual guide
-		// clones to ~/morphit, so the callout must still tell those operators
-		// to override the unit paths with a `systemctl edit` drop-in.
+		// beta14: the shipped units target /opt/morphit; this manual guide
+		// clones to ~/morphit. The installer detects the real checkout and
+		// writes the units with correct paths — replacing the old
+		// `systemctl edit` drop-in workaround (now retired). The callout
+		// must point operators at the installer, and the drop-in text must
+		// not creep back.
 		mustHave: [
+			'ops/scripts/install-systemd-units.sh',
+			'detects where you actually cloned',
+			'systemctl enable --now morphit-indexer'
+		],
+		mustNotHave: [
 			'This manual guide instead clones to',
-			'/home/morphit/morphit',
-			'systemctl edit morphit-indexer',
 			'the systemd idiom for overriding'
 		]
 	},

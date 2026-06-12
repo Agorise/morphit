@@ -20,6 +20,10 @@ export interface HealthResponse {
 	readonly chain_head_block: number;
 	readonly indexed_block: number;
 	readonly lag_blocks: number;
+	/** Human-readable context for `lag_blocks` (normal range +
+	 *  seconds-behind at Blurt's 3s block time). Optional: indexers
+	 *  older than v1.0.0-beta.14 don't send it. */
+	readonly lag_blocks_note?: string;
 	readonly stale: boolean;
 }
 
@@ -908,7 +912,8 @@ export interface InstanceResponse {
 export type InstanceProbeStatus =
 	| 'good'         // healthy, recent activity (or new-grace)
 	| 'quiet'        // healthy but no orderbook activity in 7d
-	| 'stale'        // /v1/health degraded, or chain-lag too high
+	| 'syncing'      // reachable + health 'ok' but chain-lag over threshold (catching up)
+	| 'stale'        // /v1/health degraded or malformed (a real problem)
 	| 'unreachable'  // HTTP fetch failed
 	| 'mismatch'     // origin reachable but relay_account mismatched
 	| 'never';       // queued but probe scheduler hasn't run yet

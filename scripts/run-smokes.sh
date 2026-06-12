@@ -189,6 +189,7 @@ SMOKES=(
 	"apps/web:canary-template-smoke"
 	"packages/asset-registry:asset-registry-smoke"
 	".:operations-hardening-smoke"
+	".:systemd-unit-install-smoke"
 	".:csp-header-consistency-smoke"
 	".:workspace-membership-smoke"
 	".:operator-doc-fenced-path-existence-smoke"

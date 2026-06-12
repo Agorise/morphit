@@ -350,3 +350,50 @@ export function formatDateTime(input: string | Date): string {
 		minute: '2-digit'
 	}).format(d);
 }
+
+/**
+ * The project's CANONICAL UI date format: day number, full
+ * (translated) month name, a comma, then the 4-digit year —
+ * "11 June, 2026" in en, "11 junio, 2026" in es, "11 Juni, 2026"
+ * in de, with the digits themselves localized too (e.g. fa shows
+ * Persian numerals).  Every plain date the UI shows should flow
+ * through this so the format is consistent and translated.
+ *
+ * The parts are assembled explicitly (rather than via a single
+ * Intl pattern) so the ORDER is the same in every locale — Ken's
+ * spec is "day, full month, comma, year" regardless of the
+ * locale's own default ordering — while the month name and digits
+ * are still locale-correct.
+ *
+ * Guards a missing / unparseable / clearly-bogus pre-2000 value
+ * (e.g. an unset epoch-0 timestamp would otherwise render as
+ * "31 December, 1969"): returns an em-dash instead.
+ */
+export function formatDayMonth(input: string | Date | null | undefined): string {
+	if (input === null || input === undefined || input === '') return '—';
+	const d = typeof input === 'string' ? new Date(input) : input;
+	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
+	const loc = activeLocale();
+	const day = getDateFormat(loc, { day: 'numeric' }).format(d);
+	const month = getDateFormat(loc, { month: 'long' }).format(d);
+	const year = getDateFormat(loc, { year: 'numeric' }).format(d);
+	return `${day} ${month}, ${year}`;
+}
+
+/**
+ * The canonical format plus a localized time, joined by " @ " —
+ * "11 June, 2026 @ 3:27:54 PM" in en, "11 Juni, 2026 @ 15:27:54"
+ * in de.  For timestamps where the time-of-day matters (e.g.
+ * "Directory last updated").  Same guards as {@link formatDayMonth}.
+ */
+export function formatDayMonthTime(input: string | Date | null | undefined): string {
+	if (input === null || input === undefined || input === '') return '—';
+	const d = typeof input === 'string' ? new Date(input) : input;
+	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
+	const time = getDateFormat(activeLocale(), {
+		hour: 'numeric',
+		minute: '2-digit',
+		second: '2-digit'
+	}).format(d);
+	return `${formatDayMonth(d)} @ ${time}`;
+}

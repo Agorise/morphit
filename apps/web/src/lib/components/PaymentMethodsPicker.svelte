@@ -240,7 +240,7 @@
 			placeholder={$_('payment_method.search_placeholder')}
 			aria-invalid={invalid || undefined}
 			aria-describedby={invalid && describedById ? describedById : undefined}
-			class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:border-morphit-emerald focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+			class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 			autocomplete="off"
 			autocapitalize="off"
 			autocorrect="off"

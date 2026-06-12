@@ -277,7 +277,14 @@ export class Poller {
 			// a leading "indexer." subdomain (same transform the RSS
 			// self-URL builder uses), so this matches the directory row for
 			// both same-origin and indexer-subdomain deploys.
-			selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//')
+			selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//'),
+			// Our own chain lag, read straight from the poller state (no HTTP),
+			// so the self-reachable row can show 'syncing' while catching up.
+			localLagBlocks: () => {
+				const st = this.getStatus();
+				if (!st.running || st.chainHeadBlock <= 0) return null;
+				return Math.max(0, st.chainHeadBlock - st.indexedBlock);
+			}
 		});
 
 		// ADR-0011 sub-phase 4b: fee verifiers. Build each only if

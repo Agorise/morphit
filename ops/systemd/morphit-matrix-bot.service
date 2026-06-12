@@ -57,7 +57,8 @@ ProtectClock=true
 RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
-MemoryDenyWriteExecute=false  # Node's V8 JIT needs W+X
+# Node's V8 JIT needs W+X
+MemoryDenyWriteExecute=false
 
 LimitCORE=0
 ProtectProc=invisible
