@@ -1049,22 +1049,36 @@ sudo chmod 0700 /var/lib/morphit-relay
 
 For the full list of relay env vars, open `ops/env/relay.env.example` — every key is commented.
 
-### Web Push (optional but recommended)
+### Web Push (on by default)
 
 Morphit can deliver notifications to users even when their browser
 tab is closed or their phone is locked. This requires a one-time
 **VAPID keypair** that identifies your relay to push services
-(Google FCM, Mozilla autopush, Apple's push service). Generate it
-once, never share the private half, and you're done:
+(Google FCM, Mozilla autopush, Apple's push service).
+
+**The Ansible playbook generates this for you automatically** the
+first time it runs — once, into `/etc/morphit/relay-vapid.env`, which
+the relay sources on startup — so push works out of the box. It is
+never regenerated on a later run (rotating the public key would drop
+everyone's subscriptions). The subject defaults to your public origin;
+override it with `morphit_vapid_subject` in `group_vars/all.yml`, or
+set `morphit_enable_web_push: false` to turn it off.
+
+If you installed by hand, generate the keypair once into the same
+file the relay sources, then restart the relay (use a real `https://`
+URL or a `mailto:` address you read — push services use it to reach
+you if something goes wrong with your pushes):
 
 ```
-bash scripts/generate-vapid-keys.sh
+sudo bash scripts/generate-vapid-keys.sh --bare \
+  --subject https://your-domain.example \
+  | sudo tee /etc/morphit/relay-vapid.env >/dev/null
+sudo chmod 640 /etc/morphit/relay-vapid.env
+sudo systemctl restart morphit-relay
 ```
 
-The script prints three lines. Append them to `/etc/morphit/relay.env`
-(replace `mailto:operator@your-domain.example` with a real address
-you read — push services use it to contact you if something goes
-wrong with your pushes):
+Running the script with no flags prints a human-readable version of
+the three env vars you can paste into any env file instead:
 
 ```
 MORPHIT_RELAY_VAPID_PUBLIC_KEY=BH5ZK…   (~88 chars)
@@ -1297,7 +1311,7 @@ sudo bash ops/scripts/install-systemd-units.sh
 sudo systemctl enable --now morphit-indexer morphit-relay
 ```
 
-The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users — set those up separately (see OPERATIONS.md) if you use them; that isolation is intentional.
+The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users, so this manual installer leaves them alone. The **Ansible playbook deploys and enables the MCP server for you by default** (isolated, as its own `morphit-mcp` user from `/opt/morphit-mcp`, locked down so it can't read your DB password or relay keys); to do it by hand, run `sudo bash ops/scripts/deploy-mcp.sh`, create the `morphit-mcp` user, and enable `morphit-mcp.service` (the mint-acts job is a separate setup — see OPERATIONS.md). That isolation is intentional. Once the MCP server is installed, you can turn it on or off at any time with `sudo morphit-ops mcp` (or the interactive menu → **Check & operate → MCP server**) — no need to remember the unit name.
 
 > **Before you start the services, run the doctor.** From your
 > install directory, `npx morphit-ops doctor` reads your config and

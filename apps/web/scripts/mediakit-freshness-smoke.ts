@@ -11,16 +11,31 @@
  * regenerate the zip in the same commit, otherwise the footer
  * "Mediakit" link silently serves stale content.
  *
- * This smoke compares mtimes within the working tree.  When the
- * source list or logos are edited but `scripts/build-mediakit.sh`
- * hasn't been re-run, the zip's mtime is older and the smoke
- * fails with a clear "run scripts/build-mediakit.sh" message.
+ * Staleness signal.  The zip must not predate any of its source
+ * files.  We measure "when did this file's content last change" with
+ * git commit time (`git log -1 --format=%ct`), NOT filesystem mtime:
+ * a fresh `git checkout` (as in CI) writes every file with the
+ * checkout-instant mtime in path order, so e.g.
+ * `apps/web/static/morphit-mediakit.zip` is always written a moment
+ * before `apps/web/tailwind.config.js` ('s' < 't') and would look
+ * "stale" on every clean checkout regardless of content.  Git commit
+ * time is immune to that: in CI's shallow (depth-1) checkout every
+ * file reports the single HEAD-commit time (equal → not stale); in a
+ * full-history checkout each file reports its real last-commit time
+ * (the zip, regenerated alongside a source change, is committed no
+ * earlier than that source).  Files with uncommitted working-tree
+ * edits fall back to mtime — so the dev workflow "edited a source but
+ * forgot to rebuild the zip" still fires.  Outside a git repo (e.g. a
+ * release-tarball extraction with no .git) the whole comparison falls
+ * back to mtime.
  *
  * Self-tested by touching MORPHIT-BRAG-LIST.md without rebuilding —
- * smoke fires.  Rebuild → smoke passes.
+ * the working-tree edit makes it dirty, so mtime is used and the
+ * smoke fires.  Rebuild + commit → smoke passes.
  */
 
 import { statSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
@@ -30,7 +45,66 @@ const ZIP_PATH = join(REPO_ROOT, 'apps', 'web', 'static', 'morphit-mediakit.zip'
 const BRAG_LIST = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
 const MARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-mark.svg');
 const WORDMARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-wordmark.svg');
+// The README's "Color standards" section is derived from the Tailwind
+// palette, so a color change must regenerate the zip — track it as a
+// source so a stale kit fails this smoke.
+const TAILWIND_CONFIG = join(REPO_ROOT, 'apps', 'web', 'tailwind.config.js');
 const BUILD_SCRIPT = join(REPO_ROOT, 'scripts', 'build-mediakit.sh');
+
+// ─── Effective "last changed" time (git-aware, mtime fallback) ─────
+// See the header: filesystem mtime is unreliable for a committed
+// artifact checked in a fresh CI checkout (write order ≠ content
+// order), so we prefer git commit time and only fall back to mtime
+// for uncommitted edits or when there's no git repo at all.
+let GIT_AVAILABLE: boolean;
+function gitAvailable(): boolean {
+	if (GIT_AVAILABLE !== undefined) return GIT_AVAILABLE;
+	try {
+		execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+			cwd: REPO_ROOT,
+			stdio: ['ignore', 'pipe', 'ignore']
+		});
+		GIT_AVAILABLE = true;
+	} catch {
+		GIT_AVAILABLE = false;
+	}
+	return GIT_AVAILABLE;
+}
+function gitCommitMs(absPath: string): number | null {
+	try {
+		const out = execFileSync('git', ['log', '-1', '--format=%ct', '--', absPath], {
+			cwd: REPO_ROOT,
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore']
+		}).trim();
+		if (!out) return null;
+		const sec = parseInt(out, 10);
+		return Number.isFinite(sec) ? sec * 1000 : null;
+	} catch {
+		return null;
+	}
+}
+function gitDirty(absPath: string): boolean {
+	try {
+		const out = execFileSync('git', ['status', '--porcelain', '--', absPath], {
+			cwd: REPO_ROOT,
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore']
+		});
+		return out.trim().length > 0;
+	} catch {
+		return false;
+	}
+}
+/** Last-content-change time in ms: git commit time for a clean,
+ *  tracked file; mtime for an uncommitted edit or when git is absent. */
+function effectiveChangeMs(absPath: string): number {
+	if (gitAvailable() && !gitDirty(absPath)) {
+		const committed = gitCommitMs(absPath);
+		if (committed !== null) return committed;
+	}
+	return statSync(absPath).mtimeMs;
+}
 
 interface ScenarioResult {
 	readonly name: string;
@@ -61,7 +135,8 @@ results.push({
 const sources = [
 	{ path: BRAG_LIST, label: 'MORPHIT-BRAG-LIST.md' },
 	{ path: MARK_SVG, label: 'apps/web/static/brand/morphit-mark.svg' },
-	{ path: WORDMARK_SVG, label: 'apps/web/static/brand/morphit-wordmark.svg' }
+	{ path: WORDMARK_SVG, label: 'apps/web/static/brand/morphit-wordmark.svg' },
+	{ path: TAILWIND_CONFIG, label: 'apps/web/tailwind.config.js (brand palette → README color standards)' }
 ];
 const missing = sources.filter((s) => !existsSync(s.path));
 results.push({
@@ -75,10 +150,12 @@ results.push({
 
 // ─── 4. Zip is newer than every source file ───
 // This is the core check — surfaces "edited brag list but forgot
-// to rebuild zip" before it ships.
+// to rebuild zip" before it ships.  Uses git-aware effective change
+// time (see header) so a fresh CI checkout's path-order mtimes can't
+// produce a false "stale" result.
 if (existsSync(ZIP_PATH) && missing.length === 0) {
-	const zipMtime = statSync(ZIP_PATH).mtimeMs;
-	const stale = sources.filter((s) => statSync(s.path).mtimeMs > zipMtime);
+	const zipChangeMs = effectiveChangeMs(ZIP_PATH);
+	const stale = sources.filter((s) => effectiveChangeMs(s.path) > zipChangeMs);
 	results.push({
 		name: 'morphit-mediakit.zip is no older than its sources',
 		ok: stale.length === 0,

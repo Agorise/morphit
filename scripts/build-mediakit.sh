@@ -37,13 +37,19 @@ cd "$repo"
 BRAG_LIST="MORPHIT-BRAG-LIST.md"
 MARK_SVG="apps/web/static/brand/morphit-mark.svg"
 WORDMARK_SVG="apps/web/static/brand/morphit-wordmark.svg"
+# Canonical brand palette lives in the Tailwind config; the README's
+# "Color standards" section (appended below) is DERIVED from it so the
+# kit always reflects the live brand colors.  It's also a freshness
+# source (mediakit-freshness-smoke), so a color change without a
+# rebuild fails CI.
+TAILWIND_CONFIG="apps/web/tailwind.config.js"
 
 # ─── Destination ───────────────────────────────────────────────────
 OUTPUT_DIR="apps/web/static"
 OUTPUT_ZIP="${OUTPUT_DIR}/morphit-mediakit.zip"
 
 # ─── Preflight ─────────────────────────────────────────────────────
-for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG"; do
+for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG" "$TAILWIND_CONFIG"; do
 	if [ ! -f "$f" ]; then
 		echo "ERROR: missing source file: $f" >&2
 		exit 1
@@ -110,6 +116,41 @@ The brag list reflects the state of the repo at the time this
 zip was built.  For the absolute latest, see MORPHIT-BRAG-LIST.md
 in the source repo.
 EOF
+
+# ─── Color standards (DERIVED from the canonical Tailwind palette so
+#     the kit always reflects the live brand colors) ────────────────
+readme="$stage/morphit-mediakit/README.txt"
+# Isolate the `morphit: { … }` palette block, then pull each
+# `name: '#RRGGBB'` pair.  Guarded: if the count drifts from 6 the
+# build fails loudly rather than shipping a half-empty section.
+palette="$(sed -n '/morphit: {/,/}/p' "$TAILWIND_CONFIG" | grep -oE "[a-z]+: '#[0-9A-Fa-f]{6}'" || true)"
+palette_count="$(printf '%s\n' "$palette" | grep -cE "#[0-9A-Fa-f]{6}" || true)"
+if [ "$palette_count" -ne 6 ]; then
+	echo "ERROR: expected 6 Morphit palette colors in $TAILWIND_CONFIG, found $palette_count." >&2
+	echo "       build-mediakit.sh's color extraction is out of sync with the config." >&2
+	echo "       Fix the extraction so the README Color standards stay accurate." >&2
+	exit 1
+fi
+gradient="$(grep -oE "linear-gradient\([^']+\)" "$TAILWIND_CONFIG" | head -1 || true)"
+{
+	echo ""
+	echo "Color standards"
+	echo "───────────────"
+	echo "The canonical Morphit palette, kept in sync with the site's"
+	echo "Tailwind config.  If the brand colors change, regenerating this"
+	echo "kit (scripts/build-mediakit.sh) updates these values too."
+	echo ""
+	printf '%s\n' "$palette" | awk '{
+		split($0, a, ":"); name=a[1]; gsub(/[ \t]/, "", name);
+		match($0, /#[0-9A-Fa-f]+/); hex=substr($0, RSTART, RLENGTH);
+		printf "  %-9s %s\n", toupper(substr(name,1,1)) substr(name,2), hex
+	}'
+	if [ -n "$gradient" ]; then
+		echo ""
+		echo "  Brand gradient:"
+		echo "    $gradient"
+	fi
+} >> "$readme"
 
 # ─── Build the zip ─────────────────────────────────────────────────
 rm -f "$OUTPUT_ZIP"

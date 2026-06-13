@@ -2362,8 +2362,8 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 // federated orderbook to any MCP-compatible AI agent (Claude
 // Desktop, Cursor, Cline, Continue, Windsurf, Zed, plus local
 // LLM stacks built on @modelcontextprotocol/sdk).  Five read-only
-// tools: search orders, fetch listing detail, list operators,
-// look up an account's reputation, return a federation summary.
+// tools: search orders, list federation instances, list accepted
+// payment methods, fetch listing detail, describe the instance.
 //
 // Why this matters for SEO and discoverability:
 //
@@ -2404,11 +2404,11 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 			'`@modelcontextprotocol/sdk`.\n' +
 			'\n' +
 			'Five read-only tools:\n' +
-			'  • morphit_search_orders     (filter the live orderbook)\n' +
-			'  • morphit_get_listing       (fetch one listing in detail)\n' +
-			'  • morphit_list_operators    (federation directory)\n' +
-			'  • morphit_account_reputation (look up a trader)\n' +
-			'  • morphit_federation_summary (federation health snapshot)\n' +
+			'  • morphit_search_orders      (filter the live orderbook)\n' +
+			'  • morphit_list_instances     (federation directory)\n' +
+			'  • morphit_list_payment_methods (accepted payment methods)\n' +
+			'  • morphit_get_listing        (fetch one listing in detail)\n' +
+			'  • morphit_describe           (what this instance is)\n' +
 			'\n' +
 			'Why you want this on:\n' +
 			'\n' +

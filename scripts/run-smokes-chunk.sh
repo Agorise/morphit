@@ -2,7 +2,17 @@
 set -u
 START="${1:-1}"; END="${2:-9999}"
 repo="$(cd "$(dirname "$0")/.." && pwd)"; cd "$repo"
-TSX="/home/claude/morphit/morphit/node_modules/.bin/tsx"
+# Resolve tsx portably (workspace first, then PATH) — mirrors scripts/run-smokes.sh.
+# (Previously this hardcoded an absolute sandbox path, which broke on every
+# other machine and leaked the build environment's directory layout.)
+if [ -x "$repo/node_modules/.bin/tsx" ]; then
+  TSX="$repo/node_modules/.bin/tsx"
+elif command -v tsx >/dev/null 2>&1; then
+  TSX="$(command -v tsx)"
+else
+  echo "ERROR: tsx not found. Run 'npm install' from the repo root." >&2
+  exit 2
+fi
 mapfile -t SMOKES < <(grep -E '^[[:space:]]*"[^"]+"' scripts/run-smokes.sh | sed -E 's/^[[:space:]]*"([^"]+)".*/\1/')
 total=0; failed=0
 SMOKE_OUT="$(mktemp -t morphit-smoke.XXXXXX.out)"

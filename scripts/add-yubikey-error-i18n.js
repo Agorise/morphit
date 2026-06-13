@@ -4,6 +4,10 @@
 // human-quality for the target audience but written by Claude;
 // project standard is to accept these as-is and treat any
 // improvements as ordinary i18n edits.
+//
+// SPENT one-off migration: these keys are already in the locale files;
+// re-running overwrites them (including later translator revisions).
+// Kept only as a record of how they were added.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -101,7 +105,8 @@ const TRANSLATIONS = {
 	}
 };
 
-const localesDir = '/home/claude/morphit/apps/web/src/lib/i18n/locales';
+// Repo root is one level up from this script (scripts/ -> repo root).
+const localesDir = path.join(__dirname, '..', 'apps/web/src/lib/i18n/locales');
 
 for (const [code, t] of Object.entries(TRANSLATIONS)) {
 	const filepath = path.join(localesDir, `${code}.json`);

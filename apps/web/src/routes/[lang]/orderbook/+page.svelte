@@ -58,6 +58,7 @@
 
 	import { getOrderbook } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
+	import { ASSETS } from '$lib/assets/registry';
 	import { instanceAdditions, instanceNameLookup } from '$lib/stores/instanceAdditions';
 	import { instance } from '$lib/stores/instance';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
@@ -210,6 +211,81 @@
 	type SortMode = 'recent' | 'rating' | 'trades';
 	let sortMode = $state<SortMode>('recent');
 
+	// Payment-methods filter: an animated typewriter placeholder, same
+	// "someone is typing" treatment as the Region field above, cycling
+	// through example payment methods.  Like the place names, these are
+	// brand/method names shown verbatim in every locale (NOT translated).
+	// HOLD_MS is deliberately 1s LONGER than the Region field's so the two
+	// placeholders never cycle in lockstep (Ken's ask).  Runs only while
+	// NOTHING is selected; reduced-motion shows a single static name.
+	// (Declared here, after paymentMethods, so the $derived below can read it.)
+	const PAYMENT_PLACEHOLDERS = [
+		'PayPal',
+		'Cash (in person)',
+		'Monero',
+		'Barter (goods/services)',
+		'BLURT',
+		'Bitcoin Cash (BCH)',
+		'Apple Pay',
+		'Monero (XMR)',
+		'Klarna'
+	] as const;
+	let paymentPlaceholder = $state<string>(PAYMENT_PLACEHOLDERS[0]);
+	// True whenever a method is selected — the typewriter pauses while true
+	// and resumes (the $effect re-runs) when selections clear back to none.
+	const paymentHasSelection = $derived(paymentMethods.length > 0);
+	$effect(() => {
+		// Pause while the user has selected something; resume when cleared.
+		if (paymentHasSelection) return;
+		// Respect reduced-motion: a single static method name, no typing.
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			paymentPlaceholder = PAYMENT_PLACEHOLDERS[0];
+			return;
+		}
+		const TYPE_MS = 70; // per-character typing speed (matches Region)
+		const DELETE_MS = 35; // per-character backspacing speed (matches Region)
+		const HOLD_MS = 2600; // Region holds 1600 — +1s here to desync the two
+		const GAP_MS = 450; // blank beat before the next name (matches Region)
+		let idx = 0;
+		let charIdx = 0;
+		let phase: 'typing' | 'holding' | 'deleting' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const name = PAYMENT_PLACEHOLDERS[idx] ?? PAYMENT_PLACEHOLDERS[0];
+			if (phase === 'typing') {
+				charIdx += 1;
+				paymentPlaceholder = name.slice(0, charIdx);
+				if (charIdx >= name.length) {
+					phase = 'holding';
+					timer = setTimeout(tick, HOLD_MS);
+				} else {
+					timer = setTimeout(tick, TYPE_MS);
+				}
+			} else if (phase === 'holding') {
+				phase = 'deleting';
+				timer = setTimeout(tick, DELETE_MS);
+			} else {
+				charIdx -= 1;
+				paymentPlaceholder = name.slice(0, Math.max(charIdx, 0));
+				if (charIdx <= 0) {
+					phase = 'typing';
+					charIdx = 0;
+					idx = (idx + 1) % PAYMENT_PLACEHOLDERS.length;
+					timer = setTimeout(tick, GAP_MS);
+				} else {
+					timer = setTimeout(tick, DELETE_MS);
+				}
+			}
+		};
+		// Start by typing the first name in from an empty field.
+		paymentPlaceholder = '';
+		timer = setTimeout(tick, GAP_MS);
+		return () => clearTimeout(timer);
+	});
+
 	/** When true, render orders from hidden accounts in-place (still
 	 *  marked as hidden). Flipped by the transparency link under the
 	 *  filter bar. Per-session only — doesn't touch the hidden set. */
@@ -341,6 +417,86 @@
 		return q;
 	}
 
+	/** The human-readable feed title handed to the per-asset RSS feed, built
+	 *  from the orderbook form's OWN labels + registries so it always mirrors
+	 *  exactly what the form shows: change a filter label or option and the
+	 *  feed title follows automatically (single source of truth).  Lists only
+	 *  the ACTIVE criteria — blank fields, "Any"/"Everything", and the default
+	 *  ("Most recent") sort are omitted.  Passed to the indexer via the feed
+	 *  URL's `feed_title` param; the indexer echoes it as the feed <title> and
+	 *  never reconstructs any label itself (the labels live here).  Sort IS
+	 *  shown in the title because it mirrors the user's search, even though the
+	 *  feed contents are always recency-ordered (see rssQuery + the indexer's
+	 *  sort note). */
+	const rssTitle = $derived.by(() => {
+		const parts: string[] = [];
+		// Side — its option label is self-describing ("Posts wanting to sell
+		// crypto"), so it carries no field-name prefix, matching the form.
+		if (side) parts.push($_(`orderbook.filters.side_${side}`));
+		// Asset — "Asset: Blurt (BLURT)", the same name+ticker format
+		// AssetFilterSelect renders.  (The pill only shows for a real asset,
+		// but guard 'barter' + an unknown ticker defensively.)
+		if (asset && asset !== 'barter') {
+			const a = ASSETS.find((x) => x.displayTicker === asset);
+			const label = a ? `${a.displayName} (${a.displayTicker})` : asset;
+			parts.push(`${$_('orderbook.filters.asset_label')}: ${label}`);
+		}
+		if (fiatList.length) {
+			parts.push(`${$_('orderbook.filters.fiat_label')}: ${fiatList.join(', ')}`);
+		}
+		const regionTrim = region.trim();
+		if (regionTrim) {
+			parts.push(`${$_('orderbook.filters.region_label')}: "${regionTrim}"`);
+		}
+		if (paymentMethods.length) {
+			// Same resolver the rendered orders use, so a method's name in the
+			// title and in a row never disagree.
+			const names = displayNamesForMethods(paymentMethods, instLookup);
+			if (names.length) {
+				parts.push(`${$_('orderbook.filters.payment_methods_label')}: ${names.join(', ')}`);
+			}
+		}
+		if (minTrades > 0) {
+			parts.push(
+				`${$_('orderbook.filters.min_trades_label')}: ${$_(`orderbook.filters.min_trades_${minTrades}`)}`
+			);
+		}
+		if (sortMode !== 'recent') {
+			parts.push(
+				`${$_('orderbook.filters.sort_label')}: ${$_(`orderbook.filters.sort_${sortMode}`)}`
+			);
+		}
+		const prefix = $_('orderbook.filters.rss_title_prefix', {
+			values: { site: $_('seo.site_name') }
+		});
+		return parts.length ? `${prefix} ${parts.join(', ')}` : prefix;
+	});
+
+	/** The query string handed to the per-asset RSS feed so the feed
+	 *  mirrors the current search.  Reuses currentQuery() as the single
+	 *  source of filter logic, then keeps the filters the feed honors —
+	 *  side, fiat_currency, location_region, payment_methods, min_trades.
+	 *  asset is intentionally dropped from the filters (it's already in the
+	 *  feed PATH); sort is dropped as a FILTER because a feed is always
+	 *  recency-ordered (readers re-sort by date) — see
+	 *  apps/indexer/src/api/rssOrderbookHandlers.ts.  A cosmetic `feed_title`
+	 *  (rssTitle) is appended so the served <title> spells out the active
+	 *  criteria (including asset + sort) without changing what matches. */
+	const rssQuery = $derived.by(() => {
+		const q = currentQuery();
+		const params = new URLSearchParams();
+		if (q.side) params.set('side', q.side);
+		if (q.fiat_currency) params.set('fiat_currency', q.fiat_currency);
+		if (q.location_region) params.set('location_region', q.location_region);
+		if (q.payment_methods) params.set('payment_methods', q.payment_methods);
+		if (q.min_trades) params.set('min_trades', String(q.min_trades));
+		// Cosmetic only: drives the served feed <title>, built from the form's
+		// own labels (single source of truth).  Functional filtering uses only
+		// the params above.
+		params.set('feed_title', rssTitle);
+		return params.toString();
+	});
+
 	/** Fetch profile data for the accounts in the given order set,
 	 *  deduplicated and batched via the shared profile cache. Merges
 	 *  results into profileMap so the UI reactively swaps identicons
@@ -441,28 +597,12 @@
 		}, 250);
 	}
 
-	/** Filter-card collapse.  Expanded on page load; collapses when the
-	 *  user commits a discrete filter change (frees above-the-fold space),
-	 *  and re-expands via the header toggle (the X/+ icon). */
+	/** Filter-card collapse.  Expanded on page load; the user controls it
+	 *  via the header toggle (clicking anywhere on the title row).  There
+	 *  is deliberately NO auto-collapse on filter changes — folding the
+	 *  card away mid-adjustment was disorienting, so it stays open until
+	 *  the user chooses to collapse it. */
 	let filtersExpanded = $state(true);
-	let filterCollapseArmed = false;
-	$effect(() => {
-		// Discrete selects/dropdowns.  The region TEXT input is excluded
-		// here (it collapses on its own change/blur event) so the card
-		// never folds away while the user is mid-typing.  The first run is
-		// the mount pass and must NOT collapse.
-		void side;
-		void asset;
-		void fiatList;
-		void paymentMethods;
-		void minTrades;
-		void sortMode;
-		if (!filterCollapseArmed) {
-			filterCollapseArmed = true;
-			return;
-		}
-		filtersExpanded = false;
-	});
 
 	// Re-fetch when any filter changes.
 	$effect(() => {
@@ -724,33 +864,37 @@
 
 	<!-- Filters -->
 	<section class="card mb-6" aria-labelledby="filters-heading">
-		<div class="mb-4 flex items-center justify-between gap-3">
-			<h2 id="filters-heading" class="font-display text-lg font-bold">
-				{$_('orderbook.filters.heading')}
-			</h2>
+		<h2 id="filters-heading" class="mb-4">
 			<button
 				type="button"
 				onclick={() => (filtersExpanded = !filtersExpanded)}
 				aria-expanded={filtersExpanded}
 				aria-controls="orderbook-filters-body"
-				class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition hover:bg-emerald-50 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-ink-700"
 				title={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
-				aria-label={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
+				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-start transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800/60"
 			>
-				<svg
-					class="h-4 w-4 transition-transform duration-200 {filtersExpanded ? 'rotate-45' : ''}"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+				<span class="font-display text-lg font-bold">
+					{$_('orderbook.filters.heading')}
+				</span>
+				<span
+					class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700"
 					aria-hidden="true"
 				>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
+					<svg
+						class="h-4 w-4 transition-transform duration-200 {filtersExpanded ? 'rotate-45' : ''}"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M12 5v14M5 12h14" />
+					</svg>
+				</span>
 			</button>
-		</div>
+		</h2>
 		{#if filtersExpanded}
 		<div id="orderbook-filters-body" transition:slide={{ duration: 250 }}>
 		<div class="grid gap-4 sm:grid-cols-2">
@@ -796,7 +940,6 @@
 					bind:value={region}
 					maxlength="128"
 					autocomplete="off"
-					onchange={() => (filtersExpanded = false)}
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 					placeholder={regionPlaceholder}
 				/>
@@ -811,6 +954,7 @@
 				bind:value={paymentMethods}
 				additions={$instanceAdditions}
 				disabled={$instance.disabled_payment_methods}
+				placeholder={paymentPlaceholder}
 			/>
 			<p class="mt-1 text-xs text-ink-500">
 				{$_('orderbook.filters.payment_methods_hint')}
@@ -871,8 +1015,9 @@
 				{#if asset && asset !== 'barter'}
 					<RssFeedPicker
 						base={`/rss/orderbook/by-asset/${asset.toLowerCase()}`}
+						query={rssQuery}
 						label={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
-						text={$_('orderbook.filters.rss_asset_label', { values: { asset } }) as string}
+						text={$_('orderbook.filters.rss_generated_label') as string}
 						triggerClass="chip text-xs"
 						iconClass="h-3.5 w-3.5"
 					/>

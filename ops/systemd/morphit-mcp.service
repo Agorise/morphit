@@ -13,10 +13,17 @@ Group=morphit-mcp
 # Service user must own it with 0750 perms.
 WorkingDirectory=/opt/morphit-mcp
 
-# Same environment file as the indexer — MCP needs MORPHIT_PG_URL
-# (read-only) and the public origin URL to construct deeplinks.
-# See ops/env/relay.env.example for the schema.
-EnvironmentFile=/etc/morphit/relay.env
+# MCP config lives in its own optional env file.  The server is a
+# read-only HTTP CLIENT of a Morphit instance's public /v1 API — it
+# holds NO DB connection and NO keys — so it needs only the
+# MORPHIT_MCP_* knobs, chiefly MORPHIT_MCP_INSTANCE_URL (which
+# instance to surface; the installer points it at THIS node's public
+# origin so a self-hosted MCP serves the operator's own orderbook,
+# not the default morphit.io).  The `-` prefix makes it optional so
+# the unit still starts if the file is absent (it then falls back to
+# the source defaults).  It deliberately does NOT read the relay's
+# env: pulling in the relay DB URL / keys would breach the isolation.
+EnvironmentFile=-/etc/morphit/mcp.env
 
 # Default port + bind from the morphit-mcp source (127.0.0.1:8124).
 # Operators who want public exposure should reverse-proxy via nginx

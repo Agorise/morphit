@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
+# SPENT one-off migration: these keys are already in the locale files;
+# re-running overwrites them (incl. later translator revisions). Kept as a record.
 import json, os, sys
-LOCALE_DIR = "/home/claude/morphit/apps/web/src/lib/i18n/locales"
+from pathlib import Path
+# Repo root is two levels up from this script (scripts/ -> repo root).
+LOCALE_DIR = str(Path(__file__).resolve().parent.parent / "apps/web/src/lib/i18n/locales")
 
 IDENTITY_MISMATCH = {
     "en": "Couldn't sign — your account session looks out of sync. Sign out, then sign back in to fix this.",

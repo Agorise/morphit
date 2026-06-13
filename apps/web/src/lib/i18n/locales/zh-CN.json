@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "我能在 Morphit 上交易商品或服务吗，比如果树或黑胶唱片？",
-        "a": "可以——但有一种需要花点时间领会的特定形态。Morphit 的订单模型始终是**一边是可交易资产（BTC、XMR、Blurt 或 Morphit 列出的任何其他币种），另一边是别的东西**。那个「别的东西」可以是：\n\n• 一种**法币**（USD、EUR、MXN、COP、NGN——任何国家的钱）\n• 一种**不同的加密货币**（例如用 BTC 支付一笔资产为 XMR 的订单）\n• **商品或服务**，通过 `Barter (goods)` 支付方式\n\n**要用橙树换 XMR**，你会这样发布：side=`buy`、asset=`XMR`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（或你和对手方商定的任何计价参考），并把具体内容写进 `terms` 字段——例如：`\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` 碰巧持有 XMR 的橙树买家会回应。\n\n**要用 BTC 换一棵樱桃树**，发布：side=`sell`、asset=`BTC`、payment_methods=`[Barter (goods)]`、fiat_currency=`USD`（参考价）、terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**你无法直接建模的**：物物交换（橙树换辣木树，不涉及加密货币）。每笔 Morphit 订单的一边必须是可交易资产（BTC、XMR、Blurt 或 Morphit 列出的任何其他币种）——链就是这样锚定交易、反馈就是这样附到真实的链上动作的。对于不涉及加密货币的纯物物交换，请使用别的平台。\n\n**为什么有这个约束？**三个原因：\n\n1. **声誉需要锚定。**反馈是针对 Blurt 上的一笔订单操作签名的。订单操作引用一个特定的可分割资产（带有数量、价格、费用）。纯商品不符合这个形态——不存在「一棵橙树的多少」这个问题。\n\n2. **市场之所以运作，是因为大多数订单以一个共同单位计价。**一个在订单簿里搜索 `XMR/USD < $300` 的买家会得到一份清爽的列表。如果一半订单以果树计价、另一半以理发计价，搜索和撮合就会崩溃。\n\n3. **当一边在链上可证明时，纠纷更容易处理。**如果你发送了 BTC 却没收到樱桃树，那笔 BTC 转账永远在链上。卖家无法否认收到了付款。至少一边有加密货币，每笔 Morphit 交易就有一半带有硬性凭据。\n\n**关于像 Bitso、Zelle、PayPal 这样的支付方式**：这些是**法币侧的轨道**——它们描述法币（或一个以法币计价的参考价）是如何转移的。「用 Bitso 转账换辣木树」不符合模型：Bitso 转移的是 MXN，不是辣木树。最接近的模型：发布一笔通过 Bitso 支付的买入 XMR 订单，然后单独用那些 XMR 在平台外购买辣木树。两笔交易，而不是一笔。\n\n**反过来的组合**：只要资产是 Morphit 支持的加密货币之一，`(side, asset, payment_methods, fiat_currency)` 的任何组合都可行。自由格式的 `terms` 字段描述交易在人类可读侧实际涉及什么。常见组合：\n\n• 通过 PayPal 用 USD 买入/卖出 BTC\n• 当面用现金买入/卖出 XMR\n• 用 BTC 买入/卖出 Blurt（加密货币换加密货币）\n• 通过 Wise 或当面现金用法币买入/卖出 USDT（在 Tron、Ethereum、Solana 或 BSC 上）\n• 用橙树买入 XMR（物物交换，以 USD 为参考价）\n• 用一棵樱桃树卖出 BTC（物物交换，以 USD 为参考价）\n• 用生大蒜卖出 USDT（物物交换，以 USD 为参考价）\n• 卖出 XMR 以换取当面现金交换（`payment_methods=[cash]`）"
+        "a": "可以——但有一种需要花点时间领会的特定形态。Morphit 的订单模型始终是**一边是可交易资产（BTC、XMR、Blurt 或 Morphit 列出的任何其他币种），另一边是别的东西**。那个「别的东西」可以是：\n\n• 一种**法币**（USD、EUR、MXN、COP、NGN——任何国家的钱）\n• 一种**不同的加密货币**（例如用 BTC 支付一笔资产为 XMR 的订单）\n• **商品或服务**，通过 `Barter (goods/services)` 支付方式\n\n**要用橙树换 XMR**，你会这样发布：side=`buy`、asset=`XMR`、payment_methods=`[Barter (goods/services)]`、fiat_currency=`USD`（或你和对手方商定的任何计价参考），并把具体内容写进 `terms` 字段——例如：`\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` 碰巧持有 XMR 的橙树买家会回应。\n\n**要用 BTC 换一棵樱桃树**，发布：side=`sell`、asset=`BTC`、payment_methods=`[Barter (goods/services)]`、fiat_currency=`USD`（参考价）、terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**你无法直接建模的**：物物交换（橙树换辣木树，不涉及加密货币）。每笔 Morphit 订单的一边必须是可交易资产（BTC、XMR、Blurt 或 Morphit 列出的任何其他币种）——链就是这样锚定交易、反馈就是这样附到真实的链上动作的。对于不涉及加密货币的纯物物交换，请使用别的平台。\n\n**为什么有这个约束？**三个原因：\n\n1. **声誉需要锚定。**反馈是针对 Blurt 上的一笔订单操作签名的。订单操作引用一个特定的可分割资产（带有数量、价格、费用）。纯商品不符合这个形态——不存在「一棵橙树的多少」这个问题。\n\n2. **市场之所以运作，是因为大多数订单以一个共同单位计价。**一个在订单簿里搜索 `XMR/USD < $300` 的买家会得到一份清爽的列表。如果一半订单以果树计价、另一半以理发计价，搜索和撮合就会崩溃。\n\n3. **当一边在链上可证明时，纠纷更容易处理。**如果你发送了 BTC 却没收到樱桃树，那笔 BTC 转账永远在链上。卖家无法否认收到了付款。至少一边有加密货币，每笔 Morphit 交易就有一半带有硬性凭据。\n\n**关于像 Bitso、Zelle、PayPal 这样的支付方式**：这些是**法币侧的轨道**——它们描述法币（或一个以法币计价的参考价）是如何转移的。「用 Bitso 转账换辣木树」不符合模型：Bitso 转移的是 MXN，不是辣木树。最接近的模型：发布一笔通过 Bitso 支付的买入 XMR 订单，然后单独用那些 XMR 在平台外购买辣木树。两笔交易，而不是一笔。\n\n**反过来的组合**：只要资产是 Morphit 支持的加密货币之一，`(side, asset, payment_methods, fiat_currency)` 的任何组合都可行。自由格式的 `terms` 字段描述交易在人类可读侧实际涉及什么。常见组合：\n\n• 通过 PayPal 用 USD 买入/卖出 BTC\n• 当面用现金买入/卖出 XMR\n• 用 BTC 买入/卖出 Blurt（加密货币换加密货币）\n• 通过 Wise 或当面现金用法币买入/卖出 USDT（在 Tron、Ethereum、Solana 或 BSC 上）\n• 用橙树买入 XMR（物物交换，以 USD 为参考价）\n• 用一棵樱桃树卖出 BTC（物物交换，以 USD 为参考价）\n• 用生大蒜卖出 USDT（物物交换，以 USD 为参考价）\n• 卖出 XMR 以换取当面现金交换（`payment_methods=[cash]`）"
       },
       "cash_by_mail_walkthrough": {
         "q": "我如何通过 Morphit 用邮件交易现金或运送实物商品?",
@@ -1999,7 +1999,7 @@
     "title": "登录 Morphit",
     "body": "选择与您的情况相符的选项。",
     "no_account_heading": "还没有账户？",
-    "no_account_body": "在下方注册 — 首次注册免费,用时不到一分钟。",
+    "no_account_body": "在上方挑个酷炫的用户名就能创建一个，真的就这么简单。",
     "register_cta": "创建新账户",
     "checking": "正在检查你的会话…",
     "import_existing": "用 助记词登录",
@@ -2175,7 +2175,8 @@
       "walkthrough_body": "5 分钟解释 Morphit 交易实际如何运作,从头到尾。"
     },
     "error": {
-      "load_failed": "无法加载你的订单。请重试。"
+      "load_failed": "无法加载你的订单。请重试。",
+      "no_account": "使用你的 Blurt 账户登录即可查看你的订单。"
     }
   },
   "nav": {
@@ -2186,7 +2187,7 @@
     "language": "语言",
     "privacy_terms": "隐私",
     "post_now": "立即发布",
-    "login_register": "登录 / 注册",
+    "start": "开始",
     "glossary": "术语表",
     "cheat_sheet": "速查表"
   },
@@ -2195,16 +2196,18 @@
     "intro": "你的 Morphit 账户是一对加密密钥。它们就在你的设备上生成,从不离开。如果你丢了,没人能找回——我们也不行。这就是真正隐私的代价。",
     "path_reputation": {
       "title": "建立信誉",
+      "cta_hint": "信誉就是一切",
       "body": "长期使用同一身份。成功的交易会累积一份公开记录,让别人愿意信任你。大多数人推荐这样用。"
     },
     "path_anonymous": {
       "title": "最大匿名",
+      "cta_hint": "每次都从头开始",
       "body": "每次交易使用新身份。没有任何东西把你的交易连起来。适合注重不可关联性的门罗币用户——但你每次都从零开始。"
     },
     "generating": "正在你的设备上安全生成密钥……",
     "generated_title": "密钥已就绪。",
     "generated_body": "在做任何其他事之前,请先备份。一旦丢失,账户就永远没了。我们提醒过——这是密钥只属于你的代价。",
-    "this_is_you": "别人看到的你是这样的",
+    "this_is_you": "别人看到的你是这样的（除非你之后更改）",
     "backup": {
       "title": "备份你的密钥",
       "seed_hint": "12 个单词。按顺序。写在纸上。存进 KeePass(.info)。也要做一份备份副本。把这 12 个单词存放在安全的地方。不要拍照。不要发邮件给自己。",
@@ -2535,7 +2538,8 @@
       "sort_recent": "最新优先",
       "sort_rating": "⭐ 评分最高的用户优先",
       "sort_trades": "经验最丰富的用户优先",
-      "rss_asset_label": "RSS — {asset} 订单",
+      "rss_generated_label": "RSS — 动态生成",
+      "rss_title_prefix": "{site} 订单簿 - 筛选条件：",
       "rss_asset_title": "当有新的 {asset} 订单发布时通过 RSS 收到通知。",
       "side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。"
     },

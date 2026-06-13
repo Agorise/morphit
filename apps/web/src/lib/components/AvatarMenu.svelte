@@ -824,7 +824,7 @@
 	     larger CTA below as the canonical mobile entry point, but
 	     having the header CTA visible too means users tapping the
 	     avatar slot get a deterministic "do this to sign in" target. -->
-	<a href={lp('/login')} class="btn-primary btn-shine inline-flex text-sm">
-		{$_('nav.login_register')}
+	<a href={lp('/login')} class="btn-primary-sm">
+		{$_('nav.start')}
 	</a>
 {/if}

@@ -135,10 +135,10 @@
 		animation: morphit-logo-bling-sweep 15s ease-in-out infinite;
 	}
 	/* Park the highlight off the RIGHT for most of the cycle (-20%), sweep it
-	 * across once to off the LEFT (120%) over ~10%→19% of 15s (≈1.3s — the
-	 * same quick glint as before, just less often), then hold off-left until
-	 * the loop restarts — at which point it jumps back to -20% while still
-	 * off-screen, so only the single sweep is ever visible.
+	 * across once to off the LEFT (120%) over 10%→20% of 15s (=1.5s — a touch
+	 * slower than before so the eye has a moment to register the glint), then
+	 * hold off-left until the loop restarts — at which point it jumps back to
+	 * -20% while still off-screen, so only the single sweep is ever visible.
 	 * (background-size 250%: -20% ≈ band off the right edge, 120% ≈ off the
 	 * left edge, 50% ≈ band centred over the wordmark.) */
 	@keyframes morphit-logo-bling-sweep {
@@ -148,7 +148,7 @@
 		10% {
 			background-position: -20% 0;
 		}
-		19% {
+		20% {
 			background-position: 120% 0;
 		}
 		100% {

@@ -432,18 +432,26 @@
 				<button
 					type="button"
 					onclick={() => pickPath('reputation')}
-					class="card text-left transition hover:border-morphit-emerald hover:shadow-lg active:scale-[0.99]"
+					class="group card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<h3 class="font-display text-xl font-bold">{$_('onboarding.path_reputation.title')}</h3>
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_reputation.body')}</p>
+					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
+						{$_('onboarding.path_reputation.cta_hint')}
+						<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+					</p>
 				</button>
 				<button
 					type="button"
 					onclick={() => pickPath('anonymous')}
-					class="card text-left transition hover:border-morphit-emerald hover:shadow-lg active:scale-[0.99]"
+					class="group card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<h3 class="font-display text-xl font-bold">{$_('onboarding.path_anonymous.title')}</h3>
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_anonymous.body')}</p>
+					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
+						{$_('onboarding.path_anonymous.cta_hint')}
+						<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+					</p>
 				</button>
 			</div>
 

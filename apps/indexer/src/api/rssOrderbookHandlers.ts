@@ -16,7 +16,7 @@
 
 import type { Database } from '$db/pool';
 import type { Config } from '$config/index';
-import { isAccountName } from '$api/shared';
+import { isAccountName, escapeLike } from '$api/shared';
 
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
 
@@ -256,6 +256,9 @@ const PRIVACY_NOTE_GLOBAL =
 const PRIVACY_NOTE_PER_TRADER =
 	"Blurt is a public chain, so this feed does not reveal information that a chain indexer wouldn't. However, polling a per-trader URL reveals to a network observer that you are watching this specific account — slightly more revealing than the global or per-asset feeds. If timing correlation matters in your threat model, poll over Tor.";
 
+const PRIVACY_NOTE_FILTERED =
+	"This feed URL encodes your search filters, so anyone who sees the URL — or a passive observer watching your polling — learns more about what you're looking for than the plain per-asset feed does. For a less revealing subscription, drop the query string and filter inside your reader instead; poll over Tor if timing correlation matters in your threat model.";
+
 /** Strip the "indexer." subdomain from publicOrigin to derive
  *  the frontend origin. Operators on the same origin (dev) get
  *  that for free. */
@@ -327,6 +330,179 @@ export async function globalFeedHandler(
 	return { status: 200, headers: headersFor(format), body };
 }
 
+/** Order-intrinsic + reputation filters a per-asset feed can carry as
+ *  query params, mirroring the live orderbook's filter surface
+ *  (apps/indexer/src/api/orderbook.ts) so a feed of "my current
+ *  search" returns the same rows the orderbook page shows: side,
+ *  fiat_currency, location_region, payment_methods, and min_trades.
+ *
+ *  min_trades rides the SAME sock-puppet-filtered, trade-bound
+ *  feedback COUNT the orderbook uses (FEEDBACK_COUNT_SUBQUERY below,
+ *  pinned table-for-table against orderbook.ts by
+ *  rss-orderbook-filters-smoke), so a trader the orderbook hides under
+ *  a min_trades threshold is hidden from the feed too — the two never
+ *  disagree.
+ *
+ *  ONE orderbook control is intentionally NOT honored:
+ *    - sort: a feed is inherently reverse-chronological (every
+ *      RSS/Atom/JSON reader re-sorts by date, and a non-recency feed
+ *      would silently drop new matching orders past the 50-cap), so
+ *      the feed always returns the MOST-RECENT matching orders.  sort
+ *      only changes the orderbook's DISPLAY order, not which orders
+ *      match — the filters above are what define the feed's contents.
+ */
+interface FeedFilters {
+	readonly side?: 'buy' | 'sell';
+	readonly fiatCurrencies?: readonly string[];
+	readonly locationRegion?: string;
+	readonly paymentMethods?: readonly string[];
+	readonly minTrades?: number;
+}
+
+/** Parse + validate raw query params into FeedFilters.  Fail-OPEN: an
+ *  unparseable value for a given filter is dropped (the feed returns a
+ *  broader — never empty — result) so a slightly-malformed
+ *  subscription URL still yields a working feed instead of a 400. */
+function parseFeedFilters(raw: Readonly<Record<string, string | undefined>>): FeedFilters {
+	const out: {
+		side?: 'buy' | 'sell';
+		fiatCurrencies?: string[];
+		locationRegion?: string;
+		paymentMethods?: string[];
+		minTrades?: number;
+	} = {};
+
+	const side = (raw.side ?? '').trim().toLowerCase();
+	if (side === 'buy' || side === 'sell') out.side = side;
+
+	const fiatRaw = (raw.fiat_currency ?? '').trim();
+	if (fiatRaw) {
+		const fiats = [
+			...new Set(
+				fiatRaw
+					.split(',')
+					.map((s) => s.trim().toUpperCase())
+					.filter((s) => s.length >= 2 && s.length <= 8)
+			)
+		];
+		if (fiats.length) out.fiatCurrencies = fiats;
+	}
+
+	const region = (raw.location_region ?? '').trim();
+	if (region) {
+		const normalized = region.normalize('NFC').slice(0, 128);
+		if (normalized) out.locationRegion = normalized;
+	}
+
+	const payRaw = (raw.payment_methods ?? '').trim();
+	if (payRaw) {
+		const methods = [
+			...new Set(
+				payRaw
+					.split(',')
+					.map((s) => s.trim().normalize('NFC').toLowerCase())
+					.filter((s) => s.length > 0 && s.length <= 32)
+			)
+		];
+		if (methods.length) out.paymentMethods = methods;
+	}
+
+	// min_trades: integer 1..100 (matches orderbook.ts's
+	// z.coerce.number().int().nonnegative().max(100); 0 = "Any" = no
+	// filter, so only a positive value narrows the feed).
+	const mt = (raw.min_trades ?? '').trim();
+	if (mt) {
+		const n = Number(mt);
+		if (Number.isInteger(n) && n > 0 && n <= 100) out.minTrades = n;
+	}
+
+	return out;
+}
+
+/** True when any filter is active — drives the self-describing
+ *  description + the self URL's query string. */
+function hasAnyFilter(f: FeedFilters): boolean {
+	return (
+		f.side !== undefined ||
+		f.fiatCurrencies !== undefined ||
+		f.locationRegion !== undefined ||
+		f.paymentMethods !== undefined ||
+		f.minTrades !== undefined
+	);
+}
+
+/** Append the filter WHERE-clause fragments, binding params via `p`.
+ *  Clause shapes are kept byte-identical to orderbook.ts so the feed
+ *  matches the orderbook exactly; rss-orderbook-filters-smoke pins
+ *  the parity. */
+function appendFilterClauses(f: FeedFilters, where: string[], p: (v: unknown) => string): void {
+	if (f.side) where.push(`o.side = ${p(f.side)}`);
+	if (f.fiatCurrencies) where.push(`o.fiat_currency = ANY(${p(f.fiatCurrencies)}::text[])`);
+	if (f.locationRegion) {
+		where.push(`o.location_region ILIKE ${p(escapeLike(f.locationRegion) + '%')} ESCAPE '\\'`);
+	}
+	if (f.paymentMethods) {
+		where.push(
+			`EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ANY(${p(f.paymentMethods)}::text[]))`
+		);
+	}
+}
+
+/** The `?…` suffix reproducing the active filters for the feed's self
+ *  URL.  Stable key order so the self URL is deterministic. */
+function filterQueryString(f: FeedFilters): string {
+	const parts: string[] = [];
+	if (f.side) parts.push(`side=${encodeURIComponent(f.side)}`);
+	if (f.fiatCurrencies)
+		parts.push(`fiat_currency=${encodeURIComponent(f.fiatCurrencies.join(','))}`);
+	if (f.locationRegion) parts.push(`location_region=${encodeURIComponent(f.locationRegion)}`);
+	if (f.paymentMethods)
+		parts.push(`payment_methods=${encodeURIComponent(f.paymentMethods.join(','))}`);
+	if (f.minTrades !== undefined) parts.push(`min_trades=${f.minTrades}`);
+	return parts.length ? `?${parts.join('&')}` : '';
+}
+
+/** Sock-puppet-filtered, trade-bound feedback COUNT per subject — the
+ *  SAME row-eligibility predicate the live orderbook uses for its
+ *  min_trades filter (apps/indexer/src/api/orderbook.ts, the `f` join),
+ *  so a feed's min_trades and the orderbook's never disagree about who
+ *  clears a threshold.  COUNT-only: the feed never sorts by rating, so
+ *  the decay-weighted rating the orderbook also computes is omitted.
+ *
+ *  CANONICAL exclusion set lives in orderbook.ts; this is a deliberate
+ *  count-only mirror (the codebase already keeps per-consumer copies of
+ *  this aggregate — orders.ts, orderbookStream.ts, reputationReceipt.ts,
+ *  the feedback API — rather than one shared CTE).  rss-orderbook-
+ *  filters-smoke extracts the exclusion TABLES from both this constant
+ *  and orderbook.ts's `f` subquery and fails if they ever differ, so
+ *  the mirror can't silently drift. */
+const FEEDBACK_COUNT_SUBQUERY = `
+		SELECT subject, COUNT(*)::int AS c
+		  FROM feedback fb
+		 WHERE fb.order_permlink IS NOT NULL
+		   AND NOT EXISTS (
+		     SELECT 1 FROM suspicious_reciprocity sr
+		      WHERE sr.account_a = LEAST(fb.reviewer, fb.subject)
+		        AND sr.account_b = GREATEST(fb.reviewer, fb.subject)
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1 FROM related_accounts ra
+		      WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
+		        AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1 FROM one_way_pile_on owpo,
+		                  jsonb_array_elements(owpo.attacking_reviewers) attacker
+		      WHERE owpo.subject = fb.subject
+		        AND attacker->>'reviewer' = fb.reviewer
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1 FROM review_concentration rc
+		      WHERE rc.reviewer = fb.reviewer
+		        AND rc.dominant_subject = fb.subject
+		   )
+		 GROUP BY subject`;
+
 /** /rss/orderbook/by-asset/<asset>.xml — `rawSegment` is the
  *  URL path parameter (e.g., "btc.xml"). Validates the asset
  *  is one of the canonical ASSET_TICKERS supported (16 at
@@ -345,7 +521,8 @@ export async function globalFeedHandler(
 export async function perAssetFeedHandler(
 	rawSegment: string,
 	db: Database,
-	config: Config
+	config: Config,
+	rawFilters: Readonly<Record<string, string | undefined>> = {}
 ): Promise<HandlerResult> {
 	// Derive allow-set from canonical ASSET_TICKERS (lowercased).
 	// LL #38 sibling-file pattern: any future asset addition to
@@ -364,27 +541,74 @@ export async function perAssetFeedHandler(
 	const asset = upper as Asset;
 	const frontendOrigin = frontendOriginFrom(config);
 
+	const filters = parseFeedFilters(rawFilters);
+
+	// Dynamic param binder (mirrors orderbook.ts).  Asset binds FIRST
+	// so params[0] is always the asset (rss-orderbook-smoke relies on
+	// that); optional order-property filters splice in after the fixed
+	// predicates and FEED_LIMIT binds last.
+	const params: unknown[] = [];
+	const p = (v: unknown): string => {
+		params.push(v);
+		return `$${params.length}`;
+	};
+	const where: string[] = [
+		`o.status = 'live'`,
+		`o.fee_status IN ('verified', 'verified_by_attestation')`,
+		`o.asset = ${p(asset)}`,
+		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.officialAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+	];
+	appendFilterClauses(filters, where, p);
+
+	// min_trades rides the feedback-count aggregate (same sock-puppet
+	// exclusion set as the orderbook) — joined ONLY when the filter is
+	// active so the bare / order-property feed never pays for it.  A
+	// LEFT JOIN never drops rows on its own; the COALESCE clause is what
+	// enforces the threshold.
+	let joinSql = '';
+	if (filters.minTrades !== undefined) {
+		joinSql = `
+		  LEFT JOIN (${FEEDBACK_COUNT_SUBQUERY}
+		  ) f ON f.subject = o.account`;
+		where.push(`COALESCE(f.c, 0) >= ${p(filters.minTrades)}`);
+	}
+
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 		       o.amount_min::text, o.amount_max::text,
 		       o.location_region, o.payment_methods, o.fee_method,
 		       o.created_at, o.updated_at
-		  FROM orders o
-		 WHERE o.status = 'live'
-		   AND o.fee_status IN ('verified', 'verified_by_attestation')
-		   AND o.asset = $1
-		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $3 AND ob.blocked = o.account AND ob.state = 'blocked')
+		  FROM orders o${joinSql}
+		 WHERE ${where.join(' AND ')}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
-		 LIMIT $2`;
+		 LIMIT ${p(FEED_LIMIT)}`;
 
-	const result = await db.query<OrderRow>(sql, [asset, FEED_LIMIT, config.officialAccountName]);
+	const result = await db.query<OrderRow>(sql, params);
+
+	const filtered = hasAnyFilter(filters);
+
+	// Optional human-readable feed title built by the FRONTEND from the
+	// orderbook form's own labels (single source of truth — see
+	// RssFeedPicker / orderbook +page.svelte).  When present we echo it as
+	// the feed <title>: the labels live in the web app's i18n + registries,
+	// so the indexer never reconstructs them here.  serializeFeed applies the
+	// format's escaping (XML/JSON), so we only strip control chars (keep the
+	// title one clean line + valid XML) and length-cap so a hand-crafted URL
+	// can't bloat the feed head.  Absent (a manual / bare feed URL) → the
+	// static per-asset title.
+	const customTitle = (rawFilters.feed_title ?? '')
+		.replace(/[\u0000-\u001f\u007f]/g, ' ')
+		.trim()
+		.slice(0, 300);
+	const feedTitle =
+		customTitle.length > 0 ? customTitle : `Morphit — New ${asset} orderbook entries`;
 
 	const body = serializeFeed(
 		result.rows,
 		{
-			title: `Morphit — New ${asset} orderbook entries`,
-			description: `The ${FEED_LIMIT} most recent live ${asset} orders on Morphit. ${PRIVACY_NOTE_GLOBAL}`,
-			selfUrl: `${config.publicOrigin}/rss/orderbook/by-asset/${lower}.${ext}`,
+			title: feedTitle,
+			description: `The ${FEED_LIMIT} most recent live ${asset} orders on Morphit${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : PRIVACY_NOTE_GLOBAL}`,
+			selfUrl: `${config.publicOrigin}/rss/orderbook/by-asset/${lower}.${ext}${filterQueryString(filters)}`,
 			humanLink: `${frontendOrigin}/orderbook?asset=${asset}`
 		},
 		frontendOrigin,

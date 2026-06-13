@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Inject the missing block_explorer FAQ Q/A across 10 locales.
-Translations from Batch K transcript."""
+Translations from Batch K transcript.
+
+NOTE: This is a SPENT one-off migration. Its keys are already present in the
+locale files; re-running it would overwrite them (including any later
+translator revisions). Kept only as a record of how the keys were added.
+"""
 import json
 from pathlib import Path
 
-ROOT = Path("/home/claude/morphit/apps/web/src/lib/i18n/locales")
+# Repo root is two levels up from this script (scripts/ -> repo root).
+ROOT = Path(__file__).resolve().parent.parent / "apps/web/src/lib/i18n/locales"
 
 DATA = {
     "en": {

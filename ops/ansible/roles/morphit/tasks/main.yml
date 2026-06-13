@@ -115,3 +115,107 @@
     name: morphit-backup.timer
     enabled: true
     state: started
+
+# ─── Web Push — VAPID keypair (generate-once, §46) ──────────────
+# Web push is a relay feature gated on a VAPID keypair (RFC 8292).
+# Generate it ONCE into /etc/morphit/relay-vapid.env, which the
+# relay unit sources if present.  `creates:` makes this idempotent:
+# the keypair is NEVER regenerated on a re-converge, because rotating
+# the public key invalidates every existing push subscription.  ON by
+# default (morphit_enable_web_push).
+- name: Ensure /etc/morphit exists
+  ansible.builtin.file:
+    path: /etc/morphit
+    state: directory
+  when: morphit_enable_web_push | bool
+
+- name: Generate Web Push VAPID keypair (once)
+  ansible.builtin.shell:
+    cmd: >-
+      bash {{ morphit_repo_path }}/scripts/generate-vapid-keys.sh
+      --bare --subject {{ morphit_vapid_subject | quote }}
+      > /etc/morphit/relay-vapid.env
+    creates: /etc/morphit/relay-vapid.env
+  when: morphit_enable_web_push | bool
+  notify: Restart morphit-relay
+
+- name: Lock down the VAPID env file (holds the private key)
+  ansible.builtin.file:
+    path: /etc/morphit/relay-vapid.env
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+  when: morphit_enable_web_push | bool
+
+# ─── MCP server — isolated deploy + enable (§45) ────────────────
+# MCP runs ISOLATED on purpose: its own low-privilege user from its
+# own directory (/opt/morphit-mcp) with ReadOnlyPaths locked, so the
+# MCP process CANNOT read the main install's DB password or relay
+# keys.  We deploy it as a self-contained tree (the two pure
+# @morphit/* workspace deps are vendored by deploy-mcp.sh), install
+# the unit, and enable+start it.  ALL gated on morphit_mcp_enabled
+# (default true): set it false to skip the deploy + service entirely,
+# or disable at runtime with `morphit-ops mcp`.
+- name: Create morphit-mcp group
+  ansible.builtin.group:
+    name: morphit-mcp
+    system: true
+  when: morphit_mcp_enabled | bool
+
+- name: Create morphit-mcp service user (no login, isolated)
+  ansible.builtin.user:
+    name: morphit-mcp
+    group: morphit-mcp
+    system: true
+    shell: /usr/sbin/nologin
+    home: /opt/morphit-mcp
+    create_home: false
+  when: morphit_mcp_enabled | bool
+
+- name: Ensure /opt/morphit-mcp exists (owned by the service user)
+  ansible.builtin.file:
+    path: /opt/morphit-mcp
+    state: directory
+    owner: morphit-mcp
+    group: morphit-mcp
+    mode: '0750'
+  when: morphit_mcp_enabled | bool
+
+- name: Deploy MCP env file (points the MCP at THIS instance, not morphit.io)
+  ansible.builtin.template:
+    src: mcp.env.j2
+    dest: /etc/morphit/mcp.env
+    owner: root
+    group: root
+    mode: '0644'
+  when: morphit_mcp_enabled | bool
+  notify: Restart morphit-mcp
+
+- name: Deploy morphit-mcp as a self-contained tree
+  ansible.builtin.command:
+    cmd: >-
+      bash {{ morphit_repo_path }}/ops/scripts/deploy-mcp.sh
+      {{ morphit_repo_path }} /opt/morphit-mcp morphit-mcp
+  register: morphit_mcp_deploy
+  changed_when: "'deployed to' in morphit_mcp_deploy.stdout"
+  when: morphit_mcp_enabled | bool
+  notify: Restart morphit-mcp
+
+- name: Install morphit-mcp.service unit
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path }}/ops/systemd/morphit-mcp.service"
+    dest: /etc/systemd/system/morphit-mcp.service
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  when: morphit_mcp_enabled | bool
+  notify: Reload systemd
+
+- name: Enable + start morphit-mcp
+  ansible.builtin.systemd:
+    name: morphit-mcp
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: morphit_mcp_enabled | bool

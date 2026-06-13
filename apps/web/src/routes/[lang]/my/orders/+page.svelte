@@ -139,7 +139,7 @@
 	async function load(): Promise<void> {
 		if (!blurtAccount) {
 			phase = 'error';
-			errorMessage = 'no account';
+			errorMessage = $_('my_orders.error.no_account');
 			return;
 		}
 		phase = 'loading';

@@ -221,13 +221,26 @@ function hashNonce(bytes: Uint8Array): string {
 }
 
 /**
- * Return the identicon as a URL-encoded data URI suitable for use
- * in an `<img src>`. URL encoding (vs base64) produces a smaller
- * string and works in every browser that supports SVG in data URIs.
+ * Return the identicon as a base64 data URI suitable for use in an
+ * `<img src>`.
+ *
+ * Why base64 and not percent-encoding (`data:image/svg+xml,<encoded>`):
+ * the percent-encoded form is smaller, but WebKit/Safari renders
+ * `image/svg+xml,` percent-encoded data URIs in <img> unreliably —
+ * the exact "valid SVG, valid data URI, but the <img> shows a broken-
+ * image icon" failure mode.  The base64 form (`;base64,<b64>`) renders
+ * consistently across every engine (Chromium, Gecko, WebKit) and is the
+ * canonical fix for that class of bug.  Still a `data:` URI, so it's
+ * covered by the same `img-src 'self' data: blob:` CSP directive.
+ *
+ * `btoa` is available in browsers and in Node ≥18 (the repo requires
+ * ≥22).  The identicon SVG is pure ASCII — markup, `#rrggbb` colours,
+ * integer coordinates, and a base36 clip-path id — so `btoa` needs no
+ * UTF-8 pre-encoding.
  */
 export function identiconDataUri(bytes: Uint8Array, size = 64): string {
 	const svg = identiconSvg(bytes, size);
-	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+	return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 /**

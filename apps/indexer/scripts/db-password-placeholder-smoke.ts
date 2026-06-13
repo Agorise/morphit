@@ -69,6 +69,9 @@ const ALLOWED_PATHS = new Set([
 	'apps/relay/src/config/index.ts',
 	// This smoke itself contains the strings literally.
 	'apps/indexer/scripts/db-password-placeholder-smoke.ts',
+	// The relay HMAC-secret smoke (cp252) tests that these sentinels
+	// are REJECTED as HMAC secrets, so it contains them literally.
+	'apps/relay/scripts/hmac-secret-placeholder-smoke.ts',
 	// Historical audit log — append-only, mentions the past
 	// presence of the placeholders in fix narratives.
 	'docs/AUDIT-2026-05.md',

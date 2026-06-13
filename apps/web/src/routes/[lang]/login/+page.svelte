@@ -556,6 +556,7 @@
 				<svg
 					viewBox="-1 -1 2002 2002"
 					fill="currentColor"
+					fill-rule="evenodd"
 					aria-hidden="true"
 					class="h-5 w-5 flex-none"
 				>

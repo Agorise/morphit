@@ -16,7 +16,7 @@
 	this is NOT lazy-loaded (unlike the 150-entry currency list).
 
 	Grandma-friendly: chips + dropdown show the human name ("PayPal",
-	"Barter (goods)") not the internal key; keyboard ↑/↓/Enter/Backspace/
+	"Barter (goods/services)") not the internal key; keyboard ↑/↓/Enter/Backspace/
 	Esc all work.
 -->
 <script lang="ts">
@@ -31,7 +31,14 @@
 		/** Canonical keys the operator disabled on this instance —
 		 *  excluded from the dropdown so users can't filter by a
 		 *  method this instance doesn't offer (e.g. "barter_goods"). */
-		disabled = [] as readonly string[]
+		disabled = [] as readonly string[],
+		/** Placeholder for the input when nothing is selected.  The
+		 *  orderbook passes an animated typewriter string here (mirroring
+		 *  the Region field), including '' on the blank beats — so we use
+		 *  `?? fallback` (not `|| fallback`) below to honour an explicit
+		 *  empty string.  Callers that omit this get the static localized
+		 *  example. */
+		placeholder = undefined as string | undefined
 	} = $props();
 
 	let query = $state('');
@@ -48,12 +55,14 @@
 	const hits = $derived.by<PaymentMethodEntry[]>(() => {
 		// lookupDescription → null: match on the method NAME only (a
 		// filter doesn't need description matching).
+		//
+		// No result cap: the registry has grown past 50 methods, and any
+		// fixed cap silently hid the tail of the alphabet (Ken: "the select
+		// options only go as far as S").  The dropdown is scrollable and the
+		// registry is bounded, so show EVERY matching method.
 		return searchPaymentMethods(all, query, () => null)
 			.map((r) => r.entry)
-			.filter((e) => !value.includes(e.key))
-			// 50 (not 8): scrollable list, so an empty-focus browse shows a
-			// generous set and typing narrows it.
-			.slice(0, 50);
+			.filter((e) => !value.includes(e.key));
 	});
 
 	function nameFor(key: string): string {
@@ -93,12 +102,18 @@
 		}
 	}
 
-	function onWindowClick(e: MouseEvent): void {
+	// Close on an outside press.  pointerdown (not click) for the same
+	// reason as FiatCurrencySelect: picking an option runs add(), which
+	// drops it from `hits` and detaches the clicked node before a `click`
+	// would bubble here (where rootEl.contains() would then be false and
+	// close the menu on every pick).  pointerdown fires first, so the menu
+	// stays open for multi-select; an outside press still closes it.
+	function onWindowPointerDown(e: PointerEvent): void {
 		if (open && rootEl && !rootEl.contains(e.target as Node)) open = false;
 	}
 </script>
 
-<svelte:window onclick={onWindowClick} />
+<svelte:window onpointerdown={onWindowPointerDown} />
 
 <div class="relative" bind:this={rootEl}>
 	<div
@@ -137,7 +152,9 @@
 				activeIndex = 0;
 			}}
 			onkeydown={onKeydown}
-			placeholder={value.length ? '' : $_('orderbook.filters.payment_methods_placeholder')}
+			placeholder={value.length
+				? ''
+				: (placeholder ?? $_('orderbook.filters.payment_methods_placeholder'))}
 			class="grow border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-0"
 		/>
 	</div>
@@ -174,6 +191,17 @@
 									width="20"
 									height="20"
 									class="h-5 w-5 shrink-0 rounded-full"
+								/>
+							{:else if e.icon}
+								<!-- Non-crypto entry with an explicit glyph (e.g. Barter). -->
+								<img
+									src={e.icon}
+									alt=""
+									loading="lazy"
+									decoding="async"
+									width="20"
+									height="20"
+									class="h-5 w-5 shrink-0"
 								/>
 							{:else}
 								<!-- Non-crypto (fiat rails, in-person, by-mail): no coin
