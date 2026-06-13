@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "¿Puedo comerciar bienes o servicios en Morphit, como árboles frutales o discos de vinilo?",
-        "a": "Sí — pero con una forma específica que cuesta un momento captar. El modelo de órdenes de Morphit es siempre **un activo negociable (BTC, XMR, Blurt o cualquier otra moneda que Morphit liste) en un lado, y algo más en el otro lado**. Ese «algo más» puede ser:\n\n• Una **moneda fiat** (USD, EUR, MXN, COP, NGN — el dinero de cualquier país)\n• Una **criptomoneda diferente** (p. ej. pagar con BTC una orden cuyo activo es XMR)\n• **Bienes o servicios**, mediante el método de pago `Barter (goods)`\n\n**Para intercambiar naranjos por XMR**, publicarías: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (o cualquier referencia de precio que tú y la contraparte acuerden), y pondrías los detalles en el campo `terms` — por ejemplo: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Responderán compradores de naranjos que casualmente tengan XMR.\n\n**Para intercambiar BTC por un cerezo**, publica: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (precio de referencia), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Lo que no puedes modelar directamente**: intercambios de bienes por bienes (naranjos por árboles de moringa, sin cripto de por medio). Un lado de toda orden de Morphit tiene que ser un activo negociable (BTC, XMR, Blurt o cualquier otra moneda que Morphit liste) — así es como la cadena ancla el intercambio y cómo la reseña queda adjunta a una acción real en la cadena. Para el trueque puro sin cripto, usa otra plataforma.\n\n**¿Por qué esta restricción?** Tres razones:\n\n1. **La reputación necesita anclaje.** La reseña se firma contra una operación de orden en Blurt. La operación de orden referencia un activo divisible específico (con una cantidad, un precio, una comisión). Los bienes puros no encajan en esta forma — no existe la pregunta «cuánto de un naranjo».\n\n2. **El mercado funciona porque la mayoría de las órdenes se cotizan en una unidad común.** Un comprador que escanea el libro de órdenes buscando `XMR/USD < $300` obtiene una lista limpia. Si la mitad de las órdenes se cotizaran en frutales y la otra mitad en cortes de pelo, la búsqueda y el emparejamiento se vendrían abajo.\n\n3. **Las disputas son más fáciles cuando un lado es demostrable en la cadena.** Si enviaste BTC y no recibiste el cerezo, la transferencia de BTC está en la cadena para siempre. El vendedor no puede negar haber recibido el pago. Con cripto en al menos un lado, cada intercambio de Morphit tiene un recibo firme para una mitad.\n\n**Sobre métodos de pago como Bitso, Zelle, PayPal**: estos son **rieles del lado fiat** — describen CÓMO se transfiere el fiat (o un precio de referencia denominado en fiat). «Transferencia Bitso por árboles de moringa» no encaja en el modelo: Bitso transfiere MXN, no árboles de moringa. Modelo más cercano: publica una orden de compra de XMR pagada vía Bitso, y luego usa por separado ese XMR para comprar árboles de moringa fuera de la plataforma. Dos intercambios, no uno.\n\n**Combinaciones a la inversa**: cualquier combinación de `(side, asset, payment_methods, fiat_currency)` funciona siempre que el activo sea una de las criptomonedas soportadas por Morphit. El campo libre `terms` describe lo que el intercambio realmente implica en el lado legible por humanos. Combinaciones comunes:\n\n• Comprar/vender BTC por USD vía PayPal\n• Comprar/vender XMR por efectivo en persona\n• Comprar/vender Blurt por BTC (cripto por cripto)\n• Comprar/vender USDT (en Tron, Ethereum, Solana o BSC) por fiat vía Wise o efectivo en persona\n• Comprar XMR por naranjos (trueque, con precio de referencia en USD)\n• Vender BTC por un cerezo (trueque, con precio de referencia en USD)\n• Vender USDT por ajo crudo (trueque, con precio de referencia en USD)\n• Vender XMR por un intercambio de efectivo en persona (`payment_methods=[cash]`)"
+        "a": "Sí — pero con una forma específica que cuesta un momento captar. El modelo de órdenes de Morphit es siempre **un activo negociable (BTC, XMR, Blurt o cualquier otra moneda que Morphit liste) en un lado, y algo más en el otro lado**. Ese «algo más» puede ser:\n\n• Una **moneda fiat** (USD, EUR, MXN, COP, NGN — el dinero de cualquier país)\n• Una **criptomoneda diferente** (p. ej. pagar con BTC una orden cuyo activo es XMR)\n• **Bienes o servicios**, mediante el método de pago `Barter (goods/services)`\n\n**Para intercambiar naranjos por XMR**, publicarías: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (o cualquier referencia de precio que tú y la contraparte acuerden), y pondrías los detalles en el campo `terms` — por ejemplo: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Responderán compradores de naranjos que casualmente tengan XMR.\n\n**Para intercambiar BTC por un cerezo**, publica: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (precio de referencia), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Lo que no puedes modelar directamente**: intercambios de bienes por bienes (naranjos por árboles de moringa, sin cripto de por medio). Un lado de toda orden de Morphit tiene que ser un activo negociable (BTC, XMR, Blurt o cualquier otra moneda que Morphit liste) — así es como la cadena ancla el intercambio y cómo la reseña queda adjunta a una acción real en la cadena. Para el trueque puro sin cripto, usa otra plataforma.\n\n**¿Por qué esta restricción?** Tres razones:\n\n1. **La reputación necesita anclaje.** La reseña se firma contra una operación de orden en Blurt. La operación de orden referencia un activo divisible específico (con una cantidad, un precio, una comisión). Los bienes puros no encajan en esta forma — no existe la pregunta «cuánto de un naranjo».\n\n2. **El mercado funciona porque la mayoría de las órdenes se cotizan en una unidad común.** Un comprador que escanea el libro de órdenes buscando `XMR/USD < $300` obtiene una lista limpia. Si la mitad de las órdenes se cotizaran en frutales y la otra mitad en cortes de pelo, la búsqueda y el emparejamiento se vendrían abajo.\n\n3. **Las disputas son más fáciles cuando un lado es demostrable en la cadena.** Si enviaste BTC y no recibiste el cerezo, la transferencia de BTC está en la cadena para siempre. El vendedor no puede negar haber recibido el pago. Con cripto en al menos un lado, cada intercambio de Morphit tiene un recibo firme para una mitad.\n\n**Sobre métodos de pago como Bitso, Zelle, PayPal**: estos son **rieles del lado fiat** — describen CÓMO se transfiere el fiat (o un precio de referencia denominado en fiat). «Transferencia Bitso por árboles de moringa» no encaja en el modelo: Bitso transfiere MXN, no árboles de moringa. Modelo más cercano: publica una orden de compra de XMR pagada vía Bitso, y luego usa por separado ese XMR para comprar árboles de moringa fuera de la plataforma. Dos intercambios, no uno.\n\n**Combinaciones a la inversa**: cualquier combinación de `(side, asset, payment_methods, fiat_currency)` funciona siempre que el activo sea una de las criptomonedas soportadas por Morphit. El campo libre `terms` describe lo que el intercambio realmente implica en el lado legible por humanos. Combinaciones comunes:\n\n• Comprar/vender BTC por USD vía PayPal\n• Comprar/vender XMR por efectivo en persona\n• Comprar/vender Blurt por BTC (cripto por cripto)\n• Comprar/vender USDT (en Tron, Ethereum, Solana o BSC) por fiat vía Wise o efectivo en persona\n• Comprar XMR por naranjos (trueque, con precio de referencia en USD)\n• Vender BTC por un cerezo (trueque, con precio de referencia en USD)\n• Vender USDT por ajo crudo (trueque, con precio de referencia en USD)\n• Vender XMR por un intercambio de efectivo en persona (`payment_methods=[cash]`)"
       },
       "cash_by_mail_walkthrough": {
         "q": "¿Cómo intercambio dinero en efectivo por correo o envío bienes físicos a través de Morphit?",
@@ -1999,7 +1999,7 @@
     "title": "Iniciar sesión en Morphit",
     "body": "Elige la opción que coincida con cómo llegaste aquí.",
     "no_account_heading": "¿No tienes cuenta?",
-    "no_account_body": "Regístrate abajo — el registro inicial es gratuito y toma menos de un minuto.",
+    "no_account_body": "Crea una arriba con solo elegir un nombre de usuario genial; eso es literalmente todo.",
     "register_cta": "Crear una cuenta nueva",
     "checking": "Verificando tu sesión…",
     "import_existing": "Entrar con frase semilla",
@@ -2175,7 +2175,8 @@
       "walkthrough_body": "Una explicación de 5 minutos sobre cómo funciona realmente una operación Morphit, de principio a fin."
     },
     "error": {
-      "load_failed": "No se pudo cargar tus pedidos. Inténtalo de nuevo."
+      "load_failed": "No se pudo cargar tus pedidos. Inténtalo de nuevo.",
+      "no_account": "Inicia sesión con tu cuenta de Blurt para ver tus pedidos."
     }
   },
   "nav": {
@@ -2186,7 +2187,7 @@
     "language": "Idioma",
     "privacy_terms": "Privacidad",
     "post_now": "Publicar ya",
-    "login_register": "Iniciar / Registrarse",
+    "start": "Empezar",
     "glossary": "Glosario",
     "cheat_sheet": "Hoja de referencia"
   },
@@ -2195,16 +2196,18 @@
     "intro": "Tu cuenta Morphit es un par de claves criptográficas. Se crean aquí mismo, en tu dispositivo, y nunca salen de él. Si las pierdes, nadie puede recuperarlas — ni siquiera nosotros. Ese es el precio de la privacidad real.",
     "path_reputation": {
       "title": "Construir Reputación",
+      "cta_hint": "La reputación lo es todo",
       "body": "Una identidad en el tiempo. Tus operaciones exitosas construyen un historial público que hace que la gente confíe en ti. Recomendado para la mayoría."
     },
     "path_anonymous": {
       "title": "Anonimato máximo",
+      "cta_hint": "Empieza de cero cada vez",
       "body": "Una identidad nueva en cada operación. Nada vincula tus operaciones entre sí. Ideal para usuarios de Monero que priorizan la desvinculación — pero empiezas de cero cada vez."
     },
     "generating": "Generando tus claves de forma segura en tu dispositivo…",
     "generated_title": "Tus claves están listas.",
     "generated_body": "Antes de seguir, haz una copia de seguridad. Si las pierdes, tu cuenta desaparece para siempre. Te lo advertimos — ese es el precio de tener las claves sólo tú.",
-    "this_is_you": "Así te ven los demás",
+    "this_is_you": "Así te ven los demás (a menos que lo cambies más tarde)",
     "backup": {
       "title": "Guarda tus claves",
       "seed_hint": "12 palabras. En orden. En papel. En KeePass(.info). Haz también una copia de respaldo. Guarda las 12 palabras en un lugar SEGURO. No las fotografíes. No te las envíes por correo electrónico.",
@@ -2535,7 +2538,8 @@
       "sort_recent": "Más recientes",
       "sort_rating": "⭐ Usuarios mejor valorados primero",
       "sort_trades": "Usuarios más experimentados primero",
-      "rss_asset_label": "RSS — órdenes {asset}",
+      "rss_generated_label": "RSS — Generado dinámicamente",
+      "rss_title_prefix": "{site} Libro de órdenes - Filtrado por:",
       "rss_asset_title": "Recibe notificaciones por RSS cuando se publique una nueva orden de {asset}.",
       "side_help": "Consejo: si quieres comprar cripto, busca publicaciones que quieren vender. Si quieres vender cripto, busca publicaciones que quieren comprar."
     },

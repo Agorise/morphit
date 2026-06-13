@@ -26,7 +26,12 @@ WorkingDirectory=/opt/morphit/apps/indexer
 # Source the operator env + config exactly like a manual start, then exec the
 # indexer. A shell wrapper (rather than EnvironmentFile=) is deliberate so env
 # files written in either `KEY=value` or `export KEY=value` form both load.
-ExecStart=/usr/bin/env bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+# We source BOTH layouts, each guarded with `[ -f ]`: the ops-cli layout
+# (/opt/morphit/morphit.env + morphit.config.env, written by `morphit-ops
+# init`) AND the Ansible layout (/etc/morphit/indexer.env, written by the
+# playbook).  Whichever a given install produced is sourced; the other is
+# simply absent.  loadConfig() reads process.env, so either path works.
+ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/indexer.env; do [ -f "$f" ] && . "$f"; done; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM

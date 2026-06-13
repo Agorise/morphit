@@ -61,6 +61,16 @@ export function restartServices(units: readonly string[], exec: RestartExec = de
 	return failed;
 }
 
+/** `systemctl daemon-reload` (sudo-aware, same root-detection as
+ *  restartServices) so a just-refreshed unit FILE is picked up before the
+ *  caller restarts the service.  Returns true on success (status 0). */
+export function daemonReload(exec: RestartExec = defaultExec): boolean {
+	const root = isRoot();
+	const cmd = root ? 'systemctl' : 'sudo';
+	const args = root ? ['daemon-reload'] : ['systemctl', 'daemon-reload'];
+	return exec(cmd, args).status === 0;
+}
+
 export interface OfferRestartOpts {
 	/** Override the yes/no prompt (defaults to the interactive askYesNo). */
 	readonly confirm?: (question: string, defaultYes: boolean) => Promise<boolean>;

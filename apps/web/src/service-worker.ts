@@ -9,20 +9,36 @@
  * goes through an in-app configurable endpoint list — not this service
  * worker. See $lib/net/endpoints (Phase 2).
  *
- * ─── Update policy: pin-on-install, opt-in upgrade ───────────────────────
+ * ─── Update policy: auto-activate + network-first navigation ──────────────
  *
- * We do NOT stale-while-revalidate JS/CSS. A compromised origin serving
- * malicious scripts must not be able to replace the user's installed
- * bundle silently. Instead:
+ * **SECURITY CHANGE (was: pin-on-install, opt-in upgrade).** The previous
+ * model snapshotted the build into a versioned cache and served the app
+ * CACHE-ONLY, refusing to upgrade until the user consented — the goal was
+ * that a compromised origin could not silently replace the installed
+ * bundle. In practice that model black-paged real users: on mobile, Cache
+ * Storage gets partially evicted under storage pressure, so after a deploy
+ * the surviving cached shell referenced hashed chunks the origin had
+ * already rotated away. The cache-only chunk then 404'd on the network
+ * fallback, the dynamic import threw, nothing hydrated — and because the
+ * app never booted, the in-app "update available" / "reload" banners could
+ * not render to rescue the user. (Reproduces as: blank page in a normal
+ * tab, fine in a private window which has no service worker.)
  *
- *   • On install, we snapshot the entire build manifest into a versioned
- *     cache and serve from that cache exclusively.
- *   • When a new version is detected on the server, the running page is
- *     notified. The user must explicitly accept the upgrade in Settings
- *     (or via a banner). Only then do we swap caches and reload.
+ * The trade chosen here, for a fix that can't strand a user:
+ *   • install precaches best-effort and skipWaiting()s; activate purges old
+ *     caches and claims clients — so a corrected worker can take over a
+ *     stuck tab on the next load.
+ *   • navigations are network-first (fresh shell ⇒ its chunk names always
+ *     exist on the origin), cached shell only as the OFFLINE fallback.
+ *   • hashed/immutable assets stay cache-first and self-heal on eviction.
  *
- * This protects users whose edge host is compromised and, more
- * prosaically, prevents partial-update breakage.
+ * What we GIVE UP: the origin can now serve a new shell/bundle without an
+ * explicit per-user consent click. The backstop against a hostile operator
+ * remains the chain-signed release manifest + the running-bundle SHA-256
+ * check (TamperAlertBanner / $stores/release) — note that check runs inside
+ * the app, so it is defence-in-depth, not a hard guarantee against a
+ * malicious bundle. REVISIT-LIST flags this for a future hardened
+ * consent-gated-AND-eviction-safe upgrade path if the threat model warrants.
  *
  * ─── What does hit the network ───────────────────────────────────────────
  *
@@ -84,10 +100,24 @@ self.addEventListener('install', (event: ExtendableEvent) => {
 	event.waitUntil(
 		(async () => {
 			const cache = await caches.open(CACHE);
-			await cache.addAll(PRECACHE_ASSETS);
-			// Do NOT skipWaiting() here — the current tab must stay on its
-			// pinned version until the user consents to upgrade. The running
-			// page controls the swap via the APPLY_UPDATE message below.
+			// Best-effort precache: cache assets INDIVIDUALLY and tolerate
+			// per-asset failures. `cache.addAll()` is atomic — a single 404
+			// (e.g. a manifest entry that didn't deploy) rejects the whole
+			// batch, the install fails, and users stay pinned to an older
+			// worker. allSettled lets the rest of the bundle precache.
+			await Promise.allSettled(PRECACHE_ASSETS.map((a) => cache.add(a)));
+			// Activate immediately. We previously withheld skipWaiting() to
+			// pin users to their installed bundle until they consented to an
+			// upgrade (see the SECURITY note in the header). That model
+			// black-paged users whose Cache Storage was partially evicted
+			// after a deploy: the cached shell still referenced hashed chunks
+			// the server had already rotated away, so the network fallback
+			// 404'd and nothing hydrated — and, because the app never booted,
+			// no in-app "update available" banner could rescue them. Taking
+			// over immediately + network-first navigation (see fetch below)
+			// removes that trap and lets a fixed worker rescue a stuck tab on
+			// the next load.
+			await self.skipWaiting();
 		})()
 	);
 });
@@ -137,25 +167,48 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 		(async () => {
 			const cache = await caches.open(CACHE);
 
-			// Precached assets (app bundle, static files, prerendered HTML)
-			// are served cache-only. They shipped with this version of the
-			// SW; the next build will rebuild the cache under a new key.
-			// This is what gives us total origin-decoupling after install.
-			const precached = await cache.match(req, { ignoreSearch: true });
-			if (precached) return req.mode === 'navigate' ? cleanRedirect(precached) : precached;
+			// ── Navigations (the HTML document) → NETWORK-FIRST ──────────
+			// Always try the server first so the shell matches the deployed
+			// version; its hashed chunks then resolve from cache (below) or
+			// from the network on a miss. This is what prevents the
+			// stale-shell / dead-chunk black page: after a deploy, a cached
+			// old shell would reference chunk hashes the server has rotated
+			// away — fetching the shell fresh guarantees the chunk names it
+			// asks for actually exist on the origin. Offline (network throws):
+			// fall back to the cached shell — exact route HTML first, then the
+			// root — so the user still sees the app, never a browser error.
+			if (req.mode === 'navigate') {
+				try {
+					return cleanRedirect(await fetch(req));
+				} catch {
+					const cached =
+						(await cache.match(req, { ignoreSearch: true })) ??
+						(await cache.match(url.pathname)) ??
+						(await cache.match('/'));
+					if (cached) return cleanRedirect(cached);
+					return new Response('Offline — no cached copy of this page.', {
+						status: 503,
+						headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+					});
+				}
+			}
 
-			// Anything else: try network, fall back to cached shell for
-			// navigations so the user still sees something coherent.
+			// ── Everything else (hashed JS/CSS, /static/*) → CACHE-FIRST ──
+			// These are content-addressed / immutable, so a cache hit is
+			// always correct and fast. On a miss (first sight, or the entry
+			// was evicted under storage pressure) fetch from the network and
+			// repopulate the cache, so the precache SELF-HEALS after eviction
+			// instead of leaving a hole that 404s.
+			const hit = await cache.match(req, { ignoreSearch: true });
+			if (hit) return hit;
 			try {
 				const fresh = await fetch(req);
-				return req.mode === 'navigate' ? cleanRedirect(fresh) : fresh;
-			} catch {
-				if (req.mode === 'navigate') {
-					// Prefer the exact route HTML if we have it; otherwise root.
-					const fallback = (await cache.match(url.pathname)) ?? (await cache.match('/'));
-					if (fallback) return fallback;
+				if (fresh.ok && fresh.status === 200) {
+					event.waitUntil(cache.put(req, fresh.clone()).catch(() => {}));
 				}
-				return new Response('Offline — no cached copy of this resource.', {
+				return fresh;
+			} catch {
+				return new Response('Offline — resource unavailable.', {
 					status: 503,
 					headers: { 'Content-Type': 'text/plain; charset=utf-8' }
 				});

@@ -17,10 +17,19 @@
  *     Same shape, filtered to a single asset
  *     (BTC | XMR | BLURT | USDT | USDC | DAI | BCH | LTC | DASH
  *     | DOGE | ZEC | ARRR | DCR | SOL | ETH | XRP). Lets a subscriber follow only the trades they
- *     care about. The set of valid URLs is fixed and
- *     enumerable — sixteen of them. A subscriber polling
- *     /rss/orderbook/by-asset/btc.xml reveals "I care about
- *     BTC" and nothing more granular than that.
+ *     care about. The BARE URL (no query string) reveals only
+ *     "I care about BTC" and nothing more granular. It also
+ *     accepts OPTIONAL filters as query params — side,
+ *     fiat_currency, location_region, payment_methods, min_trades
+ *     — so a feed can mirror an orderbook search (e.g.
+ *     ?side=buy&fiat_currency=USD,EUR&payment_methods=paypal&min_trades=5).
+ *     The filters are opt-in: adding them narrows the feed but
+ *     also encodes the subscriber's criteria into the URL, so a
+ *     filtered URL reveals more than the bare one. min_trades uses
+ *     the SAME sock-puppet-filtered feedback count as the
+ *     orderbook (so the two never disagree). Only `sort` is NOT
+ *     honored — a feed is always recency-ordered (readers re-sort
+ *     by date) — see rssOrderbookHandlers.ts for the rationale.
  *
  *   /rss/orderbook/by-account/@<account>.xml
  *     Filtered to a single trader's orders. Lets a subscriber
@@ -35,13 +44,17 @@
  * Shared design choices:
  *   - Fixed limit of 50 entries. No `?limit=` — fixed cap
  *     keeps cache behaviour predictable and removes one more
- *     way for an observer to fingerprint a subscriber.
+ *     way for an observer to fingerprint a subscriber. (The
+ *     by-asset feed's optional filter params are the one
+ *     deliberate exception, opt-in per above.)
  *   - Item content is strictly a subset of /v1/orderbook.
  *   - Cache-Control max-age=60s.
  *   - Empty result → 200 with a valid empty feed (so the
  *     endpoint isn't an account-existence oracle).
  *   - Account names validated with the standard regex; assets
  *     validated against a fixed whitelist. Invalid → 400.
+ *     Malformed filter values fail OPEN (dropped, not 400) so a
+ *     slightly-off subscription URL still yields a working feed.
  */
 
 import { Hono } from 'hono';
@@ -94,7 +107,14 @@ export function rssOrderbookRoute(db: Database, config: Config): Hono {
 	// .xml | .atom | .json off the end and serializes accordingly,
 	// so these two routes cover all three formats without fan-out.
 	app.get('/orderbook/by-asset/:asset', async (c) => {
-		return applyResult(c as never, await perAssetFeedHandler(c.req.param('asset'), db, config));
+		// The by-asset feed honors order-property filters (side,
+		// fiat_currency, location_region, payment_methods) via query
+		// params so a feed can mirror an orderbook search; see
+		// rssOrderbookHandlers.ts for the supported set + privacy note.
+		return applyResult(
+			c as never,
+			await perAssetFeedHandler(c.req.param('asset'), db, config, c.req.query())
+		);
 	});
 
 	app.get('/orderbook/by-account/:account', async (c) => {

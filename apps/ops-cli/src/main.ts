@@ -7,7 +7,7 @@
  *
  * Subcommands:
  *   init [--check-only] [--out=PATH]    First-time setup wizard (run on a fresh install)
- *   edit [--out=PATH]                   Re-prompt origin / alt-DNS / SEO of an existing config
+ *   edit [--out=PATH]                   Re-prompt origin, alt-network addresses, SEO, listing fee, operator tag, or RPC endpoints
  *   edit-active-key [--wipe-prior | --keep-backup]
  *                                       Rotate the relay account ACTIVE key.  Interactive by default;
  *                                       --wipe-prior overwrites prior keystore with random bytes + zeros
@@ -55,6 +55,8 @@
 
 import { loadConfig } from './config.ts';
 import { createDatabase } from './db.ts';
+import { loadInstanceEnv } from './lib/instanceEnv.ts';
+import { defaultRepoRoot } from './lib/repoRoot.ts';
 import { initColor, error as printError, info, sanitizeForTerm } from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
@@ -78,6 +80,7 @@ import { runDoctor } from './commands/doctor.ts';
 import { runSsl } from './commands/ssl.ts';
 import { runBunkerWeb } from './commands/bunkerweb.ts';
 import { runHealth } from './commands/health.ts';
+import { runMcp } from './commands/mcp.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
 import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
@@ -171,7 +174,8 @@ function printHelp(): void {
 		'                                  schema against this version (--no-db skips that). Run before',
 		'                                  starting services, or to diagnose a node that will not boot.',
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
-		'  edit [--out=PATH]               Re-prompt origin / alt-DNS / SEO of an existing config',
+		'  edit [--out=PATH]               Re-prompt origin, alt-network addresses, SEO, listing fee,',
+		'                                  operator tag, or RPC endpoints of an existing config',
 		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address: helps you',
 		'                                  generate one (vanity prefix where possible), then saves it',
 		'                                  to the footer. Lokinet has no vanity prefix (ONS for names).',
@@ -204,6 +208,9 @@ function printHelp(): void {
 		'  health [--url=URL] [--port=N]   Node health: indexer + relay /v1/health (auto-probes the',
 		'                                  Docker bridge if loopback fails), matrix-bot + mcp service',
 		'                                  state, and canary freshness. Needs no config or DB.',
+		'  mcp                             MCP server on/off switch: show the morphit-mcp service state',
+		'                                  and enable+start or stop+disable it (the AI-agent orderbook',
+		'                                  surface). Read-only + non-custodial; on by default.',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -571,6 +578,39 @@ async function main(): Promise<number> {
 			return 3;
 		}
 	}
+
+	// `mcp` — on/off switch for the morphit-mcp.service unit (the
+	// read-only AI-agent orderbook surface). Pure systemd toggle:
+	// reads the unit's state and enable+starts / stop+disables it.
+	// Needs NO config file and NO DB (it only talks to systemctl), so
+	// it lives in the pre-DB group alongside ssl/bunkerweb/health.
+	if (args.subcommand === 'mcp') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runMcp({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// Bridge the operator's on-disk env (morphit.env + morphit.config.env)
+	// into process.env BEFORE loadConfig, so the DB-backed commands (status,
+	// signups, drain-queue, failed-broadcasts, moderation, abuse, loyalty,
+	// attestations, flags, block/unblock, fast-forward) find the database
+	// URL on a systemd deploy.  There, the DB URL lives in morphit.env,
+	// sourced ONLY by the unit's `EnvironmentFile=` — never by the operator's
+	// interactive `sudo morphit-ops` shell — so without this the menu's whole
+	// "Check & operate" group failed with "No database URL configured."  OS
+	// env still wins (populate-if-missing); best-effort and root-gated since
+	// morphit.env is root-owned, which is exactly why these commands are
+	// tagged "(needs sudo)".  Same bridge the on-chain commands (register /
+	// show-key / payment-method) already use.
+	loadInstanceEnv(defaultRepoRoot());
 
 	// Now load config — only after we've handled help/version
 	// and init, because those work without DATABASE_URL set.

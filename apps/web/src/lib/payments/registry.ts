@@ -65,6 +65,11 @@ export interface PaymentMethodEntry {
 	/** Hide this method when the order's traded asset matches.
 	 *  Only meaningful for crypto entries. */
 	readonly assetExclusion?: AssetTicker;
+	/** Optional icon path (under /static) for non-crypto entries.
+	 *  Crypto entries derive their coin icon from the key
+	 *  (`/icons/icon-<ticker>.svg`) and ignore this; a non-crypto
+	 *  entry that wants a glyph (e.g. Barter) sets it explicitly. */
+	readonly icon?: string;
 }
 
 /** All canonical entries.  Adding an entry: insert in
@@ -344,15 +349,16 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 
 	// ─── In Person ──────────────────────────────────────────────
 	// Three options that cover the realistic spectrum of
-	// face-to-face exchange.  "Barter (goods)" is intentionally
+	// face-to-face exchange.  "Barter (goods/services)" is intentionally
 	// open-ended — the order's free-form `terms` field carries
 	// what's actually being bartered ("orange trees," "used
 	// bicycle," "raw garlic").
 	{
 		key: 'barter_goods',
-		name: 'Barter (goods)',
+		name: 'Barter (goods/services)',
 		url: null,
-		category: 'in_person'
+		category: 'in_person',
+		icon: '/icons/icon-barter.svg'
 	},
 	{
 		key: 'cash_in_person',

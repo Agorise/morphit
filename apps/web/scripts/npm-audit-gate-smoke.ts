@@ -89,6 +89,29 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'Matrix homeservers, so attacker-controlled cookies are not in scope.'
 	},
 	{
+		package: 'esbuild',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'esbuild enables any website to send any requests to the development server and read the response',
+			'esbuild: Missing binary integrity verification in Deno module enables remote code execution via NPM_CONFIG_REGISTRY',
+			'esbuild allows arbitrary file read when running the development server on Windows'
+		],
+		lastReviewed: '2026-06-12',
+		rationale:
+			'Dev/build-only dependency (never shipped to operators). All three advisories ' +
+			'target esbuild usage patterns Morphit does not employ: (1) the permissive-CORS ' +
+			'dev server and (3) the Windows dev-server arbitrary-file-read both require ' +
+			"esbuild's `serve` mode — Morphit uses esbuild only as a one-shot Node bundler " +
+			'(ops-cli build.mjs) and the SvelteKit/Vite dev server is local-development-only, ' +
+			'never exposed in production (operators serve prebuilt static assets). (2) the ' +
+			'Deno-module binary-integrity RCE requires running esbuild under Deno with an ' +
+			'attacker-controlled NPM_CONFIG_REGISTRY — Morphit builds under Node with the ' +
+			'default registry and has no Deno path installed. No production surface; the ' +
+			'lockfile is the tested source of truth (no `npm audit fix`). Reviewed cp252. ' +
+			'Revisit if esbuild ever becomes a runtime/served dependency or if a non-breaking ' +
+			'patched esbuild is already in range.'
+	},
+	{
 		package: 'vitest',
 		maxSeverity: 'critical',
 		acceptedTitles: [

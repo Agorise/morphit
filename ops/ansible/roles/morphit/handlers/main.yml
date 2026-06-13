@@ -12,3 +12,8 @@
   ansible.builtin.systemd:
     name: morphit-indexer
     state: restarted
+
+- name: Restart morphit-mcp
+  ansible.builtin.systemd:
+    name: morphit-mcp
+    state: restarted

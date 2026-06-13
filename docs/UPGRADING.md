@@ -244,11 +244,30 @@ Steps the command takes, in order:
 
     This check is best-effort and never fails the upgrade; it exists so a
     silent publish failure becomes a visible, actionable one.
-10. Restarts these systemd services if they're active:
+10. Refreshes the installed systemd unit files from the templates in
+    the freshly-extracted `ops/systemd/`. Those units are static files
+    you copy to `/etc/systemd/system/` once at install, so a fix to a
+    unit (for example an added `RestrictAddressFamilies=AF_UNIX`,
+    without which a service can crash-loop) used to ship in the repo but
+    never reach an already-installed box — the upgrade only restarted
+    services, it didn't update the unit files. Now it does, safely:
+    - Only units you **already have installed** *and* whose contents
+      differ from the template are touched — it never installs a unit
+      you didn't choose to run, and never rewrites an identical one.
+    - The previous file is saved to `<unit>.bak` before it's
+      overwritten, so a hand-edited unit is never silently lost.
+    - **Drop-ins** (`<unit>.d/*.conf`) are never touched — your
+      overrides survive (so a unit you fixed by hand with a drop-in
+      keeps working after the base unit is refreshed).
+    - It then runs `systemctl daemon-reload` so the restart below picks
+      up the new units. This whole step is best-effort and never fails
+      the upgrade. (Set `MORPHIT_SYSTEMD_DIR` if your units live
+      somewhere other than `/etc/systemd/system`.)
+11. Restarts these systemd services if they're active:
     - `morphit-indexer.service`
     - `morphit-relay.service`
     - `morphit-matrix-bot.service`
-11. Prunes old backups, keeping the 3 most recent (tunable via
+12. Prunes old backups, keeping the 3 most recent (tunable via
     `MORPHIT_BACKUP_KEEP`).
 
 If **any** step from 7 onwards fails, the command:

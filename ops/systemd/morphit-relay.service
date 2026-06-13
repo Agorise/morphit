@@ -36,7 +36,13 @@ WorkingDirectory=/opt/morphit/apps/relay
 # credential is missing this unit FAILS to start — intentionally; do not fall
 # back to a plaintext passphrase in morphit.env. See docs/OPERATIONS.md.
 LoadCredentialEncrypted=relay_passphrase:/etc/morphit/relay_passphrase.cred
-ExecStart=/usr/bin/env bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+# Source BOTH env layouts, each guarded with `[ -f ]`: the ops-cli layout
+# (/opt/morphit/morphit.env + morphit.config.env) AND the Ansible layout
+# (/etc/morphit/relay.env), plus the generate-once VAPID file.  Whichever a
+# given install produced is sourced; the other is simply absent.  This is why
+# the relay works identically whether it was set up by `morphit-ops init` or
+# by the Ansible playbook (which writes /etc/morphit/relay.env).
+ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env; do [ -f "$f" ] && . "$f"; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 # With the env-var passphrase path, restart-on-crash actually succeeds now
 # (no interactive prompt to hang on).
 Restart=on-failure

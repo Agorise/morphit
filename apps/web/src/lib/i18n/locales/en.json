@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "Can I trade goods or services on Morphit, like fruit trees or vintage records?",
-        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of Morphit's supported cryptocurrencies. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell Blurt for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
+        "a": "Yes — but with a specific shape that takes a moment to grasp. Morphit's order model is always **a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) on one side, and something else on the other side**. The \"something else\" can be:\n\n• A **fiat currency** (USD, EUR, MXN, COP, NGN — any country's money)\n• A **different cryptocurrency** (e.g. paying with BTC for an order whose asset is XMR)\n• **Goods or services**, via the `Barter (goods/services)` payment method\n\n**To trade orange trees for XMR**, you would post: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (or whatever pricing reference you and the counterparty agree to), and put the specifics in the `terms` field — for example: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Buyers of orange trees who happen to have XMR will respond.\n\n**To trade BTC for a cherry tree**, post: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (reference price), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**What you cannot model directly**: goods-for-goods trades (orange trees for moringa trees, with no crypto involved). One side of every Morphit order has to be a tradable asset (BTC, XMR, Blurt, or any other coin Morphit lists) — that's how the chain anchors the trade and how feedback gets attached to a real on-chain action. For pure barter without crypto, use a different platform.\n\n**Why this constraint?** Three reasons:\n\n1. **Reputation needs anchoring.** Feedback is signed against an order op on Blurt. The order op references a specific divisible asset (with a quantity, a price, a fee). Pure goods don't fit this shape — there's no \"how much of an orange tree\" question.\n\n2. **The marketplace works because most orders price in a common unit.** A buyer scanning the orderbook for `XMR/USD < $300` gets a clean list. If half the orders priced in fruit trees and the other half in haircuts, search and matching break down.\n\n3. **Disputes are easier when one side is provable on-chain.** If you sent BTC and didn't get the cherry tree, the BTC transfer is on-chain forever. The seller can't deny receiving payment. With crypto on at least one side, every Morphit trade has a hard receipt for one half.\n\n**About payment methods like Bitso, Zelle, PayPal**: these are **fiat-side rails** — they describe HOW the fiat (or a fiat-denominated reference price) gets transferred. \"Bitso transfer for moringa trees\" doesn't fit the model: Bitso transfers MXN, not moringa trees. Closest model: post a buy XMR order paid via Bitso, then separately use that XMR to buy moringa trees off-platform. Two trades, not one.\n\n**Vice-versa combinations**: every combination of `(side, asset, payment_methods, fiat_currency)` works as long as the asset is one of Morphit's supported cryptocurrencies. The free-form `terms` field describes what the trade actually involves on the human-readable side. Common combinations:\n\n• Buy/sell BTC for USD via PayPal\n• Buy/sell XMR for cash in person\n• Buy/sell Blurt for BTC (crypto-for-crypto)\n• Buy/sell USDT (on Tron, Ethereum, Solana, or BSC) for fiat via Wise or in-person cash\n• Buy XMR for orange trees (barter, with USD reference price)\n• Sell BTC for a cherry tree (barter, with USD reference price)\n• Sell USDT for raw garlic (barter, with USD reference price)\n• Sell XMR for an in-person cash exchange (`payment_methods=[cash]`)"
       },
       "cash_by_mail_walkthrough": {
         "q": "How do I trade cash by mail or ship physical goods through Morphit?",
@@ -1999,7 +1999,7 @@
     "title": "Log in to Morphit",
     "body": "Pick the option that matches how you got here.",
     "no_account_heading": "Don't have an account?",
-    "no_account_body": "Register below — first-time signup is free and takes under a minute.",
+    "no_account_body": "Create one above by just picking a cool username, that's literally all there is to it.",
     "register_cta": "Create a new account",
     "checking": "Checking your session…",
     "import_existing": "Sign in with seed phrase",
@@ -2175,7 +2175,8 @@
       "walkthrough_body": "A 5-minute explainer of how a Morphit trade actually works, start to finish."
     },
     "error": {
-      "load_failed": "Couldn't load your orders. Try again."
+      "load_failed": "Couldn't load your orders. Try again.",
+      "no_account": "Sign in with your Blurt account to see your orders."
     }
   },
   "nav": {
@@ -2186,7 +2187,7 @@
     "language": "Language",
     "privacy_terms": "Privacy / Terms",
     "post_now": "Post Now",
-    "login_register": "Login / Register",
+    "start": "Start",
     "glossary": "Glossary",
     "cheat_sheet": "Cheat-sheet"
   },
@@ -2195,16 +2196,18 @@
     "intro": "Your Morphit account is a pair of cryptographic keys. They are made right here on your device and never leave it. If you lose them, no one can recover them — not even us. That's the price of true privacy.",
     "path_reputation": {
       "title": "Build Reputation",
+      "cta_hint": "Reputation is everything",
       "body": "One identity over time. Your successful trades earn a public track record that makes people trust you. Recommended for most users."
     },
     "path_anonymous": {
       "title": "Maximum Anonymity",
+      "cta_hint": "Start over every time",
       "body": "A fresh identity every trade. Nothing links your trades together. Best for Monero users who prioritize unlinkability — but you start from zero reputation every time."
     },
     "generating": "Generating your keys securely on your device…",
     "generated_title": "Your keys are ready.",
     "generated_body": "Before you do anything else, back them up. If you lose them, your account is gone forever. We warned you — this is the tradeoff for keys only you control.",
-    "this_is_you": "This is how you appear to others",
+    "this_is_you": "This is how you appear to others (unless you change it later)",
     "backup": {
       "title": "Back up your keys",
       "seed_hint": "12 words. In order. On paper. In KeePass(.info). Make a backup copy too. Store the 12 words somewhere SAFE. Do not photograph them. Do not email them to yourself.",
@@ -2535,7 +2538,8 @@
       "sort_recent": "Most recent",
       "sort_rating": "⭐ Highest rated users first",
       "sort_trades": "Most experienced users first",
-      "rss_asset_label": "RSS — {asset} orders",
+      "rss_generated_label": "RSS — Generated dynamically",
+      "rss_title_prefix": "{site} Orderbook - Filtered by:",
       "rss_asset_title": "Get notified via RSS when a new {asset} order is posted.",
       "side_help": "Tip: if you want to buy crypto, look for posts wanting to sell. If you want to sell crypto, look for posts wanting to buy."
     },
@@ -2897,7 +2901,7 @@
         "eth": "Ethereum (ETH) — Proof-of-Stake cryptocurrency. Native ETH transfer (not wrapped ETH or ERC-20 tokens). 42-character 0x-prefixed hex addresses (same shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every EVM token-account address; asset field + network field disambiguate). Trade-only on Morphit; listing fees stay BLURT/BTC/XMR.",
         "xrp": "Ripple (XRP) — Federated Byzantine Agreement cryptocurrency on the XRP Ledger. 24-34 character base58 addresses starting with `r`. Destination tags (32-bit integers) are required when sending to exchange-hosted addresses — your peer-to-peer counterparty typically does not need one. XRPL accounts need ≥1 XRP base reserve to exist. Trade-only on Morphit; listing fees stay BLURT/BTC/XMR."
       },
-      "waiver_fiat_hint": "💡 BLURT trades thinly on centralized exchanges, so most BLURT-for-fiat trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. Tip: pick a fiat your local network uses (USD, EUR, MXN, etc.), or check the In-Person → Barter (goods) payment method in step 3 if you want to offer something else of value. The orderbook is small for now — your buy order helps build it.",
+      "waiver_fiat_hint": "💡 BLURT trades thinly on centralized exchanges, so most BLURT-for-fiat trades on Morphit happen with active Blurt social-network users, existing operators, or via barter. Tip: pick a fiat your local network uses (USD, EUR, MXN, etc.), or check the In-Person → Barter (goods/services) payment method in step 3 if you want to offer something else of value. The orderbook is small for now — your buy order helps build it.",
       "waiver_benefits_heading": "What your buy unlocks:",
       "price_model_legend": "Price",
       "price_model_hint": "How is your asking price set? Most traders use market rate; flat-price is for when you want a specific number regardless of market moves.",

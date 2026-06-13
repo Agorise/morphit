@@ -623,9 +623,10 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		if (rs?.version != null) console.log(`      Version:       ${safe(rs.version)}`);
 		console.log(`      Uptime:        ${fmtUptime(rs?.uptimeSec ?? null)}`);
 	} else if (relay.kind === 'unreachable') {
-		console.log(`  ${c.red('✗')} not reachable`);
+		console.log(`  ${c.red('✗')} not reachable on loopback or any bridge gateway`);
 		console.log(`      ${c.dim('the relay is optional — only needed if your node broadcasts')}`);
-		console.log(`      ${c.dim('user-signed ops. If you run it, check its systemd service.')}`);
+		console.log(`      ${c.dim('user-signed ops. If you run it, check that its container or')}`);
+		console.log(`      ${c.dim('systemd service is up and publishes its port to the host.')}`);
 	} else {
 		console.log(`  ${c.yellow('⚠')} answered, but not as the relay (${relay.kind})`);
 	}

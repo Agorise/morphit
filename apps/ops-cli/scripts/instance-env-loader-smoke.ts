@@ -5,6 +5,15 @@
  * (payment-method / register / show-key), without overwriting values the
  * operator set explicitly, and without throwing when files are absent.
  *
+ * It ALSO covers the DB-command bridge (cp248): the DB-backed commands
+ * (status / signups / drain-queue / failed-broadcasts / moderation) resolve
+ * their database URL through loadConfig(), which reads process.env.  On a
+ * systemd deploy the DB URL lives in morphit.env (unit-sourced only), so
+ * `sudo morphit-ops status` failed with "No database URL configured" until
+ * main.ts began calling loadInstanceEnv() BEFORE loadConfig().  Scenarios 5
+ * + 6 pin that the DB URL bridges through to loadConfig and that main.ts
+ * keeps the call ordering.
+ *
  * Why: on a systemd deployment morphit.env is sourced only by the unit, so
  * `morphit-ops payment-method` previously failed with
  * "✗ MORPHIT_RELAY_ACCOUNT is not set" even on a healthy instance.
@@ -14,15 +23,21 @@
  *   2. OS env wins — a pre-set value is NOT overwritten.
  *   3. no env files present → no throw, both flags false.
  *   4. only morphit.env present (no config) → infraLoaded true, no throw.
+ *   5. a DB URL in morphit.env bridges through to loadConfig().databaseUrl.
+ *   6. main.ts calls loadInstanceEnv() BEFORE loadConfig() (static wiring).
  *
  * Usage:
  *   tsx apps/ops-cli/scripts/instance-env-loader-smoke.ts
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadInstanceEnv } from '../src/lib/instanceEnv.ts';
+import { loadConfig } from '../src/config.ts';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface R {
 	readonly name: string;
@@ -38,7 +53,10 @@ function ok(name: string, cond: boolean, detail?: string): void {
 const TOUCHED = [
 	'MORPHIT_RELAY_ACCOUNT',
 	'MORPHIT_OPERATOR_POSTING_KEY_FILE',
-	'MORPHIT_OPERATOR_CONFIG_FILE'
+	'MORPHIT_OPERATOR_CONFIG_FILE',
+	'MORPHIT_OPS_DATABASE_URL',
+	'MORPHIT_INDEXER_DATABASE_URL',
+	'DATABASE_URL'
 ];
 const saved = new Map<string, string | undefined>();
 for (const k of TOUCHED) saved.set(k, process.env[k]);
@@ -105,6 +123,45 @@ function main(): void {
 		}
 		ok('infra_only_no_throw', !threw);
 		rmSync(dir, { recursive: true, force: true });
+	}
+
+	// Scenario 5: a DB URL in morphit.env bridges through to loadConfig() —
+	// the exact path that fixes `sudo morphit-ops status` ("No database URL
+	// configured") on a systemd deploy.  We clear all three DB-URL env keys
+	// first so the only source is the file.
+	{
+		resetEnv();
+		const dir = mkdtempSync(join(tmpdir(), 'ienv-dburl-'));
+		writeInfra(dir, 'MORPHIT_INDEXER_DATABASE_URL=postgres://u:p@localhost:5432/morphit\n');
+		loadInstanceEnv(dir);
+		let threw = false;
+		let url: string | undefined;
+		try {
+			url = loadConfig().databaseUrl;
+		} catch {
+			threw = true;
+		}
+		ok(
+			'db_url_bridged_to_loadConfig',
+			!threw && url === 'postgres://u:p@localhost:5432/morphit',
+			threw ? 'loadConfig threw (DB URL not bridged)' : `got ${url}`
+		);
+		rmSync(dir, { recursive: true, force: true });
+	}
+
+	// Scenario 6 (static wiring): main.ts must call loadInstanceEnv() BEFORE
+	// loadConfig() — otherwise the bridge never runs for the DB commands and
+	// the whole "Check & operate" menu group regresses to the DB-URL error.
+	{
+		const mainSrc = readFileSync(join(__dirname, '..', 'src', 'main.ts'), 'utf-8');
+		const iEnv = mainSrc.indexOf('loadInstanceEnv(');
+		const iCfg = mainSrc.indexOf('loadConfig()');
+		ok('main_imports_loadInstanceEnv', /import \{ loadInstanceEnv \}/.test(mainSrc));
+		ok(
+			'main_calls_loadInstanceEnv_before_loadConfig',
+			iEnv !== -1 && iCfg !== -1 && iEnv < iCfg,
+			`iEnv=${iEnv} iCfg=${iCfg}`
+		);
 	}
 
 	// Restore env.

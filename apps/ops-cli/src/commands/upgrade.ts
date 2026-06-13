@@ -93,12 +93,14 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
+import { refreshManagedUnits } from '../lib/refreshUnits.ts';
+import { daemonReload } from '../lib/restartServices.ts';
 
 interface UpgradeFlags {
 	readonly 'check-only'?: string;
@@ -1080,6 +1082,47 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		} catch {
 			// verification is best-effort; never fail the upgrade over it
 		}
+	}
+
+	// ─── 9e. Refresh systemd unit files from the new templates ──
+	// The units in ops/systemd/ are STATIC files an operator copies to
+	// /etc/systemd/system/ once at init; this upgrade just extracted fresh
+	// copies into installDir.  Bring the INSTALLED units up to date so a
+	// unit fix (e.g. an added RestrictAddressFamilies=AF_UNIX, without
+	// which a tsx-run service crash-loops on EAFNOSUPPORT) reaches an
+	// already-installed box — historically upgrade only restarted services
+	// and never refreshed the unit files, so such fixes never landed.
+	// Best-effort: never fails the upgrade.  Drop-ins (<unit>.d/) are
+	// untouched; a changed unit is backed up to <unit>.bak first.  The
+	// daemon-reload here means the restart step below picks up the new
+	// units; refreshed timer/monitor units take effect on their next run.
+	try {
+		const { results, reloadNeeded } = refreshManagedUnits({
+			templateDir: join(installDir, 'ops', 'systemd'),
+			systemdDir: process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
+			apply: true
+		});
+		const refreshed = results.filter((r) => r.action === 'refreshed');
+		if (refreshed.length > 0) {
+			for (const r of refreshed) {
+				info(
+					`Refreshed ${r.unit} from the new template` +
+						(r.backupPath ? ` (previous saved to ${basename(r.backupPath)})` : '')
+				);
+			}
+			if (reloadNeeded) {
+				if (daemonReload()) {
+					info('Reloaded systemd so the refreshed units take effect.');
+				} else {
+					warn('Could not run `systemctl daemon-reload`; run it by hand before restarting.');
+				}
+			}
+		}
+	} catch (err) {
+		warn(
+			`Could not refresh systemd unit files (continuing): ` +
+				`${err instanceof Error ? err.message : String(err)}`
+		);
 	}
 
 	// ─── 10. Restart services ──────────────────────────────────

@@ -232,6 +232,31 @@ body {
 		animation-play-state: paused;
 	}
 
+	/* Compact primary button — same animated 1px gradient border as
+	 * .btn-primary, but sized to match the LanguageSwitcher pill EXACTLY
+	 * (px-2.5 py-2 text-sm + 1px border) so the two sit at the same height
+	 * in the header.  Deliberately NOT built on .btn (which forces
+	 * min-height:44px + py-3 + text-base, making it taller than the pill). */
+	.btn-primary-sm {
+		@apply inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-semibold text-white transition-all duration-150;
+		@apply focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald;
+		border: 1px solid transparent;
+		background:
+			linear-gradient(var(--morphit-btn-face), var(--morphit-btn-face)) padding-box,
+			var(--morphit-gradient) border-box;
+		background-size:
+			100% 100%,
+			200% 100%;
+		background-repeat: no-repeat;
+		background-position:
+			0 0,
+			0 50%;
+		animation: morphit-shimmer 6s linear infinite;
+	}
+	.btn-primary-sm:hover {
+		animation-play-state: paused;
+	}
+
 	.btn-secondary {
 		@apply btn bg-ink-100 text-ink-900 hover:bg-ink-200 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700;
 	}
@@ -344,6 +369,7 @@ body {
 /* Respect the user's reduced-motion preference. */
 @media (prefers-reduced-motion: reduce) {
 	.btn-primary,
+	.btn-primary-sm,
 	.animate-morphit-hue-shift,
 	.animate-morphit-pulse {
 		animation: none !important;

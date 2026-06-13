@@ -96,12 +96,20 @@
 		}
 	}
 
-	function onWindowClick(e: MouseEvent): void {
+	// Close on an outside press.  Uses `pointerdown` (not `click`)
+	// deliberately: clicking an option runs add(), which removes that
+	// option from `hits` and so detaches the clicked node from the DOM
+	// before a `click` would bubble to here — at which point
+	// rootEl.contains(detachedNode) is false and the menu would wrongly
+	// close on every pick.  pointerdown fires BEFORE that re-render, so
+	// the target is still inside rootEl and the menu stays open for the
+	// next selection; an outside press still closes it.
+	function onWindowPointerDown(e: PointerEvent): void {
 		if (open && rootEl && !rootEl.contains(e.target as Node)) open = false;
 	}
 </script>
 
-<svelte:window onclick={onWindowClick} />
+<svelte:window onpointerdown={onWindowPointerDown} />
 
 <div class="relative" bind:this={rootEl}>
 	<div

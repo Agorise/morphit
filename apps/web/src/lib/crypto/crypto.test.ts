@@ -489,13 +489,19 @@ describe('identicon', () => {
 		expect(a).not.toBe(b);
 	});
 
-	it('returns a data URI suitable for <img src>', () => {
-		const uri = identiconDataUri(new Uint8Array([1, 2, 3]), 48);
-		// URL-encoded SVG, not base64 — smaller payload, standard
-		// prefix for `data:image/svg+xml`. Widely supported in all
-		// modern browsers.
-		expect(uri.startsWith('data:image/svg+xml,')).toBe(true);
-		expect(uri).toContain('%3Csvg'); // URL-encoded `<svg`
+	it('returns a base64 data URI suitable for <img src>', () => {
+		const bytes = new Uint8Array([1, 2, 3]);
+		const uri = identiconDataUri(bytes, 48);
+		// Base64 (not percent-encoded): renders consistently in <img>
+		// across every engine, notably WebKit/Safari where the
+		// percent-encoded `image/svg+xml,` form is unreliable. Still a
+		// `data:` URI, covered by the `img-src ... data:` CSP directive.
+		expect(uri.startsWith('data:image/svg+xml;base64,')).toBe(true);
+		// The base64 payload must decode back to exactly the SVG markup.
+		const b64 = uri.slice('data:image/svg+xml;base64,'.length);
+		const decoded = Buffer.from(b64, 'base64').toString('utf-8');
+		expect(decoded).toBe(identiconSvg(bytes, 48));
+		expect(decoded.startsWith('<svg')).toBe(true);
 	});
 });
 

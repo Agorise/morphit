@@ -92,10 +92,20 @@ check('installer runs systemctl daemon-reload', /systemctl daemon-reload/.test(i
 for (const u of CORE_UNITS) {
 	check(`installer targets ${u}`, installer.includes(u));
 }
+// Scope the isolation invariant to EXECUTABLE logic.  The installer is
+// allowed to *document* how to set up the isolated units by hand (it
+// echoes step-by-step guidance for MCP + web push), but its actual
+// install loop (CORE_UNITS) must never include them.  Strip comment +
+// standalone-echo lines before checking, so guidance text doesn't trip
+// the invariant.
+const installerLogic = installer
+	.split('\n')
+	.filter((ln) => !/^\s*#/.test(ln) && !/^\s*echo\b/.test(ln))
+	.join('\n');
 for (const u of ISOLATED_UNITS) {
 	check(
-		`installer does NOT touch ${u} (isolation preserved)`,
-		!installer.includes(u)
+		`installer does NOT install ${u} in its core loop (isolation preserved)`,
+		!installerLogic.includes(u)
 	);
 }
 

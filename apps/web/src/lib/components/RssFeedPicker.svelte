@@ -32,6 +32,7 @@
 		base,
 		label,
 		text = '',
+		query = '',
 		triggerClass = 'chip',
 		iconClass = 'h-4 w-4',
 		align = 'left'
@@ -39,6 +40,10 @@
 		base: string;
 		label: string;
 		text?: string;
+		/** Optional query string (no leading '?') appended after the
+		 *  extension, e.g. 'side=buy&fiat_currency=USD'.  Lets a feed
+		 *  carry the caller's active filters (orderbook by-asset feed). */
+		query?: string;
 		triggerClass?: string;
 		iconClass?: string;
 		align?: 'left' | 'right';
@@ -63,7 +68,8 @@
 
 	function urlFor(format: RssFormat): string {
 		const origin = typeof location !== 'undefined' ? location.origin : '';
-		return `${origin}${base}.${EXT[format]}`;
+		const qs = query ? `?${query}` : '';
+		return `${origin}${base}.${EXT[format]}${qs}`;
 	}
 
 	async function pick(format: RssFormat, e: MouseEvent): Promise<void> {

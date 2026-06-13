@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "Puis-je échanger des biens ou des services sur Morphit, comme des arbres fruitiers ou des disques vinyles ?",
-        "a": "Oui — mais avec une forme spécifique qui demande un instant à saisir. Le modèle d'ordre de Morphit est toujours **un actif négociable (BTC, XMR, Blurt ou toute autre monnaie listée par Morphit) d'un côté, et autre chose de l'autre côté**. Cet « autre chose » peut être :\n\n• Une **monnaie fiat** (USD, EUR, MXN, COP, NGN — l'argent de n'importe quel pays)\n• Une **cryptomonnaie différente** (p. ex. payer en BTC pour un ordre dont l'actif est XMR)\n• **Des biens ou services**, via la méthode de paiement `Barter (goods)`\n\n**Pour échanger des orangers contre du XMR**, tu publierais : side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (ou la référence de prix dont toi et la contrepartie convenez), et tu mettrais les détails dans le champ `terms` — par exemple : `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Des acheteurs d'orangers qui ont justement du XMR répondront.\n\n**Pour échanger du BTC contre un cerisier**, publie : side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (prix de référence), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Ce que tu ne peux pas modéliser directement** : les échanges biens-contre-biens (orangers contre arbres de moringa, sans crypto). Un côté de chaque ordre Morphit doit être un actif négociable (BTC, XMR, Blurt ou toute autre monnaie listée par Morphit) — c'est ainsi que la chaîne ancre l'échange et que l'avis est rattaché à une vraie action on-chain. Pour le troc pur sans crypto, utilise une autre plateforme.\n\n**Pourquoi cette contrainte ?** Trois raisons :\n\n1. **La réputation a besoin d'ancrage.** L'avis est signé contre une op d'ordre sur Blurt. L'op d'ordre référence un actif divisible spécifique (avec une quantité, un prix, des frais). Les biens purs ne rentrent pas dans cette forme — il n'y a pas de question « combien d'un oranger ».\n\n2. **Le marché fonctionne parce que la plupart des ordres sont cotés dans une unité commune.** Un acheteur qui parcourt le carnet d'ordres à la recherche de `XMR/USD < $300` obtient une liste nette. Si la moitié des ordres étaient cotés en arbres fruitiers et l'autre moitié en coupes de cheveux, la recherche et l'appariement s'effondreraient.\n\n3. **Les litiges sont plus faciles quand un côté est prouvable on-chain.** Si tu as envoyé du BTC et n'as pas reçu le cerisier, le transfert de BTC est on-chain pour toujours. Le vendeur ne peut pas nier avoir reçu le paiement. Avec de la crypto d'au moins un côté, chaque échange Morphit a un reçu solide pour une moitié.\n\n**À propos des méthodes de paiement comme Bitso, Zelle, PayPal** : ce sont des **rails côté fiat** — elles décrivent COMMENT le fiat (ou un prix de référence libellé en fiat) est transféré. « Virement Bitso pour des arbres de moringa » ne rentre pas dans le modèle : Bitso transfère des MXN, pas des arbres de moringa. Modèle le plus proche : publie un ordre d'achat de XMR payé via Bitso, puis utilise séparément ce XMR pour acheter des arbres de moringa hors plateforme. Deux échanges, pas un.\n\n**Combinaisons inverses** : toute combinaison de `(side, asset, payment_methods, fiat_currency)` fonctionne tant que l'actif est l'une des cryptomonnaies prises en charge par Morphit. Le champ libre `terms` décrit ce que l'échange implique réellement du côté lisible par l'humain. Combinaisons courantes :\n\n• Acheter/vendre du BTC contre des USD via PayPal\n• Acheter/vendre du XMR contre des espèces en personne\n• Acheter/vendre du Blurt contre du BTC (crypto-contre-crypto)\n• Acheter/vendre de l'USDT (sur Tron, Ethereum, Solana ou BSC) contre du fiat via Wise ou des espèces en personne\n• Acheter du XMR contre des orangers (troc, avec prix de référence en USD)\n• Vendre du BTC contre un cerisier (troc, avec prix de référence en USD)\n• Vendre de l'USDT contre de l'ail cru (troc, avec prix de référence en USD)\n• Vendre du XMR contre un échange d'espèces en personne (`payment_methods=[cash]`)"
+        "a": "Oui — mais avec une forme spécifique qui demande un instant à saisir. Le modèle d'ordre de Morphit est toujours **un actif négociable (BTC, XMR, Blurt ou toute autre monnaie listée par Morphit) d'un côté, et autre chose de l'autre côté**. Cet « autre chose » peut être :\n\n• Une **monnaie fiat** (USD, EUR, MXN, COP, NGN — l'argent de n'importe quel pays)\n• Une **cryptomonnaie différente** (p. ex. payer en BTC pour un ordre dont l'actif est XMR)\n• **Des biens ou services**, via la méthode de paiement `Barter (goods/services)`\n\n**Pour échanger des orangers contre du XMR**, tu publierais : side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (ou la référence de prix dont toi et la contrepartie convenez), et tu mettrais les détails dans le champ `terms` — par exemple : `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Des acheteurs d'orangers qui ont justement du XMR répondront.\n\n**Pour échanger du BTC contre un cerisier**, publie : side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (prix de référence), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Ce que tu ne peux pas modéliser directement** : les échanges biens-contre-biens (orangers contre arbres de moringa, sans crypto). Un côté de chaque ordre Morphit doit être un actif négociable (BTC, XMR, Blurt ou toute autre monnaie listée par Morphit) — c'est ainsi que la chaîne ancre l'échange et que l'avis est rattaché à une vraie action on-chain. Pour le troc pur sans crypto, utilise une autre plateforme.\n\n**Pourquoi cette contrainte ?** Trois raisons :\n\n1. **La réputation a besoin d'ancrage.** L'avis est signé contre une op d'ordre sur Blurt. L'op d'ordre référence un actif divisible spécifique (avec une quantité, un prix, des frais). Les biens purs ne rentrent pas dans cette forme — il n'y a pas de question « combien d'un oranger ».\n\n2. **Le marché fonctionne parce que la plupart des ordres sont cotés dans une unité commune.** Un acheteur qui parcourt le carnet d'ordres à la recherche de `XMR/USD < $300` obtient une liste nette. Si la moitié des ordres étaient cotés en arbres fruitiers et l'autre moitié en coupes de cheveux, la recherche et l'appariement s'effondreraient.\n\n3. **Les litiges sont plus faciles quand un côté est prouvable on-chain.** Si tu as envoyé du BTC et n'as pas reçu le cerisier, le transfert de BTC est on-chain pour toujours. Le vendeur ne peut pas nier avoir reçu le paiement. Avec de la crypto d'au moins un côté, chaque échange Morphit a un reçu solide pour une moitié.\n\n**À propos des méthodes de paiement comme Bitso, Zelle, PayPal** : ce sont des **rails côté fiat** — elles décrivent COMMENT le fiat (ou un prix de référence libellé en fiat) est transféré. « Virement Bitso pour des arbres de moringa » ne rentre pas dans le modèle : Bitso transfère des MXN, pas des arbres de moringa. Modèle le plus proche : publie un ordre d'achat de XMR payé via Bitso, puis utilise séparément ce XMR pour acheter des arbres de moringa hors plateforme. Deux échanges, pas un.\n\n**Combinaisons inverses** : toute combinaison de `(side, asset, payment_methods, fiat_currency)` fonctionne tant que l'actif est l'une des cryptomonnaies prises en charge par Morphit. Le champ libre `terms` décrit ce que l'échange implique réellement du côté lisible par l'humain. Combinaisons courantes :\n\n• Acheter/vendre du BTC contre des USD via PayPal\n• Acheter/vendre du XMR contre des espèces en personne\n• Acheter/vendre du Blurt contre du BTC (crypto-contre-crypto)\n• Acheter/vendre de l'USDT (sur Tron, Ethereum, Solana ou BSC) contre du fiat via Wise ou des espèces en personne\n• Acheter du XMR contre des orangers (troc, avec prix de référence en USD)\n• Vendre du BTC contre un cerisier (troc, avec prix de référence en USD)\n• Vendre de l'USDT contre de l'ail cru (troc, avec prix de référence en USD)\n• Vendre du XMR contre un échange d'espèces en personne (`payment_methods=[cash]`)"
       },
       "cash_by_mail_walkthrough": {
         "q": "Comment échanger de l'argent liquide par courrier ou expédier des biens physiques via Morphit ?",
@@ -1999,7 +1999,7 @@
     "title": "Se connecter à Morphit",
     "body": "Choisis l'option qui correspond à ta situation.",
     "no_account_heading": "Vous n'avez pas de compte ?",
-    "no_account_body": "Inscris-toi ci-dessous — l'inscription initiale est gratuite et prend moins d'une minute.",
+    "no_account_body": "Créez-en un ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
     "register_cta": "Créer un nouveau compte",
     "checking": "Vérification de votre session…",
     "import_existing": "Se connecter avec phrase seed",
@@ -2175,7 +2175,8 @@
       "walkthrough_body": "Une explication de 5 minutes sur comment fonctionne vraiment un trade Morphit, du début à la fin."
     },
     "error": {
-      "load_failed": "Impossible de charger tes commandes. Réessaie."
+      "load_failed": "Impossible de charger tes commandes. Réessaie.",
+      "no_account": "Connecte-toi avec ton compte Blurt pour voir tes commandes."
     }
   },
   "nav": {
@@ -2186,7 +2187,7 @@
     "language": "Langue",
     "privacy_terms": "Confidentialité",
     "post_now": "Publier maintenant",
-    "login_register": "Connexion / Inscription",
+    "start": "Commencer",
     "glossary": "Glossaire",
     "cheat_sheet": "Aide-mémoire"
   },
@@ -2195,16 +2196,18 @@
     "intro": "Votre compte Morphit, c'est une paire de clés cryptographiques. Elles sont créées ici, sur votre appareil, et ne le quittent jamais. Si vous les perdez, personne ne peut les récupérer — pas même nous. C'est le prix de la vraie confidentialité.",
     "path_reputation": {
       "title": "Construire une réputation",
+      "cta_hint": "La réputation est tout",
       "body": "Une identité dans la durée. Vos échanges réussis créent un historique public qui inspire confiance. Recommandé pour la plupart des utilisateurs."
     },
     "path_anonymous": {
       "title": "Anonymat maximal",
+      "cta_hint": "Repartez de zéro à chaque fois",
       "body": "Une nouvelle identité à chaque échange. Rien ne relie vos trades entre eux. Idéal pour les utilisateurs Monero qui tiennent à la non-liaison — mais vous repartez de zéro à chaque fois."
     },
     "generating": "Vos clés sont générées en toute sécurité sur votre appareil…",
     "generated_title": "Vos clés sont prêtes.",
     "generated_body": "Avant toute chose, sauvegardez-les. Si vous les perdez, votre compte disparaît pour toujours. On vous avait prévenus — c'est le prix des clés que vous seul contrôlez.",
-    "this_is_you": "Voici comment les autres vous voient",
+    "this_is_you": "Voici comment les autres vous voient (sauf si vous le changez plus tard)",
     "backup": {
       "title": "Sauvegardez vos clés",
       "seed_hint": "12 mots. Dans l'ordre. Sur papier. Dans KeePass(.info). Faites aussi une copie de sauvegarde. Conservez les 12 mots dans un endroit SÛR. Ne les photographiez pas. Ne vous les envoyez pas par e-mail.",
@@ -2535,7 +2538,8 @@
       "sort_recent": "Plus récents",
       "sort_rating": "⭐ Utilisateurs les mieux notés en premier",
       "sort_trades": "Utilisateurs les plus expérimentés en premier",
-      "rss_asset_label": "RSS — ordres {asset}",
+      "rss_generated_label": "RSS — Généré dynamiquement",
+      "rss_title_prefix": "{site} Carnet d'ordres - Filtré par :",
       "rss_asset_title": "Reçois des notifications par RSS quand un nouvel ordre {asset} est publié.",
       "side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter."
     },

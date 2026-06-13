@@ -368,6 +368,52 @@ enable_matrix_bot: false
 # matrix_bot_dry_run: false               # set true for staging
 
 
+# ─── MCP server (Model Context Protocol — AI-agent surface, §45) ─
+#
+# The morphit-mcp service exposes this instance's slice of the
+# federated orderbook to AI agents (Claude / ChatGPT / Grok /
+# Cursor / Cline / local LLMs).  Read-only + non-custodial: it
+# holds NO keys and signs NO trades — it hands the user off to the
+# web UI for the actual key-signing, so the zero-KYC + non-custodial
+# invariant is preserved.  ON BY DEFAULT.
+#
+# It runs ISOLATED on purpose: its own low-privilege `morphit-mcp`
+# user + its own directory (/opt/morphit-mcp) with ReadOnlyPaths
+# locked, so the MCP process CANNOT read the main install's DB
+# password or relay keys.  The role deploys it as a self-contained
+# tree (the two pure @morphit/* workspace deps are vendored).
+#
+# Set to false to skip the MCP deploy + service entirely.  At
+# runtime you can also flip it off without re-running Ansible:
+# `sudo morphit-ops mcp` (or the menu → Check & operate → MCP server).
+morphit_mcp_enabled: true
+
+# Which Morphit instance the MCP server surfaces to AI agents.  Defaults
+# to THIS node's own public origin so a self-hosted MCP serves the
+# operator's own orderbook (the server's built-in fallback is the public
+# morphit.io instance, which a self-hoster almost never wants).
+morphit_mcp_instance_url: "https://{{ morphit_domain }}"
+
+
+# ─── Web Push (VAPID — relay feature, §46) ──────────────────────
+#
+# Web Push lets users opt into browser/OS notifications for trade
+# events.  It is a RELAY feature gated on a VAPID keypair (RFC 8292):
+# when the keys are present the relay's push-sender worker runs; when
+# absent every push endpoint returns 503.  ON BY DEFAULT — the role
+# generates the keypair ONCE into /etc/morphit/relay-vapid.env (it is
+# never regenerated on re-converge: rotating the public key would
+# invalidate every existing subscription), and the relay unit sources
+# that file if present.
+#
+# The VAPID subject MUST be a mailto: or https:// URL identifying the
+# operator to the push services (they use it to contact you if your
+# pushes misbehave).  Defaults to this instance's public origin.
+# Override with e.g. "mailto:ops@example.com".
+morphit_enable_web_push: true
+morphit_vapid_subject: "https://{{ morphit_domain }}"
+
+
 # ─── Host-resource monitor sidecar (cp10, §16) ──────────────────
 #
 # Disk / memory / swap / CPU thresholds.  All optional — the

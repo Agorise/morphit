@@ -63,7 +63,8 @@ const ALLOW_LIST = new Set<string>([
 	// would harm UX (e.g. SW retry-on-network-restore, EventSource
 	// open which has its own keepalive).
 	// Format: relpath:lineHint (line is approximate, just for human ref).
-	'apps/web/src/service-worker.ts:150', // navigation/asset fetch in the SW fetch handler — browser manages the timeout via the request's own signal; a blanket AbortController would prematurely 503 a slow-but-working asset (cp199's cleanRedirect shifted this from line 127)
+	'apps/web/src/service-worker.ts:182', // navigation fetch (network-first) in the SW fetch handler — a blanket AbortController would prematurely fall back to the (possibly stale) cached shell on a slow-but-working network, reintroducing the dead-chunk staleness the network-first nav exists to prevent; the browser's own network timeout bounds it, and a true network failure rejects → cached-shell offline fallback (cp252 SW rewrite shifted this from line 150)
+	'apps/web/src/service-worker.ts:205', // asset cache-first network fallback in the SW fetch handler — a blanket AbortController would prematurely 503 a slow-but-working immutable asset; the browser manages the request's own timeout (cp252 SW rewrite added this second fetch alongside the navigation one)
 	// fetchWithTimeout itself wraps fetch() — the signal it adds IS
 	// the timeout, but the smoke can't see that the `signal` variable
 	// it passes was just constructed from an AbortController.

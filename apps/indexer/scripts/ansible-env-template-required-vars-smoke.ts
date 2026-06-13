@@ -145,11 +145,36 @@ function extractRequiredEnvVars(configSrc: string): string[] {
 		const start = matches[i]!.idx;
 		const end = i + 1 < matches.length ? matches[i + 1]!.idx : block.length;
 		const body = block.slice(start, end);
-		if (!body.includes('.default(') && !body.includes('.optional(')) {
+		if (!bodyDeclaresOptional(body, configSrc)) {
 			required.push(matches[i]!.name);
 		}
 	}
 	return required;
+}
+
+/**
+ * True if a field body marks the var optional/defaulted — either inline
+ * (`.optional(` / `.default(`) OR by referencing a schema constant that is
+ * itself optional/defaulted, e.g. `MORPHIT_X: hmacSecretSchema,` where
+ * `const hmacSecretSchema = z.string()...optional()`. Resolving one level of
+ * indirection keeps shared schema constants (good DRY — see the relay's
+ * `hmacSecretSchema`) from being misread as required, which would otherwise
+ * demand they be templated into Ansible even though leaving them unset is a
+ * valid, secure default.
+ */
+function bodyDeclaresOptional(body: string, configSrc: string): boolean {
+	if (body.includes('.optional(') || body.includes('.default(')) return true;
+	const ref = body.match(/:\s*([A-Za-z_$][\w$]*)\s*,/);
+	if (ref) {
+		const ident = ref[1]!;
+		const declIdx = configSrc.search(new RegExp(`\\bconst\\s+${ident}\\b\\s*=`));
+		if (declIdx !== -1) {
+			const semi = configSrc.indexOf(';', declIdx);
+			const decl = configSrc.slice(declIdx, semi === -1 ? undefined : semi);
+			if (decl.includes('.optional(') || decl.includes('.default(')) return true;
+		}
+	}
+	return false;
 }
 
 for (const sub of SUBSYSTEMS) {

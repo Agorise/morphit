@@ -33,6 +33,32 @@ const PLACEHOLDER_DB_PASSWORDS = [
 	'postgres'
 ] as const;
 
+/** HMAC secret schema for the invite-token + Altcha-challenge signers.
+ *  Optional: if UNSET the relay generates a secure random 32-byte secret
+ *  per boot (see policy/inviteToken.ts + policy/altcha.ts) — fine for most
+ *  operators given the ~10-minute TTL. But if an operator DOES set one,
+ *  refuse the example placeholder sentinel and any too-short value, so a
+ *  careless copy of relay.env.example (where these once shipped uncommented
+ *  as `__SET_BEFORE_DEPLOY__`) can't put a publicly-known HMAC secret into
+ *  production — which would let an attacker forge invite tokens / Altcha
+ *  solutions. This is exactly the boot-refusal the relay.env.example comment
+ *  promises; the previous bare `.optional()` did NOT enforce it. Leaving the
+ *  var unset remains valid (and is the secure default). */
+export const hmacSecretSchema = z
+	.string()
+	.refine(
+		(s) => !(PLACEHOLDER_DB_PASSWORDS as readonly string[]).includes(s),
+		'HMAC secret is a known placeholder sentinel — generate a real random ' +
+			'secret (e.g. `openssl rand -base64 32`) or remove the line entirely ' +
+			'to use a secure ephemeral per-boot secret'
+	)
+	.refine(
+		(s) => s.length >= 16,
+		'HMAC secret too short (need ≥16 chars) — or remove the line entirely ' +
+			'to use a secure ephemeral per-boot secret'
+	)
+	.optional();
+
 const envSchema = z.object({
 	// Required.
 	MORPHIT_RELAY_ACCOUNT: z.string().min(3).max(16),
@@ -151,11 +177,11 @@ const envSchema = z.object({
 	 *  32-byte secret per boot (in-flight invites don't
 	 *  survive a restart). For most operators the ephemeral
 	 *  default is fine — invites have a 10-minute TTL anyway. */
-	MORPHIT_RELAY_INVITE_HMAC_SECRET: z.string().optional(),
+	MORPHIT_RELAY_INVITE_HMAC_SECRET: hmacSecretSchema,
 	/** Optional persistent HMAC secret for signing Altcha
 	 *  challenges. Same ephemeral-by-default semantics as
 	 *  INVITE_HMAC_SECRET. */
-	MORPHIT_RELAY_ALTCHA_HMAC_SECRET: z.string().optional(),
+	MORPHIT_RELAY_ALTCHA_HMAC_SECRET: hmacSecretSchema,
 
 	/** Layer 7 — high-value name policy.
 	 *

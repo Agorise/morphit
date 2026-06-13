@@ -93,7 +93,7 @@ Minimum files:
 ```json
 {
   "name": "morphit-<name>",          // or "@morphit/<name>" for packages/
-  "version": "1.0.0-beta.14",        // MUST equal the root package.json version — version-consistency-smoke fails the build if any workspace drifts
+  "version": "1.0.0-beta.15",        // MUST equal the root package.json version — version-consistency-smoke fails the build if any workspace drifts
   "type": "module",
   "license": "AGPL-3.0-only",
   "private": false,                  // or true for packages/

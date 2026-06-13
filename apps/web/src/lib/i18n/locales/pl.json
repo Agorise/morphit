@@ -1113,7 +1113,7 @@
       },
       "trade_goods_services": {
         "q": "Czy mogę handlować towarami lub usługami na Morphit, takimi jak drzewa owocowe lub płyty winylowe?",
-        "a": "Tak — ale w określonej formie, którą trzeba chwilę zrozumieć. Model zlecenia Morphit to zawsze **zbywalny aktyw (BTC, XMR, Blurt lub dowolna inna moneta wymieniona przez Morphit) po jednej stronie, a coś innego po drugiej stronie**. To „coś innego” może być:\n\n• **Walutą fiat** (USD, EUR, MXN, COP, NGN — pieniądzem dowolnego kraju)\n• **Inną kryptowalutą** (np. płacenie BTC za zlecenie, którego aktywem jest XMR)\n• **Towarami lub usługami**, przez metodę płatności `Barter (goods)`\n\n**Aby wymienić drzewka pomarańczowe na XMR**, opublikowałbyś: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (lub jakąkolwiek cenę referencyjną, którą ty i kontrahent uzgodnicie), a szczegóły wpisałbyś w pole `terms` — na przykład: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Odpowiedzą kupujący drzewka pomarańczowe, którzy akurat mają XMR.\n\n**Aby wymienić BTC na drzewo wiśni**, opublikuj: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods)]`, fiat_currency=`USD` (cena referencyjna), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Czego nie możesz modelować bezpośrednio**: wymian towar-za-towar (drzewka pomarańczowe za drzewa moringa, bez krypto). Jedna strona każdego zlecenia Morphit musi być zbywalnym aktywem (BTC, XMR, Blurt lub dowolna inna moneta wymieniona przez Morphit) — tak łańcuch zakotwicza wymianę i tak opinia zostaje dołączona do prawdziwego działania w łańcuchu. Do czystego barteru bez krypto użyj innej platformy.\n\n**Dlaczego to ograniczenie?** Trzy powody:\n\n1. **Reputacja potrzebuje zakotwiczenia.** Opinia jest podpisana względem operacji zlecenia na Blurt. Operacja zlecenia odwołuje się do konkretnego podzielnego aktywu (z ilością, ceną, opłatą). Czyste towary nie pasują do tej formy — nie ma pytania „ile drzewka pomarańczowego”.\n\n2. **Rynek działa, bo większość zleceń wycenia w wspólnej jednostce.** Kupujący skanujący księgę zleceń w poszukiwaniu `XMR/USD < $300` dostaje czystą listę. Gdyby połowa zleceń była wyceniana w drzewkach owocowych, a druga połowa w strzyżeniach, wyszukiwanie i dopasowywanie by się rozpadły.\n\n3. **Spory są łatwiejsze, gdy jedna strona jest do udowodnienia w łańcuchu.** Jeśli wysłałeś BTC i nie dostałeś drzewa wiśni, transfer BTC jest w łańcuchu na zawsze. Sprzedawca nie może zaprzeczyć otrzymaniu płatności. Z krypto po co najmniej jednej stronie każda wymiana Morphit ma twardy dowód odbioru dla jednej połowy.\n\n**O metodach płatności jak Bitso, Zelle, PayPal**: to są **szyny po stronie fiat** — opisują, JAK fiat (lub denominowana w fiat cena referencyjna) zostaje przelany. „Przelew Bitso za drzewa moringa” nie pasuje do modelu: Bitso przelewa MXN, nie drzewa moringa. Najbliższy model: opublikuj zlecenie kupna XMR opłacane przez Bitso, a potem osobno użyj tego XMR, by kupić drzewa moringa poza platformą. Dwie wymiany, nie jedna.\n\n**Kombinacje odwrotne**: każda kombinacja `(side, asset, payment_methods, fiat_currency)` działa, dopóki aktyw jest jedną z kryptowalut obsługiwanych przez Morphit. Dowolne pole `terms` opisuje, co wymiana faktycznie obejmuje po stronie czytelnej dla człowieka. Częste kombinacje:\n\n• Kup/sprzedaj BTC za USD przez PayPal\n• Kup/sprzedaj XMR za gotówkę osobiście\n• Kup/sprzedaj Blurt za BTC (krypto-za-krypto)\n• Kup/sprzedaj USDT (na Tron, Ethereum, Solana lub BSC) za fiat przez Wise lub gotówkę osobiście\n• Kup XMR za drzewka pomarańczowe (barter, z ceną referencyjną w USD)\n• Sprzedaj BTC za drzewo wiśni (barter, z ceną referencyjną w USD)\n• Sprzedaj USDT za surowy czosnek (barter, z ceną referencyjną w USD)\n• Sprzedaj XMR za osobistą wymianę gotówki (`payment_methods=[cash]`)"
+        "a": "Tak — ale w określonej formie, którą trzeba chwilę zrozumieć. Model zlecenia Morphit to zawsze **zbywalny aktyw (BTC, XMR, Blurt lub dowolna inna moneta wymieniona przez Morphit) po jednej stronie, a coś innego po drugiej stronie**. To „coś innego” może być:\n\n• **Walutą fiat** (USD, EUR, MXN, COP, NGN — pieniądzem dowolnego kraju)\n• **Inną kryptowalutą** (np. płacenie BTC za zlecenie, którego aktywem jest XMR)\n• **Towarami lub usługami**, przez metodę płatności `Barter (goods/services)`\n\n**Aby wymienić drzewka pomarańczowe na XMR**, opublikowałbyś: side=`buy`, asset=`XMR`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (lub jakąkolwiek cenę referencyjną, którą ty i kontrahent uzgodnicie), a szczegóły wpisałbyś w pole `terms` — na przykład: `\"50 healthy orange tree saplings, 30cm+ tall, picked up at my farm in Querétaro, MX. Will release XMR after delivery.\"` Odpowiedzą kupujący drzewka pomarańczowe, którzy akurat mają XMR.\n\n**Aby wymienić BTC na drzewo wiśni**, opublikuj: side=`sell`, asset=`BTC`, payment_methods=`[Barter (goods/services)]`, fiat_currency=`USD` (cena referencyjna), terms=`\"Will accept one mature cherry tree (3+ years, healthy) as payment for 0.001 BTC. Delivery to Mexico City.\"`\n\n**Czego nie możesz modelować bezpośrednio**: wymian towar-za-towar (drzewka pomarańczowe za drzewa moringa, bez krypto). Jedna strona każdego zlecenia Morphit musi być zbywalnym aktywem (BTC, XMR, Blurt lub dowolna inna moneta wymieniona przez Morphit) — tak łańcuch zakotwicza wymianę i tak opinia zostaje dołączona do prawdziwego działania w łańcuchu. Do czystego barteru bez krypto użyj innej platformy.\n\n**Dlaczego to ograniczenie?** Trzy powody:\n\n1. **Reputacja potrzebuje zakotwiczenia.** Opinia jest podpisana względem operacji zlecenia na Blurt. Operacja zlecenia odwołuje się do konkretnego podzielnego aktywu (z ilością, ceną, opłatą). Czyste towary nie pasują do tej formy — nie ma pytania „ile drzewka pomarańczowego”.\n\n2. **Rynek działa, bo większość zleceń wycenia w wspólnej jednostce.** Kupujący skanujący księgę zleceń w poszukiwaniu `XMR/USD < $300` dostaje czystą listę. Gdyby połowa zleceń była wyceniana w drzewkach owocowych, a druga połowa w strzyżeniach, wyszukiwanie i dopasowywanie by się rozpadły.\n\n3. **Spory są łatwiejsze, gdy jedna strona jest do udowodnienia w łańcuchu.** Jeśli wysłałeś BTC i nie dostałeś drzewa wiśni, transfer BTC jest w łańcuchu na zawsze. Sprzedawca nie może zaprzeczyć otrzymaniu płatności. Z krypto po co najmniej jednej stronie każda wymiana Morphit ma twardy dowód odbioru dla jednej połowy.\n\n**O metodach płatności jak Bitso, Zelle, PayPal**: to są **szyny po stronie fiat** — opisują, JAK fiat (lub denominowana w fiat cena referencyjna) zostaje przelany. „Przelew Bitso za drzewa moringa” nie pasuje do modelu: Bitso przelewa MXN, nie drzewa moringa. Najbliższy model: opublikuj zlecenie kupna XMR opłacane przez Bitso, a potem osobno użyj tego XMR, by kupić drzewa moringa poza platformą. Dwie wymiany, nie jedna.\n\n**Kombinacje odwrotne**: każda kombinacja `(side, asset, payment_methods, fiat_currency)` działa, dopóki aktyw jest jedną z kryptowalut obsługiwanych przez Morphit. Dowolne pole `terms` opisuje, co wymiana faktycznie obejmuje po stronie czytelnej dla człowieka. Częste kombinacje:\n\n• Kup/sprzedaj BTC za USD przez PayPal\n• Kup/sprzedaj XMR za gotówkę osobiście\n• Kup/sprzedaj Blurt za BTC (krypto-za-krypto)\n• Kup/sprzedaj USDT (na Tron, Ethereum, Solana lub BSC) za fiat przez Wise lub gotówkę osobiście\n• Kup XMR za drzewka pomarańczowe (barter, z ceną referencyjną w USD)\n• Sprzedaj BTC za drzewo wiśni (barter, z ceną referencyjną w USD)\n• Sprzedaj USDT za surowy czosnek (barter, z ceną referencyjną w USD)\n• Sprzedaj XMR za osobistą wymianę gotówki (`payment_methods=[cash]`)"
       },
       "cash_by_mail_walkthrough": {
         "q": "Jak handluję gotówką pocztą lub wysyłam fizyczne towary przez Morphit?",
@@ -1999,7 +1999,7 @@
     "title": "Zaloguj się do Morphit",
     "body": "Wybierz opcję pasującą do tego, jak tu trafiłeś.",
     "no_account_heading": "Nie masz konta?",
-    "no_account_body": "Zarejestruj się poniżej — pierwsza rejestracja jest darmowa i zajmuje mniej niż minutę.",
+    "no_account_body": "Utwórz je powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
     "register_cta": "Utwórz nowe konto",
     "checking": "Sprawdzanie twojej sesji…",
     "import_existing": "Zaloguj z frazą seed",
@@ -2175,7 +2175,8 @@
       "walkthrough_body": "5-minutowe wyjaśnienie, jak naprawdę działa transakcja Morphit, od początku do końca."
     },
     "error": {
-      "load_failed": "Nie udało się załadować twoich zleceń. Spróbuj ponownie."
+      "load_failed": "Nie udało się załadować twoich zleceń. Spróbuj ponownie.",
+      "no_account": "Zaloguj się swoim kontem Blurt, aby zobaczyć swoje zlecenia."
     }
   },
   "nav": {
@@ -2186,7 +2187,7 @@
     "language": "Język",
     "privacy_terms": "Prywatność",
     "post_now": "Opublikuj teraz",
-    "login_register": "Logowanie / Rejestracja",
+    "start": "Zacznij",
     "glossary": "Słowniczek",
     "cheat_sheet": "Ściąga"
   },
@@ -2195,16 +2196,18 @@
     "intro": "Twoje konto Morphit to para kluczy kryptograficznych. Tworzone są tu, na Twoim urządzeniu, i nigdy go nie opuszczają. Jeśli je zgubisz, nikt ich nie odzyska — nawet my. To cena prawdziwej prywatności.",
     "path_reputation": {
       "title": "Buduj reputację",
+      "cta_hint": "Reputacja to wszystko",
       "body": "Jedna tożsamość w czasie. Udane transakcje budują publiczną historię, która sprawia, że ludzie Ci ufają. Polecane dla większości."
     },
     "path_anonymous": {
       "title": "Maksymalna anonimowość",
+      "cta_hint": "Za każdym razem od nowa",
       "body": "Nowa tożsamość przy każdej transakcji. Nic nie łączy Twoich transakcji. Idealne dla użytkowników Monero ceniących nielinkowalność — ale zaczynasz od zera za każdym razem."
     },
     "generating": "Generuję Twoje klucze bezpiecznie na Twoim urządzeniu…",
     "generated_title": "Klucze gotowe.",
     "generated_body": "Zanim zrobisz cokolwiek dalej — zrób kopię zapasową. Jeśli je zgubisz, Twoje konto przepadnie na zawsze. Ostrzegliśmy — to cena kluczy, które kontrolujesz tylko Ty.",
-    "this_is_you": "Tak widzą Cię inni",
+    "this_is_you": "Tak widzą Cię inni (chyba że zmienisz to później)",
     "backup": {
       "title": "Zabezpiecz klucze",
       "seed_hint": "12 słów. W kolejności. Na papierze. W KeePass(.info). Zrób też kopię zapasową. Przechowuj te 12 słów w BEZPIECZNYM miejscu. Nie rób im zdjęć. Nie wysyłaj ich sobie e-mailem.",
@@ -2535,7 +2538,8 @@
       "sort_recent": "Najnowsze",
       "sort_rating": "⭐ Najwyżej oceniani użytkownicy najpierw",
       "sort_trades": "Najbardziej doświadczeni użytkownicy najpierw",
-      "rss_asset_label": "RSS — zlecenia {asset}",
+      "rss_generated_label": "RSS — Generowane dynamicznie",
+      "rss_title_prefix": "{site} Księga zleceń - Filtrowane według:",
       "rss_asset_title": "Powiadomienia przez RSS, gdy zostanie opublikowane nowe zlecenie {asset}.",
       "side_help": "Wskazówka: jeśli chcesz kupić kryptowaluty, szukaj ogłoszeń chcących sprzedać. Jeśli chcesz sprzedać, szukaj ogłoszeń chcących kupić."
     },

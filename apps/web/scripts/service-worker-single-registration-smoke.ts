@@ -197,7 +197,7 @@ const root = resolve(import.meta.dirname, '..');
 	const text = readFileSync(path, 'utf8');
 	const definesCleaner = /function cleanRedirect\b/.test(text) && /\.redirected\b/.test(text);
 	const wiredOnNavigation =
-		(text.match(/mode === 'navigate'\s*\?\s*cleanRedirect\(/g) ?? []).length >= 2;
+		(text.match(/return cleanRedirect\(/g) ?? []).length >= 2;
 	const ok = definesCleaner && wiredOnNavigation;
 	results.push({
 		name: 'service-worker.ts rebuilds redirected responses on the navigation path (ERR_FAILED guard)',

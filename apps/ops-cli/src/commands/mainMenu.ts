@@ -155,6 +155,12 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'The quickest \u201cis it synced right now?\u201d check. Needs the indexer running; doctor checks config instead.'
 			},
 			{
+				label: 'MCP server (AI-agent discovery): turn on or off',
+				blurb: 'The read-only, non-custodial MCP surface that lets AI agents answer \u201cwhere can I buy XMR no-KYC near me\u201d from your orderbook. On by default; this is the off-switch (and on-switch).',
+				subcommand: 'mcp',
+				tip: 'Holds no keys, signs no trades \u2014 it hands the user off to your web UI for the actual key-signing. Disabling it never affects human traders, only AI-agent discovery.'
+			},
+			{
 				label: 'Status dashboard',
 				blurb: 'Day-to-day operations: relay balance, queue depth, health, and your last 3 DB backups (with the file path).',
 				subcommand: 'status',
@@ -268,6 +274,7 @@ const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
 	'ssl',
 	'bunkerweb',
 	'doctor',
+	'mcp',
 	'status',
 	'signups',
 	'failed-broadcasts',

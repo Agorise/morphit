@@ -187,7 +187,7 @@
 				expanded.add(hit.entry.key);
 				document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
 					behavior: 'smooth',
-					block: 'center'
+					block: 'start'
 				});
 			}
 		} else if (e.key === 'Escape') {
@@ -280,7 +280,7 @@
 							queueMicrotask(() => {
 								document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
 									behavior: 'smooth',
-									block: 'center'
+									block: 'start'
 								});
 							});
 							query = '';
