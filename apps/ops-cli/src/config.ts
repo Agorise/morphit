@@ -45,11 +45,21 @@ export interface Config {
 	 *  — falls back to `morphit-fees` if unset. */
 	readonly feesAccount: string;
 
-	/** This operator's official chain account — the `operator` key
-	 *  in `operator_blocks`. Instance-local blocks written by
-	 *  `morphit-ops block` are keyed on this, matching the on-chain
-	 *  block handler. Default `morphit`. */
+	/** This operator's official chain account (the federation-wide
+	 *  release-signer; `MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME`).
+	 *  Default `morphit`. NOTE: this is NOT the operator_blocks key —
+	 *  see `operatorAccount` below. */
 	readonly officialAccount: string;
+
+	/** This operator's per-instance moderation account — the `operator`
+	 *  key in `operator_blocks`. Instance-local blocks written by
+	 *  `morphit-ops block` (and the moderation views) are keyed on this,
+	 *  matching the on-chain block handler (`operatorBlock.ts` gates on
+	 *  `operatorAccountName`). Falls back to `officialAccount` when no
+	 *  separate operator account is configured — exactly the indexer's
+	 *  rule (cp258: was wrongly keyed on `officialAccount`, which made
+	 *  ops-cli blocks inert for a separate-operator-account instance). */
+	readonly operatorAccount: string;
 
 	/** This operator's daily signup ceiling.  Snapshot of the
 	 *  relay's MORPHIT_RELAY_SIGNUP_DAILY_CEILING.  CLI uses
@@ -111,10 +121,18 @@ export function loadConfig(): Config {
 		databaseUrl: readDatabaseUrl(),
 		relayAccount: envStr('MORPHIT_OPS_RELAY_ACCOUNT', 'morphit-relay'),
 		feesAccount: envStr('MORPHIT_OPS_FEES_ACCOUNT', 'morphit-fees'),
-		// The operator's official chain account — the `operator` key in
-		// operator_blocks (and what the on-chain block handler gates on).
-		// Same env var the indexer reads, so they agree.
+		// The federation-wide official account (release-signer). NOT the
+		// operator_blocks key — that's operatorAccount below.
 		officialAccount: envStr('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME', 'morphit'),
+		// The per-instance operator account — the `operator` key in
+		// operator_blocks (what the on-chain block handler gates on, and
+		// what the indexer's read surfaces filter by). Same fallback rule
+		// the indexer uses: MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME if set,
+		// else the official account. So local + chain blocks agree on one
+		// key (cp258: was officialAccount — inert for separate-operator).
+		operatorAccount:
+			envStr('MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME', '') ||
+			envStr('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME', 'morphit'),
 		signupDailyCeiling: envInt('MORPHIT_RELAY_SIGNUP_DAILY_CEILING', 50),
 		thresholds: {
 			relayBalance: {

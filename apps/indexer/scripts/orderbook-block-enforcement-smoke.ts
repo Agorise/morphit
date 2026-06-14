@@ -70,6 +70,79 @@ for (const [file, expected] of Object.entries(SURFACES)) {
 	}
 }
 
+// ─── cp257: read/write KEY consistency ──────────────────────────────
+// The exclusion only works if the account the READ surfaces filter by is
+// the SAME account operatorBlock.ts WRITES blocks under. Blocks are keyed
+// on operatorAccountName (operatorBlock gates `ctx.signer ===
+// operatorAccountName` and inserts operator=signer). If a read surface
+// filters by officialAccountName instead, blocks are SILENTLY ignored
+// whenever an operator sets a separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME
+// (the two default-equal, so the default deployment never noticed). This
+// asserts the whole chain keys on operatorAccountName.
+{
+	const srcDir = join(apiDir, '..');
+
+	// 1. operatorBlock.ts keys the write on operatorAccountName.
+	try {
+		const ob = readFileSync(join(srcDir, 'indexer', 'handlers', 'operatorBlock.ts'), 'utf8');
+		const gatesOnOperator = /ctx\.signer\s*!==\s*ctx\.config\.operatorAccountName/.test(ob);
+		const keysOnOfficial = /operator_blocks[\s\S]{0,200}officialAccountName/.test(ob);
+		if (gatesOnOperator && !keysOnOfficial) {
+			ok('operatorBlock.ts keys blocks on operatorAccountName (per-instance operator)');
+		} else {
+			bad(
+				`operatorBlock.ts: gatesOnOperatorAccount=${gatesOnOperator} keysOnOfficial=${keysOnOfficial}`,
+				'blocks must be written under operatorAccountName so reads can match'
+			);
+		}
+	} catch {
+		bad('operatorBlock.ts: cannot read (handler moved/renamed?)');
+	}
+
+	// 2. main.ts wires every listing route's block account to operatorAccountName.
+	try {
+		const mainSrc = readFileSync(join(srcDir, 'main.ts'), 'utf8');
+		for (const r of [
+			'orderbookRoute',
+			'orderbookStreamRoute',
+			'featuredRoute',
+			'ordersByAccountRoute'
+		]) {
+			const right = new RegExp(r + '\\([^)]*config\\.operatorAccountName');
+			const wrong = new RegExp(r + '\\([^)]*config\\.officialAccountName');
+			if (right.test(mainSrc)) {
+				ok(`main.ts: ${r} filters blocks by operatorAccountName`);
+			} else if (wrong.test(mainSrc)) {
+				bad(
+					`main.ts: ${r} passes officialAccountName — operator blocks silently ignored when the accounts differ`,
+					'pass config.operatorAccountName (matches operatorBlock write key)'
+				);
+			} else {
+				bad(`main.ts: ${r} call site not found or passes no account`);
+			}
+		}
+	} catch {
+		bad('main.ts: cannot read');
+	}
+
+	// 3. rssOrderbookHandlers.ts filters by operatorAccountName, never officialAccountName.
+	try {
+		const rss = readFileSync(join(apiDir, 'rssOrderbookHandlers.ts'), 'utf8');
+		const usesOperator = /operatorAccountName/.test(rss);
+		const usesOfficial = /officialAccountName/.test(rss);
+		if (usesOperator && !usesOfficial) {
+			ok('rssOrderbookHandlers.ts: block filter uses operatorAccountName');
+		} else {
+			bad(
+				`rssOrderbookHandlers.ts: usesOperatorAccount=${usesOperator} usesOfficialAccount=${usesOfficial}`,
+				'RSS block filter must use operatorAccountName (officialAccountName ignores blocks)'
+			);
+		}
+	} catch {
+		bad('rssOrderbookHandlers.ts: cannot read');
+	}
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {

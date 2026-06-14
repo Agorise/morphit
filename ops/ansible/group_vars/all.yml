@@ -160,6 +160,19 @@ morphit_relay_trusted_proxy_ips: "172.20.0.0/16"
 morphit_indexer_bind_host: 0.0.0.0
 morphit_indexer_bind_port: 8081
 
+# MCP server (§45) — same topology as the relay/indexer: the dockerized
+# BunkerWeb frontend reaches it on the host across the Docker bridge, so
+# it binds all interfaces and the bunkerweb role allows ONLY the
+# bunkerweb_net CIDR to this port (UFW default-deny keeps the public
+# out).  Because the MCP is fail-closed on a non-private bind, the
+# mcp.env template pairs this 0.0.0.0 bind with
+# MORPHIT_MCP_ALLOW_PUBLIC_BIND=1 — the firewall is the protection,
+# exactly as for the relay.  Port 8124 is the morphit default.  (A
+# bare-metal operator who fronts the MCP with host nginx instead can set
+# morphit_mcp_bind_host: 127.0.0.1 and drop the allow flag.)
+morphit_mcp_bind_host: 0.0.0.0
+morphit_mcp_bind_port: 8124
+
 # Blurt RPC endpoints — see §22 for selection criteria.  The
 # canonical primary is rpc.blurt.world; configure failover for
 # production.  Comma-separated.
@@ -393,6 +406,14 @@ morphit_mcp_enabled: true
 # operator's own orderbook (the server's built-in fallback is the public
 # morphit.io instance, which a self-hoster almost never wants).
 morphit_mcp_instance_url: "https://{{ morphit_domain }}"
+
+# Advertise this node's MCP endpoint in /v1/instance.mcp_url so other AI
+# agents discover it federation-wide — the live `<origin>/mcp` route the
+# BunkerWeb frontend now proxies.  Defaults true to match the init
+# wizard's default-Yes (and the brag-list claim); set false to run the
+# MCP without announcing it to the federation directory.  Consumed by
+# the INDEXER (it builds mcp_url), so it lives in indexer.env.
+morphit_mcp_advertise: true
 
 
 # ─── Web Push (VAPID — relay feature, §46) ──────────────────────

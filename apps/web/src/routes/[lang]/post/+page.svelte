@@ -2389,6 +2389,7 @@
 				<FocusedField focused={password.length === 0} valid={password.length >= 8}>
 					<input
 						type="password"
+						maxlength="64"
 						bind:value={password}
 						autocomplete="current-password"
 						onkeydown={(e) => {

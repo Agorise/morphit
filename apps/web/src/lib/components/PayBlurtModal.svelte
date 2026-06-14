@@ -291,6 +291,7 @@
 					</span>
 					<input
 						type="password"
+						maxlength="64"
 						bind:value={passwordInput}
 						autocomplete="current-password"
 						disabled={phase.kind === 'paying'}

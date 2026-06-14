@@ -94,7 +94,7 @@ const stubDb = {
 
 (async () => {
 	// SD-4 empty stablecoinKeys
-	const empty = await detectStablecoinDepeg(stubDb, { stablecoinKeys: [], officialAccountName: 'morphit' });
+	const empty = await detectStablecoinDepeg(stubDb, { stablecoinKeys: [], operatorAccountName: 'morphit' });
 	if (
 		empty.usable_pair_count === 0 &&
 		Object.keys(empty.status).length === 0 &&
@@ -106,7 +106,7 @@ const stubDb = {
 	}
 
 	// SD-5 single-stablecoin input
-	const single = await detectStablecoinDepeg(stubDb, { stablecoinKeys: ['usdt'], officialAccountName: 'morphit' });
+	const single = await detectStablecoinDepeg(stubDb, { stablecoinKeys: ['usdt'], operatorAccountName: 'morphit' });
 	if (
 		single.usable_pair_count === 0 &&
 		single.status.usdt === 'unknown' &&

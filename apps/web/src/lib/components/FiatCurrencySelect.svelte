@@ -48,10 +48,15 @@
 
 	const hits = $derived.by<Currency[]>(() => {
 		if (!mod) return [];
-		// 50 (not 8): the field is scrollable (max-h-72), so an empty-focus
-		// browse shows a generous list and typing narrows it — the old cap
-		// of 8 made the field look like it only held 8 currencies.
-		return mod.searchCurrencies(query, 50).filter((c) => !value.includes(c.code));
+		// No artificial cap: the field is scrollable (max-h-72) and the
+		// dataset is small (~150 light rows in a lazily-imported chunk),
+		// so an empty-focus browse must reach EVERY currency — a prior
+		// cap of 50 silently stopped the list at the 50th name
+		// (Georgian lari), making later currencies unreachable. Typing
+		// still narrows the same full set.
+		return mod
+			.searchCurrencies(query, mod.CURRENCIES.length)
+			.filter((c) => !value.includes(c.code));
 	});
 
 	function nameFor(code: string): string {
@@ -96,22 +101,28 @@
 		}
 	}
 
-	// Close on an outside press.  Uses `pointerdown` (not `click`)
-	// deliberately: clicking an option runs add(), which removes that
-	// option from `hits` and so detaches the clicked node from the DOM
-	// before a `click` would bubble to here — at which point
-	// rootEl.contains(detachedNode) is false and the menu would wrongly
-	// close on every pick.  pointerdown fires BEFORE that re-render, so
-	// the target is still inside rootEl and the menu stays open for the
-	// next selection; an outside press still closes it.
-	function onWindowPointerDown(e: PointerEvent): void {
-		if (open && rootEl && !rootEl.contains(e.target as Node)) open = false;
-	}
+	// Outside-close is handled by the full-screen blur scrim below (a
+	// dedicated click-catcher), NOT a window listener. The old approach
+	// raced the option click — picking an option runs add(), which drops
+	// it from `hits` and detaches the clicked node, so a window handler
+	// could mis-close. The scrim sits BELOW the field (z-20 vs z-30) so
+	// option clicks land cleanly and the menu stays open for multi-select
+	// until an outside (scrim) click.
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} />
+{#if open}
+	<!-- Full-screen blur scrim (mirrors FaqSearch): dims + blurs the page
+	     behind the open listbox; an outside click closes it. -->
+	<button
+		type="button"
+		tabindex="-1"
+		aria-hidden="true"
+		onclick={() => (open = false)}
+		class="fixed inset-0 z-20 cursor-default bg-ink-900/5 backdrop-blur-sm"
+	></button>
+{/if}
 
-<div class="relative" bind:this={rootEl}>
+<div class="relative z-30" bind:this={rootEl}>
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}

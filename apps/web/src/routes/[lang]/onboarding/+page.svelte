@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { currentLocale } from '$i18n';
 	import { _ } from 'svelte-i18n';
 	import { goto, beforeNavigate } from '$app/navigation';
 	import { gotoLocale } from '$i18n/navigate';
@@ -265,6 +266,11 @@
 	 *  the navigation via goto() after wiping sensitive state. */
 	let pendingLeaveUrl = $state<URL | null>(null);
 	let leaveConfirmOpen = $state(false);
+	/** Set true by onConfirmLeave so the replayed goto() passes straight
+	 *  through beforeNavigate (which self-resets it). pendingLeaveUrl
+	 *  can't double as this signal: it's cleared to close the modal, but
+	 *  the guard would then re-cancel the very navigation we're allowing. */
+	let leaving = $state(false);
 
 	// Sync pendingLeaveUrl → leaveConfirmOpen. Clearing the URL
 	// closes the modal (ConfirmModal writes open=false on
@@ -274,6 +280,15 @@
 	});
 
 	beforeNavigate((nav) => {
+		// A confirmed "Leave anyway" sets `leaving` so its replayed goto()
+		// passes straight through here (self-resetting). This MUST be the
+		// first check — after the wipe, stage is still 'review', so the
+		// sensitive-stage gate below would otherwise re-trap the nav.
+		if (leaving) {
+			leaving = false;
+			return;
+		}
+
 		// Only warn while we're in a stage where unfinished sensitive state
 		// lives in memory. The submitQuiz path flips stage to 'done' BEFORE
 		// calling goto(), so that path won't trip this guard.
@@ -296,12 +311,6 @@
 		// Don't bother if there's nothing to navigate to — the
 		// hook gives null for some refresh types.
 		if (!nav.to) return;
-
-		// If user already confirmed, let them through. The confirm
-		// handler sets pendingLeaveUrl=null before calling goto(),
-		// so when this hook re-fires for that goto the state is
-		// clean and we return here.
-		if (pendingLeaveUrl !== null) return;
 
 		// Cancel the in-flight navigation and surface the modal
 		// instead. The confirm handler will re-issue the
@@ -332,8 +341,9 @@
 		// abandoning onboarding mid-flow, no reason to keep the
 		// password sitting in component state until GC.
 		password = '';
-		// Clear pending so when the goto() re-enters beforeNavigate
-		// we fall through instead of re-prompting.
+		// Clear pending (closes the modal) and set the bypass flag so the
+		// goto() below isn't re-trapped by beforeNavigate.
+		leaving = true;
 		pendingLeaveUrl = null;
 		await goto(target.pathname + target.search + target.hash);
 	}
@@ -400,7 +410,12 @@
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
-	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	// From the active-locale STORE (not $page.data.lang) so an in-place
+	// language swap on this route — LanguageSwitcher uses replaceState here
+	// to avoid remounting and wiping the freshly generated keys — re-renders
+	// every $_() string AND re-prefixes every lp() link, with no navigation.
+	// Render-correct under SSR (layout load sets the locale before render).
+	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 
@@ -631,6 +646,7 @@
 								bind:value={password}
 								autocomplete="new-password"
 								minlength="8"
+								maxlength="64"
 								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 							/>
 						</label>

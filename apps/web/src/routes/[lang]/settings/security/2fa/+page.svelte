@@ -490,6 +490,7 @@
 					<span>{$_('settings.totp.confirm_password_to_begin')}</span>
 					<input
 						type="password"
+						maxlength="64"
 						bind:value={password}
 						autocomplete="current-password"
 						disabled={busy}
@@ -571,6 +572,7 @@
 						<span>{$_('settings.totp.confirm_password')}</span>
 						<input
 							type="password"
+							maxlength="64"
 							bind:value={password}
 							autocomplete="current-password"
 							disabled={busy}
@@ -632,6 +634,7 @@
 					<span>{$_('settings.totp.confirm_password')}</span>
 					<input
 						type="password"
+						maxlength="64"
 						bind:value={password}
 						autocomplete="current-password"
 						disabled={busy}
@@ -672,6 +675,7 @@
 					<span>{$_('settings.totp.confirm_password')}</span>
 					<input
 						type="password"
+						maxlength="64"
 						bind:value={password}
 						autocomplete="current-password"
 						disabled={busy}

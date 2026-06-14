@@ -67,7 +67,7 @@ interface FeaturedRow {
 	expires_at_bid: Date;
 }
 
-export function featuredRoute(db: Database, officialAccount: string): Hono {
+export function featuredRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/', async (c) => {
@@ -120,7 +120,7 @@ export function featuredRoute(db: Database, officialAccount: string): Hono {
 			  AND o.fee_status IN ('verified', 'verified_by_attestation')
 			  AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $2 AND ob.blocked = o.account AND ob.state = 'blocked')
 			ORDER BY w.blurt_per_hour DESC, w.effective_at ASC`,
-			[MAX_SLOTS, officialAccount]
+			[MAX_SLOTS, operatorAccount]
 		);
 
 		const featured = rows.rows.map((r) => ({

@@ -274,7 +274,7 @@ function buildMorphitNativeFetch(
 		denominationFiat: config.priceFeedDenominationFiat,
 		stablecoinKeys: config.priceFeedStablecoinKeys,
 		db,
-		officialAccountName: config.officialAccountName,
+		operatorAccountName: config.operatorAccountName,
 		minPlausibleUsd: config.priceFeedNativePlausibleMin,
 		maxPlausibleUsd: config.priceFeedNativePlausibleMax
 	});

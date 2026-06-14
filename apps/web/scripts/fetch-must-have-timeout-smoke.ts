@@ -58,18 +58,51 @@ function walkTs(dir: string, out: string[]): void {
 	}
 }
 
-const ALLOW_LIST = new Set<string>([
-	// File + reason — allow-list intentional fetches where a timeout
-	// would harm UX (e.g. SW retry-on-network-restore, EventSource
-	// open which has its own keepalive).
-	// Format: relpath:lineHint (line is approximate, just for human ref).
-	'apps/web/src/service-worker.ts:182', // navigation fetch (network-first) in the SW fetch handler — a blanket AbortController would prematurely fall back to the (possibly stale) cached shell on a slow-but-working network, reintroducing the dead-chunk staleness the network-first nav exists to prevent; the browser's own network timeout bounds it, and a true network failure rejects → cached-shell offline fallback (cp252 SW rewrite shifted this from line 150)
-	'apps/web/src/service-worker.ts:205', // asset cache-first network fallback in the SW fetch handler — a blanket AbortController would prematurely 503 a slow-but-working immutable asset; the browser manages the request's own timeout (cp252 SW rewrite added this second fetch alongside the navigation one)
-	// fetchWithTimeout itself wraps fetch() — the signal it adds IS
-	// the timeout, but the smoke can't see that the `signal` variable
-	// it passes was just constructed from an AbortController.
-	'apps/web/src/lib/net/fetchWithTimeout.ts:60',
-]);
+// Allow-list of intentional fetches where a timeout would harm UX.
+//
+// Each entry is anchored on a STABLE SUBSTRING of the fetch line, NOT
+// a line number. A line-number anchor is fragile: the service worker
+// is edited often and its hint went stale TWICE (cp252 shifted it
+// 150→182, cp257 shifted it 182→190 — each shift silently broke this
+// gate in CI until repaired). A content anchor survives line shifts
+// and re-breaks ONLY when the fetch line itself is rewritten — which
+// is exactly the moment the rationale below should be re-examined.
+//
+// Hygiene: any entry that no longer matches a real fetch() line is
+// reported as a STALE allow-list entry (see the orphan check below),
+// so this list can't silently accumulate dead exemptions that would
+// mask a removed/renamed guarded fetch.
+interface AllowEntry {
+	/** Repo-relative path of the file containing the allowed fetch. */
+	readonly file: string;
+	/** A distinctive substring of the fetch line (the anchor). */
+	readonly snippet: string;
+	/** Why a blanket AbortController timeout would be wrong here. */
+	readonly reason: string;
+}
+const ALLOW_LIST: readonly AllowEntry[] = [
+	{
+		file: 'apps/web/src/service-worker.ts',
+		snippet: 'cleanRedirect(await fetch(req))',
+		reason:
+			'navigation fetch (network-first) in the SW fetch handler — a blanket AbortController would prematurely fall back to the (possibly stale) cached shell on a slow-but-working network, reintroducing the dead-chunk staleness the network-first nav exists to prevent; the browser bounds the request, and a true network failure rejects → cached-shell offline fallback'
+	},
+	{
+		file: 'apps/web/src/service-worker.ts',
+		snippet: 'const fresh = await fetch(req)',
+		reason:
+			'asset cache-first network fallback in the SW fetch handler — a blanket AbortController would prematurely 503 a slow-but-working immutable asset; the browser manages the request timeout'
+	},
+	{
+		// fetchWithTimeout itself wraps fetch() — the `signal` it passes
+		// IS the timeout, but the AbortController is constructed >15 lines
+		// up, beyond the smoke's look-back window, so it needs an entry.
+		file: 'apps/web/src/lib/net/fetchWithTimeout.ts',
+		snippet: 'fetch(input, { ...init, signal })',
+		reason: 'fetchWithTimeout is the timeout-wrapping helper itself; its signal comes from an AbortController constructed earlier than the smoke window'
+	}
+];
+const allowMatched: boolean[] = ALLOW_LIST.map(() => false);
 
 const tsFiles: string[] = [];
 for (const root of [
@@ -125,15 +158,15 @@ for (const file of tsFiles) {
 		const hasAbortController = /new AbortController\(/.test(prevWindow) || /AbortSignal\.timeout\(/.test(prevWindow);
 		if (hasAbortController && /signal[\s:]/.test(prevWindow)) continue;
 
-		// Check allow-list
+		// Check allow-list (content-anchored, not line-anchored).
 		const relPath = file.replace(REPO_ROOT + '/', '');
 		let allowed = false;
-		for (const entry of ALLOW_LIST) {
-			const [allowPath, allowLineStr] = entry.split(':');
-			if (relPath !== allowPath) continue;
-			const allowLine = Number(allowLineStr);
-			if (Math.abs((i + 1) - allowLine) <= 5) {
+		for (let ei = 0; ei < ALLOW_LIST.length; ei++) {
+			const entry = ALLOW_LIST[ei];
+			if (relPath !== entry.file) continue;
+			if (line.includes(entry.snippet)) {
 				allowed = true;
+				allowMatched[ei] = true;
 				break;
 			}
 		}
@@ -157,8 +190,20 @@ for (const f of findings) {
 	);
 }
 
-if (findings.length === 0) {
-	pass(`all ${totalFetches} fetch() sites have an AbortController+timeout (or are explicitly allow-listed)`);
+// Stale allow-list hygiene: every exemption must still match a real
+// fetch() line. An orphaned entry means the guarded fetch was moved,
+// renamed, or deleted — fail so the dead exemption gets cleaned up
+// rather than silently masking a future un-timed fetch.
+const orphaned = ALLOW_LIST.filter((_, i) => !allowMatched[i]);
+for (const o of orphaned) {
+	fail(
+		`stale allow-list entry: ${o.file} «${o.snippet}»`,
+		`no fetch() line matches this allow-list snippet anymore — the guarded fetch was moved/renamed/deleted; update the snippet or remove the entry`
+	);
+}
+
+if (findings.length === 0 && orphaned.length === 0) {
+	pass(`all ${totalFetches} fetch() sites have an AbortController+timeout (or are explicitly allow-listed); all ${ALLOW_LIST.length} allow-list entries still match`);
 }
 
 const total = passed + failed;

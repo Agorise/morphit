@@ -11,7 +11,14 @@
  * carrying byte-identical order data:
  *
  *   /rss/orderbook.xml
- *     The original global feed. 50 most recent orders.
+ *     The global feed. 50 most recent orders. The BARE URL is the
+ *     least-revealing subscription. It ALSO accepts the same OPTIONAL
+ *     filters as the by-asset feed — side, fiat_currency,
+ *     location_region, payment_methods, min_trades — so the orderbook
+ *     page can offer an RSS subscription that mirrors an active search
+ *     even when NO single asset is chosen. Opt-in, same privacy
+ *     trade-off (a filtered URL encodes the subscriber's criteria);
+ *     `sort` is NOT honored (feeds are always recency-ordered).
  *
  *   /rss/orderbook/by-asset/<asset>.xml
  *     Same shape, filtered to a single asset
@@ -93,13 +100,13 @@ export function rssOrderbookRoute(db: Database, config: Config): Hono {
 	const app = new Hono();
 
 	app.get('/orderbook.xml', async (c) => {
-		return applyResult(c as never, await globalFeedHandler(db, config, 'rss'));
+		return applyResult(c as never, await globalFeedHandler(db, config, 'rss', c.req.query()));
 	});
 	app.get('/orderbook.atom', async (c) => {
-		return applyResult(c as never, await globalFeedHandler(db, config, 'atom'));
+		return applyResult(c as never, await globalFeedHandler(db, config, 'atom', c.req.query()));
 	});
 	app.get('/orderbook.json', async (c) => {
-		return applyResult(c as never, await globalFeedHandler(db, config, 'json'));
+		return applyResult(c as never, await globalFeedHandler(db, config, 'json', c.req.query()));
 	});
 
 	// Per-asset / per-account: the path parameter carries the file

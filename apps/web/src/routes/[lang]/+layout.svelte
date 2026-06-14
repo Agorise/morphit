@@ -35,6 +35,7 @@
 	import { crossPageTradeEventsEnabled } from '$lib/notifications/crossPageTradeEvents';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { currentLocale } from '$i18n';
 
 	interface Props {
 		children: import('svelte').Snippet;
@@ -50,7 +51,15 @@
 	// site in the nav/header/footer; see also: the deferred
 	// internal-link audit in REVISIT-LIST §A for the sweep of
 	// per-page link sites still using bare hrefs.
-	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	// Drive the locale prefix from the active-locale STORE, not
+	// $page.data.lang.  The two are equal on every real navigation (the
+	// [lang] load sets both), but the store ALSO updates on an in-place
+	// locale swap (LanguageSwitcher's onboarding path, which uses
+	// replaceState instead of navigating).  Reading the store keeps the
+	// header nav links in sync during that swap; it's render-correct under
+	// SSR/prerender because the layout load runs initI18nFor(code) before
+	// render, so $currentLocale already equals the route locale.
+	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
 	// Tier-N a11y deferred from Part 100 — route-transition focus
