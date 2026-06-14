@@ -272,6 +272,51 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
+// ─── 11. UpdateBanner clears a stale waiting worker (no phantom snackbar) ───
+// Seen on the beta16 deploy: the banner only ever SET waitingWorker (from
+// reg.waiting) and never cleared it, so once a worker had been waiting the
+// "update available" snackbar could linger after that worker activated or
+// was discarded — a "Load it now" button with nothing to act on. check()
+// must clear waitingWorker when there is neither a waiting nor an installing
+// worker.
+{
+	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
+	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
+	const clearsStale =
+		/!reg\.installing/.test(text) && /waitingWorker\s*=\s*null/.test(text);
+	results.push({
+		name: 'UpdateBanner clears waitingWorker when nothing is waiting/installing (no phantom snackbar)',
+		ok: clearsStale,
+		detail: clearsStale
+			? undefined
+			: `clears waitingWorker on the no-waiting/no-installing branch: ${clearsStale}. Without this a stale waitingWorker leaves the snackbar offering an "update available" prompt whose "Load it now" can't do anything.`
+	});
+}
+
+// ─── 12. "Load it now" always acts: fallback reload + double-reload guard ───
+// controllerchange is not guaranteed to fire (an uncontrolled page after a
+// hard refresh, or a wedged worker) — exactly the "Load it now does nothing"
+// report. applyUpdate() must post APPLY_UPDATE AND fall back to a reload, and
+// a `refreshing` flag must guard BOTH reload sites so the two paths can't
+// double-reload.
+{
+	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
+	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
+	const hasGuard = /let\s+refreshing\s*=\s*false/.test(text);
+	const hasFallbackReload =
+		/setTimeout\(/.test(text) && /location\.reload\s*\(/.test(text);
+	// The guard must appear at BOTH reload sites (controllerchange + fallback).
+	const guardSites = (text.match(/if\s*\(refreshing\)\s*return/g) || []).length;
+	const ok = hasGuard && hasFallbackReload && guardSites >= 2;
+	results.push({
+		name: 'UpdateBanner "Load it now" has a fallback reload guarded against a double reload',
+		ok,
+		detail: ok
+			? undefined
+			: `refreshing flag declared: ${hasGuard}; setTimeout fallback reload present: ${hasFallbackReload}; refreshing guard sites (need >=2): ${guardSites}. Without a fallback, "Load it now" silently does nothing whenever controllerchange never fires.`
+	});
+}
+
 // ─── Report ──────────────────────────────────────────────────
 console.log('\n── service-worker-single-registration smoke (cp81 LL #81 / O-27) ──\n');
 let passed = 0;

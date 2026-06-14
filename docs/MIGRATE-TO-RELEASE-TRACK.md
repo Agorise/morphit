@@ -103,7 +103,7 @@ sudo systemctl restart morphit-indexer morphit-relay
 sudo systemctl restart morphit-matrix-bot 2>/dev/null || true
 
 # 9. Confirm you're on the release track.
-cat "$INSTALL_DIR/release-info.json"     # should show your tag, e.g. v1.0.0-beta.16
+cat "$INSTALL_DIR/release-info.json"     # should show your tag, e.g. v1.0.0-beta.17
 npx morphit-ops status                   # should run cleanly
 ```
 

@@ -91,7 +91,12 @@
 	></button>
 {/if}
 
-<div class="relative z-30" bind:this={rootEl}>
+<!-- Root z is conditional (z-30 open / z-10 closed): the orderbook stacks
+     three of these selects, and equal-z sibling stacking contexts paint in
+     DOM order, so a bare z-30 root let a later filter paint over this one's
+     open dropdown. Closed → z-10 keeps idle siblings below the active
+     scrim. See the longer note in FiatCurrencySelect. -->
+<div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
 	<button
 		bind:this={buttonEl}
 		type="button"

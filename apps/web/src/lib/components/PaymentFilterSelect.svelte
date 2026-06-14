@@ -132,8 +132,12 @@
 	// dedicated click-catcher), NOT a window listener — same fix as
 	// FiatCurrencySelect: a window handler raced the option click
 	// (add() detaches the picked node), so it could mis-close. The scrim
-	// sits BELOW the field (z-20 vs z-30); option clicks land cleanly and
-	// the menu stays open for multi-select until an outside (scrim) click.
+	// (z-20) sits BELOW the OPEN field (z-30); option clicks land cleanly
+	// and the menu stays open for multi-select until an outside (scrim)
+	// click. The root z is conditional (z-30 open / z-10 closed) so that,
+	// with three of these selects stacked on the orderbook page, an idle
+	// sibling can't paint over this one's open dropdown — see the longer
+	// note in FiatCurrencySelect.
 </script>
 
 {#if open}
@@ -148,7 +152,7 @@
 	></button>
 {/if}
 
-<div class="relative z-30" bind:this={rootEl}>
+<div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}

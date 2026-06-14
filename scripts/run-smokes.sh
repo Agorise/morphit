@@ -320,6 +320,7 @@ SMOKES=(
 	"apps/web:comparison-image-freshness-smoke"
 	"apps/web:asset-select-coverage-smoke"
 	"apps/web:disabled-payment-methods-ui-coverage-smoke"
+	"apps/web:orderbook-select-stacking-smoke"
 	"apps/web:faq-search-grandma-coverage-smoke"
 	"apps/web:import-remember-me-smoke"
 	"apps/indexer:reputation-decay-smoke"

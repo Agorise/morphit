@@ -105,9 +105,19 @@
 	// dedicated click-catcher), NOT a window listener. The old approach
 	// raced the option click — picking an option runs add(), which drops
 	// it from `hits` and detaches the clicked node, so a window handler
-	// could mis-close. The scrim sits BELOW the field (z-20 vs z-30) so
-	// option clicks land cleanly and the menu stays open for multi-select
-	// until an outside (scrim) click.
+	// could mis-close. The scrim (z-20) sits BELOW the OPEN field (z-30)
+	// so option clicks land cleanly and the menu stays open for
+	// multi-select until an outside (scrim) click.
+	//
+	// The root z is conditional — z-30 while open, z-10 while closed —
+	// because the orderbook stacks three of these selects on one page
+	// (asset / fiat / payment). Each is its own `relative` stacking
+	// context, and sibling contexts at EQUAL z paint in DOM order, so a
+	// bare `z-30` root let a later filter's field paint OVER this one's
+	// open dropdown (the payment pills bled into the fiat list). Dropping
+	// to z-10 when closed keeps every idle sibling BELOW the active
+	// select's z-20 scrim, so the open dropdown overlays them cleanly and
+	// a tap on an idle sibling hits the scrim and closes this one first.
 </script>
 
 {#if open}
@@ -122,7 +132,7 @@
 	></button>
 {/if}
 
-<div class="relative z-30" bind:this={rootEl}>
+<div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}

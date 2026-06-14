@@ -4,6 +4,11 @@
 
 	let waitingWorker = $state<ServiceWorker | null>(null);
 	let dismissed = $state(false);
+	// Guards against a double page reload: whichever fires first — the
+	// controllerchange listener or the applyUpdate() fallback timer — sets
+	// this and the other becomes a no-op. Resets on every page load, so it
+	// can never wedge the banner across navigations.
+	let refreshing = false;
 
 	const DISMISS_KEY = 'morphit.updateDismissed';
 
@@ -30,7 +35,16 @@
 				if (!reg) return;
 				// Trigger an update check (no-op if already up to date).
 				await reg.update().catch(() => {});
-				if (reg.waiting) waitingWorker = reg.waiting;
+				if (reg.waiting) {
+					waitingWorker = reg.waiting;
+				} else if (!reg.installing) {
+					// No worker waiting and none installing — there is nothing
+					// to apply, so clear any stale reference. Without this the
+					// snackbar could linger as a phantom "update available"
+					// (e.g. after the waiting worker already activated or was
+					// discarded) offering a "Load it now" button that can't act.
+					waitingWorker = null;
+				}
 				// Watch for a new worker appearing later. Only attach
 				// once per registration to avoid duplicate listeners
 				// across periodic check() invocations.
@@ -79,6 +93,8 @@
 
 		// When a new controller takes over, reload so the new UI is shown.
 		const onControllerChange = (): void => {
+			if (refreshing) return;
+			refreshing = true;
 			window.location.reload();
 		};
 		navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
@@ -102,6 +118,21 @@
 		// message protocol. The controllerchange listener above reloads
 		// once the new worker takes over.
 		waitingWorker.postMessage({ type: 'APPLY_UPDATE' });
+		// Fallback: in the normal path the new worker activates, fires
+		// controllerchange, and the listener above reloads. But if the page
+		// is currently uncontrolled (e.g. opened via a hard refresh, which
+		// bypasses the service worker) or the worker is wedged,
+		// controllerchange may never fire and the button would appear to do
+		// nothing. Reload anyway after a short grace period so the click
+		// always has an effect — a fresh load re-evaluates the registration
+		// and picks up the new build. `refreshing` keeps this to at most one
+		// reload (the controllerchange path usually wins) and resets on every
+		// load, so repeated clicks can't auto-loop.
+		setTimeout(() => {
+			if (refreshing) return;
+			refreshing = true;
+			window.location.reload();
+		}, 3000);
 	}
 
 	function dismiss(): void {
