@@ -130,7 +130,7 @@ export function priceReceiptRoute(db: Database, config: Config): Hono {
 			denominationFiat,
 			stablecoinKeys: config.priceFeedStablecoinKeys,
 			db,
-			officialAccountName: config.officialAccountName,
+			operatorAccountName: config.operatorAccountName,
 			minPlausibleUsd:
 				config.priceFeedNativePlausibleMin ?? HARDCODED_OUTER_MIN_USD,
 			maxPlausibleUsd:

@@ -43,7 +43,7 @@ Single configuration env var: `MORPHIT_MCP_INSTANCE_URL` (default `https://morph
 
 Every Morphit instance exposes the same `/v1/` surface, so the MCP server is instance-agnostic. Operators get the AI-discoverable surface for free by standing up the indexer; no operator-side work required.
 
-Future work (separate ADR if pursued): embed an HTTP MCP transport directly in the relay so that pointing an MCP client at `https://morphit.io/mcp` is one fewer install step. The stdio-only npm package is the v1; HTTP-transport remote-MCP is the v2 option.
+Future work — **now shipped (beta16); see the addendum below.** The stdio-only npm package was the v1; a hardened HTTP transport in the MCP server itself (not the relay — keeping it isolated and key-free) is the v2, making `https://morphit.io/mcp` a real, reachable endpoint.
 
 ## Alternatives considered
 
@@ -71,3 +71,57 @@ Future work (separate ADR if pursued): embed an HTTP MCP transport directly in t
 - `apps/mcp-server/README.md` — Claude Desktop / Cline / Cursor / Continue / Windsurf / Zed integration
 - `apps/mcp-server/scripts/mcp-server-smoke.ts` — 8-scenario wire-protocol test
 - Brag list #99
+
+## Addendum (beta16) — HTTP transport shipped
+
+The "future work" HTTP transport is now implemented in the MCP server
+itself (not the relay — keeping the MCP isolated and key-free). A single
+env var, `MORPHIT_MCP_TRANSPORT`, selects it: `stdio` (default) for local
+agents that spawn the server as a subprocess; `http` (the mode
+`morphit-mcp.service` runs) for a hardened, network-reachable endpoint a
+reverse proxy can expose for federation-wide remote-agent discovery.
+
+**Why it was needed.** cp251 shipped a persistent `morphit-mcp.service`
+whose unit, docs, and brag claim all assumed a network HTTP MCP on
+`127.0.0.1:8124` — but the server was stdio-only. Run as a daemon it read
+EOF on its empty stdin and exited 0 in under a second, so nothing ever
+listened on 8124 and the advertised `/v1/instance.mcp_url` (`<origin>/mcp`)
+pointed at a dead upstream.
+
+**Transport choice: stateless, JSON-response.** `sessionIdGenerator` is
+left `undefined` with `enableJsonResponse: true`, so each POST is an
+independent request/response — no session table to exhaust, no long-lived
+SSE. `initialize`, `tools/list`, and `tools/call` all work per request
+(verified end-to-end). The read-only tool set emits no server-initiated
+messages, so nothing is lost by dropping the SSE channel. A hand-rolled
+JSON-RPC endpoint was rejected (not MCP-spec compliant — standard clients
+couldn't connect); stateful `Mcp-Session-Id` sessions were rejected for
+the first cut (a bounded-but-real exhaustion surface for zero benefit
+here).
+
+**Security posture (the MCP is the most exposed surface).** Defense in
+depth, all on by default, tunable via `MORPHIT_MCP_*` in
+`/etc/morphit/mcp.env`: a fail-closed bind that accepts loopback or any
+private/bridge address (e.g. `172.18.0.1` for a dockerized reverse proxy,
+the same way the indexer/relay are reached) but refuses `0.0.0.0`/`::` or
+a public address unless `MORPHIT_MCP_ALLOW_PUBLIC_BIND=1`; DNS-rebinding
+Host/Origin allowlists enforced by both our middleware and the SDK
+transport (browser `Origin`s rejected by default; the default Host
+allowlist auto-includes the bound address); a per-client token-bucket
+rate limit; a hard request-body cap; a connection ceiling; slowloris
+timeouts; and SSRF-guarded outbound fetches. The systemd unit adds a
+`@system-service` seccomp allowlist, `ProtectSystem=strict`,
+`ReadOnlyPaths`, an empty capability set, `UMask=0077`, and `MemoryMax=256M`,
+and restarts forever with a start-limit circuit breaker.
+
+**Lifecycle.** Fresh nodes: the Ansible role installs the (HTTP-mode) unit
+and enables+starts it. Existing nodes: `morphit-ops upgrade` re-deploys the
+MCP's isolated vendored tree and restarts it (gated on the unit being
+installed), so the endpoint rolls forward automatically.
+
+Source: `apps/mcp-server/src/main.ts` (transport selection +
+`startHttpTransport` + in-file rate-limiter / Host-Origin / body-cap
+middleware + `bindAllowedByDefault`), `ops/systemd/morphit-mcp.service`,
+`apps/ops-cli/src/commands/upgrade.ts` (step 10b),
+`apps/mcp-server/scripts/mcp-http-transport-smoke.ts` (12-scenario
+behavioral test).

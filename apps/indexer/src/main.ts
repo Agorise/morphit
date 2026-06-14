@@ -334,12 +334,20 @@ async function main(): Promise<void> {
 	// Long-lived SSE connections shouldn't share a per-minute
 	// budget with REST GETs.  Per-IP open-connection caps belong
 	// at the reverse-proxy layer, not here.
-	app.route('/v1/orderbook/stream', orderbookStreamRoute(db, poller, config.officialAccountName));
+	// Operator-instance block filtering: the account these read routes
+	// filter `operator_blocks` by MUST match the account operatorBlock.ts
+	// writes blocks under — `ctx.signer === operatorAccountName` (the
+	// per-instance operator, NOT officialAccountName, the federation-wide
+	// release-signer). They default to the same value, but when an operator
+	// sets MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME separately, filtering by
+	// officialAccountName would silently ignore every block (the rows are
+	// keyed by operatorAccountName). cp257 fix.
+	app.route('/v1/orderbook/stream', orderbookStreamRoute(db, poller, config.operatorAccountName));
 
 	const orderbookApp = new Hono();
 	orderbookApp.use('*', rateLimit('list', config.listRatePerMin));
-	orderbookApp.route('/', orderbookRoute(db, poller, config.officialAccountName));
-	orderbookApp.route('/featured', featuredRoute(db, config.officialAccountName));
+	orderbookApp.route('/', orderbookRoute(db, poller, config.operatorAccountName));
+	orderbookApp.route('/featured', featuredRoute(db, config.operatorAccountName));
 	// Clearing-price history sits under /featured/clearing-price-history
 	// (closely related; lets clients fetch in one base URL).  Same
 	// 'list' rate-limit tier inherited from orderbookApp.
@@ -366,7 +374,7 @@ async function main(): Promise<void> {
 
 	const ordersApp = new Hono();
 	ordersApp.use('*', rateLimit('list', config.listRatePerMin));
-	ordersApp.route('/', ordersByAccountRoute(db, config.officialAccountName));
+	ordersApp.route('/', ordersByAccountRoute(db, config.operatorAccountName));
 	// Task #14 — private viewcounts.  Same /v1/orders namespace
 	// because the routes are :account/:permlink/view{,s}.  Inherits
 	// the existing 'list' rate-limit tier; nginx limit_req_zone is

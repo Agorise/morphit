@@ -26,7 +26,7 @@ import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-const VERSION = '1.0.0-beta.15';
+const VERSION = '1.0.0-beta.16';
 const POLL_INTERVAL_MS = 30_000;
 /** When pending_claimed_accounts drops below this, the relay
  *  rejects new create requests with relay_out_of_funds.  This
@@ -158,6 +158,10 @@ export class HealthService {
 				body.version = VERSION;
 				body.uptime_sec = Number(elapsedNs / 1_000_000_000n);
 				body.node_version = process.versions.node;
+				// Web Push delivery capability — true only when all three
+				// VAPID fields are configured.  Operator-triage signal that
+				// order/chat push notifications can actually be sent.
+				body.web_push = this.cfg.pushEnabled;
 				body.blurt_balance = this.snapshot.blurt_balance;
 				body.pending_claimed_accounts = this.snapshot.pending_claimed_accounts;
 				body.last_refresh_unix = this.snapshot.last_refresh_unix;

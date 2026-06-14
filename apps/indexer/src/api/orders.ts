@@ -97,7 +97,7 @@ function rowToWire(r: OrderRow) {
 	};
 }
 
-export function ordersByAccountRoute(db: Database, officialAccount: string): Hono {
+export function ordersByAccountRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/:account', async (c) => {
@@ -133,7 +133,7 @@ export function ordersByAccountRoute(db: Database, officialAccount: string): Hon
 		const limitParam = `$${params.length}`;
 		// beta5 — instance-local block: if the requested account is
 		// blocked on THIS instance, its listings are hidden here too.
-		params.push(officialAccount);
+		params.push(operatorAccount);
 		const opParam = `$${params.length}`;
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,

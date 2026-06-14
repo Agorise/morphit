@@ -55,6 +55,13 @@ const deployScript = read('ops/scripts/deploy-mcp.sh');
 const vapidScript = read('scripts/generate-vapid-keys.sh');
 const mcpUnit = read('ops/systemd/morphit-mcp.service');
 const indexerUnit = read('ops/systemd/morphit-indexer.service');
+const mcpMain = read('apps/mcp-server/src/main.ts');
+const upgradeTs = read('apps/ops-cli/src/commands/upgrade.ts');
+const mcpEnvTemplate = read('ops/ansible/roles/morphit/templates/mcp.env.j2');
+const bunkerwebTasks = read('ops/ansible/roles/bunkerweb/tasks/main.yml');
+const frontendNginx = read('ops/bunkerweb/frontend/nginx.conf');
+const webConf = read('ops/nginx/web.conf');
+const indexerEnvTmpl = read('ops/ansible/roles/morphit/templates/indexer.env.j2');
 
 // ── group_vars defaults ───────────────────────────────────────────
 check(
@@ -162,6 +169,111 @@ check('role deploys mcp.env template', /mcp\.env\.j2/.test(roleMain) && /dest:\s
 check(
 	'group_var morphit_mcp_instance_url defined (origin-derived)',
 	/^morphit_mcp_instance_url:\s*".*morphit_domain.*"\s*$/m.test(groupVars)
+);
+
+// ── MCP HTTP transport wiring (beta16 §45) ────────────────────────
+// The unit MUST run the HTTP transport: a plain stdio daemon reads EOF
+// on a service's empty stdin and exits 0 in <1s (correct for local
+// agent spawning, fatal for a persistent service).  And it must bind
+// loopback + restart forever.
+check(
+	'mcp unit runs the HTTP transport (Environment=MORPHIT_MCP_TRANSPORT=http)',
+	/^Environment=MORPHIT_MCP_TRANSPORT=http\s*$/m.test(mcpUnit)
+);
+check(
+	'mcp unit pins a loopback bind (Environment=MORPHIT_MCP_HTTP_HOST=127.0.0.1)',
+	/^Environment=MORPHIT_MCP_HTTP_HOST=127\.0\.0\.1\s*$/m.test(mcpUnit)
+);
+check('mcp unit restarts forever (Restart=always)', /^Restart=always\s*$/m.test(mcpUnit));
+check(
+	'mcp unit hardened with a seccomp allowlist (SystemCallFilter=@system-service)',
+	/^SystemCallFilter=@system-service\s*$/m.test(mcpUnit)
+);
+// The server actually implements an HTTP transport (not stdio-only).
+check(
+	'main.ts imports StreamableHTTPServerTransport',
+	/import\s*\{\s*StreamableHTTPServerTransport\s*\}\s*from\s*'@modelcontextprotocol\/sdk\/server\/streamableHttp\.js'/.test(
+		mcpMain
+	)
+);
+check(
+	'main.ts selects transport on MORPHIT_MCP_TRANSPORT and has startHttpTransport',
+	/MORPHIT_MCP_TRANSPORT/.test(mcpMain) && /startHttpTransport/.test(mcpMain)
+);
+check(
+	'main.ts is fail-closed: refuses non-loopback bind without override',
+	/MORPHIT_MCP_ALLOW_PUBLIC_BIND/.test(mcpMain) && /isLoopbackHost/.test(mcpMain)
+);
+check('main.ts serves a /health endpoint', /'\/health'/.test(mcpMain));
+check(
+	'main.ts allows private/bridge binds (isPrivateIp in the bind guard, not loopback-only)',
+	/isPrivateIp/.test(mcpMain) && /bindAllowedByDefault/.test(mcpMain)
+);
+// The unit's EnvironmentFile must be read AFTER the Environment= defaults
+// so /etc/morphit/mcp.env can override the bind host (e.g. a dockerized
+// proxy host sets MORPHIT_MCP_HTTP_HOST=172.18.0.1).  systemd is
+// last-assignment-wins, so order matters.
+const envHostIdx = mcpUnit.indexOf('Environment=MORPHIT_MCP_HTTP_HOST=127.0.0.1');
+const envFileIdx = mcpUnit.indexOf('EnvironmentFile=-/etc/morphit/mcp.env');
+check(
+	'mcp unit reads mcp.env AFTER the Environment= defaults (override ordering)',
+	envHostIdx > -1 && envFileIdx > envHostIdx
+);
+
+// ── upgrade.ts redeploys + restarts the MCP (existing nodes) ──────
+// The MCP's vendored tree at /opt/morphit-mcp is NOT updated by the
+// install-dir swap, so upgrade must re-run deploy-mcp.sh + restart it,
+// gated on the unit being installed.
+check('upgrade.ts re-runs deploy-mcp.sh', /deploy-mcp\.sh/.test(upgradeTs));
+check(
+	'upgrade.ts restarts morphit-mcp after redeploy',
+	/\['restart',\s*'morphit-mcp\.service'\]/.test(upgradeTs)
+);
+check(
+	'upgrade.ts gates the MCP step on the unit being installed',
+	/morphit-mcp\.service/.test(upgradeTs) && /existsSync\(mcpUnitPath\)/.test(upgradeTs)
+);
+check(
+	'mcp.env.j2 documents the MORPHIT_MCP_TRANSPORT=http knob',
+	/MORPHIT_MCP_TRANSPORT=http/.test(mcpEnvTemplate)
+);
+
+// ── MCP public exposure wired into the canonical BunkerWeb path (§45) ──
+// Closes the cp255 gap: a fresh Ansible node's MCP must be reachable
+// through BunkerWeb with NO manual step (it was loopback-only + unrouted).
+check(
+	'group_vars: morphit_mcp_bind_host + morphit_mcp_bind_port defined',
+	/^morphit_mcp_bind_host:/m.test(groupVars) && /^morphit_mcp_bind_port:/m.test(groupVars)
+);
+check('group_vars: morphit_mcp_advertise defined', /^morphit_mcp_advertise:/m.test(groupVars));
+check(
+	'mcp.env.j2 binds from morphit_mcp_bind_host and pairs an all-interfaces bind with ALLOW_PUBLIC_BIND',
+	/MORPHIT_MCP_HTTP_HOST=\{\{\s*morphit_mcp_bind_host/.test(mcpEnvTemplate) &&
+		/MORPHIT_MCP_ALLOW_PUBLIC_BIND=1/.test(mcpEnvTemplate) &&
+		/morphit_mcp_bind_host in \['0\.0\.0\.0'/.test(mcpEnvTemplate)
+);
+check(
+	'bunkerweb role opens UFW for the MCP port from bunkerweb_net, gated on morphit_mcp_enabled',
+	/port:\s*"\{\{\s*morphit_mcp_bind_port\s*\}\}"/.test(bunkerwebTasks) &&
+		/when:\s*morphit_mcp_enabled\s*\|\s*bool/.test(bunkerwebTasks)
+);
+check(
+	'BunkerWeb frontend nginx proxies /mcp to the host MCP with a loopback Host upstream',
+	/location \/mcp\b/.test(frontendNginx) &&
+		/proxy_pass http:\/\/host\.docker\.internal:8124/.test(frontendNginx) &&
+		/proxy_set_header Host 127\.0\.0\.1:8124/.test(frontendNginx)
+);
+check(
+	'bare-metal web.conf proxies /mcp to the loopback MCP with a loopback Host upstream',
+	/location \/mcp\b/.test(webConf) &&
+		/proxy_pass http:\/\/127\.0\.0\.1:8124/.test(webConf) &&
+		/proxy_set_header Host 127\.0\.0\.1:8124/.test(webConf)
+);
+check(
+	'indexer.env.j2 advertises mcp_url only when the MCP is BOTH enabled and advertise-opted-in',
+	/MORPHIT_MCP_ADVERTISE=\{\{\s*\(morphit_mcp_enabled\s*\|\s*bool\s*and\s*morphit_mcp_advertise\s*\|\s*bool\)/.test(
+		indexerEnvTmpl
+	)
 );
 
 // ── Result ────────────────────────────────────────────────────────

@@ -12,8 +12,13 @@
 	same matcher the post-order picker uses), so there's one source of
 	truth for method names/keys.  Operator-defined instance additions
 	are merged in via the `additions` prop so users can filter by them
-	too.  The registry is small and already in the orderbook bundle, so
-	this is NOT lazy-loaded (unlike the 150-entry currency list).
+	too.  LAZY: the ~60-entry registry and its search matcher are
+	`await import()`ed on FIRST FOCUS (mirroring FiatCurrencySelect's
+	currency dataset), so the orderbook's initial bundle never ships them
+	unless the user actually opens this filter.  Selected chips fall back
+	to the raw key until the registry resolves — and the orderbook's
+	filters start empty on load, so in practice there are no chips to
+	label before first focus anyway.
 
 	Grandma-friendly: chips + dropdown show the human name ("PayPal",
 	"Barter (goods/services)") not the internal key; keyboard ↑/↓/Enter/Backspace/
@@ -21,8 +26,7 @@
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { PAYMENT_METHODS, type PaymentMethodEntry } from '$lib/payments/registry';
-	import { searchPaymentMethods } from '$lib/payments/search';
+	import type { PaymentMethodEntry } from '$lib/payments/registry';
 
 	/** Selected payment-method keys (e.g. ["paypal","barter_goods"]). */
 	let {
@@ -48,11 +52,32 @@
 	let rootEl = $state<HTMLDivElement>();
 	let inputEl = $state<HTMLInputElement>();
 
+	// LAZY: the registry + its search matcher are the heavy bits; load them
+	// only when the user focuses this field (ensureLoaded is wired to the
+	// input's onfocus). Until then `all` is just the operator additions and
+	// `hits` is empty, so the initial orderbook bundle ships neither.
+	let regMod = $state<typeof import('$lib/payments/registry') | null>(null);
+	let searchMod = $state<typeof import('$lib/payments/search') | null>(null);
+
+	async function ensureLoaded(): Promise<void> {
+		if (regMod && searchMod) return;
+		const [r, s] = await Promise.all([
+			import('$lib/payments/registry'),
+			import('$lib/payments/search')
+		]);
+		regMod = r;
+		searchMod = s;
+	}
+
 	const all = $derived<PaymentMethodEntry[]>(
-		[...PAYMENT_METHODS, ...additions].filter((e) => !disabled.includes(e.key))
+		[...(regMod?.PAYMENT_METHODS ?? []), ...additions].filter((e) => !disabled.includes(e.key))
 	);
 
 	const hits = $derived.by<PaymentMethodEntry[]>(() => {
+		// Until the lazy search module resolves (first focus) there are no
+		// hits — the dropdown only renders once the user has typed anyway,
+		// and the import is a fast local chunk.
+		if (!searchMod) return [];
 		// lookupDescription → null: match on the method NAME only (a
 		// filter doesn't need description matching).
 		//
@@ -60,7 +85,8 @@
 		// fixed cap silently hid the tail of the alphabet (Ken: "the select
 		// options only go as far as S").  The dropdown is scrollable and the
 		// registry is bounded, so show EVERY matching method.
-		return searchPaymentMethods(all, query, () => null)
+		return searchMod
+			.searchPaymentMethods(all, query, () => null)
 			.map((r) => r.entry)
 			.filter((e) => !value.includes(e.key));
 	});
@@ -102,20 +128,27 @@
 		}
 	}
 
-	// Close on an outside press.  pointerdown (not click) for the same
-	// reason as FiatCurrencySelect: picking an option runs add(), which
-	// drops it from `hits` and detaches the clicked node before a `click`
-	// would bubble here (where rootEl.contains() would then be false and
-	// close the menu on every pick).  pointerdown fires first, so the menu
-	// stays open for multi-select; an outside press still closes it.
-	function onWindowPointerDown(e: PointerEvent): void {
-		if (open && rootEl && !rootEl.contains(e.target as Node)) open = false;
-	}
+	// Outside-close is handled by the full-screen blur scrim below (a
+	// dedicated click-catcher), NOT a window listener — same fix as
+	// FiatCurrencySelect: a window handler raced the option click
+	// (add() detaches the picked node), so it could mis-close. The scrim
+	// sits BELOW the field (z-20 vs z-30); option clicks land cleanly and
+	// the menu stays open for multi-select until an outside (scrim) click.
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} />
+{#if open}
+	<!-- Full-screen blur scrim (mirrors FaqSearch): dims + blurs the page
+	     behind the open listbox; an outside click closes it. -->
+	<button
+		type="button"
+		tabindex="-1"
+		aria-hidden="true"
+		onclick={() => (open = false)}
+		class="fixed inset-0 z-20 cursor-default bg-ink-900/5 backdrop-blur-sm"
+	></button>
+{/if}
 
-<div class="relative" bind:this={rootEl}>
+<div class="relative z-30" bind:this={rootEl}>
 	<div
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
@@ -146,7 +179,10 @@
 			role="combobox"
 			aria-expanded={open}
 			aria-controls="payment-method-listbox"
-			onfocus={() => (open = true)}
+			onfocus={() => {
+				open = true;
+				void ensureLoaded();
+			}}
 			oninput={() => {
 				open = true;
 				activeIndex = 0;

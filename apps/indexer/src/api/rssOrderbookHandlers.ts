@@ -298,29 +298,70 @@ const errorJson = (code: string, status: number): HandlerResult => ({
 export async function globalFeedHandler(
 	db: Database,
 	config: Config,
-	format: FeedFormat = 'rss'
+	format: FeedFormat = 'rss',
+	rawFilters: Readonly<Record<string, string | undefined>> = {}
 ): Promise<HandlerResult> {
 	const frontendOrigin = frontendOriginFrom(config);
+	const filters = parseFeedFilters(rawFilters);
+
+	// Dynamic param binder (mirrors perAssetFeedHandler / orderbook.ts).
+	// No asset predicate — this is the cross-asset feed; the optional
+	// order-property filters splice in after the fixed predicates and
+	// FEED_LIMIT binds last. The bare URL (no query) is unchanged; the
+	// filters are opt-in so a filtered URL reveals more than the bare one
+	// (same privacy posture as the per-asset feed).
+	const params: unknown[] = [];
+	const p = (v: unknown): string => {
+		params.push(v);
+		return `$${params.length}`;
+	};
+	const where: string[] = [
+		`o.status = 'live'`,
+		`o.fee_status IN ('verified', 'verified_by_attestation')`,
+		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.operatorAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+	];
+	appendFilterClauses(filters, where, p);
+
+	// min_trades rides the SAME sock-puppet-filtered feedback-count
+	// aggregate as the orderbook + per-asset feed, joined ONLY when the
+	// filter is active so the bare feed never pays for it.
+	let joinSql = '';
+	if (filters.minTrades !== undefined) {
+		joinSql = `
+		  LEFT JOIN (${FEEDBACK_COUNT_SUBQUERY}
+		  ) f ON f.subject = o.account`;
+		where.push(`COALESCE(f.c, 0) >= ${p(filters.minTrades)}`);
+	}
+
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 		       o.amount_min::text, o.amount_max::text,
 		       o.location_region, o.payment_methods, o.fee_method,
 		       o.created_at, o.updated_at
-		  FROM orders o
-		 WHERE o.status = 'live'
-		   AND o.fee_status IN ('verified', 'verified_by_attestation')
-		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $2 AND ob.blocked = o.account AND ob.state = 'blocked')
+		  FROM orders o${joinSql}
+		 WHERE ${where.join(' AND ')}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
-		 LIMIT $1`;
+		 LIMIT ${p(FEED_LIMIT)}`;
 
-	const result = await db.query<OrderRow>(sql, [FEED_LIMIT, config.officialAccountName]);
+	const result = await db.query<OrderRow>(sql, params);
+
+	const filtered = hasAnyFilter(filters);
+
+	// Optional FRONTEND-supplied human title (same single-source-of-truth
+	// posture as the per-asset feed — the labels live in the web app and
+	// are never reconstructed here); control-stripped + length-capped.
+	const customTitle = (rawFilters.feed_title ?? '')
+		.replace(/[\u0000-\u001f\u007f]/g, ' ')
+		.trim()
+		.slice(0, 300);
+	const feedTitle = customTitle.length > 0 ? customTitle : 'Morphit — New orderbook entries';
 
 	const body = serializeFeed(
 		result.rows,
 		{
-			title: 'Morphit — New orderbook entries',
-			description: `The ${FEED_LIMIT} most recent live orders on Morphit with an established listing fee. ${PRIVACY_NOTE_GLOBAL}`,
-			selfUrl: `${config.publicOrigin}/rss/orderbook.${feedExt(format)}`,
+			title: feedTitle,
+			description: `The ${FEED_LIMIT} most recent live orders on Morphit with an established listing fee${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : PRIVACY_NOTE_GLOBAL}`,
+			selfUrl: `${config.publicOrigin}/rss/orderbook.${feedExt(format)}${filterQueryString(filters)}`,
 			humanLink: `${frontendOrigin}/orderbook`
 		},
 		frontendOrigin,
@@ -556,7 +597,7 @@ export async function perAssetFeedHandler(
 		`o.status = 'live'`,
 		`o.fee_status IN ('verified', 'verified_by_attestation')`,
 		`o.asset = ${p(asset)}`,
-		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.officialAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.operatorAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
 	];
 	appendFilterClauses(filters, where, p);
 
@@ -657,7 +698,7 @@ export async function perAccountFeedHandler(
 		 ORDER BY o.updated_at DESC, o.permlink ASC
 		 LIMIT $2`;
 
-	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT, config.officialAccountName]);
+	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT, config.operatorAccountName]);
 
 	const body = serializeFeed(
 		result.rows,
