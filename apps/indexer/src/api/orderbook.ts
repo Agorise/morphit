@@ -189,7 +189,7 @@ function rowToWire(r: OrderRow) {
 	};
 }
 
-export function orderbookRoute(db: Database, poller: Poller, officialAccount: string): Hono {
+export function orderbookRoute(db: Database, poller: Poller, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/', async (c) => {
@@ -242,7 +242,7 @@ export function orderbookRoute(db: Database, poller: Poller, officialAccount: st
 		// local OR chain-origin both apply). Keeps blocked sellers out of
 		// the public orderbook on THIS instance only.
 		where.push(
-			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(officialAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(operatorAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
 		);
 
 		if (q.asset) where.push(`o.asset = ${p(q.asset)}`);

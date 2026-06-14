@@ -92,7 +92,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 export function buildWhereClauses(
 	q: OrderbookStreamQuery,
 	startIndex = 0,
-	officialAccount = ''
+	operatorAccount = ''
 ): { where: string[]; params: unknown[] } {
 	const where: string[] = [
 		`o.status = 'live'`,
@@ -117,11 +117,14 @@ export function buildWhereClauses(
 	// or fallback poll) a listing from an account this operator blocked.
 	// buildWhereClauses is the single chokepoint for all three SSE
 	// paths, so the live stream can't leak a blocked account's new order.
-	// Skipped only when no operator account is supplied (direct unit
-	// calls); every production caller passes config.officialAccountName.
-	if (officialAccount !== '') {
+	// The `operatorAccount` param is config.operatorAccountName — the
+	// per-instance operator that operatorBlock.ts keys blocks under (NOT
+	// officialAccountName, the federation-wide release-signer; cp257
+	// renamed this param from the misleading `officialAccount`). Skipped
+	// only when no account is supplied (direct unit calls).
+	if (operatorAccount !== '') {
 		where.push(
-			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(officialAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
+			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(operatorAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
 		);
 	}
 

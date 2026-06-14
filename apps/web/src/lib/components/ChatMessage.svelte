@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
+	import { safeContactUrl } from '$lib/utils/safeContactUrl';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
 	 * ChatMessage — a single message bubble in a conversation.
@@ -158,6 +159,36 @@
 	 *  with the recipient's render means an OUTGOING address share
 	 *  should render as a pill on the sender's side too. */
 	const decoded = $derived(isPlaceholder ? null : decodePayload(message.text));
+
+	/** Split plaintext into text + http(s) link segments so URLs become
+	 *  clickable (opening in a new tab) WITHOUT ever using @html on
+	 *  peer-controlled text — every segment renders through Svelte's
+	 *  normal escaping. The regex matches http(s):// up to whitespace;
+	 *  trailing sentence punctuation is peeled back onto the next text
+	 *  run so "see https://example.org." links cleanly. Only http/https
+	 *  match, so no javascript:/data: scheme can sneak into an href. */
+	function linkifySegments(text: string): Array<{ link: boolean; value: string }> {
+		const out: Array<{ link: boolean; value: string }> = [];
+		const re = /https?:\/\/[^\s]+/g;
+		let last = 0;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(text)) !== null) {
+			let url = m[0];
+			let trail = '';
+			const tm = /[).,;:!?'"\]}>]+$/.exec(url);
+			if (tm) {
+				trail = tm[0];
+				url = url.slice(0, url.length - trail.length);
+			}
+			if (m.index > last) out.push({ link: false, value: text.slice(last, m.index) });
+			if (url.length > 0) out.push({ link: true, value: url });
+			if (trail.length > 0) out.push({ link: false, value: trail });
+			last = m.index + m[0].length;
+		}
+		if (last < text.length) out.push({ link: false, value: text.slice(last) });
+		return out;
+	}
+	const textSegments = $derived(linkifySegments(message.text));
 
 	/** Copy-to-clipboard state for address/txid pills. The pill
 	 *  shows "Copied!" briefly after a click before reverting.
@@ -1086,7 +1117,7 @@
 					{$_('chat.unknown_version')}
 				</span>
 			{:else}
-				<span class="whitespace-pre-wrap">{message.text}</span>
+				<span class="whitespace-pre-wrap">{#each textSegments as seg}{#if seg.link}<a href={safeContactUrl(seg.value)} target="_blank" rel="noopener noreferrer nofollow" class="underline break-all">{seg.value}</a>{:else}{seg.value}{/if}{/each}</span>
 			{/if}
 		</div>
 

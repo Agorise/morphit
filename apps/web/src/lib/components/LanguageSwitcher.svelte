@@ -3,7 +3,7 @@
 	import { SUPPORTED_LOCALES, currentLocale, setLocale, type LocaleCode } from '$i18n';
 	import { localePath, stripLocalePrefix } from '$i18n/path';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 
 	let open = $state(false);
 	let buttonEl: HTMLButtonElement;
@@ -22,29 +22,36 @@
 	}
 
 	async function choose(code: LocaleCode): Promise<void> {
-		// Part 121 cp7 — language switch is now a navigation, not
-		// a runtime locale swap.  Each locale has its own
-		// prerendered HTML at `/<lang>/<route>`, so switching
-		// requires navigating to the equivalent path under the
-		// new prefix.
-		//
-		// stripLocalePrefix + localePath together compose the
-		// "same page, different locale" URL:
+		// Language switch is normally a NAVIGATION — each locale has its own
+		// prerendered HTML at `/<lang>/<route>`, so switching navigates to the
+		// equivalent path under the new prefix:
 		//   /es/orderbook?asset=BTC#row-3
 		//     → stripLocalePrefix → /orderbook?asset=BTC#row-3
 		//     → localePath(_, 'pl') → /pl/orderbook?asset=BTC#row-3
-		// Query strings and fragments are preserved.
-		//
-		// We still call setLocale() so the localStorage preference
-		// updates immediately (for next visit's redirect-shell
-		// detection on the bare /).  The navigation itself triggers
-		// the [lang]/+layout.ts load() which re-runs initI18nFor
-		// for the destination locale.
+		// Query + fragment preserved. setLocale() updates the active-locale
+		// store + the localStorage preference; the goto re-runs the
+		// [lang]/+layout.ts load() (initI18nFor) for the destination locale.
 		const currentPath = $page.url.pathname + $page.url.search + $page.url.hash;
 		const target = localePath(stripLocalePrefix(currentPath), code);
 		await setLocale(code);
 		open = false;
 		buttonEl?.focus();
+
+		// EXCEPTION — the onboarding flow holds unsaved, in-memory-only state:
+		// a freshly generated keypair the user is mid-backup on, or keys/seed
+		// they're typing to import. A normal navigation REMOUNTS the page and
+		// wipes that state (and mid-review it would trip the leave-confirmation
+		// guard). On these routes we swap the locale IN PLACE: setLocale() above
+		// already re-rendered every $_() string and — because currentLang reads
+		// the locale store on these routes — re-prefixed every on-page link;
+		// replaceState then updates the URL bar WITHOUT a navigation, so there's
+		// no remount and no beforeNavigate, and the keys survive. A later real
+		// navigation or a reload re-syncs everything from the new URL.
+		if (stripLocalePrefix($page.url.pathname).startsWith('/onboarding')) {
+			replaceState(target, $page.state);
+			return;
+		}
+
 		await goto(target);
 	}
 

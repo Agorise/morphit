@@ -191,6 +191,7 @@
 		</span>
 		<input
 			type="password"
+			maxlength="64"
 			bind:value={password}
 			autocomplete="current-password"
 			disabled={submitting}

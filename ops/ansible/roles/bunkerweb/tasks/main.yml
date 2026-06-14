@@ -101,6 +101,17 @@
     - "{{ morphit_relay_bind_port }}"
     - "{{ morphit_indexer_bind_port }}"
 
+# §45 — same as above, for the MCP HTTP transport, but only when the MCP
+# is enabled (it's the most exposed surface, so don't open the port for
+# a service that isn't running).  The frontend nginx proxies /mcp here.
+- name: Allow the bunkerweb Docker network to reach the MCP
+  community.general.ufw:
+    rule: allow
+    src: 172.20.0.0/16
+    port: "{{ morphit_mcp_bind_port }}"
+    proto: tcp
+  when: morphit_mcp_enabled | bool
+
 - name: Bring BunkerWeb up
   community.docker.docker_compose_v2:
     project_src: /etc/bunkerweb

@@ -13,7 +13,7 @@ import { applyLocalBlock, normalizeAccount, type BlockAction } from '../lib/loca
 
 async function run(ctx: CommandCtx, action: BlockAction): Promise<number> {
 	const json = ctx.flags.json === 'true';
-	const operator = ctx.config.officialAccount;
+	const operator = ctx.config.operatorAccount;
 
 	const rawAccount = ctx.positional[0];
 	if (rawAccount === undefined || rawAccount === '') {

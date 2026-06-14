@@ -497,6 +497,24 @@
 		return params.toString();
 	});
 
+	/** The GLOBAL (cross-asset) RSS pill shows when no single asset is
+	 *  selected — so the per-asset pill isn't showing — but the search
+	 *  still carries at least one filter the feed honors: side, fiat,
+	 *  region, payment, min_trades, or the barter payment constraint
+	 *  (asset === 'barter'). This is what surfaces an RSS subscription
+	 *  for a side/region/experience search without an asset (orderbook
+	 *  items 1/4/6). `sort` is deliberately excluded — feeds are always
+	 *  recency-ordered, so a sort-only change produces no feed pill. */
+	const globalRssActive = $derived(
+		(asset === '' || asset === 'barter') &&
+			(side !== '' ||
+				fiatList.length > 0 ||
+				region.trim() !== '' ||
+				paymentMethods.length > 0 ||
+				minTrades > 0 ||
+				asset === 'barter')
+	);
+
 	/** Fetch profile data for the accounts in the given order set,
 	 *  deduplicated and batched via the shared profile cache. Merges
 	 *  results into profileMap so the UI reactively swaps identicons
@@ -904,7 +922,7 @@
 				</span>
 				<select
 					bind:value={side}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value="">{$_('orderbook.filters.side_any')}</option>
 					<option value="buy">{$_('orderbook.filters.side_buy')}</option>
@@ -973,7 +991,7 @@
 				</span>
 				<select
 					bind:value={minTrades}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value={0}>{$_('orderbook.filters.min_trades_any')}</option>
 					<option value={5}>{$_('orderbook.filters.min_trades_5')}</option>
@@ -990,7 +1008,7 @@
 				</span>
 				<select
 					bind:value={sortMode}
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					class="w-full cursor-pointer rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
 				>
 					<option value="recent">{$_('orderbook.filters.sort_recent')}</option>
 					<option value="rating">{$_('orderbook.filters.sort_rating')}</option>
@@ -1017,6 +1035,20 @@
 						base={`/rss/orderbook/by-asset/${asset.toLowerCase()}`}
 						query={rssQuery}
 						label={$_('orderbook.filters.rss_asset_title', { values: { asset } }) as string}
+						text={$_('orderbook.filters.rss_generated_label') as string}
+						triggerClass="chip text-xs"
+						iconClass="h-3.5 w-3.5"
+					/>
+				{:else if globalRssActive}
+					<!-- Cross-asset filtered feed: no single asset selected, but
+					     the search has filters the feed honors. Same global
+					     /rss/orderbook the footer links, with the active filters
+					     in the query. aria-label is the dynamic, already-localized
+					     criteria summary (rssTitle). -->
+					<RssFeedPicker
+						base="/rss/orderbook"
+						query={rssQuery}
+						label={rssTitle}
 						text={$_('orderbook.filters.rss_generated_label') as string}
 						triggerClass="chip text-xs"
 						iconClass="h-3.5 w-3.5"

@@ -284,6 +284,10 @@ export interface HealthSummary {
 	 *  cooldown — i.e. RPC, not the indexer, is the reason for a
 	 *  stalled sync. */
 	readonly rpcAllDown: boolean;
+	/** Relay only: Web Push delivery enabled (all three VAPID fields
+	 *  set).  null when the field is absent (the indexer health, or a
+	 *  relay built before this field existed). */
+	readonly webPush: boolean | null;
 }
 
 function numOrNull(v: unknown): number | null {
@@ -310,7 +314,8 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		uptimeSec: numOrNull(b.uptime_sec),
 		rpcHealthy,
 		rpcTotal,
-		rpcAllDown: rpcTotal !== null && rpcTotal > 0 && rpcHealthy === 0
+		rpcAllDown: rpcTotal !== null && rpcTotal > 0 && rpcHealthy === 0,
+		webPush: typeof b.web_push === 'boolean' ? b.web_push : null
 	};
 }
 
@@ -569,7 +574,8 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						outcome: relay.kind,
 						up: relayUp,
 						version: relay.summary?.version ?? null,
-						uptime_sec: relay.summary?.uptimeSec ?? null
+						uptime_sec: relay.summary?.uptimeSec ?? null,
+						web_push: relay.summary?.webPush ?? null
 					},
 					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
 					canary
@@ -622,6 +628,11 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		console.log(`  ${c.green('✓')} up`);
 		if (rs?.version != null) console.log(`      Version:       ${safe(rs.version)}`);
 		console.log(`      Uptime:        ${fmtUptime(rs?.uptimeSec ?? null)}`);
+		if (rs?.webPush != null) {
+			console.log(
+				`      Web push:      ${rs.webPush ? c.green('✓ enabled') : c.dim('○ disabled (no VAPID keys)')}`
+			);
+		}
 	} else if (relay.kind === 'unreachable') {
 		console.log(`  ${c.red('✗')} not reachable on loopback or any bridge gateway`);
 		console.log(`      ${c.dim('the relay is optional — only needed if your node broadcasts')}`);

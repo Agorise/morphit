@@ -539,6 +539,7 @@
 					rows="3"
 					autocomplete="off"
 					spellcheck="false"
+					maxlength="120"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white p-3 font-mono text-base focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-950"
 				></textarea>
 				<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
@@ -562,6 +563,7 @@
 				<span class="mb-2 block font-semibold">{$_('onboarding.import.password_label')}</span>
 				<input
 					type="password"
+					maxlength="64"
 					bind:value={password}
 					autocomplete="current-password"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -604,6 +606,7 @@
 				>
 				<input
 					type="password"
+					maxlength="64"
 					bind:value={postingWif}
 					autocomplete="off"
 					spellcheck="false"
@@ -623,6 +626,7 @@
 				>
 				<input
 					type="password"
+					maxlength="64"
 					bind:value={postingNewPassword}
 					autocomplete="new-password"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -638,6 +642,7 @@
 				>
 				<input
 					type="password"
+					maxlength="64"
 					bind:value={postingNewPasswordConfirm}
 					autocomplete="new-password"
 					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -694,6 +699,7 @@
 						</span>
 						<input
 							type="password"
+							maxlength="64"
 							bind:value={rememberPassword}
 							autocomplete="new-password"
 							minlength="8"
@@ -721,6 +727,7 @@
 						</span>
 						<input
 							type="password"
+							maxlength="64"
 							bind:value={rememberPasswordConfirm}
 							autocomplete="new-password"
 							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"

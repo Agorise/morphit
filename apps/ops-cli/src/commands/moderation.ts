@@ -55,7 +55,7 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 	const json = ctx.flags.json === 'true';
 	const cutoff = new Date(Date.now() - sinceSec * 1000);
 	const limit = json ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
-	const operator = ctx.config.officialAccount;
+	const operator = ctx.config.operatorAccount;
 
 	const reciprocity = showReciprocity ? await fetchReciprocityFlags(ctx.db, cutoff, limit) : [];
 	const related = showRelated ? await fetchRelatedFlags(ctx.db, cutoff, limit) : [];
