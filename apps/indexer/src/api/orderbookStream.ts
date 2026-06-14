@@ -191,8 +191,8 @@ const ROW_SELECT = `
 
 /** Fetch the snapshot — the "first page" matching the filter,
  *  sort=recent, limit=SNAPSHOT_LIMIT. */
-async function fetchSnapshot(db: Database, q: OrderbookStreamQuery, officialAccount: string): Promise<OrderbookStreamRow[]> {
-	const { where, params } = buildWhereClauses(q, 0, officialAccount);
+async function fetchSnapshot(db: Database, q: OrderbookStreamQuery, operatorAccount: string): Promise<OrderbookStreamRow[]> {
+	const { where, params } = buildWhereClauses(q, 0, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
 		 ${FEEDBACK_AGGREGATE_JOIN}
@@ -211,7 +211,7 @@ async function fetchOrderIfMatchesFilter(
 	db: Database,
 	orderId: string,
 	q: OrderbookStreamQuery,
-	officialAccount: string
+	operatorAccount: string
 ): Promise<OrderbookStreamRow | null> {
 	const slash = orderId.indexOf('/');
 	if (slash < 0) return null;
@@ -220,7 +220,7 @@ async function fetchOrderIfMatchesFilter(
 	if (account.length === 0 || permlink.length === 0) return null;
 
 	// We bind account + permlink as $1, $2; filter params start at $3.
-	const { where, params } = buildWhereClauses(q, 2, officialAccount);
+	const { where, params } = buildWhereClauses(q, 2, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
 		 ${FEEDBACK_AGGREGATE_JOIN}
@@ -236,9 +236,9 @@ async function fetchOrderIfMatchesFilter(
 async function fetchRecentlyChanged(
 	db: Database,
 	q: OrderbookStreamQuery,
-	officialAccount: string
+	operatorAccount: string
 ): Promise<OrderbookStreamRow[]> {
-	const { where, params } = buildWhereClauses(q, 1, officialAccount);
+	const { where, params } = buildWhereClauses(q, 1, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
 		 ${FEEDBACK_AGGREGATE_JOIN}
@@ -251,7 +251,7 @@ async function fetchRecentlyChanged(
 	return result.rows;
 }
 
-export function orderbookStreamRoute(db: Database, poller: Poller, officialAccount: string): Hono {
+export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/', (c) => {
@@ -369,7 +369,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, officialAccou
 				const { schedule: processOrderChange } = makeFetchSerializer(
 					async (orderId: string) => {
 						try {
-							const row = await fetchOrderIfMatchesFilter(db, orderId, filter, officialAccount);
+							const row = await fetchOrderIfMatchesFilter(db, orderId, filter, operatorAccount);
 							if (cancelled) return;
 							if (row !== null) {
 								trackUpsert(orderId);
@@ -423,7 +423,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, officialAccou
 
 				// ─── Initial snapshot ────
 				try {
-					const rows = await fetchSnapshot(db, filter, officialAccount);
+					const rows = await fetchSnapshot(db, filter, operatorAccount);
 					const items = rows.map(rowToWire);
 					for (const row of rows) {
 						trackUpsert(`${row.account}/${row.permlink}`);
@@ -460,7 +460,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, officialAccou
 				pollTimer = setInterval(async () => {
 					if (cancelled) return;
 					try {
-						const rows = await fetchRecentlyChanged(db, filter, officialAccount);
+						const rows = await fetchRecentlyChanged(db, filter, operatorAccount);
 						for (const row of rows) {
 							const orderId = `${row.account}/${row.permlink}`;
 							// Always emit upsert for any matching row in

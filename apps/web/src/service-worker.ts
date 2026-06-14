@@ -24,21 +24,26 @@
  * not render to rescue the user. (Reproduces as: blank page in a normal
  * tab, fine in a private window which has no service worker.)
  *
- * The trade chosen here, for a fix that can't strand a user:
- *   • install precaches best-effort and skipWaiting()s; activate purges old
- *     caches and claims clients — so a corrected worker can take over a
- *     stuck tab on the next load.
+ * The model here — consent-gated AND eviction-safe, so no trade-off is needed:
+ *   • install precaches best-effort but does NOT skipWaiting(): while a
+ *     controller already exists, a freshly installed worker SITS IN "waiting"
+ *     so the in-app UpdateBanner can offer "Load it now / Later" and the user
+ *     upgrades on their own schedule — never mid-form, never mid-read.
+ *     skipWaiting() fires only from the APPLY_UPDATE message (user consent).
  *   • navigations are network-first (fresh shell ⇒ its chunk names always
- *     exist on the origin), cached shell only as the OFFLINE fallback.
+ *     exist on the origin), cached shell only as the OFFLINE fallback — THIS
+ *     is the stuck-tab rescue: a full load always boots from a fresh shell,
+ *     so a waiting (un-consented) worker can never strand anyone.
  *   • hashed/immutable assets stay cache-first and self-heal on eviction.
+ *   • activate purges old caches and claims clients (after a consented
+ *     skipWaiting, or on first install where there is no prior worker).
  *
- * What we GIVE UP: the origin can now serve a new shell/bundle without an
- * explicit per-user consent click. The backstop against a hostile operator
- * remains the chain-signed release manifest + the running-bundle SHA-256
- * check (TamperAlertBanner / $stores/release) — note that check runs inside
- * the app, so it is defence-in-depth, not a hard guarantee against a
- * malicious bundle. REVISIT-LIST flags this for a future hardened
- * consent-gated-AND-eviction-safe upgrade path if the threat model warrants.
+ * No consent is given up: the origin cannot silently swap a user's running
+ * bundle — an upgrade waits for the "Load it now" click (or a cold start, once
+ * every tab on the old worker is closed). The backstop against a hostile
+ * operator remains the chain-signed release manifest + the running-bundle
+ * SHA-256 check (TamperAlertBanner / $stores/release) — defence-in-depth
+ * inside the app, not a hard guarantee against a malicious bundle.
  *
  * ─── What does hit the network ───────────────────────────────────────────
  *
@@ -106,18 +111,21 @@ self.addEventListener('install', (event: ExtendableEvent) => {
 			// batch, the install fails, and users stay pinned to an older
 			// worker. allSettled lets the rest of the bundle precache.
 			await Promise.allSettled(PRECACHE_ASSETS.map((a) => cache.add(a)));
-			// Activate immediately. We previously withheld skipWaiting() to
-			// pin users to their installed bundle until they consented to an
-			// upgrade (see the SECURITY note in the header). That model
-			// black-paged users whose Cache Storage was partially evicted
-			// after a deploy: the cached shell still referenced hashed chunks
-			// the server had already rotated away, so the network fallback
-			// 404'd and nothing hydrated — and, because the app never booted,
-			// no in-app "update available" banner could rescue them. Taking
-			// over immediately + network-first navigation (see fetch below)
-			// removes that trap and lets a fixed worker rescue a stuck tab on
-			// the next load.
-			await self.skipWaiting();
+			// DO NOT skipWaiting() here. While a controller already exists, a
+			// freshly installed worker must SIT IN "waiting" so the in-app
+			// UpdateBanner can surface "Load it now / Later" and the user
+			// upgrades on THEIR schedule — never auto-reloading them mid-form
+			// or mid-read. skipWaiting() runs only from the APPLY_UPDATE message
+			// handler below, i.e. after the user clicks "Load it now".
+			//
+			// This does NOT reintroduce the stale-shell black page that a
+			// previous build added skipWaiting() to dodge — that rescue comes
+			// from NETWORK-FIRST navigation (see the fetch handler), which
+			// always refetches the shell from the origin on a full load, so its
+			// hashed chunks can never point at rotated-away files. A waiting
+			// worker also activates on its own once every tab on the old worker
+			// is closed, so choosing "Later" still lands the update on the next
+			// cold start.
 		})()
 	);
 });

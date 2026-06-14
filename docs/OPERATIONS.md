@@ -579,9 +579,10 @@ back-fill.
 >   auto-probe the bridge gateway if loopback doesn't answer (see the
 >   note above). The relay is reported as optional.
 > - **Services** — the read-only `systemctl` active-state of
->   `morphit-matrix-bot` and `morphit-mcp`. (The MCP server speaks the
->   MCP stdio protocol, so there is no HTTP health endpoint to curl —
->   the systemd service state is the signal that it's up.)
+>   `morphit-matrix-bot` and `morphit-mcp`. (The MCP runs the hardened
+>   Streamable-HTTP transport bound to `127.0.0.1:8124`, so besides the
+>   systemd service state you can curl its liveness directly:
+>   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
 > - **Canary** — whether `apps/web/static/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
 >   regeneration.
@@ -2602,6 +2603,39 @@ curl -sI https://morphit.example.org/ | grep -iE "(strict-transport|x-content|re
 Expected: all six headers present. If any are missing,
 fix your web server config before making the deployment
 public.
+
+### Troubleshooting: account avatars show as broken images
+
+If newly-generated account avatars (the heart identicons on the
+onboarding "your keys are ready" screen, profile chips, the avatar
+menu, etc.) render as the browser's broken-image icon, and the browser
+console / **Issues** panel reports a Content-Security-Policy violation
+for `data:image/svg+xml` requests, your *deployed* CSP is older than
+this config. Identicons are inline `data:` SVGs generated in the
+browser, so the `img-src` directive must include `data:` — this config
+ships `img-src 'self' data: blob:`. (The avatars are valid `data:` URIs;
+the CSP is what blocks them, so rebuilding the frontend bundle alone
+does NOT fix it.)
+
+Check two things, in order:
+
+1. **The served header.** DevTools → Network → click the HTML document
+   request → Response Headers → `content-security-policy`. If its
+   `img-src` is just `'self'` (no `data:`), your reverse proxy is
+   serving an out-of-date policy. Re-deploy the CSP from this repo
+   (`ops/nginx/web.conf`, or `CONTENT_SECURITY_POLICY` in your
+   BunkerWeb env from `ops/bunkerweb/bunkerweb.env.example`) and reload:
+   `nginx -t && nginx -s reload`, or restart the BunkerWeb container.
+2. **The service worker cache.** A previously-cached HTML response can
+   keep enforcing the old CSP header even after the proxy is fixed.
+   Hard-reload bypassing the cache, or DevTools → Application → Storage
+   → **Clear site data** (which also unregisters the service worker),
+   then reload.
+
+The shipped policy is correct and is guarded by
+`scripts/csp-header-consistency-smoke.ts` (CI fails if `img-src` ever
+loses `data:`), so a broken-avatar report is always a stale-deployment
+or stale-cache symptom — never a code change.
 
 ---
 
@@ -10297,10 +10331,37 @@ at `/v1/orderbook` etc.) plus deeplinks back to your frontend.
 The user's wallet still executes the actual trade — the agent is
 strictly a discovery surface.
 
-Default bind: `127.0.0.1:8124` (loopback only).  Reverse-proxy
-via nginx at `/mcp/*` if you want public exposure.  No CORS
-needed because the MCP protocol is request/response over HTTP
-without browser-origin restrictions in the agent runtime.
+**Transport.** The service runs the Streamable-HTTP transport
+(`MORPHIT_MCP_TRANSPORT=http`, set in the unit) in stateless,
+JSON-response mode — no sessions, no long-lived SSE.  It binds `127.0.0.1:8124` by default and is **fail-closed**: it accepts
+loopback or a private/bridge address — e.g. set
+`MORPHIT_MCP_HTTP_HOST=172.18.0.1` in `/etc/morphit/mcp.env` so a
+dockerized reverse proxy (BunkerWeb) can reach it across the Docker
+bridge, exactly as you do for the indexer/relay listen host — but
+refuses `0.0.0.0`/`::` or a public address unless you explicitly set
+`MORPHIT_MCP_ALLOW_PUBLIC_BIND=1`.  Public exposure is meant to go
+through the reverse proxy (below), never a direct public bind.  (The
+default Host allowlist auto-includes whatever address it binds, so a
+bridge bind passes DNS-rebinding protection without extra config.)
+
+**Defenses (all on by default, tunable in `/etc/morphit/mcp.env`).**
+DNS-rebinding protection via a Host allowlist (`MORPHIT_MCP_ALLOWED_HOSTS`,
+default the loopback Host values), enforced by both our own middleware
+and the SDK transport; an Origin allowlist that **rejects any browser
+`Origin` by default** (add trusted ones via `MORPHIT_MCP_ALLOWED_ORIGINS`);
+a per-client token-bucket rate limit (`MORPHIT_MCP_RATE_LIMIT_PER_MIN`,
+default 120/min); a hard request-body cap (`MORPHIT_MCP_MAX_BODY_BYTES`,
+default 256 KiB); a connection ceiling (`MORPHIT_MCP_MAX_CONNECTIONS`,
+default 64); and slowloris header/request timeouts.  Outbound fetches to
+the instance API are SSRF-guarded (private hostnames/IPs refused,
+body-capped, redirects rejected).  The unit adds a seccomp allowlist
+(`SystemCallFilter=@system-service`), `ProtectSystem=strict`,
+`ReadOnlyPaths`, an empty capability set, `UMask=0077`, and
+`MemoryMax=256M`.
+
+**Local agents** (Claude Desktop, Cline, Cursor, …) that spawn the
+server themselves use stdio instead — set `MORPHIT_MCP_TRANSPORT=stdio`
+(the source default) and point the client's `command` at the server.
 
 ### Resource cost
 
@@ -10323,15 +10384,42 @@ your DB password or relay keys**.  Set `morphit_mcp_enabled: false` in
 `group_vars/all.yml` to skip it, or toggle it any time at runtime with
 `sudo morphit-ops mcp`.
 
-If you installed by hand instead of via Ansible, deploy the isolated
-tree, create the service user, then enable the unit:
+If you installed by hand instead of via Ansible, create the service
+user FIRST (so the deploy chowns the tree to it), then deploy and
+enable the unit — order matters:
 
 ```
-sudo bash ops/scripts/deploy-mcp.sh
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin morphit-mcp 2>/dev/null || true
+# 1. Isolated service group + user (nologin, home is the deploy dir):
+sudo groupadd --system morphit-mcp 2>/dev/null || true
+sudo useradd --system --gid morphit-mcp --no-create-home \
+  --shell /usr/sbin/nologin --home-dir /opt/morphit-mcp morphit-mcp 2>/dev/null || true
+
+# 2. Its directory, owned by the service user:
+sudo mkdir -p /opt/morphit-mcp
+sudo chown morphit-mcp:morphit-mcp /opt/morphit-mcp
+sudo chmod 0750 /opt/morphit-mcp
+
+# 3. Point the MCP at THIS node (else it defaults to morphit.io):
+echo "MORPHIT_MCP_INSTANCE_URL=https://YOUR-DOMAIN" | sudo tee /etc/morphit/mcp.env >/dev/null
+sudo chmod 0644 /etc/morphit/mcp.env
+
+# 4. Deploy the self-contained tree (vendors deps, npm install, chowns):
+sudo bash ops/scripts/deploy-mcp.sh "$PWD" /opt/morphit-mcp morphit-mcp
+
+# 5. Install + enable the unit (it runs the HTTP transport automatically):
 sudo cp ops/systemd/morphit-mcp.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now morphit-mcp.service
+```
+
+Verify it's listening — the unit sets `MORPHIT_MCP_TRANSPORT=http`, so it
+stays up as a loopback HTTP service rather than exiting immediately as a
+bare stdio process would:
+
+```
+curl http://127.0.0.1:8124/health     # → {"status":"ok","transport":"http"}
+ss -ltnp | grep 8124                    # systemd-owned listener on loopback
+morphit-ops health                       # Services: mcp — running
 ```
 
 The wizard (`morphit-ops init`, step 21) also sets
@@ -10352,15 +10440,34 @@ sudo systemctl enable --now morphit-mcp.service
 sudo systemctl restart morphit-indexer.service
 ```
 
-### Reverse proxy (optional — public exposure)
+### Reverse proxy (public exposure)
 
-If you want AI agent users to reach your MCP endpoint from
-outside your VPN, add a location block to your nginx config:
+**If you installed via the Ansible playbook, this is already done for
+you** — the canonical dockerized-BunkerWeb stack now proxies `/mcp` to
+the host MCP automatically (the `morphit` role binds the MCP so the
+BunkerWeb frontend can reach it across the Docker bridge, the `bunkerweb`
+role opens UFW for the MCP port to the `bunkerweb_net` CIDR only, and the
+frontend nginx carries a `/mcp` location). The playbook also defaults
+`morphit_mcp_advertise: true`, so `/v1/instance.mcp_url` advertises the
+live `<origin>/mcp` for federation discovery. Set `morphit_mcp_enabled:
+false` to skip the MCP, or `morphit_mcp_advertise: false` to run it
+without announcing it.
+
+If instead you front Morphit with your **own host nginx** (no BunkerWeb),
+the shipped `ops/nginx/web.conf` already includes the equivalent `/mcp`
+location (loopback upstream). And if you hand-roll a different proxy, add
+a location block like:
 
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8124/;
-    proxy_set_header Host $host;
+    # Present the loopback Host upstream so the MCP's default
+    # DNS-rebinding allowlist (127.0.0.1:8124) accepts it.  If you'd
+    # rather forward your public Host, add it to MORPHIT_MCP_ALLOWED_HOSTS
+    # in /etc/morphit/mcp.env instead.
+    proxy_set_header Host 127.0.0.1:8124;
+    # Real client IP for the MCP's per-client rate limiter (it trusts
+    # the leftmost XFF only because the upstream peer is loopback).
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     # MCP responses can be long-running for federation queries.
@@ -10373,6 +10480,15 @@ The indexer's `/v1/instance` response will then include
 `MORPHIT_INDEXER_PUBLIC_ORIGIN` plus `/mcp`).  AI agent operators
 discover this via the federation directory and configure their
 clients accordingly.
+
+**Dockerized reverse proxy (e.g. BunkerWeb).** If your proxy runs in a
+container it can't reach the host's `127.0.0.1`, so — exactly as for the
+indexer and relay — bind the MCP to the Docker bridge gateway instead:
+set `MORPHIT_MCP_HTTP_HOST=172.18.0.1` in `/etc/morphit/mcp.env`, point
+the proxy at `http://172.18.0.1:8124/`, and verify with
+`curl http://172.18.0.1:8124/health`.  No `MORPHIT_MCP_ALLOW_PUBLIC_BIND`
+is needed (the bridge gateway is a private address, not a public bind),
+and the default Host allowlist already accepts `172.18.0.1:8124`.
 
 ### Disabling
 

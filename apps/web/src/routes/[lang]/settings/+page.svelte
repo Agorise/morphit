@@ -1875,6 +1875,7 @@
 							</span>
 							<input
 								type="password"
+								maxlength="64"
 								bind:value={pwOldInput}
 								autocomplete="current-password"
 								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -1887,6 +1888,7 @@
 							</span>
 							<input
 								type="password"
+								maxlength="64"
 								bind:value={pwNewInput}
 								autocomplete="new-password"
 								minlength="8"
@@ -1917,6 +1919,7 @@
 							</span>
 							<input
 								type="password"
+								maxlength="64"
 								bind:value={pwConfirmInput}
 								autocomplete="new-password"
 								class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"

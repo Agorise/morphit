@@ -194,7 +194,7 @@ With the runner registered and smoke-tested, the existing release workflows at `
 
 Once Step 7 completes successfully, the release ceremony moves from "9 of 10 steps complete, blocked on runner" to "fully shippable on next tag push". The remaining work is:
 
-1. Maintainer tags the release (e.g. `v1.0.0-beta.15`) on the canonical branch.
+1. Maintainer tags the release (e.g. `v1.0.0-beta.16`) on the canonical branch.
 2. Runner picks up the tag, runs the test matrix (Step 8), produces the signed manifest.
 3. Runner produces the tarball (Step 9) and attaches to the Forgejo release page.
 4. Runner triggers mirror upload (Step 10).

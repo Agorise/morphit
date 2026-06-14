@@ -208,6 +208,70 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
+// ─── 9. SW update is CONSENT-GATED, not auto-applied (snackbar regression guard) ───
+//
+// A new worker must SIT IN "waiting" so the in-app UpdateBanner can offer
+// "Load it now / Later" — the user upgrades on their own schedule, never an
+// auto-reload mid-form or mid-read. skipWaiting() therefore must NOT live in
+// the install handler (that auto-activates the new worker → clients.claim() →
+// controllerchange → the banner force-reloads before the user ever sees it);
+// it belongs ONLY in the APPLY_UPDATE message handler. This regressed once: a
+// build added skipWaiting() to install to dodge a stale-shell black page — but
+// that rescue actually comes from network-first navigation (the fetch path),
+// not from auto-activation.
+{
+	const path = resolve(root, 'src/service-worker.ts');
+	const text = readFileSync(path, 'utf8');
+
+	// Strip JS comments so the explanatory "DO NOT skipWaiting() here" /
+	// "skipWaiting() runs only from APPLY_UPDATE" notes aren't mistaken for code.
+	const stripJs = (s: string): string =>
+		s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+	// Slice out the install handler body: from the install listener to the
+	// next top-level self.addEventListener(.
+	const installStart = text.indexOf("addEventListener('install'");
+	const afterInstall = text.indexOf('self.addEventListener(', installStart + 1);
+	const installBody =
+		installStart >= 0 && afterInstall > installStart
+			? stripJs(text.slice(installStart, afterInstall))
+			: '';
+	const installHasSkipWaiting = /skipWaiting\s*\(/.test(installBody);
+
+	// skipWaiting must exist in the message / APPLY_UPDATE handler.
+	const msgStart = text.indexOf("addEventListener('message'");
+	const msgBody = msgStart >= 0 ? stripJs(text.slice(msgStart)) : '';
+	const applyUpdateSkips = /APPLY_UPDATE/.test(msgBody) && /skipWaiting\s*\(/.test(msgBody);
+
+	const ok = installStart >= 0 && msgStart >= 0 && !installHasSkipWaiting && applyUpdateSkips;
+	results.push({
+		name: 'SW update is consent-gated: skipWaiting() only in APPLY_UPDATE handler, never in install',
+		ok,
+		detail: ok
+			? undefined
+			: `install handler found: ${installStart >= 0}; install calls skipWaiting (must be FALSE): ${installHasSkipWaiting}; APPLY_UPDATE handler calls skipWaiting (must be TRUE): ${applyUpdateSkips}. skipWaiting() in install auto-activates the new worker → clients.claim() → controllerchange → the UpdateBanner force-reloads the user mid-task, never showing "Load it now / Later".`
+	});
+}
+
+// ─── 10. UpdateBanner wires the consent → apply → reload flow ───
+{
+	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
+	const exists = existsSync(path);
+	const text = exists ? readFileSync(path, 'utf8') : '';
+	const postsApply = /postMessage\(\s*\{\s*type:\s*['"]APPLY_UPDATE['"]/.test(text);
+	const reloadsOnControllerChange =
+		/controllerchange/.test(text) && /location\.reload\s*\(/.test(text);
+	const offersChoice = /update\.apply/.test(text) && /update\.later/.test(text);
+	const ok = exists && postsApply && reloadsOnControllerChange && offersChoice;
+	results.push({
+		name: 'UpdateBanner offers Load-it-now/Later, posts APPLY_UPDATE, reloads on controllerchange',
+		ok,
+		detail: ok
+			? undefined
+			: `exists: ${exists}; posts APPLY_UPDATE: ${postsApply}; reloads on controllerchange: ${reloadsOnControllerChange}; offers apply+later: ${offersChoice}. This is the user-consent surface for SW updates; without it the only upgrade paths are an auto-takeover (bad UX) or a cold restart.`
+	});
+}
+
 // ─── Report ──────────────────────────────────────────────────
 console.log('\n── service-worker-single-registration smoke (cp81 LL #81 / O-27) ──\n');
 let passed = 0;

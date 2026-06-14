@@ -157,13 +157,16 @@ export interface MorphitNativeFetcherConfig {
 	readonly denominationFiat: string; // e.g., 'USD'
 	readonly stablecoinKeys: ReadonlyArray<string>; // e.g., ['usdt', 'usdc', 'dai']
 	readonly db: Database;
-	/** This instance's official/operator account name (the
-	 *  `operator` column in operator_blocks).  Orders from accounts
-	 *  this operator has blocked (state='blocked') are excluded from
-	 *  every derivation tier AND from the depeg detector, mirroring
+	/** This instance's OPERATOR account name (the `operator` column
+	 *  in operator_blocks — keyed by `operatorAccountName`, NOT
+	 *  `officialAccountName`; cp258 fixed this from the latter, which
+	 *  silently made the exclusion inert whenever an operator set a
+	 *  separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME).  Orders from
+	 *  accounts this operator has blocked (state='blocked') are excluded
+	 *  from every derivation tier AND from the depeg detector, mirroring
 	 *  the orderbook's instance-local moderation (cp209).  Pass
-	 *  `config.officialAccountName`; '' makes the exclusion inert. */
-	readonly officialAccountName: string;
+	 *  `config.operatorAccountName`; '' makes the exclusion inert. */
+	readonly operatorAccountName: string;
 	/** Per-asset plausibility envelope.  Will be clamped to
 	 *  HARDCODED_OUTER_MIN_USD..HARDCODED_OUTER_MAX_USD before use. */
 	readonly minPlausibleUsd: number;
@@ -240,7 +243,7 @@ export async function deriveMorphitNativePrice(
 	// stablecoins are eligible for Tier 2.
 	const depegReport = await detectStablecoinDepeg(config.db, {
 		stablecoinKeys: config.stablecoinKeys,
-		officialAccountName: config.officialAccountName,
+		operatorAccountName: config.operatorAccountName,
 		windowHours,
 		orderAgeGraceMinutes: graceMinutes
 	});
@@ -511,7 +514,7 @@ async function queryTier1Orders(
 		           AND ob.blocked = o.account
 		           AND ob.state = 'blocked'
 		    )`,
-		[config.asset.toUpperCase(), config.denominationFiat.toUpperCase(), config.officialAccountName]
+		[config.asset.toUpperCase(), config.denominationFiat.toUpperCase(), config.operatorAccountName]
 	);
 
 	const rows: RawOrderRow[] = [];
@@ -606,7 +609,7 @@ async function queryTier2Orders(
 		           AND ob.blocked = o.account
 		           AND ob.state = 'blocked'
 		    )`,
-		[config.asset.toUpperCase(), payKeys, config.officialAccountName]
+		[config.asset.toUpperCase(), payKeys, config.operatorAccountName]
 	);
 
 	const rows: Array<RawOrderRow & { via_stablecoin: string }> = [];

@@ -834,7 +834,11 @@ What it asks you, in order:
 20. **MCP server** (Model Context Protocol for AI agents —
     recommended on; lets AI agents like Claude Desktop, Cursor,
     etc. discover your instance and answer user queries from
-    your orderbook).  See OPERATIONS.md §45 for details.
+    your orderbook).  On the canonical Ansible + BunkerWeb path it
+    is now exposed automatically — the playbook binds it for the
+    BunkerWeb frontend, opens the firewall to the bridge only,
+    proxies `/mcp`, and advertises `<origin>/mcp` for federation
+    discovery, with no manual step.  See OPERATIONS.md §45.
 21. **BunkerWeb WAF / reverse proxy** (recommended for any
     public instance — answer yes if BunkerWeb terminates TLS and
     fronts your stack, and the wizard sets
@@ -1311,7 +1315,7 @@ sudo bash ops/scripts/install-systemd-units.sh
 sudo systemctl enable --now morphit-indexer morphit-relay
 ```
 
-The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users, so this manual installer leaves them alone. The **Ansible playbook deploys and enables the MCP server for you by default** (isolated, as its own `morphit-mcp` user from `/opt/morphit-mcp`, locked down so it can't read your DB password or relay keys); to do it by hand, run `sudo bash ops/scripts/deploy-mcp.sh`, create the `morphit-mcp` user, and enable `morphit-mcp.service` (the mint-acts job is a separate setup — see OPERATIONS.md). That isolation is intentional. Once the MCP server is installed, you can turn it on or off at any time with `sudo morphit-ops mcp` (or the interactive menu → **Check & operate → MCP server**) — no need to remember the unit name.
+The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users, so this manual installer leaves them alone. The **Ansible playbook deploys and enables the MCP server for you by default** (isolated, as its own `morphit-mcp` user from `/opt/morphit-mcp`, locked down so it can't read your DB password or relay keys); to do it by hand, create the `morphit-mcp` user **first**, then run `sudo bash ops/scripts/deploy-mcp.sh "$PWD" /opt/morphit-mcp morphit-mcp` and enable `morphit-mcp.service` — the full ordered steps (the deploy chowns the tree to that user, so creating it first matters) are in OPERATIONS.md §45, and the mint-acts job is a separate setup. The service runs the hardened HTTP transport on `127.0.0.1:8124`, so confirm it with `curl http://127.0.0.1:8124/health`; and `sudo morphit-ops upgrade` now redeploys and restarts it automatically on every version bump, so you never re-run the deploy by hand after an upgrade. That isolation is intentional. Once the MCP server is installed, you can turn it on or off at any time with `sudo morphit-ops mcp` (or the interactive menu → **Check & operate → MCP server**) — no need to remember the unit name.
 
 > **Before you start the services, run the doctor.** From your
 > install directory, `npx morphit-ops doctor` reads your config and
@@ -2123,6 +2127,19 @@ npx morphit-ops init
 If you installed Morphit with the **Ansible playbook** (`ops/ansible/`), you don't run these commands by hand — the playbook runs `npm install` for you and (since cp161) verifies the `morphit-ops` tool is runnable before finishing. If something changed on the box, re-run the playbook rather than doing a manual `git pull` on the server.
 
 For the full explanation of *why* this happens (workspace bins, the `tsx` runtime dependency, the `NODE_ENV=production` edge case), see **OPERATIONS.md → "Troubleshooting: `morphit-ops` says command not found"** in §33.
+
+### "Account avatars show as broken images"
+
+The heart identicons on the onboarding "your keys are ready" screen (and profile chips, the avatar menu, etc.) show the browser's broken-image icon, and the browser console / **Issues** panel mentions a Content-Security-Policy violation on `data:image/svg+xml` requests.
+
+Those avatars are tiny SVGs the browser builds on the fly as `data:` URIs — they're valid, so this is never a frontend-bundle problem, and **rebuilding the frontend alone will not fix it**. It means the CSP your web server is actually *sending* is older than this repo's: its `img-src` directive is missing `data:`. The shipped policy is `img-src 'self' data: blob:`.
+
+Fix it in two steps:
+
+1. **Update the served policy.** Confirm what's being sent first: DevTools → Network → the HTML document request → Response Headers → `content-security-policy` (look for `img-src`). If you front the site with nginx, re-copy `ops/nginx/web.conf` and run `sudo nginx -t && sudo nginx -s reload`. If you use BunkerWeb, update `CONTENT_SECURITY_POLICY` in your env to match `ops/bunkerweb/bunkerweb.env.example` and restart the container.
+2. **Clear the cached page.** The service worker may have cached an old HTML response that still carries the old CSP header, so the fix won't show until the cache is gone: DevTools → Application → Storage → **Clear site data**, then reload.
+
+See **OPERATIONS.md §15 → "Troubleshooting: account avatars show as broken images"** for the same fix with more detail.
 
 ### "My node won't start"
 

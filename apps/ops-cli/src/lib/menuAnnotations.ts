@@ -113,7 +113,7 @@ export async function unresolvedFlagCount(timeoutMs = 2500): Promise<number | nu
 				                         WHERE ob.operator = $2 AND ob.state = 'blocked'
 				                           AND ob.blocked IN (ra.account_a, ra.account_b)))
 				   AS n`,
-				[cutoff, config.officialAccount]
+				[cutoff, config.operatorAccount]
 			);
 			const n = r.rows[0]?.n;
 			return n === undefined ? null : Number(n);

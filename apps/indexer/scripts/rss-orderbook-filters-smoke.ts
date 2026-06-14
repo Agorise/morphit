@@ -27,7 +27,7 @@ import type pg from 'pg';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { perAssetFeedHandler } from '../src/api/rssOrderbookHandlers.ts';
+import { perAssetFeedHandler, globalFeedHandler } from '../src/api/rssOrderbookHandlers.ts';
 import type { Database } from '../src/db/pool.ts';
 import type { Config } from '../src/config/index.ts';
 
@@ -317,6 +317,74 @@ await scenario('invalid asset still 400 even with filters', async () => {
 	const r = await perAssetFeedHandler('fake.xml', mock.db, FAKE_CONFIG, { side: 'buy' });
 	assertEqual(r.status, 400, 'status');
 	assertEqual(mock.queries.length, 0, 'no DB query for invalid asset');
+});
+
+// ─── GLOBAL (cross-asset) feed honors the same filters ──────────────
+// The orderbook page surfaces an RSS pill for a side/region/experience
+// search even when NO asset is chosen; it points at /rss/orderbook with
+// the filter query, so globalFeedHandler must apply the same clauses the
+// per-asset feed does (minus the asset predicate).
+
+console.log('\n── RSS GLOBAL feed filters (cross-asset) ───────────');
+
+await scenario('global bare feed → no filter clauses, no asset clause, no query in self URL', async () => {
+	const mock = makeMockDb([]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss');
+	assertEqual(r.status, 200, 'status');
+	const q = mock.queries[0]!;
+	assertNotContains(q.text, 'o.side =', 'no side clause when bare');
+	assertNotContains(q.text, 'o.asset =', 'global feed has NO asset clause');
+	assertNotContains(r.body, 'orderbook.xml?', 'no query in self URL');
+	assertNotContains(r.body, 'matching your selected filters', 'no filter phrase');
+	assertContains(r.body, 'Blurt is a public chain', 'global privacy note');
+});
+
+await scenario('global side filter → o.side clause + bound param, still no asset clause', async () => {
+	const mock = makeMockDb([]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss', { side: 'buy' });
+	assertEqual(r.status, 200, 'status');
+	const q = mock.queries[0]!;
+	assertContains(q.text, 'o.side =', 'side clause present');
+	assertNotContains(q.text, 'o.asset =', 'no asset clause');
+	assertContains(JSON.stringify(q.params), '"buy"', 'side param bound');
+});
+
+await scenario('global fiat+region filters → clauses + filtered self URL + filtered note', async () => {
+	const mock = makeMockDb([]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss', {
+		fiat_currency: 'usd,eur',
+		location_region: 'Berlin'
+	});
+	const q = mock.queries[0]!;
+	assertContains(q.text, 'o.fiat_currency = ANY(', 'fiat clause present');
+	assertContains(q.text, 'o.location_region ILIKE', 'region clause present');
+	assertContains(JSON.stringify(q.params), '["USD","EUR"]', 'fiat array uppercased + bound');
+	assertContains(r.body, 'orderbook.xml?', 'filtered self URL carries query');
+	assertContains(r.body, 'matching your selected filters', 'filtered phrase present');
+});
+
+await scenario('global min_trades → feedback aggregate join, SAME exclusion set as orderbook', async () => {
+	const mock = makeMockDb([]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss', { min_trades: '5' });
+	assertEqual(r.status, 200, 'status');
+	const q = mock.queries[0]!;
+	assertContains(q.text, 'FROM feedback fb', 'feedback aggregate joined');
+	assertContains(q.text, 'COALESCE(f.c, 0) >=', 'min_trades threshold clause');
+	const perAssetMock = makeMockDb([]);
+	await perAssetFeedHandler('btc.xml', perAssetMock.db, FAKE_CONFIG, { min_trades: '5' });
+	assertEqual(
+		exclusionTables(feedbackBlock(q.text)),
+		exclusionTables(feedbackBlock(perAssetMock.queries[0]!.text)),
+		'global + per-asset feedback exclusion sets identical'
+	);
+});
+
+await scenario('global sort param ignored (recency order, not a feed filter)', async () => {
+	const mock = makeMockDb([]);
+	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss', { sort: 'rating' });
+	const q = mock.queries[0]!;
+	assertContains(q.text, 'ORDER BY o.updated_at DESC', 'recency order');
+	assertNotContains(r.body, 'orderbook.xml?', 'sort produces no query in self URL');
 });
 
 console.log('');

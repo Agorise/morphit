@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="en" dir="ltr" class="dark">
 	<head>
-		<!-- Shell rationale + per-route SEO notes: docs/WEB-SHELL.md -->
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="color-scheme" content="dark" />
@@ -34,20 +33,16 @@
 		/>
 
 		<script>
-			// Preflight locale hint (see docs/WEB-SHELL.md). Best-effort.
 			(function () {
 				try {
 					var q = new URLSearchParams(window.location.search);
 					var code = q.get('lang');
 					if (!code) return;
-					// Whitelist — must stay in sync with SUPPORTED_LOCALES.
 					var allowed = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru', 'fa', 'zh-CN', 'zh-HK'];
 					if (allowed.indexOf(code) === -1) return;
 					document.documentElement.lang = code;
 					document.documentElement.dir = code === 'fa' ? 'rtl' : 'ltr';
-				} catch (_e) {
-					/* swallow — this is best-effort */
-				}
+				} catch (_e) {}
 			})();
 		</script>
 

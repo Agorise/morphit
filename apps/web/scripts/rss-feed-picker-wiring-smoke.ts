@@ -77,6 +77,11 @@ const SURFACES: { file: string; baseNeedle: string; label: string }[] = [
 		label: 'per-asset orderbook feed'
 	},
 	{
+		file: 'src/routes/[lang]/orderbook/+page.svelte',
+		baseNeedle: 'base="/rss/orderbook"',
+		label: 'orderbook cross-asset filtered feed (no-asset search)'
+	},
+	{
 		file: 'src/routes/[lang]/[x+40][account=account]/+page.svelte',
 		baseNeedle: '/rss/orderbook/by-account/@',
 		label: 'per-trader profile feed'
@@ -103,6 +108,20 @@ for (const s of SURFACES) {
 		}
 	});
 }
+
+scenario('orderbook cross-asset pill is gated on globalRssActive (conditional, mutually exclusive)', () => {
+	const src = read('src/routes/[lang]/orderbook/+page.svelte');
+	if (!src.includes('globalRssActive')) {
+		throw new Error(
+			'orderbook: cross-asset RSS pill must be gated on globalRssActive (no-asset + has-filter), not shown unconditionally'
+		);
+	}
+	if (!src.includes('{:else if globalRssActive}')) {
+		throw new Error(
+			'orderbook: global pill should be the {:else if} branch of the per-asset pill so the two never both render'
+		);
+	}
+});
 
 scenario('RssFeedPicker references all 8 rss.* keys', () => {
 	const src = read(PICKER);

@@ -1141,6 +1141,55 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
+	// ─── 10b. Redeploy + restart the MCP (its own vendored tree) ──
+	// The MCP runs from a SELF-CONTAINED tree at /opt/morphit-mcp, separate
+	// from the /opt/morphit install dir swapped above, so it does NOT pick
+	// up new code from the swap — its vendored deps + source must be
+	// re-deployed and the service then restarted, or morphit-mcp keeps
+	// running the OLD version forever (manually running deploy-mcp.sh +
+	// restart after every upgrade was the previous rough edge).  Gated on
+	// the unit being installed, so boxes without the MCP are untouched.  The
+	// MCP is isolated, read-only, and non-critical, so a failure here WARNS
+	// rather than rolling back the whole upgrade — morphit.io is unaffected.
+	const mcpUnitPath = join(
+		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
+		'morphit-mcp.service'
+	);
+	if (existsSync(mcpUnitPath)) {
+		const mcpDest = process.env.MORPHIT_MCP_DEPLOY_DIR ?? '/opt/morphit-mcp';
+		const mcpUser = process.env.MORPHIT_MCP_DEPLOY_USER ?? 'morphit-mcp';
+		const deployScript = join(installDir, 'ops', 'scripts', 'deploy-mcp.sh');
+		const mcpWasActive =
+			spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service']).status === 0;
+		info('Redeploying the MCP server (vendored tree) for the new version...');
+		const dep = spawnSync('bash', [deployScript, installDir, mcpDest, mcpUser], {
+			stdio: 'inherit'
+		});
+		if (dep.status !== 0) {
+			warn(
+				`MCP redeploy failed (deploy-mcp.sh exit ${dep.status ?? 'signal'}); morphit-mcp ` +
+					`may keep running stale code. Re-run \`sudo bash ${deployScript} ${installDir} ` +
+					`${mcpDest} ${mcpUser}\` then \`sudo systemctl restart morphit-mcp\`.`
+			);
+		} else {
+			info('Restarting morphit-mcp...');
+			const rs = spawnSync('systemctl', ['restart', 'morphit-mcp.service'], {
+				stdio: 'inherit'
+			});
+			if (rs.status !== 0) {
+				warn(
+					`morphit-mcp restart failed (exit ${rs.status ?? 'signal'}); the new code is ` +
+						`deployed. Start it with \`sudo systemctl restart morphit-mcp\` and check ` +
+						`\`journalctl -u morphit-mcp\`.`
+				);
+			} else if (!mcpWasActive) {
+				info('Started morphit-mcp (it was not previously active).');
+			}
+		}
+	} else {
+		info('Skipping MCP redeploy (morphit-mcp.service is not installed on this host).');
+	}
+
 	// Safeguard: a manually-run indexer/relay (not the systemd units handled
 	// above) is now orphaned on the OLD code — the dir swap moved its source
 	// out from under it, and we can't restart a service we don't manage. Say

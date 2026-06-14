@@ -11,14 +11,17 @@
  * Enforcement lives in three per-account order-price queries:
  *   - morphitNativeFetcher.ts  tier1 (USD-direct) + tier2 (stablecoin)
  *   - stablecoinDepegDetector.ts  cross-stablecoin ratio query
- * and is fed by `officialAccountName` threaded from the indexer config
+ * and is fed by `operatorAccountName` threaded from the indexer config
  * through two construction sites (factory.ts, priceReceipt.ts).
  *
  * This static smoke is the leak sentinel: it asserts each price-input
  * query still carries the operator-block exclusion (`NOT EXISTS ...
  * operator_blocks ... ob.blocked = o.account ... state = 'blocked'`),
- * that both config types declare `officialAccountName`, and that both
- * construction sites pass it. If someone weakens a query or adds a new
+ * that both config types declare `operatorAccountName` (NOT the old
+ * `officialAccountName` — cp258: operator_blocks is keyed by the operator
+ * account, so binding the official account made the exclusion inert for
+ * any instance with a separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME),
+ * and that both construction sites pass `config.operatorAccountName`. If someone weakens a query or adds a new
  * per-account price-input read without the filter, this fails.
  *
  * (Runtime proof that the clause actually drops a blocked account's
@@ -90,12 +93,15 @@ for (const [file, expected] of Object.entries(QUERY_SURFACES)) {
 	}
 }
 
-// ── PB-3/PB-4: both config types require officialAccountName ──
+// ── PB-3/PB-4: both config types require operatorAccountName ──
+// cp258: the field MUST be operatorAccountName (the operator_blocks write
+// key) — it was officialAccountName, which made the exclusion inert for any
+// instance running a separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME.
 const CONFIG_DECLS: Record<string, string> = {
 	'morphitNativeFetcher.ts': 'MorphitNativeFetcherConfig',
 	'stablecoinDepegDetector.ts': 'DepegDetectorConfig'
 };
-const DECL = /readonly\s+officialAccountName\s*:\s*string\s*;/;
+const DECL = /readonly\s+operatorAccountName\s*:\s*string\s*;/;
 
 for (const [file, iface] of Object.entries(CONFIG_DECLS)) {
 	const src = read(join(priceDir, file));
@@ -107,22 +113,30 @@ for (const [file, iface] of Object.entries(CONFIG_DECLS)) {
 		bad(`${file}: ${iface} not found (renamed?)`);
 		continue;
 	}
-	if (DECL.test(src)) {
-		ok(`${file}: ${iface} declares a required officialAccountName: string`);
+	if (/readonly\s+officialAccountName\s*:\s*string\s*;/.test(src)) {
+		bad(
+			`${file}: ${iface} still declares officialAccountName — must be operatorAccountName (cp258)`,
+			'officialAccountName is the federation-wide release-signer; operator_blocks is keyed by operatorAccountName, so a query bound to officialAccountName is inert in the separate-operator-account config'
+		);
+	} else if (DECL.test(src)) {
+		ok(`${file}: ${iface} declares a required operatorAccountName: string`);
 	} else {
 		bad(
-			`${file}: ${iface} is missing \`readonly officialAccountName: string;\``,
+			`${file}: ${iface} is missing \`readonly operatorAccountName: string;\``,
 			'without the required field a construction site could silently omit the operator name, making the exclusion inert'
 		);
 	}
 }
 
-// ── PB-5/PB-6: both construction sites pass officialAccountName ──
+// ── PB-5/PB-6: both construction sites pass config.operatorAccountName ──
+// cp258: the VALUE must be config.operatorAccountName (the write key), NOT
+// config.officialAccountName — the bug this guard now catches.
 const CALL_SITES: Array<{ file: string; fn: string }> = [
 	{ file: join(srcDir, 'indexer', 'price', 'factory.ts'), fn: 'createMorphitNativeFetcher' },
 	{ file: join(srcDir, 'api', 'priceReceipt.ts'), fn: 'deriveMorphitNativePrice' }
 ];
-const PASSES_FIELD = /officialAccountName\s*:\s*config\.officialAccountName/;
+const PASSES_FIELD = /operatorAccountName\s*:\s*config\.operatorAccountName/;
+const PASSES_WRONG = /operatorAccountName\s*:\s*config\.officialAccountName|officialAccountName\s*:\s*config\./;
 
 for (const { file, fn } of CALL_SITES) {
 	const src = read(file);
@@ -135,11 +149,16 @@ for (const { file, fn } of CALL_SITES) {
 		bad(`${label}: does not call ${fn} (moved?)`);
 		continue;
 	}
-	if (PASSES_FIELD.test(src)) {
-		ok(`${label}: passes officialAccountName: config.officialAccountName to ${fn}`);
+	if (PASSES_WRONG.test(src)) {
+		bad(
+			`${label}: passes the WRONG account to ${fn} (config.officialAccountName / officialAccountName)`,
+			'operator_blocks is keyed by operatorAccountName — bind config.operatorAccountName or the exclusion is inert for separate-operator-account instances (cp258)'
+		);
+	} else if (PASSES_FIELD.test(src)) {
+		ok(`${label}: passes operatorAccountName: config.operatorAccountName to ${fn}`);
 	} else {
 		bad(
-			`${label}: calls ${fn} but never passes officialAccountName: config.officialAccountName`,
+			`${label}: calls ${fn} but never passes operatorAccountName: config.operatorAccountName`,
 			'the price fetcher would receive no operator name — blocked-account exclusion would be inert'
 		);
 	}

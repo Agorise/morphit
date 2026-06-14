@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { currentLocale } from '$i18n';
 	/**
 	 * Morphit — final onboarding step: claim a Blurt account name.
 	 *
@@ -427,7 +428,10 @@
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
-	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
+	// Active-locale STORE (not $page.data.lang) so an in-place language swap
+	// on the onboarding routes re-prefixes links without a remount. SSR-safe
+	// (layout load sets the locale before render).
+	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
 

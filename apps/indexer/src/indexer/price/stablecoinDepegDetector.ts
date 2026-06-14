@@ -130,17 +130,18 @@ export interface DepegDetectorConfig {
 	 *  Pass fewer if the operator has disabled some, or pass more
 	 *  when new stablecoins enter the registry. */
 	readonly stablecoinKeys: ReadonlyArray<string>;
-	/** This instance's official/operator account name (the
-	 *  `operator` column in operator_blocks).  Orders authored by
+	/** This instance's OPERATOR account name (the `operator` column
+	 *  in operator_blocks — keyed by `operatorAccountName`, NOT
+	 *  `officialAccountName`; cp258 fix).  Orders authored by
 	 *  accounts this operator has blocked (state='blocked') are
 	 *  excluded from the depeg ratio, mirroring the orderbook's
 	 *  instance-local moderation (cp209): a blocked seller's
 	 *  listings are hidden on this instance, so their prices must
 	 *  not influence this instance's derived native price either.
-	 *  Pass `config.officialAccountName`.  An empty string makes
+	 *  Pass `config.operatorAccountName`.  An empty string makes
 	 *  the exclusion inert (no operator matches '') — used by the
 	 *  early-return < 2-stablecoin paths in structural tests. */
-	readonly officialAccountName: string;
+	readonly operatorAccountName: string;
 	/** Optional override of window / threshold / floor — primarily
 	 *  for tests.  Production uses the constants above. */
 	readonly windowHours?: number;
@@ -313,14 +314,14 @@ export async function detectStablecoinDepeg(
 		const dir1 = await db.query<{ price_str: string; account: string }>(queryDir1, [
 			tickerA,
 			payB,
-			config.officialAccountName
+			config.operatorAccountName
 		]);
 		// Direction 2: asset=B, accept payment in A.  Trader-medians
 		// of (A per B) — we flip to B/A then invert to A/B.
 		const dir2 = await db.query<{ price_str: string; account: string }>(queryDir2, [
 			tickerB,
 			payA,
-			config.officialAccountName
+			config.operatorAccountName
 		]);
 
 		// Combine into per-trader contributions (A/B), deduping

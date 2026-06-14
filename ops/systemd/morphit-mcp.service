@@ -13,31 +13,49 @@ Group=morphit-mcp
 # Service user must own it with 0750 perms.
 WorkingDirectory=/opt/morphit-mcp
 
-# MCP config lives in its own optional env file.  The server is a
-# read-only HTTP CLIENT of a Morphit instance's public /v1 API — it
-# holds NO DB connection and NO keys — so it needs only the
-# MORPHIT_MCP_* knobs, chiefly MORPHIT_MCP_INSTANCE_URL (which
-# instance to surface; the installer points it at THIS node's public
-# origin so a self-hosted MCP serves the operator's own orderbook,
-# not the default morphit.io).  The `-` prefix makes it optional so
-# the unit still starts if the file is absent (it then falls back to
-# the source defaults).  It deliberately does NOT read the relay's
-# env: pulling in the relay DB URL / keys would breach the isolation.
-EnvironmentFile=-/etc/morphit/mcp.env
+# Run the hardened Streamable-HTTP transport (NOT stdio): the server
+# binds an HTTP listener and STAYS UP as a daemon.  In stdio mode it
+# would read EOF on a service's empty stdin and exit 0 in well under a
+# second — correct for LOCAL agent spawning (Claude Desktop et al.),
+# wrong for a persistent service, which is why a plain `npm start`
+# daemon used to die immediately.  The bind is fail-closed in code: it
+# accepts loopback or a private/bridge address (127.0.0.1 by default,
+# or e.g. 172.18.0.1 so a dockerized reverse proxy like BunkerWeb can
+# reach the host via the Docker bridge — exactly like the indexer/relay
+# listen host) but REFUSES 0.0.0.0/:: or a public address unless
+# MORPHIT_MCP_ALLOW_PUBLIC_BIND=1.  Public exposure goes through the
+# reverse proxy at /mcp/* (see OPERATIONS.md §41), not a public bind.
+# Defenses (DNS-rebinding Host/Origin allowlists, per-client rate limit,
+# request-body cap, connection ceiling, slowloris timeouts) have safe
+# defaults in the source.
+Environment=MORPHIT_MCP_TRANSPORT=http
+Environment=MORPHIT_MCP_HTTP_HOST=127.0.0.1
+Environment=MORPHIT_MCP_HTTP_PORT=8124
 
-# Default port + bind from the morphit-mcp source (127.0.0.1:8124).
-# Operators who want public exposure should reverse-proxy via nginx
-# at /mcp/* with auth if desired (see OPERATIONS.md §41).
+# MCP config in its own optional env file.  Read AFTER the Environment=
+# defaults above, so it can OVERRIDE any of them — chiefly
+# MORPHIT_MCP_INSTANCE_URL (which instance to surface; the installer
+# points it at THIS node's public origin so a self-hosted MCP serves the
+# operator's own orderbook, not the default morphit.io), and on a
+# dockerized-proxy host MORPHIT_MCP_HTTP_HOST=172.18.0.1.  The server is
+# a read-only HTTP CLIENT of the instance's public /v1 API — NO DB, NO
+# keys.  The `-` prefix makes it optional (absent → source defaults).
+# It deliberately does NOT read the relay's env: pulling in the relay DB
+# URL / keys would breach the isolation.
+EnvironmentFile=-/etc/morphit/mcp.env
 ExecStart=/usr/bin/env npm start --silent
 
-# No passphrase, no tty — MCP holds no keys.
-# StandardInput intentionally NOT tty-force (unlike the relay).
+# No passphrase, no tty — MCP holds no keys and reads no stdin in HTTP
+# mode (the listener keeps the process alive; SIGTERM shuts it down).
 
 # Graceful shutdown.  MCP holds no in-flight chain ops; 10s is plenty.
 KillSignal=SIGTERM
 TimeoutStopSec=10s
 
-Restart=on-failure
+# Always bring the MCP back up; the start-limit below is the circuit
+# breaker against a misconfig crash-loop.  The server only exits 0 on
+# SIGTERM, so this never fights a deliberate `systemctl stop`.
+Restart=always
 RestartSec=5s
 StartLimitBurst=10
 StartLimitIntervalSec=120
@@ -67,6 +85,21 @@ MemoryDenyWriteExecute=no
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
+
+# Seccomp: allow only the service syscall set, then subtract privileged
+# and resource-control syscalls.  @system-service is V8-compatible — the
+# MemoryDenyWriteExecute carve-out above keeps the JIT working.
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged ~@resources
+SystemCallErrorNumber=EPERM
+
+# Further isolation: private file-creation mask, no host identity / clock
+# writes, no leaked SysV IPC, and a private mount namespace.
+UMask=0077
+ProtectHostname=yes
+ProtectClock=yes
+RemoveIPC=yes
+PrivateMounts=yes
 
 # Network: TCP only.  No raw sockets, no AF_PACKET.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

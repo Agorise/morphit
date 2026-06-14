@@ -67,10 +67,6 @@
 		buttonEl?.focus();
 	}
 
-	function onWindowClick(e: MouseEvent): void {
-		if (open && rootEl && !rootEl.contains(e.target as Node)) open = false;
-	}
-
 	function onWindowKeydown(e: KeyboardEvent): void {
 		if (open && e.key === 'Escape') {
 			open = false;
@@ -79,9 +75,23 @@
 	}
 </script>
 
-<svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
+<svelte:window onkeydown={onWindowKeydown} />
 
-<div class="relative" bind:this={rootEl}>
+{#if open}
+	<!-- Full-screen blur scrim (mirrors FaqSearch): dims + blurs the page
+	     behind the open listbox and closes it on an outside click —
+	     replaces the old window-click outside-close, which let the click
+	     race the option/trigger handlers. -->
+	<button
+		type="button"
+		tabindex="-1"
+		aria-hidden="true"
+		onclick={() => (open = false)}
+		class="fixed inset-0 z-20 cursor-default bg-ink-900/5 backdrop-blur-sm"
+	></button>
+{/if}
+
+<div class="relative z-30" bind:this={rootEl}>
 	<button
 		bind:this={buttonEl}
 		type="button"

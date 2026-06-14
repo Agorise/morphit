@@ -110,7 +110,7 @@ const stubDb = {
 			denominationFiat: 'USD',
 			stablecoinKeys: ['usdt', 'usdc', 'dai'],
 			db: stubDb,
-			officialAccountName: 'morphit',
+			operatorAccountName: 'morphit',
 			minPlausibleUsd: 0.0001,
 			maxPlausibleUsd: 0.1
 		});
@@ -130,7 +130,7 @@ const stubDb = {
 			denominationFiat: 'USD',
 			stablecoinKeys: ['usdt'],
 			db: stubDb,
-			officialAccountName: 'morphit',
+			operatorAccountName: 'morphit',
 			minPlausibleUsd: 0.1,
 			maxPlausibleUsd: 0.05 // INVERTED
 		});
@@ -151,7 +151,7 @@ const stubDb = {
 			denominationFiat: 'USD',
 			stablecoinKeys: ['usdt', 'usdc', 'dai'],
 			db: stubDb,
-			officialAccountName: 'morphit',
+			operatorAccountName: 'morphit',
 			minPlausibleUsd: 0.0001,
 			maxPlausibleUsd: 0.1
 		});
@@ -195,7 +195,7 @@ const stubDb = {
 			denominationFiat: 'USD',
 			stablecoinKeys: ['usdt', 'usdc', 'dai'],
 			db: stubDb,
-			officialAccountName: 'morphit',
+			operatorAccountName: 'morphit',
 			minPlausibleUsd: 0.0001,
 			maxPlausibleUsd: 0.1
 		});
