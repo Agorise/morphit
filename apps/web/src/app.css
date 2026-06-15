@@ -226,10 +226,10 @@ body {
 		background-position:
 			0 0,
 			0 50%;
-		animation: morphit-shimmer 6s linear infinite;
-	}
-	.btn-primary:hover {
-		animation-play-state: paused;
+		/* Occasional, subtle border-gradient sweep: one quick there-and-back
+		 * pass 2s after the page loads, then every 10s — replaces the old
+		 * continuous 6s shimmer.  The face stays a solid teal throughout. */
+		animation: morphit-border-occasional 10s ease-in-out 2s infinite;
 	}
 
 	/* Compact primary button — same animated 1px gradient border as
@@ -251,10 +251,7 @@ body {
 		background-position:
 			0 0,
 			0 50%;
-		animation: morphit-shimmer 6s linear infinite;
-	}
-	.btn-primary-sm:hover {
-		animation-play-state: paused;
+		animation: morphit-border-occasional 10s ease-in-out 2s infinite;
 	}
 
 	.btn-secondary {
@@ -307,8 +304,9 @@ body {
 	 * Subtle motion — gives the page life without demanding attention.
 	 *   - morphit-hue-shift (8s): rotates the hue of SVGs that use the brand
 	 *     gradient by ±15°, so the green/teal/blue "breathes".
-	 *   - morphit-shimmer  (6s): sweeps the brand gradient along the 1px
-	 *     border of .btn-primary (the button face stays a solid teal).
+	 *   - morphit-border-occasional (10s, 2s delay): one quick there-and-back
+	 *     sweep of the brand gradient along the 1px border of .btn-primary /
+	 *     .btn-primary-sm, 2s after load then every 10s (face stays solid teal).
 	 *   - morphit-pulse    (4s): slow opacity pulse for atmospheric glows.
 	 *
 	 * All respect prefers-reduced-motion: they pause for users who ask.
@@ -341,18 +339,27 @@ body {
 	}
 }
 
-@keyframes morphit-shimmer {
+@keyframes morphit-border-occasional {
 	/* Two background layers: layer 1 (the solid face) stays put at 0 0;
-	 * layer 2 (the gradient border) sweeps horizontally. */
-	0% {
-		background-position:
-			0 0,
-			-200% 50%;
-	}
+	 * layer 2 (the gradient border) rests at 0% 50%, does ONE quick
+	 * there-and-back sweep over the first ~0.8s of the 10s cycle, then
+	 * sits idle for the remaining ~9s. With the 2s animation-delay the
+	 * first sweep lands 2s after load, then repeats every 10s. */
+	0%,
 	100% {
 		background-position:
 			0 0,
-			200% 50%;
+			0% 50%;
+	}
+	4% {
+		background-position:
+			0 0,
+			100% 50%;
+	}
+	8% {
+		background-position:
+			0 0,
+			0% 50%;
 	}
 }
 

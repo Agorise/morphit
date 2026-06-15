@@ -37,6 +37,20 @@
 
 	let stage = $state<Stage>('choose');
 
+	// The wizard advances by swapping `stage` in place (review→confirm,
+	// and discard→choose) — these are NOT route navigations, so SvelteKit's
+	// scroll-to-top never fires and the viewport stays wherever the long
+	// `review` step left it (near the bottom). Reset to the top whenever
+	// `stage` changes so each step opens at its own heading — the confirm
+	// quiz's "Let's confirm you wrote it down" and the post-discard `choose`
+	// step. ($effect is client-only so `window` is defined; the two-arg
+	// scrollTo is instant — no smooth animation — so there's no visible jump
+	// and it honours reduced-motion by default.)
+	$effect(() => {
+		void stage;
+		window.scrollTo(0, 0);
+	});
+
 	// `full` lives only until it's handed to the keystore; then its owner/
 	// active privates are zeroed and `live` is what persists in memory
 	// for the session (via the identity store after completion).

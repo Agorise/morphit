@@ -41,7 +41,10 @@
 import { browser } from '$app/environment';
 import { createChatStream, type ChatStreamHandle } from '$lib/chat/stream';
 import { decodePayload, isValidBlurtAccount } from '$lib/chat/payload';
-import { decryptFromSender, DecryptError, deriveChatIdentity } from '$lib/chat/crypto';
+// chat/crypto (which pulls libsodium ~1 MB) is imported DYNAMICALLY
+// inside tryDecrypt below — see cp267 byte budget. A static import here
+// would drag libsodium into the shared [lang] layout closure (this
+// listener is started from +layout), i.e. onto EVERY page's first load.
 import { loadRecentPeers } from '$lib/chat/recentPeers';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
@@ -101,6 +104,13 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 	const live = get(liveIdentity);
 	if (!live) return null;
 
+	// cp267 byte budget: load chat message-crypto lazily so libsodium
+	// (~1 MB) never sits in the every-page layout closure — it loads
+	// only when a chat-bearing trade event actually arrives. Best-effort:
+	// a failed chunk load just means no toast preview.
+	const chatCrypto = await import('$lib/chat/crypto').catch(() => null);
+	if (!chatCrypto) return null;
+
 	try {
 		const header = rec.header as Record<string, unknown> | null;
 		if (
@@ -120,11 +130,16 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 		// derived deterministically from the posting private key
 		// per ADR-0014.  Re-deriving on each decrypt is cheap
 		// (BLAKE2b once) and keeps chat keys out of session memory.
-		const chatKeys = await deriveChatIdentity(live.posting.privateKey, me);
-		const plaintext = await decryptFromSender(envelope, chatKeys, rec.sender, rec.recipient);
+		const chatKeys = await chatCrypto.deriveChatIdentity(live.posting.privateKey, me);
+		const plaintext = await chatCrypto.decryptFromSender(
+			envelope,
+			chatKeys,
+			rec.sender,
+			rec.recipient
+		);
 		return plaintext;
 	} catch (err) {
-		if (err instanceof DecryptError) return null;
+		if (err instanceof chatCrypto.DecryptError) return null;
 		// Phase F.5 audit fix (F-25) — surface unexpected errors
 		// via console.warn so developers notice listener bugs
 		// instead of silent inaction.  PII-safe: log the error

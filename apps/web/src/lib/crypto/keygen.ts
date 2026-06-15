@@ -50,7 +50,7 @@
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 
-import sodium from 'libsodium-wrappers-sumo';
+import { sodium, ensureSodium } from './sodium';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import * as secp256k1 from '@noble/secp256k1';
@@ -183,11 +183,10 @@ export interface LiveIdentity {
 	readonly activePublicKey: Uint8Array | null;
 }
 
-let sodiumReady: Promise<void> | null = null;
-export async function ensureSodium(): Promise<void> {
-	const ready = sodiumReady ?? (sodiumReady = sodium.ready);
-	return ready;
-}
+// ensureSodium now lives in ./sodium (lazy dynamic import of libsodium).
+// Re-exported here so existing `import { ensureSodium } from './keygen'`
+// call sites (keystore, wif, backupCodes, yubikey, …) keep working.
+export { ensureSodium };
 
 // ────────────────────────────────────────────────────────────────────────────
 // BIP-39 layer

@@ -15,6 +15,11 @@ export default {
 					accent: '#7FED2D',
 					emerald: '#00DA69',
 					teal: '#02A6B2',
+					// Primary button face — mirrors --morphit-btn-face in app.css.
+					// A deepened brand teal (white text clears WCAG AA); this is
+					// the face used by the header Start button (.btn-primary) and,
+					// site-wide, every filled primary CTA so they all match.
+					btn: '#027c86',
 					ink: '#0B1220', // deep navy for dark-mode surfaces
 					paper: '#FEFEFE'
 				},

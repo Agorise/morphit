@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "Публичные PGP-ключи оператора для подписанных релизов и проверки канарейки",
     "mediakit": "Медиакит",
     "mediakit_title": "Брендовые материалы и список достижений Morphit — для прессы, интеграторов и сообщества",
-    "bounty": "Баг-баунти",
-    "contact_operator_matrix_label": "Matrix",
-    "contact_operator_matrix": "Открыть публичную комнату Matrix оператора ({room})"
+    "bounty": "Баг-баунти"
   },
   "glossary": {
     "active_key": {

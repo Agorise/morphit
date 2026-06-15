@@ -4,13 +4,49 @@
 
 	let waitingWorker = $state<ServiceWorker | null>(null);
 	let dismissed = $state(false);
+	// Set the instant "Load it now" is clicked so the snackbar disappears
+	// immediately rather than after the reload round-trip. Persisted in
+	// sessionStorage so a reload that lands BEFORE the new worker takes over
+	// can't re-show it — that was the PC bug where the button reloaded the
+	// page but the snackbar kept coming back, only clearing minutes later
+	// once the browser activated the worker on its own. Cleared once the
+	// update has actually landed (see check()).
+	let applying = $state(false);
 	// Guards against a double page reload: whichever fires first — the
-	// controllerchange listener or the applyUpdate() fallback timer — sets
-	// this and the other becomes a no-op. Resets on every page load, so it
-	// can never wedge the banner across navigations.
+	// controllerchange listener, the activated-statechange listener, or the
+	// applyUpdate() fallback timer — sets this and the others become no-ops.
+	// Resets on every page load, so it can never wedge across navigations.
 	let refreshing = false;
+	// The worker we've already wired an activated→reload listener onto, so
+	// repeated check()s (and re-clicks) can't stack duplicate listeners.
+	let armedWorker: ServiceWorker | null = null;
 
 	const DISMISS_KEY = 'morphit.updateDismissed';
+	const APPLYING_KEY = 'morphit.updateApplying';
+
+	// Tell the waiting worker to skipWaiting() and reload the moment it
+	// becomes the active worker. Idempotent per worker.
+	function armActivation(worker: ServiceWorker): void {
+		worker.postMessage({ type: 'APPLY_UPDATE' });
+		if (armedWorker === worker) return;
+		armedWorker = worker;
+		worker.addEventListener('statechange', () => {
+			if (worker.state === 'activated') {
+				if (refreshing) return;
+				refreshing = true;
+				window.location.reload();
+			}
+		});
+	}
+
+	function clearApplying(): void {
+		applying = false;
+		try {
+			window.sessionStorage.removeItem(APPLYING_KEY);
+		} catch {
+			// ignore
+		}
+	}
 
 	$effect(() => {
 		if (!browser) return;
@@ -37,6 +73,12 @@
 				await reg.update().catch(() => {});
 				if (reg.waiting) {
 					waitingWorker = reg.waiting;
+					// If we reloaded mid-apply but the new worker is still only
+					// "waiting" (the reload raced ahead of activation — the PC
+					// case), re-trigger skipWaiting and reload the moment it
+					// activates, instead of leaving it to the browser's own slow
+					// cycle (which is why it used to take minutes to clear).
+					if (applying) armActivation(reg.waiting);
 				} else if (!reg.installing) {
 					// No worker waiting and none installing — there is nothing
 					// to apply, so clear any stale reference. Without this the
@@ -44,6 +86,9 @@
 					// (e.g. after the waiting worker already activated or was
 					// discarded) offering a "Load it now" button that can't act.
 					waitingWorker = null;
+					// If we were mid-apply, the update has now landed — let a
+					// future update show its snackbar again.
+					if (applying) clearApplying();
 				}
 				// Watch for a new worker appearing later. Only attach
 				// once per registration to avoid duplicate listeners
@@ -83,6 +128,9 @@
 		try {
 			const remembered = window.sessionStorage.getItem(DISMISS_KEY);
 			if (remembered === '1') dismissed = true;
+			// If a reload landed mid-apply, keep the snackbar hidden until the
+			// update has actually taken over (cleared in check()).
+			if (window.sessionStorage.getItem(APPLYING_KEY) === '1') applying = true;
 		} catch {
 			// ignore
 		}
@@ -113,21 +161,29 @@
 	});
 
 	function applyUpdate(): void {
-		if (!waitingWorker) return;
-		// Ask the waiting worker to skipWaiting() — it has our APPLY_UPDATE
-		// message protocol. The controllerchange listener above reloads
-		// once the new worker takes over.
-		waitingWorker.postMessage({ type: 'APPLY_UPDATE' });
-		// Fallback: in the normal path the new worker activates, fires
-		// controllerchange, and the listener above reloads. But if the page
-		// is currently uncontrolled (e.g. opened via a hard refresh, which
-		// bypasses the service worker) or the worker is wedged,
-		// controllerchange may never fire and the button would appear to do
-		// nothing. Reload anyway after a short grace period so the click
-		// always has an effect — a fresh load re-evaluates the registration
-		// and picks up the new build. `refreshing` keeps this to at most one
-		// reload (the controllerchange path usually wins) and resets on every
-		// load, so repeated clicks can't auto-loop.
+		const target = waitingWorker;
+		if (!target) return;
+		// Hide the snackbar instantly — it must disappear the moment you
+		// click, on PC and mobile alike — and remember we're applying so a
+		// reload that lands before the new worker takes over can't re-show it.
+		applying = true;
+		try {
+			window.sessionStorage.setItem(APPLYING_KEY, '1');
+		} catch {
+			// ignore
+		}
+		// Ask the waiting worker to skipWaiting() and reload as soon as it
+		// activates. The controllerchange listener above is the usual reload
+		// trigger; the activated-statechange listener armActivation() wires up
+		// is a faster, more reliable one on browsers where controllerchange
+		// lags behind activation (the PC symptom).
+		armActivation(target);
+		// Fallback: if the page is uncontrolled (opened via a hard refresh,
+		// which bypasses the service worker) or the worker is wedged, neither
+		// controllerchange nor statechange may fire. Reload anyway after a
+		// short grace period so the click always has an effect. The
+		// `refreshing` guard keeps this to at most one reload, and the
+		// APPLYING_KEY flag keeps the snackbar hidden across it.
 		setTimeout(() => {
 			if (refreshing) return;
 			refreshing = true;
@@ -145,7 +201,7 @@
 	}
 </script>
 
-{#if waitingWorker && !dismissed}
+{#if waitingWorker && !dismissed && !applying}
 	<div
 		role="status"
 		aria-live="polite"

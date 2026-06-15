@@ -432,7 +432,7 @@
 			<button
 				type="button"
 				onclick={topUpBlurt}
-				class="rounded-xl bg-morphit-emerald px-4 py-2 text-sm font-semibold text-white transition hover:bg-morphit-teal active:scale-[0.98]"
+				class="rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
 			>
 				{$_('profile.my_balance.top_up_blurt')}
 			</button>

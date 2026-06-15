@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "營運者用於已簽名發行版和金絲雀驗證的 PGP 公鑰",
     "mediakit": "媒體資源包",
     "mediakit_title": "Morphit 的品牌資源和成就清單 — 面向媒體、整合者和社群",
-    "bounty": "漏洞賞金",
-    "contact_operator_matrix_label": "Matrix",
-    "contact_operator_matrix": "開啟營運方公開 Matrix 群組 ({room})"
+    "bounty": "漏洞賞金"
   },
   "glossary": {
     "active_key": {

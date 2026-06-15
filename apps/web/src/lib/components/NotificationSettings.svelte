@@ -342,7 +342,7 @@
 								type="button"
 								onclick={handlePushSubscribe}
 								disabled={pushBusy}
-								class="rounded-md bg-morphit-emerald px-3 py-1 text-sm font-semibold text-white hover:bg-morphit-emerald/90 disabled:opacity-50"
+								class="rounded-md bg-morphit-btn px-3 py-1 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 							>
 								{pushBusy
 									? $_('settings.notifications.push_subscribing')

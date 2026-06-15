@@ -121,12 +121,14 @@ EOF
 #     the kit always reflects the live brand colors) ────────────────
 readme="$stage/morphit-mediakit/README.txt"
 # Isolate the `morphit: { … }` palette block, then pull each
-# `name: '#RRGGBB'` pair.  Guarded: if the count drifts from 6 the
+# `name: '#RRGGBB'` pair.  Guarded: if the count drifts from 7 the
 # build fails loudly rather than shipping a half-empty section.
+# (cp264 added `btn` — the deepened-teal primary button face used by
+# every filled primary CTA site-wide — taking the palette from 6 to 7.)
 palette="$(sed -n '/morphit: {/,/}/p' "$TAILWIND_CONFIG" | grep -oE "[a-z]+: '#[0-9A-Fa-f]{6}'" || true)"
 palette_count="$(printf '%s\n' "$palette" | grep -cE "#[0-9A-Fa-f]{6}" || true)"
-if [ "$palette_count" -ne 6 ]; then
-	echo "ERROR: expected 6 Morphit palette colors in $TAILWIND_CONFIG, found $palette_count." >&2
+if [ "$palette_count" -ne 7 ]; then
+	echo "ERROR: expected 7 Morphit palette colors in $TAILWIND_CONFIG, found $palette_count." >&2
 	echo "       build-mediakit.sh's color extraction is out of sync with the config." >&2
 	echo "       Fix the extraction so the README Color standards stay accurate." >&2
 	exit 1
@@ -143,7 +145,7 @@ gradient="$(grep -oE "linear-gradient\([^']+\)" "$TAILWIND_CONFIG" | head -1 || 
 	printf '%s\n' "$palette" | awk '{
 		split($0, a, ":"); name=a[1]; gsub(/[ \t]/, "", name);
 		match($0, /#[0-9A-Fa-f]+/); hex=substr($0, RSTART, RLENGTH);
-		printf "  %-9s %s\n", toupper(substr(name,1,1)) substr(name,2), hex
+		printf "  %-9s %s\n", toupper(substr(name,1,1)) substr(name,2), toupper(hex)
 	}'
 	if [ -n "$gradient" ]; then
 		echo ""

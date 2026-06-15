@@ -317,6 +317,40 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
+// ─── 13. "Load it now" hides the snackbar instantly and survives the reload ───
+// PC bug (beta18): the click reloaded the page but the snackbar kept coming
+// back across reloads, only clearing minutes later once the browser activated
+// the worker on its own. The fix: (a) an `applying` flag gates the snackbar so
+// it hides the instant you click; (b) APPLYING_KEY persists that across the
+// reload so a reload that lands before the new worker takes over doesn't
+// re-show it; (c) armActivation reloads the moment the worker reaches
+// 'activated' (re-triggering skipWaiting), instead of waiting on the browser.
+{
+	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
+	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
+	// Snackbar template must be gated on !applying.
+	const hidesOnApply = /\{#if[^}]*!applying[^}]*\}/.test(text);
+	// applying is set on click...
+	const setsApplyingOnClick = /applying\s*=\s*true/.test(text);
+	// ...and persisted across the reload, restored on mount, and cleared.
+	const persistsKey =
+		/APPLYING_KEY/.test(text) &&
+		/sessionStorage\.setItem\(APPLYING_KEY/.test(text) &&
+		/getItem\(APPLYING_KEY\)\s*===\s*'1'/.test(text) &&
+		/removeItem\(APPLYING_KEY\)/.test(text);
+	// Reloads the moment the worker activates (not a blind wait).
+	const reloadsOnActivated =
+		/state\s*===\s*'activated'/.test(text) && /location\.reload\s*\(/.test(text);
+	const ok = hidesOnApply && setsApplyingOnClick && persistsKey && reloadsOnActivated;
+	results.push({
+		name: 'UpdateBanner snackbar hides instantly on click and cannot reappear across the reload',
+		ok,
+		detail: ok
+			? undefined
+			: `template gated on !applying: ${hidesOnApply}; sets applying on click: ${setsApplyingOnClick}; persists/restores/clears APPLYING_KEY: ${persistsKey}; reloads on worker 'activated': ${reloadsOnActivated}. Without all four the "Load it now" snackbar reappears across reloads (the PC reappear-loop) and only clears minutes later.`
+	});
+}
+
 // ─── Report ──────────────────────────────────────────────────
 console.log('\n── service-worker-single-registration smoke (cp81 LL #81 / O-27) ──\n');
 let passed = 0;

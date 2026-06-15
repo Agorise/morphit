@@ -1421,7 +1421,7 @@
 				accept="image/svg+xml,image/webp,image/jpeg,image/png,image/gif"
 				onchange={handleAvatarFileSelected}
 				disabled={avatarProcessing || avatarBroadcasting}
-				class="block w-full cursor-pointer text-sm text-ink-600 file:me-3 file:rounded-lg file:border-0 file:bg-morphit-emerald file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-morphit-teal focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
+				class="block w-full cursor-pointer text-sm text-ink-600 file:me-3 file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
 			/>
 			{#if avatarProcessing}
 				<p class="mt-2 text-sm text-ink-500">

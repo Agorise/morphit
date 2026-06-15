@@ -4,16 +4,19 @@
  * Pins the canonical Blurt RPC endpoint set (the single source of truth
  * in @morphit/operator-config) against the copies that CANNOT import it:
  *   - the frontend's DEFAULT_RPC_ENDPOINTS (browser bundle — can't pull
- *     in a node package), and
+ *     in a node package). cp268: this is now the browser-CORS-clean
+ *     SUBSET of canon (a browser can only use nodes that return a valid
+ *     single Access-Control-Allow-Origin), so it is checked as a non-empty
+ *     SUBSET with no stray node, NOT set-equal.
  *   - the env examples (ops/env/indexer.env.example,
- *     ops/env/relay.env.example).
+ *     ops/env/relay.env.example). These are SERVER-side (no CORS), so they
+ *     stay set-EQUAL to canon.
  *
  * The node-side consumers (indexer config, relay config, ops-cli
  * chainCheck/chainErrors/steps) all import the constant directly, so
  * TypeScript already guarantees they can't drift; this smoke covers the
- * non-importing copies. Compared as SETS (order-independent — the pool
- * learns fastest-first), so a cosmetic reorder is fine but a different
- * endpoint set fails.
+ * non-importing copies. Order-independent (the pool learns fastest-first),
+ * so a cosmetic reorder is fine but a stray/missing endpoint fails.
  *
  * This is the guard that would have caught the beta5 firefight's root
  * config bug: the wizard's list contained `rpc.blurt.world` and was
@@ -56,7 +59,13 @@ else bad('a canonical endpoint is not https://', show(canon));
 if (!canon.has('https://rpc.blurt.world')) ok('canonical set does not contain the un-attributed rpc.blurt.world (firefight regression)');
 else bad('rpc.blurt.world is back in the canonical set — confirm it is a real, attributed node first');
 
-// ── frontend literal ────────────────────────────────────────────────
+// ── frontend literal (browser-CORS-clean SUBSET of canon) ───────────
+// cp268: the browser list is the CORS-clean SUBSET of the canonical
+// pool — a browser can only use a node that returns a single valid
+// Access-Control-Allow-Origin, and three canonical nodes fail browser
+// CORS (beblurt double-value; blurt.one + dagobert missing header). So
+// the frontend list is NOT set-equal to canon; it must be a non-empty
+// subset with NO stray node (drift guard) + enough nodes for failover.
 {
 	const src = readFileSync(join(REPO, 'apps', 'web', 'src', 'lib', 'net', 'config.ts'), 'utf8');
 	const m = /DEFAULT_RPC_ENDPOINTS[^=]*=\s*\[([\s\S]*?)\]/.exec(src);
@@ -64,8 +73,18 @@ else bad('rpc.blurt.world is back in the canonical set — confirm it is a real,
 		bad('could not find DEFAULT_RPC_ENDPOINTS in apps/web/src/lib/net/config.ts');
 	} else {
 		const urls = new Set(Array.from(m[1]!.matchAll(/'(https:\/\/[^']+)'/g)).map((x) => x[1]!));
-		if (setEq(urls, canon)) ok('frontend DEFAULT_RPC_ENDPOINTS matches the canonical set');
-		else bad('frontend DEFAULT_RPC_ENDPOINTS differs from canonical', `frontend=[${show(urls)}] canon=[${show(canon)}]`);
+		const stray = [...urls].filter((u) => !canon.has(u));
+		if (stray.length === 0)
+			ok('frontend DEFAULT_RPC_ENDPOINTS is a subset of the canonical pool (no stray node)');
+		else
+			bad(
+				'frontend DEFAULT_RPC_ENDPOINTS contains node(s) not in the canonical pool',
+				`stray=[${show(stray)}] canon=[${show(canon)}]`
+			);
+		if (urls.size >= 2) ok(`frontend browser pool has ${urls.size} endpoints (>=2 for failover)`);
+		else bad('frontend browser pool has fewer than 2 endpoints — too little browser failover', show(urls));
+		if ([...urls].every((u) => u.startsWith('https://'))) ok('frontend endpoints are all https://');
+		else bad('a frontend endpoint is not https://', show(urls));
 	}
 }
 
