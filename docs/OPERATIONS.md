@@ -2492,7 +2492,7 @@ add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), int
 # blocks your nodes (including failover). It lists NO price API on
 # purpose: price fetching is server-side (the indexer), the browser
 # never calls CoinGecko, so listing it would only leak visitor IPs.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.blurt.blog https://blurt-rpc.saboin.com https://rpc.beblurt.com https://rpc.blurt.one; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://rpc.blurt.one https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 ```
 
 For reference, `ops/nginx/indexer.conf` and
@@ -2531,8 +2531,8 @@ frontend's web server config, not the API nginx configs.
   and `blob:` URLs (decoded avatar bitmaps)
 - `font-src 'self'` — fonts only from same origin (the
   self-hosted Nunito subset)
-- `connect-src 'self' <four Blurt RPC hosts>` — the
-  browser may fetch only from your own origin and the four
+- `connect-src 'self' <six Blurt RPC hosts>` — the
+  browser may fetch only from your own origin and the six
   default Blurt RPC nodes
   (`apps/web/src/lib/net/config.ts`), which it contacts
   directly to read the chain and broadcast signed,
@@ -2620,12 +2620,25 @@ does NOT fix it.)
 Check two things, in order:
 
 1. **The served header.** DevTools → Network → click the HTML document
-   request → Response Headers → `content-security-policy`. If its
-   `img-src` is just `'self'` (no `data:`), your reverse proxy is
-   serving an out-of-date policy. Re-deploy the CSP from this repo
-   (`ops/nginx/web.conf`, or `CONTENT_SECURITY_POLICY` in your
-   BunkerWeb env from `ops/bunkerweb/bunkerweb.env.example`) and reload:
-   `nginx -t && nginx -s reload`, or restart the BunkerWeb container.
+   request → Response Headers → `content-security-policy` (or from a
+   shell: `curl -sI https://your-site/ | grep -i content-security`). If
+   its `img-src` is just `'self'` (no `data:`) — or there is no `img-src`
+   at all, in which case images fall back to `default-src` and `data:`
+   URIs are still blocked — your reverse proxy is serving an out-of-date
+   policy. *Where the CSP lives depends on what terminates TLS for you:*
+   on bare metal it's the `add_header Content-Security-Policy` in
+   `ops/nginx/web.conf` (`nginx -t && nginx -s reload`); behind BunkerWeb
+   it's the `CONTENT_SECURITY_POLICY` setting from
+   `ops/bunkerweb/bunkerweb.env.example` (restart the BunkerWeb
+   container). If you front the site some other way — e.g. you expose the
+   BunkerWeb-compose `frontend` nginx directly with the `bunkerweb`
+   service disabled, or use another proxy — the header is an `add_header
+   Content-Security-Policy` line in *that* config. Find the file with
+   `sudo grep -rni 'content-security-policy' <your-edge-config-dir>`
+   (search the response-HEADER spelling `Content-Security-Policy`, **not**
+   the `CONTENT_SECURITY_POLICY` env-var spelling — a grep for the latter
+   will miss an nginx `add_header`), bring its value in line with the
+   canonical one above, and reload/restart that proxy after a `nginx -t`.
 2. **The service worker cache.** A previously-cached HTML response can
    keep enforcing the old CSP header even after the proxy is fixed.
    Hard-reload bypassing the cache, or DevTools → Application → Storage

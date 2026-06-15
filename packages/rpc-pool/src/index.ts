@@ -71,6 +71,22 @@ export const DEFAULT_COOLDOWN_LADDER_MS: readonly number[] = [
 	300_000
 ] as const;
 
+/** Cooldown ladder for endpoints that returned HTTP 429 (rate
+ *  limited).  A 429 is a per-window quota signal, not a momentary
+ *  blip — re-probing 2 s later (the generic ladder's first step)
+ *  just burns another request and earns another 429.  So park a
+ *  rate-limited endpoint much longer on the FIRST hit (30 s) and
+ *  escalate from there.  This does NOT add user-facing latency: the
+ *  pool serves traffic from the OTHER endpoints while one is parked
+ *  (this is why >=3 endpoints matters), and what it removes is the
+ *  stream of repeated 429 round-trips that was the actual problem. */
+export const DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS: readonly number[] = [
+	30_000,
+	60_000,
+	120_000,
+	300_000
+] as const;
+
 /** EWMA smoothing factor.  0.25 means a single observation moves
  *  the average ~25% of the way toward it — fast enough to react to
  *  degradation within a handful of calls, slow enough to ignore
@@ -129,6 +145,22 @@ export function isTransportError(err: unknown): boolean {
 	return false;
 }
 
+/** Heuristic — did this endpoint reject us specifically for RATE
+ *  LIMITING (HTTP 429 / "too many requests")?  A subset of
+ *  isTransportError(): every rate-limit error is also worth rotating
+ *  off, but it additionally warrants a LONGER cooldown than a generic
+ *  blip so the pool stops re-probing a quota'd node every couple of
+ *  seconds.  @beblurt/dblurt formats HTTP errors as
+ *  `HTTP <status>: <statusText>`. */
+export function isRateLimitError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const m = err.message.toLowerCase();
+	if (/\bhttp 429\b/.test(m)) return true;
+	if (m.includes('too many requests')) return true;
+	if (m.includes('rate limit')) return true;
+	return false;
+}
+
 /** Options for constructing an EndpointPool. */
 export interface EndpointPoolOptions {
 	readonly endpoints: readonly string[];
@@ -136,6 +168,12 @@ export interface EndpointPoolOptions {
 	 *  ladder depth; consecutive failures beyond the length stay at
 	 *  the deepest cooldown. */
 	readonly cooldownLadderMs?: readonly number[];
+	/** Override the cooldown ladder used specifically for HTTP-429
+	 *  (rate-limit) failures.  Defaults to
+	 *  DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS — longer than the generic
+	 *  ladder so a quota'd endpoint is parked, not re-probed every
+	 *  couple of seconds. */
+	readonly rateLimitCooldownLadderMs?: readonly number[];
 	/** Override the EWMA smoothing factor.  Must be in (0, 1]. */
 	readonly ewmaAlpha?: number;
 	/** Latency above which a hedge is fired when hedging is enabled
@@ -171,6 +209,7 @@ export interface CallOptions {
 export class EndpointPool {
 	private readonly endpoints: EndpointState[];
 	private readonly cooldownLadder: readonly number[];
+	private readonly rateLimitLadder: readonly number[];
 	private readonly alpha: number;
 	private readonly hedgeThresholdMs: number;
 	private readonly hedgeStaggerFloorMs: number;
@@ -189,6 +228,11 @@ export class EndpointPool {
 		this.cooldownLadder = options.cooldownLadderMs ?? DEFAULT_COOLDOWN_LADDER_MS;
 		if (this.cooldownLadder.length === 0) {
 			throw new Error('EndpointPool: cooldown ladder must be non-empty');
+		}
+		this.rateLimitLadder =
+			options.rateLimitCooldownLadderMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS;
+		if (this.rateLimitLadder.length === 0) {
+			throw new Error('EndpointPool: rate-limit cooldown ladder must be non-empty');
 		}
 		const alpha = options.ewmaAlpha ?? DEFAULT_EWMA_ALPHA;
 		if (!(alpha > 0 && alpha <= 1)) {
@@ -349,7 +393,7 @@ export class EndpointPool {
 				return { ep, result };
 			} catch (err) {
 				if (isTransportError(err)) {
-					this.recordFailure(ep);
+					this.recordFailure(ep, isRateLimitError(err));
 				}
 				throw err;
 			}
@@ -416,7 +460,7 @@ export class EndpointPool {
 			return result;
 		} catch (err) {
 			if (isTransportError(err)) {
-				this.recordFailure(ep);
+				this.recordFailure(ep, isRateLimitError(err));
 			}
 			throw err;
 		} finally {
@@ -473,10 +517,14 @@ export class EndpointPool {
 		}
 	}
 
-	private recordFailure(ep: EndpointState): void {
+	private recordFailure(ep: EndpointState, rateLimited = false): void {
 		ep.consecutiveFailures++;
-		const idx = Math.min(ep.consecutiveFailures - 1, this.cooldownLadder.length - 1);
-		ep.cooldownUntil = Date.now() + this.cooldownLadder[idx]!;
+		// A 429 parks the endpoint on the longer rate-limit ladder; any
+		// other transport failure uses the generic ladder.  Both are
+		// indexed by the shared consecutive-failure count.
+		const ladder = rateLimited ? this.rateLimitLadder : this.cooldownLadder;
+		const idx = Math.min(ep.consecutiveFailures - 1, ladder.length - 1);
+		ep.cooldownUntil = Date.now() + ladder[idx]!;
 		// Wipe EWMA on failure so a recovered endpoint must re-prove
 		// its latency before climbing back to the front.  Otherwise
 		// a once-fast endpoint that has since become slow would stay
@@ -636,7 +684,7 @@ export class EndpointPool {
 						}
 						// Genuine transport / network failure — penalize.
 						if (isTransportError(err)) {
-							this.recordFailure(ep);
+							this.recordFailure(ep, isRateLimitError(err));
 						}
 						finished++;
 						allDoneCheck();

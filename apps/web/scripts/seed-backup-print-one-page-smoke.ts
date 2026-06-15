@@ -2,38 +2,27 @@
 /**
  * Smoke for the "My Morphit backup card" one-page print layout.
  *
- * Background — the "huge blank bands top and bottom" bug (cp249):
+ * History:
+ *   - cp249 fixed "huge blank bands top and bottom" by isolating the card
+ *     for print with `visibility: hidden` everywhere + collapsing the
+ *     `#svelte` app subtree to zero height, with the card `position: fixed`
+ *     so it escaped the clip.
+ *   - cp261: that approach printed a SINGLE BLANK PAGE on print-to-PDF
+ *     engines that drop a `position: fixed` element whose entire normal-flow
+ *     context is zero-height. Replaced with a robust approach — the card is
+ *     PORTALED to be a direct child of <body> (the bodyPortal action) and
+ *     printed in NORMAL FLOW, while every OTHER direct child of <body> is
+ *     hidden. Nothing left to clip or drop.
  *
- *   SeedBackupPrint.svelte renders a printable seed-phrase card during
- *   /onboarding.  It used to isolate the card for printing with
- *   `visibility: hidden` on every element + the card positioned
- *   `absolute; inset: 0`.  `visibility: hidden` hides PAINT but keeps
- *   LAYOUT boxes, so the (tall) onboarding review page kept generating
- *   page boxes: the card landed inside a multi-page document with blank
- *   bands fore and aft, and `inset: 0` stretched the card itself to a
- *   full page so even its own box was mostly empty.
+ * SvelteKit renders the whole app under `<div id="svelte"
+ * style="display: contents">` (app.html), so the card is buried deep in
+ * that subtree — which is exactly why it must be portaled out to <body>
+ * for the "hide the other body children" isolation to work.
  *
- *   The fix isolates in two dimensions:
- *     1. PAINT — hide everything, re-show only the card.
- *     2. PAGINATION — collapse the `#svelte` app subtree (which is
- *        `display: contents` in app.html) to a zero-height,
- *        overflow-clipped box so it generates no page boxes.  The card
- *        is `position: fixed`, so its containing block is the page box,
- *        not `#svelte` — it escapes the clip and prints alone on ONE
- *        page sized to its own content (no `inset: 0` stretch).
- *
- * This is a source-level smoke (the fix is CSS + a tiny JS trigger; no
- * browser is available in CI).  It guards every load-bearing piece of
- * the fix so a future refactor can't silently reintroduce the blank
- * bands:
- *   - the `morphit-printing-seed` <html> flag couples the JS trigger to
- *     the print stylesheet (both sides must use the same class);
- *   - the `#svelte` subtree is collapsed (height:0 + overflow:hidden)
- *     — the pagination-isolation half;
- *   - the card is `position: fixed`, NOT `absolute`/`inset: 0`;
- *   - a containing-block guard neutralises transform/filter/contain on
- *     ancestors so the fixed card can't be re-anchored + clipped;
- *   - the card is `display: none` on screen.
+ * Source-level smoke (the fix is CSS + a tiny JS action; no browser in CI).
+ * It guards every load-bearing piece so a future refactor can't silently
+ * reintroduce the blank page — in particular it FAILS if the card ever goes
+ * back to `position: fixed`.
  */
 
 import { readFileSync } from 'node:fs';
@@ -58,16 +47,16 @@ function check(label: string, cond: boolean, detail = ''): void {
 	if (!cond) failures.push(`${label}${detail ? ` — ${detail}` : ''}`);
 }
 
-// ── Premise: app.html really does render the app under display:contents.
-// If this ever changes, the whole "collapse #svelte" strategy needs a
-// rethink, so assert the premise the fix is built on.
+// ── Premise: app.html renders the app under #svelte display:contents.
+// The card is buried in that subtree, which is WHY it is portaled out to
+// <body>.  If this premise changes the portal strategy needs a rethink.
 check(
 	'app.html renders the app subtree under #svelte (display:contents)',
 	/id="svelte"[^>]*display:\s*contents/.test(appHtml),
-	'the collapse-#svelte print strategy depends on this'
+	'the card is portaled out of this subtree for printing'
 );
 
-// ── 1. Trigger ↔ stylesheet coupling on the shared html flag ─────────
+// ── 1. Trigger <-> stylesheet coupling on the shared html flag ───────
 check(
 	'JS trigger adds the morphit-printing-seed flag',
 	src.includes("classList.add('morphit-printing-seed')")
@@ -83,37 +72,44 @@ check(
 	/@media\s+print/.test(src) && src.includes('html.morphit-printing-seed')
 );
 
-// ── 2. Pagination isolation: the #svelte subtree is collapsed ────────
-// `#svelte)` (no trailing ` *`) is the collapse rule; `#svelte *)` is
-// the guard rule below.  Match the collapse rule specifically.
+// ── 2. The card is portaled to be a direct child of <body> ───────────
 check(
-	'collapses the #svelte subtree to zero height (pagination isolation)',
-	/#svelte\)\s*\{[^}]*height:\s*0[^}]*overflow:\s*hidden/.test(src),
-	'this is the half that removes the blank bands / extra pages'
+	'a bodyPortal action moves the card to document.body',
+	/function\s+bodyPortal\s*\(/.test(src) &&
+		/document\.body\.appendChild\s*\(\s*node\s*\)/.test(src),
+	'the card must live at body level for the body-child isolation to work'
+);
+check(
+	'the printable card uses the bodyPortal action',
+	/class="morphit-seed-print-card"[^>]*\buse:bodyPortal\b/.test(src),
+	'without use:bodyPortal the card stays buried in #svelte'
 );
 
-// ── 3. Card positioning: fixed + content height, NOT absolute/inset ──
-const cardRuleHasFixed = /\.morphit-seed-print-card\s*\{[^}]*position:\s*fixed/.test(src);
-check('printed card uses position: fixed', cardRuleHasFixed, 'so it escapes the #svelte clip');
+// ── 3. Print isolation: hide every OTHER direct child of <body> ──────
 check(
-	'printed card does NOT use position: absolute (the old approach)',
+	'print mode hides every direct body child except the card',
+	/body\s*>\s*\*:not\(\.morphit-seed-print-card\)\)\s*\{[^}]*display:\s*none/.test(src),
+	'this is what leaves the card alone on the page'
+);
+
+// ── 4. Card prints in NORMAL FLOW — NOT position:fixed (the bug) ─────
+check(
+	'printed card does NOT use position: fixed (cp261 blank-page regression)',
+	!/\.morphit-seed-print-card\s*\{[^}]*position:\s*fixed/.test(src),
+	'a fixed card in a zero-height flow is dropped by some print-to-PDF engines'
+);
+check(
+	'printed card does NOT use position: absolute either',
 	!/\.morphit-seed-print-card\s*\{[^}]*position:\s*absolute/.test(src)
 );
 check(
 	'printed card does NOT use an inset: 0 declaration (full-page stretch)',
-	!/inset:\s*0\s*;/.test(src),
-	'inset: 0 stretches the card to a full page → trailing whitespace'
-);
-
-// ── 4. Containing-block guard so the fixed card stays page-anchored ──
-check(
-	'guard neutralises transform on app descendants',
-	/#svelte \*\)\s*\{[^}]*transform:\s*none/.test(src),
-	'a transformed ancestor would re-anchor + clip the fixed card'
+	!/inset:\s*0\s*;/.test(src)
 );
 check(
-	'guard also neutralises contain (a containing-block trigger)',
-	/#svelte \*\)\s*\{[^}]*contain:\s*none/.test(src)
+	'no leftover #svelte zero-height collapse hack',
+	!/#svelte\)\s*\{[^}]*height:\s*0/.test(src),
+	'the portal approach does not collapse the app subtree'
 );
 
 // ── 5. Card is hidden on screen (print-only) ─────────────────────────

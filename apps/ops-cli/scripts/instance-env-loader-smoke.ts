@@ -25,6 +25,9 @@
  *   4. only morphit.env present (no config) → infraLoaded true, no throw.
  *   5. a DB URL in morphit.env bridges through to loadConfig().databaseUrl.
  *   6. main.ts calls loadInstanceEnv() BEFORE loadConfig() (static wiring).
+ *   7. a DB URL with an unexpanded shell command substitution (`$(…)` or
+ *      backticks) fails with a clear, actionable error — not a cryptic
+ *      `getaddrinfo ENOTFOUND $(docker inspect …)`.
  *
  * Usage:
  *   tsx apps/ops-cli/scripts/instance-env-loader-smoke.ts
@@ -162,6 +165,52 @@ function main(): void {
 			iEnv !== -1 && iCfg !== -1 && iEnv < iCfg,
 			`iEnv=${iEnv} iCfg=${iCfg}`
 		);
+	}
+
+	// Scenario 7 (cp261): a DATABASE_URL whose host is an UNEXPANDED shell
+	// command substitution must fail with a CLEAR message, not the cryptic
+	// `getaddrinfo ENOTFOUND $(docker inspect …)` an operator hit on a manual
+	// deploy.  Env files are read literally — the shell never runs — so a host
+	// like `$(docker inspect db | jq … IPAddress)` arrives verbatim; the guard
+	// in readDatabaseUrl() catches it before pg ever tries to resolve it.
+	{
+		resetEnv();
+		process.env.MORPHIT_OPS_DATABASE_URL =
+			'postgres://u:p@$(docker inspect bunkerweb-db-1 | jq -r ".[].NetworkSettings.Networks[\\"bunkerweb_bunkerweb-net\\"].IPAddress"):5432/morphit';
+		let msg = '';
+		try {
+			loadConfig();
+		} catch (e) {
+			msg = e instanceof Error ? e.message : String(e);
+		}
+		ok(
+			'unexpanded_command_substitution_clear_error',
+			/command substitution/i.test(msg) && msg.includes('read literally'),
+			msg === '' ? 'loadConfig did NOT throw on a $(…) host' : `msg: ${msg.slice(0, 70)}`
+		);
+
+		// A backtick command substitution is caught the same way.
+		resetEnv();
+		process.env.MORPHIT_OPS_DATABASE_URL = 'postgres://u:p@`hostname`:5432/morphit';
+		let backtickThrew = false;
+		try {
+			loadConfig();
+		} catch {
+			backtickThrew = true;
+		}
+		ok('backtick_command_substitution_caught', backtickThrew, 'backtick host did not throw');
+
+		// Sanity: a normal URL with no substitution is NOT flagged (the guard
+		// is not over-eager — scenario 5 proves the happy path through a file).
+		resetEnv();
+		process.env.MORPHIT_OPS_DATABASE_URL = 'postgres://u:p@db.internal:5432/morphit';
+		let cleanThrew = false;
+		try {
+			loadConfig();
+		} catch {
+			cleanThrew = true;
+		}
+		ok('clean_url_not_flagged', !cleanThrew, 'a normal URL was wrongly flagged as a substitution');
 	}
 
 	// Restore env.

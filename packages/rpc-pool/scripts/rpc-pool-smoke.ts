@@ -16,6 +16,11 @@
  *      second request to the next-best endpoint after the stagger
  *      interval and returns the first winner.  When the primary is
  *      fast, no hedge is dispatched.
+ *   5. Rate-limit backoff — an HTTP 429 rotates off (like any
+ *      transport failure) but is parked on a LONGER, dedicated
+ *      cooldown ladder than a generic blip, so a quota'd node is
+ *      not re-probed every couple of seconds; a non-429 transport
+ *      failure stays on the short ladder.
  *
  * The "upstream" is a fake `fn` whose latency and outcome the test
  * controls per-endpoint per-call.  Wall-clock time is real (we use
@@ -26,7 +31,10 @@
 import {
 	EndpointPool,
 	DEFAULT_HEDGE_THRESHOLD_MS,
+	DEFAULT_COOLDOWN_LADDER_MS,
+	DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS,
 	isTransportError,
+	isRateLimitError,
 	isDblurtConsoleNoise,
 	suppressDblurtConsoleNoise
 } from '../src/index.ts';
@@ -720,6 +728,94 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 			'429 rotation+cooldown',
 			`result=${result} goodHits=${goodHits} cooldownUntil=${cooled?.cooldownUntil ?? 'n/a'} now=${Date.now()}`
 		);
+	}
+}
+
+/* ---------------- scenario: isRateLimitError detection (429 ⊂ transport) ---------------- */
+{
+	const rateLimited = [
+		new Error('HTTP 429: Too Many Requests'),
+		new Error('Rate limit exceeded'),
+		new Error('429 too many requests')
+	];
+	const notRateLimited = [
+		new Error('HTTP 500: Internal Server Error'),
+		new Error('HTTP 502: Bad Gateway'),
+		new Error('fetch failed'),
+		new Error('timeout')
+	];
+	const allDetected = rateLimited.every(isRateLimitError);
+	const noFalsePositive = notRateLimited.every((e) => !isRateLimitError(e));
+	// A 429 is ALSO a transport error (so it still rotates off), but a 500 is
+	// a transport error that is NOT a rate-limit (so it stays on the short ladder).
+	const subset =
+		isTransportError(new Error('HTTP 429: x')) &&
+		isTransportError(new Error('HTTP 500: x')) &&
+		!isRateLimitError(new Error('HTTP 500: x'));
+	if (allDetected && noFalsePositive && subset) {
+		pass('isRateLimitError: matches 429/too-many-requests/rate-limit, not 500/502/timeout; 429 is a subset of transport');
+	} else {
+		fail(
+			'isRateLimitError detection',
+			`detected=${allDetected} noFalsePositive=${noFalsePositive} subset=${subset}`
+		);
+	}
+}
+
+/* ---------------- scenario: a 429 is parked on the LONGER rate-limit ladder ---------------- */
+{
+	// Default invariant: the rate-limit ladder's first step is longer than the
+	// generic ladder's first step, so a quota'd node is not re-probed in 2 s.
+	if (DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS[0]! > DEFAULT_COOLDOWN_LADDER_MS[0]!) {
+		pass('default rate-limit cooldown floor is longer than the generic transport floor');
+	} else {
+		fail(
+			'rate-limit floor longer than generic',
+			`rl=${DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS[0]} generic=${DEFAULT_COOLDOWN_LADDER_MS[0]}`
+		);
+	}
+
+	// Deterministic ladders: generic 50 ms floor, rate-limit 600 ms floor.
+	const rlPool = new EndpointPool({
+		endpoints: ['a'],
+		cooldownLadderMs: [50, 100],
+		rateLimitCooldownLadderMs: [600, 2_000]
+	});
+	try {
+		await rlPool.call(async () => {
+			throw new Error('HTTP 429: Too Many Requests');
+		});
+		fail('429 longer-cooldown: single-endpoint 429 throws', 'no throw');
+	} catch {
+		// Expected — only one endpoint, all paths failed.
+	}
+	const rlCooldown = rlPool.snapshot()[0]!.cooldownUntil - Date.now();
+	if (rlCooldown > 450 && rlCooldown <= 750) {
+		pass('a 429 parks the endpoint on the longer rate-limit ladder (~600 ms, not the 50 ms generic)');
+	} else {
+		fail('429 parks on rate-limit ladder', `cooldown=${rlCooldown} ms (expected ~600)`);
+	}
+
+	// Contrast: a GENERIC transport failure on a fresh endpoint still uses the
+	// short ladder — the 429 handling must not have regressed it.
+	const genPool = new EndpointPool({
+		endpoints: ['b'],
+		cooldownLadderMs: [50, 100],
+		rateLimitCooldownLadderMs: [600, 2_000]
+	});
+	try {
+		await genPool.call(async () => {
+			throw new Error('fetch failed');
+		});
+		fail('generic-cooldown: single-endpoint failure throws', 'no throw');
+	} catch {
+		// Expected.
+	}
+	const genCooldown = genPool.snapshot()[0]!.cooldownUntil - Date.now();
+	if (genCooldown > 0 && genCooldown <= 150) {
+		pass('a generic transport failure still uses the short ladder (~50 ms) — 429 handling did not regress it');
+	} else {
+		fail('generic transport failure stays short', `cooldown=${genCooldown} ms (expected ~50)`);
 	}
 }
 

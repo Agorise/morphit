@@ -157,10 +157,12 @@ export function resolveOrigin(originOrPath: string): string {
  *  first in this list.
  */
 export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
+	'https://rpc.drakernoise.com',
+	'https://blurtrpc.dagobert.uk',
 	'https://rpc.blurt.blog',
-	'https://blurt-rpc.saboin.com',
 	'https://rpc.beblurt.com',
-	'https://rpc.blurt.one'
+	'https://rpc.blurt.one',
+	'https://blurt-rpc.saboin.com'
 ] as const;
 
 /** localStorage key under which the user's (possibly-modified) endpoint

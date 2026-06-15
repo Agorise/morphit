@@ -84,6 +84,8 @@ export const MORPHIT_GENESIS_BLOCK = 59441298;
  * the env examples to this list.
  *
  * Each endpoint is an independently-operated public node:
+ *   - rpc.drakernoise.com  — community node
+ *   - blurtrpc.dagobert.uk — community node
  *   - rpc.blurt.blog       — Blurt Foundation
  *   - rpc.beblurt.com      — BeBlurt frontend's node
  *   - rpc.blurt.one        — Witness @tekraze
@@ -95,6 +97,8 @@ export const MORPHIT_GENESIS_BLOCK = 59441298;
  * additional reliable community node here.
  */
 export const DEFAULT_BLURT_RPC_ENDPOINTS: readonly string[] = [
+	'https://rpc.drakernoise.com',
+	'https://blurtrpc.dagobert.uk',
 	'https://rpc.blurt.blog',
 	'https://rpc.beblurt.com',
 	'https://rpc.blurt.one',

@@ -296,6 +296,7 @@ SMOKES=(
 	"apps/ops-cli:upgrade-fetch-hardening-smoke"
 	"apps/ops-cli:upgrade-mirror-smoke"
 	"apps/ops-cli:upgrade-frontend-deploy-smoke"
+	"apps/ops-cli:upgrade-backup-prune-smoke"
 	"apps/ops-cli:upgrade-schema-reminder-smoke"
 	"apps/ops-cli:install-invariants-smoke"
 	"apps/ops-cli:compiled-bundle-smoke"
