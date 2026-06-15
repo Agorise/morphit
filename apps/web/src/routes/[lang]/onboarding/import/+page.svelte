@@ -553,7 +553,7 @@
 					type="file"
 					accept="application/json,.json"
 					onchange={onFileSelected}
-					class="block w-full text-sm file:me-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-emerald file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-morphit-teal"
+					class="block w-full text-sm file:me-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:font-semibold file:text-white hover:file:brightness-110"
 				/>
 				<span class="mt-2 block text-sm text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.keyfile_hint')}

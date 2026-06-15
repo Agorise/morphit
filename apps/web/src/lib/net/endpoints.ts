@@ -456,10 +456,18 @@ export function getRotator(): EndpointRotator {
 	if (singleton) return singleton;
 	const urls = loadEndpoints();
 	singleton = new EndpointRotator(urls);
-	if (browser) {
-		// Fire and forget — don't block the first call.
-		void singleton.warmup();
-	}
+	// cp268 privacy (#1): do NOT warmup-probe every endpoint here.
+	// getRotator() runs on ordinary pages (the layout's per-session
+	// release-integrity check reaches it), and an eager warmup POSTed
+	// `get_dynamic_global_properties` to ALL configured Blurt RPC nodes
+	// from the user's browser on every page load — leaking the user's IP
+	// to several third-party operators at once (and throwing CORS errors
+	// on any node whose server-side CORS headers are misconfigured, e.g.
+	// a missing or doubled Access-Control-Allow-Origin). It was also
+	// redundant: `call()` records each endpoint's latency / health on
+	// every real request, so the rotator self-tunes organically. warmup()
+	// is now OPT-IN — invoked explicitly only from the endpoint-settings
+	// UI, where probing every node is a deliberate user action.
 	return singleton;
 }
 

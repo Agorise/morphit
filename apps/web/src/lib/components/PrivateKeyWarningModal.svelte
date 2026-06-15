@@ -160,7 +160,7 @@
 				bind:this={editButtonEl}
 				type="button"
 				onclick={onEdit}
-				class="rounded-xl bg-morphit-emerald px-4 py-2 font-semibold text-ink-900 transition hover:brightness-110 active:scale-[0.98]"
+				class="rounded-xl bg-morphit-btn px-4 py-2 font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
 			>
 				{$_('privkey_warn.edit_cta')}
 			</button>

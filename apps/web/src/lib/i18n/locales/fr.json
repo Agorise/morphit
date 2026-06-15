@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "Clés publiques PGP de l'opérateur pour les versions signées et la vérification du canari",
     "mediakit": "Kit média",
     "mediakit_title": "Ressources de marque et la liste des arguments de Morphit — pour la presse, les intégrateurs et la communauté",
-    "bounty": "Prime aux bugs",
-    "contact_operator_matrix_label": "Matrix",
-    "contact_operator_matrix": "Ouvrir le salon Matrix public de l'opérateur ({room})"
+    "bounty": "Prime aux bugs"
   },
   "glossary": {
     "active_key": {

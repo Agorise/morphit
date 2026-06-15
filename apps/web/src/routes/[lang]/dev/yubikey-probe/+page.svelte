@@ -276,7 +276,7 @@
 					type="button"
 					onclick={runProbe}
 					disabled={busy}
-					class="hover:bg-morphit-emerald-dark rounded-xl bg-morphit-emerald px-5 py-2.5 font-semibold text-white active:scale-95 disabled:opacity-50"
+					class="rounded-xl bg-morphit-btn px-5 py-2.5 font-semibold text-white hover:brightness-110 active:scale-95 disabled:opacity-50"
 				>
 					{busy ? 'Running…' : 'Run probe'}
 				</button>

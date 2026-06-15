@@ -130,6 +130,15 @@ const scenarios: readonly Scenario[] = [
 	{
 		name: 'i18n key onboarding.review.back_confirm.title referenced',
 		ok: /\$_\(['"]onboarding\.review\.back_confirm\.title['"]\)/.test(ONBOARDING)
+	},
+	{
+		// The wizard swaps stages in place (review→confirm, discard→choose)
+		// rather than navigating, so SvelteKit's scroll-to-top never fires.
+		// An $effect keyed on `stage` must reset scroll to the top, else the
+		// confirm quiz / the post-discard choose step open scrolled to the
+		// bottom of the previous (long) review step.
+		name: 'stage changes reset scroll to top (confirm/choose open at their heading, not at the bottom of review)',
+		ok: /\$effect\(\(\)\s*=>\s*\{[^}]*\bstage\b[^}]*window\.scrollTo\(0,\s*0\)[^}]*\}\)/.test(ONBOARDING)
 	}
 ];
 

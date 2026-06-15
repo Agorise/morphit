@@ -315,7 +315,7 @@
 					</button>
 					<button
 						type="button"
-						class="hover:bg-morphit-emerald-dark rounded-lg bg-morphit-emerald px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
 						onclick={confirm}
 						disabled={phase.kind === 'paying'}
 					>

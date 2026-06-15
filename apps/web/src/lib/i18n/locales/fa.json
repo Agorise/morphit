@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "کلیدهای عمومی PGP اپراتور برای انتشارهای امضاشده و تأیید کاناری",
     "mediakit": "بسته رسانه‌ای",
     "mediakit_title": "دارایی‌های برند و فهرست دستاوردهای Morphit — برای رسانه‌ها، یکپارچه‌سازها و جامعه",
-    "bounty": "پاداش باگ",
-    "contact_operator_matrix_label": "ماتریکس",
-    "contact_operator_matrix": "باز کردن اتاق عمومی ماتریکس اپراتور ({room})"
+    "bounty": "پاداش باگ"
   },
   "glossary": {
     "active_key": {

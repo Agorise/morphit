@@ -138,6 +138,7 @@ SMOKES=(
 	"apps/web:fingerprint-smoke"
 	"apps/web:identicon-data-uri-smoke"
 	"apps/web:seed-backup-print-one-page-smoke"
+	"apps/web:libsodium-not-in-baseline-closure-smoke"
 	"apps/web:split-on-placeholder-smoke"
 	"apps/web:voucher-locale-parity-smoke"
 	"apps/web:price-model-display-smoke"

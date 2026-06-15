@@ -140,16 +140,24 @@ export function resolveOrigin(originOrPath: string): string {
 	return `${window.location.origin}${path}`;
 }
 
-/** Default Blurt RPC endpoints seeded into every client. The endpoint-
- *  rotation client (`$lib/net/endpoints.ts`) health-checks each, picks a
- *  live one, and fails over when requests error. Users can add / pin /
- *  remove entries in Settings.
+/** Default Blurt RPC endpoints seeded into every BROWSER client. The
+ *  endpoint-rotation client (`$lib/net/endpoints.ts`) health-checks each,
+ *  picks a live one, and fails over when requests error. Users can add /
+ *  pin / remove entries in Settings.
  *
- *  Sources as of 2026-04:
- *    • rpc.blurt.blog      — Blurt Foundation
- *    • blurt-rpc.saboin.com — Witness @saboin
- *    • rpc.beblurt.com      — BeBlurt frontend's node
- *    • rpc.blurt.one        — Witness @tekraze
+ *  ⚠ This is the BROWSER-CORS-CLEAN SUBSET of the canonical pool, NOT the
+ *  whole pool. The canonical source of truth is
+ *  `DEFAULT_BLURT_RPC_ENDPOINTS` in `@morphit/operator-config` (6 nodes),
+ *  which the indexer + relay use SERVER-side where CORS does not apply.
+ *  A browser, however, can only use a node that returns a single valid
+ *  `Access-Control-Allow-Origin`. As verified 2026-06 (cp268), three
+ *  canonical nodes fail browser CORS and are therefore OMITTED here:
+ *    • rpc.beblurt.com      — sends TWO values (`https://morphit.io, *`)
+ *    • rpc.blurt.one        — no `Access-Control-Allow-Origin` header
+ *    • blurtrpc.dagobert.uk — no `Access-Control-Allow-Origin` header
+ *  They remain in the canonical/server set (valid RPC nodes, just not
+ *  browser-reachable). The rpc-endpoint-canon smoke enforces that this
+ *  list is a SUBSET of the canonical pool (no drift, no stray node).
  *
  *  Order is NOT priority. The rotator picks based on measured round-trip
  *  latency + success rate; first-probe order is randomized on each boot
@@ -158,10 +166,7 @@ export function resolveOrigin(originOrPath: string): string {
  */
 export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.drakernoise.com',
-	'https://blurtrpc.dagobert.uk',
 	'https://rpc.blurt.blog',
-	'https://rpc.beblurt.com',
-	'https://rpc.blurt.one',
 	'https://blurt-rpc.saboin.com'
 ] as const;
 

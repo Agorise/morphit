@@ -63,7 +63,7 @@
 	const variantClass = $derived.by(() => {
 		switch (variant) {
 			case 'primary':
-				return 'bg-morphit-emerald text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
+				return 'bg-morphit-btn text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
 				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
 			case 'ghost':

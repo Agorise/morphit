@@ -64,7 +64,7 @@
 			<button
 				type="button"
 				onclick={reload}
-				class="rounded-lg bg-morphit-emerald px-3 py-1 text-sm font-semibold text-white transition hover:bg-morphit-teal active:scale-[0.98]"
+				class="rounded-lg bg-morphit-btn px-3 py-1 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
 			>
 				{$_('release.stale_build.reload')}
 			</button>

@@ -96,7 +96,7 @@
 			<button
 				type="button"
 				onclick={submit}
-				class="rounded-lg bg-morphit-emerald px-4 py-2 text-sm font-semibold text-white transition hover:bg-morphit-teal active:scale-[0.98]"
+				class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
 			>
 				{$_('explorer.search.submit')}
 			</button>

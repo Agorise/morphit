@@ -8,7 +8,7 @@
  * keyfile is the same ciphertext in a JSON wrapper.
  */
 
-import sodium from 'libsodium-wrappers-sumo';
+import { sodium } from './sodium';
 import { ensureSodium, type Identity, type KeyRole, KEY_ROLES } from './keygen';
 import {
 	type WrappedCek,

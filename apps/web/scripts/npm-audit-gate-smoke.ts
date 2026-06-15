@@ -69,14 +69,19 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		package: 'form-data',
 		maxSeverity: 'critical',
 		acceptedTitles: [
-			'form-data uses unsafe random function in form-data for choosing boundary'
+			'form-data uses unsafe random function in form-data for choosing boundary',
+			'form-data: CRLF injection in form-data via unescaped multipart field names and filenames'
 		],
-		lastReviewed: '2026-05-16',
+		lastReviewed: '2026-06-15',
 		rationale:
-			'Transitive of `request` (see above). The unsafe Math.random() boundary ' +
-			'generation matters for cross-origin request forgery via predictable ' +
-			'boundaries; matrix-bot makes only operator-configured homeserver calls, ' +
-			'so no attacker-controlled requests share the boundary space.'
+			'Transitive of `request` (see above), reached only by matrix-bot-sdk. Two ' +
+			'advisories: (1) unsafe Math.random() boundary generation matters for cross-origin ' +
+			'request forgery via predictable boundaries; (2) CRLF injection via unescaped ' +
+			'multipart field names/filenames matters only when an attacker controls those ' +
+			'names. matrix-bot makes solely outbound, operator-configured Matrix homeserver ' +
+			'calls and constructs its own multipart field names, so neither the boundary space ' +
+			'nor the field names are attacker-controlled. Acceptable until matrix-bot-sdk ' +
+			'upgrades or is replaced. Reviewed cp270.'
 	},
 	{
 		package: 'tough-cookie',
@@ -125,6 +130,30 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'never starts the UI server in CI or locally — so the listening-server ' +
 			'file-read/exec surface is not installed or reachable here. Reviewed cp184. ' +
 			'Revisit if a vitest 2.1.x patch ships or if `@vitest/ui` is ever added.'
+	},
+	{
+		package: 'vite',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling',
+			'launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows',
+			'vite: `server.fs.deny` bypass on Windows alternate paths'
+		],
+		lastReviewed: '2026-06-15',
+		rationale:
+			'Dev/build-only dependency (never shipped to operators — production serves ' +
+			'prebuilt static assets via the operator web server, with no Vite dev server ' +
+			'running). All three advisories require the Vite dev server, which Morphit uses ' +
+			'only for local development: (1) the optimized-deps `.map` path traversal is ' +
+			'served by the dev server only; (2) launch-editor (transitive via vite) is the ' +
+			"dev server's click-to-open-in-editor helper and the NTLMv2/UNC hash disclosure " +
+			'is Windows-only; (3) the `server.fs.deny` bypass is the dev server file-serving ' +
+			'guard and is also Windows-only. Morphit is developed on Linux and production ' +
+			'never starts the dev server, so neither the dev-server surface nor the ' +
+			'Windows-specific paths are reachable. No production surface; the lockfile is ' +
+			'the tested source of truth (no `npm audit fix`). Reviewed cp270. Revisit if a ' +
+			'non-breaking patched vite is already in range or if the dev server is ever ' +
+			'exposed in production.'
 	}
 ];
 

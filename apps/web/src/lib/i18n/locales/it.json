@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "Chiavi pubbliche PGP dell'operatore per release firmate e verifica del canarino",
     "mediakit": "Kit media",
     "mediakit_title": "Risorse del brand e la lista dei punti di forza di Morphit — per stampa, integratori e community",
-    "bounty": "Ricompensa bug",
-    "contact_operator_matrix_label": "Matrix",
-    "contact_operator_matrix": "Apri la stanza Matrix pubblica dell'operatore ({room})"
+    "bounty": "Ricompensa bug"
   },
   "glossary": {
     "active_key": {

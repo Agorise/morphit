@@ -27,7 +27,7 @@
 		if (!browser) return;
 		urls = loadEndpoints();
 		refreshStats();
-
+		probeEndpoints();
 		// Poll stats so latency updates appear as probes complete.
 		const t = setInterval(() => {
 			refreshStats();
@@ -45,6 +45,19 @@
 		}
 	}
 
+	/** Probe every endpoint once (to show its latency) then refresh the
+	 *  display. cp268: the eager per-page warmup was removed from
+	 *  getRotator() because it pinged every Blurt RPC operator from the
+	 *  user's browser on every page load (an IP leak + CORS noise on
+	 *  misconfigured nodes). The endpoint-settings panel is the deliberate,
+	 *  user-initiated place to probe, so warm up here instead. */
+	function probeEndpoints(): void {
+		if (!browser) return;
+		void getRotator()
+			.warmup()
+			.then(refreshStats);
+	}
+
 	function addEndpoint(): void {
 		error = '';
 		const trimmed = newUrl.trim();
@@ -60,7 +73,7 @@
 		urls = [...urls, trimmed];
 		saveEndpoints(urls);
 		refreshRotator();
-		refreshStats();
+		probeEndpoints();
 		newUrl = '';
 	}
 
@@ -72,14 +85,14 @@
 		urls = urls.filter((u) => u !== url);
 		saveEndpoints(urls);
 		refreshRotator();
-		refreshStats();
+		probeEndpoints();
 	}
 
 	function doReset(): void {
 		resetEndpoints();
 		urls = [...DEFAULT_RPC_ENDPOINTS];
 		refreshRotator();
-		refreshStats();
+		probeEndpoints();
 		error = '';
 		confirmingReset = false;
 	}

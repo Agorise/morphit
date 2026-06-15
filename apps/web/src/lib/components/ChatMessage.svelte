@@ -751,7 +751,7 @@
 						{#if canPayNow}
 							<button
 								type="button"
-								class="hover:bg-morphit-emerald-dark rounded-md border-2 border-morphit-emerald bg-morphit-emerald px-3 py-1 text-xs font-semibold text-white"
+								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
 								onclick={() =>
 									onPayNow?.({
 										recipient: p.address,
@@ -766,7 +766,7 @@
 						{#if canMarkSent}
 							<button
 								type="button"
-								class="hover:bg-morphit-emerald-dark rounded-md border-2 border-morphit-emerald bg-morphit-emerald px-3 py-1 text-xs font-semibold text-white"
+								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
 								onclick={() =>
 									onMarkSent?.({
 										method: p.method as 'btc' | 'xmr' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp',

@@ -1787,9 +1787,7 @@
     "pgp_keys_title": "Operator's PGP public keys for signed releases and canary verification",
     "mediakit": "Mediakit",
     "mediakit_title": "Brand assets and the Morphit claims list — for press, integrators, and the community",
-    "bounty": "Bug bounty",
-    "contact_operator_matrix_label": "Matrix",
-    "contact_operator_matrix": "Open the operator's public Matrix room ({room})"
+    "bounty": "Bug bounty"
   },
   "glossary": {
     "active_key": {
