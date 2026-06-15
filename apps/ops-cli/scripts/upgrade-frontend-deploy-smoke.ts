@@ -46,7 +46,7 @@ import {
 	normalizeMountPath,
 	parseMountSources,
 	containerMountsBuildDir,
-	parseSwCacheVersion,
+	parseVerifyJsonVersion,
 	classifyFrontendVerify
 } from '../src/commands/upgrade.ts';
 
@@ -413,14 +413,55 @@ function tmp(prefix: string): string {
 
 // ─── FD-21/22: served-frontend freshness verification (beta14) ──────
 {
-	// parseSwCacheVersion: pull the morphit-<version> token a built SW pins.
-	const builtSw = 'const CACHE = "morphit-1718141234567";\nself.addEventListener("install", () => {});';
-	const v = parseSwCacheVersion(builtSw);
-	if (v === '1718141234567') ok('FD-21a parseSwCacheVersion extracts the build token');
+	// parseVerifyJsonVersion pulls the `morphit_version` field out of
+	// build/verify.json — the SAME field scripts/build-verify-json.mjs writes
+	// and apps/web .../about-this-instance reads. (The old morphit-<token> SW
+	// grep never survived minification, so the check always came back
+	// "unknown"; reading the WRONG json field — a bare `version` — silently did
+	// the exact same thing, which is what shipped in the first beta18 cut.
+	// FD-21c below is the cross-file drift guard against that recurring.)
+	// Fixture uses the REAL verify.json shape, not a hand-fabricated one.
+	const verifyJson = JSON.stringify({
+		schema_version: 1,
+		morphit_version: '1.0.0-beta.18',
+		git_commit: null,
+		operator_tag: null,
+		built_at: '2026-06-15T00:00:00.000Z',
+		hash_manifest: {}
+	});
+	const v = parseVerifyJsonVersion(verifyJson);
+	if (v === '1.0.0-beta.18') ok('FD-21a parseVerifyJsonVersion extracts morphit_version from the real verify.json shape');
 	else bad('FD-21a', `got ${v}`);
 
-	if (parseSwCacheVersion('no token here') === null) ok('FD-21b parseSwCacheVersion returns null when absent');
-	else bad('FD-21b', 'expected null');
+	if (
+		parseVerifyJsonVersion('not json') === null &&
+		parseVerifyJsonVersion('{"no":"version"}') === null &&
+		// A bare `version` field must NOT satisfy it — the real file keys on
+		// morphit_version. This negative is what would have caught the bug.
+		parseVerifyJsonVersion('{"version":"1.0.0-beta.18"}') === null
+	)
+		ok('FD-21b parseVerifyJsonVersion returns null on bad/missing/wrong-field json');
+	else bad('FD-21b', 'expected null on bad/missing/wrong-field version');
+
+	// FD-21c — DRIFT GUARD: the generator (writes), the upgrade parser (reads),
+	// and the about-this-instance page (reads) must all key on the SAME field.
+	// The first beta18 cut shipped a generator writing `morphit_version` and a
+	// parser reading `.version` → always null → "unknown" forever. Assert the
+	// literal field name is present in all three sources so they can't drift.
+	const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+	const FIELD = 'morphit_version';
+	const genSrc = readFileSync(join(repoRoot, 'scripts', 'build-verify-json.mjs'), 'utf8');
+	const parserSrc = readFileSync(join(repoRoot, 'apps', 'ops-cli', 'src', 'commands', 'upgrade.ts'), 'utf8');
+	const aboutSrc = readFileSync(
+		join(repoRoot, 'apps', 'web', 'src', 'routes', '[lang]', 'about-this-instance', '+page.svelte'),
+		'utf8'
+	);
+	const genWrites = genSrc.includes(`${FIELD}:`); // payload key
+	const parserReads = parserSrc.includes(`.${FIELD}`) || parserSrc.includes(`{ ${FIELD}?:`);
+	const aboutReads = aboutSrc.includes(FIELD);
+	if (genWrites && parserReads && aboutReads)
+		ok(`FD-21c verify.json field "${FIELD}" agrees across generator, upgrade parser, and about page`);
+	else bad('FD-21c', `field drift: generator=${genWrites} parser=${parserReads} about=${aboutReads}`);
 
 	// classifyFrontendVerify: fresh / stale / unknown.
 	if (classifyFrontendVerify('abc', 'abc') === 'fresh') ok('FD-22a equal versions → fresh (snackbar will fire)');

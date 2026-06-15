@@ -1203,7 +1203,7 @@ server {
     add_header Referrer-Policy "no-referrer" always;
     add_header X-Frame-Options "DENY" always;
     add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.blurt.blog https://blurt-rpc.saboin.com https://rpc.beblurt.com https://rpc.blurt.one; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://rpc.blurt.one https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 
     # Frontend — static files from the SvelteKit build output.
     #
@@ -2136,7 +2136,7 @@ Those avatars are tiny SVGs the browser builds on the fly as `data:` URIs — th
 
 Fix it in two steps:
 
-1. **Update the served policy.** Confirm what's being sent first: DevTools → Network → the HTML document request → Response Headers → `content-security-policy` (look for `img-src`). If you front the site with nginx, re-copy `ops/nginx/web.conf` and run `sudo nginx -t && sudo nginx -s reload`. If you use BunkerWeb, update `CONTENT_SECURITY_POLICY` in your env to match `ops/bunkerweb/bunkerweb.env.example` and restart the container.
+1. **Update the served policy.** Confirm what's being sent first: DevTools → Network → the HTML document request → Response Headers → `content-security-policy`, or from a shell `curl -sI https://your-site/ | grep -i content-security` (look for `img-src` — if it's just `'self'`, or missing entirely, `data:` images are blocked). Then fix it wherever your edge sets it: bare-metal nginx → re-copy `ops/nginx/web.conf` and `sudo nginx -t && sudo nginx -s reload`; BunkerWeb → set `CONTENT_SECURITY_POLICY` to match `ops/bunkerweb/bunkerweb.env.example` and restart the container. **If you front the site directly with the BunkerWeb-compose `frontend` nginx (the `bunkerweb` service commented out), or any other proxy**, the policy is an `add_header Content-Security-Policy` directive inside *that* config — locate it with `sudo grep -rni 'content-security-policy' <your-edge-config-dir>` (search the header spelling, not the `CONTENT_SECURITY_POLICY` env-var name), match its value to the canonical one, then `nginx -t` and reload/restart that proxy.
 2. **Clear the cached page.** The service worker may have cached an old HTML response that still carries the old CSP header, so the fix won't show until the cache is gone: DevTools → Application → Storage → **Clear site data**, then reload.
 
 See **OPERATIONS.md §15 → "Troubleshooting: account avatars show as broken images"** for the same fix with more detail.
@@ -2208,7 +2208,7 @@ You'll see something like `"lag_blocks": 5`. Fewer than 100 is fine. Higher than
 
 The relay spends Mana (Blurt's transaction fuel) when users do things on the chain. Each new signup costs about 100 BLURT. If your relay's balance hits zero, signups will fail.
 
-Check the balance via any working Blurt RPC node (the four
+Check the balance via any working Blurt RPC node (the six
 defaults shipped with Morphit's frontend are listed in
 OPERATIONS.md §22):
 

@@ -98,13 +98,44 @@ function envStr(key: string, fallback: string): string {
 	return v === undefined || v === '' ? fallback : v;
 }
 
+/** Guard against an unexpanded shell command substitution leaking
+ *  into the connection string.  Environment files (e.g.
+ *  /opt/morphit/morphit.config.env) are read LITERALLY — the shell
+ *  never runs — so a value like
+ *  `postgres://u:p@$(docker inspect db | jq …):5432/x` arrives with
+ *  the host set to the literal `$(…)` text, and pg then fails with a
+ *  baffling `getaddrinfo ENOTFOUND $(docker inspect …)`.  Turn that
+ *  into an actionable message instead. */
+function assertNoUnexpandedShell(url: string, key: string): void {
+	if (url.includes('$(') || url.includes('`')) {
+		throw new Error(
+			`${key} contains an unexpanded shell command substitution ` +
+				'(`$(...)` or backticks).\n' +
+				'\n' +
+				'Environment files are read literally — the shell never runs — so the\n' +
+				'substitution is passed through as a literal hostname, which is why the\n' +
+				'connection fails with "getaddrinfo ENOTFOUND $(...)".\n' +
+				'\n' +
+				'Set the host to a concrete value instead. For a dockerized Postgres that\n' +
+				'is not published to the host, resolve the container IP once and paste it in:\n' +
+				"  docker inspect <db-container> | jq -r '.[].NetworkSettings.Networks[].IPAddress'\n" +
+				'then use e.g.  postgres://morphit:secret@172.18.0.5:5432/morphit\n' +
+				'(a container IP can change when the container is recreated — publishing the\n' +
+				'DB on 127.0.0.1 and using localhost is more stable).'
+		);
+	}
+}
+
 /** Read DATABASE_URL with a clear error if missing.  This is
  *  the only required env var; everything else has a default. */
 function readDatabaseUrl(): string {
 	const candidates = ['MORPHIT_OPS_DATABASE_URL', 'MORPHIT_INDEXER_DATABASE_URL', 'DATABASE_URL'];
 	for (const key of candidates) {
 		const v = process.env[key];
-		if (v !== undefined && v !== '') return v;
+		if (v !== undefined && v !== '') {
+			assertNoUnexpandedShell(v, key);
+			return v;
+		}
 	}
 	throw new Error(
 		'No database URL configured.  Set one of:\n' +

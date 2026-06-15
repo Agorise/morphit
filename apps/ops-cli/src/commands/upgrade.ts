@@ -502,18 +502,32 @@ function restartFrontendContainer(name: string): void {
 // confirmed the RESULT reaches browsers.  When it silently doesn't — a
 // container serving a baked-in image, a detection miss, a stale copy — the
 // new service worker never ships, so the "Load it now" update prompt never
-// fires (the recurring symptom).  This verifies the SERVED service worker's
-// build token matches the one we just built, and says exactly what's wrong
-// when it doesn't, instead of reporting a silent success.
+// fires (the recurring symptom).  We compare the build `version` written to
+// build/verify.json — a single stable token, identical on the built and
+// served sides — and say exactly what's wrong when they differ, instead of
+// reporting a silent success.
 
-/** Extract the cache-version token (`morphit-<version>`) the service
- *  worker pins.  SvelteKit inlines its per-build `version` into
- *  `const CACHE = `morphit-${version}``, so this token changes every build
- *  and is identical between the built file and what a correctly-publishing
- *  server serves.  PURE. */
-export function parseSwCacheVersion(swSource: string): string | null {
-	const m = /morphit-([0-9A-Za-z][0-9A-Za-z._-]*)/.exec(swSource);
-	return m ? m[1]! : null;
+/** Parse the build `version` field out of a verify.json document. The
+ *  postbuild step (scripts/build-verify-json.mjs) writes
+ *  `{ "version": "1.0.0-beta.N", … }` to build/verify.json, giving one
+ *  stable, unambiguous token that is identical in the built file and what a
+ *  correctly-publishing server serves. (The previous check grepped a
+ *  `morphit-<version>` literal out of the service worker, but SvelteKit
+ *  concatenates its per-build version at runtime, so no such literal
+ *  survives minification — the check always came back "unknown".)  PURE. */
+export function parseVerifyJsonVersion(jsonSource: string): string | null {
+	try {
+		// The field is `morphit_version` — the exact key
+		// scripts/build-verify-json.mjs writes and the
+		// about-this-instance page reads.  (Reading a bare `version`
+		// here silently returned null on every real verify.json, so the
+		// served-frontend check always reported "unknown" — the very bug
+		// this check was meant to fix.  Guarded by FD-21c.)
+		const v = (JSON.parse(jsonSource) as { morphit_version?: unknown }).morphit_version;
+		return typeof v === 'string' && v.length > 0 ? v : null;
+	} catch {
+		return null;
+	}
 }
 
 export type FrontendVerifyState = 'fresh' | 'stale' | 'unknown';
@@ -527,12 +541,12 @@ export function classifyFrontendVerify(
 	return builtVersion === servedVersion ? 'fresh' : 'stale';
 }
 
-/** Read + parse the freshly-built service worker's version. */
-function readBuiltSwVersion(buildDir: string): string | null {
+/** Read + parse the freshly-built frontend's version from build/verify.json. */
+function readBuiltVersion(buildDir: string): string | null {
 	try {
-		const p = join(buildDir, 'service-worker.js');
+		const p = join(buildDir, 'verify.json');
 		if (!existsSync(p)) return null;
-		return parseSwCacheVersion(readFileSync(p, 'utf8'));
+		return parseVerifyJsonVersion(readFileSync(p, 'utf8'));
 	} catch {
 		return null;
 	}
@@ -559,14 +573,14 @@ function containerBridgeIps(name: string): string[] {
 	}
 }
 
-/** Fetch + parse the served service worker's version (best-effort). */
-async function fetchServedSwVersion(url: string, timeoutMs = 4000): Promise<string | null> {
+/** Fetch + parse the served frontend's version from /verify.json (best-effort). */
+async function fetchServedVersion(url: string, timeoutMs = 4000): Promise<string | null> {
 	const controller = new AbortController();
 	const t = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		const res = await fetch(url, { method: 'GET', signal: controller.signal, redirect: 'follow' });
 		if (!res.ok) return null;
-		return parseSwCacheVersion(await res.text());
+		return parseVerifyJsonVersion(await res.text());
 	} catch {
 		return null;
 	} finally {
@@ -574,18 +588,18 @@ async function fetchServedSwVersion(url: string, timeoutMs = 4000): Promise<stri
 	}
 }
 
-/** Resolve the served SW version for whichever publish path applied.
- *  Bare-metal: read the copied file under webRoot.  Containerized: fetch
- *  the just-restarted container's own :80 (with a short retry while it
- *  comes back up).  Returns null when it can't be determined. */
-async function resolveServedSwVersion(
+/** Resolve the served frontend version for whichever publish path applied.
+ *  Bare-metal: read the copied build/verify.json under webRoot.  Containerized:
+ *  fetch the just-restarted container's own :80/verify.json (with a short
+ *  retry while it comes back up).  Returns null when it can't be determined. */
+async function resolveServedVersion(
 	plan: { copyToWebRoot: boolean; restartContainer: string | null },
 	webRoot: string
 ): Promise<string | null> {
 	if (plan.copyToWebRoot) {
 		try {
-			const p = join(webRoot, 'service-worker.js');
-			if (existsSync(p)) return parseSwCacheVersion(readFileSync(p, 'utf8'));
+			const p = join(webRoot, 'verify.json');
+			if (existsSync(p)) return parseVerifyJsonVersion(readFileSync(p, 'utf8'));
 		} catch {
 			// fall through to the container probe (covers "both")
 		}
@@ -593,7 +607,7 @@ async function resolveServedSwVersion(
 	if (plan.restartContainer) {
 		for (let attempt = 0; attempt < 5; attempt++) {
 			for (const ip of containerBridgeIps(plan.restartContainer)) {
-				const v = await fetchServedSwVersion(`http://${ip}:80/service-worker.js`);
+				const v = await fetchServedVersion(`http://${ip}:80/verify.json`);
 				if (v !== null) return v;
 			}
 			if (attempt < 4) await new Promise((r) => setTimeout(r, 1500));
@@ -1048,18 +1062,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// never fails the upgrade.
 	if (plan.copyToWebRoot || plan.restartContainer) {
 		try {
-			const builtVersion = readBuiltSwVersion(buildDir);
-			const servedVersion = await resolveServedSwVersion(plan, webRoot);
+			const builtVersion = readBuiltVersion(buildDir);
+			const servedVersion = await resolveServedVersion(plan, webRoot);
 			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
 			if (verdict === 'fresh') {
 				info(
 					`\u2713 Verified the live frontend is serving this build ` +
-						`(service worker ${builtVersion}). Returning visitors get the ` +
+						`(version ${builtVersion}). Returning visitors get the ` +
 						`"Load it now" update prompt within ~60s.`
 				);
 			} else if (verdict === 'stale') {
 				warn(
-					`The frontend being SERVED is still the old build (service worker ` +
+					`The frontend being SERVED is still the old build (version ` +
 						`${servedVersion}); this upgrade built ${builtVersion}. The ` +
 						`"Load it now" update prompt will NOT appear until the served ` +
 						`build matches. ` +
@@ -1070,13 +1084,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 								`it BAKES the build into its image, rebuild that image so it ` +
 								`includes the new build.`
 							: `Check that ${webRoot} received the new build and that your ` +
-								`web server is not caching /service-worker.js.`)
+								`web server is not caching /verify.json or /service-worker.js.`)
 				);
 			} else {
 				info(
 					`(Could not auto-verify the served frontend. Check it with: ` +
-						`curl -s <your-site>/service-worker.js | grep -o 'morphit-[0-9]*' | ` +
-						`head -1 — it should match this build.)`
+						`curl -s <your-site>/verify.json — its "morphit_version" should ` +
+						`match this build.)`
 				);
 			}
 		} catch {
@@ -1479,6 +1493,52 @@ function pidsWithCwdUnder(dir: string): number[] {
 	return out;
 }
 
+/** PIDs actively RUNNING CODE from `dir` — their executable
+ *  (/proc/<pid>/exe) resolves under `dir`, or an absolute argument in their
+ *  command line is a path under `dir` (e.g. `node /opt/morphit.bak-…/apps/
+ *  indexer/dist/main.js`). This is the real "unsafe to delete" signal:
+ *  deleting a backup a live service still executes from would yank its files
+ *  mid-run. It deliberately does NOT flag a process that merely has its cwd
+ *  parked under the tree (a leftover login shell, or a `less`/pager from
+ *  `systemctl status`) — removing the directory under such a process is
+ *  harmless, the kernel keeps it running with a now-stale cwd. Linux-only
+ *  (reads /proc); [] anywhere /proc is unavailable. */
+function pidsRunningFrom(dir: string): number[] {
+	const norm = (p: string): string => p.replace(/\/+$/, '') || '/';
+	const target = norm(dir);
+	const under = (p: string): boolean => {
+		if (!p || p[0] !== '/') return false; // absolute paths only
+		const n = norm(p);
+		return n === target || n.startsWith(`${target}/`);
+	};
+	const out: number[] = [];
+	let procEntries: string[];
+	try {
+		procEntries = readdirSync('/proc');
+	} catch {
+		return out; // non-Linux / no /proc — best-effort only.
+	}
+	for (const e of procEntries) {
+		if (!/^\d+$/.test(e)) continue;
+		let hit = false;
+		try {
+			if (under(readlinkSync(`/proc/${e}/exe`))) hit = true;
+		} catch {
+			// exe unreadable (permissions / kernel thread) — fall through.
+		}
+		if (!hit) {
+			try {
+				const argv = readFileSync(`/proc/${e}/cmdline`, 'utf8').split('\0');
+				if (argv.some((a) => under(a))) hit = true;
+			} catch {
+				// cmdline unreadable — skip.
+			}
+		}
+		if (hit) out.push(Number(e));
+	}
+	return out;
+}
+
 function pruneOldBackups(installDir: string): void {
 	const parent = dirname(installDir);
 	const base = installDir.split('/').pop() ?? 'morphit';
@@ -1494,22 +1554,36 @@ function pruneOldBackups(installDir: string): void {
 		}))
 		.sort((a, b) => b.mtime - a.mtime); // newest first
 	for (const ent of entries.slice(keep)) {
-		// Safeguard: never delete a backup tree that a live process is still
-		// reading its source from (e.g. a manually-run indexer/relay left on
-		// the old code). Pruning it would yank the files mid-run.
-		const livePids = pidsWithCwdUnder(ent.path);
-		if (livePids.length > 0) {
+		// Safeguard: only refuse to prune a backup that a live process is
+		// actively RUNNING CODE from (a manually-started indexer/relay left on
+		// the old tree) — deleting it then would yank its files mid-run. A
+		// process that merely has its cwd parked under the tree (a leftover
+		// login shell, or a `less`/pager from `systemctl status`) is harmless,
+		// so prune anyway instead of nagging the operator on every upgrade;
+		// the kernel keeps those processes running with a now-stale cwd.
+		const runningFrom = pidsRunningFrom(ent.path);
+		if (runningFrom.length > 0) {
 			warn(
-				`Not pruning ${ent.path}: ${livePids.length} process(es) are still ` +
-					`running from it (PIDs ${livePids.join(', ')}). Restart those ` +
-					`processes from ${installDir} (or move them onto the systemd units) ` +
-					`first, then they'll be pruned on a later upgrade.`
+				`Not pruning ${ent.path}: ${runningFrom.length} process(es) are ` +
+					`actively running code from it (PIDs ${runningFrom.join(', ')}). ` +
+					`That looks like a service started from the old tree — restart ` +
+					`it from ${installDir} (or move it onto the systemd units), then ` +
+					`this backup is pruned on the next upgrade.`
 			);
 			continue;
 		}
 		try {
+			const parked = pidsWithCwdUnder(ent.path);
 			rmSync(ent.path, { recursive: true, force: true });
-			info(`Pruned old backup: ${ent.path}`);
+			if (parked.length > 0) {
+				info(
+					`Pruned old backup: ${ent.path} (${parked.length} idle ` +
+						`shell/pager had it as a working directory — harmless; they ` +
+						`keep running).`
+				);
+			} else {
+				info(`Pruned old backup: ${ent.path}`);
+			}
 		} catch {
 			// best-effort
 		}

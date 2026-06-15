@@ -19,10 +19,11 @@
 	 * Privacy posture:
 	 *   - Pure local rendering.  No network, no PDF library,
 	 *     no server interaction.
-	 *   - The print stylesheet uses CSS `visibility: hidden`
-	 *     on every element except the backup card and its
-	 *     descendants, so a user who saves-to-PDF gets a
-	 *     clean single page with just the seed material.
+	 *   - The print path is pure CSS: the card is moved to be a
+	 *     direct child of <body> and, at print time, every OTHER
+	 *     direct child of <body> is hidden with `display: none`,
+	 *     so a user who saves-to-PDF gets a clean single page
+	 *     with just the seed material.
 	 *   - Browser print preview is a known, audited path; we
 	 *     are not introducing a new code path that touches
 	 *     the seed.  The seed words are already rendered in
@@ -31,31 +32,25 @@
 	 *   - On `afterprint`, the print-mode flag is removed so
 	 *     the screen UI returns to normal.
 	 *
-	 * Mechanics — paint + pagination isolation (cp249):
+	 * Mechanics — portal + normal-flow isolation (cp261):
 	 *
-	 *   A plain `display: none` on "everything but the card"
-	 *   can't be expressed cleanly because SvelteKit renders the
-	 *   whole app inside `<div id="svelte" style="display:
-	 *   contents">` (see `apps/web/src/app.html`): the card lives
-	 *   DEEP inside that subtree, so any selector that hides the
-	 *   subtree also hides the card.
+	 *   SvelteKit renders the whole app inside
+	 *   `<div id="svelte" style="display: contents">` (see
+	 *   `apps/web/src/app.html`), so the card lives DEEP inside
+	 *   that subtree.  An earlier approach (cp249) collapsed that
+	 *   subtree to a zero-height, overflow-clipped box and made the
+	 *   card `position: fixed` to escape the clip — but a fixed
+	 *   element whose entire normal-flow context is zero-height is
+	 *   dropped outright by some print-to-PDF engines, which
+	 *   printed a single BLANK page.
 	 *
-	 *   So we isolate in two independent dimensions:
-	 *     - PAINT: at print time every element is `visibility:
-	 *       hidden`, then the card + its descendants are forced
-	 *       `visibility: visible`.
-	 *     - PAGINATION: the `#svelte` app subtree is collapsed to
-	 *       a zero-height, overflow-clipped box so it generates
-	 *       no page boxes.  This is the part that kills the blank
-	 *       bands / extra blank pages the paint-only approach left
-	 *       behind — `visibility: hidden` keeps layout boxes, so
-	 *       on a tall review page they still paginated.
-	 *
-	 *   The card itself is `position: fixed`, so its containing
-	 *   block is the page box, not `#svelte`: it escapes the
-	 *   height:0/overflow:hidden clip and prints alone on a single
-	 *   page, sized to its own content (no full-page `inset: 0`
-	 *   stretch, which was the source of the trailing whitespace).
+	 *   The robust replacement: the `bodyPortal` action (below)
+	 *   moves the card to be a direct child of <body>.  At print
+	 *   time the stylesheet hides every OTHER direct child of
+	 *   <body> with `display: none` and lets the card print in
+	 *   normal flow as the sole page content — nothing can clip it
+	 *   or drop it.  No `visibility` trickery, no zero-height
+	 *   collapse, no `position: fixed`.
 	 *
 	 *   Triggered via an html-level class flag
 	 *   `morphit-printing-seed` so a regular Ctrl+P on the
@@ -115,6 +110,37 @@
 		// addition above pre-paint matter.
 		requestAnimationFrame(() => window.print());
 	}
+
+	/**
+	 * Move the printable card to be a direct child of <body>.
+	 *
+	 * SvelteKit renders the whole app inside
+	 * `<div id="svelte" style="display: contents">` (see app.html), so
+	 * the card is normally buried deep in that subtree.  The old print
+	 * isolation fought that by collapsing the subtree to `height: 0;
+	 * overflow: hidden` and making the card `position: fixed` so it
+	 * escaped the clip — but a fixed element whose entire normal-flow
+	 * context is zero-height is dropped outright by some print-to-PDF
+	 * engines, which printed a single blank page.
+	 *
+	 * Portaling the card up to <body> removes that fragility: card-only
+	 * printing becomes a robust "hide every OTHER direct child of body"
+	 * with the card in normal flow — it can't be clipped by an ancestor
+	 * or lost to a fixed-positioning quirk.  The card is `display: none`
+	 * on screen wherever it lives, so this has no on-screen effect.
+	 * Actions never run during SSR, so `document` is always defined here.
+	 */
+	function bodyPortal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return {
+			// Detach on teardown so the portaled node can't be orphaned
+			// if Svelte removes the rest of the component via its anchor
+			// range.  `remove()` is a no-op on an already-detached node.
+			destroy() {
+				node.remove();
+			}
+		};
+	}
 </script>
 
 <button
@@ -131,7 +157,7 @@
      html.morphit-printing-seed flag activates the print
      stylesheet's paint + pagination isolation (see the
      @media print block below). -->
-<div class="morphit-seed-print-card" aria-hidden="true">
+<div class="morphit-seed-print-card" use:bodyPortal aria-hidden="true">
 	<header class="seed-print-header">
 		<h1>{$_('onboarding.backup.print_card.title')}</h1>
 		<p class="seed-print-subtitle">{$_('onboarding.backup.print_card.subtitle')}</p>
@@ -178,79 +204,34 @@
 
 	/* ── Print mode: format the card for paper, on ONE page. ──── */
 	@media print {
-		/* cp249 — the backup card printed with large blank bands
-		   above and below it (often spilling onto extra blank pages).
-		   Root cause: the old approach set every element to
-		   `visibility: hidden` — which hides PAINT but keeps LAYOUT
-		   boxes — then positioned the card `absolute; inset: 0`.  The
-		   onboarding review page is tall, so all those hidden-but-
-		   present boxes kept generating page boxes; the card landed
-		   inside a multi-page document with blank space fore and aft,
-		   and `inset: 0` stretched the card itself to a full page so
-		   even its own box was mostly empty.
+		/* cp261 — print isolation, robust version.  The card is
+		   portaled to be a direct child of <body> (see bodyPortal in
+		   the script), so we no longer collapse the app subtree or rely
+		   on a `position: fixed` card escaping it — that approach printed
+		   a single BLANK page on print-to-PDF engines that drop a fixed
+		   element whose normal-flow context is zero-height.
 
-		   Fix isolates in two independent dimensions:
-		     1. PAINT — hide everything, re-show only the card.
-		     2. PAGINATION — collapse the whole SvelteKit app subtree
-		        (`#svelte`, which is `display: contents` in app.html)
-		        to a zero-height, overflow-clipped box so it generates
-		        no page boxes at all.  This is the part that removes
-		        the blank bands / extra pages.
-		   The card is `position: fixed`, so its containing block is
-		   the page box (not `#svelte`): it escapes the height:0 /
-		   overflow:hidden clip and prints alone on a single page,
-		   sized to its own content (no `inset: 0` stretch).
+		   Now card-only printing is just: hide every OTHER direct child
+		   of <body>, and let the card print in normal flow as the sole
+		   page content.  Nothing can clip it or drop it.
 
 		   Everything is gated on the `morphit-printing-seed` <html>
-		   flag, so a plain Ctrl+P on the onboarding page (no flag)
-		   still prints normally, and none of this affects on-screen
+		   flag, so a plain Ctrl+P on the onboarding page (no flag) still
+		   prints the page normally, and none of this affects on-screen
 		   layout. */
-
-		/* 1. Paint isolation. */
-		:global(html.morphit-printing-seed body *) {
-			visibility: hidden;
-		}
-		:global(html.morphit-printing-seed .morphit-seed-print-card),
-		:global(html.morphit-printing-seed .morphit-seed-print-card *) {
-			visibility: visible;
-		}
-
-		/* 2. Pagination isolation: remove the app subtree from the
-		   page flow so it contributes zero pages. */
-		:global(html.morphit-printing-seed #svelte) {
-			display: block !important;
-			height: 0 !important;
-			overflow: hidden !important;
+		:global(html.morphit-printing-seed body > *:not(.morphit-seed-print-card)) {
+			display: none !important;
 		}
 		:global(html.morphit-printing-seed body) {
 			margin: 0 !important;
 			padding: 0 !important;
-			background: white;
-		}
-		/* Containing-block guard: a stray transform/filter/contain on
-		   an ancestor would re-anchor the fixed card back inside the
-		   now-collapsed subtree (and clip it).  Neutralise them — this
-		   is print-only and cannot affect on-screen layout. */
-		:global(html.morphit-printing-seed #svelte *) {
-			transform: none !important;
-			filter: none !important;
-			backdrop-filter: none !important;
-			perspective: none !important;
-			contain: none !important;
-			will-change: auto !important;
+			background: white !important;
 		}
 
 		.morphit-seed-print-card {
 			display: block;
-			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			/* no `bottom`/`inset`: height is content-driven, so the
-			   card hugs the top of the page instead of stretching to
-			   fill it (which left the trailing blank band). */
-			padding: 0.6in;
 			margin: 0;
+			padding: 0.6in;
 			background: white;
 			color: black;
 			font-family: 'Helvetica', 'Arial', sans-serif;

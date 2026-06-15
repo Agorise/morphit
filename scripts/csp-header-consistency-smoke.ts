@@ -48,6 +48,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
@@ -161,10 +162,6 @@ const canonicalCsp = distinctCsp[0] ?? '';
 const REQUIRED_CSP_TOKENS: Array<[string, string]> = [
 	["default-src 'self'", 'baseline lockdown'],
 	["'wasm-unsafe-eval'", 'in-browser argon2 KDF needs WASM compilation'],
-	['https://rpc.blurt.blog', 'Blurt RPC origin (sign-in / price)'],
-	['https://blurt-rpc.saboin.com', 'Blurt RPC origin (sign-in / price)'],
-	['https://rpc.beblurt.com', 'Blurt RPC origin (sign-in / price)'],
-	['https://rpc.blurt.one', 'Blurt RPC origin (sign-in / price)'],
 	['img-src \'self\' data: blob:', 'identicon avatars are data:/blob:'],
 	["worker-src 'self' blob:", 'chat crypto worker'],
 	["frame-ancestors 'none'", 'clickjacking defense'],
@@ -175,6 +172,37 @@ const REQUIRED_CSP_TOKENS: Array<[string, string]> = [
 for (const [tok, why] of REQUIRED_CSP_TOKENS) {
 	if (canonicalCsp.includes(tok)) ok(`CSP retains \`${tok}\` (${why})`);
 	else bad(`CSP MISSING required directive \`${tok}\` (${why})`, 'a uniform-but-weakened CSP edit was detected');
+}
+// ── C2. connect-src RPC origins are EXACTLY the canonical default pool ──
+// Derived from @morphit/operator-config (the single source of truth that
+// rpc-endpoint-canon-smoke also pins frontend + both env examples against),
+// so adding or removing a Blurt RPC endpoint there automatically updates what
+// this guard requires.  A hand-maintained subset would fall behind the CSP —
+// exactly how the two cp261 additions (rpc.drakernoise.com, blurtrpc.dagobert.uk)
+// were left un-pinned even though they were correctly added to all 4 surfaces.
+{
+	const connectSrc = canonicalCsp.match(/connect-src([^;]*)/i)?.[1] ?? '';
+	const cspOrigins = new Set(
+		(connectSrc.match(/https:\/\/[^\s;'"]+/g) ?? []).map((o) => o.replace(/\/+$/, ''))
+	);
+	const canonOrigins = DEFAULT_BLURT_RPC_ENDPOINTS.map((e) => e.replace(/\/+$/, ''));
+	for (const origin of canonOrigins) {
+		if (cspOrigins.has(origin)) ok(`CSP connect-src includes canonical RPC origin ${origin}`);
+		else
+			bad(
+				`CSP connect-src MISSING canonical RPC origin ${origin}`,
+				'a uniform CSP edit dropped a Blurt RPC node from every surface — sign-in/price via that node breaks silently and no surface-drift check would catch it'
+			);
+	}
+	// No EXTRA https origin beyond the canonical pool: catches a stale origin
+	// left behind after an endpoint removal, and a sneaked-in third-party origin.
+	const extra = [...cspOrigins].filter((o) => !canonOrigins.includes(o));
+	if (extra.length === 0) ok('CSP connect-src carries no https origin beyond the canonical RPC pool');
+	else
+		bad(
+			`CSP connect-src has ${extra.length} non-canonical https origin(s): ${extra.join(', ')}`,
+			"connect-src must equal 'self' + the canonical Blurt RPC pool only (privacy + parity)"
+		);
 }
 // connect-src must NOT silently re-admit an external price API (privacy —
 // cp233 dropped CoinGecko; the client provider is unwired).  Catch a

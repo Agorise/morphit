@@ -299,8 +299,8 @@ object-src 'none';
 ```
 
 `connect-src 'self' https:` allows the endpoint rotator to reach the
-Blurt RPC pool (rpc.blurt.blog, rpc.beblurt.com, blurt-rpc.saboin.com,
-rpc.blurt.one) plus any user-added community mirrors. A narrower
+Blurt RPC pool (rpc.drakernoise.com, blurtrpc.dagobert.uk,
+rpc.blurt.blog, rpc.beblurt.com, rpc.blurt.one, blurt-rpc.saboin.com) plus any user-added community mirrors. A narrower
 per-endpoint CSP isn't feasible because the user can add their own
 endpoint through Settings. Mitigation: every outbound RPC request goes
 through the rotator, which sets `credentials: 'omit'`,
@@ -810,7 +810,7 @@ this feature:
 ### Single Blurt RPC trust (audit F-11)
 
 The verifier fetches transaction details from one of the
-shipped Blurt RPC nodes (the four documented in
+shipped Blurt RPC nodes (the six documented in
 `apps/web/src/lib/net/config.ts`).  A hostile RPC can:
 
 - Fabricate a `verified` result for a transfer that doesn't
@@ -835,8 +835,9 @@ Mitigations in place:
   view of the same txid would surface as contradictory mismatch
   reports.
 - **Operator-extensible endpoint list:** the canonical Morphit
-  deployment ships four endpoints (rpc.blurt.blog,
-  blurt-rpc.saboin.com, rpc.beblurt.com, rpc.blurt.one).
+  deployment ships six endpoints (rpc.drakernoise.com,
+  blurtrpc.dagobert.uk, rpc.blurt.blog, rpc.beblurt.com,
+  rpc.blurt.one, blurt-rpc.saboin.com).
   Operators concerned about RPC trust can add their own node
   via Settings.
 - **Verification is not the primary settlement mechanism:**
