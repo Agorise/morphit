@@ -28,7 +28,7 @@
 		"@morphit/operator-config": "*",
 		"@morphit/release-schema": "*",
 		"@morphit/rpc-pool": "*",
-		"hono": "^4.6.0",
+		"hono": "^4.12.25",
 		"pg": "^8.13.0",
 		"tsx": "^4.19.0",
 		"zod": "^3.23.0"

@@ -65,6 +65,7 @@ export interface MatrixDeps {
 	readonly sync?: (run: boolean, restart: boolean) => MatrixBotSyncResult;
 	readonly confirm?: (question: string, defaultYes: boolean) => Promise<boolean>;
 	readonly selfTest?: (port: number) => Promise<MatrixSelfTestResult>;
+	readonly readHealthcheckPort?: (path?: string) => number;
 }
 
 /** Shape returned by the bot's loopback `/self-test` route. */
@@ -137,6 +138,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	const sync = deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
 	const confirm = deps.confirm ?? askYesNo;
 	const selfTest = deps.selfTest ?? postSelfTest;
+	const readHealthcheckPort = deps.readHealthcheckPort ?? readMatrixBotHealthcheckPort;
 
 	const paint = (open: string, s: string): string => (ctx.colorEnabled ? `${open}${s}\u001b[0m` : s);
 	const bold = (s: string): string => paint('\u001b[1m', s);
@@ -182,7 +184,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			return 1;
 		}
 
-		const port = readMatrixBotHealthcheckPort(MATRIX_BOT_ENV_PATH);
+		const port = readHealthcheckPort(MATRIX_BOT_ENV_PATH);
 		console.log(dim(`  Asking the bot to send a self-test alert to ${readiness.mxids.length} recipient(s)…`));
 
 		let result: MatrixSelfTestResult;
