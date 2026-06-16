@@ -161,6 +161,12 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Holds no keys, signs no trades \u2014 it hands the user off to your web UI for the actual key-signing. Disabling it never affects human traders, only AI-agent discovery.'
 			},
 			{
+				label: 'Matrix alerts: set / clear your alert username',
+				blurb: 'Get operator alerts (low balance, service down, security) DM\u2019d to your Matrix account. The matrix-bot auto-starts when you set a username and stops when you clear it.',
+				subcommand: 'matrix',
+				tip: 'Set your personal MXID (@you:matrix.org) \u2014 NOT a #room alias (that would leak private alerts publicly). You also need a bot account access token in /etc/morphit/matrix-bot.env.'
+			},
+			{
 				label: 'Status dashboard',
 				blurb: 'Day-to-day operations: relay balance, queue depth, health, and your last 3 DB backups (with the file path).',
 				subcommand: 'status',
@@ -275,6 +281,7 @@ const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
 	'bunkerweb',
 	'doctor',
 	'mcp',
+	'matrix',
 	'status',
 	'signups',
 	'failed-broadcasts',

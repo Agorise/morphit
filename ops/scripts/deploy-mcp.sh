@@ -83,8 +83,10 @@ done
 
 # ── 3. Rewrite the deployed package.json ───────────────────────────
 # - point the two @morphit/* deps at the vendored copies (file:)
-# - promote tsx to a runtime dep (the unit runs `tsx src/main.ts`, so
-#   `npm install --omit=dev` must keep it)
+# - keep tsx as a runtime dep (the source package.json now declares
+#   tsx in `dependencies` — the unit runs `tsx src/main.ts`, so
+#   `npm install --omit=dev` must keep it; this read is kept
+#   robust to tsx living in either section)
 # - drop the remaining devDependencies for a lean runtime tree
 node -e '
 const fs = require("fs");
@@ -93,7 +95,7 @@ const pkg = JSON.parse(fs.readFileSync(p, "utf8"));
 pkg.dependencies = pkg.dependencies || {};
 pkg.dependencies["@morphit/asset-registry"] = "file:./vendor/asset-registry";
 pkg.dependencies["@morphit/net-defense"] = "file:./vendor/net-defense";
-const tsxVer = (pkg.devDependencies && pkg.devDependencies.tsx) || "^4.19.1";
+const tsxVer = (pkg.dependencies && pkg.dependencies.tsx) || (pkg.devDependencies && pkg.devDependencies.tsx) || "^4.19.1";
 pkg.dependencies.tsx = tsxVer;
 delete pkg.devDependencies;
 fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");

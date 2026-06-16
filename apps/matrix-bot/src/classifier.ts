@@ -1139,3 +1139,23 @@ export function escapeHtml(s: string): string {
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&#39;');
 }
+
+/** The body of the manual self-test DM that `morphit-ops matrix test`
+ *  triggers (via the bot's loopback healthcheck server).  Deliberately
+ *  unmistakable as a TEST so an operator never confuses it with a real
+ *  alert — and self-explanatory in case they forgot they ran the command. */
+export function renderTestAlertBody(): { plain: string; html: string } {
+	const plain =
+		'🔔 Morphit alerting self-test\n\n' +
+		'If you can read this, your operator alerting is working: the bot ' +
+		'authenticated to Matrix and can deliver direct messages to you.\n\n' +
+		'This was triggered by `morphit-ops matrix test` — it is NOT a real alert, ' +
+		'and there is nothing to act on.';
+	const html =
+		'<p><strong>🔔 Morphit alerting self-test</strong></p>' +
+		'<p>If you can read this, your operator alerting is working: the bot ' +
+		'authenticated to Matrix and can deliver direct messages to you.</p>' +
+		'<p><em>This was triggered by <code>morphit-ops matrix test</code> — it is ' +
+		'NOT a real alert, and there is nothing to act on.</em></p>';
+	return { plain, html };
+}

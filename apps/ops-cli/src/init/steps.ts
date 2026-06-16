@@ -2345,9 +2345,16 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 				"         MORPHIT_MATRIX_BOT_ACCESS_TOKEN  the bot account's access\n" +
 				'           token (log in once as a dedicated bot account and copy\n' +
 				'           its token — never reuse your personal account token)\n' +
-				`         MORPHIT_MATRIX_BOT_ALERT_MXID    ${alertMxid}  (already chosen)\n` +
-				'    3. Enable the service:\n' +
-				'         sudo systemctl enable --now morphit-matrix-bot.service\n' +
+				'    3. Set your alert username — this writes it to the env file\n' +
+				'       AND auto-starts the bot (no separate systemctl step):\n' +
+				`         morphit-ops matrix set ${alertMxid}\n` +
+				'    4. Confirm it works — this DMs you a one-off test alert:\n' +
+				'         morphit-ops matrix test\n' +
+				'       (The first message from the bot arrives as an invite —\n' +
+				'       accept it, and real alerts land directly afterward.)\n' +
+				'       Later: `morphit-ops matrix clear` stops + disables the bot;\n' +
+				'       `morphit-ops matrix` shows status.  Every `morphit-ops\n' +
+				'       upgrade` re-checks this username and starts/stops to match.\n' +
 				'\n' +
 				'  Full reference: docs/RUN-A-MORPHIT-NODE.md §11 (Matrix sidecar).\n'
 		);

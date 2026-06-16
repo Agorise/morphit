@@ -38,6 +38,7 @@
 	import ChatMessage from '$components/ChatMessage.svelte';
 	import ChatComposer from '$components/ChatComposer.svelte';
 	import FirstTradeHelper from '$components/FirstTradeHelper.svelte';
+	import ChatNotificationNudge from '$components/ChatNotificationNudge.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import {
@@ -842,6 +843,12 @@
 	     when the user has never given feedback before AND this
 	     conversation is anchored to a specific order. -->
 	<FirstTradeHelper {orderPermlink} />
+
+	<!-- One-time nudge to enable web-push chat notifications so the user
+	     is pinged when the counterparty replies (tab closed = still
+	     delivered). Self-suppressing; rides the existing push system only
+	     (opaque endpoint, no PII). -->
+	<ChatNotificationNudge {peer} />
 
 	<!-- Scrollable message list: the flex-grow child. -->
 	<div

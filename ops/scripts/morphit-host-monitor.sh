@@ -20,11 +20,12 @@
 # Payload shape matches what the classifier's ALERT_COPY templates
 # expect — DO NOT rename fields without updating both ends.
 #
-# Output goes through `systemd-cat -t morphit-host-monitor`
-# which is run as the morphit-host-monitor.service systemd unit
-# (set in the accompanying unit file), so journalctl entries
-# carry _SYSTEMD_UNIT=morphit-host-monitor.service and the bot's
-# unit filter picks them up.
+# Output is emitted by emit() (ops/scripts/lib/emit.sh).  Running as the
+# morphit-host-monitor.service systemd unit, emit() writes the LogRecord to
+# the service's own journal stream (stdout, StandardOutput=journal), so
+# journald tags entries with _SYSTEMD_UNIT=morphit-host-monitor.service and
+# the bot's `-u` filter picks them up.  (emit() falls back to systemd-cat
+# only when run outside a journal-connected service.)
 
 set -eu
 

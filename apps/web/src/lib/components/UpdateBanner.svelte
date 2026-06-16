@@ -147,10 +147,25 @@
 		};
 		navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
+		// Mobile browsers throttle (or fully pause) background timers, so the
+		// 60 s interval above can stall for minutes while the tab is hidden.
+		// Re-check the instant the tab is foregrounded — and when connectivity
+		// returns — so a freshly-deployed update is offered promptly instead of
+		// waiting for the next un-throttled tick. This is what made the snackbar
+		// take ~5 minutes to appear on mobile.
+		const onVisible = (): void => {
+			if (document.visibilityState === 'visible') void check();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		const onOnline = (): void => void check();
+		window.addEventListener('online', onOnline);
+
 		return () => {
 			cancelled = true;
 			clearInterval(timer);
 			navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+			document.removeEventListener('visibilitychange', onVisible);
+			window.removeEventListener('online', onOnline);
 			if (trackedReg !== null && onUpdateFound !== null) {
 				trackedReg.removeEventListener('updatefound', onUpdateFound);
 			}

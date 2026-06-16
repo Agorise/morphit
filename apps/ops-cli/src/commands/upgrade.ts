@@ -101,6 +101,12 @@ import { tmpdir } from 'node:os';
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
 import { daemonReload } from '../lib/restartServices.ts';
+import {
+	MATRIX_BOT_UNIT,
+	matrixBotReadiness,
+	readMatrixBotEnv,
+	syncMatrixBotService
+} from '../lib/matrixBot.ts';
 
 interface UpgradeFlags {
 	readonly 'check-only'?: string;
@@ -142,13 +148,19 @@ const DEFAULT_INSTALL_DIR = '/opt/morphit';
 const DEFAULT_WEB_ROOT = '/var/www/morphit-frontend';
 const DEFAULT_BACKUP_KEEP = 3;
 
-// Services to restart on upgrade.  Listed in dependency order
-// (deps before consumers).  If a service unit doesn't exist on
+// Services to restart UNCONDITIONALLY on upgrade.  Listed in dependency
+// order (deps before consumers).  If a service unit doesn't exist on
 // the host, the restart attempt is skipped with an INFO log.
+//
+// NOTE: morphit-matrix-bot is deliberately NOT in this list — it is
+// handled by a dedicated lifecycle sync below (step 10c) that
+// enable+restarts it only when a valid alert username is configured and
+// disable+stops it otherwise, per the operator's `morphit-ops matrix`
+// setting.  Restarting it unconditionally would needlessly bounce a unit
+// that is meant to stay cleanly inert on instances not using Matrix.
 const SERVICES_TO_RESTART = [
 	'morphit-indexer.service',
-	'morphit-relay.service',
-	'morphit-matrix-bot.service'
+	'morphit-relay.service'
 ];
 
 // ─── Mirror fallback + source-independent integrity (beta5) ─────────
@@ -1202,6 +1214,42 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	} else {
 		info('Skipping MCP redeploy (morphit-mcp.service is not installed on this host).');
+	}
+
+	// ─── 10c. Sync the matrix-bot to the configured alert username ──
+	// The matrix-bot is opt-in: it only runs when a valid alert MXID is
+	// configured in /etc/morphit/matrix-bot.env.  On every upgrade we
+	// re-check that field and bring the service into line — enable +
+	// restart it (to pick up the new code) when a username is set, or
+	// disable + stop it when it isn't — so an operator who set or cleared
+	// their Matrix username between upgrades lands in the right state with
+	// no manual step.  Gated on the unit being installed; the bot is
+	// isolated and non-critical, so a failure WARNs rather than rolling
+	// back the whole upgrade (morphit.io is unaffected).
+	const matrixUnitPath = join(
+		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
+		MATRIX_BOT_UNIT
+	);
+	if (existsSync(matrixUnitPath)) {
+		const readiness = matrixBotReadiness(readMatrixBotEnv());
+		if (readiness.run) {
+			info('Matrix alert username configured — enabling + restarting morphit-matrix-bot...');
+			const res = syncMatrixBotService(true, { restart: true });
+			if (!res.ok) {
+				warn(
+					'Could not enable/restart morphit-matrix-bot. Start it with ' +
+						'`sudo systemctl enable --now morphit-matrix-bot` and check ' +
+						'`journalctl -u morphit-matrix-bot`.'
+				);
+			}
+		} else {
+			info('No Matrix alert username configured — ensuring morphit-matrix-bot is stopped.');
+			syncMatrixBotService(false, {});
+		}
+	} else {
+		info(
+			'Skipping matrix-bot lifecycle (morphit-matrix-bot.service is not installed on this host).'
+		);
 	}
 
 	// Safeguard: a manually-run indexer/relay (not the systemd units handled

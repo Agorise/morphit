@@ -46,12 +46,13 @@
  */
 
 import { writable, derived, type Readable } from 'svelte/store';
-import {
-	fetchVerifiedRelease,
-	type VerifiedRelease,
-	type ReleaseFetchError
-} from '$net/releaseFetch';
-import { checkManifestAgainstRunningBundle, type AssetMismatch } from '$net/releaseHashCheck';
+// fetchVerifiedRelease + checkManifestAgainstRunningBundle are dynamically
+// imported inside initRelease() (cp271 byte budget): both statically pull
+// $blurt/client, and initRelease runs in the layout's onMount — NOT at first
+// paint — so deferring them keeps the Blurt client out of every page's
+// baseline modulepreload closure. Types stay static (erased at build).
+import type { VerifiedRelease, ReleaseFetchError } from '$net/releaseFetch';
+import type { AssetMismatch } from '$net/releaseHashCheck';
 
 /** Frontend bundle version, baked in by Vite's `define`.  See
  *  apps/web/vite.config.js.  TypeScript ambient declaration in
@@ -135,6 +136,7 @@ export async function initRelease(): Promise<void> {
 	initStarted = true;
 
 	releaseStore.set({ kind: 'loading' });
+	const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 	const fetchResult = await fetchVerifiedRelease();
 	if (!fetchResult.ok) {
 		releaseStore.set({ kind: 'error', error: fetchResult.error });
@@ -147,6 +149,7 @@ export async function initRelease(): Promise<void> {
 	// banner appears immediately while the tamper check works.
 	assetCheckStore.set({ kind: 'loading' });
 	try {
+		const { checkManifestAgainstRunningBundle } = await import('$net/releaseHashCheck');
 		const hashResult = await checkManifestAgainstRunningBundle(
 			fetchResult.value.payload.hash_manifest
 		);

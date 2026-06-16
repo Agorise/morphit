@@ -9,7 +9,7 @@
  */
 
 import { sodium } from './sodium';
-import { ensureSodium, type Identity, type KeyRole, KEY_ROLES } from './keygen';
+import { ensureSodium, type Identity, type KeyRole, KEY_ROLES } from './identity-core';
 import {
 	type WrappedCek,
 	type WrappedCekPassphrase,

@@ -81,6 +81,7 @@ import { runSsl } from './commands/ssl.ts';
 import { runBunkerWeb } from './commands/bunkerweb.ts';
 import { runHealth } from './commands/health.ts';
 import { runMcp } from './commands/mcp.ts';
+import { runMatrix } from './commands/matrix.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
 import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
@@ -209,6 +210,7 @@ function printHelp(): void {
 		'                                  Docker bridge if loopback fails), matrix-bot + mcp service',
 		'                                  state, and canary freshness. Needs no config or DB.',
 		'  mcp                             MCP server on/off switch: show the morphit-mcp service state',
+		'  matrix [set <mxid>|clear|test]  Matrix alert username: set/edit/clear it (bot auto starts/stops); test DMs you a sample alert',
 		'                                  and enable+start or stop+disable it (the AI-agent orderbook',
 		'                                  surface). Read-only + non-custodial; on by default.',
 		'  status                          Operator dashboard at a glance',
@@ -588,6 +590,24 @@ async function main(): Promise<number> {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {
 			return await runMcp({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `matrix` — set/edit/clear the operator's Matrix alert username and
+	// auto start/stop the morphit-matrix-bot service to match. Touches
+	// only the bot's env file + systemctl (no DB, no morphit.config.env),
+	// so it lives in the pre-DB group alongside mcp/ssl/bunkerweb/health.
+	if (args.subcommand === 'matrix') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runMatrix({
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled
