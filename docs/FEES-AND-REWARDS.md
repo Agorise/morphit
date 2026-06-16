@@ -26,7 +26,7 @@ fee-recipient account.
 ### 1. Listing fee — paid per posted order
 
 - **Default: 60 BLURT (~$0.12 at BLURT ≈ $0.002)**
-- Source: `apps/indexer/src/config/index.ts` line 395
+- Source: `apps/indexer/src/config/index.ts` line 723
   (`MORPHIT_INDEXER_FEE_BASE_BLURT.default(60)`)
 - Sybil tier multiplier scales for prolific posters within 24h:
   4th order = 1×, 5th = 2×, 6th = 4×, 7th+ = 8×.  See
@@ -159,7 +159,7 @@ registration after first config.
 - **Cost: ~100 BLURT (~$0.20) per new user**, set by Blurt
   witness consensus (subject to change without notice on the
   chain side).
-- Source: `apps/relay/src/config/index.ts` line ~166–236
+- Source: `apps/relay/src/config/index.ts` line 296
   (operator-tunable mirror of chain `account_creation_fee`)
 - Source: `apps/relay/src/blurt/client.ts`
   `broadcastAccountCreate()` — the relay's active key signs and
@@ -173,7 +173,7 @@ registration after first config.
 ### 2. Welcome bonus — paid to new users on their first completed trade
 
 - **20 BLURT total: 10 BLURT liquid + 10 BLURT vesting**
-- Source: `apps/indexer/src/indexer/handlers/feedback.ts` lines 365–366
+- Source: `apps/indexer/src/indexer/handlers/feedback.ts` lines 435–436
   ```
   ($1, 'liquid',  10, 'welcome_bonus_liquid',  $2),
   ($1, 'vesting', 10, 'welcome_bonus_vesting', $2)
@@ -183,10 +183,16 @@ registration after first config.
   (idempotent UPSERT into `accounts.first_trade_complete_at`).
 - Bonus is queued in `relay_pending_transfers`; the relay
   drainer picks it up and broadcasts the actual transfer.
-- The "vesting" half delegates to vested BLURT, which earns
-  the recipient BP (Blurt Power, the chain's voting/social
-  weight token).  Vesting BLURT is still BLURT; it's just
-  staked.  Roughly 10 BLURT vesting ≈ 13 BP at current ratios.
+- The "vesting" half is powered up into vested BLURT — a
+  `transfer_to_vesting` op (the relay drainer's `kind: 'vesting'`
+  branch calls `broadcastTransferToVesting`), so the recipient
+  **owns** it; this is NOT a delegation (delegations are the
+  separate `kind: 'delegation'` → `delegate_vesting_shares` path
+  used by the 1-BP first-fee reward and the loyalty milestones
+  below).  Vested BLURT earns the recipient BP (Blurt Power, the
+  chain's voting/social weight token).  Vesting BLURT is still
+  BLURT; it's just staked.  Roughly 10 BLURT vesting ≈ 13 BP at
+  current ratios.
 - Paid by the **relay** account, drawn from accumulated
   listing-fee revenue accumulated by the operator's relay
   balance.
@@ -211,7 +217,7 @@ registration after first config.
 | 10,000 BLURT | 1,000 BP |
 | **Total at top tier** | **1,260 BP** |
 
-- Source: `apps/indexer/src/indexer/loyalty.ts` lines 25–33
+- Source: `apps/indexer/src/indexer/loyalty.ts` lines 28–36
   (`LOYALTY_MILESTONES` constant array)
 - Tracked by **cumulative BLURT-denominated fees paid**, NOT trade
   count.  A user paying high fees crosses milestones faster.

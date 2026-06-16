@@ -96,6 +96,8 @@ Offline alternative: `docs/NEW-ISSUE-FOUND.md` (plain Markdown copy of the bug-r
 
 AGPL-3.0-only. Every operator running a modified instance must make their source available to their users. See [`LICENSE`](LICENSE).
 
+Third-party dependencies are used under their own licenses (overwhelmingly permissive — MIT/ISC/Apache-2.0/BSD); see [`THIRD-PARTY-LICENSES`](THIRD-PARTY-LICENSES.md). Note that the Blurt client `@beblurt/dblurt` carries a `BSD-3-Clause-No-Military-License` (a no-military-use restriction) — disclosed there for operators and redistributors.
+
 ---
 
 *Don't trust the project's marketing — verify it. Every claim in `MORPHIT-BRAG-LIST.md` points at code, an ADR, or a smoke that proves it. If you find one that doesn't, open an issue.*

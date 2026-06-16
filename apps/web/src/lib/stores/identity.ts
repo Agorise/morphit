@@ -38,7 +38,7 @@
 import { writable, derived, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { decryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
-import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/keygen';
+import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/identity-core';
 import { KEYSTORE_ENVELOPE_STORAGE_KEY } from '$crypto/persistentKeystore';
 import {
 	PAIRED_SESSION_STORAGE_KEY,

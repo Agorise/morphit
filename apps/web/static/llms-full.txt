@@ -744,7 +744,7 @@ Every Morphit order costs a small listing fee — $0.25 base if paid in BTC or X
 
 **For Blurt-paid listing fees: 90% goes to you, 10% goes to the Morphit treasury.**
 
-Yes, you read that right. Ninety percent. The operator who attracted the order keeps the lion's share. The 10% the project keeps covers the welcome bonus (10 BP delegated to every new trader after their first trade), the loyalty milestone delegations (up to 1,000 BP for active traders), and the relay's account-creation costs (~100 Blurt per new signup, on Morphit's tab). Without a small slice flowing back to the project, that whole onboarding economy can't sustain itself — and your instance benefits from a larger network of trained, account-funded users.
+Yes, you read that right. Ninety percent. The operator who attracted the order keeps the lion's share. The 10% the project keeps covers the welcome bonus (10 Blurt + 10 BP granted to every new trader after their first trade), the loyalty milestone delegations (up to 1,000 BP for active traders), and the relay's account-creation costs (~100 Blurt per new signup, on Morphit's tab). Without a small slice flowing back to the project, that whole onboarding economy can't sustain itself — and your instance benefits from a larger network of trained, account-funded users.
 
 **For BTC-paid and XMR-paid listing fees: 100% flows to the Morphit treasury, 0% to operators.**
 

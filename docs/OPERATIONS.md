@@ -2809,7 +2809,45 @@ For operators picking Matrix as their alert channel, the morphit
 repo ships a turnkey sidecar at `apps/matrix-bot/` that implements
 Option 1 above with a tier-aware classifier.  Same shipping pattern
 as `ops/bunkerweb/`, `ops/nginx/`, `ops/systemd/`, etc. — copy + edit
-+ `systemctl enable --now morphit-matrix-bot`.
+the env file, then activate with `morphit-ops matrix set <mxid>`.
+
+**Lifecycle (`morphit-ops matrix`) — installed by default, runs only when configured:**
+
+The matrix-bot is installed by default but stays cleanly inert until you
+give it an alert username, so there is nothing to run (or watch) on an
+instance that doesn't use Matrix.  Manage it with one command instead of
+a raw `systemctl`:
+
+- `morphit-ops matrix set @you:matrix.org` — writes the alert MXID to
+  `/etc/morphit/matrix-bot.env` **and** enables + (re)starts the bot. The
+  MXID must be a personal `@user:server` — a `#room:server` alias is
+  rejected outright (routing private alerts to a public room would leak
+  security telemetry). Comma-separated multiple recipients are allowed
+  (vacation coverage). The bot also needs `MORPHIT_MATRIX_BOT_ACCESS_TOKEN`
+  in that file; if it's missing, the username is saved but the bot stays
+  stopped with a hint, rather than starting and crash-looping on the
+  missing token.
+- `morphit-ops matrix clear` — empties the MXID and stops + disables the bot.
+- `morphit-ops matrix test` — asks the running bot to DM you a clearly
+  labelled one-off test alert, so you can confirm delivery actually works
+  in a single command (no journal/classifier dance). It refuses with an
+  actionable hint if no username/token is set or the bot isn't running,
+  and it triggers the bot's OWN client over loopback rather than opening a
+  second Matrix client — the test DM is a real encrypted alert, identical
+  to a genuine one. See "Verifying end-to-end delivery" below.
+- `morphit-ops matrix` (or the menu → **Check & operate → Matrix alerts**)
+  — shows the username, readiness, and service state, and offers to
+  start/stop the bot if it's out of sync.
+
+`morphit-ops upgrade` re-checks the alert username on every upgrade and
+brings the service into line automatically (enable + restart when set,
+disable + stop when cleared) — so a node that gained or lost its Matrix
+username between upgrades lands in the right state with no manual step.
+The single source of truth is `/etc/morphit/matrix-bot.env`: the bot reads
+its config there via the systemd `EnvironmentFile=` and does NOT read
+`morphit.config.env`. (Fresh Ansible nodes get the service user, state
+dir, unit, and env file laid down by the `matrix_bot` role; the manual
+install steps below do the same by hand.)
 
 **What it does:**
 
@@ -2883,7 +2921,9 @@ sudo install -m 0640 -o root -g morphit-matrix-bot /dev/stdin \
      /etc/morphit/matrix-bot.env <<'ENV'
 MORPHIT_MATRIX_BOT_HOMESERVER=https://matrix.org
 MORPHIT_MATRIX_BOT_ACCESS_TOKEN=<bot-account-access-token>
-MORPHIT_MATRIX_BOT_ALERT_MXID=@you:matrix.org,@your-backup:matrix.org
+# Leave MORPHIT_MATRIX_BOT_ALERT_MXID empty here — set it in step 6 with
+# `morphit-ops matrix set`, which writes it AND enables + starts the bot.
+MORPHIT_MATRIX_BOT_ALERT_MXID=
 # Optional:
 # MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS=morphit-indexer.service,morphit-relay.service
 # MORPHIT_MATRIX_BOT_DIGEST_SEND_TIME_UTC=09:00
@@ -2912,16 +2952,24 @@ sudo -u morphit npm ci --workspaces --include-workspace-root \
 test -d /opt/morphit/node_modules/better-sqlite3/build \
     || (echo "better-sqlite3 native build did not produce build/ — see logs"; exit 1)
 
-# 5. Install + enable the systemd unit.
+# 5. Install the systemd unit (do NOT `enable --now` it by hand — step 6
+#    does that as part of setting your alert username, so the service
+#    state always tracks whether a username is configured).
 sudo cp /opt/morphit/ops/systemd/morphit-matrix-bot.service \
         /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now morphit-matrix-bot
 
-# 6. Verify.
+# 6. Set your alert username — writes MORPHIT_MATRIX_BOT_ALERT_MXID into
+#    the env file AND enables + starts the bot.  Personal @user:server
+#    MXID only (a #room alias is refused — it would leak private alerts).
+morphit-ops matrix set @you:matrix.org
+#    Later:  morphit-ops matrix clear   empties it + stops/disables the bot
+#            morphit-ops matrix         shows username, readiness, state
+
+# 7. Verify.
 sudo systemctl status morphit-matrix-bot
 sudo journalctl -u morphit-matrix-bot --since '5 minutes ago'
-# Expect: "morphit-matrix-bot ready." in the logs.
+# Expect: "morphit-matrix-bot starting." in the logs (recipients=N).
 ```
 
 **Vacation coverage:** put a comma-separated list of MXIDs in
@@ -2934,6 +2982,72 @@ restart the unit, and the bot logs what it WOULD have sent
 without actually posting to Matrix.  Useful for verifying the
 classifier sees your indexer/relay log lines correctly before
 going live.
+
+**Verifying end-to-end delivery (one-time check).** The quickest check is
+**`morphit-ops matrix test`** — it asks the running bot to DM you a clearly
+labelled test alert through its real client (token + DM creation + delivery)
+and prints exactly what happened, so most operators need nothing more. The
+manual runbook below *additionally* exercises the **journal → classifier**
+half of the path — worth doing if you've customized the watch-list or suspect
+a `_SYSTEMD_UNIT` tagging problem. DRY_RUN above proves the classifier sees
+lines; both of the checks here prove a real DM actually reaches you.  The bot
+only acts on journal entries carrying `_SYSTEMD_UNIT=<watched-unit>`, and
+`emit()` (ops/scripts/lib/emit.sh) guarantees that by writing through each
+sidecar service's own `StandardOutput=journal` stream — so this test fires a
+throwaway service that emits one CRITICAL through that exact path:
+
+```bash
+# a) Temporarily have the bot ALSO watch a throwaway unit, then restart.
+#    (MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS *replaces* the default list, so
+#    list the defaults you rely on plus morphit-alerttest.service.)
+sudo sed -i '/^MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS=/d' /etc/morphit/matrix-bot.env
+echo 'MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS=morphit-indexer.service,morphit-relay.service,morphit-host-monitor.service,morphit-smartctl-monitor.service,morphit-fail2ban-monitor.service,morphit-mdadm-monitor.service,morphit-dmesg-monitor.service,morphit-trivy-monitor.service,morphit-postfix-monitor.service,morphit-certbot-monitor.service,morphit-apt-monitor.service,morphit-compose-monitor.service,morphit-systemd-monitor.service,morphit-journald-monitor.service,morphit-alerttest.service' | sudo tee -a /etc/morphit/matrix-bot.env >/dev/null
+sudo systemctl restart morphit-matrix-bot
+
+# b) A throwaway emit script + oneshot service (a script file avoids unit-file
+#    quoting pitfalls and exercises the real emit.sh path):
+sudo tee /usr/local/bin/morphit-alerttest.sh >/dev/null <<'SCRIPT'
+#!/bin/bash
+. /opt/morphit/ops/scripts/lib/emit.sh
+export MORPHIT_EMIT_MODULE=tamper MORPHIT_EMIT_TAG=morphit-alerttest
+emit info bundle_hash_mismatch '{"note":"delivery test"}'
+SCRIPT
+sudo chmod +x /usr/local/bin/morphit-alerttest.sh
+sudo tee /etc/systemd/system/morphit-alerttest.service >/dev/null <<'UNIT'
+[Unit]
+Description=Morphit matrix-bot delivery test
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/morphit-alerttest.sh
+UNIT
+sudo systemctl daemon-reload
+sudo systemctl start morphit-alerttest.service
+# -> a CRITICAL DM should arrive within seconds.  The FIRST message from the
+#    bot account lands as a message request / invite — accept it in your client.
+
+# c) Tear down the test (remove the unit + script + the temporary watch line):
+sudo rm -f /etc/systemd/system/morphit-alerttest.service /usr/local/bin/morphit-alerttest.sh
+sudo sed -i '/^MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS=.*morphit-alerttest/d' /etc/morphit/matrix-bot.env
+sudo systemctl daemon-reload
+sudo systemctl restart morphit-matrix-bot
+```
+
+If no DM arrives, check `journalctl -u morphit-matrix-bot` for a
+`failed to deliver` line (a Matrix/token error, shown verbatim); a
+silent bot log plus a delivered DM is the success case (the bot only
+logs delivery *failures*).  Tip: **`morphit-ops matrix test`** (above) is
+the one-command version of the Matrix-delivery half of this check — it
+triggers the bot's own client over its loopback healthcheck endpoint, so the
+DM it sends is identical to a real alert.
+
+**Why stdout, not `systemd-cat`:** `emit()` writes to the service's own
+journal stream rather than piping to `systemd-cat`, because on some
+systemd/journald builds `systemd-cat`'s entries arrive with no
+`_SYSTEMD_UNIT` (the stream is opened by a short-lived helper process
+whose cgroup journald can't resolve) — which would make the bot's
+`-u` filter silently skip every shell-sidecar alert.  Routing through
+the service stream guarantees the unit tag.  (`emit()` still falls back
+to `systemd-cat` when run outside a journal-connected service.)
 
 **For operators who prefer email/Discord/PagerDuty instead:** the
 generic Option 1 advice above still applies.  matrix-bot is the

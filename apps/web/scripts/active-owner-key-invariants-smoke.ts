@@ -59,13 +59,16 @@ function pass(msg: string): void {
 
 // ─── Scenario 1: LiveIdentity exposes only public halves ─────
 function checkLiveIdentityShape(): void {
-	const keygenPath = path.join(APP_WEB_SRC, 'lib/crypto/keygen.ts');
-	const src = readFileSync(keygenPath, 'utf8');
+	// LiveIdentity moved from keygen.ts to identity-core.ts in the cp271
+	// baseline-bloat refactor (keygen.ts re-exports it).  Check it where
+	// it is now DEFINED.
+	const corePath = path.join(APP_WEB_SRC, 'lib/crypto/identity-core.ts');
+	const src = readFileSync(corePath, 'utf8');
 
 	// Find the LiveIdentity interface body
 	const m = src.match(/export interface LiveIdentity\s*\{([\s\S]*?)^\}/m);
 	if (!m) {
-		fail('keygen.ts: cannot find LiveIdentity interface body');
+		fail('identity-core.ts: cannot find LiveIdentity interface body');
 		return;
 	}
 	const body = m[1] ?? '';
@@ -105,6 +108,10 @@ function checkEntryPointsToActiveOwner(): void {
 	const allowedFiles = new Set([
 		path.join(APP_WEB_SRC, 'lib/crypto/keystore.ts'),
 		path.join(APP_WEB_SRC, 'lib/crypto/keygen.ts'),
+		// cp271 moved the sanctioned toLiveIdentity/wipeLiveIdentity helpers
+		// here from keygen.ts — same code (memzeroes private keys, exposes
+		// only public halves), just relocated.
+		path.join(APP_WEB_SRC, 'lib/crypto/identity-core.ts'),
 		path.join(APP_WEB_SRC, 'lib/crypto/runWithActiveKey.ts'),
 		path.join(APP_WEB_SRC, 'lib/crypto/changePassword.ts')
 	]);

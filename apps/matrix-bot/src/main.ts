@@ -20,12 +20,12 @@
  * data flow.
  */
 
-import { createServer } from 'node:http';
 import { parseConfig } from './config.ts';
 import { openState } from './state.ts';
 import { createRateLimiter } from './rateLimit.ts';
-import { classify, renderAlertBody } from './classifier.ts';
+import { classify, renderAlertBody, renderTestAlertBody } from './classifier.ts';
 import { createDryRunSender, createMatrixSender, type MatrixSender } from './matrix.ts';
+import { createHealthServer } from './health.ts';
 import { tailJournalctl } from './journalctl.ts';
 import { startDigestScheduler } from './digest.ts';
 
@@ -73,10 +73,14 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// Healthcheck endpoint — systemd readiness probe.
-	const health = createServer((_req, res) => {
-		res.writeHead(200, { 'Content-Type': 'application/json' });
-		res.end(JSON.stringify({ ok: true, ts: new Date().toISOString() }));
+	// Healthcheck endpoint — systemd readiness probe + the `/self-test`
+	// route that `morphit-ops matrix test` POSTs to (DMs a labelled test
+	// alert to the configured recipients via this same client).
+	const health = createHealthServer({
+		alertMxids: config.alertMxids,
+		dryRun: config.dryRun,
+		sender,
+		renderTestBody: renderTestAlertBody
 	});
 	health.listen(config.healthcheckPort, '127.0.0.1');
 

@@ -2620,7 +2620,11 @@ const SCENARIOS: readonly Scenario[] = [
 			'Matrix alerting + public contact (recommended)',
 			'/etc/morphit/matrix-bot.env',
 			'MORPHIT_MATRIX_BOT_ACCESS_TOKEN',
-			'morphit-matrix-bot.service'
+			// cp272 replaced the raw `systemctl enable morphit-matrix-bot.service`
+			// step with the one-command lifecycle switch; cp275 added the
+			// one-command delivery self-test.  Assert the walkthrough uses both.
+			'morphit-ops matrix set',
+			'morphit-ops matrix test'
 		],
 		mustNotHave: ["if you don't use Matrix"]
 	},

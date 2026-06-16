@@ -12,10 +12,12 @@ WorkingDirectory=/opt/morphit/apps/matrix-bot
 
 # Environment file — NEVER commit a populated version.  Operator
 # fills MORPHIT_MATRIX_BOT_HOMESERVER, MORPHIT_MATRIX_BOT_ACCESS_TOKEN,
-# and MORPHIT_MATRIX_BOT_ALERT_MXID at deploy time.  The bot also
-# loads morphit.config.env from the repo root (via the operator-
-# config allowlist) so the MXID configured at `morphit-ops init`
-# time flows through automatically.
+# and MORPHIT_MATRIX_BOT_ALERT_MXID at deploy time.  This file is the
+# bot's ONLY config source — it does NOT read morphit.config.env (the
+# operator-config loader).  The MXID it reads is the one written here by
+# `morphit-ops matrix set <mxid>`, which also enables + starts this unit;
+# `morphit-ops matrix clear` empties it and stops the unit; and
+# `morphit-ops upgrade` re-checks it on every upgrade.
 #
 # Leading `-` makes the file OPTIONAL — systemd won't refuse to
 # start the unit if /etc/morphit/matrix-bot.env doesn't exist.
@@ -25,7 +27,7 @@ EnvironmentFile=-/etc/morphit/matrix-bot.env
 
 # tsx — same pattern as indexer/relay; no build step.
 ExecStart=/usr/bin/env node --enable-source-maps \
-    node_modules/tsx/dist/cli.mjs src/main.ts
+    /opt/morphit/node_modules/tsx/dist/cli.mjs src/main.ts
 
 KillSignal=SIGTERM
 TimeoutStopSec=15
@@ -45,7 +47,13 @@ StandardError=journal
 # Mirrors the indexer/relay hardening posture.
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/morphit-matrix-bot /var/log/morphit
+# The bot logs to the journal (StandardOutput/StandardError=journal),
+# so it only needs its state dir writable.  (It does NOT write to
+# /var/log/morphit — that path was previously listed here by analogy
+# with the indexer/relay, but the bot has no file logging, and listing
+# a non-existent path makes systemd fail unit start with 226/NAMESPACE
+# on hosts where the indexer/relay haven't created /var/log/morphit.)
+ReadWritePaths=/var/lib/morphit-matrix-bot
 PrivateTmp=true
 
 NoNewPrivileges=true
@@ -62,7 +70,14 @@ MemoryDenyWriteExecute=false
 
 LimitCORE=0
 ProtectProc=invisible
-ProcSubset=pid
+# NOTE: deliberately NOT setting `ProcSubset=pid` here, even though the
+# indexer/relay units do.  Those are *monitored* services; the matrix-bot's
+# job is to RUN `journalctl --follow`, and journalctl reads the boot id from
+# /proc/sys/kernel/random/boot_id.  ProcSubset=pid mounts /proc with
+# subset=pid, which hides /proc/sys — making journalctl fail with
+# "Failed to get boot id: No such file or directory" and the bot crash-loop.
+# /proc/sys remains read-only via ProtectKernelTunables=true (journalctl
+# only needs to read it), so dropping ProcSubset costs little hardening here.
 
 # Network — egress only to the Matrix homeserver.  Healthcheck
 # binds loopback only.

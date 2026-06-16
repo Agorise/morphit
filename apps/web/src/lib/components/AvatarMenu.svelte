@@ -45,7 +45,11 @@
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
 	import { backupVisited } from '$utils/backupVisited';
-	import { runExplicitLockExtras } from '$lib/chat/explicitLock';
+	// runExplicitLockExtras is dynamically imported in confirmLock() (cp271 byte
+	// budget): it pulls sign-out-only chat/trade cleanup (pubPin/tradeStatus/
+	// blurtVerify), and importing it statically dragged a chat-verify chunk
+	// (condenser_api.get_transaction) onto every page's baseline. It only runs
+	// on an explicit lock action, never at first paint.
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import ConfirmModal from './ConfirmModal.svelte';
 
@@ -206,6 +210,7 @@
 	 *  drafts around for the user who just walked away briefly. */
 	async function confirmLock(): Promise<void> {
 		showLockConfirm = false;
+		const { runExplicitLockExtras } = await import('$lib/chat/explicitLock');
 		runExplicitLockExtras();
 		lockSession();
 		await gotoLocale('/login');
