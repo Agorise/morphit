@@ -146,10 +146,23 @@ export function parseMatrixBotHealthcheckPort(text: string): number {
 	return Number.isInteger(n) && n > 0 && n < 65536 ? n : MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT;
 }
 
-/** Read the matrix-bot healthcheck port from the env file (default 9876). */
+/** Read the matrix-bot healthcheck port from the env file (default 9876).
+ *  Any failure to read the file — it is missing (ENOENT), or it exists but
+ *  is not readable by this process (EACCES: the env file is root-owned 0600
+ *  and `morphit-ops` is being run as a non-root user), or it is otherwise
+ *  unusable — falls back to the default port, exactly like a malformed /
+ *  out-of-range value does. The caller therefore always gets a usable port
+ *  and never an unhandled fs error. (An `existsSync` pre-check is not enough:
+ *  a present-but-unreadable file passes the existence test and then throws on
+ *  the read.) */
 export function readMatrixBotHealthcheckPort(path: string = MATRIX_BOT_ENV_PATH): number {
-	if (!existsSync(path)) return MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT;
-	return parseMatrixBotHealthcheckPort(readFileSync(path, 'utf-8'));
+	let text: string;
+	try {
+		text = readFileSync(path, 'utf-8');
+	} catch {
+		return MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT;
+	}
+	return parseMatrixBotHealthcheckPort(text);
 }
 
 /** True when the token field holds something that could plausibly be a

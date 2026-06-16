@@ -19,10 +19,13 @@
 import { runMatrix, type MatrixDeps, type MatrixSelfTestResult } from '../src/commands/matrix.ts';
 import {
 	parseMatrixBotHealthcheckPort,
+	readMatrixBotHealthcheckPort,
 	MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT,
 	type MatrixBotEnv
 } from '../src/lib/matrixBot.ts';
 import type { ServiceState } from '../src/commands/health.ts';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 let failures = 0;
 let n = 0;
@@ -69,6 +72,14 @@ const okResult: MatrixSelfTestResult = {
 	failed: []
 };
 const active = (): ServiceState => 'active';
+
+// A deliberately non-default port: the ready-path scenarios inject the port
+// reader so the smoke NEVER reads the real /etc/morphit/matrix-bot.env (which,
+// on a host that has the bot installed, is root-owned 0600 and unreadable by a
+// non-root CI runner — that EACCES crash is exactly what this guards against).
+// Using a non-default value also proves the injected reader's port is what
+// actually reaches the self-test POST, rather than a coincidental 9876.
+const TEST_PORT = 12345;
 
 async function main(): Promise<void> {
 	console.log('matrix-test-command-smoke');
@@ -130,6 +141,7 @@ async function main(): Promise<void> {
 		const { code, out } = await run({
 			readEnv: () => env(),
 			readState: active,
+			readHealthcheckPort: () => TEST_PORT,
 			selfTest: async (p) => {
 				posted = true;
 				portUsed = p;
@@ -138,7 +150,7 @@ async function main(): Promise<void> {
 		});
 		check('happy: exit 0', code === 0, `code=${code}`);
 		check('happy: POSTed the self-test', posted === true);
-		check('happy: used the default healthcheck port 9876', portUsed === 9876, `port=${portUsed}`);
+		check('happy: threaded the configured healthcheck port to the POST', portUsed === TEST_PORT, `port=${portUsed}`);
 		check(
 			'happy: confirms delivery + invite-acceptance hint',
 			/Sent a test alert/.test(out) && /invite/.test(out)
@@ -150,6 +162,7 @@ async function main(): Promise<void> {
 		const { code, out } = await run({
 			readEnv: () => env(),
 			readState: active,
+			readHealthcheckPort: () => TEST_PORT,
 			selfTest: async () => ({ ok: true, dryRun: true, recipients: 1, sent: [], failed: [] })
 		});
 		check('dry-run: exit 0', code === 0);
@@ -162,6 +175,7 @@ async function main(): Promise<void> {
 		const { code, out } = await run({
 			readEnv: () => env(),
 			readState: active,
+			readHealthcheckPort: () => TEST_PORT,
 			selfTest: async () => ({
 				ok: false,
 				dryRun: false,
@@ -180,8 +194,9 @@ async function main(): Promise<void> {
 		const { code, out } = await run({
 			readEnv: () => env(),
 			readState: active,
+			readHealthcheckPort: () => TEST_PORT,
 			selfTest: async () => {
-				throw new Error('connect ECONNREFUSED 127.0.0.1:9876');
+				throw new Error(`connect ECONNREFUSED 127.0.0.1:${TEST_PORT}`);
 			}
 		});
 		check('conn-err: exit 1', code === 1);
@@ -217,6 +232,26 @@ async function main(): Promise<void> {
 		'port: falls back on out-of-range',
 		parseMatrixBotHealthcheckPort('MORPHIT_MATRIX_BOT_HEALTHCHECK_PORT=99999\n') ===
 			MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT
+	);
+
+	// ─── healthcheck-port READER: never throws on a file it can't read ──
+	// Regression for the cp277 CI failure: readMatrixBotHealthcheckPort used an
+	// existsSync pre-check, which a present-but-unreadable file passes — so the
+	// subsequent readFileSync threw EACCES (matrix-bot.env is root-owned 0600 and
+	// the forgejo runner is non-root), crashing the whole smoke. Both a missing
+	// file (ENOENT) and an unreadable one must fall back to the default port.
+	// We can't portably force EACCES while running as root, so we read a
+	// directory path (readFileSync → EISDIR), which throws for every uid and
+	// exercises the same catch.
+	check(
+		'port-read: missing file falls back to the default (no throw)',
+		readMatrixBotHealthcheckPort(
+			join(tmpdir(), `morphit-no-such-${process.pid}-${Date.now()}.env`)
+		) === MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT
+	);
+	check(
+		'port-read: unreadable file (read throws) falls back to the default (no throw)',
+		readMatrixBotHealthcheckPort(tmpdir()) === MATRIX_BOT_DEFAULT_HEALTHCHECK_PORT
 	);
 
 	if (failures > 0) {
