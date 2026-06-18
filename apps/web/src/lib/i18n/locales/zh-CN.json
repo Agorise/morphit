@@ -2000,7 +2000,7 @@
     "no_account_body": "在上方挑个酷炫的用户名就能创建一个，真的就这么简单。",
     "register_cta": "创建新账户",
     "checking": "正在检查你的会话…",
-    "import_existing": "用 助记词登录",
+    "import_existing": "用 助记词、json 或 posting 密钥登录",
     "unlock": {
       "password_required": "输入密码以解锁。",
       "wrong_password": "该密码与你的 keystore 不匹配。重试,或用 助记词登录。",
@@ -2238,11 +2238,14 @@
         "warning_heading": "这张纸就是您的账户。",
         "warning_body": "任何找到这12个单词的人都可以拿走您 Morphit 账户中的所有内容。将此纸存放在只有您能拿到的地方 — 保险箱、上锁的抽屉或银行保险柜。不要拍照。不要发邮件。不要存储在云笔记中。",
         "instructions": "如果您失去对设备的访问权限,请在新设备上的 Morphit 导入流程中输入这12个单词以恢复您的账户。"
-      }
+      },
+      "keys_title": "你账户的四个密钥",
+      "keys_intro": "它们让你能在其他 Blurt 应用中使用此账户。你的 12 个单词仍是你的主要备份。",
+      "keys_reveal_button": "显示我的密钥"
     },
     "import": {
       "title": "导入已有密钥",
-      "body": "已经有 Blurt 账户?选你密钥的存放方式。如果从没用过 Blurt,返回上一步去注册一个新账户。",
+      "body": "已经有 Blurt 账户?选你密钥的存放方式。如果从没用过 Blurt,[[返回上一步]]去注册一个新账户。",
       "seed_tab_label": "12 词助记词",
       "keyfile_tab_label": "密钥文件 (.json)",
       "seed_label": "粘贴你的 12 词助记词",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Blurt 发帖密钥",
         "warning_title": "仅 Posting 密钥导入",
-        "warning_body": "如果你只有 posting WIF(没有主密码或助记词),粘贴到这里。我们会用你选择的密码在此设备上加密它。你可以阅读、发帖和交易 — 但不能更改账户密钥(那需要 active 或 owner 密钥)。",
+        "warning_body": "如果你没有 12 个单词的助记词或用于导入账户的 .json 文件，直接把你的 Blurt posting 密钥粘贴到这里。我们会用你选择的密码在此设备上加密它。你可以阅读、发帖和交易 — 但不能更改账户密钥（那需要像 blurtwallet.com 这样的钱包）。",
         "account_label": "你的 Blurt 账户名",
-        "account_placeholder": "alice",
+        "account_ok": "没问题！",
         "account_hint": "不带 @。我们将检查此账户是否存在于 Blurt 链上,以及 posting 密钥是否匹配。",
         "wif_label": "Posting 私钥 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
@@ -2285,15 +2288,17 @@
             "active": "那是你的 ACTIVE 密钥。Morphit 只需要 POSTING — 请粘贴那个。",
             "owner": "那是你的 OWNER 密钥。Morphit 只需要 POSTING — 请粘贴那个。(Owner 密钥授予对账户的完全控制权;不要粘贴到任何网站。)",
             "memo": "那是你的 MEMO 密钥。Morphit 需要 POSTING — 请粘贴那个。"
-          }
+          },
+          "master_password": "这看起来是你的 Blurt 主密码，而不是 POSTING 密钥。Morphit 从不使用主密码登录。请打开 blurtwallet.com → Permissions，复制你的 Posting Private Key（以 5 开头）。"
         }
       },
       "error": {
-        "seed_word_count": "助记词必须是 12 个单词。",
+        "seed_word_count": "Blurt 助记词恰好是 12 个单词——你输入了 {count} 个。请确保 12 个单词齐全，每个之间用一个空格分隔。",
         "seed_invalid": "该助记词无效。检查单词是否有拼写错误后重试。",
         "keyfile_password_wrong": "Keyfile 密码错误。请重试。",
         "keyfile_corrupt": "Keyfile 损坏或不是有效的 Morphit keyfile。",
-        "generic": "导入失败。检查输入后重试。"
+        "generic": "导入失败。检查输入后重试。",
+        "network": "无法连接到 Blurt 网络。请检查你的网络连接后重试。"
       },
       "remember_me": {
         "heading": "已登录 — 还有一个选择",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "无法生成新密钥。刷新页面。",
       "keyfile_download_failed": "无法准备 keyfile 下载。请重试。",
-      "quiz_submit_failed": "测验后无法继续。请重试。"
+      "quiz_submit_failed": "测验后无法继续。请重试。",
+      "keys_reveal_failed": "暂时无法显示你的密钥。请重试。"
     },
     "review": {
       "back_button": "重新开始",
@@ -4307,5 +4313,31 @@
     "enabled": "已完成——有新消息时会通知你。",
     "error": "无法开启通知。你可以在“设置 → 通知”中启用。",
     "privacy_note": "使用浏览器的私密通知——无需邮箱或电话号码，随时可以关闭。"
+  },
+  "backup_keys_panel": {
+    "warning_title": "请保密",
+    "warning_body": "任何拥有下方任一私钥的人都能完全控制你的账户和资金。绝不要分享给任何人——不要给 Morphit、不要给客服、不要给朋友、不要给任何网站。请把它们保存在只有你能访问的地方，例如密码管理器或妥善保管的纸张。",
+    "intro": "这是你 Blurt 账户的四个密钥。你的 12 个单词是你的 Morphit 备份；这些密钥让你能在 blurtwallet.com 等其他 Blurt 应用中使用同一账户。",
+    "role": {
+      "owner": "Owner 密钥",
+      "active": "Active 密钥",
+      "posting": "Posting 密钥",
+      "memo": "Memo 密钥"
+    },
+    "role_hint": {
+      "owner": "对账户的完全控制权。请离线保存。",
+      "active": "转移资金并更改账户设置。",
+      "posting": "发帖、投票并登录 Morphit。",
+      "memo": "加密并读取私信。"
+    },
+    "public_label": "公钥",
+    "private_label": "私钥（WIF）",
+    "copy": "复制",
+    "copied": "已复制",
+    "download": "下载为文本文件",
+    "downloaded": "已保存",
+    "no_master_password": "没有主密码。Morphit 从不创建或使用主密码——你的 12 个单词和这些密钥就是全部。",
+    "txt_warning": "请保密。任何拥有下方私钥的人都能完全控制你的账户和资金。绝不要分享给任何人，绝不要输入到你不信任的网站，也绝不要通过消息或电子邮件发送。",
+    "txt_footer": "你的 12 个单词助记词是你的 Morphit 备份。这四个密钥让你能在其他 Blurt 工具中使用此账户。没有主密码。"
   }
 }

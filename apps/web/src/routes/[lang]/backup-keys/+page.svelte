@@ -11,6 +11,9 @@
 	import { markBackupVisited } from '$utils/backupVisited';
 	import { envelopeToBlob, decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import { mnemonicForBackup, wipeFullIdentity } from '$crypto/keygen';
+	import { deriveBackupKeys, type BackupKey } from '$crypto/keyExport';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import KeyBackupPanel from '$components/KeyBackupPanel.svelte';
 
 	let downloading = $state(false);
 	let downloaded = $state(false);
@@ -28,7 +31,7 @@
 		| { kind: 'idle' }
 		| { kind: 'prompting' }
 		| { kind: 'verifying' }
-		| { kind: 'shown'; words: readonly string[] }
+		| { kind: 'shown'; words: readonly string[]; keys: readonly BackupKey[]; account: string }
 		| { kind: 'error'; messageKey: string };
 
 	let seedPhase = $state<SeedPhase>({ kind: 'idle' });
@@ -106,12 +109,21 @@
 				return;
 			}
 			const mnemonic = mnemonicForBackup(id);
+			// Derive the four role keys (public BLT + private WIF) from the
+			// same decrypted identity, BEFORE the wipe below — this is the
+			// portable, paste-into-any-Blurt-tool form of the account.
+			const keys = await deriveBackupKeys(id);
 			// Wipe the FullIdentity copy now that we have the
 			// mnemonic.  Per Part 67 audit, the mnemonic string
 			// returned here is a JS-immutable; this wipe covers
 			// the seedBytes / keypairs only.
 			wipeFullIdentity(id);
-			seedPhase = { kind: 'shown', words: Object.freeze(mnemonic.split(' ')) };
+			seedPhase = {
+				kind: 'shown',
+				words: Object.freeze(mnemonic.split(' ')),
+				keys: Object.freeze(keys),
+				account: getUserBlurtAccount() ?? ''
+			};
 			// Clear the password from component state immediately
 			// — same hygiene posture as login/+page.svelte and
 			// PayBlurtModal.
@@ -335,6 +347,13 @@
 									{/each}
 								</ol>
 							</div>
+
+							{#if seedPhase.keys.length > 0}
+								<div class="mt-6">
+									<KeyBackupPanel keys={seedPhase.keys} accountName={seedPhase.account} />
+								</div>
+							{/if}
+
 							<div class="mt-3">
 								<BusyButton variant="secondary" onclick={hideSeed}>
 									{$_('backup_keys.show_seed.hide')}

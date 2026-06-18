@@ -27,6 +27,7 @@
 		type LiveIdentity
 	} from '$crypto/keygen';
 	import { encryptIdentity, envelopeToBlob } from '$crypto/keystore';
+	import { deriveBackupKeys, type BackupKey } from '$crypto/keyExport';
 	import { writeKeystoreMode, writeEnvelope } from '$crypto/persistentKeystore';
 	import { identiconDataUri } from '$crypto/identicon';
 	import { bootFromEnvelope } from '$stores/identity';
@@ -63,9 +64,32 @@
 	// cp165: lazy SeedBackupPrint (only rendered after Show Seed click)
 	const loadSeedBackupPrint = () =>
 		import('$components/SeedBackupPrint.svelte').then((m) => m.default);
+	// Same byte-budget treatment for the 4-key backup panel — only pulled
+	// in once the user clicks "show my keys" in review.
+	const loadKeyBackupPanel = () =>
+		import('$components/KeyBackupPanel.svelte').then((m) => m.default);
 	const loadConfirmModal = () =>
 		import('$components/ConfirmModal.svelte').then((m) => m.default);
 	let showSeed = $state(false);
+	// 4-key backup reveal. backupKeys holds the WIF private keys (sensitive)
+	// only after the user explicitly clicks reveal, and is cleared when they
+	// leave review (proceedToConfirm / restart) so the strings don't linger.
+	let showKeys = $state(false);
+	let backupKeys = $state<BackupKey[]>([]);
+	let derivingKeys = $state(false);
+	async function revealKeys(): Promise<void> {
+		if (!full || derivingKeys) return;
+		derivingKeys = true;
+		try {
+			backupKeys = await deriveBackupKeys(full);
+			showKeys = true;
+		} catch (err) {
+			console.warn('[onboarding] key derivation failed:', err);
+			errorMsg = $_('onboarding.error.keys_reveal_failed');
+		} finally {
+			derivingKeys = false;
+		}
+	}
 	let password = $state('');
 	/** The user's keystore persistence choice. `null` means they
 	 *  haven't chosen yet — Continue button is disabled. */
@@ -150,6 +174,9 @@
 		if (!wroteDown || !understand || !full) return;
 		// Hide the seed UI now that we're quizzing the user on it.
 		showSeed = false;
+		// Drop the revealed private keys too — they were display-only.
+		showKeys = false;
+		backupKeys = [];
 		// Pick 3 random distinct indices from the 12-word seed.
 		quizIndices = pickRandomIndices(12, 3);
 		quizAnswers = ['', '', ''];
@@ -405,6 +432,8 @@
 		wroteDown = false;
 		understand = false;
 		showSeed = false;
+		showKeys = false;
+		backupKeys = [];
 		keystoreMode = null;
 		errorMsg = '';
 		quizIndices = [];
@@ -714,6 +743,31 @@
 								</div>
 							</div>
 						</details>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Your four Blurt keys: the portable, paste-into-any-Blurt-tool
+			     form of this account. Revealed only on demand (these are
+			     private keys), and cleared when the user advances past review. -->
+			<div
+				class="mt-6 rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900"
+			>
+				<h3 class="font-display text-lg font-bold">{$_('onboarding.backup.keys_title')}</h3>
+				<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
+					{$_('onboarding.backup.keys_intro')}
+				</p>
+				{#if showKeys}
+					{#await loadKeyBackupPanel() then KeyBackupPanel}
+						<div class="mt-4">
+							<KeyBackupPanel keys={backupKeys} />
+						</div>
+					{/await}
+				{:else}
+					<div class="mt-4">
+						<BusyButton variant="secondary" busy={derivingKeys} onclick={revealKeys}>
+							{$_('onboarding.backup.keys_reveal_button')}
+						</BusyButton>
 					</div>
 				{/if}
 			</div>

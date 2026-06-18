@@ -2000,7 +2000,7 @@
     "no_account_body": "Utwórz je powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
     "register_cta": "Utwórz nowe konto",
     "checking": "Sprawdzanie twojej sesji…",
-    "import_existing": "Zaloguj z frazą seed",
+    "import_existing": "Zaloguj z seed, json lub kluczem posting",
     "unlock": {
       "password_required": "Wpisz hasło, aby odblokować.",
       "wrong_password": "To hasło nie pasuje do twojego keystore'a. Spróbuj ponownie lub zaloguj się frazą seed.",
@@ -2238,11 +2238,14 @@
         "warning_heading": "Ten papier TO twoje konto.",
         "warning_body": "Każdy, kto znajdzie te 12 słów, może zabrać wszystko z twojego konta Morphit. Przechowuj ten papier tam, gdzie tylko ty możesz go znaleźć — w sejfie, zamkniętej szufladzie lub skrytce depozytowej. Nie rób zdjęcia. Nie wysyłaj e-mailem. Nie przechowuj w notatkach w chmurze.",
         "instructions": "Jeśli kiedykolwiek utracisz dostęp do swojego urządzenia, wpisz te 12 słów w proces importu Morphit na nowym urządzeniu, aby odzyskać konto."
-      }
+      },
+      "keys_title": "Twoje cztery klucze konta",
+      "keys_intro": "Pozwalają używać tego konta w innych aplikacjach Blurt. Twoje 12 słów wciąż jest główną kopią zapasową.",
+      "keys_reveal_button": "Pokaż moje klucze"
     },
     "import": {
       "title": "Zaimportuj istniejące klucze",
-      "body": "Masz już konto Blurt? Wybierz, jak masz zapisany klucz. Jeśli nigdy nie używałeś Blurta, wróć i utwórz nowe konto zamiast tego.",
+      "body": "Masz już konto Blurt? Wybierz, jak masz zapisany klucz. Jeśli nigdy nie używałeś Blurta, [[wróć]] i utwórz nowe konto zamiast tego.",
       "seed_tab_label": "Fraza 12 słów",
       "keyfile_tab_label": "Plik klucza (.json)",
       "seed_label": "Wklej frazę 12 słów",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Klucz posting Blurta",
         "warning_title": "Import tylko klucza posting",
-        "warning_body": "Jeśli masz tylko swój klucz WIF posting (bez hasła głównego lub frazy seed), wklej go tutaj. Zaszyfrujemy go na tym urządzeniu hasłem, które wybierzesz. Będziesz mógł czytać, publikować i handlować — ale nie zmieniać kluczy konta (do tego potrzebny jest klucz active lub owner).",
+        "warning_body": "Jeśli nie masz 12-wyrazowego seeda ani pliku .json do importu konta, po prostu wklej tutaj swój klucz posting Blurt. Zaszyfrujemy go na tym urządzeniu hasłem, które wybierzesz. Będziesz mógł czytać, publikować i handlować — ale nie zmieniać kluczy konta (do tego potrzebny jest portfel jak blurtwallet.com).",
         "account_label": "Twoja nazwa konta Blurt",
-        "account_placeholder": "alice",
+        "account_ok": "wygląda dobrze!",
         "account_hint": "Bez @. Sprawdzimy, czy konto istnieje na Blurt i czy klucz posting pasuje.",
         "wif_label": "Prywatny klucz posting (WIF)",
         "wif_placeholder": "5J… lub P5J…",
@@ -2285,15 +2288,17 @@
             "active": "To twój klucz ACTIVE. Morphit potrzebuje tylko POSTING — wklej ten.",
             "owner": "To twój klucz OWNER. Morphit potrzebuje tylko POSTING — wklej ten. (Klucze owner dają pełną kontrolę nad kontem; nigdzie ich nie wklejaj.)",
             "memo": "To twój klucz MEMO. Morphit potrzebuje POSTING — wklej ten."
-          }
+          },
+          "master_password": "To wygląda na Twoje hasło główne Blurt, a nie klucz POSTING. Morphit nigdy nie używa hasła głównego do logowania. Otwórz blurtwallet.com → Permissions i skopiuj swój Posting Private Key (zaczyna się od 5)."
         }
       },
       "error": {
-        "seed_word_count": "Fraza seed musi mieć 12 słów.",
+        "seed_word_count": "Fraza seed Blurt ma dokładnie 12 słów — wpisano {count}. Upewnij się, że jest wszystkie 12, każde oddzielone pojedynczą spacją.",
         "seed_invalid": "Ta fraza seed nie jest poprawna. Sprawdź literówki w słowach i spróbuj ponownie.",
         "keyfile_password_wrong": "Nieprawidłowe hasło keyfile. Spróbuj ponownie.",
         "keyfile_corrupt": "Keyfile jest uszkodzony lub nie jest prawidłowym keyfilem Morphit.",
-        "generic": "Import nieudany. Sprawdź wprowadzone dane i spróbuj ponownie."
+        "generic": "Import nieudany. Sprawdź wprowadzone dane i spróbuj ponownie.",
+        "network": "Nie udało się połączyć z siecią Blurt. Sprawdź połączenie i spróbuj ponownie."
       },
       "remember_me": {
         "heading": "Zalogowano — jeszcze jeden wybór",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "Nie można wygenerować nowych kluczy. Odśwież stronę.",
       "keyfile_download_failed": "Nie można przygotować keyfile do pobrania. Spróbuj ponownie.",
-      "quiz_submit_failed": "Nie można przejść dalej po quizie. Spróbuj ponownie."
+      "quiz_submit_failed": "Nie można przejść dalej po quizie. Spróbuj ponownie.",
+      "keys_reveal_failed": "Nie udało się teraz pokazać Twoich kluczy. Spróbuj ponownie."
     },
     "review": {
       "back_button": "Zacznij od nowa",
@@ -4307,5 +4313,31 @@
     "enabled": "Gotowe — powiadomimy Cię, gdy nadejdzie nowa wiadomość.",
     "error": "Nie udało się włączyć powiadomień. Możesz je włączyć w Ustawienia → Powiadomienia.",
     "privacy_note": "Używa prywatnych powiadomień przeglądarki — bez e-maila i numeru telefonu, możesz je wyłączyć w każdej chwili."
+  },
+  "backup_keys_panel": {
+    "warning_title": "Trzymaj je w tajemnicy",
+    "warning_body": "Każdy, kto ma jeden z poniższych kluczy prywatnych, może przejąć pełną kontrolę nad Twoim kontem i środkami. Nie udostępniaj ich nikomu — ani Morphit, ani wsparciu, ani znajomemu, ani żadnej stronie. Przechowuj je w miejscu dostępnym tylko dla Ciebie, np. w menedżerze haseł lub na papierze schowanym w bezpiecznym miejscu.",
+    "intro": "To cztery klucze Twojego konta Blurt. Twoje 12 słów to kopia zapasowa Morphit; te klucze pozwalają używać tego samego konta w innych aplikacjach Blurt, takich jak blurtwallet.com.",
+    "role": {
+      "owner": "Klucz Owner",
+      "active": "Klucz Active",
+      "posting": "Klucz Posting",
+      "memo": "Klucz Memo"
+    },
+    "role_hint": {
+      "owner": "Pełna kontrola nad kontem. Trzymaj offline.",
+      "active": "Przenosi środki i zmienia ustawienia konta.",
+      "posting": "Publikuje, głosuje i loguje do Morphit.",
+      "memo": "Szyfruje i odczytuje prywatne wiadomości."
+    },
+    "public_label": "Klucz publiczny",
+    "private_label": "Klucz prywatny (WIF)",
+    "copy": "Kopiuj",
+    "copied": "Skopiowano",
+    "download": "Pobierz jako plik tekstowy",
+    "downloaded": "Zapisano",
+    "no_master_password": "Nie ma hasła głównego. Morphit nigdy go nie tworzy ani nie używa — Twoje 12 słów i te klucze to wszystko.",
+    "txt_warning": "ZACHOWAJ TO W TAJEMNICY. Każdy, kto ma poniższy klucz prywatny, może przejąć pełną kontrolę nad Twoim kontem i środkami. Nie udostępniaj go nikomu, nie wpisuj na stronie, której nie ufasz, i nigdy nie wysyłaj w wiadomości ani e-mailu.",
+    "txt_footer": "Twoja 12-słowna fraza seed to kopia zapasowa Morphit. Te cztery klucze pozwalają używać tego konta w innych narzędziach Blurt. Nie ma hasła głównego."
   }
 }

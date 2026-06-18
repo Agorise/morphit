@@ -128,6 +128,34 @@ access has already won — they can hook the KDF before the wiping
 ever happens. Documented here so future maintainers don't think
 it's solved by `sodium.memzero(plaintext)` alone.
 
+**User key-backup surface (seed + four WIF keys) is deliberate and
+local-only.** On an explicit, opt-in reveal — the "Show my keys"
+panel on the account-creation review screen and the `/backup-keys`
+page (the latter behind a password unlock) — the user can view and
+export their 12-word seed and all four Blurt private keys in
+standard WIF form (`owner`/`active`/`posting`/`memo`), via per-line
+copy or a downloadable `.txt`. This exists for backup and for
+portability: a Morphit-created account's keys are otherwise only
+reachable through Morphit's BIP-39 seed, which other Blurt tools
+(e.g. blurtwallet.com) don't understand — they import the
+individual WIF keys. The keys are derived on demand
+(`crypto/keyExport.ts` → `deriveBackupKeys`, WIFs proven
+byte-identical to dblurt) from the live/decrypted identity, shown
+only after the user clicks reveal, and fronted by a prominent
+don't-share warning baked into both the panel and the `.txt`. This
+does **not** weaken "private keys never leave the device": the
+clipboard and `.txt` are local to the user's own machine and make
+no network calls (verified — the panel and crypto have zero
+`fetch`/egress). The residual constraint is identical to the
+mnemonic/JSON one above: the rendered WIF strings and the `.txt`
+body are non-zeroable JS strings that live on the heap until GC;
+the in-memory `backupKeys` array is cleared when the user leaves
+the review stage. There is **no master password** — Morphit never
+derives keys via the legacy `account+role+password` formula, so
+none exists to show (a pasted master password in the posting-key
+login field is *detected* for a precise error, never used to sign
+in; `crypto/masterPassword.ts`).
+
 **Password-change flow is shipped but UI not yet wired** for the
 end user (`useActiveKeyForPasswordChange` exists, `changePassword`
 exists; settings page calls the latter with proper finally-block

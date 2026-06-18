@@ -73,6 +73,22 @@
 			buttonEl?.focus();
 		}
 	}
+
+	// Robust outside-close. A document-level pointerdown listener (capture
+	// phase) closes the menu when the press lands outside this component's
+	// root. We use pointerdown (not click) so it fires BEFORE any option
+	// handler that detaches its own node — and we don't depend on the blur
+	// scrim catching the click, which it can't everywhere: the sticky page
+	// header sits at z-40, above the scrim's z-20, so a press in the header
+	// strip never reached the scrim and the menu stayed stuck open.
+	$effect(() => {
+		if (!open) return;
+		const onDocPointerDown = (e: PointerEvent): void => {
+			if (rootEl && !rootEl.contains(e.target as Node)) open = false;
+		};
+		document.addEventListener('pointerdown', onDocPointerDown, true);
+		return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+	});
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />

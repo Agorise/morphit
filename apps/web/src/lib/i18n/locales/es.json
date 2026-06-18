@@ -2000,7 +2000,7 @@
     "no_account_body": "Crea una arriba con solo elegir un nombre de usuario genial; eso es literalmente todo.",
     "register_cta": "Crear una cuenta nueva",
     "checking": "Verificando tu sesión…",
-    "import_existing": "Entrar con frase semilla",
+    "import_existing": "Entrar con semilla, json o clave de posting",
     "unlock": {
       "password_required": "Introduce tu contraseña para desbloquear.",
       "wrong_password": "Esa contraseña no coincide con tu keystore. Intenta de nuevo, o usa tu frase semilla para entrar.",
@@ -2238,11 +2238,14 @@
         "warning_heading": "Este papel ES tu cuenta.",
         "warning_body": "Cualquiera que encuentre estas 12 palabras puede tomar todo lo que hay en tu cuenta de Morphit. Guarda este papel donde solo tú puedas alcanzarlo — una caja fuerte, un cajón con llave o una caja de seguridad. No lo fotografíes. No lo envíes por correo. No lo guardes en notas en la nube.",
         "instructions": "Si alguna vez pierdes el acceso a tu dispositivo, escribe estas 12 palabras en el flujo de importación de Morphit en un dispositivo nuevo para recuperar tu cuenta."
-      }
+      },
+      "keys_title": "Tus cuatro claves de cuenta",
+      "keys_intro": "Te permiten usar esta cuenta en otras apps de Blurt. Tus 12 palabras siguen siendo tu copia de seguridad principal.",
+      "keys_reveal_button": "Mostrar mis claves"
     },
     "import": {
       "title": "Importar claves existentes",
-      "body": "¿Ya tienes una cuenta de Blurt? Elige cómo guardas tu clave. Si nunca usaste Blurt, vuelve y crea una cuenta nueva en su lugar.",
+      "body": "¿Ya tienes una cuenta de Blurt? Elige cómo guardas tu clave. Si nunca usaste Blurt, [[vuelve]] y crea una cuenta nueva en su lugar.",
       "seed_tab_label": "Frase de 12 palabras",
       "keyfile_tab_label": "Archivo de claves (.json)",
       "seed_label": "Pega tu frase de 12 palabras",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Clave de posting de Blurt",
         "warning_title": "Importación solo con clave de posting",
-        "warning_body": "Si solo tienes la clave WIF de posting (sin contraseña maestra ni frase semilla), pégala aquí. La ciframos en este dispositivo con una contraseña que elijas. Podrás leer, publicar y operar — pero no cambiar las claves de la cuenta (eso requiere la clave active o owner).",
+        "warning_body": "Si no tienes una frase semilla de 12 palabras ni un archivo .json para importar la cuenta, simplemente pega aquí tu clave de posting de Blurt. La ciframos en este dispositivo con una contraseña que elijas. Podrás leer, publicar y operar — pero no cambiar las claves de la cuenta (eso requiere una wallet como blurtwallet.com).",
         "account_label": "Tu nombre de cuenta de Blurt",
-        "account_placeholder": "alice",
+        "account_ok": "¡se ve bien!",
         "account_hint": "Sin la @. Verificaremos que la cuenta exista en Blurt y que la clave de posting coincida.",
         "wif_label": "Clave privada de posting (WIF)",
         "wif_placeholder": "5J… o P5J…",
@@ -2285,15 +2288,17 @@
             "active": "Esa es tu clave ACTIVE. Morphit solo necesita la POSTING — pega esa.",
             "owner": "Esa es tu clave OWNER. Morphit solo necesita la POSTING — pega esa. (Las claves owner dan control total de la cuenta; no las pegues en ningún sitio.)",
             "memo": "Esa es tu clave MEMO. Morphit necesita la POSTING — pega esa."
-          }
+          },
+          "master_password": "Eso parece tu contraseña maestra de Blurt, no tu clave POSTING. Morphit nunca usa tu contraseña maestra para iniciar sesión. Abre blurtwallet.com → Permissions y copia tu Posting Private Key (empieza por 5)."
         }
       },
       "error": {
-        "seed_word_count": "La frase semilla debe tener 12 palabras.",
+        "seed_word_count": "Una frase semilla de Blurt tiene exactamente 12 palabras — has introducido {count}. Asegúrate de que estén las 12, separadas por un solo espacio.",
         "seed_invalid": "Esa frase semilla no es válida. Comprueba si hay errores tipográficos y vuelve a intentar.",
         "keyfile_password_wrong": "La contraseña del keyfile es incorrecta. Inténtalo de nuevo.",
         "keyfile_corrupt": "El keyfile está corrupto o no es un keyfile válido de Morphit.",
-        "generic": "La importación falló. Revisa tu entrada e inténtalo de nuevo."
+        "generic": "La importación falló. Revisa tu entrada e inténtalo de nuevo.",
+        "network": "No se pudo conectar con la red Blurt. Revisa tu conexión e inténtalo de nuevo."
       },
       "remember_me": {
         "heading": "Has iniciado sesión — una elección más",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "No se pudieron generar claves nuevas. Recarga la página.",
       "keyfile_download_failed": "No se pudo preparar tu keyfile para descarga. Inténtalo de nuevo.",
-      "quiz_submit_failed": "No se pudo continuar después del quiz. Inténtalo de nuevo."
+      "quiz_submit_failed": "No se pudo continuar después del quiz. Inténtalo de nuevo.",
+      "keys_reveal_failed": "No se pudieron mostrar tus claves ahora mismo. Inténtalo de nuevo."
     },
     "review": {
       "back_button": "Empezar de nuevo",
@@ -4307,5 +4313,31 @@
     "enabled": "Listo: te avisaremos cuando llegue un mensaje nuevo.",
     "error": "No se pudieron activar las notificaciones. Puedes habilitarlas en Configuración → Notificaciones.",
     "privacy_note": "Usa notificaciones privadas del navegador: sin correo ni número de teléfono, y puedes desactivarlas cuando quieras."
+  },
+  "backup_keys_panel": {
+    "warning_title": "Mantenlas en privado",
+    "warning_body": "Cualquiera que tenga una de las claves privadas de abajo puede tomar el control total de tu cuenta y tus fondos. No las compartas con nadie — ni con Morphit, ni con soporte, ni con un amigo, ni con ningún sitio web. Guárdalas en un lugar al que solo tú puedas acceder, como un gestor de contraseñas o papel guardado en un lugar seguro.",
+    "intro": "Estas son las cuatro claves de tu cuenta de Blurt. Tus 12 palabras son tu copia de seguridad de Morphit; estas claves te permiten usar esta misma cuenta en otras apps de Blurt como blurtwallet.com.",
+    "role": {
+      "owner": "Clave Owner",
+      "active": "Clave Active",
+      "posting": "Clave Posting",
+      "memo": "Clave Memo"
+    },
+    "role_hint": {
+      "owner": "Control total de tu cuenta. Mantenla sin conexión.",
+      "active": "Mueve fondos y cambia ajustes de la cuenta.",
+      "posting": "Publica, vota e inicia sesión en Morphit.",
+      "memo": "Cifra y lee mensajes privados."
+    },
+    "public_label": "Clave pública",
+    "private_label": "Clave privada (WIF)",
+    "copy": "Copiar",
+    "copied": "Copiada",
+    "download": "Descargar como archivo de texto",
+    "downloaded": "Guardado",
+    "no_master_password": "No hay contraseña maestra. Morphit nunca crea ni usa una — tus 12 palabras y estas claves son todo lo que necesitas.",
+    "txt_warning": "MANTÉN ESTO EN PRIVADO. Cualquiera que tenga una clave privada de abajo puede tomar el control total de tu cuenta y tus fondos. No la compartas con nadie, no la escribas en un sitio web en el que no confíes y no la envíes en un mensaje ni correo.",
+    "txt_footer": "Tu frase semilla de 12 palabras es tu copia de seguridad de Morphit. Estas cuatro claves te permiten usar esta cuenta en otras herramientas de Blurt. No hay contraseña maestra."
   }
 }

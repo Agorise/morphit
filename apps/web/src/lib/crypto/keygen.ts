@@ -420,8 +420,20 @@ export async function formatPublicKeyBLT(pk: Uint8Array): Promise<string> {
 			`formatPublicKeyBLT: expected 33-byte compressed point, got ${pk.length} bytes`
 		);
 	}
-	const { PublicKey } = await import('@beblurt/dblurt');
-	return new PublicKey(pk as unknown as Buffer).toString();
+	const [{ PublicKey }, { Buffer }] = await Promise.all([
+		import('@beblurt/dblurt'),
+		import('buffer')
+	]);
+	// dblurt's PublicKey.toString() computes a RIPEMD160 checksum through its
+	// bundled browserify crypto (cipher-base / hash-base), whose .update()
+	// rejects anything failing Buffer.isBuffer() — and a plain Uint8Array
+	// fails that check IN THE BROWSER (Node's native crypto accepts typed
+	// arrays, which is why this only bit on the deployed build, not in tests).
+	// The old `pk as unknown as Buffer` cast satisfied the compiler but did
+	// nothing at runtime. Buffer.from copies the 33 bytes into a real Buffer
+	// (its `_isBuffer` flag is what dblurt's isBuffer duck-types on), so the
+	// hash accepts it; the resulting BLT string is byte-identical either way.
+	return new PublicKey(Buffer.from(pk) as unknown as Buffer).toString();
 }
 
 // wipeLiveIdentity now lives in ./identity-core (imported + re-exported above).

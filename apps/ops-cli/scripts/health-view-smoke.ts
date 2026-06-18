@@ -126,7 +126,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	const full = summarizeHealth({
 		stale: false,
 		status: 'ok',
-		version: '1.0.0-beta.20',
+		version: '1.0.0-beta.21',
 		indexed_block: 1000,
 		chain_head_block: 1002,
 		lag_blocks: 2,
@@ -139,7 +139,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		'HV-3a full healthy body parsed',
 		full.synced &&
 			full.status === 'ok' &&
-			full.version === '1.0.0-beta.20' &&
+			full.version === '1.0.0-beta.21' &&
 			full.indexedBlock === 1000 &&
 			full.chainHeadBlock === 1002 &&
 			full.lagBlocks === 2 &&
