@@ -32,7 +32,7 @@
 import sodium from 'libsodium-wrappers-sumo';
 import * as secp256k1 from '@noble/secp256k1';
 import { ensureSodium } from './keygen';
-import { wifDecodePure } from './base58';
+import { wifDecodePure, base58Encode } from './base58';
 
 export { looksLikeWif } from './base58';
 
@@ -94,4 +94,48 @@ export async function wifToRawPrivateKey(wif: string): Promise<Uint8Array> {
 		throw new WifDecodeError('bad-scalar', 'WIF scalar is not a valid secp256k1 private key');
 	}
 	return verdict.scalar;
+}
+
+/**
+ * Encode a raw 32-byte secp256k1 scalar as an (uncompressed) Bitcoin/Blurt
+ * WIF — the "5..."-prefixed string that blurtwallet.com and every other
+ * Blurt tool accepts for key import.  The inverse of wifToRawPrivateKey,
+ * and the export complement ADR-0007 reserved for "Phase 5".  Used by the
+ * account-backup "your keys" panel so a Morphit-created account (whose
+ * keys are otherwise only reachable through Morphit's BIP-39 seed) is
+ * portable to any Blurt frontend.
+ *
+ * Format (uncompressed — matching what Blurt frontends display and what a
+ * user pastes back):
+ *   payload  = 0x80 || scalar(32)
+ *   checksum = sha256(sha256(payload))[0..4]
+ *   wif      = base58(payload || checksum)         // 51 chars, "5..."
+ *
+ * Best-effort wipes the internal copies that held the scalar on the way
+ * out; the caller still owns (and must wipe) `scalar`.
+ *
+ * Throws if `scalar` is not exactly 32 bytes or is not a valid secp256k1
+ * private key — encoding a malformed scalar would hand the user a WIF no
+ * chain would ever accept, which is worse than a clear error.
+ */
+export async function rawPrivateKeyToWif(scalar: Uint8Array): Promise<string> {
+	await ensureSodium();
+	if (scalar.length !== 32) {
+		throw new Error(`rawPrivateKeyToWif: scalar must be 32 bytes, got ${scalar.length}`);
+	}
+	if (!secp256k1.utils.isValidPrivateKey(scalar)) {
+		throw new Error('rawPrivateKeyToWif: scalar is not a valid secp256k1 private key');
+	}
+	const payload = new Uint8Array(33);
+	payload[0] = 0x80;
+	payload.set(scalar, 1);
+	const checksum = sodium.crypto_hash_sha256(sodium.crypto_hash_sha256(payload));
+	const full = new Uint8Array(37);
+	full.set(payload, 0);
+	full.set(checksum.subarray(0, 4), 33);
+	const wif = base58Encode(full);
+	// Best-effort wipe of the copies that contained the scalar.
+	payload.fill(0);
+	full.fill(0);
+	return wif;
 }

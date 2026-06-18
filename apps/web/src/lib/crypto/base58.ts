@@ -56,6 +56,43 @@ export function base58Decode(s: string): Uint8Array {
 	return out;
 }
 
+/** Encode bytes to a base58 (Bitcoin alphabet) string.  The complement of
+ *  base58Decode that the header comment reserved for "later".  Leading
+ *  0x00 bytes map to leading '1' characters, per the Bitcoin base58check
+ *  convention, so encode∘decode and decode∘encode both round-trip.
+ *
+ *  Used by the WIF *encoder* (rawPrivateKeyToWif in wif.ts) to render a
+ *  private scalar as the "5..."-prefixed WIF that blurtwallet.com and
+ *  other Blurt tools accept — i.e. to make a Morphit-created account
+ *  portable. No crypto here; just the alphabet + bigint-free long
+ *  multiplication (mirror image of base58Decode's long division). */
+export function base58Encode(bytes: Uint8Array): string {
+	if (bytes.length === 0) return '';
+	let zeros = 0;
+	while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+
+	// digits[] accumulates the base-58 representation, least-significant
+	// limb first; each input byte multiplies the running value by 256.
+	const digits: number[] = [];
+	for (let i = zeros; i < bytes.length; i++) {
+		let carry = bytes[i] ?? 0;
+		for (let j = 0; j < digits.length; j++) {
+			carry += (digits[j] ?? 0) * 256;
+			digits[j] = carry % 58;
+			carry = (carry / 58) | 0;
+		}
+		while (carry > 0) {
+			digits.push(carry % 58);
+			carry = (carry / 58) | 0;
+		}
+	}
+
+	let out = '';
+	for (let i = 0; i < zeros; i++) out += ALPHABET.charAt(0);
+	for (let i = digits.length - 1; i >= 0; i--) out += ALPHABET.charAt(digits[i] ?? 0);
+	return out;
+}
+
 /** Cheap shape check before invoking the (allocating) base58 decoder.
  *  Bitcoin/Blurt WIFs are 51-52 chars and always start with `5`, `K`, or `L`. */
 export function looksLikeWif(s: string): boolean {

@@ -128,16 +128,24 @@
 		}
 	}
 
-	// Outside-close is handled by the full-screen blur scrim below (a
-	// dedicated click-catcher), NOT a window listener — same fix as
-	// FiatCurrencySelect: a window handler raced the option click
-	// (add() detaches the picked node), so it could mis-close. The scrim
-	// (z-20) sits BELOW the OPEN field (z-30); option clicks land cleanly
-	// and the menu stays open for multi-select until an outside (scrim)
-	// click. The root z is conditional (z-30 open / z-10 closed) so that,
-	// with three of these selects stacked on the orderbook page, an idle
-	// sibling can't paint over this one's open dropdown — see the longer
-	// note in FiatCurrencySelect.
+	// Robust outside-close — same approach as FiatCurrencySelect: a
+	// document-level pointerdown listener (capture) closes the menu when the
+	// press lands outside this component's root. pointerdown (not click)
+	// fires BEFORE the picked option's add() detaches its own node, so an
+	// option press is still seen as INSIDE rootEl. The menu stays open for
+	// multi-select until an OUTSIDE press. The blur scrim below is now purely
+	// visual; relying on it to close was fragile because the sticky page
+	// header (z-40) paints over the scrim (z-20). The root z stays conditional
+	// (z-30 open / z-10 closed) so that, with three of these selects stacked,
+	// an idle sibling can't paint over this one's open dropdown.
+	$effect(() => {
+		if (!open) return;
+		const onDocPointerDown = (e: PointerEvent): void => {
+			if (rootEl && !rootEl.contains(e.target as Node)) open = false;
+		};
+		document.addEventListener('pointerdown', onDocPointerDown, true);
+		return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+	});
 </script>
 
 {#if open}

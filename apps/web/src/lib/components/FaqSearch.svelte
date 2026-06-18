@@ -171,6 +171,17 @@
 	function handleKey(e: KeyboardEvent): void {
 		if (e.key === 'Escape') {
 			query = '';
+			activeIndex = 0;
+			return;
+		}
+		// Enter is intentionally disabled in the FAQ search. It used to jump the
+		// page to the first result (hits[activeIndex]; activeIndex resets to 0 on
+		// every keystroke), which felt like scrolling to a random location.
+		// Selection is now click/tap-only — the user picks an entry from the
+		// dropdown below. preventDefault stops the keypress from triggering any
+		// implicit form submit or the browser's native type="search" behavior.
+		if (e.key === 'Enter') {
+			e.preventDefault();
 			return;
 		}
 		if (!hits.length) return;
@@ -180,19 +191,6 @@
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			activeIndex = Math.max(activeIndex - 1, 0);
-		} else if (e.key === 'Enter') {
-			e.preventDefault();
-			const hit = hits[activeIndex];
-			if (hit) {
-				expanded.add(hit.entry.key);
-				document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
-					behavior: 'smooth',
-					block: 'start'
-				});
-			}
-		} else if (e.key === 'Escape') {
-			query = '';
-			activeIndex = 0;
 		}
 	}
 

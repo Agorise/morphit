@@ -2000,7 +2000,7 @@
     "no_account_body": "喺上面揀個型嘅用戶名就可以開一個，真係咁簡單。",
     "register_cta": "建立新帳戶",
     "checking": "正在檢查你的會話…",
-    "import_existing": "用 助記詞登入",
+    "import_existing": "用 助記詞、json 或 posting 密鑰登入",
     "unlock": {
       "password_required": "輸入密碼以解鎖。",
       "wrong_password": "該密碼與你的 keystore 不符。重試,或用 助記詞登入。",
@@ -2238,11 +2238,14 @@
         "warning_heading": "這張紙就是您的帳戶。",
         "warning_body": "任何找到這12個單詞的人都可以拿走您 Morphit 帳戶中的所有內容。將此紙存放在只有您能拿到的地方 — 保險箱、上鎖的抽屜或銀行保險箱。不要拍照。不要發郵件。不要儲存在雲端筆記中。",
         "instructions": "如果您失去對裝置的存取權限,請在新裝置上的 Morphit 匯入流程中輸入這12個單詞以恢復您的帳戶。"
-      }
+      },
+      "keys_title": "你帳戶的四個密鑰",
+      "keys_intro": "它們讓你能在其他 Blurt 應用中使用此帳戶。你的 12 個單詞仍是你的主要備份。",
+      "keys_reveal_button": "顯示我的密鑰"
     },
     "import": {
       "title": "匯入舊有嘅 key",
-      "body": "已經有 Blurt 戶口?揀返你個 key 點儲。如果未用過 Blurt,撳返上一步去開個新戶口先。",
+      "body": "已經有 Blurt 戶口?揀返你個 key 點儲。如果未用過 Blurt,[[撳返上一步]]去開個新戶口先。",
       "seed_tab_label": "12 字助記詞",
       "keyfile_tab_label": "Key 檔案 (.json)",
       "seed_label": "貼上你嘅 12 字助記詞",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Blurt Posting key",
         "warning_title": "只用 Posting 密鑰匯入",
-        "warning_body": "如果你只有 posting WIF(冇主密碼或助記詞),黐喺呢度。我哋會用你揀嘅密碼喺呢部裝置上加密佢。你可以讀、發文同交易 — 但唔可以改帳戶密鑰(嗰個需要 active 或 owner 密鑰)。",
+        "warning_body": "如果你冇 12 個字嘅助記詞或者用喻匯入戶口嘅 .json 檔案，直接將你嘅 Blurt posting 密鑰黏喺呢度。我哋會用你揀嘅密碼喺呢部裝置上加密佢。你可以讀、發文同交易 — 但唔可以改帳戶密鑰（嘸個需要好似 blurtwallet.com 黈嘅錢包）。",
         "account_label": "你嘅 Blurt 帳戶名",
-        "account_placeholder": "alice",
+        "account_ok": "冇問題！",
         "account_hint": "唔帶 @。我哋會檢查呢個帳戶喺 Blurt 鏈上係咪存在,同 posting 密鑰係咪夾。",
         "wif_label": "Posting 私鑰 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
@@ -2285,15 +2288,17 @@
             "active": "嗰個係你嘅 ACTIVE 密鑰。Morphit 只需要 POSTING — 黐嗰個。",
             "owner": "嗰個係你嘅 OWNER 密鑰。Morphit 只需要 POSTING — 黐嗰個。(Owner 密鑰俾你完全控制帳戶;唔好黐到任何網站。)",
             "memo": "嗰個係你嘅 MEMO 密鑰。Morphit 需要 POSTING — 黐嗰個。"
-          }
+          },
+          "master_password": "這看來是你的 Blurt 主密碼，而非 POSTING 密鑰。Morphit 從不使用主密碼登入。請開啟 blurtwallet.com → Permissions，複製你的 Posting Private Key（以 5 開頭）。"
         }
       },
       "error": {
-        "seed_word_count": "助記詞必須係 12 個字。",
+        "seed_word_count": "Blurt 助記詞剛好是 12 個單詞——你輸入了 {count} 個。請確保 12 個單詞齊全，每個之間用一個空格分隔。",
         "seed_invalid": "呢個助記詞無效。檢查單詞係咪有拼寫錯誤後重試。",
         "keyfile_password_wrong": "Keyfile 密碼錯誤。請重試。",
         "keyfile_corrupt": "Keyfile 損壞或唔係有效嘅 Morphit keyfile。",
-        "generic": "匯入失敗。檢查輸入後重試。"
+        "generic": "匯入失敗。檢查輸入後重試。",
+        "network": "連唔到 Blurt 網絡。請檢查你嘅網絡連線再試。"
       },
       "remember_me": {
         "heading": "已登入 — 還有一個選擇",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "無法生成新密鑰。刷新頁面。",
       "keyfile_download_failed": "無法準備 keyfile 下載。請重試。",
-      "quiz_submit_failed": "測驗後無法繼續。請重試。"
+      "quiz_submit_failed": "測驗後無法繼續。請重試。",
+      "keys_reveal_failed": "暫時無法顯示你的密鑰。請重試。"
     },
     "review": {
       "back_button": "重新開始",
@@ -4307,5 +4313,31 @@
     "enabled": "搞掂——有新訊息嘅時候會通知你。",
     "error": "開唔到通知。你可以喺「設定 → 通知」度開啟。",
     "privacy_note": "用瀏覽器嘅私密通知——唔使電郵或者電話號碼，隨時可以閂。"
+  },
+  "backup_keys_panel": {
+    "warning_title": "請保密",
+    "warning_body": "任何擁有下方任一私鑰的人都能完全控制你的帳戶和資金。切勿分享給任何人——不要給 Morphit、不要給客服、不要給朋友、不要給任何網站。請把它們儲存在只有你能存取的地方，例如密碼管理器或妥善保管的紙張。",
+    "intro": "這是你 Blurt 帳戶的四個密鑰。你的 12 個單詞是你的 Morphit 備份；這些密鑰讓你能在 blurtwallet.com 等其他 Blurt 應用中使用同一帳戶。",
+    "role": {
+      "owner": "Owner 密鑰",
+      "active": "Active 密鑰",
+      "posting": "Posting 密鑰",
+      "memo": "Memo 密鑰"
+    },
+    "role_hint": {
+      "owner": "對帳戶的完全控制權。請離線保存。",
+      "active": "轉移資金並更改帳戶設定。",
+      "posting": "發帖、投票並登入 Morphit。",
+      "memo": "加密並讀取私訊。"
+    },
+    "public_label": "公鑰",
+    "private_label": "私鑰（WIF）",
+    "copy": "複製",
+    "copied": "已複製",
+    "download": "下載為文字檔",
+    "downloaded": "已儲存",
+    "no_master_password": "沒有主密碼。Morphit 從不建立或使用主密碼——你的 12 個單詞和這些密鑰就是全部。",
+    "txt_warning": "請保密。任何擁有下方私鑰的人都能完全控制你的帳戶和資金。切勿分享給任何人，切勿輸入到你不信任的網站，也切勿透過訊息或電郵傳送。",
+    "txt_footer": "你的 12 個單詞助記詞是你的 Morphit 備份。這四個密鑰讓你能在其他 Blurt 工具中使用此帳戶。沒有主密碼。"
   }
 }

@@ -1994,13 +1994,13 @@
     "switcher_aria": "Change language"
   },
   "login": {
-    "title": "Log in to Morphit",
+    "title": "Sign in to Morphit",
     "body": "Pick the option that matches how you got here.",
     "no_account_heading": "Don't have an account?",
     "no_account_body": "Create one above by just picking a cool username, that's literally all there is to it.",
     "register_cta": "Create a new account",
     "checking": "Checking your session…",
-    "import_existing": "Sign in with seed phrase",
+    "import_existing": "Sign in with seed, json or posting key",
     "unlock": {
       "password_required": "Enter your password to unlock.",
       "wrong_password": "That password does not match your keystore. Try again, or use your seed phrase to sign in.",
@@ -2238,11 +2238,14 @@
         "warning_heading": "This paper IS your account.",
         "warning_body": "Anyone who finds these 12 words can take everything in your Morphit account. Store this paper somewhere only you can reach — a safe, a locked drawer, or a secure deposit box. Don't photograph it. Don't email it. Don't store it in cloud notes.",
         "instructions": "If you ever lose access to your device, type these 12 words into Morphit's import flow on a new device to recover your account."
-      }
+      },
+      "keys_title": "Your four account keys",
+      "keys_intro": "These let you use this account in other Blurt apps. Your 12 words are still your main backup.",
+      "keys_reveal_button": "Show my keys"
     },
     "import": {
       "title": "Import existing keys",
-      "body": "Already have a Blurt account? Pick how you have your key stored. If you've never used Blurt before, go back and create a new account instead.",
+      "body": "Already have a Blurt account? Pick how you have your key stored. If you've never used Blurt before, [[go back]] and create a new account instead.",
       "seed_tab_label": "12-word seed",
       "keyfile_tab_label": "Keyfile (.json)",
       "seed_label": "Paste your 12-word seed",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Blurt posting key",
         "warning_title": "Posting-only import",
-        "warning_body": "If you only have a posting WIF (no master password or seed), you can paste it here. We'll encrypt it on this device with a password you choose. You'll be able to read, post, and trade — but not change account keys (that needs the active or owner key).",
+        "warning_body": "If you don't have a 12-word seed or a .json file for account import, just paste your Blurt Posting Key here instead. We'll encrypt it on this device with a password you choose. You'll be able to read, post, and trade — but not change account keys (that needs a wallet like blurtwallet.com).",
         "account_label": "Your Blurt account name",
-        "account_placeholder": "alice",
+        "account_ok": "looks good!",
         "account_hint": "Without the @. We'll check that this account exists on Blurt and that the posting key matches.",
         "wif_label": "Posting private key (WIF)",
         "wif_placeholder": "5J… or P5J…",
@@ -2270,8 +2273,8 @@
           "bad_account": "Account names use lowercase letters, digits, dashes, and dots.",
           "password_too_short": "Password must be at least 8 characters.",
           "passwords_mismatch": "Passwords don't match. Please retype both.",
-          "account_not_found": "We couldn't find @{account} on the Blurt chain. Check the spelling and try again.",
-          "key_not_on_account": "The posting key you entered doesn't match @{account}'s on-chain posting key. Check that you copied the right WIF.",
+          "account_not_found": "We couldn't find an account called '@{account}' on Blurt. Usernames are all lowercase with no '@' — check the spelling and try again.",
+          "key_not_on_account": "This is a valid Blurt key, but it doesn't belong to '@{account}'. Double-check the username above, or paste the Posting key that matches this account.",
           "wif": {
             "too-short": "That WIF is too short to be a valid Blurt key.",
             "too-long": "That WIF is too long to be a valid Blurt key.",
@@ -2282,18 +2285,20 @@
             "bad-scalar": "Decoded successfully but the key is mathematically invalid. Re-copy and try again."
           },
           "wrong_role": {
-            "active": "That's your ACTIVE key. Morphit only needs your POSTING key — please paste that one instead.",
-            "owner": "That's your OWNER key. Morphit only needs your POSTING key — please paste that one instead. (Owner keys grant full account control; never paste them into any site.)",
-            "memo": "That's your MEMO key. Morphit needs your POSTING key — please paste that one instead."
-          }
+            "active": "That's your Active key, which controls funds and account changes. For your safety, Morphit signs in with your Posting key only. Please paste your Posting key instead.",
+            "owner": "That's your Owner key — the most powerful key on your account, and the one to guard most carefully. Morphit only ever signs you in with your Posting key. Please paste your Posting key instead.",
+            "memo": "That's your Memo key — it's only used to encrypt and decrypt private messages and can't sign you in. Please paste your Posting key instead."
+          },
+          "master_password": "That looks like your Blurt master password, not your Posting key. Morphit never uses your master password to sign in. Open blurtwallet.com → Permissions and copy your Posting Private Key (it starts with 5)."
         }
       },
       "error": {
-        "seed_word_count": "Seed phrase must be 12 words.",
-        "seed_invalid": "That seed phrase isn't valid. Check the words for typos and try again.",
-        "keyfile_password_wrong": "Keyfile password is wrong. Try again.",
-        "keyfile_corrupt": "Keyfile is corrupt or not a valid Morphit keyfile.",
-        "generic": "Import failed. Check your input and try again."
+        "seed_word_count": "A Blurt seed phrase is exactly 12 words — you've entered {count}. Make sure all 12 are present, each separated by a single space.",
+        "seed_invalid": "That seed phrase isn't valid — one or more words aren't from the standard seed word list, or a word was mistyped. Check each word carefully and try again.",
+        "keyfile_password_wrong": "That password doesn't match this keyfile. Passwords are case-sensitive, so check Caps Lock and any stray spaces, then try again.",
+        "keyfile_corrupt": "This file isn't a valid Morphit keyfile, or it's been damaged. Upload the 'morphit-keyfile-….json' file you saved when you created your account — not a screenshot or a different file.",
+        "generic": "Something unexpected went wrong while signing you in — it wasn't your key or password. Please wait a moment and try again.",
+        "network": "We couldn't reach the Blurt network to verify your key. This is a connection problem on the network side, not a problem with your key. Check your internet and try again in a moment."
       },
       "remember_me": {
         "heading": "You're signed in — one more choice",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "Couldn't generate new keys. Try refreshing the page.",
       "keyfile_download_failed": "Couldn't prepare your keyfile for download. Try again.",
-      "quiz_submit_failed": "Couldn't continue past the quiz. Try again."
+      "quiz_submit_failed": "Couldn't continue past the quiz. Try again.",
+      "keys_reveal_failed": "Couldn't show your keys just now. Please try again."
     },
     "review": {
       "back_button": "Start over",
@@ -3566,7 +3572,7 @@
       "description": "How Morphit treats your privacy and what we ask of you."
     },
     "login": {
-      "title": "Log in to Morphit",
+      "title": "Sign in to Morphit",
       "description": "Sign in to your Morphit account or register a new one to start trading Bitcoin, Monero, Blurt, other cryptocurrencies, and fiat currencies peer-to-peer."
     },
     "operators": {
@@ -4307,5 +4313,31 @@
     "enabled": "Done — you'll be notified when a new message arrives.",
     "error": "Couldn't turn on notifications. You can enable them in Settings → Notifications.",
     "privacy_note": "Uses private browser notifications — no email or phone number, and you can turn them off anytime."
+  },
+  "backup_keys_panel": {
+    "warning_title": "Keep these private",
+    "warning_body": "Anyone who has one of the private keys below can take full control of your account and your funds. Never share them with anyone — not Morphit, not support, not a friend, not any website. Store them somewhere only you can reach, like a password manager or paper kept somewhere safe.",
+    "intro": "These are the four keys for your Blurt account. Your 12 words are your Morphit backup; these keys let you use this same account in other Blurt apps like blurtwallet.com.",
+    "role": {
+      "owner": "Owner key",
+      "active": "Active key",
+      "posting": "Posting key",
+      "memo": "Memo key"
+    },
+    "role_hint": {
+      "owner": "Full control of your account. Keep it offline.",
+      "active": "Moves funds and changes account settings.",
+      "posting": "Posts, votes, and signs in to Morphit.",
+      "memo": "Encrypts and reads private messages."
+    },
+    "public_label": "Public key",
+    "private_label": "Private key (WIF)",
+    "copy": "Copy",
+    "copied": "Copied",
+    "download": "Download as text file",
+    "downloaded": "Saved",
+    "no_master_password": "There is no master password. Morphit never creates or uses one — your 12 words and these keys are everything.",
+    "txt_warning": "KEEP THIS PRIVATE. Anyone who has a private key below can take full control of your account and funds. Never share it with anyone, never type it into a website you don't trust, and never send it in a message or email.",
+    "txt_footer": "Your 12-word seed phrase is your Morphit backup. These four keys let you use this account in other Blurt tools. There is no master password."
   }
 }

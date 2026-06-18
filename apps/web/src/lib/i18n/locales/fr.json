@@ -2000,7 +2000,7 @@
     "no_account_body": "Créez-en un ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
     "register_cta": "Créer un nouveau compte",
     "checking": "Vérification de votre session…",
-    "import_existing": "Se connecter avec phrase seed",
+    "import_existing": "Se connecter avec seed, json ou clé de posting",
     "unlock": {
       "password_required": "Entrez votre mot de passe pour déverrouiller.",
       "wrong_password": "Ce mot de passe ne correspond pas à votre keystore. Réessayez ou connectez-vous avec votre phrase seed.",
@@ -2238,11 +2238,14 @@
         "warning_heading": "Ce papier EST votre compte.",
         "warning_body": "Quiconque trouve ces 12 mots peut s'emparer de tout dans votre compte Morphit. Rangez ce papier là où vous seul pouvez l'atteindre — un coffre-fort, un tiroir verrouillé ou une boîte de sécurité. Ne le photographiez pas. Ne l'envoyez pas par e-mail. Ne le stockez pas dans des notes cloud.",
         "instructions": "Si vous perdez l'accès à votre appareil, tapez ces 12 mots dans le flux d'importation de Morphit sur un nouvel appareil pour récupérer votre compte."
-      }
+      },
+      "keys_title": "Tes quatre clés de compte",
+      "keys_intro": "Elles te permettent d'utiliser ce compte dans d'autres applis Blurt. Tes 12 mots restent ta sauvegarde principale.",
+      "keys_reveal_button": "Afficher mes clés"
     },
     "import": {
       "title": "Importer des clés existantes",
-      "body": "Vous avez déjà un compte Blurt ? Choisissez la façon dont votre clé est stockée. Si vous n'avez jamais utilisé Blurt, revenez en arrière et créez plutôt un nouveau compte.",
+      "body": "Vous avez déjà un compte Blurt ? Choisissez la façon dont votre clé est stockée. Si vous n'avez jamais utilisé Blurt, [[revenez en arrière]] et créez plutôt un nouveau compte.",
       "seed_tab_label": "Phrase de 12 mots",
       "keyfile_tab_label": "Fichier de clés (.json)",
       "seed_label": "Collez votre phrase de 12 mots",
@@ -2256,9 +2259,9 @@
       "posting_only": {
         "tab_label": "Clé de posting Blurt",
         "warning_title": "Import via clé de posting uniquement",
-        "warning_body": "Si tu n'as que ta clé WIF de posting (pas de mot de passe maître ni de phrase de sauvegarde), colle-la ici. On la chiffre sur cet appareil avec un mot de passe que tu choisis. Tu pourras lire, publier et trader — mais pas changer les clés du compte (cela nécessite la clé active ou owner).",
+        "warning_body": "Si tu n'as pas de seed de 12 mots ni de fichier .json pour importer le compte, colle simplement ta clé de posting Blurt ici. On la chiffre sur cet appareil avec un mot de passe que tu choisis. Tu pourras lire, publier et trader — mais pas changer les clés du compte (cela nécessite un portefeuille comme blurtwallet.com).",
         "account_label": "Ton nom de compte Blurt",
-        "account_placeholder": "alice",
+        "account_ok": "c'est bon !",
         "account_hint": "Sans le @. On vérifiera que ce compte existe sur Blurt et que la clé de posting correspond.",
         "wif_label": "Clé privée de posting (WIF)",
         "wif_placeholder": "5J… ou P5J…",
@@ -2285,15 +2288,17 @@
             "active": "C'est ta clé ACTIVE. Morphit a juste besoin de la POSTING — colle celle-là.",
             "owner": "C'est ta clé OWNER. Morphit a juste besoin de la POSTING — colle celle-là. (Les clés owner donnent le contrôle total du compte ; ne les colle nulle part.)",
             "memo": "C'est ta clé MEMO. Morphit a besoin de la POSTING — colle celle-là."
-          }
+          },
+          "master_password": "Cela ressemble à ton mot de passe maître Blurt, pas à ta clé POSTING. Morphit n'utilise jamais ton mot de passe maître pour se connecter. Ouvre blurtwallet.com → Permissions et copie ta Posting Private Key (elle commence par 5)."
         }
       },
       "error": {
-        "seed_word_count": "La phrase de récupération doit comporter 12 mots.",
+        "seed_word_count": "Une phrase de récupération Blurt comporte exactement 12 mots — tu en as saisi {count}. Vérifie que les 12 sont présents, séparés par une seule espace.",
         "seed_invalid": "Cette phrase de sauvegarde n'est pas valide. Vérifie les mots pour des fautes de frappe et réessaie.",
         "keyfile_password_wrong": "Mot de passe du keyfile incorrect. Réessaie.",
         "keyfile_corrupt": "Le keyfile est corrompu ou n'est pas un keyfile Morphit valide.",
-        "generic": "L'import a échoué. Vérifie ta saisie et réessaie."
+        "generic": "L'import a échoué. Vérifie ta saisie et réessaie.",
+        "network": "Impossible de joindre le réseau Blurt. Vérifie ta connexion et réessaie."
       },
       "remember_me": {
         "heading": "Connecté — un dernier choix",
@@ -2417,7 +2422,8 @@
     "error": {
       "generate_failed": "Impossible de générer de nouvelles clés. Rafraîchis la page.",
       "keyfile_download_failed": "Impossible de préparer ton keyfile pour le téléchargement. Réessaie.",
-      "quiz_submit_failed": "Impossible de continuer après le quiz. Réessaie."
+      "quiz_submit_failed": "Impossible de continuer après le quiz. Réessaie.",
+      "keys_reveal_failed": "Impossible d'afficher tes clés pour l'instant. Réessaie."
     },
     "review": {
       "back_button": "Recommencer",
@@ -4307,5 +4313,31 @@
     "enabled": "C'est fait : vous serez notifié à l'arrivée d'un nouveau message.",
     "error": "Impossible d'activer les notifications. Vous pouvez les activer dans Paramètres → Notifications.",
     "privacy_note": "Utilise les notifications privées du navigateur : sans e-mail ni numéro de téléphone, et désactivables à tout moment."
+  },
+  "backup_keys_panel": {
+    "warning_title": "Garde-les privées",
+    "warning_body": "Quiconque possède l'une des clés privées ci-dessous peut prendre le contrôle total de ton compte et de tes fonds. Ne les partage avec personne — ni Morphit, ni le support, ni un ami, ni aucun site web. Conserve-les dans un endroit accessible à toi seul, comme un gestionnaire de mots de passe ou du papier rangé en sécurité.",
+    "intro": "Voici les quatre clés de ton compte Blurt. Tes 12 mots sont ta sauvegarde Morphit ; ces clés te permettent d'utiliser ce même compte dans d'autres applis Blurt comme blurtwallet.com.",
+    "role": {
+      "owner": "Clé Owner",
+      "active": "Clé Active",
+      "posting": "Clé Posting",
+      "memo": "Clé Memo"
+    },
+    "role_hint": {
+      "owner": "Contrôle total de ton compte. Garde-la hors ligne.",
+      "active": "Déplace des fonds et modifie les réglages du compte.",
+      "posting": "Publie, vote et te connecte à Morphit.",
+      "memo": "Chiffre et lit les messages privés."
+    },
+    "public_label": "Clé publique",
+    "private_label": "Clé privée (WIF)",
+    "copy": "Copier",
+    "copied": "Copiée",
+    "download": "Télécharger en fichier texte",
+    "downloaded": "Enregistré",
+    "no_master_password": "Il n'y a pas de mot de passe maître. Morphit n'en crée ni n'en utilise jamais — tes 12 mots et ces clés sont tout ce qu'il faut.",
+    "txt_warning": "GARDE CECI PRIVÉ. Quiconque possède une clé privée ci-dessous peut prendre le contrôle total de ton compte et de tes fonds. Ne la partage avec personne, ne la saisis sur aucun site web auquel tu ne fais pas confiance, et ne l'envoie jamais par message ou e-mail.",
+    "txt_footer": "Ta phrase de récupération de 12 mots est ta sauvegarde Morphit. Ces quatre clés te permettent d'utiliser ce compte dans d'autres outils Blurt. Il n'y a pas de mot de passe maître."
   }
 }

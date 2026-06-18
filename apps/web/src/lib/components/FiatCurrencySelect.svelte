@@ -101,13 +101,24 @@
 		}
 	}
 
-	// Outside-close is handled by the full-screen blur scrim below (a
-	// dedicated click-catcher), NOT a window listener. The old approach
-	// raced the option click — picking an option runs add(), which drops
-	// it from `hits` and detaches the clicked node, so a window handler
-	// could mis-close. The scrim (z-20) sits BELOW the OPEN field (z-30)
-	// so option clicks land cleanly and the menu stays open for
-	// multi-select until an outside (scrim) click.
+	// Robust outside-close. A document-level pointerdown listener (capture)
+	// closes the menu when the press lands outside this component's root.
+	// pointerdown (not click) fires BEFORE the picked option's add() detaches
+	// its own node, so an option press is still seen as INSIDE rootEl — the
+	// race the old window-click approach hit. The menu stays open for
+	// multi-select until an OUTSIDE press. The blur scrim below is now purely
+	// visual: relying on it to close was fragile because the sticky page
+	// header (z-40) paints over the scrim (z-20), so a press in the header
+	// strip never reached it and the menu stayed stuck open.
+	$effect(() => {
+		if (!open) return;
+		const onDocPointerDown = (e: PointerEvent): void => {
+			if (rootEl && !rootEl.contains(e.target as Node)) open = false;
+		};
+		document.addEventListener('pointerdown', onDocPointerDown, true);
+		return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+	});
+
 	//
 	// The root z is conditional — z-30 while open, z-10 while closed —
 	// because the orderbook stacks three of these selects on one page
