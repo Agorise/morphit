@@ -7,7 +7,7 @@
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import { currentEnvelope, isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import { currentEnvelope, isUnlocked, isPairedReadOnly, liveIdentity } from '$stores/identity';
 	import { markBackupVisited } from '$utils/backupVisited';
 	import { envelopeToBlob, decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import { mnemonicForBackup, wipeFullIdentity } from '$crypto/keygen';
@@ -36,6 +36,13 @@
 
 	let seedPhase = $state<SeedPhase>({ kind: 'idle' });
 	let seedPassword = $state('');
+
+	// Posting-key imports have no BIP-39 seed phrase (origin === 'posting-
+	// only'): the user pasted a single WIF, so there's nothing to render as
+	// a 12-word phrase. The keyfile backup still applies (it's the encrypted
+	// posting key), so we point there instead of showing a seed flow that
+	// would only error.
+	const isPostingOnly = $derived($liveIdentity?.origin === 'posting-only');
 
 	// Mark the page as visited on mount. This is idempotent and
 	// clears the avatar-menu badge on first visit. If the user bails
@@ -255,6 +262,11 @@
 			     recover from. -->
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.seed_heading')}</h3>
+				{#if isPostingOnly}
+					<p class="mt-2 text-ink-700 dark:text-ink-200">
+						{$_('backup_keys.show_seed.error.no_seed_posting_only')}
+					</p>
+				{:else}
 				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
 					{$_('backup_keys.seed_body')}
 				</p>
@@ -381,6 +393,7 @@
 							{$_('backup_keys.show_seed.locked_hint')}
 						</StatusLine>
 					</div>
+				{/if}
 				{/if}
 			</article>
 

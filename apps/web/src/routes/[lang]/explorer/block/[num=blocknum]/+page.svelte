@@ -127,7 +127,7 @@
 				</dt>
 				<dd class="font-mono text-sm">
 					<a
-						href={lp('/explorer/account/{block.witness}')}
+						href={lp(`/explorer/account/${block.witness}`)}
 						class="text-morphit-emerald underline-offset-2 hover:underline"
 					>
 						@{block.witness}

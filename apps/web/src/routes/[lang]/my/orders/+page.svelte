@@ -464,7 +464,7 @@
 				     including order posts, replace/cancel, feedback. -->
 				<p class="mt-2 text-sm">
 					<a
-						href={lp('/explorer/account/{blurtAccount}')}
+						href={lp(`/explorer/account/${blurtAccount}`)}
 						class="text-morphit-emerald underline-offset-2 hover:underline"
 					>
 						{$_('my_orders.view_on_explorer')} →
@@ -560,7 +560,7 @@
 			<div class="grid gap-3 sm:grid-cols-3">
 				<a
 					href={lp('/orderbook')}
-					class="card text-left transition hover:border-morphit-emerald hover:shadow-lg"
+					class="card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<p class="text-2xl">🔍</p>
 					<h3 class="mt-2 font-display text-base font-bold">
@@ -572,7 +572,7 @@
 				</a>
 				<a
 					href={lp('/post')}
-					class="card text-left transition hover:border-morphit-emerald hover:shadow-lg"
+					class="card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<p class="text-2xl">✍️</p>
 					<h3 class="mt-2 font-display text-base font-bold">
@@ -584,7 +584,7 @@
 				</a>
 				<a
 					href={lp('/faq#how_to_trade_walkthrough')}
-					class="card text-left transition hover:border-morphit-emerald hover:shadow-lg"
+					class="card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<p class="text-2xl">📖</p>
 					<h3 class="mt-2 font-display text-base font-bold">

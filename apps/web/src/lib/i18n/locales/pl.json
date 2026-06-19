@@ -303,7 +303,7 @@
     "seed_tip_split": "Dla większych sald, podziel ją: pierwsze 6 słów w jednym miejscu, ostatnie 6 w innym. Obie połowy razem = pełny dostęp. Żadna połowa sama = nic.",
     "seed_tip_digital_warning": "Nigdy nie przechowuj seeda w emailu, notatkach w chmurze, screenshotach, menedżerach haseł synchronizowanych do chmury ani żadnej aplikacji dostępnej zdalnie.",
     "keyfile_heading": "2. Zaszyfrowany keyfile (drugorzędny)",
-    "keyfile_body": "Twoja sesja została uruchomiona z keyfilem zaszyfrowanym hasłem. Pobierz go teraz i przechowaj w miejscu oddzielnym od urządzenia, którego używasz. Jeśli zapomnisz hasła, keyfile jest bezużyteczny — więc traktuj hasło jako równie krytyczne.",
+    "keyfile_body": "Ten plik kluczy to twoje klucze prywatne, zaszyfrowane hasłem urządzenia. Pobierz go teraz i przechowuj w miejscu oddzielnym od urządzenia, którego używasz. Jeśli zapomnisz hasła, plik kluczy jest bezużyteczny — traktuj więc hasło jako równie krytyczne.",
     "keyfile_download": "Pobierz zaszyfrowany keyfile",
     "keyfile_downloading": "Generowanie pobrania…",
     "keyfile_downloaded": "Pobrano ✓",
@@ -1998,9 +1998,9 @@
     "body": "Wybierz opcję pasującą do tego, jak tu trafiłeś.",
     "no_account_heading": "Nie masz konta?",
     "no_account_body": "Utwórz je powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
-    "register_cta": "Utwórz nowe konto",
+    "register_cta": "🌱 Utwórz nowe konto",
     "checking": "Sprawdzanie twojej sesji…",
-    "import_existing": "Zaloguj z seed, json lub kluczem posting",
+    "import_existing": "Zaloguj z 12-wyrazowym seedem, plikiem json lub kluczem posting",
     "unlock": {
       "password_required": "Wpisz hasło, aby odblokować.",
       "wrong_password": "To hasło nie pasuje do twojego keystore'a. Spróbuj ponownie lub zaloguj się frazą seed.",
@@ -2290,7 +2290,8 @@
             "memo": "To twój klucz MEMO. Morphit potrzebuje POSTING — wklej ten."
           },
           "master_password": "To wygląda na Twoje hasło główne Blurt, a nie klucz POSTING. Morphit nigdy nie używa hasła głównego do logowania. Otwórz blurtwallet.com → Permissions i skopiuj swój Posting Private Key (zaczyna się od 5)."
-        }
+        },
+        "account_bad": "nieprawidłowy"
       },
       "error": {
         "seed_word_count": "Fraza seed Blurt ma dokładnie 12 słów — wpisano {count}. Upewnij się, że jest wszystkie 12, każde oddzielone pojedynczą spacją.",
@@ -2317,7 +2318,8 @@
           "password_too_short": "Hasło musi mieć co najmniej 8 znaków.",
           "passwords_mismatch": "Hasła nie pasują do siebie.",
           "password_weak": "Hasło jest zbyt słabe. Użyj czegoś dłuższego lub mniej przewidywalnego."
-        }
+        },
+        "body_password_set": "Twoje klucze są załadowane na tę sesję przeglądarki. Domyślnie po zamknięciu tej karty znikają i następnym razem trzeba będzie zalogować się ponownie. Jeśli to twój własny komputer, możesz wybrać, aby zapamiętać cię na tym urządzeniu — następnym razem odblokujesz tym samym hasłem, którego właśnie użyłeś."
       }
     },
     "confirm": {
@@ -2462,7 +2464,7 @@
     "run_cta": "Uruchom węzeł Morphit",
     "learn_cta": "Jak zarabiają operatorzy?",
     "empty_heading": "Jeszcze brak operatorów.",
-    "empty_body": "Żaden operator nie zarejestrował się jeszcze w widoku łańcucha tego indeksera. Operacja operator-register istnieje dziś — każdy może nadać `morphit_register_operator`, aby zarezerwować tag i zacząć zarabiać swój 90% udział w opłatach za publikację zapłaconych w BLURT. Jeśli chciałbyś być wśród pierwszych niezależnych operatorów, zacznij tutaj.",
+    "empty_body": "Żaden dodatkowy operator nie zarejestrował się jeszcze w łańcuchu. Każdy może zacząć zarabiać swój 90% udział w opłatach za publikację zapłaconych w BLURT. Jeśli chciałbyś być wśród pierwszych niezależnych operatorów, zacznij tutaj.",
     "empty_cta": "Uruchom węzeł",
     "load_error": "Nie można połączyć z indexerem",
     "inactive_badge": "Nieaktywny",
@@ -3364,7 +3366,7 @@
     "why_privacy_title": "Minimalizuj wyciek metadanych",
     "why_privacy_body": "Użytkownicy handlujący przez twoją instancję dzielą metadane tylko z tobą. Żaden inny operator, nawet Agorise, nie widzi wzorców ich aktywności.",
     "why_earn_title": "Płatność automatyczna przez Smart Contract",
-    "why_earn_body": "Każda opłata za publikację płatna w BLURT, którą przyciąga twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit na finansowanie bonusów powitalnych, delegacji lojalnościowych i kosztów tworzenia kont. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść zamiast oryginalnie rozważanego 50/50).\n\nSmart Contract działający na łańcuchu Blurt wymusza podział — nie osoba, nie firma, nikt kto może zmienić zdanie. 100% zautomatyzowane. Bez faktur, bez ręcznych wypłat, bez założeń zaufania. Dowodliwie pomagasz, dowodliwie ci płacą. Gwarantowane w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy. W pełni open source pod AGPL-3.0; jeśli umiesz czytać kod indexera, możesz audytować logikę wypłat.",
+    "why_earn_body": "Każda opłata za publikację płatna w BLURT, którą przyciąga twoja instancja, płaci ci 90% — tylko 10% trafia do skarbca Morphit na finansowanie dalszego rozwoju i utrzymania samego oprogramowania Morphit. Opłaty płatne w BTC i XMR trafiają w 100% do skarbca na te same zobowiązania projektowe (mechanizm podziału on-chain działa tylko dla BLURT, ale uczyniliśmy podział BLURT agresywnie hojnym dla kompensacji — 90/10 na twoją korzyść).\n\nSmart Contract działający na łańcuchu Blurt wymusza podział — nie osoba, nie firma, nikt kto może zmienić zdanie. 100% zautomatyzowane. Dowodliwie pomagasz, dowodliwie ci płacą. Gwarantowane w kodzie.\n\nWypłaty są denominowane w BLURT, więc jeśli BLURT się umacnia, twoje zarobki też — bez dodatkowej pracy.",
     "how_heading": "Jak zacząć",
     "step1_title": "Przygotuj VPS",
     "step1_body": "Linux (Debian 12, Ubuntu 24.04 LTS, Arch, NixOS — testujemy na Debianie). 2 rdzenie CPU przy 1 GHz+, 2 GB RAM minimum (4 GB komfortowo), 20 GB SSD. Raspberry Pi 4, stary laptop lub VPS za 5 $/miesiąc — wszystko działa. Statyczny IP nie jest potrzebny — DDNS działa dobrze. Zobacz wpis FAQ o minimalnych wymaganiach sprzętowych, by zobaczyć pełny rozkład między poziomami hobbystycznym, poważnym i starego laptopa.",
@@ -3384,14 +3386,14 @@
     "asset_policy_federation_label": "Federacja pozostaje nienaruszona.",
     "asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa zleceń z instancji partnerskich przed twoimi użytkownikami — historia łańcucha jest współdzielona, więc orderbook nadal pokazuje je w trybie tylko-do-odczytu. Blokada dotyczy tylko NOWYCH zleceń publikowanych Z twojej instancji.",
     "asset_policy_doc_pointer": "Pełna referencja zmiennych środowiskowych i przykłady wielo-aktywowe w",
-    "asset_policy_doc_pointer_suffix": "pod §Trade-only asset configuration.",
+    "asset_policy_doc_pointer_suffix": "pod Trade-only asset configuration.",
     "requirements_heading": "Wymagania zasobów",
     "req_hw_label": "Sprzęt",
     "req_hw_value": "2 rdzenie CPU, 2-4 GB RAM, 20 GB SSD",
     "req_network_label": "Sieć",
     "req_network_value": "Domowy internet wystarczy — DDNS obsługuje dynamiczne IP, statyczny IP nie jest wymagany",
     "req_time_label": "Twój czas",
-    "req_time_value": "Godzina miesięcznie na konserwację",
+    "req_time_value": "Poniżej godziny miesięcznie na konserwację",
     "cta_heading": "Gotowy, żeby zacząć?",
     "cta_body": "Sklonuj repo, przygotuj sprzęt (Pi 4 lub jakikolwiek stary laptop wystarczy), postępuj według runbook. Gdy raz nadasz operację register-operator, twoja instancja działa i zarabia.",
     "cta_repo": "Zobacz repozytorium",
@@ -3723,10 +3725,10 @@
       "reset_confirm_cancel": "Anuluj"
     },
     "session": {
-      "heading": "Sesja",
-      "explain": "Wyloguj się, gdy skończysz. Klucze posting i memo zostaną wymazane z pamięci; zaszyfrowany keystore na Twoim urządzeniu pozostaje nietknięty.",
+      "heading": "Narzędzia",
+      "explain": "Wyloguj się, gdy skończysz. Twoje klucze zostaną usunięte z pamięci; zaszyfrowany magazyn kluczy na twoim urządzeniu pozostaje nietknięty.",
       "sign_out": "Wyloguj",
-      "confirm_prompt": "Wylogować się z tego urządzenia? Twoje klucze posting i memo zostaną wymazane z pamięci. Musisz ponownie odblokować, aby handlować.",
+      "confirm_prompt": "Wylogować się z tego urządzenia? Twoje klucze zostaną usunięte z pamięci. Aby handlować, musisz ponownie odblokować.",
       "confirm_yes": "Tak, wyloguj",
       "confirm_cancel": "Pozostań zalogowany",
       "autolock_label": "Auto-blokada po bezczynności",
@@ -3752,20 +3754,20 @@
         "malformed": "To nie wygląda na prawidłowy URL."
       },
       "preview_label": "Podgląd",
-      "save": "Zapisz na tym urządzeniu",
+      "save": "Zapisz lokalnie",
       "save_pending": "Zapisuję…",
       "saved_toast": "Zapisano ✓",
-      "save_and_broadcast": "Zapisz i opublikuj w łańcuchu",
+      "save_and_broadcast": "Zapisz i rozgłoś",
       "broadcast_pending": "Publikuję…",
       "broadcast_ok": "Opublikowano ✓",
-      "clear": "Usuń",
+      "clear": "Wyczyść",
       "need_display_name": "Najpierw ustaw nazwę wyświetlaną. Twoja transmisja profilu obejmuje obie.",
       "reminder_title": "Gdzie to się pojawia",
       "reminder_body": "Po opublikowaniu ikona Nostr pojawia się obok Twojej nazwy użytkownika przy każdym zleceniu, każdej opinii, każdej wiadomości czatu — w każdej instancji Morphit, nie tylko tej. Inni użytkownicy dotkną jej, aby otworzyć Twój profil Nostr w swoim preferowanym kliencie."
     },
     "blurt_media_url": {
       "heading": "URL profilu Blurt.media",
-      "explain": "Link do twojego profilu na blurt.media, popularnym frontendzie Blurt. Wyświetlany obok twojej nazwy użytkownika w całym Morphit. Opcjonalne.",
+      "explain": "Link do twojego profilu na blurt.media, popularnym frontendzie Blurt do streamingu. Wyświetlany obok twojej nazwy użytkownika wszędzie w Morphit. Opcjonalne.",
       "label": "URL Blurt.media",
       "placeholder": "https://blurt.media/@twojanazwa",
       "hint_empty": "Wklej tutaj URL swojego profilu blurt.media lub zostaw puste.",
@@ -3786,7 +3788,7 @@
       "clear": "Wyczyść",
       "need_display_name": "Najpierw ustaw nazwę wyświetlaną — twoja op profilu niesie oba pola razem.",
       "reminder_title": "Opcjonalne — możesz pominąć.",
-      "reminder_body": "Twoja tożsamość Morphit działa bez tego URL. To grzecznościowy link dla ludzi, którzy chcą zobaczyć twoją obecność na Blurt.media z profilu Morphit."
+      "reminder_body": "Twoja tożsamość w Morphit działa dobrze bez tego adresu URL. To grzecznościowy link dla osób, które mogą chcieć obejrzeć także twoje filmy lub podcasty."
     },
     "notifications": {
       "heading": "Powiadomienia",
@@ -4294,14 +4296,15 @@
   "welcome_first_buy": {
     "heading": "Twoja pierwsza transakcja na nasz koszt. 🌱",
     "lead": "Witaj w Morphit! Twoje pierwsze zlecenie to bezpłatny zakup BLURT — pokrywamy opłatę za wystawienie, a ty wychodzisz z prawdziwym saldem początkowym w portfelu. Oto dlaczego to jedna z najlepszych ofert powitalnych w P2P krypto:",
-    "bullet_free": "<strong>Opłata za wystawienie jest bezpłatna.</strong> Morphit płaci opłatę sieciową za tę transakcję — twoim jedynym kosztem jest to, co zgodzisz się zapłacić kontrahentowi.",
-    "bullet_starter": "<strong>Wychodzisz z BLURT w portfelu.</strong> Wystarczająco, aby sfinansować przyszłe ogłoszenia na Morphit po obniżonej stawce BLURT (~60 BLURT każde) i uczestniczyć w sieci społecznościowej Blurt od pierwszego dnia.",
-    "bullet_runway": "<strong>BLURT działa w całej sieci społecznościowej Blurt.</strong> Używaj go do głosowania na posty na blurt.blog, blurt.media i innych frontendach Blurt — zdobywaj nagrody za kurację po prostu głosując na dobre treści.",
-    "bullet_bp_stake": "<strong>Natychmiast odblokowujesz 1 BP powitalnej stawki</strong> w momencie, gdy uruchomi się twoja pierwsza opłata za wystawienie zapłacona w BLURT. Po twojej pierwszej zakończonej transakcji to staje się 10 BLURT liquid + 10 BLURT Power — trwała stawka z wagą głosu w sieci społecznościowej Blurt.",
-    "why_blurt_minimum": "Dlaczego BLURT a nie BTC lub XMR za darmową transakcję? Ponieważ BLURT w twoim portfelu pozwala ci robić wszystko inne na Morphit później — płacić opłaty za wystawianie przyszłych transakcji (za pół ceny!), uczestniczyć w warstwie społecznej Blurt i zdobywać nagrody lojalnościowe. Chcemy, żebyś był gotowy do bycia aktywnym, a nie zablokowany z pustym saldem BLURT.",
+    "bullet_free": "<strong>Opłata za wystawienie jest bezpłatna.</strong> Morphit płaci opłatę sieciową za twoją pierwszą transakcję — twoim jedynym kosztem jest to, co zgodzisz się zapłacić kontrahentowi.",
+    "bullet_starter": "<strong>Wychodzisz z prawdziwymi środkami w swoim portfelu on-chain</strong> na opłaty transakcyjne (również po obniżonej stawce (~60 BLURT każda)) od pierwszego dnia.",
+    "bullet_runway": "<strong>BLURT działa w całej sieci społecznościowej Blurt.</strong> Używaj go do głosowania na posty na blurt.blog, blurt.media itd. i zdobywaj nagrody, po prostu klikając \"Like\" przy dobrych treściach.",
+    "bullet_bp_stake": "<strong>Natychmiast odblokowujesz 1 BP powitalnej stawki</strong> w momencie, gdy uruchomi się twoja pierwsza opłata za wystawienie zapłacona w BLURT. Po twojej pierwszej udanej transakcji to staje się 10 BLURT liquid + 10 BLURT Power — stawka generująca dochód pasywny w sieci.",
+    "why_blurt_minimum": "Dlaczego BLURT a nie BTC lub XMR za darmową transakcję? Ponieważ BLURT w twoim portfelu pozwala ci robić wszystko inne na Morphit później — płacić opłaty za wystawianie przyszłych transakcji (za pół ceny!), uczestniczyć w warstwie społecznej Blurt i zdobywać nagrody lojalnościowe. Chcemy, żebyś był gotowy do bycia aktywnym, a nie zablokowany z pustym saldem.",
     "cta_compose": "Skomponuj mój pierwszy bezpłatny zakup",
     "learn_more": "Dowiedz się więcej",
-    "dismiss_aria": "Zamknij ten baner powitalny"
+    "collapse_aria": "Zwiń tę kartę powitalną",
+    "expand_aria": "Rozwiń tę kartę powitalną"
   },
   "chat_notif_nudge": {
     "aria_label": "Sugestia powiadomień czatu",

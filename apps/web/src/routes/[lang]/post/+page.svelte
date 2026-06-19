@@ -174,6 +174,12 @@
 	const DRAFT_KEY = 'post.compose';
 	let draftSavedAt = $state<Date | null>(null);
 	let draftSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+	// JSON of the form state captured right after mount (draft restore + all
+	// prefills). The auto-save effect only persists once the live state
+	// diverges from this baseline — so arriving via a programmatic prefill
+	// (e.g. ?welcome=1) without typing anything never writes a draft that
+	// would later resurface as a phantom "Draft restored from N ago" banner.
+	let baselineDraftJson: string | null = null;
 
 	/** All form fields that constitute a "draft" — everything a user
 	 *  types or picks during compose. Intentionally excludes:
@@ -311,6 +317,9 @@
 		feeMethodChoice = 'blurt';
 		externalTxId = '';
 		txProof = '';
+		// Re-baseline to the cleared state: the next auto-save only fires
+		// once the user starts composing again.
+		baselineDraftJson = JSON.stringify(snapshotDraft());
 	}
 
 	/** Compact relative-time formatter matching /my/orders: 1m / 1h / 1d.
@@ -810,6 +819,11 @@
 			// the page.
 		}
 
+		// Capture the post-mount baseline (after restore + every prefill).
+		// Until the user diverges from this, the auto-save effect stays quiet,
+		// so a prefill-only visit never persists a phantom draft.
+		baselineDraftJson = JSON.stringify(snapshotDraft());
+
 		return () => {
 			if (draftSaveTimeout) clearTimeout(draftSaveTimeout);
 			clearInterval(t);
@@ -851,6 +865,13 @@
 		if (draftSaveTimeout) clearTimeout(draftSaveTimeout);
 		draftSaveTimeout = setTimeout(() => {
 			const snapshot = snapshotDraft();
+			// Hold off until the post-mount baseline is captured, then only
+			// persist once the user has actually diverged from it. This stops
+			// a pure programmatic prefill (welcome CTA / re-list / stored
+			// prefs) from being written and later resurrected as a phantom
+			// "Draft restored from N ago" banner.
+			if (baselineDraftJson === null) return;
+			if (JSON.stringify(snapshot) === baselineDraftJson) return;
 			// Skip writes when the snapshot has nothing worth saving
 			// — avoids churning the storage slot with an all-defaults
 			// envelope and avoids showing "Restored" later for a

@@ -6,13 +6,13 @@
 	 * AvatarMenu — the top-right avatar-with-badge + dropdown.
 	 *
 	 * When the user is signed in (unlocked OR paired-readonly):
-	 *   - Renders their identicon avatar.  For unlocked sessions the
-	 *     identicon is derived from the posting pubkey.  For paired-
-	 *     readonly sessions (ADR-0022 QR-pair, Option A) we don't have
-	 *     posting pubkey material on this device — only the account
-	 *     name and chat pubkey — so the identicon is derived from the
-	 *     account name itself.  Profile pages and IdentityLabel use the
-	 *     same fallback for paired sessions, so the seed is consistent.
+	 *   - Renders their identicon avatar, seeded from the account
+	 *     NAME whenever one is known (the stable, app-wide-available
+	 *     anchor — it survives a posting-key rotation and matches the
+	 *     profile page, explorer, the /settings account-name card, and
+	 *     IdentityLabel everywhere). This holds for both unlocked and
+	 *     paired-readonly sessions. Only before a name exists (mid-
+	 *     onboarding, unlocked) does it fall back to the posting pubkey.
 	 *   - Overlays an emerald badge with unread count when
 	 *     totalUnread > 0.
 	 *   - Click opens a dropdown menu with two panes:
@@ -85,20 +85,23 @@
 		return getUserBlurtAccount() !== null;
 	});
 
-	// Avatar src — identicon seeded from whichever public material
-	// is available for the current session:
-	//   - unlocked: posting pubkey (same source IdentityLabel uses)
-	//   - paired-readonly: account name (no posting pubkey on this
-	//     device; the account name is the next-best deterministic
-	//     seed for a consistent visual identity).
-	// Empty string when no session is present — the surrounding
-	// {#if $hasAnySession} gate hides the avatar in that case, so
-	// the empty src is never rendered.
+	// Avatar src — identicon seeded from the account NAME so it matches
+	// the avatar shown on the profile page, the explorer, the account-name
+	// card on /settings, and IdentityLabel everywhere. The account name is
+	// the stable visual anchor (it survives a future posting-key rotation,
+	// and it's the only seed available for accounts whose pubkey we haven't
+	// fetched). Falls back to the posting pubkey only before a name exists
+	// (mid-onboarding). Empty string when no session — the surrounding
+	// {#if $hasAnySession} gate hides the avatar then.
 	const avatarSrc = $derived.by(() => {
-		const live = $liveIdentity;
-		if (live) return identiconDataUri(live.posting.publicKey, 40);
+		void $liveIdentity; // re-evaluate on any session change
+		void $pairedReadOnly;
+		const name = getUserBlurtAccount();
+		if (name) return identiconDataUriFromString(name, 40);
 		const paired = $pairedReadOnly;
 		if (paired) return identiconDataUriFromString(paired.account, 40);
+		const live = $liveIdentity;
+		if (live) return identiconDataUri(live.posting.publicKey, 40);
 		return '';
 	});
 
@@ -144,11 +147,10 @@
 
 	function goToEditProfile(): void {
 		close();
-		// Anchor-link into the display-name section of /settings, where
-		// all profile fields (display name, Blurt.media URL, Nostr URL)
-		// live. If/when a dedicated /profile/edit route ships, this
-		// changes to point at it directly.
-		void gotoLocale('/settings#display-name-heading');
+		// Land at the TOP of /settings (the profile/identity editor). No
+		// anchor — deep-linking to #display-name-heading auto-scrolled the
+		// user past the account-name card, which was disorienting.
+		void gotoLocale('/settings');
 	}
 
 	function goToBackupKeys(): void {

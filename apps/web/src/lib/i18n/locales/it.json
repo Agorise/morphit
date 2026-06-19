@@ -303,7 +303,7 @@
     "seed_tip_split": "Per saldi più grandi, dividila: prime 6 parole in un posto, ultime 6 in un altro. Entrambe le metà insieme = accesso completo. Nessuna metà da sola = niente.",
     "seed_tip_digital_warning": "Mai conservare il seed in email, note cloud, screenshot, gestori password sincronizzati al cloud, o qualsiasi app accessibile da remoto.",
     "keyfile_heading": "2. Keyfile cifrato (secondario)",
-    "keyfile_body": "La tua sessione è stata avviata con un keyfile cifrato da password. Riscaricalo ora e conservalo in un posto separato dal dispositivo che stai usando. Se dimentichi la password, il keyfile è inutile — quindi tratta la password come ugualmente critica.",
+    "keyfile_body": "Questo file di chiavi sono le tue chiavi private, cifrate con la password del tuo dispositivo. Scaricalo ora e conservalo in un luogo separato dal dispositivo che stai usando. Se dimentichi la password, il file di chiavi è inutile — quindi tratta la password come altrettanto critica.",
     "keyfile_download": "Scarica keyfile cifrato",
     "keyfile_downloading": "Generazione download…",
     "keyfile_downloaded": "Scaricato ✓",
@@ -1998,9 +1998,9 @@
     "body": "Scegli l'opzione che corrisponde a come sei arrivato qui.",
     "no_account_heading": "Non hai un account?",
     "no_account_body": "Creane uno qui sopra scegliendo semplicemente un nome utente simpatico; è letteralmente tutto qui.",
-    "register_cta": "Crea un nuovo account",
+    "register_cta": "🌱 Crea un nuovo account",
     "checking": "Verifica della tua sessione…",
-    "import_existing": "Accedi con seed, json o chiave di posting",
+    "import_existing": "Accedi con seed di 12 parole, file json o chiave di posting",
     "unlock": {
       "password_required": "Inserisci la password per sbloccare.",
       "wrong_password": "Questa password non corrisponde al tuo keystore. Riprova o accedi con la tua frase seed.",
@@ -2290,7 +2290,8 @@
             "memo": "Quella è la tua chiave MEMO. Morphit serve la POSTING — incolla quella."
           },
           "master_password": "Sembra la tua master password di Blurt, non la tua chiave POSTING. Morphit non usa mai la master password per accedere. Apri blurtwallet.com → Permissions e copia la tua Posting Private Key (inizia con 5)."
-        }
+        },
+        "account_bad": "non valido"
       },
       "error": {
         "seed_word_count": "Una frase seed di Blurt ha esattamente 12 parole — ne hai inserite {count}. Assicurati che ci siano tutte e 12, separate da un solo spazio.",
@@ -2317,7 +2318,8 @@
           "password_too_short": "La password deve essere di almeno 8 caratteri.",
           "passwords_mismatch": "Le password non corrispondono.",
           "password_weak": "Password troppo debole. Usa qualcosa di più lungo o meno prevedibile."
-        }
+        },
+        "body_password_set": "Le tue chiavi sono caricate per questa sessione del browser. Per impostazione predefinita, quando chiudi questa scheda spariscono e dovrai accedere di nuovo la prossima volta. Se questo è il tuo computer, puoi scegliere di essere ricordato su questo dispositivo — la prossima volta sbloccherai con la stessa password che hai appena usato."
       }
     },
     "confirm": {
@@ -2462,7 +2464,7 @@
     "run_cta": "Esegui un nodo Morphit",
     "learn_cta": "Come guadagnano gli operatori?",
     "empty_heading": "Ancora nessun operatore.",
-    "empty_body": "Nessun operatore si è ancora registrato sulla vista della catena di questo indexer. L'operazione operator-register esiste oggi — chiunque può trasmettere `morphit_register_operator` per reclamare un tag e iniziare a guadagnare la sua quota del 90% delle commissioni di annuncio pagate in BLURT. Se vorresti essere tra i primi operatori indipendenti, inizia qui.",
+    "empty_body": "Nessun operatore aggiuntivo si è ancora registrato sulla catena. Chiunque può iniziare a guadagnare la sua quota del 90% delle commissioni di annuncio pagate in BLURT. Se vorresti essere tra i primi operatori indipendenti, inizia qui.",
     "empty_cta": "Esegui un nodo",
     "load_error": "Impossibile raggiungere l'indexer",
     "inactive_badge": "Inattivo",
@@ -3364,7 +3366,7 @@
     "why_privacy_title": "Minimizza la fuga di metadati",
     "why_privacy_body": "Gli utenti che tradano tramite la tua istanza condividono metadati con te e solo con te. Nessun altro operatore, nemmeno Agorise, vede i loro schemi di attività.",
     "why_earn_title": "Pagato automaticamente da Smart Contract",
-    "why_earn_body": "Ogni commissione annuncio pagata in BLURT che la tua istanza attrae ti paga il 90% — solo il 10% va al tesoro Morphit per finanziare bonus di benvenuto, deleghe di fedeltà e costi di creazione account. Le commissioni pagate in BTC e XMR fluiscono al 100% al tesoro per gli stessi obblighi del progetto (il meccanismo di ripartizione on-chain funziona solo per BLURT, ma abbiamo reso la ripartizione BLURT aggressivamente generosa per compensare — 90/10 a tuo favore invece del 50/50 originalmente considerato).\n\nUno Smart Contract sulla catena Blurt impone la divisione — non una persona, non un'azienda, nessuno che possa cambiare idea. 100% automatizzato. Niente fatture, niente pagamenti manuali, nessuna assunzione di fiducia. Aiuti dimostrabilmente, vieni pagato dimostrabilmente. Garantito nel codice.\n\nI pagamenti sono denominati in BLURT, quindi se BLURT si apprezza, lo fanno anche i tuoi guadagni — senza lavoro aggiuntivo. Completamente open source sotto AGPL-3.0; se sai leggere il sorgente dell'indexer, puoi verificare la logica di pagamento.",
+    "why_earn_body": "Ogni commissione annuncio pagata in BLURT che la tua istanza attrae ti paga il 90% — solo il 10% va al tesoro Morphit per finanziare lo sviluppo continuo e la manutenzione del software Morphit stesso. Le commissioni pagate in BTC e XMR fluiscono al 100% al tesoro per gli stessi obblighi del progetto (il meccanismo di ripartizione on-chain funziona solo per BLURT, ma abbiamo reso la ripartizione BLURT aggressivamente generosa per compensare — 90/10 a tuo favore).\n\nUno Smart Contract sulla catena Blurt impone la divisione — non una persona, non un'azienda, nessuno che possa cambiare idea. 100% automatizzato. Aiuti dimostrabilmente, vieni pagato dimostrabilmente. Garantito nel codice.\n\nI pagamenti sono denominati in BLURT, quindi se BLURT si apprezza, lo fanno anche i tuoi guadagni — senza lavoro aggiuntivo.",
     "how_heading": "Come iniziare",
     "step1_title": "Fornisci un VPS",
     "step1_body": "Linux (Debian 12, Ubuntu 24.04 LTS, Arch, NixOS — testiamo su Debian). 2 core CPU a 1 GHz+, 2 GB RAM minimo (4 GB comodo), 20 GB SSD. Una Raspberry Pi 4, un vecchio laptop o un VPS da $5/mese funzionano tutti. Nessun IP statico necessario — DDNS funziona. Vedi la voce FAQ sui requisiti hardware minimi per la ripartizione completa tra livelli hobbista, serio e laptop vecchio.",
@@ -3384,14 +3386,14 @@
     "asset_policy_federation_label": "La federazione rimane intatta.",
     "asset_policy_federation_body": "Disabilitare un asset sulla tua istanza non nasconde gli ordini delle istanze peer ai tuoi utenti — la storia della catena è condivisa, quindi l'orderbook li mostra comunque in sola lettura. Il blocco si applica solo a NUOVI ordini pubblicati DALLA tua istanza.",
     "asset_policy_doc_pointer": "Riferimento completo delle variabili d'ambiente ed esempi multi-asset in",
-    "asset_policy_doc_pointer_suffix": "sotto §Trade-only asset configuration.",
+    "asset_policy_doc_pointer_suffix": "sotto Trade-only asset configuration.",
     "requirements_heading": "Requisiti di risorse",
     "req_hw_label": "Hardware",
     "req_hw_value": "2 core CPU, 2-4 GB RAM, 20 GB SSD",
     "req_network_label": "Rete",
     "req_network_value": "Internet domestico va bene — DDNS gestisce IP dinamici, nessun IP statico richiesto",
     "req_time_label": "Il tuo tempo",
-    "req_time_value": "Un'ora al mese per la manutenzione",
+    "req_time_value": "Meno di un'ora al mese per la manutenzione",
     "cta_heading": "Pronto per iniziare?",
     "cta_body": "Clona il repo, prepara il tuo hardware (una Pi 4 o qualsiasi vecchio laptop va bene), segui il runbook. Una volta che trasmetti l'operazione register-operator, la tua istanza è live e guadagna.",
     "cta_repo": "Vedi il repo",
@@ -3723,10 +3725,10 @@
       "reset_confirm_cancel": "Annulla"
     },
     "session": {
-      "heading": "Sessione",
-      "explain": "Esci quando hai finito. Le tue chiavi posting e memo verranno cancellate dalla memoria; il keystore cifrato sul tuo dispositivo resta intatto.",
+      "heading": "Utilità",
+      "explain": "Esci quando hai finito. Le tue chiavi verranno cancellate dalla memoria; il portachiavi cifrato sul tuo dispositivo rimane intatto.",
       "sign_out": "Esci",
-      "confirm_prompt": "Uscire da questo dispositivo? Le tue chiavi posting e memo saranno cancellate dalla memoria. Dovrai sbloccare di nuovo per scambiare.",
+      "confirm_prompt": "Disconnettersi da questo dispositivo? Le tue chiavi verranno cancellate dalla memoria. Dovrai sbloccare di nuovo per fare trading.",
       "confirm_yes": "Sì, esci",
       "confirm_cancel": "Resta connesso",
       "autolock_label": "Auto-blocco dopo inattività",
@@ -3752,20 +3754,20 @@
         "malformed": "Non sembra un URL valido."
       },
       "preview_label": "Anteprima",
-      "save": "Salva su questo dispositivo",
+      "save": "Salva localmente",
       "save_pending": "Salvataggio…",
       "saved_toast": "Salvato ✓",
-      "save_and_broadcast": "Salva e pubblica on-chain",
+      "save_and_broadcast": "Salva e trasmetti",
       "broadcast_pending": "Pubblicazione…",
       "broadcast_ok": "Pubblicato ✓",
-      "clear": "Rimuovi",
+      "clear": "Cancella",
       "need_display_name": "Imposta prima un nome mostrato. Il tuo broadcast del profilo include entrambi.",
       "reminder_title": "Dove appare",
       "reminder_body": "Una volta pubblicata, l'icona Nostr appare accanto al tuo nome utente su ogni ordine, ogni feedback, ogni messaggio di chat — su ogni istanza Morphit, non solo questa. Altri utenti la toccano per aprire il tuo profilo Nostr nel loro client preferito."
     },
     "blurt_media_url": {
       "heading": "URL profilo Blurt.media",
-      "explain": "Un link al tuo profilo su blurt.media, il popolare frontend Blurt. Mostrato accanto al tuo nome utente ovunque su Morphit. Opzionale.",
+      "explain": "Un collegamento al tuo profilo su blurt.media, un popolare frontend di Blurt per lo streaming. Mostrato accanto al tuo nome utente ovunque su Morphit. Facoltativo.",
       "label": "URL Blurt.media",
       "placeholder": "https://blurt.media/@tuonome",
       "hint_empty": "Incolla qui l'URL del tuo profilo blurt.media, o lascia vuoto.",
@@ -3786,7 +3788,7 @@
       "clear": "Cancella",
       "need_display_name": "Imposta prima un nome visualizzato — la tua op profilo porta entrambi i campi insieme.",
       "reminder_title": "Opzionale — puoi saltare.",
-      "reminder_body": "La tua identità Morphit funziona bene senza questo URL. È un link di cortesia per chi vuole vedere la tua presenza Blurt.media dal tuo profilo Morphit."
+      "reminder_body": "La tua identità Morphit funziona benissimo senza questo URL. È un link di cortesia per le persone che potrebbero voler vedere anche i tuoi video o podcast."
     },
     "notifications": {
       "heading": "Notifiche",
@@ -4294,14 +4296,15 @@
   "welcome_first_buy": {
     "heading": "Il tuo primo scambio è offerto da noi. 🌱",
     "lead": "Benvenuto su Morphit! Il tuo primo ordine è un acquisto gratuito di BLURT — copriamo noi la commissione di listing, e tu te ne vai con un saldo iniziale reale nel tuo portafoglio. Ecco perché è una delle migliori offerte di onboarding in crypto P2P:",
-    "bullet_free": "<strong>La commissione di listing è gratuita.</strong> Morphit paga la commissione di rete per questo scambio — il tuo unico costo è quello che concordi di pagare alla tua controparte.",
-    "bullet_starter": "<strong>Te ne vai con del BLURT nel tuo portafoglio.</strong> Abbastanza per finanziare futuri annunci su Morphit alla tariffa BLURT scontata (~60 BLURT ciascuno), e per partecipare alla rete social Blurt dal primo giorno.",
-    "bullet_runway": "<strong>BLURT funziona in tutta la rete social Blurt.</strong> Usalo per votare i post su blurt.blog, blurt.media e altri frontend Blurt — guadagna ricompense di curation semplicemente votando contenuti buoni.",
-    "bullet_bp_stake": "<strong>Sblocchi istantaneamente 1 BP di partecipazione di benvenuto</strong> nel momento in cui scatta la tua prima commissione di listing pagata in BLURT. Dopo il tuo primo scambio completato, diventa 10 BLURT liquid + 10 BLURT Power — una partecipazione permanente con peso di voto nella rete social Blurt.",
-    "why_blurt_minimum": "Perché BLURT e non BTC o XMR per lo scambio gratuito? Perché il BLURT nel tuo portafoglio è ciò che ti permette di fare tutto il resto su Morphit dopo — pagare le commissioni di listing sui futuri scambi (a metà prezzo!), partecipare al livello social di Blurt e guadagnare ricompense fedeltà. Vogliamo che tu sia pronto a essere attivo, non bloccato con un saldo BLURT vuoto.",
+    "bullet_free": "<strong>La commissione di listing è gratuita.</strong> Morphit paga la commissione di rete per il tuo primo scambio — il tuo unico costo è quello che concordi di pagare alla tua controparte.",
+    "bullet_starter": "<strong>Te ne vai con fondi reali nel tuo portafoglio on-chain</strong> per le commissioni di trading (anche alla tariffa scontata (~60 BLURT ciascuno)) dal primo giorno.",
+    "bullet_runway": "<strong>BLURT funziona in tutta la rete social Blurt.</strong> Usalo per votare i post su blurt.blog, blurt.media, ecc. e guadagna ricompense semplicemente cliccando \"Like\" sui contenuti buoni.",
+    "bullet_bp_stake": "<strong>Sblocchi istantaneamente 1 BP di partecipazione di benvenuto</strong> nel momento in cui scatta la tua prima commissione di listing pagata in BLURT. Dopo il tuo primo scambio riuscito, diventa 10 BLURT liquid + 10 BLURT Power — una partecipazione che genera reddito passivo sulla rete.",
+    "why_blurt_minimum": "Perché BLURT e non BTC o XMR per lo scambio gratuito? Perché il BLURT nel tuo portafoglio è ciò che ti permette di fare tutto il resto su Morphit dopo — pagare le commissioni di listing sui futuri scambi (a metà prezzo!), partecipare al livello social di Blurt e guadagnare ricompense fedeltà. Vogliamo che tu sia pronto a essere attivo, non bloccato con un saldo vuoto.",
     "cta_compose": "Componi il mio primo acquisto gratuito",
     "learn_more": "Scopri di più",
-    "dismiss_aria": "Chiudi questo banner di benvenuto"
+    "collapse_aria": "Comprimi questa scheda di benvenuto",
+    "expand_aria": "Espandi questa scheda di benvenuto"
   },
   "chat_notif_nudge": {
     "aria_label": "Suggerimento per le notifiche della chat",

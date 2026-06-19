@@ -30,7 +30,14 @@
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 	import { hiddenAccounts, unhideAccount, clearAllHidden } from '$lib/utils/hiddenAccounts';
 	import { firstTradeAnnounce, setFirstTradeAnnounce } from '$lib/utils/syndicationPrefs';
-	import { liveIdentity, isUnlocked, isPairedReadOnly, reset as resetIdentity } from '$stores/identity';
+	import {
+		liveIdentity,
+		isUnlocked,
+		isPairedReadOnly,
+		broadcastSignOut
+	} from '$stores/identity';
+	import { getProfile } from '$lib/indexer/client';
+	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import {
 		broadcastProfile,
 		BroadcastError,
@@ -160,7 +167,13 @@
 	 *  a failed upload (some browsers remember the last selection
 	 *  and refuse a repeat of the same file). */
 	let avatarFileInput = $state<HTMLInputElement | null>(null);
-
+	/** True when the account currently has a custom avatar broadcast on
+	 *  chain. Drives whether the "Remove avatar" button is shown — there's
+	 *  no point offering to remove an avatar that was never set. Defaults
+	 *  false (button hidden) until a profile fetch confirms one exists, so
+	 *  a failed/slow fetch errs toward hiding rather than a no-op button. */
+	let hasCustomAvatar = $state(false);
+	let avatarExistenceChecked = false;
 	// Rehydrate from localStorage on mount.
 	$effect(() => {
 		if (!browser) return;
@@ -187,6 +200,24 @@
 			if (acct) {
 				accountSaved = acct;
 				accountInput = acct;
+				// One-shot, best-effort: find out whether this account already
+				// has a custom avatar on chain so we only show "Remove avatar"
+				// when there's actually one to remove. Failure leaves the flag
+				// false (button stays hidden), which is the safe default.
+				if (!avatarExistenceChecked) {
+					avatarExistenceChecked = true;
+					void (async () => {
+						try {
+							const r = await getProfile(acct);
+							if (r.ok) {
+								const props = extractLabelPropsFromProfile(r.data);
+								hasCustomAvatar = !!(props.avatarSvg || props.avatarDataUri);
+							}
+						} catch {
+							// Indexer unreachable / no profile — leave hidden.
+						}
+					})();
+				}
 			}
 			// Sally finding H2 (Part 68): one-shot banner trigger
 			// for users redirected here from seed/keyfile import.
@@ -377,6 +408,32 @@
 		setTimeout(() => (blurtMediaSavedToast = false), 1800);
 	}
 
+	/** Auto-save the Blurt.media URL locally when the field loses focus.
+	 *  Silent (no spinner, no artificial delay) and a no-op when the value
+	 *  hasn't actually changed, so tabbing through the form doesn't spam a
+	 *  "Saved" toast. Invalid input is left untouched for the user to fix
+	 *  (the inline error stays visible). This is why the field no longer
+	 *  needs an explicit "Save locally" button — broadcasting to chain stays
+	 *  a deliberate, separate action. */
+	function persistBlurtMediaOnBlur(): void {
+		if (!blurtMediaIsValid) return;
+		const cleaned = blurtMediaIsEmpty ? '' : blurtMediaCleaned;
+		if (cleaned === blurtMediaSaved) {
+			blurtMediaInput = cleaned; // normalize display only
+			return;
+		}
+		try {
+			if (cleaned) window.localStorage.setItem(BLURT_MEDIA_URL_STORAGE_KEY, cleaned);
+			else window.localStorage.removeItem(BLURT_MEDIA_URL_STORAGE_KEY);
+		} catch {
+			// Private mode — in-memory only.
+		}
+		blurtMediaSaved = cleaned;
+		blurtMediaInput = cleaned;
+		blurtMediaSavedToast = true;
+		setTimeout(() => (blurtMediaSavedToast = false), 1800);
+	}
+
 	async function saveAndBroadcastBlurtMedia(): Promise<void> {
 		await saveBlurtMediaLocal();
 		const live = $liveIdentity;
@@ -445,6 +502,29 @@
 		nostrSaved = cleaned;
 		nostrInput = cleaned;
 		nostrSaving = false;
+		nostrSavedToast = true;
+		setTimeout(() => (nostrSavedToast = false), 1800);
+	}
+
+	/** Auto-save the Nostr URL locally on blur. Same contract as
+	 *  persistBlurtMediaOnBlur — silent, change-detected, invalid input
+	 *  left for the user to fix. Removes the need for a "Save locally"
+	 *  button; "Save & broadcast" stays a deliberate action. */
+	function persistNostrOnBlur(): void {
+		if (!nostrIsValid) return;
+		const cleaned = nostrIsEmpty ? '' : nostrCleaned;
+		if (cleaned === nostrSaved) {
+			nostrInput = cleaned; // normalize display only
+			return;
+		}
+		try {
+			if (cleaned) window.localStorage.setItem(NOSTR_URL_STORAGE_KEY, cleaned);
+			else window.localStorage.removeItem(NOSTR_URL_STORAGE_KEY);
+		} catch {
+			// Private mode — in-memory only.
+		}
+		nostrSaved = cleaned;
+		nostrInput = cleaned;
 		nostrSavedToast = true;
 		setTimeout(() => (nostrSavedToast = false), 1800);
 	}
@@ -578,6 +658,7 @@
 				avatar_svg: avatarStagedSvg,
 				avatar_data_uri: avatarStagedDataUri
 			});
+			hasCustomAvatar = true;
 			avatarBroadcastOk = true;
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
@@ -620,6 +701,7 @@
 				avatar_svg: '',
 				avatar_data_uri: ''
 			});
+			hasCustomAvatar = false;
 			// Clear any local staging — the on-chain state is now
 			// "no avatar", and the UI should reflect that.
 			avatarStagedSvg = '';
@@ -681,7 +763,10 @@
 		confirmingSignOut = false;
 	}
 	function confirmSignOut(): void {
-		resetIdentity();
+		// broadcastSignOut (not reset) so that an in-memory-only session
+		// cloned into sibling tabs via the cross-tab handoff is revoked
+		// everywhere, not just here. See $stores/identity.
+		broadcastSignOut();
 		gotoLocale('/');
 	}
 
@@ -994,7 +1079,7 @@
 	</section>
 
 	<!-- ─── Display name ─── -->
-	<section class="card" aria-labelledby="display-name-heading">
+	<section class="card mt-6" aria-labelledby="display-name-heading">
 		<h2 id="display-name-heading" class="font-display text-xl font-bold">
 			{$_('settings.display_name.heading')}
 		</h2>
@@ -1007,6 +1092,7 @@
 				{$_('settings.display_name.preview_label')}
 			</p>
 			<IdentityLabel
+				account={accountSaved ?? undefined}
 				publicKey={previewPubkey}
 				displayName={validation.ok ? validation.cleaned : saved}
 				weight="bold"
@@ -1142,6 +1228,7 @@
 			inputmode="url"
 			spellcheck="false"
 			bind:value={blurtMediaInput}
+			onblur={persistBlurtMediaOnBlur}
 			placeholder={$_('settings.blurt_media_url.placeholder')}
 			aria-invalid={!blurtMediaIsValid}
 			aria-describedby="blurt-media-url-help"
@@ -1189,6 +1276,7 @@
 					{$_('settings.blurt_media_url.preview_label')}
 				</p>
 				<IdentityLabel
+					account={accountSaved ?? undefined}
 					displayName={saved}
 					publicKey={previewPubkey}
 					blurtMediaUrl={blurtMediaCleaned}
@@ -1197,21 +1285,6 @@
 		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
-			<BusyButton
-				variant="primary"
-				busy={blurtMediaSaving}
-				done={blurtMediaSavedToast}
-				disabled={!blurtMediaIsValid ||
-					(blurtMediaIsEmpty ? blurtMediaSaved === '' : blurtMediaCleaned === blurtMediaSaved)}
-				busyLabel={$_('settings.blurt_media_url.save_pending')}
-				onclick={saveBlurtMediaLocal}
-			>
-				{#if blurtMediaSavedToast}
-					{$_('settings.blurt_media_url.saved_toast')}
-				{:else}
-					{$_('settings.blurt_media_url.save')}
-				{/if}
-			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
 					variant="secondary"
@@ -1232,6 +1305,11 @@
 				<BusyButton variant="ghost" onclick={clearBlurtMedia}>
 					{$_('settings.blurt_media_url.clear')}
 				</BusyButton>
+			{/if}
+			{#if blurtMediaSavedToast}
+				<span class="text-sm font-medium text-morphit-emerald" role="status">
+					{$_('settings.blurt_media_url.saved_toast')}
+				</span>
 			{/if}
 		</div>
 
@@ -1268,6 +1346,7 @@
 			inputmode="url"
 			spellcheck="false"
 			bind:value={nostrInput}
+			onblur={persistNostrOnBlur}
 			placeholder={$_('settings.nostr_url.placeholder')}
 			aria-invalid={!nostrIsValid}
 			aria-describedby="nostr-url-help"
@@ -1310,25 +1389,11 @@
 				<p class="mb-2 text-xs uppercase tracking-wider text-ink-500">
 					{$_('settings.nostr_url.preview_label')}
 				</p>
-				<IdentityLabel displayName={saved} publicKey={previewPubkey} nostrUrl={nostrCleaned} />
+				<IdentityLabel account={accountSaved ?? undefined} displayName={saved} publicKey={previewPubkey} nostrUrl={nostrCleaned} />
 			</div>
 		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
-			<BusyButton
-				variant="primary"
-				busy={nostrSaving}
-				done={nostrSavedToast}
-				disabled={!nostrIsValid || (nostrIsEmpty ? nostrSaved === '' : nostrCleaned === nostrSaved)}
-				busyLabel={$_('settings.nostr_url.save_pending')}
-				onclick={saveNostrLocal}
-			>
-				{#if nostrSavedToast}
-					{$_('settings.nostr_url.saved_toast')}
-				{:else}
-					{$_('settings.nostr_url.save')}
-				{/if}
-			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
 					variant="secondary"
@@ -1349,6 +1414,11 @@
 				<BusyButton variant="ghost" onclick={clearNostr}>
 					{$_('settings.nostr_url.clear')}
 				</BusyButton>
+			{/if}
+			{#if nostrSavedToast}
+				<span class="text-sm font-medium text-morphit-emerald" role="status">
+					{$_('settings.nostr_url.saved_toast')}
+				</span>
 			{/if}
 		</div>
 
@@ -1421,7 +1491,7 @@
 				accept="image/svg+xml,image/webp,image/jpeg,image/png,image/gif"
 				onchange={handleAvatarFileSelected}
 				disabled={avatarProcessing || avatarBroadcasting}
-				class="block w-full cursor-pointer text-sm text-ink-600 file:me-3 file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
+				class="block w-full text-sm text-ink-600 file:me-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
 			/>
 			{#if avatarProcessing}
 				<p class="mt-2 text-sm text-ink-500">
@@ -1492,7 +1562,7 @@
 					{$_('settings.avatar.cancel')}
 				</BusyButton>
 			{/if}
-			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri}
+			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
 				<BusyButton
 					variant="ghost"
 					busy={avatarBroadcasting}

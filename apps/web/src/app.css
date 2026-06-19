@@ -280,6 +280,21 @@ body {
 		@apply cursor-default;
 	}
 
+	/* Site-wide choice-row hover affordance. Any <label> that wraps a
+	 * radio/checkbox gets a subtle background tint on hover so the eye can
+	 * see which option-row the pointer is over. Labels that already manage
+	 * their own background (e.g. selectable cards like the DAI-network
+	 * picker, the prominent remember-me box) opt out via :not([class*='bg-'])
+	 * so we never fight their existing styling. */
+	label:has(input[type='radio']):not([class*='bg-']),
+	label:has(input[type='checkbox']):not([class*='bg-']) {
+		@apply rounded-lg transition-colors;
+	}
+	label:has(input[type='radio']):not([class*='bg-']):hover,
+	label:has(input[type='checkbox']):not([class*='bg-']):hover {
+		@apply bg-ink-50 dark:bg-ink-800/50;
+	}
+
 	.brand-gradient-text {
 		background: var(--morphit-gradient);
 		-webkit-background-clip: text;
