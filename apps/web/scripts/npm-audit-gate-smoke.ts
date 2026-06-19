@@ -154,6 +154,32 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'the tested source of truth (no `npm audit fix`). Reviewed cp270. Revisit if a ' +
 			'non-breaking patched vite is already in range or if the dev server is ever ' +
 			'exposed in production.'
+	},
+	{
+		package: 'undici',
+		maxSeverity: 'high',
+		acceptedTitles: [
+			'undici vulnerable to TLS certificate validation bypass via dropped requestTls in SOCKS5 ProxyAgent',
+			'undici vulnerable to cross-user information disclosure via shared cache whitespace bypass'
+		],
+		lastReviewed: '2026-06-19',
+		rationale:
+			'undici@7.25.0 is brought in TRANSITIVELY by jsdom@29.1.1 (a root dependency ' +
+			'used only by the vitest jsdom test environment — jsdom is never bundled into ' +
+			'any deployed app artifact). The ONE place production code touches undici is ' +
+			"apps/indexer/src/indexer/federationProbe.ts, which imports ONLY undici's " +
+			'`Agent` (line 35) to build an IP-pinned dispatcher for the DNS-rebind/SSRF ' +
+			'defense — verified the sole undici import in apps/indexer/src. Both advisories ' +
+			'target undici APIs Morphit does not use: (1) the TLS-validation-bypass requires ' +
+			"undici's `ProxyAgent` configured for SOCKS5 (federationProbe uses neither a " +
+			'ProxyAgent nor SOCKS5); (2) the cross-user cache disclosure requires undici\u2019s ' +
+			'HTTP response cache (federationProbe uses a plain Agent, no cache). So neither ' +
+			'vector is reachable in Morphit. No `npm audit fix` (banned); the lockfile is ' +
+			'the tested source of truth. Reviewed cp293 (the beta.22 release was blocked by ' +
+			'this gate in CI — it runs as a publish gate; the advisories dropped AFTER the ' +
+			'beta.21 push, which is why beta.21 was green and beta.22 was not). Revisit if ' +
+			'federationProbe ever adopts ProxyAgent/SOCKS5 or the response cache, or if an ' +
+			'in-range jsdom bump pulls patched undici (8.x).'
 	}
 ];
 
