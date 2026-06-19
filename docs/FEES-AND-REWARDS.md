@@ -77,8 +77,11 @@ fee and splits it asymmetrically.
 
 - **Operator: 90%** of the BLURT fee (immediate per-order
   payout — see "Payout mechanics" below).
-- **Treasury: 10%** retained to fund welcome bonuses, loyalty
-  milestone delegations, and account-creation costs.
+- **Treasury: 10%** retained to fund the ongoing development and
+  maintenance of the Morphit software itself.  (Welcome bonuses,
+  loyalty delegations, and account-creation costs are NOT paid by
+  the treasury — each operator funds those from their own relay
+  account; see "Money OUT from the operator" below.)
 - Source: `apps/indexer/src/indexer/operatorEarnings.ts`
   `OPERATOR_BLURT_SPLIT_PERCENT = 90`
 - Computed in milli-BLURT integer arithmetic with floor

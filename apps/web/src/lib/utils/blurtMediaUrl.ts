@@ -48,6 +48,17 @@ export function validateBlurtMediaUrl(raw: string | null | undefined): BlurtMedi
 	if (trimmed.length === 0) return null;
 	if (trimmed.length > MAX_URL_LENGTH) return { ok: false, reason: 'too_long' };
 
+	// Reject a scheme that's missing its `//` authority, e.g.
+	// `https:blurt.media/@me`. The WHATWG URL parser is lenient and
+	// silently rewrites that into `https://blurt.media/@me`, so it would
+	// otherwise pass validation and show "Looks good" even though the user
+	// clearly mistyped the URL. Require an explicit `scheme://`. (http://
+	// still parses here and is then rejected by the https-only check below,
+	// preserving the more specific invalid_scheme reason.)
+	if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+		return { ok: false, reason: 'malformed' };
+	}
+
 	// Parse with URL() and normalize via toString(). Explicitly
 	// reject any non-https scheme (http: too — blurt.media is
 	// TLS-enabled; accepting http: would downgrade users).

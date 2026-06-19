@@ -303,7 +303,7 @@
     "seed_tip_split": "对于更大的余额,把它分开:前 6 个词放一个地方,后 6 个放另一个地方。两半在一起 = 完全访问。任一半单独 = 什么都没有。",
     "seed_tip_digital_warning": "绝不要将种子存在电子邮件、云笔记、截图、同步到云的密码管理器或任何可远程访问的应用中。",
     "keyfile_heading": "2. 加密的 keyfile(次要)",
-    "keyfile_body": "你的会话使用密码加密的 keyfile 启动。现在重新下载,并将它存放在与你正在使用的设备分开的地方。如果你忘记密码,keyfile 就没用了 — 所以要把密码当作同等关键的东西对待。",
+    "keyfile_body": "这个密钥文件就是你的私钥，用你的设备密码加密。现在就下载它，并存放在与你正在使用的设备分开的地方。如果你忘记了密码，这个密钥文件就毫无用处——所以请把密码看得同样重要。",
     "keyfile_download": "下载加密 keyfile",
     "keyfile_downloading": "生成下载…",
     "keyfile_downloaded": "已下载 ✓",
@@ -1998,9 +1998,9 @@
     "body": "选择与您的情况相符的选项。",
     "no_account_heading": "还没有账户？",
     "no_account_body": "在上方挑个酷炫的用户名就能创建一个，真的就这么简单。",
-    "register_cta": "创建新账户",
+    "register_cta": "🌱 创建新账户",
     "checking": "正在检查你的会话…",
-    "import_existing": "用 助记词、json 或 posting 密钥登录",
+    "import_existing": "用 12 词助记词、json 密钥文件或 posting 密钥登录",
     "unlock": {
       "password_required": "输入密码以解锁。",
       "wrong_password": "该密码与你的 keystore 不匹配。重试,或用 助记词登录。",
@@ -2290,7 +2290,8 @@
             "memo": "那是你的 MEMO 密钥。Morphit 需要 POSTING — 请粘贴那个。"
           },
           "master_password": "这看起来是你的 Blurt 主密码，而不是 POSTING 密钥。Morphit 从不使用主密码登录。请打开 blurtwallet.com → Permissions，复制你的 Posting Private Key（以 5 开头）。"
-        }
+        },
+        "account_bad": "无效"
       },
       "error": {
         "seed_word_count": "Blurt 助记词恰好是 12 个单词——你输入了 {count} 个。请确保 12 个单词齐全，每个之间用一个空格分隔。",
@@ -2317,7 +2318,8 @@
           "password_too_short": "密码必须至少 8 个字符。",
           "passwords_mismatch": "密码不匹配。",
           "password_weak": "密码太弱。使用更长或不太可预测的内容。"
-        }
+        },
+        "body_password_set": "你的密钥已为此浏览器会话加载。默认情况下，关闭此标签页后它们会消失，下次需要重新登录。如果这是你自己的电脑，你可以选择在此设备上记住你——下次用你刚才使用的同一个密码解锁。"
       }
     },
     "confirm": {
@@ -2462,7 +2464,7 @@
     "run_cta": "运行 Morphit 节点",
     "learn_cta": "运营者如何盈利？",
     "empty_heading": "目前尚无运营者。",
-    "empty_body": "还没有运营商在此索引器的链视图中注册。operator-register 操作今天就存在 — 任何人都可以广播 `morphit_register_operator` 来认领一个标签并开始赚取以 BLURT 支付的发布费的 90% 份额。如果你想成为首批独立运营商之一,从这里开始。",
+    "empty_body": "还没有其他运营商在链上注册。任何人都可以开始赚取以 BLURT 支付的发布费的 90% 份额。如果你想成为首批独立运营商之一，从这里开始。",
     "empty_cta": "运行节点",
     "load_error": "无法连接 indexer",
     "inactive_badge": "不活跃",
@@ -3364,7 +3366,7 @@
     "why_privacy_title": "最小化元数据泄露",
     "why_privacy_body": "通过你的实例交易的用户只与你分享元数据。没有其他运营者,甚至 Agorise 也看不到他们的活动模式。",
     "why_earn_title": "由智能合约(SC)自动支付",
-    "why_earn_body": "你实例吸引的每一笔以 BLURT 支付的发布费向你支付 90% — 仅 10% 进入 Morphit 财库,用于资助欢迎奖励、忠诚度委托和账户创建成本。以 BTC 和 XMR 支付的费用 100% 流向财库,用于同样的项目义务(链上分配机制仅适用于 BLURT,但我们使 BLURT 分配积极慷慨以弥补 — 90/10 对你有利,而不是我们最初考虑的 50/50)。\n\n运行在 Blurt 链上的 Smart Contract 强制执行分配 — 不是某个人、某个公司、某个可以改变主意的人。100% 自动化。无发票、无手动支付、无信任假设。你可证明地帮助,你可证明地获得报酬。在代码中保证。\n\n支付以 BLURT 计价,所以如果 BLURT 升值,你的收入也升值 — 无需额外工作。在 AGPL-3.0 下完全开源;如果你能阅读索引器源代码,你就能审计支付逻辑。",
+    "why_earn_body": "你实例吸引的每一笔以 BLURT 支付的发布费向你支付 90% — 仅 10% 进入 Morphit 财库,用于资助 Morphit 软件本身的持续开发和维护。以 BTC 和 XMR 支付的费用 100% 流向财库,用于同样的项目义务(链上分配机制仅适用于 BLURT,但我们使 BLURT 分配积极慷慨以弥补 — 90/10 对你有利)。\n\n运行在 Blurt 链上的 Smart Contract 强制执行分配 — 不是某个人、某个公司、某个可以改变主意的人。100% 自动化。你可证明地帮助,你可证明地获得报酬。在代码中保证。\n\n支付以 BLURT 计价,所以如果 BLURT 升值,你的收入也升值 — 无需额外工作。",
     "how_heading": "如何开始",
     "step1_title": "准备一个 VPS",
     "step1_body": "Linux(Debian 12、Ubuntu 24.04 LTS、Arch、NixOS — 我们在 Debian 上测试)。2 核 CPU @ 1 GHz+,最低 2 GB RAM(4 GB 舒适),20 GB SSD。Raspberry Pi 4、旧笔记本电脑或 5 美元/月的 VPS 都可以。不需要静态 IP — DDNS 工作得很好。请参阅 FAQ 中关于最低硬件要求的条目以获取爱好者、认真和旧笔记本电脑层级的完整细分。",
@@ -3384,14 +3386,14 @@
     "asset_policy_federation_label": "联邦保持完整。",
     "asset_policy_federation_body": "在你的实例上禁用某资产不会向你的用户隐藏对等实例的订单——链历史是共享的,所以 orderbook 仍以只读方式显示它们。禁用仅适用于从你的实例发布的新订单。",
     "asset_policy_doc_pointer": "完整的环境变量参考和多资产示例见",
-    "asset_policy_doc_pointer_suffix": "的 §Trade-only asset configuration 章节。",
+    "asset_policy_doc_pointer_suffix": "的 Trade-only asset configuration 章节。",
     "requirements_heading": "资源需求",
     "req_hw_label": "硬件",
     "req_hw_value": "2 核 CPU,2-4 GB RAM,20 GB SSD",
     "req_network_label": "网络",
     "req_network_value": "家庭互联网就可以 — DDNS 处理动态 IP,不需要静态 IP",
     "req_time_label": "你的时间",
-    "req_time_value": "每月一小时维护",
+    "req_time_value": "每月不到一小时维护",
     "cta_heading": "准备好开始了吗？",
     "cta_body": "克隆仓库,设置硬件(Pi 4 或任何旧笔记本电脑都可以),按照 runbook 操作。一旦你广播 register-operator 操作,你的实例就上线并赚钱。",
     "cta_repo": "查看仓库",
@@ -3723,10 +3725,10 @@
       "reset_confirm_cancel": "取消"
     },
     "session": {
-      "heading": "会话",
-      "explain": "用完后请退出登录。你的 posting 和 memo 密钥会从内存中清除;设备上加密的 keystore 不会动。",
+      "heading": "实用工具",
+      "explain": "用完后请退出登录。你的密钥会从内存中清除；你设备上加密的密钥库不受影响。",
       "sign_out": "退出登录",
-      "confirm_prompt": "从这台设备登出吗?您的 posting 和 memo 密钥将从内存中清除。您需要重新解锁才能交易。",
+      "confirm_prompt": "在此设备上退出登录？你的密钥会从内存中清除。要交易需要再次解锁。",
       "confirm_yes": "是的,登出",
       "confirm_cancel": "保持登录",
       "autolock_label": "闲置后自动锁定",
@@ -3752,20 +3754,20 @@
         "malformed": "这看起来不像有效的 URL。"
       },
       "preview_label": "预览",
-      "save": "保存到此设备",
+      "save": "本地保存",
       "save_pending": "保存中…",
       "saved_toast": "已保存 ✓",
-      "save_and_broadcast": "保存并发布到链上",
+      "save_and_broadcast": "保存并广播",
       "broadcast_pending": "发布中…",
       "broadcast_ok": "已发布 ✓",
-      "clear": "移除",
+      "clear": "清除",
       "need_display_name": "请先设置显示名。你的资料广播包括两者。",
       "reminder_title": "它会出现在哪里",
       "reminder_body": "一旦发布,Nostr 图标会出现在你的用户名旁边——在每个订单、每条反馈条目、每条聊天消息上,在每个 Morphit 实例上,不只是这个。其他用户点击它会在他们喜欢的客户端中打开你的 Nostr 个人资料。"
     },
     "blurt_media_url": {
       "heading": "Blurt.media 个人资料 URL",
-      "explain": "您在 blurt.media(流行的 Blurt 前端)上的个人资料链接。在 Morphit 各处与您的用户名一起显示。可选。",
+      "explain": "指向你在 blurt.media 上个人资料的链接，blurt.media 是一个流行的 Blurt 流媒体前端。会在 Morphit 各处显示在你的用户名旁边。可选。",
       "label": "Blurt.media 网址",
       "placeholder": "https://blurt.media/@您的名字",
       "hint_empty": "在此粘贴您的 blurt.media 个人资料 URL,或留空。",
@@ -3786,7 +3788,7 @@
       "clear": "清除",
       "need_display_name": "请先设置显示名称 — 您的个人资料 op 一起携带两个字段。",
       "reminder_title": "可选 — 您可以跳过。",
-      "reminder_body": "您的 Morphit 身份没有这个 URL 也可以正常工作。这是给想从您的 Morphit 个人资料看到您 Blurt.media 存在的人的礼貌链接。"
+      "reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的视频或播客的人。"
     },
     "notifications": {
       "heading": "通知",
@@ -4294,14 +4296,15 @@
   "welcome_first_buy": {
     "heading": "你的第一笔交易由我们承担。🌱",
     "lead": "欢迎来到 Morphit！你的第一个订单是免费的 BLURT 购买——我们承担上架费，你带着真正的起始余额进入你的钱包。这是 P2P 加密货币中最好的入门优惠之一，原因如下：",
-    "bullet_free": "<strong>上架费免费。</strong>Morphit 为这笔交易支付网络费——你唯一的成本是你同意支付给对方的金额。",
-    "bullet_starter": "<strong>你带着 BLURT 离开。</strong>足以以 BLURT 折扣价（每笔约 60 BLURT）资助未来在 Morphit 上的订单，并从第一天起参与 Blurt 社交网络。",
-    "bullet_runway": "<strong>BLURT 在整个 Blurt 社交网络中通用。</strong>用它在 blurt.blog、blurt.media 和其他 Blurt 前端为帖子投票——只要为好内容投票就能获得策展奖励。",
-    "bullet_bp_stake": "<strong>你立即解锁 1 BP 欢迎权益</strong>，就在你第一笔以 BLURT 支付的上架费触发的那一刻。第一笔完成的交易后，这会变成 10 BLURT liquid + 10 BLURT Power——Blurt 社交网络中永久的投票权重权益。",
-    "why_blurt_minimum": "为什么免费交易要用 BLURT 而不是 BTC 或 XMR？因为你钱包里的 BLURT 是你之后在 Morphit 上做所有其他事情的关键——为未来的交易支付上架费（半价！）、参与 Blurt 社交层、赚取忠诚度奖励。我们希望你能积极参与，而不是带着空 BLURT 余额被困住。",
+    "bullet_free": "<strong>上架费免费。</strong>Morphit 为你的第一笔交易支付网络费——你唯一的成本是你同意支付给对方的金额。",
+    "bullet_starter": "<strong>你带着链上钱包里的真实资金离开</strong>，用于交易费用（同样是折扣价（每笔约 60 BLURT）），从第一天起。",
+    "bullet_runway": "<strong>BLURT 在整个 Blurt 社交网络中通用。</strong>用它在 blurt.blog、blurt.media 等为帖子投票，只要在好内容上点击 \"Like\" 就能赚取奖励。",
+    "bullet_bp_stake": "<strong>你立即解锁 1 BP 欢迎权益</strong>，就在你第一笔以 BLURT 支付的上架费触发的那一刻。第一笔成功的交易后，这会变成 10 BLURT liquid + 10 BLURT Power——在网络中产生被动收入的权益。",
+    "why_blurt_minimum": "为什么免费交易要用 BLURT 而不是 BTC 或 XMR？因为你钱包里的 BLURT 是你之后在 Morphit 上做所有其他事情的关键——为未来的交易支付上架费（半价！）、参与 Blurt 社交层、赚取忠诚度奖励。我们希望你能积极参与，而不是带着空余额被困住。",
     "cta_compose": "撰写我的免费首次购买",
     "learn_more": "了解更多",
-    "dismiss_aria": "关闭此欢迎横幅"
+    "collapse_aria": "收起此欢迎卡片",
+    "expand_aria": "展开此欢迎卡片"
   },
   "chat_notif_nudge": {
     "aria_label": "聊天通知建议",

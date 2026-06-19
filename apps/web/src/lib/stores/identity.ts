@@ -573,8 +573,171 @@ export function handleStorageEvent(e: StorageEvent): void {
 	}
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Cross-tab in-memory session handoff (BroadcastChannel)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Opening a Morphit link in a NEW tab — or reloading one tab while others
+// stay open — should not force a re-login (not even a password prompt) when
+// another tab in this same browser already holds a session. The live keys
+// are handed tab-to-tab IN MEMORY via postMessage (structured clone): they
+// never touch disk, and they vanish once the last tab closes. This is the
+// privacy-preserving alternative to persisting the decrypted session — no
+// on-disk plaintext keys, and it does NOT weaken the "Remember me" opt-in
+// (which is the separate, deliberate control for surviving a full close /
+// a lone-tab cold reload).
+//
+// Protocol on channel 'morphit-session-handoff-v1':
+//   a freshly-booted LOCKED tab broadcasts  { t: 'request' }
+//   any tab WITH a session replies          { t: 'offer', payload: IdentityState }
+//   a tab whose user EXPLICITLY signs out   { t: 'signout' }
+// A tab only ADOPTS an offer while it is still locked (a live session is
+// never clobbered) and only OFFERS while it actually holds one. The channel
+// is same-origin only, so it exposes nothing a same-origin XSS couldn't
+// already read straight out of the page.
+//
+// The 'signout' message closes a gap this in-memory handoff opened: once a
+// session can be cloned tab-to-tab, an explicit Sign Out in one tab MUST
+// revoke it in the siblings too. The pre-existing `storage`-event mirror
+// (handleStorageEvent below) only fires when the on-disk envelope CHANGES,
+// so it covers a "Remember me" (persisted) session but NOT an in-memory-only
+// one (the default): there is no disk key to delete, hence no storage event,
+// hence the siblings used to keep their cloned live keys after a Sign Out.
+// broadcastSignOut() fills that gap. CRITICAL SAFETY INVARIANT: the signout
+// broadcast lives ONLY in broadcastSignOut(), NEVER in reset() or the
+// pagehide handler — closing or locking one tab must never sign the user
+// out of the others (reset() is also called from pagehide on tab-close).
+
+type SessionHandoffMessage =
+	| { t: 'request' }
+	| { t: 'offer'; payload: IdentityState }
+	| { t: 'signout' };
+
+const SESSION_HANDOFF_CHANNEL = 'morphit-session-handoff-v1';
+let sessionHandoffChannel: BroadcastChannel | null = null;
+
+function getSessionHandoffChannel(): BroadcastChannel | null {
+	if (!browser || typeof BroadcastChannel === 'undefined') return null;
+	if (!sessionHandoffChannel) {
+		try {
+			sessionHandoffChannel = new BroadcastChannel(SESSION_HANDOFF_CHANNEL);
+		} catch {
+			sessionHandoffChannel = null;
+		}
+	}
+	return sessionHandoffChannel;
+}
+
+/** Adopt a session offered by a sibling tab. No-op unless we're locked —
+ *  a live session is never clobbered by an inbound offer (so a stale offer
+ *  arriving after we've unlocked some other way is harmless). */
+function adoptOfferedSession(payload: unknown): void {
+	if (get(internal).state !== 'locked') return;
+	const p = payload as IdentityState | null;
+	if (!p || typeof p !== 'object' || typeof (p as { state?: unknown }).state !== 'string') return;
+	if (p.state === 'unlocked' && p.live && p.envelope) {
+		internal.set({ state: 'unlocked', live: p.live, envelope: p.envelope });
+	} else if (p.state === 'paired-readonly' && p.paired) {
+		internal.set({ state: 'paired-readonly', paired: p.paired });
+	}
+}
+
+/** Handle one inbound session-handoff message. Exported (pure-ish, like
+ *  handleStorageEvent) so vitest can drive the request/offer/signout
+ *  dispatch directly without two real BroadcastChannels — the `post`
+ *  callback is how an 'offer' reply is sent (the real channel's
+ *  postMessage in production, a spy in tests). No DOM access beyond the
+ *  injected post. */
+export function handleSessionHandoffMessage(
+	data: unknown,
+	post: (msg: SessionHandoffMessage) => void
+): void {
+	const msg = data as { t?: unknown; payload?: unknown } | null;
+	if (!msg || typeof msg.t !== 'string') return;
+	if (msg.t === 'request') {
+		// A sibling tab booted locked and wants a session. Offer ours if
+		// we have one. Several unlocked tabs may all reply; the requester
+		// adopts the first and ignores the rest (it's no longer locked).
+		const s = get(internal);
+		if (s.state === 'unlocked' || s.state === 'paired-readonly') {
+			try {
+				post({ t: 'offer', payload: s });
+			} catch {
+				// Structured-clone or channel error — drop silently.
+			}
+		}
+	} else if (msg.t === 'offer') {
+		adoptOfferedSession(msg.payload);
+	} else if (msg.t === 'signout') {
+		// Another tab's user EXPLICITLY signed out. Wipe our in-memory
+		// session too — this is the whole point of the signout message
+		// (the storage-event mirror can't see an in-memory-only sign-out).
+		// reset() is idempotent and does NOT re-broadcast (the broadcast
+		// lives only in broadcastSignOut, never in reset), so this can't
+		// loop. Fires only on an explicit sign-out, never on tab-close.
+		reset();
+	}
+}
+
+function initSessionHandoff(): void {
+	const ch = getSessionHandoffChannel();
+	if (!ch) return;
+	ch.onmessage = (ev: MessageEvent) => {
+		handleSessionHandoffMessage(ev.data, (m) => ch.postMessage(m));
+	};
+}
+
+/** Ask any already-open tab for its session. Fire-and-forget: if a sibling
+ *  replies, the listener flips this tab's store to unlocked/paired-readonly
+ *  reactively (no password, no disk read). No-op when this tab already has a
+ *  session, when no sibling answers, or when BroadcastChannel is unavailable. */
+export function requestSessionFromOpenTabs(): void {
+	const ch = getSessionHandoffChannel();
+	if (!ch) return;
+	if (get(internal).state !== 'locked') return;
+	try {
+		ch.postMessage({ t: 'request' });
+	} catch {
+		// no-op
+	}
+}
+
+/** Explicit, user-initiated Sign Out that propagates to every open tab.
+ *  Posts a one-shot 'signout' over the handoff channel (so sibling tabs
+ *  holding the SAME in-memory session wipe their keys too) and then resets
+ *  THIS tab.
+ *
+ *  Use this — NOT reset() alone — for the Sign Out button. Without it, an
+ *  in-memory-only session (Remember-me unchecked → no disk envelope → no
+ *  `storage` event to mirror) stays alive in any sibling tab the cross-tab
+ *  handoff cloned it into, which contradicts an explicit "sign me out".
+ *
+ *  Deliberately NOT wired into reset(), pagehide, or lockSession(): closing
+ *  one tab, the idle auto-lock, or a per-tab Lock must never sign the user
+ *  out of their other tabs. The broadcast is the single distinguishing act
+ *  of an EXPLICIT sign-out. Idempotent and safe to call when already locked
+ *  (siblings receiving the message just reset() a locked store — a no-op). */
+export function broadcastSignOut(): void {
+	const ch = getSessionHandoffChannel();
+	if (ch) {
+		try {
+			ch.postMessage({ t: 'signout' });
+		} catch {
+			// Channel error — local reset still runs below.
+		}
+	}
+	reset();
+}
+
 if (browser) {
 	autoRestorePairedSession();
+
+	// Set up the cross-tab handoff listener (so this tab can ANSWER sibling
+	// requests) and immediately ask any open tab to hand us a session.
+	// Runs after autoRestorePairedSession so a disk-restored paired session
+	// short-circuits the request (we're no longer locked).
+	initSessionHandoff();
+	requestSessionFromOpenTabs();
 
 	// Best-effort: wipe keys when the tab closes. JS engines don't
 	// guarantee this runs, but when it does, it reduces the window in

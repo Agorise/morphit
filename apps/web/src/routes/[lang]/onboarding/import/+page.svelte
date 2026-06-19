@@ -102,26 +102,51 @@
 	const accountHasInvalidChar = $derived(INVALID_ACCOUNT_CHAR.test(postingAccount));
 	const accountHasText = $derived(postingAccount.trim().length > 0);
 
-	// On-blur "this account exists on Blurt" affirmation. Only ever shows the
-	// positive (green ✓ + the account_ok string); a missing account shows
-	// nothing — submit-time validation already explains account-not-found.
-	// Cleared whenever the field regains focus or its text changes.
-	let accountExists = $state(false);
+	// On-blur account check, tri-state so the field can affirm OR warn:
+	//   'idle'     — empty, or being edited (no verdict shown)
+	//   'checking' — async on-chain lookup in flight
+	//   'valid'    — exists on Blurt → green ✓ + account_ok
+	//   'invalid'  — malformed name, OR a well-formed name that does NOT
+	//                exist on Blurt → red ⚠ + account_bad
+	// Re-runs on every blur, so editing a previously-green name and tabbing
+	// out re-verifies the new value (and flips to red if it's now bogus).
+	// A network error reverts to 'idle' (never a false red on a flaky link).
+	let accountStatus = $state<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
 	async function checkAccountExists(): Promise<void> {
 		const v = postingAccount.trim();
-		// Only hit the chain for a plausibly-complete, well-formed name.
-		if (!v || accountHasInvalidChar || !ACCOUNT_NAME_RE.test(v)) {
-			accountExists = false;
+		if (!v) {
+			accountStatus = 'idle';
+			return;
+		}
+		// Malformed (bad chars or not a legal Blurt name) → invalid, no chain hit.
+		if (accountHasInvalidChar || !ACCOUNT_NAME_RE.test(v)) {
+			accountStatus = 'invalid';
 			return;
 		}
 		const token = v; // guard against stale async results (value changed / refocus)
+		accountStatus = 'checking';
 		try {
 			const fetched = await getBlurtClient().getAccount(v);
-			if (postingAccount.trim() === token) accountExists = !!fetched;
+			if (postingAccount.trim() === token) accountStatus = fetched ? 'valid' : 'invalid';
 		} catch {
-			if (postingAccount.trim() === token) accountExists = false;
+			// Couldn't reach the chain — don't assert invalid; clear the verdict.
+			if (postingAccount.trim() === token) accountStatus = 'idle';
 		}
 	}
+
+	// Live structural check for the posting-key (WIF) field: a Blurt private
+	// key is an uncompressed Bitcoin-style WIF — 51 base58 chars beginning
+	// with '5'. This flags obviously-wrong input (too short/long, wrong
+	// prefix, non-base58 chars, or a pasted master password) with a red
+	// border as the user types. The full checksum + secp256k1 validation
+	// still runs at submit (wifToRawPrivateKey) and sets wifKeyInvalid for a
+	// structurally-valid but cryptographically-bad key.
+	const BASE58_ALPHABET_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+	function looksLikeBlurtWif(s: string): boolean {
+		const t = s.trim();
+		return t.length === 51 && t.startsWith('5') && BASE58_ALPHABET_RE.test(t);
+	}
+	const wifLooksInvalid = $derived(postingWif.trim().length > 0 && !looksLikeBlurtWif(postingWif));
 
 	// Animated "someone is typing" placeholder — same treatment as the
 	// orderbook Region/Payment fields. These handles are deliberately NOT
@@ -135,7 +160,7 @@
 		'scooby88',
 		'die-piraten',
 		'mariadbee',
-		'what.the.actual.frank',
+		'what.the.frank',
 		'sweeptheleg',
 		'bonkstr-23'
 	] as const;
@@ -212,6 +237,19 @@
 	let rememberMe = $state(false);
 	let rememberPassword = $state('');
 	let rememberPasswordConfirm = $state('');
+	// ALL three import modes (seed / keyfile / posting-only) now pause on the
+	// remember-me choice so the user always sees the (default-unchecked,
+	// prominent) persist option. These describe the pending choice:
+	//   passwordAlreadyChosen — true for keyfile + posting-only (the envelope
+	//     is already encrypted with a password the user knows, so the choice
+	//     is a plain checkbox with no password sub-form); false for seed (the
+	//     session envelope uses an ephemeral key, so the choice collects one).
+	//   pendingNeedsAccountName — seed + keyfile don't carry the account name
+	//     (route to /settings to capture it); posting-only already did.
+	//   pendingDestination — where to go after the choice resolves.
+	let passwordAlreadyChosen = $state(false);
+	let pendingNeedsAccountName = $state(true);
+	let pendingDestination = $state('/settings#account-name-heading');
 	/** Held envelope + random session password from the seed import,
 	 *  waiting on the user's choice in the remember-me step.  Wiped
 	 *  after the choice is made (either path consumes them). */
@@ -293,33 +331,27 @@
 			// path), the envelope is already persistent by virtue of
 			// the user-set password, so we proceed straight to the
 			// redirect.
-			if (mode === 'seed') {
-				pendingEnvelope = env;
-				pendingSessionPassword = usedPassword;
-				importStage = 'remember_me_choice';
-				return;
-			}
-
-			// Local `usedPassword` exits scope at function return.
-			// Sally finding H2 (Part 68): seed/keyfile imports don't
-			// carry the account name, so we redirect to /settings.
-			// Without this flag the user lands on a generic settings
-			// page with no idea why — an explanatory banner fires
-			// once based on this flag and self-clears.
-			try {
-				sessionStorage.setItem('morphit.import.needs_account_name', '1');
-			} catch {
-				// Private/Incognito mode — banner won't fire, but the
-				// account-name section on /settings is itself the
-				// first card on the page so the user still sees it.
-			}
-			// Seed/keyfile imports don't carry the account name (the
-			// keys themselves don't tell us which Blurt account they
-			// belong to).  Route to /settings where the user is
-			// prompted to set their account name and we verify it
-			// against on-chain posting.key_auths.  Without this step,
-			// 70+ surfaces silently treat the user as signed-out.
-			await gotoLocale('/settings#account-name-heading');
+			// cp137 H-1 (cp290 extended) — pause on the remember-me choice
+			// so the user ALWAYS sees the (default-unchecked) persist option.
+			// Seed: the session env uses an ephemeral random key, so the
+			// choice collects a real password (passwordAlreadyChosen=false).
+			// Keyfile: the user already supplied the keyfile password (env is
+			// encrypted with it), so the choice is a plain checkbox with no
+			// password sub-form (passwordAlreadyChosen=true). Neither carries
+			// the account name, so after the choice we route to /settings to
+			// capture + verify it.
+			pendingEnvelope = env;
+			// Only the seed path needs the pending session password (the
+			// ephemeral random key, used to re-decrypt before persisting).
+			// Keyfile's envelope is already encrypted with the user's keyfile
+			// password, so persist is a direct writeEnvelope — don't hold the
+			// real password in component state any longer than necessary.
+			pendingSessionPassword = mode === 'seed' ? usedPassword : '';
+			passwordAlreadyChosen = mode !== 'seed';
+			pendingNeedsAccountName = true;
+			pendingDestination = '/settings#account-name-heading';
+			importStage = 'remember_me_choice';
+			return;
 		} catch (err) {
 			// Map known error messages to localized keys.  The
 			// raw err.message text is English (e.g. "Seed must be
@@ -379,27 +411,65 @@
 		if (working) return;
 		errorMsg = '';
 
-		if (!rememberMe) {
-			// Session-only — original behavior preserved.  The
-			// identity store already holds the live envelope from
-			// the earlier `bootFromEnvelope` call; nothing to
-			// persist.  Wipe the pending session-password and
-			// continue to the account-name banner.
+		// Common post-choice continuation: flag the account-name prompt
+		// when the mode didn't carry it, wipe pending secrets, navigate to
+		// the mode's destination.
+		const continueAfterChoice = async (): Promise<void> => {
+			if (pendingNeedsAccountName) {
+				// Sally finding H2 (Part 68): seed/keyfile imports don't carry
+				// the account name, so we flag the one-shot /settings banner
+				// that explains why the user landed there to set + verify it.
+				try {
+					sessionStorage.setItem('morphit.import.needs_account_name', '1');
+				} catch {
+					// Private/Incognito — the /settings account-name card is
+					// the first thing on the page anyway; only the one-shot
+					// explanatory banner is skipped.
+				}
+			}
+			const dest = pendingDestination;
 			pendingEnvelope = null;
 			pendingSessionPassword = '';
 			rememberPassword = '';
 			rememberPasswordConfirm = '';
-			try {
-				sessionStorage.setItem('morphit.import.needs_account_name', '1');
-			} catch {
-				// Private/Incognito — fall through.
-			}
-			await gotoLocale('/settings#account-name-heading');
+			await gotoLocale(dest);
+		};
+
+		if (!rememberMe) {
+			// Session-only (privacy-positive default). The identity store
+			// already holds the live session from the earlier boot; nothing
+			// is written to disk. When the last tab closes the keys are gone.
+			await continueAfterChoice();
 			return;
 		}
 
-		// rememberMe === true — re-encrypt with the user's password
-		// and persist.
+		// rememberMe === true.
+		if (!pendingEnvelope) {
+			errorMsg = $_('onboarding.import.error.generic');
+			return;
+		}
+
+		if (passwordAlreadyChosen) {
+			// Keyfile / posting-only: the envelope is already encrypted with
+			// a password the user knows (the keyfile password, or the one
+			// they just set). Persist it directly — no re-encrypt, no new
+			// password. The identity store is already booted with this env.
+			working = true;
+			try {
+				writeEnvelope(pendingEnvelope);
+				writeKeystoreMode('password');
+				await continueAfterChoice();
+			} catch (err) {
+				console.warn('[import] remember-me persist failed:', err);
+				errorMsg = $_('onboarding.import.error.generic');
+			} finally {
+				working = false;
+			}
+			return;
+		}
+
+		// Seed: the session envelope uses an ephemeral random key, so collect
+		// + validate a real password and re-encrypt the identity with it.
 		if (rememberPassword.length < 8) {
 			errorMsg = $_('onboarding.import.remember_me.error.password_too_short');
 			return;
@@ -412,44 +482,22 @@
 			errorMsg = $_('onboarding.import.remember_me.error.password_weak');
 			return;
 		}
-		if (!pendingEnvelope) {
-			errorMsg = $_('onboarding.import.error.generic');
-			return;
-		}
 
 		working = true;
 		let full: FullIdentity | null = null;
 		try {
-			// Re-decrypt the session envelope so we have the
-			// FullIdentity to re-encrypt with the user's password.
-			full = (await decryptIdentity(
-				pendingEnvelope,
-				pendingSessionPassword
-			)) as FullIdentity;
+			// Re-decrypt the session envelope so we have the FullIdentity to
+			// re-encrypt with the user's password.
+			full = (await decryptIdentity(pendingEnvelope, pendingSessionPassword)) as FullIdentity;
 			const persistedEnv = await encryptIdentity(full, rememberPassword);
 			writeEnvelope(persistedEnv);
 			writeKeystoreMode('password');
-			// Re-boot the identity store to the persistent envelope.
-			// Same end-state — the live identity is unchanged — but
-			// the envelope reference in the store now matches what's
-			// on disk, so Settings/Backup-keys surfaces show the
-			// right state.
+			// Re-boot so the store's envelope reference matches what's on
+			// disk (Settings/Backup-keys surfaces show the right state).
 			await bootFromEnvelope(persistedEnv, rememberPassword);
-
-			// Wipe sensitive locals.
 			wipeFullIdentity(full);
 			full = null;
-			pendingEnvelope = null;
-			pendingSessionPassword = '';
-			rememberPassword = '';
-			rememberPasswordConfirm = '';
-
-			try {
-				sessionStorage.setItem('morphit.import.needs_account_name', '1');
-			} catch {
-				// Private/Incognito — fall through.
-			}
-			await gotoLocale('/settings#account-name-heading');
+			await continueAfterChoice();
 		} catch (err) {
 			console.warn('[import] remember-me persist failed:', err);
 			errorMsg = $_('onboarding.import.error.generic');
@@ -592,16 +640,25 @@
 			full = null;
 			wipeLiveIdentity(live);
 			live = null;
-			// Clear sensitive component state before navigation.
-			// `postingWif` was the raw posting-key WIF the user
-			// pasted — sensitive enough to need explicit clearing.
-			// `postingNewPassword*` are the keystore password the
-			// user just chose; they're gating real cryptographic
-			// material from this point forward.
+			// cp290 — pause on the remember-me choice (the env is already
+			// encrypted with the password the user just set, so it's a plain
+			// checkbox, no password sub-form). The account name is already
+			// captured, so the post-choice destination is /orderbook. Hold
+			// the env + password in the pending slots until the choice
+			// resolves; clear the raw key + the form's password fields now.
+			pendingEnvelope = env;
+			// Envelope is already encrypted with the password the user just
+			// set, so persist is a direct writeEnvelope — no need to hold the
+			// real password pending (passwordAlreadyChosen path never uses it).
+			pendingSessionPassword = '';
+			passwordAlreadyChosen = true;
+			pendingNeedsAccountName = false;
+			pendingDestination = '/orderbook';
 			postingWif = '';
 			postingNewPassword = '';
 			postingNewPasswordConfirm = '';
-			await gotoLocale('/orderbook');
+			importStage = 'remember_me_choice';
+			return;
 		} catch (err) {
 			// Same localization rationale as the seed/keyfile
 			// catch above — raw exception text is English.
@@ -810,19 +867,20 @@
 								const p = Math.max(0, caret);
 								el.setSelectionRange(p, p);
 							}
-							accountExists = false;
+							accountStatus = 'idle';
 						}}
-						onfocus={() => (accountExists = false)}
+						onfocus={() => (accountStatus = 'idle')}
 						onblur={checkAccountExists}
 						autocomplete="off"
 						autocapitalize="none"
 						spellcheck="false"
 						placeholder={accountPlaceholder}
-						class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-28 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {accountHasInvalidChar
+						class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-28 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {accountHasInvalidChar ||
+						accountStatus === 'invalid'
 							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
 							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 					/>
-					{#if accountExists}
+					{#if accountStatus === 'valid'}
 						<span
 							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-morphit-emerald"
 						>
@@ -841,6 +899,28 @@
 								<path d="M20 6 9 17l-5-5" />
 							</svg>
 							{$_('onboarding.import.posting_only.account_ok')}
+						</span>
+					{:else if accountStatus === 'invalid'}
+						<span
+							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-medium text-red-500 dark:text-red-400"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+								<path d="M12 9v4" />
+								<path d="M12 17h.01" />
+							</svg>
+							{$_('onboarding.import.posting_only.account_bad')}
 						</span>
 					{/if}
 				</div>
@@ -862,7 +942,8 @@
 					oninput={() => (wifKeyInvalid = false)}
 					onfocus={() => (wifKeyInvalid = false)}
 					placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
-					class="w-full rounded-xl border-2 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid
+					class="w-full rounded-xl border-2 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
+					wifLooksInvalid
 						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
 						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 				/>
@@ -927,21 +1008,25 @@
 				{$_('onboarding.import.remember_me.heading')}
 			</h2>
 			<p class="mt-3 text-ink-700 dark:text-ink-200">
-				{$_('onboarding.import.remember_me.body')}
+				{passwordAlreadyChosen
+					? $_('onboarding.import.remember_me.body_password_set')
+					: $_('onboarding.import.remember_me.body')}
 			</p>
 
-			<label class="mt-5 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700">
+			<label
+				class="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-4 transition-colors hover:border-morphit-emerald/70"
+			>
 				<input
 					type="checkbox"
 					bind:checked={rememberMe}
-					class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+					class="mt-0.5 h-6 w-6 flex-none accent-morphit-emerald"
 				/>
-				<span class="text-ink-800 dark:text-ink-100">
+				<span class="font-semibold text-ink-900 dark:text-ink-50">
 					{$_('onboarding.import.remember_me.checkbox_label')}
 				</span>
 			</label>
 
-			{#if rememberMe}
+			{#if rememberMe && !passwordAlreadyChosen}
 				<div class="mt-5 space-y-4 rounded-xl border-2 border-morphit-emerald bg-morphit-emerald/5 p-4">
 					<p class="text-sm text-ink-700 dark:text-ink-200">
 						{$_('onboarding.import.remember_me.password_intro')}

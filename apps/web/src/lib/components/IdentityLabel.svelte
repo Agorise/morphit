@@ -143,18 +143,19 @@
 	const validatedNostrUrl = $derived(validateNostrUrlForRender(nostrUrl));
 	const validatedBlurtMediaUrl = $derived(validateBlurtMediaUrlForRender(blurtMediaUrl));
 
-	// Derive identicon seed bytes. publicKey wins when present because it's
-	// the cryptographic anchor — two accounts with the same name but
-	// different keys (account recoveries, key rotations in the future) will
-	// have different identicons, which is exactly what we want for
-	// visual user-identity. If only account is available (e.g. pre-pubkey-
-	// fetch rendering), hash the account name into a byte array so we
-	// still get a deterministic identicon.
+	// Derive identicon seed bytes. The ACCOUNT NAME wins when present: an
+	// identicon is a stable visual anchor for an identity, so it should NOT
+	// change when a posting key is rotated/recovered, and the name is the
+	// only seed available everywhere (profile page, explorer, order rows —
+	// many of which never have the pubkey on hand). Seeding from the name
+	// keeps every surface that knows the account visually consistent. Falls
+	// back to the posting pubkey only when no account name is given (e.g.
+	// a mid-onboarding preview before the name exists).
 	const seedBytes = $derived.by(() => {
-		if (publicKey && publicKey.length > 0) return publicKey;
 		if (account && account.length > 0) {
 			return new TextEncoder().encode(account);
 		}
+		if (publicKey && publicKey.length > 0) return publicKey;
 		// Empty fallback — all-zero bytes produce a consistent but
 		// intentionally bland identicon that signals "no identity given".
 		return new Uint8Array(8);

@@ -337,6 +337,7 @@ SMOKES=(
 	"apps/web:orderbook-select-stacking-smoke"
 	"apps/web:faq-search-grandma-coverage-smoke"
 	"apps/web:import-remember-me-smoke"
+	"apps/web:cross-tab-signout-propagation-smoke"
 	"apps/web:chat-notif-nudge-smoke"
 	"apps/indexer:reputation-decay-smoke"
 	"apps/indexer:reputation-decay-sql-constant-parity-smoke"

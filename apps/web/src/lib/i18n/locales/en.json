@@ -303,7 +303,7 @@
     "seed_tip_split": "For larger balances, split it: first 6 words in one location, last 6 in another. Both halves together = full access. Neither half alone = nothing.",
     "seed_tip_digital_warning": "Never store the seed in email, cloud notes, screenshots, password managers synced to a cloud, or any app that can be remotely accessed.",
     "keyfile_heading": "2. Encrypted keyfile (secondary)",
-    "keyfile_body": "Your session was booted with a password-encrypted keyfile. Re-download it now and store it somewhere separate from the device you're using. If you forget the password, the keyfile is useless — so treat the password as equally critical.",
+    "keyfile_body": "This keyfile is your private keys, encrypted with your device password. Download it now and store it somewhere separate from the device you're using. If you forget the password, the keyfile is useless — so treat the password as equally critical.",
     "keyfile_download": "Download encrypted keyfile",
     "keyfile_downloading": "Generating download…",
     "keyfile_downloaded": "Downloaded ✓",
@@ -1998,9 +1998,9 @@
     "body": "Pick the option that matches how you got here.",
     "no_account_heading": "Don't have an account?",
     "no_account_body": "Create one above by just picking a cool username, that's literally all there is to it.",
-    "register_cta": "Create a new account",
+    "register_cta": "🌱 Create a new account",
     "checking": "Checking your session…",
-    "import_existing": "Sign in with seed, json or posting key",
+    "import_existing": "Sign in with 12-word seed, json keyfile or posting key",
     "unlock": {
       "password_required": "Enter your password to unlock.",
       "wrong_password": "That password does not match your keystore. Try again, or use your seed phrase to sign in.",
@@ -2290,7 +2290,8 @@
             "memo": "That's your Memo key — it's only used to encrypt and decrypt private messages and can't sign you in. Please paste your Posting key instead."
           },
           "master_password": "That looks like your Blurt master password, not your Posting key. Morphit never uses your master password to sign in. Open blurtwallet.com → Permissions and copy your Posting Private Key (it starts with 5)."
-        }
+        },
+        "account_bad": "invalid"
       },
       "error": {
         "seed_word_count": "A Blurt seed phrase is exactly 12 words — you've entered {count}. Make sure all 12 are present, each separated by a single space.",
@@ -2317,7 +2318,8 @@
           "password_too_short": "Password must be at least 8 characters.",
           "passwords_mismatch": "Passwords don't match.",
           "password_weak": "Password is too weak. Use something longer or less predictable."
-        }
+        },
+        "body_password_set": "Your keys are loaded for this browser session. By default, when you close this tab they disappear and you'll need to sign in again next time. If this is your own computer, you can choose to be remembered on this device — you'll unlock next time with the same password you just used."
       }
     },
     "confirm": {
@@ -2462,7 +2464,7 @@
     "run_cta": "Run a Morphit node",
     "learn_cta": "How do operators earn?",
     "empty_heading": "No operators yet.",
-    "empty_body": "No operators have registered with this indexer's view of the chain yet. The operator-register op exists today — anyone can broadcast `morphit_register_operator` to claim a tag and start earning their 90% share of BLURT-paid listing fees. If you'd like to be among the first independent operators, start here.",
+    "empty_body": "No additional operators have registered with the chain yet. Anyone can start earning their 90% share of BLURT-paid listing fees. If you'd like to be among the first independent operators, start here.",
     "empty_cta": "Run a node",
     "load_error": "Could not reach the indexer",
     "inactive_badge": "Inactive",
@@ -3364,7 +3366,7 @@
     "why_privacy_title": "Minimize metadata leakage",
     "why_privacy_body": "Users trading through your instance share metadata with you and only you. No other operator, not even Agorise, sees their activity patterns.",
     "why_earn_title": "Paid automatically by Smart Contract",
-    "why_earn_body": "Every BLURT-paid listing fee your instance attracts pays you 90% — only 10% goes to the Morphit treasury to fund welcome bonuses, loyalty delegations, and account-creation costs. BTC- and XMR-paid fees flow 100% to the treasury for the same project obligations (the on-chain split mechanism only works for BLURT, but we made the BLURT split aggressively generous to compensate — 90/10 in your favor instead of the 50/50 we considered originally).\n\nA Smart Contract running on the Blurt chain enforces the split — not a person, not a company, not anyone who can change their mind. 100% automated. No invoices, no payouts, no trust assumptions. You provably assist, you provably get paid. Guaranteed in code.\n\nPayouts are denominated in BLURT, so if BLURT appreciates, so do your earnings — without any additional work on your part. Fully open source under AGPL-3.0; if you can read the indexer source, you can audit the payout logic.",
+    "why_earn_body": "Every BLURT-paid listing fee your instance attracts pays you 90% — only 10% goes to the Morphit treasury to fund the furthering development and maintenance of the Morphit software itself. BTC- and XMR-paid fees flow 100% to the treasury for the same project obligations (the on-chain split mechanism only works for BLURT, but we made the BLURT split aggressively generous to compensate — 90/10 in your favor).\n\nA Smart Contract running on the Blurt chain enforces the split — not a person, not a company, not anyone who can change their mind. 100% automated. You provably assist, you provably get paid. Guaranteed in code.\n\nPayouts are denominated in BLURT, so if BLURT appreciates, so do your earnings — without any additional work on your part.",
     "how_heading": "How to get started",
     "step1_title": "Provision a VPS",
     "step1_body": "Linux (Debian 12, Ubuntu 24.04 LTS, Arch, NixOS — we test on Debian). 2 CPU cores at 1 GHz+, 2 GB RAM minimum (4 GB comfortable), 20 GB SSD. A Raspberry Pi 4, an old laptop, or a $5/month VPS all work. No static IP needed — DDNS works fine. See the FAQ entry on minimum hardware requirements for the full breakdown across hobbyist, serious, and spare-laptop tiers.",
@@ -3384,14 +3386,14 @@
     "asset_policy_federation_label": "Federation stays intact.",
     "asset_policy_federation_body": "Disabling an asset on your instance doesn't hide peer instances' orders from your users — chain history is shared, so the orderbook still surfaces them as read-only. The gate is only on NEW orders posted FROM your instance.",
     "asset_policy_doc_pointer": "Full env-var reference and multi-asset examples in",
-    "asset_policy_doc_pointer_suffix": "under §Trade-only asset configuration.",
+    "asset_policy_doc_pointer_suffix": "under Trade-only asset configuration.",
     "requirements_heading": "Resource requirements",
     "req_hw_label": "Hardware",
     "req_hw_value": "2 CPU cores, 2-4 GB RAM, 20 GB SSD",
     "req_network_label": "Network",
     "req_network_value": "Home internet works fine — DDNS handles dynamic IPs, no static IP required",
     "req_time_label": "Your time",
-    "req_time_value": "One hour monthly for maintenance",
+    "req_time_value": "Under one hour monthly for maintenance",
     "cta_heading": "Ready to begin?",
     "cta_body": "Clone the repo, set up your hardware (a Pi 4 or any old laptop will do), follow the runbook. Once you broadcast the operator-register op your instance is live and earning.",
     "cta_repo": "See the repo",
@@ -3723,10 +3725,10 @@
       "reset_confirm_cancel": "Cancel"
     },
     "session": {
-      "heading": "Session",
-      "explain": "Sign out when you're done. Your posting + memo keys will be wiped from memory; the encrypted keystore on your device is untouched.",
+      "heading": "Utility",
+      "explain": "Sign out when you're done. Your keys will be wiped from memory; the encrypted keystore on your device is untouched.",
       "sign_out": "Sign out",
-      "confirm_prompt": "Sign out of this device? Your posting + memo keys will be wiped from memory. You'll need to unlock again to trade.",
+      "confirm_prompt": "Sign out of this device? Your keys will be wiped from memory. You'll need to unlock again to trade.",
       "confirm_yes": "Yes, sign out",
       "confirm_cancel": "Stay signed in",
       "autolock_label": "Auto-lock after idle",
@@ -3774,20 +3776,20 @@
         "malformed": "That does not look like a valid URL."
       },
       "preview_label": "Preview",
-      "save": "Save on this device",
+      "save": "Save locally",
       "save_pending": "Saving…",
       "saved_toast": "Saved ✓",
-      "save_and_broadcast": "Save & publish on chain",
+      "save_and_broadcast": "Save & broadcast",
       "broadcast_pending": "Publishing…",
       "broadcast_ok": "Published ✓",
-      "clear": "Remove",
+      "clear": "Clear",
       "need_display_name": "Set a display name first. Your profile broadcast includes both.",
       "reminder_title": "Where this shows up",
       "reminder_body": "Once published, the Nostr icon appears next to your username on every order, every feedback entry, every chat message — on every Morphit instance, not just this one. Other users tap it to open your Nostr profile in their preferred client."
     },
     "blurt_media_url": {
       "heading": "Blurt.media profile URL",
-      "explain": "A link to your profile on blurt.media, the popular Blurt frontend. Displayed alongside your username everywhere on Morphit. Optional.",
+      "explain": "A link to your profile on blurt.media, a popular Blurt frontend for streaming. Displayed alongside your username everywhere on Morphit. Optional.",
       "label": "Blurt.media URL",
       "placeholder": "https://blurt.media/@yourname",
       "hint_empty": "Paste your blurt.media profile URL here, or leave blank.",
@@ -3808,7 +3810,7 @@
       "clear": "Clear",
       "need_display_name": "Set a display name first — your profile op carries both fields together.",
       "reminder_title": "Optional — you can skip this.",
-      "reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who want to see your Blurt.media presence from your Morphit profile."
+      "reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who might want to also see your videos or podcasts."
     },
     "notifications": {
       "heading": "Notifications",
@@ -4294,14 +4296,15 @@
   "welcome_first_buy": {
     "heading": "Your first trade is on us. 🌱",
     "lead": "Welcome to Morphit! Your first order is a free buy of BLURT — we cover the listing fee, and you walk away with a real starter balance in your wallet. Here's why this is one of the best onboarding deals in P2P crypto:",
-    "bullet_free": "<strong>The listing fee is free.</strong> Morphit pays the network fee for this one trade — your only cost is whatever you agree to pay your counterparty.",
-    "bullet_starter": "<strong>You walk away with BLURT in your wallet.</strong> Enough to fund future listings on Morphit at the discounted BLURT rate (~60 BLURT each), and to participate in the Blurt social network from day one.",
-    "bullet_runway": "<strong>BLURT works across the whole Blurt social network.</strong> Use it to vote on posts at blurt.blog, blurt.media, and other Blurt frontends — earn curation rewards just by upvoting good content.",
-    "bullet_bp_stake": "<strong>You unlock 1 BP welcome stake instantly</strong> the moment your first BLURT-paid listing fee fires. After your first completed trade, that becomes 10 BLURT liquid + 10 BLURT Power — a permanent voting-weight stake in the Blurt social network.",
-    "why_blurt_minimum": "Why BLURT and not BTC or XMR for the free trade? Because the BLURT in your wallet is what lets you do everything else on Morphit afterward — pay listing fees on future trades (at half price!), participate in the Blurt social layer, and earn loyalty rewards. We want you set up to be active, not stranded with an empty BLURT balance.",
+    "bullet_free": "<strong>The listing fee is free.</strong> Morphit pays the network fee for your first trade — your only cost is whatever you agree to pay your counterparty.",
+    "bullet_starter": "<strong>You walk away with actual funds in your on-chain wallet</strong> for the trading fees (at the discounted rate too (~60 BLURT each)) from day one.",
+    "bullet_runway": "<strong>BLURT works across the entire Blurt social network.</strong> Use it to vote on posts at blurt.blog, blurt.media, etc and earn rewards just by clicking \"Like\" on good content.",
+    "bullet_bp_stake": "<strong>You unlock 1 BP welcome stake instantly</strong> the moment your first BLURT-paid listing fee fires. After your first successful trade, that becomes 10 BLURT liquid + 10 BLURT Power — a passive-income producing stake on the network.",
+    "why_blurt_minimum": "Why BLURT and not BTC or XMR for the free trade? Because the BLURT in your wallet is what lets you do everything else on Morphit afterward — pay listing fees on future trades (at half price!), participate in the Blurt social layer, and earn loyalty rewards. We want you set up to be active, not stranded with an empty balance.",
     "cta_compose": "Compose my free first buy",
     "learn_more": "Learn more",
-    "dismiss_aria": "Dismiss this welcome banner"
+    "collapse_aria": "Roll up this welcome card",
+    "expand_aria": "Expand this welcome card"
   },
   "chat_notif_nudge": {
     "aria_label": "Chat notification suggestion",

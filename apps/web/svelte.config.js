@@ -75,10 +75,19 @@ const config = {
 
 		// Tighten default security headers
 		serviceWorker: {
-			// Auto-register the SW bundle. We still control the messaging
-			// surface (CHECK_UPDATE / APPLY_UPDATE) from hooks.client.ts so
-			// that version upgrades require user consent.
-			register: true
+			// Auto-register the SW bundle. Update-consent (the "Load it now"
+			// snackbar) is driven by UpdateBanner.svelte off the waiting
+			// worker; the SW's APPLY_UPDATE message is the only path that
+			// calls skipWaiting(), so a new version never takes over silently.
+			register: true,
+			// updateViaCache:'none' — the browser must re-fetch
+			// /service-worker.js from the NETWORK (never its HTTP cache) on
+			// every update check, so a freshly-deployed worker is detected
+			// promptly and the snackbar can surface. Without this, a cached
+			// SW script can hide a deploy until the browser's own ~24h cycle.
+			// (Pair with a server-side `Cache-Control: no-cache` on
+			// /service-worker.js so an upstream proxy can't serve it stale.)
+			options: { updateViaCache: 'none' }
 		}
 	}
 };

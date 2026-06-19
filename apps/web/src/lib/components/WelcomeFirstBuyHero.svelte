@@ -9,8 +9,11 @@
 	 * Renders ONLY when:
 	 *   - user is logged in (has a Blurt account)
 	 *   - waiver eligibility check returned 'eligible' or
-	 *     'eligible_unknown_account'
-	 *   - user hasn't dismissed the banner this session
+	 *     'eligible_unknown_account' (so it stops showing once the
+	 *     user has any order — i.e. by/at their first completed trade)
+	 *
+	 * The ✕ no longer dismisses the card — it rolls it up (the ＋ then
+	 * re-expands it), and the rolled-up state persists for the session.
 	 *
 	 * The banner explains the why-BLURT-first design positively:
 	 *   1. Free — Morphit covers the listing fee for this one
@@ -39,10 +42,17 @@
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 
-	const DISMISS_KEY = 'morphit.welcomeFirstBuyHero.dismissed';
+	const COLLAPSE_KEY = 'morphit.welcomeFirstBuyHero.collapsed';
 
 	type Phase = 'loading' | 'show' | 'hide';
 	let phase = $state<Phase>('loading');
+	// Collapsed = the user rolled the card up via the ✕→＋ toggle. The card
+	// stays PRESENT (heading + ＋ to re-expand) — it is NOT dismissed. Persisted
+	// per session so a reload keeps it rolled up. The card disappears for good
+	// only once the free-first-buy waiver is consumed (checkWaiverEligibility
+	// flips to ineligible once the user has any order — i.e. well before/at
+	// their first completed trade).
+	let collapsed = $state(false);
 
 	const live = $derived($liveIdentity);
 
@@ -51,18 +61,12 @@
 			phase = 'hide';
 			return;
 		}
-		// Per-session dismiss — the banner reappears after a fresh
-		// page load if not dismissed mid-session.  We don't persist
-		// to localStorage because the natural end-state (the user
-		// completes the buy → waiver consumed → banner stops
-		// showing because eligibility flips false) is the right
-		// dismissal mechanism.  Persistent dismiss would risk
-		// hiding the banner from someone who sat on it for a week.
+		// Restore the collapsed (rolled-up) state for this session. We do
+		// NOT early-return hidden here: the ✕ no longer dismisses the card,
+		// it only rolls it up (＋ re-expands). The card stops showing for good
+		// when the free-first-buy waiver is consumed (eligibility flips).
 		try {
-			if (sessionStorage.getItem(DISMISS_KEY) === '1') {
-				phase = 'hide';
-				return;
-			}
+			collapsed = sessionStorage.getItem(COLLAPSE_KEY) === '1';
 		} catch {
 			// Private/Incognito mode may throw; fall through.
 		}
@@ -84,13 +88,14 @@
 		}
 	});
 
-	function dismiss(): void {
+	function toggleCollapse(): void {
+		collapsed = !collapsed;
 		try {
-			sessionStorage.setItem(DISMISS_KEY, '1');
+			if (collapsed) sessionStorage.setItem(COLLAPSE_KEY, '1');
+			else sessionStorage.removeItem(COLLAPSE_KEY);
 		} catch {
 			// no-op
 		}
-		phase = 'hide';
 	}
 
 	// Part 121 cp7 — per-locale internal-link wrapper.
@@ -118,16 +123,22 @@
 					>
 						{$_('welcome_first_buy.heading')}
 					</h2>
-					<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
-						{$_('welcome_first_buy.lead')}
-					</p>
+					{#if !collapsed}
+						<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+							{$_('welcome_first_buy.lead')}
+						</p>
+					{/if}
 				</div>
 			</div>
 			<button
 				type="button"
 				class="flex-none rounded-md p-1 text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200"
-				onclick={dismiss}
-				aria-label={$_('welcome_first_buy.dismiss_aria') as string}
+				onclick={toggleCollapse}
+				aria-expanded={!collapsed}
+				aria-controls="welcome-first-buy-body"
+				aria-label={(collapsed
+					? $_('welcome_first_buy.expand_aria')
+					: $_('welcome_first_buy.collapse_aria')) as string}
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -141,54 +152,65 @@
 					stroke-linejoin="round"
 					aria-hidden="true"
 				>
-					<path d="M18 6 6 18" />
-					<path d="m6 6 12 12" />
+					{#if collapsed}
+						<!-- ＋ : rolled up, click to re-expand -->
+						<path d="M12 5v14" />
+						<path d="M5 12h14" />
+					{:else}
+						<!-- ✕ : expanded, click to roll up -->
+						<path d="M18 6 6 18" />
+						<path d="m6 6 12 12" />
+					{/if}
 				</svg>
 			</button>
 		</div>
 
-		<ul class="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-			<li class="flex items-start gap-2">
-				<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
-				<span class="text-ink-700 dark:text-ink-200">
-					{@html $_('welcome_first_buy.bullet_free')}
-				</span>
-			</li>
-			<li class="flex items-start gap-2">
-				<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
-				<span class="text-ink-700 dark:text-ink-200">
-					{@html $_('welcome_first_buy.bullet_starter')}
-				</span>
-			</li>
-			<li class="flex items-start gap-2">
-				<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
-				<span class="text-ink-700 dark:text-ink-200">
-					{@html $_('welcome_first_buy.bullet_runway')}
-				</span>
-			</li>
-			<li class="flex items-start gap-2">
-				<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
-				<span class="text-ink-700 dark:text-ink-200">
-					{@html $_('welcome_first_buy.bullet_bp_stake')}
-				</span>
-			</li>
-		</ul>
+		{#if !collapsed}
+			<div id="welcome-first-buy-body">
+				<ul class="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+					<li class="flex items-start gap-2">
+						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
+						<span class="text-ink-700 dark:text-ink-200">
+							{@html $_('welcome_first_buy.bullet_free')}
+						</span>
+					</li>
+					<li class="flex items-start gap-2">
+						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
+						<span class="text-ink-700 dark:text-ink-200">
+							{@html $_('welcome_first_buy.bullet_starter')}
+						</span>
+					</li>
+					<li class="flex items-start gap-2">
+						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
+						<span class="text-ink-700 dark:text-ink-200">
+							{@html $_('welcome_first_buy.bullet_runway')}
+						</span>
+					</li>
+					<li class="flex items-start gap-2">
+						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
+						<span class="text-ink-700 dark:text-ink-200">
+							{@html $_('welcome_first_buy.bullet_bp_stake')}
+						</span>
+					</li>
+				</ul>
 
-		<p class="mt-5 text-sm text-ink-600 dark:text-ink-300">
-			{$_('welcome_first_buy.why_blurt_minimum')}
-		</p>
+				<p class="mt-5 text-sm text-ink-600 dark:text-ink-300">
+					{$_('welcome_first_buy.why_blurt_minimum')}
+				</p>
 
-		<div class="mt-5 flex flex-wrap items-center gap-3">
-			<a href={lp('/post?welcome=1')} class="btn-primary inline-flex items-center gap-2">
-				<span aria-hidden="true">🌱</span>
-				<span>{$_('welcome_first_buy.cta_compose')}</span>
-			</a>
-			<a
-				href={lp('/faq#first_order_free')}
-				class="text-sm font-semibold text-morphit-emerald hover:underline"
-			>
-				{$_('welcome_first_buy.learn_more')}
-			</a>
-		</div>
+				<div class="mt-5 flex flex-wrap items-center gap-3">
+					<a href={lp('/post?welcome=1')} class="btn-primary inline-flex items-center gap-2">
+						<span aria-hidden="true">🌱</span>
+						<span>{$_('welcome_first_buy.cta_compose')}</span>
+					</a>
+					<a
+						href={lp('/faq#first_order_free')}
+						class="text-sm font-semibold text-morphit-emerald hover:underline"
+					>
+						{$_('welcome_first_buy.learn_more')}
+					</a>
+				</div>
+			</div>
+		{/if}
 	</section>
 {/if}
