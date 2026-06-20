@@ -170,7 +170,7 @@ function buildServer(): Server {
 	const server = new Server(
 		{
 			name: 'morphit-mcp',
-			version: '1.0.0-beta.22'
+			version: '1.0.0-beta.23'
 		},
 		{
 			capabilities: {

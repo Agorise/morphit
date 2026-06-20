@@ -103,6 +103,13 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'rss.format_json', locale: 'de', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
 	{ key: 'rss.format_json', locale: 'es', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
 	{ key: 'rss.format_json', locale: 'fr', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
+	// cp295 — the footer link was shortened from "PGP keys" to the bare
+	// acronym "PGP" (Ken's batch item D). "PGP" is a universal
+	// cryptography acronym, written the same in every locale, so being
+	// byte-identical to English here is the CORRECT rendering, not a miss.
+	{ key: 'footer.pgp_keys', locale: 'de', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
+	{ key: 'footer.pgp_keys', locale: 'es', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
+	{ key: 'footer.pgp_keys', locale: 'fr', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
 	// ─── cp115 network product names: Latin-script brand names that
 	//     legitimately do NOT translate.  Arbitrum, Base, Polygon are
 	//     Layer-2 network product names (registered marks).  BEP-20

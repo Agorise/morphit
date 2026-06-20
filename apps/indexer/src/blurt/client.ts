@@ -45,6 +45,15 @@ export interface DynamicGlobalProperties {
 	readonly head_block_number: number;
 	readonly last_irreversible_block_num: number;
 	readonly time: string;
+	/** Vesting-fund + total-VESTS + supply figures.  Needed to
+	 *  convert a VESTS balance to BLURT POWER and to compute the
+	 *  vesting APR for the user-facing balance proxy.  Optional
+	 *  because the poller's minimal use of DGP (block heights only)
+	 *  doesn't require them; the balance endpoint validates their
+	 *  presence before relying on them. */
+	readonly total_vesting_fund_blurt?: string;
+	readonly total_vesting_shares?: string;
+	readonly current_supply?: string;
 }
 
 /** Minimal shape of a block as returned by `condenser_api.get_block`.
@@ -86,6 +95,22 @@ export interface ChainAccount {
 	 *  for callers doing balance-sensitive logic (ADR-0010 §3
 	 *  low-balance auto-refill).  Parse with parseBlurtAmount. */
 	readonly balance?: string;
+	/** Powered-up stake as a VESTS asset string like
+	 *  "1000000.000000 VESTS".  Present in the RPC response;
+	 *  exposed here for the user-facing balance proxy
+	 *  (apps/indexer/src/api/accountBalance.ts), which converts it
+	 *  to BLURT POWER via the frontend's vestsToBlurtPower using the
+	 *  DGP vesting totals below. */
+	readonly vesting_shares?: string;
+	/** Voting-mana regen bar.  Present in the RPC response; the
+	 *  balance proxy passes it through so the frontend can render a
+	 *  mana percentage without the browser ever touching an RPC
+	 *  node directly (privacy: third-party nodes never see the
+	 *  user's IP or which account they're viewing). */
+	readonly voting_manabar?: {
+		readonly current_mana: string;
+		readonly last_update_time: number;
+	};
 }
 
 /** Bridge a dblurt call (no native cancellation) to an AbortSignal.
@@ -153,7 +178,7 @@ export class BlurtClient {
 			const dgp = (await withSignal(
 				client.condenser.getDynamicGlobalProperties(),
 				signal
-			)) as DynamicGlobalProperties;
+			)) as unknown as DynamicGlobalProperties;
 			if (
 				typeof dgp.head_block_number !== 'number' ||
 				typeof dgp.last_irreversible_block_num !== 'number'

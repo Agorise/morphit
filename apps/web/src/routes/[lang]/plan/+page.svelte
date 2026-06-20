@@ -52,7 +52,7 @@
 			<a
 				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/PLAN.md"
 				class="text-morphit-emerald hover:underline"
-				rel="noopener">docs/PLAN.md</a
+				target="_blank" rel="noopener noreferrer">docs/PLAN.md</a
 			>.
 		</p>
 	</footer>

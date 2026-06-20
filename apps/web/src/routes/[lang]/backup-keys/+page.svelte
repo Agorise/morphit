@@ -403,7 +403,11 @@
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.keyfile_heading')}</h3>
 				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
-					{$_('backup_keys.keyfile_body')}
+					{$_(
+						isPostingOnly
+							? 'backup_keys.keyfile_body_posting_only'
+							: 'backup_keys.keyfile_body'
+					)}
 				</p>
 
 				{#if $isUnlocked}
@@ -445,16 +449,25 @@
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.redundancy_heading')}</h3>
 				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-200">
-					{$_('backup_keys.redundancy_body')}
+					{$_(
+						isPostingOnly
+							? 'backup_keys.redundancy_body_posting_only'
+							: 'backup_keys.redundancy_body'
+					)}
 				</p>
 			</article>
 		</div>
 	</section>
 
 	<!-- What NOT to do. Reciprocal to the advice above — spelling out
-	     the most common ways people lose crypto. -->
-	<section class="card mb-6">
-		<h2 class="font-display text-2xl font-bold">{$_('backup_keys.antipatterns_heading')}</h2>
+	     the most common ways people lose crypto. Every item here is
+	     framed around the SEED phrase, which a posting-key-only login
+	     doesn't have, so the whole section is hidden in that case
+	     (cp295) — the keyfile guidance above already covers the one
+	     secret such a user holds. -->
+	{#if !isPostingOnly}
+		<section class="card mb-6">
+			<h2 class="font-display text-2xl font-bold">{$_('backup_keys.antipatterns_heading')}</h2>
 		<ul class="mt-4 space-y-3">
 			<li class="flex gap-3">
 				<span class="flex-none text-red-500" aria-hidden="true">✕</span>
@@ -478,6 +491,7 @@
 			</li>
 		</ul>
 	</section>
+	{/if}
 
 	<!-- FAQ pointers for users who want to dig deeper. -->
 	<section class="card">

@@ -266,7 +266,6 @@
       "feedback_help": "收到的或已回应的"
     },
     "post_order": "发布新订单",
-    "edit_profile": "编辑个人资料",
     "help_support": "帮助和支持",
     "sign_out_modal": {
       "title": "登出 Morphit?",
@@ -312,6 +311,8 @@
     "keyfile_download_err_locked": "你的会话似乎已锁定。登录以下载你的 keyfile。",
     "redundancy_heading": "3. 多份副本,多个位置",
     "redundancy_body": "加密幸存者是那些为火灾、洪水、死亡和自己健忘做好计划的人。\n\n你的助记词两份物理副本放在不同位置。至少一份在保险箱或银行保险柜中。考虑遗产计划:如果你出事,可信赖的继承人如何找到你的密钥?把说明与密钥本身分开写。\n\n冗余花你 10 分钟工夫。它的缺失可以让你失去一切。",
+    "keyfile_body_posting_only": "此密钥文件是你的私有发帖密钥，已用你的设备密码加密。请立即下载，并将其存放在与你正在使用的设备分开的地方。如果你忘记密码，该密钥文件将毫无用处——所以请将密码视为同等重要。",
+    "redundancy_body_posting_only": "在加密世界中幸存下来的人，都是那些为火灾、洪水、死亡以及自己的健忘做好了准备的人。\n\n将你的密钥文件加密保存两份，分别存放在不同的物理地点。至少有一份放在保险箱或银行保管箱中。考虑一份遗产计划：如果你发生意外，受信任的继承人如何取得你的资金？把操作说明与密钥本身分开记录。\n\n冗余只需花费你 10 分钟的精力，而它的缺失可能让你失去一切。",
     "antipatterns_heading": "让人失去一切的常见错误",
     "anti_email": "把助记词发邮件给自己。你邮件提供商的任何泄露都会暴露它。",
     "anti_cloud": "把种子存在 Google Drive、iCloud、Dropbox、OneDrive。它们被自动化恶意软件扫描,被政府传唤,被攻击者入侵。",
@@ -940,7 +941,8 @@
       "submit": "搜索",
       "hint": "账户名以字母开头。交易 ID 是 40 个十六进制字符。区块号是正整数。",
       "error_invalid": "此输入无法转换为有效查询。",
-      "error_unknown": "无法识别这是什么。请尝试 Blurt 用户名、交易 ID 或区块号。"
+      "error_unknown": "无法识别这是什么。请尝试 Blurt 用户名、交易 ID 或区块号。",
+      "delay_notice": "刚做完交易？可能需要最多一分钟才会出现。打开该账户并点击刷新，即可从链上加载最新数据。"
     },
     "nav": {
       "back_to_search": "返回搜索",
@@ -969,7 +971,9 @@
       "error": {
         "load_failed": "无法加载此账户的历史。",
         "load_more_failed": "无法加载更早的历史。"
-      }
+      },
+      "refresh_label": "从链上刷新",
+      "delay_notice": "每隔几秒会自动刷新（空闲时更慢），所以刚刚完成的交易可能需要最多一分钟才会自动出现。点击刷新即可立即从链上加载最新数据。"
     },
     "block": {
       "page_title": "区块 {block}",
@@ -1783,7 +1787,7 @@
     "i2p_name": "I2P",
     "canary": "金丝雀",
     "canary_title": "运营者的每周搜查令金丝雀 — 验证日期是否近期",
-    "pgp_keys": "PGP 密钥",
+    "pgp_keys": "PGP",
     "pgp_keys_title": "运营者用于已签名发行版和金丝雀验证的 PGP 公钥",
     "mediakit": "媒体资源包",
     "mediakit_title": "Morphit 的品牌资源和成就清单 — 面向媒体、集成方和社区",
@@ -1955,6 +1959,7 @@
     "title": "已知的 Morphit 实例",
     "intro": "Morphit 是联邦化的。任何人都可以运行一个实例,你的索引器通过读取链自动发现其他实例。下面是来自最近一次探测的它们当前的健康状况。",
     "loading": "正在加载目录…",
+    "bookmark_tip": "提示：在浏览器中收藏其中几个实例——以及它们的 Tor、I2P 或 Lokinet 地址。订单簿存在于公开的区块链上，因此即使某个站点被封锁或下线，你也能通过任何其他实例访问完全相同的订单和交易。",
     "fetch_error": "无法加载目录。",
     "last_updated": "目录上次更新:{date}",
     "contact": "联系本运营者 →",
@@ -2265,6 +2270,7 @@
         "account_hint": "不带 @。我们将检查此账户是否存在于 Blurt 链上,以及 posting 密钥是否匹配。",
         "wif_label": "Posting 私钥 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
+        "password_mismatch": "密码不匹配。",
         "wif_hint": "以 5 (旧版)或 P5 (新版)开头。从不与运营商分享 — 仅在此设备上加密。",
         "new_password_label": "此设备的新密码",
         "new_password_hint": "至少 8 个字符。用于在此设备上解锁 Morphit。不是你的 Blurt 密码。",
@@ -2319,6 +2325,7 @@
           "passwords_mismatch": "密码不匹配。",
           "password_weak": "密码太弱。使用更长或不太可预测的内容。"
         },
+        "welcome_title": "欢迎！",
         "body_password_set": "你的密钥已为此浏览器会话加载。默认情况下，关闭此标签页后它们会消失，下次需要重新登录。如果这是你自己的电脑，你可以选择在此设备上记住你——下次用你刚才使用的同一个密码解锁。"
       }
     },
@@ -2867,15 +2874,13 @@
       "asset_label": "哪种资产?",
       "step_2_heading": "金额和价格?",
       "fiat_label": "法币",
-      "fiat_placeholder": "例如 USD、EUR、CNY",
       "amount_min_label": "最少(法币)",
       "amount_max_label": "最多(法币)",
       "amount_optional_hint": "留空表示无限制。",
-      "step_3_heading": "如何联系您?",
-      "payment_methods_label": "接受的付款方式",
-      "payment_methods_hint": "添加所有你接受的方式——对方从中挑选合适的一种。",
+      "step_3_heading": "你将如何付款？",
+      "payment_methods_label": "我可以通过以下方式付款",
+      "payment_methods_hint": "想加多少就加多少——交易对手会选择适合他们的方式。",
       "region_label": "地区 (可选)",
-      "region_placeholder": "例如 北美、布宜诺斯艾利斯",
       "region_hint": "您愿意在哪里交易。帮助附近的人找到您。",
       "terms_label": "附加条件 (可选)",
       "terms_placeholder": "例如 \"仅周末\" 或 \"100 美元以下仅限现金\"",
@@ -2919,7 +2924,10 @@
       "price_model_fixed_help": "每单位固定的法币价格。市场波动时订单不动。",
       "price_model_fixed_aria": "每单位的法币固定价",
       "price_model_fixed_placeholder": "例如 100000",
-      "price_model_fiat_placeholder": "法币"
+      "price_model_fiat_placeholder": "法币",
+      "first_trade_title": "你的第一笔交易：购买 BLURT",
+      "first_trade_body": "Morphit 以 BLURT 运行，挂单手续费也用它支付。因此你的第一笔交易是少量购买 BLURT 来为账户注资——只要持有一些，你就能挂单并交易任何资产。这第一笔购买是免费的（挂单费已豁免），挂单将在 7 天后到期。",
+      "first_trade_expiry_note": "首次挂单将在 7 天后到期。"
     },
     "errors": {
       "fiat_empty": "请选择一种法币(如 USD 或 EUR)。",
@@ -3218,9 +3226,10 @@
     "privacy_heading": "隐私",
     "privacy_body_1": "Morphit 在您的浏览器中运行。您的密钥在您的设备上生成,从不离开设备。Morphit 不收集跟踪 cookie、分析数据或您的 IP 地址,除非是技术上提供页面所必需的。",
     "privacy_body_2": "你发布的每一个报价——连同你给出和收到的反馈与评价——都公开在区块链上，用于建立信誉、留存记录，以及你对其他交易者的调查研究。",
+    "privacy_body_protected": "相反，你的私人对话始终保持私密。交易者之间的私信经过端到端加密——它们在区块链上仅以密文形式存在，只有你和你的交易对手才能读取，运营方、索引服务或任何其他观察链上数据的人都无法读取。Morphit 也不收集任何姓名、电子邮件、电话或身份证件，而你交换的支付信息（例如收款地址）会通过该加密通道传递，而不会出现在公开的订单簿中。",
     "privacy_body_3": "我们鼓励你在访问 Morphit 时使用 VPN、Tor、Lokinet 或 I2P——任何隐藏你 IP 不被服务器看到的方式都是好主意。我们不对你的浏览器进行指纹识别,不画像你,并明确设计我们的防滥用机制,使其不会惩罚注重隐私的用户。我们的速率限制很粗糙(每 IP 每天几次注册),通过 VPN 轮换很容易绕过——这是一个自觉的权衡。我们宁愿接受更多滥用,也不愿让尊重隐私的用户感到不受欢迎。如果一种防御需要追踪你才能工作,我们就不会实现它。",
     "terms_heading": "条款",
-    "terms_body": "请遵守不侵犯原则(NAP)。说脏话是可以的,但请记住 Morphit 的用户有各种年龄——老人、青少年以及中间的每一个人。欢迎各种观点,但不接受针对性的辱骂。您的买/卖订单、广告、反馈和聊天都是不可更改的,所以用词至关重要。表达观点然后停下。不要挑起争端。不要发布非法或明显令人反感的内容。请注意礼貌,做个友善的人。💙💚"
+    "terms_body": "请遵守不侵犯原则(NAP)。说脏话是可以的,但请记住 Morphit 的用户有各种年龄——老人、青少年以及中间的每一个人。欢迎各种观点,但不接受针对性的辱骂。您的买/卖订单、广告、反馈和聊天都是不可更改的,所以用词至关重要。表达观点然后停下。不要挑起争端。不要发布非法或明显令人反感的内容。请注意礼貌,做个友善的人。💚💙"
   },
   "privkey_warn": {
     "title": "停 — 这看起来像一个私钥",

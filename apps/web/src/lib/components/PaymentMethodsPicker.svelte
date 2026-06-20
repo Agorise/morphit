@@ -81,11 +81,15 @@
 	}: Props = $props();
 
 	let query = $state('');
+	// O (cp295): the four standard category sections start COLLAPSED so
+	// the picker opens compact — the user expands only the category they
+	// pay with. (The operator's own "instance additions" section, if any,
+	// stays open since it's small and operator-curated.)
 	let collapsed = $state<Record<PaymentCategory | 'instance', boolean>>({
-		crypto: false,
-		in_person: false,
-		by_mail: false,
-		online: false,
+		crypto: true,
+		in_person: true,
+		by_mail: true,
+		online: true,
 		instance: false
 	});
 
@@ -267,7 +271,7 @@
 						type="button"
 						onclick={() => toggle(entry.key)}
 						disabled={!isSelected(entry.key) && maxReached}
-						class="flex w-full items-center justify-between gap-3 rounded-lg border border-ink-200 px-3 py-2 text-left text-sm transition hover:border-morphit-emerald disabled:opacity-50 dark:border-ink-800 {isSelected(
+						class="flex w-full items-center justify-between gap-3 rounded-lg border border-ink-200 px-3 py-2 text-left text-sm transition cursor-pointer hover:border-morphit-emerald disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-800 {isSelected(
 							entry.key
 						)
 							? 'bg-emerald-50 dark:bg-ink-800'
@@ -326,7 +330,7 @@
 										type="button"
 										onclick={() => toggle(entry.key)}
 										disabled={!isSelected(entry.key) && maxReached}
-										class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-ink-50 disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
+										class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition cursor-pointer hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
 											entry.key
 										)
 											? 'bg-emerald-50 dark:bg-ink-800'
@@ -383,7 +387,7 @@
 									type="button"
 									onclick={() => toggle(entry.key)}
 									disabled={!isSelected(entry.key) && maxReached}
-									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-ink-50 disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
+									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition cursor-pointer hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-ink-900 {isSelected(
 										entry.key
 									)
 										? 'bg-emerald-50 dark:bg-ink-800'

@@ -22,6 +22,9 @@
 		<p class="mb-3 text-ink-700 dark:text-ink-200">
 			{$_('privacy_terms.privacy_body_2')}
 		</p>
+		<p class="mb-3 text-ink-700 dark:text-ink-200">
+			{$_('privacy_terms.privacy_body_protected')}
+		</p>
 		<p class="text-ink-700 dark:text-ink-200">
 			{$_('privacy_terms.privacy_body_3')}
 		</p>

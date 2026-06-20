@@ -104,6 +104,9 @@
 		<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
 			{$_('explorer.search.hint')}
 		</p>
+		<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
+			{$_('explorer.search.delay_notice')}
+		</p>
 
 		{#if lastError}
 			<p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
@@ -134,7 +137,7 @@
 				{$_('explorer.nav.fallback_description')}
 			</p>
 		</a>
-		<a href="/" class="card transition hover:border-morphit-emerald">
+		<a href={lp('/')} class="card transition hover:border-morphit-emerald">
 			<h2 class="font-display text-base font-bold">
 				{$_('explorer.nav.home_title')}
 			</h2>

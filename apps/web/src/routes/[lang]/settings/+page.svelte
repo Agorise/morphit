@@ -46,7 +46,8 @@
 	} from '$blurt/ops/profile';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
 	import { verifyPostingKey } from '$crypto/postingVerify';
-	import { getBlurtClient } from '$blurt/client';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, loadBlocks, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
@@ -319,8 +320,7 @@
 		accountVerifyError = '';
 		try {
 			const derivedPub = await formatPublicKeyBLT(live.posting.publicKey);
-			const client = getBlurtClient();
-			const fetched = await client.getAccount(candidate);
+			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), candidate);
 			if (!fetched) {
 				accountVerifyError = $_('settings.account_name.error_not_found', {
 					values: { account: candidate }

@@ -79,7 +79,7 @@
 			{$_('download.pwa_platforms')}
 		</p>
 		<div class="mt-4 flex flex-wrap gap-3">
-			<a href="/" class="btn-primary">
+			<a href={lp('/')} class="btn-primary">
 				{$_('download.web_cta')}
 			</a>
 		</div>

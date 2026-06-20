@@ -22,7 +22,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { getBlurtClient } from '$blurt/client';
+	import { fetchAccountBalance } from '$blurt/accountBalance';
+	import { fetchAccountHistory } from '$blurt/accountHistory';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import {
 		parseAssetAmount,
 		vestsToBlurtPower,
@@ -64,6 +66,9 @@
 	let ops = $state<OpRow[]>([]);
 	let oldestSeqLoaded = $state<number | null>(null);
 	let loadingMore = $state(false);
+	/** True while a manual "refresh now" is in flight (spins the icon,
+	 *  disables the button). */
+	let refreshing = $state(false);
 
 	const POLL_MS_BASE = 5_000;
 	/** Sally finding M9 (Part 68): backoff cap.  Five seconds is
@@ -79,38 +84,51 @@
 	 *  the account is idle. */
 	let currentPollMs = POLL_MS_BASE;
 
+	/** A successful balance fetch's payload. */
+	type BalanceOkData = Extract<
+		Awaited<ReturnType<typeof fetchAccountBalance>>,
+		{ kind: 'ok' }
+	>['data'];
+
+	/** Map a successful balance fetch onto the page's balance state.
+	 *  Shared by the initial load and the manual refresh so the two never
+	 *  drift apart. */
+	function applyBalanceData(d: BalanceOkData): void {
+		const { account: acct, dgp } = d;
+		blurt = parseAssetAmount(acct.balance);
+		bp = vestsToBlurtPower(
+			acct.vesting_shares ?? '0 VESTS',
+			dgp.total_vesting_fund_blurt,
+			dgp.total_vesting_shares
+		);
+		mana = manaPercentage(
+			acct.voting_manabar ?? null,
+			acct.vesting_shares ?? '0 VESTS',
+			Math.floor(Date.now() / 1000)
+		);
+		// posting_pub is the first posting-authority key (or null).
+		if (acct.posting_pub) postingPub = acct.posting_pub;
+	}
+
 	async function loadInitial(): Promise<void> {
 		status = 'loading';
 		try {
-			const client = getBlurtClient();
-			const [acct, dgp] = await Promise.all([
-				client.getAccount(account),
-				client.getDynamicGlobalProperties()
-			]);
-			if (!acct) {
+			// Account + DGP via the indexer (privacy: no direct RPC from
+			// the browser). The balance proxy returns balance / vesting /
+			// manabar / dgp / posting_pub — everything this page renders.
+			const r = await fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
 			}
+			if (r.kind !== 'ok') {
+				throw new Error(r.message);
+			}
+			const { account: acct } = r.data;
 			if (acct.name !== account) {
-				throw new Error(`RPC returned ${acct.name} but ${account} was requested`);
+				throw new Error(`indexer returned ${acct.name} but ${account} was requested`);
 			}
-			blurt = parseAssetAmount(acct.balance);
-			bp = vestsToBlurtPower(
-				acct.vesting_shares ?? '0 VESTS',
-				dgp.total_vesting_fund_blurt,
-				dgp.total_vesting_shares
-			);
-			mana = manaPercentage(
-				acct.voting_manabar ?? null,
-				acct.vesting_shares ?? '0 VESTS',
-				Math.floor(Date.now() / 1000)
-			);
-			// Account.posting is an Authority object; extract the
-			// first key for display.
-			const keyAuths = acct.posting?.key_auths;
-			if (Array.isArray(keyAuths) && keyAuths[0] && typeof keyAuths[0][0] === 'string') {
-				postingPub = keyAuths[0][0];
-			}
+			applyBalanceData(r.data);
 
 			// First page of history.
 			await fetchHistory(-1);
@@ -122,20 +140,20 @@
 		}
 	}
 
-	async function fetchHistory(from: number): Promise<void> {
-		const client = getBlurtClient();
-		// condenser_api.get_account_history shape:
+	async function fetchHistory(from: number, noCache = false): Promise<void> {
+		// One page via the indexer (privacy: no direct RPC from the
+		// browser). get_account_history shape per entry:
 		//   [seq, { block, trx_id, timestamp, op: [name, body] }]
-		type HistoryEntry = [
-			number,
-			{ block: number; trx_id: string; timestamp: string; op: [string, Record<string, unknown>] }
-		];
-		const history = await client.call<HistoryEntry[]>('condenser_api.get_account_history', [
+		const r = await fetchAccountHistory(
+			resolveOrigin(MORPHIT_INDEXER_ORIGIN),
 			account,
 			from,
-			PAGE_SIZE
-		]);
-		if (!Array.isArray(history)) return;
+			PAGE_SIZE,
+			fetch,
+			noCache
+		);
+		if (r.kind !== 'ok') return;
+		const history = r.entries;
 
 		const newOps: OpRow[] = [];
 		for (const entry of history) {
@@ -235,6 +253,32 @@
 		if (pollTimer) {
 			clearTimeout(pollTimer);
 			pollTimer = null;
+		}
+	}
+
+	/** Manual "refresh now". For when a user just made a transaction and
+	 *  doesn't want to wait for the auto-poll, which backs off to a minute
+	 *  on an idle account. Re-fetches balance + the latest history in
+	 *  place (cache-bypassed, so it reflects the chain even within the
+	 *  short proxy cache window), then restarts polling at the base
+	 *  interval. Deliberately does NOT call loadInitial: that flips status
+	 *  to 'loading' and blanks the page, which would feel like a
+	 *  navigation rather than an in-place refresh. */
+	async function manualRefresh(): Promise<void> {
+		if (refreshing || status !== 'ok') return;
+		refreshing = true;
+		stopPolling();
+		try {
+			const r = await fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch, true);
+			if (r.kind === 'ok' && r.data.account.name === account) applyBalanceData(r.data);
+			await fetchHistory(-1, true);
+		} catch (err) {
+			console.warn('[explorer/account] manual refresh failed:', err);
+		} finally {
+			refreshing = false;
+			// Snap polling back to the base interval (startPolling resets
+			// currentPollMs), so we keep watching closely right after a refresh.
+			startPolling();
 		}
 	}
 
@@ -352,12 +396,37 @@
 		{/if}
 
 		<section class="card">
-			<h2 class="mb-3 font-display text-base font-bold">
-				{$_('explorer.account.recent_ops_heading')}
-				<span class="ml-2 text-xs font-normal text-ink-500">
-					({$_('explorer.account.realtime_label')})
-				</span>
-			</h2>
+			<div class="mb-1 flex items-center justify-between gap-2">
+				<h2 class="font-display text-base font-bold">
+					{$_('explorer.account.recent_ops_heading')}
+					<span class="ml-2 text-xs font-normal text-ink-500">
+						({$_('explorer.account.realtime_label')})
+					</span>
+				</h2>
+				<button
+					type="button"
+					onclick={manualRefresh}
+					disabled={refreshing}
+					aria-label={$_('explorer.account.refresh_label')}
+					title={$_('explorer.account.refresh_label')}
+					class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ink-300 text-ink-600 transition hover:text-morphit-emerald disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-700 dark:text-ink-300"
+				>
+					<svg
+						class="h-4 w-4 {refreshing ? 'animate-spin' : ''}"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+						<path d="M21 3v6h-6" />
+					</svg>
+				</button>
+			</div>
+			<p class="mb-3 text-xs text-ink-500">{$_('explorer.account.delay_notice')}</p>
 			{#if ops.length === 0}
 				<p class="text-sm text-ink-500">{$_('explorer.account.no_ops')}</p>
 			{:else}

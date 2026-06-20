@@ -91,7 +91,7 @@
 				<a
 					href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/SECURITY.md#bug-bounty-program"
 					class="text-morphit-emerald hover:underline"
-					rel="noopener">{$_('security.bounty_link')}</a
+					target="_blank" rel="noopener noreferrer">{$_('security.bounty_link')}</a
 				>
 			</p>
 		</article>

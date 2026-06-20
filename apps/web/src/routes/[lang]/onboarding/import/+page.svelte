@@ -23,7 +23,8 @@
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { masterPasswordPubKey } from '$crypto/masterPassword';
 	import { normalizeSeedPhrase } from '$crypto/seedNormalize';
-	import { getBlurtClient } from '$blurt/client';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { bootFromEnvelope } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
 	import sodium from 'libsodium-wrappers-sumo';
@@ -37,6 +38,10 @@
 	let postingWif = $state('');
 	let postingNewPassword = $state('');
 	let postingNewPasswordConfirm = $state('');
+	// H (cp295): has the user blurred the Confirm-password field at least
+	// once? The red mismatch border only appears after a blur (and only
+	// while the two differ), per Ken's spec — not while still typing.
+	let postingConfirmBlurred = $state(false);
 	let working = $state(false);
 	let errorMsg = $state('');
 	// Per-field "this input is wrong" flags that paint the field's border
@@ -53,6 +58,16 @@
 	let errorEl = $state<HTMLDivElement>();
 	$effect(() => {
 		if (errorMsg && errorEl) errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	});
+
+	// I (cp295): when the import flow advances to the "remember me" card
+	// (after a successful posting-key login), scroll the page back to the
+	// top so the card's heading is in view — the user submitted from the
+	// bottom of the form and would otherwise be left scrolled down.
+	$effect(() => {
+		if (importStage === 'remember_me_choice' && typeof window !== 'undefined') {
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		}
 	});
 
 	/** Heuristic: did a failure come from the network / RPC layer (all Blurt
@@ -126,7 +141,7 @@
 		const token = v; // guard against stale async results (value changed / refocus)
 		accountStatus = 'checking';
 		try {
-			const fetched = await getBlurtClient().getAccount(v);
+			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), v);
 			if (postingAccount.trim() === token) accountStatus = fetched ? 'valid' : 'invalid';
 		} catch {
 			// Couldn't reach the chain — don't assert invalid; clear the verdict.
@@ -547,7 +562,7 @@
 					// NEVER logs in via master password — this is detection
 					// only, to give a precise, actionable message.
 					try {
-						const fetched = await getBlurtClient().getAccount(account);
+						const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
 						if (fetched) {
 							const mpPub = await masterPasswordPubKey(account, 'posting', postingWif);
 							if (mpPub && verifyPostingKey(fetched, mpPub).kind === 'ok') {
@@ -580,8 +595,7 @@
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
 			// 4. Fetch the account from chain and classify the key.
-			const client = getBlurtClient();
-			const fetched = await client.getAccount(account);
+			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
 			if (!fetched) {
 				errorMsg = $_('onboarding.import.posting_only.error.account_not_found', {
 					values: { account }
@@ -700,15 +714,32 @@
 		file = input.files?.[0] ?? null;
 	}
 
+	// H (cp295): show the Confirm-password mismatch border once the field
+	// has been blurred and has content but doesn't match.
+	const postingConfirmMismatch = $derived(
+		postingConfirmBlurred &&
+			postingNewPasswordConfirm.length > 0 &&
+			postingNewPassword !== postingNewPasswordConfirm
+	);
+
 	const submitDisabled = $derived(
 		mode === 'seed'
 			? !seed.trim()
 			: mode === 'keyfile'
 				? !file || !password
-				: !postingAccount.trim() ||
+				: // posting-only (N + H, cp295): the "Unlock my account" button
+					// must stay disabled until ALL four fields hold proper-looking
+					// values — a real-looking account name, a WIF that passes the
+					// Blurt-WIF shape check (not a 1-char stub), a device password
+					// of at least the 8-char floor the handler enforces, and a
+					// confirmation that actually MATCHES. Previously it only
+					// checked the four fields were non-empty.
+					!postingAccount.trim() ||
+					accountHasInvalidChar ||
 					!postingWif.trim() ||
-					!postingNewPassword ||
-					!postingNewPasswordConfirm
+					wifLooksInvalid ||
+					postingNewPassword.length < 8 ||
+					postingNewPassword !== postingNewPasswordConfirm
 	);
 </script>
 
@@ -717,11 +748,17 @@
 <div class="mx-auto max-w-2xl px-4 py-12 md:py-16">
 	<header class="mb-8 text-center">
 		<h1 class="font-display text-3xl font-extrabold tracking-tight md:text-4xl">
-			<span class="brand-gradient-text">{$_('onboarding.import.title')}</span>
+			<span class="brand-gradient-text"
+				>{importStage === 'remember_me_choice'
+					? $_('onboarding.import.remember_me.welcome_title')
+					: $_('onboarding.import.title')}</span
+			>
 		</h1>
-		<p class="mx-auto mt-3 max-w-prose text-ink-600 dark:text-ink-300">
-			{#if importBodyParts}{importBodyParts.before}<a href={lp('/login')} class="font-semibold text-morphit-emerald underline underline-offset-2 hover:text-morphit-emerald/80">{importBodyParts.link}</a>{importBodyParts.after}{:else}{$_('onboarding.import.body')}{/if}
-		</p>
+		{#if importStage !== 'remember_me_choice'}
+			<p class="mx-auto mt-3 max-w-prose text-ink-600 dark:text-ink-300">
+				{#if importBodyParts}{importBodyParts.before}<a href={lp('/login')} class="font-semibold text-morphit-emerald underline underline-offset-2 hover:text-morphit-emerald/80">{importBodyParts.link}</a>{importBodyParts.after}{:else}{$_('onboarding.import.body')}{/if}
+			</p>
+		{/if}
 	</header>
 
 	{#if errorMsg}
@@ -978,9 +1015,18 @@
 					type="password"
 					maxlength="64"
 					bind:value={postingNewPasswordConfirm}
+					onblur={() => (postingConfirmBlurred = true)}
 					autocomplete="new-password"
-					class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+					aria-invalid={postingConfirmMismatch}
+					class="w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {postingConfirmMismatch
+						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 				/>
+				{#if postingConfirmMismatch}
+					<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
+						{$_('onboarding.import.posting_only.password_mismatch')}
+					</span>
+				{/if}
 			</label>
 		{/if}
 

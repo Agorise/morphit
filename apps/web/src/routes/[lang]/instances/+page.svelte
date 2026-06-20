@@ -251,6 +251,11 @@
 		<p class="mt-4 max-w-prose text-ink-700 dark:text-ink-200">
 			{$_('instances.intro')}
 		</p>
+		<div
+			class="mt-5 max-w-prose rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-4 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:bg-morphit-emerald/10 dark:text-ink-200"
+		>
+			{$_('instances.bookmark_tip')}
+		</div>
 	</header>
 
 	<div class="mb-6 flex flex-wrap items-end gap-3">
