@@ -20,7 +20,9 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { getBlurtClient, type BlurtTransaction } from '$blurt/client';
+	import type { BlurtTransaction } from '$blurt/client';
+	import { fetchChainTx } from '$blurt/chainExplorer';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { decorateOp } from '$lib/explorer/decorate';
 	import { morphitExplorerBlockUrl, blurtWalletExplorerFallbackUrl } from '$lib/explorer/urls';
 	import Head from '$components/Head.svelte';
@@ -36,13 +38,16 @@
 	async function load(): Promise<void> {
 		status = 'loading';
 		try {
-			const client = getBlurtClient();
-			const result = await client.getTransaction(trxId);
-			if (!result) {
+			// Transaction via the indexer (privacy: no direct RPC from the
+			// browser; also more reliable — the pool finds a node that
+			// exposes get_transaction).
+			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), trxId);
+			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
 			}
-			tx = result;
+			if (r.kind !== 'ok') throw new Error(r.message);
+			tx = r.tx;
 			status = 'ok';
 		} catch (err) {
 			console.warn('[explorer/tx] load failed:', err);

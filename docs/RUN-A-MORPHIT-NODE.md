@@ -1217,6 +1217,24 @@ server {
     # `/en/login`) — never the `.html` files directly.
     root /var/www/morphit-frontend;
     index index.html;
+
+    # Keep the "update surface" always-fresh so the in-app update snackbar
+    # appears after every deploy. /service-worker.js drives update
+    # detection (the browser refetches it on each update check and a
+    # byte-changed worker is what raises the "Load it now" prompt), and
+    # verify.json carries this build's version (read by the update-version
+    # poll and the "About this instance" auto-verify). If either is served
+    # stale — from the browser's cache OR an upstream proxy/CDN edge cache —
+    # the client never learns a new build is live and the prompt never
+    # shows (the classic "no snackbar on mobile or PC" symptom). `expires -1`
+    # emits `Cache-Control: no-cache` (revalidate every time) WITHOUT an
+    # `add_header`, so — unlike add_header — it does NOT drop the inherited
+    # security headers set above this block. (The shipped ops/nginx/web.conf
+    # achieves the same with add_header + a full security-header re-emission;
+    # expires -1 is the shorter equivalent.)
+    location = /service-worker.js { expires -1; try_files $uri =404; }
+    location = /verify.json       { expires -1; try_files $uri =404; }
+
     location / {
         try_files $uri $uri.html $uri/index.html /index.html;
     }

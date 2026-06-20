@@ -266,7 +266,6 @@
       "feedback_help": "Reçus ou répondus"
     },
     "post_order": "Publier un nouvel ordre",
-    "edit_profile": "Modifier le profil",
     "help_support": "Aide et support",
     "sign_out_modal": {
       "title": "Se déconnecter de Morphit ?",
@@ -312,6 +311,8 @@
     "keyfile_download_err_locked": "Votre session semble verrouillée. Connectez-vous pour télécharger votre keyfile.",
     "redundancy_heading": "3. Plusieurs copies, plusieurs emplacements",
     "redundancy_body": "Les survivants du crypto sont ceux qui ont planifié contre l'incendie, l'inondation, la mort et leur propre oubli.\n\nDeux copies physiques de votre phrase seed dans des emplacements séparés. Au moins une dans un coffre-fort ou un coffre bancaire. Pensez à un plan successoral : comment un héritier de confiance trouve-t-il vos clés s'il vous arrive quelque chose ? Écrivez les instructions séparément des clés elles-mêmes.\n\nLa redondance vous coûte 10 minutes d'effort. Son absence peut vous coûter tout.",
+    "keyfile_body_posting_only": "Ce fichier de clés est votre clé de publication privée, chiffrée avec le mot de passe de votre appareil. Téléchargez-le maintenant et conservez-le à un endroit distinct de l'appareil que vous utilisez. Si vous oubliez le mot de passe, le fichier de clés est inutile — traitez donc le mot de passe comme tout aussi crucial.",
+    "redundancy_body_posting_only": "Les survivants de la crypto sont ceux qui ont anticipé l'incendie, l'inondation, la mort et leur propre oubli.\n\nDeux copies chiffrées de votre fichier de clés, conservées dans des lieux physiques distincts. Au moins une dans un coffre-fort ou un coffre bancaire. Pensez à une planification successorale : comment un héritier de confiance accède-t-il à vos fonds s'il vous arrive quelque chose ? Notez les instructions séparément de la clé elle-même.\n\nLa redondance vous coûte 10 minutes d'effort. Son absence peut vous coûter tout.",
     "antipatterns_heading": "Erreurs communes qui coûtent tout aux gens",
     "anti_email": "S'envoyer la phrase seed par email. N'importe quelle faille de votre fournisseur email l'expose.",
     "anti_cloud": "Stocker la seed dans Google Drive, iCloud, Dropbox, OneDrive. Ces services sont scannés par des malwares automatisés, assignés par les gouvernements, compromis par les attaquants.",
@@ -940,7 +941,8 @@
       "submit": "Rechercher",
       "hint": "Les noms de compte commencent par une lettre. Les ID de transaction font 40 caractères hex. Les numéros de bloc sont des entiers positifs.",
       "error_invalid": "Cette saisie n'a pas pu être convertie en recherche valide.",
-      "error_unknown": "Je n'ai pas pu identifier ce que c'est. Essaie un utilisateur Blurt, un ID de transaction ou un numéro de bloc."
+      "error_unknown": "Je n'ai pas pu identifier ce que c'est. Essaie un utilisateur Blurt, un ID de transaction ou un numéro de bloc.",
+      "delay_notice": "Vous venez de faire une transaction ? Elle peut mettre jusqu'à une minute à apparaître. Ouvrez le compte et touchez actualiser pour charger les dernières données de la chaîne."
     },
     "nav": {
       "back_to_search": "Retour à la recherche",
@@ -969,7 +971,9 @@
       "error": {
         "load_failed": "Impossible de charger l'historique de ce compte.",
         "load_more_failed": "Impossible de charger l'historique plus ancien."
-      }
+      },
+      "refresh_label": "Actualiser depuis la chaîne",
+      "delay_notice": "S'actualise toutes les quelques secondes (plus lentement au repos), donc une transaction toute récente peut mettre jusqu'à une minute à apparaître d'elle-même. Touchez actualiser pour charger maintenant les dernières données de la chaîne."
     },
     "block": {
       "page_title": "Bloc {block}",
@@ -1783,7 +1787,7 @@
     "i2p_name": "I2P",
     "canary": "Canari",
     "canary_title": "Canari hebdomadaire de l'opérateur — vérifiez que la date est récente",
-    "pgp_keys": "Clés PGP",
+    "pgp_keys": "PGP",
     "pgp_keys_title": "Clés publiques PGP de l'opérateur pour les versions signées et la vérification du canari",
     "mediakit": "Kit média",
     "mediakit_title": "Ressources de marque et la liste des arguments de Morphit — pour la presse, les intégrateurs et la communauté",
@@ -1955,6 +1959,7 @@
     "title": "Instances Morphit connues",
     "intro": "Morphit est fédéré. N'importe qui peut exécuter une instance, et votre indexeur découvre automatiquement les autres instances en lisant la chaîne. Cette liste montre leur état actuel depuis la dernière vérification.",
     "loading": "Chargement du répertoire…",
+    "bookmark_tip": "Astuce : ajoutez à vos favoris quelques-unes de ces instances — ainsi que leurs adresses Tor, I2P ou Lokinet — dans votre navigateur. Le carnet d'ordres se trouve sur la blockchain publique : si un site venait à être bloqué ou hors ligne, vous retrouverez exactement les mêmes ordres et transactions via n'importe quelle autre instance.",
     "fetch_error": "Impossible de charger le répertoire.",
     "last_updated": "Répertoire mis à jour pour la dernière fois : {date}",
     "contact": "Contacter cet opérateur →",
@@ -2265,6 +2270,7 @@
         "account_hint": "Sans le @. On vérifiera que ce compte existe sur Blurt et que la clé de posting correspond.",
         "wif_label": "Clé privée de posting (WIF)",
         "wif_placeholder": "5J… ou P5J…",
+        "password_mismatch": "Les mots de passe ne correspondent pas.",
         "wif_hint": "Commence par 5 (ancien format) ou P5 (récent). Jamais partagée avec l'opérateur — chiffrée seulement sur cet appareil.",
         "new_password_label": "Nouveau mot de passe pour cet appareil",
         "new_password_hint": "Au moins 8 caractères. Sert à déverrouiller Morphit sur cet appareil. Pas ton mot de passe Blurt.",
@@ -2319,6 +2325,7 @@
           "passwords_mismatch": "Les mots de passe ne correspondent pas.",
           "password_weak": "Mot de passe trop faible. Utilise quelque chose de plus long ou moins prévisible."
         },
+        "welcome_title": "Bienvenue !",
         "body_password_set": "Vos clés sont chargées pour cette session de navigateur. Par défaut, lorsque vous fermez cet onglet, elles disparaissent et vous devrez vous reconnecter la prochaine fois. Si c'est votre propre ordinateur, vous pouvez choisir d'être mémorisé sur cet appareil — vous déverrouillerez la prochaine fois avec le même mot de passe que vous venez d'utiliser."
       }
     },
@@ -2867,15 +2874,13 @@
       "asset_label": "Quel actif ?",
       "step_2_heading": "Combien et à quel prix ?",
       "fiat_label": "Monnaie fiat",
-      "fiat_placeholder": "p. ex. USD, EUR, ARS",
       "amount_min_label": "Minimum (fiat)",
       "amount_max_label": "Maximum (fiat)",
       "amount_optional_hint": "Laissez vide pour aucune limite.",
-      "step_3_heading": "Comment vous joindre ?",
-      "payment_methods_label": "Moyens de paiement acceptés",
-      "payment_methods_hint": "Ajoute tous ceux que tu acceptes — ton partenaire choisit ce qui lui convient.",
+      "step_3_heading": "Comment allez-vous payer ?",
+      "payment_methods_label": "Je peux payer via",
+      "payment_methods_hint": "Ajoutez-en autant que vous voulez — vos partenaires d'échange choisiront celui qui leur convient.",
       "region_label": "Région (optionnel)",
-      "region_placeholder": "p. ex. Amérique du Nord, Buenos Aires",
       "region_hint": "Où vous êtes prêt à échanger. Aide les gens proches à vous trouver.",
       "terms_label": "Conditions supplémentaires (optionnel)",
       "terms_placeholder": "p. ex. « Week-ends seulement » ou « Espèces uniquement pour les montants inférieurs à 100 $ »",
@@ -2919,7 +2924,10 @@
       "price_model_fixed_help": "Un prix fixe en fiat par unité. L'ordre ne bouge pas quand le marché bouge.",
       "price_model_fixed_aria": "Prix fixe par unité en fiat",
       "price_model_fixed_placeholder": "ex. 100000",
-      "price_model_fiat_placeholder": "fiat"
+      "price_model_fiat_placeholder": "fiat",
+      "first_trade_title": "Votre première transaction : acheter du BLURT",
+      "first_trade_body": "Morphit fonctionne avec du BLURT, et les frais de publication se paient en BLURT. Votre toute première transaction est donc un petit achat de BLURT pour approvisionner votre compte : une fois que vous en avez, vous pouvez publier et échanger n'importe quoi. Ce premier achat est gratuit (les frais de publication sont offerts) et l'annonce expire dans 7 jours.",
+      "first_trade_expiry_note": "Les premières annonces expirent au bout de 7 jours."
     },
     "errors": {
       "fiat_empty": "Choisissez une monnaie fiat (comme USD ou EUR).",
@@ -3218,9 +3226,10 @@
     "privacy_heading": "Confidentialité",
     "privacy_body_1": "Morphit fonctionne dans votre navigateur. Vos clés sont générées sur votre appareil et ne le quittent jamais. Morphit ne collecte pas de cookies de traçage, d'analytique ni votre adresse IP au-delà de ce qui est techniquement nécessaire pour servir la page.",
     "privacy_body_2": "Chaque offre que vous publiez — ainsi que les avis et évaluations que vous laissez et recevez — est publique sur la blockchain, pour bâtir une réputation, pour la postérité et pour vos propres recherches sur les autres traders.",
+    "privacy_body_protected": "À l'inverse, vos conversations privées restent privées. Les messages directs entre traders sont chiffrés de bout en bout : ils ne figurent sur la blockchain que sous forme de texte chiffré que vous seuls, vous et votre partenaire d'échange, pouvez lire — jamais l'opérateur, les indexeurs, ni quiconque observe la chaîne. Morphit ne collecte pas non plus de nom, d'e-mail, de téléphone ni de pièce d'identité, et les informations de paiement que vous échangez (comme une adresse de réception) transitent par ce canal chiffré plutôt que par le carnet d'ordres public.",
     "privacy_body_3": "Nous vous encourageons à utiliser un VPN, Tor, Lokinet ou I2P pour accéder à Morphit — tout ce qui cache votre IP au serveur avec lequel vous parlez est une bonne idée. Nous ne prenons pas d'empreintes de votre navigateur, nous ne vous profilons pas, et nous concevons explicitement nos défenses contre les abus pour ne pas pénaliser les utilisateurs soucieux de leur vie privée. Nos limites de débit sont grossières (quelques inscriptions par IP par jour) et facilement contournées par rotation de VPN — c'est un compromis conscient. Nous préférons accepter plus d'abus que faire sentir les utilisateurs respectueux de la vie privée mal accueillis. Si une défense nécessitait de vous suivre pour fonctionner, nous ne l'implémentons pas.",
     "terms_heading": "Conditions",
-    "terms_body": "Veuillez respecter le Principe de Non-Agression (PNA). Jurer est acceptable, mais gardez à l'esprit que Morphit s'utilise à tout âge — personnes âgées, adolescents, et tout le monde entre les deux. Toutes les OPINIONS sont les bienvenues, mais les insultes directes non. Vos ordres d'achat/vente, annonces, avis et discussions sont immuables, donc les mots comptent. Dites votre avis, puis arrêtez. Ne cherchez pas la bagarre. Ne publiez rien d'illégal ou de manifestement choquant. Restez poli, soyez gentil. 💙💚"
+    "terms_body": "Veuillez respecter le Principe de Non-Agression (PNA). Jurer est acceptable, mais gardez à l'esprit que Morphit s'utilise à tout âge — personnes âgées, adolescents, et tout le monde entre les deux. Toutes les OPINIONS sont les bienvenues, mais les insultes directes non. Vos ordres d'achat/vente, annonces, avis et discussions sont immuables, donc les mots comptent. Dites votre avis, puis arrêtez. Ne cherchez pas la bagarre. Ne publiez rien d'illégal ou de manifestement choquant. Restez poli, soyez gentil. 💚💙"
   },
   "privkey_warn": {
     "title": "Stop — on dirait une clé privée",

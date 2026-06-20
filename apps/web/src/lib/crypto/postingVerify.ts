@@ -29,6 +29,13 @@
 
 import type { BlurtAccount } from '$blurt/client';
 
+/** The public-authority subset of a Blurt account that key
+ *  verification actually reads. A full `BlurtAccount` satisfies this,
+ *  and so does the privacy-preserving `/v1/account/:name/keys` indexer
+ *  response — neither carries any secret. Verification stays entirely
+ *  client-side regardless of where these public keys came from. */
+export type AccountAuthorities = Pick<BlurtAccount, 'owner' | 'active' | 'posting' | 'memo_key'>;
+
 export type PostingKeyVerdict =
 	| { kind: 'ok' }
 	| { kind: 'wrong-role'; foundIn: 'active' | 'owner' | 'memo' }
@@ -68,7 +75,7 @@ export type PostingKeyVerdict =
  * Now we check active/owner/memo first and reject any cross-role
  * appearance before checking posting alone.
  */
-export function verifyPostingKey(account: BlurtAccount, pubKeyBLT: string): PostingKeyVerdict {
+export function verifyPostingKey(account: AccountAuthorities, pubKeyBLT: string): PostingKeyVerdict {
 	// Check privileged authorities first.  Any match here is a
 	// wrong-role rejection regardless of whether the key also
 	// appears in posting.key_auths.

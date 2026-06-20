@@ -19,7 +19,9 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { getBlurtClient, type BlurtBlock } from '$blurt/client';
+	import type { BlurtBlock } from '$blurt/client';
+	import { fetchChainBlock } from '$blurt/chainExplorer';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { decorateOp } from '$lib/explorer/decorate';
 	import {
 		morphitExplorerTxUrl,
@@ -38,13 +40,14 @@
 	async function load(): Promise<void> {
 		status = 'loading';
 		try {
-			const client = getBlurtClient();
-			const result = await client.getBlock(blockNumber);
-			if (!result) {
+			// Block via the indexer (privacy: no direct RPC from the browser).
+			const r = await fetchChainBlock(resolveOrigin(MORPHIT_INDEXER_ORIGIN), blockNumber);
+			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
 			}
-			block = result;
+			if (r.kind !== 'ok') throw new Error(r.message);
+			block = r.block;
 			status = 'ok';
 		} catch (err) {
 			console.warn('[explorer/block] load failed:', err);

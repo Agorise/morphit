@@ -66,6 +66,17 @@ services:
       # in apps/web) — no need to rebuild this image.  Adjust the path
       # if you cloned morphit somewhere other than /opt/morphit.
       - /opt/morphit/apps/web/build:/usr/share/nginx/html:ro
+      # nginx.conf from the host repo, read-only.  Bind-mounting it (in
+      # addition to the COPY in the Dockerfile, which stays as a baked
+      # fallback) means a shipped config change — e.g. the no-cache
+      # blocks for /service-worker.js + /verify.json that drive the
+      # update snackbar — deploys the SAME way a build change does: pull
+      # the new source, then RESTART the container (which re-reads this
+      # mount).  `morphit-ops upgrade` already `docker restart`s this
+      # container, so config changes now ride along on a normal upgrade
+      # with NO image rebuild.  Adjust the path if you cloned morphit
+      # somewhere other than /opt/morphit.
+      - /opt/morphit/ops/bunkerweb/frontend/nginx.conf:/etc/nginx/conf.d/morphit.conf:ro
     extra_hosts:
       # So the frontend nginx can reach the relay + indexer on the
       # host.  Linux: host-gateway resolves to the host's

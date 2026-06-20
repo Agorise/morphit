@@ -56,6 +56,10 @@ import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
 import { ordersByAccountRoute } from '$api/orders';
 import { orderViewsRoute } from '$api/orderViews';
 import { profilesRoute } from '$api/profiles';
+import { accountBalanceRoute } from '$api/accountBalance';
+import { accountHistoryRoute } from '$api/accountHistory';
+import { accountKeysRoute } from '$api/accountKeys';
+import { chainExplorerRoute } from '$api/chainExplorer';
 import { feedbackByAccountRoute } from '$api/feedback';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
@@ -386,6 +390,22 @@ async function main(): Promise<void> {
 	profilesApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	profilesApp.route('/', profilesRoute(db));
 	app.route('/v1/profiles', profilesApp);
+
+	// cp295 — privacy balance/account proxy. Browser reads an account's
+	// balance via the indexer (same-origin) instead of hitting third-party
+	// Blurt RPC nodes directly, so those nodes never see the user's IP or
+	// which account they're viewing. Server-side fetch uses the full
+	// canonical RPC pool with automatic best-node selection (no browser
+	// CORS constraint). Resource-rate-limited: it's one live upstream read
+	// per cache-miss, short-cached and public (balances are public chain
+	// data).
+	const accountApp = new Hono();
+	accountApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	accountApp.route('/', accountBalanceRoute(blurt));
+	accountApp.route('/', accountHistoryRoute(blurt));
+	accountApp.route('/', accountKeysRoute(blurt));
+	app.route('/v1/account', accountApp);
+	app.route('/v1/chain', chainExplorerRoute(blurt));
 
 	const feedbackApp = new Hono();
 	feedbackApp.use('*', rateLimit('list', config.listRatePerMin));

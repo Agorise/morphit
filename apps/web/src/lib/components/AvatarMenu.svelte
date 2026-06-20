@@ -145,14 +145,6 @@
 		if (me) void gotoLocale(`/@${me}`);
 	}
 
-	function goToEditProfile(): void {
-		close();
-		// Land at the TOP of /settings (the profile/identity editor). No
-		// anchor — deep-linking to #display-name-heading auto-scrolled the
-		// user past the account-name card, which was disorienting.
-		void gotoLocale('/settings');
-	}
-
 	function goToBackupKeys(): void {
 		close();
 		void gotoLocale('/backup-keys');
@@ -595,35 +587,6 @@
 								</button>
 							</li>
 						{/if}
-
-						<!-- Edit profile — deep-links into the
-						     display-name section of /settings where
-						     display_name, Blurt.media URL, and Nostr
-						     URL are edited. -->
-						<li>
-							<button
-								type="button"
-								onclick={goToEditProfile}
-								role="menuitem"
-								class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-								</svg>
-								<span class="text-sm font-semibold">{$_('avatar_menu.edit_profile')}</span>
-							</button>
-						</li>
 
 						<!-- Backup my keys — critical one-time nudge.
 						     Amber pill on the right disappears on

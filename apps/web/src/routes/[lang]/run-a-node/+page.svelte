@@ -331,7 +331,7 @@
 			     which already use the correct Forgejo form. -->
 			<a
 				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/RUN-A-MORPHIT-NODE.md"
-				rel="noopener"
+				target="_blank" rel="noopener noreferrer"
 				class="text-morphit-emerald hover:underline"
 			>
 				RUN-A-MORPHIT-NODE.md
@@ -342,7 +342,7 @@
 			{$_('run_a_node.runbook_pointer')}
 			<a
 				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md"
-				rel="noopener"
+				target="_blank" rel="noopener noreferrer"
 				class="text-morphit-emerald hover:underline"
 			>
 				OPERATIONS.md
@@ -392,7 +392,7 @@
 			{$_('run_a_node.asset_policy_doc_pointer')}
 			<a
 				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md"
-				rel="noopener"
+				target="_blank" rel="noopener noreferrer"
 				class="text-morphit-emerald hover:underline"
 			>
 				OPERATIONS.md
@@ -445,7 +445,7 @@
 			</h2>
 			<p class="mt-3 text-ink-700 dark:text-ink-300">{$_('run_a_node.cta_body')}</p>
 		</div>
-		<a href="https://git.agorise.net/agorise/morphit" rel="noopener" class="btn-primary btn-shine">
+		<a href="https://git.agorise.net/agorise/morphit" target="_blank" rel="noopener noreferrer" class="btn-primary btn-shine">
 			{$_('run_a_node.cta_repo')}
 		</a>
 		<a

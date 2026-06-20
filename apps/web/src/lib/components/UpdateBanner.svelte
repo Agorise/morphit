@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
+	import { runningVersion } from '$stores/release';
+	import { fetchWithTimeout } from '$net/fetchWithTimeout';
+	import {
+		parseDeployedVersion,
+		deployedVersionDiffers,
+		verifyJsonPollUrl
+	} from '$lib/updates/deployedVersion';
 
 	let waitingWorker = $state<ServiceWorker | null>(null);
 	let dismissed = $state(false);
@@ -20,6 +27,15 @@
 	// The worker we've already wired an activated→reload listener onto, so
 	// repeated check()s (and re-clicks) can't stack duplicate listeners.
 	let armedWorker: ServiceWorker | null = null;
+	// Set when the deployed-version poll (pollDeployedVersion) finds that
+	// /verify.json reports a different bundle version than the one we're
+	// running — i.e. an update is available EVEN IF the service-worker
+	// byte-diff was never detected (the case where an upstream proxy serves
+	// /service-worker.js stale despite updateViaCache:'none'). This is what
+	// makes the snackbar appear "once and for all", independent of proxy
+	// caching. Cleared on a successful apply (the reload reboots into the
+	// new version, after which deployed === running again).
+	let newerVersionDeployed = $state(false);
 
 	const DISMISS_KEY = 'morphit.updateDismissed';
 	const APPLYING_KEY = 'morphit.updateApplying';
@@ -125,6 +141,45 @@
 			}
 		}
 
+		// Belt-and-suspenders update detection that does NOT depend on the
+		// service-worker byte-diff being seen by the browser. Poll the
+		// deployed bundle's own version from /verify.json (cache-busted so a
+		// proxy can't answer stale) and compare to the running bundle's
+		// baked-in version. A mismatch = a different bundle is deployed =
+		// offer the update, even when reg.update() found no new worker
+		// because an upstream proxy served /service-worker.js stale. Runs on
+		// mount, on tab-foreground, and on reconnect — NOT on the 60 s timer,
+		// since verify.json carries the full asset-hash manifest and is large;
+		// the lightweight reg.update() check covers the periodic case.
+		async function pollDeployedVersion(): Promise<void> {
+			if (cancelled) return;
+			try {
+				const res = await fetchWithTimeout(
+					verifyJsonPollUrl(),
+					// no-store + cache-buster: never the browser's cache, never a
+					// proxy's. same-origin credentials so the request carries the
+					// beta Basic-Auth the user already passed (verify.json should
+					// also be gate-exempted server-side — see OPERATIONS.md — but
+					// crediting the existing auth makes the poll work either way).
+					{ cache: 'no-store', credentials: 'same-origin' },
+					10_000
+				);
+				if (cancelled || !res.ok) return;
+				const deployed = parseDeployedVersion(await res.text());
+				if (deployedVersionDiffers(deployed, runningVersion)) {
+					newerVersionDeployed = true;
+					// Nudge the SW to pick up the new worker too (best-effort);
+					// the reload on apply is network-first regardless, so the new
+					// shell + chunks land even if this update() sees stale bytes.
+					const reg = await navigator.serviceWorker.getRegistration();
+					await reg?.update().catch(() => {});
+				}
+			} catch {
+				// Network/timeout/parse error — stay silent. The SW path is the
+				// primary mechanism; this poll only ever ADDS a reason to offer.
+			}
+		}
+
 		try {
 			const remembered = window.sessionStorage.getItem(DISMISS_KEY);
 			if (remembered === '1') dismissed = true;
@@ -136,6 +191,7 @@
 		}
 
 		void check();
+		void pollDeployedVersion();
 		// Re-check periodically while tab is open.
 		const timer = setInterval(check, 60_000);
 
@@ -154,10 +210,16 @@
 		// waiting for the next un-throttled tick. This is what made the snackbar
 		// take ~5 minutes to appear on mobile.
 		const onVisible = (): void => {
-			if (document.visibilityState === 'visible') void check();
+			if (document.visibilityState === 'visible') {
+				void check();
+				void pollDeployedVersion();
+			}
 		};
 		document.addEventListener('visibilitychange', onVisible);
-		const onOnline = (): void => void check();
+		const onOnline = (): void => {
+			void check();
+			void pollDeployedVersion();
+		};
 		window.addEventListener('online', onOnline);
 
 		return () => {
@@ -177,7 +239,6 @@
 
 	function applyUpdate(): void {
 		const target = waitingWorker;
-		if (!target) return;
 		// Hide the snackbar instantly — it must disappear the moment you
 		// click, on PC and mobile alike — and remember we're applying so a
 		// reload that lands before the new worker takes over can't re-show it.
@@ -187,23 +248,38 @@
 		} catch {
 			// ignore
 		}
-		// Ask the waiting worker to skipWaiting() and reload as soon as it
-		// activates. The controllerchange listener above is the usual reload
-		// trigger; the activated-statechange listener armActivation() wires up
-		// is a faster, more reliable one on browsers where controllerchange
-		// lags behind activation (the PC symptom).
-		armActivation(target);
-		// Fallback: if the page is uncontrolled (opened via a hard refresh,
-		// which bypasses the service worker) or the worker is wedged, neither
-		// controllerchange nor statechange may fire. Reload anyway after a
-		// short grace period so the click always has an effect. The
-		// `refreshing` guard keeps this to at most one reload, and the
-		// APPLYING_KEY flag keeps the snackbar hidden across it.
-		setTimeout(() => {
-			if (refreshing) return;
-			refreshing = true;
-			window.location.reload();
-		}, 3000);
+		if (target) {
+			// Ask the waiting worker to skipWaiting() and reload as soon as it
+			// activates. The controllerchange listener above is the usual reload
+			// trigger; the activated-statechange listener armActivation() wires up
+			// is a faster, more reliable one on browsers where controllerchange
+			// lags behind activation (the PC symptom).
+			armActivation(target);
+		} else {
+			// No waiting worker, but the deployed-version poll told us a new
+			// bundle IS live (the proxy-served-the-SW-stale case). A full reload
+			// still lands the update: navigations are network-first, so the
+			// fresh shell and its chunks come straight from the origin. Kick an
+			// update() first so the SW also starts catching up in the background.
+			void navigator.serviceWorker
+				.getRegistration()
+				.then((reg) => reg?.update().catch(() => {}));
+		}
+		// Fallback / primary-when-uncontrolled: if the page is uncontrolled
+		// (opened via a hard refresh, which bypasses the service worker), the
+		// worker is wedged, or there was no waiting worker at all, neither
+		// controllerchange nor statechange fires — so reload anyway. The
+		// `refreshing` guard keeps this to at most one reload and the
+		// APPLYING_KEY flag keeps the snackbar hidden across it. When there is
+		// no worker to wait on, reload promptly rather than after the 3 s grace.
+		setTimeout(
+			() => {
+				if (refreshing) return;
+				refreshing = true;
+				window.location.reload();
+			},
+			target ? 3000 : 600
+		);
 	}
 
 	function dismiss(): void {
@@ -216,7 +292,7 @@
 	}
 </script>
 
-{#if waitingWorker && !dismissed && !applying}
+{#if (waitingWorker || newerVersionDeployed) && !dismissed && !applying}
 	<div
 		role="status"
 		aria-live="polite"

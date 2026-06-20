@@ -48,6 +48,7 @@
 	// cp165: lazy below (showTermsKeyWarning guard)
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
+	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PrivacyWarningChip from '$components/PrivacyWarningChip.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
@@ -129,7 +130,14 @@
 	let daiNetwork = $state<DaiNetwork | null>(null);
 
 	// ─── Form state (step 2) ───────────────────────────────────────
-	let fiat = $state('');
+	// O (cp295): the fiat denomination is chosen via a single-select
+	// FiatCurrencySelect (was a free-text field). `fiatArr` is the
+	// component's 1-element binding; `fiat` stays a plain string derived
+	// from it, so every existing read (validation, draft, broadcast,
+	// price-model) is unchanged. The three former `fiat = …` writes now
+	// set `fiatArr`.
+	let fiatArr = $state<string[]>([]);
+	const fiat = $derived(fiatArr[0] ?? '');
 	let amountMin: string = $state(''); // kept as string so empty distinguishes from 0
 	let amountMax: string = $state('');
 	type PriceModelKind = 'spread' | 'fixed';
@@ -148,6 +156,70 @@
 	 *  in. When true, Post B fires immediately after the order
 	 *  broadcast succeeds — see syndicate/publish.ts. */
 	let syndicateToBlog = $state(false);
+
+	// O (cp295): animated example regions cycle through the placeholder,
+	// mirroring the onboarding import account field. Runs only while the
+	// field is empty; pauses the instant there's text and resumes when it
+	// goes empty again. prefers-reduced-motion shows a single static
+	// example with no animation. Region names are proper nouns, so they
+	// are not localized (same rationale as the import account examples).
+	const REGION_PLACEHOLDERS = [
+		'Buenos Aires',
+		'Lagos',
+		'Berlin',
+		'Manila',
+		'São Paulo',
+		'Nairobi',
+		'Jakarta',
+		'Istanbul'
+	] as const;
+	let regionPlaceholder = $state<string>(REGION_PLACEHOLDERS[0]);
+	$effect(() => {
+		if (region.length > 0) return;
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			regionPlaceholder = REGION_PLACEHOLDERS[0];
+			return;
+		}
+		const TYPE_MS = 70;
+		const DELETE_MS = 35;
+		const HOLD_MS = 1600;
+		const GAP_MS = 450;
+		let nameIdx = 0;
+		let charIdx = 0;
+		let phase: 'typing' | 'holding' | 'deleting' = 'typing';
+		let timer: ReturnType<typeof setTimeout>;
+		const tick = (): void => {
+			const name = REGION_PLACEHOLDERS[nameIdx] ?? REGION_PLACEHOLDERS[0];
+			if (phase === 'typing') {
+				charIdx += 1;
+				regionPlaceholder = name.slice(0, charIdx);
+				if (charIdx >= name.length) {
+					phase = 'holding';
+					timer = setTimeout(tick, HOLD_MS);
+				} else {
+					timer = setTimeout(tick, TYPE_MS);
+				}
+			} else if (phase === 'holding') {
+				phase = 'deleting';
+				timer = setTimeout(tick, DELETE_MS);
+			} else {
+				charIdx -= 1;
+				regionPlaceholder = name.slice(0, charIdx);
+				if (charIdx <= 0) {
+					nameIdx = (nameIdx + 1) % REGION_PLACEHOLDERS.length;
+					phase = 'typing';
+					timer = setTimeout(tick, GAP_MS);
+				} else {
+					timer = setTimeout(tick, DELETE_MS);
+				}
+			}
+		};
+		timer = setTimeout(tick, GAP_MS);
+		return () => clearTimeout(timer);
+	});
 
 	// ─── Private-key protection for the terms field ────────────────
 	// The terms field is the highest-risk free-text input on this
@@ -253,7 +325,7 @@
 	function applyDraft(d: ComposeDraft): void {
 		side = d.side;
 		asset = d.asset;
-		fiat = d.fiat;
+		fiatArr = d.fiat ? [d.fiat] : [];
 		amountMin = d.amountMin;
 		amountMax = d.amountMax;
 		priceModelKind = d.priceModelKind;
@@ -302,7 +374,7 @@
 		// eligibility, adding latency the user hasn't asked for.
 		side = null;
 		asset = null;
-		fiat = '';
+		fiatArr = [];
 		amountMin = '';
 		amountMax = '';
 		priceModelKind = 'spread';
@@ -418,6 +490,35 @@
 			waiverEligibility !== null &&
 			(waiverEligibility.kind === 'eligible' ||
 				waiverEligibility.kind === 'eligible_unknown_account')
+	);
+	/** O#1/#9 (cp295): a brand-new account — no prior orders on record,
+	 *  or not yet visible in the index — is locked to its FUNDING trade:
+	 *  a BUY of BLURT. BLURT is what pays listing fees, so until the
+	 *  account holds some it can't list anything; making the first trade
+	 *  a (free, waived) BLURT buy is the on-ramp. Same signal as the
+	 *  waiver. On 'error' / not-yet-loaded we do NOT lock — if we can't
+	 *  verify, fall back to the normal full picker. */
+	const isFirstTrade = $derived(
+		waiverEligibility !== null &&
+			(waiverEligibility.kind === 'eligible' ||
+				waiverEligibility.kind === 'eligible_unknown_account')
+	);
+	// Backstop the lock: while first-trade applies, hold side=buy,
+	// asset=BLURT, and a 7-day expiry. The Step-1 picker and the expiry
+	// <select> are hidden/disabled in the template, so nothing else
+	// writes these during first-trade; the guards (write only when the
+	// value is wrong) make this converge in finite steps — it never
+	// loops — and guarantee the values even against a restored draft.
+	$effect(() => {
+		if (!isFirstTrade) return;
+		if (side !== 'buy') side = 'buy';
+		if (asset !== 'BLURT') asset = 'BLURT';
+		if (expiresDays !== 7) expiresDays = 7;
+	});
+	/** Asset chips shown in Step 1: only BLURT during the first-trade
+	 *  lock, the full set otherwise. */
+	const assetTickersForPicker: readonly AssetTicker[] = $derived(
+		isFirstTrade ? (['BLURT'] as const) : ASSET_TICKERS
 	);
 	/** The user's choice for this order. Four options post-4b:
 	 *    'blurt'              → pay standard BLURT fee (default)
@@ -749,7 +850,7 @@
 				}
 				if (typeof p.amountMin === 'string') amountMin = p.amountMin;
 				if (typeof p.amountMax === 'string') amountMax = p.amountMax;
-				if (typeof p.fiat === 'string') fiat = p.fiat;
+				if (typeof p.fiat === 'string') fiatArr = p.fiat ? [p.fiat] : [];
 				if (p.priceModelKind === 'spread' || p.priceModelKind === 'fixed') {
 					priceModelKind = p.priceModelKind;
 				}
@@ -811,7 +912,7 @@
 		// new user) are silently no-op.
 		try {
 			const prefs = getPreferencesSnapshot();
-			if (fiat === '' && prefs.fiat !== '') fiat = prefs.fiat;
+			if (fiat === '' && prefs.fiat !== '') fiatArr = [prefs.fiat];
 			if (region === '' && prefs.region !== '') region = prefs.region;
 		} catch {
 			// localStorage unavailable / quota issues / private
@@ -1418,7 +1519,7 @@
 		// Reset everything for a fresh listing.
 		side = null;
 		asset = null;
-		fiat = '';
+		fiatArr = [];
 		amountMin = '';
 		amountMax = '';
 		priceModelKind = 'spread';
@@ -1552,7 +1653,25 @@
 			<h2 id="step1-heading" class="mb-4 font-display text-lg font-bold">
 				{$_('post_order.form.step_1_heading')}
 			</h2>
-			<div class="grid gap-3 sm:grid-cols-2">
+			{#if isFirstTrade}
+				<!-- O#1 (cp295): first-trade lock. The only useful thing a
+				     brand-new account can do is BUY BLURT to fund itself
+				     (BLURT pays listing fees), so the buy/sell + asset picker
+				     is replaced by a fixed, explained "Buy BLURT" card and the
+				     side is held to buy / asset to BLURT in the script. -->
+				<div class="rounded-xl border-2 border-morphit-emerald/40 bg-morphit-emerald/5 p-4">
+					<p
+						class="flex items-center gap-2 font-display text-base font-bold text-morphit-emerald"
+					>
+						<span aria-hidden="true">🌱</span>
+						{$_('post_order.form.first_trade_title')}
+					</p>
+					<p class="mt-2 text-sm text-ink-700 dark:text-ink-200">
+						{$_('post_order.form.first_trade_body')}
+					</p>
+				</div>
+			{:else}
+				<div class="grid gap-3 sm:grid-cols-2">
 				<button
 					type="button"
 					onclick={() => (side = 'buy')}
@@ -1574,6 +1693,7 @@
 					<span class="font-semibold">{$_('post_order.form.side_sell')}</span>
 				</button>
 			</div>
+			{/if}
 			<p class="mb-2 mt-6 flex items-center gap-2 text-sm font-semibold">
 				{$_('post_order.form.asset_label')}
 			</p>
@@ -1595,7 +1715,7 @@
 			     each asset chip carries a tooltip explaining what the
 			     asset is, so first-time users don't have to guess.  -->
 			<div class="flex flex-wrap gap-2">
-				{#each ASSET_TICKERS as a}
+				{#each assetTickersForPicker as a}
 					{@const disabled = feeMethodChoice === 'waived_first_buy' && a !== 'BLURT'}
 					<div class="flex items-center gap-1">
 						<button
@@ -1715,22 +1835,16 @@
 					{$_('post_order.form.step_2_heading')}
 				</h2>
 
-				<label class="mb-4 block">
+				<div class="mb-4">
 					<span class="mb-1 block text-sm font-semibold">
 						{$_('post_order.form.fiat_label')}
 					</span>
-					<FocusedField focused={fiat.length === 0} valid={fiat.length > 0 && fiatError === ''}>
-						<input
-							type="text"
-							bind:value={fiat}
-							maxlength="8"
-							autocomplete="off"
-							aria-invalid={!!fiatError}
-							aria-describedby={fiatError ? 'fiat-error' : undefined}
-							class="w-full rounded-2xl bg-transparent px-4 py-3 text-base uppercase outline-none dark:text-ink-50"
-							placeholder={$_('post_order.form.fiat_placeholder')}
-						/>
-					</FocusedField>
+					<FiatCurrencySelect
+						single
+						bind:value={fiatArr}
+						invalid={!!fiatError}
+						describedById={fiatError ? 'fiat-error' : undefined}
+					/>
 					{#if fiatError}
 						<StatusLine kind="warn" id="fiat-error">{fiatError}</StatusLine>
 					{/if}
@@ -1739,7 +1853,7 @@
 							{$_('post_order.form.waiver_fiat_hint')}
 						</p>
 					{/if}
-				</label>
+				</div>
 
 				<div class="grid gap-4 sm:grid-cols-2">
 					<label class="block">
@@ -1946,7 +2060,7 @@
 						bind:value={region}
 						maxlength="128"
 						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
-						placeholder={$_('post_order.form.region_placeholder')}
+						placeholder={regionPlaceholder}
 					/>
 					<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.region_hint')}</p>
 				</label>
@@ -1968,7 +2082,8 @@
 					>
 					<select
 						bind:value={expiresDays}
-						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+						disabled={isFirstTrade}
+						class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald disabled:cursor-not-allowed disabled:opacity-60 dark:border-ink-700 dark:bg-ink-900"
 					>
 						<option value={1}>{$_('post_order.form.expires_1d')}</option>
 						<option value={3}>{$_('post_order.form.expires_3d')}</option>
@@ -1978,6 +2093,9 @@
 						<option value={60}>{$_('post_order.form.expires_60d')}</option>
 						<option value={90}>{$_('post_order.form.expires_90d')}</option>
 					</select>
+					{#if isFirstTrade}
+						<p class="mt-1 text-xs text-ink-500">{$_('post_order.form.first_trade_expiry_note')}</p>
+					{/if}
 				</label>
 
 				<!-- New syndication model: per-order opt-in posts the
@@ -1995,12 +2113,12 @@
 				     per-order post.  Border emerald to match the
 				     "this is a benefit" framing. -->
 				<label
-					class="flex items-start gap-3 rounded-xl border-2 border-morphit-emerald/30 bg-morphit-emerald/5 p-4 dark:border-morphit-emerald/40"
+					class="mt-6 flex items-start gap-3 rounded-xl border-2 border-morphit-emerald/30 bg-morphit-emerald/5 p-4 dark:border-morphit-emerald/40"
 				>
 					<input
 						type="checkbox"
 						bind:checked={syndicateToBlog}
-						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+						class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
 					/>
 					<div class="min-w-0">
 						<p class="flex items-center gap-2 font-semibold text-morphit-emerald">

@@ -266,7 +266,6 @@
       "feedback_help": "Received or responded to"
     },
     "post_order": "Post new order",
-    "edit_profile": "Edit profile",
     "help_support": "Help & support",
     "sign_out_modal": {
       "title": "Sign out of Morphit?",
@@ -312,6 +311,8 @@
     "keyfile_download_err_locked": "Your session appears to be locked. Sign in to download your keyfile.",
     "redundancy_heading": "3. Multiple copies, multiple locations",
     "redundancy_body": "The crypto survivors are the ones who planned for fire, flood, death, and their own forgetfulness.\n\nTwo physical copies of your seed phrase in separate locations. At least one in a safe or safety deposit box. Consider an estate plan: how does a trusted heir find your keys if something happens to you? Write down the instructions separately from the keys themselves.\n\nRedundancy costs you 10 minutes of effort. Its absence can cost you everything.",
+    "keyfile_body_posting_only": "This keyfile is your private posting key, encrypted with your device password. Download it now and store it somewhere separate from the device you're using. If you forget the password, the keyfile is useless — so treat the password as equally critical.",
+    "redundancy_body_posting_only": "The crypto survivors are the ones who planned for fire, flood, death, and their own forgetfulness.\n\nTwo encrypted copies of your keyfile, kept in separate physical locations. At least one in a safe or safety deposit box. Consider an estate plan: how does a trusted heir reach your funds if something happens to you? Write down the instructions separately from the key itself.\n\nRedundancy costs you 10 minutes of effort. Its absence can cost you everything.",
     "antipatterns_heading": "Common mistakes that cost people everything",
     "anti_email": "Emailing the seed phrase to yourself. Any breach of your email provider exposes it.",
     "anti_cloud": "Storing the seed in Google Drive, iCloud, Dropbox, OneDrive. These are searched by automated malware, subpoenaed by governments, breached by attackers.",
@@ -940,7 +941,8 @@
       "submit": "Search",
       "hint": "Account names start with a letter. Transaction ids are 40 hex characters. Block numbers are positive integers.",
       "error_invalid": "That input couldn't be turned into a valid lookup.",
-      "error_unknown": "I couldn't tell what that is. Try a Blurt username, transaction id, or block number."
+      "error_unknown": "I couldn't tell what that is. Try a Blurt username, transaction id, or block number.",
+      "delay_notice": "Just made a transaction? It can take up to a minute to appear. Open the account and tap refresh to load the latest from the chain."
     },
     "nav": {
       "back_to_search": "Back to search",
@@ -969,7 +971,9 @@
       "error": {
         "load_failed": "Couldn't load this account's history.",
         "load_more_failed": "Couldn't load older history."
-      }
+      },
+      "refresh_label": "Refresh from chain",
+      "delay_notice": "Auto-refreshes every few seconds (slower when idle), so a brand-new transaction can take up to a minute to appear on its own. Tap refresh to load the latest from the chain now."
     },
     "block": {
       "page_title": "Block {block}",
@@ -1783,7 +1787,7 @@
     "i2p_name": "I2P",
     "canary": "Canary",
     "canary_title": "Operator's weekly warrant canary — verify the date is recent",
-    "pgp_keys": "PGP keys",
+    "pgp_keys": "PGP",
     "pgp_keys_title": "Operator's PGP public keys for signed releases and canary verification",
     "mediakit": "Mediakit",
     "mediakit_title": "Brand assets and the Morphit claims list — for press, integrators, and the community",
@@ -1955,6 +1959,7 @@
     "title": "Known Morphit instances",
     "intro": "Morphit is federated. Anyone can run an instance, and your indexer discovers other instances automatically by reading the chain. This list shows their current health from the most recent probe.",
     "loading": "Loading directory…",
+    "bookmark_tip": "Tip: bookmark a few of these instances — and their Tor, I2P, or Lokinet addresses — in your browser. The orderbook lives on the public blockchain, so if any one site is ever blocked or goes offline, you can reach the very same orders and trades through any other instance.",
     "fetch_error": "Could not load the directory.",
     "last_updated": "Directory last updated: {date}",
     "contact": "Contact this operator →",
@@ -2265,6 +2270,7 @@
         "account_hint": "Without the @. We'll check that this account exists on Blurt and that the posting key matches.",
         "wif_label": "Posting private key (WIF)",
         "wif_placeholder": "5J… or P5J…",
+        "password_mismatch": "Passwords don't match.",
         "wif_hint": "Starts with 5 (legacy) or P5 (newer). Never shared with the operator — encrypted on this device only.",
         "new_password_label": "New password for this device",
         "new_password_hint": "At least 8 characters. Used to unlock Morphit on this device. Not your Blurt password.",
@@ -2319,6 +2325,7 @@
           "passwords_mismatch": "Passwords don't match.",
           "password_weak": "Password is too weak. Use something longer or less predictable."
         },
+        "welcome_title": "Welcome!",
         "body_password_set": "Your keys are loaded for this browser session. By default, when you close this tab they disappear and you'll need to sign in again next time. If this is your own computer, you can choose to be remembered on this device — you'll unlock next time with the same password you just used."
       }
     },
@@ -2867,15 +2874,13 @@
       "asset_label": "Which asset?",
       "step_2_heading": "How much and at what price?",
       "fiat_label": "Fiat currency",
-      "fiat_placeholder": "e.g. USD, EUR, ARS",
       "amount_min_label": "Minimum trade (fiat)",
       "amount_max_label": "Maximum trade (fiat)",
       "amount_optional_hint": "Leave blank for no limit.",
-      "step_3_heading": "How will you be reached?",
-      "payment_methods_label": "Payment methods accepted",
-      "payment_methods_hint": "Add as many as you accept — trade partners pick which works for them.",
+      "step_3_heading": "How will you pay?",
+      "payment_methods_label": "I can pay via",
+      "payment_methods_hint": "Add as many as you like — trade partners pick which works for them.",
       "region_label": "Region (optional)",
-      "region_placeholder": "e.g. North America, Buenos Aires",
       "region_hint": "Where you're willing to trade. Helps people find you nearby.",
       "terms_label": "Extra terms (optional)",
       "terms_placeholder": "e.g. \"Weekends only\" or \"Cash only for amounts under $100\"",
@@ -2919,7 +2924,10 @@
       "price_model_fixed_help": "A fixed fiat price per unit. The order won't move when the market does.",
       "price_model_fixed_aria": "Fixed price per unit in fiat",
       "price_model_fixed_placeholder": "e.g. 100000",
-      "price_model_fiat_placeholder": "fiat"
+      "price_model_fiat_placeholder": "fiat",
+      "first_trade_title": "Your first trade: buy BLURT",
+      "first_trade_body": "Morphit runs on BLURT, and listing fees are paid in it. So your very first trade is a small purchase of BLURT to fund your account — once you hold some, you can list and trade anything. This first buy is free (the listing fee is waived) and the listing expires in 7 days.",
+      "first_trade_expiry_note": "First listings are set to expire in 7 days."
     },
     "errors": {
       "fiat_empty": "Pick a fiat currency (like USD or EUR).",
@@ -3218,9 +3226,10 @@
     "privacy_heading": "Privacy",
     "privacy_body_1": "Morphit runs in your browser. Your keys are generated on your device and never leave it. Morphit does not collect tracking cookies, analytics, or your IP address for any purpose beyond what's technically required to serve the page.",
     "privacy_body_2": "Every offer you post — along with the feedback and reviews you leave and receive — is public on the blockchain, for reputation-building, posterity, and your own research on other traders.",
+    "privacy_body_protected": "By contrast, your private conversations stay private. Direct messages between traders are end-to-end encrypted — they live on the blockchain only as ciphertext that you and your trade partner can read, never the operator, the indexers, or anyone else watching the chain. Morphit also collects no name, email, phone, or ID, and the payment details you exchange (such as a receiving address) move through that encrypted channel instead of the public orderbook.",
     "privacy_body_3": "We encourage you to use a VPN, Tor, Lokinet, or I2P when accessing Morphit — anything that hides your IP from the server you're talking to is a good idea. We don't fingerprint your browser, we don't profile you, and we explicitly design our defenses against abuse so they don't punish privacy-conscious users. Our rate limits are crude (a handful of signups per IP per day) and easily defeated by VPN rotation — that's a conscious tradeoff. We'd rather accept more abuse than make privacy-respecting users feel unwelcome. If a defense would require tracking you to work, we don't ship it.",
     "terms_heading": "Terms",
-    "terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your Buy/Sell orders, Ads, the Feedback section and Chats are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💙💚"
+    "terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your Buy/Sell orders, Ads, the Feedback section and Chats are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
   },
   "privkey_warn": {
     "title": "Stop — that looks like a private key",

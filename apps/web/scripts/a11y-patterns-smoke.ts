@@ -52,6 +52,10 @@ const PICKER = readFileSync(
 	join(REPO_ROOT, 'apps/web/src/lib/components/PaymentMethodsPicker.svelte'),
 	'utf8'
 );
+const FIAT_SELECT = readFileSync(
+	join(REPO_ROOT, 'apps/web/src/lib/components/FiatCurrencySelect.svelte'),
+	'utf8'
+);
 
 interface Scenario {
 	readonly name: string;
@@ -103,13 +107,21 @@ const scenarios: readonly Scenario[] = [
 	},
 
 	// ─── /post field validation aria ───────────────────────
+	// The fiat field is a FiatCurrencySelect combobox (cp295): the page
+	// passes invalid/describedById, and the component forwards them to its
+	// <input role="combobox"> as aria-invalid / aria-describedby — the same
+	// error association the old native input had. Both legs are checked.
 	{
-		name: '/post fiat input has aria-invalid wired to fiatError',
-		ok: /bind:value=\{fiat\}[\s\S]{0,400}aria-invalid=\{!!fiatError\}/.test(POST)
+		name: '/post fiat combobox has aria-invalid wired to fiatError',
+		ok:
+			/<FiatCurrencySelect[\s\S]{0,200}invalid=\{!!fiatError\}/.test(POST) &&
+			/aria-invalid=\{invalid/.test(FIAT_SELECT)
 	},
 	{
-		name: '/post fiat input has aria-describedby wired to fiat-error',
-		ok: /bind:value=\{fiat\}[\s\S]{0,400}aria-describedby=\{fiatError\s*\?\s*'fiat-error'/.test(POST)
+		name: '/post fiat combobox has aria-describedby wired to fiat-error',
+		ok:
+			/<FiatCurrencySelect[\s\S]{0,200}describedById=\{fiatError\s*\?\s*'fiat-error'/.test(POST) &&
+			/aria-describedby=\{describedById\}/.test(FIAT_SELECT)
 	},
 	{
 		name: '/post fiat StatusLine has id="fiat-error"',

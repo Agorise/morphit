@@ -34,7 +34,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
-	import { getBlurtClient } from '$blurt/client';
+	import { fetchAccountBalance } from '$blurt/accountBalance';
+	import { fetchAccountHistory } from '$blurt/accountHistory';
+	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { vestsToBlurtPower, manaPercentage, parseAssetAmount } from '$blurt/balanceMath';
 	import { computeBlurtVestingApr, formatApr } from '$blurt/apr';
 	import {
@@ -100,31 +102,38 @@
 		if (refreshInFlight) return;
 		refreshInFlight = true;
 		try {
-			const client = getBlurtClient();
-			const [acct, dgp] = await Promise.all([
-				client.getAccount(account),
-				client.getDynamicGlobalProperties()
-			]);
-			if (!acct) {
-				throw new Error('account not found');
+			// cp295 — read balance via the indexer (same-origin), NOT
+			// directly from a Blurt RPC node. The indexer fetches account
+			// + DGP server-side across the full node pool, so third-party
+			// nodes never see the user's IP or which account they're
+			// viewing (privacy #1), and the load no longer depends on
+			// whichever nodes happen to be browser-CORS-clean today.
+			const result = await fetchAccountBalance(
+				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+				account
+			);
+			if (result.kind !== 'ok') {
+				if (result.kind === 'error') {
+					console.warn('[MyBalanceCard] balance load failed:', result.message);
+				}
+				errorMsg = $_('my_balance.error.load_failed');
+				loadState = 'error';
+				return;
 			}
+			const { account: acct, dgp } = result.data;
 			blurtBalance = parseAssetAmount(acct.balance);
 			bpBalance = vestsToBlurtPower(
-				acct.vesting_shares ?? '0 VESTS',
+				acct.vesting_shares,
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
 			manaPct = manaPercentage(
-				acct.voting_manabar ?? null,
-				acct.vesting_shares ?? '0 VESTS',
+				acct.voting_manabar,
+				acct.vesting_shares,
 				Math.floor(Date.now() / 1000)
 			);
-			// Batch K: APR.  Cheap to recompute every refresh; the
-			// inputs already came in with the same call.  Cache the
-			// result for display; it doesn't change measurably
-			// between minute-scale refreshes (the inflation curve
-			// drifts by sub-basis-points per day) but the formula
-			// is pure and trivial so we don't bother memoizing.
+			// Batch K: APR. Cheap to recompute every refresh; inputs
+			// arrived in the same response. Pure formula, no memoization.
 			vestingApr = computeBlurtVestingApr({
 				head_block_number: dgp.head_block_number,
 				current_supply: dgp.current_supply,
@@ -179,7 +188,6 @@
 	 *  someone with that much chain activity has unusual needs and
 	 *  can ask for a larger window in the future. */
 	async function fetchYearOfHistory(account: string): Promise<HistoryOp[]> {
-		const client = getBlurtClient();
 		const PAGE = 10_000;
 		const MAX_PAGES = 5;
 		const oneYearAgoSec = Math.floor(Date.now() / 1000) - 365 * 86_400;
@@ -190,13 +198,18 @@
 		// `from = oldestSeen - 1` for the next page.
 		let from = -1;
 		for (let page = 0; page < MAX_PAGES; page++) {
-			// condenser_api.get_account_history shape:
+			// One page via the indexer (privacy: no direct RPC from the
+			// browser). get_account_history shape per entry:
 			//   [seq, { block, trx_id, timestamp, op: [name, body] }]
-			const history = await client.call<Array<[number, HistoryOp]>>(
-				'condenser_api.get_account_history',
-				[account, from, PAGE]
+			const r = await fetchAccountHistory(
+				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+				account,
+				from,
+				PAGE
 			);
-			if (!Array.isArray(history) || history.length === 0) break;
+			if (r.kind !== 'ok') break;
+			const history = r.entries;
+			if (history.length === 0) break;
 
 			// `history` is ordered oldest-first within the window.
 			// `seq` is monotonically increasing across history.

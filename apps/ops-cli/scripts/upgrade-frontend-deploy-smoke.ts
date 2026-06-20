@@ -423,14 +423,14 @@ function tmp(prefix: string): string {
 	// Fixture uses the REAL verify.json shape, not a hand-fabricated one.
 	const verifyJson = JSON.stringify({
 		schema_version: 1,
-		morphit_version: '1.0.0-beta.22',
+		morphit_version: '1.0.0-beta.23',
 		git_commit: null,
 		operator_tag: null,
 		built_at: '2026-06-15T00:00:00.000Z',
 		hash_manifest: {}
 	});
 	const v = parseVerifyJsonVersion(verifyJson);
-	if (v === '1.0.0-beta.22') ok('FD-21a parseVerifyJsonVersion extracts morphit_version from the real verify.json shape');
+	if (v === '1.0.0-beta.23') ok('FD-21a parseVerifyJsonVersion extracts morphit_version from the real verify.json shape');
 	else bad('FD-21a', `got ${v}`);
 
 	if (
@@ -438,7 +438,7 @@ function tmp(prefix: string): string {
 		parseVerifyJsonVersion('{"no":"version"}') === null &&
 		// A bare `version` field must NOT satisfy it — the real file keys on
 		// morphit_version. This negative is what would have caught the bug.
-		parseVerifyJsonVersion('{"version":"1.0.0-beta.22"}') === null
+		parseVerifyJsonVersion('{"version":"1.0.0-beta.23"}') === null
 	)
 		ok('FD-21b parseVerifyJsonVersion returns null on bad/missing/wrong-field json');
 	else bad('FD-21b', 'expected null on bad/missing/wrong-field version');

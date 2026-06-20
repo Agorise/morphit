@@ -76,6 +76,13 @@ const PID_REGISTRY_MAX_ENTRIES = 10_000;
 const DELIVER_BODY_MAX_BYTES = 4096;
 const JANITOR_INTERVAL_MS = 30_000;
 const PID_TTL_MAX_MS = 5 * 60_000;
+/** SSE keep-alive cadence for the /wait stream. A reverse proxy
+ *  (BunkerWeb / nginx default `proxy_read_timeout` is 60s) closes an
+ *  idle connection, which the desktop renders as "This code expired".
+ *  An un-scanned QR's wait sends NO bytes for up to PID_TTL_MAX_MS, so
+ *  we emit an SSE comment every 25s to keep the connection alive for
+ *  the full 5-minute window. Matches the orderbook/chat stream cadence. */
+const PAIRING_KEEPALIVE_INTERVAL_MS = 25_000;
 
 /** PID format: 64 lowercase hex chars (SHA-256 output). */
 const PID_RE = /^[0-9a-f]{64}$/;
@@ -355,44 +362,57 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 		// until callback fires or TTL expires.
 		return streamSSE(c, async (stream) => {
 			let resolved = false;
-			const settled = new Promise<string>((resolve) => {
-				const installed = registry.setWaiter(pid, (bundleJson) => {
-					if (resolved) return;
-					resolved = true;
-					resolve(bundleJson);
-				});
-				if (installed === 'fired_immediately') {
-					// setWaiter handled the callback synchronously;
-					// the resolver above already fired.  Nothing
-					// else to do — the promise is settled.
-				} else if (installed === 'gone') {
-					if (!resolved) {
+			// G (cp295): keep-alive. Without periodic bytes a reverse proxy
+			// closes this idle connection at ~60s, and the desktop shows
+			// "This code expired" even though the pairing is valid for the
+			// full 5-minute window server-side. An SSE comment every 25s
+			// keeps it open. Cleared in `finally` so it never outlives the
+			// stream.
+			const keepalive = setInterval(() => {
+				void stream.write(': keepalive\n\n').catch(() => {});
+			}, PAIRING_KEEPALIVE_INTERVAL_MS);
+			try {
+				const settled = new Promise<string>((resolve) => {
+					const installed = registry.setWaiter(pid, (bundleJson) => {
+						if (resolved) return;
 						resolved = true;
-						resolve('');
+						resolve(bundleJson);
+					});
+					if (installed === 'fired_immediately') {
+						// setWaiter handled the callback synchronously;
+						// the resolver above already fired.  Nothing
+						// else to do — the promise is settled.
+					} else if (installed === 'gone') {
+						if (!resolved) {
+							resolved = true;
+							resolve('');
+						}
 					}
+					// Hard TTL fallback even if janitor doesn't fire.
+					setTimeout(() => {
+						if (!resolved) {
+							resolved = true;
+							registry.cancelWait(pid);
+							resolve('');
+						}
+					}, PID_TTL_MAX_MS).unref?.();
+				});
+				const bundleJson = await settled;
+				if (bundleJson === '') {
+					// Empty signals expired — close the stream
+					// cleanly with a sentinel event.
+					await stream.writeSSE({
+						event: 'expired',
+						data: '{}'
+					});
+				} else {
+					await stream.writeSSE({
+						event: 'bundle',
+						data: bundleJson
+					});
 				}
-				// Hard TTL fallback even if janitor doesn't fire.
-				setTimeout(() => {
-					if (!resolved) {
-						resolved = true;
-						registry.cancelWait(pid);
-						resolve('');
-					}
-				}, PID_TTL_MAX_MS).unref?.();
-			});
-			const bundleJson = await settled;
-			if (bundleJson === '') {
-				// Empty signals expired — close the stream
-				// cleanly with a sentinel event.
-				await stream.writeSSE({
-					event: 'expired',
-					data: '{}'
-				});
-			} else {
-				await stream.writeSSE({
-					event: 'bundle',
-					data: bundleJson
-				});
+			} finally {
+				clearInterval(keepalive);
 			}
 		});
 	});

@@ -22,8 +22,18 @@
 	import { _ } from 'svelte-i18n';
 	import type { Currency } from '$lib/data/currencies';
 
-	/** Selected ISO codes, uppercase (e.g. ["USD","EUR"]). */
-	let { value = $bindable<string[]>([]) } = $props();
+	/** Selected ISO codes, uppercase (e.g. ["USD","EUR"]). In `single`
+	 *  mode the array holds at most one code (picking replaces). */
+	let {
+		value = $bindable<string[]>([]),
+		single = false,
+		/** When true, marks the combobox input `aria-invalid` (the field
+		 *  failed validation) — mirrors a native input's invalid state. */
+		invalid = false,
+		/** Id of an external error/description element to associate via
+		 *  `aria-describedby` (e.g. the fiat StatusLine's `fiat-error`). */
+		describedById = undefined as string | undefined
+	} = $props();
 
 	let query = $state('');
 	let open = $state(false);
@@ -64,6 +74,15 @@
 	}
 
 	function add(code: string): void {
+		if (single) {
+			// Single-select: a pick REPLACES the current choice and closes
+			// the menu (used by the compose-order page's fiat field).
+			value = [code];
+			query = '';
+			activeIndex = 0;
+			open = false;
+			return;
+		}
 		if (!value.includes(code)) value = [...value, code];
 		query = '';
 		activeIndex = 0;
@@ -175,6 +194,8 @@
 			role="combobox"
 			aria-expanded={open}
 			aria-controls="fiat-currency-listbox"
+			aria-invalid={invalid || undefined}
+			aria-describedby={describedById}
 			onfocus={onFocus}
 			oninput={() => {
 				open = true;

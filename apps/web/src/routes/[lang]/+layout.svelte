@@ -229,14 +229,22 @@
 		class="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md dark:border-ink-800 dark:bg-ink-950/80"
 	>
 		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-			<!-- Wide wordmark logo, hyperlinked to home.  `shine` enables
-				 a subtle occasional glint (every ~15s) that traces the
-				 wordmark letterforms to draw the eye — pure CSS, masked to
-				 the wordmark shape, and removed under prefers-reduced-motion.
-				 (The hero logo on the homepage uses the same component
-				 WITHOUT `shine`, so it stays completely static.) -->
+			<!-- Wide wordmark logo, hyperlinked to the locale home.  MUST be
+			     locale-prefixed (`lp('/')` → e.g. `/en`), NOT a bare `/`:
+			     a bare `/` leaves the [lang] subtree for the root
+			     detection-redirect shell, which redirects via
+			     `window.location.replace` — a FULL PAGE RELOAD that drops
+			     the in-memory identity session (a "Remember me" keystore is
+			     encrypted-at-rest, so a hard reload lands the user locked).
+			     Keeping the logo inside [lang] makes it a client-side nav,
+			     exactly like the primary nav links, so it preserves the
+			     session.  `shine` enables a subtle occasional glint
+			     (every ~15s) tracing the wordmark — pure CSS, masked to the
+			     wordmark shape, removed under prefers-reduced-motion.  (The
+			     hero logo on the homepage uses the same component WITHOUT
+			     `shine`, so it stays completely static.) -->
 			<a
-				href="/"
+				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 				aria-label="Morphit — home"
 			>
@@ -343,7 +351,7 @@
 							href={safeContact}
 							class="font-medium text-morphit-emerald hover:underline"
 							title={$_('footer.contact_operator')}
-							rel="noopener"
+							target="_blank" rel="noopener noreferrer"
 						>
 							{$instance.name}
 						</a>
@@ -591,7 +599,7 @@
 				<a
 					href="https://git.agorise.net/agorise/morphit"
 					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
-					rel="noopener">{$_('footer.source')}</a
+					target="_blank" rel="noopener noreferrer">{$_('footer.source')}</a
 				>
 				<a
 					href="/morphit-mediakit.zip" data-sveltekit-reload

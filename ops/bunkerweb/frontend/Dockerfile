@@ -12,8 +12,14 @@
 # /usr/share/nginx/html (see ../docker-compose.yml), so this image
 # carries only the nginx config. Ship new frontend bytes by
 # rebuilding the web app (`npm run build` in apps/web) — you do NOT
-# need to rebuild this image for a content change. Rebuild the image
-# only when nginx.conf itself changes:  docker compose up -d --build
+# need to rebuild this image for a content change. nginx.conf is ALSO
+# bind-mounted from the host repo in docker-compose.yml (the COPY
+# below is a baked fallback the mount overrides at runtime), so a
+# config change deploys by pulling the new source and RESTARTING the
+# container — `docker compose restart frontend`, or just
+# `morphit-ops upgrade`, which restarts it for you. You only need to
+# rebuild this image (`docker compose up -d --build frontend`) if you
+# run WITHOUT the docker-compose nginx.conf mount.
 FROM nginx:alpine
 
 # Drop the stock default server (it also listens on :80) and install

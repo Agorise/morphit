@@ -1009,6 +1009,37 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
+	// ─── 9b2. Rebuild the dist-shipping workspaces (cp296) ─────
+	//
+	// Unlike the indexer/relay/matrix-bot (pure tsx-from-source), TWO
+	// workspaces EXECUTE from a compiled `dist/` bundle, and `dist/` is
+	// gitignored + NOT shipped in the tarball:
+	//   • morphit-mcp — its `bin` points straight at `dist/main.js`.
+	//   • morphit-ops — its bin launcher PREFERS `dist/main.js` when
+	//     present (falling back to tsx source otherwise).
+	// `npm ci` builds neither, so before this step an upgrade left the
+	// OLD-version dist on disk: the MCP server ran stale code, and
+	// `morphit-ops` itself preferred its own stale bundle over the
+	// freshly-extracted source. Rebuild both now so each runs the new
+	// version. NON-FATAL: nothing served has changed, the ops launcher
+	// self-heals by falling back to source if its bundle is missing, so
+	// we warn loudly rather than roll back an already-built frontend.
+	for (const wsDir of ['ops-cli', 'mcp-server'] as const) {
+		try {
+			info(`Rebuilding the ${wsDir} dist bundle...`);
+			runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', wsDir) });
+		} catch {
+			warn(
+				wsDir === 'ops-cli'
+					? `Could not rebuild morphit-ops's dist bundle. It will fall back to running ` +
+							`its TypeScript source via tsx (correct, just not precompiled). Run ` +
+							`\`npm run build\` in ${join(installDir, 'apps', wsDir)} to restore the fast path.`
+					: `Could not rebuild the MCP server's dist bundle. \`morphit-mcp\` may run stale ` +
+							`code until you run \`npm run build\` in ${join(installDir, 'apps', wsDir)} by hand.`
+			);
+		}
+	}
+
 	// ─── 9c. Publish the freshly-built frontend ────────────────
 	//
 	// Decide how to publish from two signals:

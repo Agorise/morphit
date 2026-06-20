@@ -5646,6 +5646,26 @@ For everyone else, deploy it. Reasons it's the default recommendation:
 - Built-in GeoIP, slow-loris guards, connection-rate limits.
 - Single dashboard for HTTPS certs, request rate limits, country blocking, and OWASP rule tuning.
 
+### Caching the update surface — `/service-worker.js` + `verify.json` (why the update snackbar may not appear)
+
+The in-app **"Load it now" update snackbar** that prompts users to reload after you deploy depends on two files always being served **fresh**:
+
+- **`/service-worker.js`** — the browser refetches it on every update check (the app registers the worker with `updateViaCache: 'none'`, so it never uses the *browser's* HTTP cache for it), and a byte-changed worker is exactly what raises the snackbar. The build embeds a per-deploy version hash, so the file changes on every release.
+- **`verify.json`** — this build's version + per-file hash manifest. The app's belt-and-suspenders **update-version poll** and the **"About this instance" auto-verify** both read it.
+
+`updateViaCache: 'none'` only stops the *browser* from answering from its own cache — it does **not** stop an upstream cache. If **BunkerWeb's edge cache (or any CDN in front) serves `/service-worker.js` stale**, the browser receives the *old* worker on the network fetch, no update is detected, and the snackbar never appears — on mobile **and** desktop. A stale `verify.json` likewise makes the app think it's already up to date.
+
+**The shipped configs now mark both `no-cache`** so BunkerWeb and the browser always revalidate:
+
+- `ops/bunkerweb/frontend/nginx.conf` (the container BunkerWeb proxies to) has `location = /service-worker.js` and `location = /verify.json` blocks emitting `Cache-Control: no-cache`, AND `docker-compose.yml` now **bind-mounts** that file into the container (the Dockerfile `COPY` is a baked fallback the mount overrides). So config changes deploy like build changes: pull the new source, then **restart** the container — `morphit-ops upgrade` already `docker restart`s it, so the no-cache blocks ride along on a normal upgrade with no image rebuild. **One caveat for instances deployed BEFORE the mount was added:** a plain restart won't attach a *new* volume to an already-running container, so run `docker compose up -d frontend` **once** (recreates it with the mount); after that, restarts/upgrades pick up config changes automatically. (Fresh installs get the mount from the first `docker compose up -d`.) The app-side update poll does NOT depend on any of this — it ships in the web build, which `morphit-ops upgrade` redeploys — so the update snackbar works after a normal upgrade regardless; the no-cache config additionally keeps the service worker itself fresh.
+- `ops/nginx/web.conf` (bare-metal) has the equivalent blocks (with a full security-header re-emission, since `add_header` in a `location` drops inherited headers — see the comment there; the hand-paste example in `RUN-A-MORPHIT-NODE.md` uses the shorter `expires -1` form, which sets `no-cache` without that footgun).
+
+BunkerWeb passes an upstream `Cache-Control: no-cache` through and honors it for its own caching, so the frontend-container block is sufficient — you do **not** need a separate BunkerWeb cache rule. (If you have explicitly enabled BunkerWeb's `USE_CACHE`, confirm it isn't configured to override upstream cache directives for these two paths.)
+
+> The app no longer relies *solely* on the service-worker byte-diff: the update-version poll compares `verify.json`'s deployed version to the running bundle's version on every tab-foreground and surfaces the snackbar on a mismatch even if a proxy served the worker stale. The `no-cache` config above is still the right fix — it keeps the worker itself updating promptly and the poll cheap — but the two together mean the prompt appears regardless of proxy quirks.
+
+**Beta gate note:** if you front the beta site with HTTP Basic Auth, **exempt `/verify.json`** from the auth (e.g. `auth_basic off;` inside its `location` block) so the version poll and auto-verify can read it. The poll sends the visitor's existing credentials, so it works through the gate either way, but the exemption is what lets the "About this instance" auto-verify succeed instead of reporting "Could not auto-verify."
+
 ### What BunkerWeb adds on top of Caddy/nginx
 
 | Feature | Caddy / nginx alone | BunkerWeb |

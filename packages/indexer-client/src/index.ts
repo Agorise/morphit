@@ -333,6 +333,95 @@ export interface ProfileResponse {
 	readonly updated_at: string;
 }
 
+/** Response shape for `GET /v1/account/:account/balance` (cp295).
+ *  The indexer fetches the account + dynamic global properties from
+ *  the Blurt RPC pool SERVER-side and returns just the fields the
+ *  frontend balance math needs, so the browser never opens a
+ *  cross-origin connection to a third-party RPC node (privacy: those
+ *  nodes never see the user's IP or which account they viewed).
+ *  Mirrors `AccountBalanceBody` in apps/indexer/src/api/accountBalance.ts. */
+export interface AccountBalanceResponse {
+	readonly account: {
+		readonly name: string;
+		/** Liquid BLURT, e.g. "42.500 BLURT". */
+		readonly balance: string;
+		/** Staked VESTS, e.g. "1000000.000000 VESTS". */
+		readonly vesting_shares: string;
+		readonly voting_manabar: {
+			readonly current_mana: string;
+			readonly last_update_time: number;
+		} | null;
+		/** First posting-authority public key (e.g. "BLT6…"), or null if
+		 *  the account has none. Lets the block explorer's account page
+		 *  render the posting key WITHOUT a direct getAccount RPC read. */
+		readonly posting_pub: string | null;
+	};
+	readonly dgp: {
+		readonly head_block_number: number;
+		readonly current_supply: string;
+		readonly total_vesting_fund_blurt: string;
+		readonly total_vesting_shares: string;
+	};
+}
+
+/** A single account-history entry exactly as Blurt's
+ *  `get_account_history` RPC returns it: `[sequence, op]`. The op shape
+ *  matches the frontend `HistoryOp` (apps/web/src/lib/pnl/categorize.ts),
+ *  so the browser's existing parsing + P&L categorization is unchanged. */
+export interface AccountHistoryOp {
+	readonly block: number;
+	readonly trx_id: string;
+	readonly timestamp: string;
+	readonly op: readonly [string, Record<string, unknown>];
+}
+export type AccountHistoryEntry = readonly [number, AccountHistoryOp];
+
+/** Response shape for `GET /v1/account/:account/history?from=&limit=` (cp296).
+ *  The indexer relays ONE page of Blurt `get_account_history` from the
+ *  RPC pool SERVER-side, so the browser never opens a cross-origin
+ *  connection to a third-party RPC node (privacy #1: those nodes never
+ *  see the user's IP or which account's history they viewed). The
+ *  browser keeps its own pagination / time-window / page-cap logic and
+ *  merely swaps the per-page SOURCE from direct-RPC to this endpoint.
+ *  Mirrors `AccountHistoryBody` in apps/indexer/src/api/accountHistory.ts. */
+export interface AccountHistoryResponse {
+	readonly entries: readonly AccountHistoryEntry[];
+}
+
+/** Response shapes for the `/v1/chain` explorer proxies (cp296). Both
+ *  relay the Blurt condenser result VERBATIM (the indexer is a privacy
+ *  passthrough — the browser never opens a cross-origin RPC connection),
+ *  so the payload is typed `unknown` here and the web consumer narrows it
+ *  to its own `BlurtBlock` / `BlurtTransaction` shape. */
+export interface ChainBlockResponse {
+	readonly block: unknown;
+}
+export interface ChainTxResponse {
+	readonly tx: unknown;
+}
+
+/** A Blurt public authority block (owner / active / posting). Structural
+ *  twin of the web client's `BlurtAuthority`. Contains only PUBLIC keys. */
+export interface BlurtAuthority {
+	weight_threshold: number;
+	account_auths: Array<[string, number]>;
+	key_auths: Array<[string, number]>;
+}
+
+/** Response for `GET /v1/account/:name/keys` (cp298). PUBLIC key
+ *  authorities only — used for client-side key-verify at login/import so
+ *  the browser never reveals IP↔account to third-party RPC operators. No
+ *  secret is ever present. */
+export interface AccountKeysResponse {
+	readonly account: {
+		readonly name: string;
+		readonly owner: BlurtAuthority;
+		readonly active: BlurtAuthority;
+		readonly posting: BlurtAuthority;
+		readonly memo_key: string;
+	};
+}
+
 /** Response shape for `GET /v1/profiles?accounts=alice,bob,...`.
  *  Keyed by account so callers can do `response.profiles[account]`
  *  directly. Accounts that don't have a profile row are silently
