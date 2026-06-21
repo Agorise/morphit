@@ -54,10 +54,13 @@ export const LOYALTY_MILESTONES: readonly {
  *      attacker cost for 1000 BP, which isn't a great deal even
  *      if the attacker is determined).
  *
- *  This is independent of the existing 10 BP delegation that
- *  fires on first COMPLETED trade (see feedback handler) — the
- *  two run in parallel and both add to the cumulative
- *  delegation target.
+ *  This is independent of the first-COMPLETED-trade reward (see
+ *  the feedback handler), which is 10 BLURT liquid + 10 BLURT
+ *  Power (a `vesting` transfer the user OWNS — NOT a delegation,
+ *  and NOT reclaimable). The two run in parallel. Only the
+ *  delegations — this first-fee 1 BP welcome plus the loyalty
+ *  milestones below — accumulate into the cumulative delegation
+ *  target; the first-trade liquid+vesting reward does not.
  */
 export const FIRST_FEE_WELCOME_SENTINEL_BLURT = 0;
 export const FIRST_FEE_WELCOME_BP = 1;

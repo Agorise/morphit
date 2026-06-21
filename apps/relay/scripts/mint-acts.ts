@@ -52,7 +52,6 @@
 import { loadConfig } from '../src/config/index.ts';
 import { unlockActiveKey } from '../src/config/unlock.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
-import { Client, PrivateKey } from '@beblurt/dblurt';
 
 async function main(): Promise<void> {
 	// Resolve the count: explicit CLI arg wins; otherwise fall
@@ -152,14 +151,20 @@ async function main(): Promise<void> {
 	);
 
 	// Mint one ACT per iteration. Each claim_account op is its
-	// own transaction so partial failures are recoverable.
-	const priv = PrivateKey.fromString(cfg.relayActiveKeyWif);
+	// own transaction so partial failures are recoverable. The
+	// op shape + signing live in BlurtClient.broadcastClaimAccount
+	// (single source of truth, shared with the in-process
+	// ActAutoMinter) so the two mint paths can never drift.
 	let succeeded = 0;
 	let failed = 0;
 	for (let i = 1; i <= count; i++) {
 		try {
-			const trxId = await mintOne(cfg.blurtRpcEndpoints, cfg.relayAccount, feeBlurt, priv);
-			log(`  [${i}/${count}] minted  trx_id=${trxId}`);
+			const conf = await blurt.broadcastClaimAccount({
+				creator: cfg.relayAccount,
+				creatorActiveWif: cfg.relayActiveKeyWif,
+				feeBlurt
+			});
+			log(`  [${i}/${count}] minted  trx_id=${conf.id}`);
 			succeeded++;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
@@ -170,43 +175,6 @@ async function main(): Promise<void> {
 
 	log(`done; succeeded=${succeeded} failed=${failed}`);
 	if (failed > 0) process.exit(2);
-}
-
-/** Broadcast a single claim_account op. Returns the trx id on
- *  success; throws on failure. */
-async function mintOne(
-	endpoints: readonly string[],
-	creator: string,
-	feeBlurt: number,
-	priv: PrivateKey
-): Promise<string> {
-	// claim_account requires active authority. Op shape per
-	// Steem/Blurt wire:
-	//   ['claim_account', { creator, fee: "N.NNN BLURT", extensions: [] }]
-	const op: [string, Record<string, unknown>] = [
-		'claim_account',
-		{
-			creator,
-			fee: `${feeBlurt.toFixed(3)} BLURT`,
-			extensions: []
-		}
-	];
-
-	// We don't re-use BlurtClient.callWithRotation here because
-	// its private and the mint flow is simpler — try the first
-	// endpoint, move to the next on failure. Three attempts max.
-	let lastErr: unknown = null;
-	for (let i = 0; i < endpoints.length; i++) {
-		const client = new Client(endpoints[i]!, { timeout: 15_000 });
-		try {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const confirmation = await client.broadcast.sendOperations([op as any], priv);
-			return String((confirmation as { id?: string }).id ?? '');
-		} catch (err) {
-			lastErr = err;
-		}
-	}
-	throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 function log(msg: string): void {

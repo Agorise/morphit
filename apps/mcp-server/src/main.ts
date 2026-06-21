@@ -130,6 +130,12 @@ interface ToolRegistration<I extends z.ZodTypeAny> {
 	handler: (input: z.infer<I>) => Promise<unknown>;
 }
 
+/** Single source of the MCP server's advertised version. Gated by the
+ *  repo version-consistency smoke (Category B) so it can't drift from the
+ *  root package.json on a release bump — mirrors the relay/indexer
+ *  health.ts VERSION constants. */
+const MCP_VERSION = '1.0.0-beta.24';
+
 const TOOLS: ToolRegistration<z.ZodTypeAny>[] = [
 	{
 		name: 'morphit_search_orders',
@@ -170,7 +176,7 @@ function buildServer(): Server {
 	const server = new Server(
 		{
 			name: 'morphit-mcp',
-			version: '1.0.0-beta.23'
+			version: MCP_VERSION
 		},
 		{
 			capabilities: {

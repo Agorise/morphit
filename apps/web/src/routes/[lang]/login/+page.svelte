@@ -8,6 +8,8 @@
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import {
 		bootFromEnvelope,
 		bootFromEnvelopeWithYubikey,
@@ -120,6 +122,45 @@
 	 *  fresh QR-pair). */
 	function continuePaired(): void {
 		void gotoLocale('/orderbook');
+	}
+
+	// ─── Sign-out-before-switch guard (cp305) ──────────────────────────
+	// If the user already has a session, clicking "Sign in with…",
+	// "Create a new account", or the QR card would start a DIFFERENT
+	// identity on top of the current one — exactly the mix-up where
+	// registering a new name left the old account still "logged in".
+	// We gate those three cards on getUserBlurtAccount(): it returns the
+	// current account name and, unlike isUnlocked/hasAnySession, still
+	// reports it when only the stale `morphit.blurtAccount` anchor lingers
+	// after a cold refresh — the broadest "there is an account to sign out
+	// of" signal, matching how AvatarMenu decides to show signed-in UI.
+	let showSwitchConfirm = $state(false);
+	let pendingDestination = $state('/onboarding/import');
+	let pendingAccount = $state('');
+
+	/** Click handler for the three "start a new/different session" cards.
+	 *  If a session exists, prevent navigation and raise the confirm modal;
+	 *  otherwise let the normal <a href> navigation proceed unchanged. */
+	function guardSwitch(e: MouseEvent, destination: string): void {
+		const account = getUserBlurtAccount();
+		if (!account) return; // not signed in → let the link navigate normally
+		e.preventDefault();
+		pendingAccount = account;
+		pendingDestination = destination;
+		showSwitchConfirm = true;
+	}
+
+	/** User confirmed: sign out of the current account, THEN continue to
+	 *  the card's destination so the new sign-in / registration starts
+	 *  from a clean, sessionless state. */
+	async function confirmSwitch(): Promise<void> {
+		showSwitchConfirm = false;
+		reset();
+		await gotoLocale(pendingDestination);
+	}
+
+	function cancelSwitch(): void {
+		showSwitchConfirm = false;
 	}
 
 	async function handleUnlock(): Promise<void> {
@@ -535,10 +576,18 @@
 		</header>
 
 		<div class="mt-8 flex flex-col gap-4 sm:flex-row">
-			<a href={lp('/onboarding/import')} class="btn-primary flex-1 text-center">
+			<a
+				href={lp('/onboarding/import')}
+				onclick={(e) => guardSwitch(e, '/onboarding/import')}
+				class="btn-primary flex-1 text-center"
+			>
 				{$_('login.import_existing')}
 			</a>
-			<a href={lp('/onboarding')} class="btn-secondary flex-1 text-center">
+			<a
+				href={lp('/onboarding')}
+				onclick={(e) => guardSwitch(e, '/onboarding')}
+				class="btn-secondary flex-1 text-center"
+			>
 				{$_('login.register_cta')}
 			</a>
 		</div>
@@ -553,7 +602,11 @@
 		     the uploaded icon-qr.svg artwork, fill=currentColor so it
 		     inherits the button text colour in both light + dark. -->
 		<div class="mt-4">
-			<a href={lp('/login/qr-pair')} class="btn-secondary flex w-full">
+			<a
+				href={lp('/login/qr-pair')}
+				onclick={(e) => guardSwitch(e, '/login/qr-pair')}
+				class="btn-secondary flex w-full"
+			>
 				<svg
 					viewBox="-1 -1 2002 2002"
 					fill="currentColor"
@@ -572,4 +625,20 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('login.no_account_body')}</p>
 		</aside>
 	{/if}
+
+	<!-- Sign-out-before-switch confirmation (cp305). Lives at the section
+	     level so it's available whatever formMode is showing; only opens
+	     when guardSwitch() found a current account. Destructive variant —
+	     confirming wipes the in-memory session for the current account. The
+	     body interpolates that account name (@NNNN). -->
+	<ConfirmModal
+		bind:open={showSwitchConfirm}
+		variant="destructive"
+		title={$_('login.signout_before_switch_modal.title')}
+		body={$_('login.signout_before_switch_modal.body', { values: { account: pendingAccount } })}
+		confirmLabel={$_('login.signout_before_switch_modal.confirm')}
+		cancelLabel={$_('login.signout_before_switch_modal.cancel')}
+		onConfirm={confirmSwitch}
+		onCancel={cancelSwitch}
+	/>
 </section>

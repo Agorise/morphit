@@ -35,7 +35,14 @@ export async function fetchAccountKeys(
 	account: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<AccountAuthorities | null> {
-	const res = await fetchImpl(`${indexerOrigin}/v1/account/${encodeURIComponent(account)}/keys`, {
+	// Compose with `new URL` (NOT string concatenation) per $net/config:
+	// a root-absolute path replaces any path/trailing slash on the base, so
+	// the request can never double-slash regardless of how `indexerOrigin`
+	// is shaped. (cp305 — the old `${indexerOrigin}/v1/…` form produced
+	// `//v1/…` when indexerOrigin carried a trailing slash, which a
+	// merge_slashes-off proxy 404s, making a valid account read "invalid".)
+	const url = new URL(`/v1/account/${encodeURIComponent(account)}/keys`, indexerOrigin);
+	const res = await fetchImpl(url, {
 		method: 'GET',
 		headers: { accept: 'application/json' }
 	});

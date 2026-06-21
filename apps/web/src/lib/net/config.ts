@@ -134,6 +134,18 @@ export function resolveOrigin(originOrPath: string): string {
 				'Move this call into an event handler, onMount, or similar.'
 		);
 	}
+	// Empty string = same origin. Return the BARE origin with NO trailing
+	// slash, so BOTH composition styles produce a single-slash URL:
+	//   • `new URL('/v1/…', here)`        → https://host/v1/…   (documented)
+	//   • `${here}/v1/…`  (string concat) → https://host/v1/…   (was the trap)
+	// Previously this fell through to `${origin}${'/'}` = "https://host/",
+	// and a string-concatenating consumer then produced "https://host//v1/…"
+	// — a DOUBLE slash that a reverse proxy with `merge_slashes off`
+	// (e.g. BunkerWeb) 404s, which made valid indexer reads (account-keys
+	// existence check) read as "invalid". cp305 root-cause fix.
+	if (originOrPath === '') {
+		return window.location.origin;
+	}
 	// Window exists. Normalize the path so e.g. both '/relay' and
 	// 'relay' work, and so we don't double-slash when appending.
 	const path = originOrPath.startsWith('/') ? originOrPath : `/${originOrPath}`;

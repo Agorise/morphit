@@ -196,7 +196,7 @@ export function loadConfig(): Config {
 	};
 }
 
-function readColorMode(): Config['color'] {
+export function readColorMode(): Config['color'] {
 	const v = process.env.MORPHIT_OPS_COLOR;
 	if (v === 'always' || v === 'never' || v === 'auto') return v;
 	if (process.env.NO_COLOR !== undefined) return 'never';

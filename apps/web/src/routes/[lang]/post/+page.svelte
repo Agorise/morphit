@@ -26,6 +26,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { get } from 'svelte/store';
@@ -412,6 +413,19 @@
 	// ─── Flow state ────────────────────────────────────────────────
 	type Phase = 'editing' | 'reviewing' | 'awaiting_password' | 'broadcasting' | 'success' | 'error';
 	let phase = $state<Phase>('editing');
+
+	// Mid-broadcast navigation guard (cp308 F-005). Order permlinks are
+	// random per attempt, so a user who navigates away mid-broadcast —
+	// unsure whether it landed — and re-posts creates a DUPLICATE on-chain
+	// order. Cancel navigation while the chain op is in flight, exactly as
+	// register-name guards its account-creation broadcast. (The success/
+	// error views below drive the user's own navigation once it resolves.)
+	beforeNavigate((nav) => {
+		if (phase === 'broadcasting') {
+			nav.cancel();
+		}
+	});
+
 	let password = $state('');
 	let passwordError = $state('');
 	let broadcastError = $state('');

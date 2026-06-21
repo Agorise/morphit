@@ -29,6 +29,15 @@
 	 */
 	import Head from '$components/Head.svelte';
 	import { _ } from 'svelte-i18n';
+	import { page } from '$app/stores';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+
+	// cp303 — the footnote hyperlinks the word "FAQ" to the FAQ page. localePath
+	// gives the locale-prefixed href (/en/faq, /de/faq, …); the {faqOpen}/{faqClose}
+	// placeholders in glossary.footnote wrap the FAQ word so every locale keeps the
+	// link in its own natural sentence position (rendered via {@html} below).
+	const faqHref = $derived(localePath('/faq', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE));
 
 	/** The 22 terms covered by the glossary, in alphabetized
 	 *  English order. Adding a new term: add the key here, add
@@ -88,6 +97,13 @@
 	</dl>
 
 	<footer class="mt-12 border-t border-ink-200 pt-6 text-sm text-ink-500 dark:border-ink-700">
-		<p>{$_('glossary.footnote')}</p>
+		<p>
+			{@html $_('glossary.footnote', {
+				values: {
+					faqOpen: `<a href="${faqHref}" class="underline hover:text-morphit-emerald">`,
+					faqClose: '</a>'
+				}
+			})}
+		</p>
 	</footer>
 </section>

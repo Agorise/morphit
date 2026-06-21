@@ -211,6 +211,35 @@
 	// available, fingerprint as the synchronous placeholder otherwise.
 	const full = $derived(fullKey ?? fingerprint ?? (account ?? ''));
 
+	// What we DISPLAY on screen: a truncation of the SAME value the copy
+	// button yields (`full`), so the abbreviation is always a true
+	// prefix+suffix of what gets copied — NOT a different encoding. (cp305
+	// fix: previously the screen showed `fingerprint()`'s BLT+hex
+	// abbreviation while copy gave the base58 canonical key, so e.g.
+	// "BLT02cd7c…a6d3" on screen but "BLT6SzDa…" on the clipboard — same
+	// pubkey, two encodings, looked like a mismatch.) Before the canonical
+	// base58 key resolves, `full` is the short sync placeholder (already
+	// abbreviated) and shows as-is; once resolved it's the ~53-char base58
+	// BLT key, truncated head(BLT+6)…tail(4) to match the placeholder shape.
+	const shown = $derived.by(() => {
+		const f = full;
+		if (f.length <= 14) return f;
+		return `${f.slice(0, 9)}…${f.slice(-4)}`;
+	});
+
+	// cp305: eagerly resolve the canonical base58 key as soon as the
+	// component mounts WITH a public key, so the displayed truncation
+	// matches the copy/tooltip value immediately rather than only after
+	// hover. Only three single-identity surfaces pass `publicKey` (the two
+	// onboarding recaps + the settings profile preview); none are
+	// high-cardinality lists, so this does NOT regress the cp165 first-paint
+	// dblurt byte-budget (and the onboarding pages load dblurt anyway).
+	// ensureFullKey() is a no-op once resolved/resolving; effects are
+	// client-only so this never runs during SSR.
+	$effect(() => {
+		if (publicKey && publicKey.length > 0) void ensureFullKey();
+	});
+
 	const weightCls = $derived(
 		weight === 'bold' ? 'font-bold' : weight === 'normal' ? 'font-normal' : 'font-semibold'
 	);
@@ -259,7 +288,7 @@
 			class="ltr-in-rtl ms-1.5 font-mono text-[0.85em] text-ink-500 dark:text-ink-400"
 			title={full}
 			onpointerenter={ensureFullKey}
-			onfocus={ensureFullKey}>({fingerprint})</bdi
+			onfocus={ensureFullKey}>({shown})</bdi
 		>
 	{:else if name}
 		<span class={weightCls}>{name}</span>
@@ -269,7 +298,7 @@
 			class="ltr-in-rtl font-mono {weightCls} text-ink-700 dark:text-ink-200"
 			title={full}
 			onpointerenter={ensureFullKey}
-			onfocus={ensureFullKey}>{fingerprint}</bdi
+			onfocus={ensureFullKey}>{shown}</bdi
 		>
 	{/if}
 {/snippet}

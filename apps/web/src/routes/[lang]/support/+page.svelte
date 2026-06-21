@@ -115,7 +115,7 @@
 					</p>
 					<a
 						class="btn-secondary mt-3 inline-flex"
-						href="https://matrix.to/#/{encodeURIComponent($instance.operator_matrix_room)}"
+						href="https://matrix.to/#/{$instance.operator_matrix_room}"
 						rel="noopener noreferrer"
 						target="_blank"
 					>
@@ -161,10 +161,10 @@
 					{$_('support.self_host.body')}
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
-					<a class="btn-ghost" href={lp('/run-a-node')}>
+					<a class="btn-secondary" href={lp('/run-a-node')}>
 						{$_('support.self_host.cta_run')}
 					</a>
-					<a class="btn-ghost" href={lp('/instances')}>
+					<a class="btn-secondary" href={lp('/instances')}>
 						{$_('support.self_host.cta_browse')}
 					</a>
 				</div>

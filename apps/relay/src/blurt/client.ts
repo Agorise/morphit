@@ -435,6 +435,52 @@ export class BlurtClient {
 		};
 	}
 
+	/**
+	 * Build, sign, and broadcast a `claim_account` op — MINTS one ACT
+	 * (increments the relay's `pending_claimed_accounts`) by burning the
+	 * current `account_creation_fee` in LIQUID BLURT.
+	 *
+	 * This is the inverse of `broadcastAccountCreate`: that one CONSUMES
+	 * an ACT to make an account (fee-free); this one PRE-PAYS the fee to
+	 * stockpile an ACT for later. Per ADR-0010 §4 the relay keeps a
+	 * buffer of ACTs so signup latency never includes a fee payment.
+	 *
+	 * Used by the unattended `mint-acts.ts` ceremony AND the in-process
+	 * `ActAutoMinter` (ADR-0010 §5). Each call mints exactly one ACT; the
+	 * caller loops for a batch so a partial failure is recoverable.
+	 *
+	 * `feeBlurt` is a plain decimal (e.g. 100); formatted to the
+	 * "N.NNN BLURT" asset shape at the edge. Requires active authority
+	 * (the relay's active key WIF). Returns the chain confirmation; throws
+	 * on any failure (chain reject, signing error, all-endpoints-down).
+	 */
+	async broadcastClaimAccount(args: {
+		creator: string;
+		creatorActiveWif: string;
+		feeBlurt: number;
+	}): Promise<AccountCreateResult> {
+		if (!(args.feeBlurt > 0)) {
+			throw new Error(`broadcastClaimAccount: fee must be > 0, got ${args.feeBlurt}`);
+		}
+		const priv = PrivateKey.fromString(args.creatorActiveWif);
+		const op: [string, Record<string, unknown>] = [
+			'claim_account',
+			{
+				creator: args.creator,
+				fee: `${args.feeBlurt.toFixed(3)} BLURT`,
+				extensions: []
+			}
+		];
+
+		const confirmation = await this.callWithRotation(async (client) => {
+			// dblurt's TS types are narrower than its runtime op support.
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			return await client.broadcast.sendOperations([op as any], priv);
+		});
+
+		return this.shapeConfirmation(confirmation);
+	}
+
 	/** Build, sign, and broadcast a `transfer` op sending BLURT from
 	 *  the relay to `to`. Used by the welcome-bonus queue drainer
 	 *  (ADR-0011 §8) to deliver 10 BLURT liquid to a new trader, and

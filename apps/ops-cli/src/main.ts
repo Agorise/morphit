@@ -53,11 +53,11 @@
  *   MORPHIT_OPS_THRESHOLD_*     threshold tunables (see config.ts)
  */
 
-import { loadConfig } from './config.ts';
+import { loadConfig, readColorMode } from './config.ts';
 import { createDatabase } from './db.ts';
 import { loadInstanceEnv } from './lib/instanceEnv.ts';
 import { defaultRepoRoot } from './lib/repoRoot.ts';
-import { initColor, error as printError, info, sanitizeForTerm } from './render/term.ts';
+import { initColor, initColorMode, error as printError, info, sanitizeForTerm } from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
 import { runSignups } from './commands/signups.ts';
@@ -282,6 +282,12 @@ async function main(): Promise<number> {
 			printHelp();
 			return 1;
 		}
+		// Initialize color BEFORE rendering the menu. The full config
+		// (and its initColor call) doesn't load until after the menu
+		// picks a subcommand, so without this the menu drew with color
+		// disabled — the "update available" marker and relay-balance
+		// warnings rendered as plain text. (cp307 fix.)
+		initColorMode(readColorMode());
 		// Best-effort annotations (live version on Upgrade, attention marker
 		// on Moderation). Never throws or hangs — bounded by short timeouts.
 		const annotations = await gatherMenuAnnotations();

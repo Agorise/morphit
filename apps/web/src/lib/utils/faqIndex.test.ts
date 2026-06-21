@@ -196,3 +196,49 @@ describe('FAQ search — overall behavior regression', () => {
 		expect(hits[0]?.score).toBeCloseTo(1, 5);
 	});
 });
+
+describe('FAQ search — quoted exact-phrase matching', () => {
+	const corpus: FaqEntry[] = [
+		mkEntry('a', 'Is web push available?', 'Web push is enabled on the server now, not post-launch.'),
+		mkEntry('b', 'Roadmap', 'Some features will land post launch as the project grows.'),
+		mkEntry('c', 'Unrelated', 'Nothing about notifications here at all.')
+	];
+
+	it('a quoted phrase matches only entries containing that exact substring', () => {
+		// "post launch" (no hyphen) in entry b must NOT match the hyphenated phrase.
+		const hits = searchEntries(corpus, '"post-launch"');
+		expect(hits.map((h) => h.entry.key)).toEqual(['a']);
+	});
+
+	it('exact-phrase matching is case-insensitive', () => {
+		const hits = searchEntries(corpus, '"POST-LAUNCH"');
+		expect(hits.map((h) => h.entry.key)).toEqual(['a']);
+	});
+
+	it('a quoted phrase is narrower than the same unquoted query', () => {
+		// Unquoted tokenizes into "post" + "launch" and matches both a and b;
+		// quoted matches only the literal "post-launch" substring in a.
+		const quoted = searchEntries(corpus, '"post-launch"');
+		const fuzzy = searchEntries(corpus, 'post-launch');
+		expect(fuzzy.length).toBeGreaterThan(quoted.length);
+		expect(quoted).toHaveLength(1);
+	});
+
+	it('matches a phrase in the question, not only the answer', () => {
+		const hits = searchEntries(corpus, '"web push available"');
+		expect(hits.map((h) => h.entry.key)).toEqual(['a']);
+	});
+
+	it('a quoted phrase with no match returns no results', () => {
+		expect(searchEntries(corpus, '"nonexistent exact phrase"')).toHaveLength(0);
+	});
+
+	it('empty quotes return no results', () => {
+		expect(searchEntries(corpus, '""')).toHaveLength(0);
+	});
+
+	it('curly/smart double quotes also trigger exact matching', () => {
+		const hits = searchEntries(corpus, '\u201cpost-launch\u201d');
+		expect(hits.map((h) => h.entry.key)).toEqual(['a']);
+	});
+});
