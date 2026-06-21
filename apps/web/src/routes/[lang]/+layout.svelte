@@ -95,8 +95,16 @@
 		if (!nav.from) return;
 		if (nav.from.url.pathname === nav.to?.url.pathname) return;
 		// Ensure focus actually lands.  queueMicrotask so the
-		// DOM has settled after the route swap.
-		queueMicrotask(() => mainEl?.focus());
+		// DOM has settled after the route swap.  preventScroll: the
+		// a11y benefit is moving focus to the <main> landmark, NOT
+		// scrolling — and a plain .focus() makes the browser scroll
+		// <main> into view, which (with the `sticky top-0` header
+		// overlaying the top) tucks the page's top heading UNDER the
+		// header on every client-side navigation. SvelteKit already
+		// resets a new page to the top, so we keep that and only move
+		// focus, never scroll. (cp305 — fixes "page loads slightly
+		// scrolled, header text cut off" on link clicks.)
+		queueMicrotask(() => mainEl?.focus({ preventScroll: true }));
 	});
 
 	// Start the ambient notification channels (title-bar prefix,
@@ -199,9 +207,9 @@
 
 	const navLinks = $derived([
 		{ href: lp('/orderbook'), key: 'nav.orderbook' },
-		{ href: lp('/faq'), key: 'nav.faq' },
+		{ href: lp('/post'), key: 'nav.post_now' },
 		{ href: lp('/chat'), key: 'nav.messages' },
-		{ href: lp('/post'), key: 'nav.post_now' }
+		{ href: lp('/faq'), key: 'nav.faq' }
 	]);
 
 	function isActive(href: string): boolean {
@@ -330,15 +338,13 @@
 	<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
 		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
 			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed.
-			     Lazy-loaded per Priority #4 — footer is below-the-fold on every page;
-			     never in LCP candidate set. -->
-			<img
-				src="/brand/morphit-wordmark.svg"
-				alt="Morphit"
-				loading="lazy"
-				decoding="async"
-				class="animate-morphit-hue-shift h-10 w-auto"
-			/>
+			     cp304 — IDENTICAL to the top-left header wordmark: same imported wordmark
+			     SVG, same occasional letterform "bling" glint (shine), no extra effects.
+			     (The former animate-morphit-hue-shift was dropped at Ken's request so the
+			     footer matches the header exactly — only the display height differs.) The
+			     wordmark is a Vite-fingerprinted, immutably-cached asset fetched once per
+			     client and reused here, so there is no extra per-page network request (Priority #4). -->
+			<MorphitLogoBling heightPx={40} shine />
 
 			<p class="text-sm text-ink-600 dark:text-ink-400">{$_('footer.tagline')}</p>
 

@@ -317,8 +317,6 @@ body {
 
 	/*
 	 * Subtle motion — gives the page life without demanding attention.
-	 *   - morphit-hue-shift (8s): rotates the hue of SVGs that use the brand
-	 *     gradient by ±15°, so the green/teal/blue "breathes".
 	 *   - morphit-border-occasional (10s, 2s delay): one quick there-and-back
 	 *     sweep of the brand gradient along the 1px border of .btn-primary /
 	 *     .btn-primary-sm, 2s after load then every 10s (face stays solid teal).
@@ -326,10 +324,6 @@ body {
 	 *
 	 * All respect prefers-reduced-motion: they pause for users who ask.
 	 */
-	.animate-morphit-hue-shift {
-		animation: morphit-hue-shift 8s ease-in-out infinite;
-	}
-
 	/* .btn-shine previously layered a full-face white "shine" sweep on
 	 * top of .btn-primary. That full-face motion was removed in favour
 	 * of the subtle 1px animated-gradient border on .btn-primary itself.
@@ -341,16 +335,6 @@ body {
 
 	.animate-morphit-pulse {
 		animation: morphit-pulse 4s ease-in-out infinite;
-	}
-}
-
-@keyframes morphit-hue-shift {
-	0%,
-	100% {
-		filter: hue-rotate(0deg);
-	}
-	50% {
-		filter: hue-rotate(15deg);
 	}
 }
 
@@ -392,7 +376,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
 	.btn-primary,
 	.btn-primary-sm,
-	.animate-morphit-hue-shift,
 	.animate-morphit-pulse {
 		animation: none !important;
 	}

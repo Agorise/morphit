@@ -210,6 +210,7 @@ SMOKES=(
 	".:workspace-membership-smoke"
 	".:operator-doc-fenced-path-existence-smoke"
 	".:operator-doc-section-ref-smoke"
+	".:operator-doc-env-var-parity-smoke"
 	".:license-disclosure-smoke"
 	".:handler-push-click-path-route-smoke"
 	".:sidecar-shell-quoting-smoke"

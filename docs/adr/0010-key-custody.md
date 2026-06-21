@@ -171,7 +171,11 @@ refill; extraction is slow.
   (`claim_account`) happens via a weekly script that the
   operator runs by hand with the active-key passphrase. It is
   separate from the persistent relay service; the relay
-  consumes ACTs it cannot mint.
+  consumes ACTs it cannot mint. (As of beta.24 this can instead
+  be handled in-process by the opt-in auto-minter — see §5 —
+  which keeps the active key in the relay's memory rather than
+  requiring a separate passphrase session, a tradeoff that
+  section makes explicit.)
 - **BLURT top-ups via `recurrent_transfer`.** Blurt supports
   native recurrent transfers. The operator configures a
   recurrent transfer from a funding account (cold-storage-
@@ -198,7 +202,74 @@ refill; extraction is slow.
   operator can pause the relay at nginx while investigating,
   rotate keys from paper backup if compromise is suspected.
 
-### 5. Blast radius analysis
+### 5. ACT auto-minter (in-process buffer maintenance)
+
+The weekly manual ceremony (§4) keeps the active key out of any
+routine automation: the operator SSHes in and runs `mint-acts.ts`
+with the passphrase. That is the most conservative posture, but
+it puts a human in the loop for routine refills and risks the
+relay running out of ACTs between sessions — signups then fail
+with `relay_out_of_funds` even though the relay holds plenty of
+BLURT, because the gate is ACT availability, not balance.
+
+The **auto-minter** (`MORPHIT_RELAY_AUTOMINT_ENABLED`, default ON as of
+beta.24 — a relay that can't create accounts is a broken relay, so
+self-refill is the right default) removes the routine human step. The persistent relay service —
+which already holds the decrypted active key in memory to run
+`create_claimed_account` for signups — periodically:
+
+1. reads its own `pending_claimed_accounts` (ACT buffer) and
+   liquid balance;
+2. if the buffer is at/above the low-water mark, does nothing;
+3. otherwise mints `claim_account` ops back up toward the target,
+   capped per cycle, **spending only liquid BLURT above a
+   configured reserve** (the reserve protects welcome bonuses,
+   dust refills, and fees from being starved by minting);
+4. if it cannot afford even one ACT without dipping into the
+   reserve, it mints nothing and logs `automint_insufficient_blurt`.
+
+**Tradeoff (deliberate, documented).** Auto-minting does NOT
+widen the key's storage posture — `create_claimed_account`
+already requires the active key in memory, so the relay is
+already an online-active-key service (§1, §4). Auto-minting adds
+*more frequent use* of that same key for `claim_account`, but no
+new exposure surface: same key, same memory, same op family. It
+trades the weekly passphrase session for continuous unattended
+operation. Operators who prefer the human-in-the-loop posture set
+`MORPHIT_RELAY_AUTOMINT_ENABLED=false` and keep the weekly ceremony.
+
+**Direct "signups are down" alert.** Independent of minting, the relay's
+health poller watches its own `pending_claimed_accounts`; when it falls
+below the reject gate (`MIN_PENDING_CLAIMED_ACCOUNTS` = 3) — i.e. signups
+are being refused with `relay_out_of_funds` — it emits a CRITICAL
+`relay-acts:act_buffer_depleted` alert (hysteresis: once per downward
+cross), which the matrix-bot routes to the operator. This is the alert
+that was MISSING when a signup failed while the relay held plenty of
+BLURT: the balance scanner can't catch it because the gate is ACT
+availability, not balance.
+
+**Closing the loop with notifications.** Because minting spends
+BLURT, a busy instance eventually needs a top-up. The indexer's
+operator-balance scanner already watches `@morphit-relay`'s
+on-chain balance and emits `operator-balance:low_balance` when it
+crosses a threshold; the matrix-bot turns that into a Matrix DM.
+The auto-minter additionally emits `automint_insufficient_blurt` /
+`automint_partial_insufficient_blurt` the moment minting is
+constrained by BLURT, which the matrix-bot also routes to Matrix.
+Operators set the balance threshold ABOVE the auto-mint reserve
+(plus a cycle's worth of fees) so the warning arrives BEFORE
+minting stalls. See docs/OPERATIONS.md §47 for the exact knobs.
+
+**Invariants (enforced at boot when enabled).** The low-water
+mark must be greater than the relay's signup reject gate
+(`MIN_PENDING_CLAIMED_ACCOUNTS` = 3) and no greater than the
+target, so the minter refills before signups are rejected and
+never computes a negative mint count. The `claim_account` op
+shape is single-sourced in `BlurtClient.broadcastClaimAccount`,
+shared with the manual `mint-acts.ts`, so the two paths can't
+drift.
+
+### 6. Blast radius analysis
 
 In the worst case — full compromise of the relay VM while it
 holds the decrypted active key in memory — the attacker can:
@@ -233,7 +304,7 @@ What the attacker CANNOT do (because those keys are paper-only):
   without the owner key (Blurt's recover_account mechanism
   requires owner-or-recovery-partner authority)
 
-### 6. Owner keys — always paper, always air-gapped
+### 7. Owner keys — always paper, always air-gapped
 
 For all three accounts, the owner key is generated in an
 air-gapped environment, printed to paper, and stored in a
@@ -253,7 +324,7 @@ and periodic withdrawals from `@morphit-fees` to pay operating
 costs (maybe quarterly). Each event is a one-time ceremony with
 deliberate friction.
 
-### 7. "Super-encrypt everything" is not the right mental model
+### 8. "Super-encrypt everything" is not the right mental model
 
 The original closeout note raised the possibility of "super-
 encrypt[ing], salt[ing], hash[ing], whatever you call it with

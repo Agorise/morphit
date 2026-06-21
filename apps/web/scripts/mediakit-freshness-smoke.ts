@@ -106,6 +106,18 @@ function effectiveChangeMs(absPath: string): number {
 	return statSync(absPath).mtimeMs;
 }
 
+let UNZIP_AVAILABLE: boolean | undefined;
+function unzipAvailable(): boolean {
+	if (UNZIP_AVAILABLE !== undefined) return UNZIP_AVAILABLE;
+	try {
+		execFileSync('unzip', ['-v'], { stdio: ['ignore', 'ignore', 'ignore'] });
+		UNZIP_AVAILABLE = true;
+	} catch {
+		UNZIP_AVAILABLE = false;
+	}
+	return UNZIP_AVAILABLE;
+}
+
 interface ScenarioResult {
 	readonly name: string;
 	readonly ok: boolean;
@@ -210,6 +222,68 @@ results.push({
 			? undefined
 			: `Missing keys: [${missingLocaleKeys.join(', ')}]`
 });
+
+// ─── 7. Zip CONTENT matches sources byte-for-byte ───
+// The staleness check (scenario 4) is timestamp-based, which has a gap:
+// in CI's shallow (depth-1) checkout every file reports the single HEAD
+// commit time, so a zip committed STALE alongside a brag-list edit (same
+// commit → equal times) passes "no older than its sources" while its
+// bytes are actually out of date. This is exactly the "root brag list and
+// the zip's brag list are out of sync" failure. Close it by reading the
+// copied entries straight out of the committed zip and comparing them
+// byte-for-byte to the repo sources. (README.txt + the palette are
+// generated/derived, not byte-copied, so only the three directly-copied
+// files are content-checked; the tailwind→README link stays on the
+// timestamp guard above.)
+if (existsSync(ZIP_PATH) && missing.length === 0) {
+	const contentChecks = [
+		{ entry: 'morphit-mediakit/MORPHIT-BRAG-LIST.md', source: BRAG_LIST, label: 'MORPHIT-BRAG-LIST.md' },
+		{ entry: 'morphit-mediakit/logos/morphit-mark.svg', source: MARK_SVG, label: 'logos/morphit-mark.svg' },
+		{
+			entry: 'morphit-mediakit/logos/morphit-wordmark.svg',
+			source: WORDMARK_SVG,
+			label: 'logos/morphit-wordmark.svg'
+		}
+	];
+	if (!unzipAvailable()) {
+		// Don't fail CI over a missing tool, but never silently claim
+		// success: the timestamp check (scenario 4) is the floor and a
+		// dirty-working-tree edit still trips it via mtime.
+		results.push({
+			name: 'zip content matches sources byte-for-byte (brag list + brand SVGs)',
+			ok: true,
+			detail:
+				'NOTE: `unzip` not on PATH — byte-content was NOT verified this run; ' +
+				'relying on the timestamp check above. Standard CI/dev images have unzip.'
+		});
+	} else {
+		const drifted: string[] = [];
+		for (const c of contentChecks) {
+			let zipBytes: Buffer;
+			try {
+				zipBytes = execFileSync('unzip', ['-p', ZIP_PATH, c.entry], {
+					cwd: REPO_ROOT,
+					maxBuffer: 64 * 1024 * 1024
+				}) as Buffer;
+			} catch {
+				drifted.push(`${c.label} (entry missing from the zip)`);
+				continue;
+			}
+			const srcBytes = readFileSync(c.source);
+			if (!Buffer.from(zipBytes).equals(Buffer.from(srcBytes))) drifted.push(c.label);
+		}
+		results.push({
+			name: 'zip content matches sources byte-for-byte (brag list + brand SVGs)',
+			ok: drifted.length === 0,
+			detail:
+				drifted.length === 0
+					? undefined
+					: `The committed zip's content has DRIFTED from the repo sources: [${drifted.join(', ')}]. ` +
+						`A timestamp-only check can miss this (a stale zip committed in the same commit as a source edit). ` +
+						`Run \`bash scripts/build-mediakit.sh\` to rebuild from current sources, then commit the new zip.`
+		});
+	}
+}
 
 // ─── Report ──
 console.log(`mediakit-freshness smoke: ${results.length} scenarios\n`);

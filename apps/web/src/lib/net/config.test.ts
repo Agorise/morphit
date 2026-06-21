@@ -41,6 +41,24 @@ describe('resolveOrigin', () => {
 		expect(resolveOrigin('/relay')).toBe('https://morphit.example.com/relay');
 	});
 
+	it('returns the bare origin (NO trailing slash) for the empty same-origin case', () => {
+		// cp305 regression guard. MORPHIT_INDEXER_ORIGIN is '' (same
+		// origin). A trailing slash here let string-concatenating
+		// consumers build `https://host//v1/…` (double slash), which a
+		// merge_slashes-off proxy 404s — making valid indexer reads
+		// (account-keys existence check) read as "invalid".
+		withWindowOrigin('https://morphit.example.com');
+		expect(resolveOrigin('')).toBe('https://morphit.example.com');
+		// The exact failure mode: string concatenation must stay single-slash.
+		expect(`${resolveOrigin('')}/v1/account/kentest2/keys`).toBe(
+			'https://morphit.example.com/v1/account/kentest2/keys'
+		);
+		// And new URL composition (the documented pattern) is correct too.
+		expect(new URL('/v1/account/kentest2/keys', resolveOrigin('')).toString()).toBe(
+			'https://morphit.example.com/v1/account/kentest2/keys'
+		);
+	});
+
 	it('resolves a nested relative path against window.location.origin', () => {
 		withWindowOrigin('https://morphit.example.com');
 		expect(resolveOrigin('/some/nested/path')).toBe('https://morphit.example.com/some/nested/path');

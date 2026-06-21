@@ -146,6 +146,41 @@ const envSchema = z.object({
 	 *  0600. Operator must ensure the dir exists and is writable
 	 *  by the relay process user. */
 	MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH: z.string().optional(),
+	// ─── ACT auto-minter (ADR-0010 §5) ───────────────────────────────
+	/** Master switch for the in-process ACT auto-minter. When true, the
+	 *  relay automatically mints Account Creation Tokens (claim_account,
+	 *  paying account_creation_fee in liquid BLURT) to keep its buffer
+	 *  topped up, instead of relying on the manual mint-acts.ts ceremony.
+	 *  DEFAULT TRUE (cp307, per project owner): a relay that can't create
+	 *  accounts is a broken relay, so self-refill is the right default.
+	 *  Bounded + safe: it only spends liquid BLURT ABOVE the reserve and
+	 *  only when below the low-water mark. Set to false to keep the manual
+	 *  / weekly-timer workflow. */
+	MORPHIT_RELAY_AUTOMINT_ENABLED: z
+		.enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
+		.default('true')
+		.transform((v) => v === 'true' || v === '1' || v === 'yes' || v === 'on'),
+	/** Desired ACT buffer. Each cycle tops pending_claimed_accounts back
+	 *  up toward this. Default 25 — a comfortable headroom at a modest
+	 *  signup rate; raise for busier instances. */
+	MORPHIT_RELAY_AUTOMINT_TARGET_ACTS: z.coerce.number().int().positive().max(1000).default(25),
+	/** Mint only when pending_claimed_accounts drops below this. Must be
+	 *  greater than MIN_PENDING_CLAIMED_ACCOUNTS (3, the relay's reject
+	 *  gate) and no greater than the target; cross-field-validated at
+	 *  load. Default 10. */
+	MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS: z.coerce.number().int().positive().max(1000).default(10),
+	/** Milliseconds between auto-mint cycles. Default 3_600_000 (1h) —
+	 *  ACT consumption is signup-paced, so hourly checks are ample and
+	 *  keep chain reads light. Floor 60s. */
+	MORPHIT_RELAY_AUTOMINT_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+	/** Hard cap on ACTs minted in one cycle — bounds the BLURT burn and
+	 *  the broadcast burst even if the buffer is far below target.
+	 *  Default 25. */
+	MORPHIT_RELAY_AUTOMINT_MAX_PER_CYCLE: z.coerce.number().int().positive().max(100).default(25),
+	/** Liquid BLURT the auto-minter must leave untouched (for welcome
+	 *  bonuses, loyalty delegations, dust refills). Minting only ever
+	 *  spends BLURT above this floor. Default 50. */
+	MORPHIT_RELAY_AUTOMINT_MIN_BLURT_RESERVE: z.coerce.number().nonnegative().default(50),
 	/** Data directory for runtime operator-actionable state.
 	 *  Currently used for:
 	 *    - kill-switch sentinel file (`SIGNUPS_DISABLED`).  Operator
@@ -399,6 +434,16 @@ export interface Config {
 	 *  Recommended location: a file under the relay's data dir,
 	 *  e.g. `/var/lib/morphit/relay/daily-ceiling.json`. */
 	readonly signupCeilingPersistPath: string | null;
+
+	/** ACT auto-minter (ADR-0010 §5). When enabled, the relay mints
+	 *  Account Creation Tokens to keep its buffer topped up, paying the
+	 *  chain fee in liquid BLURT above the reserve. See blurt/actAutoMinter.ts. */
+	readonly autoMintEnabled: boolean;
+	readonly autoMintTargetActs: number;
+	readonly autoMintLowWaterActs: number;
+	readonly autoMintIntervalMs: number;
+	readonly autoMintMaxPerCycle: number;
+	readonly autoMintMinBlurtReserve: number;
 	/** Data directory for runtime operator-actionable state
 	 *  (kill-switch sentinel, future runtime flags).  When unset,
 	 *  the kill-switch feature is disabled. */
@@ -573,6 +618,29 @@ export function loadConfig(): Config {
 		}
 	}
 
+	// ACT auto-minter cross-field invariants (ADR-0010 §5). Only enforced
+	// when enabled, so operators leaving it off aren't blocked by defaults.
+	// The reject gate (MIN_PENDING_CLAIMED_ACCOUNTS in api/health.ts) is 3:
+	// the low-water mark MUST sit above it so the auto-minter refills BEFORE
+	// the relay starts rejecting signups, and at or below the target so the
+	// mint plan is never negative.
+	if (env.MORPHIT_RELAY_AUTOMINT_ENABLED) {
+		const RELAY_MIN_PENDING_CLAIMED_ACCOUNTS = 3;
+		if (env.MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS <= RELAY_MIN_PENDING_CLAIMED_ACCOUNTS) {
+			throw new Error(
+				`MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS (${env.MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS}) ` +
+					`must be greater than the signup reject gate (${RELAY_MIN_PENDING_CLAIMED_ACCOUNTS}), ` +
+					'so the auto-minter refills before signups start being rejected.'
+			);
+		}
+		if (env.MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS > env.MORPHIT_RELAY_AUTOMINT_TARGET_ACTS) {
+			throw new Error(
+				`MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS (${env.MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS}) ` +
+					`must not exceed MORPHIT_RELAY_AUTOMINT_TARGET_ACTS (${env.MORPHIT_RELAY_AUTOMINT_TARGET_ACTS}).`
+			);
+		}
+	}
+
 	return {
 		listenHost: env.MORPHIT_RELAY_LISTEN_HOST,
 		listenPort: env.MORPHIT_RELAY_LISTEN_PORT,
@@ -594,6 +662,12 @@ export function loadConfig(): Config {
 		signupEnabled: env.MORPHIT_RELAY_SIGNUP_ENABLED,
 		signupDailyCeiling: env.MORPHIT_RELAY_SIGNUP_DAILY_CEILING,
 		signupCeilingPersistPath: env.MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH ?? null,
+		autoMintEnabled: env.MORPHIT_RELAY_AUTOMINT_ENABLED,
+		autoMintTargetActs: env.MORPHIT_RELAY_AUTOMINT_TARGET_ACTS,
+		autoMintLowWaterActs: env.MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS,
+		autoMintIntervalMs: env.MORPHIT_RELAY_AUTOMINT_INTERVAL_MS,
+		autoMintMaxPerCycle: env.MORPHIT_RELAY_AUTOMINT_MAX_PER_CYCLE,
+		autoMintMinBlurtReserve: env.MORPHIT_RELAY_AUTOMINT_MIN_BLURT_RESERVE,
 		dataDir: env.MORPHIT_RELAY_DATA_DIR ?? null,
 		createSpacingMinutes: env.MORPHIT_RELAY_CREATE_SPACING_MINUTES,
 		altchaTriggerCount: env.MORPHIT_RELAY_ALTCHA_TRIGGER_COUNT,

@@ -837,6 +837,42 @@ const scenarios: Scenario[] = [
 			overlimit_count: 3
 		}),
 		expectedTier: 'WARN'
+	},
+	// ─── act-automint (ADR-0010 §5) ───────────────────────────
+	{
+		name: 'act-automint automint_insufficient_blurt → WARN (auto-mint blocked, top up BLURT)',
+		alert: a('act-automint', 'automint_insufficient_blurt', {
+			account: 'morphit-relay',
+			pending: 4,
+			desired: 21,
+			liquid_blurt: 40,
+			fee_blurt: 100,
+			reserve: 50
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'act-automint automint_partial_insufficient_blurt → WARN (minted some, low on BLURT)',
+		alert: a('act-automint', 'automint_partial_insufficient_blurt', {
+			account: 'morphit-relay',
+			minted: 3,
+			desired: 21,
+			liquid_blurt: 60,
+			fee_blurt: 100,
+			reserve: 50
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'relay-acts act_buffer_depleted → CRITICAL (signups refused, out of ACTs despite high BLURT)',
+		alert: a('relay-acts', 'act_buffer_depleted', {
+			account: 'morphit-relay',
+			pending_claimed_accounts: 0,
+			reject_gate: 3,
+			blurt_balance: '9000.000 BLURT',
+			automint_enabled: true
+		}),
+		expectedTier: 'CRITICAL'
 	}
 ];
 

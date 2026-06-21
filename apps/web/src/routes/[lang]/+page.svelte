@@ -91,7 +91,7 @@
 	<div class="mx-auto max-w-6xl px-4 py-16 md:px-6 md:py-24">
 		<div class="flex flex-col items-center text-center">
 			<div class="mb-6 animate-fade-up">
-				<MorphitLogoBling heightClass="h-11 sm:h-16 md:h-20 lg:h-24" />
+				<MorphitLogoBling heightClass="h-11 sm:h-16 md:h-20 lg:h-24" shine />
 			</div>
 
 			<h1

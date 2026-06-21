@@ -193,7 +193,16 @@ const scenarios: readonly Scenario[] = [
 	},
 	{
 		name: 'Layout has afterNavigate hook that focuses mainEl',
-		ok: /afterNavigate\s*\(\s*\(\s*nav\s*\)\s*=>[\s\S]{0,400}mainEl\?\.focus\(\)/.test(LAYOUT)
+		ok: /afterNavigate\s*\(\s*\(\s*nav\s*\)\s*=>[\s\S]{0,1100}mainEl\?\.focus\(/.test(LAYOUT)
+	},
+	{
+		// cp305 — the focus MUST be { preventScroll: true }. A plain
+		// .focus() scrolls <main> into view, and with the sticky top-0
+		// header that tucks the page's top heading under the header on
+		// every client-side navigation. Guarding so the scroll bug
+		// can't silently return.
+		name: 'Layout afterNavigate focus uses { preventScroll: true }',
+		ok: /mainEl\?\.focus\(\s*\{[^}]*preventScroll\s*:\s*true[^}]*\}\s*\)/.test(LAYOUT)
 	},
 	{
 		name: 'Layout <main> has tabindex="-1" for programmatic focus',

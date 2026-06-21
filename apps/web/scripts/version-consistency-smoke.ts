@@ -131,6 +131,17 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 		remediation:
 			'update `const INDEXER_VERSION = ...` in apps/indexer/src/api/health.ts'
 	},
+	{
+		// The MCP server advertises its version in the SDK server-info
+		// handshake (buildServer). Hoisted to `const MCP_VERSION` so this
+		// smoke can gate it like the other runtime constants — it used to
+		// be an inline literal that the smoke did not cover (cp308 deep-deep
+		// drift finding).
+		label: "apps/mcp-server/src/main.ts (`const MCP_VERSION`)",
+		path: 'apps/mcp-server/src/main.ts',
+		extract: tsConstExtractor('MCP_VERSION'),
+		remediation: 'update `const MCP_VERSION = ...` in apps/mcp-server/src/main.ts'
+	},
 
 	// Category C — doc example responses.
 	{

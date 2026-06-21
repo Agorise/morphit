@@ -5962,18 +5962,25 @@ The default install in `RUN-A-MORPHIT-NODE.md` is bare-metal: clone the repo, in
 
 There's no `docker-compose.yml` shipped in the repo (deliberately — Docker is one of several deployment options, not the canonical one). Below is a tested-shape reference. Drop into the repo root or a sibling dir.
 
-> **Caveat (2026-05-06 audit):** The `*_FILE` env-var-from-secret
-> pattern shown below (`MORPHIT_INDEXER_DB_PASSWORD_FILE`,
-> `MORPHIT_RELAY_DB_PASSWORD_FILE`, `MORPHIT_RELAY_KEYSTORE_PATH`,
-> `MORPHIT_RELAY_PASSPHRASE_FILE`) is **not yet implemented** in
-> the indexer or relay config loaders.  Today, those vars are
-> ignored and the services read the password directly from
-> `MORPHIT_INDEXER_DATABASE_URL` / `MORPHIT_RELAY_DATABASE_URL`.
+> **Caveat (cp308 audit).** The two classes of secret reference in the example
+> below behave differently — read carefully before copying:
 >
-> Until the `*_FILE` pattern lands, **inline credentials in the
-> DATABASE_URL** for the Compose example to work — e.g.
-> `postgres://morphit_indexer:<password>@postgres:5432/morphit_indexer`.
-> Implementation tracked in REVISIT-LIST.
+> - **DB password from a file is NOT yet implemented.**
+>   `MORPHIT_INDEXER_DB_PASSWORD_FILE` and `MORPHIT_RELAY_DB_PASSWORD_FILE` are
+>   ignored today; the services read the password directly from
+>   `MORPHIT_INDEXER_DATABASE_URL` / `MORPHIT_RELAY_DATABASE_URL`. Until the
+>   `*_FILE` pattern lands, **inline credentials in the DATABASE_URL** for the
+>   Compose example to work — e.g.
+>   `postgres://morphit_indexer:<password>@postgres:5432/morphit_indexer`.
+>   Implementation tracked in REVISIT-LIST.
+> - **The relay key + passphrase from a file ARE implemented** and work exactly
+>   as shown. `MORPHIT_RELAY_ACTIVE_KEY_FILE` is **required** and reads the
+>   encrypted keystore from the mounted secret path; `MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE`
+>   reads the unlock passphrase from its mounted secret. (Earlier revisions of
+>   this example named these `MORPHIT_RELAY_KEYSTORE_PATH` /
+>   `MORPHIT_RELAY_PASSPHRASE_FILE`, which the relay never reads — copying that
+>   would set ignored vars, omit the required `…ACTIVE_KEY_FILE`, and the relay
+>   would fail to boot.)
 
 ```yaml
 # docker-compose.yml
@@ -6028,8 +6035,8 @@ services:
     environment:
       MORPHIT_RELAY_DATABASE_URL: "postgres://morphit_indexer@postgres:5432/morphit_indexer"
       MORPHIT_RELAY_DB_PASSWORD_FILE: /run/secrets/db_password
-      MORPHIT_RELAY_KEYSTORE_PATH: /run/secrets/relay_keystore
-      MORPHIT_RELAY_PASSPHRASE_FILE: /run/secrets/relay_passphrase
+      MORPHIT_RELAY_ACTIVE_KEY_FILE: /run/secrets/relay_keystore
+      MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE: /run/secrets/relay_passphrase
     secrets:
       - db_password
       - relay_keystore
@@ -10753,3 +10760,95 @@ separately and are **not** touched by any of this.
    ```
 
    You want `Database schema (matches this version)`.
+
+## 47. ACT auto-minter + low-BLURT notifications — hands-off signup funding
+
+The relay creates accounts by **consuming** pre-minted Account Creation
+Tokens (ACTs, the on-chain `pending_claimed_accounts` counter). When that
+buffer empties, signups fail with `relay_out_of_funds` — **even if the relay
+holds thousands of BLURT**, because the gate is ACT availability, not
+balance. Minting an ACT (`claim_account`) burns the chain
+`account_creation_fee` (≈100 BLURT) in *liquid* BLURT. See ADR-0010 §4–§5.
+
+Two ways to keep the buffer full:
+
+- **Weekly manual ceremony** (the original): you run `mint-acts.ts` (or its
+  systemd timer) with the active-key passphrase. See §«weekly ACT minting».
+- **Auto-minter** (this section, **default ON** as of beta.24): the running
+  relay tops its own buffer up, so you never run a mint command again. You
+  only keep the relay funded with liquid BLURT — and it tells you (over
+  Matrix) when to do that. Set `MORPHIT_RELAY_AUTOMINT_ENABLED=false` to opt
+  back out and use the weekly timer instead.
+
+### 47.1 Enable the auto-minter (relay env)
+
+In the relay's env file (`ops/env/relay.env.example` has the full list):
+
+```
+MORPHIT_RELAY_AUTOMINT_ENABLED=true
+MORPHIT_RELAY_AUTOMINT_TARGET_ACTS=25        # buffer to maintain
+MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS=10     # mint when below this (>3, <=target)
+MORPHIT_RELAY_AUTOMINT_INTERVAL_MS=3600000   # check hourly
+MORPHIT_RELAY_AUTOMINT_MAX_PER_CYCLE=25      # cap per cycle (bounds burn)
+MORPHIT_RELAY_AUTOMINT_MIN_BLURT_RESERVE=50  # never spend below this BLURT
+```
+
+Restart the relay. On boot it logs `automint_enabled {…}` (or
+`automint_disabled` if the flag is off). Each cycle it logs one of
+`automint_above_low_water` (healthy), `automint_minted` + `automint_cycle_done`
+(it refilled), or `automint_insufficient_blurt` (it wanted to mint but the
+relay is too low on BLURT — top up). Boot is **refused** if `LOW_WATER` is not
+both `> 3` (the signup reject gate) and `<= TARGET`.
+
+The auto-minter never spends below `MIN_BLURT_RESERVE`, so welcome bonuses,
+dust refills, and fees are never starved by minting. Once it's enabled you
+can disable the weekly `morphit-relay-mint-acts.timer` — it's redundant.
+
+The active key it uses is the same one the relay already holds in memory for
+`create_claimed_account`; auto-minting adds no new key-exposure surface
+(ADR-0010 §5 spells out the tradeoff vs. the human-in-the-loop ceremony).
+
+### 47.2 Get notified when BLURT runs low (so you can top up)
+
+Two complementary signals, both delivered to your Matrix alert DM by the
+matrix-bot (which reads the indexer/relay JSON journal). Set
+`MORPHIT_MATRIX_BOT_ALERT_MXID=@you:your.server` for the bot and run it.
+
+1. **On-chain balance threshold (indexer).** Opt-in; default off. In the
+   indexer env:
+
+   ```
+   MORPHIT_INDEXER_OPERATOR_BALANCE_INTERVAL_MS=300000
+   MORPHIT_INDEXER_OPERATOR_BALANCE_RELAY_THRESHOLD_BLURT=300
+   ```
+
+   The indexer watches `@morphit-relay`'s liquid balance and fires
+   `operator-balance:low_balance` → Matrix when it drops below the threshold
+   (CRITICAL at zero — the relay has halted; WARN above zero). Hysteresis
+   means one alert per downward crossing, plus a `balance_recovered` when your
+   top-up lands. **Set the threshold ABOVE the auto-mint reserve plus one
+   cycle's mint cost** (`MAX_PER_CYCLE × account_creation_fee`) so the warning
+   arrives *before* minting stalls. With the defaults above (reserve 50,
+   25 ACTs/cycle × 100 = 2500), a threshold around the low-thousands gives
+   real lead time on a busy instance; 300 suits a quiet one.
+
+2. **Auto-minter "blocked on BLURT" (relay).** Automatic, no extra config:
+   the moment the auto-minter wants to mint but can't afford to without
+   touching the reserve, it logs `automint_insufficient_blurt`
+   (WARN → Matrix); if it minted some but couldn't reach target it logs
+   `automint_partial_insufficient_blurt`. Both name the account, the BLURT
+   balance, the fee, and the reserve, so the Matrix message tells you exactly
+   how much to send.
+
+3. **Signups actually down (relay, CRITICAL).** Automatic, no config: the
+   relay's health poller watches its own ACT buffer; if
+   `pending_claimed_accounts` falls below the reject gate (3) — meaning
+   signups are being REFUSED with `relay_out_of_funds` right now — it emits
+   `relay-acts:act_buffer_depleted` (CRITICAL → Matrix), with the BLURT
+   balance and whether auto-mint is on. This is the alarm that was missing
+   when account creation failed while the relay held plenty of BLURT (the
+   gate is ACT availability, not balance). With auto-mint on it should be
+   rare; when it fires, minting couldn't keep up — top up liquid BLURT.
+
+To top up: transfer liquid BLURT to `@morphit-relay`. The next auto-mint
+cycle (within `INTERVAL_MS`) catches up on its own — no command to run.

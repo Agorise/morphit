@@ -165,11 +165,20 @@ export function sanitizeForTerm(s: string): string {
 let colorEnabled = false;
 
 export function initColor(config: Config): void {
-	if (config.color === 'never') {
+	initColorMode(config.color);
+}
+
+/** Config-free color init — used BEFORE loadConfig (e.g. the bare
+ *  `morphit-ops` interactive menu, which renders before the full
+ *  config is loaded). Without this the menu drew with colorEnabled
+ *  still false, so the "update available" marker and the relay-balance
+ *  warnings showed as plain text. (cp307 fix.) */
+export function initColorMode(mode: 'auto' | 'always' | 'never'): void {
+	if (mode === 'never') {
 		colorEnabled = false;
 		return;
 	}
-	if (config.color === 'always') {
+	if (mode === 'always') {
 		colorEnabled = true;
 		return;
 	}

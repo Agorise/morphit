@@ -25,40 +25,32 @@ Reputation is everything; even when the only thing that Morphit "knows" about th
 
 ---
 
-## How is Morphit different from LocalMonero, LocalBitcoins, or Haveno/Retoswap?
+## How is Morphit different from LocalBitcoins or LocalMonero?
 
 **FAQ key:** `vs_others`
 
-Short version: Morphit goes further on decentralization, privacy, and non-custody than any of them — and deliberately does less in exchange.
+Short version: Morphit goes further on decentralization, privacy, and non-custody than either of them — and deliberately does less in exchange.
 
 LocalBitcoins (RIP, 2023) and LocalMonero (closed 2024) were centralized companies with custodial escrow. When a trade went wrong, their human arbitrators held the coins and decided who got them. When the companies shut down — by regulator pressure or business decision — their entire user base, reputations, dispute history, and ongoing trades vanished overnight. Morphit cannot be shut down in the same way: there are no central arbitrators, no custodial wallets, no company bank account to freeze. Every order lives on-chain, every trade is peer-to-peer, and anyone can run an indexer or frontend. Multiple instances on four networks (clearnet, Tor, Lokinet, I2P) mean blocking one node does nothing.
 
-Haveno (and its fork Retoswap) is much closer in spirit — non-custodial, P2P, no KYC. The big differences: Haveno is a desktop-only Java/JavaFX application tied to the Monero blockchain for its 2-of-3 multisig escrow, and needs you to run (or connect to) a seednode. Morphit runs in any browser, on any phone, with no install; uses Blurt (not Monero) for its on-chain coordination layer, which is faster and far cheaper per action (~free vs. Monero's per-op fees); and ships with built-in Tor, Lokinet, and I2P reachability rather than relying on you to configure it. Haveno trades involve arbitrated escrow, which is strong but requires trusted arbitrators per market. Morphit v1 is pure reputation-based bulletin board — no escrow, no arbitrator, full responsibility on the traders to pick partners with real track records. That's a more conservative safety model, but also fewer centralized choke points and no arbitrator role that a government could pressure.
-
-On May 20, 2026 the Haveno trade protocol was exploited for approximately $2.7 million. The attack used a forged out-of-order acknowledgment message from a fake arbitrator to redirect the 2-of-3 multisig wallet address before user funds were deposited; RetoSwap halted trading the same day. Morphit's design has no arbitrator role, no multisig escrow, and no central coordination message Haveno's exploit relied on — so this attack class doesn't apply to our threat model. The tradeoff is real and stated above: Morphit users carry full self-custody and lean on signed on-chain reputation rather than an arbitrator's safety net.
-
-OpenMonero (a LocalMonero clone) has lost user funds twice in 12 months. On June 6, 2025, a misconfigured firewall + wallet-rpc combination drained roughly 77.85 XMR (~$25,225) from the platform's custodial internal wallet; refunds are still being paid out of trading fees more than a year later, with vendors prioritized over regular users. On May 21, 2026 — one day after the Haveno exploit — a second exploit drained ~40 XMR (~$16,120) from OpenMonero; the platform posted an alert and told users to halt all payments. Morphit has no custodial wallet at all; your XMR never sits on a Morphit server, so this entire attack class has nothing to steal. The pattern is consistent: every Monero P2P platform that holds user funds in an internal wallet has been drained at least once. Morphit's answer is to not hold them in the first place.
-
-On privacy: Morphit pushes harder than any of the above on transport, storage, and chat.
+On privacy: Morphit pushes harder than either of them on transport, storage, and chat.
 • Transport: four parallel networks, all first-class (not just an 'onion mode').
-• Storage: nothing about you lives on Morphit's servers — keys are in your browser, orders are on-chain, chats are on-chain as ciphertext only. Haveno stores trade history on your desktop; Morphit matches that while also letting you move to any device with just your 12-word seed.
-• Chat: end-to-end encrypted using X25519 key agreement plus ChaCha20-Poly1305 (from libsodium), with a per-message ephemeral key. LocalBitcoins/LocalMonero chats were visible to staff. Haveno chats are end-to-end encrypted. Morphit chat is encrypted on your device, stored as ciphertext on the Blurt blockchain, and decryptable only by the two participants — operators and chain observers see nothing. We deliberately chose a simple, fast, low-bundle-weight ECIES design.
+• Storage: nothing about you lives on Morphit's servers — keys are in your browser, orders are on-chain, chats are on-chain as ciphertext only. You can move to any device with just your 12-word seed.
+• Chat: end-to-end encrypted using X25519 key agreement plus ChaCha20-Poly1305 (from libsodium), with a per-message ephemeral key. LocalBitcoins/LocalMonero chats were visible to staff. Morphit chat is encrypted on your device, stored as ciphertext on the Blurt blockchain, and decryptable only by the two participants — operators and chain observers see nothing. We deliberately chose a simple, fast, low-bundle-weight ECIES design.
 
-On non-custody: LocalBitcoins/LocalMonero held your coins during a trade. Haveno/Retoswap lock your coins in multisig during a trade. Morphit never touches them at any point, period — the seller sends directly to the buyer when payment is confirmed. That is more trust placed on reputation, less on cryptography; honest about the tradeoff.
+On non-custody: LocalBitcoins/LocalMonero held your coins during a trade. Morphit never touches them at any point, period — the seller sends directly to the buyer when payment is confirmed. That is more trust placed on reputation, less on cryptography; honest about the tradeoff.
 
-On arbitration: LocalBitcoins/LocalMonero arbitrators could overrule feedback. Haveno arbitrators could redirect multisig payouts. Morphit has no arbitrator role at all; feedback is permanent and signed on chain. If you scam someone, your public key carries that feedback forever; you cannot appeal to a human. That's a strong disincentive for repeat scammers and zero protection for first-time ones — hence the emphasis on checking account age and reputation.
+On arbitration: LocalBitcoins/LocalMonero arbitrators could overrule feedback. Morphit has no arbitrator role at all; feedback is permanent and signed on chain. If you scam someone, your public key carries that feedback forever; you cannot appeal to a human. That's a strong disincentive for repeat scammers and zero protection for first-time ones — hence the emphasis on checking account age and reputation.
 
-What Morphit doesn't have that they do: escrow, human arbitration, per-market moderation. **Morphit will never offer any of these.** Reintroducing escrow, multisig, or arbitration would reintroduce the middleman this project exists to remove. Morphit's advantage is that it's lean, portable, browser-native, fully decentralized at every layer, and impossible to shut down — and its tradeoff is that you trade on immutable, provable reputation.
+What Morphit doesn't have that they did: escrow, human arbitration, per-market moderation. **Morphit will never offer any of these.** Reintroducing escrow, multisig, or arbitration would reintroduce the middleman this project exists to remove. Morphit's advantage is that it's lean, portable, browser-native, fully decentralized at every layer, and impossible to shut down — and its tradeoff is that you trade on immutable, provable reputation.
 
 ---
 
-## How is Morphit different from Bisq or BasicSwap?
+## How is Morphit different from BasicSwap?
 
 **FAQ key:** `vs_atomic_swap_dexes`
 
-Bisq and BasicSwap are kindred projects in the no-middleman peer-to-peer space, but make different architectural choices than Morphit.
-
-**Bisq** is a long-running peer-to-peer marketplace with the same architectural pattern as Haveno: desktop Java application, 2-of-3 multisig escrow during trades, Tor for transport, arbitrated disputes when something goes wrong. Bisq has been compromised twice with user funds stolen — the kind of risk Morphit avoids by never touching user funds in the first place. Bisq also requires you to lock up BSQ collateral before you can list orders. Morphit locks up nothing from anyone.
+BasicSwap is a kindred project in the no-middleman peer-to-peer space, but makes different architectural choices than Morphit.
 
 **BasicSwap** takes a structurally different approach: cross-chain atomic swaps directly between two wallets, no escrow, no arbitrator, no central server. Aligned with Morphit on the "no middleman" principle. The tradeoffs differ from Morphit's tradeoffs:
 
@@ -79,6 +71,30 @@ Bisq and BasicSwap are kindred projects in the no-middleman peer-to-peer space, 
 • Mandatory client updates. BasicSwap users must keep their client current to stay compatible with peers, and updates can involve resync work. Morphit auto-updates in the browser like any web page; operators upgrade their server-side instance independently.
 
 BasicSwap's strength — true cross-chain atomic swaps with no middleman — is real and a beautiful piece of cryptographic engineering. Morphit makes a different choice: a coordination + reputation layer that works for fiat, crypto and barter, accessible from any browser on any device, where the privacy work happens in transport (Tor/Lokinet/I2P) and chat (E2EE) rather than in a swap protocol alone. Both designs are valid; they serve different users.
+
+---
+
+## How is Morphit different from Bisq or Haveno/Retoswap?
+
+**FAQ key:** `vs_bisq_haveno`
+
+Bisq and Haveno (and Haveno's fork Retoswap) are the closest projects to Morphit in spirit — non-custodial, peer-to-peer, no KYC. Haveno is itself a fork of Bisq, so the two share the same underlying design; here's how each compares to Morphit.
+
+**Bisq** is a long-running peer-to-peer marketplace with the same architectural pattern as Haveno: desktop Java application, 2-of-3 multisig escrow during trades, Tor for transport, arbitrated disputes when something goes wrong. Bisq has been compromised twice with user funds stolen — the kind of risk Morphit avoids by never touching user funds in the first place. Bisq also requires you to lock up BSQ collateral before you can list orders. Morphit locks up nothing from anyone.
+
+Haveno (and its fork Retoswap) is much closer in spirit — non-custodial, P2P, no KYC. The big differences: Haveno is a desktop-only Java/JavaFX application tied to the Monero blockchain for its 2-of-3 multisig escrow, and needs you to run (or connect to) a seednode. Morphit runs in any browser, on any phone, with no install; uses Blurt (not Monero) for its on-chain coordination layer, which is faster and far cheaper per action (~free vs. Monero's per-op fees); and ships with built-in Tor, Lokinet, and I2P reachability rather than relying on you to configure it. Haveno trades involve arbitrated escrow, which is strong but requires trusted arbitrators per market. Morphit v1 is pure reputation-based bulletin board — no escrow, no arbitrator, full responsibility on the traders to pick partners with real track records. That's a more conservative safety model, but also fewer centralized choke points and no arbitrator role that a government could pressure.
+
+On May 20, 2026 the Haveno trade protocol was exploited for approximately $2.7 million. The attack used a forged out-of-order acknowledgment message from a fake arbitrator to redirect the 2-of-3 multisig wallet address before user funds were deposited; RetoSwap halted trading the same day. Morphit's design has no arbitrator role, no multisig escrow, and no central coordination message Haveno's exploit relied on — so this attack class doesn't apply to our threat model. The tradeoff is real and stated above: Morphit users carry full self-custody and lean on signed on-chain reputation rather than an arbitrator's safety net.
+
+---
+
+## How is Morphit different from OpenMonero?
+
+**FAQ key:** `vs_openmonero`
+
+OpenMonero (a LocalMonero clone) has lost user funds twice in 12 months. On June 6, 2025, a misconfigured firewall + wallet-rpc combination drained roughly 77.85 XMR (~$25,225) from the platform's custodial internal wallet; refunds are still being paid out of trading fees more than a year later, with vendors prioritized over regular users. On May 21, 2026 — one day after the Haveno exploit — a second exploit drained ~40 XMR (~$16,120) from OpenMonero; the platform posted an alert and told users to halt all payments. Morphit has no custodial wallet at all; your XMR never sits on a Morphit server, so this entire attack class has nothing to steal. The pattern is consistent: every Monero P2P platform that holds user funds in an internal wallet has been drained at least once. Morphit's answer is to not hold them in the first place.
+
+Then, in early June 2026, OpenMonero apparently shut down again — taking the platform, and any balances still sitting in its custodial wallet, offline with it. That is exactly the failure mode Morphit is built to make impossible: there is no Morphit wallet to drain and no company that can quietly close and walk off with your coins. The seller sends XMR directly to the buyer when payment is confirmed, and Morphit never holds it at any point.
 
 ---
 
@@ -439,7 +455,7 @@ Yes, and please do — Morphit only stays unstoppable if lots of people run piec
 
 • A payment watcher, a support bot, or an avatar server — smaller pieces, all useful.
 
-Why it matters: every mirror, every indexer, every relay is an extra path that a censor, a bankrupt host, or a bad court order cannot shut down at once. One instance is a target. Fifty is a movement. Morphit's core promise — non-custodial, no-KYC, uncensorable — only holds as long as enough people are willing to run a copy. If you have a VPS, a Raspberry Pi, a spare laptop, or even a mid-range phone, you can contribute. All the services are single-binary Go programs with plain config files; the README walks you through it in minutes, not hours.
+Why it matters: every mirror, every indexer, every relay is an extra path that a censor, a bankrupt host, or a bad court order cannot shut down at once. One instance is a target. Fifty is a movement. Morphit's core promise — non-custodial, no-KYC, uncensorable — only holds as long as enough people are willing to run a copy. If you have a VPS, a Raspberry Pi, a spare laptop, or even a mid-range phone, you can contribute. All the services are lightweight Node.js (TypeScript) programs with plain config files; the README walks you through it in minutes, not hours.
 
 The more people who run Morphit, the harder it is for anyone to take it away from the rest of us. Running a Morphit node also earns you 90% of the Blurt-paid listing fees there.
 
@@ -1069,9 +1085,9 @@ You'll get a string starting with `OutProofV1` or `OutProofV2`. Paste that into 
 
 **FAQ key:** `morphit_mirrors`
 
-Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub is live, and more are being added (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Get Morphit page.
+Decentralization — it's priority #2 in Morphit's design, right behind privacy. A project that lives in one place can be killed in one place: a platform can suspend the account, a government can order a takedown, a host can simply disappear. So Morphit's source code (AGPL-3.0) is mirrored across many independent code hosts — our own Forgejo server at git.agorise.net is the canonical copy, GitHub is live, and more are being added (Codeberg, GitLab, Bitbucket, SourceForge, Gitee, Launchpad, GitFlic, SourceHut, Radicle), plus a content-addressed copy on IPFS that no single host controls. If any one of them blocks or drops Morphit, every other copy is still there — and because it's AGPL, anyone can re-host, audit, or fork it. The full, current list is on the Download page.
 
-(There's nothing to install from an app store — Morphit runs as a Progressive Web App you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)
+(There's nothing to install from an app store — Morphit runs as a Progressive Web App (PWA) you add straight from your browser. The mirrors are for the source code, so the project can't be silenced by taking down a single repository.)
 
 You can confirm any running instance serves untampered code: each release's SHA-256 hashes are published on the Blurt chain — see /about-this-instance.
 
@@ -1581,7 +1597,7 @@ These never interrupt you; they're just there if you glance over.
 • **Feedback events** (someone left you a rating) — default on.
 • **Chat events** (new chat message) — default off. Chat is high-volume; turn it on per-channel if you want every message to ping.
 
-**Tab-closed delivery (Web Push) — post-launch.** The channels above work while the Morphit tab is open. To be notified when the tab is closed or your phone is locked requires Web Push, which is deferred to post-launch. When it ships, you'll be able to choose between your operator's self-hosted push server (most private), a standard browser push provider (broadest reach), or off.
+**Tab-closed delivery (Web Push) — available now.** The channels above work while the Morphit tab is open. To be notified when the tab is closed or your phone is locked, turn on Web Push. You can choose between your operator's self-hosted push server (most private), a standard browser push provider (broadest reach), or off.
 
 The principle behind all of this: **use every reasonable channel — visual, audible, native OS — without being annoying.** Defaults are quiet; you opt in to anything louder.
 
@@ -1815,7 +1831,7 @@ The operator-earnings split is sized so that even a Pi-tier instance covers its 
 
 **FAQ key:** `iphone_install`
 
-Yes — fully, no jailbreak and no App Store needed. Apple rejects apps that facilitate non-KYC peer-to-peer crypto (exactly what Morphit is), so instead of a native app we ship a Progressive Web App.
+Yes — fully, no jailbreak and no App Store needed. Apple rejects apps that facilitate non-KYC peer-to-peer crypto (exactly what Morphit is), so instead of a native app we ship a Progressive Web App (PWA).
 
 Install it in ~15 seconds:
 1. Open this site in **Safari** (Chrome/Firefox on iOS don't show the install option).
@@ -2308,7 +2324,7 @@ For the full per-coin guidance see /privacy/{asset} (e.g. /privacy/xmr, /privacy
 
 ## Metadata
 
-Total FAQ entries: 136
+Total FAQ entries: 138
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

@@ -402,7 +402,12 @@
 
 	function skipForNow(): void {
 		// The user keeps their generated identity and enters a read-only
-		// exploration mode. Settings will nudge them to register later.
+		// exploration mode. The orderbook (and any write action — post,
+		// place order, leave feedback) shows a register prompt, so this is
+		// where they finish signup later. (cp308 F-004: Settings has no
+		// account-CREATION path — only on-chain name verification for
+		// imported accounts — so the register nudge lives on the trade
+		// surfaces, NOT in Settings.)
 		gotoLocale('/orderbook');
 	}
 

@@ -25,7 +25,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Matches an upgrade-backup path segment like `.bak-1781151799741`. */
 const BACKUP_SEGMENT_RE = /\.bak-\d+(?=\/|$)/;
@@ -75,13 +76,37 @@ function walkUpToRepoRoot(start: string): string {
  */
 export function defaultRepoRoot(): string {
 	const fromCwd = walkUpToRepoRoot(process.cwd());
-	if (!BACKUP_SEGMENT_RE.test(fromCwd)) return fromCwd;
+	if (BACKUP_SEGMENT_RE.test(fromCwd)) {
+		// Stale CWD from a recent upgrade — recover the live install path.
+		const recoveredStart = fromCwd.replace(BACKUP_SEGMENT_RE, '');
+		const recovered = walkUpToRepoRoot(recoveredStart);
+		if (recovered !== fromCwd && existsSync(`${recovered}/package.json`)) {
+			return recovered;
+		}
+		return fromCwd;
+	}
+	// CWD walk landed on the real monorepo root (has a `workspaces`
+	// package.json): honor it.
+	if (declaresWorkspaces(`${fromCwd}/package.json`)) return fromCwd;
 
-	// Stale CWD from a recent upgrade — recover the live install path.
-	const recoveredStart = fromCwd.replace(BACKUP_SEGMENT_RE, '');
-	const recovered = walkUpToRepoRoot(recoveredStart);
-	if (recovered !== fromCwd && existsSync(`${recovered}/package.json`)) {
-		return recovered;
+	// Otherwise the operator ran `morphit-ops` from OUTSIDE the install
+	// tree (e.g. their home dir), so the cwd-walk fell back to the cwd,
+	// which has no workspaces package.json — and instance-env loading
+	// then looked for morphit.config.env in the wrong place, surfacing
+	// "No database URL configured" on Status dashboard. Recover from THIS
+	// module's own location, which is always inside the installed tree
+	// (whether running compiled dist or from source). (cp308 #16 fix.)
+	const fromModule = walkUpToRepoRoot(dirname(fileURLToPath(import.meta.url)));
+	if (declaresWorkspaces(`${fromModule}/package.json`)) {
+		// Apply the same stale-.bak recovery to the module path, in case
+		// the binary itself is being run out of a post-upgrade backup.
+		if (BACKUP_SEGMENT_RE.test(fromModule)) {
+			const recovered = walkUpToRepoRoot(fromModule.replace(BACKUP_SEGMENT_RE, ''));
+			if (recovered !== fromModule && declaresWorkspaces(`${recovered}/package.json`)) {
+				return recovered;
+			}
+		}
+		return fromModule;
 	}
 	return fromCwd;
 }

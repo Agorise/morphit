@@ -18,6 +18,9 @@ import type { Hono } from 'hono';
 import type { Config } from '../config/index.ts';
 import type { BlurtClient } from '../blurt/client.ts';
 import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
+import { logger } from '$log';
+
+const log = logger('relay-acts');
 
 // Keep in sync with the root package.json `version`.  The
 // version-consistency-smoke (Part 122 cp20) fails the build if
@@ -26,7 +29,7 @@ import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-const VERSION = '1.0.0-beta.23';
+const VERSION = '1.0.0-beta.24';
 const POLL_INTERVAL_MS = 30_000;
 /** When pending_claimed_accounts drops below this, the relay
  *  rejects new create requests with relay_out_of_funds.  This
@@ -52,6 +55,13 @@ export class HealthService {
 		stale: true
 	};
 	private poller: NodeJS.Timeout | null = null;
+	/** Hysteresis for the ACT-buffer alert: true once we've alerted that
+	 *  the relay is at/below the reject gate, reset when it recovers. In
+	 *  memory only — a restart at worst re-alerts once (cheap; a missed
+	 *  alert would be worse). This is the signal that was MISSING when a
+	 *  signup failed with relay_out_of_funds but the relay still held
+	 *  plenty of BLURT (the gate is ACTs, not balance) — see ADR-0010. */
+	private actBufferDepleted = false;
 	/** Optional reference to the signup ceiling. When present,
 	 *  /v1/health?verbose=1 includes signup_stats so the indexer-
 	 *  side operator-balance scanner can detect anomalous signup
@@ -136,6 +146,40 @@ export class HealthService {
 			last_refresh_unix: Math.floor(Date.now() / 1000),
 			stale: false
 		};
+
+		// ACT-buffer alert (hysteresis). When pending_claimed_accounts
+		// falls below the reject gate, the relay is ALREADY refusing
+		// signups with relay_out_of_funds — regardless of BLURT balance,
+		// because account creation consumes ACTs, not BLURT. This is the
+		// alert that was missing when kentest3 failed silently (the relay
+		// held plenty of BLURT, so the balance scanner never fired). It is
+		// emitted to the journal so the matrix-bot routes it to the
+		// operator's Matrix DM (module=relay-acts). With auto-mint on this
+		// should be rare; when it fires, auto-mint couldn't keep up (BLURT
+		// out, disabled, or minting failing) and needs operator attention.
+		const pca = acct.pending_claimed_accounts;
+		if (pca < MIN_PENDING_CLAIMED_ACCOUNTS) {
+			if (!this.actBufferDepleted) {
+				this.actBufferDepleted = true;
+				log.error('act_buffer_depleted', {
+					account: this.cfg.relayAccount,
+					pending_claimed_accounts: pca,
+					reject_gate: MIN_PENDING_CLAIMED_ACCOUNTS,
+					blurt_balance: acct.balance,
+					automint_enabled: this.cfg.autoMintEnabled,
+					hint:
+						'The relay is refusing signups (relay_out_of_funds) — it is out of ' +
+						'Account Creation Tokens, NOT BLURT. If auto-mint is on, it could not ' +
+						'keep up (top up liquid BLURT in this account). If off, mint ACTs.'
+				});
+			}
+		} else if (this.actBufferDepleted) {
+			this.actBufferDepleted = false;
+			log.info('act_buffer_recovered', {
+				account: this.cfg.relayAccount,
+				pending_claimed_accounts: pca
+			});
+		}
 	}
 
 	register(app: Hono): void {

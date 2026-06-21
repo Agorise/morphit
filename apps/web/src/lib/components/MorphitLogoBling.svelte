@@ -6,20 +6,27 @@
 
 	Earlier builds rendered a canvas element behind the wordmark running a
 	slow 3-body particle dance (mutual spring + centroid gravity).  Ken retired
-	that effect: the big hero logo on the homepage is now a plain static
-	wordmark with no animation at all, and the small top-left header
-	wordmark gets a single subtle glint every ~15s instead of perpetual
-	motion.  This component is therefore now a PURE presentational wrapper
+	that perpetual canvas motion.  The remaining effect is a single subtle
+	glint every ~15s that traces the letterforms.  cp303 UPDATE: that glint
+	(`shine`) is now enabled EVERYWHERE the wordmark appears — the top-left
+	header, the homepage hero, AND the footer — at Ken's request (earlier the
+	hero/footer were static).  This component is therefore a PURE presentational
+	wrapper
 	— no canvas element, no requestAnimationFrame, no IntersectionObserver,
 	no physics, no script logic at all — which also drops a chunk of
 	per-frame CPU (priority #4) and JS off every page.
 
 	USAGE
 
-	  - Homepage hero (centre):  <MorphitLogoBling heightClass="…" />
-	    → no `shine` → a completely static wordmark, no effects.
+	  - Homepage hero (centre):  <MorphitLogoBling heightClass="…" shine />
 	  - Header (top-left):       <MorphitLogoBling heightPx={32} shine />
-	    → `shine` enabled → an occasional glint tracing the letters.
+	  - Footer (centre):         <MorphitLogoBling heightPx={40} shine />
+	    → all three are now IDENTICAL — the same imported wordmark SVG and the
+	      same `shine` glint, with NO extra effects.  (cp304: the footer's
+	      former `animate-morphit-hue-shift` was dropped so the footer matches
+	      the header exactly, at Ken's request.  Only the display height
+	      differs.)  Omitting `shine` still yields a fully static wordmark for
+	      any future placement that wants one.
 
 	THE SHINE (only rendered when `shine` is set)
 
@@ -42,10 +49,20 @@
 	  - `prefers-reduced-motion: reduce` removes the shine entirely (a plain
 	    static wordmark) — serves vestibular-disorder accessibility and the
 	    "no jittery motion on low-end devices" grandma-friendliness rule.
-	  - Lives in the Svelte bundle; Vite fingerprints + emits an immutable
-	    Cache-Control so it never re-fetches after first paint.
+	  - The wordmark is IMPORTED (see the import at the top of the component),
+	    so Vite fingerprints it and emits an immutable Cache-Control: the browser
+	    fetches it once and reuses that one cached copy for every instance and
+	    every later navigation — it never re-fetches after first paint.
 -->
 <script lang="ts">
+	// The wordmark is IMPORTED (not referenced as a raw /static URL) so Vite
+	// fingerprints it and serves it with an immutable Cache-Control.  That means
+	// the browser fetches the SVG ONCE per client and reuses that single cached
+	// copy for every instance on a page (header, hero, footer — and the shine
+	// mask, which points at the same URL) and across every later navigation,
+	// instead of re-requesting a non-fingerprinted static file each time.
+	import wordmarkUrl from '../../../static/brand/morphit-wordmark.svg?url';
+
 	interface Props {
 		/** Path to the wordmark SVG (defaults to the bundled brand asset). */
 		wordmarkSrc?: string;
@@ -64,7 +81,7 @@
 	}
 
 	const {
-		wordmarkSrc = '/brand/morphit-wordmark.svg',
+		wordmarkSrc = wordmarkUrl,
 		heightPx = 28,
 		heightClass = '',
 		class: cls = '',

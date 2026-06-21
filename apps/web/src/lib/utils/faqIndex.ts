@@ -27,6 +27,8 @@ export const FAQ_KEYS = [
 	'is_it_safe',
 	'vs_others',
 	'vs_atomic_swap_dexes',
+	'vs_bisq_haveno',
+	'vs_openmonero',
 	'video_tutorial',
 	'who_runs_it',
 
@@ -209,8 +211,10 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// Intro + framing cluster — helps new readers orient between
 	// "what is this" and the handful of pages they should read next.
 	what_is_morphit: ['vs_others', 'is_it_safe', 'how_to_trade_walkthrough'],
-	vs_others: ['vs_atomic_swap_dexes', 'what_is_morphit', 'is_it_safe', 'who_runs_it'],
-	vs_atomic_swap_dexes: ['vs_others', 'what_is_morphit', 'no_escrow_arbitration'],
+	vs_others: ['vs_atomic_swap_dexes', 'vs_bisq_haveno', 'vs_openmonero', 'what_is_morphit', 'who_runs_it'],
+	vs_atomic_swap_dexes: ['vs_others', 'vs_bisq_haveno', 'vs_openmonero', 'no_escrow_arbitration'],
+	vs_bisq_haveno: ['vs_others', 'vs_atomic_swap_dexes', 'vs_openmonero', 'no_escrow_arbitration'],
+	vs_openmonero: ['vs_others', 'vs_bisq_haveno', 'vs_atomic_swap_dexes'],
 
 	// Fees + incentives cluster
 	fees: [
@@ -646,6 +650,23 @@ function tokenize(s: string): string[] {
 	const n = normalize(s);
 	// Latin words + single CJK characters (CJK treats each glyph as a token).
 	return n.match(/[\p{L}\p{N}]+|[\u4e00-\u9fff]/gu) ?? [];
+}
+
+/** Double-quote characters that wrap an EXACT-phrase query: straight ("),
+ *  curly (“ ” „ ‟), and fullwidth (＂, common on CJK keyboards). */
+const DQUOTE = new Set(['"', '\u201c', '\u201d', '\u201e', '\u201f', '\uff02']);
+
+/** If `query` is wrapped in a matching pair of double-quote characters,
+ *  return the inner phrase (trimmed) so the caller can do an EXACT substring
+ *  match instead of tokenized/fuzzy scoring; otherwise return null. An empty
+ *  pair ("") yields '' — the caller treats that as "no phrase → no results".
+ *  See searchEntries for the exact-match path. */
+function parseQuotedPhrase(query: string): string | null {
+	const q = query.trim();
+	if (q.length >= 2 && DQUOTE.has(q[0]!) && DQUOTE.has(q[q.length - 1]!)) {
+		return q.slice(1, -1).trim();
+	}
+	return null;
 }
 
 // ─── English stopwords + synonyms ─────────────────────────────────
@@ -1096,6 +1117,27 @@ export function scoreEntry(
 export function searchEntries(entries: FaqEntry[], query: string, limit = 10): FaqHit[] {
 	if (!query.trim()) {
 		return entries.map((entry) => ({ entry, score: 0 }));
+	}
+
+	// Quoted EXACT-phrase search: when the user wraps the query in double
+	// quotes — e.g. "post-launch" — match ONLY entries whose question or
+	// answer literally contains that phrase as a substring, with no
+	// tokenization, synonym expansion, or fuzzy scoring. Case- and
+	// diacritic-insensitive (via normalize()), but punctuation and hyphens
+	// are preserved, so "post-launch" returns just the one or two entries
+	// that contain that exact string — a precise way to pinpoint a term.
+	const phrase = parseQuotedPhrase(query);
+	if (phrase !== null) {
+		if (!phrase) return []; // empty quotes ("") → no phrase → no results
+		const needle = normalize(phrase);
+		return entries
+			.filter(
+				(entry) =>
+					normalize(entry.question).includes(needle) ||
+					normalize(entry.answer).includes(needle)
+			)
+			.slice(0, limit)
+			.map((entry) => ({ entry, score: 1 }));
 	}
 
 	const idf = computeIdf(entries);

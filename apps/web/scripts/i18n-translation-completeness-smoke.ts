@@ -89,6 +89,13 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// cp305 — the sign-out-before-switch modal's confirm button is "OK"
+	// per Ken's explicit two-button [Cancel / OK] spec for this dialog.
+	// "OK" is an internationally-recognized affirmation rendered
+	// identically in these locales (it/pl already pass the heuristic);
+	// it is the intended text, not an untranslated miss.
+	{ key: 'login.signout_before_switch_modal.confirm', locale: 'de', reason: '(b) "OK" is a universal affirmation loanword; intentional per the modal\'s Cancel/OK spec' },
+	{ key: 'login.signout_before_switch_modal.confirm', locale: 'fr', reason: '(b) "OK" is a universal affirmation loanword; intentional per the modal\'s Cancel/OK spec' },
 	// ─── cp229 RSS feed-format names: "RSS 2.0", "Atom", "JSON" are
 	//     proper-noun / technical format identifiers, byte-identical in
 	//     every locale by design (the 3-format RSS feature). The
