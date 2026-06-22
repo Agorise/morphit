@@ -16,7 +16,8 @@
 		isUnlocked,
 		isPairedReadOnly,
 		pairedReadOnly,
-		reset
+		reset,
+		broadcastSignOut
 	} from '$stores/identity';
 	import { hasPersistedKeystore, readEnvelope, readKeystoreMode } from '$crypto/persistentKeystore';
 	import { hasYubikeyWrap, isYubikeyOnly, classifyYubikeyError } from '$crypto/keystoreYubikey';
@@ -152,10 +153,16 @@
 
 	/** User confirmed: sign out of the current account, THEN continue to
 	 *  the card's destination so the new sign-in / registration starts
-	 *  from a clean, sessionless state. */
+	 *  from a clean, sessionless state.
+	 *
+	 *  broadcastSignOut() (NOT reset() alone): switching accounts is an
+	 *  explicit sign-out, so it must propagate to every open tab AND clear
+	 *  the persisted account-name cache that getUserBlurtAccount() (the
+	 *  gate below) reads — otherwise the gate still saw @account and this
+	 *  modal re-fired, looking like the sign-out never happened (cp312). */
 	async function confirmSwitch(): Promise<void> {
 		showSwitchConfirm = false;
-		reset();
+		broadcastSignOut();
 		await gotoLocale(pendingDestination);
 	}
 

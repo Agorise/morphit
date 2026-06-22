@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
 /**
  * Sentinels that have appeared in this repo's example .env files.
@@ -719,7 +720,7 @@ const envSchema = z.object({
 	 *  config change while community operators get a dedicated knob. */
 	MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME: z.string().max(16).default(''),
 
-	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().min(3).max(16).default('morphit-fees'),
+	MORPHIT_INDEXER_FEE_RECIPIENT: z.string().min(3).max(16).default(CANONICAL_TREASURY.blurt),
 	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(60),
 	MORPHIT_INDEXER_FEE_TOLERANCE: z.coerce.number().positive().max(0.5).default(0.001),
 
@@ -951,9 +952,13 @@ const envSchema = z.object({
 	// BTC fee verification.  Default amount targets ~$0.25 USD at
 	// $60K BTC; operator can recompute via
 	//   tsx apps/indexer/scripts/recommend-fee-amounts.ts
-	// when prices drift significantly.  An empty fee ADDRESS keeps
-	// the feature disabled regardless of the SATOSHIS value.
-	MORPHIT_INDEXER_BTC_FEE_ADDRESS: z.string().default(''),
+	// when prices drift significantly.  Address defaults to the
+	// canonical treasury (CANONICAL_TREASURY.btc) so every instance
+	// routes BTC fees to the canonical treasury out of the box; the
+	// chain-pinned release op overrides it once broadcast
+	// (treasurySource.ts).  Set this to an explicit empty string to
+	// DISABLE BTC fee acceptance on this instance.
+	MORPHIT_INDEXER_BTC_FEE_ADDRESS: z.string().default(CANONICAL_TREASURY.btc),
 	MORPHIT_INDEXER_BTC_FEE_SATOSHIS: z.coerce.number().int().min(0).default(416),
 	MORPHIT_INDEXER_BTC_EXPLORER_URLS: z
 		.string()
@@ -982,7 +987,13 @@ const envSchema = z.object({
 	//
 	// Default piconero amount targets ~$0.25 USD at $320 XMR;
 	// see the recommend-fee-amounts CLI for live recomputation.
-	MORPHIT_INDEXER_XMR_FEE_ADDRESS: z.string().default(''),
+	// Address defaults to the canonical treasury
+	// (CANONICAL_TREASURY.xmr) so every instance routes XMR fees to
+	// the canonical treasury out of the box; the chain-pinned
+	// release op overrides it once broadcast (treasurySource.ts).
+	// Set this to an explicit empty string to DISABLE XMR fee
+	// acceptance on this instance.
+	MORPHIT_INDEXER_XMR_FEE_ADDRESS: z.string().default(CANONICAL_TREASURY.xmr),
 	MORPHIT_INDEXER_XMR_FEE_PICONERO: z
 		.string()
 		.default('781250000')

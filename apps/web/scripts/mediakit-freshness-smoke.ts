@@ -45,6 +45,9 @@ const ZIP_PATH = join(REPO_ROOT, 'apps', 'web', 'static', 'morphit-mediakit.zip'
 const BRAG_LIST = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
 const MARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-mark.svg');
 const WORDMARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-wordmark.svg');
+// The feature-comparison PNG is bundled into the kit (build-mediakit.sh),
+// so a regenerated comparison image must regenerate the zip too.
+const COMPARISON_PNG = join(REPO_ROOT, 'apps', 'web', 'static', 'morphit-comparison.png');
 // The README's "Color standards" section is derived from the Tailwind
 // palette, so a color change must regenerate the zip — track it as a
 // source so a stale kit fails this smoke.
@@ -146,6 +149,7 @@ results.push({
 // ─── 3. Source files all exist ───
 const sources = [
 	{ path: BRAG_LIST, label: 'MORPHIT-BRAG-LIST.md' },
+	{ path: COMPARISON_PNG, label: 'apps/web/static/morphit-comparison.png' },
 	{ path: MARK_SVG, label: 'apps/web/static/brand/morphit-mark.svg' },
 	{ path: WORDMARK_SVG, label: 'apps/web/static/brand/morphit-wordmark.svg' },
 	{ path: TAILWIND_CONFIG, label: 'apps/web/tailwind.config.js (brand palette → README color standards)' }
@@ -232,12 +236,17 @@ results.push({
 // the zip's brag list are out of sync" failure. Close it by reading the
 // copied entries straight out of the committed zip and comparing them
 // byte-for-byte to the repo sources. (README.txt + the palette are
-// generated/derived, not byte-copied, so only the three directly-copied
+// generated/derived, not byte-copied, so only the four directly-copied
 // files are content-checked; the tailwind→README link stays on the
 // timestamp guard above.)
 if (existsSync(ZIP_PATH) && missing.length === 0) {
 	const contentChecks = [
 		{ entry: 'morphit-mediakit/MORPHIT-BRAG-LIST.md', source: BRAG_LIST, label: 'MORPHIT-BRAG-LIST.md' },
+		{
+			entry: 'morphit-mediakit/morphit-comparison.png',
+			source: COMPARISON_PNG,
+			label: 'morphit-comparison.png'
+		},
 		{ entry: 'morphit-mediakit/logos/morphit-mark.svg', source: MARK_SVG, label: 'logos/morphit-mark.svg' },
 		{
 			entry: 'morphit-mediakit/logos/morphit-wordmark.svg',
@@ -250,7 +259,7 @@ if (existsSync(ZIP_PATH) && missing.length === 0) {
 		// success: the timestamp check (scenario 4) is the floor and a
 		// dirty-working-tree edit still trips it via mtime.
 		results.push({
-			name: 'zip content matches sources byte-for-byte (brag list + brand SVGs)',
+			name: 'zip content matches sources byte-for-byte (brag list + comparison image + brand SVGs)',
 			ok: true,
 			detail:
 				'NOTE: `unzip` not on PATH — byte-content was NOT verified this run; ' +
@@ -273,7 +282,7 @@ if (existsSync(ZIP_PATH) && missing.length === 0) {
 			if (!Buffer.from(zipBytes).equals(Buffer.from(srcBytes))) drifted.push(c.label);
 		}
 		results.push({
-			name: 'zip content matches sources byte-for-byte (brag list + brand SVGs)',
+			name: 'zip content matches sources byte-for-byte (brag list + comparison image + brand SVGs)',
 			ok: drifted.length === 0,
 			detail:
 				drifted.length === 0

@@ -88,6 +88,8 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 43. [SEO override env vars — homepage title/description/keywords + Twitter card](#43-seo-override-env-vars--homepage-titledescriptionkeywords--twitter-card)
 44. [User-side optional TOTP 2FA — operator-side notes](#44-user-side-optional-totp-2fa--operator-side-notes)
 45. [MCP server — AI agent surface](#45-mcp-server--ai-agent-surface)
+46. [Resetting the indexer database (schema drift after an upgrade)](#46-resetting-the-indexer-database-schema-drift-after-an-upgrade)
+47. [ACT auto-minter + low-BLURT notifications — hands-off signup funding](#47-act-auto-minter--low-blurt-notifications--hands-off-signup-funding)
 
 ---
 
@@ -4918,21 +4920,25 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c \
 cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 ```
 
-### Alt-network addresses (Tor / Lokinet / I2P) — the `alt-address` wizard
+### Alt-network addresses (Tor / Lokinet / I2P / Nostr) — the `alt-address` wizard
 
-`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided wizard that helps an operator *generate* a privacy-network address and then writes it into `morphit.config.env`. The relevant knobs:
+`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). For Tor / Lokinet / I2P, "Replace" walks you through *generating* the address; **Nostr** (cp311) is a public key you already own, so it just prompts for the value. The relevant knobs:
 
 | Variable | Footer field | Notes |
 | --- | --- | --- |
 | `MORPHIT_INSTANCE_TOR_ADDRESS` | `tor` | v3 `.onion` |
 | `MORPHIT_INSTANCE_LOKINET_ADDRESS` | `lokinet` | full `.loki` **or** an ONS name |
-| `MORPHIT_INSTANCE_I2P_B32_ADDRESS` | `i2p_b32` | always-resolvable `.b32.i2p` (preferred) |
+| `MORPHIT_INSTANCE_I2P_B32_ADDRESS` | `i2p_b32` | always-resolvable `.b32.i2p` (preferred; the wizard WRITES this key) |
 | `MORPHIT_INSTANCE_I2P_NAME_ADDRESS` | `i2p_name` | optional readable `name.i2p` (addressbook-dependent) |
-| `MORPHIT_INSTANCE_I2P_ADDRESS` | — | legacy single var; still honored, routed to `i2p_b32`/`i2p_name` by suffix |
+| `MORPHIT_INSTANCE_I2P_ADDRESS` | — | legacy single var; still honored, routed to `i2p_b32`/`i2p_name` by suffix. The wizard reads it (as a fallback) and clears it whenever you set/delete the i2p address, so a value can't linger under two keys. |
+| `MORPHIT_INSTANCE_NOSTR_PUBKEY` | `nostr` | Nostr public key — `npub1…` (bech32) or 64-char hex. The wizard rejects a private key (`nsec…`). Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders this as a "Nostr" pill linking to your instance's Nostr page; it also appears as an alt-network chip on your directory card. |
 
 The indexer reads these at startup and includes them in its instance announce; the frontend renders the footer pills from that announce at runtime. So a new/changed address appears after the indexer restarts — the `alt-address` / `edit` wizard **offers to do that for you** (press Enter at the prompt) — **no frontend rebuild needed.**
 
+> **Your own directory card (cp311):** the bold name + alt-network chips on **your own** row of `/instances` come from a *cached* probe snapshot. The indexer never network-probes its own public URL (hairpin-NAT), so it now reads its own branding (`MORPHIT_INSTANCE_NAME`/`_TAGLINE`/`_CONTACT_URL` + these alt-network vars) straight from config and refreshes the cache on each self-probe. Your card therefore updates within one good-status probe cycle (~10 min) after the indexer restarts — not instantly like the footer (which reads the announce live). Before cp311 the own-card name was stuck on your operator-account fallback regardless of `MORPHIT_INSTANCE_NAME`.
+
 **Vanity reality differs per network** (the wizard is explicit about this):
+
 
 - **Tor** — full prefix vanity via `mkp224o` (`scripts/generate-onion.sh <prefix>`). Time grows exponentially with prefix length.
 - **I2P** — prefix vanity via `i2pd-tools`' `vain` (`scripts/generate-i2p.sh <prefix>`), but the `.b32.i2p` is `base32(sha256(destination))`, so only a *short* prefix is feasible (~1–5 chars quick, 6 ≈ minutes, 7+ hours). `vain` writes a `private.dat` that i2pd reads directly. A readable `name.i2p` is a registrar step (`reg.i2p`/`stats.i2p`), not local key-grinding.
@@ -9107,16 +9113,18 @@ payload carrying the `treasury` block.  Full shape
 }
 ```
 
-A helper script generates this for you interactively:
-
-```
-cd /opt/morphit
-tsx apps/indexer/scripts/release-build-payload.ts > release.json
-```
+A helper script generates this for you.  Note the
+`hash_manifest` is NOT hand-typed — it is the SRI JSON
+file produced by `apps/web/scripts/build-manifest.mjs
+--release-json` (step 0 below); you give the builder its
+path.  See the numbered flow below for the exact commands.
 
 The script:
 
-- Walks you through entering each field
+- Takes the version, manifest-file path, and endpoints
+  (via prompts on a TTY, or the `MORPHIT_BUILD_*` env vars)
+- Pre-fills the BTC/XMR treasury from the canonical
+  addresses baked into `canonicalTreasury.ts`
 - Validates against the same rules the indexer enforces
 - Refuses to emit any payload containing a 64-hex
   string (defense against accidentally including a view
@@ -9137,8 +9145,46 @@ Sign + broadcast as a `custom_json` op:
 
 Sign with the `@morphit` posting key.  This key lives
 **off** the morphit.io production server, on a personal
-machine you trust — typically your laptop with a
-Blurt-aware wallet.
+machine you trust — typically your laptop.
+
+You do NOT need to hand-assemble that op or find a wallet
+that broadcasts arbitrary `custom_json`.  The repo ships a
+helper that does it from the same machine, using the same
+Blurt library the relay uses (`@beblurt/dblurt`):
+
+```
+# 0) build the frontend, then generate the SRI hash manifest
+#    (JSON object of /<served-path>: sha256-<base64>, scoped to the
+#    tamper-critical executable surface to stay under the 64 KB cap):
+cd apps/web && npm run build && \
+  node scripts/build-manifest.mjs --release-json \
+    --prefix _app/ --prefix index.html --prefix service-worker.js
+cd ../..
+
+# 1) build the payload — BTC/XMR treasury pre-filled from
+#    apps/indexer/src/config/canonicalTreasury.ts; you supply the
+#    version, the manifest from step 0, and your endpoints file.
+#    < /dev/null forces non-interactive mode so the redirected
+#    stdout is clean JSON (not echoed prompts):
+MORPHIT_BUILD_VERSION=<semver> \
+  MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
+  MORPHIT_BUILD_ENDPOINTS_FILE=<endpoints.json> \
+  npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+
+# 2) PREVIEW — prints the exact op, asks for NO key, sends nothing:
+npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+
+# 3) sign + broadcast for real (prompts for the posting key, masked):
+npx tsx apps/indexer/scripts/release-broadcast.ts release.json
+```
+
+`release-broadcast.ts` re-validates the payload, refuses any
+64-hex secret, reads the posting WIF from a MASKED prompt
+(never a file, never an env var, never logged), shows you the
+derived public key to eyeball before sending, then broadcasts
+across the default RPC nodes.  **LAPTOP ONLY** — never run it
+on the production server; that box must never hold the posting
+key.
 
 ### 40.7 For community operators (running your own Morphit instance)
 
@@ -10337,6 +10383,16 @@ emission, for the Twitter handle) is used.
 
 The frontend reads these via `/v1/instance`, so changes propagate after the
 indexer config is re-read (restart `morphit-indexer` after editing the env file).
+
+> **Edit these from the TUI (cp311):** `morphit-ops edit → Branding & SEO` now
+> edits these three SEO vars **and** the displayed-branding vars
+> (`MORPHIT_INSTANCE_NAME`, `_TAGLINE`, `_CONTACT_URL`) in one section. Each
+> field is keep-current: press **Enter** to leave it unchanged, type **`-`** to
+> clear it, or type a new value (spaces are quoted for you, so a name like
+> `Morphit NL` is written safely — unlike a raw hand-edit of a shell-sourced env
+> file). This is the supported way to change the bold name on your directory
+> card / browser title bar; see the cp311 note under §"Alt-network addresses" for
+> how the own-card name propagates.
 
 ### Available env vars
 

@@ -1926,9 +1926,9 @@ Everything in §1–§10 gets you to a running, public Morphit instance with TLS
 
 ### Recommended additions
 
-#### Extra private addresses — Tor / Lokinet / I2P (one wizard does it)
+#### Extra private addresses — Tor / Lokinet / I2P / Nostr (one wizard does it)
 
-Besides your normal web address, you can give people a *private* way to reach your instance over Tor, Lokinet, or I2P. Each one shows up as a little pill in your site footer. This is optional — your normal address works fine on its own — but it's the most on-brand thing you can add.
+Besides your normal web address, you can give people a *private* way to reach your instance over Tor, Lokinet, or I2P, and link your instance to a **Nostr** profile. Each one shows up as a little pill in your site footer. This is optional — your normal address works fine on its own — but it's the most on-brand thing you can add.
 
 You don't have to know how any of these networks work. Run:
 
@@ -1936,12 +1936,15 @@ You don't have to know how any of these networks work. Run:
 npx morphit-ops
 ```
 
-…and pick **"Set up a Tor / Lokinet / I2P address"** (or run `npx morphit-ops alt-address` directly). It walks you through it in plain English. The short version:
+…and pick **"Set up a Tor / Lokinet / I2P address"** (or run `npx morphit-ops alt-address` directly). It's a simple menu: pick an address, it **shows you what's set right now**, and offers **Replace · Delete · Back**. The short version:
 
 - **Tor (`.onion`)** and **I2P (`.b32.i2p`)** — you can pick the **first few letters** of your address. A helper tries random keys until it finds one that starts with your letters (short = seconds, long = much slower). You run that helper **on your own computer, not the server**, so the secret key is born somewhere you control; then you copy the key to the server over SSH and paste the address into the wizard. The helpers are `scripts/generate-onion.sh` and `scripts/generate-i2p.sh`.
 - **Lokinet (`.loki`)** — you **can't** pick the letters; Lokinet makes the address for you. You just add one `keyfile=` line to `lokinet.ini`, restart Lokinet, and paste the `.loki` it prints. Want a short, readable name like `yourname.loki`? That's **ONS** — you buy it with OXEN coin in the Oxen wallet (optional, costs money). The `scripts/generate-lokinet.sh` helper prints these steps.
+- **Nostr** — there's nothing to generate; you already have a Nostr identity. Just paste your **public** key (`npub1…` or the 64-character hex form). The wizard refuses a private key (`nsec…`) so you can't leak it. The footer pill links to your instance's Nostr page. (You can also set this under `morphit-ops edit → Branding & SEO`.)
 
-After you paste an address, the wizard saves it and **offers to restart the indexer for you** (just press Enter) so the change goes live. Reload your site and the new footer pill appears — no manual restart needed. The secret keys are **never** committed to the repo. Full reference (env vars, exact mechanics, why Lokinet differs): `OPERATIONS.md` §23.
+After you set or change an address, the wizard saves it and **offers to restart the indexer for you** (just press Enter) so the change goes live. Reload your site and the new footer pill appears — no manual restart needed. **Delete** removes the pill the same way. The secret keys are **never** committed to the repo. Full reference (env vars, exact mechanics, why Lokinet differs, how your own directory-card pills refresh): `OPERATIONS.md` §23.
+
+> **Want to change the bold name on your instance card or browser tab?** That's a different setting: `morphit-ops edit → Branding & SEO`, which edits your instance **name**, **tagline**, and **contact link** (press Enter to keep a value, `-` to clear it). After you restart the indexer, your title bar and footer update right away; your own row on the public `/instances` directory refreshes within about 10 minutes (it shows a cached snapshot). Tip: don't hand-edit the env file for this — a name with a space needs quotes there, and the wizard handles that for you.
 
 
 #### BunkerWeb — recommended WAF (canonical config shipped)

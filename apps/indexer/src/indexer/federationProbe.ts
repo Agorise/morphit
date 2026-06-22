@@ -98,6 +98,40 @@ export interface FederationProbeConfig {
 	 *  while we're still catching up, instead of a misleading 'good'.
 	 *  Returns null when unknown (poller not yet running). */
 	readonly localLagBlocks?: () => number | null;
+	/** This instance's own branding, read straight from local config —
+	 *  the SAME values the `/v1/instance` endpoint serves.  Because the
+	 *  scheduler never network-probes its own origin (see `selfOrigin`),
+	 *  the self directory row would otherwise NEVER receive a cached
+	 *  name/tagline/contact/alt-networks snapshot (probeOne only runs
+	 *  for peers), leaving the operator's own card stuck on the
+	 *  operator-account fallback no matter what they set
+	 *  `MORPHIT_INSTANCE_*` to.  When provided, `persistSelfReachable`
+	 *  refreshes the cached_* columns from this on every self-tick, so
+	 *  a branding change shows on the directory card after one probe
+	 *  cycle (and immediately on the title bar / footer, which read
+	 *  `/v1/instance` live).  A function so it re-reads current config. */
+	readonly selfBranding?: () => {
+		readonly name: string | null;
+		readonly tagline: string | null;
+		readonly contactUrl: string | null;
+		readonly altNetworks: {
+			readonly tor: string | null;
+			readonly lokinet: string | null;
+			readonly i2p_b32: string | null;
+			readonly i2p_name: string | null;
+			readonly nostr: string | null;
+		};
+	} | null;
+	/** cp316 — the RESOLVED (chain-pin > env > canonical default)
+	 *  treasury addresses THIS indexer verifies fee payments against.
+	 *  probeOne compares each peer's advertised `/v1/instance`
+	 *  treasury against this; a peer advertising a DIFFERENT non-null
+	 *  address is trying to redirect fee payments away from the
+	 *  canonical treasury → 'mismatch'.  A peer that advertises null
+	 *  (fee method disabled) or omits the field (older release) is NOT
+	 *  flagged.  null entries here mean THIS instance has that method
+	 *  disabled, so the corresponding peer comparison is skipped. */
+	readonly canonicalTreasury?: () => { btc: string | null; xmr: string | null };
 }
 
 /** Normalize an origin for self-comparison: trim, drop any trailing
@@ -248,7 +282,7 @@ export class FederationProbeScheduler {
 					continue;
 				}
 				try {
-					const outcome = await probeOne(inst);
+					const outcome = await probeOne(inst, this.config.canonicalTreasury?.() ?? null);
 					await this.persistOutcome(inst, outcome);
 				} catch (err) {
 					// Defensive: probeOne should never throw, but if it
@@ -320,9 +354,19 @@ export class FederationProbeScheduler {
 
 	/** Self-instance reachability: the indexer IS this origin, so a
 	 *  network probe is unnecessary and unreliable. Flip status to
-	 *  'good' and clear the failure counter, but DO NOT touch the
-	 *  cached_* snapshot — the directory keeps showing the instance's
-	 *  name/tagline/contact from its last real refresh. */
+	 *  'good'/'syncing' and clear the failure counter.
+	 *
+	 *  cp311 fix: ALSO refresh the cached_* snapshot from local config
+	 *  (`selfBranding`).  Before this, the self row's cached_name /
+	 *  tagline / contact / alt_networks were NEVER written — the seed
+	 *  (federationSeed) doesn't set them and the only writer of cached_*
+	 *  is the network probe (`probeOne`/`persistOutcome`), which is
+	 *  skipped for self.  So the operator's own directory card was stuck
+	 *  on the `operator_account` fallback and no `MORPHIT_INSTANCE_NAME`
+	 *  change could ever move it.  We have the values right here in
+	 *  config (same source `/v1/instance` serves), so write them every
+	 *  self-tick.  Without `selfBranding` configured we keep the old
+	 *  status-only behavior (don't clobber a snapshot with nulls). */
 	private async persistSelfReachable(inst: KnownInstanceRow): Promise<void> {
 		// We can't network-probe our own public URL (hairpin-NAT fragile),
 		// but we ARE the indexer — so we know our own chain lag directly.
@@ -332,6 +376,30 @@ export class FederationProbeScheduler {
 		// during initial sync — it shows 'syncing' until caught up.
 		const lagBlocks = this.config.localLagBlocks?.() ?? null;
 		const selfStatus: ProbeStatus = selfReachableStatus(lagBlocks);
+		const branding = this.config.selfBranding?.() ?? null;
+		if (branding) {
+			await this.db.query(
+				`UPDATE known_instances SET
+					last_probed_at = NOW(),
+					last_probe_status = $2,
+					last_probe_error = NULL,
+					cached_name = $3,
+					cached_tagline = $4,
+					cached_contact_url = $5,
+					cached_alt_networks = $6,
+					consecutive_failures = 0
+				 WHERE origin = $1`,
+				[
+					inst.origin,
+					selfStatus,
+					branding.name,
+					branding.tagline,
+					branding.contactUrl,
+					branding.altNetworks
+				]
+			);
+			return;
+		}
 		await this.db.query(
 			`UPDATE known_instances SET
 				last_probed_at = NOW(),
@@ -348,7 +416,10 @@ export class FederationProbeScheduler {
 
 /** Probe one instance.  Always resolves with a ProbeOutcome; never
  *  throws (errors caught and converted to status='unreachable'). */
-export async function probeOne(inst: KnownInstanceRow): Promise<ProbeOutcome> {
+export async function probeOne(
+	inst: KnownInstanceRow,
+	canonicalTreasury: { btc: string | null; xmr: string | null } | null = null
+): Promise<ProbeOutcome> {
 	const { origin, operator_account, registered_at_time } = inst;
 
 	// Fetch /v1/instance.
@@ -365,6 +436,15 @@ export async function probeOne(inst: KnownInstanceRow): Promise<ProbeOutcome> {
 		return mkMismatch(
 			`relay_account mismatch: chain=${operator_account} instance=${instanceData.relay_account}`
 		);
+	}
+	// cp316: treasury-address mismatch.  A peer advertising a DIFFERENT
+	// non-null fee address is trying to redirect fee payments away from
+	// the canonical treasury (the exact "operator edits the addresses to
+	// cheat us out of income" case).  Peers that omit the field (older
+	// release) or advertise null (method disabled) are NOT flagged.
+	const treasuryReason = treasuryMismatchReason(canonicalTreasury, instanceData.treasury);
+	if (treasuryReason !== null) {
+		return mkMismatch(treasuryReason);
 	}
 
 	// Fetch /v1/health.
@@ -440,6 +520,37 @@ interface InstanceShape {
 		nostr: string | null;
 	};
 	relay_account: string;
+	/** cp316 — the RESOLVED treasury fee addresses this instance
+	 *  verifies against (chain-pin > env > canonical default).
+	 *  Optional: instances on an older release omit it (probe treats
+	 *  absence as "no opinion", never a mismatch).  Either chain may
+	 *  be null (that fee method disabled on the instance). */
+	treasury?: { btc: string | null; xmr: string | null };
+}
+
+/** cp316 — pure treasury-address comparison used by probeOne (kept
+ *  separate so it's unit-testable without network mocks).  Returns a
+ *  mismatch reason string when `advertised` carries a non-null fee
+ *  address that DIFFERS from `canonical`, else null.
+ *
+ *  Not a mismatch:
+ *   - `canonical` null (this instance has no reference to compare to),
+ *   - `advertised` undefined (peer on an older release omits the field),
+ *   - a per-chain null on either side (method disabled — a legitimate
+ *     operator choice, NOT a fee redirection),
+ *   - addresses equal. */
+export function treasuryMismatchReason(
+	canonical: { btc: string | null; xmr: string | null } | null,
+	advertised: { btc: string | null; xmr: string | null } | undefined
+): string | null {
+	if (canonical === null || advertised === undefined) return null;
+	if (canonical.btc !== null && advertised.btc != null && advertised.btc !== canonical.btc) {
+		return `treasury_btc_address mismatch: canonical=${canonical.btc} instance=${advertised.btc}`;
+	}
+	if (canonical.xmr !== null && advertised.xmr != null && advertised.xmr !== canonical.xmr) {
+		return `treasury_xmr_address mismatch: canonical=${canonical.xmr} instance=${advertised.xmr}`;
+	}
+	return null;
 }
 
 interface HealthShape {
@@ -460,6 +571,14 @@ function isInstanceShape(v: unknown): v is InstanceShape {
 	if (!isPlainObject(v)) return false;
 	if (typeof v.relay_account !== 'string') return false;
 	if (!isPlainObject(v.alt_networks)) return false;
+	// cp316: treasury is OPTIONAL (older instances omit it), but if
+	// present it must be a well-formed object with string|null chains.
+	if (v.treasury !== undefined) {
+		if (!isPlainObject(v.treasury)) return false;
+		const t = v.treasury;
+		const okChain = (x: unknown) => x === null || typeof x === 'string';
+		if (!okChain(t.btc) || !okChain(t.xmr)) return false;
+	}
 	return true;
 }
 

@@ -46,7 +46,6 @@ import { offerRestart } from '../lib/restartServices.ts';
 import {
 	stepAltNetworks,
 	stepOrigin,
-	stepSeo,
 	stepListingFee,
 	stepOperatorTag,
 	stepRpcEndpoints,
@@ -66,6 +65,14 @@ interface ExistingConfig {
 	readonly path: string;
 	readonly text: string;
 	readonly origin: string | null;
+	/** cp311 — displayed branding (name / tagline / contact).  Set at
+	 *  init time but previously NOT re-editable here, so an operator who
+	 *  wanted to rename their instance had to hand-edit the env file
+	 *  (and hit the unquoted-space shell-source trap).  Now editable in
+	 *  the "Branding & SEO" section. */
+	readonly name: string | null;
+	readonly tagline: string | null;
+	readonly contactUrl: string | null;
 	readonly altNetworks: AltNetworkResult;
 	readonly seo: SeoResult;
 	/** Part 110 — listing-fee + fallback-price slice.  Optional
@@ -104,6 +111,9 @@ interface ExistingEnv {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const EDITABLE_KEYS = [
 	'MORPHIT_INSTANCE_ORIGIN',
+	'MORPHIT_INSTANCE_NAME',
+	'MORPHIT_INSTANCE_TAGLINE',
+	'MORPHIT_INSTANCE_CONTACT_URL',
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
@@ -181,10 +191,53 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		configUpdates.set('MORPHIT_INSTANCE_NOSTR_PUBKEY', alt.nostr);
 	}
 	if (choice === 'seo' || choice === 'all') {
-		const seo = await stepSeo();
-		configUpdates.set('MORPHIT_INSTANCE_SEO_TITLE', seo.title);
-		configUpdates.set('MORPHIT_INSTANCE_SEO_DESCRIPTION', seo.description);
-		configUpdates.set('MORPHIT_INSTANCE_SEO_KEYWORDS', seo.keywords);
+		// cp311 — "Branding & SEO".  All six fields use keep-current /
+		// clear semantics (Enter keeps, "-" clears), so editing one
+		// (e.g. the instance name) never silently wipes the others.
+		// Branding identity first (what shows on the directory card,
+		// title bar, footer), then the search-engine meta tags.
+		const nameR = await editField(
+			'Instance name',
+			'The bold name on your directory card, browser title bar, and footer.',
+			existing.name
+		);
+		if (nameR.changed) configUpdates.set('MORPHIT_INSTANCE_NAME', nameR.value);
+
+		const taglineR = await editField(
+			'Tagline',
+			'One-line subtitle shown on your homepage under the name.',
+			existing.tagline
+		);
+		if (taglineR.changed) configUpdates.set('MORPHIT_INSTANCE_TAGLINE', taglineR.value);
+
+		const contactR = await editField(
+			'Contact URL',
+			'Footer "contact the operator" link — Matrix room, mailto:, Mastodon, etc.',
+			existing.contactUrl
+		);
+		if (contactR.changed) configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', contactR.value);
+
+		const seoTitleR = await editField(
+			'SEO <title>',
+			'Homepage browser-tab / search-result title. Leave unset for the default.',
+			existing.seo.title
+		);
+		if (seoTitleR.changed) configUpdates.set('MORPHIT_INSTANCE_SEO_TITLE', seoTitleR.value);
+
+		const seoDescR = await editField(
+			'SEO <meta description>',
+			'One sentence (~150 chars) for search results + social link previews.',
+			existing.seo.description
+		);
+		if (seoDescR.changed)
+			configUpdates.set('MORPHIT_INSTANCE_SEO_DESCRIPTION', seoDescR.value);
+
+		const seoKwR = await editField(
+			'SEO <meta keywords>',
+			'Comma-separated keywords. Optional; most search engines ignore these now.',
+			existing.seo.keywords
+		);
+		if (seoKwR.changed) configUpdates.set('MORPHIT_INSTANCE_SEO_KEYWORDS', seoKwR.value);
 	}
 	if (choice === 'listing-fee' || choice === 'all') {
 		const fee = await stepListingFee();
@@ -421,6 +474,9 @@ function loadExisting(path: string): ExistingConfig {
 		path,
 		text,
 		origin: kv.get('MORPHIT_INSTANCE_ORIGIN') ?? null,
+		name: kv.get('MORPHIT_INSTANCE_NAME') ?? null,
+		tagline: kv.get('MORPHIT_INSTANCE_TAGLINE') ?? null,
+		contactUrl: kv.get('MORPHIT_INSTANCE_CONTACT_URL') ?? null,
 		altNetworks: {
 			tor: kv.get('MORPHIT_INSTANCE_TOR_ADDRESS') ?? null,
 			lokinet: kv.get('MORPHIT_INSTANCE_LOKINET_ADDRESS') ?? null,
@@ -649,9 +705,9 @@ async function pickSection(
 		},
 		{
 			key: 'seo',
-			label: 'SEO copy',
+			label: 'Branding & SEO',
 			description:
-				'SEO copy — homepage <title>, description, keywords.'
+				'Instance name, tagline, contact URL, and homepage SEO <title>/description/keywords.'
 		},
 		{
 			key: 'listing-fee',
@@ -717,6 +773,32 @@ async function pickSection(
 	return sections[idx]?.key ?? 'cancel';
 }
 
+/** cp311 — edit one optional text field with keep-current / clear
+ *  semantics, used by the "Branding & SEO" section.  Shows the current
+ *  value, then interprets the answer:
+ *    - empty (just Enter) → keep current, report no change
+ *    - "-"                → clear (write null → key removed from file)
+ *    - anything else      → set to the trimmed typed value
+ *  Quoting (spaces etc.) is handled later by quoteValue at write time,
+ *  so the operator can type a value with spaces safely — unlike a raw
+ *  hand-edit of the env file. */
+async function editField(
+	label: string,
+	hint: string,
+	current: string | null
+): Promise<{ readonly changed: boolean; readonly value: string | null }> {
+	console.log('');
+	console.log(`  ${label}`);
+	if (hint.length > 0) console.log(`    ${hint}`);
+	console.log(
+		`    Current: ${current !== null ? sanitizeForTerm(current) : '(unset)'}`
+	);
+	const ans = (await ask('    New value ([Enter] to keep, "-" to clear)', '')).trim();
+	if (ans.length === 0) return { changed: false, value: current };
+	if (ans === '-') return { changed: current !== null, value: null };
+	return { changed: true, value: ans };
+}
+
 function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	console.log('Current values:\n');
 	// cp139-C-17: every value here comes from file-system read of
@@ -725,6 +807,9 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	// with elevated privilege) could plant ANSI escapes that fire
 	// at next `morphit-ops edit` invocation.  Sanitize on display.
 	console.log(`  Primary origin:    ${c.origin !== null ? sanitizeForTerm(c.origin) : '(unset)'}`);
+	console.log(`  Instance name:     ${c.name !== null ? sanitizeForTerm(c.name) : '(unset — falls back to "Morphit" / your operator account)'}`);
+	console.log(`  Tagline:           ${c.tagline !== null ? sanitizeForTerm(truncate(c.tagline, 50)) : '(unset)'}`);
+	console.log(`  Contact URL:       ${c.contactUrl !== null ? sanitizeForTerm(c.contactUrl) : '(unset)'}`);
 	console.log(`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`);
 	console.log(`  Lokinet address:   ${c.altNetworks.lokinet !== null ? sanitizeForTerm(c.altNetworks.lokinet) : '(unset)'}`);
 	console.log(`  I2P address:       ${c.altNetworks.i2p !== null ? sanitizeForTerm(c.altNetworks.i2p) : '(unset)'}`);

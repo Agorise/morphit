@@ -201,11 +201,11 @@ const INVARIANTS: Invariant[] = [
 	{
 		name: 'treasury_fee_account',
 		description:
-			'Treasury fee-recipient account default — defined by indexer config Zod default; consumed by operator-facing docs that quote the default by string',
+			'Treasury fee-recipient account — defined by CANONICAL_TREASURY (apps/indexer/src/config/canonicalTreasury.ts), the cp315 single source of truth that the indexer config Zod default references; consumed by indexer code/docs that name the account by string',
 		source: {
-			file: 'apps/indexer/src/config/index.ts',
-			regex: /MORPHIT_INDEXER_FEE_RECIPIENT:[^,;\n]*\.default\('([^']+)'\)/,
-			context: 'indexer config Zod default',
+			file: 'apps/indexer/src/config/canonicalTreasury.ts',
+			regex: /blurt:\s*'([^']+)'/,
+			context: 'CANONICAL_TREASURY.blurt single source of truth',
 		},
 		// Docs that NAME the default account by string MUST match.  Docs
 		// that talk about "the operator's fee account" abstractly (no

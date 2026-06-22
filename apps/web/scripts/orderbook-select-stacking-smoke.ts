@@ -81,6 +81,23 @@ const sources = new Map<string, string>(
 	])
 );
 
+// The orderbook page that hosts the three selects. cp314 un-wrapped them
+// from <label> elements: a <label> adopts its first labelable descendant
+// (the trigger <button>) as its control, so on the single-select Asset
+// menu — which closes on choose() and thus detaches the clicked option
+// mid-click — the label's activation behavior fell back to firing a
+// SECOND, synthetic click on the trigger, re-toggling `open` true right
+// after choose() set it false. The menu "selected but wouldn't close."
+const ORDERBOOK_PAGE = readFileSync(
+	resolve(REPO, 'apps/web/src/routes/[lang]/orderbook/+page.svelte'),
+	'utf8'
+);
+
+// Matches a <label …> opener that reaches one of the custom selects WITHOUT
+// an intervening </label> — i.e. the select sits inside the label.
+const labelWrapsSelect = (name: string): boolean =>
+	new RegExp(`<label\\b[^>]*>(?:(?!</label>)[\\s\\S])*?<${name}\\b`).test(ORDERBOOK_PAGE);
+
 // Matches the root element of a select: a `relative` div carrying the
 // conditional z and the `bind:this={rootEl}` handle. Captures the two z
 // classes (open branch, closed branch).
@@ -206,6 +223,16 @@ const scenarios: Scenario[] = [
 			const offenders = SELECTS.filter((name) => DOC_CLICK_RE.test(sources.get(name)!));
 			if (offenders.length) {
 				return `document-level \`click\` outside-close listener (the option-detach race cp282 fixed) reintroduced in: ${offenders.join(', ')}`;
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-7: orderbook page does NOT wrap any custom select in a <label> (cp314 — a label re-fires a synthetic click on its trigger, re-opening the Asset menu after select)',
+		test: () => {
+			const offenders = SELECTS.filter((name) => labelWrapsSelect(name));
+			if (offenders.length) {
+				return `custom select(s) wrapped in <label> in the orderbook page (use <div> + <span> heading; the trigger button carries its own accessible name): ${offenders.join(', ')}`;
 			}
 			return null;
 		}

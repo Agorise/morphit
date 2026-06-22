@@ -272,8 +272,8 @@
 				<option value="quiet">{$_('instances.status.quiet')}</option>
 				<option value="syncing">{$_('instances.status.syncing')}</option>
 				<option value="stale">{$_('instances.status.stale')}</option>
-				<option value="unreachable">{$_('instances.status.unreachable')}</option>
 				<option value="mismatch">{$_('instances.status.mismatch')}</option>
+				<option value="unreachable">{$_('instances.status.unreachable')}</option>
 				<option value="never">{$_('instances.status.never')}</option>
 			</select>
 		</label>
@@ -310,8 +310,16 @@
 			<div
 				class="rounded-lg border border-ink-100 bg-ink-50 p-8 text-center dark:border-ink-800 dark:bg-ink-950"
 			>
-				<p class="font-display text-base font-bold">{$_('instances.empty_title')}</p>
-				<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">{$_('instances.empty_body')}</p>
+				{#if statusFilter !== '' && entries.size > 0}
+					<!-- Peers exist, but none match the active status filter.
+					     A filter-aware message avoids the misleading "no peers
+					     known yet" copy when the directory is simply filtered. -->
+					<p class="font-display text-base font-bold">{$_('instances.no_match_title')}</p>
+					<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">{$_('instances.no_match_body')}</p>
+				{:else}
+					<p class="font-display text-base font-bold">{$_('instances.empty_title')}</p>
+					<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">{$_('instances.empty_body')}</p>
+				{/if}
 			</div>
 		{:else}
 			<ul class="grid gap-5 md:grid-cols-2">

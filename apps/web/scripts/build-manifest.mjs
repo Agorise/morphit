@@ -2,20 +2,47 @@
 /**
  * apps/web/scripts/build-manifest.mjs
  *
- * Walk apps/web/build/ recursively and emit a sorted SHA-256
- * manifest of every emitted file.  The manifest is the
- * deterministic fingerprint of "what bytes did we just ship":
- * an operator running `morphit_release_v1` can broadcast it
- * on-chain so users with a local clone can verify they're
- * loading the same bytes the operator built.
+ * Walk apps/web/build/ recursively and emit a SHA-256 manifest of
+ * every emitted file.  TWO output formats, for two DISTINCT purposes
+ * — do not confuse them (cp319 fixed a launch-path mix-up where the
+ * release op was fed the wrong one):
  *
- * Output format (one line per file, sorted by path):
- *   <hex sha-256>  ./<relative-path-from-build-dir>
+ *   1. DEFAULT (no flag) — reproducible-build fingerprint.
+ *      Output format (one line per file, sorted by path):
+ *        <hex sha-256>  ./<relative-path-from-build-dir>
+ *      Same shape as `find . -type f | sort | xargs sha256sum`.
+ *      Written to `apps/web/build-manifest.sha256`.  This is the
+ *      "did we ship the same bytes?" artifact a user with a local
+ *      clone diffs against (brag #222 reproducibility; STRIDE audit).
+ *      It is NOT the on-chain release manifest.
  *
- * Same shape as `find . -type f | sort | xargs sha256sum`,
- * which is exactly what the CI workflow does inline (see
- * .forgejo/workflows/ci.yml).  This standalone script gives
- * operators the same output without needing the CI environment.
+ *   2. `--release-json [outfile]` — the on-chain `morphit_release_v1`
+ *      hash_manifest.  Output is a JSON OBJECT mapping each asset's
+ *      SERVED URL path → Subresource-Integrity hash:
+ *        { "/_app/immutable/…": "sha256-<base64>", "/index.html": … }
+ *      This is the EXACT shape @morphit/release-schema
+ *      `validateReleasePayload` requires (SHA256_RE =
+ *      /^sha256-[A-Za-z0-9+/]{43}=$/) and the frontend tamper-check
+ *      (apps/web/src/lib/net/releaseHashCheck.ts) compares the running
+ *      bundle against.  Feed it to the release-op builder:
+ *        MORPHIT_BUILD_HASH_MANIFEST_FILE=<outfile> \
+ *          tsx apps/indexer/scripts/release-build-payload.ts > release.json
+ *      Written to `apps/web/build-manifest.release.json` by default.
+ *
+ * Keys vs. the default format: the release JSON uses `/<rel>` (a
+ * leading slash, no `./`) because the frontend fetches each key as a
+ * same-origin URL path; the reproducibility text uses `./<rel>` to
+ * match `sha256sum`.  Both come from the same single file walk + a
+ * single digest per file (hex and base64 are two encodings of it).
+ *
+ * SIZE: the schema caps the serialized hash_manifest at 64 KB
+ * (~500 entries).  A full SvelteKit build (hundreds of prerendered
+ * per-locale pages) can exceed that, so `--release-json` supports
+ * `--prefix <p>` (repeatable) to scope to the tamper-critical
+ * executable surface, e.g. `--prefix _app/ --prefix index.html
+ * --prefix service-worker.js`.  If the manifest still exceeds the
+ * cap the script exits non-zero with guidance — it never emits an
+ * over-cap manifest the release op would reject.
  *
  * Why a script and not just `find | sha256sum`?
  *   - Cross-platform: works on macOS where `find -print0` and
@@ -26,20 +53,25 @@
  *
  * Usage:
  *   npm run build -w apps/web && npm run build:manifest -w apps/web
- *
- * Output:
- *   apps/web/build-manifest.sha256
+ *   node scripts/build-manifest.mjs --release-json --prefix _app/ --prefix index.html
  */
 
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const HERE = dirname(__filename);
 const WEB_ROOT = join(HERE, '..');
-const BUILD_DIR = join(WEB_ROOT, 'build');
-const OUT_FILE = join(WEB_ROOT, 'build-manifest.sha256');
+const DEFAULT_BUILD_DIR = join(WEB_ROOT, 'build');
+const DEFAULT_TEXT_OUT = join(WEB_ROOT, 'build-manifest.sha256');
+const DEFAULT_RELEASE_OUT = join(WEB_ROOT, 'build-manifest.release.json');
+
+/** Mirror of @morphit/release-schema MANIFEST_MAX_SERIALIZED_BYTES.
+ *  Kept in sync by build-manifest-release-json-smoke (which also runs
+ *  the real validateReleasePayload, so a drift here is caught). */
+const MANIFEST_MAX_SERIALIZED_BYTES = 64 * 1024;
 
 async function* walk(dir) {
 	for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -55,41 +87,136 @@ async function* walk(dir) {
 	}
 }
 
-async function sha256(path) {
-	const buf = await readFile(path);
-	return createHash('sha256').update(buf).digest('hex');
+/**
+ * Walk `buildDir` and return sorted entries, each carrying BOTH hash
+ * encodings derived from a single digest:
+ *   { rel: '<forward-slash path>', hex: '<64 hex>', sri: 'sha256-<base64>' }
+ * Pure apart from reading the build files; no writes, no process exit.
+ */
+export async function computeManifest(buildDir) {
+	const entries = [];
+	for await (const path of walk(buildDir)) {
+		const rel = relative(buildDir, path).split('\\').join('/');
+		const buf = await readFile(path);
+		const digest = createHash('sha256').update(buf).digest();
+		entries.push({
+			rel,
+			hex: digest.toString('hex'),
+			sri: `sha256-${digest.toString('base64')}`
+		});
+	}
+	// Stable sort by path — locale-independent (codepoint compare).
+	entries.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+	return entries;
 }
 
+/** Reproducible-build fingerprint: `<hex>  ./<rel>` per line, sorted.
+ *  Byte-identical to the pre-cp319 default output. */
+export function renderSha256sumText(entries) {
+	return entries.map((e) => `${e.hex}  ./${e.rel}`).join('\n') + '\n';
+}
+
+/** Normalize a `--prefix` value to a forward-slash, no-leading-slash
+ *  comparison key (so `/_app/`, `_app/`, and `_app` all match files
+ *  under `_app/…`). */
+function normalizePrefix(p) {
+	return p.replace(/^\/+/, '');
+}
+
+/**
+ * On-chain release hash_manifest: a JSON object mapping each asset's
+ * SERVED URL path (`/<rel>`) → its `sha256-<base64>` SRI hash, sorted
+ * by key.  Optionally scoped to entries whose path starts with one of
+ * `prefixes`.  Returns the manifest OBJECT (caller serializes).
+ */
+export function buildReleaseManifest(entries, { prefixes = [] } = {}) {
+	const norm = prefixes.map(normalizePrefix).filter((p) => p.length > 0);
+	const obj = {};
+	for (const e of entries) {
+		if (norm.length > 0 && !norm.some((p) => e.rel.startsWith(p))) continue;
+		obj[`/${e.rel}`] = e.sri;
+	}
+	return obj;
+}
+
+/** UTF-8 byte length of the COMPACT JSON serialization — matches the
+ *  schema validator's `byteLengthOfJson`, so this guard agrees with
+ *  what `validateReleasePayload` will measure. */
+export function manifestSerializedBytes(manifestObj) {
+	return new TextEncoder().encode(JSON.stringify(manifestObj)).length;
+}
+
+// ── CLI (only when run directly) ───────────────────────────────────
 async function main() {
+	const argv = process.argv.slice(2);
+	let releaseJson = false;
+	let outOverride = null;
+	const prefixes = [];
+	for (let i = 0; i < argv.length; i++) {
+		const a = argv[i];
+		if (a === '--release-json') releaseJson = true;
+		else if (a === '--prefix') {
+			const v = argv[++i];
+			if (v) prefixes.push(v);
+		} else if (!a.startsWith('--') && outOverride === null) outOverride = a;
+	}
+
 	let buildExists;
 	try {
-		buildExists = (await stat(BUILD_DIR)).isDirectory();
+		buildExists = (await stat(DEFAULT_BUILD_DIR)).isDirectory();
 	} catch {
 		buildExists = false;
 	}
 	if (!buildExists) {
 		console.error(
-			`build-manifest: ${BUILD_DIR} does not exist — run \`npm run build -w apps/web\` first.`
+			`build-manifest: ${DEFAULT_BUILD_DIR} does not exist — run \`npm run build -w apps/web\` first.`
 		);
 		process.exit(1);
 	}
 
-	const entries = [];
-	for await (const path of walk(BUILD_DIR)) {
-		const rel = relative(BUILD_DIR, path).split('\\').join('/');
-		const hash = await sha256(path);
-		entries.push({ rel, hash });
-	}
-	// Stable sort by path — locale-independent (codepoint compare).
-	entries.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+	const entries = await computeManifest(DEFAULT_BUILD_DIR);
 
-	const lines = entries.map((e) => `${e.hash}  ./${e.rel}`);
-	const out = lines.join('\n') + '\n';
-	await writeFile(OUT_FILE, out, 'utf8');
-	console.log(`build-manifest: wrote ${entries.length} entries to ${OUT_FILE}`);
+	if (releaseJson) {
+		const obj = buildReleaseManifest(entries, { prefixes });
+		const count = Object.keys(obj).length;
+		if (count === 0) {
+			console.error(
+				`build-manifest: --release-json produced 0 entries` +
+					(prefixes.length ? ` (no files matched --prefix ${prefixes.join(' / ')})` : '') +
+					` — nothing to pin.`
+			);
+			process.exit(1);
+		}
+		const bytes = manifestSerializedBytes(obj);
+		if (bytes > MANIFEST_MAX_SERIALIZED_BYTES) {
+			console.error(
+				`build-manifest: release manifest is ${bytes} bytes serialized, over the ` +
+					`${MANIFEST_MAX_SERIALIZED_BYTES}-byte schema cap (${count} entries).\n` +
+					`Scope it to the tamper-critical executable surface with --prefix, e.g.:\n` +
+					`  node scripts/build-manifest.mjs --release-json --prefix _app/ --prefix index.html --prefix service-worker.js\n` +
+					`(see docs/PRE-LAUNCH-CHECKLIST.md \u00A7B).`
+			);
+			process.exit(1);
+		}
+		const out = outOverride ?? DEFAULT_RELEASE_OUT;
+		await writeFile(out, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+		console.log(
+			`build-manifest: wrote ${count} entries (${bytes} bytes) to ${out}\n` +
+				`  feed it to the release op:\n` +
+				`  MORPHIT_BUILD_HASH_MANIFEST_FILE=${out} \\\n` +
+				`    tsx apps/indexer/scripts/release-build-payload.ts > release.json`
+		);
+		return;
+	}
+
+	const out = outOverride ?? DEFAULT_TEXT_OUT;
+	await writeFile(out, renderSha256sumText(entries), 'utf8');
+	console.log(`build-manifest: wrote ${entries.length} entries to ${out}`);
 }
 
-main().catch((err) => {
-	console.error('build-manifest: failed:', err);
-	process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+	main().catch((err) => {
+		console.error('build-manifest: failed:', err);
+		process.exit(1);
+	});
+}

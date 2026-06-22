@@ -177,6 +177,19 @@ function isOperatorManagedRuntimeFile(p: string, repoRoot: string): boolean {
 	if (p.endsWith('/keystore.json') || p.endsWith('/keystore.wif')) {
 		return true;
 	}
+	// Build-generated outputs written by apps/web/scripts/build-manifest.mjs:
+	// the reproducible-build fingerprint (`build-manifest.sha256`) and the
+	// SRI on-chain release manifest (`build-manifest.release.json`).  They
+	// materialize only after `npm run build` / `build:manifest`; never
+	// committed (see apps/web/.gitignore).  Operator docs reference them as
+	// the release-op manifest source (PRE-LAUNCH-CHECKLIST §B/§E, OPERATIONS
+	// §40.6), so the existence check must skip them.
+	if (
+		p.endsWith('/build-manifest.sha256') ||
+		p.endsWith('/build-manifest.release.json')
+	) {
+		return true;
+	}
 	if (p.endsWith('.env')) {
 		const examplePath = join(repoRoot, p + '.example');
 		if (existsSync(examplePath)) return true;

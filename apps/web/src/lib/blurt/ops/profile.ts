@@ -57,6 +57,27 @@ export function setUserBlurtAccount(name: string): void {
 	}
 }
 
+/** Forget the persisted account name.  Call this on a DELIBERATE
+ *  account switch/sign-out (e.g. the login page's "sign out first"
+ *  confirm) — NOT from the identity store's `reset()`, which also runs
+ *  on `pagehide` (tab close) where wiping this cache would needlessly
+ *  force the user to re-type their account name every session.
+ *
+ *  Why this exists (cp312): the login page gates its "sign you out of
+ *  @NNN first" modal on `getUserBlurtAccount()`, which reads this
+ *  persistent key.  `reset()` clears the in-memory keystore but leaves
+ *  this name, so after confirming the switch the gate still saw an
+ *  account and the modal re-fired on the next attempt — looking like
+ *  the sign-out hadn't happened.  Clearing the name here closes that. */
+export function clearUserBlurtAccount(): void {
+	if (!browser) return;
+	try {
+		window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+	} catch {
+		// Privacy Mode / storage unavailable — nothing persisted to clear.
+	}
+}
+
 export interface ProfilePayload {
 	/** Human-readable display name, already validated by caller. */
 	display_name: string;

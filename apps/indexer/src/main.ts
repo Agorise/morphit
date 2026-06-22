@@ -302,7 +302,7 @@ async function main(): Promise<void> {
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
 	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults));
-	app.route('/v1/instance', instanceRoute(config));
+	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
 

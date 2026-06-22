@@ -284,7 +284,30 @@ export class Poller {
 				const st = this.getStatus();
 				if (!st.running || st.chainHeadBlock <= 0) return null;
 				return Math.max(0, st.chainHeadBlock - st.indexedBlock);
-			}
+			},
+			// cp311: our own branding, straight from config (same values
+			// /v1/instance serves).  The self row is never network-probed,
+			// so this is the ONLY way its cached_name/tagline/contact/alt
+			// columns get populated — without it the operator's own
+			// directory card is stuck on the operator-account fallback.
+			selfBranding: () => ({
+				name: config.instanceName ?? null,
+				tagline: config.instanceTagline ?? null,
+				contactUrl: config.instanceContactUrl ?? null,
+				altNetworks: {
+					tor: config.instanceTorAddress ?? null,
+					lokinet: config.instanceLokinetAddress ?? null,
+					i2p_b32: config.instanceI2pB32Address ?? null,
+					i2p_name: config.instanceI2pNameAddress ?? null,
+					nostr: config.instanceNostrPubkey ?? null
+				}
+			}),
+			// cp316: the resolved (chain-pin > env > canonical default)
+			// treasury addresses THIS indexer verifies against.  The
+			// probe compares each peer's advertised /v1/instance treasury
+			// against this; a non-null divergence → 'mismatch' (a peer
+			// trying to redirect fee payments to a non-canonical address).
+			canonicalTreasury: () => this.currentTreasuryAddresses()
 		});
 
 		// ADR-0011 sub-phase 4b: fee verifiers. Build each only if
@@ -733,5 +756,22 @@ export class Poller {
 	 *  alert. Safe to call concurrently with run(); does no I/O. */
 	getOperatorBalanceState() {
 		return this.operatorBalanceScanner.getCurrentState();
+	}
+
+	/** cp316 — the RESOLVED treasury addresses the fee verifiers are
+	 *  currently checking against: chain-pinned release op > operator
+	 *  env > baked canonical default (treasurySource.ts resolution).
+	 *  `feeVerifierAddresses` is re-synced every loop by
+	 *  refreshFeeVerifiersFromTreasury(), so this follows a
+	 *  chain-pin rotation within one poll cycle.  null = that method
+	 *  has no address (disabled on this instance).  Surfaced on
+	 *  /v1/instance (so peers can audit it) and used as the canonical
+	 *  reference by the federation probe's treasury-mismatch check.
+	 *  Safe to call concurrently with run(); does no I/O. */
+	currentTreasuryAddresses(): { btc: string | null; xmr: string | null } {
+		return {
+			btc: this.feeVerifierAddresses.btc ?? null,
+			xmr: this.feeVerifierAddresses.xmr ?? null
+		};
 	}
 }
