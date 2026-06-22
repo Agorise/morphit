@@ -285,7 +285,7 @@
       "confirm_pending": "Blokuję…"
     },
     "lock_session": "Zablokuj sesję",
-    "view_my_profile": "Zobacz mój profil"
+    "view_my_profile": "Profil @{account}"
   },
   "backup_keys": {
     "title": "Zabezpiecz swoje klucze",
@@ -973,7 +973,13 @@
         "load_more_failed": "Nie udało się załadować starszej historii."
       },
       "refresh_label": "Odśwież z łańcucha",
-      "delay_notice": "Odświeża się samo co kilka sekund (wolniej, gdy nieaktywne), więc świeżo wykonana transakcja może pojawić się sama nawet po minucie. Dotknij odśwież, aby od razu wczytać najnowsze dane z łańcucha."
+      "delay_notice": "Odświeża się samo co kilka sekund (wolniej, gdy nieaktywne), więc świeżo wykonana transakcja może pojawić się sama nawet po minucie. Dotknij odśwież, aby od razu wczytać najnowsze dane z łańcucha.",
+      "voting_label": "Głos",
+      "public_keys_heading": "Klucze publiczne",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "Blok {block}",
@@ -2012,7 +2018,7 @@
     "title": "Zaloguj się do Morphit",
     "body": "Wybierz opcję pasującą do tego, jak tu trafiłeś.",
     "no_account_heading": "Nie masz konta?",
-    "no_account_body": "Utwórz je powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
+    "no_account_body": "Utwórz nowe konto powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
     "register_cta": "🌱 Utwórz nowe konto",
     "checking": "Sprawdzanie twojej sesji…",
     "import_existing": "🔐 Zaloguj z 12-wyrazowym seedem, plikiem json lub kluczem posting",
@@ -2385,6 +2391,7 @@
         "body": "Płacimy opłatę tworzenia w łańcuchu — nie potrzebujesz BLURT-a, by się zarejestrować."
       },
       "submit": "Zajmij tę nazwę",
+      "submit_named": "Zarejestruj teraz moją nazwę @{name}",
       "submit_pending": "Rezerwowanie…",
       "skip": "Pomiń na razie",
       "identity_recap": "Ta tożsamość",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "Sprawdzam, czy jesteś człowiekiem…",
         "verified": "Zweryfikowano ✓"
+      },
+      "leave_guard": {
+        "title": "Zaczekaj — czy na pewno chcesz teraz opuścić tę stronę?",
+        "body": "Twoja nowa nazwa użytkownika nie została jeszcze zarejestrowana.",
+        "confirm": "Wyjdź mimo to",
+        "cancel": "Zostań na tej stronie"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "Z kolei Twoje prywatne rozmowy pozostają prywatne. Wiadomości bezpośrednie między handlującymi są szyfrowane end-to-end — na blockchainie istnieją wyłącznie jako szyfrogram, który mogą odczytać tylko Ty i Twój partner transakcji, nigdy operator, indeksery ani nikt inny obserwujący łańcuch. Morphit nie zbiera też żadnego imienia, adresu e-mail, telefonu ani dokumentu tożsamości, a dane płatnicze, które wymieniasz (takie jak adres odbioru), przechodzą przez ten szyfrowany kanał, a nie przez publiczną księgę zleceń.",
     "privacy_body_3": "Zachęcamy do korzystania z VPN, Tor, Lokinet lub I2P podczas dostępu do Morphit — wszystko, co ukrywa twój adres IP przed serwerem, z którym rozmawiasz, jest dobrym pomysłem. Nie pobieramy odcisku palca twojej przeglądarki, nie profilujemy cię, i wprost projektujemy nasze mechanizmy obrony przed nadużyciami tak, aby nie karały użytkowników dbających o prywatność. Nasze limity są prymitywne (kilka rejestracji na IP dziennie) i łatwo je obejść rotacją VPN — to świadomy kompromis. Wolimy akceptować więcej nadużyć niż sprawiać, by użytkownicy szanujący prywatność czuli się niemile widziani. Jeśli obrona wymagałaby śledzenia cię, żeby działać, nie wdrażamy jej.",
     "terms_heading": "Warunki",
-    "terms_body": "Prosimy o przestrzeganie zasady nieagresji (NAP). Przeklinanie jest akceptowalne, ale pamiętaj, że Morphit używają osoby w każdym wieku — starsi, nastolatki i wszyscy między. Wszystkie OPINIE są mile widziane, ale ukierunkowane obelgi — nie. Twoje zlecenia kupna/sprzedaży, ogłoszenia, opinie i czaty są niezmienialne, więc słowa mają znaczenie. Wyraź opinię i skończ. Nie wszczynaj kłótni. Nie publikuj niczego nielegalnego ani oczywiście nieodpowiedniego. Pamiętaj o manierach, bądź miły. 💚💙"
+    "terms_body": "Prosimy o przestrzeganie zasady nieagresji (NAP). Przeklinanie jest akceptowalne, ale pamiętaj, że Morphit używają osoby w każdym wieku — starsi, nastolatki i wszyscy między. Wszystkie OPINIE są mile widziane, ale ukierunkowane obelgi — nie. Twoje zlecenia kupna/sprzedaży, opinie i czaty są niezmienialne, więc słowa mają znaczenie. Wyraź opinię i skończ. Nie wszczynaj kłótni. Nie publikuj niczego nielegalnego ani oczywiście nieodpowiedniego. Pamiętaj o manierach, bądź miły. 💚💙"
   },
   "privkey_warn": {
     "title": "Stop — to wygląda na klucz prywatny",
@@ -3302,10 +3315,10 @@
       "loading": "Ładowanie salda...",
       "error": "Nie udało się załadować salda",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP (zablokowane BLURT)",
+      "voting_label": "Głos",
       "low_blurt_hint": "Płynne BLURT się kończy. Doładuj, aby dalej publikować zlecenia.",
-      "low_mana_hint": "Twoja MANA jest niska. Każda akcja na chainie ją zużywa; regeneruje się w ciągu ok. 5 dni. Jeśli często publikujesz, doładuj BLURT i zamień go na BP.",
+      "low_voting_hint": "Twoja siła głosu jest niska. Regeneruje się w około 5 dni. Przekształcenie większej ilości BLURT w BLURT Power podnosi Twój limit.",
       "top_up_blurt": "Doładuj BLURT",
       "top_up_hint": "Otwiera wstępnie wypełnione zlecenie kupna.",
       "apr_label": "Aktualnie {apr} APR"

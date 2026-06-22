@@ -194,6 +194,18 @@
 		void pollDeployedVersion();
 		// Re-check periodically while tab is open.
 		const timer = setInterval(check, 60_000);
+		// Also poll the deployed version on a slower cadence. The lightweight
+		// reg.update() check() above is the periodic SW-byte-diff path, but on
+		// desktop that path is unreliable: an upstream proxy (BunkerWeb) can
+		// serve /service-worker.js stale, so the browser never sees a new
+		// worker and check() finds nothing — the symptom where the snackbar
+		// never appeared on PC even though a new bundle was live. The version
+		// poll does NOT depend on the SW byte-diff, so ticking it here makes a
+		// long-open desktop tab (one that never backgrounds to fire
+		// visibilitychange) still notice a deploy. Slower than check() because
+		// verify.json carries the full asset-hash manifest.
+		const POLL_INTERVAL_MS = 5 * 60_000;
+		const pollTimer = setInterval(() => void pollDeployedVersion(), POLL_INTERVAL_MS);
 
 		// When a new controller takes over, reload so the new UI is shown.
 		const onControllerChange = (): void => {
@@ -225,6 +237,7 @@
 		return () => {
 			cancelled = true;
 			clearInterval(timer);
+			clearInterval(pollTimer);
 			navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
 			document.removeEventListener('visibilitychange', onVisible);
 			window.removeEventListener('online', onOnline);

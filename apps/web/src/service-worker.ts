@@ -69,6 +69,7 @@
 
 import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
+import { isDynamicDataPath } from '$lib/net/dynamicPaths';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -98,6 +99,12 @@ function isCacheable(req: Request): boolean {
 	if (url.origin !== self.location.origin) return false;
 	// The service worker file itself must not be cached by the service worker.
 	if (url.pathname === '/service-worker.js') return false;
+	// Dynamic same-origin data (indexer/relay API, feeds, verify.json,
+	// canary) must NEVER be cache-first — a hit would pin stale bytes
+	// (e.g. an operator's updated /v1/instance branding) until a hard
+	// reload. These fall through to the network, where each caller's
+	// own `cache:` directive governs freshness. See $lib/net/dynamicPaths.
+	if (isDynamicDataPath(url.pathname)) return false;
 	return true;
 }
 

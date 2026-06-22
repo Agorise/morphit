@@ -102,6 +102,13 @@ export interface ChainAccount {
 	 *  to BLURT POWER via the frontend's vestsToBlurtPower using the
 	 *  DGP vesting totals below. */
 	readonly vesting_shares?: string;
+	/** VESTS delegated TO / OUT FROM this account. Present in the RPC
+	 *  response; the balance proxy passes them through so the frontend can
+	 *  compute EFFECTIVE vesting (own + received − delegated) — the real
+	 *  voting-manabar ceiling. Without these, an account that delegates BP
+	 *  out (loyalty grants) has its voting power % understated. */
+	readonly received_vesting_shares?: string;
+	readonly delegated_vesting_shares?: string;
 	/** Voting-mana regen bar.  Present in the RPC response; the
 	 *  balance proxy passes it through so the frontend can render a
 	 *  mana percentage without the browser ever touching an RPC

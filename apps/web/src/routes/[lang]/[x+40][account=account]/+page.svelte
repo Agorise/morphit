@@ -69,11 +69,22 @@
 	// renders.  The non-null assertion is safe because SvelteKit
 	// would not have routed here without it.
 	const account = $derived($page.params.account!);
-	const viewerAccount = getUserBlurtAccount();
+	/** The signed-in viewer's account, but ONLY when there's an active
+	 *  session. The `morphit.blurtAccount` cache (getUserBlurtAccount)
+	 *  persists across a hard browser reload — it's cleared only on an
+	 *  explicit sign-out — so reading it unconditionally made a locked /
+	 *  logged-out visitor still match isOwnProfile and see the PRIVATE
+	 *  balance card ("Only you see this") after a refresh. Gating on the
+	 *  live session keeps the page consistent with the nav: no session ⇒
+	 *  public view. (cp323) */
+	const viewerAccount = $derived.by((): string | null => {
+		if (!$isUnlocked && !$isPairedReadOnly) return null;
+		return getUserBlurtAccount();
+	});
 	/** True when the signed-in user is viewing their own profile.
-	 *  Enables subject-only affordances (reply to reviews). The
-	 *  indexer re-checks authorization on broadcast — this derivation
-	 *  only controls UI visibility. */
+	 *  Enables subject-only affordances (reply to reviews) AND the
+	 *  private balance card. The indexer re-checks authorization on
+	 *  broadcast — this derivation only controls UI visibility. */
 	const isOwnProfile = $derived(viewerAccount !== null && viewerAccount === account);
 
 	// ─── State ─────────────────────────────────────────────────────

@@ -1,23 +1,23 @@
 <!--
 	Morphit — private balance card.
 
-	Renders the user's BLURT, BP (Blurt Power), and MANA on their own
-	profile page.  Visible ONLY when `viewerAccount === profileAccount`
-	(parent gate); never displayed to public viewers.
+	Renders the user's BLURT, BP (Blurt Power), and voting power on
+	their own profile page.  Visible ONLY when `viewerAccount ===
+	profileAccount` (parent gate); never displayed to public viewers.
 
 	Why:
-	  - Users buy a small amount of BLURT at signup.  Each chain op
-	    they perform consumes a tiny resource credit (MANA), and
-	    transfers spend the liquid balance.  Without a visible
-	    indicator, users won't realize they're running low until ops
-	    start failing.
+	  - Users buy a small amount of BLURT at signup and power it up
+	    into BP (staked VESTS).  More BP raises their voting-power
+	    ceiling; transfers spend the liquid BLURT balance.  A visible
+	    indicator lets them see where they stand at a glance.
 	  - The "Top up BLURT" button pre-fills a buy order so the user
 	    doesn't retype known fields.
 
 	Data flow:
 	  1. On mount, fetch the chain's get_accounts + DGP in parallel.
 	  2. Compute BP from VESTS via balanceMath.vestsToBlurtPower.
-	  3. Compute MANA% via balanceMath.manaPercentage with the
+	  3. Compute voting power % via balanceMath.manaPercentage from
+	     the EFFECTIVE vesting (own + received − delegated) and the
 	     present clock time.
 	  4. Display.  Refresh once per minute while mounted (cheap; one
 	     RPC call).
@@ -130,6 +130,8 @@
 			manaPct = manaPercentage(
 				acct.voting_manabar,
 				acct.vesting_shares,
+				acct.received_vesting_shares,
+				acct.delegated_vesting_shares,
 				Math.floor(Date.now() / 1000)
 			);
 			// Batch K: APR. Cheap to recompute every refresh; inputs
@@ -403,7 +405,7 @@
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
-					{$_('profile.my_balance.bp_label')}
+					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
 					<AnimatedNumber value={bpBalance} decimals={3} />
@@ -423,7 +425,7 @@
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
-					{$_('profile.my_balance.mana_label')}
+					{$_('profile.my_balance.voting_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
 					<AnimatedNumber value={manaPct} decimals={1} />%
@@ -436,7 +438,7 @@
 				{#if showLowBalanceHint}
 					{$_('profile.my_balance.low_blurt_hint')}
 				{:else}
-					{$_('profile.my_balance.low_mana_hint')}
+					{$_('profile.my_balance.low_voting_hint')}
 				{/if}
 			</p>
 		{/if}

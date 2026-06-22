@@ -90,39 +90,64 @@ export interface VotingManabar {
 	last_update_time: number;
 }
 
-/** Compute the user's current MANA percentage [0..100], regenerated
- *  to the supplied `nowSeconds`.
+/** Compute the account's current voting-power percentage [0..100],
+ *  regenerated to the supplied `nowSeconds`.
+ *
+ *  (Blurt has a SINGLE manabar — the voting manabar — and no separate
+ *  resource-credit / "RC mana" system the way Hive does, so this value
+ *  IS the account's voting power. The UI labels it "Voting".)
  *
  *  Inputs:
  *   - `manabar`: the chain's voting_manabar struct.
- *   - `vestingSharesStr`: the account's `vesting_shares` (e.g.
- *      `"1000000.123456 VESTS"`).  The MAX mana for an account is
- *      its full vesting_shares value — when current_mana ==
- *      vesting_shares, the user is at 100%.
+ *   - `ownVestingSharesStr`: the account's own `vesting_shares` (e.g.
+ *      `"1000000.123456 VESTS"`).
+ *   - `receivedVestingSharesStr`: VESTS delegated TO the account
+ *      (`received_vesting_shares`).
+ *   - `delegatedVestingSharesStr`: VESTS the account delegated OUT
+ *      (`delegated_vesting_shares`).
  *   - `nowSeconds`: Date.now()/1000 floored.  Pass it explicitly so
  *      the function is deterministic and smoke-testable.
  *
- *  Math:
- *    elapsed = max(0, nowSeconds - last_update_time)
- *    regenerated = elapsed * max_mana / MANA_REGEN_SECONDS
- *    current = min(max_mana, current_mana + regenerated)
- *    pct = 100 * current / max_mana
+ *  The manabar ceiling is the account's EFFECTIVE vesting —
+ *  `own + received − delegated` — NOT its owned vesting. This matters
+ *  for any account that delegates BP out (e.g. the loyalty-grant relay):
+ *  using owned vesting as the ceiling overstates the max and understates
+ *  the percentage. When current_mana == effective vesting the account is
+ *  at 100%.
  *
- *  Returns a percentage (0..100) suitable for direct display.
- *  Returns NaN on bad input.  When max_mana is zero (account has
- *  zero vesting), returns 0 (a zero-stake account has no mana to
- *  regenerate — display 0% rather than NaN). */
+ *  Math:
+ *    max_mana    = own + received − delegated
+ *    elapsed     = max(0, nowSeconds − last_update_time)
+ *    regenerated = elapsed * max_mana / MANA_REGEN_SECONDS
+ *    current     = min(max_mana, current_mana + regenerated)
+ *    pct         = 100 * current / max_mana
+ *
+ *  Returns a percentage (0..100) suitable for direct display. Returns
+ *  NaN when the manabar or owned-vesting input is bad. When effective
+ *  vesting is ≤ 0 (zero-stake, or fully delegated out), returns 0 — no
+ *  mana to regenerate, so display 0% rather than NaN. A missing or
+ *  malformed received/delegated value degrades to 0 (ceiling falls back
+ *  to owned-only) rather than poisoning the result with NaN. */
 export function manaPercentage(
 	manabar: VotingManabar | undefined | null,
-	vestingSharesStr: string,
+	ownVestingSharesStr: string,
+	receivedVestingSharesStr: string,
+	delegatedVestingSharesStr: string,
 	nowSeconds: number
 ): number {
 	if (!manabar || typeof manabar.current_mana !== 'string') return NaN;
 	if (typeof manabar.last_update_time !== 'number') return NaN;
 	if (!Number.isFinite(nowSeconds)) return NaN;
 	const current = Number(manabar.current_mana);
-	const maxMana = parseAssetAmount(vestingSharesStr);
-	if (!Number.isFinite(current) || !Number.isFinite(maxMana)) return NaN;
+	const own = parseAssetAmount(ownVestingSharesStr);
+	if (!Number.isFinite(current) || !Number.isFinite(own)) return NaN;
+	const finiteOr0 = (s: string): number => {
+		const v = parseAssetAmount(s);
+		return Number.isFinite(v) ? v : 0;
+	};
+	const received = finiteOr0(receivedVestingSharesStr);
+	const delegated = finiteOr0(delegatedVestingSharesStr);
+	const maxMana = own + received - delegated;
 	if (maxMana <= 0) return 0;
 	const elapsed = Math.max(0, nowSeconds - manabar.last_update_time);
 	const regenerated = (elapsed * maxMana) / MANA_REGEN_SECONDS;

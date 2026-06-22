@@ -285,7 +285,7 @@
       "confirm_pending": "鎖定中…"
     },
     "lock_session": "鎖定會話",
-    "view_my_profile": "查看我的個人檔案"
+    "view_my_profile": "@{account} 的個人檔案"
   },
   "backup_keys": {
     "title": "備份你的金鑰",
@@ -973,7 +973,13 @@
         "load_more_failed": "無法載入更舊嘅歷史。"
       },
       "refresh_label": "從鏈上重新整理",
-      "delay_notice": "每隔幾秒會自動重新整理（閒置時較慢），所以剛完成的交易可能需要最多一分鐘才會自動出現。點一下重新整理即可立即從鏈上載入最新資料。"
+      "delay_notice": "每隔幾秒會自動重新整理（閒置時較慢），所以剛完成的交易可能需要最多一分鐘才會自動出現。點一下重新整理即可立即從鏈上載入最新資料。",
+      "voting_label": "投票權",
+      "public_keys_heading": "公開金鑰",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "區塊 {block}",
@@ -2012,7 +2018,7 @@
     "title": "登入 Morphit",
     "body": "選擇與您的情況相符的選項。",
     "no_account_heading": "仲未有帳戶？",
-    "no_account_body": "喺上面揀個型嘅用戶名就可以開一個，真係咁簡單。",
+    "no_account_body": "喺上面揀個型嘅用戶名就可以開一個新帳戶，真係咁簡單。",
     "register_cta": "🌱 建立新帳戶",
     "checking": "正在檢查你的會話…",
     "import_existing": "🔐 用 12 詞助記詞、json 密鑰檔或 posting 密鑰登入",
@@ -2385,6 +2391,7 @@
         "body": "鏈上創建費用由我們支付——您不需要 BLURT 也能註冊。"
       },
       "submit": "領取此名字",
+      "submit_named": "立即註冊我的 @{name} 用戶名",
       "submit_pending": "正在領取…",
       "skip": "暫時跳過",
       "identity_recap": "此身分",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "正在驗證您是真人…",
         "verified": "已驗證 ✓"
+      },
+      "leave_guard": {
+        "title": "等一等 — 確定現在要離開此頁面嗎？",
+        "body": "你的新用戶名尚未註冊。",
+        "confirm": "仍要離開",
+        "cancel": "留在此頁面"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "相反，你的私人對話始終保持私密。交易者之間的私訊經過端對端加密——它們在區塊鏈上僅以密文形式存在，只有你和你的交易對手才能讀取，營運方、索引服務或任何其他觀察鏈上資料的人都無法讀取。Morphit 亦不會收集任何姓名、電郵、電話或身分證件，而你交換的付款資訊（例如收款地址）會透過該加密通道傳遞，而不會出現在公開的訂單簿中。",
     "privacy_body_3": "我們鼓勵你在存取 Morphit 時使用 VPN、Tor、Lokinet 或 I2P——任何隱藏你 IP 不被伺服器看到的方式都是好主意。我們不對你的瀏覽器進行指紋識別,不畫像你,並明確設計我們的防濫用機制,使其不會懲罰注重隱私的用戶。我們的速率限制很粗糙(每 IP 每天幾次註冊),通過 VPN 輪換很容易繞過——這是一個自覺的權衡。我們寧願接受更多濫用,也不願讓尊重隱私的用戶感到不受歡迎。如果一種防禦需要追蹤你才能運作,我們就不會實現它。",
     "terms_heading": "條款",
-    "terms_body": "請遵守不侵犯原則(NAP)。說髒話是可以的,但請記住 Morphit 的用戶有各種年齡——老人、青少年以及中間的每一個人。歡迎各種觀點,但不接受針對性的辱罵。您的買/賣訂單、廣告、回饋和聊天都是不可更改的,所以用詞至關重要。表達觀點然後停下。不要挑起爭端。不要發布非法或明顯令人反感的內容。請注意禮貌,做個友善的人。💚💙"
+    "terms_body": "請遵守不侵犯原則(NAP)。說髒話是可以的,但請記住 Morphit 的用戶有各種年齡——老人、青少年以及中間的每一個人。歡迎各種觀點,但不接受針對性的辱罵。您的買/賣訂單、回饋和聊天都是不可更改的,所以用詞至關重要。表達觀點然後停下。不要挑起爭端。不要發布非法或明顯令人反感的內容。請注意禮貌,做個友善的人。💚💙"
   },
   "privkey_warn": {
     "title": "停 — 這看起來像一個私鑰",
@@ -3302,10 +3315,10 @@
       "loading": "正在載入餘額...",
       "error": "無法載入餘額",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP（質押嘅 BLURT）",
+      "voting_label": "投票權",
       "low_blurt_hint": "你的流動 BLURT 快用完了。充值以繼續發佈訂單。",
-      "low_mana_hint": "你的 MANA 偏低。每次鏈上操作都會消耗少許;大約 5 天可回復滿值。如果你常發佈,請充值 BLURT 並轉換為 BP。",
+      "low_voting_hint": "您的投票權較低。大約 5 天可恢復。將更多 BLURT 升級為 BLURT Power 可提高上限。",
       "top_up_blurt": "充值 BLURT",
       "top_up_hint": "開啟預填的買入訂單。",
       "apr_label": "目前年化收益率 {apr}"

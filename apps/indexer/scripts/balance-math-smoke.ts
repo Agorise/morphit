@@ -94,27 +94,23 @@ scenario('manaPercentage at 100% when current == max', () => {
 		current_mana: '1000000000',
 		last_update_time: 1_700_000_000
 	};
-	const pct = manaPercentage(manabar, '1000.000000 VESTS', 1_700_000_000);
-	// vesting_shares parsed as 1000 (the symbol stripped); raw
-	// scale comparison is intentional — chain values for
-	// current_mana are in the same VESTS-base units as
-	// vesting_shares.  Here current_mana 1e9 vs max 1e3 means
-	// the test is using artificial values; let me pick consistent
-	// scales.
+	// current_mana is compared on the SAME scale as the parsed vesting
+	// amount (the chain reports both in VESTS-base units); this fixture
+	// uses artificial magnitudes, so just assert the result is finite —
+	// exact-value checks are below. No delegation → effective == owned.
+	const pct = manaPercentage(manabar, '1000.000000 VESTS', '0.000000 VESTS', '0.000000 VESTS', 1_700_000_000);
 	if (Number.isNaN(pct)) throw new Error('got NaN');
-	// Skip exact value check because of the scale mismatch in this
-	// fixture — real test below.
 });
 
 scenario('manaPercentage at 100% with consistent scale', () => {
 	// Use raw numbers (no symbol) for vesting_shares to align with
 	// current_mana scale.  Real chain values use VESTS suffix; the
-	// math is identical.
+	// math is identical.  No delegation → effective == owned.
 	const manabar: VotingManabar = {
 		current_mana: '1000000000',
 		last_update_time: 1_700_000_000
 	};
-	const pct = manaPercentage(manabar, '1000000000', 1_700_000_000);
+	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000);
 	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
 });
 
@@ -124,7 +120,7 @@ scenario('manaPercentage at 50% half-elapsed regen from zero', () => {
 		last_update_time: 1_700_000_000
 	};
 	const halfRegen = MANA_REGEN_SECONDS / 2;
-	const pct = manaPercentage(manabar, '1000000000', 1_700_000_000 + halfRegen);
+	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 + halfRegen);
 	if (Math.abs(pct - 50) > 0.01) throw new Error(`expected ~50, got ${pct}`);
 });
 
@@ -134,7 +130,7 @@ scenario('manaPercentage caps at 100% for over-regen', () => {
 		last_update_time: 1_700_000_000
 	};
 	// Wait 10 days = 2x regen cycle; should cap at 100%.
-	const pct = manaPercentage(manabar, '1000000000', 1_700_000_000 + 10 * 86_400);
+	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 + 10 * 86_400);
 	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
 });
 
@@ -143,22 +139,22 @@ scenario('manaPercentage returns 0 for zero-vesting account', () => {
 		current_mana: '0',
 		last_update_time: 1_700_000_000
 	};
-	const pct = manaPercentage(manabar, '0.000000 VESTS', 1_700_000_000 + 1000);
+	const pct = manaPercentage(manabar, '0.000000 VESTS', '0.000000 VESTS', '0.000000 VESTS', 1_700_000_000 + 1000);
 	if (pct !== 0) throw new Error(`expected 0, got ${pct}`);
 });
 
 scenario('manaPercentage returns NaN for missing manabar', () => {
-	if (!Number.isNaN(manaPercentage(null, '1000 VESTS', 1_700_000_000))) {
+	if (!Number.isNaN(manaPercentage(null, '1000 VESTS', '0', '0', 1_700_000_000))) {
 		throw new Error('null');
 	}
-	if (!Number.isNaN(manaPercentage(undefined, '1000 VESTS', 1_700_000_000))) {
+	if (!Number.isNaN(manaPercentage(undefined, '1000 VESTS', '0', '0', 1_700_000_000))) {
 		throw new Error('undef');
 	}
 });
 
 scenario('manaPercentage returns NaN for bogus current_mana', () => {
 	const bad = { current_mana: 'abc', last_update_time: 1_700_000_000 } as VotingManabar;
-	if (!Number.isNaN(manaPercentage(bad, '1000', 1_700_000_000))) {
+	if (!Number.isNaN(manaPercentage(bad, '1000', '0', '0', 1_700_000_000))) {
 		throw new Error('bogus');
 	}
 });
@@ -170,8 +166,56 @@ scenario('manaPercentage handles past last_update_time without negative regen', 
 	};
 	// nowSeconds BEFORE last_update_time — clock skew.  Should
 	// not subtract; clamp at current_mana.
-	const pct = manaPercentage(manabar, '1000000000', 1_700_000_000 - 100);
+	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 - 100);
 	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
+});
+
+// ── Effective-vesting ceiling (own + received − delegated) ──────────
+// The manabar max is EFFECTIVE vesting, not owned (cp322 fix). An
+// account that delegates BP out reads HIGHER than the owned-only
+// figure; one that receives delegation reads LOWER.
+
+scenario('manaPercentage: delegating BP out raises the % (effective < owned)', () => {
+	const manabar: VotingManabar = {
+		current_mana: '250000000',
+		last_update_time: 1_700_000_000
+	};
+	// own 1e9, delegated-out 5e8 → effective 5e8. current 2.5e8.
+	// effective: 2.5e8 / 5e8 = 50%.  (Owned-only would read 25%.)
+	const pct = manaPercentage(manabar, '1000000000', '0', '500000000', 1_700_000_000);
+	if (Math.abs(pct - 50) > 1e-9) throw new Error(`expected 50 (effective), got ${pct}`);
+});
+
+scenario('manaPercentage: received delegation lowers the % (effective > owned)', () => {
+	const manabar: VotingManabar = {
+		current_mana: '1000000000',
+		last_update_time: 1_700_000_000
+	};
+	// own 1e9, received 1e9 → effective 2e9. current 1e9.
+	// effective: 1e9 / 2e9 = 50%.  (Owned-only would read 100%.)
+	const pct = manaPercentage(manabar, '1000000000', '1000000000', '0', 1_700_000_000);
+	if (Math.abs(pct - 50) > 1e-9) throw new Error(`expected 50 (effective), got ${pct}`);
+});
+
+scenario('manaPercentage returns 0 when fully delegated out (effective <= 0)', () => {
+	const manabar: VotingManabar = {
+		current_mana: '1000000000',
+		last_update_time: 1_700_000_000
+	};
+	// delegated-out exceeds own+received → effective <= 0 → 0%.
+	const pct = manaPercentage(manabar, '1000000000', '0', '1500000000', 1_700_000_000);
+	if (pct !== 0) throw new Error(`expected 0, got ${pct}`);
+});
+
+scenario('manaPercentage degrades malformed received/delegated to 0 (ceiling = owned)', () => {
+	const manabar: VotingManabar = {
+		current_mana: '1000000000',
+		last_update_time: 1_700_000_000
+	};
+	// Garbage received/delegated must not poison the result — they fall
+	// back to 0, so the ceiling is owned vesting (1e9) → 100%.
+	const pct = manaPercentage(manabar, '1000000000', 'garbage', 'also-bad', 1_700_000_000);
+	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100 (degraded), got ${pct}`);
 });
 
 // ─── formatBalance ──────────────────────────────────────────────────

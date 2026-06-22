@@ -24,6 +24,7 @@
 	import { page } from '$app/stores';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { fetchAccountHistory } from '$blurt/accountHistory';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import {
 		parseAssetAmount,
@@ -32,6 +33,8 @@
 		formatBalance,
 		formatPercentage
 	} from '$blurt/balanceMath';
+	import { computeBlurtVestingApr, formatApr } from '$blurt/apr';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	import { decorateOp } from '$lib/explorer/decorate';
 	import {
 		morphitExplorerTxUrl,
@@ -52,8 +55,25 @@
 
 	let blurt = $state(NaN);
 	let bp = $state(NaN);
-	let mana = $state(NaN);
-	let postingPub = $state<string | null>(null);
+	/** Live BP (staked-BLURT) APR from chain inflation — same global rate
+	 *  for every account; shown under the BP figure to make explicit that
+	 *  staked BLURT accrues yield. Computed pure-functionally from the DGP
+	 *  (no extra fetch). */
+	let vestingApr = $state(NaN);
+	/** Voting power %, regenerated to "now" from the chain's voting_manabar.
+	 *  NOTE: Blurt exposes a single manabar — the voting manabar — and has
+	 *  no separate resource-credit ("RC mana") system the way Hive does, so
+	 *  this value IS the account's voting power. */
+	let voting = $state(NaN);
+	/** All four public keys (owner / active / posting / memo), fetched once
+	 *  from the indexer's same-origin /keys proxy.  null until loaded or on
+	 *  fetch failure (the card then simply doesn't render). */
+	let keys = $state<{
+		readonly owner: string | null;
+		readonly active: string | null;
+		readonly posting: string | null;
+		readonly memo: string | null;
+	} | null>(null);
 
 	interface OpRow {
 		readonly seq: number;
@@ -101,13 +121,27 @@
 			dgp.total_vesting_fund_blurt,
 			dgp.total_vesting_shares
 		);
-		mana = manaPercentage(
+		voting = manaPercentage(
 			acct.voting_manabar ?? null,
 			acct.vesting_shares ?? '0 VESTS',
+			acct.received_vesting_shares ?? '0 VESTS',
+			acct.delegated_vesting_shares ?? '0 VESTS',
 			Math.floor(Date.now() / 1000)
 		);
-		// posting_pub is the first posting-authority key (or null).
-		if (acct.posting_pub) postingPub = acct.posting_pub;
+		vestingApr = computeBlurtVestingApr({
+			head_block_number: dgp.head_block_number,
+			current_supply: dgp.current_supply,
+			total_vesting_fund_blurt: dgp.total_vesting_fund_blurt
+		});
+	}
+
+	/** First public key in an authority's key_auths list (the account's
+	 *  primary signer for that role), or null for an empty/absent authority. */
+	function firstAuthKey(
+		auth: { readonly key_auths?: ReadonlyArray<readonly [string, number]> } | null | undefined
+	): string | null {
+		const first = auth?.key_auths?.[0]?.[0];
+		return typeof first === 'string' ? first : null;
 	}
 
 	async function loadInitial(): Promise<void> {
@@ -130,6 +164,23 @@
 			}
 			applyBalanceData(r.data);
 
+			// All four public keys (owner / active / posting / memo) via the
+			// indexer's same-origin /keys proxy. Non-fatal: a keys failure
+			// must not blank a page that already loaded balances + history.
+			try {
+				const k = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch);
+				if (k !== null) {
+					keys = {
+						owner: firstAuthKey(k.owner),
+						active: firstAuthKey(k.active),
+						posting: firstAuthKey(k.posting),
+						memo: typeof k.memo_key === 'string' ? k.memo_key : null
+					};
+				}
+			} catch (err) {
+				console.warn('[explorer/account] keys load failed:', err);
+			}
+
 			// First page of history.
 			await fetchHistory(-1);
 			status = 'ok';
@@ -140,7 +191,7 @@
 		}
 	}
 
-	async function fetchHistory(from: number, noCache = false): Promise<void> {
+	async function fetchHistory(from: number, noCache = false, limit = PAGE_SIZE): Promise<void> {
 		// One page via the indexer (privacy: no direct RPC from the
 		// browser). get_account_history shape per entry:
 		//   [seq, { block, trx_id, timestamp, op: [name, body] }]
@@ -148,7 +199,7 @@
 			resolveOrigin(MORPHIT_INDEXER_ORIGIN),
 			account,
 			from,
-			PAGE_SIZE,
+			limit,
 			fetch,
 			noCache
 		);
@@ -206,7 +257,14 @@
 		if (oldestSeqLoaded === null || oldestSeqLoaded <= 0 || loadingMore) return;
 		loadingMore = true;
 		try {
-			await fetchHistory(oldestSeqLoaded - 1);
+			// Blurt's get_account_history rejects `from < limit - 1` (it can't
+			// return `limit` entries ending below sequence `limit-1`). Near the
+			// start of an account's history `oldestSeqLoaded` can be smaller than
+			// a full page, so clamp the page to what's actually available — else
+			// the final "load older" call fails silently and the button looks
+			// like it doesn't work.
+			const limit = Math.min(PAGE_SIZE, oldestSeqLoaded);
+			await fetchHistory(oldestSeqLoaded - 1, false, limit);
 		} catch (err) {
 			console.warn('[explorer/account] load-more failed:', err);
 			errorMsg = $_('explorer.account.error.load_more_failed');
@@ -374,25 +432,68 @@
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
-					{$_('profile.my_balance.bp_label')}
+					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">{formatBalance(bp)}</dd>
+				{#if Number.isFinite(vestingApr)}
+					<!-- Live BP APR from chain inflation. Phrased "Currently
+					     earning N% APR" (same key as the private balance card)
+					     so staked BLURT reads as yield-bearing, not idle. -->
+					<dd class="text-xs text-ink-500 dark:text-ink-400">
+						{$_('profile.my_balance.apr_label', {
+							values: { apr: formatApr(vestingApr) }
+						})}
+					</dd>
+				{/if}
 			</div>
 			<div>
 				<dt class="text-xs text-ink-500 dark:text-ink-400">
-					{$_('profile.my_balance.mana_label')}
+					{$_('explorer.account.voting_label')}
 				</dt>
-				<dd class="font-mono text-lg font-semibold">{formatPercentage(mana)}</dd>
+				<dd class="font-mono text-lg font-semibold">{formatPercentage(voting)}</dd>
 			</div>
 		</dl>
 
-		{#if postingPub}
-			<dl class="card mb-6">
-				<dt class="text-xs text-ink-500 dark:text-ink-400">
-					{$_('explorer.account.posting_pubkey_label')}
-				</dt>
-				<dd class="break-all font-mono text-xs">{postingPub}</dd>
-			</dl>
+		{#if keys}
+			<section class="card mb-6">
+				<h2 class="mb-3 font-display text-base font-bold">
+					{$_('explorer.account.public_keys_heading')}
+				</h2>
+				<dl class="space-y-3">
+					{#if keys.owner}
+						<div>
+							<dt class="text-xs text-ink-500 dark:text-ink-400">
+								{$_('explorer.account.key_owner')}
+							</dt>
+							<dd class="break-all font-mono text-xs">{keys.owner}</dd>
+						</div>
+					{/if}
+					{#if keys.active}
+						<div>
+							<dt class="text-xs text-ink-500 dark:text-ink-400">
+								{$_('explorer.account.key_active')}
+							</dt>
+							<dd class="break-all font-mono text-xs">{keys.active}</dd>
+						</div>
+					{/if}
+					{#if keys.posting}
+						<div>
+							<dt class="text-xs text-ink-500 dark:text-ink-400">
+								{$_('explorer.account.key_posting')}
+							</dt>
+							<dd class="break-all font-mono text-xs">{keys.posting}</dd>
+						</div>
+					{/if}
+					{#if keys.memo}
+						<div>
+							<dt class="text-xs text-ink-500 dark:text-ink-400">
+								{$_('explorer.account.key_memo')}
+							</dt>
+							<dd class="break-all font-mono text-xs">{keys.memo}</dd>
+						</div>
+					{/if}
+				</dl>
+			</section>
 		{/if}
 
 		<section class="card">
@@ -409,7 +510,7 @@
 					disabled={refreshing}
 					aria-label={$_('explorer.account.refresh_label')}
 					title={$_('explorer.account.refresh_label')}
-					class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ink-300 text-ink-600 transition hover:text-morphit-emerald disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-700 dark:text-ink-300"
+					class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink-300 text-ink-600 transition hover:border-morphit-emerald hover:bg-ink-50 hover:text-morphit-emerald disabled:cursor-wait disabled:opacity-100 dark:border-ink-700 dark:text-ink-300 dark:hover:bg-ink-900"
 				>
 					<svg
 						class="h-4 w-4 {refreshing ? 'animate-spin' : ''}"
@@ -433,6 +534,9 @@
 				<ul class="divide-y divide-ink-200 dark:divide-ink-800">
 					{#each ops as op (op.seq)}
 						{@const dec = decorateOp(op.opName, op.opBody)}
+						{@const txUrl = morphitExplorerTxUrl(op.trxId)}
+						{@const blockUrl = morphitExplorerBlockUrl(op.block)}
+						{@const iso = op.timestamp.endsWith('Z') ? op.timestamp : `${op.timestamp}Z`}
 						<li class="py-3">
 							<div class="flex items-baseline justify-between gap-2">
 								<span
@@ -442,19 +546,19 @@
 								>
 									{$_(`explorer.op.label.${dec.labelKey}`)}
 								</span>
-								<time class="text-xs text-ink-500 dark:text-ink-400">
-									{op.timestamp.endsWith('Z') ? op.timestamp : `${op.timestamp}Z`}
+								<time datetime={iso} class="text-xs text-ink-500 dark:text-ink-400">
+									{formatDayMonthTime(iso)}
 								</time>
 							</div>
 							<div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
 								<a
-									href={morphitExplorerTxUrl(op.trxId) ?? '#'}
+									href={txUrl ? lp(txUrl) : '#'}
 									class="font-mono text-morphit-emerald underline-offset-2 hover:underline"
 								>
 									tx: {op.trxId.slice(0, 10)}…
 								</a>
 								<a
-									href={morphitExplorerBlockUrl(op.block) ?? '#'}
+									href={blockUrl ? lp(blockUrl) : '#'}
 									class="font-mono text-morphit-emerald underline-offset-2 hover:underline"
 								>
 									block: {op.block}
@@ -468,9 +572,26 @@
 						type="button"
 						onclick={loadMore}
 						disabled={loadingMore}
-						class="mt-3 w-full rounded-lg border border-ink-300 px-3 py-2 text-sm font-semibold transition hover:bg-ink-50 disabled:opacity-50 dark:border-ink-700 dark:hover:bg-ink-900"
+						class="mt-3 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-ink-300 px-3 py-2 text-sm font-semibold transition hover:border-morphit-emerald hover:bg-ink-50 disabled:cursor-wait disabled:opacity-70 dark:border-ink-700 dark:hover:bg-ink-900"
 					>
-						{loadingMore ? $_('explorer.account.loading_more') : $_('explorer.account.load_more')}
+						{#if loadingMore}
+							<svg
+								class="h-4 w-4 animate-spin"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+								<path d="M21 3v6h-6" />
+							</svg>
+							{$_('explorer.account.loading_more')}
+						{:else}
+							{$_('explorer.account.load_more')}
+						{/if}
 					</button>
 				{/if}
 			{/if}

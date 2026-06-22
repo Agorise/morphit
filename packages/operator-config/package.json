@@ -1,6 +1,6 @@
 {
 	"name": "@morphit/operator-config",
-	"version": "1.0.0-beta.25",
+	"version": "1.0.0-beta.26",
 	"private": true,
 	"type": "module",
 	"description": "Loads morphit.config.env and projects its values into process.env for the indexer and relay to consume.",

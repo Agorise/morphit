@@ -399,34 +399,74 @@
 							{#if inst.alt_networks}
 								<div class="flex flex-wrap gap-2">
 									{#if inst.alt_networks.tor}
-										<span class="chip text-xs" title={inst.alt_networks.tor}>
+										<a
+											href="http://{inst.alt_networks.tor}"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.tor }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
 											<AltNetworkIcon network="tor" size={16} class="h-4 w-4" />
 											{$_('footer.tor')}
-										</span>
+										</a>
 									{/if}
 									{#if inst.alt_networks.lokinet}
-										<span class="chip text-xs" title={inst.alt_networks.lokinet}>
+										<a
+											href="http://{inst.alt_networks.lokinet}"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.lokinet }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
 											<AltNetworkIcon network="lokinet" size={16} class="h-4 w-4" />
 											{$_('footer.lokinet')}
-										</span>
+										</a>
 									{/if}
 									{#if inst.alt_networks.i2p_b32}
-										<span class="chip text-xs" title={inst.alt_networks.i2p_b32}>
+										<a
+											href="http://{inst.alt_networks.i2p_b32}"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.i2p_b32 }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
 											<AltNetworkIcon network="i2p" size={16} class="h-4 w-4" />
 											{$_('footer.i2p_b32')}
-										</span>
+										</a>
 									{/if}
 									{#if inst.alt_networks.i2p_name}
-										<span class="chip text-xs" title={inst.alt_networks.i2p_name}>
+										<a
+											href="http://{inst.alt_networks.i2p_name}"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.i2p_name }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
 											<AltNetworkIcon network="i2p" size={16} class="h-4 w-4" />
 											{$_('footer.i2p_name')}
-										</span>
+										</a>
 									{/if}
 									{#if inst.alt_networks.nostr}
-										<span class="chip text-xs" title={inst.alt_networks.nostr}>
+										<a
+											href="nostr:{inst.alt_networks.nostr}"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.nostr }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
 											<AltNetworkIcon network="nostr" size={16} class="h-4 w-4" />
 											{$_('footer.nostr')}
-										</span>
+										</a>
 									{/if}
 								</div>
 							{/if}

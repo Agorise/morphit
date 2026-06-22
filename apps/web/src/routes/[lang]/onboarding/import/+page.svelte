@@ -163,6 +163,22 @@
 	}
 	const wifLooksInvalid = $derived(postingWif.trim().length > 0 && !looksLikeBlurtWif(postingWif));
 
+	// On-blur verdict for the posting-key (WIF) field — drives the inline
+	// icon at the field's end (green check if the key looks structurally
+	// valid, red triangle if not, nothing while empty/untouched). Mirrors
+	// the account-name field's tri-state. The live red border above
+	// (wifLooksInvalid) still flags as the user types; this only adds the
+	// affirm/deny ICON on blur. (cp323)
+	let wifStatus = $state<'idle' | 'valid' | 'invalid'>('idle');
+	function checkWifLooksOk(): void {
+		const v = postingWif.trim();
+		if (v.length === 0) {
+			wifStatus = 'idle';
+			return;
+		}
+		wifStatus = looksLikeBlurtWif(v) ? 'valid' : 'invalid';
+	}
+
 	// Animated "someone is typing" placeholder — same treatment as the
 	// orderbook Region/Payment fields. These handles are deliberately NOT
 	// translated (proper-noun usernames, like the orderbook place names).
@@ -892,6 +908,7 @@
 				<div class="relative">
 					<input
 						type="text"
+						maxlength="16"
 						bind:value={postingAccount}
 						oninput={(e) => {
 							const el = e.currentTarget;
@@ -970,20 +987,70 @@
 				<span class="mb-2 block font-semibold"
 					>{$_('onboarding.import.posting_only.wif_label')}</span
 				>
-				<input
-					type="password"
-					maxlength="64"
-					bind:value={postingWif}
-					autocomplete="off"
-					spellcheck="false"
-					oninput={() => (wifKeyInvalid = false)}
-					onfocus={() => (wifKeyInvalid = false)}
-					placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
-					class="w-full rounded-xl border-2 bg-white px-3 py-2 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
-					wifLooksInvalid
-						? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-						: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
-				/>
+				<div class="relative">
+					<input
+						type="password"
+						maxlength="64"
+						bind:value={postingWif}
+						autocomplete="off"
+						spellcheck="false"
+						oninput={() => {
+							wifKeyInvalid = false;
+							wifStatus = 'idle';
+						}}
+						onfocus={() => {
+							wifKeyInvalid = false;
+							wifStatus = 'idle';
+						}}
+						onblur={checkWifLooksOk}
+						placeholder={$_('onboarding.import.posting_only.wif_placeholder')}
+						class="w-full rounded-xl border-2 bg-white px-3 py-2 pe-10 font-mono focus:outline-none focus:ring-2 dark:bg-ink-900 {wifKeyInvalid ||
+						wifLooksInvalid
+							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+							: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
+					/>
+					{#if wifStatus === 'valid'}
+						<span
+							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-morphit-emerald"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="3"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="M20 6 9 17l-5-5" />
+							</svg>
+						</span>
+					{:else if wifStatus === 'invalid'}
+						<span
+							class="pointer-events-none absolute end-3 top-1/2 inline-flex -translate-y-1/2 items-center text-red-500 dark:text-red-400"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+								<path d="M12 9v4" />
+								<path d="M12 17h.01" />
+							</svg>
+						</span>
+					{/if}
+				</div>
 				<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 					{$_('onboarding.import.posting_only.wif_hint')}
 				</span>

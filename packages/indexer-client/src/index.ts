@@ -347,6 +347,16 @@ export interface AccountBalanceResponse {
 		readonly balance: string;
 		/** Staked VESTS, e.g. "1000000.000000 VESTS". */
 		readonly vesting_shares: string;
+		/** VESTS delegated TO this account by others, e.g.
+		 *  "0.000000 VESTS". Part of the EFFECTIVE vesting used as the
+		 *  voting-manabar ceiling (own + received − delegated). */
+		readonly received_vesting_shares: string;
+		/** VESTS this account has delegated OUT to others, e.g.
+		 *  "0.000000 VESTS". Subtracted from the manabar ceiling — an
+		 *  account that delegates BP out (e.g. loyalty grants) has a
+		 *  lower effective stake, so its voting power % is higher than an
+		 *  owned-only figure would suggest. */
+		readonly delegated_vesting_shares: string;
 		readonly voting_manabar: {
 			readonly current_mana: string;
 			readonly last_update_time: number;
