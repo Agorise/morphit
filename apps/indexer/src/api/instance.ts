@@ -65,6 +65,14 @@ export interface InstanceResponse {
 	 *  payout), and the treasury keeps 100%.  See
 	 *  apps/indexer/src/indexer/operatorEarnings.ts. */
 	operator_tag: string | null;
+	/** cp316 — the RESOLVED treasury fee addresses this instance
+	 *  verifies fee payments against (chain-pin > env > canonical
+	 *  default).  PUBLIC receiving addresses — safe to expose.  Lets
+	 *  peers' federation probes audit that this instance routes fees
+	 *  to the canonical treasury; an instance advertising a different
+	 *  non-null address is flagged 'mismatch' on the directory.  Either
+	 *  chain is null when that fee method is disabled here. */
+	treasury: { btc: string | null; xmr: string | null };
 	/** Optional SEO override (task #4).  Null = use bundled
 	 *  i18n defaults; non-null = render this string verbatim
 	 *  in the Head component instead of the localized default. */
@@ -225,7 +233,13 @@ export interface InstanceResponse {
 	mcp_url: string | null;
 }
 
-export function instanceRoute(config: Config): Hono {
+export function instanceRoute(
+	config: Config,
+	getTreasuryAddresses: () => { btc: string | null; xmr: string | null } = () => ({
+		btc: null,
+		xmr: null
+	})
+): Hono {
 	const app = new Hono();
 
 	app.get('/', (c) => {
@@ -252,6 +266,7 @@ export function instanceRoute(config: Config): Hono {
 			fee_recipient: config.feeRecipient,
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
+			treasury: getTreasuryAddresses(),
 			seo: {
 				title: config.instanceSeoTitle ?? null,
 				description: config.instanceSeoDescription ?? null,

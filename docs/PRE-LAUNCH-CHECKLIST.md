@@ -263,8 +263,35 @@ file in the same turn.
       `apps/indexer/scripts/release-build-payload.ts`
       enforces "no viewkey field" defense-in-depth.  The
       op is signed by `@morphit`'s posting key from the
-      operator's personal off-server machine.  *(Origin:
-      Part 106 + Part 107 + Part 108++.)*
+      operator's personal off-server machine.  Build it,
+      preview it, then sign + broadcast it with the
+      laptop-only helper (masked key prompt, never stored;
+      see OPERATIONS §40.6).  The BTC/XMR treasury addresses
+      are pre-filled from the canonical treasury (cp315), so
+      you only supply the version, the SRI hash manifest
+      (built in §E), and your endpoints file:
+      ```
+      # 1. Build the frontend + the SRI release manifest (§E):
+      cd apps/web && npm run build && \
+        node scripts/build-manifest.mjs --release-json \
+          --prefix _app/ --prefix index.html --prefix service-worker.js
+      cd ../..
+
+      # 2. Build the release payload (treasury pre-filled),
+      #    pre-loading the manifest/endpoints/version
+      #    (< /dev/null keeps it non-interactive so the
+      #    redirected stdout is clean JSON, not prompts):
+      MORPHIT_BUILD_VERSION=<semver> \
+        MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
+        MORPHIT_BUILD_ENDPOINTS_FILE=<endpoints.json> \
+        npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+
+      # 3. Preview, then sign + broadcast (masked key):
+      npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+      npx tsx apps/indexer/scripts/release-broadcast.ts release.json
+      ```
+      *(Origin: Part 106 + Part 107 + Part 108++; broadcast
+      helper cp317; SRI manifest pipeline fix cp319.)*
 
 - [ ] **[recommended]** Verify federation propagation by
       polling each peer's `/v1/release.treasury`.  Confirm
@@ -665,18 +692,31 @@ file in the same turn.
 - [ ] **[blocking]** Hash the bundle and include the
       hash manifest in the next `morphit_release_v1`
       op so federated frontends can verify integrity.
-      Generate the manifest from the built bundle:
+      `build-manifest.mjs` emits TWO distinct artifacts
+      from the same `apps/web/build/` walk — do not mix
+      them up:
       ```
+      # (a) Reproducible-build fingerprint (sha256sum text,
+      #     for clone-vs-ship diffs — NOT the release op):
       cd apps/web && node scripts/build-manifest.mjs
+
+      # (b) The ON-CHAIN release hash_manifest (SRI base64
+      #     JSON, scoped to the tamper-critical executable
+      #     surface to stay under the 64 KB schema cap):
+      cd apps/web && node scripts/build-manifest.mjs \
+        --release-json --prefix _app/ --prefix index.html \
+        --prefix service-worker.js
       ```
-      This walks `apps/web/build/` and emits a sorted
-      SHA-256-per-file manifest (deterministic
-      fingerprint of the bundle bytes).  Pass the output
-      path to `apps/indexer/scripts/release-build-payload.ts`
-      via `--hash-manifest <path>` when building the
-      next release op.  *(Origin: ADR-0007 chain-pinned
-      hash manifest; build-manifest script reference
-      added Part 122 cp19 pre-launch dry-run.)*
+      Artifact (b) writes `apps/web/build-manifest.release.json`
+      — a JSON object of `/<served-path>: sha256-<base64>`,
+      exactly the shape `@morphit/release-schema` requires and
+      the frontend tamper-check (`releaseHashCheck.ts`) verifies
+      the running bundle against.  Supply it to the release-op
+      builder via the `MORPHIT_BUILD_HASH_MANIFEST_FILE` env var
+      (see §B for the full broadcast flow).  *(Origin: ADR-0007
+      chain-pinned hash manifest; build-manifest reference added
+      Part 122 cp19; SRI `--release-json` mode + format fix
+      cp319.)*
 
 - [ ] **[recommended]** Verify your frontend renders
       correctly for ALL 10 locales (en, es, fr, de, it,

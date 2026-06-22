@@ -39,7 +39,7 @@
 		isPairedReadOnly,
 		pairedReadOnly,
 		hasAnySession,
-		reset as resetIdentity,
+		broadcastSignOut,
 		lockSession
 	} from '$stores/identity';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
@@ -169,15 +169,19 @@
 	}
 
 	/** User confirmed sign-out in the modal. Close the modal first
-	 *  (smooth visual), then wipe the in-memory identity (which
-	 *  unmounts this whole branch), then navigate home.
+	 *  (smooth visual), then wipe the identity, then navigate home.
 	 *
-	 *  Order matters: closing the modal before resetIdentity() means
+	 *  broadcastSignOut() (NOT reset() alone) so the sign-out propagates
+	 *  to every open tab AND clears the persisted account-name cache —
+	 *  "sign out anywhere → signed out everywhere." Matches the settings
+	 *  page's Sign Out.
+	 *
+	 *  Order matters: closing the modal before broadcastSignOut() means
 	 *  the modal goes through its normal close animation instead of
 	 *  vanishing mid-unmount. */
 	async function confirmSignOut(): Promise<void> {
 		showSignOutConfirm = false;
-		resetIdentity();
+		broadcastSignOut();
 		await gotoLocale('/');
 	}
 

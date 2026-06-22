@@ -37,6 +37,14 @@ cd "$repo"
 BRAG_LIST="MORPHIT-BRAG-LIST.md"
 MARK_SVG="apps/web/static/brand/morphit-mark.svg"
 WORDMARK_SVG="apps/web/static/brand/morphit-wordmark.svg"
+# The feature-comparison image (Morphit vs Bisq/Haveno/OpenMonero/
+# BasicSwap), regenerated from scripts/comparison-image/build_comparison.py
+# and served at the stable hot-link https://<instance>/morphit-comparison.png.
+# Press and integrators who grab the kit get the comparison graphic in the
+# bundle too, not just by hot-linking the live URL.  Like the brag list, a
+# change to this PNG must regenerate the zip (mediakit-freshness-smoke tracks
+# it as a source).
+COMPARISON_PNG="apps/web/static/morphit-comparison.png"
 # Canonical brand palette lives in the Tailwind config; the README's
 # "Color standards" section (appended below) is DERIVED from it so the
 # kit always reflects the live brand colors.  It's also a freshness
@@ -49,7 +57,7 @@ OUTPUT_DIR="apps/web/static"
 OUTPUT_ZIP="${OUTPUT_DIR}/morphit-mediakit.zip"
 
 # ─── Preflight ─────────────────────────────────────────────────────
-for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG" "$TAILWIND_CONFIG"; do
+for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG" "$COMPARISON_PNG" "$TAILWIND_CONFIG"; do
 	if [ ! -f "$f" ]; then
 		echo "ERROR: missing source file: $f" >&2
 		exit 1
@@ -66,6 +74,7 @@ trap 'rm -rf "$stage"' EXIT
 
 mkdir -p "$stage/morphit-mediakit/logos"
 cp "$BRAG_LIST" "$stage/morphit-mediakit/MORPHIT-BRAG-LIST.md"
+cp "$COMPARISON_PNG" "$stage/morphit-mediakit/morphit-comparison.png"
 cp "$MARK_SVG" "$stage/morphit-mediakit/logos/morphit-mark.svg"
 cp "$WORDMARK_SVG" "$stage/morphit-mediakit/logos/morphit-wordmark.svg"
 
@@ -94,6 +103,16 @@ Contents
                               backed by code in the repo or honestly
                               disclosed as backlog.  Use as a
                               reference when writing about Morphit.
+
+  morphit-comparison.png     Feature-by-feature comparison of Morphit
+                              against Bisq, Haveno/RetoSwap, OpenMonero,
+                              and BasicSwap.  The same image Morphit
+                              serves at https://<instance>/morphit-comparison.png
+                              for blog and fediverse hot-linking — bundled
+                              here so you have it offline.  Every claim is
+                              traceable to source code or the competitor's
+                              public docs; corrections welcome via Matrix
+                              #agorise:matrix.org.
 
   logos/morphit-mark.svg     The standalone Morphit mark (no
                               wordmark).  Use when the surrounding

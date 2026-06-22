@@ -935,19 +935,19 @@
 				</p>
 			</label>
 
-			<label class="block">
+			<div class="block">
 				<span class="mb-1 block text-sm font-semibold">
 					{$_('orderbook.filters.asset_label')}
 				</span>
 				<AssetFilterSelect bind:value={asset} />
-			</label>
+			</div>
 
-			<label class="block">
+			<div class="block">
 				<span class="mb-1 block text-sm font-semibold">
 					{$_('orderbook.filters.fiat_label')}
 				</span>
 				<FiatCurrencySelect bind:value={fiatList} />
-			</label>
+			</div>
 
 			<label class="block">
 				<span class="mb-1 block text-sm font-semibold">
@@ -964,7 +964,7 @@
 			</label>
 		</div>
 
-		<label class="mt-4 block">
+		<div class="mt-4 block">
 			<span class="mb-1 block text-sm font-semibold">
 				{$_('orderbook.filters.payment_methods_label')}
 			</span>
@@ -977,7 +977,7 @@
 			<p class="mt-1 text-xs text-ink-500">
 				{$_('orderbook.filters.payment_methods_hint')}
 			</p>
-		</label>
+		</div>
 
 		<!-- Trader experience + sort. These two controls surface
 		     reputation data without hiding newcomers — new traders

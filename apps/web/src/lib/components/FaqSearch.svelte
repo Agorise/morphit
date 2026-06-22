@@ -21,6 +21,34 @@
 	let activeIndex = $state(0);
 	let inputEl: HTMLInputElement;
 
+	// Search ergonomics (cp314, Ken):
+	//  - Don't search until at least 3 chars are typed (1–2 chars match
+	//    almost everything and just flicker a useless dropdown).
+	//  - Cap the field at 24 chars (a real FAQ query is a couple of words;
+	//    longer is almost always a paste accident).
+	const MIN_QUERY_LEN = 3;
+	const MAX_QUERY_LEN = 24;
+
+	// Subtle in-place highlight of the searched term(s) via the CSS Custom
+	// Highlight API — paints over the already-rendered dropdown + article
+	// text WITHOUT mutating the DOM (so it never touches the {@html} answer
+	// markup). `highlightTerms` is what's currently painted; it tracks the
+	// query while searching and PERSISTS through a result-click (query is
+	// cleared to close the dropdown, but the article you jumped to stays
+	// highlighted) until the next search or an explicit dismiss.
+	const HIGHLIGHT_NAME = 'faq-search';
+	let highlightTerms = $state<string[]>([]);
+
+	/** Lowercased, de-duped query tokens (≥2 chars) to highlight. */
+	function highlightTokens(q: string): string[] {
+		const toks = q
+			.toLowerCase()
+			.split(/\s+/)
+			.map((t) => t.trim())
+			.filter((t) => t.length >= 2);
+		return Array.from(new Set(toks));
+	}
+
 	// Auto-expanded entries (by key). A SvelteSet so .has()/.add()/.delete()
 	// are reactive in every context — at mount (deep-link), in event
 	// handlers (toggle / related-chip / search-hit), without the awkward
@@ -31,7 +59,12 @@
 	let copiedKey = $state<FaqKey | null>(null);
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	const hits: FaqHit[] = $derived(searchEntries($faqEntries, query, 20));
+	// Gate on MIN_QUERY_LEN: 1–2 char queries return nothing (and show no
+	// dropdown at all — not even an empty-state — see the template).
+	const hits: FaqHit[] = $derived(
+		query.trim().length >= MIN_QUERY_LEN ? searchEntries($faqEntries, query, Infinity) : []
+	);
+	const showDropdown = $derived(query.trim().length >= MIN_QUERY_LEN);
 
 	/** Lookup map key → entry, used to resolve related-entry chips to
 	 *  their localized question strings. Rebuilds when the locale
@@ -172,6 +205,7 @@
 		if (e.key === 'Escape') {
 			query = '';
 			activeIndex = 0;
+			highlightTerms = [];
 			return;
 		}
 		// Enter is intentionally disabled in the FAQ search. It used to jump the
@@ -197,6 +231,82 @@
 	$effect(() => {
 		void query;
 		activeIndex = 0;
+	});
+
+	// Track what to highlight. While a real search is active (≥ MIN chars)
+	// the terms mirror the query. When the query drops below MIN — including
+	// the query = '' a result-click does to close the dropdown — we leave
+	// `highlightTerms` untouched, so the article you jumped to stays
+	// highlighted. A new ≥ MIN search overwrites them (clear-then-rehighlight
+	// is automatic: the applier rebuilds the highlight from scratch); Escape
+	// clears them outright.
+	$effect(() => {
+		const q = query.trim();
+		if (q.length >= MIN_QUERY_LEN) highlightTerms = highlightTokens(q);
+	});
+
+	/** Paint `highlightTerms` over the dropdown + every expanded article
+	 *  using the CSS Custom Highlight API. No DOM mutation — it adds Ranges
+	 *  to a document-level highlight, so it works over the {@html} answer
+	 *  markup and is trivially cleared by replacing the highlight. Feature-
+	 *  detected: where the API is absent (older browsers) it's a silent
+	 *  no-op and search still works. */
+	function applySearchHighlight(): void {
+		if (!browser) return;
+		if (
+			typeof CSS === 'undefined' ||
+			!CSS.highlights ||
+			typeof Highlight === 'undefined' ||
+			typeof Range === 'undefined'
+		)
+			return;
+		CSS.highlights.delete(HIGHLIGHT_NAME);
+		const terms = highlightTerms;
+		if (terms.length === 0) return;
+
+		const roots: Element[] = [];
+		const dropdown = document.getElementById('faq-results');
+		if (dropdown) roots.push(dropdown);
+		for (const key of expanded) {
+			const li = document.getElementById(`faq-${key}`);
+			if (li) roots.push(li);
+		}
+		if (roots.length === 0) return;
+
+		const ranges: Range[] = [];
+		for (const root of roots) {
+			const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+			let node: Node | null;
+			while ((node = walker.nextNode())) {
+				const text = node.nodeValue ?? '';
+				if (!text.trim()) continue;
+				const lower = text.toLowerCase();
+				for (const term of terms) {
+					let idx = lower.indexOf(term);
+					while (idx !== -1) {
+						const r = new Range();
+						r.setStart(node, idx);
+						r.setEnd(node, idx + term.length);
+						ranges.push(r);
+						idx = lower.indexOf(term, idx + term.length);
+					}
+				}
+			}
+		}
+		if (ranges.length > 0) CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(...ranges));
+	}
+
+	// Re-paint after the DOM settles whenever the terms, the dropdown
+	// contents, or the set of expanded articles change. rAF defers past
+	// Svelte's flush so the just-rendered dropdown / just-expanded article
+	// is in the DOM when we walk it.
+	$effect(() => {
+		void highlightTerms;
+		void hits;
+		void Array.from(expanded).join('|');
+		if (!browser) return;
+		const raf = requestAnimationFrame(() => applySearchHighlight());
+		return () => cancelAnimationFrame(raf);
 	});
 
 	// Part 121 cp7 — per-locale internal-link wrapper.
@@ -249,7 +359,8 @@
 				type="search"
 				id="faq-search"
 				role="combobox"
-				aria-expanded={query.length > 0 && hits.length > 0}
+				maxlength={MAX_QUERY_LEN}
+				aria-expanded={showDropdown && hits.length > 0}
 				aria-controls="faq-results"
 				aria-autocomplete="list"
 				autocomplete="off"
@@ -258,13 +369,13 @@
 			/>
 		</div>
 
-		{#if query && hits.length > 0}
+		{#if showDropdown && hits.length > 0}
 			<div
 				id="faq-results"
 				role="listbox"
 				class="absolute inset-x-0 z-30 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-ink-200 bg-white shadow-morphit-card dark:border-ink-700 dark:bg-ink-900"
 			>
-				{#each hits.slice(0, 8) as hit, i (hit.entry.key)}
+				{#each hits as hit, i (hit.entry.key)}
 					<button
 						type="button"
 						role="option"
@@ -291,7 +402,7 @@
 					</button>
 				{/each}
 			</div>
-		{:else if query && hits.length === 0}
+		{:else if showDropdown && hits.length === 0}
 			<div
 				class="absolute inset-x-0 z-30 mt-2 rounded-2xl border border-ink-200 bg-white p-4 text-center text-sm text-ink-500 shadow-morphit-card dark:border-ink-700 dark:bg-ink-900 dark:text-ink-400"
 			>
@@ -539,3 +650,18 @@
 		<p class="mt-2 text-xs">{$_('faq.matrix_room_blurb')}</p>
 	</footer>
 </section>
+
+<style>
+	/*
+		Very subtle search highlight (cp314). Painted via the CSS Custom
+		Highlight API — ::highlight() is document-global (it can't be scoped
+		to a component or under the app's class-based .dark), and it only
+		accepts a tiny set of properties (color, background-color, text-
+		decoration, text-shadow). A low-opacity morphit-emerald tint reads
+		gently on both the light and dark surfaces. :global() because the
+		highlight pseudo lives on the document, not this component's subtree.
+	*/
+	:global(::highlight(faq-search)) {
+		background-color: rgba(16, 185, 129, 0.28);
+	}
+</style>

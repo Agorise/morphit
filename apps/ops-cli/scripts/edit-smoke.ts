@@ -104,6 +104,42 @@ scenario('SEO copy with spaces (parseEnv consumer = single-quoted, no apostrophe
 	assertContains(after, "MORPHIT_INSTANCE_SEO_TITLE='My Privacy-First Instance'", 'single-quoted');
 });
 
+scenario('cp311: instance NAME with a space is single-quoted (shell-source safe)', () => {
+	// Regression for the trap Ken hit hand-editing the env file:
+	// `MORPHIT_INSTANCE_NAME=Morphit NL` (unquoted) is parsed by the
+	// indexer's shell-source (`set -a; . file`) as "set NAME=Morphit,
+	// run command NL" → the var never gets set.  morphit-ops writes via
+	// quoteValue, which single-quotes any value with a space, so the
+	// same input through `edit` is shell- AND dotenv-safe.
+	const before = ['MORPHIT_INSTANCE_ORIGIN=https://x.example', ''].join('\n');
+	const updates = new Map<string, string | null>([['MORPHIT_INSTANCE_NAME', 'Morphit NL']]);
+	const after = applyUpdates(before, updates, 'parseEnv');
+	assertContains(after, "MORPHIT_INSTANCE_NAME='Morphit NL'", 'name single-quoted');
+	assertNotContains(after, 'MORPHIT_INSTANCE_NAME=Morphit NL', 'never bare/unquoted');
+});
+
+scenario('cp311: tagline + contact_url round-trip (set then clear)', () => {
+	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
+	const set = applyUpdates(
+		before,
+		new Map<string, string | null>([
+			['MORPHIT_INSTANCE_TAGLINE', 'Trade freely'],
+			['MORPHIT_INSTANCE_CONTACT_URL', 'https://matrix.to/#/@op:example.org']
+		]),
+		'parseEnv'
+	);
+	assertContains(set, "MORPHIT_INSTANCE_TAGLINE='Trade freely'", 'tagline set');
+	assertContains(set, 'MORPHIT_INSTANCE_CONTACT_URL=', 'contact set');
+	// Now clear the tagline (the "-" path → null) and confirm it's gone.
+	const cleared = applyUpdates(
+		set,
+		new Map<string, string | null>([['MORPHIT_INSTANCE_TAGLINE', null]]),
+		'parseEnv'
+	);
+	assertNotContains(cleared, 'MORPHIT_INSTANCE_TAGLINE', 'tagline cleared');
+	assertContains(cleared, 'MORPHIT_INSTANCE_CONTACT_URL=', 'contact still present');
+});
+
 scenario('cp139-D-1: $HOME in parseEnv-consumer value is single-quoted (parseEnv literal)', () => {
 	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
 	const updates = new Map<string, string | null>([

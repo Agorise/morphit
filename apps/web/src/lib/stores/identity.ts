@@ -47,6 +47,7 @@ import {
 	readPairedSession,
 	type PairedSession
 } from '$crypto/pairedSession';
+import { clearUserBlurtAccount } from '$blurt/ops/profile';
 
 export type IdentityState =
 	| { state: 'locked' }
@@ -727,6 +728,17 @@ export function broadcastSignOut(): void {
 		}
 	}
 	reset();
+	// Forget the persisted account name on an EXPLICIT sign-out so the
+	// login page's signed-in gate (getUserBlurtAccount(), which reads the
+	// shared-across-tabs `morphit.blurtAccount` localStorage key) no longer
+	// reports an account anywhere. localStorage is per-origin, so this one
+	// removal signs the name out of every open tab — the sibling tabs only
+	// need the broadcast above to wipe their per-tab in-memory keys.
+	// Deliberately here and NOT in reset(): like the signout broadcast,
+	// reset() also runs on pagehide/lockSession(), where wiping this
+	// convenience cache would force the user to re-enter their account name
+	// every session. The name-clear is the mark of an EXPLICIT sign-out.
+	clearUserBlurtAccount();
 }
 
 if (browser) {

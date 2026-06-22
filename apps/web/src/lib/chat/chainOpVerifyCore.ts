@@ -18,7 +18,7 @@
  * notes, and the trust-vs-defense-in-depth narrative.
  */
 
-import { Buffer } from 'buffer';
+import type { Buffer } from 'buffer';
 import type {
 	Client,
 	AuthorityType,

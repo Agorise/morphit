@@ -11,7 +11,7 @@
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It is a bulletin board, not a bank.
+Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a bulletin board service (BBS), not a bank.
 
 ---
 
@@ -411,7 +411,7 @@ Filtered to a single trader's orders. Subscribe to a counterparty you trust so y
 
 **What RSS is good for**: monitoring new orders without keeping a tab open, getting notifications when the main site is slow or blocked in your network, and piping the feed into IFTTT / n8n / a home script for push-notifications the moment something matches.
 
-**Privacy tradeoff — worldwide and per-asset**: Blurt is a public chain, so nothing in these feeds is information a determined observer couldn't already get by running their own chain indexer. But RSS makes that effort drop to zero — anyone polling the feed can build a timeline of who posts when, in which region, for what. The set of valid URLs is small and enumerable (one worldwide + one per asset), so a passive observer learns at most "this subscriber cares about BTC."
+**Privacy tradeoff — worldwide and per-asset**: Blurt is a public chain, so nothing in these feeds is information a determined observer couldn't already get by running their own chain indexer. But RSS makes that effort drop to zero — anyone polling the feed can build a timeline of who posts when, in which region, for what. The set of valid URLs is small and enumerable (one worldwide + one per asset), so a passive observer learns at most "@scooby really likes BTC."
 
 **Privacy tradeoff — per-trader (slightly more revealing)**: A per-trader URL maps one-to-one to one identified subject of interest. A network observer who sees you polling `/rss/orderbook/by-account/@alice.xml` learns specifically that you're watching @alice — slightly more revealing than the worldwide or per-asset feeds. If timing correlation matters in your threat model, poll over Tor.
 
@@ -2059,7 +2059,7 @@ DAI runs on four networks Morphit supports: Ethereum (ERC-20, native), Polygon (
 
 **FAQ key:** `arbitrage_morphit_vs_exchanges`
 
-Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or DEX (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
+Morphit is built so arbitrage is easy. Listing fees are a fraction of a dollar, there's no taker fee, no withdrawal fee on the trade itself, no withdrawal limit, and no waiting period. A trader who sees a price gap between Morphit's P2P market and a CEX (Coinbase, Kraken, Binance) or a "DEX" (Uniswap, THORChain) can post a Morphit order at a thin spread on either side and let the orderbook fill. The price-model picker lets you pin a `spread: 0.5%` against the live CoinGecko mid-price so your order tracks the market automatically — no manual re-pricing as the worldwide price moves. As more traders use Morphit, arbitrageurs naturally pull the P2P prices into line with the broader market, which is good for everyone trading on the marketplace: tighter spreads, better fills, more predictable execution. A few practical notes: Morphit's per-trade settlement is what you make it — direct wallet-to-wallet for crypto-vs-crypto pairs (XMR for USDT, BTC for USDT), or via your bank/fiat rail of choice for crypto-vs-fiat. For high-frequency arbitrage, the Sybil-tier fee structure escalates listing costs if you post many orders quickly from the same account; this is anti-spam infrastructure, not anti-arbitrage — most arbitrageurs run a single account per direction and never hit the tier-2 threshold.
 
 ---
 

@@ -58,6 +58,7 @@ import * as fs from 'node:fs';
 import { stdin as input, stdout as output } from 'node:process';
 import { validateReleasePayload, validateTreasury } from '@morphit/release-schema';
 import type { ReleasePayloadV1, ReleaseTreasuryBlock } from '@morphit/release-schema';
+import { CANONICAL_TREASURY } from '../src/config/canonicalTreasury.ts';
 
 function fail(reason: string): never {
 	process.stderr.write(`\n✗ ${reason}\n`);
@@ -156,7 +157,7 @@ async function gatherInputs(): Promise<Inputs> {
 
 	const btcAddress = await ask(
 		'BTC fee address (mainnet bc1q.../1.../3...)',
-		process.env.MORPHIT_BUILD_BTC_ADDRESS
+		process.env.MORPHIT_BUILD_BTC_ADDRESS ?? CANONICAL_TREASURY.btc
 	);
 	const btcSatoshis = await ask(
 		'BTC fee amount (satoshis)',
@@ -165,7 +166,7 @@ async function gatherInputs(): Promise<Inputs> {
 
 	const xmrAddress = await ask(
 		'XMR fee address (mainnet 4.../8...)',
-		process.env.MORPHIT_BUILD_XMR_ADDRESS
+		process.env.MORPHIT_BUILD_XMR_ADDRESS ?? CANONICAL_TREASURY.xmr
 	);
 	const xmrPiconero = await ask(
 		'XMR fee amount (piconero)',

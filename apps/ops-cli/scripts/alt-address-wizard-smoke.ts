@@ -25,6 +25,7 @@ import {
 	GEN_SCRIPT,
 	SUPPORTS_VANITY_PREFIX
 } from '../src/lib/altAddressValidate.ts';
+import { validateNostr } from '../src/commands/altAddress.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OPS = join(__dirname, '..');
@@ -161,6 +162,45 @@ else bad('isValidI2pB32');
 	else bad('generate-lokinet.sh still references lokinet-vanity');
 	if (/keyfile=/.test(lokiSrc) && /ONS/.test(lokiSrc)) ok('generate-lokinet.sh: honest keyfile= setup + ONS naming');
 	else bad('generate-lokinet.sh', 'missing keyfile=/ONS guidance');
+}
+
+// ── cp311: Nostr pubkey validation ───────────────────────────────────
+{
+	const NPUB = 'npub1' + 'q'.repeat(58); // matches /^npub1[a-z0-9]{58,}$/i
+	const HEX = 'a'.repeat(64);
+	const rNpub = validateNostr(NPUB);
+	if (rNpub.ok && rNpub.value === NPUB) ok('validateNostr accepts npub1…');
+	else bad('validateNostr npub', JSON.stringify(rNpub));
+
+	const rHex = validateNostr(HEX.toUpperCase());
+	if (rHex.ok && rHex.value === HEX) ok('validateNostr accepts 64-hex (lowercased)');
+	else bad('validateNostr hex', JSON.stringify(rHex));
+
+	const rNsec = validateNostr('nsec1' + 'q'.repeat(58));
+	if (!rNsec.ok && /PRIVATE/.test(rNsec.reason)) ok('validateNostr REJECTS nsec… (private key) with a warning');
+	else bad('validateNostr nsec', JSON.stringify(rNsec));
+
+	if (!validateNostr('npub1short').ok) ok('validateNostr rejects too-short npub');
+	else bad('validateNostr too-short npub should fail');
+	if (!validateNostr('hello world').ok) ok('validateNostr rejects garbage');
+	else bad('validateNostr garbage should fail');
+}
+
+// ── cp311: alt-address CRUD shape (show / clear / nostr / i2p dual-key) ─
+{
+	const altSrc = readFileSync(join(OPS, 'src', 'commands', 'altAddress.ts'), 'utf8');
+	if (/Current:/.test(altSrc)) ok('CRUD: shows the current value before acting');
+	else bad('CRUD show-current', 'no "Current:" display');
+	if (/Delete it|removed from/.test(altSrc)) ok('CRUD: has a delete/clear path');
+	else bad('CRUD delete', 'no delete path');
+	if (/Back \(pick a different address\)/.test(altSrc)) ok('CRUD: per-address Back to the parent list');
+	else bad('CRUD back', 'no Back option');
+	if (/Nostr \(npub/.test(altSrc) && /collectNostr/.test(altSrc)) ok('CRUD: Nostr is a managed address');
+	else bad('CRUD nostr', 'nostr not wired into the menu');
+	// i2p must read/clear BOTH the modern + legacy keys (indexer reads both).
+	if (/MORPHIT_INSTANCE_I2P_ADDRESS/.test(altSrc) && /ENV_KEY\.i2p/.test(altSrc))
+		ok('CRUD: i2p keeps modern + legacy env keys in sync');
+	else bad('CRUD i2p dual-key', 'legacy i2p key not handled');
 }
 
 console.log('');
