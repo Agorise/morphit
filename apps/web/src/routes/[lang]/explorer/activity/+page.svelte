@@ -159,8 +159,8 @@
 	</nav>
 
 	<header class="mb-6">
-		<h1 class="font-display text-2xl font-bold">
-			{$_('explorer.activity.heading')}
+		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
+			<span class="brand-gradient-text">{$_('explorer.activity.heading')}</span>
 		</h1>
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 			{$_('explorer.activity.subheading')}

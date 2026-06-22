@@ -344,7 +344,13 @@
 			     footer matches the header exactly — only the display height differs.) The
 			     wordmark is a Vite-fingerprinted, immutably-cached asset fetched once per
 			     client and reused here, so there is no extra per-page network request (Priority #4). -->
-			<MorphitLogoBling heightPx={40} shine />
+			<a
+				href={lp('/')}
+				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				aria-label="Morphit — home"
+			>
+				<MorphitLogoBling heightPx={40} shine />
+			</a>
 
 			<p class="text-sm text-ink-600 dark:text-ink-400">{$_('footer.tagline')}</p>
 

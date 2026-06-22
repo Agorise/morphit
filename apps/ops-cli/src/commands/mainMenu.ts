@@ -223,30 +223,40 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 	if (subcommand === 'moderation') {
 		const n = ann.unresolvedFlags;
 		if (n !== null && n > 0) {
-			return '  ' + fmt.yellow(`\u26a0 ${n} to review`);
+			return '  ' + fmt.boldBrightYellow(`\u26a0 ${n} to review`);
 		}
 	}
 	if (subcommand === 'status') {
 		const st = ann.relayBalanceStatus;
-		if (st === 'error') return '  ' + fmt.red('\u{1F6A9} relay balance very low');
-		if (st === 'warn') return '  ' + fmt.yellow('\u26a0 relay balance low');
+		// All main-menu attention markers use the loud bold BRIGHT yellow
+		// (\x1b[1;93m) so they're unmissable on every terminal theme. The
+		// glyph (\u{1F6A9} vs \u26a0) carries the severity; the colour is
+		// uniform across every alert next to a menu item.
+		if (st === 'error') return '  ' + fmt.boldBrightYellow('\u{1F6A9} relay balance very low');
+		if (st === 'warn') return '  ' + fmt.boldBrightYellow('\u26a0 relay balance low');
 	}
 	return '';
 }
 
-/** Which attention state (if any) an item's whole LABEL should be
- *  colored for, from the best-effort annotations. Separate from
+/** Whether an item's whole LABEL should be highlighted as an
+ *  attention item, from the best-effort annotations. Separate from
  *  itemSuffix so the render loop can color the label without nesting
  *  ANSI codes inside the (already-colored) suffix. Returns null when
- *  the line should render in the default color. */
+ *  the line should render in the default color. Every attention state
+ *  renders the label in the same loud bold bright yellow — the suffix
+ *  glyph/text carries the specific reason and severity. */
 export function itemEmphasis(
 	subcommand: string,
 	ann?: MenuAnnotations
-): 'update' | 'balance-warn' | 'balance-error' | null {
+): 'update' | 'flags' | 'balance-warn' | 'balance-error' | null {
 	if (ann === undefined) return null;
 	if (subcommand === 'upgrade') {
 		const { currentVersion: cur, latestVersion: latest } = ann;
 		if (cur !== null && latest !== null && cur !== latest) return 'update';
+	}
+	if (subcommand === 'moderation') {
+		const n = ann.unresolvedFlags;
+		if (n !== null && n > 0) return 'flags';
 	}
 	if (subcommand === 'status') {
 		if (ann.relayBalanceStatus === 'error') return 'balance-error';
@@ -321,14 +331,9 @@ export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSe
 		for (const item of group.items) {
 			flat.push(item);
 			const emphasis = itemEmphasis(item.subcommand, annotations);
-			const label =
-				emphasis === 'update'
-					? fmt.bold(fmt.yellow(item.label))
-					: emphasis === 'balance-error'
-						? fmt.bold(fmt.red(item.label))
-						: emphasis === 'balance-warn'
-							? fmt.yellow(item.label)
-							: item.label;
+			// Any attention state → loud bold bright yellow label, matching
+			// the suffix marker. The suffix glyph/text says which alert.
+			const label = emphasis !== null ? fmt.boldBrightYellow(item.label) : item.label;
 			lines.push(
 				`    ${flat.length}. ${label}${rootTag(item.subcommand)}${itemSuffix(item.subcommand, annotations)}`
 			);

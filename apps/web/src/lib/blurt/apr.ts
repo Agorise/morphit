@@ -3,23 +3,28 @@
  *
  * Pure: takes a DGP-shaped object plus the chain's head-block
  * number, returns the current APR for staked BLURT (BP) as a
- * percentage (e.g. 8.32 means 8.32% per year).
+ * percentage (e.g. 1.73 means 1.73% per year).
  *
- * Blurt's inflation curve mirrors Steem-family chains:
+ * Blurt reset the Steem-family curve at its 2020 genesis:
  *
- *   • Inflation starts at ~9.5% annually.
- *   • Decreases by 0.01% (one basis point) every ~250,000 blocks
- *     (roughly one year given Blurt's 3-second block time).
- *   • Floors at ~0.95%.
+ *   • Inflation starts at 10% annually (at block 0).
+ *   • Narrows LINEARLY to 1% annually over 20 years.
+ *   • Floors at 1% thereafter.
+ *
+ *   (Source: Blurt fork spec — "Reset inflation to 10% APR inflation
+ *   narrowing to 1% APR over 20 years.")
  *
  * Of the total annual inflation, a fixed share is paid to vesting-
- * stake holders pro-rata.  The remainder goes to content rewards
- * and witness rewards.  Blurt's split per chain config:
+ * stake (Blurt Power) holders pro-rata.  The remainder funds author/
+ * curation rewards and witnesses.  Blurt's split:
  *
- *   • Vesting share of inflation: 75%
+ *   • Vesting (BP) share of inflation: 15%
  *
- * (Content rewards = 15%, witnesses = 10%.  These percentages are
- * effectively constants in Blurt's mainnet config.)
+ * (Source: Blurt FAQ — "The current earning rate is set at 15% of the
+ * inflation rate and divided equally between all BP holders."  The
+ * other ~85% funds content rewards + witnesses.)  Sanity check: at
+ * head block ~60.4M this yields BP APR ≈ 1.7%, matching the live
+ * figure on Blurt block explorers.
  *
  * The APR for one unit of staked BLURT is therefore:
  *
@@ -56,45 +61,44 @@ import { formatPercent } from '../i18n/formatters';
 
 /** Inflation curve constants — keep in sync with Blurt chain config. */
 
-/** Starting annual inflation rate (basis points).  9.5%. */
-const INFLATION_START_BPS = 950;
+/** Starting annual inflation rate (basis points). 10% at genesis. */
+const INFLATION_START_BPS = 1000;
 
-/** Rate at which inflation decreases per BLOCK, in
- *  micro-basis-points (bps × 1e-6).  Blurt schedule: 1 bp per
- *  ~250,000 blocks, or 4 micro-bps per block. */
-const INFLATION_DECAY_PER_BLOCK_MICRO_BPS = 4;
+/** Floor on the annual inflation rate (basis points). 1%. */
+const INFLATION_FLOOR_BPS = 100;
 
-/** Floor on inflation rate (basis points).  0.95%. */
-const INFLATION_FLOOR_BPS = 95;
+/** Blurt blocks are 3 seconds. */
+const SECONDS_PER_BLOCK = 3;
+const BLOCKS_PER_YEAR = (365.25 * 24 * 60 * 60) / SECONDS_PER_BLOCK; // ≈ 10.52M
 
-/** Block at which the inflation decay schedule began.  Blurt
- *  mainnet inherited Steem's schedule; the curve is anchored at
- *  block 0 for our purposes (the per-block decay accumulates
- *  over the chain's life). */
-const INFLATION_NARROWING_BASELINE_BLOCK = 0;
+/** Years over which inflation narrows linearly from START to FLOOR. */
+const INFLATION_NARROWING_YEARS = 20;
 
-/** Vesting share of total inflation (basis points).  75%.
- *  Configured by Blurt's chain at hardfork; constant for our
- *  purposes. */
-const VESTING_REWARD_SHARE_BPS = 7500;
+/** Per-block reduction in the annual inflation rate (basis points), so
+ *  the rate falls from INFLATION_START_BPS to INFLATION_FLOOR_BPS across
+ *  exactly INFLATION_NARROWING_YEARS, anchored at block 0. */
+const INFLATION_DECAY_PER_BLOCK_BPS =
+	(INFLATION_START_BPS - INFLATION_FLOOR_BPS) / (INFLATION_NARROWING_YEARS * BLOCKS_PER_YEAR);
 
-/** Compute the chain's annual inflation rate, in basis points,
- *  given a current head-block number.
+/** Vesting (Blurt Power) share of total inflation (basis points). Blurt
+ *  pays BP holders 15% of the inflation rate, divided pro-rata across
+ *  all BP (Blurt FAQ). The other ~85% funds author/curation rewards and
+ *  witnesses. A future hardfork that changes this would silently skew
+ *  the APR until this constant is updated. */
+const VESTING_REWARD_SHARE_BPS = 1500;
+
+/** Compute the chain's annual inflation rate, in basis points, given a
+ *  current head-block number.
  *
- *  The schedule is monotonically decreasing from
- *  INFLATION_START_BPS toward INFLATION_FLOOR_BPS.  We track in
- *  micro-basis-points internally to avoid integer-division
- *  truncation, then convert back to bps for the return.
+ *  Monotonically decreasing from INFLATION_START_BPS toward
+ *  INFLATION_FLOOR_BPS along Blurt's documented 10%→1%-over-20-years
+ *  schedule, then flat at the floor.
  *
  *  Pure; smoke-testable. */
 export function currentAnnualInflationBps(headBlockNumber: number): number {
 	if (!Number.isFinite(headBlockNumber) || headBlockNumber < 0) return NaN;
-	const startMicroBps = INFLATION_START_BPS * 1_000_000;
-	const decayMicroBps =
-		Math.max(0, headBlockNumber - INFLATION_NARROWING_BASELINE_BLOCK) *
-		INFLATION_DECAY_PER_BLOCK_MICRO_BPS;
-	const currentMicroBps = Math.max(INFLATION_FLOOR_BPS * 1_000_000, startMicroBps - decayMicroBps);
-	return currentMicroBps / 1_000_000;
+	const decayed = INFLATION_START_BPS - headBlockNumber * INFLATION_DECAY_PER_BLOCK_BPS;
+	return Math.max(INFLATION_FLOOR_BPS, decayed);
 }
 
 /** Inputs the APR formula needs.  Mirrors the relevant slice of

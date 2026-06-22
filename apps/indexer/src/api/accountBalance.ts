@@ -53,6 +53,12 @@ interface AccountBalanceBody {
 		readonly name: string;
 		readonly balance: string;
 		readonly vesting_shares: string;
+		/** VESTS delegated TO / OUT FROM this account — the frontend uses
+		 *  them to compute EFFECTIVE vesting (own + received − delegated),
+		 *  the real voting-manabar ceiling, so voting power % is correct for
+		 *  accounts that delegate BP out (e.g. the loyalty-grant relay). */
+		readonly received_vesting_shares: string;
+		readonly delegated_vesting_shares: string;
 		readonly voting_manabar: {
 			readonly current_mana: string;
 			readonly last_update_time: number;
@@ -136,6 +142,11 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 				name: acct.name,
 				balance: acct.balance,
 				vesting_shares: acct.vesting_shares,
+				// Effective-vesting inputs. Default to zero if a node omits
+				// them so the frontend's manabar math degrades to the
+				// owned-only ceiling rather than producing NaN.
+				received_vesting_shares: acct.received_vesting_shares ?? '0.000000 VESTS',
+				delegated_vesting_shares: acct.delegated_vesting_shares ?? '0.000000 VESTS',
 				voting_manabar: acct.voting_manabar ?? null,
 				posting_pub: postingPub
 			},

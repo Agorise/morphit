@@ -35,16 +35,17 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { fetchWithTimeout } from '$net/fetchWithTimeout';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { gotoLocale } from '$i18n/navigate';
 
 	import Head from '$components/Head.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
-	import { identiconDataUri } from '$crypto/identicon';
+	import { identiconDataUri, identiconDataUriFromString } from '$crypto/identicon';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
 	import { impersonatesReservedName } from '$crypto/confusables';
 	import { liveIdentity, isPairedReadOnly } from '$stores/identity';
@@ -119,6 +120,18 @@
 	/** Derived: whether the submit button is actionable right now. */
 	const canSubmit = $derived(
 		submit.kind === 'ready' && availability.kind === 'available' && normalizedName.length >= 3
+	);
+
+	/** Derived: whether the claim button previews the typed name
+	 *  ("Claim my @{name} username now") vs the generic fallback
+	 *  ("Claim this name"). Real-time — true as soon as the name is long
+	 *  enough and not a hard-rejected reserved handle, so the @name shows
+	 *  WHILE availability is still being checked, not only after the relay
+	 *  round-trip resolves to 'available'. The button stays disabled until
+	 *  canSubmit, so previewing the name on a not-yet-confirmed name is
+	 *  safe — it reflects intent, never enables a premature claim. */
+	const showNamedClaim = $derived(
+		normalizedName.length >= 3 && availability.kind !== 'rejected'
 	);
 
 	// ─── Availability polling ────────────────────────────────────────
@@ -408,6 +421,7 @@
 		// account-CREATION path — only on-chain name verification for
 		// imported accounts — so the register nudge lives on the trade
 		// surfaces, NOT in Settings.)
+		allowLeave = true; // explicit choice to leave — skip the soft guard
 		gotoLocale('/orderbook');
 	}
 
@@ -416,19 +430,68 @@
 	// the top of this file; nothing local needed.
 
 	// ─── Navigation guard ────────────────────────────────────────────
+	// Two layers: (1) HARD-block while a broadcast is in flight — leaving
+	// mid-create would orphan the op. (2) SOFT-confirm a typed-but-not-yet-
+	// registered name — pop a modal so the user doesn't silently lose the
+	// name they were about to claim by clicking a nav link. The explicit
+	// "Skip for now" path and the post-success redirect set `allowLeave`
+	// so they bypass the soft guard.
+
+	let allowLeave = $state(false);
+	let leaveGuard = $state<{ open: boolean; to: URL | null }>({ open: false, to: null });
 
 	beforeNavigate((nav) => {
 		if (submit.kind === 'submitting') {
 			// Mid-broadcast — don't let them navigate away before the
 			// chain has confirmed either way.
 			nav.cancel();
+			return;
 		}
+		// Registered, skipped, or already confirmed in the modal → let go.
+		if (allowLeave || submit.kind === 'done') return;
+		// Nothing typed yet → nothing to lose, no need to nag.
+		if (name.trim().length === 0) return;
+		// Already deciding (modal open) → don't stack cancels.
+		if (leaveGuard.open) return;
+		// Typed-but-unregistered: block this navigation and ask. We stash
+		// the intended destination and resume it via goto() on confirm.
+		nav.cancel();
+		leaveGuard = { open: true, to: nav.to?.url ?? null };
 	});
 
+	/** Modal "Leave anyway" → resume the navigation we cancelled. */
+	function confirmLeave(): void {
+		allowLeave = true;
+		const dest = leaveGuard.to;
+		leaveGuard = { open: false, to: null };
+		// dest is null for tab-close / external 'leave' navigations, which
+		// can't be programmatically resumed anyway; internal links carry a
+		// concrete URL we can re-navigate to (allowLeave now lets it pass).
+		if (dest) void goto(dest);
+	}
+
+	/** Modal "Stay" / Escape / backdrop → keep them on the page. */
+	function cancelLeave(): void {
+		leaveGuard = { open: false, to: null };
+	}
+
 	// ─── Derived avatar ──────────────────────────────────────────────
-	// Use the posting pubkey as the identicon seed so it matches what
-	// the user saw in the previous step.
-	const avatarUri = $derived(live ? identiconDataUri(live.posting.publicKey, 96) : '');
+	// Seed the preview from the chosen account NAME so it matches the
+	// avatar the user will actually have everywhere AFTER registration —
+	// the AvatarMenu, their /@profile hero, and IdentityLabel all seed
+	// from the account name (a brand-new account stores empty
+	// json_metadata, so the profile hero falls back to the same
+	// name-seeded identicon). Before a valid name is typed (< 3 chars,
+	// the registration minimum) we fall back to the posting pubkey so the
+	// preview isn't blank. (cp323 — previously this always seeded from the
+	// pubkey, so the preview didn't match the post-registration avatar.)
+	const avatarUri = $derived(
+		normalizedName.length >= 3
+			? identiconDataUriFromString(normalizedName, 96)
+			: live
+				? identiconDataUri(live.posting.publicKey, 96)
+				: ''
+	);
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
@@ -652,7 +715,13 @@
 						? busyLabelFor(submit.phase)
 						: $_('onboarding.register_name.submit_pending')}
 				>
-					{$_('onboarding.register_name.submit')}
+					{#if showNamedClaim}
+						{$_('onboarding.register_name.submit_named', {
+							values: { name: normalizedName }
+						})}
+					{:else}
+						{$_('onboarding.register_name.submit')}
+					{/if}
 				</BusyButton>
 				<BusyButton variant="ghost" disabled={submit.kind === 'submitting'} onclick={skipForNow}>
 					{$_('onboarding.register_name.skip')}
@@ -671,3 +740,19 @@
 		</section>
 	{/if}
 </div>
+
+<!-- Leave-guard: pops when the user tries to navigate away with a typed-
+     but-unregistered name (see beforeNavigate above). Neutral variant —
+     leaving isn't destructive (keys are kept; they can finish later), it's
+     just a "wait, you didn't claim it yet" nudge. Focus defaults to the
+     safe "Stay" button. -->
+<ConfirmModal
+	bind:open={leaveGuard.open}
+	variant="neutral"
+	title={$_('onboarding.register_name.leave_guard.title')}
+	body={$_('onboarding.register_name.leave_guard.body')}
+	confirmLabel={$_('onboarding.register_name.leave_guard.confirm')}
+	cancelLabel={$_('onboarding.register_name.leave_guard.cancel')}
+	onConfirm={confirmLeave}
+	onCancel={cancelLeave}
+/>

@@ -67,7 +67,7 @@ const DEFAULT_TIMEOUT_MS = 8_000;
  *  error body. */
 async function request<T>(
 	path: string,
-	init: { signal?: AbortSignal; query?: URLSearchParams; origin?: string } = {}
+	init: { signal?: AbortSignal; query?: URLSearchParams; origin?: string; cache?: RequestCache } = {}
 ): Promise<Result<T>> {
 	const url = new URL(path, resolveOrigin(init.origin ?? MORPHIT_INDEXER_ORIGIN));
 	if (init.query) {
@@ -88,6 +88,12 @@ async function request<T>(
 		response = await fetch(url.toString(), {
 			method: 'GET',
 			headers: { accept: 'application/json' },
+			// Per-call cache mode. Defaults to the browser's heuristic
+			// (honours the server's Cache-Control) when omitted; callers
+			// fetching operator-mutable config (e.g. branding) pass
+			// 'no-cache' to force revalidation so an operator's change
+			// shows on the next normal refresh, not only a cold one.
+			...(init.cache ? { cache: init.cache } : {}),
 			signal: combined
 		});
 	} catch (err) {
@@ -162,7 +168,12 @@ export function getHealth(signal?: AbortSignal): Promise<Result<HealthResponse>>
  *  store (e.g., a comparison view fetching another instance's
  *  branding). */
 export function getInstance(signal?: AbortSignal): Promise<Result<InstanceResponse>> {
-	return request<InstanceResponse>('/v1/instance', { signal });
+	// Branding is operator-mutable (name/tagline/contact set via
+	// morphit-ops). The indexer still allows caching, but we force a
+	// revalidation here so a just-changed operator name appears on a
+	// normal refresh instead of waiting out the HTTP cache (the footer
+	// used to keep the stale name until a ctrl+shift+r cold reload).
+	return request<InstanceResponse>('/v1/instance', { signal, cache: 'no-cache' });
 }
 
 /** GET /v1/instances — federation directory (all known peer

@@ -285,7 +285,7 @@
       "confirm_pending": "Sperre…"
     },
     "lock_session": "Session sperren",
-    "view_my_profile": "Mein Profil ansehen"
+    "view_my_profile": "Profil von @{account}"
   },
   "backup_keys": {
     "title": "Sichere deine Schlüssel",
@@ -973,7 +973,13 @@
         "load_more_failed": "Konnte ältere Verlaufseinträge nicht laden."
       },
       "refresh_label": "Von der Chain aktualisieren",
-      "delay_notice": "Aktualisiert sich alle paar Sekunden von selbst (langsamer im Leerlauf), daher kann eine ganz neue Transaktion bis zu einer Minute brauchen, um von allein zu erscheinen. Tippe auf Aktualisieren, um jetzt den neuesten Stand von der Chain zu laden."
+      "delay_notice": "Aktualisiert sich alle paar Sekunden von selbst (langsamer im Leerlauf), daher kann eine ganz neue Transaktion bis zu einer Minute brauchen, um von allein zu erscheinen. Tippe auf Aktualisieren, um jetzt den neuesten Stand von der Chain zu laden.",
+      "voting_label": "Stimme",
+      "public_keys_heading": "Öffentliche Schlüssel",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "Block {block}",
@@ -2012,7 +2018,7 @@
     "title": "Bei Morphit anmelden",
     "body": "Wähle die Option, die zu deiner Situation passt.",
     "no_account_heading": "Noch kein Konto?",
-    "no_account_body": "Erstelle oben eines, indem du einfach einen coolen Benutzernamen wählst – mehr ist es wirklich nicht.",
+    "no_account_body": "Erstelle oben ein neues Konto, indem du einfach einen coolen Benutzernamen wählst – mehr ist es wirklich nicht.",
     "register_cta": "🌱 Neues Konto erstellen",
     "checking": "Überprüfe deine Session…",
     "import_existing": "🔐 Mit 12-Wort-Seed, json-Keyfile oder Posting-Key anmelden",
@@ -2385,6 +2391,7 @@
         "body": "Wir zahlen die Erstellungsgebühr auf der Chain — du brauchst kein BLURT zum Registrieren."
       },
       "submit": "Diesen Namen sichern",
+      "submit_named": "Meinen Benutzernamen @{name} jetzt sichern",
       "submit_pending": "Wird gesichert…",
       "skip": "Erstmal überspringen",
       "identity_recap": "Diese Identität",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "Überprüfe, ob du ein Mensch bist…",
         "verified": "Bestätigt ✓"
+      },
+      "leave_guard": {
+        "title": "Moment — möchtest du diese Seite wirklich gerade jetzt verlassen?",
+        "body": "Dein neuer Benutzername wurde noch nicht registriert.",
+        "confirm": "Trotzdem verlassen",
+        "cancel": "Auf dieser Seite bleiben"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "Im Gegensatz dazu bleiben Ihre privaten Unterhaltungen privat. Direktnachrichten zwischen Händlern sind Ende-zu-Ende-verschlüsselt – sie liegen auf der Blockchain nur als Geheimtext vor, den ausschließlich Sie und Ihr Handelspartner lesen können, niemals der Betreiber, die Indexer oder sonst jemand, der die Kette beobachtet. Morphit erfasst außerdem keinen Namen, keine E-Mail, keine Telefonnummer und keinen Ausweis, und die Zahlungsdaten, die Sie austauschen (etwa eine Empfangsadresse), laufen über diesen verschlüsselten Kanal statt über das öffentliche Orderbuch.",
     "privacy_body_3": "Wir ermutigen dich, ein VPN, Tor, Lokinet oder I2P zu verwenden, wenn du auf Morphit zugreifst — alles, was deine IP vor dem Server verbirgt, mit dem du sprichst, ist eine gute Idee. Wir nehmen keine Fingerabdrücke deines Browsers, wir profilieren dich nicht, und wir gestalten unsere Missbrauchsabwehr ausdrücklich so, dass sie datenschutzbewusste Benutzer nicht bestraft. Unsere Rate-Limits sind grob (einige Registrierungen pro IP pro Tag) und durch VPN-Rotation leicht zu umgehen — das ist ein bewusster Kompromiss. Wir akzeptieren lieber mehr Missbrauch, als datenschutzbewusste Benutzer unwillkommen zu machen. Wenn eine Abwehr erfordern würde, dich zu tracken, um zu funktionieren, implementieren wir sie nicht.",
     "terms_heading": "Nutzungsbedingungen",
-    "terms_body": "Bitte halte dich an das Nichtangriffsprinzip (NAP). Fluchen ist okay, aber denke daran, dass Morphit von Menschen aller Altersgruppen genutzt wird — Ältere, Jugendliche und alle dazwischen. Alle MEINUNGEN sind willkommen, gezielte Beleidigungen nicht. Deine Kauf-/Verkaufsangebote, Anzeigen, Bewertungen und Chats sind unveränderlich — die Formulierung zählt. Sag deine Meinung, dann Schluss. Fang keinen Streit an. Poste nichts Illegales oder offensichtlich Anstößiges. Gute Manieren. Sei freundlich. 💚💙"
+    "terms_body": "Bitte halte dich an das Nichtangriffsprinzip (NAP). Fluchen ist okay, aber denke daran, dass Morphit von Menschen aller Altersgruppen genutzt wird — Ältere, Jugendliche und alle dazwischen. Alle MEINUNGEN sind willkommen, gezielte Beleidigungen nicht. Deine Kauf-/Verkaufsangebote, Bewertungen und Chats sind unveränderlich — die Formulierung zählt. Sag deine Meinung, dann Schluss. Fang keinen Streit an. Poste nichts Illegales oder offensichtlich Anstößiges. Gute Manieren. Sei freundlich. 💚💙"
   },
   "privkey_warn": {
     "title": "Stopp — das sieht nach einem privaten Schlüssel aus",
@@ -3302,10 +3315,10 @@
       "loading": "Guthaben wird geladen...",
       "error": "Guthaben konnte nicht geladen werden",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP (gestaktes BLURT)",
+      "voting_label": "Stimme",
       "low_blurt_hint": "Dein flüssiges BLURT geht zur Neige. Lade auf, um weiter Orders zu veröffentlichen.",
-      "low_mana_hint": "Dein MANA ist niedrig. Jede Chain-Aktion verbraucht etwas davon; es regeneriert sich über ca. 5 Tage. Wenn du oft postest, kaufe BLURT nach und wandle es in BP um.",
+      "low_voting_hint": "Deine Stimmkraft ist niedrig. Sie regeneriert sich in etwa 5 Tagen. Mehr BLURT als BLURT Power anlegen erhöht deine Obergrenze.",
       "top_up_blurt": "BLURT aufladen",
       "top_up_hint": "Öffnet eine vorausgefüllte Kauforder.",
       "apr_label": "Aktuell {apr} APR"

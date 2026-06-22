@@ -285,7 +285,7 @@
       "confirm_pending": "Verrouillage…"
     },
     "lock_session": "Verrouiller la session",
-    "view_my_profile": "Voir mon profil"
+    "view_my_profile": "Profil de @{account}"
   },
   "backup_keys": {
     "title": "Sauvegardez vos clés",
@@ -973,7 +973,13 @@
         "load_more_failed": "Impossible de charger l'historique plus ancien."
       },
       "refresh_label": "Actualiser depuis la chaîne",
-      "delay_notice": "S'actualise toutes les quelques secondes (plus lentement au repos), donc une transaction toute récente peut mettre jusqu'à une minute à apparaître d'elle-même. Touchez actualiser pour charger maintenant les dernières données de la chaîne."
+      "delay_notice": "S'actualise toutes les quelques secondes (plus lentement au repos), donc une transaction toute récente peut mettre jusqu'à une minute à apparaître d'elle-même. Touchez actualiser pour charger maintenant les dernières données de la chaîne.",
+      "voting_label": "Vote",
+      "public_keys_heading": "Clés publiques",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "Bloc {block}",
@@ -2012,7 +2018,7 @@
     "title": "Se connecter à Morphit",
     "body": "Choisis l'option qui correspond à ta situation.",
     "no_account_heading": "Vous n'avez pas de compte ?",
-    "no_account_body": "Créez-en un ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
+    "no_account_body": "Créez un nouveau compte ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
     "register_cta": "🌱 Créer un nouveau compte",
     "checking": "Vérification de votre session…",
     "import_existing": "🔐 Se connecter avec seed de 12 mots, fichier json ou clé de posting",
@@ -2385,6 +2391,7 @@
         "body": "Nous payons les frais de création on-chain — vous n'avez pas besoin de BLURT pour vous inscrire."
       },
       "submit": "Prendre ce nom",
+      "submit_named": "Réclamer mon nom d'utilisateur @{name} maintenant",
       "submit_pending": "En cours…",
       "skip": "Plus tard",
       "identity_recap": "Cette identité",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "Vérification que vous êtes humain…",
         "verified": "Vérifié ✓"
+      },
+      "leave_guard": {
+        "title": "Attendez — êtes-vous sûr de vouloir quitter cette page maintenant ?",
+        "body": "Votre nouveau nom d'utilisateur n'a pas encore été enregistré.",
+        "confirm": "Quitter quand même",
+        "cancel": "Rester sur cette page"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "À l'inverse, vos conversations privées restent privées. Les messages directs entre traders sont chiffrés de bout en bout : ils ne figurent sur la blockchain que sous forme de texte chiffré que vous seuls, vous et votre partenaire d'échange, pouvez lire — jamais l'opérateur, les indexeurs, ni quiconque observe la chaîne. Morphit ne collecte pas non plus de nom, d'e-mail, de téléphone ni de pièce d'identité, et les informations de paiement que vous échangez (comme une adresse de réception) transitent par ce canal chiffré plutôt que par le carnet d'ordres public.",
     "privacy_body_3": "Nous vous encourageons à utiliser un VPN, Tor, Lokinet ou I2P pour accéder à Morphit — tout ce qui cache votre IP au serveur avec lequel vous parlez est une bonne idée. Nous ne prenons pas d'empreintes de votre navigateur, nous ne vous profilons pas, et nous concevons explicitement nos défenses contre les abus pour ne pas pénaliser les utilisateurs soucieux de leur vie privée. Nos limites de débit sont grossières (quelques inscriptions par IP par jour) et facilement contournées par rotation de VPN — c'est un compromis conscient. Nous préférons accepter plus d'abus que faire sentir les utilisateurs respectueux de la vie privée mal accueillis. Si une défense nécessitait de vous suivre pour fonctionner, nous ne l'implémentons pas.",
     "terms_heading": "Conditions",
-    "terms_body": "Veuillez respecter le Principe de Non-Agression (PNA). Jurer est acceptable, mais gardez à l'esprit que Morphit s'utilise à tout âge — personnes âgées, adolescents, et tout le monde entre les deux. Toutes les OPINIONS sont les bienvenues, mais les insultes directes non. Vos ordres d'achat/vente, annonces, avis et discussions sont immuables, donc les mots comptent. Dites votre avis, puis arrêtez. Ne cherchez pas la bagarre. Ne publiez rien d'illégal ou de manifestement choquant. Restez poli, soyez gentil. 💚💙"
+    "terms_body": "Veuillez respecter le Principe de Non-Agression (PNA). Jurer est acceptable, mais gardez à l'esprit que Morphit s'utilise à tout âge — personnes âgées, adolescents, et tout le monde entre les deux. Toutes les OPINIONS sont les bienvenues, mais les insultes directes non. Vos ordres d'achat/vente, avis et discussions sont immuables, donc les mots comptent. Dites votre avis, puis arrêtez. Ne cherchez pas la bagarre. Ne publiez rien d'illégal ou de manifestement choquant. Restez poli, soyez gentil. 💚💙"
   },
   "privkey_warn": {
     "title": "Stop — on dirait une clé privée",
@@ -3302,10 +3315,10 @@
       "loading": "Chargement du solde...",
       "error": "Impossible de charger le solde",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP (BLURT bloqué)",
+      "voting_label": "Vote",
       "low_blurt_hint": "Ton BLURT liquide est presque épuisé. Recharge pour continuer à publier des ordres.",
-      "low_mana_hint": "Ton MANA est bas. Chaque action en chaîne en consomme un peu ; il se régénère en environ 5 jours. Si tu publies souvent, recharge du BLURT et convertis-le en BP.",
+      "low_voting_hint": "Votre pouvoir de vote est faible. Il se régénère en environ 5 jours. Convertir plus de BLURT en BLURT Power augmente votre plafond.",
       "top_up_blurt": "Recharger BLURT",
       "top_up_hint": "Ouvre un ordre d'achat pré-rempli.",
       "apr_label": "Rendement actuel {apr} APR"

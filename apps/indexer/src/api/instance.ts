@@ -6,9 +6,12 @@
  * All fields are optional; frontend has hardcoded fallbacks
  * for unbranded instances ("Morphit" / "A Morphit instance").
  *
- * Response is cached for 5 minutes (Cache-Control: public,
- * max-age=300) — branding is set-and-forget, no need to
- * re-fetch on every page navigation.
+ * Cache-Control: no-cache — clients/proxies may store the body but
+ * must revalidate before reuse, so an operator's branding change
+ * (name/tagline/contact, set via morphit-ops) shows on the next
+ * normal refresh rather than waiting out a cache window. The store
+ * fetches this once per session anyway, so the revalidation cost is
+ * one small conditional GET per page load.
  *
  * Includes fee_recipient and relay_account because the
  * frontend already surfaces these in trust-context strings
@@ -312,7 +315,17 @@ export function instanceRoute(
 				? `${config.publicOrigin.replace(/\/$/, '')}/mcp`
 				: null
 		};
-		c.header('Cache-Control', 'public, max-age=300');
+		// Branding is operator-mutable (name/tagline/contact change via
+		// morphit-ops) and the operator expects a change to show up
+		// immediately, not after a cache window. `no-cache` lets clients
+		// and BunkerWeb store the body but requires revalidation before
+		// reuse, so a just-changed operator name is never served stale.
+		// (Was `public, max-age=300`, which kept the footer on the old
+		// name for up to 5 min — and let shared caches serve it too —
+		// until a cold reload.) The frontend additionally fetches this
+		// with cache:'no-cache'. The federation directory (/v1/instances)
+		// keeps its short max-age=60 since probe data is not operator-set.
+		c.header('Cache-Control', 'no-cache');
 		return c.json(body);
 	});
 

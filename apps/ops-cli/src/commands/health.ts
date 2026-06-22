@@ -288,6 +288,15 @@ export interface HealthSummary {
 	 *  set).  null when the field is absent (the indexer health, or a
 	 *  relay built before this field existed). */
 	readonly webPush: boolean | null;
+	/** Relay only: ACT auto-minter (ADR-0010 §5) enabled. null when the
+	 *  field is absent (indexer health, or a pre-automint relay). */
+	readonly automintEnabled: boolean | null;
+	/** Relay only: ACTs ready for use right now (pending_claimed_accounts
+	 *  on the relay account). null when absent. */
+	readonly actsReady: number | null;
+	/** Relay only: the buffer the auto-minter tops up to / refills below. */
+	readonly automintTarget: number | null;
+	readonly automintLowWater: number | null;
 }
 
 function numOrNull(v: unknown): number | null {
@@ -315,7 +324,11 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		rpcHealthy,
 		rpcTotal,
 		rpcAllDown: rpcTotal !== null && rpcTotal > 0 && rpcHealthy === 0,
-		webPush: typeof b.web_push === 'boolean' ? b.web_push : null
+		webPush: typeof b.web_push === 'boolean' ? b.web_push : null,
+		automintEnabled: typeof b.automint_enabled === 'boolean' ? b.automint_enabled : null,
+		actsReady: numOrNull(b.pending_claimed_accounts),
+		automintTarget: numOrNull(b.automint_target_acts),
+		automintLowWater: numOrNull(b.automint_low_water_acts)
 	};
 }
 
@@ -575,7 +588,11 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						up: relayUp,
 						version: relay.summary?.version ?? null,
 						uptime_sec: relay.summary?.uptimeSec ?? null,
-						web_push: relay.summary?.webPush ?? null
+						web_push: relay.summary?.webPush ?? null,
+						automint_enabled: relay.summary?.automintEnabled ?? null,
+						acts_ready: relay.summary?.actsReady ?? null,
+						automint_target_acts: relay.summary?.automintTarget ?? null,
+						automint_low_water_acts: relay.summary?.automintLowWater ?? null
 					},
 					services: Object.fromEntries(services.map((s) => [s.unit, s.state])),
 					canary
@@ -632,6 +649,24 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			console.log(
 				`      Web push:      ${rs.webPush ? c.green('✓ enabled') : c.dim('○ disabled (no VAPID keys)')}`
 			);
+		}
+		// ACT auto-minter (ADR-0010 §5): green "✓ N ACT's ready" when the
+		// relay self-refills its account-creation-token buffer, red
+		// "Disabled" when the operator turned it off. The threshold sub-line
+		// makes it clear the relay tops UP TO a target (only minting the
+		// gap) rather than minting a fixed batch each cycle.
+		if (rs?.automintEnabled != null) {
+			if (rs.automintEnabled) {
+				const ready = rs.actsReady ?? 0;
+				console.log(`      Auto-minter:   ${c.green(`✓ ${ready} ACT's ready`)}`);
+				if (rs.automintTarget != null && rs.automintLowWater != null) {
+					console.log(
+						`                     ${c.dim(`target ${rs.automintTarget} · refills when below ${rs.automintLowWater}`)}`
+					);
+				}
+			} else {
+				console.log(`      Auto-minter:   ${c.red('Disabled')}`);
+			}
 		}
 	} else if (relay.kind === 'unreachable') {
 		console.log(`  ${c.red('✗')} not reachable on loopback or any bridge gateway`);

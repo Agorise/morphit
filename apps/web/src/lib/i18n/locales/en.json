@@ -285,7 +285,7 @@
       "confirm_pending": "Locking…"
     },
     "lock_session": "Lock session",
-    "view_my_profile": "View my profile"
+    "view_my_profile": "@{account} profile"
   },
   "backup_keys": {
     "title": "Back up your keys",
@@ -973,7 +973,13 @@
         "load_more_failed": "Couldn't load older history."
       },
       "refresh_label": "Refresh from chain",
-      "delay_notice": "Auto-refreshes every few seconds (slower when idle), so a brand-new transaction can take up to a minute to appear on its own. Tap refresh to load the latest from the chain now."
+      "delay_notice": "Auto-refreshes every few seconds (slower when idle), so a brand-new transaction can take up to a minute to appear on its own. Tap refresh to load the latest from the chain now.",
+      "voting_label": "Voting",
+      "public_keys_heading": "Public Keys",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "Block {block}",
@@ -2012,7 +2018,7 @@
     "title": "Sign in to Morphit",
     "body": "Pick the option that matches how you got here.",
     "no_account_heading": "Don't have an account?",
-    "no_account_body": "Create one above by just picking a cool username, that's literally all there is to it.",
+    "no_account_body": "Create a new account above by just picking a cool username, that's literally all there is to it.",
     "register_cta": "🌱 Create a new account",
     "checking": "Checking your session…",
     "import_existing": "🔐 Sign in with a 12-word seed, json keyfile or posting key",
@@ -2385,6 +2391,7 @@
         "body": "We pay the on-chain creation fee — you don't need any BLURT to sign up."
       },
       "submit": "Claim this name",
+      "submit_named": "Claim my @{name} username now",
       "submit_pending": "Claiming…",
       "skip": "Skip for now",
       "identity_recap": "This identity",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "Verifying you're human…",
         "verified": "Verified ✓"
+      },
+      "leave_guard": {
+        "title": "Wait — are you sure that you want to leave this page right now?",
+        "body": "Your new username has not been registered yet.",
+        "confirm": "Leave anyway",
+        "cancel": "Stay on this page"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "By contrast, your private conversations stay private. Direct messages between traders are end-to-end encrypted — they live on the blockchain only as ciphertext that you and your trade partner can read, never the operator, the indexers, or anyone else watching the chain. Morphit also collects no name, email, phone, or ID, and the payment details you exchange (such as a receiving address) move through that encrypted channel instead of the public orderbook.",
     "privacy_body_3": "We encourage you to use a VPN, Tor, Lokinet, or I2P when accessing Morphit — anything that hides your IP from the server you're talking to is a good idea. We don't fingerprint your browser, we don't profile you, and we explicitly design our defenses against abuse so they don't punish privacy-conscious users. Our rate limits are crude (a handful of signups per IP per day) and easily defeated by VPN rotation — that's a conscious tradeoff. We'd rather accept more abuse than make privacy-respecting users feel unwelcome. If a defense would require tracking you to work, we don't ship it.",
     "terms_heading": "Terms",
-    "terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your Buy/Sell orders, Ads, the Feedback section and Chats are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
+    "terms_body": "Please abide by the Non-Aggression Principle (NAP). Cursing is acceptable, but just keep in mind that there are all ages that use Morphit. Elderly, teens and everyone in between. All OPINIONS are welcome here, but directed insults are not. Your Buy/Sell orders, the Feedback section and Chats are immutable, so wording is everything. State your opinion, then stop. Don't start fights. Do not post illegal or obviously objectionable stuff. Remember your manners, be nice. 💚💙"
   },
   "privkey_warn": {
     "title": "Stop — that looks like a private key",
@@ -3302,10 +3315,10 @@
       "loading": "Loading balance...",
       "error": "Couldn't load balance",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP (staked BLURT)",
+      "voting_label": "Voting",
       "low_blurt_hint": "Your liquid BLURT is running low. Top up to keep posting orders.",
-      "low_mana_hint": "Your MANA is low. Each chain action consumes a small amount; it regenerates over about 5 days. If you're posting often, top up some BLURT and power it up.",
+      "low_voting_hint": "Your voting power is low. It regenerates over about 5 days. Powering up more BLURT raises your ceiling.",
       "top_up_blurt": "Top up BLURT",
       "top_up_hint": "Opens a pre-filled buy order.",
       "apr_label": "Currently earning {apr} APR"

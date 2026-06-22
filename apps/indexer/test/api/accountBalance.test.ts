@@ -25,6 +25,8 @@ const FULL_ACCOUNT: ChainAccount = {
 	memo_key: 'BLT1111111111111111111111111111111114T1Anm',
 	balance: '42.500 BLURT',
 	vesting_shares: '1000000.000000 VESTS',
+	received_vesting_shares: '50000.000000 VESTS',
+	delegated_vesting_shares: '20000.000000 VESTS',
 	voting_manabar: { current_mana: '900000', last_update_time: 1_700_000_000 }
 };
 
@@ -49,6 +51,8 @@ type BalanceBody = {
 		name: string;
 		balance: string;
 		vesting_shares: string;
+		received_vesting_shares: string;
+		delegated_vesting_shares: string;
 		voting_manabar: { current_mana: string; last_update_time: number } | null;
 	};
 	dgp: {
@@ -71,6 +75,8 @@ describe('GET /v1/account/:account/balance', () => {
 		expect(body.account.name).toBe('alice');
 		expect(body.account.balance).toBe('42.500 BLURT');
 		expect(body.account.vesting_shares).toBe('1000000.000000 VESTS');
+		expect(body.account.received_vesting_shares).toBe('50000.000000 VESTS');
+		expect(body.account.delegated_vesting_shares).toBe('20000.000000 VESTS');
 		expect(body.account.voting_manabar?.current_mana).toBe('900000');
 		expect(body.dgp.total_vesting_fund_blurt).toBe('1000000.000 BLURT');
 		expect(body.dgp.total_vesting_shares).toBe('2000000.000000 VESTS');
@@ -88,6 +94,22 @@ describe('GET /v1/account/:account/balance', () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as BalanceBody;
 		expect(body.account.voting_manabar).toBeNull();
+	});
+
+	it('defaults received/delegated vesting to zero when the node omits them', async () => {
+		const app = mount({
+			getAccount: async () => ({
+				...FULL_ACCOUNT,
+				received_vesting_shares: undefined,
+				delegated_vesting_shares: undefined
+			}),
+			getDynamicGlobalProperties: async () => FULL_DGP
+		});
+		const res = await app.request('/v1/account/alice/balance');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as BalanceBody;
+		expect(body.account.received_vesting_shares).toBe('0.000000 VESTS');
+		expect(body.account.delegated_vesting_shares).toBe('0.000000 VESTS');
 	});
 
 	it('404s when the account does not exist on chain', async () => {

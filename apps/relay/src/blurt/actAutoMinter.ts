@@ -23,10 +23,13 @@
  * sit above the point where minting stalls so the operator can top up
  * BLURT before signups are affected. See docs/OPERATIONS.md §19.
  *
- * OPT-IN: disabled unless MORPHIT_RELAY_AUTOMINT_ENABLED=true, so an
- * operator who upgrades without reading the release notes sees no new
- * on-chain spending. The decision logic (`planActMint`) is a pure
- * function with no I/O — fully unit-tested in test/actAutoMinter.test.ts.
+ * ON BY DEFAULT (MORPHIT_RELAY_AUTOMINT_ENABLED defaults to true): a relay
+ * that can't fund accounts is a broken relay, so self-refill is the right
+ * default. It only ever spends liquid BLURT ABOVE `minBlurtReserve`, so the
+ * on-chain spend is bounded and safe. Set MORPHIT_RELAY_AUTOMINT_ENABLED=false
+ * to keep the old manual / weekly-timer (`scripts/mint-acts.ts`) workflow.
+ * The decision logic (`planActMint`) is a pure function with no I/O — fully
+ * unit-tested in test/actAutoMinter.test.ts.
  */
 
 import type { BlurtClient } from './client.ts';
@@ -44,7 +47,8 @@ export function parseBlurtBalance(raw: string): number | null {
 }
 
 export interface ActAutoMintConfig {
-	/** Master switch. False = never mint (the default). */
+	/** Master switch. True (the default) = self-refill; false = never
+	 *  mint (manual / weekly-timer workflow). */
 	readonly enabled: boolean;
 	/** Desired ACT buffer. Each cycle tops up toward this. */
 	readonly targetActs: number;
@@ -252,7 +256,17 @@ export class ActAutoMinter {
 					log.info('automint_minted', { i, of: plan.mintCount, trx_id: r.id });
 				} catch (err) {
 					failed++;
-					log.error('automint_mint_failed', { i, of: plan.mintCount }, err);
+					// Surface the chain's rejection REASON in a context field, not
+					// only via the error's stack (the text sink renders an error
+					// arg as a stack line, which an operator's `grep automint`
+					// drops — and a stackless RPC error object would lose it
+					// entirely). For a mint failure the rejection reason (e.g.
+					// insufficient mana, fee mismatch, bad auth) is the whole point.
+					log.error(
+						'automint_mint_failed',
+						{ i, of: plan.mintCount, error: err instanceof Error ? err.message : String(err) },
+						err
+					);
 					break;
 				}
 			}

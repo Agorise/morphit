@@ -85,6 +85,16 @@
 		return getUserBlurtAccount() !== null;
 	});
 
+	/** The logged-in account name, for the "@<name> profile" menu label.
+	 *  Same reactive deps as canViewProfile so it tracks session changes.
+	 *  Empty string when no name (the item is hidden via canViewProfile
+	 *  then, so the value is never actually shown). */
+	const myAccount = $derived.by((): string => {
+		void $liveIdentity;
+		void $pairedReadOnly;
+		return getUserBlurtAccount() ?? '';
+	});
+
 	// Avatar src — identicon seeded from the account NAME so it matches
 	// the avatar shown on the profile page, the explorer, the account-name
 	// card on /settings, and IdentityLabel everywhere. The account name is
@@ -587,7 +597,7 @@
 										<circle cx="12" cy="8" r="4" />
 										<path d="M4 21a8 8 0 0 1 16 0" />
 									</svg>
-									<span class="text-sm font-semibold">{$_('avatar_menu.view_my_profile')}</span>
+									<span class="text-sm font-semibold">{$_('avatar_menu.view_my_profile', { values: { account: myAccount } })}</span>
 								</button>
 							</li>
 						{/if}

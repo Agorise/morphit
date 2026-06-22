@@ -23,6 +23,16 @@
 
 import { Client, PrivateKey } from '@beblurt/dblurt';
 import { EndpointPool } from '@morphit/rpc-pool';
+import { registerClaimedAccountOperationSerializers } from './claimedAccountSerializers.ts';
+
+// dblurt@0.10.9 (latest) ships no serializer for claim_account /
+// create_claimed_account, so it throws at SIGN time for both the ACT
+// auto-minter and the signup path. Register our serializers ONCE, at
+// module load — before any BlurtClient broadcast can run. Idempotent.
+// See claimedAccountSerializers.ts for the why + how (it augments the
+// exported, mutable Types.Transaction; byte-identical to stock dblurt
+// for every existing op).
+registerClaimedAccountOperationSerializers();
 
 /** Parse a Graphene asset string like "1234.567 BLURT" or
  *  "9876543.210987 VESTS" into its raw integer amount (BigInt),

@@ -85,6 +85,25 @@ const SAFE_BUILDER_NAMES = [
  *  given <expr> to a value an attacker controls. */
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
+		'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte',
+		// `txUrl ? lp(txUrl) : '#'` and `blockUrl ? lp(blockUrl) : '#'` —
+		// txUrl/blockUrl are `{@const}`s from morphitExplorerTxUrl(op.trxId) /
+		// morphitExplorerBlockUrl(op.block) (apps/web/src/lib/explorer/urls.ts).
+		// Both VALIDATE their input — trxId against /^[0-9a-fA-F]{40}$/
+		// (BLURT_TRXID_RE), block as a finite positive integer — and return a
+		// hardcoded INTERNAL path (`/explorer/tx/<hex>`, `/explorer/block/<n>`)
+		// or null.  `lp()` is localePath() (a SAFE_BUILDER) which only prefixes
+		// single-slash internal paths; relative, external (`https://`) and
+		// protocol-relative (`//`) inputs pass through unchanged, so it can
+		// never synthesize a `javascript:` scheme.  A null builder result
+		// falls back to the '#' literal.  These are site-controlled URLs built
+		// from validated chain data — no operator/peer-controlled scheme is
+		// reachable.  The static tracer can't follow morphitExplorer*Url →
+		// localePath through the {@const} + ternary, but a reviewer has
+		// confirmed safe.
+		new Set(["txUrl ? lp(txUrl) : '#'", "blockUrl ? lp(blockUrl) : '#'"])
+	],
+	[
 		'apps/web/src/lib/components/RssFeedPicker.svelte',
 		// `href={urlFor(format)}` — urlFor returns
 		// `${location.origin}${base}.${EXT[format]}`. The origin is the

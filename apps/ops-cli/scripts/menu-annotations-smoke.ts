@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { itemSuffix, itemEmphasis, rootTag, MENU_GROUPS } from '../src/commands/mainMenu.ts';
 import { readCurrentVersion } from '../src/lib/menuAnnotations.ts';
+import { initColorMode } from '../src/render/term.ts';
 
 const strip = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, '');
 
@@ -76,8 +77,49 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 	truthy('emphasis: status balance error → "balance-error"', itemEmphasis('status', A({ relayBalanceStatus: 'error' })) === 'balance-error');
 	truthy('emphasis: status balance warn → "balance-warn"', itemEmphasis('status', A({ relayBalanceStatus: 'warn' })) === 'balance-warn');
 	truthy('emphasis: status balance ok → null', itemEmphasis('status', A({ relayBalanceStatus: 'ok' })) === null);
-	truthy('emphasis: moderation flags → null (suffix-only, no label color)', itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === null);
+	truthy('emphasis: moderation flags → "flags" (label colored too)', itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === 'flags');
+	truthy('emphasis: moderation 0 flags → null', itemEmphasis('moderation', A({ unresolvedFlags: 0 })) === null);
 	truthy('emphasis: no annotations → null', itemEmphasis('upgrade', undefined) === null);
+}
+
+// ── Alert COLOUR: every main-menu attention marker is BOLD BRIGHT
+//    YELLOW (\u001b[1;93m), never the pale standard yellow (33) or red
+//    (31). cp323 — Ken's directive that all menu alerts read in the
+//    same loud bold bright yellow. ──
+{
+	initColorMode('always');
+	const BBY = '\u001b[1;93m'; // bold bright yellow SGR
+	const PALE = '\u001b[33m'; // standard yellow — must NOT appear
+	const RED = '\u001b[31m'; // red — must NOT appear
+	const update = itemSuffix('upgrade', {
+		currentVersion: 'v1.0.0-beta.4',
+		latestVersion: 'v1.0.0-beta.5',
+		unresolvedFlags: null,
+		relayBalanceStatus: null
+	});
+	truthy('colour: "update available" marker is bold bright yellow', update.includes(BBY) && !update.includes(PALE), update);
+	const flags = itemSuffix('moderation', {
+		currentVersion: null,
+		latestVersion: null,
+		unresolvedFlags: 3,
+		relayBalanceStatus: null
+	});
+	truthy('colour: flags marker is bold bright yellow (not pale)', flags.includes(BBY) && !flags.includes(PALE), flags);
+	const balErr = itemSuffix('status', {
+		currentVersion: null,
+		latestVersion: null,
+		unresolvedFlags: null,
+		relayBalanceStatus: 'error'
+	});
+	truthy('colour: relay-balance error is bold bright yellow (not red)', balErr.includes(BBY) && !balErr.includes(RED), balErr);
+	const balWarn = itemSuffix('status', {
+		currentVersion: null,
+		latestVersion: null,
+		unresolvedFlags: null,
+		relayBalanceStatus: 'warn'
+	});
+	truthy('colour: relay-balance warn is bold bright yellow (not pale)', balWarn.includes(BBY) && !balWarn.includes(PALE), balWarn);
+	initColorMode('never'); // restore default for any later text assertions
 }
 
 // ── rootTag: "(needs sudo)" on the first line of privileged items ──

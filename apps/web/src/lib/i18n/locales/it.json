@@ -285,7 +285,7 @@
       "confirm_pending": "Blocco in corso…"
     },
     "lock_session": "Blocca sessione",
-    "view_my_profile": "Vedi il mio profilo"
+    "view_my_profile": "Profilo di @{account}"
   },
   "backup_keys": {
     "title": "Backup delle tue chiavi",
@@ -973,7 +973,13 @@
         "load_more_failed": "Non siamo riusciti a caricare cronologia più vecchia."
       },
       "refresh_label": "Aggiorna dalla chain",
-      "delay_notice": "Si aggiorna da solo ogni pochi secondi (più lentamente quando è inattivo), quindi una transazione appena fatta può impiegare fino a un minuto per comparire da sola. Tocca aggiorna per caricare subito gli ultimi dati dalla chain."
+      "delay_notice": "Si aggiorna da solo ogni pochi secondi (più lentamente quando è inattivo), quindi una transazione appena fatta può impiegare fino a un minuto per comparire da sola. Tocca aggiorna per caricare subito gli ultimi dati dalla chain.",
+      "voting_label": "Voto",
+      "public_keys_heading": "Chiavi pubbliche",
+      "key_owner": "Owner",
+      "key_active": "Active",
+      "key_posting": "Posting",
+      "key_memo": "Memo"
     },
     "block": {
       "page_title": "Blocco {block}",
@@ -2012,7 +2018,7 @@
     "title": "Accedi a Morphit",
     "body": "Scegli l'opzione che corrisponde a come sei arrivato qui.",
     "no_account_heading": "Non hai un account?",
-    "no_account_body": "Creane uno qui sopra scegliendo semplicemente un nome utente simpatico; è letteralmente tutto qui.",
+    "no_account_body": "Crea un nuovo account qui sopra scegliendo semplicemente un nome utente simpatico; è letteralmente tutto qui.",
     "register_cta": "🌱 Crea un nuovo account",
     "checking": "Verifica della tua sessione…",
     "import_existing": "🔐 Accedi con seed di 12 parole, file json o chiave di posting",
@@ -2385,6 +2391,7 @@
         "body": "Paghiamo noi la commissione on-chain di creazione — non ti serve nessun BLURT per iscriverti."
       },
       "submit": "Prendi questo nome",
+      "submit_named": "Richiedi ora il mio nome utente @{name}",
       "submit_pending": "In corso…",
       "skip": "Salta per ora",
       "identity_recap": "Questa identità",
@@ -2423,6 +2430,12 @@
       "altcha": {
         "verifying": "Sto verificando che sei umano…",
         "verified": "Verificato ✓"
+      },
+      "leave_guard": {
+        "title": "Aspetta — sei sicuro di voler lasciare questa pagina proprio ora?",
+        "body": "Il tuo nuovo nome utente non è ancora stato registrato.",
+        "confirm": "Esci comunque",
+        "cancel": "Resta su questa pagina"
       }
     },
     "unlock_mode": {
@@ -3245,7 +3258,7 @@
     "privacy_body_protected": "Al contrario, le tue conversazioni private restano private. I messaggi diretti tra trader sono cifrati end-to-end: risiedono sulla blockchain solo come testo cifrato che possono leggere soltanto tu e la tua controparte, mai l'operatore, gli indicizzatori o chiunque altro osservi la catena. Morphit inoltre non raccoglie alcun nome, e-mail, telefono o documento d'identità, e i dati di pagamento che scambi (come un indirizzo di ricezione) viaggiano attraverso quel canale cifrato anziché nel registro ordini pubblico.",
     "privacy_body_3": "Ti incoraggiamo a usare una VPN, Tor, Lokinet o I2P quando accedi a Morphit — qualsiasi cosa che nasconda il tuo IP al server con cui parli è una buona idea. Non rileviamo l'impronta del tuo browser, non ti profiliamo, e progettiamo esplicitamente le nostre difese contro gli abusi in modo che non puniscano gli utenti attenti alla privacy. I nostri limiti di frequenza sono grossolani (pochi registrazioni per IP al giorno) e facilmente aggirabili ruotando VPN — è un compromesso cosciente. Preferiamo accettare più abusi che far sentire a disagio gli utenti che rispettano la propria privacy. Se una difesa richiedesse di tracciarti per funzionare, non la implementiamo.",
     "terms_heading": "Termini",
-    "terms_body": "Per favore rispetta il Principio di Non-Aggressione (PNA). Imprecare è accettabile, ma ricorda che Morphit è usato da persone di tutte le età — anziani, adolescenti e tutti quelli nel mezzo. Tutte le OPINIONI sono benvenute, gli insulti diretti no. I tuoi ordini di acquisto/vendita, annunci, recensioni e chat sono immutabili, quindi le parole contano. Dì la tua opinione e basta. Non iniziare litigi. Non pubblicare cose illegali o manifestamente offensive. Ricorda le buone maniere, sii gentile. 💚💙"
+    "terms_body": "Per favore rispetta il Principio di Non-Aggressione (PNA). Imprecare è accettabile, ma ricorda che Morphit è usato da persone di tutte le età — anziani, adolescenti e tutti quelli nel mezzo. Tutte le OPINIONI sono benvenute, gli insulti diretti no. I tuoi ordini di acquisto/vendita, recensioni e chat sono immutabili, quindi le parole contano. Dì la tua opinione e basta. Non iniziare litigi. Non pubblicare cose illegali o manifestamente offensive. Ricorda le buone maniere, sii gentile. 💚💙"
   },
   "privkey_warn": {
     "title": "Fermo — sembra una chiave privata",
@@ -3302,10 +3315,10 @@
       "loading": "Caricamento saldo...",
       "error": "Impossibile caricare il saldo",
       "blurt_label": "BLURT",
-      "bp_label": "BP",
-      "mana_label": "MANA",
+      "bp_staked_label": "BP (BLURT in staking)",
+      "voting_label": "Voto",
       "low_blurt_hint": "Il tuo BLURT liquido è quasi finito. Ricarica per continuare a pubblicare ordini.",
-      "low_mana_hint": "Il tuo MANA è basso. Ogni azione su chain ne consuma un po'; si rigenera in circa 5 giorni. Se pubblichi spesso, ricarica BLURT e convertilo in BP.",
+      "low_voting_hint": "Il tuo potere di voto è basso. Si rigenera in circa 5 giorni. Convertire più BLURT in BLURT Power alza il tuo limite.",
       "top_up_blurt": "Ricarica BLURT",
       "top_up_hint": "Apre un ordine di acquisto precompilato.",
       "apr_label": "Rendimento attuale {apr} APR"

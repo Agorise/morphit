@@ -89,6 +89,25 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// ─── cp321 explorer-account Public Keys card: the four Blurt key-role
+	//     names (Owner / Active / Posting / Memo) are technical identifiers
+	//     kept in English in EVERY locale by project convention — exactly as
+	//     backup_keys_panel.role.* does ("Owner-Schlüssel" / "Clave Owner" /
+	//     etc. keep the role word English and translate only "key"). Here the
+	//     label IS just the bare role word (under a translated "Public Keys"
+	//     heading), so it is byte-identical to English by design, not a miss.
+	{ key: 'explorer.account.key_owner', locale: 'de', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_owner', locale: 'es', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_owner', locale: 'fr', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_active', locale: 'de', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_active', locale: 'es', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_active', locale: 'fr', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_posting', locale: 'de', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_posting', locale: 'es', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_posting', locale: 'fr', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_memo', locale: 'de', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_memo', locale: 'es', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
+	{ key: 'explorer.account.key_memo', locale: 'fr', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
 	// cp305 — the sign-out-before-switch modal's confirm button is "OK"
 	// per Ken's explicit two-button [Cancel / OK] spec for this dialog.
 	// "OK" is an internationally-recognized affirmation rendered
@@ -467,24 +486,6 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'profile.my_balance.blurt_label', locale: 'fa', reason: '(c) chain asset symbol' },
 	{ key: 'profile.my_balance.blurt_label', locale: 'zh-CN', reason: '(c) chain asset symbol' },
 	{ key: 'profile.my_balance.blurt_label', locale: 'zh-HK', reason: '(c) chain asset symbol' },
-	{ key: 'profile.my_balance.bp_label', locale: 'es', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'fr', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'de', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'it', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'pl', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'ru', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'fa', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'zh-CN', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.bp_label', locale: 'zh-HK', reason: '(c) chain asset symbol (BP)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'es', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'fr', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'de', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'it', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'pl', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'ru', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'fa', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'zh-CN', reason: '(c) chain asset symbol (MANA)' },
-	{ key: 'profile.my_balance.mana_label', locale: 'zh-HK', reason: '(c) chain asset symbol (MANA)' },
 
 	// ─── (c) Cryptocurrency brand names in chat-address method labels ───
 	// "Blurt" is the chain brand name in all locales.  "Bitcoin" and "Monero" are kept
