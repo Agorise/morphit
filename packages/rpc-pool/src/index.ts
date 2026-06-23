@@ -140,8 +140,18 @@ export function isTransportError(err: unknown): boolean {
 	// match 4xx CLIENT errors (400/401/403/404 etc.) — those would fail
 	// identically on every endpoint, so rotating is pointless and would
 	// just mask the real cause. The matched set is the standard
-	// retryable list: 408, 429, 500, 502, 503, 504.
-	if (/\bhttp (?:408|429|500|502|503|504)\b/.test(m)) return true;
+	// retryable list (408, 429, 500, 502, 503, 504) PLUS the 520-527
+	// family (cp328). These are non-standard 5xx codes that an UPSTREAM
+	// edge/proxy sitting in front of a Blurt RPC node returns when it
+	// can't get a valid response from that node's origin — e.g. 521
+	// "origin down", 522/524 timeout, 523 "unreachable". For us they
+	// describe an unreachable upstream endpoint, i.e. a transport
+	// failure → rotate off it. (These come from whatever proxy a given
+	// Blurt node operator runs upstream; Morphit's own stack is
+	// BunkerWeb with no CDN.) Without this the pool gave up on the
+	// first 521 instead of hopping to a healthy node — the relay's ACT
+	// auto-mint surfaced `HTTP 521: <none>` and minted 0.
+	if (/\bhttp (?:408|429|500|502|503|504|52[0-7])\b/.test(m)) return true;
 	return false;
 }
 

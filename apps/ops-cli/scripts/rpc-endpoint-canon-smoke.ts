@@ -116,6 +116,56 @@ for (const [path, varName] of [
 	}
 }
 
+// ── Ansible deploy defaults (cp328) ─────────────────────────────────
+// The env examples above were guarded, but the Ansible group_vars copy
+// was NOT — and that is exactly where the dead rpc.blurt.world node
+// survived (group_vars/all.yml pinned the indexer to it as "primary",
+// and the egress allowlist opened it while BLOCKING the real six). Pin
+// the Ansible indexer-endpoint default to canon too, and keep the
+// decommissioned node out of the whole file (endpoints AND allowlist).
+function yamlScalarList(path: string, key: string): Set<string> | null {
+	const src = readFileSync(join(REPO, path), 'utf8');
+	const line = src.split('\n').find((l) => l.trimStart().startsWith(`${key}:`));
+	if (line === undefined) return null;
+	let val = line.slice(line.indexOf(':') + 1).trim();
+	if (
+		(val.startsWith('"') && val.endsWith('"')) ||
+		(val.startsWith("'") && val.endsWith("'"))
+	) {
+		val = val.slice(1, -1);
+	}
+	return new Set(
+		val
+			.split(',')
+			.map((u) => u.trim())
+			.filter((u) => u !== '')
+	);
+}
+
+{
+	const ansiblePath = 'ops/ansible/group_vars/all.yml';
+	const urls = yamlScalarList(ansiblePath, 'morphit_indexer_blurt_rpc_endpoints');
+	if (urls === null) {
+		bad(`could not find morphit_indexer_blurt_rpc_endpoints in ${ansiblePath}`);
+	} else if (setEq(urls, canon)) {
+		ok(`${ansiblePath} morphit_indexer_blurt_rpc_endpoints matches the canonical set`);
+	} else {
+		bad(
+			`${ansiblePath} indexer RPC endpoints differ from canonical`,
+			`ansible=[${show(urls)}] canon=[${show(canon)}]`
+		);
+	}
+
+	const ay = readFileSync(join(REPO, ansiblePath), 'utf8');
+	if (!ay.includes('rpc.blurt.world')) {
+		ok(`${ansiblePath} is free of the dead rpc.blurt.world node (endpoints + egress allowlist)`);
+	} else {
+		bad(
+			`rpc.blurt.world reappeared in ${ansiblePath} — decommissioned node; use the canonical set`
+		);
+	}
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {

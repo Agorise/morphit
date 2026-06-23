@@ -683,7 +683,21 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		'HTTP 503: Service Unavailable',
 		'HTTP 504: Gateway Timeout',
 		'HTTP 500: Internal Server Error',
-		'HTTP 408: Request Timeout'
+		'HTTP 408: Request Timeout',
+		// cp328: the 520-527 family — non-standard 5xx that an upstream
+		// edge/proxy in front of a Blurt RPC node returns when that
+		// node's origin is unreachable (521 "origin down", etc.). They
+		// mean the upstream endpoint is unreachable → transport failure
+		// → rotate. (Morphit runs BunkerWeb, no CDN; these are the
+		// upstream node operator's infra.) The `HTTP 521: <none>` form
+		// is the exact string the relay's ACT auto-mint surfaced when it
+		// minted 0.
+		'HTTP 521: <none>',
+		'HTTP 520: Web Server Returned an Unknown Error',
+		'HTTP 522: Connection Timed Out',
+		'HTTP 523: Origin Is Unreachable',
+		'HTTP 524: A Timeout Occurred',
+		'HTTP 527: Railgun Error'
 	];
 	const clientErrors = [
 		'HTTP 400: Bad Request',
@@ -694,11 +708,40 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	const retryOk = retryable.every((s) => isTransportError(new Error(s)));
 	const clientOk = clientErrors.every((s) => !isTransportError(new Error(s)));
 	if (retryOk && clientOk) {
-		pass('isTransportError: 408/429/500/502/503/504 are transport; 4xx client errors are not');
+		pass('isTransportError: 408/429/500/502/503/504 + upstream 52x (origin-down) are transport; 4xx client errors are not');
 	} else {
 		fail(
 			'HTTP status classification',
 			`retryable-all-transport=${retryOk} client-none-transport=${clientOk}`
+		);
+	}
+}
+
+/* ---------------- scenario 18b: a 521 (upstream origin down) endpoint rotates ---------------- */
+// cp328: the exact relay ACT-auto-mint symptom — one upstream Blurt RPC
+// node returns `HTTP 521: <none>` (its origin is unreachable); the pool
+// must hop to a healthy endpoint instead of dead-ending the call (which
+// minted 0 ACTs).
+{
+	const pool = new EndpointPool({ endpoints: ['upstream-origin-down', 'good'] });
+	let goodHits = 0;
+	let result: string | null = null;
+	try {
+		result = await pool.call(async (u) => {
+			if (u === 'upstream-origin-down') throw new Error('HTTP 521: <none>');
+			goodHits++;
+			return 'OK';
+		});
+	} catch (err) {
+		fail('521 rotation threw', err instanceof Error ? err.message : String(err));
+	}
+	const cooled = pool.snapshot().find((s) => s.url === 'upstream-origin-down');
+	if (result === 'OK' && goodHits === 1 && cooled && cooled.cooldownUntil > Date.now()) {
+		pass('call(): a 521 (upstream origin-down) endpoint rotates to a healthy one and is cooled down');
+	} else {
+		fail(
+			'521 endpoint did not rotate to a healthy node',
+			`result=${result} goodHits=${goodHits} cooled=${cooled ? cooled.cooldownUntil > Date.now() : 'n/a'}`
 		);
 	}
 }
