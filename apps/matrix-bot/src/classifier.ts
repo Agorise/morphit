@@ -52,11 +52,11 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 		a.event === 'low_balance' &&
 		typeof a.payload?.['balance_blurt'] === 'number' &&
 		(a.payload['balance_blurt'] as number) <= 0,
-	// relay-acts: the relay is out of Account Creation Tokens and is
-	// REFUSING signups right now (relay_out_of_funds), regardless of its
-	// BLURT balance. This is the alert that was missing when kentest3
-	// failed silently. (ADR-0010 §4–§5.)
-	(a) => a.module === 'relay-acts' && a.event === 'act_buffer_depleted',
+	// relay-acts: the relay's liquid BLURT is below the
+	// account_creation_fee it pays inline per account_create, so it is
+	// REFUSING signups right now (relay_out_of_funds). Blurt disabled the
+	// ACT model at HF2; signup readiness gates on liquid balance now.
+	(a) => a.module === 'relay-acts' && a.event === 'relay_low_balance_for_signups',
 	// operator-balance: indexer can't reach the chain — alerting is BLIND.
 	(a) => a.module === 'operator-balance' && a.event === 'rpc_sustained_failure',
 	// operator-balance: balance shape unparseable — chain upgrade?
@@ -135,14 +135,6 @@ const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
 	// operator-balance: low but above zero.  CRITICAL caught zero-or-below.
 	(a) => a.module === 'operator-balance' && a.event === 'low_balance',
-	// act-automint: the relay's ACT auto-minter is blocked on liquid BLURT
-	// — it's below the ACT low-water mark but can't mint without dipping
-	// into the reserve. The relay will start rejecting signups once the
-	// ACT buffer drains. Top up @morphit-relay's BLURT. (ADR-0010 §5.)
-	(a) => a.module === 'act-automint' && a.event === 'automint_insufficient_blurt',
-	// act-automint: minted what it could afford but couldn't reach target
-	// — a softer heads-up that BLURT is running low.
-	(a) => a.module === 'act-automint' && a.event === 'automint_partial_insufficient_blurt',
 	// witness-fee: chain fee changed.
 	(a) => a.module === 'witness-fee' && a.event === 'changed',
 	// Price feed stale.
@@ -249,35 +241,14 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'this account is paused until you upgrade Morphit.'
 	},
 
-	// ─── WIRED IN CODE TODAY (act-automint, ADR-0010 §5) ──────
-	'act-automint:automint_insufficient_blurt': {
-		title: 'ACT auto-mint blocked: top up @{account} BLURT',
+	'relay-acts:relay_low_balance_for_signups': {
+		title: 'Signups DOWN: @{account} is low on BLURT',
 		advice:
-			'The relay wanted to mint {desired} Account Creation Token(s) to refill ' +
-			'its signup buffer (now {pending}) but @{account} has only {liquid_blurt} ' +
-			'liquid BLURT and the reserve floor is {reserve}, so it could not afford ' +
-			'even one at the {fee_blurt} BLURT chain fee. New signups will be refused ' +
-			'once the ACT buffer drains. Send liquid BLURT to @{account} — the next ' +
-			'auto-mint cycle catches up automatically.'
-	},
-	'act-automint:automint_partial_insufficient_blurt': {
-		title: 'ACT auto-mint low on BLURT: @{account}',
-		advice:
-			'The relay minted some but not all of the {desired} Account Creation ' +
-			'Token(s) it wanted ({minted} minted), then ran low on spendable BLURT ' +
-			'(@{account} at {liquid_blurt}, reserve {reserve}, fee {fee_blurt}). ' +
-			'Signups still work for now; top up @{account} before the buffer dips again.'
-	},
-	'relay-acts:act_buffer_depleted': {
-		title: 'Signups DOWN: @{account} is out of account-creation tokens',
-		advice:
-			'@{account} has only {pending_claimed_accounts} Account Creation Token(s) ' +
-			'(reject gate {reject_gate}) and is REFUSING new signups right now — even ' +
-			'though it holds {blurt_balance}, because account creation consumes tokens, ' +
-			'not BLURT. Auto-mint enabled: {automint_enabled}. If true, it could not keep ' +
-			'up — send liquid BLURT to @{account} (each token costs the ~100 BLURT chain ' +
-			'fee) and the next mint cycle restores signups. If false, mint tokens now ' +
-			'(`morphit-ops` or mint-acts.ts).'
+			'@{account} holds {blurt_balance} — below the {required_blurt} BLURT it ' +
+			'needs to fund a new account (it pays the ~100 BLURT account-creation fee ' +
+			'inline per signup) — and is REFUSING new signups right now. Send liquid ' +
+			'BLURT to @{account}; signups resume automatically on the next health ' +
+			'poll (within ~30s).'
 	},
 
 	// ─── WIRED IN CODE TODAY (signup-ceiling) ─────────────────

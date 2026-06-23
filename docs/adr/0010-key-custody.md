@@ -1,11 +1,29 @@
 # ADR-0010 — Key custody for Morphit's Blurt accounts
 
-**Status:** Accepted (Phase 4)
+**Status:** Accepted (Phase 4) — **amended 2026-06 (beta.28)**, see banner below
 **Date:** 2026-04-19
 **Deciders:** project maintainer
 **Supersedes:** none
 **Superseded by:** none
 **Related:** ADR-0011 (dynamic fee model)
+
+> **⚠ AMENDMENT (2026-06, beta.28):** Blurt disabled BOTH `claim_account`
+> and `create_claimed_account` at hard fork 2 — the chain evaluators now
+> assert *"This operation is disable since hard fork 2."* The Account-
+> Creation-Token (ACT) model this ADR originally specified is therefore
+> dead on Blurt. The relay now creates accounts with a **direct
+> `account_create` op**, paying the `account_creation_fee` (~100 BLURT)
+> **inline** from its liquid BLURT, which the chain burns to the null
+> account. Consequences: the **ACT auto-minter (§5) and the weekly
+> `mint-acts.ts` ceremony are removed**; signup readiness gates on the
+> relay's **liquid BLURT balance** (≥ fee + margin) rather than an ACT
+> buffer; and the relay must hold enough liquid BLURT to fund signups
+> inline (it can no longer run at near-zero balance — see the amended §4).
+> The key-custody posture is otherwise unchanged: the same online active
+> key that signed `create_claimed_account` now signs `account_create`, so
+> the blast-radius analysis (§6) still holds. Sections below describing
+> ACT minting are retained for historical context but are **superseded by
+> this amendment.**
 
 ## Context
 
@@ -105,8 +123,10 @@ The user-facing flow, landed in its final form:
    browser fingerprinting, no captchas.
 2. Frontend generates user keys locally and calls the relay
    with a signed request to create their Blurt account.
-3. Relay consumes one pre-minted ACT via `create_claimed_account`
-   to create the user's account on-chain.
+3. Relay creates the user's account on-chain with a direct
+   `account_create` op, paying the chain's `account_creation_fee`
+   inline from its liquid BLURT (the ACT model was disabled at HF2 —
+   see the amendment banner).
 4. Relay sends the user **1 BLURT dust** via `transfer` so their
    fresh account has enough on-chain bandwidth to post their
    first Morphit order.
@@ -150,32 +170,26 @@ refill; extraction is slow.
 
 ### 4. Active-key blast-radius mitigations for `@morphit-relay`
 
-- **Always use `claim_account` + `create_claimed_account`.**
-  Never use the one-shot `account_create` op. This keeps the
-  account's BLURT balance decoupled from the creation rate.
-- **Keep `@morphit-relay` at near-zero BLURT during operation.**
-  The relay's working liquid balance is sized to cover
-  approximately **one week of expected signups + dust refills**.
-  At an initial rate of 20 signups/week (project owner's
-  estimate), the relay holds about 20 BLURT for dust + some
-  buffer — roughly 50 BLURT at any time. At a later rate of
-  500 signups/week, the weekly float rises to ~500 BLURT + the
-  week's expected welcome bonuses of ~5,000 BLURT if most
-  signups complete trades → ~5,500 BLURT working balance.
+- **Use the direct `account_create` op.** *(Amended: Blurt disabled
+  `claim_account`/`create_claimed_account` at HF2, so this is the only
+  creation path.)* The relay pays the `account_creation_fee` inline,
+  read live from the chain per broadcast — the evaluator asserts it
+  equals the witnesses' median exactly.
+- **Size `@morphit-relay`'s liquid balance to ~one week of signups.**
+  *(Amended: the relay can no longer run at near-zero balance — it pays
+  the ~100 BLURT `account_creation_fee` inline per signup, whereas the
+  ACT model pre-paid it at mint time.)* The working balance covers one
+  week of: per-signup creation fees (~100 BLURT each) + 1 BLURT dust
+  each + the week's expected welcome bonuses (~10 BLURT liquid per
+  completed-trade signup). At 500 signups/week that is on the order of
+  50,000 BLURT in fees + ~500 dust + ~5,000 welcome bonuses. Signup
+  readiness is gated on this balance: the relay refuses signups
+  (`relay_out_of_funds`) when it can't cover the fee + a small margin.
 - **Passphrase-at-boot for the active key.** The relay service
   does NOT hold the decrypted active key on disk. At startup,
   the operator SSHes in and enters a passphrase interactively;
   the service holds the decrypted scalar in memory only. A
   service restart requires a human.
-- **ACT minting is a weekly manual ceremony.** Minting tickets
-  (`claim_account`) happens via a weekly script that the
-  operator runs by hand with the active-key passphrase. It is
-  separate from the persistent relay service; the relay
-  consumes ACTs it cannot mint. (As of beta.24 this can instead
-  be handled in-process by the opt-in auto-minter — see §5 —
-  which keeps the active key in the relay's memory rather than
-  requiring a separate passphrase session, a tradeoff that
-  section makes explicit.)
 - **BLURT top-ups via `recurrent_transfer`.** Blurt supports
   native recurrent transfers. The operator configures a
   recurrent transfer from a funding account (cold-storage-
@@ -183,8 +197,8 @@ refill; extraction is slow.
   funding account's active key is NOT on any server — the
   recurrent_transfer is set up once with the funding account's
   active key (entered from cold), then runs autonomously
-  on-chain for its configured duration. Reduces operator burden
-  to a single weekly ACT minting session, not two.
+  on-chain for its configured duration. No manual ACT minting is
+  needed (the relay funds signups inline from this balance).
 - **Dedicated host.** `@morphit-relay`'s key material lives
   only on the relay VM — not on the indexer host, not on
   developer machines, not in backups. Owner-key backup is
@@ -202,72 +216,18 @@ refill; extraction is slow.
   operator can pause the relay at nginx while investigating,
   rotate keys from paper backup if compromise is suspected.
 
-### 5. ACT auto-minter (in-process buffer maintenance)
+### 5. ACT auto-minter — REMOVED (superseded by the 2026-06 amendment)
 
-The weekly manual ceremony (§4) keeps the active key out of any
-routine automation: the operator SSHes in and runs `mint-acts.ts`
-with the passphrase. That is the most conservative posture, but
-it puts a human in the loop for routine refills and risks the
-relay running out of ACTs between sessions — signups then fail
-with `relay_out_of_funds` even though the relay holds plenty of
-BLURT, because the gate is ACT availability, not balance.
-
-The **auto-minter** (`MORPHIT_RELAY_AUTOMINT_ENABLED`, default ON as of
-beta.24 — a relay that can't create accounts is a broken relay, so
-self-refill is the right default) removes the routine human step. The persistent relay service —
-which already holds the decrypted active key in memory to run
-`create_claimed_account` for signups — periodically:
-
-1. reads its own `pending_claimed_accounts` (ACT buffer) and
-   liquid balance;
-2. if the buffer is at/above the low-water mark, does nothing;
-3. otherwise mints `claim_account` ops back up toward the target,
-   capped per cycle, **spending only liquid BLURT above a
-   configured reserve** (the reserve protects welcome bonuses,
-   dust refills, and fees from being starved by minting);
-4. if it cannot afford even one ACT without dipping into the
-   reserve, it mints nothing and logs `automint_insufficient_blurt`.
-
-**Tradeoff (deliberate, documented).** Auto-minting does NOT
-widen the key's storage posture — `create_claimed_account`
-already requires the active key in memory, so the relay is
-already an online-active-key service (§1, §4). Auto-minting adds
-*more frequent use* of that same key for `claim_account`, but no
-new exposure surface: same key, same memory, same op family. It
-trades the weekly passphrase session for continuous unattended
-operation. Operators who prefer the human-in-the-loop posture set
-`MORPHIT_RELAY_AUTOMINT_ENABLED=false` and keep the weekly ceremony.
-
-**Direct "signups are down" alert.** Independent of minting, the relay's
-health poller watches its own `pending_claimed_accounts`; when it falls
-below the reject gate (`MIN_PENDING_CLAIMED_ACCOUNTS` = 3) — i.e. signups
-are being refused with `relay_out_of_funds` — it emits a CRITICAL
-`relay-acts:act_buffer_depleted` alert (hysteresis: once per downward
-cross), which the matrix-bot routes to the operator. This is the alert
-that was MISSING when a signup failed while the relay held plenty of
-BLURT: the balance scanner can't catch it because the gate is ACT
-availability, not balance.
-
-**Closing the loop with notifications.** Because minting spends
-BLURT, a busy instance eventually needs a top-up. The indexer's
-operator-balance scanner already watches `@morphit-relay`'s
-on-chain balance and emits `operator-balance:low_balance` when it
-crosses a threshold; the matrix-bot turns that into a Matrix DM.
-The auto-minter additionally emits `automint_insufficient_blurt` /
-`automint_partial_insufficient_blurt` the moment minting is
-constrained by BLURT, which the matrix-bot also routes to Matrix.
-Operators set the balance threshold ABOVE the auto-mint reserve
-(plus a cycle's worth of fees) so the warning arrives BEFORE
-minting stalls. See docs/OPERATIONS.md §47 for the exact knobs.
-
-**Invariants (enforced at boot when enabled).** The low-water
-mark must be greater than the relay's signup reject gate
-(`MIN_PENDING_CLAIMED_ACCOUNTS` = 3) and no greater than the
-target, so the minter refills before signups are rejected and
-never computes a negative mint count. The `claim_account` op
-shape is single-sourced in `BlurtClient.broadcastClaimAccount`,
-shared with the manual `mint-acts.ts`, so the two paths can't
-drift.
+> This section originally described an in-process auto-minter that kept
+> the relay's Account-Creation-Token buffer topped up. Blurt disabled the
+> ACT model at hard fork 2 (see the amendment banner), so there are no
+> tokens to mint: the auto-minter, the `MORPHIT_RELAY_AUTOMINT_*` config,
+> and the weekly `mint-acts.ts` ceremony have all been removed. The relay
+> now pays the `account_creation_fee` inline per `account_create` and
+> gates signups on its liquid BLURT balance (≥ fee + margin). The
+> low-balance operator alert this machinery fed (a Matrix DM via the
+> matrix-bot) is retained, now triggered by the relay's
+> `relay_low_balance_for_signups` journal event.
 
 ### 6. Blast radius analysis
 

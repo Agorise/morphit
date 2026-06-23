@@ -1215,7 +1215,7 @@
       },
       "help_make_unstoppable": {
         "q": "Jak mogę pomóc uczynić Morphit niepowstrzymanym?",
-        "a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt do konta @morphit-relay aktywnego operatora utrzymują jego tokeny tworzenia konta.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
+        "a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt do konta @morphit-relay aktywnego operatora utrzymują jego środki na tworzenie kont.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
       },
       "why_self_trading_fails": {
         "q": "Dlaczego handel z samym sobą nie zwiększa mojej reputacji?",

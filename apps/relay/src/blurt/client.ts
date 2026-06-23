@@ -23,16 +23,6 @@
 
 import { Client, PrivateKey } from '@beblurt/dblurt';
 import { EndpointPool } from '@morphit/rpc-pool';
-import { registerClaimedAccountOperationSerializers } from './claimedAccountSerializers.ts';
-
-// dblurt@0.10.9 (latest) ships no serializer for claim_account /
-// create_claimed_account, so it throws at SIGN time for both the ACT
-// auto-minter and the signup path. Register our serializers ONCE, at
-// module load — before any BlurtClient broadcast can run. Idempotent.
-// See claimedAccountSerializers.ts for the why + how (it augments the
-// exported, mutable Types.Transaction; byte-identical to stock dblurt
-// for every existing op).
-registerClaimedAccountOperationSerializers();
 
 /** Parse a Graphene asset string like "1234.567 BLURT" or
  *  "9876543.210987 VESTS" into its raw integer amount (BigInt),
@@ -407,22 +397,27 @@ export class BlurtClient {
 	}
 
 	/**
-	 * Build, sign, and broadcast a create_claimed_account
-	 * transaction (consumes one ACT).
+	 * Build, sign, and broadcast an `account_create` transaction — the
+	 * relay (creator/signer) pays the chain's `account_creation_fee`
+	 * inline from its liquid BLURT, and the chain burns it to the null
+	 * account. Blurt disabled the Account-Creation-Token model
+	 * (claim_account / create_claimed_account) at HF2, so direct
+	 * account_create is the ONLY way to create an account on Blurt.
+	 *
+	 * The fee is read fresh from the chain per call (see body) because
+	 * the account_create_evaluator asserts
+	 * `o.fee == median account_creation_fee` exactly.
 	 *
 	 * The creator (signer) is the relay itself; its active key is
 	 * passed in as a WIF string. We convert to dblurt's PrivateKey
 	 * exactly once per call — no long-lived key object.
 	 *
-	 * Returns the chain's confirmation once the transaction is in
-	 * a block. Throws on any failure (chain error, signing error,
-	 * all-endpoints-down, including "insufficient claimed
-	 * accounts" if the relay has run out of pre-minted ACTs).
-	 *
-	 * Per ADR-0010 §4: the relay never directly pays the chain
-	 * account-creation fee.  ACTs are minted in batches via the
-	 * weekly `mint-acts.ts` ceremony; this method just consumes
-	 * them.
+	 * Returns the chain's confirmation once the transaction is in a
+	 * block. Throws on any failure (chain error, signing error,
+	 * all-endpoints-down, including "Insufficient balance to create
+	 * account" if the relay's liquid BLURT is below the fee — the
+	 * create endpoint gates on this up front via
+	 * HealthService.canAcceptCreation()).
 	 */
 	async broadcastAccountCreate(args: {
 		creator: string;
@@ -431,7 +426,12 @@ export class BlurtClient {
 	}): Promise<AccountCreateResult> {
 		const priv = PrivateKey.fromString(args.creatorActiveWif);
 
-		const op = buildAccountCreateOp(args.creator, args.authorities);
+		// account_create requires the EXACT current account_creation_fee
+		// (the chain evaluator asserts equality, not >=). Read it live so
+		// a witness fee change can't desync us into a rejected broadcast.
+		const fee = (await this.getChainProperties()).account_creation_fee;
+
+		const op = buildAccountCreateOp(args.creator, fee, args.authorities);
 
 		const confirmation = await this.callWithRotation(async (client) => {
 			return await client.broadcast.sendOperations([op], priv);
@@ -443,52 +443,6 @@ export class BlurtClient {
 			trx_num: Number((confirmation as { trx_num?: number }).trx_num ?? 0),
 			expired: Boolean((confirmation as { expired?: boolean }).expired ?? false)
 		};
-	}
-
-	/**
-	 * Build, sign, and broadcast a `claim_account` op — MINTS one ACT
-	 * (increments the relay's `pending_claimed_accounts`) by burning the
-	 * current `account_creation_fee` in LIQUID BLURT.
-	 *
-	 * This is the inverse of `broadcastAccountCreate`: that one CONSUMES
-	 * an ACT to make an account (fee-free); this one PRE-PAYS the fee to
-	 * stockpile an ACT for later. Per ADR-0010 §4 the relay keeps a
-	 * buffer of ACTs so signup latency never includes a fee payment.
-	 *
-	 * Used by the unattended `mint-acts.ts` ceremony AND the in-process
-	 * `ActAutoMinter` (ADR-0010 §5). Each call mints exactly one ACT; the
-	 * caller loops for a batch so a partial failure is recoverable.
-	 *
-	 * `feeBlurt` is a plain decimal (e.g. 100); formatted to the
-	 * "N.NNN BLURT" asset shape at the edge. Requires active authority
-	 * (the relay's active key WIF). Returns the chain confirmation; throws
-	 * on any failure (chain reject, signing error, all-endpoints-down).
-	 */
-	async broadcastClaimAccount(args: {
-		creator: string;
-		creatorActiveWif: string;
-		feeBlurt: number;
-	}): Promise<AccountCreateResult> {
-		if (!(args.feeBlurt > 0)) {
-			throw new Error(`broadcastClaimAccount: fee must be > 0, got ${args.feeBlurt}`);
-		}
-		const priv = PrivateKey.fromString(args.creatorActiveWif);
-		const op: [string, Record<string, unknown>] = [
-			'claim_account',
-			{
-				creator: args.creator,
-				fee: `${args.feeBlurt.toFixed(3)} BLURT`,
-				extensions: []
-			}
-		];
-
-		const confirmation = await this.callWithRotation(async (client) => {
-			// dblurt's TS types are narrower than its runtime op support.
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return await client.broadcast.sendOperations([op as any], priv);
-		});
-
-		return this.shapeConfirmation(confirmation);
 	}
 
 	/** Build, sign, and broadcast a `transfer` op sending BLURT from
@@ -779,43 +733,57 @@ function clientFor(url: string): Client {
 }
 
 /**
- * Build the create_claimed_account op tuple. Returns the two-element
+ * Build the `account_create` op tuple (op 5). Returns the two-element
  * array dblurt expects: [opName, opBody].
  *
- * The `creator` account must hold a pre-minted ACT (obtained via
- * the `claim_account` op — see `apps/relay/scripts/mint-acts.ts`).
- * Each broadcast consumes one ACT.  The chain rejects with an
- * insufficient-pending-claimed-accounts error if the creator has
- * zero ACTs available.
+ * Blurt disabled the Account-Creation-Token model (claim_account /
+ * create_claimed_account) at HF2, so the creator pays the
+ * account_creation_fee inline and the chain burns it to the null
+ * account. `fee` MUST equal the chain's current median
+ * account_creation_fee (the account_create_evaluator asserts equality,
+ * not >=) — broadcastAccountCreate reads it live per call.
  *
- * Wire shape per Steem/Blurt protocol:
- *   ['create_claimed_account', {
+ * Wire shape per Steem/Blurt protocol (op-5 field order):
+ *   ['account_create', {
+ *     fee,
  *     creator,
  *     new_account_name,
  *     owner, active, posting (single-key authorities),
  *     memo_key,
- *     json_metadata,
- *     extensions: []  // required, even if empty
+ *     json_metadata
  *   }]
  *
- * Note: NO `fee` field.  The fee was paid at claim_account time
- * when the ACT was minted; create_claimed_account is fee-free.
+ * Note: account_create has NO `extensions` field (unlike the retired
+ * create_claimed_account).
  */
-function buildAccountCreateOp(
+export function buildAccountCreateOp(
 	creator: string,
+	fee: string,
 	auth: NewAccountAuthorities
-): ['create_claimed_account', Record<string, unknown>] {
+): ['account_create', Record<string, unknown>] {
+	// Blurt disabled BOTH claim_account and create_claimed_account at
+	// hard fork 2 (the chain evaluators assert
+	// "This operation is disable since hard fork 2"), so the Account-
+	// Creation-Token model is dead on Blurt. Direct `account_create`
+	// (op 5) is the only creation path: the creator pays the
+	// account_creation_fee inline and it is burned to the null account.
+	// The chain's account_create_evaluator asserts
+	// `o.fee == median_props.account_creation_fee` EXACTLY (not >=), so
+	// `fee` MUST be the live chain value — broadcastAccountCreate reads
+	// it fresh per call. Unlike create_claimed_account, account_create
+	// has NO `extensions` field (op-5 layout: fee, creator,
+	// new_account_name, owner, active, posting, memo_key, json_metadata).
 	return [
-		'create_claimed_account',
+		'account_create',
 		{
+			fee,
 			creator,
 			new_account_name: auth.newAccountName,
 			owner: singleKeyAuthority(auth.ownerPubkey),
 			active: singleKeyAuthority(auth.activePubkey),
 			posting: singleKeyAuthority(auth.postingPubkey),
 			memo_key: auth.memoPubkey,
-			json_metadata: auth.jsonMetadata,
-			extensions: []
+			json_metadata: auth.jsonMetadata
 		}
 	];
 }

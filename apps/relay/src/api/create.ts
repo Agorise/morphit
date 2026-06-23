@@ -564,10 +564,12 @@ export class CreateEndpoint {
 		});
 
 		// ── Sign + broadcast ─────────────────────────────────────────
-		// Per ADR-0010 §4: the relay consumes a pre-minted ACT
-		// (via create_claimed_account) rather than paying the
-		// inline account_creation_fee.  ACTs are minted in the
-		// weekly mint-acts.ts ceremony.
+		// Blurt disabled the Account-Creation-Token model (claim_account
+		// / create_claimed_account) at HF2, so the relay creates the
+		// account with a direct `account_create` op, paying the live
+		// account_creation_fee inline from its liquid BLURT. The create
+		// endpoint already gated on sufficient relay balance up front
+		// (canAcceptCreation, above), so this should not fail for funds.
 		try {
 			const confirmation = await this.blurt.broadcastAccountCreate({
 				creator: this.cfg.relayAccount,
@@ -760,21 +762,23 @@ export class CreateEndpoint {
 			// the chain level if the first actually landed.
 			this.removeDedupeEntry(fingerprint);
 
-			// Out-of-ACTs path. The chain returns a "pending_claimed_accounts"
-			// error (or "insufficient" in some node implementations) when
-			// the relay's claimed-account pool is exhausted.  Operators
-			// refill via the weekly mint-acts.ts ceremony.  Surface a
-			// stable code so the frontend can show "signups paused
-			// while the operator refills" rather than a generic
-			// chain-rejected message.
-			if (lower.includes('pending_claimed_accounts') || lower.includes('insufficient')) {
+			// Relay-out-of-funds path. With account_create the relay pays
+			// the account_creation_fee inline, so when its liquid BLURT is
+			// too low the chain rejects with an "insufficient balance"
+			// error. The create endpoint already pre-gates on balance
+			// (canAcceptCreation, above); this branch is belt-and-suspenders
+			// for a balance that dipped between the health poll and the
+			// broadcast. Surface a stable code so the frontend can show
+			// "signups paused while the operator tops up" rather than a
+			// generic chain-rejected message.
+			if (lower.includes('insufficient')) {
 				return c.json(
 					{
 						status: 'rejected',
 						code: 'relay_out_of_funds',
 						message:
 							'The relay is temporarily unable to fund new accounts. ' +
-							'The operator needs to mint more Account Creation Tokens.'
+							'Please try again later.'
 					},
 					503
 				);

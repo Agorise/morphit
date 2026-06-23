@@ -41,7 +41,7 @@ before relying on any of it.**
 0. [Initial account setup — names, roles, and tradeoffs](#0-initial-account-setup--names-roles-and-tradeoffs)
 0a. [Initial account funding — the relay needs BLURT to operate](#0a-initial-account-funding--the-relay-needs-blurt-to-operate)
 1. [Recurrent BLURT top-up setup (one-time)](#1-recurrent-blurt-top-up-setup-one-time)
-2. [Weekly ACT minting ceremony](#2-weekly-act-minting-ceremony)
+2. [Relay account funding — weekly ACT minting REMOVED](#2-relay-account-funding--the-weekly-act-minting-ceremony-is-removed)
 3. [Relay reboot](#3-relay-reboot)
 4. [Responding to a witness fee change alert](#4-responding-to-a-witness-fee-change-alert)
 5. [Responding to a relay-queue-stuck alert](#5-responding-to-a-relay-queue-stuck-alert)
@@ -89,7 +89,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 44. [User-side optional TOTP 2FA — operator-side notes](#44-user-side-optional-totp-2fa--operator-side-notes)
 45. [MCP server — AI agent surface](#45-mcp-server--ai-agent-surface)
 46. [Resetting the indexer database (schema drift after an upgrade)](#46-resetting-the-indexer-database-schema-drift-after-an-upgrade)
-47. [ACT auto-minter + low-BLURT notifications — hands-off signup funding](#47-act-auto-minter--low-blurt-notifications--hands-off-signup-funding)
+47. [Keeping the relay funded — low-BLURT notifications](#47-keeping-the-relay-funded--low-blurt-notifications)
 
 ---
 
@@ -289,26 +289,22 @@ on-chain ops, which cost BLURT.
 The relay performs four kinds of on-chain operations
 that cost BLURT:
 
-1. **Account creation for new user signups, via the
-   weekly ACT minting ceremony (§2).**  Per
-   ADR-0010 §4, the relay does NOT mint Account
-   Creation Tokens at signup time.  Instead, the
-   operator runs a weekly ceremony that broadcasts
-   `claim_account` ops against `@morphit-relay`'s
-   balance — each ACT mint burns the chain's
-   `account_creation_fee` (currently **~100 BLURT
-   per ACT**, witness-set; see §4 for the change-
-   response runbook).  At signup time the relay
-   broadcasts `create_claimed_account` (fee-free)
-   consuming a pre-minted ACT.
+1. **Account creation for new user signups.**  The
+   relay creates each account with a direct
+   `account_create` op, paying the chain's
+   `account_creation_fee` (currently **~100 BLURT**,
+   witness-set; see §4 for the change-response
+   runbook) **inline** from `@morphit-relay`'s liquid
+   balance, which the chain burns. (Blurt disabled the
+   Account-Creation-Token model at hard fork 2 —
+   ADR-0010, as amended 2026-06; there is no minting.)
 
-   **The 100 BLURT is paid at ACT-mint time, not at
-   signup time.**  But operator-side, the cost
-   shows up as "you need to fund the relay enough
-   to mint enough ACTs to cover expected signups."
-   100 BLURT × expected weekly signups is the
-   load-bearing number for sizing.  See §2 for the
-   ceremony procedure.
+   **The 100 BLURT is spent at signup time, per
+   account.**  Operator-side, the cost shows up as
+   "keep the relay funded with enough liquid BLURT to
+   cover expected signups."  100 BLURT × expected
+   weekly signups is the load-bearing number for
+   sizing.
 
 2. **Welcome bonus + loyalty BP.**  Every user who
    completes their first trade and leaves feedback
@@ -337,33 +333,31 @@ that cost BLURT:
 
 ### How much to fund up front
 
-The account-creation cost (~100 BLURT per ACT minted,
-roughly one ACT per signup expected) dominates.
-Sizing assumes you'll run the weekly ACT minting
-ceremony (§2) and want enough float to cover both
-the next batch of ACTs and the welcome bonuses /
-refills paid from the relay's running balance:
+The account-creation cost (~100 BLURT per signup,
+paid inline) dominates. Size the relay's standing
+liquid balance to cover roughly one week of signups —
+the per-signup creation fee plus the welcome bonuses
+/ refills paid from the relay's running balance:
 
 | Use case | Approx cost breakdown | Suggested initial float |
 |---|---|---|
-| 1 signup | 100 ACT + ~21 BLURT bonus | ~121 BLURT |
-| 5 signups (quiet soft-launch with testers) | 500 ACT + ~105 BLURT bonuses | **~700 BLURT** |
-| 50 signups (first-week small) | 5,000 ACT + ~1,050 BLURT bonuses | **~6,000 BLURT** |
-| 100 signups (first-week medium) | 10,000 ACT + ~2,100 BLURT bonuses | **~12,000 BLURT** |
-| 100 signups + 100 low-balance refills | 10,000 ACT + ~2,200 BLURT | **~12,500 BLURT** |
+| 1 signup | 100 BLURT fee + ~21 BLURT bonus | ~121 BLURT |
+| 5 signups (quiet soft-launch with testers) | 500 BLURT fees + ~105 BLURT bonuses | **~700 BLURT** |
+| 50 signups (first-week small) | 5,000 BLURT fees + ~1,050 BLURT bonuses | **~6,000 BLURT** |
+| 100 signups (first-week medium) | 10,000 BLURT fees + ~2,100 BLURT bonuses | **~12,000 BLURT** |
+| 100 signups + 100 low-balance refills | 10,000 BLURT fees + ~2,200 BLURT | **~12,500 BLURT** |
 
-Operator-side this is "fund the relay enough BLURT
-to cover next week's ACT minting batch plus the
-week's expected welcome bonuses + refills."  The
-ACT minting ceremony (§2) is run weekly so you can
-size your batch to next-week-expected-signups,
-which keeps the relay's standing balance lower than
-the total expected cost.
+Operator-side this is "keep the relay funded with
+enough liquid BLURT to cover next week's expected
+signups plus the week's welcome bonuses + refills."
+Top up via `recurrent_transfer` from a cold-key-funded
+account (ADR-0010 §4) so you don't have to log in to
+refill.
 
 **Don't get caught short.**  An operator who funds
 just 250 BLURT (the pre-Part-112 "conservative"
-figure, since corrected) cannot mint enough ACTs
-for even 3 signups, let alone a meaningful launch.
+figure, since corrected) cannot cover even 3 signups
+at ~100 BLURT each, let alone a meaningful launch.
 The old sizing-table figures (50/250/500 BLURT)
 were based on a mistaken "~1 BLURT/signup" claim;
 the canonical default is ~100 BLURT/signup
@@ -448,13 +442,13 @@ fee transfer fails, the order doesn't promote to
 | Account | Role | Upfront funding | Signing key location |
 |---|---|---|---|
 | `@morphit` | Trust anchor (release pin) | ~10 BLURT | Operator's laptop (OFF prod) |
-| `@morphit-relay` | Service account (ACT minting + bonuses + refills + payouts) | ~700 BLURT (testers) – ~12,000 BLURT (100 signups/week) | Encrypted on prod box at `/etc/morphit/keys/relay-active.key` mode 0400 |
+| `@morphit-relay` | Service account (account-creation fees + bonuses + refills + payouts) | ~700 BLURT (testers) – ~12,000 BLURT (100 signups/week) | Encrypted on prod box at `/etc/morphit/keys/relay-active.key` mode 0400 |
 | `@morphit-fees` | Receive-only treasury | ~0 BLURT | Not on any production box |
 
 The `@morphit-relay` figure dominates because of the
-~100 BLURT/ACT chain account-creation fee burned at
-weekly ACT minting time (§2).  Plan one ACT per
-expected signup plus a safety margin.
+~100 BLURT chain account-creation fee the relay pays
+inline per signup.  Plan ~100 BLURT per expected
+signup plus a safety margin.
 
 ### Long-term funding — see §1
 
@@ -687,7 +681,7 @@ configured duration expires.
   NOT `@morphit-fees`. This account holds the weekly disbursement
   pool and its active key lives on paper, not on any server.
 - An accurate estimate of your weekly signup rate. Start
-  conservative — 20 signups/week × (100 BLURT ACT + 20 BLURT
+  conservative — 20 signups/week × (100 BLURT fee + 20 BLURT
   welcome + overhead) ≈ 2,500 BLURT/week.
 - A period during which you plan to run Morphit. The
   `recurrent_transfer` op takes a `recurrence` in hours and an
@@ -741,192 +735,27 @@ recurrent_transfer as a cancellation.
 
 ---
 
-## 2. Weekly ACT minting ceremony
+## 2. Relay account funding — the weekly ACT minting ceremony is REMOVED
 
-Per ADR-0010 §4, the relay does not mint ACTs at request time.
-The operator mints them in a weekly ceremony so the relay's
-working BLURT balance stays small.
-
-### Prerequisites
-
-- SSH access to the relay host as the `morphit-relay` service
-  user.
-- `@morphit-relay` has enough BLURT for the batch you're
-  minting. At 100 BLURT per ACT and 20 ACTs, you need 2,000+
-  BLURT available. The weekly `recurrent_transfer` from
-  section 1 should be keeping it topped up.
-- You know how many ACTs to mint. Target: slightly more than
-  your expected weekly signup rate. For 20 signups/week, mint
-  25 — gives buffer for a spike.
-
-### Procedure
-
-1. SSH to the relay host.
-
-2. Change to the relay's working directory:
-   ```sh
-   cd /opt/morphit/apps/relay
-   ```
-
-3. Run the mint script:
-   ```sh
-   npm run mint-acts -- 25
-   ```
-   (Equivalent to running `npx tsx apps/relay/scripts/mint-acts.ts 25`
-   from the repo root; the npm script wraps it for operators
-   without `tsx` on PATH.)
-   Output looks like:
-   ```
-   2026-04-19T12:00:00.000Z [mint-acts] loaded config; relay_account=morphit-relay endpoints=4
-   2026-04-19T12:00:00.500Z [mint-acts] current account_creation_fee = 100.000 BLURT; minting 25 ACT(s) will burn ~2500.000 BLURT
-   2026-04-19T12:00:03.123Z [mint-acts]   [1/25] minted  trx_id=abc123...
-   ...
-   2026-04-19T12:01:23.456Z [mint-acts] done; succeeded=25 failed=0
-   ```
-
-4. Verify on chain: look up `@morphit-relay` on
-   `blocks.blurtwallet.com` and check `pending_claimed_accounts`
-   has increased by the number of ACTs you just minted.
-
-5. Record in your operator journal: date, count minted, current
-   chain fee, any failures.
-
-### Failures during minting
-
-- **RPC timeout on one endpoint**: the script retries the next
-  endpoint automatically. If all endpoints fail, log notes
-  "FAILED rpc timeout" for that ACT index.
-- **Insufficient balance**: minting stops for that op. Check
-  the relay's BLURT balance. If it's low, wait for the weekly
-  recurrent_transfer to land, then re-run with a smaller count.
-- **`account_creation_fee` has changed**: you'll see a non-100
-  value in the output. Safe to proceed — the chain-fee change
-  doesn't invalidate ACTs. Consider re-running ADR-0011's
-  listing-fee-formula math to check Morphit's margin is still
-  positive.
-
-### Unattended mode (recommended for low-maintenance operators)
-
-The mint ceremony described above is the manual fallback. For
-operators who want to spend less than 5 minutes per month
-touching their instance, ship the ceremony off to a systemd
-timer. After a one-time setup, the timer fires every Sunday at
-04:00 UTC and you don't think about it again.
-
-**Why it's safe to automate**: ADR-0010 §4 originally framed the
-ceremony as operator-in-the-loop so a compromised relay couldn't
-drain unbounded BLURT into ACTs. The cap is the operator-set
-weekly count + the relay's working balance. A timer-driven mint
-inherits the same caps — automating doesn't increase the
-maximum loss on relay compromise. The operator's role of "yes,
-mint 25 again this week" is a cron job.
-
-**One-time setup:**
-
-1. Decide your weekly mint count and add it to `/etc/morphit/relay.env`:
-   ```
-   MORPHIT_RELAY_WEEKLY_ACT_COUNT=25
-   ```
-   The script reads this when no argv[1] is provided. Default
-   is 25 if the env var is unset.
-
-2. Save your active-key passphrase to a root-only file:
-   ```sh
-   sudo install -m 0600 -o root -g root /dev/null /etc/morphit/relay.passphrase
-   sudo $EDITOR /etc/morphit/relay.passphrase
-   # type the passphrase, no trailing newline (the script trims one
-   # trailing \n if echo adds it).
-   ```
-
-   **Recommended for any operator handling meaningful weekly fee
-   volume (>$100/week or so): use `systemd-creds` instead.** The
-   plaintext-file path above is the simple option; it works but
-   the passphrase exists on disk in cleartext, protected only by
-   filesystem permissions. `systemd-creds` keeps the passphrase
-   encrypted at rest using the host's TPM (if available) or a
-   per-host key, so a backup-tape leak or filesystem-level
-   compromise does not directly expose the passphrase.
-
-   **Why this matters beyond disk-at-rest:** the mint-acts
-   script reads the passphrase, derives the active key, signs
-   one transaction, and exits.  In between read and exit, the
-   plaintext passphrase and the derived key live in process
-   heap.  A core dump, a kernel oops with `kernel.core_pattern`
-   pointing somewhere readable, or a debugger attached by a
-   compromised root account can recover both.  `systemd-creds`
-   doesn't fully eliminate this — once the credential is
-   decrypted into the process, it's still in heap memory for
-   the script's lifetime — but it dramatically narrows the
-   exposure window: the encrypted blob on disk is useless to
-   an attacker without the host's TPM/per-host key, and the
-   plaintext only exists during the ~1 second the mint script
-   runs (vs. 24/7 for the plaintext file).
-
-   To set this up:
-   ```sh
-   # Create the encrypted credential.  systemd-creds prompts for
-   # the value; type your passphrase and press Ctrl-D.
-   sudo systemd-creds encrypt --name=passphrase - /etc/morphit/relay.passphrase.cred
-   sudo chmod 0600 /etc/morphit/relay.passphrase.cred
-
-   # Edit the service unit to use the encrypted form:
-   sudo systemctl edit morphit-relay-mint-acts.service
-   ```
-   In the override drop-in, replace the LoadCredential= line with:
-   ```
-   [Service]
-   LoadCredential=
-   LoadCredentialEncrypted=passphrase:/etc/morphit/relay.passphrase.cred
-   ```
-   Then `sudo systemctl daemon-reload` and the timer fires use the
-   encrypted credential on next run. See `man systemd-creds` for
-   the full encryption / TPM-binding options.
-
-   The plaintext-file path remains the documented default because
-   it works on every Linux system without TPM hardware. But for
-   any production-grade operator deployment, the systemd-creds
-   path is the right call — and the heap-residue exposure window
-   alone is reason enough to switch as soon as your weekly mint
-   volume justifies the small operational complexity.
-
-   **Pre-launch operator action checklist (also in
-   `docs/RUN-A-MORPHIT-NODE.md` §3):** if your fees account is
-   on track to receive >$100/week of listing-fee revenue,
-   ship with `systemd-creds` from day one rather than
-   migrating later.  Migration involves rotating the active
-   key (because the plaintext passphrase touched disk), which
-   is more disruptive than configuring `systemd-creds`
-   correctly the first time.
-
-3. Install and enable the timer:
-   ```sh
-   sudo cp ops/systemd/morphit-relay-mint-acts.service /etc/systemd/system/
-   sudo cp ops/systemd/morphit-relay-mint-acts.timer /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now morphit-relay-mint-acts.timer
-   ```
-
-4. Verify it's scheduled:
-   ```sh
-   systemctl list-timers morphit-relay-mint-acts.timer
-   ```
-   Output shows the next-fire time. The timer adds a randomized
-   delay of up to 30 minutes so a fleet of operators don't all
-   hammer the same RPCs at exactly 04:00 UTC.
-
-**Ongoing maintenance:** check `journalctl -u morphit-relay-mint-acts`
-once per month. The unit logs `done; succeeded=N failed=0` on
-success. Any line containing `FAILED` triggers an alert via the
-operator's normal journald-watch pipeline (see §1.6).
-
-**To change the count later**: edit `/etc/morphit/relay.env`,
-no daemon-reload needed (the env file is re-read on each timer
-fire).
-
-**To pause unattended minting**: `sudo systemctl disable --now
-morphit-relay-mint-acts.timer`. The relay's queue keeps draining
-existing ACTs in the meantime; you have a few weeks of buffer
-before signups start backing up.
+> **This ceremony no longer exists (beta.28).** Blurt disabled
+> `claim_account` / `create_claimed_account` at hard fork 2, so there are
+> no Account Creation Tokens to mint. The relay now creates each account
+> with a direct `account_create` op, paying the ~100 BLURT
+> `account_creation_fee` **inline** from its liquid BLURT (ADR-0010, as
+> amended 2026-06). There is no `mint-acts.ts` script, no weekly timer,
+> and no `MORPHIT_RELAY_AUTOMINT_*` config — if you are upgrading from an
+> older deploy, remove the `morphit-relay-mint-acts.service`/`.timer`
+> units and any `MORPHIT_RELAY_AUTOMINT_*` / `MORPHIT_RELAY_WEEKLY_ACT_COUNT`
+> lines from `relay.env`.
+>
+> **What this means for you as an operator:** keep `@morphit-relay`
+> funded with enough liquid BLURT to cover signups — roughly one week of
+> (≈100 BLURT creation fee + 1 BLURT dust + the welcome bonus per
+> completed-trade signup). See **§0a** for the funding math and **§16**
+> for the low-balance Matrix alert (`relay_low_balance_for_signups`). The
+> relay refuses signups (`relay_out_of_funds`) when its liquid balance
+> can't cover the fee + a small margin, and recovers automatically the
+> moment you top it up.
 
 ---
 
@@ -1192,13 +1021,13 @@ hour is not.
    suspicious-looking accounts. Investigate patterns (shared
    creator, sequential timestamps).
 3. If damage has been done (e.g., N fake accounts burned through
-   an ACT pool), don't panic-mint more ACTs — wait for the
-   pattern to die down. The relay will pause signups cleanly
-   when ACTs run out.
+   the relay's BLURT), don't panic — wait for the pattern to die
+   down. The relay pauses signups cleanly when its balance can't
+   cover the fee.
 
 ### If it's genuine growth
 
-1. Mint more ACTs (section 2).
+1. Top up the relay's liquid BLURT (§0a / §1).
 2. Consider raising the `MORPHIT_RELAY_CREATE_RATE_PER_DAY`
    temporarily to avoid false positives on enthusiastic users
    who complete a form multiple times.
@@ -3711,11 +3540,11 @@ already-deployed instance.
 
 ## 17. Relay origin allowlist — protecting your instance from billing drift
 
-The relay consumes one of your pre-minted ACTs on every
-`create_claimed_account` op it broadcasts. Without origin
+The relay pays the ~100 BLURT account-creation fee on every
+`account_create` op it broadcasts. Without origin
 enforcement, **any web page, `curl` invocation, or script
 anywhere on the internet can POST to your relay's
-`/v1/account/create` and you'll spend an ACT for it.** Three
+`/v1/account/create` and you'll spend ~100 BLURT for it.** Three
 concrete scenarios:
 
 1. **Community mirror misconfiguration.** Another operator
@@ -3904,17 +3733,15 @@ token). That's a larger design change not yet built.
 
 ## 18. Signup-drain prevention — the full defense stack
 
-The relay's `/v1/account/create` endpoint consumes one pre-minted
-Account Creation Token (ACT) from the relay's pool to create each
-new Blurt account.  The BLURT that ACTs cost was paid earlier at
-ACT-mint time during the relay's weekly `claim_account` ceremony
-(see §2 and ADR-0010 §4), so signup itself is fee-free — but a
-successful signup still depletes one ACT from a finite weekly
-budget.  Without defenses, a third-party operator who forges the
+The relay's `/v1/account/create` endpoint pays the ~100 BLURT
+account-creation fee inline (from `@morphit-relay`'s liquid BLURT)
+to create each new Blurt account (see ADR-0010 §4, as amended), so
+each successful signup spends ~100 BLURT of your relay's balance.
+Without defenses, a third-party operator who forges the
 `Origin` header (server-side scripts can) could attribute THEIR
-users' registrations to YOUR relay, draining your ACT pool and
-forcing you to either pause signups or mint extra ACTs out-of-cycle
-(both BLURT-expensive).  The signup-drain defense is a layer cake;
+users' registrations to YOUR relay, draining your relay's BLURT and
+forcing you to pause signups or keep topping up out-of-cycle
+(BLURT-expensive).  The signup-drain defense is a layer cake;
 each layer is cheap, additive, and tunable.  None alone is
 sufficient; together they make drains **bounded, detectable fast,
 and reversible**.
@@ -3943,10 +3770,10 @@ unavailable, please try another Morphit mirror" message.
 
 ### Layer 2: Global daily ceiling
 
-Hard cap on successful signups per UTC day.  Bounds worst-case ACT
-depletion to `ceiling` ACTs per day; in BLURT terms that's
-`ceiling × act_mint_cost` BLURT of pre-paid value at risk (where
-`act_mint_cost` is whatever the chain's `account_creation_fee`
+Hard cap on successful signups per UTC day.  Bounds worst-case
+spend to `ceiling` signups per day; in BLURT terms that's
+`ceiling × account_creation_fee` BLURT at risk (where the fee
+is whatever the chain's `account_creation_fee`
 witness-parameter is at claim time, typically ~100 BLURT).  Reset
 at UTC midnight.
 
@@ -4254,7 +4081,7 @@ disable.
    abnormal? If yes, you're under attack. If no, the
    low-balance alert was organic — top up and re-enable.
 3. **Examine recent signups.** `blocks.blurtwallet.com` → your
-   relay account → recent `create_claimed_account` ops. Look for
+   relay account → recent `account_create` ops. Look for
    similar naming patterns, sequential creation times, no
    follow-up on-chain activity after creation. Those are
    attacker signatures.
@@ -4886,8 +4713,8 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c "
      ORDER BY created_at DESC
      LIMIT 20;"
 
-# Mint ACTs
-cd /opt/morphit/apps/relay && npm run mint-acts -- 25
+# Check the relay's liquid BLURT balance (signups need fee + margin)
+curl -s http://localhost:PORT/v1/health?verbose=1 | jq .blurt_balance
 
 # Live price source status
 curl -s http://localhost:PORT/v1/health?verbose=1 | jq .diagnostics.price
@@ -6110,7 +5937,7 @@ Add `~/.pgpass` to the morphit system user's home with the same password as `sec
 ### What to NOT use Docker for
 
 - **The wizard.** `morphit-ops init` is meant to run as the host operator user, write to the repo, and print sudo commands. Running it inside a container is a footgun (paths and permissions don't match the host's).
-- **One-shot CLI commands** (`morphit-ops register`, the relay's `apps/relay/scripts/mint-acts.ts` script, etc.). Same reason.
+- **One-shot CLI commands** (`morphit-ops register`, etc.). Same reason.
 
 These should run on the host with the same Node version your image uses, against the running container's exposed ports.
 
@@ -8177,7 +8004,7 @@ sudo -u morphit-relay cat /proc/$(pgrep -f morphit-relay)/status | grep -E 'VmLc
 **Why it helps.**  The relay's existing matrix-bot integration
 can DM the operator on every chain op the relay broadcasts.
 Each DM includes: monotonic sequence number, op type
-(`create_claimed_account` / `transfer` / `custom_json`),
+(`account_create` / `transfer` / `custom_json`),
 recipient account (for transfers), BLURT amount (for
 transfers), and timestamp.  The operator sees in real time
 whether anything anomalous gets signed.  Catches compromise
@@ -8198,7 +8025,7 @@ filtered to anomalies only).
   relay; check them at coffee, lunch, end of day.  Use a
   dedicated Matrix room so they don't drown other DMs.
 - After-baseline tuning: filter to only transfers above $1
-  USD-equivalent, or only `create_claimed_account` ops, or
+  USD-equivalent, or only `account_create` ops, or
   only ops to recipients not in the operators table.
 
 **When it makes sense.**  Days 0–42 of beta.  Disable (or
@@ -8227,7 +8054,7 @@ constraints regardless of caller.  The fence rejects:
 3. **Global per-minute transfer rate ceiling.**  N transfers
    per minute max; an attacker trying to burst-drain hits this
    wall.
-4. **`create_claimed_account` only when ALTCHA + invite-HMAC
+4. **`account_create` only when ALTCHA + invite-HMAC
    re-verify at sign time.**  Closes a race where the
    anti-bot evidence was valid at request-time but the actual
    sign happens later; the signer re-checks.
@@ -8386,7 +8213,7 @@ entirely (physical access to the operator).
   cosigns valid ops, and lets the relay broadcast the
   fully-signed bytes.
 - That 6-hour batch-sign cadence is fundamentally incompatible
-  with on-demand free signups (which expect an ACT mint within
+  with on-demand free signups (which expect an account_create within
   seconds).  Compatibility options: (a) accept a 6-hour SLA
   on signups, which is awful UX; (b) split the account
   topology so a fast-cycle "signup mint" key is single-sig
@@ -8396,7 +8223,7 @@ entirely (physical access to the operator).
   understood; chain-side support is in place.
 
 **When it makes sense.**  Only if you accept a 6-hour-batch
-signup SLA (option b above) or if signup ACT mints have been
+signup SLA (option b above) or if signup account_create ops have been
 delegated to a separate key with its own narrow authority.
 Probably skip for v1.0; revisit if a real compromise event
 forces the question.
@@ -8534,7 +8361,7 @@ Volume baseline for a healthy relay: **near zero** of either event type. A handf
 
 ### 38.4 Periodic audit — review recent registrations
 
-Schedule a weekly review. Look at your relay account on `blocks.blurtwallet.com` and inspect the last 50 `create_claimed_account` operations. Watch for:
+Schedule a weekly review. Look at your relay account on `blocks.blurtwallet.com` and inspect the last 50 `account_create` operations. Watch for:
 
 - Names that look generic / patterns / brand-adjacent (e.g., `mybitcoin01`, `cryptotrader-fast`). These are squatter resale candidates that slipped past Layers 7-8 because they had long prefixes.
 - Accounts with NO follow-up activity (no posts, no Morphit orders, no transfers). A real user creates an account TO USE it; squatters never log in.
@@ -10817,54 +10644,19 @@ separately and are **not** touched by any of this.
 
    You want `Database schema (matches this version)`.
 
-## 47. ACT auto-minter + low-BLURT notifications — hands-off signup funding
+## 47. Keeping the relay funded — low-BLURT notifications
 
-The relay creates accounts by **consuming** pre-minted Account Creation
-Tokens (ACTs, the on-chain `pending_claimed_accounts` counter). When that
-buffer empties, signups fail with `relay_out_of_funds` — **even if the relay
-holds thousands of BLURT**, because the gate is ACT availability, not
-balance. Minting an ACT (`claim_account`) burns the chain
-`account_creation_fee` (≈100 BLURT) in *liquid* BLURT. See ADR-0010 §4–§5.
+The relay creates each account with a direct `account_create` op, paying
+the chain `account_creation_fee` (≈100 BLURT) **inline** from its liquid
+BLURT (Blurt disabled the Account-Creation-Token model at hard fork 2 —
+ADR-0010, as amended 2026-06). So signup readiness gates on one thing: the
+relay's **liquid BLURT balance**. When it can't cover the fee plus a small
+margin, signups fail with `relay_out_of_funds` until you top it up;
+recovery is automatic on the next health poll (~30s). There is nothing to
+"mint" and no buffer to maintain — keep `@morphit-relay` funded (see §0a
+for the math) and let it tell you, over Matrix, when to add more.
 
-Two ways to keep the buffer full:
-
-- **Weekly manual ceremony** (the original): you run `mint-acts.ts` (or its
-  systemd timer) with the active-key passphrase. See §«weekly ACT minting».
-- **Auto-minter** (this section, **default ON** as of beta.24): the running
-  relay tops its own buffer up, so you never run a mint command again. You
-  only keep the relay funded with liquid BLURT — and it tells you (over
-  Matrix) when to do that. Set `MORPHIT_RELAY_AUTOMINT_ENABLED=false` to opt
-  back out and use the weekly timer instead.
-
-### 47.1 Enable the auto-minter (relay env)
-
-In the relay's env file (`ops/env/relay.env.example` has the full list):
-
-```
-MORPHIT_RELAY_AUTOMINT_ENABLED=true
-MORPHIT_RELAY_AUTOMINT_TARGET_ACTS=25        # buffer to maintain
-MORPHIT_RELAY_AUTOMINT_LOW_WATER_ACTS=10     # mint when below this (>3, <=target)
-MORPHIT_RELAY_AUTOMINT_INTERVAL_MS=3600000   # check hourly
-MORPHIT_RELAY_AUTOMINT_MAX_PER_CYCLE=25      # cap per cycle (bounds burn)
-MORPHIT_RELAY_AUTOMINT_MIN_BLURT_RESERVE=50  # never spend below this BLURT
-```
-
-Restart the relay. On boot it logs `automint_enabled {…}` (or
-`automint_disabled` if the flag is off). Each cycle it logs one of
-`automint_above_low_water` (healthy), `automint_minted` + `automint_cycle_done`
-(it refilled), or `automint_insufficient_blurt` (it wanted to mint but the
-relay is too low on BLURT — top up). Boot is **refused** if `LOW_WATER` is not
-both `> 3` (the signup reject gate) and `<= TARGET`.
-
-The auto-minter never spends below `MIN_BLURT_RESERVE`, so welcome bonuses,
-dust refills, and fees are never starved by minting. Once it's enabled you
-can disable the weekly `morphit-relay-mint-acts.timer` — it's redundant.
-
-The active key it uses is the same one the relay already holds in memory for
-`create_claimed_account`; auto-minting adds no new key-exposure surface
-(ADR-0010 §5 spells out the tradeoff vs. the human-in-the-loop ceremony).
-
-### 47.2 Get notified when BLURT runs low (so you can top up)
+### 47.1 Get notified when BLURT runs low (so you can top up)
 
 Two complementary signals, both delivered to your Matrix alert DM by the
 matrix-bot (which reads the indexer/relay JSON journal). Set
@@ -10879,32 +10671,20 @@ matrix-bot (which reads the indexer/relay JSON journal). Set
    ```
 
    The indexer watches `@morphit-relay`'s liquid balance and fires
-   `operator-balance:low_balance` → Matrix when it drops below the threshold
-   (CRITICAL at zero — the relay has halted; WARN above zero). Hysteresis
-   means one alert per downward crossing, plus a `balance_recovered` when your
-   top-up lands. **Set the threshold ABOVE the auto-mint reserve plus one
-   cycle's mint cost** (`MAX_PER_CYCLE × account_creation_fee`) so the warning
-   arrives *before* minting stalls. With the defaults above (reserve 50,
-   25 ACTs/cycle × 100 = 2500), a threshold around the low-thousands gives
-   real lead time on a busy instance; 300 suits a quiet one.
+   `operator-balance:low_balance` → Matrix when it drops below the
+   threshold (CRITICAL at zero — the relay has halted; WARN above zero).
+   Hysteresis means one alert per downward crossing, plus a
+   `balance_recovered` when your top-up lands. **Set the threshold above
+   roughly one week of signup fees** so the warning arrives with real lead
+   time — well into the thousands of BLURT for a busy instance; 300 suits a
+   quiet one. (See also §16.)
 
-2. **Auto-minter "blocked on BLURT" (relay).** Automatic, no extra config:
-   the moment the auto-minter wants to mint but can't afford to without
-   touching the reserve, it logs `automint_insufficient_blurt`
-   (WARN → Matrix); if it minted some but couldn't reach target it logs
-   `automint_partial_insufficient_blurt`. Both name the account, the BLURT
-   balance, the fee, and the reserve, so the Matrix message tells you exactly
-   how much to send.
+2. **Signups actually down (relay, CRITICAL).** Automatic, no config: the
+   relay's health poller watches its own liquid balance; the moment it
+   drops below the account-creation fee + margin — meaning signups are
+   being REFUSED with `relay_out_of_funds` right now — it emits
+   `relay-acts:relay_low_balance_for_signups` (CRITICAL → Matrix), naming
+   the account, the balance, and the BLURT required.
 
-3. **Signups actually down (relay, CRITICAL).** Automatic, no config: the
-   relay's health poller watches its own ACT buffer; if
-   `pending_claimed_accounts` falls below the reject gate (3) — meaning
-   signups are being REFUSED with `relay_out_of_funds` right now — it emits
-   `relay-acts:act_buffer_depleted` (CRITICAL → Matrix), with the BLURT
-   balance and whether auto-mint is on. This is the alarm that was missing
-   when account creation failed while the relay held plenty of BLURT (the
-   gate is ACT availability, not balance). With auto-mint on it should be
-   rare; when it fires, minting couldn't keep up — top up liquid BLURT.
-
-To top up: transfer liquid BLURT to `@morphit-relay`. The next auto-mint
-cycle (within `INTERVAL_MS`) catches up on its own — no command to run.
+To top up: transfer liquid BLURT to `@morphit-relay`. Signups recover on
+their own within ~30 seconds — no command to run.

@@ -14,13 +14,12 @@
 > 1. **Account-creation mechanism.**  This doc describes
 >    `account_create` (inline-pay: creator broadcasts the
 >    creation transaction with a `fee` field paid in liquid
->    BLURT).  The shipped relay uses
->    `create_claimed_account` consuming pre-minted ACTs
->    (Account Creation Tokens) per **ADR-0010 §4** — the
->    weekly ACT minting ceremony is automated via
->    `morphit-relay-mint-acts.timer` (see AUTOMATION-AUDIT.md
->    §1.1).  The H8 ACT-model-drift fix in the 2026-05
->    audit closed the last inline-pay path.
+>    BLURT) — which is exactly what the shipped relay does as
+>    of beta.28. (Historically the relay briefly used the
+>    Account-Creation-Token model — `claim_account` /
+>    `create_claimed_account` — but Blurt disabled both ops at
+>    hard fork 2, so the relay reverted to direct inline-pay
+>    `account_create`. See ADR-0010, as amended 2026-06.)
 > 2. **Repo layout.**  The "morphit/apps/relay/cmd/…/internal/…"
 >    Go-style layout shown in §"Repo layout added in 3a"
 >    below was the original sketch.  The shipped layout is

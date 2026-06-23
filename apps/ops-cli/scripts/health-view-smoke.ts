@@ -134,10 +134,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		rpc_endpoints_healthy: 3,
 		rpc_endpoints_total: 4,
 		web_push: true,
-		automint_enabled: true,
-		pending_claimed_accounts: 17,
-		automint_target_acts: 25,
-		automint_low_water_acts: 10
+		blurt_balance: '9000.000 BLURT'
 	});
 	expect(
 		'HV-3a full healthy body parsed',
@@ -151,10 +148,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 			full.rpcHealthy === 3 &&
 			full.rpcTotal === 4 &&
 			full.webPush === true &&
-			full.automintEnabled === true &&
-			full.actsReady === 17 &&
-			full.automintTarget === 25 &&
-			full.automintLowWater === 10 &&
+			full.relayBalance === '9000.000 BLURT' &&
 			!full.rpcAllDown,
 		JSON.stringify(full)
 	);
@@ -174,18 +168,15 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 			missing.rpcHealthy === null &&
 			missing.rpcTotal === null &&
 			missing.webPush === null &&
-			missing.automintEnabled === null &&
-			missing.actsReady === null &&
-			missing.automintTarget === null &&
-			missing.automintLowWater === null &&
+			missing.relayBalance === null &&
 			!missing.rpcAllDown &&
 			missing.synced,
 		JSON.stringify(missing)
 	);
-	const automintOff = summarizeHealth({ automint_enabled: false, pending_claimed_accounts: 0 });
+	const lowBal = summarizeHealth({ blurt_balance: '5.000 BLURT' });
 	expect(
-		'HV-3h automint disabled parsed (enabled false, 0 ready)',
-		automintOff.automintEnabled === false && automintOff.actsReady === 0
+		'HV-3h relay balance parsed from health body',
+		lowBal.relayBalance === '5.000 BLURT'
 	);
 	expect(
 		'HV-3g non-object body tolerated',

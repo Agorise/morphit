@@ -29,19 +29,27 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-const VERSION = '1.0.0-beta.27';
+const VERSION = '1.0.0-beta.28';
 const POLL_INTERVAL_MS = 30_000;
-/** When pending_claimed_accounts drops below this, the relay
- *  rejects new create requests with relay_out_of_funds.  This
- *  gives a buffer so a TOCTOU race between health refresh and
- *  signup broadcast can't deplete the last ACT.
- *  Per ADR-0010 §4 — the relay consumes ACTs, never pays the
- *  inline fee directly. */
-const MIN_PENDING_CLAIMED_ACCOUNTS = 3;
+/** Liquid-BLURT headroom (above the account_creation_fee) the relay
+ *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
+ *  so the relay pays the fee inline per `account_create`; signup
+ *  readiness is gated on liquid balance, not a pre-minted-token buffer.
+ *  Covers the 1 BLURT signup dust plus a small buffer so a TOCTOU race
+ *  between health refresh and broadcast can't start a signup we can't
+ *  fund. */
+const SIGNUP_LIQUID_MARGIN_BLURT = 2;
+
+/** Parse a Graphene asset string ("9049.747 BLURT") to a number.
+ *  Returns 0 for 'unknown'/unparseable — which fails the funding gate
+ *  safely (we'd rather reject than start an unfundable signup). */
+function parseBlurtAmount(s: string): number {
+	const m = /^([\d.]+)\s+BLURT$/.exec(s.trim());
+	return m ? Number(m[1]) : 0;
+}
 
 interface ChainSnapshot {
 	blurt_balance: string;
-	pending_claimed_accounts: number;
 	last_refresh_unix: number;
 	/** True on the initial render before the first poll completes. */
 	stale: boolean;
@@ -50,18 +58,15 @@ interface ChainSnapshot {
 export class HealthService {
 	private snapshot: ChainSnapshot = {
 		blurt_balance: 'unknown',
-		pending_claimed_accounts: 0,
 		last_refresh_unix: 0,
 		stale: true
 	};
 	private poller: NodeJS.Timeout | null = null;
-	/** Hysteresis for the ACT-buffer alert: true once we've alerted that
-	 *  the relay is at/below the reject gate, reset when it recovers. In
-	 *  memory only — a restart at worst re-alerts once (cheap; a missed
-	 *  alert would be worse). This is the signal that was MISSING when a
-	 *  signup failed with relay_out_of_funds but the relay still held
-	 *  plenty of BLURT (the gate is ACTs, not balance) — see ADR-0010. */
-	private actBufferDepleted = false;
+	/** Hysteresis for the low-balance alert: true once we've alerted that
+	 *  the relay's liquid BLURT is below the signup-funding threshold,
+	 *  reset when it recovers. In memory only — a restart at worst
+	 *  re-alerts once (cheap; a missed alert would be worse). */
+	private lowBalanceAlerted = false;
 	/** Optional reference to the signup ceiling. When present,
 	 *  /v1/health?verbose=1 includes signup_stats so the indexer-
 	 *  side operator-balance scanner can detect anomalous signup
@@ -84,28 +89,18 @@ export class HealthService {
 		this.signupEnabled = opts.signupEnabled;
 	}
 
-	/** Returns the last known pending_claimed_accounts count.  Used
-	 *  by the create endpoint to short-circuit when the relay has
-	 *  no ACTs to consume.  Per ADR-0010 §4 the relay never pays
-	 *  the inline fee — it consumes pre-minted ACTs.  Operators
-	 *  refill ACTs via the weekly mint-acts.ts ceremony. */
-	pendingClaimedAccounts(): number {
-		return this.snapshot.pending_claimed_accounts;
-	}
-
-	/** Returns true iff the relay has enough ACTs to safely accept a
-	 *  new creation request. False means the create endpoint should
-	 *  return relay_out_of_funds without touching the chain. */
+	/** Returns true iff the relay holds enough liquid BLURT to fund a
+	 *  new account creation (the account_creation_fee plus a small
+	 *  margin). False means the create endpoint returns
+	 *  relay_out_of_funds without touching the chain. During startup,
+	 *  before the first poll lands, we don't know the balance; we choose
+	 *  restrictive (the chain would reject an unfunded broadcast anyway). */
 	canAcceptCreation(): boolean {
-		// During startup before the first poll lands we don't know the
-		// ACT count. Being permissive here would let the first request
-		// through against an empty pool; being restrictive would
-		// starve legitimate users during startup. We choose
-		// restrictive — the chain would reject a no-ACT broadcast
-		// anyway, so the user-visible behavior is the same and we
-		// save the round-trip.
 		if (this.snapshot.stale) return false;
-		return this.snapshot.pending_claimed_accounts >= MIN_PENDING_CLAIMED_ACCOUNTS;
+		return (
+			parseBlurtAmount(this.snapshot.blurt_balance) >=
+			this.cfg.accountCreationFeeBlurt + SIGNUP_LIQUID_MARGIN_BLURT
+		);
 	}
 
 	async startPolling(): Promise<void> {
@@ -142,42 +137,39 @@ export class HealthService {
 		}
 		this.snapshot = {
 			blurt_balance: acct.balance,
-			pending_claimed_accounts: acct.pending_claimed_accounts,
 			last_refresh_unix: Math.floor(Date.now() / 1000),
 			stale: false
 		};
 
-		// ACT-buffer alert (hysteresis). When pending_claimed_accounts
-		// falls below the reject gate, the relay is ALREADY refusing
-		// signups with relay_out_of_funds — regardless of BLURT balance,
-		// because account creation consumes ACTs, not BLURT. This is the
-		// alert that was missing when kentest3 failed silently (the relay
-		// held plenty of BLURT, so the balance scanner never fired). It is
-		// emitted to the journal so the matrix-bot routes it to the
-		// operator's Matrix DM (module=relay-acts). With auto-mint on this
-		// should be rare; when it fires, auto-mint couldn't keep up (BLURT
-		// out, disabled, or minting failing) and needs operator attention.
-		const pca = acct.pending_claimed_accounts;
-		if (pca < MIN_PENDING_CLAIMED_ACCOUNTS) {
-			if (!this.actBufferDepleted) {
-				this.actBufferDepleted = true;
-				log.error('act_buffer_depleted', {
+		// Low-balance alert (hysteresis). On Blurt the relay pays the
+		// account_creation_fee inline per signup via account_create (the
+		// ACT model was disabled at HF2), so signup readiness is gated on
+		// the relay's LIQUID BLURT, not a token buffer. When it drops
+		// below the funding floor the relay is ALREADY refusing signups
+		// with relay_out_of_funds; we emit to the journal so the
+		// matrix-bot routes it to the operator's Matrix DM and they can
+		// top up. The indexer's operator-balance scanner also alerts on
+		// low balance independently.
+		const liquid = parseBlurtAmount(acct.balance);
+		const fundingFloor = this.cfg.accountCreationFeeBlurt + SIGNUP_LIQUID_MARGIN_BLURT;
+		if (liquid < fundingFloor) {
+			if (!this.lowBalanceAlerted) {
+				this.lowBalanceAlerted = true;
+				log.error('relay_low_balance_for_signups', {
 					account: this.cfg.relayAccount,
-					pending_claimed_accounts: pca,
-					reject_gate: MIN_PENDING_CLAIMED_ACCOUNTS,
 					blurt_balance: acct.balance,
-					automint_enabled: this.cfg.autoMintEnabled,
+					required_blurt: fundingFloor,
 					hint:
-						'The relay is refusing signups (relay_out_of_funds) — it is out of ' +
-						'Account Creation Tokens, NOT BLURT. If auto-mint is on, it could not ' +
-						'keep up (top up liquid BLURT in this account). If off, mint ACTs.'
+						'The relay is refusing signups (relay_out_of_funds) — its liquid ' +
+						'BLURT is below the account_creation_fee needed to create an ' +
+						'account. Top up liquid BLURT in this account.'
 				});
 			}
-		} else if (this.actBufferDepleted) {
-			this.actBufferDepleted = false;
-			log.info('act_buffer_recovered', {
+		} else if (this.lowBalanceAlerted) {
+			this.lowBalanceAlerted = false;
+			log.info('relay_balance_recovered', {
 				account: this.cfg.relayAccount,
-				pending_claimed_accounts: pca
+				blurt_balance: acct.balance
 			});
 		}
 	}
@@ -206,15 +198,11 @@ export class HealthService {
 				// VAPID fields are configured.  Operator-triage signal that
 				// order/chat push notifications can actually be sent.
 				body.web_push = this.cfg.pushEnabled;
-				// ACT auto-minter status (ADR-0010 §5) for operator triage:
-				// whether self-refill is on, and the thresholds it tops up to.
-				// `pending_claimed_accounts` below is the live count of ACTs
-				// ready for use.
-				body.automint_enabled = this.cfg.autoMintEnabled;
-				body.automint_target_acts = this.cfg.autoMintTargetActs;
-				body.automint_low_water_acts = this.cfg.autoMintLowWaterActs;
+				// Relay liquid-BLURT balance for operator triage: signups
+				// pay the account_creation_fee inline per account_create
+				// (the ACT model was disabled at HF2), so this balance —
+				// not a token buffer — gates signup readiness.
 				body.blurt_balance = this.snapshot.blurt_balance;
-				body.pending_claimed_accounts = this.snapshot.pending_claimed_accounts;
 				body.last_refresh_unix = this.snapshot.last_refresh_unix;
 				if (this.snapshot.stale) body.stale = true;
 

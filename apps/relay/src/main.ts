@@ -17,7 +17,6 @@ import { loadConfig, type Config, type UnlockedConfig } from './config/index.ts'
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
 import { BlurtClient } from './blurt/client.ts';
-import { ActAutoMinter } from './blurt/actAutoMinter.ts';
 import { checkClockDrift } from './clock/driftCheck.ts';
 import { createDatabase } from './db/pool.ts';
 import { RelayQueueDrainer } from './queue/drainer.ts';
@@ -233,29 +232,6 @@ async function main(): Promise<void> {
 		signupEnabled: cfg.signupEnabled
 	});
 
-	// ACT auto-minter (ADR-0010 §5): keeps the relay's ACT buffer topped
-	// up automatically — paying the chain account_creation_fee in liquid
-	// BLURT above the configured reserve — so the operator no longer has
-	// to run mint-acts.ts by hand. Opt-in (MORPHIT_RELAY_AUTOMINT_ENABLED;
-	// disabled → start() is a no-op). When it can't mint for lack of BLURT
-	// it logs `automint_insufficient_blurt`; the operator is actively
-	// alerted by the indexer's operator-balance scanner (→ Matrix) so they
-	// can top up BLURT. cfg.relayActiveKeyWif is guaranteed defined here
-	// (the boot guard above exits if unlock didn't populate it).
-	const actAutoMinter = new ActAutoMinter(
-		blurt,
-		cfg.relayAccount,
-		cfg.relayActiveKeyWif,
-		cfg.accountCreationFeeBlurt,
-		{
-			enabled: cfg.autoMintEnabled,
-			targetActs: cfg.autoMintTargetActs,
-			lowWaterActs: cfg.autoMintLowWaterActs,
-			intervalMs: cfg.autoMintIntervalMs,
-			maxPerCycle: cfg.autoMintMaxPerCycle,
-			minBlurtReserve: cfg.autoMintMinBlurtReserve
-		}
-	);
 	const inviteEndpoint = new InviteEndpoint(
 		cfg.signupEnabled,
 		globalCeiling,
@@ -350,9 +326,6 @@ async function main(): Promise<void> {
 	// per-device Web Push deliveries.  Only when VAPID is set.
 	if (pushSender) pushSender.start();
 
-	// Start the ACT auto-minter loop. No-op (logs once) when disabled.
-	actAutoMinter.start();
-
 	const app = new Hono();
 
 	// Middleware order matches the Go-version rationale:
@@ -425,7 +398,6 @@ async function main(): Promise<void> {
 		inviteTokens.close();
 		altcha.close();
 		healthService.close();
-		actAutoMinter.close();
 		// Stop the queue drainer (awaits in-flight broadcasts).
 		// We don't await here because the callback pattern of
 		// server.close expects a sync handler; instead we let the
