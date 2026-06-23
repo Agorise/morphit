@@ -811,7 +811,7 @@ What it asks you, in order:
 5. **The ACTIVE key for that relay account** — paste the WIF
    string starting with `5`.  This is the **active** key, not
    posting.  The wizard explains why in detail; the short
-   version is that the relay broadcasts `create_claimed_account`,
+   version is that the relay broadcasts `account_create`,
    `transfer`, `transfer_to_vesting`, and
    `delegate_vesting_shares` operations — all active-authority.
    The chain rejects every one of those with "missing required
@@ -1333,7 +1333,7 @@ sudo bash ops/scripts/install-systemd-units.sh
 sudo systemctl enable --now morphit-indexer morphit-relay
 ```
 
-The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server and the weekly mint-acts job deliberately run from their own restricted directories as separate low-privilege users, so this manual installer leaves them alone. The **Ansible playbook deploys and enables the MCP server for you by default** (isolated, as its own `morphit-mcp` user from `/opt/morphit-mcp`, locked down so it can't read your DB password or relay keys); to do it by hand, create the `morphit-mcp` user **first**, then run `sudo bash ops/scripts/deploy-mcp.sh "$PWD" /opt/morphit-mcp morphit-mcp` and enable `morphit-mcp.service` — the full ordered steps (the deploy chowns the tree to that user, so creating it first matters) are in OPERATIONS.md §45, and the mint-acts job is a separate setup. The service runs the hardened HTTP transport on `127.0.0.1:8124`, so confirm it with `curl http://127.0.0.1:8124/health`; and `sudo morphit-ops upgrade` now redeploys and restarts it automatically on every version bump, so you never re-run the deploy by hand after an upgrade. That isolation is intentional. Once the MCP server is installed, you can turn it on or off at any time with `sudo morphit-ops mcp` (or the interactive menu → **Check & operate → MCP server**) — no need to remember the unit name.
+The installer writes the three monorepo services (indexer, relay, and matrix-bot if you run the alert bot), each pointed at this checkout. The MCP server deliberately runs from its own restricted directory as a separate low-privilege user, so this manual installer leaves it alone. The **Ansible playbook deploys and enables the MCP server for you by default** (isolated, as its own `morphit-mcp` user from `/opt/morphit-mcp`, locked down so it can't read your DB password or relay keys); to do it by hand, create the `morphit-mcp` user **first**, then run `sudo bash ops/scripts/deploy-mcp.sh "$PWD" /opt/morphit-mcp morphit-mcp` and enable `morphit-mcp.service` — the full ordered steps (the deploy chowns the tree to that user, so creating it first matters) are in OPERATIONS.md §45. The service runs the hardened HTTP transport on `127.0.0.1:8124`, so confirm it with `curl http://127.0.0.1:8124/health`; and `sudo morphit-ops upgrade` now redeploys and restarts it automatically on every version bump, so you never re-run the deploy by hand after an upgrade. That isolation is intentional. Once the MCP server is installed, you can turn it on or off at any time with `sudo morphit-ops mcp` (or the interactive menu → **Check & operate → MCP server**) — no need to remember the unit name.
 
 > **Before you start the services, run the doctor.** From your
 > install directory, `npx morphit-ops doctor` reads your config and
@@ -1893,7 +1893,7 @@ Short version: **once per month is the design target**, and most weeks you shoul
 
 - **OS package updates**: install `unattended-upgrades` (the `ops-cli init` system check tells you if it's missing) and security patches install themselves. You don't have to do anything.
 
-- **Keeping the relay stocked with Account Creation Tokens (ACTs)**: the relay needs ~25 fresh ACTs per week to handle new signups (without them, signups fail with `relay_out_of_funds` even when the relay holds plenty of BLURT — the gate is ACT availability, not balance). Two ways to handle it: **(a) Auto-minter (recommended, hands-off)** — set `MORPHIT_RELAY_AUTOMINT_ENABLED=true` and the running relay tops its own buffer up, paying the chain fee in liquid BLURT above a reserve; you never run a mint command again and the matrix-bot DMs you when the relay's BLURT runs low so you can top it up. See `OPERATIONS.md` §47. **(b) Weekly timer** — set up the `mint-acts.ts` systemd timer once (see `OPERATIONS.md` §2 → "Unattended mode"); it fires every Sunday 04:00 UTC. Either way it's set-and-forget; the auto-minter removes even the weekly mint command. If you run the auto-minter you can disable the weekly timer.
+- **Keeping the relay funded for signups**: the relay creates each account with a direct `account_create` op, paying the ~100 BLURT chain fee inline from `@morphit-relay`'s liquid balance (Blurt disabled the Account-Creation-Token model at hard fork 2, so there is nothing to "mint" — see `OPERATIONS.md` §2 and §47). Keep `@morphit-relay` topped up with enough liquid BLURT to cover your weekly signups (~100 BLURT each) plus welcome bonuses; the matrix-bot DMs you when the balance runs low, and signups pause cleanly (`relay_out_of_funds`) and resume automatically once you top up. Top up hands-off via a `recurrent_transfer` from a cold-key-funded account.
 
 - **Relay BLURT top-up**: already automated as a `recurrent_transfer` from your funding account (set up once during step 8 → "Configure the relay"). Fires weekly without you. Quarterly you check that the funding account itself isn't running low — that's a one-minute glance at a Blurt wallet.
 
@@ -1906,7 +1906,7 @@ Short version: **once per month is the design target**, and most weeks you shoul
   ```
   Pick "Blurt RPC endpoints" from the menu, paste the new comma-separated list, confirm. The wizard validates each URL, backs up your previous `morphit.env`, writes atomically, then **offers to restart the indexer for you** (just press Enter) so the new endpoints take effect. Watch `journalctl -u morphit-indexer -f` on restart — if the indexer fails to connect it'll log which endpoint refused, fix that one, and try again.
 
-- **Once-per-month review**: glance at `journalctl -u morphit-relay-mint-acts` (did the timer fire successfully every Sunday?), glance at the witness-fee-divergence log, glance at your nightly backup directory. ~5 minutes total. If everything's normal, you do nothing.
+- **Once-per-month review**: glance at the relay's liquid BLURT balance (so signups never stall for lack of funds), glance at the witness-fee-divergence log, glance at your nightly backup directory. ~5 minutes total. If everything's normal, you do nothing.
 
 If you find yourself touching the instance more often than monthly for routine maintenance, file a bug — we want to know what we missed. Operators staying engaged long-term is the entire reason Morphit can exist as a federation.
 

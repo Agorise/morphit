@@ -15,11 +15,11 @@
 	 * What this route does:
 	 *   - Asks them to pick a Blurt account name
 	 *   - Checks availability live against the relay
-	 *   - Asks the relay to broadcast the create_claimed_account op
-	 *     to Blurt, consuming one pre-minted ACT from the relay's
-	 *     pool (the chain's BLURT fee was paid earlier at ACT-minting
-	 *     time via the weekly claim_account ceremony — see ADR-0010
-	 *     §4 and docs/OPERATIONS.md §2).  Signup itself is fee-free.
+	 *   - Asks the relay to broadcast the account_create op to Blurt,
+	 *     paying the chain's account_creation_fee inline from the
+	 *     relay's liquid BLURT (Blurt disabled the Account-Creation-
+	 *     Token model at HF2 — see ADR-0010 §4 and docs/OPERATIONS.md
+	 *     §2).
 	 *   - Records the chosen name locally and routes on
 	 *
 	 * What this route NEVER does:

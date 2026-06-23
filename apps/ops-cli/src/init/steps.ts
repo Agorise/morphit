@@ -288,7 +288,7 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 			'every operation it broadcasts on chain is an active-authority\n' +
 			'operation:\n' +
 			'\n' +
-			'  • create_claimed_account     (signing up a new Morphit user)\n' +
+			'  • account_create             (signing up a new Morphit user)\n' +
 			'  • transfer                   (sending the welcome bonus)\n' +
 			'  • transfer_to_vesting        (powering up donated BLURT)\n' +
 			'  • delegate_vesting_shares    (delegating BP for posting)\n' +

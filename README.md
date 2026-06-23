@@ -42,7 +42,7 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 |---|---|
 | `apps/web/` | SvelteKit frontend, fully prerendered per locale (10 locales × dozens of indexable routes; the canonical list of routes is whatever `apps/web/src/routes/[lang]/**/+page.svelte` enumerates at build time) |
 | `apps/indexer/` | Reads Blurt blocks, materializes orderbook + chat + reputation, exposes `/v1/*` HTTP API |
-| `apps/relay/` | Holds the operator's relay active key; signup broadcasts, welcome-bonus payouts, ACT minting, Web Push delivery |
+| `apps/relay/` | Holds the operator's relay active key; signup broadcasts, welcome-bonus payouts, Web Push delivery |
 | `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
 | `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config`, `release-schema`, `net-defense`, `rpc-pool` |

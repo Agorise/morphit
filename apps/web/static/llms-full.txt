@@ -507,7 +507,7 @@ Morphit's resilience grows with every independent operator. You can help in any 
 
 • Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We document the exact list in the operator runbook.
 
-• Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps their account-creation tokens topped up. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.
+• Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps it funded to create accounts. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.
 
 • Spread the word. Morphit depends on network effect — every user who posts a trade is a signal to the next person that the marketplace is alive. Tell your crypto communities, link us from your blog, post tutorials on blurt.media.
 
@@ -539,7 +539,7 @@ The honest path is cheaper, faster, and actually works: post good orders, commun
 
 You can — but the economics make it unprofitable, and the system is designed to stay that way.
 
-Each Morphit relay pre-mints Account Creation Tokens (ACTs) at ~100 Blurt each in a weekly batch ceremony, and consumes one ACT per signup. So every account a Morphit relay creates costs the operator ~$0.20 of pre-paid token. To recover this, Morphit requires a listing fee on every order you post after your first. An attacker registering bulk accounts and never posting wastes ~$0.20 per account of Morphit's Blurt — so we rate-limit signups to 2 per IP per day at the network layer, and the relay's pre-minted ACT pool size caps the total damage to one week's worth of signup capacity (operators mint ~25 ACTs/week by default). An attacker who wants to exceed our rate limits has to rotate IPs (which is non-trivial and expensive at scale); the rate limit is an annoyance for abusers and invisible to normal users.
+Each Morphit relay creates accounts on Blurt with a direct account_create operation that pays the ~100 Blurt account-creation fee inline. So every account a Morphit relay creates costs the operator ~$0.20 of Blurt. To recover this, Morphit requires a listing fee on every order you post after your first. An attacker registering bulk accounts and never posting wastes ~$0.20 per account of Morphit's Blurt — so we rate-limit signups to 2 per IP per day at the network layer, and a per-relay daily signup ceiling caps the total damage (operators set this ceiling to bound how much Blurt they'll spend on signups per day). An attacker who wants to exceed our rate limits has to rotate IPs (which is non-trivial and expensive at scale); the rate limit is an annoyance for abusers and invisible to normal users.
 
 If you register accounts AND post orders to spam the orderbook, each order pays its $0.25 listing fee. 100 spam orders = $25 of your real money. Meanwhile Morphit's indexer flags related-account patterns automatically and shows that signal publicly on the orderbook, so your spam is conspicuous.
 
@@ -1669,13 +1669,13 @@ If you see a non-verified status that doesn't resolve itself, the simplest fix i
 
 **FAQ key:** `signup_stuck`
 
-Signup goes through a relay that consumes one of its pre-minted Account Creation Tokens to create your account, so it has to push back on abuse. Most errors you might see are temporary and resolve on their own; a few need you to wait or pick a different relay. The most common cases:
+Signup goes through a relay that creates your account on Blurt (paying the account-creation fee), so it has to push back on abuse. Most errors you might see are temporary and resolve on their own; a few need you to wait or pick a different relay. The most common cases:
 
 **"Verifying you're not a name-squatting bot" stuck.** The relay is asking your browser to solve a small proof-of-work puzzle (Altcha). It usually takes 1-2 seconds. If it hangs much longer, your browser may have throttled the background work — try closing other tabs or switching to a different browser. Refreshing the page restarts the puzzle with a fresh challenge.
 
 **"Too many requests from this client" / "rate-limited."** This relay caps signups per IP address per hour. If you're sharing a network (school, office, public WiFi) with others who recently signed up, you'll hit the cap even though you personally haven't signed up. Wait an hour, or try from a different network.
 
-**"Daily signup limit reached on this relay."** Each relay sets a daily signup ceiling to bound how many of its pre-minted Account Creation Tokens it will spend per day. The cap resets at UTC midnight. You can wait it out, or — if you're impatient — try a different Morphit instance (linked at the bottom of this page).
+**"Daily signup limit reached on this relay."** Each relay sets a daily signup ceiling to bound how many accounts it will fund per day. The cap resets at UTC midnight. You can wait it out, or — if you're impatient — try a different Morphit instance (linked at the bottom of this page).
 
 **"You recently created an account. Wait N minutes."** A spacing rule: even within the daily cap, the relay enforces a minimum gap between signups from the same IP address. This catches scripted attempts. If you're a real human signing up your second device, just wait.
 
@@ -1683,7 +1683,7 @@ Signup goes through a relay that consumes one of its pre-minted Account Creation
 
 **"Signup is currently unavailable on this relay."** The operator has paused signups, usually because they're investigating a potential abuse spike or topping up the relay's Blurt balance. You can wait, or just switch to a different instance (linked at the bottom of this page).
 
-**"The relay is temporarily unable to fund new accounts."** The relay has run out of pre-minted Account Creation Tokens. The operator mints these in a weekly batch and consumes one per signup; if signups outpace the weekly mint, the pool empties early. The operator gets an alert when this happens; usually it's resolved within hours. Switching instances also works.
+**"The relay is temporarily unable to fund new accounts."** The relay's Blurt balance is too low to pay the account-creation fee. The operator tops it up; the operator gets an alert when the balance runs low, so usually it's resolved within hours. Switching instances also works.
 
 **"The chain rejected the transaction" / "broadcast_failed."** Generic fallback for chain errors that don't fit the patterns above. Usually transient — try again. If it persists, your chosen account name may have been claimed by someone else in the moment between the relay checking availability and broadcasting; pick a different name.
 

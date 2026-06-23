@@ -33,7 +33,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 1. Free, fast, and friction-free
 
-1. **Signup is free to the user.** No credit card, no bank link, no fee, no deposit. The operator's relay account pre-mints Account Creation Tokens (ACTs) at ~100 Blurt each in a weekly batch ceremony, then consumes one ACT to create your account on-chain — so you join cost-free, and the operator's hot wallet is never sized to the daily signup rate. (See ADR-0010 §4 for the key-custody rationale.)
+1. **Signup is free to the user.** No credit card, no bank link, no fee, no deposit. The operator's relay account creates your account on-chain with a direct `account_create` op, paying the ~100 Blurt chain account-creation fee for you — so you join cost-free. (See ADR-0010 §4 for the key-custody rationale.)
 
 2. **No KYC, no ID, no selfie, no proof of address, no nothing.** You submit your cryptographic public keys and your desired username. That's the entire signup.
 
@@ -570,7 +570,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 250. **Federation registration is one CLI broadcast.** After setup, a single chain op puts you in the federation directory worldwide — you show up on every other Morphit instance's `/instances` page within seconds.
 
-251. **Operational runbook with concrete cron snippets.** `OPERATIONS.md` ships copy-pasteable cron snippets for the operational tasks that should be automated (weekly ACT minting, TLS certificate renewal monitoring). Set up once, the runbook walks you through verifying each.
+251. **Operational runbook with concrete cron snippets.** `OPERATIONS.md` ships copy-pasteable cron snippets for the operational tasks that should be automated (TLS certificate renewal monitoring, nightly database backups). Set up once, the runbook walks you through verifying each.
 
 252. **Sign in to a strange computer by scanning a QR with your phone.** Posting key never leaves the phone. Your phone shows a confirmation card with the website name so you can spot phishing like `morph1t.io` before tapping "Yes, that was me." See `docs/adr/0022-desktop-qr-pairing.md` for the full protocol and threat model.
 

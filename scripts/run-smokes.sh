@@ -104,6 +104,7 @@ SMOKES=(
 	"apps/relay:ip-bucketing-canonicalization-smoke"
 	"apps/relay:trusted-proxy-smoke"
 	"apps/relay:squatter-defense-smoke"
+	"apps/relay:account-create-op-smoke"
 	"apps/ops-cli:ops-cli-smoke"
 	"apps/ops-cli:doctor-smoke"
 	"apps/ops-cli:status-backups-smoke"

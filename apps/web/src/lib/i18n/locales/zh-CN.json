@@ -1215,7 +1215,7 @@
       },
       "help_make_unstoppable": {
         "q": "我如何帮助让 Morphit 不可阻挡?",
-        "a": "Morphit 的韧性随着每个独立运营者而增长。你可以通过以下方式帮助:\n\n• 运行你自己的节点。在自己的服务器上部署 indexer + relay + frontend,并从你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上托管。.onion、.loki 或 .b32.i2p 镜像让受审查网络中的用户也能访问。\n\n• 托管 Morphit 的依赖项。\n\n• 资助社区节点。向活跃运营者的 @morphit-relay 账户贡献 Blurt,可以维持他们的账户创建代币。\n\n• 广而告之。\n\n• 编写教程和翻译。项目采用 AGPL-3.0 许可。\n\nMorphit 设计为不可关闭,因为没有中心角色可被施压。"
+        "a": "Morphit 的韧性随着每个独立运营者而增长。你可以通过以下方式帮助:\n\n• 运行你自己的节点。在自己的服务器上部署 indexer + relay + frontend,并从你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上托管。.onion、.loki 或 .b32.i2p 镜像让受审查网络中的用户也能访问。\n\n• 托管 Morphit 的依赖项。\n\n• 资助社区节点。向活跃运营者的 @morphit-relay 账户贡献 Blurt,可以维持其创建账户所需的资金。\n\n• 广而告之。\n\n• 编写教程和翻译。项目采用 AGPL-3.0 许可。\n\nMorphit 设计为不可关闭,因为没有中心角色可被施压。"
       },
       "why_self_trading_fails": {
         "q": "为什么自己跟自己交易不能提升我的信誉?",

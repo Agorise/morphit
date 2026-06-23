@@ -14,7 +14,7 @@
       apps/indexer/src/indexer/operatorEarnings.ts (OPERATOR_BLURT_SPLIT_PERCENT = 90)
       apps/indexer/src/indexer/handlers/feedback.ts (welcome bonus 10 liquid + 10 vesting BP)
       apps/indexer/src/indexer/handlers/featureBid.ts (50 BLURT/hour, MIN_HOURS = 6)
-      apps/relay/src/blurt/client.ts (create_claimed_account via pre-minted ACTs; ~100 BLURT/ACT)
+      apps/relay/src/blurt/client.ts (account_create; ~100 BLURT fee paid inline)
     BLURT/USD reference: ~$0.002/BLURT (project default static floor).
   -->
 
@@ -148,7 +148,7 @@
   <g>
     <rect x="880" y="620" width="280" height="78" rx="10" fill="#1A202B" stroke="#8A96A8" stroke-width="2" stroke-dasharray="5 3"/>
     <text x="1020" y="650" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F8FA">Operator's cost, not a fee</text>
-    <text x="1020" y="676" text-anchor="middle" font-size="11" fill="#B8C2D0">~100 BLURT/account, pre-minted as ACTs</text>
+    <text x="1020" y="676" text-anchor="middle" font-size="11" fill="#B8C2D0">~100 BLURT/account, paid inline at signup</text>
   </g>
 
   <!-- Arrows: fees -> recipients (neutral, money "landing") -->

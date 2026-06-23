@@ -97,15 +97,15 @@ Where:
 - **account_creation_fee_blurt** — current witness-set value,
   polled hourly from `get_chain_properties`. Morphit caches the
   last observed value + timestamp.
-- **amortization_factor** — how much of a new user's ACT cost
+- **amortization_factor** — how much of a new user's account-creation cost
   each listing pays toward. At a factor of 0.5, 2 listings
-  amortize one full ACT. At 1.0, every listing pays for an ACT
+  amortize one full account-creation fee. At 1.0, every listing pays for one
   in full — suitable if most listings come from new users.
   Operator-configurable; default 0.5.
 - **operational_margin_blurt** — Morphit's unit profit per
   listing. Operator-configurable; default ~25 BLURT so that at
-  100-BLURT ACT cost and factor 0.5, a listing covers 50 BLURT
-  of ACT + 25 BLURT margin + some buffer ≈ $0.15 cost + $0.10
+  100-BLURT account-creation cost and factor 0.5, a listing covers 50 BLURT
+  of that cost + 25 BLURT margin + some buffer ≈ $0.15 cost + $0.10
   margin = $0.25 listing fee.
 - **blurt_usd_price** — price feed (Klingex via ADR-0004 + phase
   4 implementation). When unavailable, the indexer falls back
@@ -467,15 +467,15 @@ implementation) is sufficient.
 crypto users. Additional assets expand verifier complexity
 without user demand evidence.
 
-### Charge small upfront registration fees instead of amortizing ACT cost across listings
+### Charge small upfront registration fees instead of amortizing account-creation cost across listings
 
 **Rejected per ADR-0010.** Grandma has no crypto at signup.
 
 ### Pre-purchased vouchers from community services (e.g., blurtplugin.online)
 
 **Rejected.** Would make Morphit dependent on a third-party
-service for its core registration flow. We mint our own ACTs
-directly.
+service for its core registration flow. We create accounts
+ourselves via `account_create`.
 
 ## Consequences
 
