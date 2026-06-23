@@ -173,11 +173,14 @@ morphit_indexer_bind_port: 8081
 morphit_mcp_bind_host: 0.0.0.0
 morphit_mcp_bind_port: 8124
 
-# Blurt RPC endpoints — see §22 for selection criteria.  The
-# canonical primary is rpc.blurt.world; configure failover for
-# production.  Comma-separated.
-# DUMMY-VALUE: review §22 and choose endpoints for your deployment.
-morphit_indexer_blurt_rpc_endpoints: "https://rpc.blurt.world,https://blurt-rpc.actifit.io"
+# Blurt RPC endpoints — see §22 for selection criteria.  Defaults to
+# the canonical six; the indexer and relay node-hop across them
+# (latency-aware, fastest-first with failover).  This list MUST stay in
+# sync with DEFAULT_BLURT_RPC_ENDPOINTS in
+# packages/operator-config/src/index.ts, and with the Blurt RPC hosts in
+# outbound_allowed_destinations below.  Override only if you run or trust
+# a different set.  Comma-separated.
+morphit_indexer_blurt_rpc_endpoints: "https://rpc.drakernoise.com,https://blurtrpc.dagobert.uk,https://rpc.blurt.blog,https://rpc.beblurt.com,https://rpc.blurt.one,https://blurt-rpc.saboin.com"
 
 # Asset registry: disable specific tradable assets if your instance
 # specializes (§38, Memory #25).  Comma-separated uppercase tickers.
@@ -340,9 +343,14 @@ outbound_allowed_destinations:
   - archive.ubuntu.com
   - security.ubuntu.com
   - download.docker.com           # BunkerWeb deploy
-  # Blurt RPC (parsed from morphit_indexer_blurt_rpc_endpoints)
-  - rpc.blurt.world
-  - blurt-rpc.actifit.io
+  # Blurt RPC — the canonical six (keep in sync with
+  # morphit_indexer_blurt_rpc_endpoints / DEFAULT_BLURT_RPC_ENDPOINTS)
+  - rpc.drakernoise.com
+  - blurtrpc.dagobert.uk
+  - rpc.blurt.blog
+  - rpc.beblurt.com
+  - rpc.blurt.one
+  - blurt-rpc.saboin.com
   # ACME
   - acme-v02.api.letsencrypt.org
   # Federation probes — must be open since they target arbitrary

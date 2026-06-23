@@ -1,6 +1,6 @@
 {
   "name": "morphit-relay",
-  "version": "1.0.0-beta.26",
+  "version": "1.0.0-beta.27",
   "description": "Morphit posting relay — pays Blurt account-creation fees on behalf of new users. Never holds user private keys.",
   "type": "module",
   "private": true,
