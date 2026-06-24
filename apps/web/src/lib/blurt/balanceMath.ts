@@ -30,8 +30,9 @@
 
 import { formatPercent } from '../i18n/formatters';
 
-/** Number of seconds for a fully-depleted manabar to refill to 100%. */
-export const MANA_REGEN_SECONDS = 432_000;
+/** Seconds for fully-depleted voting power to regenerate to 100%
+ *  (Blurt inherits Steem's 5-day vote-power regen). */
+export const VOTE_POWER_REGEN_SECONDS = 432_000;
 
 /** Parse a "42.123 BLURT" or "42.123 VESTS" amount string into a
  *  plain number.  Returns NaN if the format is bogus.  Caller decides
@@ -81,78 +82,35 @@ export function vestsToBlurtPower(
 	return (vests * fund) / totalVests;
 }
 
-/** A voting_manabar object exactly as the chain returns it. */
-export interface VotingManabar {
-	/** Mana value at `last_update_time`, as a numeric string.  This
-	 *  field is in raw VESTS units, not percentage. */
-	current_mana: string;
-	/** Unix seconds at which `current_mana` was set. */
-	last_update_time: number;
-}
-
-/** Compute the account's current voting-power percentage [0..100],
- *  regenerated to the supplied `nowSeconds`.
+/** Compute an account's current voting-power percentage [0..100] from
+ *  the legacy `voting_power` (0–10000) + `last_vote_time` fields,
+ *  regenerated to `nowSeconds`.  This is the value classic Blurt
+ *  explorers (e.g. blocks.blurtwallet.com) display, so Morphit's
+ *  "Voting" stat matches the wider ecosystem:
  *
- *  (Blurt has a SINGLE manabar — the voting manabar — and no separate
- *  resource-credit / "RC mana" system the way Hive does, so this value
- *  IS the account's voting power. The UI labels it "Voting".)
+ *    elapsed     = max(0, nowSeconds − last_vote_time)
+ *    regenerated = voting_power + 10000 · elapsed / VOTE_POWER_REGEN_SECONDS
+ *    current     = min(10000, regenerated)
+ *    pct         = current / 100
  *
- *  Inputs:
- *   - `manabar`: the chain's voting_manabar struct.
- *   - `ownVestingSharesStr`: the account's own `vesting_shares` (e.g.
- *      `"1000000.123456 VESTS"`).
- *   - `receivedVestingSharesStr`: VESTS delegated TO the account
- *      (`received_vesting_shares`).
- *   - `delegatedVestingSharesStr`: VESTS the account delegated OUT
- *      (`delegated_vesting_shares`).
- *   - `nowSeconds`: Date.now()/1000 floored.  Pass it explicitly so
- *      the function is deterministic and smoke-testable.
- *
- *  The manabar ceiling is the account's EFFECTIVE vesting —
- *  `own + received − delegated` — NOT its owned vesting. This matters
- *  for any account that delegates BP out (e.g. the loyalty-grant relay):
- *  using owned vesting as the ceiling overstates the max and understates
- *  the percentage. When current_mana == effective vesting the account is
- *  at 100%.
- *
- *  Math:
- *    max_mana    = own + received − delegated
- *    elapsed     = max(0, nowSeconds − last_update_time)
- *    regenerated = elapsed * max_mana / MANA_REGEN_SECONDS
- *    current     = min(max_mana, current_mana + regenerated)
- *    pct         = 100 * current / max_mana
- *
- *  Returns a percentage (0..100) suitable for direct display. Returns
- *  NaN when the manabar or owned-vesting input is bad. When effective
- *  vesting is ≤ 0 (zero-stake, or fully delegated out), returns 0 — no
- *  mana to regenerate, so display 0% rather than NaN. A missing or
- *  malformed received/delegated value degrades to 0 (ceiling falls back
- *  to owned-only) rather than poisoning the result with NaN. */
-export function manaPercentage(
-	manabar: VotingManabar | undefined | null,
-	ownVestingSharesStr: string,
-	receivedVestingSharesStr: string,
-	delegatedVestingSharesStr: string,
+ *  Blurt returns `last_vote_time` as a UTC timestamp WITHOUT a trailing
+ *  "Z", so it is normalized before parsing.  Returns NaN when either
+ *  input is missing/malformed (the UI then shows "—"). */
+export function votingPowerPercent(
+	votingPower: number | undefined | null,
+	lastVoteTime: string | undefined | null,
 	nowSeconds: number
 ): number {
-	if (!manabar || typeof manabar.current_mana !== 'string') return NaN;
-	if (typeof manabar.last_update_time !== 'number') return NaN;
+	if (typeof votingPower !== 'number' || !Number.isFinite(votingPower)) return NaN;
+	if (typeof lastVoteTime !== 'string' || lastVoteTime.length === 0) return NaN;
 	if (!Number.isFinite(nowSeconds)) return NaN;
-	const current = Number(manabar.current_mana);
-	const own = parseAssetAmount(ownVestingSharesStr);
-	if (!Number.isFinite(current) || !Number.isFinite(own)) return NaN;
-	const finiteOr0 = (s: string): number => {
-		const v = parseAssetAmount(s);
-		return Number.isFinite(v) ? v : 0;
-	};
-	const received = finiteOr0(receivedVestingSharesStr);
-	const delegated = finiteOr0(delegatedVestingSharesStr);
-	const maxMana = own + received - delegated;
-	if (maxMana <= 0) return 0;
-	const elapsed = Math.max(0, nowSeconds - manabar.last_update_time);
-	const regenerated = (elapsed * maxMana) / MANA_REGEN_SECONDS;
-	const present = Math.min(maxMana, current + regenerated);
-	return Math.max(0, Math.min(100, (100 * present) / maxMana));
+	const iso = lastVoteTime.endsWith('Z') ? lastVoteTime : `${lastVoteTime}Z`;
+	const lastMs = Date.parse(iso);
+	if (!Number.isFinite(lastMs)) return NaN;
+	const elapsed = Math.max(0, nowSeconds - Math.floor(lastMs / 1000));
+	const regenerated = votingPower + (10_000 * elapsed) / VOTE_POWER_REGEN_SECONDS;
+	const current = Math.min(10_000, regenerated);
+	return Math.max(0, Math.min(100, current / 100));
 }
 
 /** Format a number with 3 fractional digits, locale-grouped, dropping
@@ -166,9 +124,11 @@ export function formatBalance(n: number): string {
 	return fixed.replace(/\.?0+$/, '');
 }
 
-/** Format a percentage as "92.4%".  Used for MANA.
+/** Format a percentage as "92.46%".  Used for the voting-power display.
+ *  Two fractional digits so the value matches what other Blurt explorers
+ *  show (e.g. 96.46%) rather than rounding to a single decimal.
  *  Locale-aware via formatPercent. */
 export function formatPercentage(n: number): string {
 	if (!Number.isFinite(n)) return '—';
-	return formatPercent(n, 1);
+	return formatPercent(n, 2);
 }

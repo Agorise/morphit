@@ -16,7 +16,7 @@
 	Data flow:
 	  1. On mount, fetch the chain's get_accounts + DGP in parallel.
 	  2. Compute BP from VESTS via balanceMath.vestsToBlurtPower.
-	  3. Compute voting power % via balanceMath.manaPercentage from
+	  3. Compute voting power % via balanceMath.votingPowerPercent from
 	     the EFFECTIVE vesting (own + received − delegated) and the
 	     present clock time.
 	  4. Display.  Refresh once per minute while mounted (cheap; one
@@ -37,7 +37,7 @@
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { fetchAccountHistory } from '$blurt/accountHistory';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
-	import { vestsToBlurtPower, manaPercentage, parseAssetAmount } from '$blurt/balanceMath';
+	import { vestsToBlurtPower, votingPowerPercent, parseAssetAmount } from '$blurt/balanceMath';
 	import { computeBlurtVestingApr, formatApr } from '$blurt/apr';
 	import {
 		categorizeOp,
@@ -127,11 +127,9 @@
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
-			manaPct = manaPercentage(
-				acct.voting_manabar,
-				acct.vesting_shares,
-				acct.received_vesting_shares,
-				acct.delegated_vesting_shares,
+			manaPct = votingPowerPercent(
+				acct.voting_power,
+				acct.last_vote_time,
 				Math.floor(Date.now() / 1000)
 			);
 			// Batch K: APR. Cheap to recompute every refresh; inputs
@@ -151,6 +149,22 @@
 			// success and error paths or a single failed refresh
 			// would permanently lock subsequent refreshes.
 			refreshInFlight = false;
+		}
+	}
+
+	/** True only while a USER-initiated refresh is running, so the
+	 *  refresh button's icon spins on click but NOT on the silent 5s
+	 *  auto-refresh (which would make the icon strobe). Mirrors the
+	 *  block-explorer account page's manual-refresh affordance. */
+	let manualRefreshing = $state(false);
+
+	async function manualRefresh(): Promise<void> {
+		if (manualRefreshing) return;
+		manualRefreshing = true;
+		try {
+			await refresh();
+		} finally {
+			manualRefreshing = false;
 		}
 	}
 
@@ -380,9 +394,33 @@
 		<h2 class="font-display text-base font-bold">
 			{$_('profile.my_balance.title')}
 		</h2>
-		<span class="text-xs text-ink-500 dark:text-ink-400">
-			{$_('profile.my_balance.private_label')}
-		</span>
+		<div class="flex items-center gap-2">
+			<span class="text-xs text-ink-500 dark:text-ink-400">
+				{$_('profile.my_balance.private_label')}
+			</span>
+			<button
+				type="button"
+				onclick={manualRefresh}
+				disabled={manualRefreshing}
+				aria-label={$_('explorer.account.refresh_label')}
+				title={$_('explorer.account.refresh_label')}
+				class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink-300 text-ink-600 transition hover:border-morphit-emerald hover:bg-ink-50 hover:text-morphit-emerald disabled:cursor-wait disabled:opacity-100 dark:border-ink-700 dark:text-ink-300 dark:hover:bg-ink-900"
+			>
+				<svg
+					class="h-3.5 w-3.5 {manualRefreshing ? 'animate-spin' : ''}"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+					<path d="M21 3v6h-6" />
+				</svg>
+			</button>
+		</div>
 	</header>
 
 	{#if loadState === 'loading'}
@@ -400,7 +438,7 @@
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={blurtBalance} decimals={3} />
+					<AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} />
 				</dd>
 			</div>
 			<div>
@@ -408,7 +446,7 @@
 					{$_('profile.my_balance.bp_staked_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={bpBalance} decimals={3} />
+					<AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} />
 				</dd>
 				{#if Number.isFinite(vestingApr)}
 					<!-- Batch K: APR display.  Phrased as "Currently
@@ -428,18 +466,21 @@
 					{$_('profile.my_balance.voting_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={manaPct} decimals={1} />%
+					<AnimatedNumber value={manaPct} decimals={2} durationMs={3000} />%
 				</dd>
 			</div>
 		</dl>
 
 		{#if showLowBalanceHint || showLowManaHint}
-			<p class="mt-3 text-xs text-ink-600 dark:text-ink-300">
-				{#if showLowBalanceHint}
-					{$_('profile.my_balance.low_blurt_hint')}
-				{:else}
-					{$_('profile.my_balance.low_voting_hint')}
-				{/if}
+			<p class="mt-3 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+				<span aria-hidden="true" class="flex-none">⚠</span>
+				<span>
+					{#if showLowBalanceHint}
+						{$_('profile.my_balance.low_blurt_hint')}
+					{:else}
+						{$_('profile.my_balance.low_voting_hint')}
+					{/if}
+				</span>
 			</p>
 		{/if}
 

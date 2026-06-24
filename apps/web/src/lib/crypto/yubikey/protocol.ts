@@ -175,8 +175,21 @@ export function isYubikeyWrap(w: WrappedCek): w is WrappedCekYubikey {
 /** Constants shared between the writer and reader.  Centralized so
  *  envelope-shape changes happen in one place. */
 export const CEK_BYTES = 32;
-/** ChaCha20-Poly1305 IETF nonce size — same as our chat/pair crypto. */
-export const CEK_NONCE_BYTES = 12;
+/** Nonce size for the layered-CEK AEAD.
+ *
+ *  The keystore's CEK encrypt + passphrase/yubikey-wrap path uses
+ *  libsodium `crypto_secretbox_easy` (XSalsa20-Poly1305), whose nonce is
+ *  24 bytes (`crypto_secretbox_NONCEBYTES`).  This constant was previously
+ *  12 (a ChaCha20-Poly1305-IETF size), which `crypto_secretbox_easy`
+ *  rejects with "invalid nonce length" — so `encryptIdentityToCek` /
+ *  `buildPassphraseWrap`, and therefore the entire layered-cek / YubiKey
+ *  enrollment write path, threw at runtime.  That path is only reachable
+ *  via real-hardware YubiKey enrollment, so it had no automated coverage
+ *  and the defect went unnoticed.  Because no layered envelope could ever
+ *  be written under the old value, there is no stored-data migration
+ *  concern in raising it to 24.  (Readers use the nonce length stored on
+ *  the envelope, not this constant.) */
+export const CEK_NONCE_BYTES = 24;
 /** Salt size for Argon2id — libsodium's default. */
 export const ARGON_SALT_BYTES = 16;
 

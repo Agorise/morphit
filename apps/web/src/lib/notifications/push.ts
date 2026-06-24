@@ -119,6 +119,21 @@ async function getVapidPublicKey(): Promise<string> {
 	return cachedVapidKey;
 }
 
+/** True when an existing push subscription was created with the same
+ *  VAPID applicationServerKey as `key`. Lets subscribe() reuse the
+ *  browser's existing subscription instead of tripping the
+ *  InvalidStateError that pushManager.subscribe() throws when the key
+ *  differs. `options.applicationServerKey` is an ArrayBuffer (or null on
+ *  browsers that don't expose it — treated as "unknown / can't match"). */
+function sameApplicationServerKey(sub: PushSubscription, key: Uint8Array): boolean {
+	const existing = sub.options?.applicationServerKey;
+	if (!existing) return false;
+	const a = new Uint8Array(existing);
+	if (a.length !== key.length) return false;
+	for (let i = 0; i < a.length; i++) if (a[i] !== key[i]) return false;
+	return true;
+}
+
 /** Convert a base64url VAPID public key into the Uint8Array that
  *  pushManager.subscribe expects as `applicationServerKey`. */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -253,12 +268,29 @@ export async function subscribe(
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 
+	const appServerKey = urlBase64ToUint8Array(vapidKey);
+
 	let sub: PushSubscription;
 	try {
-		sub = await reg.pushManager.subscribe({
-			userVisibleOnly: true,
-			applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
-		});
+		// A browser allows only ONE push subscription per service-worker
+		// registration. Calling pushManager.subscribe() while a
+		// subscription already exists with a DIFFERENT applicationServerKey
+		// throws InvalidStateError — which is exactly what makes "Enable
+		// push" fail on every click after a half-finished prior attempt or
+		// a VAPID-key rotation (the stale subscription never gets cleared,
+		// so each retry hits the same error). So: reuse the existing
+		// subscription when its key still matches, otherwise drop it and
+		// create a fresh one.
+		const existing = await reg.pushManager.getSubscription();
+		if (existing && sameApplicationServerKey(existing, appServerKey)) {
+			sub = existing;
+		} else {
+			if (existing) await existing.unsubscribe().catch(() => undefined);
+			sub = await reg.pushManager.subscribe({
+				userVisibleOnly: true,
+				applicationServerKey: appServerKey as BufferSource
+			});
+		}
 	} catch {
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}

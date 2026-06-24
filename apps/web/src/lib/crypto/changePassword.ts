@@ -31,6 +31,7 @@ import { get } from 'svelte/store';
 import {
 	decryptIdentity,
 	encryptIdentity,
+	rewrapLayeredPassphrase,
 	KeystoreError,
 	type KeystoreEnvelope
 } from '$crypto/keystore';
@@ -41,7 +42,9 @@ import { identity, updateEnvelope } from '$stores/identity';
 export type ChangePasswordErrKind =
 	/** Either password was an empty string. */
 	| 'password_empty'
-	/** New password is shorter than 8 characters. */
+	/** New password is shorter than 10 characters (the keystore
+	 *  floor enforced by encryptIdentity / buildPassphraseWrap; the
+	 *  UI's passwordStrength check demands at least this). */
 	| 'new_password_too_short'
 	/** New password equals old — pointless rotation. */
 	| 'same_password'
@@ -67,7 +70,12 @@ export interface ChangePasswordErr {
 }
 export type ChangePasswordResult = ChangePasswordOk | ChangePasswordErr;
 
-const MIN_NEW_PASSWORD_LENGTH = 8;
+// Must match the keystore's own floor (encryptIdentity /
+// buildPassphraseWrap both throw below 10).  Keeping this in sync
+// means an 8–9 char password is rejected here with a clear
+// 'new_password_too_short' instead of throwing later and surfacing
+// as a confusing generic 'internal'.
+const MIN_NEW_PASSWORD_LENGTH = 10;
 
 /**
  * Change the user's keystore password.
@@ -122,11 +130,24 @@ export async function changePassword(
 
 	let newEnv: KeystoreEnvelope;
 	try {
-		// Re-encrypt with the new password.  encryptIdentity
-		// generates a fresh salt + nonce, so the new envelope's
-		// ciphertext is unrelated to the old one's even though the
-		// plaintext (the FullIdentity) is identical.
-		newEnv = await encryptIdentity(full, newPassword);
+		if (currentEnv.scheme === 'layered-cek') {
+			// Layered keystore (a YubiKey is enrolled).  Rotate ONLY the
+			// passphrase wrap, preserving the CEK, the identity ciphertext,
+			// and every yubikey wrap.  encryptIdentity() here would emit a
+			// simple-passphrase envelope and silently drop the YubiKey
+			// unlock path — the bug this branch fixes.  (TOTP 2FA lives in
+			// the identity ciphertext, which is preserved byte-for-byte on
+			// both paths, so it survives a password change regardless.)
+			newEnv = await rewrapLayeredPassphrase(currentEnv, oldPassword, newPassword);
+		} else {
+			// simple-passphrase keystore (covers TOTP-only enrollments,
+			// whose totpSecret rides inside the identity blob).  Re-encrypt
+			// the FullIdentity under the new password: encryptIdentity
+			// generates a fresh salt + nonce, so the new ciphertext is
+			// unrelated to the old one's even though the plaintext is
+			// identical.
+			newEnv = await encryptIdentity(full, newPassword);
+		}
 	} catch (err) {
 		// Wipe before returning.
 		wipeFullIdentity(full);

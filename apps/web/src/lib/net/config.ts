@@ -182,6 +182,23 @@ export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://blurt-rpc.saboin.com'
 ] as const;
 
+/** The remaining canonical Blurt RPC nodes that the indexer + relay use
+ *  SERVER-side but a browser cannot reach (CORS — see the omission notes
+ *  on DEFAULT_RPC_ENDPOINTS above). Listed here ONLY so the endpoint-
+ *  settings panel can show the operator the COMPLETE canonical pool (the
+ *  three browser-reachable nodes above + these three) and explain why the
+ *  browser can't probe them — they are never added to the rotator.
+ *
+ *  Invariant: DEFAULT_RPC_ENDPOINTS ∪ SERVER_ONLY_CANONICAL_RPC_ENDPOINTS
+ *  === the 6-node canonical pool (`DEFAULT_BLURT_RPC_ENDPOINTS` in
+ *  `@morphit/operator-config`), with the two sets disjoint. The
+ *  rpc-endpoint-canon smoke enforces this so the split can't drift. */
+export const SERVER_ONLY_CANONICAL_RPC_ENDPOINTS: readonly string[] = [
+	'https://rpc.beblurt.com',
+	'https://rpc.blurt.one',
+	'https://blurtrpc.dagobert.uk'
+] as const;
+
 /** localStorage key under which the user's (possibly-modified) endpoint
  *  list is persisted. If missing, DEFAULT_RPC_ENDPOINTS is used. */
 export const ENDPOINTS_STORAGE_KEY = 'morphit.rpcEndpoints';

@@ -312,6 +312,12 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
+	// Modern split i2p vars: b32 (always-resolvable <hash>.b32.i2p) and the
+	// human-readable vanity name (DOMAIN.i2p).  The indexer prefers these over
+	// the legacy single key; both are independent (an instance may set neither,
+	// one, or both).
+	'MORPHIT_INSTANCE_I2P_B32_ADDRESS',
+	'MORPHIT_INSTANCE_I2P_NAME_ADDRESS',
 	'MORPHIT_INSTANCE_NOSTR_PUBKEY',
 
 	// MORPHIT_INSTANCE_OPERATOR_TAG: the operator's registered

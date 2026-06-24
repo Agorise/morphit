@@ -82,7 +82,12 @@
 						{/if}
 					</p>
 					{#if safeContact}
-						<a class="btn-secondary mt-3 inline-flex" href={safeContact} rel="noopener">
+						<a
+							class="btn-secondary mt-3 inline-flex"
+							href={safeContact}
+							rel="noopener noreferrer nofollow"
+							target="_blank"
+						>
 							{$_('support.operator.cta')}
 						</a>
 					{:else}
@@ -116,7 +121,7 @@
 					<a
 						class="btn-secondary mt-3 inline-flex"
 						href="https://matrix.to/#/{$instance.operator_matrix_room}"
-						rel="noopener noreferrer"
+						rel="noopener noreferrer nofollow"
 						target="_blank"
 					>
 						{$_('support.operator_matrix.cta')}

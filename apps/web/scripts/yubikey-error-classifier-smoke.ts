@@ -133,6 +133,24 @@ scenario('"YubiKey wrap challenge has wrong length: 8 vs 16" → wrap_schema_uns
 	);
 });
 
+scenario('"YubiKey verification failed: challenge-independent response" → enroll_verify_failed', () => {
+	assertEqual(
+		classifyYubikeyError(new Error('YubiKey verification failed: challenge-independent response')),
+		'enroll_verify_failed',
+		'kind'
+	);
+});
+
+scenario('"YubiKey returned 16-byte HMAC, expected 20" (verify length check) → protocol_violation', () => {
+	// The verify gate reuses the canonical length-mismatch message, which
+	// must keep classifying as a protocol violation, not a verify failure.
+	assertEqual(
+		classifyYubikeyError(new Error('YubiKey returned 16-byte HMAC, expected 20')),
+		'protocol_violation',
+		'kind'
+	);
+});
+
 scenario('"YubiKey-unwrapped CEK has wrong length" → unwrap_failed', () => {
 	assertEqual(
 		classifyYubikeyError(new Error('YubiKey-unwrapped CEK has wrong length')),

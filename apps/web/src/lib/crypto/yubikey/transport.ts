@@ -24,29 +24,73 @@
  * users can't use this feature; we surface a clear "not supported"
  * UI and let them keep using the passphrase wrap.
  *
- * --- Limitations of this implementation ---
+ * --- STATUS: this transport is NOT correct yet (do not trust it) ---
  *
  * The HID frame protocol for HMAC-SHA1 is documented in Yubico's
- * yubikey-personalization library (in C).  This TypeScript
- * implementation translates the parts we need:
+ * yubikey-personalization library (C): ykcore/ykcore.c
+ * (`yk_write_to_key`, `yk_read_response_from_key`,
+ * `yk_wait_for_key_status`) and ykcore/ykdef.h (flag bytes).  A
+ * close read against that source shows this TypeScript port has
+ * SEVERAL defects, not the single "frame layout" nit an earlier
+ * comment here claimed.  None can be fixed blind — they need a
+ * physical YubiKey on the bench — so they are documented here in
+ * full to set up that session, and a fail-closed enrollment gate
+ * (below) prevents the dangerous outcomes in the meantime.
  *
- *   - Vendor ID 0x1050 (Yubico) plus a known-good usagePage.
- *   - Feature reports of size 7 bytes each (REPORT_TYPE_FEATURE
- *     with id 0); the slot-2 challenge command is 0x38, slot-1 is
- *     0x30.
- *   - The challenge is sent as 8 frames of 7 bytes each (with the
- *     last frame's high bit signalling end-of-data per Yubico's
- *     framing).
- *   - Response is read back as feature reports until the WAIT or
- *     RESPONSE_PENDING flag clears, indicating the 20-byte HMAC
- *     output is ready.
+ * SEND-path defects:
+ *   1. No 70-byte YK_FRAME.  Yubico wraps the (≤64-byte) challenge
+ *      in a 70-byte frame: payload[0..63] zero-padded challenge,
+ *      payload[64] = slot command (0x30/0x38), payload[65..66] =
+ *      CRC16 of payload[0..63] (little-endian), payload[67..69] =
+ *      filler.  This code sends raw challenge chunks with the
+ *      command byte misplaced and NO CRC16, so the key's frame-CRC
+ *      check rejects the write.
+ *   2. Wrong per-report sequence/flag byte.  Every 8-byte report is
+ *      [7 frame bytes][SLOT_WRITE_FLAG(0x80) | seq(0..9)].  This
+ *      code writes the frame index on non-final reports and
+ *      (command | 0x80) on the last — neither matches Yubico's
+ *      framing.
  *
- * I have NOT been able to live-fire this against a physical
- * YubiKey from this sandbox; the protocol fidelity is best-effort
- * and the integration test must happen in the browser at unlock
- * time.  The wrap/unwrap math (in wrap.ts) is independently smoke-
- * tested with a deterministic stub HMAC, so the surface that can
- * fail at integration time is narrow: the WebHID frame layout.
+ * READ-path defects:
+ *   3. RESP_PENDING_FLAG (0x40) polarity is INVERTED.  Per
+ *      `yk_read_response_from_key` → `yk_wait_for_key_status(...,
+ *      mask=RESP_PENDING_FLAG, logic=0/AND-zero)`, the key SETS 0x40
+ *      when response bytes are ready to read and the host CLEARS it
+ *      as it drains them.  This code waits WHILE 0x40 is set and
+ *      reads once it CLEARS — exactly backwards — so it reads device
+ *      status instead of the HMAC.  (This is the defect most likely
+ *      to yield challenge-INDEPENDENT output, which is precisely what
+ *      the enrollment gate below is designed to catch.)
+ *   4. No sequence de-duplication.  Response reports carry a seq in
+ *      the low bits; a repeated/duplicate report must be skipped or
+ *      the assembled 20-byte HMAC is corrupted.
+ *   5. No device reset after read.  Yubico writes a dummy report
+ *      (flag byte 0x8f) to return the key to a clean state; omitting
+ *      it can leave the applet mid-transaction for the next op.
+ *
+ * Wrap/unwrap math (wrap.ts) is independently smoke-tested with a
+ * deterministic stub HMAC and is sound; the failures above live
+ * ENTIRELY in this byte channel and only manifest against real
+ * hardware.
+ *
+ * --- Interim safety: fail-closed enrollment gate ---
+ *
+ * Because defect #3 most likely produces challenge-INDEPENDENT
+ * output, a naive single-tap enroll could silently commit a wrap
+ * around a CONSTANT (e.g. all-zero) response — a "2FA factor"
+ * unlockable by a known constant, i.e. security theatre.  To prevent
+ * that until this transport is fixed on hardware, enrollment goes
+ * through `buildVerifiedYubikeyWrap` (wrap.ts), which sends two
+ * DISTINCT challenges and refuses to enroll unless the responses
+ * DIFFER (`verifyYubikeyChallengeResponse`).  That rejects constant /
+ * zero-entropy / dead transports up front, fail-closed.  The
+ * passphrase wrap remains as an escape hatch, so a user can never be
+ * locked out by a bad YubiKey.
+ *
+ * Remaining human-gated work (cannot be done in-sandbox): fix the
+ * five defects above with a physical key, then prove a full
+ * enroll → reload → unlock round-trip in a real Chromium browser.
+ * Until then, treat HardwareKeyCard enrollment as unverified.
  *
  * --- Touch UX ---
  *

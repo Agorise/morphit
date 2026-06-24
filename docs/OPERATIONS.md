@@ -4749,7 +4749,7 @@ cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 
 ### Alt-network addresses (Tor / Lokinet / I2P / Nostr) — the `alt-address` wizard
 
-`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). For Tor / Lokinet / I2P, "Replace" walks you through *generating* the address; **Nostr** (cp311) is a public key you already own, so it just prompts for the value. The relevant knobs:
+`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). I2P now appears as **two separate menu choices** — the always-resolvable **b32** (`DOMAIN.b32.i2p`, generated) and an optional **vanity name** (`DOMAIN.i2p`, which you *register* with an i2p naming service and paste — not generated). For Tor / Lokinet / I2P-b32, "Replace" walks you through *generating* the address; the **I2P vanity name** and **Nostr** (cp311) are values you already own, so they just prompt for the value. An instance may set neither, one, or both i2p addresses. The relevant knobs:
 
 | Variable | Footer field | Notes |
 | --- | --- | --- |

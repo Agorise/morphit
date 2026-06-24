@@ -118,6 +118,11 @@ export interface ChainAccount {
 		readonly current_mana: string;
 		readonly last_update_time: number;
 	};
+	/** Legacy voting-power counter (0–10000) + last-vote timestamp.
+	 *  The balance proxy passes them through so the frontend can show the
+	 *  same "Voting" % as classic Blurt explorers (blocks.blurtwallet.com). */
+	readonly voting_power?: number;
+	readonly last_vote_time?: string;
 }
 
 /** Bridge a dblurt call (no native cancellation) to an AbortSignal.

@@ -229,7 +229,10 @@
 	): string | null {
 		if (method === 'btc') return externalExplorerUrl('BTC', txid);
 		if (method === 'xmr') return externalExplorerUrl('XMR', txid);
-		if (method === 'blurt') return morphitExplorerTxUrl(txid);
+		if (method === 'blurt') {
+			const u = morphitExplorerTxUrl(txid);
+			return u ? lp(u) : null;
+		}
 		if (method === 'bch') return externalExplorerUrl('BCH', txid);
 		if (method === 'ltc') return externalExplorerUrl('LTC', txid);
 		if (method === 'dash') return externalExplorerUrl('DASH', txid);

@@ -7,6 +7,24 @@
 
 ---
 
+## Why does Morphit use the AGPL-3.0 license?
+
+**FAQ key:** `why_agpl`
+
+So that no one — not a corporation, not a government, not even us — can take Morphit, lock it up, and quietly turn it against the people using it. The license guarantees that every running copy of Morphit stays open and inspectable. Everything else here is built on that.
+
+**The one rule it adds.** If you run Morphit as a public service and you change the code, you have to share your changes with the people using it. That's the whole deal. Run an instance, rebrand it, rewrite every word on the screen, add features, charge for it — all fine, and encouraged. The only thing you can't do is run a *secret, modified* version. If your instance can reach users, your users can read its source. For a privacy tool that's the whole game: it's how anyone can confirm the instance they're on is the real Morphit and not a backdoored look-alike. Freedom you can't verify is just a promise — this turns it into something you can check.
+
+**Why not a "freer" license?** Permissive licenses (MIT, BSD, Apache) ask for nothing in return, which sounds freer — until you notice it also lets anyone take Morphit, bolt on hidden tracking, close the source, and sell it back to your neighbors as a polished surveillance app, with no one the wiser. A license that permits your own capture isn't protecting your freedom; it's protecting whoever wants to cage you. The plain GPL has the same hole for network software: it only triggers when you hand someone a program to download, not when you run a modified copy on your own server — which is exactly how people use Morphit. The AGPL closes that hole. And no license at all is the worst of the lot: say nothing, and copyright law defaults to *all rights reserved* — no one may legally fork it or run their own instance. Silence isn't freedom; it's a locked door.
+
+**For agorists especially.** Here's the honest tension: the AGPL leans on copyright, and copyright is a creature of the State. The purist position is to claim nothing — drop it into the public domain and walk away. We think that hands a gift to the exact people you're trying to escape: the well-funded actors who'll take it, close it, wire it into the surveillance machine, and call it convenient. Pure intentions, captured tool. Copyleft is the judo move — it takes the State's own instrument and turns it against enclosure. We're not begging the State for protection; we're using its own rules to make this commons permanently un-takeable. Every fork stays open. Every instance stays inspectable. Nobody gets to build a cage out of our code. That's not making peace with the system — it's the system finally working for the counter-economy instead of against it.
+
+**The bigger picture.** The point was never to win an argument with the beast — it's to make it obsolete. The more people who run their own instances, and talk others into running even more, the less there is for any central power to control: tools it can't surveil, markets it can't see, exchange it can't tax or stop. That's what renders the apparatus pointless. It won't be graceful — when control slips, the first reflex is always to grab harder, with more rules and more force. But coercion is expensive and futility is exhausting, and sooner or later the beast does what bullies do once no one's afraid: it loses interest and goes off to find something more productive to do. So fork Morphit. Make it yours. Stand up an instance, and talk three friends into standing up three more. The license is here to guarantee one thing — that every one of those instances stays free, open, and impossible to quietly turn against the people who use it.
+
+*Morphit is released under the GNU Affero General Public License, version 3. This is our reasoning, not legal advice.*
+
+---
+
 ## What is Morphit?
 
 **FAQ key:** `what_is_morphit`
@@ -2324,7 +2342,7 @@ For the full per-coin guidance see /privacy/{asset} (e.g. /privacy/xmr, /privacy
 
 ## Metadata
 
-Total FAQ entries: 138
+Total FAQ entries: 139
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

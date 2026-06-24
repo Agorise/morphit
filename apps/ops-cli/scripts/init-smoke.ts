@@ -161,7 +161,7 @@ const sampleAnswers: WizardAnswers = {
 	dailyCeiling: 25,
 	contactUrl: 'https://example.com/contact',
 	origin: null,
-	altNetworks: { tor: null, lokinet: null, i2p: null, nostr: null },
+	altNetworks: { tor: null, lokinet: null, i2pB32: null, i2pName: null, nostr: null },
 	feeExplorers: {
 		btc: ['https://blockstream.info/api', 'https://mempool.space/api'],
 		xmr: [
@@ -181,6 +181,10 @@ const sampleAnswers: WizardAnswers = {
 		doge: 'https://blockchair.com/dogecoin/transaction/{txid}',
 		zec: 'https://mainnet.zcashexplorer.app/transactions/{txid}',
 		arrr: 'https://explorer.piratechain.com/tx/{txid}',
+		dcr: 'https://dcrdata.decred.org/tx/{txid}',
+		sol: 'https://explorer.solana.com/tx/{txid}',
+		eth: 'https://eth.blockscout.com/tx/{txid}',
+		xrp: 'https://livenet.xrpl.org/transactions/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',
@@ -205,6 +209,7 @@ const sampleAnswers: WizardAnswers = {
 		btcSatoshis: 416,
 		xmrPiconero: 781_250_000,
 		fallbackBlurtPriceUsd: 0.002,
+		denominationFiat: 'USD',
 		source: 'default'
 	},
 	seo: { title: null, description: null, keywords: null },
@@ -762,14 +767,17 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 			altNetworks: {
 				tor: 'abc.onion',
 				lokinet: null,
-				i2p: 'xyz.b32.i2p',
+				i2pB32: 'xyz.b32.i2p',
+				i2pName: 'morphit.i2p',
 				nostr: null
 			}
 		};
 		const result = writeWizardOutput(withAlt, tmp);
 		const content = readFileSync(result.configPath, 'utf8');
 		assertContains(content, 'MORPHIT_INSTANCE_TOR_ADDRESS=abc.onion', 'tor written');
-		assertContains(content, 'MORPHIT_INSTANCE_I2P_ADDRESS=xyz.b32.i2p', 'i2p written');
+		assertContains(content, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS=xyz.b32.i2p', 'i2p b32 written');
+		assertContains(content, 'MORPHIT_INSTANCE_I2P_NAME_ADDRESS=morphit.i2p', 'i2p name written');
+		assertTrue(!content.includes('MORPHIT_INSTANCE_I2P_ADDRESS='), 'no legacy single-i2p key');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_LOKINET_ADDRESS'), 'no lokinet');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_NOSTR_PUBKEY'), 'no nostr');
 	} finally {

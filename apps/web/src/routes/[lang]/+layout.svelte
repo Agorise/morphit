@@ -593,9 +593,6 @@
 			</div>
 
 			<nav aria-label="Footer" class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-				<a href={lp('/faq')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
-					>{$_('nav.faq')}</a
-				>
 				<a href={lp('/glossary')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>{$_('nav.glossary')}</a
 				>
@@ -607,6 +604,11 @@
 				>
 				<a href={lp('/download')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>{$_('footer.download')}</a
+				>
+				<a
+					href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}"
+					class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					title={$_('footer.api_title')}>{$_('footer.api')}</a
 				>
 				<a
 					href="https://git.agorise.net/agorise/morphit"
@@ -649,9 +651,18 @@
 				<a href={lp('/security#bounty')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
 					>{$_('footer.bounty')}</a
 				>
+				<a href={lp('/faq')} class="text-ink-600 hover:text-morphit-emerald dark:text-ink-300"
+					>{$_('nav.faq')}</a
+				>
 			</nav>
 
-			<p class="text-xs text-ink-500">AGPL-3.0 · No cookies · No analytics · No logs</p>
+			<p class="text-xs text-ink-500">
+				<a
+					href="{lp('/faq')}?q=why_agpl&lang={currentLang}"
+					class="underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald"
+					title={$_('footer.agpl_title')}>AGPL-3.0</a
+				> · No cookies · No analytics · No logs
+			</p>
 		</div>
 	</footer>
 

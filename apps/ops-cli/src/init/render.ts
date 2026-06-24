@@ -461,7 +461,8 @@ function renderConfig(answers: WizardAnswers): string {
 	const hasAlt =
 		altNetworks.tor !== null ||
 		altNetworks.lokinet !== null ||
-		altNetworks.i2p !== null ||
+		altNetworks.i2pB32 !== null ||
+		altNetworks.i2pName !== null ||
 		altNetworks.nostr !== null;
 	if (hasAlt) {
 		lines.push('# ──────────────────────────────────────────────────────');
@@ -473,8 +474,11 @@ function renderConfig(answers: WizardAnswers): string {
 		if (altNetworks.lokinet !== null) {
 			lines.push(`MORPHIT_INSTANCE_LOKINET_ADDRESS=${quote(altNetworks.lokinet, 'parseEnv')}`);
 		}
-		if (altNetworks.i2p !== null) {
-			lines.push(`MORPHIT_INSTANCE_I2P_ADDRESS=${quote(altNetworks.i2p, 'parseEnv')}`);
+		if (altNetworks.i2pB32 !== null) {
+			lines.push(`MORPHIT_INSTANCE_I2P_B32_ADDRESS=${quote(altNetworks.i2pB32, 'parseEnv')}`);
+		}
+		if (altNetworks.i2pName !== null) {
+			lines.push(`MORPHIT_INSTANCE_I2P_NAME_ADDRESS=${quote(altNetworks.i2pName, 'parseEnv')}`);
 		}
 		if (altNetworks.nostr !== null) {
 			lines.push(`MORPHIT_INSTANCE_NOSTR_PUBKEY=${quote(altNetworks.nostr, 'parseEnv')}`);

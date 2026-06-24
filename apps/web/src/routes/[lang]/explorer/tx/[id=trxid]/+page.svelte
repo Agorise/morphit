@@ -120,13 +120,14 @@
 
 		<dl class="card mb-6 grid gap-3 sm:grid-cols-2">
 			{#if tx.block_num}
+				{@const blockUrl = morphitExplorerBlockUrl(tx.block_num)}
 				<div>
 					<dt class="text-xs text-ink-500 dark:text-ink-400">
 						{$_('explorer.tx.block_label')}
 					</dt>
 					<dd class="font-mono text-sm">
 						<a
-							href={morphitExplorerBlockUrl(tx.block_num) ?? '#'}
+							href={blockUrl ? lp(blockUrl) : '#'}
 							class="text-morphit-emerald underline-offset-2 hover:underline"
 						>
 							{tx.block_num}

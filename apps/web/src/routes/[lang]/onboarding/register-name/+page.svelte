@@ -122,6 +122,11 @@
 		submit.kind === 'ready' && availability.kind === 'available' && normalizedName.length >= 3
 	);
 
+	/** Derived: the typed name is invalid — either already taken or
+	 *  rejected by the relay (bad format / reserved handle). Drives the
+	 *  red field border + the in-field "invalid" badge. */
+	const nameInvalid = $derived(availability.kind === 'taken' || availability.kind === 'rejected');
+
 	/** Derived: whether the claim button previews the typed name
 	 *  ("Claim my @{name} username now") vs the generic fallback
 	 *  ("Claim this name"). Real-time — true as soon as the name is long
@@ -551,25 +556,46 @@
 				</p>
 
 				<div class="mt-4">
-					<FocusedField
-						focused={submit.kind !== 'submitting' && availability.kind !== 'available'}
-						valid={availability.kind === 'available'}
-					>
-						<input
-							id="blurt-name"
-							type="text"
-							bind:value={name}
-							maxlength="16"
-							autocomplete="off"
-							autocorrect="off"
-							autocapitalize="none"
-							spellcheck="false"
-							class="w-full rounded-2xl bg-transparent px-4 py-3 font-mono text-base text-ink-900 outline-none placeholder:text-ink-400 disabled:opacity-60 dark:text-ink-50"
-							placeholder={$_('onboarding.register_name.field_placeholder')}
-							aria-describedby="availability-msg"
-							disabled={submit.kind === 'submitting'}
-						/>
-					</FocusedField>
+					<div class="relative">
+						<FocusedField
+							focused={submit.kind !== 'submitting' && availability.kind !== 'available'}
+							valid={availability.kind === 'available'}
+							invalid={nameInvalid}
+						>
+							<input
+								id="blurt-name"
+								type="text"
+								bind:value={name}
+								maxlength="16"
+								autocomplete="off"
+								autocorrect="off"
+								autocapitalize="none"
+								spellcheck="false"
+								class="w-full rounded-2xl bg-transparent px-4 py-3 font-mono text-base text-ink-900 outline-none placeholder:text-ink-400 disabled:opacity-60 dark:text-ink-50 {nameInvalid
+									? 'pe-24'
+									: ''}"
+								placeholder={$_('onboarding.register_name.field_placeholder')}
+								aria-describedby="availability-msg"
+								aria-invalid={nameInvalid}
+								disabled={submit.kind === 'submitting'}
+							/>
+						</FocusedField>
+						{#if nameInvalid}
+							<!-- In-field invalid badge, right-aligned (RTL-safe via
+							     logical end-*/pe-*). Decorative: the StatusLine below
+							     carries the screen-reader message, and aria-invalid on
+							     the input conveys the state to assistive tech. -->
+							<div
+								class="pointer-events-none absolute inset-y-0 end-4 flex items-center gap-1.5 text-red-600 dark:text-red-400"
+								aria-hidden="true"
+							>
+								<span>⚠</span>
+								<span class="text-xs font-semibold uppercase tracking-wide"
+									>{$_('onboarding.import.posting_only.account_bad')}</span
+								>
+							</div>
+						{/if}
+					</div>
 
 					{#if availability.kind === 'idle'}
 						<StatusLine kind="idle" id="availability-msg" />

@@ -152,7 +152,7 @@
 					>
 				</div>
 				{@render keyLine(`${k.role}:pub`, $_('backup_keys_panel.public_label'), k.pub, false)}
-				{@render keyLine(`${k.role}:wif`, $_('backup_keys_panel.private_label'), k.wif, true)}
+				{@render keyLine(`${k.role}:wif`, `🔒 ${$_('backup_keys_panel.private_label')}`, k.wif, true)}
 			</div>
 		{/each}
 	</div>

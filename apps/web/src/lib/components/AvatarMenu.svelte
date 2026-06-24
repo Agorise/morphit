@@ -50,7 +50,7 @@
 	// blurtVerify), and importing it statically dragged a chat-verify chunk
 	// (condenser_api.get_transaction) onto every page's baseline. It only runs
 	// on an explicit lock action, never at first paint.
-	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { getUserBlurtAccount, blurtAccountName } from '$blurt/ops/profile';
 	import ConfirmModal from './ConfirmModal.svelte';
 
 	let open = $state(false);
@@ -77,23 +77,16 @@
 	/** Whether to show the View profile menu item.  Sally finding
 	 *  H8 (Part 68).  Hidden when the user hasn't completed
 	 *  account-name registration yet, since /@<null> would 404.
-	 *  Reads $liveIdentity AND $pairedReadOnly so it re-evaluates
-	 *  on any session change without needing a page reload. */
-	const canViewProfile = $derived.by((): boolean => {
-		void $liveIdentity;
-		void $pairedReadOnly;
-		return getUserBlurtAccount() !== null;
-	});
+	 *  Reads the reactive `blurtAccountName` store so it re-evaluates
+	 *  the instant registration writes the name (and on sign-out),
+	 *  without needing a page reload. */
+	const canViewProfile = $derived($blurtAccountName !== null);
 
 	/** The logged-in account name, for the "@<name> profile" menu label.
-	 *  Same reactive deps as canViewProfile so it tracks session changes.
+	 *  Same reactive store as canViewProfile so it tracks session changes.
 	 *  Empty string when no name (the item is hidden via canViewProfile
 	 *  then, so the value is never actually shown). */
-	const myAccount = $derived.by((): string => {
-		void $liveIdentity;
-		void $pairedReadOnly;
-		return getUserBlurtAccount() ?? '';
-	});
+	const myAccount = $derived($blurtAccountName ?? '');
 
 	// Avatar src — identicon seeded from the account NAME so it matches
 	// the avatar shown on the profile page, the explorer, the account-name
@@ -104,9 +97,13 @@
 	// (mid-onboarding). Empty string when no session — the surrounding
 	// {#if $hasAnySession} gate hides the avatar then.
 	const avatarSrc = $derived.by(() => {
-		void $liveIdentity; // re-evaluate on any session change
-		void $pairedReadOnly;
-		const name = getUserBlurtAccount();
+		// Primary seed: the registered account name, read from the
+		// reactive store so this recomputes the instant registration
+		// writes the name (no reload). Falls back to a paired-session
+		// account name, then the posting pubkey before any name exists
+		// (mid-onboarding). Empty string when no session — the
+		// surrounding {#if $hasAnySession} gate hides the avatar then.
+		const name = $blurtAccountName;
 		if (name) return identiconDataUriFromString(name, 40);
 		const paired = $pairedReadOnly;
 		if (paired) return identiconDataUriFromString(paired.account, 40);

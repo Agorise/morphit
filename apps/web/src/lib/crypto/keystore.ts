@@ -625,6 +625,58 @@ export async function generateCek(): Promise<Uint8Array> {
 	return sodium.randombytes_buf(CEK_BYTES);
 }
 
+/**
+ * Rotate the passphrase on a `layered-cek` envelope WITHOUT disturbing
+ * the CEK, the identity ciphertext, or any non-passphrase wrap.
+ *
+ * Why this exists: a layered envelope's identity blob is encrypted to a
+ * random CEK, and that CEK is independently recoverable through each
+ * `wraps[]` entry (a passphrase wrap, and — for YubiKey-protected
+ * keystores — one or more yubikey wraps).  Changing the password must
+ * therefore re-wrap *only* the passphrase path.  Re-encrypting the whole
+ * identity with `encryptIdentity()` instead would emit a
+ * `simple-passphrase` envelope, which has no `wraps[]` array at all — so
+ * the user's YubiKey unlock path would be silently dropped (they'd change
+ * their password and find their key no longer unlocks).  See
+ * `changePassword()`.
+ *
+ * What's preserved, byte-for-byte: `cekNonce`, `ciphertext` (hence the
+ * full identity, including any enrolled `totpSecret`/backup codes), and
+ * every non-passphrase wrap (the yubikey wrap(s)).  Only the single
+ * passphrase wrap is replaced — recovered via the old password, rebuilt
+ * via the new one.  Because the CEK and the yubikey wraps are untouched,
+ * the YubiKey unlock path is provably unaffected.
+ *
+ * `validateLayeredEnvelope` permits at most one passphrase wrap, so the
+ * `[newPp, ...nonPassphrase]` result keeps that invariant.
+ */
+export async function rewrapLayeredPassphrase(
+	env: LayeredCekEnvelope,
+	oldPassword: string,
+	newPassword: string
+): Promise<LayeredCekEnvelope> {
+	await ensureSodium();
+	validateLayeredEnvelope(env);
+	// Recover the CEK through the existing passphrase wrap.  Throws
+	// KeystoreError 'bad_password' (wrong old password),
+	// 'no_passphrase_wrap' (yubikey-only keystore — no password to
+	// change), or 'envelope_corrupt' (structural) — all of which the
+	// caller maps to a typed result.
+	const cek = await recoverCekViaPassphrase(env, oldPassword);
+	try {
+		const newPassphraseWrap = await buildPassphraseWrap(cek, newPassword);
+		// Carry every non-passphrase wrap (yubikey) over verbatim; swap
+		// the passphrase wrap for the freshly-derived one.
+		const nonPassphrase = env.wraps.filter((w) => !isPassphraseWrap(w));
+		return {
+			...env,
+			wraps: [newPassphraseWrap, ...nonPassphrase]
+		};
+	} finally {
+		sodium.memzero(cek);
+	}
+}
+
 /** Defensive minimums for KDF parameters in a stored envelope.
  *
  *  cp138 C-1 — raised to libsodium's `crypto_pwhash_OPSLIMIT_

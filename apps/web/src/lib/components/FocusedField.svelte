@@ -3,15 +3,24 @@
 	 * FocusedField — visually leads grandma's eye to the field she's
 	 * supposed to fill in next.
 	 *
-	 * Three visual states:
+	 * Visual states:
 	 *
 	 *   focused + not-yet-valid  → thick emerald border + gentle
 	 *                              pulse (draws the eye)
 	 *   focused + valid          → thick emerald border, solid
 	 *                              (shows the field accepted input)
+	 *   invalid                  → thick red border (persists even
+	 *                              while focused; the global focus
+	 *                              ring still indicates focus on top)
 	 *   not-focused              → normal 1px neutral border
-	 *                              (recedes once another field is
-	 *                              the current one)
+	 *
+	 * The emerald "attention" border RECEDES once the field is actually
+	 * focused (`:focus-within`): app.css already draws a brand-green
+	 * `:focus-visible` ring on the inner control, so keeping the emerald
+	 * border too produced a redundant SECOND green outline on click. On
+	 * focus we drop back to a neutral 1px border + no pulse and let that
+	 * single focus ring do the work. (The red `invalid` border is exempt
+	 * — it must stay visible while the user fixes the value.)
 	 *
 	 * This is a wrapper, not a full input component — the caller
 	 * owns the actual <input>/<select>/<textarea> for full control
@@ -28,19 +37,32 @@
 		/** True when this field's current value is valid. When
 		 *  focused+valid we show solid (no pulse). */
 		valid?: boolean;
+		/** True when this field's current value is invalid (e.g. a taken
+		 *  or rejected account name). Shows a red border that persists
+		 *  even while focused. Takes priority over focused/valid. */
+		invalid?: boolean;
 		children: Snippet;
 	}
 
-	let { focused, valid = false, children }: Props = $props();
+	let { focused, valid = false, invalid = false, children }: Props = $props();
 
 	const classes = $derived.by(() => {
+		if (invalid) {
+			// Red border stays put even on focus (no focus-within recede) —
+			// the global :focus-visible ring still indicates focus on top.
+			return 'border-2 border-red-500 dark:border-red-500';
+		}
+		// Non-invalid: the emerald attention border recedes on focus so it
+		// doesn't double up with the global green focus ring.
+		const recede =
+			'focus-within:border focus-within:border-ink-200 focus-within:animate-none dark:focus-within:border-ink-700';
 		if (!focused) {
-			return 'border border-ink-200 dark:border-ink-700';
+			return `border border-ink-200 dark:border-ink-700 ${recede}`;
 		}
 		if (valid) {
-			return 'border-2 border-morphit-emerald';
+			return `border-2 border-morphit-emerald ${recede}`;
 		}
-		return 'border-2 border-morphit-emerald animate-pulse-soft-border';
+		return `border-2 border-morphit-emerald animate-pulse-soft-border ${recede}`;
 	});
 </script>
 

@@ -121,9 +121,65 @@ async function deriveWrapKey(
 	);
 }
 
+/** Build a YubiKey wrap from a PRECOMPUTED HMAC response.
+ *
+ *  Internal core shared by the single-tap `buildYubikeyWrap` (which
+ *  taps the device itself) and the enroll-time `buildVerifiedYubikeyWrap`
+ *  (which has already tapped the device twice for the verification gate
+ *  and reuses the first verified response, so the user isn't asked for
+ *  a third tap).  Given the challenge that was sent and the 20-byte
+ *  response that came back, derive the wrap key and encrypt the CEK.
+ *
+ *  Ownership: `cek` and `hmacResponse` are owned by the caller; we read
+ *  them but do NOT zero them — the caller's own `finally` must wipe
+ *  both.  (This mirrors `buildYubikeyWrap`'s historical contract for
+ *  `cek`.)  We do wipe the derived `wrapKey`, which is ours. */
+async function wrapCekWithResponse(
+	cek: Uint8Array,
+	challenge: Uint8Array,
+	hmacResponse: Uint8Array,
+	slot: YubikeySlot,
+	label: string
+): Promise<WrappedCekYubikey> {
+	if (hmacResponse.length !== YUBIKEY_HMAC_OUTPUT_BYTES) {
+		throw new Error(
+			`YubiKey returned ${hmacResponse.length}-byte HMAC, expected ${YUBIKEY_HMAC_OUTPUT_BYTES}`
+		);
+	}
+	let wrapKey: Uint8Array | null = null;
+	try {
+		const salt = sodium.randombytes_buf(ARGON_SALT_BYTES);
+		const params = argonParams();
+		wrapKey = await deriveWrapKey(hmacResponse, salt, params);
+		const wrapNonce = sodium.randombytes_buf(CEK_NONCE_BYTES);
+		const wrapCt = sodium.crypto_secretbox_easy(cek, wrapNonce, wrapKey);
+		sodium.memzero(wrapKey);
+		wrapKey = null;
+		return {
+			kind: 'yubikey',
+			schemaVersion: YUBIKEY_WRAP_SCHEMA_VERSION,
+			slot,
+			challenge: toB64(challenge),
+			kdf: 'argon2id',
+			kdfParams: params,
+			salt: toB64(salt),
+			nonce: toB64(wrapNonce),
+			ciphertext: toB64(wrapCt),
+			label,
+			enrolledAt: Date.now()
+		};
+	} finally {
+		if (wrapKey) sodium.memzero(wrapKey);
+	}
+}
+
 /** Build a YubiKey wrap for a layered envelope.  Generates a fresh
  *  64-byte challenge, sends it to the YubiKey via the supplied
- *  HMAC callback, derives a wrap key, encrypts the CEK to it.
+ *  HMAC callback (one tap), derives a wrap key, encrypts the CEK to it.
+ *
+ *  This is the low-level single-tap primitive.  Enrollment callers
+ *  should prefer `buildVerifiedYubikeyWrap`, which first proves the
+ *  device is doing real challenge-response before committing a wrap.
  *
  *  Caller responsibilities:
  *   - cek: the CEK to wrap.  Caller owns the buffer; we read it,
@@ -144,40 +200,125 @@ export async function buildYubikeyWrap(
 	}
 	const challenge = sodium.randombytes_buf(YUBIKEY_CHALLENGE_BYTES);
 	let hmac: Uint8Array | null = null;
-	let wrapKey: Uint8Array | null = null;
 	try {
 		hmac = await hmacFn(challenge);
-		if (hmac.length !== YUBIKEY_HMAC_OUTPUT_BYTES) {
+		return await wrapCekWithResponse(cek, challenge, hmac, slot, label);
+	} finally {
+		// Zero the HMAC output once it's been consumed by the KDF (or on error).
+		if (hmac) sodium.memzero(hmac);
+	}
+}
+
+/** Prove, before committing a wrap, that the supplied HMAC callback is
+ *  actually performing YubiKey HMAC-SHA1 challenge-response — and not a
+ *  broken transport, a constant/zero-entropy stub, the wrong slot
+ *  (OTP/empty), or a non-Yubico HID that returns challenge-INDEPENDENT
+ *  bytes.
+ *
+ *  Why this gate exists (Batch I hardening, 2026-06): the WebHID
+ *  transport (`transport.ts`) has known framing defects (see the
+ *  diagnosis comment there) and is pending a real-hardware fix.  Its
+ *  most likely failure mode is challenge-INDEPENDENT output (a malformed
+ *  frame is rejected by the key, and the read path returns device status
+ *  that does not depend on the challenge).  Pre-gate, `enrollYubikey`
+ *  tapped the device exactly once and committed the wrap with NO check
+ *  that the key works.  Worst case that silently enrolls a CONSTANT
+ *  (e.g. all-zero) "factor" — a 2FA path unlockable by a known constant,
+ *  i.e. security theatre.  This gate makes enrollment FAIL CLOSED in
+ *  that case rather than commit a hollow factor.
+ *
+ *  How: send two DISTINCT random challenges and require DISTINCT
+ *  responses.  A correctly-configured HMAC-SHA1 slot is a deterministic,
+ *  collision-resistant function of (secret, challenge), so different
+ *  challenges yield different outputs; equal outputs prove the response
+ *  does not depend on the challenge.  Costs the user two taps instead of
+ *  one (a one-time enrollment cost).
+ *
+ *  Residual (deferred to the mandatory real-hardware verification pass,
+ *  and bounded by the passphrase escape hatch so it can never lock a
+ *  user out): a transport that returns INCONSISTENT, challenge-varying
+ *  garbage could pass this independence check yet still fail to
+ *  reproduce the response at unlock time, leaving a dead (but
+ *  non-dangerous) YubiKey factor.  The security-critical case —
+ *  constant / zero-entropy output — IS caught here.
+ *
+ *  Returns the verified `(challenge, response)` pair (the FIRST
+ *  challenge/response) so the caller can build the wrap from it without
+ *  asking for a third tap.  The returned `response` is owned by the
+ *  caller and MUST be wiped.  Throws a plain Error with a stable message
+ *  (classified by `classifyYubikeyError`) on any failure. */
+export async function verifyYubikeyChallengeResponse(
+	hmacFn: YubikeyHmacFn
+): Promise<{ challenge: Uint8Array; response: Uint8Array }> {
+	await ensureSodium();
+	// Two DISTINCT challenges.  Equal challenges would (for a correct
+	// device) yield equal responses and falsely trip the independence
+	// check below, so guarantee they differ.  Collision probability for
+	// two random 64-byte values is ~2^-512; the loop is a formality.
+	const challengeA = sodium.randombytes_buf(YUBIKEY_CHALLENGE_BYTES);
+	let challengeB = sodium.randombytes_buf(YUBIKEY_CHALLENGE_BYTES);
+	while (sodium.memcmp(challengeA, challengeB)) {
+		challengeB = sodium.randombytes_buf(YUBIKEY_CHALLENGE_BYTES);
+	}
+	let respA: Uint8Array | null = null;
+	let respB: Uint8Array | null = null;
+	try {
+		respA = await hmacFn(challengeA);
+		if (respA.length !== YUBIKEY_HMAC_OUTPUT_BYTES) {
 			throw new Error(
-				`YubiKey returned ${hmac.length}-byte HMAC, expected ${YUBIKEY_HMAC_OUTPUT_BYTES}`
+				`YubiKey returned ${respA.length}-byte HMAC, expected ${YUBIKEY_HMAC_OUTPUT_BYTES}`
 			);
 		}
-		const salt = sodium.randombytes_buf(ARGON_SALT_BYTES);
-		const params = argonParams();
-		wrapKey = await deriveWrapKey(hmac, salt, params);
-		// Zero the HMAC output as soon as it's been consumed by the KDF.
-		sodium.memzero(hmac);
-		hmac = null;
-		const wrapNonce = sodium.randombytes_buf(CEK_NONCE_BYTES);
-		const wrapCt = sodium.crypto_secretbox_easy(cek, wrapNonce, wrapKey);
-		sodium.memzero(wrapKey);
-		wrapKey = null;
-		return {
-			kind: 'yubikey',
-			schemaVersion: YUBIKEY_WRAP_SCHEMA_VERSION,
-			slot,
-			challenge: toB64(challenge),
-			kdf: 'argon2id',
-			kdfParams: params,
-			salt: toB64(salt),
-			nonce: toB64(wrapNonce),
-			ciphertext: toB64(wrapCt),
-			label,
-			enrolledAt: Date.now()
-		};
+		respB = await hmacFn(challengeB);
+		if (respB.length !== YUBIKEY_HMAC_OUTPUT_BYTES) {
+			throw new Error(
+				`YubiKey returned ${respB.length}-byte HMAC, expected ${YUBIKEY_HMAC_OUTPUT_BYTES}`
+			);
+		}
+		// Challenge-independence check.  Both lengths are now known equal
+		// (20), so memcmp is safe and constant-time.  Equal responses for
+		// two distinct challenges ⇒ the device is not performing real
+		// challenge-response ⇒ reject, fail-closed.
+		if (sodium.memcmp(respA, respB)) {
+			throw new Error('YubiKey verification failed: challenge-independent response');
+		}
+		// respB has served its purpose; wipe it now.  Hand back the
+		// verified (challengeA, respA) for the caller to build from.
+		sodium.memzero(respB);
+		respB = null;
+		const verified = { challenge: challengeA, response: respA };
+		respA = null; // ownership transferred to caller (must wipe)
+		return verified;
 	} finally {
-		if (hmac) sodium.memzero(hmac);
-		if (wrapKey) sodium.memzero(wrapKey);
+		if (respA) sodium.memzero(respA);
+		if (respB) sodium.memzero(respB);
+	}
+}
+
+/** Enroll-safe wrap builder: verify the device is doing real
+ *  challenge-response (two taps, fail-closed — see
+ *  `verifyYubikeyChallengeResponse`), then build the wrap from the
+ *  verified response without a third tap.  Enrollment paths in
+ *  `keystoreYubikey.ts` use this instead of the bare single-tap
+ *  `buildYubikeyWrap`.
+ *
+ *  Caller owns `cek` (we read, don't wipe — caller's finally wipes). */
+export async function buildVerifiedYubikeyWrap(
+	cek: Uint8Array,
+	hmacFn: YubikeyHmacFn,
+	slot: YubikeySlot,
+	label: string
+): Promise<WrappedCekYubikey> {
+	await ensureSodium();
+	if (cek.length !== CEK_BYTES) {
+		throw new Error('buildVerifiedYubikeyWrap: CEK has wrong length');
+	}
+	const { challenge, response } = await verifyYubikeyChallengeResponse(hmacFn);
+	try {
+		return await wrapCekWithResponse(cek, challenge, response, slot, label);
+	} finally {
+		// The verified response is ours to wipe now that the wrap is built.
+		sodium.memzero(response);
 	}
 }
 

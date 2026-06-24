@@ -51,7 +51,14 @@ export type YubikeyKeystoreErrorKind =
 	/** KDF parameters below the minimum-safety floor (tampering). */
 	| 'unsafe_kdf_params'
 	/** Wrap schema version unknown to this client. */
-	| 'wrap_schema_unsupported';
+	| 'wrap_schema_unsupported'
+	/** Enrollment verification failed: the device returned
+	 *  challenge-INDEPENDENT responses to two distinct challenges, so
+	 *  it is not performing real HMAC-SHA1 challenge-response (broken
+	 *  transport, constant/zero-entropy stub, wrong slot, or non-Yubico
+	 *  HID).  Raised by the fail-closed verify gate in
+	 *  $crypto/yubikey/wrap before any wrap is committed. */
+	| 'enroll_verify_failed';
 
 /** Stable error class for keystore-shape errors.  Throw sites
  *  in $crypto/keystoreYubikey use this.  Transport + wrap
@@ -109,6 +116,8 @@ export function classifyYubikeyError(err: unknown): YubikeyKeystoreErrorKind | n
 	}
 	// ── Wrap-layer ──────────────────────────────────────────────
 	if (msg.includes('invalid or unsafe KDF parameters')) return 'unsafe_kdf_params';
+	// Enroll-time fail-closed verify gate: challenge-independent response.
+	if (msg.startsWith('YubiKey verification failed')) return 'enroll_verify_failed';
 	if (msg.startsWith('Unsupported YubiKey wrap schema')) return 'wrap_schema_unsupported';
 	if (msg.startsWith('YubiKey wrap challenge has wrong length')) {
 		return 'wrap_schema_unsupported';

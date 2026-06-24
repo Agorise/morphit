@@ -85,6 +85,45 @@ else bad('rpc.blurt.world is back in the canonical set — confirm it is a real,
 		else bad('frontend browser pool has fewer than 2 endpoints — too little browser failover', show(urls));
 		if ([...urls].every((u) => u.startsWith('https://'))) ok('frontend endpoints are all https://');
 		else bad('a frontend endpoint is not https://', show(urls));
+
+		// cp(post-beta28): SERVER_ONLY_CANONICAL_RPC_ENDPOINTS — the
+		// CORS-omitted canonical nodes the settings panel shows READ-ONLY
+		// so the operator sees the complete 6-node pool. Must be a subset
+		// of canon, DISJOINT from the browser list, and together with it
+		// cover the WHOLE canonical pool (the "show all 6" guarantee).
+		const soM = /SERVER_ONLY_CANONICAL_RPC_ENDPOINTS[^=]*=\s*\[([\s\S]*?)\]/.exec(src);
+		if (!soM) {
+			bad('could not find SERVER_ONLY_CANONICAL_RPC_ENDPOINTS in apps/web/src/lib/net/config.ts');
+		} else {
+			const serverOnly = new Set(
+				Array.from(soM[1]!.matchAll(/'(https:\/\/[^']+)'/g)).map((x) => x[1]!)
+			);
+			const soStray = [...serverOnly].filter((u) => !canon.has(u));
+			if (soStray.length === 0)
+				ok('SERVER_ONLY_CANONICAL_RPC_ENDPOINTS is a subset of the canonical pool (no stray node)');
+			else
+				bad(
+					'SERVER_ONLY_CANONICAL_RPC_ENDPOINTS contains node(s) not in the canonical pool',
+					`stray=[${show(soStray)}]`
+				);
+
+			const overlap = [...serverOnly].filter((u) => urls.has(u));
+			if (overlap.length === 0) ok('browser DEFAULT and SERVER_ONLY endpoint lists are disjoint');
+			else
+				bad(
+					'an endpoint is in BOTH the browser DEFAULT and SERVER_ONLY lists',
+					`overlap=[${show(overlap)}]`
+				);
+
+			const union = new Set([...urls, ...serverOnly]);
+			if (setEq(union, canon))
+				ok('browser DEFAULT ∪ SERVER_ONLY === the full canonical pool (settings panel shows every canonical node)');
+			else
+				bad(
+					'browser DEFAULT ∪ SERVER_ONLY does not equal the canonical pool',
+					`union=[${show(union)}] canon=[${show(canon)}]`
+				);
+		}
 	}
 }
 
