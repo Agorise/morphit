@@ -42,6 +42,12 @@ export interface EndpointStat {
 	/** Unix ms when this endpoint becomes eligible to retry after
 	 *  consecutive failures tripped RPC_MAX_CONSECUTIVE_FAILURES. */
 	cooldownUntil: number;
+	/** HTTP status from the most recent transport failure (e.g. 429,
+	 *  503), or null when the failure wasn't an HTTP response (timeout /
+	 *  network / CORS) or when the last call succeeded. Surfaced in the
+	 *  endpoint-settings panel as "Error: 429" so the operator can see
+	 *  WHY a node is failing, not just that it is. */
+	lastErrorCode: number | null;
 }
 
 export interface JsonRpcRequest {
@@ -128,7 +134,8 @@ export class EndpointRotator {
 				consecutiveFailures: 0,
 				lastLatencyMs: null,
 				lastOkAt: null,
-				cooldownUntil: 0
+				cooldownUntil: 0,
+				lastErrorCode: null
 			});
 		}
 	}
@@ -203,11 +210,13 @@ export class EndpointRotator {
 					target.lastLatencyMs = Math.round(elapsed);
 					target.consecutiveFailures = 0;
 					target.lastOkAt = Date.now();
+					target.lastErrorCode = null;
 					throw new RpcError(json.error.message, json.error.code, target.url);
 				}
 				target.lastLatencyMs = Math.round(elapsed);
 				target.consecutiveFailures = 0;
 				target.lastOkAt = Date.now();
+				target.lastErrorCode = null;
 				return (json as JsonRpcSuccess<T>).result;
 			} catch (err) {
 				lastErr = err instanceof Error ? err : new Error(String(err));
@@ -215,6 +224,12 @@ export class EndpointRotator {
 				// answered, it just said no).
 				if (!(err instanceof RpcError)) {
 					target.consecutiveFailures++;
+					// Capture the HTTP status if this was an HTTP error
+					// (fetchWithTimeout throws `HTTP <status> from <url>`);
+					// leave null for timeouts (AbortError) and network /
+					// CORS failures (TypeError) which have no status.
+					const httpMatch = /^HTTP (\d{3})\b/.exec(lastErr.message);
+					target.lastErrorCode = httpMatch ? Number(httpMatch[1]) : null;
 					if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
 						// Exponential-ish cooldown capped at 5 minutes.
 						const base = 1_500;
@@ -372,7 +387,8 @@ export class EndpointRotator {
 					consecutiveFailures: 0,
 					lastLatencyMs: null,
 					lastOkAt: null,
-					cooldownUntil: 0
+					cooldownUntil: 0,
+					lastErrorCode: null
 				}
 			);
 		}

@@ -175,6 +175,7 @@ export const FAQ_KEYS = [
 	// ─── 11. Run your own node / operators ─────────────────────
 	'switching_instances',
 	'run_your_own',
+	'why_agpl',
 	'how_to_run_node',
 	'node_technical_skills',
 	'node_hosting_costs',
@@ -424,7 +425,8 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// switching_instances get links so readers who land on those
 	// concrete questions can navigate to the bigger "who runs this
 	// / can it be taken down" framing.
-	run_your_own: ['how_to_run_node', 'help_make_unstoppable', 'node_minimum_requirements'],
+	run_your_own: ['how_to_run_node', 'help_make_unstoppable', 'node_minimum_requirements', 'why_agpl'],
+	why_agpl: ['run_your_own', 'help_make_unstoppable', 'how_to_spread_morphit', 'data_collection'],
 	how_to_run_node: [
 		'run_your_own',
 		'how_operators_earn',

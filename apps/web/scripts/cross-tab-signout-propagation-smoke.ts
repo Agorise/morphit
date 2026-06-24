@@ -19,7 +19,7 @@
  *
  * Fix (cp290 follow-up): a `'signout'` message on the handoff channel plus
  * an exported `broadcastSignOut()` that posts it and then resets THIS tab.
- * The explicit Sign Out button (`settings/+page.svelte` confirmSignOut)
+ * The explicit Sign Out button (`AvatarMenu.svelte` confirmSignOut)
  * calls `broadcastSignOut()` instead of `reset()`.
  *
  * THE CRITICAL SAFETY INVARIANT this smoke protects. The signout broadcast
@@ -44,7 +44,7 @@
  *   6. SAFETY: lockSession()'s body contains NO signout broadcast /
  *      postMessage.
  *   7. SAFETY: 'signout' is posted from EXACTLY ONE place (broadcastSignOut).
- *   8. settings/+page.svelte's confirmSignOut calls broadcastSignOut() and
+ *   8. AvatarMenu.svelte's confirmSignOut calls broadcastSignOut() and
  *      not a bare reset()/resetIdentity().
  *
  * Tamper tests (each must turn the smoke red):
@@ -64,9 +64,9 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 const STORE = join(REPO_ROOT, 'apps/web/src/lib/stores/identity.ts');
-const SETTINGS = join(REPO_ROOT, 'apps/web/src/routes/[lang]/settings/+page.svelte');
+const AVATAR_MENU = join(REPO_ROOT, 'apps/web/src/lib/components/AvatarMenu.svelte');
 
-for (const p of [STORE, SETTINGS]) {
+for (const p of [STORE, AVATAR_MENU]) {
 	if (!existsSync(p)) {
 		console.error(`  ✗ source file missing: ${p}`);
 		process.exit(1);
@@ -74,7 +74,7 @@ for (const p of [STORE, SETTINGS]) {
 }
 
 const store = readFileSync(STORE, 'utf-8');
-const settings = readFileSync(SETTINGS, 'utf-8');
+const avatarMenu = readFileSync(AVATAR_MENU, 'utf-8');
 
 let passes = 0;
 let failures = 0;
@@ -215,20 +215,20 @@ if (broadcastSites === 1) {
 
 // ── #8: settings Sign Out button calls broadcastSignOut, not bare reset ─────
 const importsBroadcast = /import\s*\{[^}]*\bbroadcastSignOut\b[^}]*\}\s*from\s*['"]\$stores\/identity['"]/.test(
-	settings
+	avatarMenu
 );
-const confirmBody = extractBody(settings, /function\s+confirmSignOut\s*\(\s*\)\s*:/);
+const confirmBody = extractBody(avatarMenu, /function\s+confirmSignOut\s*\(\s*\)\s*:/);
 if (!importsBroadcast) {
-	fail(`settings does not import broadcastSignOut`, `Sign Out must propagate cross-tab`);
+	fail(`AvatarMenu does not import broadcastSignOut`, `Sign Out must propagate cross-tab`);
 } else if (!confirmBody) {
-	fail(`confirmSignOut body not found in settings`, `brace-match failed`);
+	fail(`confirmSignOut body not found in AvatarMenu`, `brace-match failed`);
 } else {
 	const callsBroadcast = /\bbroadcastSignOut\s*\(\s*\)/.test(confirmBody);
 	// A bare reset()/resetIdentity() in confirmSignOut would skip the
 	// cross-tab broadcast — the exact pre-fix bug.
 	const callsBareReset = /\b(?:reset|resetIdentity)\s*\(\s*\)/.test(confirmBody);
 	if (callsBroadcast && !callsBareReset) {
-		pass(`settings confirmSignOut calls broadcastSignOut() (not a bare reset)`);
+		pass(`AvatarMenu confirmSignOut calls broadcastSignOut() (not a bare reset)`);
 	} else if (!callsBroadcast) {
 		fail(`confirmSignOut does not call broadcastSignOut()`, `cross-tab sign-out would not propagate`);
 	} else {

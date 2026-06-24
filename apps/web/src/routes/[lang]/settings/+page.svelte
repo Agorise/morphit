@@ -33,8 +33,7 @@
 	import {
 		liveIdentity,
 		isUnlocked,
-		isPairedReadOnly,
-		broadcastSignOut
+		isPairedReadOnly
 	} from '$stores/identity';
 	import { getProfile } from '$lib/indexer/client';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -752,23 +751,6 @@
 		confirmingClear = false;
 	}
 
-	/** True when the user has tapped Sign out and we're waiting for
-	 *  confirmation. Sign-out is destructive (wipes session keys). */
-	let confirmingSignOut = $state(false);
-
-	function beginSignOut(): void {
-		confirmingSignOut = true;
-	}
-	function cancelSignOut(): void {
-		confirmingSignOut = false;
-	}
-	function confirmSignOut(): void {
-		// broadcastSignOut (not reset) so that an in-memory-only session
-		// cloned into sibling tabs via the cross-tab handoff is revoked
-		// everywhere, not just here. See $stores/identity.
-		broadcastSignOut();
-		gotoLocale('/');
-	}
 
 	// Auto-lock timeout handler. Parses the <select> value — the
 	// 'never' option maps to the NEVER_LOCK sentinel, all others are
@@ -886,6 +868,12 @@
 	 *  which names are pending. */
 	let unblockingSet = $state<Set<string>>(new Set());
 
+	/** Briefly true after a manual refresh so the card can flash a
+	 *  "Refreshed!" confirmation (~2s). The timer is cleared on a
+	 *  re-click so rapid taps restart the window instead of stacking. */
+	let blockedRefreshed = $state(false);
+	let blockedRefreshedTimer: ReturnType<typeof setTimeout> | null = null;
+
 	$effect(() => {
 		if (!browser) return;
 		const me = getUserBlurtAccount();
@@ -919,6 +907,9 @@
 		const me = getUserBlurtAccount();
 		if (!me) return;
 		await refreshBlocks(me);
+		blockedRefreshed = true;
+		if (blockedRefreshedTimer) clearTimeout(blockedRefreshedTimer);
+		blockedRefreshedTimer = setTimeout(() => (blockedRefreshed = false), 2000);
 	}
 
 	// Part 121 cp7 — per-locale internal-link wrapper.  See
@@ -1777,14 +1768,25 @@
 					{$_('settings.blocked_accounts.scope_note')}
 				</p>
 			</div>
-			<button
-				type="button"
-				onclick={onRefreshBlocked}
-				class="flex-none rounded-lg border border-ink-300 px-3 py-1 text-xs font-semibold hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700"
-				aria-label={$_('settings.blocked_accounts.refresh_aria') as string}
-			>
-				{$_('settings.blocked_accounts.refresh')}
-			</button>
+			<div class="flex flex-none items-center gap-2">
+				{#if blockedRefreshed}
+					<span
+						class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+						role="status"
+						aria-live="polite"
+					>
+						✓ {$_('settings.blocked_accounts.refreshed')}
+					</span>
+				{/if}
+				<button
+					type="button"
+					onclick={onRefreshBlocked}
+					class="rounded-lg border border-ink-300 px-3 py-1 text-xs font-semibold transition-colors hover:border-morphit-emerald hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-700"
+					aria-label={$_('settings.blocked_accounts.refresh_aria') as string}
+				>
+					{$_('settings.blocked_accounts.refresh')}
+				</button>
+			</div>
 		</div>
 
 		{#if blockedList.length === 0}
@@ -2063,33 +2065,6 @@
 					</select>
 				</div>
 
-				<div class="mt-6 border-t border-ink-100 dark:border-ink-800"></div>
-			{/if}
-
-			{#if !confirmingSignOut}
-				<div class="mt-4">
-					<BusyButton variant="secondary" onclick={beginSignOut}>
-						{$_('settings.session.sign_out')}
-					</BusyButton>
-				</div>
-			{:else}
-				<div
-					class="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950"
-					role="alertdialog"
-					aria-live="polite"
-				>
-					<p class="text-sm text-amber-900 dark:text-amber-100">
-						{$_('settings.session.confirm_prompt')}
-					</p>
-					<div class="mt-3 flex flex-wrap gap-2">
-						<BusyButton variant="primary" onclick={confirmSignOut}>
-							{$_('settings.session.confirm_yes')}
-						</BusyButton>
-						<BusyButton variant="ghost" onclick={cancelSignOut}>
-							{$_('settings.session.confirm_cancel')}
-						</BusyButton>
-					</div>
-				</div>
 			{/if}
 		</section>
 	{/if}

@@ -63,6 +63,10 @@ interface AccountBalanceBody {
 			readonly current_mana: string;
 			readonly last_update_time: number;
 		} | null;
+		/** Legacy voting power (0–10000) + last-vote time — the inputs the
+		 *  frontend regenerates into the "Voting" % shown by blocks.blurtwallet.com. */
+		readonly voting_power: number | null;
+		readonly last_vote_time: string | null;
 		/** First posting-authority pubkey, or null — lets the block
 		 *  explorer's account page avoid a direct getAccount RPC read. */
 		readonly posting_pub: string | null;
@@ -148,6 +152,8 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 				received_vesting_shares: acct.received_vesting_shares ?? '0.000000 VESTS',
 				delegated_vesting_shares: acct.delegated_vesting_shares ?? '0.000000 VESTS',
 				voting_manabar: acct.voting_manabar ?? null,
+				voting_power: acct.voting_power ?? null,
+				last_vote_time: acct.last_vote_time ?? null,
 				posting_pub: postingPub
 			},
 			dgp: {

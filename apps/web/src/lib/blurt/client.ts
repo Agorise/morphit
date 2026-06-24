@@ -51,11 +51,15 @@ export interface BlurtAccount {
 	/** Powered-up stake as VESTS ("1000000.123456 VESTS" format).
 	 *  Convert to BLURT POWER via balanceMath.vestsToBlurtPower. */
 	vesting_shares?: string;
-	/** Voting MANA regen state.  See balanceMath.manaPercentage. */
+	/** Voting MANA regen state (raw chain data). */
 	voting_manabar?: {
 		current_mana: string;
 		last_update_time: number;
 	};
+	/** Legacy voting-power counter (0–10000) + last-vote timestamp — the
+	 *  inputs balanceMath.votingPowerPercent regenerates for the "Voting" %. */
+	voting_power?: number;
+	last_vote_time?: string;
 }
 
 export interface DynamicGlobalProperties {

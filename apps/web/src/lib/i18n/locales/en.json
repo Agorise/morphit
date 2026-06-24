@@ -1085,6 +1085,10 @@
     "still_need_help": "Still need help?",
     "contact_support": "Ask the support room",
     "entries": {
+      "why_agpl": {
+        "q": "Why does Morphit use the AGPL-3.0 license?",
+        "a": "So that no one — not a corporation, not a government, not even us — can take Morphit, lock it up, and quietly turn it against the people using it. The license guarantees that every running copy of Morphit stays open and inspectable. Everything else here is built on that.\n\n**The one rule it adds.** If you run Morphit as a public service and you change the code, you have to share your changes with the people using it. That's the whole deal. Run an instance, rebrand it, rewrite every word on the screen, add features, charge for it — all fine, and encouraged. The only thing you can't do is run a *secret, modified* version. If your instance can reach users, your users can read its source. For a privacy tool that's the whole game: it's how anyone can confirm the instance they're on is the real Morphit and not a backdoored look-alike. Freedom you can't verify is just a promise — this turns it into something you can check.\n\n**Why not a \"freer\" license?** Permissive licenses (MIT, BSD, Apache) ask for nothing in return, which sounds freer — until you notice it also lets anyone take Morphit, bolt on hidden tracking, close the source, and sell it back to your neighbors as a polished surveillance app, with no one the wiser. A license that permits your own capture isn't protecting your freedom; it's protecting whoever wants to cage you. The plain GPL has the same hole for network software: it only triggers when you hand someone a program to download, not when you run a modified copy on your own server — which is exactly how people use Morphit. The AGPL closes that hole. And no license at all is the worst of the lot: say nothing, and copyright law defaults to *all rights reserved* — no one may legally fork it or run their own instance. Silence isn't freedom; it's a locked door.\n\n**For agorists especially.** Here's the honest tension: the AGPL leans on copyright, and copyright is a creature of the State. The purist position is to claim nothing — drop it into the public domain and walk away. We think that hands a gift to the exact people you're trying to escape: the well-funded actors who'll take it, close it, wire it into the surveillance machine, and call it convenient. Pure intentions, captured tool. Copyleft is the judo move — it takes the State's own instrument and turns it against enclosure. We're not begging the State for protection; we're using its own rules to make this commons permanently un-takeable. Every fork stays open. Every instance stays inspectable. Nobody gets to build a cage out of our code. That's not making peace with the system — it's the system finally working for the counter-economy instead of against it.\n\n**The bigger picture.** The point was never to win an argument with the beast — it's to make it obsolete. The more people who run their own instances, and talk others into running even more, the less there is for any central power to control: tools it can't surveil, markets it can't see, exchange it can't tax or stop. That's what renders the apparatus pointless. It won't be graceful — when control slips, the first reflex is always to grab harder, with more rules and more force. But coercion is expensive and futility is exhausting, and sooner or later the beast does what bullies do once no one's afraid: it loses interest and goes off to find something more productive to do. So fork Morphit. Make it yours. Stand up an instance, and talk three friends into standing up three more. The license is here to guarantee one thing — that every one of those instances stays free, open, and impossible to quietly turn against the people who use it.\n\n*Morphit is released under the GNU Affero General Public License, version 3. This is our reasoning, not legal advice.*"
+      },
       "what_is_morphit": {
         "q": "What is Morphit?",
         "a": "Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a bulletin board service (BBS), not a bank."
@@ -1796,7 +1800,10 @@
     "alt_network_address": "Address: {address}",
     "instances": "Instances",
     "explorer": "Block explorer",
-    "download": "Download",
+"download": "Download",
+    "api": "API",
+    "api_title": "Developer API documentation",
+    "agpl_title": "Why Morphit uses the AGPL-3.0 license",
     "i2p_b32": "I2P (.b32.i2p)",
     "i2p_name": "I2P",
     "canary": "Canary",
@@ -2033,6 +2040,7 @@
           "finalizing": "Unlocking…"
         },
         "error": {
+          "enroll_verify_failed": "Couldn't verify your YubiKey. Re-enroll it in Settings, then try again.",
           "webhid_unsupported": "Your browser doesn't support hardware keys. Try Chrome, Edge, or Brave.",
           "no_device": "No YubiKey was selected.",
           "open_failed": "Couldn't open the YubiKey. Make sure it's plugged in.",
@@ -3755,6 +3763,10 @@
       "duplicate": "That endpoint is already in the list.",
       "at_least_one": "Please keep at least one endpoint.",
       "cooling_down": "cooling down",
+      "recheck": "Re-check node speeds",
+      "http_error": "Error: {code}",
+      "server_only_heading": "Also in the network",
+      "server_only_note": "Part of Blurt's network, but a browser can't connect to them directly. Morphit's servers use them behind the scenes.",
       "failing": "{n} failure(s)",
       "probing": "probing…",
       "remove_aria": "Remove {url}",
@@ -3765,10 +3777,6 @@
     "session": {
       "heading": "Utility",
       "explain": "Sign out when you're done. Your keys will be wiped from memory; the encrypted keystore on your device is untouched.",
-      "sign_out": "Sign out",
-      "confirm_prompt": "Sign out of this device? Your keys will be wiped from memory. You'll need to unlock again to trade.",
-      "confirm_yes": "Yes, sign out",
-      "confirm_cancel": "Stay signed in",
       "autolock_label": "Auto-lock after idle",
       "autolock_help": "Automatically lock your session after this long with no activity. Locking clears your keys from memory; your encrypted keystore stays on this device so you can unlock with your password when you return.",
       "autolock_15min": "15 minutes",
@@ -3971,6 +3979,7 @@
       "empty": "You have not blocked anyone.",
       "refresh": "Refresh",
       "refresh_aria": "Refresh the blocked accounts list from the indexer",
+      "refreshed": "Refreshed!",
       "unblock": "Unblock",
       "unblocking": "Unblocking…",
       "unblock_failed": "Could not unblock. Please check your connection and try again.",
@@ -4048,6 +4057,7 @@
         "finalizing": "Finalizing…"
       },
       "error": {
+        "enroll_verify_failed": "We couldn't verify your YubiKey. Make sure slot 2 is set up for HMAC-SHA1 challenge-response, try a different USB port, then enroll again.",
         "confirm_backup": "Please confirm your seed phrase is backed up before continuing.",
         "password_too_short": "Password must be at least 8 characters.",
         "passwords_mismatch": "The two passwords don't match.",

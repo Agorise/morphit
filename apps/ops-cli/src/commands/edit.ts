@@ -44,7 +44,6 @@ import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import {
-	stepAltNetworks,
 	stepOrigin,
 	stepListingFee,
 	stepOperatorTag,
@@ -74,6 +73,10 @@ interface ExistingConfig {
 	readonly tagline: string | null;
 	readonly contactUrl: string | null;
 	readonly altNetworks: AltNetworkResult;
+	/** The legacy single MORPHIT_INSTANCE_I2P_ADDRESS, if present, so the
+	 *  alt-network editor can clear it when migrating to the split
+	 *  b32 / vanity keys. */
+	readonly legacyI2pAddress: string | null;
 	readonly seo: SeoResult;
 	/** Part 110 — listing-fee + fallback-price slice.  Optional
 	 *  fields (any may be null if the operator has hand-edited
@@ -184,11 +187,60 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		originChanged = true;
 	}
 	if (choice === 'alt-networks' || choice === 'all') {
-		const alt = await stepAltNetworks();
-		configUpdates.set('MORPHIT_INSTANCE_TOR_ADDRESS', alt.tor);
-		configUpdates.set('MORPHIT_INSTANCE_LOKINET_ADDRESS', alt.lokinet);
-		configUpdates.set('MORPHIT_INSTANCE_I2P_ADDRESS', alt.i2p);
-		configUpdates.set('MORPHIT_INSTANCE_NOSTR_PUBKEY', alt.nostr);
+		// Each address uses keep-current / clear semantics (Enter keeps the
+		// current value, "-" clears it), mirroring Branding & SEO above.
+		// Editing one address (e.g. adding I2P) therefore never silently
+		// wipes the others — previously, skipping a field here meant the
+		// wizard returned null for it and we overwrote the existing value
+		// with null, dropping a configured Tor onion the operator never
+		// touched.  For full validated add/clear of a single network, the
+		// dedicated `alt-address` command is still the richer path.
+		const torR = await editField(
+			'Tor .onion address',
+			'Your v3 hidden-service address (56 chars then ".onion").',
+			existing.altNetworks.tor
+		);
+		if (torR.changed) configUpdates.set('MORPHIT_INSTANCE_TOR_ADDRESS', torR.value);
+
+		const lokinetR = await editField(
+			'Lokinet .loki address',
+			'Full .loki address or your ONS name (e.g. "morphit.loki").',
+			existing.altNetworks.lokinet
+		);
+		if (lokinetR.changed)
+			configUpdates.set('MORPHIT_INSTANCE_LOKINET_ADDRESS', lokinetR.value);
+
+		// I2P has two independent slots — always-resolvable b32 + optional
+		// vanity name.  Writing either modern key also clears the legacy single
+		// MORPHIT_INSTANCE_I2P_ADDRESS so it can't shadow them.
+		const i2pB32R = await editField(
+			'I2P b32 address (DOMAIN.b32.i2p)',
+			'Your always-resolvable <base32>.b32.i2p address.',
+			existing.altNetworks.i2pB32
+		);
+		if (i2pB32R.changed) {
+			configUpdates.set('MORPHIT_INSTANCE_I2P_B32_ADDRESS', i2pB32R.value);
+			if (existing.legacyI2pAddress !== null)
+				configUpdates.set('MORPHIT_INSTANCE_I2P_ADDRESS', null);
+		}
+
+		const i2pNameR = await editField(
+			'I2P vanity name (DOMAIN.i2p)',
+			'Optional pretty alias like "morphit.i2p" (needs an i2p address-book entry).',
+			existing.altNetworks.i2pName
+		);
+		if (i2pNameR.changed) {
+			configUpdates.set('MORPHIT_INSTANCE_I2P_NAME_ADDRESS', i2pNameR.value);
+			if (existing.legacyI2pAddress !== null)
+				configUpdates.set('MORPHIT_INSTANCE_I2P_ADDRESS', null);
+		}
+
+		const nostrR = await editField(
+			'Nostr pubkey',
+			'Your npub… public key for cross-network discovery.',
+			existing.altNetworks.nostr
+		);
+		if (nostrR.changed) configUpdates.set('MORPHIT_INSTANCE_NOSTR_PUBKEY', nostrR.value);
 	}
 	if (choice === 'seo' || choice === 'all') {
 		// cp311 — "Branding & SEO".  All six fields use keep-current /
@@ -470,6 +522,18 @@ function loadExisting(path: string): ExistingConfig {
 	const text = readFileSync(path, 'utf-8');
 	const kv = parseKvLines(text);
 
+	// I2P split keys, with the legacy single key routed by suffix so an
+	// operator who configured i2p before the split still sees their value.
+	const legacyI2p = kv.get('MORPHIT_INSTANCE_I2P_ADDRESS') ?? null;
+	const i2pB32 =
+		kv.get('MORPHIT_INSTANCE_I2P_B32_ADDRESS') ??
+		(legacyI2p !== null && legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null);
+	const i2pName =
+		kv.get('MORPHIT_INSTANCE_I2P_NAME_ADDRESS') ??
+		(legacyI2p !== null && legacyI2p.endsWith('.i2p') && !legacyI2p.endsWith('.b32.i2p')
+			? legacyI2p
+			: null);
+
 	return {
 		path,
 		text,
@@ -480,9 +544,11 @@ function loadExisting(path: string): ExistingConfig {
 		altNetworks: {
 			tor: kv.get('MORPHIT_INSTANCE_TOR_ADDRESS') ?? null,
 			lokinet: kv.get('MORPHIT_INSTANCE_LOKINET_ADDRESS') ?? null,
-			i2p: kv.get('MORPHIT_INSTANCE_I2P_ADDRESS') ?? null,
+			i2pB32,
+			i2pName,
 			nostr: kv.get('MORPHIT_INSTANCE_NOSTR_PUBKEY') ?? null
 		},
+		legacyI2pAddress: legacyI2p,
 		seo: {
 			title: kv.get('MORPHIT_INSTANCE_SEO_TITLE') ?? null,
 			description: kv.get('MORPHIT_INSTANCE_SEO_DESCRIPTION') ?? null,
@@ -812,7 +878,8 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	console.log(`  Contact URL:       ${c.contactUrl !== null ? sanitizeForTerm(c.contactUrl) : '(unset)'}`);
 	console.log(`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`);
 	console.log(`  Lokinet address:   ${c.altNetworks.lokinet !== null ? sanitizeForTerm(c.altNetworks.lokinet) : '(unset)'}`);
-	console.log(`  I2P address:       ${c.altNetworks.i2p !== null ? sanitizeForTerm(c.altNetworks.i2p) : '(unset)'}`);
+	console.log(`  I2P b32:           ${c.altNetworks.i2pB32 !== null ? sanitizeForTerm(c.altNetworks.i2pB32) : '(unset)'}`);
+	console.log(`  I2P vanity name:   ${c.altNetworks.i2pName !== null ? sanitizeForTerm(c.altNetworks.i2pName) : '(unset)'}`);
 	console.log(`  Nostr pubkey:      ${c.altNetworks.nostr !== null ? sanitizeForTerm(c.altNetworks.nostr) : '(unset)'}`);
 	console.log(`  SEO title:         ${c.seo.title !== null ? sanitizeForTerm(c.seo.title) : '(default)'}`);
 	console.log(

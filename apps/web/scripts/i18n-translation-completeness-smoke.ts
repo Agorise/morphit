@@ -136,6 +136,18 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.pgp_keys', locale: 'de', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
 	{ key: 'footer.pgp_keys', locale: 'es', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
 	{ key: 'footer.pgp_keys', locale: 'fr', reason: '(c) "PGP" is a universal cryptography acronym; identical in every locale' },
+	// post-beta.28 — the footer "API" link (developer-API FAQ deep-link).
+	// "API" is a universal programming acronym, written the same in every
+	// locale, so being byte-identical to English is the CORRECT rendering.
+	// (Tooltip footer.api_title IS translated; only the bare label is invariant.)
+	{ key: 'footer.api', locale: 'de', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
+	{ key: 'footer.api', locale: 'es', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
+	{ key: 'footer.api', locale: 'fr', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
+	// post-beta.28 — the RPC endpoint-health error label "Error: {code}".
+	// "Error" is spelled identically in Spanish (cognate); only the
+	// interpolated HTTP status code follows, so es is legitimately
+	// byte-identical to EN here. (fr/de/it/pl/ru/fa/zh all differ.)
+	{ key: 'settings.endpoints.http_error', locale: 'es', reason: '(b) "Error" is identical in Spanish (cognate); the rest is the interpolated HTTP {code}' },
 	// ─── cp115 network product names: Latin-script brand names that
 	//     legitimately do NOT translate.  Arbitrum, Base, Polygon are
 	//     Layer-2 network product names (registered marks).  BEP-20

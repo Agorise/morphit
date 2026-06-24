@@ -361,6 +361,10 @@ export interface AccountBalanceResponse {
 			readonly current_mana: string;
 			readonly last_update_time: number;
 		} | null;
+		/** Legacy voting power (0–10000) + last-vote timestamp, regenerated
+		 *  by the frontend into the "Voting" % classic Blurt explorers show. */
+		readonly voting_power: number | null;
+		readonly last_vote_time: string | null;
 		/** First posting-authority public key (e.g. "BLT6…"), or null if
 		 *  the account has none. Lets the block explorer's account page
 		 *  render the posting key WITHOUT a direct getAccount RPC read. */

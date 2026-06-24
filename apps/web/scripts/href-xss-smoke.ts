@@ -104,6 +104,29 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		new Set(["txUrl ? lp(txUrl) : '#'", "blockUrl ? lp(blockUrl) : '#'"])
 	],
 	[
+		'apps/web/src/routes/[lang]/explorer/block/[num=blocknum]/+page.svelte',
+		// `prevUrl ? lp(prevUrl) : '#'` and `txUrl ? lp(txUrl) : '#'` — same safe
+		// pattern as the account page above. prevUrl is a `{@const}` from
+		// morphitExplorerBlockUrl(blockNumber - 1) — validates a finite positive
+		// integer and returns the hardcoded internal `/explorer/block/<n>` or null
+		// (blockNumber 1 → arg 0 → null → '#', so no zero/negative link). txUrl is
+		// from morphitExplorerTxUrl(trxId) — validates BLURT_TRXID_RE, returns
+		// `/explorer/tx/<hex>` or null. Both wrapped in lp() (a SAFE_BUILDER that
+		// only prefixes single-slash internal paths) with a '#' fallback. Site-
+		// controlled internal paths built from validated chain data; no operator/
+		// peer-controlled scheme is reachable. (Added when the explorer-link lang-
+		// prefix fix wrapped these two `href`s in lp().)
+		new Set(["prevUrl ? lp(prevUrl) : '#'", "txUrl ? lp(txUrl) : '#'"])
+	],
+	[
+		'apps/web/src/routes/[lang]/explorer/tx/[id=trxid]/+page.svelte',
+		// `blockUrl ? lp(blockUrl) : '#'` — `{@const}` from
+		// morphitExplorerBlockUrl(tx.block_num) (validates a finite positive
+		// integer → hardcoded `/explorer/block/<n>` or null), wrapped in lp() with
+		// a '#' fallback. Same safe profile as the block/account entries above.
+		new Set(["blockUrl ? lp(blockUrl) : '#'"])
+	],
+	[
 		'apps/web/src/lib/components/RssFeedPicker.svelte',
 		// `href={urlFor(format)}` — urlFor returns
 		// `${location.origin}${base}.${EXT[format]}`. The origin is the

@@ -29,7 +29,7 @@
 	import {
 		parseAssetAmount,
 		vestsToBlurtPower,
-		manaPercentage,
+		votingPowerPercent,
 		formatBalance,
 		formatPercentage
 	} from '$blurt/balanceMath';
@@ -121,11 +121,9 @@
 			dgp.total_vesting_fund_blurt,
 			dgp.total_vesting_shares
 		);
-		voting = manaPercentage(
-			acct.voting_manabar ?? null,
-			acct.vesting_shares ?? '0 VESTS',
-			acct.received_vesting_shares ?? '0 VESTS',
-			acct.delegated_vesting_shares ?? '0 VESTS',
+		voting = votingPowerPercent(
+			acct.voting_power ?? null,
+			acct.last_vote_time ?? null,
 			Math.floor(Date.now() / 1000)
 		);
 		vestingApr = computeBlurtVestingApr({

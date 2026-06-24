@@ -149,8 +149,9 @@
 				</dt>
 				<dd class="font-mono text-xs">
 					{#if blockNumber > 1}
+						{@const prevUrl = morphitExplorerBlockUrl(blockNumber - 1)}
 						<a
-							href={morphitExplorerBlockUrl(blockNumber - 1) ?? '#'}
+							href={prevUrl ? lp(prevUrl) : '#'}
 							class="text-morphit-emerald underline-offset-2 hover:underline"
 						>
 							{$_('explorer.block.previous_link', { values: { block: blockNumber - 1 } })}
@@ -186,8 +187,9 @@
 									{$_('explorer.block.tx_index', { values: { i: txIdx + 1 } })}
 								</span>
 								{#if trxId}
+									{@const txUrl = morphitExplorerTxUrl(trxId)}
 									<a
-										href={morphitExplorerTxUrl(trxId) ?? '#'}
+										href={txUrl ? lp(txUrl) : '#'}
 										class="font-mono text-xs text-morphit-emerald underline-offset-2 hover:underline"
 									>
 										{trxId.slice(0, 10)}…

@@ -1085,6 +1085,10 @@
     "still_need_help": "Nadal potrzebujesz pomocy?",
     "contact_support": "Zapytaj na wsparciu",
     "entries": {
+      "why_agpl": {
+        "q": "Dlaczego Morphit używa licencji AGPL-3.0?",
+        "a": "Po to, by nikt — ani korporacja, ani rząd, ani nawet my — nie mógł wziąć Morphita, zamknąć go i po cichu obrócić przeciwko ludziom, którzy go używają. Licencja gwarantuje, że każda działająca kopia Morphita pozostaje otwarta i możliwa do zweryfikowania. Wszystko inne opiera się na tym.\n\n**Jedyna zasada, którą dodaje.** Jeśli uruchamiasz Morphita jako usługę publiczną i zmieniasz kod, musisz udostępnić swoje zmiany ludziom, którzy z niego korzystają. To cała umowa. Uruchom instancję, zmień jej markę, przepisz każde słowo na ekranie, dodaj funkcje, pobieraj za to opłaty — wszystko to jest dozwolone, a wręcz zachęcamy do tego. Jedyne, czego nie wolno, to uruchomić *tajnej, zmodyfikowanej* wersji. Jeśli twoja instancja może dotrzeć do użytkowników, twoi użytkownicy mogą przeczytać jej kod źródłowy. Dla narzędzia chroniącego prywatność to istota rzeczy: dzięki temu każdy może potwierdzić, że instancja, na której się znajduje, to prawdziwy Morphit, a nie podróbka z tylną furtką. Wolność, której nie możesz zweryfikować, to tylko obietnica — to zamienia ją w coś sprawdzalnego.\n\n**Dlaczego nie „bardziej wolna\" licencja?** Licencje liberalne (MIT, BSD, Apache) nie wymagają niczego w zamian, co brzmi bardziej wolnościowo — dopóki nie zauważysz, że pozwalają też każdemu wziąć Morphita, doczepić ukryte śledzenie, zamknąć kod źródłowy i sprzedać go twoim sąsiadom jako dopracowaną aplikację inwigilacyjną, tak że nikt się nie zorientuje. Licencja, która pozwala na przejęcie ciebie samego, nie chroni twojej wolności; chroni tego, kto chce zamknąć cię w klatce. Zwykła GPL ma tę samą dziurę w przypadku oprogramowania sieciowego: działa tylko wtedy, gdy przekazujesz komuś program do pobrania, a nie gdy uruchamiasz zmodyfikowaną kopię na własnym serwerze — a właśnie tak używa się Morphita. AGPL zamyka tę dziurę. A brak jakiejkolwiek licencji to najgorsze z wszystkiego: jeśli nic nie powiesz, prawo autorskie domyślnie nadaje *wszelkie prawa zastrzeżone* — nikt nie może legalnie go sforkować ani uruchomić własnej instancji. Milczenie to nie wolność; to zamknięte na klucz drzwi.\n\n**Szczególnie dla agorystów.** Oto uczciwe napięcie: AGPL opiera się na prawie autorskim, a prawo autorskie jest tworem Państwa. Postawa purystyczna to nie rościć sobie niczego — zrzucić to do domeny publicznej i odejść. Uważamy, że to jest prezent dokładnie dla tych ludzi, przed którymi próbujesz uciec: dobrze finansowanych graczy, którzy to wezmą, zamkną, podłączą do maszyny inwigilacji i nazwą to wygodą. Czyste intencje, przejęte narzędzie. Copyleft to chwyt judo: bierze własne narzędzie Państwa i obraca je przeciwko grodzeniu. Nie błagamy Państwa o ochronę; używamy jego własnych reguł, by uczynić to dobro wspólne trwale niemożliwym do zawłaszczenia. Każdy fork pozostaje otwarty. Każda instancja pozostaje możliwa do zweryfikowania. Nikt nie zbuduje klatki z naszego kodu. To nie jest zawieranie pokoju z systemem — to system, który wreszcie pracuje na rzecz kontrekonomii, zamiast przeciwko niej.\n\n**Szerszy obraz.** Nigdy nie chodziło o wygranie sporu z bestią — chodzi o to, by uczynić ją zbędną. Im więcej ludzi uruchamia własne instancje i namawia innych, by uruchamiali jeszcze więcej, tym mniej zostaje do kontrolowania dla jakiejkolwiek centralnej władzy: narzędzia, których nie może śledzić, rynki, których nie widzi, wymiana, której nie może opodatkować ani zatrzymać. To właśnie czyni aparat bezużytecznym. Nie będzie to eleganckie: gdy kontrola się wymyka, pierwszym odruchem jest zawsze ścisnąć mocniej, więcej reguł i więcej siły. Ale przymus jest kosztowny, a bezsilność wyczerpuje, i prędzej czy później bestia robi to, co robią tyrani, gdy nikt się już nie boi: traci zainteresowanie i odchodzi poszukać czegoś bardziej produktywnego. Więc sforkuj Morphita. Uczyń go swoim. Postaw instancję i namów trzech znajomych, by postawili trzy kolejne. Licencja jest tu po to, by zagwarantować jedną rzecz — że każda z tych instancji pozostanie wolna, otwarta i niemożliwa do cichego obrócenia przeciwko ludziom, którzy z niej korzystają.\n\n*Morphit jest udostępniany na licencji GNU Affero General Public License, wersja 3. To nasze uzasadnienie, a nie porada prawna.*"
+      },
       "what_is_morphit": {
         "q": "Czym jest Morphit?",
         "a": "Morphit to rynek P2P, na którym ludzie wymieniają gotówkę na kryptowaluty (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum i XRP) bezpośrednio między sobą. Możesz też barterować towary/usługi. Morphit nigdy nie dotyka Twoich aktywów i nigdy nie pyta o nic na Twój temat. To tablica ogłoszeń (BBS), nie bank."
@@ -1796,7 +1800,10 @@
     "alt_network_address": "Adres: {address}",
     "instances": "Instancje",
     "explorer": "Eksplorator bloków",
-    "download": "Pobierz",
+"download": "Pobierz",
+    "api": "API",
+    "api_title": "Dokumentacja API dla programistów",
+    "agpl_title": "Dlaczego Morphit używa licencji AGPL-3.0",
     "i2p_b32": "I2P (.b32.i2p)",
     "i2p_name": "I2P",
     "canary": "Kanarek",
@@ -2033,6 +2040,7 @@
           "finalizing": "Odblokowywanie…"
         },
         "error": {
+          "enroll_verify_failed": "Nie udało się zweryfikować klucza YubiKey. Zarejestruj go ponownie w Ustawieniach i spróbuj jeszcze raz.",
           "webhid_unsupported": "Twoja przeglądarka nie obsługuje kluczy sprzętowych. Spróbuj Chrome, Edge lub Brave.",
           "no_device": "Nie wybrano żadnego YubiKeya.",
           "open_failed": "Nie udało się otworzyć YubiKeya. Upewnij się, że jest podłączony.",
@@ -3755,6 +3763,10 @@
       "duplicate": "Ten endpoint już jest na liście.",
       "at_least_one": "Zostaw przynajmniej jeden endpoint.",
       "cooling_down": "przerwa",
+      "recheck": "Sprawdź ponownie szybkość węzłów",
+      "http_error": "Błąd: {code}",
+      "server_only_heading": "Również w sieci",
+      "server_only_note": "Są częścią sieci Blurt, ale przeglądarka nie może się z nimi połączyć bezpośrednio. Serwery Morphit używają ich w tle.",
       "failing": "niepowodzeń: {n}",
       "probing": "sprawdzam…",
       "remove_aria": "Usuń {url}",
@@ -3765,10 +3777,6 @@
     "session": {
       "heading": "Narzędzia",
       "explain": "Wyloguj się, gdy skończysz. Twoje klucze zostaną usunięte z pamięci; zaszyfrowany magazyn kluczy na twoim urządzeniu pozostaje nietknięty.",
-      "sign_out": "Wyloguj",
-      "confirm_prompt": "Wylogować się z tego urządzenia? Twoje klucze zostaną usunięte z pamięci. Aby handlować, musisz ponownie odblokować.",
-      "confirm_yes": "Tak, wyloguj",
-      "confirm_cancel": "Pozostań zalogowany",
       "autolock_label": "Auto-blokada po bezczynności",
       "autolock_help": "Automatycznie blokuj sesję po tym czasie bez aktywności. Blokowanie czyści klucze z pamięci; twój zaszyfrowany keystore zostaje na tym urządzeniu, więc możesz odblokować hasłem po powrocie.",
       "autolock_15min": "15 minut",
@@ -3949,6 +3957,7 @@
       "empty": "Nie zablokowałeś nikogo.",
       "refresh": "Odśwież",
       "refresh_aria": "Odśwież listę zablokowanych kont z indeksera",
+      "refreshed": "Odświeżono!",
       "unblock": "Odblokuj",
       "unblocking": "Odblokowywanie…",
       "unblock_failed": "Nie udało się odblokować. Sprawdź połączenie i spróbuj ponownie.",
@@ -4048,6 +4057,7 @@
         "finalizing": "Kończę…"
       },
       "error": {
+        "enroll_verify_failed": "Nie udało się zweryfikować klucza YubiKey. Upewnij się, że slot 2 jest skonfigurowany do mechanizmu wyzwanie-odpowiedź HMAC-SHA1, spróbuj innego portu USB i zarejestruj go ponownie.",
         "confirm_backup": "Potwierdź, że fraza seed jest zapisana, zanim przejdziesz dalej.",
         "password_too_short": "Hasło musi mieć co najmniej 8 znaków.",
         "passwords_mismatch": "Hasła się nie zgadzają.",

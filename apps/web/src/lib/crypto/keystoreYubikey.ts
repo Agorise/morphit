@@ -53,7 +53,11 @@ import {
 	MAX_YUBIKEY_WRAPS,
 	normalizeYubikeyLabel
 } from './yubikey/protocol';
-import { buildYubikeyWrap, recoverCekFromYubikey, type YubikeyHmacFn } from './yubikey/wrap';
+import {
+	buildVerifiedYubikeyWrap,
+	recoverCekFromYubikey,
+	type YubikeyHmacFn
+} from './yubikey/wrap';
 
 function toB64(bytes: Uint8Array): string {
 	return sodium.to_base64(bytes, sodium.base64_variants.ORIGINAL);
@@ -232,7 +236,7 @@ export async function enrollYubikey(
 				// passphrase wrap is permitted anyway, so this is a
 				// non-issue today.)
 				const newPassphraseWrap = await buildPassphraseWrap(cek, password);
-				const newYubikeyWrap = await buildYubikeyWrap(cek, hmacFn, slot, cleanLabel);
+				const newYubikeyWrap = await buildVerifiedYubikeyWrap(cek, hmacFn, slot, cleanLabel);
 				layered = {
 					scheme: 'layered-cek',
 					v: 1,
@@ -249,7 +253,7 @@ export async function enrollYubikey(
 			// wrap first, then add the yubikey wrap on top.
 			const upgraded = await upgradeToLayered(env, password);
 			cek = upgraded.cek;
-			const yubikeyWrap = await buildYubikeyWrap(cek, hmacFn, slot, cleanLabel);
+			const yubikeyWrap = await buildVerifiedYubikeyWrap(cek, hmacFn, slot, cleanLabel);
 			layered = {
 				...upgraded.env,
 				wraps: [...upgraded.env.wraps, yubikeyWrap]

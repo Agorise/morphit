@@ -517,7 +517,11 @@ export async function stepContactUrl(): Promise<string | null> {
 export interface AltNetworkResult {
 	readonly tor: string | null;
 	readonly lokinet: string | null;
-	readonly i2p: string | null;
+	/** Always-resolvable <base32>.b32.i2p address. */
+	readonly i2pB32: string | null;
+	/** Optional human-readable vanity name (DOMAIN.i2p). Independent of
+	 *  i2pB32 — an instance may advertise neither, one, or both. */
+	readonly i2pName: string | null;
 	readonly nostr: string | null;
 }
 
@@ -631,10 +635,19 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	}
 
 	const wantsI2p = await askYesNo('Add an I2P (.b32.i2p) address?', false);
-	let i2p: string | null = null;
+	let i2pB32: string | null = null;
 	if (wantsI2p) {
 		const v = await ask('I2P .b32.i2p address (paste, or Enter to skip)', '');
-		i2p = v.length > 0 ? v : null;
+		i2pB32 = v.length > 0 ? v : null;
+	}
+
+	// Optional human-readable vanity name (DOMAIN.i2p), independent of the
+	// b32 above — an instance may advertise neither, one, or both.
+	const wantsI2pName = await askYesNo('Add an I2P vanity name (DOMAIN.i2p)?', false);
+	let i2pName: string | null = null;
+	if (wantsI2pName) {
+		const v = await ask('I2P vanity name, e.g. morphit.i2p (paste, or Enter to skip)', '');
+		i2pName = v.length > 0 ? v : null;
 	}
 
 	const wantsNostr = await askYesNo('Add a Nostr pubkey?', false);
@@ -644,7 +657,7 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 		nostr = v.length > 0 ? v : null;
 	}
 
-	return { tor, lokinet, i2p, nostr };
+	return { tor, lokinet, i2pB32, i2pName, nostr };
 }
 
 export interface SeoResult {

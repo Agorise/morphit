@@ -18,6 +18,9 @@ const ONION_RE = /^[a-z2-7]{56}\.onion$/;
 // Accept either so an operator can advertise their ONS name in the footer.
 const LOKI_RE = /^[a-z0-9][a-z0-9-]{1,62}\.loki$/;
 const I2P_B32_RE = /^[a-z2-7]{52,}\.b32\.i2p$/;
+// I2P vanity host-name: ordinary hostname labels ending in ".i2p" (NOT the
+// ".b32.i2p" hash form — that's the b32 slot).  e.g. "morphit.i2p".
+const I2P_NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.i2p$/;
 
 /** Trim, lowercase, strip a pasted scheme + trailing slashes. */
 export function normalizeAltAddress(raw: string): string {
@@ -36,6 +39,9 @@ export function isValidLoki(s: string): boolean {
 }
 export function isValidI2pB32(s: string): boolean {
 	return I2P_B32_RE.test(s);
+}
+export function isValidI2pName(s: string): boolean {
+	return I2P_NAME_RE.test(s) && !s.endsWith('.b32.i2p');
 }
 
 export type ValidateResult =
@@ -59,6 +65,19 @@ export function validateAltAddress(net: AltNet, raw: string): ValidateResult {
 	return isValidI2pB32(v)
 		? { ok: true, value: v }
 		: { ok: false, reason: 'that is not a .b32.i2p address (expected 52+ letters/digits then ".b32.i2p")' };
+}
+
+/** Validate (and normalize) a pasted I2P vanity NAME (DOMAIN.i2p), the
+ *  human-readable address that resolves via an i2p address book.  Rejects
+ *  the .b32.i2p hash form (that belongs in the b32 slot). */
+export function validateI2pName(raw: string): ValidateResult {
+	const v = normalizeAltAddress(raw);
+	if (v.length === 0) return { ok: false, reason: 'empty' };
+	if (v.endsWith('.b32.i2p'))
+		return { ok: false, reason: 'that is a .b32.i2p hash address — set it under the I2P b32 option, not the vanity name' };
+	return isValidI2pName(v)
+		? { ok: true, value: v }
+		: { ok: false, reason: 'that is not an I2P vanity name (expected something like "morphit.i2p")' };
 }
 
 /** Which morphit.config.env key each network's address is written to. I2P

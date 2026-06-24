@@ -31,6 +31,7 @@ import { atomicEnvWrite } from './edit.ts';
 import {
 	type AltNet,
 	validateAltAddress,
+	validateI2pName,
 	ENV_KEY,
 	GEN_SCRIPT
 } from '../lib/altAddressValidate.ts';
@@ -129,13 +130,14 @@ async function collectAddress(net: AltNet): Promise<string | null> {
 // (`collectAddress`, `validateAltAddress`, `GEN_SCRIPT`) still uses the
 // narrower `AltNet`.
 
-type ManagedNet = AltNet | 'nostr';
+type ManagedNet = AltNet | 'nostr' | 'i2p_name';
 type AddrAction = 'replace' | 'clear' | 'back';
 
 const NET_LABEL: Record<ManagedNet, string> = {
 	tor: 'Tor (.onion) address',
 	lokinet: 'Lokinet (.loki) address',
-	i2p: 'I2P (.b32.i2p) address',
+	i2p: 'I2P b32 address (DOMAIN.b32.i2p)',
+	i2p_name: 'I2P vanity name (DOMAIN.i2p)',
 	nostr: 'Nostr pubkey'
 };
 
@@ -149,6 +151,7 @@ const ENV_KEYS_FOR: Record<ManagedNet, readonly string[]> = {
 	tor: [ENV_KEY.tor],
 	lokinet: [ENV_KEY.lokinet],
 	i2p: [ENV_KEY.i2p, 'MORPHIT_INSTANCE_I2P_ADDRESS'],
+	i2p_name: ['MORPHIT_INSTANCE_I2P_NAME_ADDRESS'],
 	nostr: ['MORPHIT_INSTANCE_NOSTR_PUBKEY']
 };
 
@@ -208,6 +211,29 @@ async function collectNostr(): Promise<string | null> {
 	}
 }
 
+/** Collect + validate an I2P vanity NAME (DOMAIN.i2p).  Nothing to
+ *  "generate" — the operator registers a human-readable name with an
+ *  i2p naming service / address book, then pastes it here.  This is the
+ *  optional pretty alias for the always-resolvable .b32.i2p address. */
+async function collectI2pName(): Promise<string | null> {
+	console.log('');
+	console.log('I2P vanity name — a human-readable alias like "morphit.i2p".');
+	console.log('');
+	console.log('This is OPTIONAL and separate from your .b32.i2p address: the b32');
+	console.log('always resolves; the vanity name only resolves for visitors whose');
+	console.log('i2p router has the name in its address book.  Register the name');
+	console.log('with an i2p naming service first, then paste it here.');
+	console.log('');
+	for (;;) {
+		const pasted = (await ask('Paste your DOMAIN.i2p vanity name (or press Enter to go back)', '')).trim();
+		if (pasted.length === 0) return null;
+		const res = validateI2pName(pasted);
+		if (res.ok) return res.value;
+		console.log(`  ✗ ${res.reason}`);
+		console.log('  Try again, or press Enter to go back.');
+	}
+}
+
 /** Validate a Nostr pubkey: npub1 bech32 or 64-char hex.  Lenient on the
  *  bech32 body (guards typos, not a full checksum verify); rejects nsec. */
 export function validateNostr(
@@ -254,20 +280,29 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 			[
 				'Tor (.onion)',
 				'Lokinet (.loki)',
-				'I2P (.b32.i2p)',
+				'I2P b32 (DOMAIN.b32.i2p)',
+				'I2P vanity (DOMAIN.i2p)',
 				'Nostr (npub… / hex pubkey)',
 				'Done / cancel'
 			],
 			undefined,
 			{ showList: true }
 		);
-		if (idx === 4) {
+		if (idx === 5) {
 			console.log('\n  Nothing else to do. Bye!');
 			return 0;
 		}
 
 		const kind: ManagedNet =
-			idx === 0 ? 'tor' : idx === 1 ? 'lokinet' : idx === 2 ? 'i2p' : 'nostr';
+			idx === 0
+				? 'tor'
+				: idx === 1
+					? 'lokinet'
+					: idx === 2
+						? 'i2p'
+						: idx === 3
+							? 'i2p_name'
+							: 'nostr';
 		const label = NET_LABEL[kind];
 		const fileText = hasConfig ? readFileSync(configPath, 'utf-8') : '';
 		const current = hasConfig ? readManagedValue(fileText, kind) : null;
@@ -327,7 +362,12 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 		}
 
 		// action === 'replace' (or first-time set).
-		const address = kind === 'nostr' ? await collectNostr() : await collectAddress(kind);
+		const address =
+			kind === 'nostr'
+				? await collectNostr()
+				: kind === 'i2p_name'
+					? await collectI2pName()
+					: await collectAddress(kind);
 		if (address === null) {
 			console.log('  (Cancelled — back to the list.)\n');
 			continue;

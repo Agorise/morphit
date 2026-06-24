@@ -21,6 +21,8 @@ import {
 	isValidOnion,
 	isValidLoki,
 	isValidI2pB32,
+	isValidI2pName,
+	validateI2pName,
 	ENV_KEY,
 	GEN_SCRIPT,
 	SUPPORTS_VANITY_PREFIX
@@ -96,6 +98,26 @@ if (isValidLoki(LOKI) && isValidLoki('morphit.loki') && !isValidLoki(ONION)) ok(
 else bad('isValidLoki');
 if (isValidI2pB32(I2P) && !isValidI2pB32(ONION)) ok('isValidI2pB32 accepts b32, rejects onion');
 else bad('isValidI2pB32');
+if (
+	isValidI2pName('morphit.i2p') &&
+	isValidI2pName('shop.morphit.i2p') &&
+	!isValidI2pName(I2P) &&
+	!isValidI2pName(ONION)
+)
+	ok('isValidI2pName accepts DOMAIN.i2p (incl. subdomains), rejects .b32.i2p + onion');
+else bad('isValidI2pName');
+{
+	const good = validateI2pName('  HTTP://Morphit.I2P/ ');
+	if (good.ok && good.value === 'morphit.i2p')
+		ok('validateI2pName normalizes scheme/case/slash → morphit.i2p');
+	else bad('validateI2pName normalize', JSON.stringify(good));
+	if (!validateI2pName(I2P).ok)
+		ok('validateI2pName rejects the .b32.i2p hash form (belongs in the b32 slot)');
+	else bad('validateI2pName should reject b32');
+	if (!validateI2pName('not a host').ok && !validateI2pName('').ok)
+		ok('validateI2pName rejects garbage + empty');
+	else bad('validateI2pName garbage/empty');
+}
 
 // ── Wiring maps ──────────────────────────────────────────────────────
 {
@@ -201,6 +223,52 @@ else bad('isValidI2pB32');
 	if (/MORPHIT_INSTANCE_I2P_ADDRESS/.test(altSrc) && /ENV_KEY\.i2p/.test(altSrc))
 		ok('CRUD: i2p keeps modern + legacy env keys in sync');
 	else bad('CRUD i2p dual-key', 'legacy i2p key not handled');
+	// Vanity i2p_name is a parallel managed slot (like nostr) with its own key.
+	if (/i2p_name: \['MORPHIT_INSTANCE_I2P_NAME_ADDRESS'\]/.test(altSrc) && /collectI2pName/.test(altSrc))
+		ok('CRUD: i2p vanity name is a managed slot (→ _I2P_NAME_ADDRESS, collectI2pName)');
+	else bad('CRUD i2p vanity', 'i2p_name slot not wired into altAddress.ts');
+}
+
+// ── edit menu alt-networks must be keep-current (data-loss regression) ──
+// Guards the bug where editing one alt address via the main `edit` menu
+// wiped the others: skipping Tor (because it was already set) returned null
+// from the wizard and we overwrote the configured onion with null. The fix
+// routes each field through editField (Enter keeps, "-" clears) and writes a
+// key only when that field actually changed.
+{
+	const editSrc = readFileSync(join(OPS, 'src', 'commands', 'edit.ts'), 'utf8');
+	const start = editSrc.indexOf("choice === 'alt-networks'");
+	const end = editSrc.indexOf("choice === 'seo'");
+	const altSection = start >= 0 && end > start ? editSrc.slice(start, end) : '';
+	if (altSection.length === 0) {
+		bad('edit menu alt-networks section', 'could not locate the alt-networks branch');
+	} else {
+		if (!/configUpdates\.set\('MORPHIT_INSTANCE_TOR_ADDRESS', alt\.tor\)/.test(altSection))
+			ok('edit menu: no unconditional alt-network overwrite (keep-current)');
+		else bad('edit menu alt-networks', 'still unconditionally overwrites — skipping a field wipes it');
+		const keys = [
+			'MORPHIT_INSTANCE_TOR_ADDRESS',
+			'MORPHIT_INSTANCE_LOKINET_ADDRESS',
+			'MORPHIT_INSTANCE_I2P_B32_ADDRESS',
+			'MORPHIT_INSTANCE_I2P_NAME_ADDRESS',
+			'MORPHIT_INSTANCE_NOSTR_PUBKEY'
+		];
+		const allGated = keys.every((k) =>
+			new RegExp(`\\.changed\\)[\\s\\S]{0,80}configUpdates\\.set\\('${k}'`).test(altSection)
+		);
+		if (allGated) ok('edit menu: every alt-network key written only when changed');
+		else bad('edit menu alt-networks', 'an alt key is set without a .changed guard');
+		if (/await editField\(/.test(altSection))
+			ok('edit menu: alt-networks uses keep-current editField prompts');
+		else bad('edit menu alt-networks', 'not using editField keep-current prompts');
+		// Two-slot i2p: the menu writes the modern split keys + offers a vanity prompt.
+		if (
+			/MORPHIT_INSTANCE_I2P_B32_ADDRESS/.test(altSection) &&
+			/MORPHIT_INSTANCE_I2P_NAME_ADDRESS/.test(altSection)
+		)
+			ok('edit menu: i2p writes modern b32 + vanity keys');
+		else bad('edit menu i2p', 'not writing the modern split i2p keys');
+	}
 }
 
 console.log('');

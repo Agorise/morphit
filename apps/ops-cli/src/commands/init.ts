@@ -319,7 +319,8 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  Public origin:        ${answers.origin !== null ? sanitizeForTerm(answers.origin) : '(skipped — federation-invisible)'}`);
 	console.log(`  Tor address:          ${answers.altNetworks.tor !== null ? sanitizeForTerm(answers.altNetworks.tor) : '(skipped)'}`);
 	console.log(`  Lokinet address:      ${answers.altNetworks.lokinet !== null ? sanitizeForTerm(answers.altNetworks.lokinet) : '(skipped)'}`);
-	console.log(`  I2P address:          ${answers.altNetworks.i2p !== null ? sanitizeForTerm(answers.altNetworks.i2p) : '(skipped)'}`);
+	console.log(`  I2P b32:              ${answers.altNetworks.i2pB32 !== null ? sanitizeForTerm(answers.altNetworks.i2pB32) : '(skipped)'}`);
+	console.log(`  I2P vanity name:      ${answers.altNetworks.i2pName !== null ? sanitizeForTerm(answers.altNetworks.i2pName) : '(skipped)'}`);
 	console.log(`  Nostr pubkey:         ${answers.altNetworks.nostr !== null ? sanitizeForTerm(answers.altNetworks.nostr) : '(skipped)'}`);
 	console.log(
 		`  BTC fee explorers:    ${answers.feeExplorers.btc.length} URL${answers.feeExplorers.btc.length === 1 ? '' : 's'}`

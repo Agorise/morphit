@@ -1,5 +1,5 @@
 /**
- * Morphit smoke — Blurt balance math (VESTS→BP, MANA regen).
+ * Morphit smoke — Blurt balance math (VESTS→BP, voting-power regen).
  *
  * Pure deterministic helpers; verifies the standard Steem-family
  * formulas against known reference values.
@@ -8,11 +8,10 @@
 import {
 	parseAssetAmount,
 	vestsToBlurtPower,
-	manaPercentage,
+	votingPowerPercent,
 	formatBalance,
 	formatPercentage,
-	MANA_REGEN_SECONDS,
-	type VotingManabar
+	VOTE_POWER_REGEN_SECONDS
 } from '../../web/src/lib/blurt/balanceMath';
 
 let scenarios = 0;
@@ -87,135 +86,59 @@ scenario('vestsToBlurtPower returns NaN on malformed input', () => {
 	}
 });
 
-// ─── manaPercentage ─────────────────────────────────────────────────
+// ─── votingPowerPercent (legacy voting_power + last_vote_time) ───────
+// Matches the "Voting" % classic Blurt explorers (blocks.blurtwallet.com)
+// show: regenerate the 0–10000 voting_power counter from last_vote_time.
 
-scenario('manaPercentage at 100% when current == max', () => {
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	// current_mana is compared on the SAME scale as the parsed vesting
-	// amount (the chain reports both in VESTS-base units); this fixture
-	// uses artificial magnitudes, so just assert the result is finite —
-	// exact-value checks are below. No delegation → effective == owned.
-	const pct = manaPercentage(manabar, '1000.000000 VESTS', '0.000000 VESTS', '0.000000 VESTS', 1_700_000_000);
-	if (Number.isNaN(pct)) throw new Error('got NaN');
+/** UTC seconds → the no-"Z" timestamp string Blurt's RPC returns. */
+const blurtTime = (sec: number): string =>
+	new Date(sec * 1000).toISOString().replace('Z', '');
+const NOW = 1_700_000_000;
+
+scenario('votingPowerPercent: 9646 just-voted → 96.46% (the supergirl case)', () => {
+	const pct = votingPowerPercent(9646, blurtTime(NOW), NOW);
+	if (Math.abs(pct - 96.46) > 1e-9) throw new Error(`expected 96.46, got ${pct}`);
 });
 
-scenario('manaPercentage at 100% with consistent scale', () => {
-	// Use raw numbers (no symbol) for vesting_shares to align with
-	// current_mana scale.  Real chain values use VESTS suffix; the
-	// math is identical.  No delegation → effective == owned.
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000);
+scenario('votingPowerPercent: 10000 → 100%', () => {
+	const pct = votingPowerPercent(10_000, blurtTime(NOW), NOW);
 	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
 });
 
-scenario('manaPercentage at 50% half-elapsed regen from zero', () => {
-	const manabar: VotingManabar = {
-		current_mana: '0',
-		last_update_time: 1_700_000_000
-	};
-	const halfRegen = MANA_REGEN_SECONDS / 2;
-	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 + halfRegen);
-	if (Math.abs(pct - 50) > 0.01) throw new Error(`expected ~50, got ${pct}`);
-});
-
-scenario('manaPercentage caps at 100% for over-regen', () => {
-	const manabar: VotingManabar = {
-		current_mana: '500000000',
-		last_update_time: 1_700_000_000
-	};
-	// Wait 10 days = 2x regen cycle; should cap at 100%.
-	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 + 10 * 86_400);
-	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
-});
-
-scenario('manaPercentage returns 0 for zero-vesting account', () => {
-	const manabar: VotingManabar = {
-		current_mana: '0',
-		last_update_time: 1_700_000_000
-	};
-	const pct = manaPercentage(manabar, '0.000000 VESTS', '0.000000 VESTS', '0.000000 VESTS', 1_700_000_000 + 1000);
+scenario('votingPowerPercent: 0 just-voted → 0%', () => {
+	const pct = votingPowerPercent(0, blurtTime(NOW), NOW);
 	if (pct !== 0) throw new Error(`expected 0, got ${pct}`);
 });
 
-scenario('manaPercentage returns NaN for missing manabar', () => {
-	if (!Number.isNaN(manaPercentage(null, '1000 VESTS', '0', '0', 1_700_000_000))) {
-		throw new Error('null');
-	}
-	if (!Number.isNaN(manaPercentage(undefined, '1000 VESTS', '0', '0', 1_700_000_000))) {
-		throw new Error('undef');
-	}
+scenario('votingPowerPercent: half-regen from 0 → ~50%', () => {
+	const half = VOTE_POWER_REGEN_SECONDS / 2; // 2.5 days
+	const pct = votingPowerPercent(0, blurtTime(NOW - half), NOW);
+	if (Math.abs(pct - 50) > 1e-9) throw new Error(`expected 50, got ${pct}`);
 });
 
-scenario('manaPercentage returns NaN for bogus current_mana', () => {
-	const bad = { current_mana: 'abc', last_update_time: 1_700_000_000 } as VotingManabar;
-	if (!Number.isNaN(manaPercentage(bad, '1000', '0', '0', 1_700_000_000))) {
-		throw new Error('bogus');
-	}
-});
-
-scenario('manaPercentage handles past last_update_time without negative regen', () => {
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	// nowSeconds BEFORE last_update_time — clock skew.  Should
-	// not subtract; clamp at current_mana.
-	const pct = manaPercentage(manabar, '1000000000', '0', '0', 1_700_000_000 - 100);
+scenario('votingPowerPercent: caps at 100% for over-regen', () => {
+	// voted 10 days ago starting at 50% → would regen past 100% → capped.
+	const pct = votingPowerPercent(5000, blurtTime(NOW - 10 * 86_400), NOW);
 	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100, got ${pct}`);
 });
 
-// ── Effective-vesting ceiling (own + received − delegated) ──────────
-// The manabar max is EFFECTIVE vesting, not owned (cp322 fix). An
-// account that delegates BP out reads HIGHER than the owned-only
-// figure; one that receives delegation reads LOWER.
-
-scenario('manaPercentage: delegating BP out raises the % (effective < owned)', () => {
-	const manabar: VotingManabar = {
-		current_mana: '250000000',
-		last_update_time: 1_700_000_000
-	};
-	// own 1e9, delegated-out 5e8 → effective 5e8. current 2.5e8.
-	// effective: 2.5e8 / 5e8 = 50%.  (Owned-only would read 25%.)
-	const pct = manaPercentage(manabar, '1000000000', '0', '500000000', 1_700_000_000);
-	if (Math.abs(pct - 50) > 1e-9) throw new Error(`expected 50 (effective), got ${pct}`);
+scenario('votingPowerPercent: trailing "Z" is optional (UTC either way)', () => {
+	const withZ = votingPowerPercent(9646, `${blurtTime(NOW)}Z`, NOW);
+	const without = votingPowerPercent(9646, blurtTime(NOW), NOW);
+	if (Math.abs(withZ - without) > 1e-9) throw new Error(`Z mismatch: ${withZ} vs ${without}`);
+	if (Math.abs(withZ - 96.46) > 1e-9) throw new Error(`expected 96.46, got ${withZ}`);
 });
 
-scenario('manaPercentage: received delegation lowers the % (effective > owned)', () => {
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	// own 1e9, received 1e9 → effective 2e9. current 1e9.
-	// effective: 1e9 / 2e9 = 50%.  (Owned-only would read 100%.)
-	const pct = manaPercentage(manabar, '1000000000', '1000000000', '0', 1_700_000_000);
-	if (Math.abs(pct - 50) > 1e-9) throw new Error(`expected 50 (effective), got ${pct}`);
+scenario('votingPowerPercent: clock skew (now before last vote) → no negative regen', () => {
+	const pct = votingPowerPercent(9646, blurtTime(NOW + 100), NOW);
+	if (Math.abs(pct - 96.46) > 1e-9) throw new Error(`expected 96.46, got ${pct}`);
 });
 
-scenario('manaPercentage returns 0 when fully delegated out (effective <= 0)', () => {
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	// delegated-out exceeds own+received → effective <= 0 → 0%.
-	const pct = manaPercentage(manabar, '1000000000', '0', '1500000000', 1_700_000_000);
-	if (pct !== 0) throw new Error(`expected 0, got ${pct}`);
-});
-
-scenario('manaPercentage degrades malformed received/delegated to 0 (ceiling = owned)', () => {
-	const manabar: VotingManabar = {
-		current_mana: '1000000000',
-		last_update_time: 1_700_000_000
-	};
-	// Garbage received/delegated must not poison the result — they fall
-	// back to 0, so the ceiling is owned vesting (1e9) → 100%.
-	const pct = manaPercentage(manabar, '1000000000', 'garbage', 'also-bad', 1_700_000_000);
-	if (Math.abs(pct - 100) > 1e-9) throw new Error(`expected 100 (degraded), got ${pct}`);
+scenario('votingPowerPercent: NaN for missing/bad inputs', () => {
+	if (!Number.isNaN(votingPowerPercent(null, blurtTime(NOW), NOW))) throw new Error('null vp');
+	if (!Number.isNaN(votingPowerPercent(9646, null, NOW))) throw new Error('null time');
+	if (!Number.isNaN(votingPowerPercent(9646, 'not-a-date', NOW))) throw new Error('bad time');
+	if (!Number.isNaN(votingPowerPercent(9646, blurtTime(NOW), NaN))) throw new Error('bad now');
 });
 
 // ─── formatBalance ──────────────────────────────────────────────────
@@ -236,10 +159,11 @@ scenario('formatBalance returns em-dash for NaN', () => {
 	if (formatBalance(Infinity) !== '—') throw new Error('Infinity');
 });
 
-scenario('formatPercentage one decimal place', () => {
-	if (formatPercentage(50) !== '50.0%') throw new Error('50');
-	if (formatPercentage(92.45) !== '92.5%') throw new Error('92.45');
-	if (formatPercentage(0) !== '0.0%') throw new Error('0');
+scenario('formatPercentage two decimal places', () => {
+	if (formatPercentage(50) !== '50.00%') throw new Error('50');
+	if (formatPercentage(92.45) !== '92.45%') throw new Error('92.45');
+	if (formatPercentage(96.46) !== '96.46%') throw new Error('96.46');
+	if (formatPercentage(0) !== '0.00%') throw new Error('0');
 });
 
 scenario('formatPercentage NaN returns em-dash', () => {

@@ -1085,6 +1085,10 @@
     "still_need_help": "¿Sigues con dudas?",
     "contact_support": "Preguntar en soporte",
     "entries": {
+      "why_agpl": {
+        "q": "¿Por qué Morphit usa la licencia AGPL-3.0?",
+        "a": "Para que nadie —ni una empresa, ni un gobierno, ni siquiera nosotros— pueda tomar Morphit, encerrarlo y volverlo silenciosamente contra las personas que lo usan. La licencia garantiza que toda copia de Morphit en funcionamiento permanezca abierta e inspeccionable. Todo lo demás se construye sobre eso.\n\n**La única regla que añade.** Si ejecutas Morphit como un servicio público y modificas el código, tienes que compartir tus cambios con las personas que lo usan. Eso es todo. Levanta una instancia, cámbiale la marca, reescribe cada palabra de la pantalla, añade funciones, cóbralo: todo está permitido, y además lo fomentamos. Lo único que no puedes hacer es ejecutar una versión *secreta y modificada*. Si tu instancia llega a los usuarios, tus usuarios pueden leer su código fuente. Para una herramienta de privacidad eso lo es todo: es la forma en que cualquiera puede confirmar que la instancia en la que está es el Morphit real y no una imitación con puerta trasera. La libertad que no puedes verificar es solo una promesa; esto la convierte en algo que sí puedes comprobar.\n\n**¿Por qué no una licencia «más libre»?** Las licencias permisivas (MIT, BSD, Apache) no piden nada a cambio, lo que suena más libre... hasta que te das cuenta de que también permiten que cualquiera tome Morphit, le añada rastreo oculto, cierre el código y se lo venda a tus vecinos como una pulida app de vigilancia, sin que nadie se entere. Una licencia que permite tu propia captura no protege tu libertad; protege a quien quiere enjaularte. La GPL común tiene el mismo agujero para el software de red: solo se activa cuando le entregas a alguien un programa para descargar, no cuando ejecutas una copia modificada en tu propio servidor, que es exactamente como se usa Morphit. La AGPL cierra ese agujero. Y no tener ninguna licencia es lo peor de todo: si no dices nada, la ley de derechos de autor aplica por defecto *todos los derechos reservados*: nadie puede legalmente bifurcarlo ni ejecutar su propia instancia. El silencio no es libertad; es una puerta cerrada con llave.\n\n**Para los agoristas en especial.** Aquí está la tensión honesta: la AGPL se apoya en los derechos de autor, y los derechos de autor son una criatura del Estado. La postura purista es no reclamar nada: lanzarlo al dominio público y marcharse. Creemos que eso les hace un regalo precisamente a las personas de las que intentas escapar: los actores con grandes recursos que lo tomarán, lo cerrarán, lo conectarán a la máquina de vigilancia y lo llamarán comodidad. Intenciones puras, herramienta capturada. El copyleft es el movimiento de judo: toma el propio instrumento del Estado y lo vuelve contra el cercamiento. No le suplicamos protección al Estado; usamos sus propias reglas para hacer que este bien común sea permanentemente inapropiable. Cada bifurcación sigue abierta. Cada instancia sigue siendo inspeccionable. Nadie puede construir una jaula con nuestro código. Eso no es hacer las paces con el sistema: es el sistema funcionando por fin a favor de la contraeconomía en lugar de en su contra.\n\n**El panorama completo.** El objetivo nunca fue ganarle una discusión a la bestia, sino volverla obsoleta. Cuanta más gente ejecute sus propias instancias, y convenza a otros de ejecutar todavía más, menos habrá que cualquier poder central pueda controlar: herramientas que no puede vigilar, mercados que no puede ver, intercambios que no puede gravar ni detener. Eso es lo que vuelve inútil al aparato. No será elegante: cuando el control se escapa, el primer reflejo siempre es apretar más fuerte, con más reglas y más fuerza. Pero la coerción es cara y la inutilidad agota, y tarde o temprano la bestia hace lo que hacen los matones cuando ya nadie les teme: pierde el interés y se marcha a buscar algo más productivo que hacer. Así que bifurca Morphit. Hazlo tuyo. Levanta una instancia y convence a tres amigos de levantar tres más. La licencia está aquí para garantizar una sola cosa: que cada una de esas instancias siga siendo libre, abierta e imposible de volver silenciosamente contra las personas que la usan.\n\n*Morphit se publica bajo la GNU Affero General Public License, versión 3. Este es nuestro razonamiento, no asesoramiento legal.*"
+      },
       "what_is_morphit": {
         "q": "¿Qué es Morphit?",
         "a": "Morphit es un marketplace P2P donde la gente cambia efectivo por criptomoneda (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum y XRP) directamente entre sí. También puedes intercambiar bienes/servicios. Morphit nunca toca tus activos y nunca te pregunta nada sobre ti. Es un tablón de anuncios (BBS), no un banco."
@@ -1796,7 +1800,10 @@
     "alt_network_address": "Dirección: {address}",
     "instances": "Instancias",
     "explorer": "Explorador de bloques",
-    "download": "Descargar",
+"download": "Descargar",
+    "api": "API",
+    "api_title": "Documentación de la API para desarrolladores",
+    "agpl_title": "Por qué Morphit usa la licencia AGPL-3.0",
     "i2p_b32": "I2P (.b32.i2p)",
     "i2p_name": "I2P",
     "canary": "Canario",
@@ -2033,6 +2040,7 @@
           "finalizing": "Desbloqueando…"
         },
         "error": {
+          "enroll_verify_failed": "No se pudo verificar tu YubiKey. Vuelve a registrarla en Ajustes e inténtalo de nuevo.",
           "webhid_unsupported": "Tu navegador no admite llaves de hardware. Prueba Chrome, Edge o Brave.",
           "no_device": "No se seleccionó ninguna YubiKey.",
           "open_failed": "No se pudo abrir la YubiKey. Asegúrate de que está conectada.",
@@ -3755,6 +3763,10 @@
       "duplicate": "Ese endpoint ya está en la lista.",
       "at_least_one": "Mantén al menos un endpoint.",
       "cooling_down": "enfriándose",
+      "recheck": "Volver a comprobar la velocidad de los nodos",
+      "http_error": "Error: {code}",
+      "server_only_heading": "También en la red",
+      "server_only_note": "Forman parte de la red de Blurt, pero un navegador no puede conectarse a ellos directamente. Los servidores de Morphit los usan en segundo plano.",
       "failing": "{n} fallo(s)",
       "probing": "comprobando…",
       "remove_aria": "Quitar {url}",
@@ -3765,10 +3777,6 @@
     "session": {
       "heading": "Utilidades",
       "explain": "Cierra sesión cuando termines. Tus claves se borrarán de la memoria; el almacén de claves cifrado en tu dispositivo permanece intacto.",
-      "sign_out": "Cerrar sesión",
-      "confirm_prompt": "¿Cerrar sesión en este dispositivo? Tus claves se borrarán de la memoria. Tendrás que desbloquear de nuevo para operar.",
-      "confirm_yes": "Sí, cerrar sesión",
-      "confirm_cancel": "Seguir conectado",
       "autolock_label": "Auto-bloquear tras inactividad",
       "autolock_help": "Bloquear automáticamente tu sesión tras este tiempo sin actividad. Bloquear limpia tus claves de memoria; tu keystore cifrado queda en este dispositivo para que puedas desbloquear con tu contraseña al volver.",
       "autolock_15min": "15 minutos",
@@ -3949,6 +3957,7 @@
       "empty": "No has bloqueado a nadie.",
       "refresh": "Actualizar",
       "refresh_aria": "Actualizar la lista de cuentas bloqueadas desde el indexador",
+      "refreshed": "¡Actualizado!",
       "unblock": "Desbloquear",
       "unblocking": "Desbloqueando…",
       "unblock_failed": "No se pudo desbloquear. Revisa tu conexión e inténtalo de nuevo.",
@@ -4048,6 +4057,7 @@
         "finalizing": "Finalizando…"
       },
       "error": {
+        "enroll_verify_failed": "No pudimos verificar tu YubiKey. Asegúrate de que la ranura 2 esté configurada para desafío-respuesta HMAC-SHA1, prueba otro puerto USB y vuelve a registrarla.",
         "confirm_backup": "Confirma que tu frase semilla está guardada antes de continuar.",
         "password_too_short": "La contraseña debe tener al menos 8 caracteres.",
         "passwords_mismatch": "Las dos contraseñas no coinciden.",

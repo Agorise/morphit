@@ -21,6 +21,7 @@
  */
 
 import { browser } from '$app/environment';
+import { writable } from 'svelte/store';
 // cp165 byte-budget: `broadcastCustomJson` is dynamically imported
 // inside `broadcastProfile` (which is only called on user action).
 // A static import of '../sign' here transitively pulled dblurt into
@@ -36,14 +37,52 @@ import { clearProfileCache } from '$lib/indexer/profileCache';
 
 const ACCOUNT_STORAGE_KEY = 'morphit.blurtAccount';
 
-/** Return the Blurt account name the user registered, or null. */
-export function getUserBlurtAccount(): string | null {
+function readAccountFromStorage(): string | null {
 	if (!browser) return null;
 	try {
 		return window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Reactive mirror of the persisted Blurt account name.
+ *
+ * Why this exists (beta.29): the always-visible AvatarMenu seeds the
+ * user's identicon from this name. It read `getUserBlurtAccount()` —
+ * an imperative localStorage read — inside a `$derived` whose only
+ * reactive deps were the keystore stores, NEITHER of which changes
+ * when registration writes the name (the keypair is identical before
+ * and after). Because the avatar `<img>` is always on screen, that
+ * `$derived` computed once during onboarding — before a name existed —
+ * cached the pubkey-seeded fallback heart, and never recomputed within
+ * the session. The result: the avatar showed a heart that mismatched
+ * the name-seeded heart every freshly-loaded page renders (profile
+ * hero, /settings cards, register-name preview). Subscribing to this
+ * store makes every consumer recompute the instant the name is set.
+ *
+ * Source of truth is still localStorage (survives reloads, shared
+ * across tabs); this store mirrors it. `set`/`clearUserBlurtAccount`
+ * keep it current in-tab, and the `storage` listener below syncs
+ * changes made by OTHER tabs (registering or signing out elsewhere).
+ */
+export const blurtAccountName = writable<string | null>(readAccountFromStorage());
+
+if (browser) {
+	// Cross-tab: a `storage` event fires in every OTHER tab when this
+	// key changes, so registering / signing out in one tab keeps the
+	// avatar correct everywhere without a reload.
+	window.addEventListener('storage', (e) => {
+		if (e.key === ACCOUNT_STORAGE_KEY) blurtAccountName.set(e.newValue);
+		// A full localStorage.clear() reports key === null.
+		else if (e.key === null) blurtAccountName.set(readAccountFromStorage());
+	});
+}
+
+/** Return the Blurt account name the user registered, or null. */
+export function getUserBlurtAccount(): string | null {
+	return readAccountFromStorage();
 }
 
 /** Record the Blurt account name after registration. */
@@ -55,6 +94,10 @@ export function setUserBlurtAccount(name: string): void {
 		// Privacy Mode; the account name will need to be re-entered next
 		// session. A real solution is Phase 3 — indexer lookup by pubkey.
 	}
+	// Update the reactive mirror regardless of whether the persistent
+	// write succeeded — even in Privacy Mode the name is valid for THIS
+	// session, so the avatar should reflect it immediately.
+	blurtAccountName.set(name);
 }
 
 /** Forget the persisted account name.  Call this on a DELIBERATE
@@ -76,6 +119,7 @@ export function clearUserBlurtAccount(): void {
 	} catch {
 		// Privacy Mode / storage unavailable — nothing persisted to clear.
 	}
+	blurtAccountName.set(null);
 }
 
 export interface ProfilePayload {
