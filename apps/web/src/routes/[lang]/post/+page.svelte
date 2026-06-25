@@ -35,6 +35,7 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
 	import Term from '$components/Term.svelte';
@@ -1566,6 +1567,7 @@
 <Head routeKey="post_order" noindex />
 
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
+	<RequireLiveSession />
 	<header class="mb-8">
 		<h1 class="font-display text-3xl font-extrabold">
 			<span class="brand-gradient-text">{$_('post_order.heading')}</span>
@@ -2506,7 +2508,7 @@
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
 			<BusyButton variant="link" onclick={backToEditing}>
-				<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('common.back')}
+				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('common.back')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"
@@ -2563,7 +2565,7 @@
 						password = '';
 					}}
 				>
-					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('common.cancel')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('common.cancel')}
 				</BusyButton>
 				<BusyButton variant="primary" disabled={password.length < 8} onclick={submitBroadcast}>
 					{$_('post_order.locked.unlock')}

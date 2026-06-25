@@ -38,6 +38,7 @@
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { gotoLocale } from '$i18n/navigate';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
@@ -203,6 +204,8 @@
 </script>
 
 <Head routeKey="chat_conversation" noindex />
+
+<RequireLiveSession />
 
 {#if bootError}
 	<section class="mx-auto max-w-2xl px-4 py-8">

@@ -52,12 +52,13 @@ const checks: readonly Check[] = [
 		}
 	},
 	{
-		name: 'main.ts mounts the chain explorer routes at /v1/chain',
+		name: 'main.ts mounts the chain explorer routes at /v1/chain (cp347: via a rate-limited sub-app)',
 		holds: () => {
 			const s = read(P.main);
 			return (
 				/import \{ chainExplorerRoute \}/.test(s) &&
-				/app\.route\('\/v1\/chain', chainExplorerRoute\(blurt\)\)/.test(s)
+				/chainApp\.route\('\/', chainExplorerRoute\(blurt\)\)/.test(s) &&
+				/app\.route\('\/v1\/chain', chainApp\)/.test(s)
 			);
 		}
 	},
@@ -105,8 +106,8 @@ for (const c of checks) {
 
 // ── Tamper tests ──
 {
-	const mutated = read(P.main).replace(/\n\tapp\.route\('\/v1\/chain', chainExplorerRoute\(blurt\)\);/, '');
-	const stillOk = /app\.route\('\/v1\/chain', chainExplorerRoute\(blurt\)\)/.test(mutated);
+	const mutated = read(P.main).replace(/\n\tchainApp\.route\('\/', chainExplorerRoute\(blurt\)\);/, '');
+	const stillOk = /chainApp\.route\('\/', chainExplorerRoute\(blurt\)\)/.test(mutated);
 	if (mutated === read(P.main)) {
 		console.error('  \u2717 tamper wiring error: could not drop the /v1/chain mount');
 		fail++;

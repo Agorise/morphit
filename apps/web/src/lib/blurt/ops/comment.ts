@@ -70,7 +70,7 @@ import type {
 	Operation
 } from '@beblurt/dblurt';
 
-import { getBlurtClient } from '$blurt/client';
+import { submitSignedTransaction, fetchDynamicGlobalProperties } from '$blurt/broadcastTransport';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
@@ -145,8 +145,10 @@ async function getRefBlockInfo(): Promise<{
 	ref_block_prefix: number;
 	expiration: string;
 }> {
-	const client = getBlurtClient();
-	const props = await client.getDynamicGlobalProperties();
+	// cp344: read the chain head SAME-ORIGIN (indexer proxy, direct-RPC
+	// fallback) — same as sign.ts, so a syndicated comment no longer reads
+	// the head from a third-party RPC node directly.
+	const props = await fetchDynamicGlobalProperties();
 	const blockNum = props.head_block_number;
 	const blockId = props.head_block_id;
 	const ref_block_num = blockNum & 0xffff;
@@ -204,8 +206,10 @@ const APP_MARKER = 'morphit/0.1.0';
 const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * Broadcast a native Blurt comment. Returns the block_num and
- * trx_id from `condenser_api.broadcast_transaction_synchronous`.
+ * Broadcast a native Blurt comment. Returns the block_num and trx_id.
+ * cp344: submitted SAME-ORIGIN through the indexer broadcast proxy
+ * (broadcastTransport.submitSignedTransaction), with a direct-RPC fallback —
+ * no cross-origin RPC connection, no third-party IP leak.
  *
  * @param live     Session LiveIdentity. The posting private key is
  *                 read from here; never leaves the browser.
@@ -283,7 +287,6 @@ export async function broadcastComment(
 
 	const op = buildCommentOperation(payload, account);
 
-	const client = getBlurtClient();
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 
 	const tx: Transaction = {
@@ -301,10 +304,9 @@ export async function broadcastComment(
 		live.posting.privateKey
 	);
 
-	const result = await client.call<{ block_num: number; trx_id: string }>(
-		'condenser_api.broadcast_transaction_synchronous',
-		[signed]
-	);
+	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
+	// fallback). `comment` is on the proxy's op whitelist.
+	const result = await submitSignedTransaction(signed);
 	return result;
 }
 

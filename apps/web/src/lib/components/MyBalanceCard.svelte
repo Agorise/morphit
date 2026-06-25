@@ -161,8 +161,16 @@
 	async function manualRefresh(): Promise<void> {
 		if (manualRefreshing) return;
 		manualRefreshing = true;
+		// Always show a visible spin on click. Without a floor, a click that
+		// lands while the silent 5s auto-refresh is mid-flight makes refresh()
+		// early-return (the refreshInFlight guard) so fast that the true→false
+		// flip coalesces into one reactive flush and the icon never visibly
+		// spins — the user perceives a dead button that only "works" a couple
+		// seconds later, once the auto-refresh window has passed. A short floor
+		// guarantees prompt feedback regardless of what the refresh did.
+		const minSpin = new Promise<void>((resolve) => setTimeout(resolve, 600));
 		try {
-			await refresh();
+			await Promise.all([refresh(), minSpin]);
 		} finally {
 			manualRefreshing = false;
 		}

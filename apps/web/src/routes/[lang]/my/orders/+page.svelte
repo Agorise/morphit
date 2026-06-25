@@ -463,11 +463,9 @@
 				     Surfaces every chain op the user has authored,
 				     including order posts, replace/cancel, feedback. -->
 				<p class="mt-2 text-sm">
-					<a
-						href={lp(`/explorer/account/${blurtAccount}`)}
-						class="text-morphit-emerald underline-offset-2 hover:underline"
-					>
-						{$_('my_orders.view_on_explorer')} →
+					<a href={lp(`/explorer/account/${blurtAccount}`)} class="text-morphit-emerald">
+						{$_('my_orders.view_on_explorer')}
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</p>
 			{/if}
@@ -490,14 +488,17 @@
 	{#if !blurtAccount}
 		<section class="card text-center">
 			<h2 class="font-display text-xl font-bold">
-				{$_('post_order.no_account.title')}
+				{$_('my_orders.no_account.title')}
 			</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
-				{$_('post_order.no_account.body')}
+				{$_('my_orders.no_account.body')}
 			</p>
-			<div class="mt-4">
+			<div class="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
 				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/register-name')}>
-					{$_('post_order.no_account.cta')}
+					{$_('my_orders.no_account.cta_register')}
+				</BusyButton>
+				<BusyButton variant="secondary" onclick={() => gotoLocale('/onboarding/import')}>
+					{$_('my_orders.no_account.cta_unlock')}
 				</BusyButton>
 			</div>
 		</section>
@@ -511,11 +512,11 @@
 		     unlock to continue" CTA they can't satisfy (their keys
 		     live on their phone). -->
 		<section class="card">
-			<h2 class="font-display text-xl font-bold">{$_('post_order.locked.title')}</h2>
-			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.locked.body')}</p>
+			<h2 class="font-display text-xl font-bold">{$_('my_orders.locked.title')}</h2>
+			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('my_orders.locked.body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="primary" onclick={() => gotoLocale('/onboarding/import')}>
-					{$_('post_order.locked.unlock')}
+					{$_('my_orders.locked.unlock')}
 				</BusyButton>
 			</div>
 		</section>

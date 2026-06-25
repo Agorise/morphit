@@ -19,11 +19,14 @@
  *   DIRECTION B — every canonical-example env var MUST be EITHER in
  *   the Zod schema OR consumed by a sibling script (apps/<svc>/scripts/).
  *   The script-consumed exception exists because some env vars are
- *   read by helper scripts (e.g. apps/relay/scripts/mint-acts.ts reads
- *   MORPHIT_RELAY_WEEKLY_ACT_COUNT for the unattended ACT-minting
- *   ceremony) and are legitimately not part of the main server
- *   Zod schema.  Without this exception, the smoke would false-fire
- *   on WEEKLY_ACT_COUNT.
+ *   read by helper scripts in apps/<svc>/scripts/ rather than by the
+ *   main server, and are legitimately not part of the server Zod
+ *   schema. (The original motivating case was the relay's
+ *   MORPHIT_RELAY_WEEKLY_ACT_COUNT, read by apps/relay/scripts/mint-acts.ts;
+ *   that ACT-minting model was removed at beta.28 / cp329 — account
+ *   creation is now a direct account_create op paying the fee inline —
+ *   so neither the var nor the script exists any more. The exception
+ *   mechanism is kept for any future script-consumed env var.)
  *
  * Drift surfaced at cp57:
  *   - Indexer: 13 vars in schema but not in ops/env/indexer.env.example
@@ -34,9 +37,9 @@
  *     keys, TRUSTED_PROXY_IPS, and SEQUENTIAL_* squatter-defense
  *     knobs that operators couldn't tune through canonical docs.
  *   - Relay: 1 var (MORPHIT_RELAY_WEEKLY_ACT_COUNT) in example but
- *     not in schema → false-positive Direction-B candidate.  Smoke
- *     verifies it's consumed by apps/relay/scripts/mint-acts.ts
- *     (it is) and allows it.
+ *     not in schema → false-positive Direction-B candidate at cp57;
+ *     was consumed by apps/relay/scripts/mint-acts.ts (since removed
+ *     at beta.28 / cp329 along with the var itself).
  *
  * Recurring class scope progression (11 defenses across 10 checkpoints):
  *   cp48-O1: standalone smoke scripts

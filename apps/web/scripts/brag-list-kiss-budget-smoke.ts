@@ -112,7 +112,12 @@ const content = readFileSync(BRAG_PATH, 'utf-8');
 // belongs here.  (Surfaced when the parser's end-of-input bug was
 // fixed: #14 contains "Zero", whose capital Z used to truncate its
 // body before the sentence counter ever saw the staccato tail.)
-const STACCATO_ALLOWLIST = new Set(['3', '12', '14', '197', '206', '210', '213', '215']);
+// cp344: a new privacy entry ("Your broadcasts go through your
+// operator's node…") was inserted at #15, shifting every entry ≥15
+// by +1.  The staccato exemptions above #15 move with them:
+// 197→198, 206→207, 210→211, 213→214, 215→216.  '3', '12', '14'
+// are below the insertion point and don't shift.
+const STACCATO_ALLOWLIST = new Set(['3', '12', '14', '198', '207', '211', '214', '216']);
 
 const SENTENCE_LIMIT = 4;
 const WORD_LIMIT = 100;

@@ -22,42 +22,26 @@ walkthrough). Both must stay aligned with this catalog.
 
 ## 1. Operator-side manual tasks
 
-### 1.1 Weekly ACT minting ceremony — ✅ AUTOMATED (was: HIGH automation potential)
+### 1.1 Weekly ACT minting ceremony — ❌ REMOVED (beta.28 / cp329)
 
-**Today** (manual fallback): Operator SSHes weekly, runs
-`npm run mint-acts -- 25` (or `npx tsx scripts/mint-acts.ts 25`),
-verifies on-chain, journals.
+**There is no ACT minting task any more, so there is nothing to
+automate here.** Blurt disabled `claim_account` /
+`create_claimed_account` at hard fork 2, so Account Creation
+Tokens cannot be minted at all. As of beta.28 (ADR-0010, as
+amended 2026-06) the relay creates each account with a direct
+`account_create` op, paying the ~100 BLURT `account_creation_fee`
+**inline** from its liquid BLURT at signup time. The
+`mint-acts.ts` script, the `morphit-relay-mint-acts.{service,timer}`
+units, and the `MORPHIT_RELAY_WEEKLY_ACT_COUNT` /
+`MORPHIT_RELAY_AUTOMINT_*` config knobs have all been removed.
 
-**Today** (recommended path, since 2026-05): operator runs the
-one-time systemd setup (`ops/systemd/morphit-relay-mint-acts.{service,timer}`),
-which fires every Sunday 04:00 UTC and mints
-`MORPHIT_RELAY_WEEKLY_ACT_COUNT` ACTs (default 25). Operator
-checks `journalctl -u morphit-relay-mint-acts` once per month
-to confirm green; alerts fire on failed runs via the existing
-journald-watch pipeline.
-
-**Why automation is fine**: the cap is the operator-set
-weekly count + the relay's working balance. Automating doesn't
-increase the maximum loss on relay compromise — the timer
-inherits the same caps.
-
-**Implementation:**
-1. SystemD timer `morphit-relay-mint-acts.timer` runs
-   `OnCalendar=Sun *-*-* 04:00:00 UTC` weekly with up to 30 min
-   randomized delay.
-2. The script reads `MORPHIT_RELAY_WEEKLY_ACT_COUNT` env var
-   (default 25, operator-tunable in `/etc/morphit/relay.env`).
-3. Active-key access via `LoadCredential=` pointing at a
-   root-owned 0600 file, or `LoadCredentialEncrypted=` with
-   `systemd-creds` for higher-threat-model operators.  The
-   script reads `MORPHIT_RELAY_PASSPHRASE_FILE` from systemd's
-   `$CREDENTIALS_DIRECTORY`.
-4. Failure mode: oneshot exit non-zero with detail in journal;
-   operator's existing alert pipeline (see §1.6) catches it.
-
-**Saves**: ~10 min/week × 52 weeks = ~9 hr/year per operator,
-plus the cognitive overhead of "am I going to forget the
-ceremony this week?" which is the real cost.
+**Operator-side, the only standing task is funding** — keep
+`@morphit-relay` topped up with enough liquid BLURT to cover
+signups (see OPERATIONS §0a for the sizing math and §16 for the
+`relay_low_balance_for_signups` Matrix alert). That funding is
+itself "automatable" via a recurrent on-chain transfer (§1.2),
+and the low-balance alerting is already automated (§1.6), so no
+new automation is owed here.
 
 **STATUS**: ✅ Implemented 2026-05-01. See OPERATIONS.md §2
 "Unattended mode" for the operator-facing setup steps.
@@ -290,9 +274,12 @@ SSH key-only mode.
 
 ### 3.2 Configure systemd timers for auto-tasks — should be in setup checklist
 
-If §1.1 (weekly ACT mint) becomes auto-cron'd, the operator's
-setup wizard should install + enable the timer alongside the
-relay.
+The weekly ACT-mint timer referenced here historically was
+removed at beta.28 (see §1.1). The remaining auto-task timers the
+setup wizard should install + enable alongside the relay are the
+monitoring/backup units (TLS renewal, balance alerts, backups) —
+none of them touch account creation, which now pays its fee
+inline per signup.
 
 ### 3.3 ops-cli should verify everything's in place — Q9 deliverable
 
@@ -381,7 +368,7 @@ encrypted at rest. Currently silent on this.
 
 | # | Task | Auto today? | Recommend automating? | Effort |
 |---|---|---|---|---|
-| 1.1 | Weekly ACT minting | ❌ Manual | ✅ HIGH | ~80 lines + systemd unit |
+| 1.1 | Weekly ACT minting | ❌ Removed (beta.28) | n/a — task no longer exists | done |
 | 1.2 | Recurrent BLURT top-up | ✅ Native chain | n/a | done |
 | 1.3 | TLS renewal | ✅ certbot | n/a | done |
 | 1.4 | Witness fee change response | ❌ Manual | 🟡 Partial — log warn | ~20 lines |
@@ -399,10 +386,8 @@ encrypted at rest. Currently silent on this.
 
 ## Next steps
 
-1. Implement §1.1 (weekly ACT mint via systemd timer + env var
-   count). High value; medium effort. Tracked in REVISIT-LIST §G.
-2. Implement §3.3 (expanded setup checklist) as part of Q9.
-3. Implement §2.1 (7-day backup-seed nudge). Small.
+1. Implement §3.3 (expanded setup checklist) as part of Q9.
+2. Implement §2.1 (7-day backup-seed nudge). Small.
 4. Document §1.9 + §5.3 in OPERATIONS.md and
    RUN-A-MORPHIT-NODE.md.
 

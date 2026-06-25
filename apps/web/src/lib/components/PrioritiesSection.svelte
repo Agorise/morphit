@@ -188,18 +188,7 @@
 					     the card is interactive.  Arrow glyph shifts on hover. -->
 					<span class="priorities-card-cta" aria-hidden="true">
 						{$_('home.priorities.learn_more')}
-						<svg
-							class="priorities-card-cta-arrow"
-							viewBox="0 0 16 16"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.6"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M3 8h10" />
-							<path d="m9 4 4 4-4 4" />
-						</svg>
+						<span class="nav-arrow nav-arrow-right">⇨</span>
 					</span>
 				</a>
 			</li>
@@ -336,8 +325,7 @@
 	/* Honor user's motion preference — no animation, but the
 	 * lift/border state changes still apply (instant). */
 	@media (prefers-reduced-motion: reduce) {
-		.priorities-card,
-		.priorities-card-cta-arrow {
+		.priorities-card {
 			transition: none;
 		}
 	}
@@ -388,19 +376,8 @@
 		color: rgb(148 163 184); /* ink-400 */
 	}
 
-	.priorities-card-cta-arrow {
-		width: 14px;
-		height: 14px;
-		transition: transform 180ms ease-out;
-	}
-
-	/* On hover, the arrow slides 3px to the right — universal
-	 * "you're going somewhere" affordance.  The card title also
-	 * shifts to a brand color. */
-	.priorities-card:hover .priorities-card-cta-arrow,
-	.priorities-card:focus-visible .priorities-card-cta-arrow {
-		transform: translateX(3px);
-	}
+	/* On hover the CTA text shifts to the brand color; the arrow glyph
+	 * slides + greens via the global .nav-arrow rules in app.css. */
 	.priorities-card:hover .priorities-card-cta,
 	.priorities-card:focus-visible .priorities-card-cta {
 		color: rgb(0 218 105); /* morphit-emerald */

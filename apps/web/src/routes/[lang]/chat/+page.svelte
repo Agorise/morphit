@@ -51,6 +51,7 @@
 	import { hiddenAccounts, hideAccount } from '$lib/utils/hiddenAccounts';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import type { ConversationSummary, ProfileResponse } from '@morphit/indexer-client';
 
 	let me: string | null = $state(null);
@@ -282,6 +283,7 @@
 <Head routeKey="chat_inbox" noindex />
 
 <section class="mx-auto max-w-2xl px-4 py-8">
+	<RequireLiveSession />
 	<header class="mb-6">
 		<div class="flex items-baseline justify-between gap-4">
 			<h1 class="font-display text-3xl font-extrabold">
@@ -517,7 +519,7 @@
 								weight="semibold"
 								showCopy={false}
 							/>
-							<span class="ml-auto text-xs text-ink-500 dark:text-ink-400 rtl:inline-block rtl:-scale-x-100" aria-hidden="true"
+							<span class="ml-auto text-xs text-ink-500 dark:text-ink-400 nav-arrow nav-arrow-right" aria-hidden="true"
 								>⇨</span
 							>
 						</a>

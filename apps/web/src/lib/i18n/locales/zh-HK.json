@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "開發者 API 文檔",
     "agpl_title": "為甚麼 Morphit 使用 AGPL-3.0 授權條款",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "金絲雀",
     "canary_title": "營運者的每週搜查令金絲雀 — 確認日期是否為近期",
@@ -2029,7 +2029,7 @@
     "no_account_body": "喺上面揀個型嘅用戶名就可以開一個新帳戶，真係咁簡單。",
     "register_cta": "🌱 建立新帳戶",
     "checking": "正在檢查你的會話…",
-    "import_existing": "🔐 用 12 詞助記詞、json 密鑰檔或 posting 密鑰登入",
+    "import_existing": "用 12 詞助記詞、json 密鑰檔或 posting 密鑰登入",
     "unlock": {
       "password_required": "輸入密碼以解鎖。",
       "wrong_password": "該密碼與你的 keystore 不符。重試,或用 助記詞登入。",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "無法載入你嘅訂單。請重試。",
       "no_account": "用你嘅 Blurt 帳戶登入即可查看你嘅訂單。"
+    },
+    "no_account": {
+      "title": "設定以查看您的訂單",
+      "body": "您的訂單以鏈上方式儲存在您的 Morphit 身份下。建立一個即可開始交易，或解鎖現有身份以查看您的記錄。",
+      "cta_register": "建立帳戶",
+      "cta_unlock": "我已有帳戶"
+    },
+    "locked": {
+      "title": "解鎖以查看您的訂單",
+      "body": "您的訂單記錄受您的解鎖保護，因此鎖定的裝置絕不會洩露您的交易。請輸入密碼以查看。",
+      "unlock": "解鎖"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "私隱",
     "post_now": "立即發布",
     "start": "開始",
+    "unlock": "解鎖",
     "glossary": "術語表",
     "cheat_sheet": "速查表"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "已本地儲存。註冊帳戶後即可發佈。",
         "locked": "Session 已鎖定。請重新登入再廣播。",
-        "generic": "無法廣播。請重試。"
+        "generic": "無法廣播。請重試。",
+        "rejected": "網絡拒絕咗今次廣播：{reason}"
       },
       "save_pending": "正在儲存…",
       "broadcast_pending": "發佈中…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "移除 {url}",
       "reset_confirm_prompt": "將所有自定義 RPC 端點重置為預設值？",
       "reset_confirm_yes": "係，重置",
-      "reset_confirm_cancel": "取消"
+      "reset_confirm_cancel": "取消",
+      "timed_out": "逾時",
+      "unreachable": "無法連線"
     },
     "session": {
       "autolock_changed": "已改為 {label}",

@@ -291,7 +291,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.rss', locale: 'fa', reason: '(c) "RSS" is universal acronym' },
 	{ key: 'footer.rss', locale: 'zh-CN', reason: '(c) "RSS" is universal acronym' },
 	{ key: 'footer.rss', locale: 'zh-HK', reason: '(c) "RSS" is universal acronym' },
-	{ key: 'footer.i2p_b32', locale: 'es', reason: '(c) "I2P (.b32.i2p)" technical protocol' },
+	{ key: 'footer.i2p_b32', locale: 'es', reason: '(c) "B32 I2P" technical protocol' },
 	{ key: 'footer.i2p_b32', locale: 'fr', reason: '(c) technical protocol' },
 	{ key: 'footer.i2p_b32', locale: 'de', reason: '(c) technical protocol' },
 	{ key: 'footer.i2p_b32', locale: 'it', reason: '(c) technical protocol' },

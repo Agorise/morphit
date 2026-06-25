@@ -155,16 +155,23 @@
 				cls: 'text-amber-700 dark:text-amber-400'
 			};
 		}
-		// Failing → RED. An HTTP failure shows its status ("Error: 429");
-		// a timeout / network / CORS failure (no status) shows the count.
+		// Failing → RED, with the REASON so the user can see why a node is
+		// failing: an HTTP status ("Error: 429"), a timeout ("Timed out"), or a
+		// network/DNS/TLS/CORS failure the browser won't let us disambiguate
+		// ("Unreachable"). The bare count is only a fallback if no kind was
+		// captured.
 		if (s.consecutiveFailures > 0) {
-			return {
-				text:
-					s.lastErrorCode != null
-						? $_('settings.endpoints.http_error', { values: { code: s.lastErrorCode } })
-						: $_('settings.endpoints.failing', { values: { n: s.consecutiveFailures } }),
-				cls: 'text-red-600 dark:text-red-400'
-			};
+			let text: string;
+			if (s.lastErrorKind === 'http' && s.lastErrorCode != null) {
+				text = $_('settings.endpoints.http_error', { values: { code: s.lastErrorCode } });
+			} else if (s.lastErrorKind === 'timeout') {
+				text = $_('settings.endpoints.timed_out');
+			} else if (s.lastErrorKind === 'network') {
+				text = $_('settings.endpoints.unreachable');
+			} else {
+				text = $_('settings.endpoints.failing', { values: { n: s.consecutiveFailures } });
+			}
+			return { text, cls: 'text-red-600 dark:text-red-400' };
 		}
 		// Healthy → latency in seconds. Yellow once it crosses 1 s.
 		if (s.lastLatencyMs != null) {

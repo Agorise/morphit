@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "Dokumentacja API dla programistów",
     "agpl_title": "Dlaczego Morphit używa licencji AGPL-3.0",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Kanarek",
     "canary_title": "Tygodniowy kanarek operatora — sprawdź, czy data jest aktualna",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Utwórz nowe konto powyżej, po prostu wybierając fajną nazwę użytkownika — to dosłownie wszystko.",
     "register_cta": "🌱 Utwórz nowe konto",
     "checking": "Sprawdzanie twojej sesji…",
-    "import_existing": "🔐 Zaloguj z 12-wyrazowym seedem, plikiem json lub kluczem posting",
+    "import_existing": "Zaloguj z 12-wyrazowym seedem, plikiem json lub kluczem posting",
     "unlock": {
       "password_required": "Wpisz hasło, aby odblokować.",
       "wrong_password": "To hasło nie pasuje do twojego keystore'a. Spróbuj ponownie lub zaloguj się frazą seed.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "Nie udało się załadować twoich zleceń. Spróbuj ponownie.",
       "no_account": "Zaloguj się swoim kontem Blurt, aby zobaczyć swoje zlecenia."
+    },
+    "no_account": {
+      "title": "Skonfiguruj, aby zobaczyć swoje zlecenia",
+      "body": "Twoje zlecenia są przechowywane on-chain w ramach Twojej tożsamości Morphit. Utwórz ją, aby zacząć handlować, lub odblokuj istniejącą tożsamość, aby zobaczyć swoją historię.",
+      "cta_register": "Utwórz konto",
+      "cta_unlock": "Mam już konto"
+    },
+    "locked": {
+      "title": "Odblokuj, aby zobaczyć swoje zlecenia",
+      "body": "Twoja historia zleceń pozostaje za Twoją blokadą, aby zablokowane urządzenie nigdy nie ujawniło Twoich transakcji. Wpisz hasło, aby ją zobaczyć.",
+      "unlock": "Odblokuj"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Prywatność",
     "post_now": "Opublikuj teraz",
     "start": "Zacznij",
+    "unlock": "Odblokuj",
     "glossary": "Słowniczek",
     "cheat_sheet": "Ściąga"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Zapisano lokalnie. Publikacja będzie dostępna po zarejestrowaniu konta.",
         "locked": "Sesja jest zablokowana. Zaloguj się ponownie, by opublikować.",
-        "generic": "Nie udało się rozgłosić. Spróbuj ponownie."
+        "generic": "Nie udało się rozgłosić. Spróbuj ponownie.",
+        "rejected": "Sieć odrzuciła publikację: {reason}"
       },
       "save_pending": "Zapisywanie…",
       "broadcast_pending": "Publikacja…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "Usuń {url}",
       "reset_confirm_prompt": "Zresetować wszystkie własne endpointy RPC do domyślnych?",
       "reset_confirm_yes": "Tak, zresetuj",
-      "reset_confirm_cancel": "Anuluj"
+      "reset_confirm_cancel": "Anuluj",
+      "timed_out": "przekroczono czas",
+      "unreachable": "nieosiągalny"
     },
     "session": {
       "autolock_changed": "Zmieniono na {label}",

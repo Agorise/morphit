@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "API-Dokumentation für Entwickler",
     "agpl_title": "Warum Morphit die AGPL-3.0-Lizenz verwendet",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Kanarienvogel",
     "canary_title": "Wöchentlicher Warrant-Canary des Betreibers — prüfe, dass das Datum aktuell ist",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Erstelle oben ein neues Konto, indem du einfach einen coolen Benutzernamen wählst – mehr ist es wirklich nicht.",
     "register_cta": "🌱 Neues Konto erstellen",
     "checking": "Überprüfe deine Session…",
-    "import_existing": "🔐 Mit 12-Wort-Seed, json-Keyfile oder Posting-Key anmelden",
+    "import_existing": "Mit 12-Wort-Seed, json-Keyfile oder Posting-Key anmelden",
     "unlock": {
       "password_required": "Gib dein Passwort ein, um zu entsperren.",
       "wrong_password": "Dieses Passwort passt nicht zu deinem Keystore. Versuch es erneut oder melde dich mit deiner Seed-Phrase an.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "Konnte deine Bestellungen nicht laden. Versuche es erneut.",
       "no_account": "Melde dich mit deinem Blurt-Konto an, um deine Bestellungen zu sehen."
+    },
+    "no_account": {
+      "title": "Einrichten, um deine Orders zu sehen",
+      "body": "Deine Orders werden on-chain unter deiner Morphit-Identität gespeichert. Erstelle eine, um zu handeln, oder entsperre eine bestehende Identität, um deinen Verlauf zu sehen.",
+      "cta_register": "Konto erstellen",
+      "cta_unlock": "Ich habe bereits ein Konto"
+    },
+    "locked": {
+      "title": "Entsperren, um deine Orders zu sehen",
+      "body": "Dein Order-Verlauf bleibt hinter deiner Entsperrung, damit ein gesperrtes Gerät deine Trades nie preisgibt. Gib dein Passwort ein, um ihn zu sehen.",
+      "unlock": "Entsperren"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Datenschutz",
     "post_now": "Jetzt posten",
     "start": "Loslegen",
+    "unlock": "Entsperren",
     "glossary": "Glossar",
     "cheat_sheet": "Spickzettel"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Lokal gespeichert. Die Veröffentlichung ist verfügbar, sobald dein Konto registriert ist.",
         "locked": "Sitzung gesperrt. Bitte neu anmelden, um zu veröffentlichen.",
-        "generic": "Konnte nicht übertragen werden. Versuche es erneut."
+        "generic": "Konnte nicht übertragen werden. Versuche es erneut.",
+        "rejected": "Übertragung vom Netzwerk abgelehnt: {reason}"
       },
       "save_pending": "Wird gespeichert…",
       "broadcast_pending": "Veröffentlichung…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "{url} entfernen",
       "reset_confirm_prompt": "Alle benutzerdefinierten RPC-Endpunkte auf Standardwerte zurücksetzen?",
       "reset_confirm_yes": "Ja, zurücksetzen",
-      "reset_confirm_cancel": "Abbrechen"
+      "reset_confirm_cancel": "Abbrechen",
+      "timed_out": "Zeitüberschreitung",
+      "unreachable": "nicht erreichbar"
     },
     "session": {
       "autolock_changed": "Geändert auf {label}",

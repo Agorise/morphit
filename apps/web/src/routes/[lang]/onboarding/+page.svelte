@@ -478,9 +478,11 @@
 		<h1 class="font-display text-4xl font-extrabold tracking-tight md:text-5xl">
 			<span class="brand-gradient-text">{$_('onboarding.title')}</span>
 		</h1>
-		<p class="mx-auto mt-4 max-w-prose text-lg text-ink-700 dark:text-ink-200">
-			{$_('onboarding.intro')}
-		</p>
+		{#if signupStep === 1 && stage !== 'done'}
+			<p class="mx-auto mt-4 max-w-prose text-lg text-ink-700 dark:text-ink-200">
+				{$_('onboarding.intro')}
+			</p>
+		{/if}
 	</header>
 
 	{#if stage !== 'done'}
@@ -509,7 +511,7 @@
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_reputation.body')}</p>
 					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
 						{$_('onboarding.path_reputation.cta_hint')}
-						<span class="transition-transform group-hover:translate-x-1 rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</p>
 				</button>
 				<button
@@ -521,14 +523,14 @@
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_anonymous.body')}</p>
 					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
 						{$_('onboarding.path_anonymous.cta_hint')}
-						<span class="transition-transform group-hover:translate-x-1 rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
+						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</p>
 				</button>
 			</div>
 
 			<div class="mt-8 text-center">
-				<a href={lp('/onboarding/import')} class="font-semibold text-morphit-emerald hover:underline">
-					{$_('nav.import_account')} →
+				<a href={lp('/onboarding/import')} class="font-semibold text-morphit-emerald">
+					{$_('nav.import_account')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 				</a>
 			</div>
 		</section>
@@ -797,7 +799,7 @@
 				</p>
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<BusyButton variant="link" onclick={requestRestartFromReview}>
-						<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('onboarding.review.back_button')}
+						<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('onboarding.review.back_button')}
 					</BusyButton>
 					<BusyButton
 						variant="primary"
@@ -860,7 +862,7 @@
 							showSeed = true;
 						}}
 					>
-						<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('onboarding.confirm.show_again')}
+						<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('onboarding.confirm.show_again')}
 					</BusyButton>
 					<BusyButton
 						variant="primary"

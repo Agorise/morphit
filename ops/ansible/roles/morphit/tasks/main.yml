@@ -1,6 +1,6 @@
 # Role: morphit
 #
-# Deploys the morphit relay + indexer + backup + mint-acts as
+# Deploys the morphit relay + indexer + backup as
 # systemd units per ops/systemd/ in the repo.  Diamond-hardened
 # squatter defense env vars per §38.7 baked into relay.env.
 
@@ -57,8 +57,6 @@
   loop:
     - morphit-indexer.service
     - morphit-relay.service
-    - morphit-relay-mint-acts.service
-    - morphit-relay-mint-acts.timer
     - morphit-backup.service
     - morphit-backup.timer
   notify: Reload systemd
@@ -103,12 +101,6 @@
     enabled: true
     state: started
     daemon_reload: true
-
-- name: Enable morphit-relay-mint-acts.timer (weekly ACT minting per §2)
-  ansible.builtin.systemd:
-    name: morphit-relay-mint-acts.timer
-    enabled: true
-    state: started
 
 - name: Enable morphit-backup.timer (daily backup per §31)
   ansible.builtin.systemd:

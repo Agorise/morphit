@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "Documentation de l'API pour les développeurs",
     "agpl_title": "Pourquoi Morphit utilise la licence AGPL-3.0",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Canari",
     "canary_title": "Canari hebdomadaire de l'opérateur — vérifiez que la date est récente",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Créez un nouveau compte ci-dessus en choisissant simplement un nom d'utilisateur cool ; c'est littéralement tout.",
     "register_cta": "🌱 Créer un nouveau compte",
     "checking": "Vérification de votre session…",
-    "import_existing": "🔐 Se connecter avec seed de 12 mots, fichier json ou clé de posting",
+    "import_existing": "Se connecter avec seed de 12 mots, fichier json ou clé de posting",
     "unlock": {
       "password_required": "Entrez votre mot de passe pour déverrouiller.",
       "wrong_password": "Ce mot de passe ne correspond pas à votre keystore. Réessayez ou connectez-vous avec votre phrase seed.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "Impossible de charger tes commandes. Réessaie.",
       "no_account": "Connecte-toi avec ton compte Blurt pour voir tes commandes."
+    },
+    "no_account": {
+      "title": "Configurez pour voir vos ordres",
+      "body": "Vos ordres sont stockés on-chain sous votre identité Morphit. Créez-en une pour commencer à trader, ou déverrouillez une identité existante pour voir votre historique.",
+      "cta_register": "Créer un compte",
+      "cta_unlock": "J'ai déjà un compte"
+    },
+    "locked": {
+      "title": "Déverrouillez pour voir vos ordres",
+      "body": "Votre historique d'ordres reste protégé par votre déverrouillage, afin qu'un appareil verrouillé ne révèle jamais vos transactions. Saisissez votre mot de passe pour le voir.",
+      "unlock": "Déverrouiller"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Confidentialité",
     "post_now": "Publier maintenant",
     "start": "Commencer",
+    "unlock": "Déverrouiller",
     "glossary": "Glossaire",
     "cheat_sheet": "Aide-mémoire"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Enregistré localement. La publication sera disponible une fois votre compte enregistré.",
         "locked": "Session verrouillée. Reconnectez-vous pour publier.",
-        "generic": "Impossible de diffuser. Réessaie."
+        "generic": "Impossible de diffuser. Réessaie.",
+        "rejected": "Diffusion refusée par le réseau : {reason}"
       },
       "save_pending": "Enregistrement…",
       "broadcast_pending": "Publication…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "Retirer {url}",
       "reset_confirm_prompt": "Réinitialiser tous les endpoints RPC personnalisés aux valeurs par défaut ?",
       "reset_confirm_yes": "Oui, réinitialiser",
-      "reset_confirm_cancel": "Annuler"
+      "reset_confirm_cancel": "Annuler",
+      "timed_out": "délai dépassé",
+      "unreachable": "injoignable"
     },
     "session": {
       "autolock_changed": "Changé en {label}",

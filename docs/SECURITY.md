@@ -1010,30 +1010,25 @@ the bus. An attacker who controls page JS (via XSS) can fire
 arbitrary bus events, but the underlying balance values come
 from chain RPC; the bus only accelerates legitimate refreshes.
 
-### Mint-acts unattended timer
+### Account-creation key handling (ACT-mint timer removed)
 
-`ops/systemd/morphit-relay-mint-acts.{service,timer}` runs the
-weekly ACT-mint ceremony unattended via a systemd timer. The
-relay's active-key passphrase is mounted via `LoadCredential=`
-(default plaintext file at `/etc/morphit/relay.passphrase`,
-mode 0600) or `LoadCredentialEncrypted=` (recommended for
-high-threat operators; see `man systemd-creds`).
+The weekly ACT-mint ceremony — and its dedicated
+`morphit-relay-mint-acts` systemd timer, which loaded the
+relay's active-key passphrase via a `LoadCredential=` mount —
+was **removed at beta.28** (Blurt disabled `claim_account` /
+`create_claimed_account` at hard fork 2). Account creation is
+now a direct `account_create` op the relay's **main** service
+broadcasts inline at signup time, so there is no longer a
+separate periodic process loading the passphrase.
 
-Residual: when the timer fires, the passphrase enters the V8
-heap as a JavaScript string and stays there until garbage
-collection. The mint-acts process is short-lived (minutes per
-week), but a memory-forensic snapshot during the run could
-expose the passphrase. The relay's main service has the same
-property; this is a known limitation of any JS service handling
-secrets. High-threat-model operators should:
-
-1. Use `LoadCredentialEncrypted=` instead of plaintext
-2. Run the unit in a more constrained namespace (already
-   hardened via `ProtectSystem=strict`,
-   `RestrictAddressFamilies=AF_INET AF_INET6`,
-   `CapabilityBoundingSet=`)
-3. Consider physical security of the host commensurate with
-   the value of weekly-fee-volume the operator processes
+The passphrase residual that section described still applies to
+the relay's main service: the active-key passphrase enters the
+V8 heap as a JavaScript string at unlock and stays there until
+garbage collection — a known limitation of any JS service
+handling secrets. High-threat-model operators should use
+`LoadCredentialEncrypted=` (see `man systemd-creds`) and size
+host physical security to the fee volume they process. See
+ADR-0010 §4 for the relay's in-memory key posture.
 
 ### Klingex / Coingecko price-feed posture
 
