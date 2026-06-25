@@ -137,6 +137,10 @@ export interface ProfilePayload {
 	 *  side via validateBlurtMediaUrl — host must be exactly
 	 *  blurt.media, HTTPS only. */
 	blurt_media_url?: string;
+	/** Optional short bio / tagline (≤128 codepoints, validated by
+	 *  caller via validateShortBio). Stored in json_metadata.short_bio
+	 *  on-chain; surfaces on the account profile page. Free text. */
+	short_bio?: string;
 	/** Optional sanitized SVG text for a custom avatar. Stored in
 	 *  json_metadata.avatar_svg on-chain. MUST have been produced
 	 *  by `sanitizeSvg` in $lib/avatar — the broadcast path does
@@ -207,6 +211,9 @@ export function buildProfileBody(
 	}
 	if (payload.blurt_media_url && payload.blurt_media_url.trim().length > 0) {
 		jsonMetadata.blurt_media_url = redactPrivateKeys(payload.blurt_media_url.trim());
+	}
+	if (payload.short_bio && payload.short_bio.trim().length > 0) {
+		jsonMetadata.short_bio = redactPrivateKeys(payload.short_bio.trim());
 	}
 	// Avatar fields. We trust the sanitizer/encoder output — that's
 	// the chokepoint for safety — but still run redactPrivateKeys

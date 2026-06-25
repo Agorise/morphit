@@ -130,7 +130,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0-beta.29",
+  "version": "1.0.0-beta.30",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -205,6 +205,7 @@ Per-instance branding and metadata as configured by the operator.
     "i2p_b32":  "abc123.b32.i2p",
     "i2p_name": "acme.i2p",
     "i2p":      null,
+    "ens":      "acme.eth",
     "nostr":    "npub1..."
   },
   "fee_recipient":   "morphit-fees-acme",
@@ -226,6 +227,12 @@ preferred fields for I2P addresses (b32 hash and human-readable
 name respectively).  `alt_networks.i2p` is a deprecated legacy
 field kept for one release cycle; it's `null` when either of the
 new fields is set.
+
+`alt_networks.ens` is an optional registered ENS `.eth` name
+(e.g. `acme.eth`) pointing at the instance, typically via an ENS
+contenthash to an IPFS copy of the site.  Display-only — the
+indexer does not resolve it; frontends render it as a footer pill
+linking to an ENS gateway.
 
 `operator_tag` is the operator-attribution tag used for
 operator-earnings split.  Null on unbranded instances.

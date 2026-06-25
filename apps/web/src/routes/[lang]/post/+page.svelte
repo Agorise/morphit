@@ -2505,8 +2505,8 @@
 		</p>
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
-			<BusyButton variant="ghost" onclick={backToEditing}>
-				← {$_('common.back')}
+			<BusyButton variant="link" onclick={backToEditing}>
+				<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('common.back')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"
@@ -2557,13 +2557,13 @@
 			</label>
 			<div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
 				<BusyButton
-					variant="ghost"
+					variant="link"
 					onclick={() => {
 						phase = 'reviewing';
 						password = '';
 					}}
 				>
-					← {$_('common.cancel')}
+					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('common.cancel')}
 				</BusyButton>
 				<BusyButton variant="primary" disabled={password.length < 8} onclick={submitBroadcast}>
 					{$_('post_order.locked.unlock')}

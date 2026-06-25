@@ -319,6 +319,10 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_I2P_B32_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_NAME_ADDRESS',
 	'MORPHIT_INSTANCE_NOSTR_PUBKEY',
+	// ENS .eth name (DOMAIN.eth) — a registered Ethereum name pointing at the
+	// instance (typically via contenthash → IPFS). Optional; displayed in the
+	// footer "Alt-network access" block as a pill linking to an ENS gateway.
+	'MORPHIT_INSTANCE_ENS_NAME',
 
 	// MORPHIT_INSTANCE_OPERATOR_TAG: the operator's registered
 	// tag (matching their `morphit_operator_register_v1` op).

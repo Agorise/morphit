@@ -256,7 +256,7 @@
     "my_orders": "My orders",
     "settings": "Settings",
     "sign_out": "Sign out",
-    "notification_settings": "Notification settings →",
+    "notification_settings": "Notification settings ⇨",
     "category": {
       "order": "Orders",
       "order_help": "Fills, expirations, counter-offers",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "How can I help make Morphit unstoppable?",
-        "a": "Morphit's resilience grows with every independent operator. You can help in any of these ways:\n\n• Run your own node. Spin up an indexer + relay + frontend on your own server (or VPS, or home box), and serve Morphit from your own URL. Every independent mirror multiplies our surface area: blocking one does nothing when ten more exist. See the 'Can I run my own Morphit?' entry for the technical steps.\n\n• Host on Tor, Lokinet, or I2P. A .onion, .loki, or .b32.i2p mirror lets users reach Morphit from jurisdictions where clearnet access is blocked. These are cheap to run — they don't need TLS certificates or DNS — and the impact is enormous for users in censored networks.\n\n• Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We document the exact list in the operator runbook.\n\n• Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps it funded to create accounts. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.\n\n• Spread the word. Morphit depends on network effect — every user who posts a trade is a signal to the next person that the marketplace is alive. Tell your crypto communities, link us from your blog, post tutorials on blurt.media.\n\n• Write tutorials and translations. The project is AGPL-3.0; clone the repo, improve documentation, translate the UI into more languages, and open a merge request. Non-code contributions count.\n\nMorphit is designed to be impossible to kill because there is no central actor to pressure. You running ANY part of the stack makes that guarantee stronger."
+        "a": "Morphit's resilience grows with every independent operator. You can help in any of these ways:\n\n• Run your own node. Spin up an indexer + relay + frontend on your own server (or VPS, or home box), and serve Morphit from your own URL. Every independent mirror multiplies our surface area: blocking one does nothing when ten more exist. See the 'Can I run my own Morphit?' entry for the technical steps.\n\n• Host on Tor, Lokinet, or I2P. A .onion, .loki, or .b32.i2p mirror lets users reach Morphit from jurisdictions where clearnet access is blocked. These are cheap to run — they don't need TLS certificates or DNS — and the impact is enormous for users in censored networks.\n\n• Point an ENS .eth name at it. Register a `.eth` name with ENS (Ethereum Name Service) and aim it at your instance — usually via an ENS contenthash to an IPFS copy of your site — so people can reach you at a human-readable, decentralized name like `morphit.eth` (through an ENS-aware browser or gateway). It appears as an extra footer pill alongside Tor/Lokinet/I2P.\n\n• Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We document the exact list in the operator runbook.\n\n• Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps it funded to create accounts. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.\n\n• Spread the word. Morphit depends on network effect — every user who posts a trade is a signal to the next person that the marketplace is alive. Tell your crypto communities, link us from your blog, post tutorials on blurt.media.\n\n• Write tutorials and translations. The project is AGPL-3.0; clone the repo, improve documentation, translate the UI into more languages, and open a merge request. Non-code contributions count.\n\nMorphit is designed to be impossible to kill because there is no central actor to pressure. You running ANY part of the stack makes that guarantee stronger."
       },
       "why_self_trading_fails": {
         "q": "Why doesn't trading with myself work to boost my reputation?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "When you submit, Morphit will also publish a short \"I joined Morphit\" announcement to the @morphit community on Blurt — under your account, signed by you. This happens once, on your first feedback ever.",
       "off": "Note: you've turned off auto-announce in Settings. No first-trade Blurt post will be published when you submit.",
-      "manage_link": "Manage in Settings →",
+      "manage_link": "Manage in Settings ⇨",
       "heading": "Announce your first trade",
       "pitch": "Syndication of your trades is everything. Announce your offers everywhere possible — more eyes on your offers means more trading partners, plus more upvotes, which are additional earnings going directly into your Blurt Wallet.",
       "label_on": "Yes, announce my first trade on Blurt",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "We've set the expiry to 7 days instead of the default 90. A shorter window means stale offers don't linger if you change your mind.",
     "tip_payment_label": "Payment method tips.",
     "tip_payment_body": "Add the payment methods you actually accept. Trade partners pick which works for them. Common starting points: PayPal, Wise, bank transfer, cash in person.",
-    "faq_link": "Read the full first-trade walkthrough →",
+    "faq_link": "Read the full first-trade walkthrough ⇨",
     "dismiss_aria": "Dismiss this starter pack"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "Wait!",
     "step_2": "If you're sending crypto, wait until you've actually received the fiat (not just \"pending\") before you send the crypto. Once it's gone, it's gone.",
     "step_3": "After the trade is done, leave a review on /my/orders so future traders trust you both.",
-    "faq_link": "Read the full walkthrough →",
+    "faq_link": "Read the full walkthrough ⇨",
     "dismiss_aria": "Dismiss this helper"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "Address: {address}",
     "instances": "Instances",
     "explorer": "Block explorer",
-"download": "Download",
+    "download": "Download",
     "api": "API",
     "api_title": "Developer API documentation",
     "agpl_title": "Why Morphit uses the AGPL-3.0 license",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "Operator's PGP public keys for signed releases and canary verification",
     "mediakit": "Mediakit",
     "mediakit_title": "Brand assets and the Morphit claims list — for press, integrators, and the community",
-    "bounty": "Bug bounty"
+    "bounty": "Bug bounty",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 Tip: bookmark a few of these instances — and their Tor, I2P, or Lokinet addresses — in your browser. The orderbook lives on the public blockchain, so if any one site is ever blocked or goes offline, you can reach the very same orders and trades through any other instance.",
     "fetch_error": "Could not load the directory.",
     "last_updated": "Directory last updated: {date}",
-    "contact": "Contact this operator →",
+    "contact": "Contact this operator ⇨",
     "add_yours_title": "Add your instance",
     "add_yours_body": "Run a Morphit instance? Just register on-chain — every other Morphit indexer will discover you automatically. The wizard (morphit-ops init) handles registration during first-time setup.",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "Yes, discard and start over",
         "cancel": "Stay here"
       }
+    },
+    "progress": {
+      "step_label": "Step {current} of {total}"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "You can browse here, but you need a Blurt account name to message sellers or post your own orders.",
       "cta": "Pick a name"
     },
-    "fee_rejected_check": "Posted an order but don't see it? Check fee status →"
+    "fee_rejected_check": "Posted an order but don't see it? Check fee status ⇨"
   },
   "paired_readonly": {
     "banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "View my order",
       "feature_upsell_heading": "Want more eyes on this listing?",
       "feature_upsell_body": "Bid for a featured slot to put your order at the top of the orderbook for a few hours. The minimum bid is 6 hours; the rate is set per-instance. Most operators ship 50 BLURT/hour as the default.",
-      "feature_upsell_cta": "Set up a featured bid →",
+      "feature_upsell_cta": "Set up a featured bid ⇨",
       "edit_window_countdown": "{remaining} to edit",
       "edit_window_tooltip": "Edits are only possible within 15 minutes of posting. After that, cancel and re-post.",
       "edit_window_expired": "Edit window passed"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "Seed phrase"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "That bio contains characters that aren't allowed.",
+        "too_long": "Bio is too long (128 characters max)."
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "Please enter a name.",
@@ -3542,7 +3552,7 @@
     "footer_body": "Found an issue? Please report via the public Forgejo repo, or via an encrypted message to the {morphit_account} chain account.",
     "bounty_title": "Bug bounty program",
     "bounty_body": "We run a discretionary security recognition program. Every actionable finding gets reviewed by a real engineer, gets an answer, and — if it materially improves Morphit's security posture — gets rewarded in BLURT (paid from @morphit-fees) or BTC, scaled to severity and the report's quality. No fixed tier table; case-by-case adjudication. Hall of fame credit available even when payment isn't. The full scope, severity guidance, payment workflow, and what we won't do (no NDA, no exclusive disclosure) is documented in SECURITY.md.",
-    "bounty_link": "Read the full bounty program scope and rules →",
+    "bounty_link": "Read the full bounty program scope and rules ⇨",
     "canary_title": "Warrant canary",
     "canary_body": "We publish a weekly warrant canary signed with the operator's PGP key. The canary explicitly declares no NSL / FISA / gag-order / backdoor demand has been served. Freshness proofs include a current Blurt chain head, a current Bitcoin chain head, and a current news headline (proves the canary cannot be pre-generated). If the canary stops updating for more than 14 days, treat it as silent: the operator may be under coercive pressure, and you should switch to a different federated operator.",
     "canary_link": "View this operator’s current canary",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "It's been a week — have you backed up your 12-word seed phrase yet? If you lose this device, the seed is the ONLY way to recover your account.",
-    "show_me_how": "Show me how →",
+    "show_me_how": "Show me how ⇨",
     "got_it": "Got it"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "Short bio",
+      "explain": "A sentence or two about yourself — what you trade, your hobbies, anything you like. Optional, up to 128 characters.",
+      "input_label": "Your short bio",
+      "placeholder": "e.g. Coffee, BTC, and long walks on the blockchain.",
+      "hint": "Looks good.",
+      "broadcast_ok_detail": "Your short bio is now published for everyone to see."
+    },
     "title": "Settings",
     "subtitle": "Your identity, your rules. Stored on your device, never on our servers.",
     "display_name": {
+      "save_legend_desc": "just display the name here so that only you see it.",
+      "broadcast_legend_desc": "post the name on-chain so everyone (and all devices) see it.",
       "heading": "Display name",
-      "explain": "A friendly label that shows up next to your avatar. It does NOT replace your public key — that's always shown in parentheses, and that's the part people should trust. You can change this at any time.",
+      "explain": "A friendly label that shows up next to your avatar. It does NOT replace your public key — that's always shown in parentheses, and that's the part people should trust.",
       "input_label": "Choose your display name",
       "placeholder": "e.g. Sally Doe",
       "preview_label": "This is how you'll appear",
       "hint": "Looks good.",
-      "save": "Save display name",
+      "save": "Save locally only",
       "clear": "Clear",
       "saved_toast": "Saved.",
-      "reminder_title": "Display names are not unique.",
-      "reminder_body": "Anyone can use any name. The short key in parentheses — for example (BLT7gHu8mn…A9bb) — is what really identifies you, and it cannot be copied by anyone else. Always check the key when you're trading.",
-      "save_and_broadcast": "Save + publish",
+      "reminder_title": "💡 Display names are not unique.",
+      "reminder_body": "Anyone can use any name. The short key in parentheses is what really identifies you, and it cannot be copied by anyone else. Always check the key when you're trading.",
+      "save_and_broadcast": "Save & broadcast",
       "broadcast_ok": "Broadcast.",
       "broadcast_err": {
         "no_account": "Saved locally. Publishing will be available once your account is registered.",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "Cancel"
     },
     "session": {
+      "autolock_changed": "Changed to {label}",
       "heading": "Utility",
       "explain": "Sign out when you're done. Your keys will be wiped from memory; the encrypted keystore on your device is untouched.",
       "autolock_label": "Auto-lock after idle",
@@ -3935,7 +3956,7 @@
     },
     "avatar": {
       "heading": "Avatar",
-      "explain": "Replace your default heart identicon with your own image. Stored on-chain inside your profile op, just like your display name and social links.",
+      "explain": "Replace your default heart identicon with your own image.",
       "guidance_heading": "Before you upload",
       "guidance_filetypes": "Accepts SVG, WebP, JPEG, PNG, or GIF.",
       "guidance_dimensions": "Ideal source: a square image at least 96×96 pixels. Anything larger will be resized down to 96×96 for you; anything smaller will look grainy.",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge: tap the address bar's install icon, or use the browser menu → Install Morphit.",
       "manual_safari": "Safari (macOS / iOS): tap the Share button, then \"Add to Home Screen\".",
       "manual_firefox": "Firefox Android: tap the menu (︙), then \"Install\". Firefox desktop doesn't support PWA install — use Chromium-based browsers.",
-      "iphone_link": "iPhone install walkthrough →"
+      "iphone_link": "iPhone install walkthrough ⇨"
     },
     "account_name": {
       "heading": "Blurt account name",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "Keep them"
     },
     "totp": {
-      "heading": "Two-factor authentication",
+      "heading": "Two-factor authentication (2FA)",
       "subtitle": "Add an authenticator app as a second factor after your password. Protects against shoulder-surfing, borrowed devices, and casual local malware.",
       "honest_framing": {
         "title": "What this protects against — honestly",

@@ -61,6 +61,18 @@
 	} from '$lib/auth/recommendedAuthenticatorApps';
 	import BusyButton from '$components/BusyButton.svelte';
 
+	// Display order = alphabetical by name (Ken's request). The source
+	// arrays keep their own documented order for programmatic/smoke use;
+	// the picker sorts a copy so neither array is mutated. localeCompare
+	// gives a stable, locale-aware order (digits before letters, so
+	// "2FAS" sorts ahead of "Aegis").
+	const recommendedAppsSorted = [...RECOMMENDED_AUTHENTICATOR_APPS].sort((a, b) =>
+		a.name.localeCompare(b.name)
+	);
+	const notRecommendedAppsSorted = [...NOT_RECOMMENDED_AUTHENTICATOR_APPS].sort((a, b) =>
+		a.name.localeCompare(b.name)
+	);
+
 	type Phase =
 		| 'loading'
 		| 'locked'
@@ -412,8 +424,10 @@
 
 <main class="totp-page">
 	<header>
-		<button class="back" onclick={backToSettings} type="button">← {$_('settings.title')}</button>
-		<h1>{$_('settings.totp.heading')}</h1>
+		<button class="back" onclick={backToSettings} type="button"><span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('settings.title')}</button>
+		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
+			<span class="brand-gradient-text">{$_('settings.totp.heading')}</span>
+		</h1>
 		<p class="subtitle">{$_('settings.totp.subtitle')}</p>
 	</header>
 
@@ -454,10 +468,15 @@
 
 			<div class="apps recommended">
 				<h3>{$_('settings.totp.recommended_apps.heading')}</h3>
-				{#each RECOMMENDED_AUTHENTICATOR_APPS as app}
+				{#each recommendedAppsSorted as app}
 					<article class="app">
 						<h4>
-							<a href={app.officialUrl} target="_blank" rel="noopener noreferrer">{app.name}</a>
+							<a
+								href={app.officialUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="transition hover:text-morphit-emerald">{app.name}</a
+							>
 						</h4>
 						<p class="license">{app.license} · {app.platforms.join(' · ')}</p>
 						<p>{$_(`settings.totp.recommended_apps.${app.i18nKey}.tagline`)}</p>
@@ -472,7 +491,7 @@
 						: $_('settings.totp.not_recommended_apps.expand')}</summary
 				>
 				<h3>{$_('settings.totp.not_recommended_apps.heading')}</h3>
-				{#each NOT_RECOMMENDED_AUTHENTICATOR_APPS as app}
+				{#each notRecommendedAppsSorted as app}
 					<article class="app">
 						<h4>{$_(`settings.totp.not_recommended_apps.${app.i18nKey}.name`)}</h4>
 						<p class="reason">{$_(`settings.totp.not_recommended_apps.${app.i18nKey}.reason`)}</p>
@@ -714,18 +733,24 @@
 	.back {
 		background: transparent;
 		border: none;
-		color: var(--accent, #4a9eff);
+		color: #ffffff;
 		cursor: pointer;
 		padding: 0;
 		margin-bottom: 1rem;
 		font-size: 0.95rem;
+		transition: color 0.15s ease;
+	}
+	.back:hover {
+		color: var(--morphit-emerald, #00da69);
 	}
 	header {
 		margin-bottom: 2rem;
 	}
 	h1 {
+		/* Sizing comes from the Tailwind text-3xl/4xl utilities + the
+		   brand-gradient-text span (matches /settings and /backup-keys);
+		   only spacing is kept here. */
 		margin: 0.5rem 0 0.25rem;
-		font-size: 1.5rem;
 	}
 	.subtitle {
 		opacity: 0.8;
@@ -898,5 +923,19 @@
 	button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* Expand/collapse headers: the native <summary> is already a
+	   full-width click target (not just the triangle). Make that
+	   discoverable — pointer cursor on the whole line plus a subtle
+	   colour shift on hover. Covers all three <details> blocks
+	   (honest-framing, the not-recommended apps list, lost-device). */
+	details > summary {
+		cursor: pointer;
+		font-weight: 600;
+		transition: color 0.15s ease;
+	}
+	details > summary:hover {
+		color: var(--accent, #4a9eff);
 	}
 </style>

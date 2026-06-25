@@ -40,6 +40,7 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 import {
 	probeRpcEndpoints,
 	formatRpcProbeLines,
@@ -156,7 +157,7 @@ function summarizeFailure(detail: string): string[] {
 
 export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	const c = makeColor(ctx.colorEnabled);
-	const installDir = process.cwd();
+	const installDir = safeCwd() ?? defaultRepoRoot();
 	const json = ctx.flags.json === 'true';
 
 	if (!json) {

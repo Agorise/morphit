@@ -23,7 +23,10 @@ import {
 	isValidI2pB32,
 	isValidI2pName,
 	validateI2pName,
+	isValidEnsName,
+	validateEnsName,
 	ENV_KEY,
+	ENS_ENV_KEY,
 	GEN_SCRIPT,
 	SUPPORTS_VANITY_PREFIX
 } from '../src/lib/altAddressValidate.ts';
@@ -117,6 +120,32 @@ else bad('isValidI2pName');
 	if (!validateI2pName('not a host').ok && !validateI2pName('').ok)
 		ok('validateI2pName rejects garbage + empty');
 	else bad('validateI2pName garbage/empty');
+}
+
+// ── ENS .eth name validation (cp334) ─────────────────────────────────
+if (
+	isValidEnsName('morphit.eth') &&
+	isValidEnsName('node.morphit.eth') &&
+	!isValidEnsName('morphit.com') &&
+	!isValidEnsName(ONION) &&
+	!isValidEnsName('morphit')
+)
+	ok('isValidEnsName accepts DOMAIN.eth (incl. subdomains), rejects non-.eth');
+else bad('isValidEnsName');
+{
+	const good = validateEnsName('  HTTPS://Morphit.ETH/ ');
+	if (good.ok && good.value === 'morphit.eth')
+		ok('validateEnsName normalizes scheme/case/slash → morphit.eth');
+	else bad('validateEnsName normalize', JSON.stringify(good));
+	if (
+		!validateEnsName('').ok &&
+		!validateEnsName('not a name').ok &&
+		!validateEnsName('morphit.com').ok
+	)
+		ok('validateEnsName rejects empty + garbage + non-.eth');
+	else bad('validateEnsName empty/garbage/non-eth');
+	if (ENS_ENV_KEY === 'MORPHIT_INSTANCE_ENS_NAME') ok('ENS_ENV_KEY = MORPHIT_INSTANCE_ENS_NAME');
+	else bad('ENS_ENV_KEY', ENS_ENV_KEY);
 }
 
 // ── Wiring maps ──────────────────────────────────────────────────────
@@ -227,6 +256,10 @@ else bad('isValidI2pName');
 	if (/i2p_name: \['MORPHIT_INSTANCE_I2P_NAME_ADDRESS'\]/.test(altSrc) && /collectI2pName/.test(altSrc))
 		ok('CRUD: i2p vanity name is a managed slot (→ _I2P_NAME_ADDRESS, collectI2pName)');
 	else bad('CRUD i2p vanity', 'i2p_name slot not wired into altAddress.ts');
+	// ENS .eth is a parallel managed slot (like i2p_name) with its own key.
+	if (/ens: \[ENS_ENV_KEY\]/.test(altSrc) && /collectEns/.test(altSrc))
+		ok('CRUD: ENS .eth is a managed slot (→ ENS_ENV_KEY, collectEns)');
+	else bad('CRUD ENS', 'ens slot not wired into altAddress.ts');
 }
 
 // ── edit menu alt-networks must be keep-current (data-loss regression) ──

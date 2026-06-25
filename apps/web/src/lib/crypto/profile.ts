@@ -143,8 +143,47 @@ export function validateDisplayName(raw: string): DisplayNameValidation {
 	return { ok: true, reasonKey: '', cleaned: s };
 }
 
+export const SHORT_BIO_MAX_LENGTH = 128;
+
+export interface ShortBioValidation {
+	ok: boolean;
+	/** i18n key for a friendly error message; empty when ok. */
+	reasonKey: string;
+	/** The cleaned bio (safe to persist) — may be empty (the field is optional). */
+	cleaned: string;
+}
+
+/**
+ * Validate + normalize an OPTIONAL short bio (≤128 codepoints). Empty is
+ * valid. Applies the same control-char / invisible-char / bidi-override
+ * hygiene as display names, but imposes no minimum length, no leading-@
+ * rule, and no reserved-name check — a bio is free text, not an identity
+ * claim. Any non-length hygiene failure maps to a single generic key.
+ */
+export function validateShortBio(raw: string): ShortBioValidation {
+	if (typeof raw !== 'string') {
+		return { ok: false, reasonKey: 'profile.short_bio.errors.invalid', cleaned: '' };
+	}
+	// NFC-normalize, trim ends, collapse internal whitespace runs to a
+	// single ASCII space (bios render on one line).
+	let s = raw.normalize('NFC').trim().replace(/\s+/g, ' ');
+
+	const codepoints = [...s];
+	if (codepoints.length > SHORT_BIO_MAX_LENGTH) {
+		return { ok: false, reasonKey: 'profile.short_bio.errors.too_long', cleaned: s };
+	}
+	for (const ch of codepoints) {
+		const code = ch.codePointAt(0) ?? 0;
+		if (isControlChar(code) || FORBIDDEN_CODEPOINTS.has(code)) {
+			return { ok: false, reasonKey: 'profile.short_bio.errors.invalid', cleaned: s };
+		}
+	}
+	return { ok: true, reasonKey: '', cleaned: s };
+}
+
 /**
  * Short fingerprint for a Blurt public key, safe to render in any UI.
+ *
  * Example: "BLT7gHu8mn…A9bb" — first 6 and last 4 characters of the key.
  *
  * **Format rationale:**

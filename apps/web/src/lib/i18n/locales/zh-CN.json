@@ -256,7 +256,7 @@
     "my_orders": "我的订单",
     "settings": "设置",
     "sign_out": "登出",
-    "notification_settings": "通知设置 →",
+    "notification_settings": "通知设置 ⇨",
     "category": {
       "order": "订单",
       "order_help": "成交、过期、反报价",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "我如何帮助让 Morphit 不可阻挡?",
-        "a": "Morphit 的韧性随着每个独立运营者而增长。你可以通过以下方式帮助:\n\n• 运行你自己的节点。在自己的服务器上部署 indexer + relay + frontend,并从你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上托管。.onion、.loki 或 .b32.i2p 镜像让受审查网络中的用户也能访问。\n\n• 托管 Morphit 的依赖项。\n\n• 资助社区节点。向活跃运营者的 @morphit-relay 账户贡献 Blurt,可以维持其创建账户所需的资金。\n\n• 广而告之。\n\n• 编写教程和翻译。项目采用 AGPL-3.0 许可。\n\nMorphit 设计为不可关闭,因为没有中心角色可被施压。"
+        "a": "Morphit 的韧性随着每个独立运营者而增长。你可以通过以下方式帮助:\n\n• 运行你自己的节点。在自己的服务器上部署 indexer + relay + frontend,并从你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上托管。.onion、.loki 或 .b32.i2p 镜像让受审查网络中的用户也能访问。\n\n• 将一个 ENS .eth 名称指向它。在 ENS（Ethereum Name Service，以太坊名称服务）注册一个 `.eth` 名称并指向你的实例——通常通过 ENS 的 contenthash 指向你站点的 IPFS 副本——这样人们就可以通过像 `morphit.eth` 这样易读的去中心化名称（使用支持 ENS 的浏览器或网关）访问你。它会作为页脚中额外的一个标签，与 Tor/Lokinet/I2P 并排显示。\n\n• 托管 Morphit 的依赖项。\n\n• 资助社区节点。向活跃运营者的 @morphit-relay 账户贡献 Blurt,可以维持其创建账户所需的资金。\n\n• 广而告之。\n\n• 编写教程和翻译。项目采用 AGPL-3.0 许可。\n\nMorphit 设计为不可关闭,因为没有中心角色可被施压。"
       },
       "why_self_trading_fails": {
         "q": "为什么自己跟自己交易不能提升我的信誉?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "提交时，Morphit 还将在 Blurt 上的 @morphit 社区发布一条简短的「我加入了 Morphit」公告 — 以您的账户名义、由您签名。仅在您有史以来第一次反馈时发生一次。",
       "off": "提示：您已在设置中关闭自动公告。提交时不会发布首次交易 Blurt 帖子。",
-      "manage_link": "在设置中管理 →",
+      "manage_link": "在设置中管理 ⇨",
       "heading": "宣告您的首次交易",
       "pitch": "辛迪加发布交易至关重要。在任何可能的地方公告您的报价 — 更多眼睛看到您的报价意味着更多交易伙伴,加上更多点赞,这些都是直接进入您 Blurt 钱包的额外收入。",
       "label_on": "是的,在 Blurt 上宣告我的首次交易",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "我们将到期时间设置为 7 天,而非默认的 90 天。更短的窗口意味着如果您改变主意,过时的报价不会滞留。",
     "tip_payment_label": "付款方式提示。",
     "tip_payment_body": "添加您实际接受的付款方式。交易伙伴会选择对他们有用的方式。常见起点:PayPal、Wise、银行转账、当面现金。",
-    "faq_link": "阅读完整的首次交易演练 →",
+    "faq_link": "阅读完整的首次交易演练 ⇨",
     "dismiss_aria": "关闭此入门包"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "等等!",
     "step_2": "如果你要发送加密货币,请等到你真正收到法币(不只是「待处理」),再发送加密货币。一旦发送,就无法收回。",
     "step_3": "交易完成后,在 /my/orders 留下评价,让未来的交易者信任你们双方。",
-    "faq_link": "阅读完整教程 →",
+    "faq_link": "阅读完整教程 ⇨",
     "dismiss_aria": "关闭此指南"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "地址:{address}",
     "instances": "实例",
     "explorer": "区块浏览器",
-"download": "下载",
+    "download": "下载",
     "api": "API",
     "api_title": "开发者 API 文档",
     "agpl_title": "为什么 Morphit 使用 AGPL-3.0 许可证",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "运营者用于已签名发行版和金丝雀验证的 PGP 公钥",
     "mediakit": "媒体资源包",
     "mediakit_title": "Morphit 的品牌资源和成就清单 — 面向媒体、集成方和社区",
-    "bounty": "漏洞赏金"
+    "bounty": "漏洞赏金",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 提示：在浏览器中收藏其中几个实例——以及它们的 Tor、I2P 或 Lokinet 地址。订单簿存在于公开的区块链上，因此即使某个站点被封锁或下线，你也能通过任何其他实例访问完全相同的订单和交易。",
     "fetch_error": "无法加载目录。",
     "last_updated": "目录上次更新:{date}",
-    "contact": "联系本运营者 →",
+    "contact": "联系本运营者 ⇨",
     "add_yours_title": "添加你的实例",
     "add_yours_body": "运行了 Morphit 实例?直接在链上注册 — 任何其他 Morphit 索引器都会自动发现你。向导(morphit-ops init)在首次设置期间处理注册。",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "是,丢弃并重新开始",
         "cancel": "留在这里"
       }
+    },
+    "progress": {
+      "step_label": "第 {current} 步，共 {total} 步"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "您可以在此浏览,但需要 Blurt 账户名才能向卖家发消息或发布自己的订单。",
       "cta": "选择名称"
     },
-    "fee_rejected_check": "发布了订单但看不到?查看手续费状态 →"
+    "fee_rejected_check": "发布了订单但看不到?查看手续费状态 ⇨"
   },
   "paired_readonly": {
     "banner_heading": "以 @{account} 登录 — 密钥在手机上。",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "查看我的订单",
       "feature_upsell_heading": "想让更多人看到这个挂单？",
       "feature_upsell_body": "竞拍特色位置，让您的订单在订单簿顶部展示几个小时。最低出价为 6 小时；费率由各实例设置。大多数运营商默认使用 50 BLURT/小时。",
-      "feature_upsell_cta": "设置特色出价 →",
+      "feature_upsell_cta": "设置特色出价 ⇨",
       "edit_window_countdown": "{remaining} 内可编辑",
       "edit_window_tooltip": "编辑仅可在发布后 15 分钟内进行。之后请取消并重新发布。",
       "edit_window_expired": "编辑窗口已过"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "助记词"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "该简介包含不允许的字符。",
+        "too_long": "简介太长（最多 128 个字符）。"
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "请填写一个名称。",
@@ -3542,7 +3552,7 @@
     "footer_body": "发现问题?请通过公共 Forgejo 仓库报告,或通过加密消息发给 {morphit_account} 链账户。",
     "bounty_title": "漏洞赏金计划",
     "bounty_body": "我们运行一个酌情决定的安全识别计划。每一个可操作的发现都由真实的工程师审查,获得答复,并且 — 如果它实质上改善了 Morphit 的安全态势 — 将在 BLURT(从 @morphit-fees 支付)或 BTC 中获得奖励,根据严重程度和报告质量进行调整。没有固定的等级表;按个案裁定。即使没有付款,名人堂荣誉也可用。完整范围、严重程度指导、付款流程以及我们不会做的事情(没有保密协议,没有独家披露)记录在 SECURITY.md 中。",
-    "bounty_link": "阅读完整范围和规则 →",
+    "bounty_link": "阅读完整范围和规则 ⇨",
     "canary_title": "搜查令金丝雀",
     "canary_body": "我们发布每周一次的金丝雀,使用运营者的 PGP 密钥签名。金丝雀明确声明没有收到任何 NSL / FISA / 禁言令 / 后门要求。新鲜度证明包括当前的 Blurt 链头、当前的比特币链头和当前的新闻标题(证明金丝雀不能预先生成)。如果金丝雀超过 14 天未更新,请视为静默:运营者可能受到强制压力,你应该切换到另一个联邦运营者。",
     "canary_link": "查看此运营者当前的金丝雀",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "已经过去一周了 — 你备份过 12 个单词的助记词了吗?如果丢了这台设备,这组助记词是恢复账户的唯一方式。",
-    "show_me_how": "告诉我怎么做 →",
+    "show_me_how": "告诉我怎么做 ⇨",
     "got_it": "知道了"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "简短简介",
+      "explain": "用一两句话介绍自己——你交易什么、你的爱好，随你喜欢。可选，最多 128 个字符。",
+      "input_label": "你的简短简介",
+      "placeholder": "例如：咖啡、BTC，还有在区块链上的漫步。",
+      "hint": "看起来不错。",
+      "broadcast_ok_detail": "你的简短简介现已发布，所有人都能看到。"
+    },
     "title": "设置",
     "subtitle": "你的身份,你的规矩。保存在你自己的设备上,绝不上传到我们的服务器。",
     "display_name": {
+      "save_legend_desc": "只在本机显示该名称，只有你能看到。",
+      "broadcast_legend_desc": "把名称发布到链上，让所有人（以及你的所有设备）都能看到。",
       "heading": "显示名称",
-      "explain": "显示在头像旁边的一个友好标签。它不会替代你的公钥——公钥始终在括号里并列出现,那才是别人该相信的东西。你随时可以修改。",
+      "explain": "显示在头像旁边的一个友好标签。它不会替代你的公钥——公钥始终在括号里并列出现,那才是别人该相信的东西。",
       "input_label": "选一个显示名称",
       "placeholder": "例如:Sally Doe",
       "preview_label": "你会被这样显示",
       "hint": "没问题。",
-      "save": "保存显示名称",
+      "save": "仅保存到本地",
       "clear": "清除",
       "saved_toast": "已保存。",
-      "reminder_title": "显示名称不是唯一的。",
-      "reminder_body": "任何人都可以用任何名字。真正识别你的是括号里的短公钥,例如 (BLT7gHu8mn…A9bb),别人复制不了。交易时务必看公钥。",
-      "save_and_broadcast": "保存 + 发布",
+      "reminder_title": "💡 显示名称不是唯一的。",
+      "reminder_body": "任何人都可以用任何名字。真正识别你的是括号里的短公钥,别人复制不了。交易时务必看公钥。",
+      "save_and_broadcast": "保存并广播",
       "broadcast_ok": "已广播。",
       "broadcast_err": {
         "no_account": "已本地保存。注册账户后即可发布。",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "取消"
     },
     "session": {
+      "autolock_changed": "已改为 {label}",
       "heading": "实用工具",
       "explain": "用完后请退出登录。你的密钥会从内存中清除；你设备上加密的密钥库不受影响。",
       "autolock_label": "闲置后自动锁定",
@@ -3913,7 +3934,7 @@
     },
     "avatar": {
       "heading": "头像",
-      "explain": "用你自己的图像替换默认的心形识别图。存储在链上，作为你个人资料 op 的一部分，就像显示名称和社交链接一样。",
+      "explain": "用你自己的图像替换默认的心形识别图。",
       "guidance_heading": "上传前须知",
       "guidance_filetypes": "接受 SVG、WebP、JPEG、PNG 或 GIF。",
       "guidance_dimensions": "理想：至少 96×96 像素的方形图像。更大的会被为你缩放到 96×96；更小的会显得颗粒感。",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge:点击地址栏的安装图标,或使用浏览器菜单 → 安装 Morphit。",
       "manual_safari": "Safari(macOS / iOS):点击共享按钮,然后「添加到主屏幕」。",
       "manual_firefox": "Firefox Android:点击菜单 (︙),然后「安装」。Firefox 桌面版不支持 PWA 安装 — 请使用基于 Chromium 的浏览器。",
-      "iphone_link": "iPhone 安装演示 →"
+      "iphone_link": "iPhone 安装演示 ⇨"
     },
     "account_name": {
       "heading": "Blurt 账户名",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "保留"
     },
     "totp": {
-      "heading": "双因素身份验证",
+      "heading": "双因素身份验证 (2FA)",
       "subtitle": "在密码之后添加一个身份验证器应用作为第二因素。防范偷窥、借用设备和普通本地恶意软件。",
       "honest_framing": {
         "title": "这能防范什么 — 诚实地说",

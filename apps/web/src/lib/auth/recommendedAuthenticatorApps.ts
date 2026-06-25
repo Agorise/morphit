@@ -66,8 +66,10 @@ export interface AuthenticatorApp {
 	readonly i18nKey: string;
 }
 
-/** Canonical recommended-apps list.  Order is the display order in
- *  the picker.  Aegis first because it's the gold standard among
+/** Canonical recommended-apps list.  NOTE: the 2FA picker now renders
+ *  these sorted ALPHABETICALLY by name (see recommendedAppsSorted in the
+ *  route); this array's own order is kept stable for programmatic/smoke
+ *  use. Aegis is listed first here because it's the gold standard among
  *  privacy-conscious Android users; 2FAS second for iOS reach;
  *  Ente Auth third for cross-platform sync (the unique value
  *  proposition for users with multiple devices).

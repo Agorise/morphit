@@ -820,7 +820,7 @@ What it asks you, in order:
 7. Daily signup ceiling (how many account creations per 24h)
 8. Contact URL (operator email or chat link — optional)
 9. Public origin URL (your https:// frontend)
-10. Alt-network addresses (Tor / Lokinet / I2P / Nostr — optional)
+10. Alt-network addresses (Tor / Lokinet / I2P / Nostr / ENS — optional)
 11. Fee-verifier explorer URLs (BTC + XMR; defaults are fine)
 12. Chat-link external explorer URLs (per-asset; defaults are fine)
 13. Trade-only asset policy (which non-BLURT assets to accept)
@@ -1926,9 +1926,9 @@ Everything in §1–§10 gets you to a running, public Morphit instance with TLS
 
 ### Recommended additions
 
-#### Extra private addresses — Tor / Lokinet / I2P / Nostr (one wizard does it)
+#### Extra private addresses — Tor / Lokinet / I2P / Nostr / ENS (one wizard does it)
 
-Besides your normal web address, you can give people a *private* way to reach your instance over Tor, Lokinet, or I2P, and link your instance to a **Nostr** profile. Each one shows up as a little pill in your site footer. This is optional — your normal address works fine on its own — but it's the most on-brand thing you can add.
+Besides your normal web address, you can give people a *private* way to reach your instance over Tor, Lokinet, or I2P, link your instance to a **Nostr** profile, and point a decentralized **ENS** `.eth` name at it. Each one shows up as a little pill in your site footer. This is optional — your normal address works fine on its own — but it's the most on-brand thing you can add.
 
 You don't have to know how any of these networks work. Run:
 
@@ -1942,6 +1942,7 @@ npx morphit-ops
 - **I2P vanity name (`DOMAIN.i2p`)** — *optional*, and separate from the `.b32.i2p` above (the wizard now has a distinct **"I2P vanity"** choice). It's a human-readable alias like `morphit.i2p` that you **register** with an i2p naming service, then paste in. It only resolves for visitors whose i2p router knows the name; the `.b32.i2p` always works. Your instance can have neither, one, or both.
 - **Lokinet (`.loki`)** — you **can't** pick the letters; Lokinet makes the address for you. You just add one `keyfile=` line to `lokinet.ini`, restart Lokinet, and paste the `.loki` it prints. Want a short, readable name like `yourname.loki`? That's **ONS** — you buy it with OXEN coin in the Oxen wallet (optional, costs money). The `scripts/generate-lokinet.sh` helper prints these steps.
 - **Nostr** — there's nothing to generate; you already have a Nostr identity. Just paste your **public** key (`npub1…` or the 64-character hex form). The wizard refuses a private key (`nsec…`) so you can't leak it. The footer pill links to your instance's Nostr page. (You can also set this under `morphit-ops edit → Branding & SEO`.)
+- **ENS (`DOMAIN.eth`)** — *optional*, nothing to generate: you **register** a `.eth` name on Ethereum (ENS) and point it at your instance, usually by setting its **contenthash** to an IPFS copy of your site. Then paste the name (e.g. `morphit.eth`) into the wizard — it checks the `.eth` shape. The footer pill links to `https://<name>.eth.limo` (an ENS gateway, so it opens in any browser); ENS-aware browsers resolve `<name>.eth` directly. (You can also set this under `morphit-ops edit → Branding & SEO`.)
 
 After you set or change an address, the wizard saves it and **offers to restart the indexer for you** (just press Enter) so the change goes live. Reload your site and the new footer pill appears — no manual restart needed. **Delete** removes the pill the same way. The secret keys are **never** committed to the repo. Full reference (env vars, exact mechanics, why Lokinet differs, how your own directory-card pills refresh): `OPERATIONS.md` §23.
 

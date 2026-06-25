@@ -849,6 +849,8 @@ export interface InstanceResponse {
 		readonly i2p_b32: string | null;
 		/** I2P human-readable name (`something.i2p`). */
 		readonly i2p_name: string | null;
+		/** ENS .eth name (`something.eth`). */
+		readonly ens: string | null;
 		/** Deprecated legacy single field.  Pre-2026-05 indexers
 		 *  populated this; post-2026-05 indexers leave it `null`
 		 *  in favor of the explicit two-field form.  Kept on the
@@ -1037,6 +1039,8 @@ export interface InstanceDirectoryEntry {
 		readonly i2p_b32: string | null;
 		/** I2P human-readable name (`something.i2p`). */
 		readonly i2p_name: string | null;
+		/** ENS .eth name (`something.eth`). */
+		readonly ens: string | null;
 		/** Deprecated legacy single field.  Frontends should
 		 *  prefer i2p_b32 + i2p_name; this is preserved for
 		 *  one release cycle. */

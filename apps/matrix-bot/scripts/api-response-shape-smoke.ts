@@ -153,6 +153,7 @@ const AltNetworksSchema = z.object({
 	lokinet: z.string().nullable(),
 	i2p_b32: z.string().nullable(),
 	i2p_name: z.string().nullable(),
+	ens: z.string().nullable().optional(),
 	i2p: z.string().nullable().optional(),
 	nostr: z.string().nullable()
 });
@@ -554,6 +555,7 @@ const sampleInstance = {
 		lokinet: null,
 		i2p_b32: null,
 		i2p_name: null,
+		ens: null,
 		nostr: null
 	},
 	fee_recipient: '@morphit-fees',

@@ -523,6 +523,8 @@ Morphit's resilience grows with every independent operator. You can help in any 
 
 • Host on Tor, Lokinet, or I2P. A .onion, .loki, or .b32.i2p mirror lets users reach Morphit from jurisdictions where clearnet access is blocked. These are cheap to run — they don't need TLS certificates or DNS — and the impact is enormous for users in censored networks.
 
+• Point an ENS .eth name at it. Register a `.eth` name with ENS (Ethereum Name Service) and aim it at your instance — usually via an ENS contenthash to an IPFS copy of your site — so people can reach you at a human-readable, decentralized name like `morphit.eth` (through an ENS-aware browser or gateway). It appears as an extra footer pill alongside Tor/Lokinet/I2P.
+
 • Host Morphit's dependencies. The frontend pulls a handful of JavaScript libraries at build time. Self-hosting mirrors of those packages (or proxying their CDNs) lets communities bootstrap without relying on third parties. We document the exact list in the operator runbook.
 
 • Fund a community node. If you don't want to run servers yourself, contributing Blurt to an active operator's @morphit-relay account keeps it funded to create accounts. One operator covering 500 weekly signups needs ~$1 of Blurt per week; small contributions add up.

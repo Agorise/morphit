@@ -21,6 +21,14 @@ const I2P_B32_RE = /^[a-z2-7]{52,}\.b32\.i2p$/;
 // I2P vanity host-name: ordinary hostname labels ending in ".i2p" (NOT the
 // ".b32.i2p" hash form — that's the b32 slot).  e.g. "morphit.i2p".
 const I2P_NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.i2p$/;
+// ENS name: one or more ASCII hostname labels ending in ".eth".  e.g.
+// "morphit.eth" or a subdomain "node.morphit.eth".  This is a FORMAT check on
+// the common ASCII case (no on-chain resolution, no UTS-46/emoji normalization
+// — consistent with how the onion/i2p addresses are validated by shape, not
+// resolved, and with the "tiny footprint, no extra deps" posture). ENS is a
+// registered NAME (like the I2P vanity name), not a self-generated address, so
+// it lives here beside validateI2pName rather than in the AltNet generator set.
+const ENS_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.eth$/;
 
 /** Trim, lowercase, strip a pasted scheme + trailing slashes. */
 export function normalizeAltAddress(raw: string): string {
@@ -42,6 +50,9 @@ export function isValidI2pB32(s: string): boolean {
 }
 export function isValidI2pName(s: string): boolean {
 	return I2P_NAME_RE.test(s) && !s.endsWith('.b32.i2p');
+}
+export function isValidEnsName(s: string): boolean {
+	return ENS_RE.test(s);
 }
 
 export type ValidateResult =
@@ -79,6 +90,24 @@ export function validateI2pName(raw: string): ValidateResult {
 		? { ok: true, value: v }
 		: { ok: false, reason: 'that is not an I2P vanity name (expected something like "morphit.i2p")' };
 }
+
+/** Validate (and normalize) a pasted ENS .eth name.  Nothing to "generate":
+ *  the operator registers an ENS name on Ethereum and pastes it here.  Like
+ *  the I2P vanity name, it's a human-readable pointer (typically an ENS
+ *  contenthash → IPFS site), advertised as a footer pill — Morphit does not
+ *  resolve it. */
+export function validateEnsName(raw: string): ValidateResult {
+	const v = normalizeAltAddress(raw);
+	if (v.length === 0) return { ok: false, reason: 'empty' };
+	return isValidEnsName(v)
+		? { ok: true, value: v }
+		: { ok: false, reason: 'that is not an ENS .eth name (expected something like "morphit.eth")' };
+}
+
+/** morphit.config.env key for the optional ENS .eth name. Standalone (not in
+ *  the AltNet ENV_KEY map) because ENS is a registered name, not a generated
+ *  hidden-service address. */
+export const ENS_ENV_KEY = 'MORPHIT_INSTANCE_ENS_NAME';
 
 /** Which morphit.config.env key each network's address is written to. I2P
  *  uses the modern split var (_I2P_B32_ADDRESS), which the indexer maps to

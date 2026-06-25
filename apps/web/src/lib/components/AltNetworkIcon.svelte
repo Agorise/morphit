@@ -2,7 +2,7 @@
 	/**
 	 * AltNetworkIcon — displays each network's authentic brand
 	 * artwork for the networks Morphit is reachable via (Tor,
-	 * Lokinet, I2P, Nostr, Blurt).
+	 * Lokinet, I2P, Nostr, Blurt, ENS).
 	 *
 	 * Design decisions:
 	 *
@@ -33,7 +33,7 @@
 	import { _ } from 'svelte-i18n';
 
 	interface Props {
-		network: 'tor' | 'lokinet' | 'i2p' | 'nostr' | 'blurt';
+		network: 'tor' | 'lokinet' | 'i2p' | 'nostr' | 'blurt' | 'ens';
 		/** Pixel size. Defaults to 24. */
 		size?: number;
 		/** Extra CSS classes on the wrapper for alignment overrides. */

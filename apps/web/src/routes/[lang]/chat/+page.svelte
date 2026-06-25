@@ -517,8 +517,8 @@
 								weight="semibold"
 								showCopy={false}
 							/>
-							<span class="ml-auto text-xs text-ink-500 dark:text-ink-400" aria-hidden="true"
-								>→</span
+							<span class="ml-auto text-xs text-ink-500 dark:text-ink-400 rtl:inline-block rtl:-scale-x-100" aria-hidden="true"
+								>⇨</span
 							>
 						</a>
 					</li>

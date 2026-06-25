@@ -34,6 +34,7 @@
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { join, isAbsolute, resolve } from 'node:path';
 import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
+import { safeCwd } from '../lib/repoRoot.ts';
 import type {
 	RelayAccountResult,
 	ActiveKeyResult,
@@ -463,7 +464,8 @@ function renderConfig(answers: WizardAnswers): string {
 		altNetworks.lokinet !== null ||
 		altNetworks.i2pB32 !== null ||
 		altNetworks.i2pName !== null ||
-		altNetworks.nostr !== null;
+		altNetworks.nostr !== null ||
+		altNetworks.ens !== null;
 	if (hasAlt) {
 		lines.push('# ──────────────────────────────────────────────────────');
 		lines.push('# Alt-network reachability');
@@ -482,6 +484,9 @@ function renderConfig(answers: WizardAnswers): string {
 		}
 		if (altNetworks.nostr !== null) {
 			lines.push(`MORPHIT_INSTANCE_NOSTR_PUBKEY=${quote(altNetworks.nostr, 'parseEnv')}`);
+		}
+		if (altNetworks.ens !== null) {
+			lines.push(`MORPHIT_INSTANCE_ENS_NAME=${quote(altNetworks.ens, 'parseEnv')}`);
 		}
 		lines.push('');
 	}
@@ -1168,5 +1173,5 @@ function quote(value: string, consumer: EnvFileConsumer = 'bash'): string {
  *  (resolved against cwd) or absolute. */
 export function resolveOutputPath(outFlag: string | undefined, defaultRoot: string): string {
 	if (outFlag === undefined || outFlag === '') return defaultRoot;
-	return isAbsolute(outFlag) ? outFlag : resolve(process.cwd(), outFlag);
+	return isAbsolute(outFlag) ? outFlag : resolve(safeCwd() ?? defaultRoot, outFlag);
 }

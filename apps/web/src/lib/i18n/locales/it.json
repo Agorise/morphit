@@ -256,7 +256,7 @@
     "my_orders": "I miei ordini",
     "settings": "Impostazioni",
     "sign_out": "Disconnetti",
-    "notification_settings": "Impostazioni notifiche →",
+    "notification_settings": "Impostazioni notifiche ⇨",
     "category": {
       "order": "Ordini",
       "order_help": "Eseguiti, scaduti, controfferte",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "Come posso contribuire a rendere Morphit inarrestabile?",
-        "a": "La resilienza di Morphit cresce con ogni operatore indipendente. Puoi contribuire in vari modi:\n\n• Gestisci il tuo nodo. Metti in piedi un indexer + relay + frontend sul tuo server e servi Morphit dal tuo URL. Ogni mirror indipendente moltiplica la nostra superficie: bloccarne uno non serve a nulla quando ne esistono altri dieci.\n\n• Ospita su Tor, Lokinet o I2P. Un mirror .onion, .loki o .b32.i2p permette agli utenti di raggiungere Morphit da giurisdizioni dove l'accesso clearnet è bloccato.\n\n• Ospita le dipendenze di Morphit. Il frontend carica alcune librerie JavaScript al momento della build. Auto-ospitare mirror di quei pacchetti permette alle comunità di partire senza dipendere da terzi.\n\n• Finanzia un nodo comunitario. Contribuire Blurt all'account @morphit-relay di un operatore attivo lo mantiene finanziato per creare account. Un operatore che copre 500 registrazioni settimanali ha bisogno di ~$1 di Blurt a settimana.\n\n• Diffondi la voce. Morphit dipende dall'effetto rete.\n\n• Scrivi tutorial e traduzioni. Il progetto è AGPL-3.0.\n\nMorphit è progettato per essere impossibile da fermare perché non c'è un attore centrale da pressare. Tu che esegui QUALSIASI parte dello stack rafforza questa garanzia."
+        "a": "La resilienza di Morphit cresce con ogni operatore indipendente. Puoi contribuire in vari modi:\n\n• Gestisci il tuo nodo. Metti in piedi un indexer + relay + frontend sul tuo server e servi Morphit dal tuo URL. Ogni mirror indipendente moltiplica la nostra superficie: bloccarne uno non serve a nulla quando ne esistono altri dieci.\n\n• Ospita su Tor, Lokinet o I2P. Un mirror .onion, .loki o .b32.i2p permette agli utenti di raggiungere Morphit da giurisdizioni dove l'accesso clearnet è bloccato.\n\n• Fai puntare un nome ENS .eth ad essa. Registra un nome `.eth` con ENS (Ethereum Name Service) e puntalo alla tua istanza — di solito tramite un contenthash ENS verso una copia IPFS del tuo sito — così le persone possono raggiungerti con un nome decentralizzato e leggibile come `morphit.eth` (tramite un browser o un gateway compatibili con ENS). Appare come una pillola aggiuntiva nel piè di pagina, accanto a Tor/Lokinet/I2P.\n\n• Ospita le dipendenze di Morphit. Il frontend carica alcune librerie JavaScript al momento della build. Auto-ospitare mirror di quei pacchetti permette alle comunità di partire senza dipendere da terzi.\n\n• Finanzia un nodo comunitario. Contribuire Blurt all'account @morphit-relay di un operatore attivo lo mantiene finanziato per creare account. Un operatore che copre 500 registrazioni settimanali ha bisogno di ~$1 di Blurt a settimana.\n\n• Diffondi la voce. Morphit dipende dall'effetto rete.\n\n• Scrivi tutorial e traduzioni. Il progetto è AGPL-3.0.\n\nMorphit è progettato per essere impossibile da fermare perché non c'è un attore centrale da pressare. Tu che esegui QUALSIASI parte dello stack rafforza questa garanzia."
       },
       "why_self_trading_fails": {
         "q": "Perché fare trading con me stesso non aumenta la mia reputazione?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "All'invio, Morphit pubblicherà anche un breve annuncio \"Mi sono unito a Morphit\" sulla community @morphit su Blurt — sotto il tuo account, firmato da te. Avviene una sola volta, al tuo primo feedback in assoluto.",
       "off": "Nota: hai disattivato l'annuncio automatico nelle Impostazioni. All'invio non verrà pubblicato alcun post di primo scambio.",
-      "manage_link": "Gestisci nelle Impostazioni →",
+      "manage_link": "Gestisci nelle Impostazioni ⇨",
       "heading": "Annuncia la tua prima operazione",
       "pitch": "La sindicazione dei tuoi scambi è tutto. Annuncia le tue offerte ovunque possibile — più occhi sulle tue offerte = più partner di trading, e più upvote, che sono guadagni extra direttamente sul tuo Wallet Blurt.",
       "label_on": "Sì, annuncia la mia prima operazione su Blurt",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "Abbiamo impostato la scadenza a 7 giorni invece dei 90 predefiniti. Una finestra più breve significa che le offerte obsolete non rimangono se cambi idea.",
     "tip_payment_label": "Consigli sui metodi di pagamento.",
     "tip_payment_body": "Aggiungi i metodi di pagamento che accetti davvero. I partner commerciali scelgono quello che funziona per loro. Punti di partenza comuni: PayPal, Wise, bonifico, contanti di persona.",
-    "faq_link": "Leggi la guida completa alla prima operazione →",
+    "faq_link": "Leggi la guida completa alla prima operazione ⇨",
     "dismiss_aria": "Chiudi questo pacchetto iniziale"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "Aspetta!",
     "step_2": "Se stai inviando cripto, aspetta finché non hai effettivamente ricevuto il fiat (non solo \"in attesa\") prima di inviare la cripto. Una volta partito, è partito.",
     "step_3": "Dopo che l'operazione è terminata, lascia una recensione su /my/orders così i futuri trader si fidano di entrambi.",
-    "faq_link": "Leggi la guida completa →",
+    "faq_link": "Leggi la guida completa ⇨",
     "dismiss_aria": "Chiudi questa guida"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "Indirizzo: {address}",
     "instances": "Istanze",
     "explorer": "Explorer dei blocchi",
-"download": "Scarica",
+    "download": "Scarica",
     "api": "API",
     "api_title": "Documentazione dell'API per sviluppatori",
     "agpl_title": "Perché Morphit usa la licenza AGPL-3.0",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "Chiavi pubbliche PGP dell'operatore per release firmate e verifica del canarino",
     "mediakit": "Kit media",
     "mediakit_title": "Risorse del brand e la lista dei punti di forza di Morphit — per stampa, integratori e community",
-    "bounty": "Ricompensa bug"
+    "bounty": "Ricompensa bug",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 Consiglio: aggiungi ai preferiti alcune di queste istanze — e i loro indirizzi Tor, I2P o Lokinet — nel tuo browser. Il registro ordini risiede sulla blockchain pubblica, quindi se un sito venisse mai bloccato o andasse offline, potrai raggiungere gli stessi identici ordini e scambi tramite qualsiasi altra istanza.",
     "fetch_error": "Impossibile caricare l’elenco.",
     "last_updated": "Ultimo aggiornamento elenco: {date}",
-    "contact": "Contatta questo operatore →",
+    "contact": "Contatta questo operatore ⇨",
     "add_yours_title": "Aggiungi la tua istanza",
     "add_yours_body": "Gestisci un'istanza Morphit? Basta registrarsi sulla blockchain — ogni altro indexer Morphit ti scoprirà automaticamente. La procedura guidata (morphit-ops init) gestisce la registrazione durante la configurazione iniziale.",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "Sì, scarta e ricomincia",
         "cancel": "Resto qui"
       }
+    },
+    "progress": {
+      "step_label": "Passaggio {current} di {total}"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "Puoi sfogliare qui, ma serve un nome account Blurt per scrivere ai venditori o pubblicare i tuoi ordini.",
       "cta": "Scegli un nome"
     },
-    "fee_rejected_check": "Hai pubblicato un ordine ma non lo vedi? Controlla lo stato della commissione →"
+    "fee_rejected_check": "Hai pubblicato un ordine ma non lo vedi? Controlla lo stato della commissione ⇨"
   },
   "paired_readonly": {
     "banner_heading": "Connesso come @{account} — il telefono ha le chiavi.",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "Vedi il mio ordine",
       "feature_upsell_heading": "Vuoi più visibilità per questa inserzione?",
       "feature_upsell_body": "Fai un'offerta per uno slot in evidenza per portare il tuo ordine in cima al book per alcune ore. L'offerta minima è di 6 ore; la tariffa è impostata per istanza. La maggior parte degli operatori usa 50 BLURT/ora come predefinito.",
-      "feature_upsell_cta": "Configura un'offerta in evidenza →",
+      "feature_upsell_cta": "Configura un'offerta in evidenza ⇨",
       "edit_window_countdown": "{remaining} per modificare",
       "edit_window_tooltip": "Le modifiche sono possibili solo entro 15 minuti dalla pubblicazione. Dopo, cancella e ripubblica.",
       "edit_window_expired": "Finestra modifica chiusa"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "Frase seme"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "Questa bio contiene caratteri non consentiti.",
+        "too_long": "La bio è troppo lunga (max 128 caratteri)."
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "Inserisci un nome.",
@@ -3542,7 +3552,7 @@
     "footer_body": "Trovato un problema? Segnalalo nel repo pubblico Forgejo, o con messaggio cifrato all'account {morphit_account} della catena.",
     "bounty_title": "Programma di ricompensa per bug",
     "bounty_body": "Operiamo un programma discrezionale di riconoscimento della sicurezza. Ogni scoperta perseguibile viene revisionata da un ingegnere reale, riceve una risposta e — se migliora materialmente la postura di sicurezza di Morphit — viene ricompensata in BLURT (pagato da @morphit-fees) o BTC, scalato in base alla severità e alla qualità del rapporto. Nessuna tabella di livelli fissa; giudizio caso per caso. Credito nella hall of fame disponibile anche senza pagamento. L'ambito completo, la guida alla severità, il flusso di pagamento e cosa non faremo (nessun NDA, nessuna divulgazione esclusiva) è documentato in SECURITY.md.",
-    "bounty_link": "Leggere l'ambito e le regole complete →",
+    "bounty_link": "Leggere l'ambito e le regole complete ⇨",
     "canary_title": "Canarino di mandato",
     "canary_body": "Pubblichiamo un canarino settimanale firmato con la chiave PGP dell'operatore. Il canarino dichiara esplicitamente che nessuna NSL / FISA / ordine di silenzio / richiesta di backdoor è stata ricevuta. Le prove di freschezza includono un'intestazione di catena Blurt attuale, un'intestazione di catena Bitcoin attuale e un titolo di notizie attuale (prova che il canarino non può essere pregenerato). Se il canarino smette di aggiornarsi per più di 14 giorni, trattalo come silenzioso: l'operatore potrebbe essere sotto pressione coercitiva, e dovresti passare a un altro operatore federato.",
     "canary_link": "Vedere il canarino attuale di questo operatore",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "È passata una settimana — hai già fatto il backup della tua frase di 12 parole? Se perdi questo dispositivo, la frase è l'UNICO modo per recuperare il tuo account.",
-    "show_me_how": "Mostrami come →",
+    "show_me_how": "Mostrami come ⇨",
     "got_it": "Capito"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "Breve bio",
+      "explain": "Una frase o due su di te — cosa scambi, i tuoi hobby, ciò che vuoi. Facoltativo, fino a 128 caratteri.",
+      "input_label": "La tua breve bio",
+      "placeholder": "es. Caffè, BTC e lunghe passeggiate sulla blockchain.",
+      "hint": "Sembra a posto.",
+      "broadcast_ok_detail": "La tua breve bio è ora pubblicata e visibile a tutti."
+    },
     "title": "Impostazioni",
     "subtitle": "La tua identità, le tue regole. Salvate sul tuo dispositivo, mai sui nostri server.",
     "display_name": {
+      "save_legend_desc": "mostra il nome solo qui, così lo vedi soltanto tu.",
+      "broadcast_legend_desc": "pubblica il nome on-chain così tutti (e tutti i tuoi dispositivi) lo vedono.",
       "heading": "Nome visibile",
-      "explain": "Un'etichetta amichevole che appare accanto al tuo avatar. NON sostituisce la tua chiave pubblica — quella è sempre mostrata tra parentesi, ed è la parte di cui le persone devono fidarsi. Puoi cambiarla in qualsiasi momento.",
+      "explain": "Un'etichetta amichevole che appare accanto al tuo avatar. NON sostituisce la tua chiave pubblica — quella è sempre mostrata tra parentesi, ed è la parte di cui le persone devono fidarsi.",
       "input_label": "Scegli il tuo nome visibile",
       "placeholder": "es. Sally Doe",
       "preview_label": "Ecco come apparirai",
       "hint": "Sembra a posto.",
-      "save": "Salva nome visibile",
+      "save": "Salva solo in locale",
       "clear": "Cancella",
       "saved_toast": "Salvato.",
-      "reminder_title": "I nomi visibili non sono unici.",
-      "reminder_body": "Chiunque può usare qualsiasi nome. La chiave corta tra parentesi — ad esempio (BLT7gHu8mn…A9bb) — è ciò che ti identifica davvero, e nessun altro può copiarla. Controlla sempre la chiave quando fai trading.",
-      "save_and_broadcast": "Salva + pubblica",
+      "reminder_title": "💡 I nomi visibili non sono unici.",
+      "reminder_body": "Chiunque può usare qualsiasi nome. La chiave corta tra parentesi è ciò che ti identifica davvero, e nessun altro può copiarla. Controlla sempre la chiave quando fai trading.",
+      "save_and_broadcast": "Salva e trasmetti",
       "broadcast_ok": "Pubblicato.",
       "broadcast_err": {
         "no_account": "Salvato localmente. La pubblicazione sarà disponibile dopo la registrazione del tuo account.",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "Annulla"
     },
     "session": {
+      "autolock_changed": "Cambiato in {label}",
       "heading": "Utilità",
       "explain": "Esci quando hai finito. Le tue chiavi verranno cancellate dalla memoria; il portachiavi cifrato sul tuo dispositivo rimane intatto.",
       "autolock_label": "Auto-blocco dopo inattività",
@@ -3913,7 +3934,7 @@
     },
     "avatar": {
       "heading": "Avatar",
-      "explain": "Sostituisci l'identicon a forma di cuore con una tua immagine. Archiviato on-chain nella tua op di profilo, come il nome visualizzato e i link social.",
+      "explain": "Sostituisci l'identicon a forma di cuore con una tua immagine.",
       "guidance_heading": "Prima di caricare",
       "guidance_filetypes": "Accetta SVG, WebP, JPEG, PNG o GIF.",
       "guidance_dimensions": "Ideale: un'immagine quadrata di almeno 96×96 pixel. Qualcosa di più grande verrà ridimensionato a 96×96; più piccolo apparirà sgranato.",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge: tocca l'icona di installazione nella barra degli indirizzi, o usa il menu del browser → Installa Morphit.",
       "manual_safari": "Safari (macOS / iOS): tocca il pulsante Condividi, poi \"Aggiungi a Home\".",
       "manual_firefox": "Firefox Android: tocca il menu (︙), poi \"Installa\". Firefox desktop non supporta l'installazione PWA — usa browser basati su Chromium.",
-      "iphone_link": "Guida all'installazione su iPhone →"
+      "iphone_link": "Guida all'installazione su iPhone ⇨"
     },
     "account_name": {
       "heading": "Nome account Blurt",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "Conservale"
     },
     "totp": {
-      "heading": "Autenticazione a due fattori",
+      "heading": "Autenticazione a due fattori (2FA)",
       "subtitle": "Aggiungi un’app di autenticazione come secondo fattore dopo la tua password. Protegge da sguardi indiscreti, dispositivi prestati e malware locale casuale.",
       "honest_framing": {
         "title": "Da cosa ti protegge — onestamente",

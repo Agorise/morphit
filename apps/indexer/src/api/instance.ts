@@ -42,6 +42,9 @@ export interface InstanceResponse {
 		 *  only resolves on routers whose address book has the
 		 *  mapping.  An operator may set neither, one, or both. */
 		i2p_name: string | null;
+		/** ENS .eth name (`something.eth`).  Optional registered Ethereum
+		 *  name advertised as a footer pill; not resolved server-side. */
+		ens: string | null;
 		/** Legacy single field — deprecated.  When `i2p_b32` or
 		 *  `i2p_name` is set, this is `null`.  Kept on the wire for
 		 *  one release cycle so older frontends pointed at this
@@ -255,6 +258,7 @@ export function instanceRoute(
 				lokinet: config.instanceLokinetAddress ?? null,
 				i2p_b32: config.instanceI2pB32Address ?? null,
 				i2p_name: config.instanceI2pNameAddress ?? null,
+				ens: config.instanceEnsName ?? null,
 				// Deprecated legacy field — left as null when
 				// either new field is set; stays populated only
 				// when an operator has only the legacy env var

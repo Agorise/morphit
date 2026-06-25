@@ -19,8 +19,9 @@
 	import type { Snippet } from 'svelte';
 
 	interface Props {
-		/** Primary CTA, secondary, or ghost. Only one primary per screen. */
-		variant?: 'primary' | 'secondary' | 'ghost';
+		/** Primary CTA, secondary, ghost, or text-link (de-emphasized
+		 *  back/cancel nav). Only one primary per screen. */
+		variant?: 'primary' | 'secondary' | 'ghost' | 'link';
 		/** True while the action is in flight. Shows spinner, disables button. */
 		busy?: boolean;
 		/** True briefly after a just-completed success. Shows a
@@ -68,8 +69,21 @@
 				return 'bg-white dark:bg-ink-900 text-morphit-emerald font-semibold border-2 border-morphit-emerald hover:bg-emerald-50 dark:hover:bg-ink-800 disabled:border-ink-300 disabled:text-ink-400';
 			case 'ghost':
 				return 'bg-transparent text-ink-700 dark:text-ink-200 font-medium hover:bg-ink-100 dark:hover:bg-ink-800 disabled:text-ink-400';
+			case 'link':
+				// De-emphasized text link (back/cancel nav): grey text, emerald
+				// on hover, no button chrome (the layoutClass below drops the
+				// padding/rounding/scale so it reads as a link, not a button).
+				return 'bg-transparent text-ink-300 font-medium hover:text-morphit-emerald disabled:text-ink-500';
 		}
 	});
+
+	// Layout differs for the link variant: no button padding/rounding/
+	// scale, so it reads as an inline text link.
+	const layoutClass = $derived(
+		variant === 'link'
+			? 'inline-flex items-center gap-1.5 text-base transition disabled:cursor-not-allowed'
+			: 'inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-base transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100'
+	);
 </script>
 
 <button
@@ -78,7 +92,7 @@
 	aria-busy={busy}
 	aria-label={ariaLabel}
 	{onclick}
-	class="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-base transition active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100 {variantClass} {fullWidth
+	class="{layoutClass} {variantClass} {fullWidth
 		? 'w-full'
 		: ''}"
 >

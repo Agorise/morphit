@@ -301,50 +301,68 @@ export function lockSession(): void {
 }
 
 /**
- * Sign out. Wipes live private key bytes in place, clears the store,
- * AND wipes the persisted envelope from disk. Next time the user
- * opens Morphit on this device, they'll need their seed phrase or
- * keyfile to get back in — no password shortcut available. This is
- * the nuclear option; use lockSession() for "stepping away briefly."
- * Safe to call even if already locked (no-op on live, still clears
- * any leftover persisted state).
+ * In-memory session wipe, with OPTIONAL deterministic disk-clear.
  *
- * Also clears the paired-readonly session marker — sign-out from a
- * QR-paired device leaves no trace of the pairing.
+ * Always (synchronously): scrubs live private-key bytes in place and
+ * sets the store to `locked`.
  *
- * NOTE on the dynamic imports: this function is called from the
- * `pagehide` event handler, where the browser is tearing the page
- * down.  Dynamic-import-then-call gives the page-teardown a chance
- * to win the race — in-memory wipe always runs (synchronous, before
- * the await point), but the disk-clear effectively only happens when
- * the user explicitly clicked Sign Out (not when they're just
- * closing the tab).  This is intentional: tab close should not
- * destroy the persistent envelope or the paired-session marker.
- * Both the keystore clear and the paired-session clear use dynamic
- * imports for the same reason.
+ * With `{ clearDisk: true }`: ALSO wipes the persisted keystore envelope
+ * and the paired-readonly marker from disk. Use this only for an
+ * EXPLICIT, user-initiated "leave this device" action (Sign Out, or the
+ * paired→keystore upgrade). After a disk-clear the user needs their seed
+ * phrase or keyfile to get back in — no password shortcut.
+ *
+ * Without `clearDisk` (the default): disk is left intact. This is what
+ * `pagehide` (tab close / refresh) and the cross-tab storage mirror use —
+ * the persisted envelope / paired marker must SURVIVE so the next page load
+ * can re-establish the session (password unlock, paired auto-restore, or
+ * cross-tab handoff). Locking ≠ signing out. (The idle auto-lock is a
+ * SEPARATE path — `+layout` wires it to `lockSession()`, not reset(); that
+ * keeps the keystore envelope too but deliberately CLEARS a paired-readonly
+ * marker, since a QR-pair session has no password to re-unlock with, so
+ * keeping the marker would just auto-restore it and make the lock pointless.)
+ *
+ * History: disk-clear used to fire unconditionally and rely on `pagehide`
+ * tearing the page down before the dynamic import resolved. That race was
+ * unsafe (persistentKeystore is already loaded, so the import resolves on
+ * the microtask queue and could win on a reload, wiping a "Remember me"
+ * envelope on refresh). It is now an explicit flag.
  */
-export function reset(): void {
+export function reset(opts?: { clearDisk?: boolean }): void {
 	const current = get(internal);
 	if (current.state === 'unlocked') {
 		wipeLiveIdentity(current.live);
 	}
 	internal.set({ state: 'locked' });
-	// Wipe persistent keystore from disk. Imported lazily so that
-	// modules that only need reset()'s in-memory behavior don't pull
-	// in the safeStorage + crypto chain — AND so the dynamic-import
-	// loses the race against page teardown on `pagehide` (intentional;
-	// see jsdoc note above).
-	void import('$crypto/persistentKeystore').then((mod) => {
-		mod.clearKeystore();
-	});
-	// Wipe paired-readonly marker from disk.  Same dynamic-import
-	// race-against-teardown pattern as clearKeystore above: a deliberate
-	// Sign Out wipes the marker, but a tab close (where `reset` runs
-	// from `pagehide`) loses the race and leaves the marker intact so
-	// the next tab open re-establishes the paired session.
-	void import('$crypto/pairedSession').then((mod) => {
-		mod.clearPairedSession();
-	});
+	// Disk-clear is now EXPLICIT and deterministic (opts.clearDisk),
+	// NOT a fire-and-forget that we hope loses a race against page
+	// teardown. The old approach — always firing the dynamic-import
+	// clear and relying on `pagehide` to kill the context first — was
+	// fragile: `$crypto/persistentKeystore` is already loaded on every
+	// page, so its `import()` resolves on the microtask queue and could
+	// WIN the race on a reload, wiping a "Remember me" envelope and
+	// dropping the user to the import screen on refresh. So:
+	//   - pagehide / cross-tab storage mirror → clearDisk omitted
+	//     (false): the persisted envelope and paired marker SURVIVE,
+	//     so the next load re-establishes the session (password
+	//     unlock, paired auto-restore, or cross-tab handoff).  (The
+	//     idle auto-lock is NOT a reset() caller — it uses
+	//     lockSession(), which keeps the keystore envelope too but
+	//     clears a paired-readonly marker on purpose.)
+	//   - explicit Sign Out (broadcastSignOut) and the paired→keystore
+	//     upgrade → clearDisk: true, wiping disk for real.
+	// The dynamic import is kept (kept out of reset()'s static graph for
+	// callers that only need the in-memory wipe); it runs only when
+	// clearDisk is set, and the page is NOT tearing down on those paths,
+	// so the clear completes deterministically.
+	if (opts?.clearDisk) {
+		void import('$crypto/persistentKeystore').then((mod) => {
+			mod.clearKeystore();
+		});
+		void import('$crypto/pairedSession').then((mod) => {
+			mod.clearPairedSession();
+		});
+	}
 }
 
 /**
@@ -530,11 +548,15 @@ export function handleStorageEvent(e: StorageEvent): void {
 	}
 
 	if (e.newValue === null) {
-		// Envelope deleted — other tab signed out.  Mirror
-		// here.  Calling reset() is safe: it wipes the
-		// in-memory live keys and tries to clear the
-		// persisted envelope (already gone — clearKeystore
-		// is idempotent, no-op on missing keys).
+		// Envelope deleted — the other tab signed out and
+		// already removed the persisted envelope.  Mirror it
+		// here with a bare reset(): post-cp334 a bare reset()
+		// wipes only the in-memory live keys and deliberately
+		// does NOT touch disk — which is exactly right here,
+		// since the envelope is already gone.  (Disk-clearing
+		// is reserved for explicit reset({ clearDisk: true })
+		// on real sign-out / passphrase-change / account
+		// upgrade.)
 		reset();
 		return;
 	}
@@ -676,7 +698,7 @@ export function handleSessionHandoffMessage(
 		// reset() is idempotent and does NOT re-broadcast (the broadcast
 		// lives only in broadcastSignOut, never in reset), so this can't
 		// loop. Fires only on an explicit sign-out, never on tab-close.
-		reset();
+		reset({ clearDisk: true });
 	}
 }
 
@@ -727,7 +749,7 @@ export function broadcastSignOut(): void {
 			// Channel error — local reset still runs below.
 		}
 	}
-	reset();
+	reset({ clearDisk: true });
 	// Forget the persisted account name on an EXPLICIT sign-out so the
 	// login page's signed-in gate (getUserBlurtAccount(), which reads the
 	// shared-across-tabs `morphit.blurtAccount` localStorage key) no longer

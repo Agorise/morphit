@@ -495,6 +495,26 @@
 							</a>
 						</li>
 					{/if}
+					{#if $instance.alt_networks.ens}
+						<li>
+							<a
+								href="https://{$instance.alt_networks.ens}.eth.limo"
+								class="chip"
+								title={$_('footer.alt_network_address', {
+									values: { address: $instance.alt_networks.ens }
+								})}
+								rel="noopener noreferrer"
+								target="_blank"
+							>
+								<AltNetworkIcon
+									network="ens"
+									size={20}
+									class="h-5 w-5 text-ink-800 dark:text-ink-100"
+								/>
+								{$_('footer.ens')}
+							</a>
+						</li>
+					{/if}
 					<li>
 						{#if $instance.alt_networks.nostr}
 							<a

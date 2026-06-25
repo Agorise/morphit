@@ -39,6 +39,7 @@
 	import { gotoLocale } from '$i18n/navigate';
 
 	import Head from '$components/Head.svelte';
+	import SignupProgress from '$components/SignupProgress.svelte';
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
@@ -530,6 +531,7 @@
 			</p>
 		</section>
 	{:else}
+		<SignupProgress current={4} total={4} />
 		<section class="animate-fade-up" aria-labelledby="register-heading">
 			<div class="card">
 				<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">

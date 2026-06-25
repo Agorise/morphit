@@ -410,6 +410,9 @@ export interface Config {
 	 *  the safer fallback. */
 	readonly instanceI2pNameAddress: string | undefined;
 	readonly instanceNostrPubkey: string | undefined;
+	/** ENS .eth name — `something.eth`. Optional registered Ethereum name
+	 *  advertised as a footer pill; not resolved server-side. */
+	readonly instanceEnsName: string | undefined;
 	readonly instanceOrigin: string | undefined;
 
 	/** Frontend chat-link URL template for BTC txids (Part 109).
@@ -1142,6 +1145,10 @@ const envSchema = z.object({
 	 *  New deployments should use the explicit two-field form. */
 	MORPHIT_INSTANCE_I2P_ADDRESS: z.string().max(80).optional(),
 	MORPHIT_INSTANCE_NOSTR_PUBKEY: z.string().max(80).optional(),
+	/** ENS .eth name (`something.eth`).  Optional. A registered Ethereum
+	 *  name pointing at the instance (typically via contenthash → IPFS).
+	 *  Advertised as a footer pill; not resolved server-side. */
+	MORPHIT_INSTANCE_ENS_NAME: z.string().max(80).optional(),
 	MORPHIT_INSTANCE_ORIGIN: z.string().url().optional(),
 	/** Frontend chat-link external explorer URL templates (Part 109).
 	 *  When a counterparty sends a BTC or XMR txid in chat, the
@@ -1582,6 +1589,7 @@ export function loadConfig(): Config {
 			return undefined;
 		})(),
 		instanceNostrPubkey: e.MORPHIT_INSTANCE_NOSTR_PUBKEY,
+		instanceEnsName: e.MORPHIT_INSTANCE_ENS_NAME,
 		instanceOrigin: e.MORPHIT_INSTANCE_ORIGIN,
 		instanceOperatorTag: e.MORPHIT_INSTANCE_OPERATOR_TAG,
 		instanceSeoTitle: e.MORPHIT_INSTANCE_SEO_TITLE,

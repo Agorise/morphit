@@ -9,6 +9,7 @@
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import Head from '$components/Head.svelte';
+	import SignupProgress from '$components/SignupProgress.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	// cp165 byte-budget: SeedBackupPrint only renders after the user
 	// clicks "Show seed" — a one-time onboarding action.  Defer the
@@ -460,6 +461,14 @@
 	// Render-correct under SSR (layout load sets the locale before render).
 	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	// Signup progress (Ken's request): a skinny "Step X of Y" bar. The
+	// new-account journey is 4 steps — (1) choose path + generate keys,
+	// (2) back up seed (review), (3) confirm seed (confirm), (4) claim
+	// account name (the /onboarding/register-name route, which renders
+	// step 4/4 itself). generating folds into step 1; done is a transient
+	// hand-off to register-name and hides the bar.
+	const signupStep = $derived(stage === 'review' ? 2 : stage === 'confirm' ? 3 : 1);
 </script>
 
 <Head routeKey="onboarding" />
@@ -473,6 +482,10 @@
 			{$_('onboarding.intro')}
 		</p>
 	</header>
+
+	{#if stage !== 'done'}
+		<SignupProgress current={signupStep} total={4} />
+	{/if}
 
 	{#if errorMsg}
 		<div
@@ -496,7 +509,7 @@
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_reputation.body')}</p>
 					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
 						{$_('onboarding.path_reputation.cta_hint')}
-						<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+						<span class="transition-transform group-hover:translate-x-1 rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
 					</p>
 				</button>
 				<button
@@ -508,7 +521,7 @@
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_anonymous.body')}</p>
 					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
 						{$_('onboarding.path_anonymous.cta_hint')}
-						<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+						<span class="transition-transform group-hover:translate-x-1 rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
 					</p>
 				</button>
 			</div>
@@ -783,8 +796,8 @@
 					{/if}
 				</p>
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<BusyButton variant="ghost" onclick={requestRestartFromReview}>
-						← {$_('onboarding.review.back_button')}
+					<BusyButton variant="link" onclick={requestRestartFromReview}>
+						<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('onboarding.review.back_button')}
 					</BusyButton>
 					<BusyButton
 						variant="primary"
@@ -840,14 +853,14 @@
 
 				<div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<BusyButton
-						variant="ghost"
+						variant="link"
 						disabled={quizSubmitting}
 						onclick={() => {
 							stage = 'review';
 							showSeed = true;
 						}}
 					>
-						← {$_('onboarding.confirm.show_again')}
+						<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('onboarding.confirm.show_again')}
 					</BusyButton>
 					<BusyButton
 						variant="primary"

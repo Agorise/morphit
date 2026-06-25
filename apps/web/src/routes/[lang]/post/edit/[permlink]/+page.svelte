@@ -546,7 +546,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_found_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					← {$_('post_order.back_to_orderbook')}
+					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -556,7 +556,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_yours_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					← {$_('post_order.back_to_orderbook')}
+					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -942,8 +942,8 @@
 		<p class="mb-4 text-sm text-ink-500">{$_('edit_order.fee_note')}</p>
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
-			<BusyButton variant="ghost" onclick={() => gotoLocale('/orderbook')}>
-				← {$_('post_order.back_to_orderbook')}
+			<BusyButton variant="link" onclick={() => gotoLocale('/orderbook')}>
+				<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"

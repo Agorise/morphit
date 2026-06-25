@@ -299,6 +299,7 @@ export class Poller {
 					lokinet: config.instanceLokinetAddress ?? null,
 					i2p_b32: config.instanceI2pB32Address ?? null,
 					i2p_name: config.instanceI2pNameAddress ?? null,
+					ens: config.instanceEnsName ?? null,
 					nostr: config.instanceNostrPubkey ?? null
 				}
 			}),

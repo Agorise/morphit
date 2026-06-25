@@ -25,6 +25,7 @@
 
 import { existsSync, symlinkSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 
 import { ask, askYesNo } from '../init/prompt.ts';
 import { runInit } from './init.ts';
@@ -201,7 +202,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
  * launcher so it always tracks this install.
  */
 async function offerPathSymlink(): Promise<void> {
-	const binTarget = join(process.cwd(), 'apps', 'ops-cli', 'bin', 'morphit-ops.mjs');
+	const binTarget = join(safeCwd() ?? defaultRepoRoot(), 'apps', 'ops-cli', 'bin', 'morphit-ops.mjs');
 	if (!existsSync(binTarget)) {
 		// Not in an install tree (or unusual layout) — skip silently
 		// rather than guess.

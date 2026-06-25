@@ -164,7 +164,7 @@ if (!isExportedBroadcast) {
 }
 
 // ── #4: SAFETY — reset() must NOT broadcast signout ─────────────────────────
-const resetBody = extractBody(store, /export\s+function\s+reset\s*\(\s*\)\s*:/);
+const resetBody = extractBody(store, /export\s+function\s+reset\s*\([^)]*\)\s*:/);
 if (!resetBody) {
 	fail(`reset() body not found`, `brace-match failed`);
 } else if (SIGNOUT_BROADCAST_RE.test(resetBody) || /postMessage\s*\(/.test(resetBody)) {
