@@ -121,10 +121,10 @@ describe('identity — paired-readonly boot path', () => {
 		expect(readPairedSession()?.account).toBe('bob');
 	});
 
-	it('reset wipes in-memory state immediately and disk after microtask flush', async () => {
+	it('reset({ clearDisk: true }) wipes in-memory state immediately and disk after microtask flush', async () => {
 		bootFromPairedSession(SAMPLE);
 		expect(get(isPairedReadOnly)).toBe(true);
-		reset();
+		reset({ clearDisk: true });
 		// In-memory wipe is synchronous.
 		expect(get(identity).state).toBe('locked');
 		expect(get(isPairedReadOnly)).toBe(false);
@@ -132,6 +132,20 @@ describe('identity — paired-readonly boot path', () => {
 		// confirm.
 		await flushMicrotasks();
 		expect(readPairedSession()).toBeNull();
+	});
+
+	it('bare reset() (pagehide / idle-lock) wipes memory but PRESERVES the paired marker on disk', async () => {
+		// Regression guard for the refresh-logout fix: pagehide / lock must
+		// NOT destroy the persisted session, so the next page load can
+		// auto-restore it. Only an EXPLICIT sign-out (clearDisk: true) wipes
+		// disk. Previously reset() always fired the disk-clear and relied on
+		// a teardown race — which could win on reload and log the user out.
+		bootFromPairedSession(SAMPLE);
+		reset();
+		expect(get(identity).state).toBe('locked'); // in-memory gone
+		await flushMicrotasks();
+		expect(readPairedSession()?.account).toBe('alice'); // marker survives on disk
+		clearPairedSession(); // cleanup
 	});
 
 	it('lockSession on paired-readonly wipes both in-memory and disk synchronously', () => {

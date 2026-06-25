@@ -32,7 +32,9 @@ import {
 	type AltNet,
 	validateAltAddress,
 	validateI2pName,
+	validateEnsName,
 	ENV_KEY,
+	ENS_ENV_KEY,
 	GEN_SCRIPT
 } from '../lib/altAddressValidate.ts';
 
@@ -130,7 +132,7 @@ async function collectAddress(net: AltNet): Promise<string | null> {
 // (`collectAddress`, `validateAltAddress`, `GEN_SCRIPT`) still uses the
 // narrower `AltNet`.
 
-type ManagedNet = AltNet | 'nostr' | 'i2p_name';
+type ManagedNet = AltNet | 'nostr' | 'i2p_name' | 'ens';
 type AddrAction = 'replace' | 'clear' | 'back';
 
 const NET_LABEL: Record<ManagedNet, string> = {
@@ -138,7 +140,8 @@ const NET_LABEL: Record<ManagedNet, string> = {
 	lokinet: 'Lokinet (.loki) address',
 	i2p: 'I2P b32 address (DOMAIN.b32.i2p)',
 	i2p_name: 'I2P vanity name (DOMAIN.i2p)',
-	nostr: 'Nostr pubkey'
+	nostr: 'Nostr pubkey',
+	ens: 'ENS name (DOMAIN.eth)'
 };
 
 /** Env key(s) per address.  Element [0] is the canonical key we WRITE;
@@ -152,7 +155,8 @@ const ENV_KEYS_FOR: Record<ManagedNet, readonly string[]> = {
 	lokinet: [ENV_KEY.lokinet],
 	i2p: [ENV_KEY.i2p, 'MORPHIT_INSTANCE_I2P_ADDRESS'],
 	i2p_name: ['MORPHIT_INSTANCE_I2P_NAME_ADDRESS'],
-	nostr: ['MORPHIT_INSTANCE_NOSTR_PUBKEY']
+	nostr: ['MORPHIT_INSTANCE_NOSTR_PUBKEY'],
+	ens: [ENS_ENV_KEY]
 };
 
 /** Current value of a managed address from morphit.config.env text, or
@@ -234,6 +238,29 @@ async function collectI2pName(): Promise<string | null> {
 	}
 }
 
+/** Collect + validate an ENS name (DOMAIN.eth).  Nothing to "generate" — the
+ *  operator registers the name on Ethereum (ENS), points it at their instance
+ *  (typically an ENS contenthash → IPFS site), then pastes the name here.
+ *  Advertised as a footer pill; Morphit does not resolve it. */
+async function collectEns(): Promise<string | null> {
+	console.log('');
+	console.log('ENS name — a decentralized .eth name like "morphit.eth".');
+	console.log('');
+	console.log('This is OPTIONAL. Register the name on Ethereum (ENS) and point it');
+	console.log('at your instance — usually by setting its contenthash to an IPFS');
+	console.log('copy of your site. Visitors open it with an ENS-aware browser or an');
+	console.log('ENS gateway. Paste just the name (e.g. morphit.eth), not a URL.');
+	console.log('');
+	for (;;) {
+		const pasted = (await ask('Paste your DOMAIN.eth name (or press Enter to go back)', '')).trim();
+		if (pasted.length === 0) return null;
+		const res = validateEnsName(pasted);
+		if (res.ok) return res.value;
+		console.log(`  ✗ ${res.reason}`);
+		console.log('  Try again, or press Enter to go back.');
+	}
+}
+
 /** Validate a Nostr pubkey: npub1 bech32 or 64-char hex.  Lenient on the
  *  bech32 body (guards typos, not a full checksum verify); rejects nsec. */
 export function validateNostr(
@@ -257,7 +284,7 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 
 	console.log('');
 	rule();
-	console.log('  Alt-network addresses (Tor / Lokinet / I2P / Nostr)');
+	console.log('  Alt-network addresses (Tor / Lokinet / I2P / Nostr / ENS)');
 	rule();
 	console.log('');
 	console.log('  These give people extra, private ways to reach your Morphit.');
@@ -283,12 +310,13 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 				'I2P b32 (DOMAIN.b32.i2p)',
 				'I2P vanity (DOMAIN.i2p)',
 				'Nostr (npub… / hex pubkey)',
+				'ENS (DOMAIN.eth)',
 				'Done / cancel'
 			],
 			undefined,
 			{ showList: true }
 		);
-		if (idx === 5) {
+		if (idx === 6) {
 			console.log('\n  Nothing else to do. Bye!');
 			return 0;
 		}
@@ -302,7 +330,9 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 						? 'i2p'
 						: idx === 3
 							? 'i2p_name'
-							: 'nostr';
+							: idx === 4
+								? 'nostr'
+								: 'ens';
 		const label = NET_LABEL[kind];
 		const fileText = hasConfig ? readFileSync(configPath, 'utf-8') : '';
 		const current = hasConfig ? readManagedValue(fileText, kind) : null;
@@ -367,7 +397,9 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 				? await collectNostr()
 				: kind === 'i2p_name'
 					? await collectI2pName()
-					: await collectAddress(kind);
+					: kind === 'ens'
+						? await collectEns()
+						: await collectAddress(kind);
 		if (address === null) {
 			console.log('  (Cancelled — back to the list.)\n');
 			continue;

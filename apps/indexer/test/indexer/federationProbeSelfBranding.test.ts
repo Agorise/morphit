@@ -83,6 +83,7 @@ describe('FederationProbe — self-instance branding refresh (cp311)', () => {
 					lokinet: null,
 					i2p_b32: null,
 					i2p_name: null,
+					ens: null,
 					nostr: 'npub1exampleexampleexample'
 				}
 			})
@@ -107,6 +108,7 @@ describe('FederationProbe — self-instance branding refresh (cp311)', () => {
 			lokinet: null,
 			i2p_b32: null,
 			i2p_name: null,
+			ens: null,
 			nostr: 'npub1exampleexampleexample'
 		});
 	});

@@ -74,9 +74,27 @@ function walkUpToRepoRoot(start: string): string {
  * automatically if the cwd is stranded in a post-upgrade `.bak-<ts>`
  * backup (see file header).
  */
+/** `process.cwd()` throws `ENOENT: … uv_cwd` when the directory the process
+ *  was started in has been removed out from under it — most often after
+ *  `morphit-ops upgrade` renamed/removed the old install dir while the
+ *  operator's shell was still sitting inside it (the inode is gone, so the
+ *  kernel can't name the cwd). Callers must NEVER crash on that: return null
+ *  and let resolution fall back to this module's own location (always inside
+ *  the installed tree). Before this guard, every menu action that resolved
+ *  the install root died with a raw `✗ ENOENT: no such file or directory,
+ *  uv_cwd`. */
+export function safeCwd(): string | null {
+	try {
+		return process.cwd();
+	} catch {
+		return null;
+	}
+}
+
 export function defaultRepoRoot(): string {
-	const fromCwd = walkUpToRepoRoot(process.cwd());
-	if (BACKUP_SEGMENT_RE.test(fromCwd)) {
+	const cwd = safeCwd();
+	const fromCwd = cwd !== null ? walkUpToRepoRoot(cwd) : null;
+	if (fromCwd !== null && BACKUP_SEGMENT_RE.test(fromCwd)) {
 		// Stale CWD from a recent upgrade — recover the live install path.
 		const recoveredStart = fromCwd.replace(BACKUP_SEGMENT_RE, '');
 		const recovered = walkUpToRepoRoot(recoveredStart);
@@ -87,7 +105,7 @@ export function defaultRepoRoot(): string {
 	}
 	// CWD walk landed on the real monorepo root (has a `workspaces`
 	// package.json): honor it.
-	if (declaresWorkspaces(`${fromCwd}/package.json`)) return fromCwd;
+	if (fromCwd !== null && declaresWorkspaces(`${fromCwd}/package.json`)) return fromCwd;
 
 	// Otherwise the operator ran `morphit-ops` from OUTSIDE the install
 	// tree (e.g. their home dir), so the cwd-walk fell back to the cwd,
@@ -108,7 +126,7 @@ export function defaultRepoRoot(): string {
 		}
 		return fromModule;
 	}
-	return fromCwd;
+	return fromCwd ?? fromModule;
 }
 
 /**
@@ -118,7 +136,9 @@ export function defaultRepoRoot(): string {
  * they're acting on differs from `pwd`, and can `cd` to refresh.
  */
 export function cwdStrandedInUpgradeBackup(): boolean {
-	const fromCwd = walkUpToRepoRoot(process.cwd());
+	const cwd = safeCwd();
+	if (cwd === null) return false;
+	const fromCwd = walkUpToRepoRoot(cwd);
 	if (!BACKUP_SEGMENT_RE.test(fromCwd)) return false;
 	const recovered = walkUpToRepoRoot(fromCwd.replace(BACKUP_SEGMENT_RE, ''));
 	return recovered !== fromCwd && existsSync(`${recovered}/package.json`);

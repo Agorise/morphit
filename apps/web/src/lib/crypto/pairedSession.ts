@@ -28,7 +28,15 @@
  *     re-establishes the paired-readonly session.
  *   - Cleared by signOut from a paired-readonly state, by switching
  *     to a real keystore unlock (paired and unlocked are mutually
- *     exclusive — see identity store), and by any reset() call.
+ *     exclusive — see identity store), by lockSession() on a paired
+ *     session (a QR-pair carries no password, so a meaningful lock
+ *     must drop the marker rather than silently auto-restore it),
+ *     and by an explicit reset({ clearDisk: true }) on real sign-out
+ *     / account upgrade.  NOTE: a bare reset() — used by pagehide
+ *     (tab close / refresh) and the cross-tab storage mirror — does
+ *     NOT clear this.  Post-cp334 disk-clearing is opt-in, so the
+ *     marker is deliberately preserved across a reload to let the
+ *     paired-readonly session auto-restore.
  *
  * Note: This module persists ONLY public information.  No secret
  * material lives here.  Anyone reading localStorage learns the

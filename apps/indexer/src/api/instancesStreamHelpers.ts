@@ -27,6 +27,7 @@ export interface InstanceDirectoryEntry {
 		lokinet: string | null;
 		i2p_b32: string | null;
 		i2p_name: string | null;
+		ens: string | null;
 		i2p: string | null; // deprecated; see InstanceDirectoryEntry
 		nostr: string | null;
 	} | null;
@@ -91,6 +92,7 @@ function normalizeAltNetworks(raw: unknown): InstanceDirectoryEntry['alt_network
 		lokinet: get('lokinet'),
 		i2p_b32: i2pB32,
 		i2p_name: i2pName,
+		ens: get('ens'),
 		i2p: null, // never re-emit legacy on the wire
 		nostr: get('nostr')
 	};

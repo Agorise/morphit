@@ -4747,9 +4747,9 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c \
 cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 ```
 
-### Alt-network addresses (Tor / Lokinet / I2P / Nostr) — the `alt-address` wizard
+### Alt-network addresses (Tor / Lokinet / I2P / Nostr / ENS) — the `alt-address` wizard
 
-`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). I2P now appears as **two separate menu choices** — the always-resolvable **b32** (`DOMAIN.b32.i2p`, generated) and an optional **vanity name** (`DOMAIN.i2p`, which you *register* with an i2p naming service and paste — not generated). For Tor / Lokinet / I2P-b32, "Replace" walks you through *generating* the address; the **I2P vanity name** and **Nostr** (cp311) are values you already own, so they just prompt for the value. An instance may set neither, one, or both i2p addresses. The relevant knobs:
+`morphit-ops alt-address` (also the **"Set up a Tor / Lokinet / I2P address"** main-menu item) is a guided **CRUD** tool for your privacy-network addresses. Pick an address type and it **shows the current value**, then offers **Replace · Delete · Back** (Delete removes the line from `morphit.config.env` and the pill from the footer). I2P now appears as **two separate menu choices** — the always-resolvable **b32** (`DOMAIN.b32.i2p`, generated) and an optional **vanity name** (`DOMAIN.i2p`, which you *register* with an i2p naming service and paste — not generated). For Tor / Lokinet / I2P-b32, "Replace" walks you through *generating* the address; the **I2P vanity name**, **Nostr** (cp311), and **ENS** (`DOMAIN.eth`, cp334) are values you already own/register elsewhere, so they just prompt for the value. An instance may set neither, one, or both i2p addresses. The relevant knobs:
 
 | Variable | Footer field | Notes |
 | --- | --- | --- |
@@ -4759,6 +4759,7 @@ cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 | `MORPHIT_INSTANCE_I2P_NAME_ADDRESS` | `i2p_name` | optional readable `name.i2p` (addressbook-dependent) |
 | `MORPHIT_INSTANCE_I2P_ADDRESS` | — | legacy single var; still honored, routed to `i2p_b32`/`i2p_name` by suffix. The wizard reads it (as a fallback) and clears it whenever you set/delete the i2p address, so a value can't linger under two keys. |
 | `MORPHIT_INSTANCE_NOSTR_PUBKEY` | `nostr` | Nostr public key — `npub1…` (bech32) or 64-char hex. The wizard rejects a private key (`nsec…`). Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders this as a "Nostr" pill linking to your instance's Nostr page; it also appears as an alt-network chip on your directory card. |
+| `MORPHIT_INSTANCE_ENS_NAME` | `ens` | optional ENS `.eth` name (`DOMAIN.eth`) — a registered Ethereum name you point at this instance (typically via an ENS contenthash → IPFS copy of the site). Paste-only (nothing to generate); the wizard validates the `.eth` shape. Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders it as an "ENS" pill linking to `https://<name>.eth.limo` (an ENS gateway); not resolved server-side. |
 
 The indexer reads these at startup and includes them in its instance announce; the frontend renders the footer pills from that announce at runtime. So a new/changed address appears after the indexer restarts — the `alt-address` / `edit` wizard **offers to do that for you** (press Enter at the prompt) — **no frontend rebuild needed.**
 

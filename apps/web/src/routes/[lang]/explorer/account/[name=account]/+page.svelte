@@ -357,8 +357,8 @@
 
 <section class="mx-auto max-w-4xl px-4 py-8">
 	<nav class="mb-4 text-sm">
-		<a href={lp('/explorer')} class="text-ink-500 hover:text-morphit-emerald dark:text-ink-400">
-			← {$_('explorer.nav.back_to_search')}
+		<a href={lp('/explorer')} class="text-white hover:text-morphit-emerald">
+			<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('explorer.nav.back_to_search')}
 		</a>
 	</nav>
 

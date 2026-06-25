@@ -256,7 +256,7 @@
     "my_orders": "Moje zlecenia",
     "settings": "Ustawienia",
     "sign_out": "Wyloguj",
-    "notification_settings": "Ustawienia powiadomień →",
+    "notification_settings": "Ustawienia powiadomień ⇨",
     "category": {
       "order": "Zlecenia",
       "order_help": "Wykonania, wygaśnięcia, kontroferty",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "Jak mogę pomóc uczynić Morphit niepowstrzymanym?",
-        "a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt do konta @morphit-relay aktywnego operatora utrzymują jego środki na tworzenie kont.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
+        "a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Skieruj na nią nazwę ENS .eth. Zarejestruj nazwę `.eth` w ENS (Ethereum Name Service) i skieruj ją na swoją instancję — zwykle przez contenthash ENS wskazujący na kopię IPFS twojej strony — aby ludzie mogli dotrzeć do ciebie pod czytelną, zdecentralizowaną nazwą taką jak `morphit.eth` (przez przeglądarkę lub bramkę obsługujące ENS). Pojawia się jako dodatkowa plakietka w stopce, obok Tor/Lokinet/I2P.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt do konta @morphit-relay aktywnego operatora utrzymują jego środki na tworzenie kont.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
       },
       "why_self_trading_fails": {
         "q": "Dlaczego handel z samym sobą nie zwiększa mojej reputacji?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "Po wysłaniu Morphit opublikuje również krótkie ogłoszenie \"Dołączyłem do Morphit\" w społeczności @morphit na Blurt — pod twoim kontem, podpisane przez ciebie. Dzieje się to raz, przy pierwszej opinii.",
       "off": "Uwaga: wyłączyłeś automatyczne ogłaszanie w Ustawieniach. Po wysłaniu nie zostanie opublikowany żaden post o pierwszym handlu.",
-      "manage_link": "Zarządzaj w Ustawieniach →",
+      "manage_link": "Zarządzaj w Ustawieniach ⇨",
       "heading": "Ogłoś swój pierwszy handel",
       "pitch": "Syndykacja twoich transakcji to wszystko. Ogłaszaj swoje oferty wszędzie, gdzie się da — więcej oczu na twoich ofertach to więcej partnerów handlowych oraz więcej upvotów, które są dodatkowymi zarobkami trafiającymi bezpośrednio do twojego portfela Blurt.",
       "label_on": "Tak, ogłoś moją pierwszą transakcję na Blurt",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "Ustawiliśmy wygaśnięcie na 7 dni zamiast domyślnych 90. Krótsze okno oznacza, że nieaktualne oferty nie zalegają, jeśli zmienisz zdanie.",
     "tip_payment_label": "Wskazówki dotyczące metod płatności.",
     "tip_payment_body": "Dodaj metody płatności, które faktycznie akceptujesz. Partnerzy handlowi wybiorą, co im odpowiada. Popularne punkty wyjścia: PayPal, Wise, przelew bankowy, gotówka osobiście.",
-    "faq_link": "Przeczytaj pełny przewodnik pierwszej transakcji →",
+    "faq_link": "Przeczytaj pełny przewodnik pierwszej transakcji ⇨",
     "dismiss_aria": "Zamknij ten pakiet startowy"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "Czekaj!",
     "step_2": "Jeśli wysyłasz kryptowalutę, poczekaj aż faktycznie otrzymasz fiat (nie tylko \"oczekujące\") przed wysłaniem kryptowaluty. Raz wysłana — nie ma odwrotu.",
     "step_3": "Po zakończeniu transakcji, zostaw opinię na /my/orders, by przyszli traderzy ufali wam obu.",
-    "faq_link": "Przeczytaj pełny przewodnik →",
+    "faq_link": "Przeczytaj pełny przewodnik ⇨",
     "dismiss_aria": "Zamknij ten przewodnik"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "Adres: {address}",
     "instances": "Instancje",
     "explorer": "Eksplorator bloków",
-"download": "Pobierz",
+    "download": "Pobierz",
     "api": "API",
     "api_title": "Dokumentacja API dla programistów",
     "agpl_title": "Dlaczego Morphit używa licencji AGPL-3.0",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "Klucze publiczne PGP operatora do podpisanych wydań i weryfikacji kanarka",
     "mediakit": "Zestaw medialny",
     "mediakit_title": "Zasoby marki i lista atutów Morphit — dla prasy, integratorów i społeczności",
-    "bounty": "Nagroda za błędy"
+    "bounty": "Nagroda za błędy",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 Wskazówka: dodaj do zakładek kilka z tych instancji — wraz z ich adresami Tor, I2P lub Lokinet — w swojej przeglądarce. Księga zleceń znajduje się na publicznym blockchainie, więc jeśli któraś witryna zostanie zablokowana lub przestanie działać, te same zlecenia i transakcje znajdziesz przez dowolną inną instancję.",
     "fetch_error": "Nie można załadować katalogu.",
     "last_updated": "Katalog ostatnio zaktualizowany: {date}",
-    "contact": "Skontaktuj się z operatorem →",
+    "contact": "Skontaktuj się z operatorem ⇨",
     "add_yours_title": "Dodaj swoją instancję",
     "add_yours_body": "Prowadzisz instancję Morphit? Po prostu zarejestruj się w łańcuchu — każdy inny indexer Morphit odkryje Cię automatycznie. Kreator (morphit-ops init) obsługuje rejestrację podczas pierwszej konfiguracji.",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "Tak, odrzuć i zacznij od nowa",
         "cancel": "Zostań tutaj"
       }
+    },
+    "progress": {
+      "step_label": "Krok {current} z {total}"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "Możesz przeglądać tutaj, ale do pisania ze sprzedawcami lub publikowania własnych ofert potrzebujesz nazwy konta Blurt.",
       "cta": "Wybierz nazwę"
     },
-    "fee_rejected_check": "Zlecenie opublikowane, ale go nie widać? Sprawdź status opłaty →"
+    "fee_rejected_check": "Zlecenie opublikowane, ale go nie widać? Sprawdź status opłaty ⇨"
   },
   "paired_readonly": {
     "banner_heading": "Zalogowany jako @{account} — klucze są na telefonie.",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "Zobacz moje zlecenie",
       "feature_upsell_heading": "Chcesz więcej uwagi dla tego ogłoszenia?",
       "feature_upsell_body": "Złóż ofertę na wyróżnione miejsce, aby umieścić swoje zamówienie na szczycie księgi zleceń na kilka godzin. Minimalna oferta to 6 godzin; stawka jest ustalana per instancja. Większość operatorów stosuje 50 BLURT/godz. jako domyślną.",
-      "feature_upsell_cta": "Skonfiguruj wyróżnioną ofertę →",
+      "feature_upsell_cta": "Skonfiguruj wyróżnioną ofertę ⇨",
       "edit_window_countdown": "{remaining} na edycję",
       "edit_window_tooltip": "Edycja możliwa tylko w ciągu 15 minut od opublikowania. Później anuluj i opublikuj ponownie.",
       "edit_window_expired": "Okno edycji minęło"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "Fraza seed"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "To bio zawiera niedozwolone znaki.",
+        "too_long": "Bio jest za długie (maks. 128 znaków)."
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "Podaj nazwę.",
@@ -3542,7 +3552,7 @@
     "footer_body": "Znalazłeś problem? Zgłoś przez publiczne repo Forgejo, lub szyfrowaną wiadomością na konto {morphit_account} łańcucha.",
     "bounty_title": "Program nagród za błędy",
     "bounty_body": "Prowadzimy uznaniowy program uznawania bezpieczeństwa. Każde wykonalne odkrycie jest sprawdzane przez prawdziwego inżyniera, otrzymuje odpowiedź i — jeśli istotnie poprawia postawę bezpieczeństwa Morphit — jest nagradzane w BLURT (płacone z @morphit-fees) lub BTC, skalowane według powagi i jakości raportu. Brak stałej tabeli poziomów; ocena indywidualna. Kredyt w hall of fame dostępny nawet bez płatności. Pełny zakres, wytyczne dotyczące powagi, przepływ płatności i czego nie zrobimy (brak NDA, brak ekskluzywnego ujawnienia) jest udokumentowane w SECURITY.md.",
-    "bounty_link": "Przeczytaj pełny zakres i zasady →",
+    "bounty_link": "Przeczytaj pełny zakres i zasady ⇨",
     "canary_title": "Kanarek nakazu",
     "canary_body": "Publikujemy cotygodniowy kanarek podpisany kluczem PGP operatora. Kanarek wyraźnie deklaruje, że żadne NSL / FISA / nakaz milczenia / żądanie tylnych drzwi nie zostało otrzymane. Dowody świeżości obejmują aktualny nagłówek łańcucha Blurt, aktualny nagłówek łańcucha Bitcoin i aktualny nagłówek wiadomości (dowodzi, że kanarek nie może być wygenerowany z wyprzedzeniem). Jeśli kanarek przestaje się aktualizować przez ponad 14 dni, traktuj go jako milczącego: operator może być pod presją przymusu, a ty powinieneś przejść do innego operatora federacyjnego.",
     "canary_link": "Zobacz aktualnego kanarka tego operatora",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "Minął tydzień — czy zrobiłeś już kopię zapasową swojej 12-wyrazowej frazy? Jeśli stracisz to urządzenie, fraza jest JEDYNYM sposobem odzyskania konta.",
-    "show_me_how": "Pokaż mi jak →",
+    "show_me_how": "Pokaż mi jak ⇨",
     "got_it": "Rozumiem"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "Krótkie bio",
+      "explain": "Zdanie lub dwa o sobie — czym handlujesz, twoje hobby, cokolwiek chcesz. Opcjonalne, do 128 znaków.",
+      "input_label": "Twoje krótkie bio",
+      "placeholder": "np. Kawa, BTC i długie spacery po blockchainie.",
+      "hint": "Wygląda dobrze.",
+      "broadcast_ok_detail": "Twoje krótkie bio jest teraz opublikowane i widoczne dla wszystkich."
+    },
     "title": "Ustawienia",
     "subtitle": "Twoja tożsamość, Twoje zasady. Zapisane u Ciebie, nigdy na naszych serwerach.",
     "display_name": {
+      "save_legend_desc": "tylko wyświetla nazwę tutaj, tak że widzisz ją tylko Ty.",
+      "broadcast_legend_desc": "publikuje nazwę w łańcuchu, aby widzieli ją wszyscy (i wszystkie Twoje urządzenia).",
       "heading": "Nazwa wyświetlana",
-      "explain": "Przyjazna etykieta pokazywana obok awatara. NIE zastępuje Twojego klucza publicznego — ten zawsze jest w nawiasie i to jemu ludzie mają ufać. Możesz to zmienić w dowolnej chwili.",
+      "explain": "Przyjazna etykieta pokazywana obok awatara. NIE zastępuje Twojego klucza publicznego — ten zawsze jest w nawiasie i to jemu ludzie mają ufać.",
       "input_label": "Wybierz nazwę wyświetlaną",
       "placeholder": "np. Sally Doe",
       "preview_label": "Tak będziesz widoczny(a)",
       "hint": "Wygląda dobrze.",
-      "save": "Zapisz nazwę",
+      "save": "Zapisz tylko lokalnie",
       "clear": "Wyczyść",
       "saved_toast": "Zapisano.",
-      "reminder_title": "Nazwy wyświetlane nie są unikalne.",
-      "reminder_body": "Każdy może użyć dowolnej nazwy. Krótki klucz w nawiasie — np. (BLT7gHu8mn…A9bb) — to jest to, co Cię rzeczywiście identyfikuje i czego nikt inny nie podrobi. Przy handlu zawsze patrz na klucz.",
-      "save_and_broadcast": "Zapisz + opublikuj",
+      "reminder_title": "💡 Nazwy wyświetlane nie są unikalne.",
+      "reminder_body": "Każdy może użyć dowolnej nazwy. Krótki klucz w nawiasie to jest to, co Cię rzeczywiście identyfikuje i czego nikt inny nie podrobi. Przy handlu zawsze patrz na klucz.",
+      "save_and_broadcast": "Zapisz i rozgłoś",
       "broadcast_ok": "Opublikowane.",
       "broadcast_err": {
         "no_account": "Zapisano lokalnie. Publikacja będzie dostępna po zarejestrowaniu konta.",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "Anuluj"
     },
     "session": {
+      "autolock_changed": "Zmieniono na {label}",
       "heading": "Narzędzia",
       "explain": "Wyloguj się, gdy skończysz. Twoje klucze zostaną usunięte z pamięci; zaszyfrowany magazyn kluczy na twoim urządzeniu pozostaje nietknięty.",
       "autolock_label": "Auto-blokada po bezczynności",
@@ -3913,7 +3934,7 @@
     },
     "avatar": {
       "heading": "Awatar",
-      "explain": "Zastąp domyślny identikon-serce własnym obrazkiem. Zapisywany w łańcuchu w twoim opie profilu, tak samo jak nazwa wyświetlana i linki społecznościowe.",
+      "explain": "Zastąp domyślny identikon-serce własnym obrazkiem.",
       "guidance_heading": "Przed przesłaniem",
       "guidance_filetypes": "Akceptuje SVG, WebP, JPEG, PNG lub GIF.",
       "guidance_dimensions": "Ideał: kwadratowy obrazek o wymiarach co najmniej 96×96 pikseli. Większe zostanie przeskalowane do 96×96; mniejsze będzie ziarniste.",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge: dotknij ikony instalacji w pasku adresu lub użyj menu przeglądarki → Zainstaluj Morphit.",
       "manual_safari": "Safari (macOS / iOS): dotknij przycisku Udostępnij, potem \"Dodaj do ekranu głównego\".",
       "manual_firefox": "Firefox Android: dotknij menu (︙), potem \"Zainstaluj\". Firefox na pulpicie nie wspiera instalacji PWA — użyj przeglądarek opartych na Chromium.",
-      "iphone_link": "Przewodnik instalacji na iPhonie →"
+      "iphone_link": "Przewodnik instalacji na iPhonie ⇨"
     },
     "account_name": {
       "heading": "Nazwa konta Blurt",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "Zachowaj"
     },
     "totp": {
-      "heading": "Uwierzytelnianie dwuskładnikowe",
+      "heading": "Uwierzytelnianie dwuskładnikowe (2FA)",
       "subtitle": "Dodaj aplikację uwierzytelniającą jako drugi składnik po haśle. Chroni przed podglądaniem przez ramię, pożyczonymi urządzeniami i przypadkowym lokalnym malware.",
       "honest_framing": {
         "title": "Przed czym to chroni — szczerze",

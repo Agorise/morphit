@@ -113,7 +113,7 @@
 	 *  because that's the path a Blurt-user-with-paired-phone would
 	 *  follow to upgrade. */
 	function upgradeWithKeys(): void {
-		reset();
+		reset({ clearDisk: true });
 		void gotoLocale('/onboarding/import');
 	}
 

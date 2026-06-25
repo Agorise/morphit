@@ -523,6 +523,9 @@ export interface AltNetworkResult {
 	 *  i2pB32 — an instance may advertise neither, one, or both. */
 	readonly i2pName: string | null;
 	readonly nostr: string | null;
+	/** Optional ENS .eth name (DOMAIN.eth). A registered Ethereum name
+	 *  pointing at the instance; advertised as a footer pill. */
+	readonly ens: string | null;
 }
 
 // ─── Step 9: Public origin URL ───────────────────────────────────
@@ -657,7 +660,18 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 		nostr = v.length > 0 ? v : null;
 	}
 
-	return { tor, lokinet, i2pB32, i2pName, nostr };
+	// Optional ENS .eth name (DOMAIN.eth) — a registered Ethereum name
+	// pointing at this instance (typically via contenthash → IPFS). Like
+	// the I2P vanity name, there's nothing to generate; paste it if you
+	// have one. (Manage it later any time with `morphit-ops alt-address`.)
+	const wantsEns = await askYesNo('Add an ENS .eth name?', false);
+	let ens: string | null = null;
+	if (wantsEns) {
+		const v = await ask('ENS name, e.g. morphit.eth (paste, or Enter to skip)', '');
+		ens = v.length > 0 ? v : null;
+	}
+
+	return { tor, lokinet, i2pB32, i2pName, nostr, ens };
 }
 
 export interface SeoResult {

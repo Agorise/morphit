@@ -302,6 +302,15 @@
 	const labelProps = $derived(extractLabelPropsFromProfile(profile));
 	const nostrUrl = $derived(labelProps.nostrUrl);
 	const blurtMediaUrl = $derived(labelProps.blurtMediaUrl);
+	/** Optional short bio from the profile's json_metadata blob. */
+	const shortBio = $derived.by(() => {
+		const md = profile?.json_metadata;
+		if (md && typeof md === 'object' && !Array.isArray(md)) {
+			const v = (md as Record<string, unknown>).short_bio;
+			if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+		}
+		return null;
+	});
 	const avatarSvg = $derived(labelProps.avatarSvg);
 	const avatarDataUri = $derived(labelProps.avatarDataUri);
 
@@ -465,6 +474,11 @@
 				weight="normal"
 			/>
 		</div>
+		{#if shortBio}
+			<p class="mt-3 max-w-prose text-pretty text-ink-600 dark:text-ink-300">
+				{shortBio}
+			</p>
+		{/if}
 		<!-- Message button: visible to any signed-in viewer who is
 		     NOT this profile's subject. Anonymous viewers see the
 		     button too — but tapping it routes through the peer

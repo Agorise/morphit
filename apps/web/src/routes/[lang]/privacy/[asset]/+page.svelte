@@ -116,8 +116,8 @@
 {#if asset}
 	<article class="mx-auto max-w-3xl px-4 py-8">
 		<nav class="mb-4 text-sm">
-			<a href={`/${$page.params.lang ?? 'en'}/privacy`} class="text-morphit-emerald hover:underline">
-				← {$_('privacy.back_to_index')}
+			<a href={`/${$page.params.lang ?? 'en'}/privacy`} class="text-white hover:text-morphit-emerald">
+				<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('privacy.back_to_index')}
 			</a>
 		</nav>
 

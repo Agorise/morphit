@@ -24,7 +24,13 @@ import {
 	KeystoreError
 } from './keystore';
 import { identiconSvg, identiconDataUri } from './identicon';
-import { fingerprint, formatIdentity, validateDisplayName } from './profile';
+import {
+	fingerprint,
+	formatIdentity,
+	validateDisplayName,
+	validateShortBio,
+	SHORT_BIO_MAX_LENGTH
+} from './profile';
 import { formatPublicKeyBLT } from './keygen';
 
 describe('keygen — full identity', () => {
@@ -471,6 +477,49 @@ describe('profile — fingerprints & validation', () => {
 		const bad = validateDisplayName('  @morphit');
 		expect(bad.ok).toBe(false);
 		expect(bad.reasonKey).toContain('leading_at');
+	});
+});
+
+describe('profile — short bio validation', () => {
+	it('accepts an empty bio (the field is optional)', () => {
+		const v = validateShortBio('');
+		expect(v.ok).toBe(true);
+		expect(v.cleaned).toBe('');
+	});
+
+	it('accepts a normal bio and trims + collapses whitespace', () => {
+		const v = validateShortBio('  Coffee,   BTC,  and  walks  ');
+		expect(v.ok).toBe(true);
+		expect(v.cleaned).toBe('Coffee, BTC, and walks');
+	});
+
+	it('accepts a bio exactly at the 128-codepoint cap', () => {
+		const v = validateShortBio('a'.repeat(SHORT_BIO_MAX_LENGTH));
+		expect(v.ok).toBe(true);
+	});
+
+	it('rejects a bio over the cap', () => {
+		const v = validateShortBio('a'.repeat(SHORT_BIO_MAX_LENGTH + 1));
+		expect(v.ok).toBe(false);
+		expect(v.reasonKey).toContain('short_bio.errors.too_long');
+	});
+
+	it('counts emoji as single codepoints, not UTF-16 units', () => {
+		// 64 astral-plane emoji = 64 codepoints (128 UTF-16 units) — under the cap.
+		const v = validateShortBio('😀'.repeat(64));
+		expect(v.ok).toBe(true);
+	});
+
+	it('rejects control characters with the generic invalid key', () => {
+		const v = validateShortBio('hello\u0007world');
+		expect(v.ok).toBe(false);
+		expect(v.reasonKey).toContain('short_bio.errors.invalid');
+	});
+
+	it('rejects bidi-override characters', () => {
+		const v = validateShortBio('hello\u202eworld');
+		expect(v.ok).toBe(false);
+		expect(v.reasonKey).toContain('short_bio.errors.invalid');
 	});
 });
 

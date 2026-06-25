@@ -54,6 +54,7 @@ import {
 	unlinkSync
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 import { askPassword, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from '../init/encrypt.ts';
@@ -357,7 +358,7 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 	const configDir =
 		typeof args.flags['config-dir'] === 'string' && args.flags['config-dir'].length > 0
 			? resolve(args.flags['config-dir'])
-			: process.cwd();
+			: (safeCwd() ?? defaultRepoRoot());
 
 	console.log('');
 	console.log('  ═══════════════════════════════════════════════════════════════');

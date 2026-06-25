@@ -22,6 +22,7 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 
 export interface SslCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -197,7 +198,7 @@ function color(enabled: boolean) {
 export async function runSsl(ctx: SslCtx): Promise<number> {
 	const c = color(ctx.colorEnabled);
 	const json = ctx.flags.json === 'true';
-	const installDir = process.cwd();
+	const installDir = safeCwd() ?? defaultRepoRoot();
 	const first = ctx.positional[0];
 	const mode = first === 'setup' ? 'setup' : 'status';
 	// The mode word ('status'/'setup') is optional. The domain is the

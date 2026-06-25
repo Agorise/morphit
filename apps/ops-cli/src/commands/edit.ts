@@ -121,6 +121,7 @@ const EDITABLE_KEYS = [
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
 	'MORPHIT_INSTANCE_NOSTR_PUBKEY',
+	'MORPHIT_INSTANCE_ENS_NAME',
 	'MORPHIT_INSTANCE_SEO_TITLE',
 	'MORPHIT_INSTANCE_SEO_DESCRIPTION',
 	'MORPHIT_INSTANCE_SEO_KEYWORDS',
@@ -241,6 +242,13 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			existing.altNetworks.nostr
 		);
 		if (nostrR.changed) configUpdates.set('MORPHIT_INSTANCE_NOSTR_PUBKEY', nostrR.value);
+
+		const ensR = await editField(
+			'ENS .eth name',
+			'A registered .eth name (DOMAIN.eth) pointing at this instance.',
+			existing.altNetworks.ens
+		);
+		if (ensR.changed) configUpdates.set('MORPHIT_INSTANCE_ENS_NAME', ensR.value);
 	}
 	if (choice === 'seo' || choice === 'all') {
 		// cp311 — "Branding & SEO".  All six fields use keep-current /
@@ -546,7 +554,8 @@ function loadExisting(path: string): ExistingConfig {
 			lokinet: kv.get('MORPHIT_INSTANCE_LOKINET_ADDRESS') ?? null,
 			i2pB32,
 			i2pName,
-			nostr: kv.get('MORPHIT_INSTANCE_NOSTR_PUBKEY') ?? null
+			nostr: kv.get('MORPHIT_INSTANCE_NOSTR_PUBKEY') ?? null,
+			ens: kv.get('MORPHIT_INSTANCE_ENS_NAME') ?? null
 		},
 		legacyI2pAddress: legacyI2p,
 		seo: {
@@ -881,6 +890,7 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	console.log(`  I2P b32:           ${c.altNetworks.i2pB32 !== null ? sanitizeForTerm(c.altNetworks.i2pB32) : '(unset)'}`);
 	console.log(`  I2P vanity name:   ${c.altNetworks.i2pName !== null ? sanitizeForTerm(c.altNetworks.i2pName) : '(unset)'}`);
 	console.log(`  Nostr pubkey:      ${c.altNetworks.nostr !== null ? sanitizeForTerm(c.altNetworks.nostr) : '(unset)'}`);
+	console.log(`  ENS .eth name:     ${c.altNetworks.ens !== null ? sanitizeForTerm(c.altNetworks.ens) : '(unset)'}`);
 	console.log(`  SEO title:         ${c.seo.title !== null ? sanitizeForTerm(c.seo.title) : '(default)'}`);
 	console.log(
 		`  SEO description:   ${c.seo.description !== null ? sanitizeForTerm(truncate(c.seo.description, 50)) : '(default)'}`

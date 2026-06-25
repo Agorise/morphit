@@ -454,6 +454,20 @@
 											{$_('footer.i2p_name')}
 										</a>
 									{/if}
+									{#if inst.alt_networks.ens}
+										<a
+											href="https://{inst.alt_networks.ens}.eth.limo"
+											class="chip text-xs"
+											title={$_('footer.alt_network_address', {
+												values: { address: inst.alt_networks.ens }
+											})}
+											rel="noopener noreferrer"
+											target="_blank"
+										>
+											<AltNetworkIcon network="ens" size={16} class="h-4 w-4" />
+											{$_('footer.ens')}
+										</a>
+									{/if}
 									{#if inst.alt_networks.nostr}
 										<a
 											href="nostr:{inst.alt_networks.nostr}"

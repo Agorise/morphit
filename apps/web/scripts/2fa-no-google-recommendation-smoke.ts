@@ -219,12 +219,14 @@ expect(
 	/NOT_RECOMMENDED_AUTHENTICATOR_APPS/.test(TFA_ROUTE)
 );
 expect(
-	'route iterates recommended apps via #each',
-	/each\s+RECOMMENDED_AUTHENTICATOR_APPS/.test(TFA_ROUTE)
+	'route iterates recommended apps via #each (directly or as a non-mutating sorted copy)',
+	/each\s+RECOMMENDED_AUTHENTICATOR_APPS/.test(TFA_ROUTE) ||
+		/\[\s*\.\.\.\s*RECOMMENDED_AUTHENTICATOR_APPS\s*\]\.sort\b/.test(TFA_ROUTE)
 );
 expect(
-	'route iterates not-recommended apps via #each',
-	/each\s+NOT_RECOMMENDED_AUTHENTICATOR_APPS/.test(TFA_ROUTE)
+	'route iterates not-recommended apps via #each (directly or as a non-mutating sorted copy)',
+	/each\s+NOT_RECOMMENDED_AUTHENTICATOR_APPS/.test(TFA_ROUTE) ||
+		/\[\s*\.\.\.\s*NOT_RECOMMENDED_AUTHENTICATOR_APPS\s*\]\.sort\b/.test(TFA_ROUTE)
 );
 expect(
 	'not-recommended section is in a <details> (collapsible, not hidden)',

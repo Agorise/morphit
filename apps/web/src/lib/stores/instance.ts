@@ -43,6 +43,9 @@ export interface InstanceState {
 		 *  on routers whose address book has the mapping; an
 		 *  operator may set neither, one, or both. */
 		readonly i2p_name: string | null;
+		/** ENS .eth name (`something.eth`).  Optional registered Ethereum
+		 *  name advertised as a footer pill; not resolved client-side. */
+		readonly ens: string | null;
 		readonly nostr: string | null;
 	};
 	readonly fee_recipient: string;
@@ -183,6 +186,7 @@ const FALLBACK: InstanceState = {
 		lokinet: null,
 		i2p_b32: null,
 		i2p_name: null,
+		ens: null,
 		nostr: null
 	},
 	fee_recipient: 'morphit-fees',
@@ -224,6 +228,7 @@ function normalizeAltNetworksFromWire(an: {
 	lokinet: string | null;
 	i2p_b32?: string | null;
 	i2p_name?: string | null;
+	ens?: string | null;
 	i2p?: string | null;
 	nostr: string | null;
 }): InstanceState['alt_networks'] {
@@ -243,6 +248,7 @@ function normalizeAltNetworksFromWire(an: {
 		lokinet: an.lokinet,
 		i2p_b32: i2pB32,
 		i2p_name: i2pName,
+		ens: an.ens ?? null,
 		nostr: an.nostr
 	};
 }

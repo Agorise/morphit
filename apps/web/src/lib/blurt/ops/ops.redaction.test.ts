@@ -207,6 +207,30 @@ describe('buildProfileBody — redaction chokepoint', () => {
 		assertNoRawKeyAnywhere(body);
 	});
 
+	it('passes short_bio through into json_metadata', () => {
+		const body = buildProfileBody(
+			mkPayload({ short_bio: 'Coffee, BTC, and long walks on the blockchain.' }),
+			FIXED_TS
+		);
+		const meta = body.json_metadata as Record<string, unknown>;
+		expect(meta.short_bio).toBe('Coffee, BTC, and long walks on the blockchain.');
+	});
+
+	it('redacts a WIF embedded in short_bio', () => {
+		const body = buildProfileBody(mkPayload({ short_bio: `my key is ${FAKE_WIF}` }), FIXED_TS);
+		const meta = body.json_metadata as Record<string, unknown>;
+		expect(meta.short_bio).not.toContain(FAKE_WIF);
+		expect(meta.short_bio).toContain(TRUNCATED_WIF);
+		assertNoRawKeyAnywhere(body);
+	});
+
+	it('omits short_bio from json_metadata when empty or whitespace', () => {
+		expect('json_metadata' in buildProfileBody(mkPayload({ short_bio: '' }), FIXED_TS)).toBe(false);
+		expect('json_metadata' in buildProfileBody(mkPayload({ short_bio: '   ' }), FIXED_TS)).toBe(
+			false
+		);
+	});
+
 	it('redacts a WIF accidentally embedded in an SVG text node (avatar_svg)', () => {
 		// Very unusual but the chokepoint discipline runs redaction
 		// on avatar_svg anyway. A WIF in an SVG <text> element

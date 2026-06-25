@@ -67,7 +67,7 @@
 							{$_(`privacy.guides.${asset.privacyFeatures.privacyGuideKey}.one_line`)}
 						</div>
 					</div>
-					<span class="text-morphit-emerald" aria-hidden="true">→</span>
+					<span class="text-morphit-emerald rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
 				</a>
 			</li>
 		{/each}

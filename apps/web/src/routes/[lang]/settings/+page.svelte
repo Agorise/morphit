@@ -5,7 +5,12 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { installPrompt, isInstalled, promptInstall } from '$lib/pwa/installPrompt';
-	import { validateDisplayName, DISPLAY_NAME_MAX_LENGTH } from '$crypto/profile';
+	import {
+		validateDisplayName,
+		DISPLAY_NAME_MAX_LENGTH,
+		validateShortBio,
+		SHORT_BIO_MAX_LENGTH
+	} from '$crypto/profile';
 	import { validateNostrUrl } from '$utils/nostrUrl';
 	import { validateBlurtMediaUrl } from '$utils/blurtMediaUrl';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
@@ -55,6 +60,7 @@
 	const STORAGE_KEY = 'morphit.displayName';
 	const NOSTR_URL_STORAGE_KEY = 'morphit.nostrUrl';
 	const BLURT_MEDIA_URL_STORAGE_KEY = 'morphit.blurtMediaUrl';
+	const SHORT_BIO_STORAGE_KEY = 'morphit.shortBio';
 
 	// Fallback public key used only when the session is locked, for the
 	// preview swatch.
@@ -80,6 +86,15 @@
 	let broadcasting = $state(false);
 	let broadcastError = $state('');
 	let broadcastOk = $state(false);
+
+	// ── Short bio (≤128 chars, optional) — same local/broadcast model ──
+	let bioInput = $state('');
+	let bioSaved = $state('');
+	let bioSaving = $state(false);
+	let bioSavedToast = $state(false);
+	let bioBroadcasting = $state(false);
+	let bioBroadcastError = $state('');
+	let bioBroadcastOk = $state(false);
 	/** True when the user has tapped Clear and we're waiting for them
 	 *  to confirm. Per UX-STANDARD rule #5 — destructive actions get
 	 *  one (and only one) confirmation. */
@@ -188,6 +203,11 @@
 				blurtMediaSaved = bm;
 				blurtMediaInput = bm;
 			}
+			const bio = window.localStorage.getItem(SHORT_BIO_STORAGE_KEY);
+			if (bio) {
+				bioSaved = bio;
+				bioInput = bio;
+			}
 			const n = window.localStorage.getItem(NOSTR_URL_STORAGE_KEY);
 			if (n) {
 				nostrSaved = n;
@@ -241,6 +261,9 @@
 
 	const validation = $derived(validateDisplayName(input));
 	const remaining = $derived(DISPLAY_NAME_MAX_LENGTH - [...input].length);
+
+	const bioValidation = $derived(validateShortBio(bioInput));
+	const bioRemaining = $derived(SHORT_BIO_MAX_LENGTH - [...bioInput].length);
 
 	// Blurt.media URL validation. Same contract as Nostr —
 	// null = empty/unset, { ok: true } = valid, { ok: false } = error.
@@ -365,7 +388,8 @@
 			await broadcastProfile(live, {
 				display_name: saved,
 				nostr_url: nostrCleaned || undefined,
-				blurt_media_url: blurtMediaCleaned || undefined
+				blurt_media_url: blurtMediaCleaned || undefined,
+				short_bio: bioSaved || undefined
 			});
 			broadcastOk = true;
 			setTimeout(() => (broadcastOk = false), 3000);
@@ -382,6 +406,57 @@
 			}
 		} finally {
 			broadcasting = false;
+		}
+	}
+
+	// ── Short bio — save locally, or save + broadcast ──────────────
+	async function saveBioLocal(): Promise<void> {
+		if (!bioValidation.ok) return;
+		bioSaving = true;
+		const cleaned = bioValidation.cleaned;
+		try {
+			if (cleaned) window.localStorage.setItem(SHORT_BIO_STORAGE_KEY, cleaned);
+			else window.localStorage.removeItem(SHORT_BIO_STORAGE_KEY);
+		} catch {
+			// Privacy Mode; keeps the change in memory only.
+		}
+		await new Promise((resolve) => setTimeout(resolve, 250));
+		bioSaved = cleaned;
+		bioInput = cleaned;
+		bioSaving = false;
+		bioSavedToast = true;
+		setTimeout(() => (bioSavedToast = false), 1800);
+	}
+
+	async function saveAndBroadcastBio(): Promise<void> {
+		await saveBioLocal();
+		const live = $liveIdentity;
+		if (!live) return;
+		bioBroadcasting = true;
+		bioBroadcastError = '';
+		bioBroadcastOk = false;
+		try {
+			// Carry every profile field so the whole json_metadata blob
+			// stays in sync on-chain (same discipline as the display-name
+			// broadcast).
+			await broadcastProfile(live, {
+				display_name: saved,
+				nostr_url: nostrSaved || undefined,
+				blurt_media_url: blurtMediaSaved || undefined,
+				short_bio: bioSaved || undefined
+			});
+			bioBroadcastOk = true;
+			setTimeout(() => (bioBroadcastOk = false), 3000);
+		} catch (err) {
+			const be = err instanceof BroadcastError ? err : null;
+			console.warn('[settings] short-bio broadcast failed:', err);
+			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
+				bioBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
+			} else {
+				bioBroadcastError = $_('settings.display_name.broadcast_err.generic');
+			}
+		} finally {
+			bioBroadcasting = false;
 		}
 	}
 
@@ -453,7 +528,8 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined
+				blurt_media_url: blurtMediaSaved || undefined,
+				short_bio: bioSaved || undefined
 			});
 			blurtMediaBroadcastOk = true;
 			setTimeout(() => (blurtMediaBroadcastOk = false), 3000);
@@ -549,7 +625,8 @@
 			await broadcastProfile(live, {
 				display_name: displayName,
 				nostr_url: nostrSaved || undefined,
-				blurt_media_url: blurtMediaSaved || undefined
+				blurt_media_url: blurtMediaSaved || undefined,
+				short_bio: bioSaved || undefined
 			});
 			nostrBroadcastOk = true;
 			setTimeout(() => (nostrBroadcastOk = false), 3000);
@@ -651,6 +728,7 @@
 				display_name: displayName,
 				nostr_url: nostrSaved || undefined,
 				blurt_media_url: blurtMediaSaved || undefined,
+				short_bio: bioSaved || undefined,
 				// Pass BOTH fields explicitly so the indexer knows
 				// exactly which one is active; empty string clears
 				// the other half of the pair.
@@ -697,6 +775,7 @@
 				display_name: displayName,
 				nostr_url: nostrSaved || undefined,
 				blurt_media_url: blurtMediaSaved || undefined,
+				short_bio: bioSaved || undefined,
 				avatar_svg: '',
 				avatar_data_uri: ''
 			});
@@ -756,6 +835,31 @@
 	// 'never' option maps to the NEVER_LOCK sentinel, all others are
 	// numeric minutes. Setting immediately persists via
 	// writeTimeoutMinutes and the store reflects the change.
+	// Transient "Changed to …" confirmation shown next to the auto-lock
+	// select. Lives only while this page is mounted — navigating away
+	// (component unmount) clears it, which is exactly the desired
+	// "gone once you leave the page" behavior.
+	let autoLockChanged = $state('');
+	function autoLockLabelKey(v: string): string {
+		switch (v) {
+			case '15':
+				return 'settings.session.autolock_15min';
+			case '30':
+				return 'settings.session.autolock_30min';
+			case '60':
+				return 'settings.session.autolock_1h';
+			case '240':
+				return 'settings.session.autolock_4h';
+			case '540':
+				return 'settings.session.autolock_9h';
+			case '1440':
+				return 'settings.session.autolock_24h';
+			case 'never':
+				return 'settings.session.autolock_never';
+			default:
+				return '';
+		}
+	}
 	function setAutoLock(event: Event): void {
 		const v = (event.target as HTMLSelectElement).value;
 		if (v === 'never') {
@@ -763,6 +867,14 @@
 		} else {
 			const n = parseInt(v, 10);
 			if (!isNaN(n)) writeTimeoutMinutes(n);
+		}
+		// The change is applied immediately above (no submit button);
+		// surface a confirmation with the new option's label.
+		const key = autoLockLabelKey(v);
+		if (key) {
+			autoLockChanged = $_('settings.session.autolock_changed', {
+				values: { label: $_(key) }
+			});
 		}
 	}
 
@@ -1069,6 +1181,151 @@
 		{/if}
 	</section>
 
+	<!-- ─── Avatar ─── -->
+	<section class="card mt-6" aria-labelledby="avatar-heading">
+		<h2 id="avatar-heading" class="font-display text-xl font-bold">
+			{$_('settings.avatar.heading')}
+		</h2>
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.avatar.explain')}
+		</p>
+
+		<!-- Upfront guidance — shown BEFORE the file picker so the
+		     user knows what to prepare instead of uploading, getting
+		     an error, and trying again. Covers: supported filetypes,
+		     ideal source size, what we'll do to the file. -->
+		<div
+			class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm dark:border-ink-700 dark:bg-ink-900"
+		>
+			<p class="font-semibold text-ink-800 dark:text-ink-100">
+				{$_('settings.avatar.guidance_heading')}
+			</p>
+			<ul class="mt-2 space-y-1 text-ink-600 dark:text-ink-300">
+				<li>{$_('settings.avatar.guidance_filetypes')}</li>
+				<li>{$_('settings.avatar.guidance_dimensions')}</li>
+				<li>{$_('settings.avatar.guidance_filesize')}</li>
+				<li>{$_('settings.avatar.guidance_size')}</li>
+				<li>{$_('settings.avatar.guidance_svg_tips')}</li>
+			</ul>
+		</div>
+
+		<!-- Permanence warning — high-contrast callout so it doesn't
+		     get skimmed past. On-chain means public forever, no
+		     delete, no takedown. -->
+		<div
+			class="mt-4 rounded-xl border-2 border-amber-500/60 bg-amber-50 p-4 text-sm dark:border-amber-500/50 dark:bg-amber-900/20"
+			role="note"
+		>
+			<p class="font-semibold text-amber-900 dark:text-amber-200">
+				⚠ {$_('settings.avatar.permanence_heading')}
+			</p>
+			<p class="mt-1 text-amber-900 dark:text-amber-100">
+				{$_('settings.avatar.permanence_body')}
+			</p>
+		</div>
+
+		<!-- File input -->
+		<div class="mt-6">
+			<label for="avatar-file-input" class="sr-only">
+				{$_('settings.avatar.file_input_label')}
+			</label>
+			<input
+				id="avatar-file-input"
+				bind:this={avatarFileInput}
+				type="file"
+				accept="image/svg+xml,image/webp,image/jpeg,image/png,image/gif"
+				onchange={handleAvatarFileSelected}
+				disabled={avatarProcessing || avatarBroadcasting}
+				class="block w-full text-sm text-ink-600 file:me-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
+			/>
+			{#if avatarProcessing}
+				<p class="mt-2 text-sm text-ink-500">
+					{$_('settings.avatar.processing')}
+				</p>
+			{/if}
+			{#if avatarError}
+				<div class="mt-3">
+					<StatusLine kind="error">{avatarError}</StatusLine>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Staged preview — shows what the user is about to broadcast.
+		     Uses IdentityLabel so the preview matches the real app
+		     rendering exactly. -->
+		{#if avatarStagedSvg || avatarStagedDataUri}
+			<div
+				class="mt-6 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
+			>
+				<p class="mb-3 text-xs uppercase tracking-wider text-ink-500">
+					{$_('settings.avatar.preview_label')}
+				</p>
+				<div class="flex items-center gap-4">
+					<IdentityLabel
+						displayName={saved || $_('settings.avatar.preview_display_name_placeholder')}
+						publicKey={previewPubkey}
+						avatarSvg={avatarStagedSvg || null}
+						avatarDataUri={avatarStagedDataUri || null}
+						avatarSize={96}
+					/>
+					<div class="text-sm text-ink-500">
+						<p>
+							{$_('settings.avatar.preview_size', {
+								values: {
+									bytes: formatBytes(avatarStagedBytes),
+									cap: formatBytes(3072)
+								}
+							})}
+						</p>
+						{#if avatarStagedBytes > 2048}
+							<p class="mt-1 text-amber-600 dark:text-amber-400">
+								{$_('settings.avatar.preview_getting_large')}
+							</p>
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Action buttons -->
+		<div class="mt-6 flex flex-wrap items-center gap-3">
+			{#if $isUnlocked && (avatarStagedSvg || avatarStagedDataUri)}
+				<BusyButton
+					variant="primary"
+					busy={avatarBroadcasting}
+					done={avatarBroadcastOk}
+					busyLabel={$_('settings.avatar.broadcast_pending')}
+					onclick={broadcastAvatar}
+				>
+					{#if avatarBroadcastOk}
+						{$_('settings.avatar.broadcast_ok')}
+					{:else}
+						{$_('settings.avatar.broadcast')}
+					{/if}
+				</BusyButton>
+				<BusyButton variant="ghost" onclick={cancelAvatar}>
+					{$_('settings.avatar.cancel')}
+				</BusyButton>
+			{/if}
+			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
+				<BusyButton
+					variant="ghost"
+					busy={avatarBroadcasting}
+					busyLabel={$_('settings.avatar.remove_pending')}
+					onclick={broadcastRemoveAvatar}
+				>
+					{$_('settings.avatar.remove')}
+				</BusyButton>
+			{/if}
+		</div>
+
+		{#if avatarBroadcastError}
+			<div class="mt-3">
+				<StatusLine kind="error">{avatarBroadcastError}</StatusLine>
+			</div>
+		{/if}
+	</section>
+
 	<!-- ─── Display name ─── -->
 	<section class="card mt-6" aria-labelledby="display-name-heading">
 		<h2 id="display-name-heading" class="font-display text-xl font-bold">
@@ -1189,12 +1446,103 @@
 			</p>
 		{/if}
 
+		<div class="mt-6 text-sm text-ink-600 dark:text-ink-300">
+			<p>
+				<strong>{$_('settings.display_name.save')}</strong> =
+				{$_('settings.display_name.save_legend_desc')}
+			</p>
+			<p class="mt-1">
+				<strong>{$_('settings.display_name.save_and_broadcast')}</strong> =
+				{$_('settings.display_name.broadcast_legend_desc')}
+			</p>
+		</div>
+
 		<div
 			class="mt-6 rounded-xl border border-ink-200 bg-white p-4 text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
 		>
 			<strong>{$_('settings.display_name.reminder_title')}</strong>
 			<p class="mt-1">{$_('settings.display_name.reminder_body')}</p>
 		</div>
+	</section>
+
+	<!-- ─── Short bio ─── -->
+	<section class="card mt-6" aria-labelledby="short-bio-heading">
+		<h2 id="short-bio-heading" class="font-display text-xl font-bold">
+			{$_('settings.short_bio.heading')}
+		</h2>
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.short_bio.explain')}
+		</p>
+
+		<label class="mt-5 block">
+			<span class="mb-2 block font-semibold">{$_('settings.short_bio.input_label')}</span>
+			<textarea
+				bind:value={bioInput}
+				rows="2"
+				maxlength={SHORT_BIO_MAX_LENGTH * 4}
+				autocomplete="off"
+				placeholder={$_('settings.short_bio.placeholder')}
+				class="w-full resize-none rounded-xl border-2 border-ink-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-950"
+			></textarea>
+		</label>
+
+		<div class="mt-2 flex items-center justify-between text-sm">
+			<p class="text-ink-500">
+				{#if bioInput && !bioValidation.ok}
+					<span class="text-red-600 dark:text-red-400">{$_(bioValidation.reasonKey)}</span>
+				{:else if bioInput}
+					<span class="text-ink-500">{$_('settings.short_bio.hint')}</span>
+				{/if}
+			</p>
+			<p class="text-ink-500" class:text-red-600={bioRemaining < 0}>
+				{bioRemaining}
+			</p>
+		</div>
+
+		<div class="mt-6 flex flex-wrap items-center gap-3">
+			<BusyButton
+				variant="primary"
+				busy={bioSaving}
+				done={bioSavedToast}
+				disabled={!bioValidation.ok || bioValidation.cleaned === bioSaved}
+				busyLabel={$_('settings.display_name.save_pending')}
+				onclick={saveBioLocal}
+			>
+				{#if bioSavedToast}
+					{$_('settings.display_name.saved_toast')}
+				{:else}
+					{$_('settings.display_name.save')}
+				{/if}
+			</BusyButton>
+			{#if $isUnlocked}
+				<BusyButton
+					variant="secondary"
+					busy={bioBroadcasting}
+					done={bioBroadcastOk}
+					disabled={!bioValidation.ok}
+					busyLabel={$_('settings.display_name.broadcast_pending')}
+					onclick={saveAndBroadcastBio}
+				>
+					{#if bioBroadcastOk}
+						{$_('settings.display_name.broadcast_ok')}
+					{:else}
+						{$_('settings.display_name.save_and_broadcast')}
+					{/if}
+				</BusyButton>
+			{/if}
+		</div>
+
+		{#if bioBroadcastError}
+			<div class="mt-3">
+				<StatusLine kind="error">{bioBroadcastError}</StatusLine>
+			</div>
+		{/if}
+
+		{#if bioBroadcastOk}
+			<p class="mt-3 text-sm text-ink-600 dark:text-ink-300" aria-live="polite">
+				{$_('settings.short_bio.broadcast_ok_detail')}
+			</p>
+		{/if}
 	</section>
 
 	<!-- ─── Blurt.media URL ─── -->
@@ -1425,151 +1773,6 @@
 			<strong>{$_('settings.nostr_url.reminder_title')}</strong>
 			<p class="mt-1">{$_('settings.nostr_url.reminder_body')}</p>
 		</div>
-	</section>
-
-	<!-- ─── Avatar ─── -->
-	<section class="card mt-6" aria-labelledby="avatar-heading">
-		<h2 id="avatar-heading" class="font-display text-xl font-bold">
-			{$_('settings.avatar.heading')}
-		</h2>
-		<p class="mt-2 text-ink-600 dark:text-ink-300">
-			{$_('settings.avatar.explain')}
-		</p>
-
-		<!-- Upfront guidance — shown BEFORE the file picker so the
-		     user knows what to prepare instead of uploading, getting
-		     an error, and trying again. Covers: supported filetypes,
-		     ideal source size, what we'll do to the file. -->
-		<div
-			class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm dark:border-ink-700 dark:bg-ink-900"
-		>
-			<p class="font-semibold text-ink-800 dark:text-ink-100">
-				{$_('settings.avatar.guidance_heading')}
-			</p>
-			<ul class="mt-2 space-y-1 text-ink-600 dark:text-ink-300">
-				<li>{$_('settings.avatar.guidance_filetypes')}</li>
-				<li>{$_('settings.avatar.guidance_dimensions')}</li>
-				<li>{$_('settings.avatar.guidance_filesize')}</li>
-				<li>{$_('settings.avatar.guidance_size')}</li>
-				<li>{$_('settings.avatar.guidance_svg_tips')}</li>
-			</ul>
-		</div>
-
-		<!-- Permanence warning — high-contrast callout so it doesn't
-		     get skimmed past. On-chain means public forever, no
-		     delete, no takedown. -->
-		<div
-			class="mt-4 rounded-xl border-2 border-amber-500/60 bg-amber-50 p-4 text-sm dark:border-amber-500/50 dark:bg-amber-900/20"
-			role="note"
-		>
-			<p class="font-semibold text-amber-900 dark:text-amber-200">
-				⚠ {$_('settings.avatar.permanence_heading')}
-			</p>
-			<p class="mt-1 text-amber-900 dark:text-amber-100">
-				{$_('settings.avatar.permanence_body')}
-			</p>
-		</div>
-
-		<!-- File input -->
-		<div class="mt-6">
-			<label for="avatar-file-input" class="sr-only">
-				{$_('settings.avatar.file_input_label')}
-			</label>
-			<input
-				id="avatar-file-input"
-				bind:this={avatarFileInput}
-				type="file"
-				accept="image/svg+xml,image/webp,image/jpeg,image/png,image/gif"
-				onchange={handleAvatarFileSelected}
-				disabled={avatarProcessing || avatarBroadcasting}
-				class="block w-full text-sm text-ink-600 file:me-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-morphit-btn file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300"
-			/>
-			{#if avatarProcessing}
-				<p class="mt-2 text-sm text-ink-500">
-					{$_('settings.avatar.processing')}
-				</p>
-			{/if}
-			{#if avatarError}
-				<div class="mt-3">
-					<StatusLine kind="error">{avatarError}</StatusLine>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Staged preview — shows what the user is about to broadcast.
-		     Uses IdentityLabel so the preview matches the real app
-		     rendering exactly. -->
-		{#if avatarStagedSvg || avatarStagedDataUri}
-			<div
-				class="mt-6 rounded-xl border border-ink-200 bg-white p-4 dark:border-ink-700 dark:bg-ink-900"
-			>
-				<p class="mb-3 text-xs uppercase tracking-wider text-ink-500">
-					{$_('settings.avatar.preview_label')}
-				</p>
-				<div class="flex items-center gap-4">
-					<IdentityLabel
-						displayName={saved || $_('settings.avatar.preview_display_name_placeholder')}
-						publicKey={previewPubkey}
-						avatarSvg={avatarStagedSvg || null}
-						avatarDataUri={avatarStagedDataUri || null}
-						avatarSize={96}
-					/>
-					<div class="text-sm text-ink-500">
-						<p>
-							{$_('settings.avatar.preview_size', {
-								values: {
-									bytes: formatBytes(avatarStagedBytes),
-									cap: formatBytes(3072)
-								}
-							})}
-						</p>
-						{#if avatarStagedBytes > 2048}
-							<p class="mt-1 text-amber-600 dark:text-amber-400">
-								{$_('settings.avatar.preview_getting_large')}
-							</p>
-						{/if}
-					</div>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Action buttons -->
-		<div class="mt-6 flex flex-wrap items-center gap-3">
-			{#if $isUnlocked && (avatarStagedSvg || avatarStagedDataUri)}
-				<BusyButton
-					variant="primary"
-					busy={avatarBroadcasting}
-					done={avatarBroadcastOk}
-					busyLabel={$_('settings.avatar.broadcast_pending')}
-					onclick={broadcastAvatar}
-				>
-					{#if avatarBroadcastOk}
-						{$_('settings.avatar.broadcast_ok')}
-					{:else}
-						{$_('settings.avatar.broadcast')}
-					{/if}
-				</BusyButton>
-				<BusyButton variant="ghost" onclick={cancelAvatar}>
-					{$_('settings.avatar.cancel')}
-				</BusyButton>
-			{/if}
-			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
-				<BusyButton
-					variant="ghost"
-					busy={avatarBroadcasting}
-					busyLabel={$_('settings.avatar.remove_pending')}
-					onclick={broadcastRemoveAvatar}
-				>
-					{$_('settings.avatar.remove')}
-				</BusyButton>
-			{/if}
-		</div>
-
-		{#if avatarBroadcastError}
-			<div class="mt-3">
-				<StatusLine kind="error">{avatarBroadcastError}</StatusLine>
-			</div>
-		{/if}
 	</section>
 
 	<!-- ─── Notifications ─── -->
@@ -1923,7 +2126,7 @@
 						href={localePath('/settings/security/2fa', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE)}
 						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-900"
 					>
-						{$_('settings.totp.enroll.cta')} →
+						{$_('settings.totp.enroll.cta')} <span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 
@@ -2063,6 +2266,26 @@
 						<option value="1440">{$_('settings.session.autolock_24h')}</option>
 						<option value="never">{$_('settings.session.autolock_never')}</option>
 					</select>
+					{#if autoLockChanged}
+						<p
+							class="mt-2 flex items-center gap-1.5 text-sm font-medium text-morphit-emerald"
+							aria-live="polite"
+						>
+							<svg
+								class="h-4 w-4 flex-shrink-0"
+								viewBox="0 0 20 20"
+								fill="currentColor"
+								aria-hidden="true"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.5 7.6a1 1 0 0 1-1.42.006l-3.5-3.5a1 1 0 1 1 1.414-1.414l2.79 2.79 6.792-6.886a1 1 0 0 1 1.418-.006Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+							{autoLockChanged}
+						</p>
+					{/if}
 				</div>
 
 			{/if}

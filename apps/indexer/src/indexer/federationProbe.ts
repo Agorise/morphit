@@ -119,6 +119,7 @@ export interface FederationProbeConfig {
 			readonly lokinet: string | null;
 			readonly i2p_b32: string | null;
 			readonly i2p_name: string | null;
+			readonly ens: string | null;
 			readonly nostr: string | null;
 		};
 	} | null;
@@ -513,6 +514,7 @@ interface InstanceShape {
 		// remote instance running an older release.
 		i2p_b32?: string | null;
 		i2p_name?: string | null;
+		ens?: string | null;
 		// Legacy single field (pre-2026-05).  We accept it on the
 		// wire, but persist normalized into i2p_b32 / i2p_name
 		// based on suffix so future reads are uniform.
@@ -877,6 +879,7 @@ function normalizeAltNetworksForCache(an: InstanceShape['alt_networks']): {
 	lokinet: string | null;
 	i2p_b32: string | null;
 	i2p_name: string | null;
+	ens: string | null;
 	nostr: string | null;
 } {
 	let i2pB32 = an.i2p_b32 ?? null;
@@ -894,6 +897,7 @@ function normalizeAltNetworksForCache(an: InstanceShape['alt_networks']): {
 		lokinet: an.lokinet,
 		i2p_b32: i2pB32,
 		i2p_name: i2pName,
+		ens: an.ens ?? null,
 		nostr: an.nostr
 	};
 }

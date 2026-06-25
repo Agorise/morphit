@@ -256,7 +256,7 @@
     "my_orders": "Meine Orders",
     "settings": "Einstellungen",
     "sign_out": "Abmelden",
-    "notification_settings": "Benachrichtigungseinstellungen →",
+    "notification_settings": "Benachrichtigungseinstellungen ⇨",
     "category": {
       "order": "Orders",
       "order_help": "Ausgeführt, abgelaufen, Gegenangebote",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "Wie kann ich helfen, Morphit unaufhaltsam zu machen?",
-        "a": "Morphits Widerstandsfähigkeit wächst mit jedem unabhängigen Betreiber. Du kannst auf verschiedene Arten beitragen:\n\n• Betreibe deinen eigenen Knoten. Hoste einen Indexer + Relay + Frontend auf deinem eigenen Server und stelle Morphit unter deiner eigenen URL bereit. Jedes unabhängige Mirror vergrößert unsere Angriffsfläche.\n\n• Hoste auf Tor, Lokinet oder I2P. Ein .onion-, .loki- oder .b32.i2p-Mirror ermöglicht Benutzern in zensierten Netzwerken den Zugang.\n\n• Hoste Morphits Abhängigkeiten. Self-Hosting von Paket-Mirrors reduziert Drittanbieter-Abhängigkeiten.\n\n• Finanziere einen Community-Knoten. Blurt-Beiträge zum @morphit-relay-Konto eines aktiven Betreibers halten es für die Kontoerstellung finanziert.\n\n• Verbreite die Botschaft. Morphit hängt von Netzwerkeffekten ab.\n\n• Schreibe Tutorials und Übersetzungen. Das Projekt ist AGPL-3.0.\n\nMorphit ist so konzipiert, dass es unmöglich zu stoppen ist, weil es keinen zentralen Akteur gibt, der unter Druck gesetzt werden kann."
+        "a": "Morphits Widerstandsfähigkeit wächst mit jedem unabhängigen Betreiber. Du kannst auf verschiedene Arten beitragen:\n\n• Betreibe deinen eigenen Knoten. Hoste einen Indexer + Relay + Frontend auf deinem eigenen Server und stelle Morphit unter deiner eigenen URL bereit. Jedes unabhängige Mirror vergrößert unsere Angriffsfläche.\n\n• Hoste auf Tor, Lokinet oder I2P. Ein .onion-, .loki- oder .b32.i2p-Mirror ermöglicht Benutzern in zensierten Netzwerken den Zugang.\n\n• Richte einen ENS-.eth-Namen darauf aus. Registriere einen `.eth`-Namen bei ENS (Ethereum Name Service) und richte ihn auf deine Instanz aus — meist über einen ENS-contenthash auf eine IPFS-Kopie deiner Seite — damit dich Leute unter einem lesbaren, dezentralen Namen wie `morphit.eth` erreichen (über einen ENS-fähigen Browser oder ein Gateway). Er erscheint als zusätzliche Pille in der Fußzeile, neben Tor/Lokinet/I2P.\n\n• Hoste Morphits Abhängigkeiten. Self-Hosting von Paket-Mirrors reduziert Drittanbieter-Abhängigkeiten.\n\n• Finanziere einen Community-Knoten. Blurt-Beiträge zum @morphit-relay-Konto eines aktiven Betreibers halten es für die Kontoerstellung finanziert.\n\n• Verbreite die Botschaft. Morphit hängt von Netzwerkeffekten ab.\n\n• Schreibe Tutorials und Übersetzungen. Das Projekt ist AGPL-3.0.\n\nMorphit ist so konzipiert, dass es unmöglich zu stoppen ist, weil es keinen zentralen Akteur gibt, der unter Druck gesetzt werden kann."
       },
       "why_self_trading_fails": {
         "q": "Warum steigert Handel mit mir selbst meine Reputation nicht?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "Beim Absenden veröffentlicht Morphit auch eine kurze \"Ich bin bei Morphit\"-Ankündigung in der @morphit-Community auf Blurt — unter deinem Konto, von dir signiert. Das passiert einmal, bei deinem allerersten Feedback.",
       "off": "Hinweis: Die automatische Ankündigung ist in den Einstellungen deaktiviert. Beim Absenden wird kein Erst-Trade-Blurt-Post veröffentlicht.",
-      "manage_link": "In Einstellungen verwalten →",
+      "manage_link": "In Einstellungen verwalten ⇨",
       "heading": "Kündige deinen ersten Trade an",
       "pitch": "Syndikation deiner Trades ist alles. Verkünde deine Angebote überall, wo es geht — mehr Augen auf deinen Angeboten bedeuten mehr Handelspartner und mehr Upvotes, das sind zusätzliche Einnahmen direkt auf deinem Blurt-Wallet.",
       "label_on": "Ja, meinen ersten Trade auf Blurt verkünden",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "Wir haben den Ablauf auf 7 Tage statt der Standardeinstellung 90 gesetzt. Ein kürzeres Fenster bedeutet, dass veraltete Angebote nicht hängenbleiben, wenn Sie es sich anders überlegen.",
     "tip_payment_label": "Tipps zu Zahlungsmethoden.",
     "tip_payment_body": "Fügen Sie die Zahlungsmethoden hinzu, die Sie tatsächlich akzeptieren. Handelspartner wählen, was für sie passt. Übliche Ausgangspunkte: PayPal, Wise, Banküberweisung, Bargeld persönlich.",
-    "faq_link": "Den vollständigen Erst-Trade-Walkthrough lesen →",
+    "faq_link": "Den vollständigen Erst-Trade-Walkthrough lesen ⇨",
     "dismiss_aria": "Dieses Starter-Pack schließen"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "Warte!",
     "step_2": "Wenn du Krypto sendest, warte, bis du das Fiat tatsächlich erhalten hast (nicht nur „ausstehend\"), bevor du die Krypto sendest. Einmal weg, ist weg.",
     "step_3": "Nach Abschluss des Trades, hinterlasse eine Bewertung auf /my/orders, damit zukünftige Trader euch beiden vertrauen.",
-    "faq_link": "Vollständige Anleitung lesen →",
+    "faq_link": "Vollständige Anleitung lesen ⇨",
     "dismiss_aria": "Diese Anleitung schließen"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "Adresse: {address}",
     "instances": "Instanzen",
     "explorer": "Block-Explorer",
-"download": "Herunterladen",
+    "download": "Herunterladen",
     "api": "API",
     "api_title": "API-Dokumentation für Entwickler",
     "agpl_title": "Warum Morphit die AGPL-3.0-Lizenz verwendet",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "PGP-Public-Keys des Betreibers für signierte Releases und Canary-Verifikation",
     "mediakit": "Medienkit",
     "mediakit_title": "Markenressourcen und Morphit-Argumentliste — für Presse, Integratoren und die Community",
-    "bounty": "Bug-Bounty"
+    "bounty": "Bug-Bounty",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 Tipp: Setzen Sie einige dieser Instanzen – samt ihrer Tor-, I2P- oder Lokinet-Adressen – als Lesezeichen in Ihrem Browser. Das Orderbuch liegt auf der öffentlichen Blockchain. Sollte also eine Seite jemals blockiert werden oder offline gehen, erreichen Sie dieselben Aufträge und Trades über jede andere Instanz.",
     "fetch_error": "Verzeichnis konnte nicht geladen werden.",
     "last_updated": "Verzeichnis zuletzt aktualisiert: {date}",
-    "contact": "Diesen Betreiber kontaktieren →",
+    "contact": "Diesen Betreiber kontaktieren ⇨",
     "add_yours_title": "Eigene Instanz hinzufügen",
     "add_yours_body": "Sie betreiben eine Morphit-Instanz? Registrieren Sie sich einfach on-chain — jeder andere Morphit-Indexer entdeckt Sie automatisch. Der Assistent (morphit-ops init) übernimmt die Registrierung beim ersten Setup.",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "Ja, verwerfen und neu beginnen",
         "cancel": "Hier bleiben"
       }
+    },
+    "progress": {
+      "step_label": "Schritt {current} von {total}"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "Du kannst hier stöbern, aber du brauchst einen Blurt-Kontonamen, um Verkäufer anzuschreiben oder eigene Angebote zu erstellen.",
       "cta": "Namen wählen"
     },
-    "fee_rejected_check": "Order veröffentlicht, aber nicht sichtbar? Gebührenstatus prüfen →"
+    "fee_rejected_check": "Order veröffentlicht, aber nicht sichtbar? Gebührenstatus prüfen ⇨"
   },
   "paired_readonly": {
     "banner_heading": "Angemeldet als @{account} — das Telefon hat die Schlüssel.",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "Meine Order ansehen",
       "feature_upsell_heading": "Mehr Aufmerksamkeit für dieses Angebot?",
       "feature_upsell_body": "Biete für einen hervorgehobenen Slot, um deinen Auftrag für einige Stunden an die Spitze des Orderbooks zu bringen. Das Mindestgebot beträgt 6 Stunden; die Rate wird pro Instanz festgelegt. Die meisten Betreiber liefern 50 BLURT/Stunde als Standard.",
-      "feature_upsell_cta": "Hervorgehobenes Gebot einrichten →",
+      "feature_upsell_cta": "Hervorgehobenes Gebot einrichten ⇨",
       "edit_window_countdown": "{remaining} zum Bearbeiten",
       "edit_window_tooltip": "Bearbeitungen sind nur innerhalb von 15 Minuten nach dem Posten möglich. Danach stornieren und neu posten.",
       "edit_window_expired": "Bearbeitungsfenster vorbei"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "Seed-Phrase"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "Diese Bio enthält unzulässige Zeichen.",
+        "too_long": "Bio ist zu lang (max. 128 Zeichen)."
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "Bitte gib einen Namen ein.",
@@ -3542,7 +3552,7 @@
     "footer_body": "Problem gefunden? Bitte melde es im öffentlichen Forgejo-Repo, oder per verschlüsselter Nachricht an das Chain-Konto {morphit_account}.",
     "bounty_title": "Bug-Bounty-Programm",
     "bounty_body": "Wir betreiben ein diskretionäres Sicherheits-Anerkennungsprogramm. Jeder umsetzbare Befund wird von einem echten Ingenieur überprüft, erhält eine Antwort und — wenn er Morphits Sicherheitslage materiell verbessert — wird in BLURT (gezahlt von @morphit-fees) oder BTC belohnt, skaliert nach Schweregrad und Berichtsqualität. Keine feste Stufentabelle; Einzelfallentscheidung. Hall-of-Fame-Anerkennung verfügbar auch ohne Zahlung. Der vollständige Umfang, die Schweregrad-Führung, der Zahlungsablauf und was wir nicht tun werden (kein NDA, keine exklusive Offenlegung) ist in SECURITY.md dokumentiert.",
-    "bounty_link": "Vollständigen Umfang und Regeln lesen →",
+    "bounty_link": "Vollständigen Umfang und Regeln lesen ⇨",
     "canary_title": "Warrant Canary",
     "canary_body": "Wir veröffentlichen wöchentlich einen mit dem PGP-Schlüssel des Betreibers signierten Canary. Der Canary erklärt ausdrücklich, dass keine NSL / FISA / Schweigeanordnung / Hintertür-Forderung erhalten wurde. Frische-Beweise umfassen einen aktuellen Blurt-Chain-Head, einen aktuellen Bitcoin-Chain-Head und eine aktuelle Schlagzeile (beweist, dass der Canary nicht im Voraus generiert werden kann). Wenn der Canary mehr als 14 Tage nicht aktualisiert wird, behandle ihn als stumm: der Betreiber könnte unter Zwangsdruck stehen, und du solltest zu einem anderen föderierten Betreiber wechseln.",
     "canary_link": "Aktuellen Canary dieses Betreibers ansehen",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "Es ist eine Woche her — hast du deine 12-Wort-Seed-Phrase schon gesichert? Wenn du dieses Gerät verlierst, ist die Seed-Phrase die EINZIGE Möglichkeit, dein Konto wiederherzustellen.",
-    "show_me_how": "Zeig mir wie →",
+    "show_me_how": "Zeig mir wie ⇨",
     "got_it": "Verstanden"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "Kurzbio",
+      "explain": "Ein oder zwei Sätze über dich — was du handelst, deine Hobbys, was du magst. Optional, bis zu 128 Zeichen.",
+      "input_label": "Deine Kurzbio",
+      "placeholder": "z. B. Kaffee, BTC und lange Spaziergänge auf der Blockchain.",
+      "hint": "Sieht gut aus.",
+      "broadcast_ok_detail": "Deine Kurzbio ist jetzt für alle sichtbar veröffentlicht."
+    },
     "title": "Einstellungen",
     "subtitle": "Deine Identität, deine Regeln. Auf deinem Gerät gespeichert, nie auf unseren Servern.",
     "display_name": {
+      "save_legend_desc": "zeigt den Namen nur hier an, sodass nur du ihn siehst.",
+      "broadcast_legend_desc": "veröffentlicht den Namen on-chain, sodass alle (und all deine Geräte) ihn sehen.",
       "heading": "Anzeigename",
-      "explain": "Ein freundliches Etikett neben deinem Avatar. Er ERSETZT nicht deinen Public Key — der steht immer in Klammern daneben, und genau dem sollten Leute trauen. Du kannst das jederzeit ändern.",
+      "explain": "Ein freundliches Etikett neben deinem Avatar. Er ERSETZT nicht deinen Public Key — der steht immer in Klammern daneben, und genau dem sollten Leute trauen.",
       "input_label": "Wähle deinen Anzeigenamen",
       "placeholder": "z. B. Sally Doe",
       "preview_label": "So siehst du aus",
       "hint": "Sieht gut aus.",
-      "save": "Anzeigenamen speichern",
+      "save": "Nur lokal speichern",
       "clear": "Löschen",
       "saved_toast": "Gespeichert.",
-      "reminder_title": "Anzeigenamen sind nicht eindeutig.",
-      "reminder_body": "Jeder kann jeden Namen nutzen. Der kurze Schlüssel in Klammern — z. B. (BLT7gHu8mn…A9bb) — ist es, der dich wirklich ausweist, und den kann niemand kopieren. Prüfe beim Handeln immer den Schlüssel.",
-      "save_and_broadcast": "Speichern + veröffentlichen",
+      "reminder_title": "💡 Anzeigenamen sind nicht eindeutig.",
+      "reminder_body": "Jeder kann jeden Namen nutzen. Der kurze Schlüssel in Klammern ist es, der dich wirklich ausweist, und den kann niemand kopieren. Prüfe beim Handeln immer den Schlüssel.",
+      "save_and_broadcast": "Speichern & senden",
       "broadcast_ok": "Veröffentlicht.",
       "broadcast_err": {
         "no_account": "Lokal gespeichert. Die Veröffentlichung ist verfügbar, sobald dein Konto registriert ist.",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "Abbrechen"
     },
     "session": {
+      "autolock_changed": "Geändert auf {label}",
       "heading": "Werkzeuge",
       "explain": "Melde dich ab, wenn du fertig bist. Deine Schlüssel werden aus dem Speicher gelöscht; der verschlüsselte Schlüsselspeicher auf deinem Gerät bleibt unangetastet.",
       "autolock_label": "Auto-sperren nach Inaktivität",
@@ -3913,7 +3934,7 @@
     },
     "avatar": {
       "heading": "Avatar",
-      "explain": "Ersetze dein Standard-Herz-Identicon durch dein eigenes Bild. Wird on-chain in deiner Profil-Op gespeichert, genau wie dein Anzeigename und deine Social-Links.",
+      "explain": "Ersetze dein Standard-Herz-Identicon durch dein eigenes Bild.",
       "guidance_heading": "Vor dem Hochladen",
       "guidance_filetypes": "Akzeptiert SVG, WebP, JPEG, PNG oder GIF.",
       "guidance_dimensions": "Ideal: ein quadratisches Bild mit mindestens 96×96 Pixel. Größeres wird für dich auf 96×96 skaliert; kleineres sieht grobkörnig aus.",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge: tippe auf das Installations-Icon in der Adressleiste oder nutze das Browser-Menü → Morphit installieren.",
       "manual_safari": "Safari (macOS / iOS): tippe auf Teilen, dann „Zum Home-Bildschirm\".",
       "manual_firefox": "Firefox Android: tippe auf das Menü (︙), dann „Installieren\". Firefox Desktop unterstützt keine PWA-Installation — nutze Chromium-basierte Browser.",
-      "iphone_link": "iPhone-Installationsanleitung →"
+      "iphone_link": "iPhone-Installationsanleitung ⇨"
     },
     "account_name": {
       "heading": "Blurt-Kontoname",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "Behalten"
     },
     "totp": {
-      "heading": "Zwei-Faktor-Authentifizierung",
+      "heading": "Zwei-Faktor-Authentifizierung (2FA)",
       "subtitle": "Füge eine Authenticator-App als zweiten Faktor nach deinem Passwort hinzu. Schützt vor Schulterblicken, geliehenen Geräten und gelegentlicher lokaler Malware.",
       "honest_framing": {
         "title": "Wovor das schützt — ehrlich gesagt",

@@ -256,7 +256,7 @@
     "my_orders": "我的訂單",
     "settings": "設定",
     "sign_out": "登出",
-    "notification_settings": "通知設定 →",
+    "notification_settings": "通知設定 ⇨",
     "category": {
       "order": "訂單",
       "order_help": "成交、過期、反報價",
@@ -1219,7 +1219,7 @@
       },
       "help_make_unstoppable": {
         "q": "我如何幫助讓 Morphit 勢不可擋?",
-        "a": "Morphit 的韌性隨著每個獨立營運者而增長。你可以通過以下方式幫助:\n\n• 運行你自己的節點。在自己的伺服器上部署 indexer + relay + frontend,並從你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上託管。.onion、.loki 或 .b32.i2p 鏡像讓受審查網絡中的用戶也能存取。\n\n• 託管 Morphit 的依賴項。\n\n• 資助社區節點。向活躍營運者的 @morphit-relay 帳戶貢獻 Blurt。\n\n• 廣而告之。\n\n• 撰寫教學和翻譯。項目採用 AGPL-3.0 許可。\n\nMorphit 設計為不可關閉,因為沒有中心角色可被施壓。"
+        "a": "Morphit 的韌性隨著每個獨立營運者而增長。你可以通過以下方式幫助:\n\n• 運行你自己的節點。在自己的伺服器上部署 indexer + relay + frontend,並從你自己的 URL 提供 Morphit。\n\n• 在 Tor、Lokinet 或 I2P 上託管。.onion、.loki 或 .b32.i2p 鏡像讓受審查網絡中的用戶也能存取。\n\n• 將一個 ENS .eth 名稱指向它。在 ENS（Ethereum Name Service，以太坊名稱服務）註冊一個 `.eth` 名稱並指向你的執行個體——通常透過 ENS 的 contenthash 指向你網站的 IPFS 副本——這樣人們就可以透過像 `morphit.eth` 這樣易讀的去中心化名稱（使用支援 ENS 的瀏覽器或閘道）存取你。它會作為頁尾中額外的一個標籤，與 Tor/Lokinet/I2P 並排顯示。\n\n• 託管 Morphit 的依賴項。\n\n• 資助社區節點。向活躍營運者的 @morphit-relay 帳戶貢獻 Blurt。\n\n• 廣而告之。\n\n• 撰寫教學和翻譯。項目採用 AGPL-3.0 許可。\n\nMorphit 設計為不可關閉,因為沒有中心角色可被施壓。"
       },
       "why_self_trading_fails": {
         "q": "為什麼自己跟自己交易不能提升我的信譽?",
@@ -1710,7 +1710,7 @@
     "first_trade_disclosure": {
       "on": "提交時，Morphit 還將在 Blurt 上的 @morphit 社群發布一則簡短的「我加入了 Morphit」公告 — 以您的帳戶名義、由您簽名。僅在您有史以來第一次反饋時發生一次。",
       "off": "提示：您已在設定中關閉自動公告。提交時不會發布首次交易 Blurt 帖子。",
-      "manage_link": "在設定中管理 →",
+      "manage_link": "在設定中管理 ⇨",
       "heading": "公告您的首次交易",
       "pitch": "辛迪加發布交易至關重要。在任何可能的地方公告您的報價 — 更多眼睛看到您的報價意味著更多交易夥伴,加上更多點讚,這些都是直接進入您 Blurt 錢包的額外收入。",
       "label_on": "是的,在 Blurt 上公告我的首次交易",
@@ -1767,7 +1767,7 @@
     "tip_expiry_body": "我們將到期時間設定為 7 天,而非預設的 90 天。更短的窗口意味著如果您改變主意,過時的報價不會滯留。",
     "tip_payment_label": "付款方式提示。",
     "tip_payment_body": "新增您實際接受的付款方式。交易夥伴會選擇對他們有用的方式。常見起點:PayPal、Wise、銀行轉帳、當面現金。",
-    "faq_link": "閱讀完整的首次交易演練 →",
+    "faq_link": "閱讀完整的首次交易演練 ⇨",
     "dismiss_aria": "關閉此入門包"
   },
   "first_trade_helper": {
@@ -1777,7 +1777,7 @@
     "step_2_warn": "等等!",
     "step_2": "如果你要發送加密貨幣,請等到你真正收到法幣(不只是「待處理」),再發送加密貨幣。一旦發送,就無法收回。",
     "step_3": "交易完成後,在 /my/orders 留下評價,讓未來的交易者信任你們雙方。",
-    "faq_link": "閱讀完整教程 →",
+    "faq_link": "閱讀完整教程 ⇨",
     "dismiss_aria": "關閉此指南"
   },
   "footer": {
@@ -1800,7 +1800,7 @@
     "alt_network_address": "地址:{address}",
     "instances": "實例",
     "explorer": "區塊瀏覽器",
-"download": "下載",
+    "download": "下載",
     "api": "API",
     "api_title": "開發者 API 文檔",
     "agpl_title": "為甚麼 Morphit 使用 AGPL-3.0 授權條款",
@@ -1812,7 +1812,8 @@
     "pgp_keys_title": "營運者用於已簽名發行版和金絲雀驗證的 PGP 公鑰",
     "mediakit": "媒體資源包",
     "mediakit_title": "Morphit 的品牌資源和成就清單 — 面向媒體、整合者和社群",
-    "bounty": "漏洞賞金"
+    "bounty": "漏洞賞金",
+    "ens": "ENS"
   },
   "glossary": {
     "active_key": {
@@ -1983,7 +1984,7 @@
     "bookmark_tip": "💡 提示：在瀏覽器中將其中幾個實例——以及它們的 Tor、I2P 或 Lokinet 位址——加入書籤。訂單簿存在於公開的區塊鏈上，因此即使某個網站被封鎖或離線，你也能透過任何其他實例存取完全相同的訂單和交易。",
     "fetch_error": "無法載入目錄。",
     "last_updated": "目錄上次更新:{date}",
-    "contact": "聯絡本營運者 →",
+    "contact": "聯絡本營運者 ⇨",
     "add_yours_title": "新增您的實例",
     "add_yours_body": "運行了 Morphit 實例?直接在鏈上註冊 — 任何其他 Morphit 索引器都會自動發現您。精靈(morphit-ops init)在首次設定期間處理註冊。",
     "status": {
@@ -2479,6 +2480,9 @@
         "confirm": "是,丟棄並重新開始",
         "cancel": "留在這裡"
       }
+    },
+    "progress": {
+      "step_label": "第 {current} 步，共 {total} 步"
     }
   },
   "operator_block": {
@@ -2653,7 +2657,7 @@
       "body": "您可以在此瀏覽,但需要 Blurt 帳戶名稱才能向賣家傳訊或發布自己的訂單。",
       "cta": "選擇名稱"
     },
-    "fee_rejected_check": "發布了訂單但看不到?查看手續費狀態 →"
+    "fee_rejected_check": "發布了訂單但看不到?查看手續費狀態 ⇨"
   },
   "paired_readonly": {
     "banner_heading": "以 @{account} 登入 — 鎖匙喺電話度。",
@@ -3017,7 +3021,7 @@
       "view_my_order_cta": "查看我嘅訂單",
       "feature_upsell_heading": "想令更多人睚到呢個掛單？",
       "feature_upsell_body": "競投特色位置，等你嘅訂單喺訂單簿頂部展示幾個鐘。最低出價係 6 個鐘；費率由各實例設定。大部分運營商默認使用 50 BLURT/小時。",
-      "feature_upsell_cta": "設定特色出價 →",
+      "feature_upsell_cta": "設定特色出價 ⇨",
       "edit_window_countdown": "{remaining} 內可編輯",
       "edit_window_tooltip": "編輯僅可在發布後 15 分鐘內進行。之後請取消並重新發布。",
       "edit_window_expired": "編輯視窗已過"
@@ -3280,6 +3284,12 @@
     "kind_mnemonic": "助記詞"
   },
   "profile": {
+    "short_bio": {
+      "errors": {
+        "invalid": "呢段簡介含有唔允許嘅字元。",
+        "too_long": "簡介太長（最多 128 個字元）。"
+      }
+    },
     "display_name": {
       "errors": {
         "too_short": "請輸入一個名。",
@@ -3542,7 +3552,7 @@
     "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或通過加密訊息發俾 {morphit_account} 鏈帳戶。",
     "bounty_title": "漏洞賞金計劃",
     "bounty_body": "我們運行一個酌情決定的安全識別計劃。每一個可操作的發現都由真實的工程師審查,獲得答覆,並且 — 如果它實質上改善了 Morphit 的安全態勢 — 將在 BLURT(從 @morphit-fees 支付)或 BTC 中獲得獎勵,根據嚴重程度和報告質量進行調整。沒有固定的等級表;按個案裁定。即使沒有付款,名人堂榮譽也可用。完整範圍、嚴重程度指導、付款流程以及我們不會做的事情(沒有保密協議,沒有獨家披露)記錄在 SECURITY.md 中。",
-    "bounty_link": "閱讀完整範圍和規則 →",
+    "bounty_link": "閱讀完整範圍和規則 ⇨",
     "canary_title": "搜查令金絲雀",
     "canary_body": "我們發布每週一次的金絲雀,使用營運者的 PGP 密鑰簽名。金絲雀明確聲明沒有收到任何 NSL / FISA / 禁言令 / 後門要求。新鮮度證明包括當前的 Blurt 鏈頭、當前的比特幣鏈頭和當前的新聞標題(證明金絲雀不能預先生成)。如果金絲雀超過 14 天未更新,請視為靜默:營運者可能受到強制壓力,你應該切換到另一個聯邦營運者。",
     "canary_link": "查看此營運者當前的金絲雀",
@@ -3550,7 +3560,7 @@
   },
   "seed_backup_nudge": {
     "body": "已經過咗一個星期 — 你備份過 12 個字嘅助記詞未?如果掉咗呢部裝置,呢組助記詞係恢復賬戶嘅唯一方法。",
-    "show_me_how": "話我知點做 →",
+    "show_me_how": "話我知點做 ⇨",
     "got_it": "知道喇"
   },
   "rss": {
@@ -3725,21 +3735,31 @@
     }
   },
   "settings": {
+    "short_bio": {
+      "heading": "簡短簡介",
+      "explain": "用一兩句介紹自己——你交易咩、你嘅興趣，隨你鍾意。可選，最多 128 個字元。",
+      "input_label": "你嘅簡短簡介",
+      "placeholder": "例如：咖啡、BTC，仲有喺區塊鏈上面散步。",
+      "hint": "睇落唔錯。",
+      "broadcast_ok_detail": "你嘅簡短簡介而家已經發佈，所有人都睇到。"
+    },
     "title": "設定",
     "subtitle": "你嘅身份,你話事。儲喺你部機,唔會上我哋伺服器。",
     "display_name": {
+      "save_legend_desc": "只喺本機顯示呢個名，只有你睇得到。",
+      "broadcast_legend_desc": "將名稱發佈到鏈上，畀所有人（同你所有裝置）都睇到。",
       "heading": "顯示名",
-      "explain": "一個顯示喺頭像隔籬嘅友善名牌。佢唔會代替你嘅 public key——public key 一路都會擺喺括號入面畀人睇,嗰個先係人哋應該信嘅嘢。你可以隨時改。",
+      "explain": "一個顯示喺頭像隔籬嘅友善名牌。佢唔會代替你嘅 public key——public key 一路都會擺喺括號入面畀人睇,嗰個先係人哋應該信嘅嘢。",
       "input_label": "揀一個顯示名",
       "placeholder": "例如:Sally Doe",
       "preview_label": "你會係咁樣顯示",
       "hint": "OK 喇。",
-      "save": "儲存顯示名",
+      "save": "只儲存喺本機",
       "clear": "清除",
       "saved_toast": "已儲存。",
-      "reminder_title": "顯示名唔係獨一無二嘅。",
-      "reminder_body": "任何人都可以用任何名。真正認到你嘅,係括號入面嗰條短 key,例如 (BLT7gHu8mn…A9bb),其他人冚唔到。做交易嗰陣,一定要睇嗰條 key。",
-      "save_and_broadcast": "儲存 + 發佈",
+      "reminder_title": "💡 顯示名唔係獨一無二嘅。",
+      "reminder_body": "任何人都可以用任何名。真正認到你嘅,係括號入面嗰條短 key,其他人冚唔到。做交易嗰陣,一定要睇嗰條 key。",
+      "save_and_broadcast": "儲存並廣播",
       "broadcast_ok": "已經發咗。",
       "broadcast_err": {
         "no_account": "已本地儲存。註冊帳戶後即可發佈。",
@@ -3775,6 +3795,7 @@
       "reset_confirm_cancel": "取消"
     },
     "session": {
+      "autolock_changed": "已改為 {label}",
       "heading": "實用工具",
       "explain": "用完之後請登出。你嘅密鑰會從記憶體中清除；你裝置上加密嘅密鑰庫唔受影響。",
       "autolock_label": "閒置後自動鎖定",
@@ -3913,7 +3934,7 @@
     },
     "avatar": {
       "heading": "頭像",
-      "explain": "用你自己的圖像替換預設的心形識別圖。儲存在鏈上，作為你個人資料 op 的一部分，就像顯示名稱和社交連結一樣。",
+      "explain": "用你自己的圖像替換預設的心形識別圖。",
       "guidance_heading": "上傳前須知",
       "guidance_filetypes": "接受 SVG、WebP、JPEG、PNG 或 GIF。",
       "guidance_dimensions": "理想：至少 96×96 像素的方形圖像。更大的會為你縮放到 96×96；更小的會看起來顆粒感。",
@@ -4088,7 +4109,7 @@
       "manual_chrome": "Chrome / Edge:點擊網址列的安裝圖標,或使用瀏覽器選單 → 安裝 Morphit。",
       "manual_safari": "Safari(macOS / iOS):點擊共享按鈕,然後「加入主畫面」。",
       "manual_firefox": "Firefox Android:點擊選單 (︙),然後「安裝」。Firefox 桌面版不支援 PWA 安裝 — 請使用基於 Chromium 的瀏覽器。",
-      "iphone_link": "iPhone 安裝演示 →"
+      "iphone_link": "iPhone 安裝演示 ⇨"
     },
     "account_name": {
       "heading": "Blurt 帳戶名",
@@ -4123,7 +4144,7 @@
       "clear_confirm_cancel": "保留"
     },
     "totp": {
-      "heading": "雙因素身份驗證",
+      "heading": "雙因素身份驗證 (2FA)",
       "subtitle": "喺密碼之後加多一個身份驗證器應用程式作為第二因素。防範偷窺、借用設備同普通本地惡意軟件。",
       "honest_framing": {
         "title": "呢個保護到啲乜嘢 — 老實咁講",
