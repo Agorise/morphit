@@ -1764,10 +1764,16 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # Indexer — read-only public API. Proxied to loopback.
+    # Indexer — public API. Proxied to loopback.
     # The frontend hits the indexer at same-origin `/v1/*`
     # (e.g. `/v1/orderbook`, `/v1/instance`). The indexer serves
     # those paths as-is, so forward them unchanged — NO rewrite.
+    # This block proxies ALL methods, so it also carries the cp344
+    # write proxies the browser uses instead of talking to a public
+    # Blurt RPC node directly: `POST /v1/broadcast` (relays a user-
+    # signed tx to the chain server-side) and `GET /v1/chain/properties`
+    # (the ref-block read that precedes a broadcast). No extra config —
+    # POST is handled by this same location block.
     # (`/relay/v1/*` is caught by the longer `/relay/` prefix
     # above, so it never falls into this block.) For the SSE
     # stream endpoints (`/v1/.../stream`) add the streaming +
@@ -4759,7 +4765,7 @@ cd /opt/morphit/apps/indexer && npx tsx scripts/fee-status-filter-lint.ts
 | `MORPHIT_INSTANCE_I2P_NAME_ADDRESS` | `i2p_name` | optional readable `name.i2p` (addressbook-dependent) |
 | `MORPHIT_INSTANCE_I2P_ADDRESS` | — | legacy single var; still honored, routed to `i2p_b32`/`i2p_name` by suffix. The wizard reads it (as a fallback) and clears it whenever you set/delete the i2p address, so a value can't linger under two keys. |
 | `MORPHIT_INSTANCE_NOSTR_PUBKEY` | `nostr` | Nostr public key — `npub1…` (bech32) or 64-char hex. The wizard rejects a private key (`nsec…`). Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders this as a "Nostr" pill linking to your instance's Nostr page; it also appears as an alt-network chip on your directory card. |
-| `MORPHIT_INSTANCE_ENS_NAME` | `ens` | optional ENS `.eth` name (`DOMAIN.eth`) — a registered Ethereum name you point at this instance (typically via an ENS contenthash → IPFS copy of the site). Paste-only (nothing to generate); the wizard validates the `.eth` shape. Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders it as an "ENS" pill linking to `https://<name>.eth.limo` (an ENS gateway); not resolved server-side. |
+| `MORPHIT_INSTANCE_ENS_NAME` | `ens` | optional ENS `.eth` name (`DOMAIN.eth`) — a registered Ethereum name you point at this instance (typically via an ENS contenthash → IPFS copy of the site). Paste-only (nothing to generate); the wizard validates the `.eth` shape. Also editable via `morphit-ops edit → Branding & SEO`'s alt-networks section. The footer renders it as an "ENS" pill linking to the bare name (`https://<name>.eth`); not resolved server-side. ENS-aware browsers (Brave, MetaMask, etc.) resolve `<name>.eth` directly — Morphit deliberately does NOT route through a centralized ENS gateway (e.g. eth.limo), so the pill is a no-op in a vanilla browser without ENS support. |
 
 The indexer reads these at startup and includes them in its instance announce; the frontend renders the footer pills from that announce at runtime. So a new/changed address appears after the indexer restarts — the `alt-address` / `edit` wizard **offers to do that for you** (press Enter at the prompt) — **no frontend rebuild needed.**
 

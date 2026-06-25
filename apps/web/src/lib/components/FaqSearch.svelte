@@ -3,9 +3,10 @@
 	import { DEFAULT_LOCALE } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { tick } from 'svelte';
 	import {
 		faqEntries,
 		searchEntries,
@@ -82,9 +83,7 @@
 	 *                                JSON-LD declaration (urlTemplate: /faq?q=...)
 	 *                                actually functional.
 	 */
-	$effect(() => {
-		if (!browser) return;
-
+	afterNavigate(() => {
 		const params = $page.url.searchParams;
 		const qKey = params.get('q');
 		const lang = params.get('lang');
@@ -99,15 +98,17 @@
 		if (!target) return;
 
 		// Form 1 + 2: target matches an FAQ entry key — expand + scroll.
+		// This runs in afterNavigate (not a $effect) for two reasons: the
+		// scroll must land AFTER SvelteKit's post-navigation scroll reset
+		// (a ?q= link is a normal navigation, so SvelteKit otherwise yanks
+		// the page to the top right after we scroll — the bug that made the
+		// footer AGPL link land at the top instead of the article), and an
+		// effect would re-fire on a locale switch and re-yank an already-open
+		// entry back into view. cp338.
 		const found = $faqEntries.find((e) => e.key === target);
 		if (found) {
 			expanded.add(found.key);
-			queueMicrotask(() => {
-				document.getElementById(`faq-${found.key}`)?.scrollIntoView({
-					behavior: 'smooth',
-					block: 'start'
-				});
-			});
+			void scrollToEntry(found.key);
 			return;
 		}
 
@@ -121,14 +122,46 @@
 		// since "/faq#unknown-key" is intentionally a no-op.
 		if (qKey) {
 			query = qKey;
-			// Focus the input so the user can refine the query
-			// without having to click it first.  Defer to next
-			// frame so the input is in the DOM.
-			queueMicrotask(() => {
-				inputEl?.focus();
-			});
+			// Focus the input so the user can refine the query without
+			// having to click it first.  Defer so the input is in the DOM.
+			void tick().then(() => inputEl?.focus());
 		}
 	});
+
+	/** Smooth-scroll a (now-expanded) FAQ entry to the top of the viewport.
+	 *  `tick()` waits for the expanded answer to render so the target sits
+	 *  at its final height; a double rAF then lets layout settle. When
+	 *  called from afterNavigate (the ?q= deep link) this also lands after
+	 *  SvelteKit's post-navigation scroll reset. Shared by the deep-link
+	 *  handler, the related-entry chips, and search-result clicks. cp338. */
+	async function scrollToEntry(key: FaqKey): Promise<void> {
+		await tick();
+		const align = (): void => {
+			document.getElementById(`faq-${key}`)?.scrollIntoView({
+				behavior: 'smooth',
+				block: 'start'
+			});
+		};
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				align();
+				// A long article low on a freshly-mounted, still-laying-out page
+				// (e.g. the footer "API" deep link → wallet_developer_api, in
+				// section 10 with a tall answer) can leave this first smooth
+				// scroll SHORT of the target: when the scroll starts the entry's
+				// final Y isn't settled — articles above are still being laid
+				// out / images are still resolving — so the page shifts under the
+				// animation and it lands above the entry. Re-align once layout has
+				// settled, but ONLY if we're actually off target (>8px from the
+				// top), so a first scroll that already landed isn't re-animated
+				// and the user isn't yanked if they're already where they want.
+				setTimeout(() => {
+					const el = document.getElementById(`faq-${key}`);
+					if (el && Math.abs(el.getBoundingClientRect().top) > 8) align();
+				}, 400);
+			});
+		});
+	}
 
 	function toggle(entry: FaqEntry): void {
 		if (expanded.has(entry.key)) expanded.delete(entry.key);
@@ -158,12 +191,7 @@
 		url.searchParams.set('lang', $currentLocale);
 		url.hash = '';
 		history.replaceState(null, '', url.toString());
-		queueMicrotask(() => {
-			document.getElementById(`faq-${targetKey}`)?.scrollIntoView({
-				behavior: 'smooth',
-				block: 'start'
-			});
-		});
+		void scrollToEntry(targetKey);
 	}
 
 	/** Build the canonical shareable URL for an entry. */
@@ -365,7 +393,7 @@
 				aria-autocomplete="list"
 				autocomplete="off"
 				placeholder={$_('faq.search_placeholder')}
-				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+				class="w-full rounded-2xl border-2 border-ink-200 bg-white py-4 pe-4 ps-12 text-base shadow-morphit-card transition hover:border-ink-300 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 dark:hover:border-white/70"
 			/>
 		</div>
 
@@ -386,13 +414,8 @@
 							: ''}"
 						onclick={() => {
 							expanded.add(hit.entry.key);
-							queueMicrotask(() => {
-								document.getElementById(`faq-${hit.entry.key}`)?.scrollIntoView({
-									behavior: 'smooth',
-									block: 'start'
-								});
-							});
 							query = '';
+							void scrollToEntry(hit.entry.key);
 						}}
 					>
 						<span class="font-semibold">{hit.entry.question}</span>
@@ -415,7 +438,7 @@
 		{#each $faqEntries as entry (entry.key)}
 			{@const isOpen = expanded.has(entry.key)}
 			{@const justCopied = copiedKey === entry.key}
-			<li id="faq-{entry.key}" class="card p-0">
+			<li id="faq-{entry.key}" class="card p-0 border border-transparent transition-colors hover:border-ink-300 dark:hover:border-white/70">
 				<!--
 					Inline-anchor target without the `faq-` prefix.  Many
 					internal "Learn more →" links spell their target as

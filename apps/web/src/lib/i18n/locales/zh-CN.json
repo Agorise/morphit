@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "开发者 API 文档",
     "agpl_title": "为什么 Morphit 使用 AGPL-3.0 许可证",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "金丝雀",
     "canary_title": "运营者的每周搜查令金丝雀 — 验证日期是否近期",
@@ -2029,7 +2029,7 @@
     "no_account_body": "在上方挑个酷炫的用户名就能创建一个新账户，真的就这么简单。",
     "register_cta": "🌱 创建新账户",
     "checking": "正在检查你的会话…",
-    "import_existing": "🔐 用 12 词助记词、json 密钥文件或 posting 密钥登录",
+    "import_existing": "用 12 词助记词、json 密钥文件或 posting 密钥登录",
     "unlock": {
       "password_required": "输入密码以解锁。",
       "wrong_password": "该密码与你的 keystore 不匹配。重试,或用 助记词登录。",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "无法加载你的订单。请重试。",
       "no_account": "使用你的 Blurt 账户登录即可查看你的订单。"
+    },
+    "no_account": {
+      "title": "设置以查看您的订单",
+      "body": "您的订单以链上方式存储在您的 Morphit 身份下。创建一个即可开始交易，或解锁现有身份以查看您的历史记录。",
+      "cta_register": "创建账户",
+      "cta_unlock": "我已有账户"
+    },
+    "locked": {
+      "title": "解锁以查看您的订单",
+      "body": "您的订单历史记录受您的解锁保护，因此锁定的设备绝不会泄露您的交易。请输入密码以查看。",
+      "unlock": "解锁"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "隐私",
     "post_now": "立即发布",
     "start": "开始",
+    "unlock": "解锁",
     "glossary": "术语表",
     "cheat_sheet": "速查表"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "已本地保存。注册账户后即可发布。",
         "locked": "会话已锁定。请重新登录以广播。",
-        "generic": "无法广播。请重试。"
+        "generic": "无法广播。请重试。",
+        "rejected": "网络拒绝了此次广播：{reason}"
       },
       "save_pending": "正在保存…",
       "broadcast_pending": "发布中…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "移除 {url}",
       "reset_confirm_prompt": "将所有自定义 RPC 端点重置为默认值？",
       "reset_confirm_yes": "是，重置",
-      "reset_confirm_cancel": "取消"
+      "reset_confirm_cancel": "取消",
+      "timed_out": "超时",
+      "unreachable": "无法连接"
     },
     "session": {
       "autolock_changed": "已改为 {label}",

@@ -60,6 +60,7 @@ import { accountBalanceRoute } from '$api/accountBalance';
 import { accountHistoryRoute } from '$api/accountHistory';
 import { accountKeysRoute } from '$api/accountKeys';
 import { chainExplorerRoute } from '$api/chainExplorer';
+import { broadcastRoute } from '$api/broadcast';
 import { feedbackByAccountRoute } from '$api/feedback';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
@@ -405,7 +406,25 @@ async function main(): Promise<void> {
 	accountApp.route('/', accountHistoryRoute(blurt));
 	accountApp.route('/', accountKeysRoute(blurt));
 	app.route('/v1/account', accountApp);
-	app.route('/v1/chain', chainExplorerRoute(blurt));
+
+	// cp347 — /v1/chain (block explorer + the cp344 ref-block properties proxy)
+	// and /v1/broadcast (the cp344 write proxy) each forward ONE upstream Blurt
+	// RPC call per request, so they get the same per-IP 'resource' rate-limit
+	// tier as every other upstream-touching proxy (e.g. /v1/account). Without it
+	// an unauthenticated flood of well-formed-but-bogus requests could amplify
+	// load onto the operator's RPC pool. 600/min (the resource default) is far
+	// above any legitimate broadcast or explorer rate, so real writes never trip
+	// it (and a 429 is not in broadcastTransport's fallback set, so a throttled
+	// op surfaces "try again" rather than silently leaking to direct RPC).
+	const chainApp = new Hono();
+	chainApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	chainApp.route('/', chainExplorerRoute(blurt));
+	app.route('/v1/chain', chainApp);
+
+	const broadcastApp = new Hono();
+	broadcastApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	broadcastApp.route('/', broadcastRoute(blurt));
+	app.route('/v1/broadcast', broadcastApp);
 
 	const feedbackApp = new Hono();
 	feedbackApp.use('*', rateLimit('list', config.listRatePerMin));

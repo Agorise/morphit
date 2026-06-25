@@ -85,8 +85,7 @@
     create_home: true
     state: present
 
-# Part 122 cp5 F12 — the shipped morphit-relay.service and
-# morphit-relay-mint-acts.service both specify
+# Part 122 cp5 F12 — the shipped morphit-relay.service specifies
 # `User=morphit-relay / Group=morphit-relay`.  Without this task,
 # `systemctl start morphit-relay` fails with "user morphit-relay
 # does not exist" on a first deploy, AND any earlier `chown

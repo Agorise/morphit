@@ -382,6 +382,80 @@ body {
 }
 
 /* -----------------------------------------------------------------------------
+ * Directional arrow affordance (site-wide)
+ *
+ * A ⇦ / ⇨ glyph that, when the enclosing link or button is hovered or
+ * keyboard-focused, slides ~3px in the direction it points and turns
+ * morphit-emerald — the homepage "Learn more" effect, applied everywhere for
+ * consistency. The glyph inherits the surrounding font size and (until hover)
+ * color. RTL-aware: under [dir="rtl"] the glyph mirrors and the slide inverts.
+ * Links carrying an arrow never underline. Honors prefers-reduced-motion (the
+ * colour change stays; the slide is dropped).
+ *
+ *   <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
+ *   <span class="nav-arrow nav-arrow-left"  aria-hidden="true">⇦</span>
+ * -------------------------------------------------------------------------- */
+.nav-arrow {
+	display: inline-block;
+	transition:
+		transform 180ms ease-out,
+		color 180ms ease-out;
+}
+
+/* No underline on any link that carries an arrow. */
+:where(a):has(.nav-arrow) {
+	text-decoration: none;
+}
+
+/* Slide + emerald when the enclosing interactive element is hovered or
+ * keyboard-focused. */
+:where(a, button, [role='link'], [role='button']):hover .nav-arrow,
+:where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow {
+	color: var(--morphit-emerald);
+}
+:where(a, button, [role='link'], [role='button']):hover .nav-arrow-right,
+:where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-right {
+	transform: translateX(3px);
+}
+:where(a, button, [role='link'], [role='button']):hover .nav-arrow-left,
+:where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-left {
+	transform: translateX(-3px);
+}
+
+/* RTL: mirror the glyph so it points the reading-direction-correct way, and
+ * invert the hover slide (forward still travels toward the leading edge). */
+[dir='rtl'] .nav-arrow {
+	transform: scaleX(-1);
+}
+[dir='rtl'] :where(a, button, [role='link'], [role='button']):hover .nav-arrow-right,
+[dir='rtl'] :where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-right {
+	transform: scaleX(-1) translateX(3px);
+}
+[dir='rtl'] :where(a, button, [role='link'], [role='button']):hover .nav-arrow-left,
+[dir='rtl'] :where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-left {
+	transform: scaleX(-1) translateX(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.nav-arrow {
+		transition: color 180ms ease-out;
+	}
+	:where(a, button, [role='link'], [role='button']):hover .nav-arrow-right,
+	:where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-right,
+	:where(a, button, [role='link'], [role='button']):hover .nav-arrow-left,
+	:where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-left {
+		transform: none;
+	}
+	[dir='rtl'] .nav-arrow,
+	[dir='rtl'] :where(a, button, [role='link'], [role='button']):hover .nav-arrow-right,
+	[dir='rtl'] :where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-right,
+	[dir='rtl'] :where(a, button, [role='link'], [role='button']):hover .nav-arrow-left,
+	[dir='rtl'] :where(a, button, [role='link'], [role='button']):focus-visible .nav-arrow-left {
+		transform: scaleX(-1);
+	}
+}
+
+/* -----------------------------------------------------------------------------
  * Print — for users who want to print a trade record or a receipt
  * -------------------------------------------------------------------------- */
 @media print {

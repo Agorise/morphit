@@ -157,6 +157,15 @@ export function resolveOrigin(originOrPath: string): string {
  *  picks a live one, and fails over when requests error. Users can add /
  *  pin / remove entries in Settings.
  *
+ *  cp344: chain WRITES (and the ref-block read that precedes them) now go
+ *  SAME-ORIGIN through the indexer proxy first (`POST /v1/broadcast`, `GET
+ *  /v1/chain/properties` — see `broadcastTransport.ts`). This pool is now the
+ *  direct-RPC FALLBACK for those writes (used only if the proxy is
+ *  unreachable) plus the transport for the browser reads not yet proxied
+ *  (endpoint-settings pings, QR-pairing `get_accounts`, chat-identity
+ *  verification, release verification). The CORS-clean requirement below
+ *  still applies because those paths talk to these nodes directly.
+ *
  *  ⚠ This is the BROWSER-CORS-CLEAN SUBSET of the canonical pool, NOT the
  *  whole pool. The canonical source of truth is
  *  `DEFAULT_BLURT_RPC_ENDPOINTS` in `@morphit/operator-config` (6 nodes),

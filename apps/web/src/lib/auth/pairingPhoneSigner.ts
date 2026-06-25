@@ -118,29 +118,21 @@ export async function getPostingKeyForPairing(): Promise<{
 	}
 
 	try {
-		// Lazy-import to avoid pulling the rotator into
-		// environments that don't need it.
-		const { getRotator } = await import('$lib/net/endpoints');
-		const rotator = getRotator();
-		const accounts = await rotator.call<unknown[]>('condenser_api.get_accounts', [[account]]);
-		if (!Array.isArray(accounts) || accounts.length === 0) {
+		// Fetch the account's PUBLIC posting authority through the SAME-ORIGIN
+		// indexer (privacy #1: third-party RPC nodes never see which account is
+		// pairing). Public keys only; the signing key stays in memory on this
+		// device.
+		const { fetchAccountKeys } = await import('$blurt/accountKeys');
+		const { resolveOrigin, MORPHIT_INDEXER_ORIGIN } = await import('$net/config');
+		const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+		if (!keys) {
 			throw new PairingSignerError(
 				'account_not_found',
 				`Account @${account} not found on chain. Verify your account name in Settings.`
 			);
 		}
-		const acct = accounts[0] as Record<string, unknown>;
-		const posting = acct.posting as
-			| {
-					weight_threshold: number;
-					key_auths: Array<[string, number]>;
-			  }
-			| undefined;
-		if (
-			posting === undefined ||
-			!Array.isArray(posting.key_auths) ||
-			typeof posting.weight_threshold !== 'number'
-		) {
+		const posting = keys.posting;
+		if (!Array.isArray(posting.key_auths) || typeof posting.weight_threshold !== 'number') {
 			throw new PairingSignerError(
 				'account_not_found',
 				`Account @${account} returned an unexpected shape from the chain.`

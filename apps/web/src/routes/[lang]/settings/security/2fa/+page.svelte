@@ -35,6 +35,7 @@
 	import { page } from '$app/stores';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { isUnlocked, updateEnvelope } from '$stores/identity';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import { readEnvelope, writeEnvelope } from '$crypto/persistentKeystore';
 	import { decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import {
@@ -423,8 +424,9 @@
 </svelte:head>
 
 <main class="totp-page">
+	<RequireLiveSession />
 	<header>
-		<button class="back" onclick={backToSettings} type="button"><span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('settings.title')}</button>
+		<button class="back" onclick={backToSettings} type="button"><span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('settings.title')}</button>
 		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
 			<span class="brand-gradient-text">{$_('settings.totp.heading')}</span>
 		</h1>

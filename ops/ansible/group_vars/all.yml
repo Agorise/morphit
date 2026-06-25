@@ -90,9 +90,8 @@ morphit_relay_keystore_path: /etc/morphit/relay.keystore
 # (Part 122 cp5 F13) — `morphit_relay_keystore_passphrase` was
 # previously defined here as a vault-with-default pattern.  It is
 # no longer needed: the relay's encrypted-envelope design unlocks
-# the keystore via interactive TTY prompt (`StandardInput=tty-force`
-# in morphit-relay.service) on first boot per reboot, or via
-# systemd `LoadCredential=` for the unattended mint-acts timer.
+# the keystore via a systemd encrypted credential
+# (`LoadCredentialEncrypted=` in morphit-relay.service) at boot.
 # There is NO `MORPHIT_RELAY_PASSPHRASE` env var consumed by any
 # code path; putting the passphrase in env would defeat the
 # encrypted-envelope design.  Removed to prevent operators from

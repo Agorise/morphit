@@ -62,10 +62,11 @@ more reliable.
 
 - **A new decentralized address option: ENS (`.eth`).** Your instance can now
   advertise an ENS `.eth` name alongside its Tor, i2p, and Lokinet addresses. It
-  appears in the footer and on the instances page and links out through `.eth.limo`,
-  giving visitors another censorship-resistant way to reach your node. Set it from
-  the init wizard or the `morphit-ops alt-address` command; it's a display-only
-  pointer, so there's no key to manage.
+  appears in the footer and on the instances page and links to the bare name
+  (e.g. `morphit.eth`), which ENS-aware browsers resolve directly — no
+  centralized gateway — giving visitors another censorship-resistant way to
+  reach your node. Set it from the init wizard or the `morphit-ops alt-address`
+  command; it's a display-only pointer, so there's no key to manage.
 
 - **Fixed: the `morphit-ops` menu could crash after an upgrade.** If you ran
   `morphit-ops` from a directory that had been replaced during an upgrade, choosing

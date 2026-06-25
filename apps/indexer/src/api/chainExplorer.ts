@@ -91,5 +91,32 @@ export function chainExplorerRoute(blurt: BlurtClient): Hono {
 		return c.json(body);
 	});
 
+	// GET /v1/chain/properties → { properties: <get_dynamic_global_properties> }
+	// cp344. The WRITE side of the privacy/reliability story: building any
+	// broadcast needs the chain head (ref_block_num / ref_block_prefix /
+	// expiration), which the browser used to read by calling
+	// get_dynamic_global_properties on a third-party RPC node directly — the
+	// same node a broadcast would hit, so the same CORS/uptime fragility broke
+	// the broadcast before it even signed. Relayed server-side here, the
+	// browser's ref-block read goes same-origin like the broadcast itself.
+	// Head moves every 3s; a 2s cache collapses the burst when a page
+	// broadcasts several ops back to back without ever yielding a stale-enough
+	// head to build an expired ref_block (Blurt's TaPoS window is days).
+	app.get('/properties', async (c) => {
+		let result: unknown;
+		try {
+			result = await blurt.callCondenser('get_dynamic_global_properties', [], {
+				userFacing: true
+			});
+		} catch {
+			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
+		}
+		if (result === null || result === undefined) {
+			return c.json(errorBody('internal', 'no chain properties returned'), 502);
+		}
+		c.header('Cache-Control', 'public, max-age=2');
+		return c.json({ properties: result });
+	});
+
 	return app;
 }

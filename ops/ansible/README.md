@@ -10,7 +10,7 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
 - **TLS** via certbot with auto-renew per §35.
 - **PostgreSQL** bound to loopback only, with morphit_indexer +
   morphit_relay databases provisioned per §37.8.
-- **Morphit indexer + relay + backup + mint-acts** as systemd
+- **Morphit indexer + relay + backup** as systemd
   units (canonical bare-metal deployment, NOT Docker — see
   "Why not Docker for morphit services?" below).
 - **BunkerWeb** as a Docker container, terminating TLS in front

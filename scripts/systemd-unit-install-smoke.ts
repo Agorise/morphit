@@ -13,15 +13,15 @@
  *      (so it works wherever you cloned), substitutes the hardcoded
  *      `/opt/morphit` base, and runs `systemctl daemon-reload`.
  *   3. It targets exactly the three monorepo services
- *      (indexer / relay / matrix-bot) — and NOT morphit-mcp or the
- *      mint-acts oneshot, whose separate restricted directories are
- *      a deliberate least-privilege isolation.
+ *      (indexer / relay / matrix-bot) — and NOT morphit-mcp, whose
+ *      separate restricted directory is a deliberate least-privilege
+ *      isolation.
  *   4. Applying the installer's substitution to each core unit with
  *      a sentinel checkout path leaves NO `/opt/morphit` behind,
  *      lands the sentinel path in WorkingDirectory, and preserves
  *      the [Unit]/[Service]/[Install] structure.
- *   5. The mcp + mint-acts units still reference their own isolated
- *      directories (isolation not flattened).
+ *   5. The mcp unit still references its own isolated
+ *      directory (isolation not flattened).
  *   6. Inline-comment guard: no unit file carries an inline `#`
  *      comment on a directive line — systemd treats it as part of
  *      the value and silently misparses it (the matrix-bot
@@ -55,7 +55,13 @@ const CORE_UNITS = [
 	'morphit-relay.service',
 	'morphit-matrix-bot.service'
 ];
-const ISOLATED_UNITS = ['morphit-mcp.service', 'morphit-relay-mint-acts.service'];
+// morphit-mcp deliberately runs from its own restricted directory
+// (/opt/morphit-mcp) as a low-priv user — the installer must NOT fold
+// it into the monorepo core loop. (The morphit-relay-mint-acts oneshot
+// was the other isolated unit; its ACT-minting model was removed at
+// beta.28 / cp329 — account creation is now a direct account_create op
+// paying the fee inline — and the unit templates were deleted at cp348.)
+const ISOLATED_UNITS = ['morphit-mcp.service'];
 
 interface Result {
 	name: string;
@@ -133,14 +139,9 @@ for (const u of CORE_UNITS) {
 // ── 5. Isolated units keep their own restricted dirs ───────────────
 {
 	const mcp = join(UNIT_DIR, 'morphit-mcp.service');
-	const mint = join(UNIT_DIR, 'morphit-relay-mint-acts.service');
 	check(
 		'morphit-mcp keeps its own /opt/morphit-mcp dir',
 		existsSync(mcp) && readFileSync(mcp, 'utf8').includes('/opt/morphit-mcp')
-	);
-	check(
-		'morphit-relay-mint-acts keeps its own /opt/morphit-relay dir',
-		existsSync(mint) && readFileSync(mint, 'utf8').includes('/opt/morphit-relay')
 	);
 }
 

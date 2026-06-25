@@ -23,10 +23,22 @@ describe('extractLabelPropsFromProfile', () => {
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null
+			blurtMediaUrl: null,
+			shortBio: null
 		};
 		expect(nullResult).toEqual(allNull);
 		expect(undefResult).toEqual(allNull);
+	});
+
+	it('extracts short_bio from json_metadata (cp346 — settings hydration)', () => {
+		const r = extractLabelPropsFromProfile(
+			mockProfile({ json_metadata: { short_bio: 'Counter-economist & coffee snob' } })
+		);
+		expect(r.shortBio).toBe('Counter-economist & coffee snob');
+		const empty = extractLabelPropsFromProfile(mockProfile({ json_metadata: { short_bio: '' } }));
+		expect(empty.shortBio).toBeNull();
+		const none = extractLabelPropsFromProfile(mockProfile({ display_name: 'Bob' }));
+		expect(none.shortBio).toBeNull();
 	});
 
 	it('extracts display_name when non-empty', () => {
@@ -136,7 +148,8 @@ describe('extractLabelPropsFromProfile', () => {
 			'avatarSvg',
 			'blurtMediaUrl',
 			'displayName',
-			'nostrUrl'
+			'nostrUrl',
+			'shortBio'
 		]);
 	});
 

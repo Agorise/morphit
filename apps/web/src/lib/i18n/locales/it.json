@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "Documentazione dell'API per sviluppatori",
     "agpl_title": "Perché Morphit usa la licenza AGPL-3.0",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Canarino",
     "canary_title": "Canarino settimanale dell'operatore — verifica che la data sia recente",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Crea un nuovo account qui sopra scegliendo semplicemente un nome utente simpatico; è letteralmente tutto qui.",
     "register_cta": "🌱 Crea un nuovo account",
     "checking": "Verifica della tua sessione…",
-    "import_existing": "🔐 Accedi con seed di 12 parole, file json o chiave di posting",
+    "import_existing": "Accedi con seed di 12 parole, file json o chiave di posting",
     "unlock": {
       "password_required": "Inserisci la password per sbloccare.",
       "wrong_password": "Questa password non corrisponde al tuo keystore. Riprova o accedi con la tua frase seed.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "Non siamo riusciti a caricare i tuoi ordini. Riprova.",
       "no_account": "Accedi con il tuo account Blurt per vedere i tuoi ordini."
+    },
+    "no_account": {
+      "title": "Configura per vedere i tuoi ordini",
+      "body": "I tuoi ordini sono memorizzati on-chain sotto la tua identità Morphit. Creane una per iniziare a fare trading, o sblocca un'identità esistente per vedere la tua cronologia.",
+      "cta_register": "Crea un account",
+      "cta_unlock": "Ho già un account"
+    },
+    "locked": {
+      "title": "Sblocca per vedere i tuoi ordini",
+      "body": "La cronologia dei tuoi ordini resta protetta dal tuo sblocco, così un dispositivo bloccato non rivela mai le tue operazioni. Inserisci la tua password per vederla.",
+      "unlock": "Sblocca"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Privacy",
     "post_now": "Pubblica ora",
     "start": "Inizia",
+    "unlock": "Sblocca",
     "glossary": "Glossario",
     "cheat_sheet": "Foglio di riferimento"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Salvato localmente. La pubblicazione sarà disponibile dopo la registrazione del tuo account.",
         "locked": "Sessione bloccata. Accedi di nuovo per pubblicare.",
-        "generic": "Non siamo riusciti a trasmettere. Riprova."
+        "generic": "Non siamo riusciti a trasmettere. Riprova.",
+        "rejected": "Pubblicazione rifiutata dalla rete: {reason}"
       },
       "save_pending": "Salvataggio…",
       "broadcast_pending": "Pubblicazione in corso…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "Rimuovi {url}",
       "reset_confirm_prompt": "Ripristinare tutti gli endpoint RPC personalizzati ai valori predefiniti?",
       "reset_confirm_yes": "Sì, ripristina",
-      "reset_confirm_cancel": "Annulla"
+      "reset_confirm_cancel": "Annulla",
+      "timed_out": "tempo scaduto",
+      "unreachable": "irraggiungibile"
     },
     "session": {
       "autolock_changed": "Cambiato in {label}",

@@ -35,30 +35,16 @@ problem has time to surface without crisis pressure.
          intent.
 
 - [ ] **Fund the relay account.**  Your relay needs BLURT
-      on hand to mint **Account Creation Tokens (ACTs)** in
-      the weekly batch ceremony — one ACT per expected
-      signup, currently ~100 BLURT each (witness-set
-      `account_creation_fee`, can change via witness
-      consensus).  Signups themselves consume a pre-minted
-      ACT via fee-free `create_claimed_account`, NOT a
-      per-signup `account_create` broadcast.  See the
-      §"Funding the relay" section below for sizing tables
-      and the ACT ceremony rationale.
-
-- [ ] **Mint the first batch of ACTs before opening
-      signups.**  If the relay's ACT pool is zero when the
-      first user tries to sign up, `create_claimed_account`
-      fails.  One-line command:
-      ```
-      cd ~/morphit/apps/relay && npm run mint-acts -- 25
-      ```
-      Burns ~2,500 BLURT (25 × ~100 BLURT) from
-      `@morphit-relay` and adds 25 ACTs to the pool.  Size
-      the batch to "slightly more than your expected
-      first-week signups" (mint 10 for a 5-tester soft-
-      launch, 60 for 50 first-week signups).  Schedule
-      subsequent batches via the systemd timer documented
-      in `docs/OPERATIONS.md §2`.
+      on hand to pay the **`account_creation_fee`** for each
+      signup — currently ~100 BLURT each (witness-set, can
+      change via witness consensus).  As of beta.28 the relay
+      creates each account with a direct `account_create` op
+      and pays that fee **inline at signup time** from its
+      liquid BLURT; there are no Account Creation Tokens to
+      pre-mint (Blurt disabled `claim_account` /
+      `create_claimed_account` at hard fork 2).  See the
+      §"Funding the relay" section below for the sizing
+      tables.
 
 - [ ] **Fund the fees account** *(if you set
       `MORPHIT_INDEXER_FEE_RECIPIENT` to something other
@@ -122,18 +108,16 @@ problem has time to surface without crisis pressure.
 
 The Morphit relay pays for these BLURT-cost activities:
 
-1. **Account creation via weekly ACT minting
-   ceremony (OPERATIONS §2)** — the relay does NOT
-   mint ACTs at signup time.  The operator runs a
-   weekly ceremony broadcasting `claim_account` ops,
-   each of which burns the chain's
-   `account_creation_fee` (currently **~100 BLURT
-   per ACT**, witness-set).  At signup time the
-   relay broadcasts the fee-free
-   `create_claimed_account` consuming a pre-minted
-   ACT.  Operator-side, the cost is "you need to
-   fund the relay enough to mint enough ACTs for
-   expected weekly signups."  This is the load-
+1. **Account creation (OPERATIONS §2)** — at signup
+   time the relay broadcasts a direct `account_create`
+   op and pays the chain's `account_creation_fee`
+   (currently **~100 BLURT**, witness-set) **inline**
+   from its liquid balance. There is no pre-minting and
+   no weekly ceremony — Blurt disabled `claim_account` /
+   `create_claimed_account` at hard fork 2, so Account
+   Creation Tokens no longer exist. Operator-side, the
+   cost is "fund the relay enough to cover the ~100 BLURT
+   fee for each expected signup." This is the load-
    bearing cost.
 
 2. **Welcome bonus + loyalty BP** — every user who
@@ -156,28 +140,25 @@ The Morphit relay pays for these BLURT-cost activities:
 
 ### How much to fund up front
 
-The ~100 BLURT/ACT minting cost dominates.  Sizing
-assumes you'll run the weekly ACT minting ceremony
-(OPERATIONS §2) and want enough float to cover both
-the next batch of ACTs and the bonuses/refills paid
-from running balance:
+The ~100 BLURT account-creation fee dominates.  Sizing
+covers the inline fee charged per signup plus the
+bonuses/refills paid from the running balance:
 
 | Use case | Approx cost breakdown | Suggested initial float |
 |---|---|---|
-| 1 signup | 100 ACT + ~21 BLURT bonus | ~121 BLURT |
-| 5 signups (quiet soft-launch with testers) | 500 ACT + ~105 BLURT bonuses | **~700 BLURT** |
-| 50 signups (first-week small) | 5,000 ACT + ~1,050 BLURT bonuses | **~6,000 BLURT** |
-| 100 signups (first-week medium) | 10,000 ACT + ~2,100 BLURT bonuses | **~12,000 BLURT** |
-| 100 signups + 100 refills | 10,000 ACT + ~2,200 BLURT | **~12,500 BLURT** |
+| 1 signup | ~100 BLURT fee + ~21 BLURT bonus | ~121 BLURT |
+| 5 signups (quiet soft-launch with testers) | ~500 BLURT fees + ~105 BLURT bonuses | **~700 BLURT** |
+| 50 signups (first-week small) | ~5,000 BLURT fees + ~1,050 BLURT bonuses | **~6,000 BLURT** |
+| 100 signups (first-week medium) | ~10,000 BLURT fees + ~2,100 BLURT bonuses | **~12,000 BLURT** |
+| 100 signups + 100 refills | ~10,000 BLURT fees + ~2,200 BLURT | **~12,500 BLURT** |
 
 **Don't get caught short.**  An operator who funds
 just 250 BLURT (the pre-Part-112 figure, since
-corrected) cannot mint enough ACTs for even 3
+corrected) cannot cover the creation fee for even 3
 signups.  The old sizing (50/250/500 BLURT) assumed
 a ~1 BLURT/signup chain fee; the canonical default
 in `apps/indexer/src/config/index.ts` is ~100 BLURT,
-which is what the weekly ACT minting ceremony
-broadcasts as `claim_account`.
+which the relay pays inline per `account_create`.
 
 You can top up any time without restart — the relay
 checks its own balance on every signup and emits an

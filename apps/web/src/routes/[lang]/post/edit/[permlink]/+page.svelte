@@ -40,6 +40,7 @@
 	// cp165: lazy below (rare leak-detection path)
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import UsdtNetworkPicker from '$components/UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from '$components/UsdcNetworkPicker.svelte';
 	import DaiNetworkPicker from '$components/DaiNetworkPicker.svelte';
@@ -509,6 +510,7 @@
 <Head routeKey="edit_order" noindex />
 
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
+	<RequireLiveSession />
 	<header class="mb-6">
 		<h1 class="font-display text-3xl font-extrabold">
 			<span class="brand-gradient-text">{$_('edit_order.heading')}</span>
@@ -546,7 +548,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_found_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -556,7 +558,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('edit_order.not_yours_body')}</p>
 			<div class="mt-4">
 				<BusyButton variant="secondary" onclick={() => gotoLocale('/orderbook')}>
-					<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+					<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 				</BusyButton>
 			</div>
 		</section>
@@ -943,7 +945,7 @@
 
 		<div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
 			<BusyButton variant="link" onclick={() => gotoLocale('/orderbook')}>
-				<span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
+				<span class="nav-arrow nav-arrow-left" aria-hidden="true">⇦</span> {$_('post_order.back_to_orderbook')}
 			</BusyButton>
 			<BusyButton
 				variant="primary"

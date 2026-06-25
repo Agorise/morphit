@@ -376,8 +376,8 @@
 			<div class="flex flex-col items-center gap-3">
 				<p class="text-xs uppercase tracking-widest text-ink-500">{$_('footer.reachable_via')}</p>
 				<ul class="flex flex-wrap justify-center gap-2">
-					<li>
-						{#if $instance.alt_networks.tor}
+					{#if $instance.alt_networks.tor}
+						<li>
 							<a
 								href="http://{$instance.alt_networks.tor}"
 								class="chip"
@@ -394,23 +394,10 @@
 								/>
 								{$_('footer.tor')}
 							</a>
-						{:else}
-							<span
-								class="chip cursor-not-allowed opacity-50"
-								title={$_('footer.alt_network_disabled')}
-								aria-disabled="true"
-							>
-								<AltNetworkIcon
-									network="tor"
-									size={20}
-									class="h-5 w-5 text-ink-800 dark:text-ink-100"
-								/>
-								{$_('footer.tor')}
-							</span>
-						{/if}
-					</li>
-					<li>
-						{#if $instance.alt_networks.lokinet}
+						</li>
+					{/if}
+					{#if $instance.alt_networks.lokinet}
+						<li>
 							<a
 								href="http://{$instance.alt_networks.lokinet}"
 								class="chip"
@@ -427,23 +414,10 @@
 								/>
 								{$_('footer.lokinet')}
 							</a>
-						{:else}
-							<span
-								class="chip cursor-not-allowed opacity-50"
-								title={$_('footer.alt_network_disabled')}
-								aria-disabled="true"
-							>
-								<AltNetworkIcon
-									network="lokinet"
-									size={20}
-									class="h-5 w-5 text-ink-800 dark:text-ink-100"
-								/>
-								{$_('footer.lokinet')}
-							</span>
-						{/if}
-					</li>
-					<li>
-						{#if $instance.alt_networks.i2p_b32}
+						</li>
+					{/if}
+					{#if $instance.alt_networks.i2p_b32}
+						<li>
 							<a
 								href="http://{$instance.alt_networks.i2p_b32}"
 								class="chip"
@@ -460,21 +434,8 @@
 								/>
 								{$_('footer.i2p_b32')}
 							</a>
-						{:else}
-							<span
-								class="chip cursor-not-allowed opacity-50"
-								title={$_('footer.alt_network_disabled')}
-								aria-disabled="true"
-							>
-								<AltNetworkIcon
-									network="i2p"
-									size={20}
-									class="h-5 w-5 text-ink-800 dark:text-ink-100"
-								/>
-								{$_('footer.i2p_b32')}
-							</span>
-						{/if}
-					</li>
+						</li>
+					{/if}
 					{#if $instance.alt_networks.i2p_name}
 						<li>
 							<a
@@ -498,7 +459,7 @@
 					{#if $instance.alt_networks.ens}
 						<li>
 							<a
-								href="https://{$instance.alt_networks.ens}.eth.limo"
+								href="https://{$instance.alt_networks.ens}"
 								class="chip"
 								title={$_('footer.alt_network_address', {
 									values: { address: $instance.alt_networks.ens }
@@ -515,8 +476,8 @@
 							</a>
 						</li>
 					{/if}
-					<li>
-						{#if $instance.alt_networks.nostr}
+					{#if $instance.alt_networks.nostr}
+						<li>
 							<a
 								href="nostr:{$instance.alt_networks.nostr}"
 								class="chip"
@@ -533,21 +494,8 @@
 								/>
 								{$_('footer.nostr')}
 							</a>
-						{:else}
-							<span
-								class="chip cursor-not-allowed opacity-50"
-								title={$_('footer.alt_network_disabled')}
-								aria-disabled="true"
-							>
-								<AltNetworkIcon
-									network="nostr"
-									size={20}
-									class="h-5 w-5 text-ink-800 dark:text-ink-100"
-								/>
-								{$_('footer.nostr')}
-							</span>
-						{/if}
-					</li>
+						</li>
+					{/if}
 					<!--
 						No-JS pill. Previously intended as `?nojs=1` — a server-side
 						hydration-suppression switch. The site is prerendered + hydrated

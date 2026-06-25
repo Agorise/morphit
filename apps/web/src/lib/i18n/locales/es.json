@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "Documentación de la API para desarrolladores",
     "agpl_title": "Por qué Morphit usa la licencia AGPL-3.0",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Canario",
     "canary_title": "Canario semanal del operador — verifica que la fecha sea reciente",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Crea una cuenta nueva arriba con solo elegir un nombre de usuario genial; eso es literalmente todo.",
     "register_cta": "🌱 Crear una cuenta nueva",
     "checking": "Verificando tu sesión…",
-    "import_existing": "🔐 Entrar con semilla de 12 palabras, archivo json o clave de posting",
+    "import_existing": "Entrar con semilla de 12 palabras, archivo json o clave de posting",
     "unlock": {
       "password_required": "Introduce tu contraseña para desbloquear.",
       "wrong_password": "Esa contraseña no coincide con tu keystore. Intenta de nuevo, o usa tu frase semilla para entrar.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "No se pudo cargar tus pedidos. Inténtalo de nuevo.",
       "no_account": "Inicia sesión con tu cuenta de Blurt para ver tus pedidos."
+    },
+    "no_account": {
+      "title": "Configura para ver tus órdenes",
+      "body": "Tus órdenes se almacenan on-chain bajo tu identidad de Morphit. Crea una para empezar a operar, o desbloquea una identidad existente para ver tu historial.",
+      "cta_register": "Crear una cuenta",
+      "cta_unlock": "Ya tengo una cuenta"
+    },
+    "locked": {
+      "title": "Desbloquea para ver tus órdenes",
+      "body": "Tu historial de órdenes permanece tras tu desbloqueo, para que un dispositivo bloqueado nunca revele tus operaciones. Introduce tu contraseña para verlo.",
+      "unlock": "Desbloquear"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Privacidad",
     "post_now": "Publicar ya",
     "start": "Empezar",
+    "unlock": "Desbloquear",
     "glossary": "Glosario",
     "cheat_sheet": "Hoja de referencia"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Guardado localmente. La publicación estará disponible cuando registres tu cuenta.",
         "locked": "La sesión está bloqueada. Inicia sesión de nuevo para publicar.",
-        "generic": "No se pudo transmitir. Inténtalo de nuevo."
+        "generic": "No se pudo transmitir. Inténtalo de nuevo.",
+        "rejected": "La red rechazó la publicación: {reason}"
       },
       "save_pending": "Guardando…",
       "broadcast_pending": "Publicando…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "Quitar {url}",
       "reset_confirm_prompt": "¿Restablecer todos los endpoints RPC personalizados a los predeterminados?",
       "reset_confirm_yes": "Sí, restablecer",
-      "reset_confirm_cancel": "Cancelar"
+      "reset_confirm_cancel": "Cancelar",
+      "timed_out": "tiempo agotado",
+      "unreachable": "inaccesible"
     },
     "session": {
       "autolock_changed": "Cambiado a {label}",

@@ -72,18 +72,18 @@ file in the same turn.
 - [ ] **[blocking]** **Fund the `@morphit-relay` account
       with starter BLURT before launch.**  The relay
       pays for these BLURT-cost activities:
-       - **Account creation via weekly ACT minting
-         (OPERATIONS §2)** — the relay does NOT mint
-         Account Creation Tokens at signup time.  The
-         operator runs a weekly ceremony broadcasting
-         `claim_account` ops, each of which burns the
-         chain's `account_creation_fee` (currently
-         **~100 BLURT per ACT**, witness-set).  At
-         signup time the relay broadcasts the fee-free
-         `create_claimed_account` consuming a pre-
-         minted ACT.  Operator-side, the cost is "you
-         need to fund the relay enough to mint enough
-         ACTs to cover expected weekly signups."
+       - **Account creation (OPERATIONS §2)** — at
+         signup time the relay broadcasts a direct
+         `account_create` op and pays the chain's
+         `account_creation_fee` (currently **~100
+         BLURT**, witness-set) **inline** from its
+         liquid balance. There is no pre-minting —
+         Blurt disabled `claim_account` /
+         `create_claimed_account` at hard fork 2, so
+         Account Creation Tokens no longer exist.
+         Operator-side, the cost is "fund the relay
+         enough to cover the ~100 BLURT fee for each
+         expected signup."
        - **Welcome bonus** — 10 BLURT liquid + 10
          BLURT vested per user on first feedback.
          Paid at the moment the user earns it from
@@ -98,9 +98,8 @@ file in the same turn.
          feedback ops, signup-failure compensation;
          sub-BLURT each.
 
-      Realistic sizing (ACT cost ~100 BLURT each,
-      one ACT per expected signup, plus running
-      bonuses/refills):
+      Realistic sizing (~100 BLURT creation fee per
+      expected signup, plus running bonuses/refills):
 
       | Expected signups | Suggested float |
       |---|---|
@@ -108,28 +107,28 @@ file in the same turn.
       | First-week ~50 users | **~6,000 BLURT** |
       | First-week ~100 users | **~12,000 BLURT** |
 
-      The ACT minting cost dominates; ~100
-      BLURT/signup is the load-bearing number.
+      The ~100 BLURT/signup creation fee dominates and
+      is the load-bearing number.
       Top-ups any time without restart — the relay
       checks its own balance on every signup and
       emits `operator_balance_low` log lines when
       thin.  See OPERATIONS §0a + §1 + §2 for the
-      full breakdown, the recurrent-transfer
-      top-up mechanism, and the weekly ACT minting
-      ceremony.
+      full breakdown and the recurrent-transfer
+      top-up mechanism.
 
       **Don't get caught short**: an operator who
       funds 250 BLURT (the old sizing-table
       conservative figure, since corrected) cannot
-      mint enough ACTs for even 3 signups, let alone
-      a meaningful launch.
+      cover the creation fee for even 3 signups, let
+      alone a meaningful launch.
 
       *(Origin: Part 110; sizing figures corrected
       Part 112 after spotting the 1→100 BLURT
-      error, ACT-vs-direct mechanism explanation
-      corrected Part 112 follow-up after spotting
-      that the relay uses `create_claimed_account`,
-      not `account_create`.)*
+      error. The Part-112 mechanism note described the
+      then-current ACT model (`create_claimed_account`);
+      that was superseded at beta.28 / cp329 — the relay
+      now uses a direct `account_create` op with the fee
+      paid inline.)*
 
 - [ ] **[blocking]** **Fund the `@morphit` account with
       ~10 BLURT before launch.**  Small fixed cost;
@@ -154,39 +153,6 @@ file in the same turn.
       HIGH-006 — removed misleading reference to a
       non-existent `morphit_warrant_canary_v1` chain
       op.)*
-
-- [ ] **[blocking]** **Mint the first batch of ACTs
-      before opening signups.**  The relay does NOT
-      mint Account Creation Tokens at signup time —
-      it consumes pre-minted ACTs (one per signup) via
-      `create_claimed_account`.  If the relay's ACT
-      pool is zero when the first user tries to sign
-      up, the signup fails.  Run the weekly ceremony
-      once before launch to seed the pool:
-
-      ```
-      cd ~/morphit/apps/relay
-      npm run mint-acts -- 25
-      ```
-
-      This burns ~2,500 BLURT (25 × 100 BLURT) from
-      `@morphit-relay`'s balance and adds 25 ACTs
-      to the pool.  Size the batch to "slightly more
-      than your expected first-week signups" — for a
-      soft-launch with 5 testers, mint 10; for 50
-      first-week signups, mint 60.
-
-      Schedule subsequent batches via systemd timer
-      (recommended: weekly).  See OPERATIONS §2 for
-      the full ceremony procedure including
-      verification + unattended setup.
-
-      *(Origin: Part 112 follow-up — discovered when
-      auditing whether OPERATIONS §0a accurately
-      described the relay's payment flow.  Pre-this-
-      item, the pre-launch checklist implicitly
-      assumed the relay would mint ACTs on demand,
-      which is NOT how ADR-0010 §4 designed it.)*
 
 - [ ] **[recommended]** Confirm the `@morphit-fees`
       account exists on chain (whether you use the

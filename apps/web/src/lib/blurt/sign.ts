@@ -5,14 +5,17 @@
  * signing, Transaction shape, reference-block-id derivation) but
  * bypasses its HTTP transport. Instead, we:
  *
- *   1. Ask our endpoint rotator for dynamic global properties
+ *   1. Read the chain head (for ref_block / expiration) same-origin via the
+ *      indexer proxy (broadcastTransport.fetchDynamicGlobalProperties)
  *   2. Build and sign a Transaction locally with dblurt's helpers
- *   3. Broadcast via `condenser_api.broadcast_transaction_synchronous`
- *      through our rotator
+ *   3. Submit the signed tx same-origin through the indexer broadcast proxy
+ *      (broadcastTransport.submitSignedTransaction → POST /v1/broadcast),
+ *      with a direct-RPC fallback if the proxy is unreachable (cp344)
  *
- * The net effect: dblurt's well-tested crypto is used as a library,
- * Morphit's multi-endpoint resilience is the transport, and the user's
- * posting key never leaves the browser.
+ * The net effect: dblurt's well-tested crypto is used as a library, chain
+ * access is relayed through the operator's own indexer (no cross-origin RPC,
+ * no IP leak to third-party nodes), and the user's posting key never leaves
+ * the browser.
  *
  * ADR-0007 corrected the package name (was `dblurt`; is `@beblurt/dblurt`)
  * and the underlying curve (was Ed25519 from libsodium; is secp256k1
@@ -29,8 +32,8 @@ import {
 	type SignedTransaction,
 	type Operation
 } from '@beblurt/dblurt';
-import { getBlurtClient } from './client';
 import { signDigestWithNoble } from './nobleSigner';
+import { submitSignedTransaction, fetchDynamicGlobalProperties } from './broadcastTransport';
 import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 
@@ -123,8 +126,10 @@ async function getRefBlockInfo(): Promise<{
 	ref_block_prefix: number;
 	expiration: string;
 }> {
-	const client = getBlurtClient();
-	const props = await client.getDynamicGlobalProperties();
+	// cp344: read the chain head SAME-ORIGIN (indexer proxy, direct-RPC
+	// fallback) so building a broadcast no longer depends on a third-party
+	// RPC node being browser-reachable — the same node a broadcast hits.
+	const props = await fetchDynamicGlobalProperties();
 
 	// Graphene-lineage chains (Steem, Hive, Blurt) derive ref_block_num
 	// and ref_block_prefix from the head block id. dblurt provides a
@@ -297,11 +302,8 @@ export function signOrderWithFeeWithKey(
 export async function broadcastSignedTransaction(
 	signed: SignedTransaction
 ): Promise<{ block_num: number; trx_id: string }> {
-	const client = getBlurtClient();
-	return client.call<{ block_num: number; trx_id: string }>(
-		'condenser_api.broadcast_transaction_synchronous',
-		[signed]
-	);
+	// cp344: same-origin broadcast proxy (direct-RPC fallback). See broadcastTransport.ts.
+	return submitSignedTransaction(signed);
 }
 
 // ─── Phase F.5 audit fix (F-18): split sign + broadcast ──────────
@@ -370,7 +372,6 @@ export async function broadcastCustomJson(
 		throw new Error('broadcastCustomJson: blurtAccount is not a valid account name');
 	}
 
-	const client = getBlurtClient();
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 
 	const op: Operation = [
@@ -396,11 +397,10 @@ export async function broadcastCustomJson(
 	const postingKey = rawToPrivateKey(live.posting.privateKey);
 	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
 
-	// Broadcast through our rotator.
-	const result = await client.call<{ block_num: number; trx_id: string }>(
-		'condenser_api.broadcast_transaction_synchronous',
-		[signed]
-	);
+	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
+	// fallback) — no cross-origin RPC connection, no IP leak to third-party
+	// nodes. See broadcastTransport.ts.
+	const result = await submitSignedTransaction(signed);
 	return result;
 }
 

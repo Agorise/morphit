@@ -23,11 +23,10 @@
 #   - morphit-relay     (broadcasts user-signed chain ops)
 #   - morphit-matrix-bot (operator alert DMs; only if you run it)
 #
-# It deliberately does NOT touch morphit-mcp or the weekly
-# morphit-relay-mint-acts oneshot: those run from their own
-# restricted directories as separate low-privilege users (a
-# least-privilege isolation so they can't read the main install's
-# secrets).  If you run those, install their units per
+# It deliberately does NOT touch morphit-mcp: it runs from its own
+# restricted directory as a separate low-privilege user (a
+# least-privilege isolation so it can't read the main install's
+# secrets).  If you run it, install its unit per
 # docs/OPERATIONS.md — that isolation is intentional.
 #
 # Usage

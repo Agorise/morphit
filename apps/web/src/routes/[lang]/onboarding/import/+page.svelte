@@ -22,7 +22,7 @@
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { masterPasswordPubKey } from '$crypto/masterPassword';
-	import { normalizeSeedPhrase } from '$crypto/seedNormalize';
+	import { normalizeSeedPhrase, seedWordCount } from '$crypto/seedNormalize';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { bootFromEnvelope } from '$stores/identity';
@@ -740,7 +740,12 @@
 
 	const submitDisabled = $derived(
 		mode === 'seed'
-			? !seed.trim()
+			? // cp338: stay disabled until exactly 12 words are present (Morphit
+				// only accepts 12-word BIP-39 mnemonics). Counted on the normalized
+				// form so comma-separated input counts before the on-blur tidy;
+				// checksum validity is enforced on submit, not here (a one-word
+				// typo gives a clear "invalid seed phrase" error, not a dead button).
+				seedWordCount(seed) !== 12
 			: mode === 'keyfile'
 				? !file || !password
 				: // posting-only (N + H, cp295): the "Unlock my account" button

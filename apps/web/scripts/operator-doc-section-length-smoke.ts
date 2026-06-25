@@ -61,7 +61,6 @@ const SPECS: DocSpec[] = [
 		allowList: new Set([
 			'0. Initial account setup — names, roles, and tradeoffs',
 			'0a. Initial account funding — the relay needs BLURT to operate',
-			'2. Weekly ACT minting ceremony',
 			'13. Responding to a stale BLURT/USD price feed',
 			'14. Deployment topology requirement — apps MUST be behind a loopback proxy',
 			'16. Operator-account balance alerts',

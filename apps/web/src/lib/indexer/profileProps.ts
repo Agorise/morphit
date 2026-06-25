@@ -37,6 +37,10 @@ export interface IdentityLabelProfileProps {
 	readonly avatarDataUri: string | null;
 	readonly nostrUrl: string | null;
 	readonly blurtMediaUrl: string | null;
+	/** json_metadata.short_bio — used by the settings form to hydrate the
+	 *  bio field from the current account's on-chain profile (cp346). Not
+	 *  rendered by IdentityLabel itself; other callers simply ignore it. */
+	readonly shortBio: string | null;
 }
 
 /** Re-sanitize an indexer-supplied SVG string.  Returns the
@@ -98,7 +102,8 @@ export function extractLabelPropsFromProfile(
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null
+			blurtMediaUrl: null,
+			shortBio: null
 		};
 	}
 	const displayName =
@@ -113,7 +118,8 @@ export function extractLabelPropsFromProfile(
 			avatarSvg: null,
 			avatarDataUri: null,
 			nostrUrl: null,
-			blurtMediaUrl: null
+			blurtMediaUrl: null,
+			shortBio: null
 		};
 	}
 
@@ -139,6 +145,7 @@ export function extractLabelPropsFromProfile(
 		avatarSvg: safeSvg,
 		avatarDataUri: safeDataUri,
 		nostrUrl: str('nostr_url'),
-		blurtMediaUrl: str('blurt_media_url')
+		blurtMediaUrl: str('blurt_media_url'),
+		shortBio: str('short_bio')
 	};
 }

@@ -177,31 +177,25 @@ const defaultVerifier: SignatureVerifier = async (account, canonicalBytes, signa
 		// Lazy-load these at call time — keeps the pairing client
 		// importable in environments (smoke tests, server-side
 		// rendering) where the chain rotator might not be wired.
-		const { getRotator } = await import('$lib/net/endpoints');
+		const { fetchAccountKeys } = await import('$blurt/accountKeys');
+		const { resolveOrigin, MORPHIT_INDEXER_ORIGIN } = await import('$net/config');
 		const { Signature } = await import('@beblurt/dblurt');
 		const { computeBundleSigningDigest } = await import('./desktopPairing');
 		const { Buffer } = await import('buffer');
 
-		// Fetch the account's posting authority.  Same RPC path
-		// the rest of the codebase uses (chat verify, post
-		// verify, etc.).
-		const rotator = getRotator();
-		const accounts = await rotator.call<unknown[]>('condenser_api.get_accounts', [[account]]);
-		if (!Array.isArray(accounts) || accounts.length === 0) {
+		// Fetch the account's PUBLIC posting authority through the SAME-ORIGIN
+		// indexer instead of a direct RPC call (privacy #1: third-party RPC
+		// nodes never see the user's IP or which account is pairing). The keys
+		// are public and the signature recovery below stays client-side, so a
+		// malicious operator cannot forge a valid pairing by serving fake keys —
+		// the worst it could do is make a legitimate pairing fail, a denial it
+		// already has by virtue of serving the app itself.
+		const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+		if (!keys) {
 			return false;
 		}
-		const acct = accounts[0] as Record<string, unknown>;
-		const posting = acct.posting as
-			| {
-					weight_threshold: number;
-					key_auths: Array<[string, number]>;
-			  }
-			| undefined;
-		if (
-			posting === undefined ||
-			!Array.isArray(posting.key_auths) ||
-			typeof posting.weight_threshold !== 'number'
-		) {
+		const posting = keys.posting;
+		if (!Array.isArray(posting.key_auths) || typeof posting.weight_threshold !== 'number') {
 			return false;
 		}
 

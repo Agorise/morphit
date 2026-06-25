@@ -48,6 +48,32 @@ export interface EndpointStat {
 	 *  endpoint-settings panel as "Error: 429" so the operator can see
 	 *  WHY a node is failing, not just that it is. */
 	lastErrorCode: number | null;
+	/** Category of the most recent transport failure, so the endpoint-settings
+	 *  panel can say WHY a node failed, not just that it did:
+	 *    'http'    — the node answered with a non-2xx (see lastErrorCode);
+	 *    'timeout' — the request hit the per-call deadline (AbortError);
+	 *    'network' — fetch threw before any response: DNS, offline, TLS, or a
+	 *                CORS rejection. The browser deliberately collapses these
+	 *                into one opaque TypeError, so we cannot tell them apart and
+	 *                must not claim a specific one.
+	 *  null when the last call succeeded or none has happened. */
+	lastErrorKind: 'http' | 'timeout' | 'network' | null;
+}
+
+/** Classify a transport Error for display. fetchWithTimeout throws
+ *  `HTTP <status> from <url>` for non-2xx, an AbortError on the deadline, and
+ *  lets the browser's TypeError ("Failed to fetch") through for everything
+ *  before a response (network/DNS/TLS/CORS — indistinguishable by design). */
+export function classifyEndpointError(err: Error): {
+	kind: 'http' | 'timeout' | 'network';
+	code: number | null;
+} {
+	const httpMatch = /^HTTP (\d{3})\b/.exec(err.message);
+	if (httpMatch) return { kind: 'http', code: Number(httpMatch[1]) };
+	if (err.name === 'AbortError' || /\b(timed out|timeout|aborted)\b/i.test(err.message)) {
+		return { kind: 'timeout', code: null };
+	}
+	return { kind: 'network', code: null };
 }
 
 export interface JsonRpcRequest {
@@ -135,7 +161,8 @@ export class EndpointRotator {
 				lastLatencyMs: null,
 				lastOkAt: null,
 				cooldownUntil: 0,
-				lastErrorCode: null
+				lastErrorCode: null,
+				lastErrorKind: null
 			});
 		}
 	}
@@ -211,12 +238,14 @@ export class EndpointRotator {
 					target.consecutiveFailures = 0;
 					target.lastOkAt = Date.now();
 					target.lastErrorCode = null;
+					target.lastErrorKind = null;
 					throw new RpcError(json.error.message, json.error.code, target.url);
 				}
 				target.lastLatencyMs = Math.round(elapsed);
 				target.consecutiveFailures = 0;
 				target.lastOkAt = Date.now();
 				target.lastErrorCode = null;
+				target.lastErrorKind = null;
 				return (json as JsonRpcSuccess<T>).result;
 			} catch (err) {
 				lastErr = err instanceof Error ? err : new Error(String(err));
@@ -224,12 +253,12 @@ export class EndpointRotator {
 				// answered, it just said no).
 				if (!(err instanceof RpcError)) {
 					target.consecutiveFailures++;
-					// Capture the HTTP status if this was an HTTP error
-					// (fetchWithTimeout throws `HTTP <status> from <url>`);
-					// leave null for timeouts (AbortError) and network /
-					// CORS failures (TypeError) which have no status.
-					const httpMatch = /^HTTP (\d{3})\b/.exec(lastErr.message);
-					target.lastErrorCode = httpMatch ? Number(httpMatch[1]) : null;
+					// Capture WHY it failed so the endpoint-settings panel can
+					// show it (HTTP status / timeout / unreachable), not just a
+					// failure count.
+					const cls = classifyEndpointError(lastErr);
+					target.lastErrorCode = cls.code;
+					target.lastErrorKind = cls.kind;
 					if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
 						// Exponential-ish cooldown capped at 5 minutes.
 						const base = 1_500;
@@ -305,6 +334,8 @@ export class EndpointRotator {
 					target.lastLatencyMs = Math.round(elapsed);
 					target.consecutiveFailures = 0;
 					target.lastOkAt = Date.now();
+					target.lastErrorCode = null;
+					target.lastErrorKind = null;
 					return {
 						url: target.url,
 						ok: false as const,
@@ -314,6 +345,8 @@ export class EndpointRotator {
 				target.lastLatencyMs = Math.round(elapsed);
 				target.consecutiveFailures = 0;
 				target.lastOkAt = Date.now();
+				target.lastErrorCode = null;
+				target.lastErrorKind = null;
 				return {
 					url: target.url,
 					ok: true as const,
@@ -323,6 +356,9 @@ export class EndpointRotator {
 				const e = err instanceof Error ? err : new Error(String(err));
 				if (!(e instanceof RpcError)) {
 					target.consecutiveFailures++;
+					const cls = classifyEndpointError(e);
+					target.lastErrorCode = cls.code;
+					target.lastErrorKind = cls.kind;
 					if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
 						const base = 1_500;
 						const cool = Math.min(
@@ -366,9 +402,17 @@ export class EndpointRotator {
 						target.lastLatencyMs = Math.round(elapsed);
 						target.lastOkAt = Date.now();
 						target.consecutiveFailures = 0;
+						target.lastErrorCode = null;
+						target.lastErrorKind = null;
 					}
-				} catch {
+				} catch (err) {
+					// The endpoint-settings panel probes via warmup(), so this is
+					// where its "why did this node fail" detail comes from — capture
+					// and classify the error instead of discarding it.
 					target.consecutiveFailures++;
+					const cls = classifyEndpointError(err instanceof Error ? err : new Error(String(err)));
+					target.lastErrorCode = cls.code;
+					target.lastErrorKind = cls.kind;
 				}
 			})
 		);
@@ -388,7 +432,8 @@ export class EndpointRotator {
 					lastLatencyMs: null,
 					lastOkAt: null,
 					cooldownUntil: 0,
-					lastErrorCode: null
+					lastErrorCode: null,
+					lastErrorKind: null
 				}
 			);
 		}

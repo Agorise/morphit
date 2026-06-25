@@ -1804,7 +1804,7 @@
     "api": "API",
     "api_title": "Developer API documentation",
     "agpl_title": "Why Morphit uses the AGPL-3.0 license",
-    "i2p_b32": "I2P (.b32.i2p)",
+    "i2p_b32": "B32 I2P",
     "i2p_name": "I2P",
     "canary": "Canary",
     "canary_title": "Operator's weekly warrant canary — verify the date is recent",
@@ -2029,7 +2029,7 @@
     "no_account_body": "Create a new account above by just picking a cool username, that's literally all there is to it.",
     "register_cta": "🌱 Create a new account",
     "checking": "Checking your session…",
-    "import_existing": "🔐 Sign in with a 12-word seed, json keyfile or posting key",
+    "import_existing": "Sign in with a 12-word seed, json keyfile or posting key",
     "unlock": {
       "password_required": "Enter your password to unlock.",
       "wrong_password": "That password does not match your keystore. Try again, or use your seed phrase to sign in.",
@@ -2211,6 +2211,17 @@
     "error": {
       "load_failed": "Couldn't load your orders. Try again.",
       "no_account": "Sign in with your Blurt account to see your orders."
+    },
+    "no_account": {
+      "title": "Set up to see your orders",
+      "body": "Your orders are stored on-chain under your Morphit identity. Create one to start trading, or unlock an existing identity to view your history.",
+      "cta_register": "Create an account",
+      "cta_unlock": "I already have an account"
+    },
+    "locked": {
+      "title": "Unlock to view your orders",
+      "body": "Your order history stays behind your unlock, so a locked device never reveals your trades. Enter your password to view it.",
+      "unlock": "Unlock"
     }
   },
   "nav": {
@@ -2222,6 +2233,7 @@
     "privacy_terms": "Privacy / Terms",
     "post_now": "Post Now",
     "start": "Start",
+    "unlock": "Unlock",
     "glossary": "Glossary",
     "cheat_sheet": "Cheat-sheet"
   },
@@ -3764,7 +3776,8 @@
       "broadcast_err": {
         "no_account": "Saved locally. Publishing will be available once your account is registered.",
         "locked": "Session is locked. Sign in again to broadcast.",
-        "generic": "Couldn't broadcast. Try again."
+        "generic": "Couldn't broadcast. Try again.",
+        "rejected": "Broadcast rejected by the network: {reason}"
       },
       "save_pending": "Saving…",
       "broadcast_pending": "Publishing…",
@@ -3792,7 +3805,9 @@
       "remove_aria": "Remove {url}",
       "reset_confirm_prompt": "Reset all custom RPC endpoints to defaults?",
       "reset_confirm_yes": "Yes, reset",
-      "reset_confirm_cancel": "Cancel"
+      "reset_confirm_cancel": "Cancel",
+      "timed_out": "timed out",
+      "unreachable": "unreachable"
     },
     "session": {
       "autolock_changed": "Changed to {label}",

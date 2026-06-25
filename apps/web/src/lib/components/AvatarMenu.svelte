@@ -74,6 +74,15 @@
 	 *  correctly returns false for since no envelope is persisted. */
 	const canLock = $derived(hasPersistedKeystore() && !$isPairedReadOnly);
 
+	/** Signed-out header CTA label. When this device has a remembered
+	 *  keystore, clicking it lands on the welcome-back UNLOCK screen
+	 *  (not a fresh import), so the button reads "Unlock" instead of
+	 *  "Start". Keyed off $hasAnySession so it re-evaluates when the
+	 *  session is locked (e.g. after a refresh) or restored. */
+	const signedOutCtaLabel = $derived(
+		!$hasAnySession && hasPersistedKeystore() ? $_('nav.unlock') : $_('nav.start')
+	);
+
 	/** Whether to show the View profile menu item.  Sally finding
 	 *  H8 (Part 68).  Hidden when the user hasn't completed
 	 *  account-name registration yet, since /@<null> would 404.
@@ -806,6 +815,6 @@
 	     having the header CTA visible too means users tapping the
 	     avatar slot get a deterministic "do this to sign in" target. -->
 	<a href={lp('/login')} class="btn-primary-sm">
-		{$_('nav.start')}
+		{signedOutCtaLabel}
 	</a>
 {/if}

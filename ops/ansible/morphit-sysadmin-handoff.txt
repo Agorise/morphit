@@ -114,13 +114,7 @@ need an outside-perspective view).
     → expect:  morphit-backup.timer fires daily at the configured time
 
 ──────────────────────────────────────────────────────────────────
-2.5  Weekly ACT minting timer scheduled
-
-    sudo systemctl list-timers | grep morphit-relay-mint-acts
-    → expect:  morphit-relay-mint-acts.timer fires weekly
-
-──────────────────────────────────────────────────────────────────
-2.6  BunkerWeb container running (if enable_bunkerweb)
+2.5  BunkerWeb container running (if enable_bunkerweb)
 
     sudo docker compose -f /opt/bunkerweb/docker-compose.yml ps
     → expect:  bunkerweb container "Up" and healthy

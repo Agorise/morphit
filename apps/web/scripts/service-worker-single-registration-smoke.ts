@@ -254,21 +254,30 @@ const root = resolve(import.meta.dirname, '..');
 }
 
 // ─── 10. UpdateBanner wires the consent → apply → reload flow ───
+// The page must refresh ONLY when the user clicks "Load it now" — never on its
+// own. So: posts APPLY_UPDATE (asks the SW to skipWaiting), offers Later/apply,
+// has NO controllerchange auto-reload listener, and the single location.reload()
+// lives inside applyUpdate().
 {
 	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
 	const exists = existsSync(path);
 	const text = exists ? readFileSync(path, 'utf8') : '';
 	const postsApply = /postMessage\(\s*\{\s*type:\s*['"]APPLY_UPDATE['"]/.test(text);
-	const reloadsOnControllerChange =
-		/controllerchange/.test(text) && /location\.reload\s*\(/.test(text);
+	const noControllerChangeListener = !/addEventListener\(\s*['"]controllerchange['"]/.test(text);
+	const applyIdx = text.indexOf('function applyUpdate');
+	const dismissIdx = text.indexOf('function dismiss');
+	const reloadIdx = text.indexOf('location.reload()');
+	const reloadIsUserConsentOnly =
+		applyIdx >= 0 && reloadIdx > applyIdx && (dismissIdx === -1 || reloadIdx < dismissIdx);
 	const offersChoice = /update\.apply/.test(text) && /update\.later/.test(text);
-	const ok = exists && postsApply && reloadsOnControllerChange && offersChoice;
+	const ok =
+		exists && postsApply && noControllerChangeListener && reloadIsUserConsentOnly && offersChoice;
 	results.push({
-		name: 'UpdateBanner offers Load-it-now/Later, posts APPLY_UPDATE, reloads on controllerchange',
+		name: 'UpdateBanner offers Load-it-now/Later, posts APPLY_UPDATE, reloads only on user consent (no controllerchange auto-reload)',
 		ok,
 		detail: ok
 			? undefined
-			: `exists: ${exists}; posts APPLY_UPDATE: ${postsApply}; reloads on controllerchange: ${reloadsOnControllerChange}; offers apply+later: ${offersChoice}. This is the user-consent surface for SW updates; without it the only upgrade paths are an auto-takeover (bad UX) or a cold restart.`
+			: `exists: ${exists}; posts APPLY_UPDATE: ${postsApply}; no controllerchange auto-reload: ${noControllerChangeListener}; reload lives inside applyUpdate only: ${reloadIsUserConsentOnly}; offers apply+later: ${offersChoice}. The page must refresh ONLY when the user clicks "Load it now" — never on its own.`
 	});
 }
 
@@ -293,61 +302,50 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
-// ─── 12. "Load it now" always acts: fallback reload + double-reload guard ───
-// controllerchange is not guaranteed to fire (an uncontrolled page after a
-// hard refresh, or a wedged worker) — exactly the "Load it now does nothing"
-// report. applyUpdate() must post APPLY_UPDATE AND fall back to a reload, and
-// a `refreshing` flag must guard BOTH reload sites so the two paths can't
-// double-reload.
+// ─── 12. "Load it now" reliably reloads — exactly one reload site ───
+// applyUpdate() posts APPLY_UPDATE (skipWaiting) then reloads. Navigations are
+// network-first, so the reload pulls the fresh shell regardless of SW state —
+// no controllerchange / 'activated' listeners are needed, so there is exactly
+// ONE reload site and thus no double-reload to guard against.
 {
 	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
 	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
-	const hasGuard = /let\s+refreshing\s*=\s*false/.test(text);
-	const hasFallbackReload =
-		/setTimeout\(/.test(text) && /location\.reload\s*\(/.test(text);
-	// The guard must appear at BOTH reload sites (controllerchange + fallback).
-	const guardSites = (text.match(/if\s*\(refreshing\)\s*return/g) || []).length;
-	const ok = hasGuard && hasFallbackReload && guardSites >= 2;
+	const postsApply = /postMessage\(\s*\{\s*type:\s*['"]APPLY_UPDATE['"]/.test(text);
+	const reloadViaTimeout = /setTimeout\(/.test(text) && /location\.reload\s*\(/.test(text);
+	const reloadSites = (text.match(/location\.reload\s*\(\s*\)/g) || []).length;
+	const ok = postsApply && reloadViaTimeout && reloadSites === 1;
 	results.push({
-		name: 'UpdateBanner "Load it now" has a fallback reload guarded against a double reload',
+		name: 'UpdateBanner "Load it now" posts APPLY_UPDATE and reloads exactly once (single reload site)',
 		ok,
 		detail: ok
 			? undefined
-			: `refreshing flag declared: ${hasGuard}; setTimeout fallback reload present: ${hasFallbackReload}; refreshing guard sites (need >=2): ${guardSites}. Without a fallback, "Load it now" silently does nothing whenever controllerchange never fires.`
+			: `posts APPLY_UPDATE: ${postsApply}; reloads via setTimeout: ${reloadViaTimeout}; location.reload() sites (want exactly 1): ${reloadSites}. The reload must be the single user-consent path — extra reload sites reintroduce the auto-reload / double-reload bugs.`
 	});
 }
 
-// ─── 13. "Load it now" hides the snackbar instantly and survives the reload ───
-// PC bug (beta18): the click reloaded the page but the snackbar kept coming
-// back across reloads, only clearing minutes later once the browser activated
-// the worker on its own. The fix: (a) an `applying` flag gates the snackbar so
-// it hides the instant you click; (b) APPLYING_KEY persists that across the
-// reload so a reload that lands before the new worker takes over doesn't
-// re-show it; (c) armActivation reloads the moment the worker reaches
-// 'activated' (re-triggering skipWaiting), instead of waiting on the browser.
+// ─── 13. "Load it now" hides the snackbar instantly; applying is in-memory ───
+// PC bug (beta18): the click reloaded but the snackbar kept reappearing,
+// clearing only minutes later. The earlier fix PERSISTED an `applying` flag
+// across the reload — which then got STUCK true and suppressed the snackbar
+// for minutes (cp339). The correct fix: `applying` gates the snackbar so it
+// hides instantly on click, but is IN-MEMORY ONLY — a reload resets it, so it
+// can never wedge. If the update didn't actually land, the snackbar correctly
+// reappears so the user can retry.
 {
 	const path = resolve(root, 'src/lib/components/UpdateBanner.svelte');
 	const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
-	// Snackbar template must be gated on !applying.
+	// Snackbar template must be gated on !applying so it hides the instant you click.
 	const hidesOnApply = /\{#if[^}]*!applying[^}]*\}/.test(text);
-	// applying is set on click...
 	const setsApplyingOnClick = /applying\s*=\s*true/.test(text);
-	// ...and persisted across the reload, restored on mount, and cleared.
-	const persistsKey =
-		/APPLYING_KEY/.test(text) &&
-		/sessionStorage\.setItem\(APPLYING_KEY/.test(text) &&
-		/getItem\(APPLYING_KEY\)\s*===\s*'1'/.test(text) &&
-		/removeItem\(APPLYING_KEY\)/.test(text);
-	// Reloads the moment the worker activates (not a blind wait).
-	const reloadsOnActivated =
-		/state\s*===\s*'activated'/.test(text) && /location\.reload\s*\(/.test(text);
-	const ok = hidesOnApply && setsApplyingOnClick && persistsKey && reloadsOnActivated;
+	// applying must NOT be persisted to web storage (the stuck-suppression bug).
+	const notPersisted = !/APPLYING_KEY/.test(text) && !/setItem\([^)]*[Aa]pplying/.test(text);
+	const ok = hidesOnApply && setsApplyingOnClick && notPersisted;
 	results.push({
-		name: 'UpdateBanner snackbar hides instantly on click and cannot reappear across the reload',
+		name: 'UpdateBanner snackbar hides instantly on click; applying is in-memory only (no stuck-suppression)',
 		ok,
 		detail: ok
 			? undefined
-			: `template gated on !applying: ${hidesOnApply}; sets applying on click: ${setsApplyingOnClick}; persists/restores/clears APPLYING_KEY: ${persistsKey}; reloads on worker 'activated': ${reloadsOnActivated}. Without all four the "Load it now" snackbar reappears across reloads (the PC reappear-loop) and only clears minutes later.`
+			: `template gated on !applying: ${hidesOnApply}; sets applying on click: ${setsApplyingOnClick}; applying NOT persisted to storage: ${notPersisted}. Persisting "applying" caused the PC bug where the snackbar stayed hidden for minutes after a reload that didn't fully apply.`
 	});
 }
 

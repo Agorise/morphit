@@ -456,7 +456,7 @@
 									{/if}
 									{#if inst.alt_networks.ens}
 										<a
-											href="https://{inst.alt_networks.ens}.eth.limo"
+											href="https://{inst.alt_networks.ens}"
 											class="chip text-xs"
 											title={$_('footer.alt_network_address', {
 												values: { address: inst.alt_networks.ens }

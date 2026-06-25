@@ -51,16 +51,36 @@
 	import { formatPublicKeyBLT } from '$crypto/keygen';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { ChainRejectedError } from '$blurt/broadcastTransport';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { broadcastUnblock } from '$blurt/ops/block';
 	import { blockedAccounts, loadBlocks, refreshBlocks, markUnblocked } from '$lib/chat/blocks';
 	import { showToast } from '$lib/stores/toast';
-	import { gotoLocale } from '$i18n/navigate';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 
-	const STORAGE_KEY = 'morphit.displayName';
-	const NOSTR_URL_STORAGE_KEY = 'morphit.nostrUrl';
-	const BLURT_MEDIA_URL_STORAGE_KEY = 'morphit.blurtMediaUrl';
-	const SHORT_BIO_STORAGE_KEY = 'morphit.shortBio';
+	// cp346: profile-field DRAFTS are scoped per account. These keys used to
+	// be global (`morphit.displayName` etc.), so signing out of one account
+	// and into another showed the previous account's cached field values in
+	// the form (a correctness + privacy bug). getUserBlurtAccount() is set at
+	// login and stable for this page's life (sign-out navigates away → the
+	// component remounts on the next login), so resolving the suffix once here
+	// is correct. With no account (not logged in) the keys fall back to the
+	// bare base, which is harmless — there's no account whose draft could leak,
+	// and the legacy global keys are purged on mount (see the rehydrate effect).
+	const PROFILE_KEY_SCOPE = browser ? (getUserBlurtAccount() ?? '') : '';
+	const PROFILE_KEY_SUFFIX = PROFILE_KEY_SCOPE ? `.${PROFILE_KEY_SCOPE}` : '';
+	const STORAGE_KEY = `morphit.displayName${PROFILE_KEY_SUFFIX}`;
+	const NOSTR_URL_STORAGE_KEY = `morphit.nostrUrl${PROFILE_KEY_SUFFIX}`;
+	const BLURT_MEDIA_URL_STORAGE_KEY = `morphit.blurtMediaUrl${PROFILE_KEY_SUFFIX}`;
+	const SHORT_BIO_STORAGE_KEY = `morphit.shortBio${PROFILE_KEY_SUFFIX}`;
+	/** The pre-cp346 GLOBAL keys, purged on mount so the leaked drafts don't
+	 *  linger (they are never read again once scoping is in effect). */
+	const LEGACY_GLOBAL_PROFILE_KEYS = [
+		'morphit.displayName',
+		'morphit.nostrUrl',
+		'morphit.blurtMediaUrl',
+		'morphit.shortBio'
+	] as const;
 
 	// Fallback public key used only when the session is locked, for the
 	// preview swatch.
@@ -86,6 +106,24 @@
 	let broadcasting = $state(false);
 	let broadcastError = $state('');
 	let broadcastOk = $state(false);
+
+	/** Localized message for a failed "Save & broadcast", shared by every
+	 *  broadcast handler on this page. A ChainRejectedError (cp344) carries the
+	 *  chain's OWN reason — "missing required posting authority", "insufficient
+	 *  mana", etc. — so we surface it instead of the opaque generic copy; that
+	 *  is the difference between a user knowing their account is out of resource
+	 *  credits vs. staring at "couldn't broadcast, try again". */
+	function broadcastErrCopy(err: unknown): string {
+		if (err instanceof ChainRejectedError) {
+			return $_('settings.display_name.broadcast_err.rejected', {
+				values: { reason: err.message }
+			});
+		}
+		if (err instanceof BroadcastError && (err.code === 'no_account' || err.code === 'locked')) {
+			return $_(`settings.display_name.broadcast_err.${err.code}`);
+		}
+		return $_('settings.display_name.broadcast_err.generic');
+	}
 
 	// ── Short bio (≤128 chars, optional) — same local/broadcast model ──
 	let bioInput = $state('');
@@ -189,6 +227,7 @@
 	 *  a failed/slow fetch errs toward hiding rather than a no-op button. */
 	let hasCustomAvatar = $state(false);
 	let avatarExistenceChecked = false;
+
 	// Rehydrate from localStorage on mount.
 	$effect(() => {
 		if (!browser) return;
@@ -213,6 +252,14 @@
 				nostrSaved = n;
 				nostrInput = n;
 			}
+			// cp346: which fields have NO local draft for this account? Those get
+			// hydrated from the on-chain profile below — so a freshly-imported
+			// account (or this account on a new device) shows its real on-chain
+			// values instead of blanks. A local draft is a pending edit and wins.
+			const noLocalName = !s;
+			const noLocalBlurtMedia = !bm;
+			const noLocalBio = !bio;
+			const noLocalNostr = !n;
 			// Hydrate the account-name section.  If posting-WIF
 			// import was used, this is already set; otherwise
 			// it's null and the user sees the empty input.
@@ -220,10 +267,21 @@
 			if (acct) {
 				accountSaved = acct;
 				accountInput = acct;
-				// One-shot, best-effort: find out whether this account already
-				// has a custom avatar on chain so we only show "Remove avatar"
-				// when there's actually one to remove. Failure leaves the flag
-				// false (button stays hidden), which is the safe default.
+				// cp346: purge the pre-scoping GLOBAL profile keys so a previous
+				// account's leaked drafts don't linger. Safe — the scoped keys
+				// above (which carry `.${acct}`) are never these bare names while
+				// logged in, so this never deletes the current account's draft.
+				for (const legacy of LEGACY_GLOBAL_PROFILE_KEYS) {
+					try {
+						window.localStorage.removeItem(legacy);
+					} catch {
+						// Privacy Mode — nothing to purge.
+					}
+				}
+				// One-shot, best-effort profile fetch: drives the "Remove avatar"
+				// button (only shown when an avatar exists on chain) AND hydrates
+				// the editable fields that have no local draft (cp346). Failure
+				// leaves the avatar button hidden + the fields empty — safe.
 				if (!avatarExistenceChecked) {
 					avatarExistenceChecked = true;
 					void (async () => {
@@ -232,9 +290,27 @@
 							if (r.ok) {
 								const props = extractLabelPropsFromProfile(r.data);
 								hasCustomAvatar = !!(props.avatarSvg || props.avatarDataUri);
+								// Only fill from on-chain where the user has no pending
+								// local draft for this account.
+								if (noLocalName && props.displayName) {
+									saved = props.displayName;
+									input = props.displayName;
+								}
+								if (noLocalBlurtMedia && props.blurtMediaUrl) {
+									blurtMediaSaved = props.blurtMediaUrl;
+									blurtMediaInput = props.blurtMediaUrl;
+								}
+								if (noLocalBio && props.shortBio) {
+									bioSaved = props.shortBio;
+									bioInput = props.shortBio;
+								}
+								if (noLocalNostr && props.nostrUrl) {
+									nostrSaved = props.nostrUrl;
+									nostrInput = props.nostrUrl;
+								}
 							}
 						} catch {
-							// Indexer unreachable / no profile — leave hidden.
+							// Indexer unreachable / no profile — leave hidden + empty.
 						}
 					})();
 				}
@@ -394,16 +470,8 @@
 			broadcastOk = true;
 			setTimeout(() => (broadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] display-name broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				broadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				// Unknown BroadcastError code, generic Error, or non-Error
-				// throw all fall to the localized generic copy.  Raw text
-				// is logged above for debugging.
-				broadcastError = $_('settings.display_name.broadcast_err.generic');
-			}
+			broadcastError = broadcastErrCopy(err);
 		} finally {
 			broadcasting = false;
 		}
@@ -448,13 +516,8 @@
 			bioBroadcastOk = true;
 			setTimeout(() => (bioBroadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] short-bio broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				bioBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				bioBroadcastError = $_('settings.display_name.broadcast_err.generic');
-			}
+			bioBroadcastError = broadcastErrCopy(err);
 		} finally {
 			bioBroadcasting = false;
 		}
@@ -486,9 +549,10 @@
 	 *  Silent (no spinner, no artificial delay) and a no-op when the value
 	 *  hasn't actually changed, so tabbing through the form doesn't spam a
 	 *  "Saved" toast. Invalid input is left untouched for the user to fix
-	 *  (the inline error stays visible). This is why the field no longer
-	 *  needs an explicit "Save locally" button — broadcasting to chain stays
-	 *  a deliberate, separate action. */
+	 *  (the inline error stays visible). This complements the explicit
+	 *  "Save locally only" button (cp344) — tabbing away saves silently; the
+	 *  button is the discoverable affordance — while broadcasting to chain
+	 *  stays a deliberate, separate action. */
 	function persistBlurtMediaOnBlur(): void {
 		if (!blurtMediaIsValid) return;
 		const cleaned = blurtMediaIsEmpty ? '' : blurtMediaCleaned;
@@ -534,16 +598,8 @@
 			blurtMediaBroadcastOk = true;
 			setTimeout(() => (blurtMediaBroadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				blurtMediaBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				// Unknown BroadcastError code, generic Error, or non-Error
-				// throw all fall to the localized generic copy.  Raw text
-				// is logged above for debugging.
-				blurtMediaBroadcastError = $_(`settings.display_name.broadcast_err.generic`);
-			}
+			blurtMediaBroadcastError = broadcastErrCopy(err);
 		} finally {
 			blurtMediaBroadcasting = false;
 		}
@@ -583,8 +639,8 @@
 
 	/** Auto-save the Nostr URL locally on blur. Same contract as
 	 *  persistBlurtMediaOnBlur — silent, change-detected, invalid input
-	 *  left for the user to fix. Removes the need for a "Save locally"
-	 *  button; "Save & broadcast" stays a deliberate action. */
+	 *  left for the user to fix. Complements the explicit "Save locally only"
+	 *  button (cp344); "Save & broadcast" stays a deliberate action. */
 	function persistNostrOnBlur(): void {
 		if (!nostrIsValid) return;
 		const cleaned = nostrIsEmpty ? '' : nostrCleaned;
@@ -631,16 +687,8 @@
 			nostrBroadcastOk = true;
 			setTimeout(() => (nostrBroadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				nostrBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				// Unknown BroadcastError code, generic Error, or non-Error
-				// throw all fall to the localized generic copy.  Raw text
-				// is logged above for debugging.
-				nostrBroadcastError = $_(`settings.display_name.broadcast_err.generic`);
-			}
+			nostrBroadcastError = broadcastErrCopy(err);
 		} finally {
 			nostrBroadcasting = false;
 		}
@@ -739,16 +787,8 @@
 			avatarBroadcastOk = true;
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				avatarBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				// Unknown BroadcastError code, generic Error, or non-Error
-				// throw all fall to the localized generic copy.  Raw text
-				// is logged above for debugging.
-				avatarBroadcastError = $_(`settings.display_name.broadcast_err.generic`);
-			}
+			avatarBroadcastError = broadcastErrCopy(err);
 		} finally {
 			avatarBroadcasting = false;
 		}
@@ -788,16 +828,8 @@
 			avatarBroadcastOk = true;
 			setTimeout(() => (avatarBroadcastOk = false), 3000);
 		} catch (err) {
-			const be = err instanceof BroadcastError ? err : null;
 			console.warn('[settings] broadcast failed:', err);
-			if (be !== null && (be.code === 'no_account' || be.code === 'locked')) {
-				avatarBroadcastError = $_(`settings.display_name.broadcast_err.${be.code}`);
-			} else {
-				// Unknown BroadcastError code, generic Error, or non-Error
-				// throw all fall to the localized generic copy.  Raw text
-				// is logged above for debugging.
-				avatarBroadcastError = $_(`settings.display_name.broadcast_err.generic`);
-			}
+			avatarBroadcastError = broadcastErrCopy(err);
 		} finally {
 			avatarBroadcasting = false;
 		}
@@ -1034,6 +1066,7 @@
 <Head routeKey="settings" noindex />
 
 <div class="mx-auto max-w-2xl px-4 py-12 md:py-16">
+	<RequireLiveSession />
 	<header class="mb-8">
 		<h1 class="font-display text-3xl font-extrabold md:text-4xl">
 			<span class="brand-gradient-text">{$_('settings.title')}</span>
@@ -1571,9 +1604,9 @@
 			placeholder={$_('settings.blurt_media_url.placeholder')}
 			aria-invalid={!blurtMediaIsValid}
 			aria-describedby="blurt-media-url-help"
-			class="mt-4 w-full rounded-xl border-2 border-ink-300 bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 {!blurtMediaIsValid
-				? 'border-red-500 dark:border-red-500'
-				: ''}"
+			class="mt-4 w-full rounded-xl border-2 bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none focus:ring-2 dark:bg-ink-900 {!blurtMediaIsValid
+				? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+				: 'border-ink-300 focus:ring-morphit-emerald dark:border-ink-700'}"
 		/>
 
 		<p id="blurt-media-url-help" class="mt-2 text-sm">
@@ -1624,6 +1657,21 @@
 		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
+			<BusyButton
+				variant="primary"
+				busy={blurtMediaSaving}
+				done={blurtMediaSavedToast}
+				disabled={!blurtMediaIsValid ||
+					(blurtMediaIsEmpty ? '' : blurtMediaCleaned) === blurtMediaSaved}
+				busyLabel={$_('settings.display_name.save_pending')}
+				onclick={saveBlurtMediaLocal}
+			>
+				{#if blurtMediaSavedToast}
+					{$_('settings.display_name.saved_toast')}
+				{:else}
+					{$_('settings.display_name.save')}
+				{/if}
+			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
 					variant="secondary"
@@ -1689,9 +1737,9 @@
 			placeholder={$_('settings.nostr_url.placeholder')}
 			aria-invalid={!nostrIsValid}
 			aria-describedby="nostr-url-help"
-			class="mt-4 w-full rounded-xl border-2 border-ink-300 bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900 {!nostrIsValid
-				? 'border-red-500 dark:border-red-500'
-				: ''}"
+			class="mt-4 w-full rounded-xl border-2 bg-white px-3 py-2 font-mono text-sm transition-colors focus:outline-none focus:ring-2 dark:bg-ink-900 {!nostrIsValid
+				? 'border-red-500 focus:ring-red-500 dark:border-red-500'
+				: 'border-ink-300 focus:ring-morphit-emerald dark:border-ink-700'}"
 		/>
 
 		<p id="nostr-url-help" class="mt-2 text-sm">
@@ -1733,6 +1781,20 @@
 		{/if}
 
 		<div class="mt-6 flex flex-wrap items-center gap-3">
+			<BusyButton
+				variant="primary"
+				busy={nostrSaving}
+				done={nostrSavedToast}
+				disabled={!nostrIsValid || (nostrIsEmpty ? '' : nostrCleaned) === nostrSaved}
+				busyLabel={$_('settings.display_name.save_pending')}
+				onclick={saveNostrLocal}
+			>
+				{#if nostrSavedToast}
+					{$_('settings.display_name.saved_toast')}
+				{:else}
+					{$_('settings.display_name.save')}
+				{/if}
+			</BusyButton>
 			{#if $isUnlocked}
 				<BusyButton
 					variant="secondary"
@@ -2126,7 +2188,7 @@
 						href={localePath('/settings/security/2fa', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE)}
 						class="mt-3 inline-block rounded-xl border border-ink-300 px-4 py-2 text-sm font-semibold transition hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-900"
 					>
-						{$_('settings.totp.enroll.cta')} <span class="rtl:inline-block rtl:-scale-x-100" aria-hidden="true">⇨</span>
+						{$_('settings.totp.enroll.cta')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</a>
 				</div>
 

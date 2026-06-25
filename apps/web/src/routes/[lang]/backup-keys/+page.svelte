@@ -8,6 +8,7 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import { currentEnvelope, isUnlocked, isPairedReadOnly, liveIdentity } from '$stores/identity';
+	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import { markBackupVisited } from '$utils/backupVisited';
 	import { envelopeToBlob, decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import { mnemonicForBackup, wipeFullIdentity } from '$crypto/keygen';
@@ -178,6 +179,7 @@
 <Head routeKey="backup_keys" noindex />
 
 <div class="mx-auto max-w-3xl px-4 py-12 md:py-16">
+	<RequireLiveSession />
 	<header class="mb-10 text-center">
 		<h1 class="font-display text-4xl font-extrabold md:text-5xl">
 			<span class="brand-gradient-text">{$_('backup_keys.title')}</span>
