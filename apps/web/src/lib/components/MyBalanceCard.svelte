@@ -48,6 +48,8 @@
 	} from '$lib/pnl/categorize';
 	import { buildPnlCsv, downloadCsv } from '$lib/pnl/exportCsv';
 	import { FEE_RECIPIENT } from '$lib/orders/fee';
+	import { fetchListingFee } from '$lib/orders/listingFee';
+	import { formatFiat } from '$i18n/formatters';
 	import { safeSession } from '$lib/utils/safeStorage';
 	import { subscribeBalanceRefresh } from '$lib/balance/bus';
 	import AnimatedNumber from '$components/AnimatedNumber.svelte';
@@ -72,6 +74,21 @@
 	let bpBalance = $state(NaN);
 	let manaPct = $state(NaN);
 	let vestingApr = $state(NaN);
+	/** Live BLURT price in the operator's fiat, fetched from
+	 *  /v1/listing-fee (present only when the operator runs the price
+	 *  feed; morphit.io does). null until loaded or when unavailable —
+	 *  in which case the USD-equivalent line is simply omitted. */
+	let blurtPriceFiat = $state<number | null>(null);
+	let denomFiat = $state('USD');
+	/** "~$10.00 usd"-style approximate fiat value of the liquid BLURT
+	 *  balance. The denomination word is appended deliberately: in many
+	 *  locales (e.g. MXN) "$" alone is ambiguous, so spelling out the
+	 *  fiat code disambiguates. null → render nothing. */
+	const usdLabel = $derived(
+		blurtPriceFiat !== null && Number.isFinite(blurtBalance)
+			? `~${formatFiat(blurtBalance * blurtPriceFiat, denomFiat)} ${denomFiat.toLowerCase()}`
+			: null
+	);
 
 	/** Refresh interval.  Aggressive at 5 seconds: Blurt blocks
 	 *  every ~3 seconds, so a 5s poll gives near-real-time updates
@@ -98,9 +115,20 @@
 	 *  is recovered by the next 5s tick. */
 	let refreshInFlight = false;
 
-	async function refresh(): Promise<void> {
-		if (refreshInFlight) return;
-		refreshInFlight = true;
+	async function refresh(opts: { hard?: boolean } = {}): Promise<void> {
+		// A `hard` refresh is user-initiated (the manual refresh button).
+		// It must NEVER be swallowed by the in-flight guard — that guard
+		// exists only to coalesce the 5s poll tick with bus nudges, and a
+		// click landing mid-tick was silently dropped (the icon spun but
+		// nothing refetched). A hard refresh also forces a cache-busted,
+		// no-store fetch, so it cannot be answered from the browser HTTP
+		// cache, the service worker, or any reverse proxy — the indexer
+		// then reads the live chain balance. Soft refreshes (tick / bus /
+		// mount / visibility) coalesce via the gate and use the normal
+		// short-cached path.
+		const hard = opts.hard === true;
+		if (refreshInFlight && !hard) return;
+		if (!hard) refreshInFlight = true;
 		try {
 			// cp295 — read balance via the indexer (same-origin), NOT
 			// directly from a Blurt RPC node. The indexer fetches account
@@ -110,7 +138,9 @@
 			// whichever nodes happen to be browser-CORS-clean today.
 			const result = await fetchAccountBalance(
 				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
-				account
+				account,
+				fetch,
+				hard
 			);
 			if (result.kind !== 'ok') {
 				if (result.kind === 'error') {
@@ -147,8 +177,34 @@
 		} finally {
 			// BATCH14-3: clear the in-flight gate.  Must run on BOTH
 			// success and error paths or a single failed refresh
-			// would permanently lock subsequent refreshes.
-			refreshInFlight = false;
+			// would permanently lock subsequent refreshes. A hard
+			// refresh never set the gate, so it must not clear it
+			// (doing so could release a concurrent soft refresh early).
+			if (!hard) refreshInFlight = false;
+		}
+	}
+
+	/** Fetch the live BLURT/fiat price from /v1/listing-fee so the
+	 *  balance can show an approximate fiat value. Best-effort: any
+	 *  failure (price feed off, stale, or unreachable) leaves
+	 *  blurtPriceFiat null and the USD-equivalent line is omitted. The
+	 *  price moves slowly, so this runs once on mount and again on a
+	 *  manual refresh — not on every 5s balance tick. */
+	async function loadPrice(): Promise<void> {
+		try {
+			const r = await fetchListingFee(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
+			if (
+				r.kind === 'ok' &&
+				typeof r.quote.blurt_price_fiat === 'number' &&
+				r.quote.blurt_price_fiat > 0
+			) {
+				blurtPriceFiat = r.quote.blurt_price_fiat;
+				if (typeof r.quote.denomination_fiat === 'string' && r.quote.denomination_fiat) {
+					denomFiat = r.quote.denomination_fiat;
+				}
+			}
+		} catch {
+			// Price feed unavailable → USD-equivalent simply not shown.
 		}
 	}
 
@@ -170,7 +226,7 @@
 		// guarantees prompt feedback regardless of what the refresh did.
 		const minSpin = new Promise<void>((resolve) => setTimeout(resolve, 600));
 		try {
-			await Promise.all([refresh(), minSpin]);
+			await Promise.all([refresh({ hard: true }), loadPrice(), minSpin]);
 		} finally {
 			manualRefreshing = false;
 		}
@@ -333,6 +389,7 @@
 
 	onMount(() => {
 		void refresh();
+		void loadPrice();
 		// Subscribe to the global balance-refresh bus so other
 		// components (FundsSentModal, post-broadcast success, etc.)
 		// can nudge an immediate refetch when they know a balance-
@@ -446,7 +503,10 @@
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold">
-					<AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} />
+					<AnimatedNumber value={blurtBalance} decimals={3} durationMs={3000} />{#if usdLabel}<span
+							class="ml-1 font-sans text-xs font-normal text-ink-500 dark:text-ink-400"
+							>({usdLabel})</span
+						>{/if}
 				</dd>
 			</div>
 			<div>

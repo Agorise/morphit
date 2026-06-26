@@ -92,9 +92,9 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Manage payment methods',
-				blurb: 'List the instance-specific payment-method additions.',
+				blurb: "List, add, or remove this instance's payment-method additions.",
 				subcommand: 'payment-method',
-				positional: ['list']
+				positional: ['menu']
 			},
 			{
 				label: 'Show my active public key',

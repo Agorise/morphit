@@ -2307,9 +2307,9 @@
         "tab_label": "Chiave posting Blurt",
         "warning_title": "Importazione con sola chiave di posting",
         "warning_body": "Se non hai un seed di 12 parole o un file .json per l'importazione dell'account, incolla qui la tua chiave di posting Blurt. La cifriamo su questo dispositivo con una password che scegli tu. Potrai leggere, pubblicare e fare trading — ma non cambiare le chiavi dell'account (serve un wallet come blurtwallet.com).",
-        "account_label": "Il tuo nome account Blurt",
+        "account_label": "Il tuo nome account Blurt (facoltativo)",
         "account_ok": "tutto ok!",
-        "account_hint": "Senza la @. Verificheremo che l'account esista su Blurt e che la chiave di posting corrisponda.",
+        "account_hint": "Lascialo vuoto e lo rileveremo dalla tua chiave. Senza la @; se lo inserisci, verificheremo che corrisponda alla tua chiave.",
         "wif_label": "Chiave privata di posting (WIF)",
         "wif_placeholder": "5J… o P5J…",
         "password_mismatch": "Le password non corrispondono.",
@@ -2337,7 +2337,8 @@
             "owner": "Quella è la tua chiave OWNER. Morphit serve solo la POSTING — incolla quella. (Le chiavi owner danno il controllo totale dell'account; non incollarle da nessuna parte.)",
             "memo": "Quella è la tua chiave MEMO. Morphit serve la POSTING — incolla quella."
           },
-          "master_password": "Sembra la tua master password di Blurt, non la tua chiave POSTING. Morphit non usa mai la master password per accedere. Apri blurtwallet.com → Permissions e copia la tua Posting Private Key (inizia con 5)."
+          "master_password": "Sembra la tua master password di Blurt, non la tua chiave POSTING. Morphit non usa mai la master password per accedere. Apri blurtwallet.com → Permissions e copia la tua Posting Private Key (inizia con 5).",
+          "could_not_resolve": "Non siamo riusciti a rilevare automaticamente il tuo account da questa chiave. Inserisci il tuo nome account Blurt sopra (senza la @) e riprova."
         },
         "account_bad": "non valido"
       },
@@ -2456,7 +2457,8 @@
         "body": "Il tuo nuovo nome utente non è ancora stato registrato.",
         "confirm": "Esci comunque",
         "cancel": "Resta su questa pagina"
-      }
+      },
+      "have_account_link": "Hai già un account Blurt? Inseriscilo nelle Impostazioni"
     },
     "unlock_mode": {
       "heading": "Come vuoi sbloccare la prossima volta?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "I nomi account usano lettere minuscole, cifre, trattini e punti — da 3 a 16 caratteri, inizia con lettera.",
       "error_not_found": "Non abbiamo trovato @{account} sulla blockchain Blurt. Controlla l'ortografia.",
       "error_key_mismatch": "La tua chiave posting non corrisponde all'autorità posting di @{account}. Verifica di aver importato le chiavi giuste.",
-      "error_chain_unreachable": "Non siamo riusciti a contattare la blockchain Blurt. Controlla la connessione e riprova."
+      "error_chain_unreachable": "Non siamo riusciti a contattare la blockchain Blurt. Controlla la connessione e riprova.",
+      "no_account_link": "Non hai ancora un account Blurt? Richiedi un nome"
     },
     "import_landing_banner": {
       "title": "Quasi fatto — scegli il tuo @account così il libro ordini ti riconosce",
@@ -4425,5 +4428,10 @@
     "no_master_password": "Non c'è alcuna master password. Morphit non ne crea né ne usa una — le tue 12 parole e queste chiavi sono tutto.",
     "txt_warning": "TIENI QUESTO PRIVATO. Chiunque possieda una chiave privata qui sotto può prendere il pieno controllo del tuo account e dei tuoi fondi. Non condividerla con nessuno, non digitarla in un sito web di cui non ti fidi e non inviarla mai in un messaggio o un'email.",
     "txt_footer": "La tua frase seed di 12 parole è il tuo backup Morphit. Queste quattro chiavi ti permettono di usare questo account in altri strumenti Blurt. Non c'è alcuna master password."
+  },
+  "needs_account_name": {
+    "heading": "Quasi pronto",
+    "body": "Hai effettuato l'accesso, ma non hai ancora un nome account Blurt. Aggiungine uno per iniziare a fare trading e pubblicare; fino ad allora puoi dare un'occhiata.",
+    "cta": "Completa la configurazione"
   }
 }

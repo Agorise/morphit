@@ -756,6 +756,21 @@
 				</BusyButton>
 			</div>
 
+			<!-- Cross-link for import users who landed here from the
+			     accountless banner but already HAVE a Blurt account: this
+			     page only CLAIMS a new name (typing an existing one hits
+			     "already registered"), so point them at the Settings
+			     account-name card, which VERIFIES an existing name against
+			     their imported key. -->
+			<p class="mt-4 text-center text-sm text-ink-600 dark:text-ink-300">
+				<a
+					href={lp('/settings#account-name-heading')}
+					class="underline underline-offset-2 hover:no-underline"
+				>
+					{$_('onboarding.register_name.have_account_link')}
+				</a>
+			</p>
+
 			<!-- Identity recap. Unobtrusive; just a reassurance that the
 			     keys about to be broadcast match the identity they just
 			     backed up. -->

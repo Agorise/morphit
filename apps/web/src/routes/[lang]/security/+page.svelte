@@ -90,7 +90,7 @@
 			<p class="mt-3 text-ink-700 dark:text-ink-200">
 				<a
 					href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/SECURITY.md#bug-bounty-program"
-					class="group inline-flex items-center text-morphit-emerald transition hover:brightness-110"
+					class="group inline-flex items-center gap-1 text-morphit-emerald transition hover:brightness-110"
 					target="_blank" rel="noopener noreferrer">{$_('security.bounty_link')} <span
 						class="nav-arrow nav-arrow-right"
 						aria-hidden="true">⇨</span

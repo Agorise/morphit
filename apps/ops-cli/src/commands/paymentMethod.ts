@@ -14,10 +14,14 @@
  *     [--url "https://..."]
  *   morphit-ops payment-method remove <key>
  *   morphit-ops payment-method list
+ *   morphit-ops payment-method            (interactive list/add/remove menu)
  *
  * The list subcommand reads from local DB and prints the operator's
  * current additions.  The add and remove subcommands sign and
- * broadcast a `morphit_payment_method_addition_v1` op.
+ * broadcast a `morphit_payment_method_addition_v1` op.  Running with
+ * no subcommand (and the "Manage payment methods" main-menu item)
+ * opens an interactive menu that prompts for the same inputs and
+ * reuses these exact add/remove/list paths.
  *
  * Required environment (sourced from morphit.env): same as the
  * operator-block command — MORPHIT_RELAY_ACCOUNT plus an operator
@@ -30,7 +34,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { askPassword, askYesNo } from '../init/prompt.ts';
+import { ask, askChoice, askPassword, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, broadcastCustomJson, errMsg } from './chainErrors.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
@@ -121,14 +125,190 @@ export async function runPaymentMethod(ctx: PaymentMethodCtx): Promise<number> {
 	if (sub === 'add') return runAdd(ctx);
 	if (sub === 'remove') return runRemove(ctx);
 	if (sub === 'list') return runList(ctx);
-	console.log('✗ Missing subcommand.');
+	if (sub === 'menu' || sub === undefined) return runMenu(ctx);
+	console.log(`✗ Unknown subcommand: ${sanitizeForTerm(String(sub))}`);
 	console.log('  Usage:');
 	console.log(
 		'    morphit-ops payment-method add <key> --name <n> --description <d> --category <c> [--url <u>]'
 	);
 	console.log('    morphit-ops payment-method remove <key>');
 	console.log('    morphit-ops payment-method list');
+	console.log('    morphit-ops payment-method            (interactive menu)');
 	return 1;
+}
+
+// ─── interactive menu (the morphit-ops main-menu entry point) ────
+
+/** Interactive list / add / remove loop. This is what the
+ *  "Manage payment methods" main-menu item runs (positional
+ *  ['menu']), and what a bare `morphit-ops payment-method` runs.
+ *  Each action reuses the same validated, confirmed, on-chain
+ *  broadcast paths as the scriptable `add` / `remove` / `list`
+ *  subcommands — the menu just gathers the inputs by prompting. */
+async function runMenu(ctx: PaymentMethodCtx): Promise<number> {
+	for (;;) {
+		console.log('');
+		const choice = await askChoice('Manage payment methods:', [
+			'List current payment-method additions',
+			'Add a payment method',
+			'Remove a payment method',
+			'Back to main menu'
+		]);
+		if (choice === 0) {
+			await runList(ctx);
+		} else if (choice === 1) {
+			await runAddInteractive();
+		} else if (choice === 2) {
+			await runRemoveInteractive();
+		} else {
+			return 0;
+		}
+	}
+}
+
+/** Prompt for the fields of a new payment-method addition (with
+ *  inline validation so the user can correct mistakes without
+ *  aborting), then hand off to runAdd, which re-validates, shows
+ *  the confirmation summary, and broadcasts. */
+async function runAddInteractive(): Promise<number> {
+	console.log('');
+	console.log('Add a payment-method addition for this instance.');
+
+	let key = '';
+	for (;;) {
+		const raw = (await ask('Key (lowercase, e.g. "my_local_bank"; 3–24 chars)')).trim();
+		if (raw === '') {
+			console.log('  ✗ A key is required.\n');
+			continue;
+		}
+		if (!KEY_RE.test(raw)) {
+			console.log('  ✗ Must match /^[a-z][a-z0-9_]+$/ (lowercase, start with a letter).\n');
+			continue;
+		}
+		if (raw.length < 3 || raw.length > 24) {
+			console.log('  ✗ Must be 3–24 characters.\n');
+			continue;
+		}
+		if (RESERVED_CANONICAL_KEYS.has(raw)) {
+			console.log(`  ✗ "${sanitizeForTerm(raw)}" is a reserved canonical key — pick another.\n`);
+			continue;
+		}
+		key = raw;
+		break;
+	}
+
+	let name = '';
+	for (;;) {
+		const raw = (await ask('Display name (e.g. "My Local Bank")')).trim();
+		if (raw === '') {
+			console.log('  ✗ A name is required.\n');
+			continue;
+		}
+		if (raw.length > 64) {
+			console.log('  ✗ Too long (max 64).\n');
+			continue;
+		}
+		name = raw;
+		break;
+	}
+
+	let description = '';
+	for (;;) {
+		const raw = (await ask('Description (optional, max 300 — Enter to skip)')).trim();
+		if (raw.length > 300) {
+			console.log('  ✗ Too long (max 300).\n');
+			continue;
+		}
+		description = raw;
+		break;
+	}
+
+	const categories = ['crypto', 'in_person', 'online'] as const;
+	const catIdx = await askChoice('Category:', categories as unknown as string[]);
+	const category = categories[catIdx] ?? 'online';
+
+	let url = '';
+	for (;;) {
+		const raw = (await ask('URL (optional, must start with https:// — Enter to skip)')).trim();
+		if (raw === '') break;
+		if (!raw.startsWith('https://')) {
+			console.log('  ✗ Must start with https://\n');
+			continue;
+		}
+		if (raw.length > 200) {
+			console.log('  ✗ Too long (max 200).\n');
+			continue;
+		}
+		url = raw;
+		break;
+	}
+
+	const flags: Record<string, string> = { name, description, category };
+	if (url !== '') flags.url = url;
+	return runAdd({ positional: ['add', key], flags });
+}
+
+/** List the operator's removable additions, let them pick one,
+ *  then hand off to runRemove (which confirms + broadcasts). */
+async function runRemoveInteractive(): Promise<number> {
+	const account = process.env.MORPHIT_RELAY_ACCOUNT;
+	if (!account) {
+		console.log(
+			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
+		);
+		return 1;
+	}
+	const rows = await fetchAdditions(account);
+	if (rows.length === 0) {
+		console.log('');
+		console.log('(no instance additions to remove)');
+		return 0;
+	}
+	console.log('');
+	const labels = rows.map(
+		(r) =>
+			`${sanitizeForTerm(r.key)}  [${sanitizeForTerm(r.category)}]  ` +
+			`${sanitizeForTerm(r.name)}  (${r.state})`
+	);
+	labels.push('Cancel');
+	const idx = await askChoice('Which payment method do you want to remove?', labels);
+	if (idx === labels.length - 1) {
+		console.log('Cancelled.');
+		return 0;
+	}
+	const chosen = rows[idx];
+	if (!chosen) {
+		console.log('Cancelled.');
+		return 0;
+	}
+	return runRemove({ positional: ['remove', chosen.key], flags: {} });
+}
+
+/** Read the operator's instance additions for the remove picker.
+ *  Mirrors runList's query but returns rows instead of printing. */
+async function fetchAdditions(
+	account: string
+): Promise<Array<{ key: string; name: string; category: string; state: string }>> {
+	const { loadConfig } = await import('../config.ts');
+	const { createDatabase } = await import('../db.ts');
+	const db = await createDatabase(loadConfig());
+	try {
+		const result = await db.query<{
+			key: string;
+			name: string;
+			category: string;
+			state: string;
+		}>(
+			`SELECT key, name, category, state
+			   FROM instance_payment_methods
+			  WHERE operator = $1
+			  ORDER BY state DESC, category, name`,
+			[account]
+		);
+		return result.rows;
+	} finally {
+		await db.close();
+	}
 }
 
 // ─── add ────────────────────────────────────────────────────────

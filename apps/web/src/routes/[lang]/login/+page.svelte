@@ -87,6 +87,7 @@
 
 		if (hasPersistedKeystore()) {
 			formMode = 'welcome-back';
+			lockedAccount = getUserBlurtAccount() ?? '';
 			const env = readEnvelope();
 			if (env) {
 				envelopeHasYubikey = hasYubikeyWrap(env);
@@ -139,6 +140,16 @@
 	let pendingDestination = $state('/onboarding/import');
 	let pendingAccount = $state('');
 
+	/** Account name of the locked keystore, shown in the welcome-back
+	 *  heading ("Welcome back @name"). Read from the persisted cache,
+	 *  which survives a cold refresh even though the in-memory identity
+	 *  is wiped while locked. Set in onMount once the welcome-back form
+	 *  is chosen. */
+	let lockedAccount = $state('');
+	/** True while the welcome-back Sign out confirmation modal is open —
+	 *  the same destructive modal the avatar menu raises. */
+	let showSignOutConfirm = $state(false);
+
 	/** Click handler for the three "start a new/different session" cards.
 	 *  If a session exists, prevent navigation and raise the confirm modal;
 	 *  otherwise let the normal <a href> navigation proceed unchanged. */
@@ -168,6 +179,55 @@
 
 	function cancelSwitch(): void {
 		showSwitchConfirm = false;
+	}
+
+	/** Welcome-back Sign out: raise the same destructive confirmation
+	 *  modal the avatar menu uses. */
+	function promptSignOut(): void {
+		showSignOutConfirm = true;
+	}
+
+	/** User confirmed sign-out. Mirror the avatar menu exactly: close
+	 *  the modal first (smooth close animation), broadcast the sign-out
+	 *  to every open tab AND clear the persisted account-name cache,
+	 *  then navigate home. */
+	async function confirmSignOut(): Promise<void> {
+		showSignOutConfirm = false;
+		broadcastSignOut();
+		await gotoLocale('/');
+	}
+
+	function cancelSignOut(): void {
+		showSignOutConfirm = false;
+	}
+
+	/** Where to go after a successful unlock.  RequireLiveSession sends a
+	 *  locked visitor here with `?next=<the page they were trying to reach>`
+	 *  (e.g. clicking "Post now" / "Chat" in the header while locked); we
+	 *  forward them there after they unlock with their password, instead of
+	 *  dumping them on the homepage.  Returns a path safe for gotoLocale.
+	 *
+	 *  SECURITY — open-redirect guard: `next` is attacker-influenceable (a
+	 *  crafted `/login?next=//evil.example` link), so resolve it against our
+	 *  OWN origin and accept it only if it stays same-origin.  This defeats
+	 *  protocol-relative (`//host`), backslash (`/\host`), `scheme:` and other
+	 *  redirect tricks in one check; anything off-origin or malformed falls
+	 *  back to the homepage. */
+	function postUnlockDestination(): string {
+		const raw = $page.url.searchParams.get('next');
+		if (raw) {
+			try {
+				const u = new URL(raw, $page.url.origin);
+				if (u.origin === $page.url.origin) {
+					// Same-origin internal path; already locale-prefixed, and
+					// gotoLocale is idempotent on an existing prefix.
+					return u.pathname + u.search + u.hash;
+				}
+			} catch {
+				// malformed `next` — fall through to the homepage
+			}
+		}
+		return '/';
 	}
 
 	async function handleUnlock(): Promise<void> {
@@ -219,8 +279,9 @@
 			totpCode = '';
 			needTotp = false;
 			totpFailCount = 0;
-			// Send them home.
-			await gotoLocale('/');
+			// Forward to the page they were trying to reach (RequireLiveSession
+			// passes it as ?next=…), or home if there's no pending destination.
+			await gotoLocale(postUnlockDestination());
 		} catch (err) {
 			// Audit 2026-05 finding 1-10: typed dispatch on
 			// KeystoreError.kind instead of regex on the message
@@ -317,7 +378,7 @@
 			ykPhase = 'tap';
 			await bootFromEnvelopeWithYubikey(env, device.hmac);
 			ykPhase = 'finalizing';
-			await gotoLocale('/');
+			await gotoLocale(postUnlockDestination());
 		} catch (err) {
 			// REVISIT-LIST item 3 — classifier-driven branching.
 			// Covers transport errors (webhid_unsupported, no_device,
@@ -414,7 +475,9 @@
 		<!-- Returning user with persisted keystore — fast path. -->
 		<header class="text-center">
 			<h1 class="font-display text-3xl font-extrabold leading-tight md:text-4xl">
-				<span class="brand-gradient-text">{$_('login.welcome_back.title')}</span>
+				<span class="brand-gradient-text"
+					>{$_('login.welcome_back.title')}{#if lockedAccount} @{lockedAccount}{/if}</span
+				>
 			</h1>
 			<p class="mt-3 text-ink-600 dark:text-ink-300">
 				{$_('login.welcome_back.body')}
@@ -469,6 +532,32 @@
 						{$_('login.welcome_back.yubikey_browser_unsupported')}
 					</p>
 				{/if}
+
+				<div class="mt-5 flex justify-end">
+					<button
+						type="button"
+						onclick={promptSignOut}
+						class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/30"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+							<polyline points="16 17 21 12 16 7" />
+							<line x1="21" y1="12" x2="9" y2="12" />
+						</svg>
+						<span class="text-sm font-semibold">{$_('avatar_menu.sign_out')}</span>
+					</button>
+				</div>
 			</div>
 		{:else}
 			<!-- State A or no YubiKey: passphrase form is the primary
@@ -564,6 +653,32 @@
 						</span>
 					</button>
 				{/if}
+
+				<div class="flex justify-end pt-1">
+					<button
+						type="button"
+						onclick={promptSignOut}
+						class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/30"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+							<polyline points="16 17 21 12 16 7" />
+							<line x1="21" y1="12" x2="9" y2="12" />
+						</svg>
+						<span class="text-sm font-semibold">{$_('avatar_menu.sign_out')}</span>
+					</button>
+				</div>
 			</form>
 		{/if}
 
@@ -670,5 +785,17 @@
 		cancelLabel={$_('login.signout_before_switch_modal.cancel')}
 		onConfirm={confirmSwitch}
 		onCancel={cancelSwitch}
+	/>
+
+	<ConfirmModal
+		bind:open={showSignOutConfirm}
+		variant="destructive"
+		title={$_('avatar_menu.sign_out_modal.title')}
+		body={$_('avatar_menu.sign_out_modal.body')}
+		confirmLabel={$_('avatar_menu.sign_out_modal.confirm')}
+		cancelLabel={$_('avatar_menu.sign_out_modal.cancel')}
+		busyLabel={$_('avatar_menu.sign_out_modal.confirm_pending')}
+		onConfirm={confirmSignOut}
+		onCancel={cancelSignOut}
 	/>
 </section>

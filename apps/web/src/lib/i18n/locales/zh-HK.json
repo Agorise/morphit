@@ -2307,9 +2307,9 @@
         "tab_label": "Blurt Posting key",
         "warning_title": "只用 Posting 密鑰匯入",
         "warning_body": "如果你冇 12 個字嘅助記詞或者用喻匯入戶口嘅 .json 檔案，直接將你嘅 Blurt posting 密鑰黏喺呢度。我哋會用你揀嘅密碼喺呢部裝置上加密佢。你可以讀、發文同交易 — 但唔可以改帳戶密鑰（嘸個需要好似 blurtwallet.com 黈嘅錢包）。",
-        "account_label": "你嘅 Blurt 帳戶名",
+        "account_label": "你嘅 Blurt 帳戶名（可選）",
         "account_ok": "冇問題！",
-        "account_hint": "唔帶 @。我哋會檢查呢個帳戶喺 Blurt 鏈上係咪存在,同 posting 密鑰係咪夾。",
+        "account_hint": "留空就得，我哋會根據你嘅密鑰自動識別。唔帶 @；如果你填咗，我哋會核對佢同你嘅密鑰夾唔夾。",
         "wif_label": "Posting 私鑰 (WIF)",
         "wif_placeholder": "5J… 或 P5J…",
         "password_mismatch": "密碼不一致。",
@@ -2337,7 +2337,8 @@
             "owner": "嗰個係你嘅 OWNER 密鑰。Morphit 只需要 POSTING — 黐嗰個。(Owner 密鑰俾你完全控制帳戶;唔好黐到任何網站。)",
             "memo": "嗰個係你嘅 MEMO 密鑰。Morphit 需要 POSTING — 黐嗰個。"
           },
-          "master_password": "這看來是你的 Blurt 主密碼，而非 POSTING 密鑰。Morphit 從不使用主密碼登入。請開啟 blurtwallet.com → Permissions，複製你的 Posting Private Key（以 5 開頭）。"
+          "master_password": "這看來是你的 Blurt 主密碼，而非 POSTING 密鑰。Morphit 從不使用主密碼登入。請開啟 blurtwallet.com → Permissions，複製你的 Posting Private Key（以 5 開頭）。",
+          "could_not_resolve": "我哋無法根據呢個密鑰自動識別你嘅帳戶。請喺上方輸入你嘅 Blurt 帳戶名（唔帶 @）後再試。"
         },
         "account_bad": "無效"
       },
@@ -2456,7 +2457,8 @@
         "body": "你的新用戶名尚未註冊。",
         "confirm": "仍要離開",
         "cancel": "留在此頁面"
-      }
+      },
+      "have_account_link": "已經有 Blurt 帳戶？喺設定度填佢"
     },
     "unlock_mode": {
       "heading": "下次你想如何解鎖?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "帳戶名用細階字母、數字、連字符同點 — 3 到 16 個字符,以字母開頭。",
       "error_not_found": "喺 Blurt 鏈上搵唔到 @{account}。檢查拼寫。",
       "error_key_mismatch": "你嘅 posting 密鑰同 @{account} 嘅 posting 權限唔夾。檢查你係咪匯入咗啱嘅密鑰。",
-      "error_chain_unreachable": "無法連接 Blurt 鏈。檢查連接後重試。"
+      "error_chain_unreachable": "無法連接 Blurt 鏈。檢查連接後重試。",
+      "no_account_link": "仲未有 Blurt 帳戶？攞個名"
     },
     "import_landing_banner": {
       "title": "就快完成 — 選擇您的 @帳戶名稱,讓訂單簿認得您",
@@ -4425,5 +4428,10 @@
     "no_master_password": "沒有主密碼。Morphit 從不建立或使用主密碼——你的 12 個單詞和這些密鑰就是全部。",
     "txt_warning": "請保密。任何擁有下方私鑰的人都能完全控制你的帳戶和資金。切勿分享給任何人，切勿輸入到你不信任的網站，也切勿透過訊息或電郵傳送。",
     "txt_footer": "你的 12 個單詞助記詞是你的 Morphit 備份。這四個密鑰讓你能在其他 Blurt 工具中使用此帳戶。沒有主密碼。"
+  },
+  "needs_account_name": {
+    "heading": "就快搞掂",
+    "body": "你已經登入，但仲未有 Blurt 帳戶名。加一個就可以開始交易同發佈；喺嗰之前你可以先睇吓。",
+    "cta": "完成設定"
   }
 }

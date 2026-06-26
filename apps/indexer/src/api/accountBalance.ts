@@ -38,11 +38,16 @@ import { Hono } from 'hono';
 import type { BlurtClient } from '$blurt/client';
 import { errorBody, isAccountName } from '$api/shared';
 
-/** Short public cache. Balances move ~every 3s block; 10s fresh +
- *  20s stale-while-revalidate keeps the card responsive while letting
- *  one upstream fetch serve many viewers. `public` is correct — an
- *  account's balance is public chain data, not per-user-private. */
-const BALANCE_CACHE_CONTROL = 'public, max-age=10, stale-while-revalidate=20';
+/** Short public cache. Balances move ~every 3s block, so the window
+ *  must stay tiny: a 2s max-age still collapses sub-block bursts (and
+ *  repeat explorer views of the same account) without ever serving a
+ *  meaningfully stale balance. NO stale-while-revalidate — on a balance
+ *  that is exactly the failure mode: swr serves the last cached copy
+ *  while a background revalidation runs, and if that revalidation fails
+ *  against a flaky node it keeps serving the old number indefinitely.
+ *  A live wallet must refetch, not coast on a cached value. `public` is
+ *  correct — an account's balance is public chain data, not private. */
+const BALANCE_CACHE_CONTROL = 'public, max-age=2';
 
 /** Response body. Mirrors the fields the frontend balance math
  *  (`vestsToBlurtPower`, `manaPercentage`, `computeBlurtVestingApr`)

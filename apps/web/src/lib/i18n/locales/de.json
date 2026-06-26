@@ -2307,9 +2307,9 @@
         "tab_label": "Blurt Posting-Schlüssel",
         "warning_title": "Import nur mit Posting-Schlüssel",
         "warning_body": "Wenn du keinen 12-Wörter-Seed oder eine .json-Datei für den Konto-Import hast, füge stattdessen einfach deinen Blurt Posting-Key hier ein. Wir verschlüsseln ihn auf diesem Gerät mit einem Passwort deiner Wahl. Du kannst lesen, posten und handeln — aber keine Konto-Schlüssel ändern (dafür braucht es ein Wallet wie blurtwallet.com).",
-        "account_label": "Dein Blurt-Kontoname",
+        "account_label": "Dein Blurt-Kontoname (optional)",
         "account_ok": "sieht gut aus!",
-        "account_hint": "Ohne das @. Wir prüfen, dass dieses Konto auf Blurt existiert und der Posting-Schlüssel passt.",
+        "account_hint": "Lass das Feld leer, dann erkennen wir ihn anhand deines Schlüssels. Ohne das @; wenn du ihn eingibst, prüfen wir, ob er zu deinem Schlüssel passt.",
         "wif_label": "Privater Posting-Schlüssel (WIF)",
         "wif_placeholder": "5J… oder P5J…",
         "password_mismatch": "Die Passwörter stimmen nicht überein.",
@@ -2337,7 +2337,8 @@
             "owner": "Das ist dein OWNER-Schlüssel. Morphit braucht nur den POSTING — bitte den einfügen. (Owner-Schlüssel geben volle Kontoverwaltung; nirgendwo einfügen.)",
             "memo": "Das ist dein MEMO-Schlüssel. Morphit braucht den POSTING — bitte den einfügen."
           },
-          "master_password": "Das sieht nach deinem Blurt-Master-Passwort aus, nicht nach deinem POSTING-Schlüssel. Morphit nutzt dein Master-Passwort nie zum Anmelden. Öffne blurtwallet.com → Permissions und kopiere deinen Posting Private Key (beginnt mit 5)."
+          "master_password": "Das sieht nach deinem Blurt-Master-Passwort aus, nicht nach deinem POSTING-Schlüssel. Morphit nutzt dein Master-Passwort nie zum Anmelden. Öffne blurtwallet.com → Permissions und kopiere deinen Posting Private Key (beginnt mit 5).",
+          "could_not_resolve": "Wir konnten dein Konto anhand dieses Schlüssels nicht automatisch erkennen. Gib oben deinen Blurt-Kontonamen ein (ohne das @) und versuche es erneut."
         },
         "account_bad": "ungültig"
       },
@@ -2456,7 +2457,8 @@
         "body": "Dein neuer Benutzername wurde noch nicht registriert.",
         "confirm": "Trotzdem verlassen",
         "cancel": "Auf dieser Seite bleiben"
-      }
+      },
+      "have_account_link": "Du hast schon ein Blurt-Konto? Trag es in den Einstellungen ein"
     },
     "unlock_mode": {
       "heading": "Wie möchtest du dich nächstes Mal entsperren?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "Kontonamen nutzen Kleinbuchstaben, Ziffern, Bindestriche und Punkte — 3 bis 16 Zeichen, beginnend mit Buchstabe.",
       "error_not_found": "Wir konnten @{account} nicht auf der Blurt-Chain finden. Prüfe die Schreibweise.",
       "error_key_mismatch": "Dein Posting-Key passt nicht zur Posting-Autorität von @{account}. Prüfe, ob du die richtigen Keys importiert hast.",
-      "error_chain_unreachable": "Konnten die Blurt-Chain nicht erreichen. Prüfe deine Verbindung und versuche es erneut."
+      "error_chain_unreachable": "Konnten die Blurt-Chain nicht erreichen. Prüfe deine Verbindung und versuche es erneut.",
+      "no_account_link": "Noch kein Blurt-Konto? Sichere dir einen Namen"
     },
     "import_landing_banner": {
       "title": "Fast fertig — wähle deinen @Konto-Namen, damit das Orderbook dich erkennt",
@@ -4425,5 +4428,10 @@
     "no_master_password": "Es gibt kein Master-Passwort. Morphit erstellt und nutzt keines — deine 12 Wörter und diese Schlüssel sind alles.",
     "txt_warning": "HALTE DIES GEHEIM. Wer einen der privaten Schlüssel unten besitzt, kann die volle Kontrolle über dein Konto und Guthaben übernehmen. Teile ihn mit niemandem, gib ihn auf keiner Website ein, der du nicht vertraust, und sende ihn nie per Nachricht oder E-Mail.",
     "txt_footer": "Deine 12-Wörter-Seed-Phrase ist deine Morphit-Sicherung. Mit diesen vier Schlüsseln kannst du dieses Konto in anderen Blurt-Tools nutzen. Es gibt kein Master-Passwort."
+  },
+  "needs_account_name": {
+    "heading": "Fast fertig",
+    "body": "Du bist angemeldet, hast aber noch keinen Blurt-Kontonamen. Lege einen an, um zu handeln und zu posten – bis dahin kannst du dich umsehen.",
+    "cta": "Einrichtung abschließen"
   }
 }

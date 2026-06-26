@@ -25,9 +25,10 @@
 	import { normalizeSeedPhrase, seedWordCount } from '$crypto/seedNormalize';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
-	import { bootFromEnvelope } from '$stores/identity';
+	import { bootFromEnvelope, liveIdentity } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
 	import { resolveAccountsByPublicKeys } from '$blurt/accountByKey';
+	import { get } from 'svelte/store';
 	import sodium from 'libsodium-wrappers-sumo';
 
 	let mode: 'seed' | 'keyfile' | 'posting-only' = $state('seed');
@@ -365,20 +366,22 @@
 			}
 
 			await bootFromEnvelope(env, usedPassword);
-			// Capture the POSTING public key before wiping the FullIdentity,
-			// so we can reverse-resolve the account name on-chain for seed
-			// imports that don't carry it (Task 6d). Posting only — the
-			// owner/active slots are gated by the active/owner key invariant
-			// and aren't needed here: a standard seed-derived account has
-			// this posting key in its posting authority, so get_key_references
-			// finds it. (A rotated posting key falls back to manual entry.)
-			// Public key only — no private material is retained. `full` is
-			// populated only for seed mode (keyfile decrypts to an envelope
-			// without exposing the FullIdentity), which is exactly the case
-			// where auto-resolution is both possible and useful.
-			if (full?.keys.posting?.publicKey) {
+			// Capture the POSTING public key from the just-booted session so we
+			// can reverse-resolve the account name on-chain — NEITHER a seed nor
+			// a keyfile carries the account name. Reading it from the live
+			// identity (not `full`) covers BOTH modes: seed (where `full` is in
+			// hand) AND keyfile (where the envelope decrypts INSIDE
+			// bootFromEnvelope without ever surfacing the FullIdentity to this
+			// page) — both are cases where auto-resolution is possible and useful.
+			// Posting only — the owner/active slots are gated by the active/owner
+			// key invariant and aren't needed here: a standard account has this
+			// posting key in its posting authority, so get_key_references finds
+			// it. (A rotated posting key falls back to manual entry.) Public key
+			// only — no private material is retained.
+			const booted = get(liveIdentity);
+			if (booted?.posting.publicKey) {
 				try {
-					pendingPubKeysBLT = [await formatPublicKeyBLT(full.keys.posting.publicKey)];
+					pendingPubKeysBLT = [await formatPublicKeyBLT(booted.posting.publicKey)];
 				} catch {
 					// Couldn't format — fall back to manual account-name entry.
 				}
@@ -603,9 +606,16 @@
 	}
 
 	async function unlockPostingOnly(): Promise<void> {
-		// Up-front validation before we do any crypto.
-		const account = postingAccount.trim().toLowerCase();
-		if (!BLURT_ACCOUNT_RE.test(account)) {
+		// Up-front validation before we do any crypto. The account name is
+		// OPTIONAL: leave it blank and we reverse-resolve it from the posting
+		// key's PUBLIC key on-chain (the same same-origin get_key_references
+		// lookup the seed/keyfile imports use) after deriving it — a posting key
+		// uniquely identifies its account in the normal case, so typing the name
+		// is redundant friction. We only format-check it here when the user DID
+		// type one; the auto-detect path "validates" by finding the key in
+		// exactly one account's posting authority.
+		const typedAccount = postingAccount.trim().toLowerCase();
+		if (typedAccount && !BLURT_ACCOUNT_RE.test(typedAccount)) {
 			errorMsg = $_('onboarding.import.posting_only.error.bad_account');
 			return;
 		}
@@ -639,14 +649,19 @@
 					// NEVER logs in via master password — this is detection
 					// only, to give a precise, actionable message.
 					try {
-						const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
-						if (fetched) {
-							const mpPub = await masterPasswordPubKey(account, 'posting', postingWif);
-							if (mpPub && verifyPostingKey(fetched, mpPub).kind === 'ok') {
-								errorMsg = $_('onboarding.import.posting_only.error.master_password');
-								wifKeyInvalid = true;
-								postingWif = '';
-								return;
+						if (typedAccount) {
+							const fetched = await fetchAccountKeys(
+								resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+								typedAccount
+							);
+							if (fetched) {
+								const mpPub = await masterPasswordPubKey(typedAccount, 'posting', postingWif);
+								if (mpPub && verifyPostingKey(fetched, mpPub).kind === 'ok') {
+									errorMsg = $_('onboarding.import.posting_only.error.master_password');
+									wifKeyInvalid = true;
+									postingWif = '';
+									return;
+								}
 							}
 						}
 					} catch {
@@ -670,6 +685,28 @@
 
 			// 3. Format the derived posting public key for chain comparison.
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
+
+			// 3b. Resolve the account name. If the user TYPED one, use it (and
+			//     verify the key against it below). If they left it BLANK,
+			//     reverse-resolve it from the derived public key via the same
+			//     same-origin get_key_references lookup the seed/keyfile imports
+			//     use — a UNIQUE match IS the account (the key is in exactly that
+			//     account's posting authority, so it's inherently verified).
+			//     Ambiguous (a key shared across accounts), no match, or any
+			//     lookup failure (a rotated key / an RPC without the method) →
+			//     ask the user to type the name and resubmit (the typed path
+			//     below then runs the full verify).
+			let account = typedAccount;
+			if (!account) {
+				const matches = await resolveAccountsByPublicKeys([derivedPub]);
+				const only = matches.length === 1 ? matches[0] : undefined;
+				if (only) {
+					account = only;
+				} else {
+					errorMsg = $_('onboarding.import.posting_only.error.could_not_resolve');
+					return;
+				}
+			}
 
 			// 4. Fetch the account from chain and classify the key.
 			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
@@ -810,13 +847,13 @@
 			: mode === 'keyfile'
 				? !file || !password
 				: // posting-only (N + H, cp295): the "Unlock my account" button
-					// must stay disabled until ALL four fields hold proper-looking
-					// values — a real-looking account name, a WIF that passes the
-					// Blurt-WIF shape check (not a 1-char stub), a device password
-					// of at least the 8-char floor the handler enforces, and a
-					// confirmation that actually MATCHES. Previously it only
-					// checked the four fields were non-empty.
-					!postingAccount.trim() ||
+					// stays disabled until the key + password fields hold
+					// proper-looking values — a WIF that passes the Blurt-WIF shape
+					// check (not a 1-char stub), a device password of at least the
+					// 8-char floor the handler enforces, and a confirmation that
+					// actually MATCHES. The account name is now OPTIONAL (blank ⇒
+					// auto-detect from the key), so it no longer gates the button;
+					// a non-empty name with bad characters still does.
 					accountHasInvalidChar ||
 					!postingWif.trim() ||
 					wifLooksInvalid ||

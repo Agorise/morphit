@@ -21,7 +21,8 @@
  *   register                            Publish operator registration on-chain (run after init)
  *   show-key                            Show the PUBLIC key your saved active key derives to (verify
  *                                       the right key is installed; never prints the private key)
- *   payment-method add|remove|list      Manage instance-specific payment-method additions (ADR-0021)
+ *   payment-method [add|remove|list]    Manage instance-specific payment-method additions (ADR-0021;
+ *                                       no subcommand opens an interactive list/add/remove menu)
  *   upgrade [--check-only] [--yes] [--json]
  *                                       Check for and apply a newer Morphit release
  *   status                              Operator dashboard at a glance
@@ -195,7 +196,9 @@ function printHelp(): void {
 		'  show-key                        Show the public key your saved active key derives to',
 		'                                  (verify the correct key is installed; never prints the',
 		'                                  private key)',
-		'  payment-method add|remove|list  Manage instance-specific payment-method additions (ADR-0021)',
+		'  payment-method [add|remove|list]',
+		'                                  Manage instance-specific payment-method additions (ADR-0021;',
+		'                                  no subcommand opens an interactive list/add/remove menu)',
 		'  upgrade [--check-only] [--yes] [--json]',
 		'                                  Check for and apply a newer Morphit release (manual-only',
 		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt)',

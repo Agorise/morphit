@@ -16,6 +16,7 @@
 	import PermissionBanner from '$components/PermissionBanner.svelte';
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
 	import PairedReadOnlyBanner from '$components/PairedReadOnlyBanner.svelte';
+	import NeedsAccountNameBanner from '$components/NeedsAccountNameBanner.svelte';
 	import ToastRegion from '$components/ToastRegion.svelte';
 	import { startAmbientChannels } from '$lib/notifications/ambient';
 	import { bannerTriggered, clearBannerTrigger } from '$lib/notifications/native';
@@ -320,6 +321,13 @@
 	     READ everything but can't BROADCAST anything; signing
 	     happens on the phone. -->
 	<PairedReadOnlyBanner />
+
+	<!-- Signed-in-but-no-account-name persistent banner.  Visible when
+	     the session is fully unlocked but no Blurt account name has been
+	     set yet (signup step 4 skipped, or an import whose auto-resolve
+	     couldn't determine the name).  Keeps that state from reading as a
+	     bug — see the component for the full rationale. -->
+	<NeedsAccountNameBanner />
 
 	{#if $bannerTriggered}
 		<PermissionBanner category={$bannerTriggered.category} onClose={clearBannerTrigger} />

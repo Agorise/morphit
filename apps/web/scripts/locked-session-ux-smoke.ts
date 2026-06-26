@@ -67,19 +67,23 @@ check(
 		(avatar.match(/nav\.start/g) || []).length === 1
 );
 
-// ── 2. Locked visitors on session-required pages are sent to the homepage ────
+// ── 2. Locked visitors on session-required pages go to the welcome-back ──────
+//      unlock screen, carrying the page they wanted as ?next= so they land
+//      there after unlocking (cp356) instead of on the homepage.
 check(
 	'Settings delegates the locked-redirect to <RequireLiveSession />',
 	/<RequireLiveSession\s*\/>/.test(settings)
 );
 check(
-	'RequireLiveSession redirects to the homepage',
-	/gotoLocale\(\s*['"]\/['"]\s*\)/.test(requireLiveSession)
+	'RequireLiveSession redirects to the welcome-back unlock screen carrying ?next=',
+	/gotoLocale\(\s*['"]\/login\?next=/.test(requireLiveSession)
 );
 check(
-	'the redirect is guarded by !isUnlocked && !isPairedReadOnly (paired keeps access) and runs in onMount (once)',
+	'the redirect is guarded by !isUnlocked && !isPairedReadOnly (paired keeps access) and runs in onMount (once), routing to /login?next=',
 	/!get\(isUnlocked\)[\s\S]{0,40}!get\(isPairedReadOnly\)/.test(requireLiveSession) &&
-		/onMount\(\(\)\s*=>\s*\{[\s\S]*?gotoLocale\(\s*['"]\/['"]\s*\)[\s\S]*?\}\)/.test(requireLiveSession)
+		/onMount\(\(\)\s*=>\s*\{[\s\S]*?gotoLocale\(\s*['"]\/login\?next=[\s\S]*?\}\)/.test(
+			requireLiveSession
+		)
 );
 
 // ── 3. Key buttons show the yellow 🔐 lock emoji; phone buttons the QR svg ───
