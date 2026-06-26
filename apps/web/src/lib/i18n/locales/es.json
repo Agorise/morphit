@@ -256,7 +256,7 @@
     "my_orders": "Mis órdenes",
     "settings": "Ajustes",
     "sign_out": "Cerrar sesión",
-    "notification_settings": "Ajustes de notificaciones ⇨",
+    "notification_settings": "Ajustes de notificaciones",
     "category": {
       "order": "Órdenes",
       "order_help": "Completadas, expiradas, contraofertas",
@@ -722,7 +722,8 @@
       "copy_button": "Copiar seguimiento",
       "track_button": "Rastrear paquete",
       "for_order": "Para el pedido"
-    }
+    },
+    "message_button_label_named": "Mensaje a @{account}"
   },
   "cheat_sheet": {
     "heading": "Hoja de referencia de Morphit",
@@ -949,9 +950,7 @@
       "activity_title": "Actividad",
       "activity_description": "Volumen de operaciones y anuncios activos.",
       "fallback_title": "blocks.blurtwallet.com",
-      "fallback_description": "Explorador Blurt independiente.",
-      "home_title": "Inicio",
-      "home_description": "Volver a Morphit."
+      "fallback_description": "Explorador Blurt independiente."
     },
     "account": {
       "page_title": "@{account} en el explorador de bloques",
@@ -1710,7 +1709,7 @@
     "first_trade_disclosure": {
       "on": "Al enviar, Morphit también publicará un breve anuncio \"Me uní a Morphit\" en la comunidad @morphit en Blurt — bajo tu cuenta, firmado por ti. Esto sucede una vez, en tu primer comentario.",
       "off": "Nota: has desactivado el anuncio automático en Configuración. No se publicará ningún anuncio de primera operación en Blurt al enviar.",
-      "manage_link": "Gestionar en Configuración ⇨",
+      "manage_link": "Gestionar en Configuración",
       "heading": "Anuncia tu primera operación",
       "pitch": "La sindicación de tus operaciones lo es todo. Anuncia tus ofertas en todos los lugares posibles — más ojos sobre tus ofertas significan más socios de comercio y más votos positivos, que son ingresos adicionales directamente a tu Billetera Blurt.",
       "label_on": "Sí, anuncia mi primera operación en Blurt",
@@ -1767,7 +1766,7 @@
     "tip_expiry_body": "Hemos puesto la expiración en 7 días en lugar de los 90 predeterminados. Una ventana más corta significa que las ofertas obsoletas no se quedan si cambias de opinión.",
     "tip_payment_label": "Consejos sobre métodos de pago.",
     "tip_payment_body": "Añade los métodos de pago que realmente aceptas. Los socios comerciales eligen el que les funcione. Puntos de partida comunes: PayPal, Wise, transferencia bancaria, efectivo en persona.",
-    "faq_link": "Lee el tutorial completo de la primera operación ⇨",
+    "faq_link": "Lee el tutorial completo de la primera operación",
     "dismiss_aria": "Descartar este pack de inicio"
   },
   "first_trade_helper": {
@@ -1777,7 +1776,7 @@
     "step_2_warn": "¡Espera!",
     "step_2": "Si vas a enviar cripto, espera hasta que realmente hayas recibido el fiat (no solo \"pendiente\") antes de enviar la cripto. Una vez que se va, se va.",
     "step_3": "Cuando termine la operación, deja una reseña en /my/orders para que futuros traders confíen en los dos.",
-    "faq_link": "Lee la guía completa ⇨",
+    "faq_link": "Lee la guía completa",
     "dismiss_aria": "Cerrar esta guía"
   },
   "footer": {
@@ -1984,7 +1983,7 @@
     "bookmark_tip": "💡 Consejo: guarda en marcadores algunas de estas instancias —y sus direcciones de Tor, I2P o Lokinet— en tu navegador. El libro de órdenes vive en la cadena de bloques pública, así que si alguna vez se bloquea un sitio o queda fuera de servicio, podrás acceder exactamente a las mismas órdenes y operaciones a través de cualquier otra instancia.",
     "fetch_error": "No se pudo cargar el directorio.",
     "last_updated": "Directorio actualizado por última vez: {date}",
-    "contact": "Contactar al operador ⇨",
+    "contact": "Contactar al operador",
     "add_yours_title": "Añade tu instancia",
     "add_yours_body": "¿Ejecutas una instancia Morphit? Solo regístrate en la cadena — cualquier otro indexador Morphit te descubrirá automáticamente. El asistente (morphit-ops init) gestiona el registro durante la configuración inicial.",
     "status": {
@@ -2669,7 +2668,7 @@
       "body": "Puedes navegar aquí, pero necesitas un nombre de cuenta de Blurt para enviar mensajes a vendedores o publicar tus propias órdenes.",
       "cta": "Elige un nombre"
     },
-    "fee_rejected_check": "¿Publicaste una orden pero no la ves? Revisa el estado de la tarifa ⇨"
+    "fee_rejected_check": "¿Publicaste una orden pero no la ves? Revisa el estado de la tarifa"
   },
   "paired_readonly": {
     "banner_heading": "Conectado como @{account} — las claves están en el teléfono.",
@@ -3033,7 +3032,7 @@
       "view_my_order_cta": "Ver mi orden",
       "feature_upsell_heading": "¿Quieres más visibilidad para esta publicación?",
       "feature_upsell_body": "Puja por un slot destacado para colocar tu orden en la parte superior del libro de órdenes durante algunas horas. La puja mínima es de 6 horas; la tarifa se establece por instancia. La mayoría de operadores usan 50 BLURT/hora como predeterminado.",
-      "feature_upsell_cta": "Configurar una puja destacada ⇨",
+      "feature_upsell_cta": "Configurar una puja destacada",
       "edit_window_countdown": "{remaining} para editar",
       "edit_window_tooltip": "Las ediciones solo son posibles dentro de los 15 minutos siguientes a la publicación. Después, cancela y vuelve a publicar.",
       "edit_window_expired": "Ventana de edición cerrada"
@@ -3339,8 +3338,8 @@
     "rss_subscribe_title": "Recibe notificaciones por RSS cuando este trader publique una nueva orden de compra o venta. Nota: consultar un feed por trader es ligeramente más revelador que el feed mundial.",
     "feedback_suppressed_chip": "No cuenta para la valoración — reseñadores marcados como relacionados",
     "my_balance": {
-      "section_label": "Tu saldo",
-      "title": "Tu saldo",
+      "section_label": "Saldo de @{account}",
+      "title": "Saldo de @{account}",
       "private_label": "Sólo tú ves esto",
       "loading": "Cargando saldo...",
       "error": "No se pudo cargar el saldo",
@@ -3564,7 +3563,7 @@
     "footer_body": "¿Encontraste un problema? Repórtalo en el repo público de Forgejo, o por mensaje cifrado a la cuenta {morphit_account} de la cadena.",
     "bounty_title": "Programa de recompensas por errores",
     "bounty_body": "Operamos un programa discrecional de reconocimiento de seguridad. Cada hallazgo accionable es revisado por un ingeniero real, recibe una respuesta y — si mejora materialmente la postura de seguridad de Morphit — es recompensado en BLURT (pagado desde @morphit-fees) o BTC, escalado por severidad y calidad del informe. Sin tabla de niveles fija; adjudicación caso por caso. Crédito en el salón de la fama disponible incluso cuando no hay pago. El alcance completo, la guía de severidad, el flujo de pago y lo que no haremos (sin NDA, sin divulgación exclusiva) está documentado en SECURITY.md.",
-    "bounty_link": "Leer el alcance y las reglas completas ⇨",
+    "bounty_link": "Leer el alcance y las reglas completas",
     "canary_title": "Canario de orden judicial",
     "canary_body": "Publicamos un canario semanal firmado con la clave PGP del operador. El canario declara explícitamente que no se ha recibido ninguna NSL / FISA / orden de silencio / demanda de puerta trasera. Las pruebas de frescura incluyen un encabezado de cadena Blurt actual, un encabezado de cadena Bitcoin actual y un titular de noticias actual (prueba que el canario no puede ser pregenerado). Si el canario deja de actualizarse durante más de 14 días, trátalo como silencioso: el operador puede estar bajo presión coercitiva, y deberías cambiar a otro operador federado.",
     "canary_link": "Ver el canario actual de este operador",
@@ -3572,7 +3571,7 @@
   },
   "seed_backup_nudge": {
     "body": "Ha pasado una semana — ¿ya has respaldado tu frase de 12 palabras? Si pierdes este dispositivo, la frase es la ÚNICA manera de recuperar tu cuenta.",
-    "show_me_how": "Muéstrame cómo ⇨",
+    "show_me_how": "Muéstrame cómo",
     "got_it": "Entendido"
   },
   "rss": {
@@ -3772,12 +3771,13 @@
       "reminder_title": "💡 Los nombres públicos no son únicos.",
       "reminder_body": "Cualquiera puede usar cualquier nombre. La clave corta entre paréntesis es lo que realmente te identifica, y nadie más puede copiarla. Siempre revisa la clave cuando estés operando.",
       "save_and_broadcast": "Guardar y difundir",
-      "broadcast_ok": "Publicado.",
+      "broadcast_ok": "Difundido",
       "broadcast_err": {
         "no_account": "Guardado localmente. La publicación estará disponible cuando registres tu cuenta.",
         "locked": "La sesión está bloqueada. Inicia sesión de nuevo para publicar.",
         "generic": "No se pudo transmitir. Inténtalo de nuevo.",
-        "rejected": "La red rechazó la publicación: {reason}"
+        "rejected": "La red rechazó la publicación: {reason}",
+        "key_mismatch": "La identidad desbloqueada no está autorizada a publicar para @{account}. Asegúrate de tener desbloqueada la cuenta correcta y de que el nombre de cuenta coincida, luego inténtalo de nuevo."
       },
       "save_pending": "Guardando…",
       "broadcast_pending": "Publicando…",
@@ -3841,9 +3841,8 @@
       "saved_toast": "Guardado ✓",
       "save_and_broadcast": "Guardar y difundir",
       "broadcast_pending": "Publicando…",
-      "broadcast_ok": "Publicado ✓",
+      "broadcast_ok": "Difundido",
       "clear": "Borrar",
-      "need_display_name": "Configura primero un nombre mostrado. Tu perfil transmite ambos.",
       "reminder_title": "Dónde aparece esto",
       "reminder_body": "Una vez publicado, el ícono de Nostr aparece junto a tu nombre de usuario en cada orden, cada feedback, cada mensaje de chat — en cada instancia de Morphit, no solo en esta. Otros usuarios lo tocan para abrir tu perfil de Nostr en su cliente preferido."
     },
@@ -3866,9 +3865,8 @@
       "saved_toast": "Guardado en este dispositivo.",
       "save_and_broadcast": "Guardar y emitir",
       "broadcast_pending": "Emitiendo…",
-      "broadcast_ok": "Emitido — visible en todo Morphit tras el próximo bloque.",
+      "broadcast_ok": "Difundido",
       "clear": "Limpiar",
-      "need_display_name": "Establece primero un nombre visible — tu op de perfil lleva ambos campos juntos.",
       "reminder_title": "Opcional — puedes saltarlo.",
       "reminder_body": "Tu identidad de Morphit funciona bien sin esta URL. Es un enlace de cortesía para las personas que quizá quieran ver también tus videos o pódcasts."
     },
@@ -3954,7 +3952,7 @@
       "guidance_filetypes": "Acepta SVG, WebP, JPEG, PNG o GIF.",
       "guidance_dimensions": "Ideal: una imagen cuadrada de al menos 96×96 píxeles. Cualquier cosa más grande se redimensionará a 96×96; más pequeña se verá pixelada.",
       "guidance_filesize": "Tamaño del archivo: hasta 5 MB. Las imágenes más grandes se reducirán automáticamente a 96×96, así que incluso una foto directa de tu teléfono funciona bien.",
-      "guidance_size": "Las imágenes ráster se re-codifican automáticamente a WebP de alta calidad. Los SVG se minifican sin pérdida. La carga final debe caber en menos de 3 KB.",
+      "guidance_size": "Las imágenes ráster se re-codifican automáticamente a WebP de alta calidad. Los SVG se minifican sin pérdida. La carga final debe caber en menos de 6 KB.",
       "guidance_svg_tips": "Consejo para SVG: un viewBox cuadrado (p. ej. 0 0 100 100) se ve mejor. Los scripts, referencias externas y HTML dentro del SVG se eliminan automáticamente por seguridad.",
       "permanence_heading": "Esto va a la cadena de forma permanente.",
       "permanence_body": "Una vez transmitido, tu avatar será público en la blockchain de Blurt para siempre. No se puede borrar, solo reemplazar. Nunca subas una imagen que no quieras asociada públicamente a tu cuenta de por vida — las fotos de rostros, en particular, son una consideración de privacidad dadas las herramientas modernas de reconocimiento facial.",
@@ -3964,10 +3962,9 @@
       "preview_display_name_placeholder": "Tu nombre",
       "preview_size": "{bytes} de {cap} máximo",
       "preview_getting_large": "Se acerca al límite de tamaño — considera una imagen más simple o un origen más pequeño.",
-      "need_display_name": "Establece y transmite tu nombre primero antes de cambiar tu avatar.",
       "broadcast": "Transmitir avatar",
       "broadcast_pending": "Transmitiendo…",
-      "broadcast_ok": "¡Transmitido!",
+      "broadcast_ok": "Difundido",
       "cancel": "Descartar",
       "remove": "Eliminar avatar",
       "remove_pending": "Eliminando…",
@@ -3977,14 +3974,16 @@
         "input_too_large": "Esa imagen es demasiado grande para subir. Por favor, elige un archivo de menos de 5 MB.",
         "parse_failed": "No se pudo analizar el SVG. El archivo puede estar mal formado.",
         "svg_no_root": "Esto no parece ser un archivo SVG válido.",
-        "svg_too_large": "Este SVG es demasiado complejo para caber en el límite on-chain de 3 KB. Intenta simplificarlo — menos trazos, menos detalle o un viewBox más pequeño.",
+        "svg_too_large": "Este SVG es demasiado complejo para caber en el límite on-chain de 6 KB. Intenta simplificarlo — menos trazos, menos detalle o un viewBox más pequeño.",
         "raster_too_large": "Incluso tras redimensionar y re-codificar, esta imagen es demasiado grande para el almacenamiento on-chain. Prueba con una imagen de origen más simple o menos detallada.",
         "raster_decode_failed": "No se pudo decodificar esta imagen. El archivo puede estar dañado o ser una variante no compatible.",
         "canvas_unavailable": "Tu navegador no admite las funciones de procesamiento de imágenes que esto necesita. Prueba con otro navegador.",
         "webp_unavailable": "Tu navegador no admite la salida WebP. Prueba con otro navegador.",
         "load_failed": "No se pudo cargar el archivo de imagen.",
         "processing_failed": "No pudimos procesar esta imagen. Prueba otro archivo."
-      }
+      },
+      "remove_confirm_title": "¿Eliminar tu avatar?",
+      "remove_confirm_body": "Esto difunde una actualización de perfil que borra tu avatar en la cadena. Puedes subir uno nuevo cuando quieras."
     },
     "blocked_accounts": {
       "heading": "Cuentas bloqueadas",
@@ -4124,7 +4123,7 @@
       "manual_chrome": "Chrome / Edge: toca el icono de instalación en la barra de direcciones, o usa el menú del navegador → Instalar Morphit.",
       "manual_safari": "Safari (macOS / iOS): toca el botón Compartir, luego \"Añadir a pantalla de inicio\".",
       "manual_firefox": "Firefox Android: toca el menú (︙), luego \"Instalar\". Firefox de escritorio no admite instalación PWA — usa navegadores basados en Chromium.",
-      "iphone_link": "Guía de instalación en iPhone ⇨"
+      "iphone_link": "Guía de instalación en iPhone"
     },
     "account_name": {
       "heading": "Nombre de cuenta Blurt",

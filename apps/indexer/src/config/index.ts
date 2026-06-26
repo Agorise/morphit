@@ -1074,8 +1074,8 @@ const envSchema = z.object({
 	// again. Default 3 days — stops a user who burns through dust
 	// in a day from becoming a refill treadmill.
 	MORPHIT_INDEXER_LOW_BALANCE_REFILL_COOLDOWN_DAYS: z.coerce.number().int().positive().default(3),
-	// Amount per refill. Default 1 BLURT — matches the signup dust,
-	// keeps per-refill cost at $0.002 or so.
+	// Amount per refill. Default 1 BLURT (the one-time signup dust is
+	// larger at 2 BLURT); keeps per-refill cost at $0.002 or so.
 	MORPHIT_INDEXER_LOW_BALANCE_REFILL_AMOUNT_BLURT: z.coerce.number().positive().default(1),
 	// Max accounts to process per scan. Hard cap to bound RPC load
 	// and damage if a bug sends refills to everyone. Default 50;

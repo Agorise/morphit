@@ -750,7 +750,7 @@ recurrent_transfer as a cancellation.
 >
 > **What this means for you as an operator:** keep `@morphit-relay`
 > funded with enough liquid BLURT to cover signups — roughly one week of
-> (≈100 BLURT creation fee + 1 BLURT dust + the welcome bonus per
+> (≈100 BLURT creation fee + 2 BLURT dust + the welcome bonus per
 > completed-trade signup). See **§0a** for the funding math and **§16**
 > for the low-balance Matrix alert (`relay_low_balance_for_signups`). The
 > relay refuses signups (`relay_out_of_funds`) when its liquid balance

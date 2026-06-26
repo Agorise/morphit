@@ -256,7 +256,7 @@
     "my_orders": "我的訂單",
     "settings": "設定",
     "sign_out": "登出",
-    "notification_settings": "通知設定 ⇨",
+    "notification_settings": "通知設定",
     "category": {
       "order": "訂單",
       "order_help": "成交、過期、反報價",
@@ -722,7 +722,8 @@
       "copy_button": "複製追蹤號碼",
       "track_button": "追蹤包裹",
       "for_order": "對應訂單"
-    }
+    },
+    "message_button_label_named": "向 @{account} 傳訊息"
   },
   "cheat_sheet": {
     "heading": "Morphit 速查表",
@@ -949,9 +950,7 @@
       "activity_title": "活動",
       "activity_description": "交易量和活躍掛單。",
       "fallback_title": "blocks.blurtwallet.com",
-      "fallback_description": "獨立的 Blurt 瀏覽器。",
-      "home_title": "首頁",
-      "home_description": "返回 Morphit。"
+      "fallback_description": "獨立的 Blurt 瀏覽器。"
     },
     "account": {
       "page_title": "@{account} - 區塊瀏覽器",
@@ -1710,7 +1709,7 @@
     "first_trade_disclosure": {
       "on": "提交時，Morphit 還將在 Blurt 上的 @morphit 社群發布一則簡短的「我加入了 Morphit」公告 — 以您的帳戶名義、由您簽名。僅在您有史以來第一次反饋時發生一次。",
       "off": "提示：您已在設定中關閉自動公告。提交時不會發布首次交易 Blurt 帖子。",
-      "manage_link": "在設定中管理 ⇨",
+      "manage_link": "在設定中管理",
       "heading": "公告您的首次交易",
       "pitch": "辛迪加發布交易至關重要。在任何可能的地方公告您的報價 — 更多眼睛看到您的報價意味著更多交易夥伴,加上更多點讚,這些都是直接進入您 Blurt 錢包的額外收入。",
       "label_on": "是的,在 Blurt 上公告我的首次交易",
@@ -1767,7 +1766,7 @@
     "tip_expiry_body": "我們將到期時間設定為 7 天,而非預設的 90 天。更短的窗口意味著如果您改變主意,過時的報價不會滯留。",
     "tip_payment_label": "付款方式提示。",
     "tip_payment_body": "新增您實際接受的付款方式。交易夥伴會選擇對他們有用的方式。常見起點:PayPal、Wise、銀行轉帳、當面現金。",
-    "faq_link": "閱讀完整的首次交易演練 ⇨",
+    "faq_link": "閱讀完整的首次交易演練",
     "dismiss_aria": "關閉此入門包"
   },
   "first_trade_helper": {
@@ -1777,7 +1776,7 @@
     "step_2_warn": "等等!",
     "step_2": "如果你要發送加密貨幣,請等到你真正收到法幣(不只是「待處理」),再發送加密貨幣。一旦發送,就無法收回。",
     "step_3": "交易完成後,在 /my/orders 留下評價,讓未來的交易者信任你們雙方。",
-    "faq_link": "閱讀完整教程 ⇨",
+    "faq_link": "閱讀完整教程",
     "dismiss_aria": "關閉此指南"
   },
   "footer": {
@@ -1984,7 +1983,7 @@
     "bookmark_tip": "💡 提示：在瀏覽器中將其中幾個實例——以及它們的 Tor、I2P 或 Lokinet 位址——加入書籤。訂單簿存在於公開的區塊鏈上，因此即使某個網站被封鎖或離線，你也能透過任何其他實例存取完全相同的訂單和交易。",
     "fetch_error": "無法載入目錄。",
     "last_updated": "目錄上次更新:{date}",
-    "contact": "聯絡本營運者 ⇨",
+    "contact": "聯絡本營運者",
     "add_yours_title": "新增您的實例",
     "add_yours_body": "運行了 Morphit 實例?直接在鏈上註冊 — 任何其他 Morphit 索引器都會自動發現您。精靈(morphit-ops init)在首次設定期間處理註冊。",
     "status": {
@@ -2669,7 +2668,7 @@
       "body": "您可以在此瀏覽,但需要 Blurt 帳戶名稱才能向賣家傳訊或發布自己的訂單。",
       "cta": "選擇名稱"
     },
-    "fee_rejected_check": "發布了訂單但看不到?查看手續費狀態 ⇨"
+    "fee_rejected_check": "發布了訂單但看不到?查看手續費狀態"
   },
   "paired_readonly": {
     "banner_heading": "以 @{account} 登入 — 鎖匙喺電話度。",
@@ -3033,7 +3032,7 @@
       "view_my_order_cta": "查看我嘅訂單",
       "feature_upsell_heading": "想令更多人睚到呢個掛單？",
       "feature_upsell_body": "競投特色位置，等你嘅訂單喺訂單簿頂部展示幾個鐘。最低出價係 6 個鐘；費率由各實例設定。大部分運營商默認使用 50 BLURT/小時。",
-      "feature_upsell_cta": "設定特色出價 ⇨",
+      "feature_upsell_cta": "設定特色出價",
       "edit_window_countdown": "{remaining} 內可編輯",
       "edit_window_tooltip": "編輯僅可在發布後 15 分鐘內進行。之後請取消並重新發布。",
       "edit_window_expired": "編輯視窗已過"
@@ -3339,8 +3338,8 @@
     "rss_subscribe_title": "當呢個交易者發布新嘅買/賣單時透過 RSS 收到通知。注意:輪詢按交易者嘅訂閱比全站訂閱稍微更具揭示性。",
     "feedback_suppressed_chip": "唔計入評分 — 評論者被標記為關聯戶口",
     "my_balance": {
-      "section_label": "你的餘額",
-      "title": "你的餘額",
+      "section_label": "@{account} 的餘額",
+      "title": "@{account} 的餘額",
       "private_label": "只有你看到",
       "loading": "正在載入餘額...",
       "error": "無法載入餘額",
@@ -3564,7 +3563,7 @@
     "footer_body": "發現問題?請通過公共 Forgejo repo 報告,或通過加密訊息發俾 {morphit_account} 鏈帳戶。",
     "bounty_title": "漏洞賞金計劃",
     "bounty_body": "我們運行一個酌情決定的安全識別計劃。每一個可操作的發現都由真實的工程師審查,獲得答覆,並且 — 如果它實質上改善了 Morphit 的安全態勢 — 將在 BLURT(從 @morphit-fees 支付)或 BTC 中獲得獎勵,根據嚴重程度和報告質量進行調整。沒有固定的等級表;按個案裁定。即使沒有付款,名人堂榮譽也可用。完整範圍、嚴重程度指導、付款流程以及我們不會做的事情(沒有保密協議,沒有獨家披露)記錄在 SECURITY.md 中。",
-    "bounty_link": "閱讀完整範圍和規則 ⇨",
+    "bounty_link": "閱讀完整範圍和規則",
     "canary_title": "搜查令金絲雀",
     "canary_body": "我們發布每週一次的金絲雀,使用營運者的 PGP 密鑰簽名。金絲雀明確聲明沒有收到任何 NSL / FISA / 禁言令 / 後門要求。新鮮度證明包括當前的 Blurt 鏈頭、當前的比特幣鏈頭和當前的新聞標題(證明金絲雀不能預先生成)。如果金絲雀超過 14 天未更新,請視為靜默:營運者可能受到強制壓力,你應該切換到另一個聯邦營運者。",
     "canary_link": "查看此營運者當前的金絲雀",
@@ -3572,7 +3571,7 @@
   },
   "seed_backup_nudge": {
     "body": "已經過咗一個星期 — 你備份過 12 個字嘅助記詞未?如果掉咗呢部裝置,呢組助記詞係恢復賬戶嘅唯一方法。",
-    "show_me_how": "話我知點做 ⇨",
+    "show_me_how": "話我知點做",
     "got_it": "知道喇"
   },
   "rss": {
@@ -3772,12 +3771,13 @@
       "reminder_title": "💡 顯示名唔係獨一無二嘅。",
       "reminder_body": "任何人都可以用任何名。真正認到你嘅,係括號入面嗰條短 key,其他人冚唔到。做交易嗰陣,一定要睇嗰條 key。",
       "save_and_broadcast": "儲存並廣播",
-      "broadcast_ok": "已經發咗。",
+      "broadcast_ok": "已廣播",
       "broadcast_err": {
         "no_account": "已本地儲存。註冊帳戶後即可發佈。",
         "locked": "Session 已鎖定。請重新登入再廣播。",
         "generic": "無法廣播。請重試。",
-        "rejected": "網絡拒絕咗今次廣播：{reason}"
+        "rejected": "網絡拒絕咗今次廣播：{reason}",
+        "key_mismatch": "已解鎖的身份無權為 @{account} 發佈。請確認解鎖咗正確嘅帳戶，而且記錄嘅帳戶名與之相符，然後再試。"
       },
       "save_pending": "正在儲存…",
       "broadcast_pending": "發佈中…",
@@ -3841,9 +3841,8 @@
       "saved_toast": "已儲存 ✓",
       "save_and_broadcast": "儲存並廣播",
       "broadcast_pending": "發佈中…",
-      "broadcast_ok": "已發佈 ✓",
+      "broadcast_ok": "已廣播",
       "clear": "清除",
-      "need_display_name": "請先設定顯示名。你的資料廣播包括兩者。",
       "reminder_title": "它會出現在哪裡",
       "reminder_body": "一旦發佈,Nostr 圖示會出現在你的用戶名旁邊——在每個訂單、每條回饋條目、每條聊天訊息上,在每個 Morphit 實例上,不只是這個。其他用戶點擊它會在他們喜歡的用戶端中開啟你的 Nostr 個人資料。"
     },
@@ -3866,9 +3865,8 @@
       "saved_toast": "已儲存到此裝置。",
       "save_and_broadcast": "儲存並廣播",
       "broadcast_pending": "廣播中…",
-      "broadcast_ok": "已廣播 — 下一個區塊後在 Morphit 各處可見。",
+      "broadcast_ok": "已廣播",
       "clear": "清除",
-      "need_display_name": "請先設定顯示名稱 — 您的個人資料 op 一起攜帶兩個欄位。",
       "reminder_title": "可選 — 您可以略過。",
       "reminder_body": "冇咗呢個網址，你嘅 Morphit 身分都照樣運作。佢只係一個禮貌性連結，方便嗰啲可能都想睇你嘅影片或者播客嘅人。"
     },
@@ -3954,7 +3952,7 @@
       "guidance_filetypes": "接受 SVG、WebP、JPEG、PNG 或 GIF。",
       "guidance_dimensions": "理想：至少 96×96 像素的方形圖像。更大的會為你縮放到 96×96；更小的會看起來顆粒感。",
       "guidance_filesize": "源檔大小：最大 5 MB。較大的圖像會自動縮小至 96×96，所以即使是手機直接拍攝的照片也可以正常使用。",
-      "guidance_size": "點陣圖像會自動重新編碼為高品質 WebP。SVG 無損壓縮。最終負載必須小於 3 KB。",
+      "guidance_size": "點陣圖像會自動重新編碼為高品質 WebP。SVG 無損壓縮。最終負載必須小於 6 KB。",
       "guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。指令碼、外部引用和 SVG 中的 HTML 出於安全原因會自動被剝離。",
       "permanence_heading": "這會永久上鏈。",
       "permanence_body": "一旦廣播，你的頭像將永遠在 Blurt 區塊鏈上公開。無法刪除，只能替換。永遠不要上傳你不希望終身公開與你帳戶關聯的圖像——人臉照片尤其需要考慮私隱問題，因為有現代人臉識別工具。",
@@ -3964,10 +3962,9 @@
       "preview_display_name_placeholder": "你的名字",
       "preview_size": "{bytes} / {cap} 上限",
       "preview_getting_large": "接近大小限制——考慮更簡單的圖像或更小的源。",
-      "need_display_name": "請先設定並廣播你的顯示名稱，然後再更改頭像。",
       "broadcast": "廣播頭像",
       "broadcast_pending": "廣播中…",
-      "broadcast_ok": "已廣播！",
+      "broadcast_ok": "已廣播",
       "cancel": "捨棄",
       "remove": "移除頭像",
       "remove_pending": "移除中…",
@@ -3977,14 +3974,16 @@
         "input_too_large": "該圖像過大,無法上載。請選擇小於 5 MB 的檔案。",
         "parse_failed": "無法解析此 SVG。檔案可能格式錯誤。",
         "svg_no_root": "這看起來不是有效的 SVG 檔案。",
-        "svg_too_large": "此 SVG 過於複雜，無法放入 3 KB 的鏈上限制內。嘗試簡化——減少路徑、減少細節或使用更小的 viewBox。",
+        "svg_too_large": "此 SVG 過於複雜，無法放入 6 KB 的鏈上限制內。嘗試簡化——減少路徑、減少細節或使用更小的 viewBox。",
         "raster_too_large": "即使經過縮放和重新編碼，此圖像仍過大，無法進行鏈上儲存。請嘗試使用更簡單或更少細節的源圖像。",
         "raster_decode_failed": "無法解碼此圖像。檔案可能已損壞或為不支援的格式變體。",
         "canvas_unavailable": "你的瀏覽器不支援此處所需的圖像處理功能。請嘗試其他瀏覽器。",
         "webp_unavailable": "你的瀏覽器不支援 WebP 輸出。請嘗試其他瀏覽器。",
         "load_failed": "無法載入圖像檔案。",
         "processing_failed": "無法處理此圖片。請嘗試其他檔案。"
-      }
+      },
+      "remove_confirm_title": "移除您的頭像？",
+      "remove_confirm_body": "這會廣播一次資料更新，清除鏈上的頭像。您隨時可以上載新的頭像。"
     },
     "blocked_accounts": {
       "heading": "已封鎖帳戶",
@@ -4124,7 +4123,7 @@
       "manual_chrome": "Chrome / Edge:點擊網址列的安裝圖標,或使用瀏覽器選單 → 安裝 Morphit。",
       "manual_safari": "Safari(macOS / iOS):點擊共享按鈕,然後「加入主畫面」。",
       "manual_firefox": "Firefox Android:點擊選單 (︙),然後「安裝」。Firefox 桌面版不支援 PWA 安裝 — 請使用基於 Chromium 的瀏覽器。",
-      "iphone_link": "iPhone 安裝演示 ⇨"
+      "iphone_link": "iPhone 安裝演示"
     },
     "account_name": {
       "heading": "Blurt 帳戶名",

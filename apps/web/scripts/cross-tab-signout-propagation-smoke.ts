@@ -239,6 +239,35 @@ if (!importsBroadcast) {
 	}
 }
 
+// ── #9: broadcastSignOut clears the cached self-avatar (cp351) ───────────────
+// The selfProfile store holds the logged-in user's own avatar (shown in the
+// menu + their IdentityLabels). On an EXPLICIT sign-out it must be dropped,
+// or the next account / signed-out view briefly shows the prior user's
+// avatar. Regression guard for the cp351 deep-deep find (clearSelfProfile was
+// defined but never called).
+if (broadcastBody && /clearSelfProfile/.test(broadcastBody)) {
+	pass(`broadcastSignOut clears the cached self-avatar (clearSelfProfile)`);
+} else if (broadcastBody) {
+	fail(
+		`broadcastSignOut does not clear the self-avatar`,
+		`must call clearSelfProfile() (selfProfile store) so the prior user's avatar can't leak across sign-out`
+	);
+}
+
+// ── #10: SAFETY — reset()/lock must NOT clear the self-avatar ────────────────
+// Like the name-clear and the signout broadcast, dropping the self-avatar
+// belongs to an EXPLICIT sign-out only. reset() runs on pagehide/lockSession,
+// where the avatar is public data that should survive (re-shown on unlock);
+// clearing it there would flicker the menu on every tab-close/lock.
+if (resetBody && /clearSelfProfile/.test(resetBody)) {
+	fail(
+		`reset() clears the self-avatar`,
+		`clearSelfProfile belongs in broadcastSignOut only — reset() runs on pagehide/lock where the avatar should persist`
+	);
+} else {
+	pass(`SAFETY: reset() does not clear the self-avatar (persists across lock/tab-close)`);
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
 console.log(`✓ all ${passes} cross-tab-signout-propagation scenarios passed`);

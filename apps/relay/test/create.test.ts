@@ -90,7 +90,7 @@ function makeStubBlurt(
 		);
 	});
 	// ADR-0010 §2 step 4: broadcastTransfer is called after
-	// account_create to send 1 BLURT signup dust. Mock returns a
+	// account_create to send 2 BLURT signup dust. Mock returns a
 	// different id so tests can distinguish the two broadcasts.
 	const broadcastTransfer = vi.fn(async () => {
 		if (overrides.broadcastTransfer instanceof Error) throw overrides.broadcastTransfer;
@@ -508,7 +508,7 @@ describe('POST /v1/account/create', () => {
 	});
 
 	// ─── ADR-0010 §2 step 4: signup dust ─────────────────────────
-	it('sends 1 BLURT dust to the new account after successful creation', async () => {
+	it('sends 2 BLURT dust to the new account after successful creation', async () => {
 		const stub = makeStubBlurt();
 		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(stub, makeStubHealth(true));
 		limiters.push(limiter, dailyLimiter);
@@ -522,7 +522,7 @@ describe('POST /v1/account/create', () => {
 		// new_account_name field.
 		const call = stub.broadcastTransfer.mock.calls[0]![0];
 		expect(call.to).toBe('sally');
-		expect(call.amountBlurt).toBe(1);
+		expect(call.amountBlurt).toBe(2);
 		expect(call.memo).toBe('morphit:signup_dust');
 	});
 

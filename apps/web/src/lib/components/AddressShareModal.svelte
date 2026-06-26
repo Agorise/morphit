@@ -688,6 +688,7 @@
 			<input
 				type="text"
 				bind:value={address}
+				maxlength="256"
 				placeholder={method === 'btc'
 					? ($_('chat.address.address_placeholder_btc') as string)
 					: method === 'xmr'
@@ -789,6 +790,7 @@
 						<input
 							type="url"
 							bind:value={payjoinEndpoint}
+							maxlength="512"
 							placeholder="https://payjoin.example.org/bip78"
 							autocomplete="off"
 							autocapitalize="none"
@@ -857,6 +859,7 @@
 			<input
 				type="text"
 				bind:value={amount}
+				maxlength="32"
 				inputmode="decimal"
 				autocomplete="off"
 				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"

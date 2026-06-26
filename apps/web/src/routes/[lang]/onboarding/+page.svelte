@@ -834,6 +834,7 @@
 								<input
 									type="text"
 									bind:value={quizAnswers[idx]}
+									maxlength="12"
 									autocomplete="off"
 									autocapitalize="off"
 									autocorrect="off"

@@ -256,7 +256,7 @@
     "my_orders": "我的订单",
     "settings": "设置",
     "sign_out": "登出",
-    "notification_settings": "通知设置 ⇨",
+    "notification_settings": "通知设置",
     "category": {
       "order": "订单",
       "order_help": "成交、过期、反报价",
@@ -722,7 +722,8 @@
       "copy_button": "复制跟踪号",
       "track_button": "跟踪包裹",
       "for_order": "对应订单"
-    }
+    },
+    "message_button_label_named": "给 @{account} 发消息"
   },
   "cheat_sheet": {
     "heading": "Morphit 速查表",
@@ -949,9 +950,7 @@
       "activity_title": "活动",
       "activity_description": "交易量和活跃挂单。",
       "fallback_title": "blocks.blurtwallet.com",
-      "fallback_description": "独立的 Blurt 浏览器。",
-      "home_title": "首页",
-      "home_description": "返回 Morphit。"
+      "fallback_description": "独立的 Blurt 浏览器。"
     },
     "account": {
       "page_title": "@{account} - 区块浏览器",
@@ -1710,7 +1709,7 @@
     "first_trade_disclosure": {
       "on": "提交时，Morphit 还将在 Blurt 上的 @morphit 社区发布一条简短的「我加入了 Morphit」公告 — 以您的账户名义、由您签名。仅在您有史以来第一次反馈时发生一次。",
       "off": "提示：您已在设置中关闭自动公告。提交时不会发布首次交易 Blurt 帖子。",
-      "manage_link": "在设置中管理 ⇨",
+      "manage_link": "在设置中管理",
       "heading": "宣告您的首次交易",
       "pitch": "辛迪加发布交易至关重要。在任何可能的地方公告您的报价 — 更多眼睛看到您的报价意味着更多交易伙伴,加上更多点赞,这些都是直接进入您 Blurt 钱包的额外收入。",
       "label_on": "是的,在 Blurt 上宣告我的首次交易",
@@ -1767,7 +1766,7 @@
     "tip_expiry_body": "我们将到期时间设置为 7 天,而非默认的 90 天。更短的窗口意味着如果您改变主意,过时的报价不会滞留。",
     "tip_payment_label": "付款方式提示。",
     "tip_payment_body": "添加您实际接受的付款方式。交易伙伴会选择对他们有用的方式。常见起点:PayPal、Wise、银行转账、当面现金。",
-    "faq_link": "阅读完整的首次交易演练 ⇨",
+    "faq_link": "阅读完整的首次交易演练",
     "dismiss_aria": "关闭此入门包"
   },
   "first_trade_helper": {
@@ -1777,7 +1776,7 @@
     "step_2_warn": "等等!",
     "step_2": "如果你要发送加密货币,请等到你真正收到法币(不只是「待处理」),再发送加密货币。一旦发送,就无法收回。",
     "step_3": "交易完成后,在 /my/orders 留下评价,让未来的交易者信任你们双方。",
-    "faq_link": "阅读完整教程 ⇨",
+    "faq_link": "阅读完整教程",
     "dismiss_aria": "关闭此指南"
   },
   "footer": {
@@ -1984,7 +1983,7 @@
     "bookmark_tip": "💡 提示：在浏览器中收藏其中几个实例——以及它们的 Tor、I2P 或 Lokinet 地址。订单簿存在于公开的区块链上，因此即使某个站点被封锁或下线，你也能通过任何其他实例访问完全相同的订单和交易。",
     "fetch_error": "无法加载目录。",
     "last_updated": "目录上次更新:{date}",
-    "contact": "联系本运营者 ⇨",
+    "contact": "联系本运营者",
     "add_yours_title": "添加你的实例",
     "add_yours_body": "运行了 Morphit 实例?直接在链上注册 — 任何其他 Morphit 索引器都会自动发现你。向导(morphit-ops init)在首次设置期间处理注册。",
     "status": {
@@ -2669,7 +2668,7 @@
       "body": "您可以在此浏览,但需要 Blurt 账户名才能向卖家发消息或发布自己的订单。",
       "cta": "选择名称"
     },
-    "fee_rejected_check": "发布了订单但看不到?查看手续费状态 ⇨"
+    "fee_rejected_check": "发布了订单但看不到?查看手续费状态"
   },
   "paired_readonly": {
     "banner_heading": "以 @{account} 登录 — 密钥在手机上。",
@@ -3033,7 +3032,7 @@
       "view_my_order_cta": "查看我的订单",
       "feature_upsell_heading": "想让更多人看到这个挂单？",
       "feature_upsell_body": "竞拍特色位置，让您的订单在订单簿顶部展示几个小时。最低出价为 6 小时；费率由各实例设置。大多数运营商默认使用 50 BLURT/小时。",
-      "feature_upsell_cta": "设置特色出价 ⇨",
+      "feature_upsell_cta": "设置特色出价",
       "edit_window_countdown": "{remaining} 内可编辑",
       "edit_window_tooltip": "编辑仅可在发布后 15 分钟内进行。之后请取消并重新发布。",
       "edit_window_expired": "编辑窗口已过"
@@ -3339,8 +3338,8 @@
     "rss_subscribe_title": "当该交易者发布新的买/卖单时通过 RSS 收到通知。注意:轮询按交易者的订阅比全站订阅稍稍更具揭示性。",
     "feedback_suppressed_chip": "不计入评分 — 评论者被标记为关联账户",
     "my_balance": {
-      "section_label": "你的余额",
-      "title": "你的余额",
+      "section_label": "@{account} 的余额",
+      "title": "@{account} 的余额",
       "private_label": "仅你可见",
       "loading": "正在加载余额...",
       "error": "无法加载余额",
@@ -3564,7 +3563,7 @@
     "footer_body": "发现问题?请通过公共 Forgejo 仓库报告,或通过加密消息发给 {morphit_account} 链账户。",
     "bounty_title": "漏洞赏金计划",
     "bounty_body": "我们运行一个酌情决定的安全识别计划。每一个可操作的发现都由真实的工程师审查,获得答复,并且 — 如果它实质上改善了 Morphit 的安全态势 — 将在 BLURT(从 @morphit-fees 支付)或 BTC 中获得奖励,根据严重程度和报告质量进行调整。没有固定的等级表;按个案裁定。即使没有付款,名人堂荣誉也可用。完整范围、严重程度指导、付款流程以及我们不会做的事情(没有保密协议,没有独家披露)记录在 SECURITY.md 中。",
-    "bounty_link": "阅读完整范围和规则 ⇨",
+    "bounty_link": "阅读完整范围和规则",
     "canary_title": "搜查令金丝雀",
     "canary_body": "我们发布每周一次的金丝雀,使用运营者的 PGP 密钥签名。金丝雀明确声明没有收到任何 NSL / FISA / 禁言令 / 后门要求。新鲜度证明包括当前的 Blurt 链头、当前的比特币链头和当前的新闻标题(证明金丝雀不能预先生成)。如果金丝雀超过 14 天未更新,请视为静默:运营者可能受到强制压力,你应该切换到另一个联邦运营者。",
     "canary_link": "查看此运营者当前的金丝雀",
@@ -3572,7 +3571,7 @@
   },
   "seed_backup_nudge": {
     "body": "已经过去一周了 — 你备份过 12 个单词的助记词了吗?如果丢了这台设备,这组助记词是恢复账户的唯一方式。",
-    "show_me_how": "告诉我怎么做 ⇨",
+    "show_me_how": "告诉我怎么做",
     "got_it": "知道了"
   },
   "rss": {
@@ -3772,12 +3771,13 @@
       "reminder_title": "💡 显示名称不是唯一的。",
       "reminder_body": "任何人都可以用任何名字。真正识别你的是括号里的短公钥,别人复制不了。交易时务必看公钥。",
       "save_and_broadcast": "保存并广播",
-      "broadcast_ok": "已广播。",
+      "broadcast_ok": "已广播",
       "broadcast_err": {
         "no_account": "已本地保存。注册账户后即可发布。",
         "locked": "会话已锁定。请重新登录以广播。",
         "generic": "无法广播。请重试。",
-        "rejected": "网络拒绝了此次广播：{reason}"
+        "rejected": "网络拒绝了此次广播：{reason}",
+        "key_mismatch": "已解锁的身份无权为 @{account} 发布。请确认解锁的是正确的账户，且记录的账户名与之匹配，然后重试。"
       },
       "save_pending": "正在保存…",
       "broadcast_pending": "发布中…",
@@ -3841,9 +3841,8 @@
       "saved_toast": "已保存 ✓",
       "save_and_broadcast": "保存并广播",
       "broadcast_pending": "发布中…",
-      "broadcast_ok": "已发布 ✓",
+      "broadcast_ok": "已广播",
       "clear": "清除",
-      "need_display_name": "请先设置显示名。你的资料广播包括两者。",
       "reminder_title": "它会出现在哪里",
       "reminder_body": "一旦发布,Nostr 图标会出现在你的用户名旁边——在每个订单、每条反馈条目、每条聊天消息上,在每个 Morphit 实例上,不只是这个。其他用户点击它会在他们喜欢的客户端中打开你的 Nostr 个人资料。"
     },
@@ -3866,9 +3865,8 @@
       "saved_toast": "已保存到此设备。",
       "save_and_broadcast": "保存并广播",
       "broadcast_pending": "广播中…",
-      "broadcast_ok": "已广播 — 下一个区块后在 Morphit 各处可见。",
+      "broadcast_ok": "已广播",
       "clear": "清除",
-      "need_display_name": "请先设置显示名称 — 您的个人资料 op 一起携带两个字段。",
       "reminder_title": "可选 — 您可以跳过。",
       "reminder_body": "没有这个网址，你的 Morphit 身份也能正常使用。它只是一个礼节性链接，方便那些可能也想看你的视频或播客的人。"
     },
@@ -3954,7 +3952,7 @@
       "guidance_filetypes": "接受 SVG、WebP、JPEG、PNG 或 GIF。",
       "guidance_dimensions": "理想：至少 96×96 像素的方形图像。更大的会被为你缩放到 96×96；更小的会显得颗粒感。",
       "guidance_filesize": "源文件大小：最多 5 MB。更大的图像会自动缩小到 96×96，所以即使是手机直接拍摄的照片也能正常使用。",
-      "guidance_size": "光栅图像会自动重新编码为高质量 WebP。SVG 无损压缩。最终负载必须小于 3 KB。",
+      "guidance_size": "光栅图像会自动重新编码为高质量 WebP。SVG 无损压缩。最终负载必须小于 6 KB。",
       "guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。脚本、外部引用和 SVG 中的 HTML 出于安全原因会自动被剥离。",
       "permanence_heading": "这会永久上链。",
       "permanence_body": "一旦广播，你的头像将永远在 Blurt 区块链上公开。无法删除，只能替换。永远不要上传你不希望终身公开与你账户相关联的图像——人脸照片尤其需要考虑隐私问题，因为有现代人脸识别工具。",
@@ -3964,10 +3962,9 @@
       "preview_display_name_placeholder": "你的名字",
       "preview_size": "{bytes} / {cap} 上限",
       "preview_getting_large": "接近大小限制——考虑更简单的图像或更小的源。",
-      "need_display_name": "请先设置并广播你的显示名称，然后再更改头像。",
       "broadcast": "广播头像",
       "broadcast_pending": "广播中…",
-      "broadcast_ok": "已广播！",
+      "broadcast_ok": "已广播",
       "cancel": "丢弃",
       "remove": "移除头像",
       "remove_pending": "移除中…",
@@ -3977,14 +3974,16 @@
         "input_too_large": "该图像过大，无法上传。请选择小于 5 MB 的文件。",
         "parse_failed": "无法解析此 SVG。文件可能格式错误。",
         "svg_no_root": "这看起来不是有效的 SVG 文件。",
-        "svg_too_large": "此 SVG 过于复杂，无法放入 3 KB 的链上限制内。尝试简化——减少路径、减少细节或使用更小的 viewBox。",
+        "svg_too_large": "此 SVG 过于复杂，无法放入 6 KB 的链上限制内。尝试简化——减少路径、减少细节或使用更小的 viewBox。",
         "raster_too_large": "即使经过缩放和重新编码，此图像仍过大，无法进行链上存储。请尝试使用更简单或更少细节的源图像。",
         "raster_decode_failed": "无法解码此图像。文件可能已损坏或为不支持的格式变体。",
         "canvas_unavailable": "你的浏览器不支持此处所需的图像处理功能。请尝试其他浏览器。",
         "webp_unavailable": "你的浏览器不支持 WebP 输出。请尝试其他浏览器。",
         "load_failed": "无法加载图像文件。",
         "processing_failed": "无法处理此图片。请尝试其他文件。"
-      }
+      },
+      "remove_confirm_title": "移除您的头像？",
+      "remove_confirm_body": "这将广播一次资料更新，清除链上的头像。您随时可以上传新的头像。"
     },
     "blocked_accounts": {
       "heading": "已屏蔽账户",
@@ -4124,7 +4123,7 @@
       "manual_chrome": "Chrome / Edge:点击地址栏的安装图标,或使用浏览器菜单 → 安装 Morphit。",
       "manual_safari": "Safari(macOS / iOS):点击共享按钮,然后「添加到主屏幕」。",
       "manual_firefox": "Firefox Android:点击菜单 (︙),然后「安装」。Firefox 桌面版不支持 PWA 安装 — 请使用基于 Chromium 的浏览器。",
-      "iphone_link": "iPhone 安装演示 ⇨"
+      "iphone_link": "iPhone 安装演示"
     },
     "account_name": {
       "heading": "Blurt 账户名",

@@ -15,12 +15,12 @@
  *      "Unlock" CTA then takes them to welcome-back. Runs ONCE on mount (not
  *      an $effect — a later idle auto-lock must not yank an active user away).
  *   3. The "sign in with your keys" buttons (welcome-back use_seed_instead AND
- *      the import-needed login.import_existing) and the "use phone instead"
- *      buttons use matching MONOCHROME inline svg icons — a closed-padlock lock
- *      svg on the key buttons, the QR glyph on the phone buttons — so they look
- *      consistent within each state and across both. cp341 superseded cp340's
- *      🔐 emoji: an emoji is a colourful glyph that clashes with the crisp
- *      monochrome QR svg sitting beside it; the lock svg matches it exactly.
+ *      the import-needed login.import_existing) carry the yellow 🔐 lock
+ *      emoji, while the "use phone instead" buttons use the monochrome QR
+ *      svg glyph. cp35x reverted cp341's monochrome lock svg back to the
+ *      🔐 emoji: the colourful padlock is the more recognizable "this
+ *      unlocks your account" affordance, which the operator prefers over a
+ *      strictly-monochrome icon set.
  *
  * Usage (from apps/web): tsx scripts/locked-session-ux-smoke.ts
  */
@@ -82,13 +82,16 @@ check(
 		/onMount\(\(\)\s*=>\s*\{[\s\S]*?gotoLocale\(\s*['"]\/['"]\s*\)[\s\S]*?\}\)/.test(requireLiveSession)
 );
 
-// ── 3. Key + phone buttons use matching inline svg icons (login + welcome-back)─
+// ── 3. Key buttons show the yellow 🔐 lock emoji; phone buttons the QR svg ───
+//      (cp35x: reverted the monochrome-svg lock back to the 🔐 emoji per
+//      operator preference — the colourful padlock is the recognizable
+//      "this unlocks your account" affordance.)
 check(
 	'welcome-back seed button uses the use_seed_instead label',
 	/use_seed_instead/.test(login)
 );
 check(
-	'en use_seed_instead no longer carries the 🔐 emoji (now a monochrome inline lock svg)',
+	'en use_seed_instead label has no inline emoji (the 🔐 lives in the markup span)',
 	typeof (en.login as { welcome_back?: { use_seed_instead?: string } })?.welcome_back
 		?.use_seed_instead === 'string' &&
 		!(
@@ -96,13 +99,13 @@ check(
 		).welcome_back.use_seed_instead.includes('\u{1F510}')
 );
 check(
-	'en login.import_existing no longer carries the 🔐 emoji (now a monochrome inline lock svg)',
+	'en login.import_existing label has no inline emoji (the 🔐 lives in the markup span)',
 	typeof (en.login as { import_existing?: string }).import_existing === 'string' &&
 		!(en.login as { import_existing: string }).import_existing.includes('\u{1F510}')
 );
 check(
-	'the lock svg renders on BOTH the welcome-back seed and import-needed import buttons',
-	(login.match(/M12 1\.5a5\.25 5\.25 0 0 0-5\.25 5\.25/g) || []).length >= 2
+	'the 🔐 lock emoji renders on BOTH the welcome-back seed and import-needed import buttons',
+	(login.match(/\u{1F510}/gu) || []).length >= 2
 );
 check(
 	'the QR icon svg renders on BOTH the welcome-back and import-needed phone buttons',

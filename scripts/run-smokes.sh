@@ -335,6 +335,7 @@ SMOKES=(
 	"apps/web:logo-bling-invariants-smoke"
 	"apps/web:coin-carousel-invariants-smoke"
 	"apps/web:svelte-component-import-coverage-smoke"
+	"apps/web:text-input-maxlength-coverage-smoke"
 	"apps/web:privacy-asset-sitemap-parity-smoke"
 	"apps/web:faq-jsonld-no-markdown-smoke"
 	"apps/web:faq-inline-render-smoke"

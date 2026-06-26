@@ -635,10 +635,11 @@ export class CreateEndpoint {
 				finalize();
 			}
 
-			// ── ADR-0010 §2 step 4: 1 BLURT signup dust ──────────────
+			// ── ADR-0010 §2 step 4: 2 BLURT signup dust ──────────────
 			// Send a small dust balance so the fresh account can pay
-			// chain bandwidth for its first few ops (post a Morphit
-			// order, submit feedback, etc.). Failure here is
+			// chain bandwidth for its first few ops AND set up its
+			// profile (display name, avatar, blurt.media / Nostr links)
+			// before the first trade. Failure here is
 			// non-fatal — the account already exists on-chain; Blurt
 			// gives new accounts enough RC for a handful of ops even
 			// without a BLURT balance, and the low-balance auto-
@@ -649,7 +650,7 @@ export class CreateEndpoint {
 					from: this.cfg.relayAccount,
 					fromActiveWif: this.cfg.relayActiveKeyWif,
 					to: name,
-					amountBlurt: 1,
+					amountBlurt: 2,
 					memo: 'morphit:signup_dust'
 				});
 			} catch (dustErr) {

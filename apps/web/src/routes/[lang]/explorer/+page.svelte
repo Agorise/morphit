@@ -85,6 +85,7 @@
 				id="search"
 				type="text"
 				bind:value={raw}
+				maxlength="128"
 				onkeydown={onKeydown}
 				placeholder={$_('explorer.search.placeholder')}
 				class="flex-1 rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
@@ -115,8 +116,11 @@
 		{/if}
 	</div>
 
-	<aside class="mt-8 grid gap-4 sm:grid-cols-3">
-		<a href={lp('/explorer/activity')} class="card transition hover:border-morphit-emerald">
+	<aside class="mt-8 grid gap-4 sm:grid-cols-2">
+		<a
+			href={lp('/explorer/activity')}
+			class="card transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
+		>
 			<h2 class="font-display text-base font-bold">
 				{$_('explorer.nav.activity_title')}
 			</h2>
@@ -128,21 +132,13 @@
 			href="https://blocks.blurtwallet.com"
 			target="_blank"
 			rel="noopener noreferrer"
-			class="card transition hover:border-morphit-emerald"
+			class="card transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 		>
 			<h2 class="font-display text-base font-bold">
 				{$_('explorer.nav.fallback_title')} ↗
 			</h2>
 			<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 				{$_('explorer.nav.fallback_description')}
-			</p>
-		</a>
-		<a href={lp('/')} class="card transition hover:border-morphit-emerald">
-			<h2 class="font-display text-base font-bold">
-				{$_('explorer.nav.home_title')}
-			</h2>
-			<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-				{$_('explorer.nav.home_description')}
 			</p>
 		</a>
 	</aside>

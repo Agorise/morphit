@@ -29,16 +29,16 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-const VERSION = '1.0.0-beta.31';
+const VERSION = '1.0.0-beta.32';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
  *  so the relay pays the fee inline per `account_create`; signup
  *  readiness is gated on liquid balance, not a pre-minted-token buffer.
- *  Covers the 1 BLURT signup dust plus a small buffer so a TOCTOU race
+ *  Covers the 2 BLURT signup dust plus a small buffer so a TOCTOU race
  *  between health refresh and broadcast can't start a signup we can't
  *  fund. */
-const SIGNUP_LIQUID_MARGIN_BLURT = 2;
+const SIGNUP_LIQUID_MARGIN_BLURT = 3;
 
 /** Parse a Graphene asset string ("9049.747 BLURT") to a number.
  *  Returns 0 for 'unknown'/unparseable — which fails the funding gate

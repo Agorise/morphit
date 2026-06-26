@@ -427,6 +427,7 @@
 			autocapitalize="off"
 			spellcheck="false"
 			bind:value={subject}
+			maxlength="16"
 			onblur={() => (subjectTouched = true)}
 			placeholder={$_('feedback.form.subject_placeholder') as string}
 			class="w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"

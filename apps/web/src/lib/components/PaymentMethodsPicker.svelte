@@ -241,6 +241,7 @@
 		<input
 			type="text"
 			bind:value={query}
+			maxlength="64"
 			placeholder={$_('payment_method.search_placeholder')}
 			aria-invalid={invalid || undefined}
 			aria-describedby={invalid && describedById ? describedById : undefined}

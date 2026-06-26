@@ -6,7 +6,10 @@ import { makeMockClient } from '../testutils/mockClient';
 
 describe('profile handler', () => {
 	it('upserts a valid payload', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const r = await handler(
 			makeCtx({
 				signer: 'alice',
@@ -15,18 +18,23 @@ describe('profile handler', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(1);
-		expect(mock.queries[0]!.params[0]).toBe('alice');
-		expect(mock.queries[0]!.params[1]).toBe('Alice the Great');
+		// A read-before-write SELECT (for the json_metadata merge) precedes
+		// the upsert, so there are two queries; the INSERT is the second.
+		expect(mock.queries).toHaveLength(2);
+		expect(mock.queries[1]!.params[0]).toBe('alice');
+		expect(mock.queries[1]!.params[1]).toBe('Alice the Great');
 	});
 
 	it('accepts optional json_metadata as a plain object', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const r = await handler(
 			makeCtx({
 				payload: {
 					display_name: 'Bob',
-					json_metadata: { avatar: 'https://example.com/b.png' }
+					json_metadata: { short_bio: 'hi there' }
 				}
 			}),
 			mock.client
@@ -41,16 +49,75 @@ describe('profile handler', () => {
 		expect(mock.queries).toHaveLength(0);
 	});
 
-	it('rejects missing display_name', async () => {
-		const mock = makeMockClient();
+	it('allows a missing display_name (avatar/links-only profile)', async () => {
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const r = await handler(makeCtx({ payload: {} }), mock.client);
+		expect(r).toEqual({ ok: true });
+		// Empty name is written; the upsert's CASE keeps any existing name.
+		expect(mock.queries[1]!.params[1]).toBe('');
+	});
+
+	it('rejects a non-string display_name', async () => {
+		const mock = makeMockClient();
+		const r = await handler(makeCtx({ payload: { display_name: 42 } }), mock.client);
 		expect(r).toEqual({ ok: false, reason: 'display_name_not_string' });
 	});
 
-	it('rejects empty display_name after trim', async () => {
-		const mock = makeMockClient();
+	it('allows an empty/whitespace display_name (treated as no name)', async () => {
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const r = await handler(makeCtx({ payload: { display_name: '   ' } }), mock.client);
-		expect(r).toEqual({ ok: false, reason: 'display_name_too_short' });
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries[1]!.params[1]).toBe('');
+	});
+
+	it('MERGES json_metadata: a field the op omits is preserved from the prior profile', async () => {
+		// Prior profile has an avatar; the op only updates short_bio. The
+		// avatar MUST survive (regression: a short-bio broadcast used to
+		// orphan a previously-set avatar under full-replace).
+		const mock = makeMockClient([
+			{
+				match: 'SELECT json_metadata',
+				rows: [{ json_metadata: { avatar_data_uri: 'data:image/webp;base64,AAA' } }]
+			},
+			{ match: 'INSERT INTO profiles' }
+		]);
+		const r = await handler(
+			makeCtx({
+				signer: 'kentest3',
+				payload: { display_name: 'Ken', json_metadata: { short_bio: 'hello' } }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		const merged = JSON.parse(mock.queries[1]!.params[2] as string);
+		expect(merged.avatar_data_uri).toBe('data:image/webp;base64,AAA');
+		expect(merged.short_bio).toBe('hello');
+	});
+
+	it('MERGES json_metadata: an explicit empty string clears that field', async () => {
+		const mock = makeMockClient([
+			{
+				match: 'SELECT json_metadata',
+				rows: [{ json_metadata: { avatar_svg: '<svg/>', short_bio: 'keep me' } }]
+			},
+			{ match: 'INSERT INTO profiles' }
+		]);
+		const r = await handler(
+			makeCtx({
+				payload: { display_name: 'Ken', json_metadata: { avatar_svg: '' } }
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		const merged = JSON.parse(mock.queries[1]!.params[2] as string);
+		expect('avatar_svg' in merged).toBe(false);
+		expect(merged.short_bio).toBe('keep me');
 	});
 
 	it('rejects display_name exceeding 64 code points', async () => {
@@ -66,7 +133,10 @@ describe('profile handler', () => {
 
 	it('counts code points, not UTF-16 units, for length', async () => {
 		// "👋 Hello" has 7 code points but 8 UTF-16 units.
-		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		// 64 emoji (each 2 UTF-16 units, 1 code point) — exactly at the limit.
 		const name = '👋'.repeat(64);
 		const r = await handler(makeCtx({ payload: { display_name: name } }), mock.client);
@@ -110,12 +180,16 @@ describe('profile handler', () => {
 		// Decomposed é (e + U+0301 combining acute) — pre-NFC this
 		// is 2 codepoints, post-NFC it's 1.  64 NFC-form chars
 		// should pass even when input is 128 codepoints decomposed.
-		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const decomposed = 'e\u0301'.repeat(64);
 		const r = await handler(makeCtx({ payload: { display_name: decomposed } }), mock.client);
 		expect(r).toEqual({ ok: true });
-		// The stored value should be NFC-normalized (single param[1]).
-		const stored = mock.queries[0]!.params[1] as string;
+		// The stored value should be NFC-normalized (the INSERT is the
+		// second query, after the merge SELECT).
+		const stored = mock.queries[1]!.params[1] as string;
 		expect([...stored].length).toBe(64);
 		// And byte-equal to the precomposed é × 64.
 		expect(stored).toBe('é'.repeat(64));
@@ -187,7 +261,10 @@ describe('profile handler', () => {
 		// owns the reserved name should be able to use it as their
 		// display_name.  impersonatesReservedName returns false on
 		// byte-equal match.
-		const mock = makeMockClient([{ match: 'INSERT INTO profiles' }]);
+		const mock = makeMockClient([
+			{ match: 'SELECT json_metadata' },
+			{ match: 'INSERT INTO profiles' }
+		]);
 		const r = await handler(
 			makeCtx({
 				signer: 'morphit-fees',

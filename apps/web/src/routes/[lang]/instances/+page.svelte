@@ -488,10 +488,14 @@
 							{#if safeContact}
 								<a
 									href={safeContact}
-									class="text-sm text-ink-600 hover:text-morphit-emerald hover:underline dark:text-ink-300"
+									class="group inline-flex items-center text-sm text-ink-600 transition hover:text-morphit-emerald dark:text-ink-300"
 									rel="noopener"
 								>
 									{$_('instances.contact')}
+									<span
+										class="nav-arrow nav-arrow-right"
+										aria-hidden="true">⇨</span
+									>
 								</a>
 							{/if}
 						</div>

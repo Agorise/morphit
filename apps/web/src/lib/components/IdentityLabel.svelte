@@ -45,6 +45,7 @@
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
 	import { validateBlurtMediaUrlForRender } from '$utils/blurtMediaUrl';
+	import { selfProfile } from '$lib/stores/selfProfile';
 
 	interface Props {
 		/**
@@ -109,6 +110,12 @@
 		 *  already shown by the parent, e.g. a detail page header that renders a 96px
 		 *  hero avatar + the username label underneath). */
 		hideAvatar?: boolean;
+		/** Hide the @handle/displayName text + copy button, keeping only
+		 *  the avatar (if shown) and the nostr/blurt.media link glyphs.
+		 *  Used where the handle is already shown elsewhere (e.g. the
+		 *  profile hero shows the name as an <h1>), so repeating it would
+		 *  be redundant — but the link glyphs are still worth surfacing. */
+		hideHandle?: boolean;
 		class?: string;
 	}
 
@@ -125,8 +132,19 @@
 		showCopy = true,
 		avatarSize = 28,
 		hideAvatar = false,
+		hideHandle = false,
 		class: cls = ''
 	}: Props = $props();
+
+	// When this label's subject is the logged-in user and the caller did
+	// NOT pass an explicit avatar, fall back to the shared self-profile
+	// avatar so the user's uploaded avatar renders everywhere their
+	// identicon would (orderbook rows, chat, feedback, etc.) — not just on
+	// their public profile page. selfProfile.account is populated by the
+	// always-mounted AvatarMenu, so no auth-store import is needed here.
+	const isSelf = $derived(!!account && $selfProfile.account === account);
+	const effAvatarSvg = $derived(avatarSvg ?? (isSelf ? $selfProfile.avatarSvg : null));
+	const effAvatarDataUri = $derived(avatarDataUri ?? (isSelf ? $selfProfile.avatarDataUri : null));
 
 	/**
 	 * Validate + normalize a user-supplied Nostr URL. We accept two
@@ -324,7 +342,7 @@
 		user has set.
 	-->
 	{#if !hideAvatar}
-		{#if avatarSvg && avatarSvg.length > 0}
+		{#if effAvatarSvg && effAvatarSvg.length > 0}
 			<span
 				class="flex flex-none items-center justify-center overflow-hidden rounded-full bg-ink-200/50 ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				style:width="{avatarSize}px"
@@ -332,11 +350,11 @@
 				aria-hidden="true"
 			>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html avatarSvg}
+				{@html effAvatarSvg}
 			</span>
-		{:else if avatarDataUri && avatarDataUri.length > 0}
+		{:else if effAvatarDataUri && effAvatarDataUri.length > 0}
 			<img
-				src={avatarDataUri}
+				src={effAvatarDataUri}
 				alt=""
 				width={avatarSize}
 				height={avatarSize}
@@ -359,17 +377,19 @@
 		{/if}
 	{/if}
 
-	{#if href}
-		<a
-			{href}
-			class="inline-flex items-baseline rounded-md hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-		>
-			{@render label()}
-		</a>
-	{:else}
-		<span class="inline-flex items-baseline">
-			{@render label()}
-		</span>
+	{#if !hideHandle}
+		{#if href}
+			<a
+				{href}
+				class="inline-flex items-baseline rounded-md hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+			>
+				{@render label()}
+			</a>
+		{:else}
+			<span class="inline-flex items-baseline">
+				{@render label()}
+			</span>
+		{/if}
 	{/if}
 
 	{#if validatedBlurtMediaUrl}
@@ -400,7 +420,7 @@
 		</a>
 	{/if}
 
-	{#if showCopy && full}
+	{#if showCopy && full && !hideHandle}
 		<button
 			type="button"
 			onclick={copyFull}

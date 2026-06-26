@@ -16,7 +16,6 @@ import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contrac
 import { checkJsonbSize, MAX_JSONB_BYTES_PROFILE } from '$indexer/payloadSize';
 import { impersonatesReservedName } from '$indexer/confusables';
 
-const DISPLAY_NAME_MIN = 1;
 const DISPLAY_NAME_MAX = 64;
 
 /** Forbidden character classes in display names. We block:
@@ -42,15 +41,16 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 interface ValidatedPayload {
 	readonly display_name: string;
 	readonly json_metadata: Record<string, unknown>;
-	/** Pre-serialized per Finding L. Empty-object default is
-	 *  `"{}"` which trivially fits the cap. */
-	readonly json_metadata_serialized: string;
 }
 
 function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
-	const dn = payload.display_name;
+	// display_name is OPTIONAL — a profile may set only an avatar
+	// or links without a name. `undefined` or empty/whitespace-only
+	// is treated as "no display name" (stored as '', which the
+	// upsert below refuses to overwrite an existing name with).
+	const dn = payload.display_name === undefined ? '' : payload.display_name;
 	if (typeof dn !== 'string') return { reason: 'display_name_not_string' };
 	// O3.1 — NFC-normalize first.  Without this, an attacker
 	// submitting NFD-decomposed unicode (e.g., "fe\u0301es" instead
@@ -66,9 +66,10 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	// NFC) so we preserve the signer's exact intent up to canonical
 	// equivalence.
 	const trimmed = normalized.trim();
-	if (trimmed.length < DISPLAY_NAME_MIN) {
-		return { reason: 'display_name_too_short' };
-	}
+	// Empty after trim ⇒ no display name (allowed). A non-empty name
+	// must still pass the length / impersonation checks below; the
+	// former one-codepoint floor is implied (any non-empty trimmed
+	// value is at least one character), so no explicit min check.
 	// Count user-perceived characters (code points), not UTF-16 units,
 	// so "👋 Sally" isn't mis-rejected.
 	if ([...trimmed].length > DISPLAY_NAME_MAX) {
@@ -111,49 +112,90 @@ function validate(payload: unknown): ValidatedPayload | { reason: string } {
 	}
 
 	let metadata: Record<string, unknown> = {};
-	let metadataSerialized = '{}';
 	if (payload.json_metadata !== undefined) {
 		if (!isPlainObject(payload.json_metadata)) {
 			return { reason: 'json_metadata_not_object' };
 		}
 		// Profile uses the larger PROFILE budget (8 KB) to make
 		// room for an inline avatar alongside the other metadata
-		// fields. See payloadSize.ts for the rationale.
+		// fields. See payloadSize.ts for the rationale. This bounds the
+		// incoming OP; the handler re-checks the MERGED result too.
 		const sizeCheck = checkJsonbSize(payload.json_metadata, MAX_JSONB_BYTES_PROFILE);
 		if (!sizeCheck.ok) {
 			return { reason: 'json_metadata_too_large' };
 		}
 		metadata = payload.json_metadata;
-		metadataSerialized = sizeCheck.serialized;
 	}
 
 	return {
 		display_name: trimmed,
-		json_metadata: metadata,
-		json_metadata_serialized: metadataSerialized
+		json_metadata: metadata
 	};
 }
+
+/** json_metadata keys the profile op recognizes. CLOSED set: a merge
+ *  only ever touches these, so partial updates can't accumulate unbounded
+ *  keys across ops. Keep in sync with the frontend profileProps extractor
+ *  (short_bio, nostr_url, blurt_media_url, avatar_svg, avatar_data_uri). */
+const PROFILE_METADATA_KEYS = [
+	'short_bio',
+	'nostr_url',
+	'blurt_media_url',
+	'avatar_svg',
+	'avatar_data_uri'
+] as const;
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	const v = validate(ctx.payload);
 	if ('reason' in v) return { ok: false, reason: v.reason };
 
-	// Upsert — if the account already has a profile, the newer one wins.
-	// Note: within a single block's transaction, multiple profile ops
-	// from the same account are applied in op-order; the last one is
-	// the one that persists, which matches "signer's latest intent."
+	// MERGE json_metadata rather than wholesale-replace, so a partial
+	// profile update (e.g. broadcasting just a new short_bio) does NOT
+	// orphan fields the op omits (e.g. a previously-set avatar). This
+	// matches the documented op intent (an omitted field is left intact;
+	// an explicit empty string clears it). Per known key: empty string ⇒
+	// clear, non-empty ⇒ set, ABSENT ⇒ keep prior. Only the closed key
+	// set is merged, bounding the accumulated size. Profile ops for one
+	// account are applied serially in block order, so the read-then-write
+	// is race-free (FOR UPDATE guards against any future concurrency).
+	const existing = await client.query<{ json_metadata: Record<string, unknown> | null }>(
+		'SELECT json_metadata FROM profiles WHERE account = $1 FOR UPDATE',
+		[ctx.signer]
+	);
+	const prior = existing.rows[0]?.json_metadata ?? {};
+	const incoming = v.json_metadata;
+	const merged: Record<string, unknown> = {};
+	for (const k of PROFILE_METADATA_KEYS) {
+		if (Object.prototype.hasOwnProperty.call(incoming, k)) {
+			const val = incoming[k];
+			if (typeof val === 'string' && val.length === 0) continue; // explicit clear
+			merged[k] = val; // set
+		} else if (Object.prototype.hasOwnProperty.call(prior, k)) {
+			merged[k] = prior[k]; // keep prior (omitted ⇒ unchanged)
+		}
+	}
+	// Re-check the MERGED size (not just this op) so repeated partial
+	// merges can never push a profile past the budget.
+	const mergedSerialized = JSON.stringify(merged);
+	if (Buffer.byteLength(mergedSerialized, 'utf8') > MAX_JSONB_BYTES_PROFILE) {
+		return { ok: false, reason: 'json_metadata_too_large' };
+	}
+
 	await client.query(
 		`INSERT INTO profiles (
 			account, display_name, json_metadata,
 			source_block_num, source_trx_id, updated_at
 		) VALUES ($1, $2, $3::jsonb, $4, $5, $6)
 		ON CONFLICT (account) DO UPDATE SET
-			display_name = EXCLUDED.display_name,
+			display_name = CASE
+				WHEN EXCLUDED.display_name = '' THEN profiles.display_name
+				ELSE EXCLUDED.display_name
+			END,
 			json_metadata = EXCLUDED.json_metadata,
 			source_block_num = EXCLUDED.source_block_num,
 			source_trx_id = EXCLUDED.source_trx_id,
 			updated_at = EXCLUDED.updated_at`,
-		[ctx.signer, v.display_name, v.json_metadata_serialized, ctx.blockNum, ctx.trxId, ctx.blockTime]
+		[ctx.signer, v.display_name, mergedSerialized, ctx.blockNum, ctx.trxId, ctx.blockTime]
 	);
 
 	return { ok: true };

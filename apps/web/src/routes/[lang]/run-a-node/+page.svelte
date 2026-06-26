@@ -225,6 +225,7 @@
 							id="op-url"
 							type="url"
 							bind:value={contactUrl}
+							maxlength="512"
 							autocomplete="url"
 							placeholder="https://"
 							class="block w-full rounded-xl border border-ink-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"

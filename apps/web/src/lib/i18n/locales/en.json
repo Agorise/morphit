@@ -256,7 +256,7 @@
     "my_orders": "My orders",
     "settings": "Settings",
     "sign_out": "Sign out",
-    "notification_settings": "Notification settings ⇨",
+    "notification_settings": "Notification settings",
     "category": {
       "order": "Orders",
       "order_help": "Fills, expirations, counter-offers",
@@ -722,7 +722,8 @@
       "copy_button": "Copy tracking",
       "track_button": "Track package",
       "for_order": "For order"
-    }
+    },
+    "message_button_label_named": "Message @{account}"
   },
   "cheat_sheet": {
     "heading": "Morphit cheat-sheet",
@@ -949,9 +950,7 @@
       "activity_title": "Activity",
       "activity_description": "Trading volume and active listings.",
       "fallback_title": "blocks.blurtwallet.com",
-      "fallback_description": "Independent Blurt explorer.",
-      "home_title": "Home",
-      "home_description": "Back to Morphit."
+      "fallback_description": "Independent Blurt explorer."
     },
     "account": {
       "page_title": "@{account} on the block explorer",
@@ -1710,7 +1709,7 @@
     "first_trade_disclosure": {
       "on": "When you submit, Morphit will also publish a short \"I joined Morphit\" announcement to the @morphit community on Blurt — under your account, signed by you. This happens once, on your first feedback ever.",
       "off": "Note: you've turned off auto-announce in Settings. No first-trade Blurt post will be published when you submit.",
-      "manage_link": "Manage in Settings ⇨",
+      "manage_link": "Manage in Settings",
       "heading": "Announce your first trade",
       "pitch": "Syndication of your trades is everything. Announce your offers everywhere possible — more eyes on your offers means more trading partners, plus more upvotes, which are additional earnings going directly into your Blurt Wallet.",
       "label_on": "Yes, announce my first trade on Blurt",
@@ -1767,7 +1766,7 @@
     "tip_expiry_body": "We've set the expiry to 7 days instead of the default 90. A shorter window means stale offers don't linger if you change your mind.",
     "tip_payment_label": "Payment method tips.",
     "tip_payment_body": "Add the payment methods you actually accept. Trade partners pick which works for them. Common starting points: PayPal, Wise, bank transfer, cash in person.",
-    "faq_link": "Read the full first-trade walkthrough ⇨",
+    "faq_link": "Read the full first-trade walkthrough",
     "dismiss_aria": "Dismiss this starter pack"
   },
   "first_trade_helper": {
@@ -1777,7 +1776,7 @@
     "step_2_warn": "Wait!",
     "step_2": "If you're sending crypto, wait until you've actually received the fiat (not just \"pending\") before you send the crypto. Once it's gone, it's gone.",
     "step_3": "After the trade is done, leave a review on /my/orders so future traders trust you both.",
-    "faq_link": "Read the full walkthrough ⇨",
+    "faq_link": "Read the full walkthrough",
     "dismiss_aria": "Dismiss this helper"
   },
   "footer": {
@@ -1984,7 +1983,7 @@
     "bookmark_tip": "💡 Tip: bookmark a few of these instances — and their Tor, I2P, or Lokinet addresses — in your browser. The orderbook lives on the public blockchain, so if any one site is ever blocked or goes offline, you can reach the very same orders and trades through any other instance.",
     "fetch_error": "Could not load the directory.",
     "last_updated": "Directory last updated: {date}",
-    "contact": "Contact this operator ⇨",
+    "contact": "Contact this operator",
     "add_yours_title": "Add your instance",
     "add_yours_body": "Run a Morphit instance? Just register on-chain — every other Morphit indexer will discover you automatically. The wizard (morphit-ops init) handles registration during first-time setup.",
     "status": {
@@ -2669,7 +2668,7 @@
       "body": "You can browse here, but you need a Blurt account name to message sellers or post your own orders.",
       "cta": "Pick a name"
     },
-    "fee_rejected_check": "Posted an order but don't see it? Check fee status ⇨"
+    "fee_rejected_check": "Posted an order but don't see it? Check fee status"
   },
   "paired_readonly": {
     "banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -3033,7 +3032,7 @@
       "view_my_order_cta": "View my order",
       "feature_upsell_heading": "Want more eyes on this listing?",
       "feature_upsell_body": "Bid for a featured slot to put your order at the top of the orderbook for a few hours. The minimum bid is 6 hours; the rate is set per-instance. Most operators ship 50 BLURT/hour as the default.",
-      "feature_upsell_cta": "Set up a featured bid ⇨",
+      "feature_upsell_cta": "Set up a featured bid",
       "edit_window_countdown": "{remaining} to edit",
       "edit_window_tooltip": "Edits are only possible within 15 minutes of posting. After that, cancel and re-post.",
       "edit_window_expired": "Edit window passed"
@@ -3339,8 +3338,8 @@
     "rss_subscribe_title": "Get notified via RSS when this trader posts a new buy or sell order. Note: polling a per-trader feed is slightly more revealing than the worldwide feed.",
     "feedback_suppressed_chip": "Not counted toward rating — reviewers flagged as related",
     "my_balance": {
-      "section_label": "Your balance",
-      "title": "Your balance",
+      "section_label": "@{account} balance",
+      "title": "@{account} balance",
       "private_label": "Only you see this",
       "loading": "Loading balance...",
       "error": "Couldn't load balance",
@@ -3564,7 +3563,7 @@
     "footer_body": "Found an issue? Please report via the public Forgejo repo, or via an encrypted message to the {morphit_account} chain account.",
     "bounty_title": "Bug bounty program",
     "bounty_body": "We run a discretionary security recognition program. Every actionable finding gets reviewed by a real engineer, gets an answer, and — if it materially improves Morphit's security posture — gets rewarded in BLURT (paid from @morphit-fees) or BTC, scaled to severity and the report's quality. No fixed tier table; case-by-case adjudication. Hall of fame credit available even when payment isn't. The full scope, severity guidance, payment workflow, and what we won't do (no NDA, no exclusive disclosure) is documented in SECURITY.md.",
-    "bounty_link": "Read the full bounty program scope and rules ⇨",
+    "bounty_link": "Read the full bounty program scope and rules",
     "canary_title": "Warrant canary",
     "canary_body": "We publish a weekly warrant canary signed with the operator's PGP key. The canary explicitly declares no NSL / FISA / gag-order / backdoor demand has been served. Freshness proofs include a current Blurt chain head, a current Bitcoin chain head, and a current news headline (proves the canary cannot be pre-generated). If the canary stops updating for more than 14 days, treat it as silent: the operator may be under coercive pressure, and you should switch to a different federated operator.",
     "canary_link": "View this operator’s current canary",
@@ -3572,7 +3571,7 @@
   },
   "seed_backup_nudge": {
     "body": "It's been a week — have you backed up your 12-word seed phrase yet? If you lose this device, the seed is the ONLY way to recover your account.",
-    "show_me_how": "Show me how ⇨",
+    "show_me_how": "Show me how",
     "got_it": "Got it"
   },
   "rss": {
@@ -3772,12 +3771,13 @@
       "reminder_title": "💡 Display names are not unique.",
       "reminder_body": "Anyone can use any name. The short key in parentheses is what really identifies you, and it cannot be copied by anyone else. Always check the key when you're trading.",
       "save_and_broadcast": "Save & broadcast",
-      "broadcast_ok": "Broadcast.",
+      "broadcast_ok": "Broadcasted",
       "broadcast_err": {
         "no_account": "Saved locally. Publishing will be available once your account is registered.",
         "locked": "Session is locked. Sign in again to broadcast.",
         "generic": "Couldn't broadcast. Try again.",
-        "rejected": "Broadcast rejected by the network: {reason}"
+        "rejected": "Broadcast rejected by the network: {reason}",
+        "key_mismatch": "The unlocked identity isn't authorized to post for @{account}. Make sure the correct account is unlocked and that the account name on file matches it, then try again."
       },
       "save_pending": "Saving…",
       "broadcast_pending": "Publishing…",
@@ -3863,9 +3863,8 @@
       "saved_toast": "Saved ✓",
       "save_and_broadcast": "Save & broadcast",
       "broadcast_pending": "Publishing…",
-      "broadcast_ok": "Published ✓",
+      "broadcast_ok": "Broadcasted",
       "clear": "Clear",
-      "need_display_name": "Set a display name first. Your profile broadcast includes both.",
       "reminder_title": "Where this shows up",
       "reminder_body": "Once published, the Nostr icon appears next to your username on every order, every feedback entry, every chat message — on every Morphit instance, not just this one. Other users tap it to open your Nostr profile in their preferred client."
     },
@@ -3888,9 +3887,8 @@
       "saved_toast": "Saved on this device.",
       "save_and_broadcast": "Save & broadcast",
       "broadcast_pending": "Broadcasting…",
-      "broadcast_ok": "Broadcast — visible across Morphit after next block.",
+      "broadcast_ok": "Broadcasted",
       "clear": "Clear",
-      "need_display_name": "Set a display name first — your profile op carries both fields together.",
       "reminder_title": "Optional — you can skip this.",
       "reminder_body": "Your Morphit identity works fine without this URL. It's a courtesy link for people who might want to also see your videos or podcasts."
     },
@@ -3976,7 +3974,7 @@
       "guidance_filetypes": "Accepts SVG, WebP, JPEG, PNG, or GIF.",
       "guidance_dimensions": "Ideal source: a square image at least 96×96 pixels. Anything larger will be resized down to 96×96 for you; anything smaller will look grainy.",
       "guidance_filesize": "Source file size: up to 5 MB. Larger images will be downsampled to 96×96 automatically, so even a phone photo straight from your camera works fine.",
-      "guidance_size": "Raster images are automatically re-encoded to WebP at high quality. SVGs are minified losslessly. The final payload must fit under 3 KB.",
+      "guidance_size": "Raster images are automatically re-encoded to WebP at high quality. SVGs are minified losslessly. The final payload must fit under 6 KB.",
       "guidance_svg_tips": "SVG tip: a square viewBox (e.g. 0 0 100 100) renders best. Scripts, external references, and HTML-in-SVG are stripped automatically for security.",
       "permanence_heading": "This goes on-chain permanently.",
       "permanence_body": "Once broadcast, your avatar is public on the Blurt blockchain forever. It cannot be deleted, only replaced. Never upload an image you wouldn't want publicly associated with your account for the rest of time — photos of faces, in particular, are a privacy consideration given modern face-recognition tools.",
@@ -3986,10 +3984,9 @@
       "preview_display_name_placeholder": "Your name",
       "preview_size": "{bytes} of {cap} maximum",
       "preview_getting_large": "Getting close to the size limit — consider a simpler image or smaller source.",
-      "need_display_name": "Set and broadcast your display name first before changing your avatar.",
       "broadcast": "Broadcast avatar",
       "broadcast_pending": "Broadcasting…",
-      "broadcast_ok": "Broadcast!",
+      "broadcast_ok": "Broadcasted",
       "cancel": "Discard",
       "remove": "Remove avatar",
       "remove_pending": "Removing…",
@@ -3999,14 +3996,16 @@
         "input_too_large": "That image is too large to upload. Please choose a file under 5 MB.",
         "parse_failed": "Couldn't parse this SVG. The file may be malformed.",
         "svg_no_root": "That doesn't look like a valid SVG file.",
-        "svg_too_large": "This SVG is too complex to fit under the 3 KB on-chain limit. Try simplifying it — fewer paths, less detail, or a smaller viewBox.",
+        "svg_too_large": "This SVG is too complex to fit under the 6 KB on-chain limit. Try simplifying it — fewer paths, less detail, or a smaller viewBox.",
         "raster_too_large": "Even after resizing and re-encoding, this image is too large for on-chain storage. Try a simpler or less-detailed source image.",
         "raster_decode_failed": "Couldn't decode this image. The file may be corrupt or an unsupported format variant.",
         "canvas_unavailable": "Your browser doesn't support the image-processing features this needs. Try a different browser.",
         "webp_unavailable": "Your browser doesn't support WebP output. Try a different browser.",
         "load_failed": "Couldn't load the image file.",
         "processing_failed": "Couldn't process this image. Try a different file."
-      }
+      },
+      "remove_confirm_title": "Remove your avatar?",
+      "remove_confirm_body": "This broadcasts a profile update that clears your avatar on-chain. You can upload a new one anytime."
     },
     "blocked_accounts": {
       "heading": "Blocked accounts",
@@ -4124,7 +4123,7 @@
       "manual_chrome": "Chrome / Edge: tap the address bar's install icon, or use the browser menu → Install Morphit.",
       "manual_safari": "Safari (macOS / iOS): tap the Share button, then \"Add to Home Screen\".",
       "manual_firefox": "Firefox Android: tap the menu (︙), then \"Install\". Firefox desktop doesn't support PWA install — use Chromium-based browsers.",
-      "iphone_link": "iPhone install walkthrough ⇨"
+      "iphone_link": "iPhone install walkthrough"
     },
     "account_name": {
       "heading": "Blurt account name",

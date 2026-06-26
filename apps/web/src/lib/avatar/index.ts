@@ -52,9 +52,11 @@
  */
 
 /** Max byte size for the final avatar payload (SVG text or raster
- *  data URI). Well under the 8 KB indexer cap so display_name,
- *  URLs, and JSON-escape overhead all fit comfortably. */
-export const MAX_AVATAR_BYTES = 3072;
+ *  data URI). Sits under the 8 KB indexer/chain profile cap with
+ *  room for display_name, URLs, and JSON-escape overhead — a maxed
+ *  6 KB avatar plus fully-populated text fields lands near ~7.6 KB,
+ *  still inside MAX_JSONB_BYTES_PROFILE. */
+export const MAX_AVATAR_BYTES = 6144;
 
 /** Max byte size for the INPUT file the user picks.  Decoupled
  *  from the output cap above: a 5 MB phone photo is fine — it'll
@@ -66,7 +68,7 @@ export const MAX_INPUT_FILE_BYTES = 5 * 1024 * 1024;
 
 /** Soft warning threshold — UI shows a "getting large" hint above
  *  this, still accepts up to the hard cap. */
-export const SOFT_WARN_AVATAR_BYTES = 2048;
+export const SOFT_WARN_AVATAR_BYTES = 4096;
 
 /** Pixel dimensions of the re-encoded raster output. 96 matches
  *  IdentityLabel's hero avatar size; anything larger is wasted

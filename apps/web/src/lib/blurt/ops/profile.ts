@@ -31,6 +31,10 @@ import { writable } from 'svelte/store';
 // 2 MB dblurt chunk out of those routes' first paint — the chunk
 // loads only when the user actually triggers a profile broadcast.
 import { OP_IDS } from '$net/config';
+import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+import { fetchAccountKeys } from '$blurt/accountKeys';
+import { verifyPostingKey } from '$crypto/postingVerify';
+import { formatPublicKeyBLT } from '$crypto/keygen';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { clearProfileCache } from '$lib/indexer/profileCache';
@@ -123,8 +127,11 @@ export function clearUserBlurtAccount(): void {
 }
 
 export interface ProfilePayload {
-	/** Human-readable display name, already validated by caller. */
-	display_name: string;
+	/** Optional human-readable display name, validated by caller when
+	 *  present. May be omitted (or empty) so a user can set an avatar
+	 *  or links without first picking a name; an empty value never
+	 *  overwrites a name already on-chain (indexer-side guard). */
+	display_name?: string;
 	/** Optional Nostr profile URL (nostr:npub1... or https://...).
 	 *  Stored in json_metadata.nostr_url on-chain; surfaces as a
 	 *  link icon next to every rendered username when populated.
@@ -176,7 +183,7 @@ export interface ProfilePayload {
  */
 export class BroadcastError extends Error {
 	constructor(
-		public readonly code: 'no_account' | 'locked' | 'missing_external_tx_id',
+		public readonly code: 'no_account' | 'locked' | 'missing_external_tx_id' | 'key_mismatch',
 		message: string
 	) {
 		super(message);
@@ -234,7 +241,7 @@ export function buildProfileBody(
 
 	const body: ProfilePayload & { json_metadata?: Record<string, unknown> } = {
 		v: 1,
-		display_name: redactPrivateKeys(payload.display_name),
+		display_name: payload.display_name ? redactPrivateKeys(payload.display_name) : '',
 		ts
 	};
 	if (Object.keys(jsonMetadata).length > 0) {
@@ -250,6 +257,29 @@ export async function broadcastProfile(
 	const account = getUserBlurtAccount();
 	if (!account) {
 		throw new BroadcastError('no_account', 'No Blurt account registered yet.');
+	}
+	// Pre-flight authority check: the most common profile-broadcast
+	// failure is an identity↔account mismatch — the unlocked identity's
+	// posting key isn't authorized for the account name on file. Left
+	// to the chain, that surfaces as a cryptic "Missing Posting
+	// Authority" rejection with a raw key dump. We catch it here with a
+	// clear, actionable message. Best-effort ONLY: a fetch/network
+	// failure must never block a broadcast that would otherwise
+	// succeed, so we proceed on anything that isn't a definitive
+	// mismatch.
+	try {
+		const derivedPosting = await formatPublicKeyBLT(live.posting.publicKey);
+		const onChain = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+		if (onChain && verifyPostingKey(onChain, derivedPosting).kind !== 'ok') {
+			throw new BroadcastError(
+				'key_mismatch',
+				`The unlocked identity's posting key isn't authorized to post for @${account}. ` +
+					`Make sure the correct account is unlocked and that the account name on file matches it, then try again.`
+			);
+		}
+	} catch (e) {
+		if (e instanceof BroadcastError) throw e;
+		// Network/fetch failure → skip the pre-check; let the broadcast proceed.
 	}
 	const body = buildProfileBody(payload, Math.floor(Date.now() / 1000));
 	// cp165: dynamic import of '../sign' keeps dblurt out of the

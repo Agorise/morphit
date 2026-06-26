@@ -27,6 +27,7 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { bootFromEnvelope } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
+	import { resolveAccountsByPublicKeys } from '$blurt/accountByKey';
 	import sodium from 'libsodium-wrappers-sumo';
 
 	let mode: 'seed' | 'keyfile' | 'posting-only' = $state('seed');
@@ -286,6 +287,31 @@
 	 *  after the choice is made (either path consumes them). */
 	let pendingEnvelope: KeystoreEnvelope | null = $state(null);
 	let pendingSessionPassword = $state('');
+	/** BLT-format public keys (owner/active/posting) captured from the
+	 *  imported seed BEFORE the FullIdentity is wiped, so we can reverse-
+	 *  look-up the account name on-chain (Task 6d) without re-deriving or
+	 *  holding any private material. Public keys only — safe to retain. */
+	let pendingPubKeysBLT = $state<string[]>([]);
+
+	// Gate the "Remember me & continue" button on a valid, matching
+	// password — only when the seed path is collecting a NEW password.
+	// Keyfile / posting-only already supplied one (passwordAlreadyChosen),
+	// and the session-only choice (rememberMe = false) needs no password.
+	// Mirrors the checks in finalizeImportChoice so the button can't be
+	// pressed into a state that just errors out.
+	const rememberPwValid = $derived(
+		rememberPassword.length >= 8 &&
+			rememberPassword === rememberPasswordConfirm &&
+			isPasswordAcceptable(rememberPassword)
+	);
+	const rememberContinueDisabled = $derived(
+		rememberMe && !passwordAlreadyChosen && !rememberPwValid
+	);
+	// Red-border the Confirm field once the user has typed something there
+	// that doesn't match the password above.
+	const rememberConfirmMismatch = $derived(
+		rememberPasswordConfirm.length > 0 && rememberPassword !== rememberPasswordConfirm
+	);
 
 	/** Map a WifError code to a localized error message. */
 	function wifErrorMessage(code: WifError): string {
@@ -339,6 +365,24 @@
 			}
 
 			await bootFromEnvelope(env, usedPassword);
+			// Capture the POSTING public key before wiping the FullIdentity,
+			// so we can reverse-resolve the account name on-chain for seed
+			// imports that don't carry it (Task 6d). Posting only — the
+			// owner/active slots are gated by the active/owner key invariant
+			// and aren't needed here: a standard seed-derived account has
+			// this posting key in its posting authority, so get_key_references
+			// finds it. (A rotated posting key falls back to manual entry.)
+			// Public key only — no private material is retained. `full` is
+			// populated only for seed mode (keyfile decrypts to an envelope
+			// without exposing the FullIdentity), which is exactly the case
+			// where auto-resolution is both possible and useful.
+			if (full?.keys.posting?.publicKey) {
+				try {
+					pendingPubKeysBLT = [await formatPublicKeyBLT(full.keys.posting.publicKey)];
+				} catch {
+					// Couldn't format — fall back to manual account-name entry.
+				}
+			}
 			if (full) {
 				wipeFullIdentity(full);
 				full = null;
@@ -446,6 +490,23 @@
 		// when the mode didn't carry it, wipe pending secrets, navigate to
 		// the mode's destination.
 		const continueAfterChoice = async (): Promise<void> => {
+			// Task 6d — auto-resolve the account name from the imported
+			// seed's public keys so the user skips the manual entry step.
+			// Only when we don't already know the name AND captured keys.
+			// A UNIQUE on-chain match is authoritative (the key is in that
+			// account's authorities, so it's inherently verified) → set it
+			// and send the user home. Ambiguous (a key shared by multiple
+			// accounts), no match, or any RPC error falls through to the
+			// existing manual /settings capture below.
+			if (pendingNeedsAccountName && pendingPubKeysBLT.length > 0) {
+				const accounts = await resolveAccountsByPublicKeys(pendingPubKeysBLT);
+				const resolved = accounts.length === 1 ? accounts[0] : undefined;
+				if (resolved) {
+					setUserBlurtAccount(resolved);
+					pendingNeedsAccountName = false;
+					pendingDestination = '/';
+				}
+			}
 			if (pendingNeedsAccountName) {
 				// Sally finding H2 (Part 68): seed/keyfile imports don't carry
 				// the account name, so we flag the one-shot /settings banner
@@ -1186,9 +1247,16 @@
 							maxlength="64"
 							bind:value={rememberPasswordConfirm}
 							autocomplete="new-password"
-							class="mt-1 w-full rounded-xl border-2 border-ink-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-morphit-emerald dark:border-ink-700 dark:bg-ink-900"
+							class="mt-1 w-full rounded-xl border-2 bg-white px-3 py-2 focus:outline-none focus:ring-2 dark:bg-ink-900 {rememberConfirmMismatch
+								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+								: 'border-ink-200 focus:ring-morphit-emerald dark:border-ink-700'}"
 						/>
 					</label>
+					{#if rememberConfirmMismatch}
+						<p class="text-xs text-red-600 dark:text-red-400">
+							{$_('onboarding.import.remember_me.error.passwords_mismatch')}
+						</p>
+					{/if}
 				</div>
 			{/if}
 
@@ -1196,6 +1264,7 @@
 				<BusyButton
 					variant="primary"
 					busy={working}
+					disabled={rememberContinueDisabled}
 					onclick={finalizeImportChoice}
 					busyLabel={$_('onboarding.import.remember_me.submit_pending')}
 					fullWidth

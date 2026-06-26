@@ -460,20 +460,24 @@
 		<h1 class="font-display text-3xl font-extrabold">
 			{effectiveDisplayName}
 		</h1>
-		<!-- Use IdentityLabel with hideAvatar=true under the hero so
-		     the @-handle + copy + nostr/media glyphs still render
-		     consistently with the rest of the app, without
-		     doubling up on identicons. -->
-		<div class="mt-2">
-			<IdentityLabel
-				{account}
-				displayName={null}
-				{nostrUrl}
-				{blurtMediaUrl}
-				hideAvatar={true}
-				weight="normal"
-			/>
-		</div>
+		<!-- The @-handle is already conveyed by the display-name heading
+		     above (or its @account fallback) and the page URL, so we don't
+		     repeat it under the avatar. We still surface the nostr /
+		     blurt.media link glyphs when the profile has them (handle
+		     hidden). -->
+		{#if nostrUrl || blurtMediaUrl}
+			<div class="mt-2 flex justify-center">
+				<IdentityLabel
+					{account}
+					displayName={null}
+					{nostrUrl}
+					{blurtMediaUrl}
+					hideAvatar={true}
+					hideHandle={true}
+					weight="normal"
+				/>
+			</div>
+		{/if}
 		{#if shortBio}
 			<p class="mt-3 max-w-prose text-pretty text-ink-600 dark:text-ink-300">
 				{shortBio}
@@ -494,7 +498,7 @@
 					aria-label={$_('chat.message_button_aria', { values: { peer: account } }) as string}
 				>
 					<span aria-hidden="true">💬</span>
-					{$_('chat.message_button_label')}
+					{$_('chat.message_button_label_named', { values: { account } })}
 				</a>
 			</div>
 		{/if}
