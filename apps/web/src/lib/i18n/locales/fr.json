@@ -2066,6 +2066,7 @@
     },
     "welcome_back": {
       "title": "Bon retour",
+      "title_named": "Bon retour @{account}",
       "body": "Déverrouillez votre keystore chiffré avec le mot de passe que vous avez défini.",
       "password_label": "Mot de passe",
       "unlock": "Déverrouiller",

@@ -513,3 +513,21 @@ welcome-back sign-in screen + the morphit-ops payment-method menu (cp358).
 **Regressions added (tamper-verified):** web `accountBalance.test.ts` (cache-buster
 contract), indexer `accountBalance.test.ts` (no stale-while-revalidate + max-age ≤ 5),
 menu-annotations-smoke (payment-method `menu` wiring).
+
+---
+
+## cp359 — beta.33 CI fix: identity-label-policy (honest miss) 🟢
+
+Both CI runners (release + smoke-suite) failed the cp358 beta.33 push on
+`identity-label-policy-smoke`. The cp358 welcome-back heading rendered the account
+as RAW `@{lockedAccount}` markup (`login/+page.svelte`), which the policy forbids
+outside the `IdentityLabel` allow-list. The sanctioned pattern for a *heading* (vs an
+identity row) is the one `paired_readonly.welcome_back_heading` already uses: the
+`@{account}` lives inside the i18n string and is interpolated by svelte-i18n, so it
+never appears as raw `@{var}` markup (the smoke only scans `.svelte` source, not the
+locale JSON). Fixed with a new `login.welcome_back.title_named` key across all 10
+locales; identity-label-policy back to 6/6. This was a genuine deep-deep miss — the
+policy has a dedicated smoke and the compliant pattern was visible in the very
+paired-readonly heading I'd read; it slipped because the full 387-smoke battery can't
+run in-sandbox. Lesson for future welcome-back/handle edits: render handles via
+`IdentityLabel` or an i18n-string placeholder, never raw `@{var}` markup.

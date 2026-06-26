@@ -476,7 +476,9 @@
 		<header class="text-center">
 			<h1 class="font-display text-3xl font-extrabold leading-tight md:text-4xl">
 				<span class="brand-gradient-text"
-					>{$_('login.welcome_back.title')}{#if lockedAccount} @{lockedAccount}{/if}</span
+					>{#if lockedAccount}{$_('login.welcome_back.title_named', {
+							values: { account: lockedAccount }
+						})}{:else}{$_('login.welcome_back.title')}{/if}</span
 				>
 			</h1>
 			<p class="mt-3 text-ink-600 dark:text-ink-300">
