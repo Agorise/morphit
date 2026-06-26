@@ -2066,6 +2066,7 @@
     },
     "welcome_back": {
       "title": "欢迎回来",
+      "title_named": "欢迎回来 @{account}",
       "body": "用你设置的密码解锁加密 keystore。",
       "password_label": "密码",
       "unlock": "解锁",

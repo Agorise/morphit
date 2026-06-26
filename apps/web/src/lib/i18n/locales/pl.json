@@ -2066,6 +2066,7 @@
     },
     "welcome_back": {
       "title": "Witaj z powrotem",
+      "title_named": "Witaj z powrotem @{account}",
       "body": "Odblokuj swój zaszyfrowany keystore hasłem, które ustawiłeś.",
       "password_label": "Hasło",
       "unlock": "Odblokuj",

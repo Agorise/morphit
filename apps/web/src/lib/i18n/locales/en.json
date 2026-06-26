@@ -2066,6 +2066,7 @@
     },
     "welcome_back": {
       "title": "Welcome back",
+      "title_named": "Welcome back @{account}",
       "body": "Unlock your encrypted keystore with the password you set up.",
       "password_label": "Password",
       "unlock": "Unlock",

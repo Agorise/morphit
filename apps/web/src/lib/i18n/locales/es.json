@@ -2066,6 +2066,7 @@
     },
     "welcome_back": {
       "title": "Bienvenido de vuelta",
+      "title_named": "Bienvenido de vuelta @{account}",
       "body": "Desbloquea tu keystore cifrado con la contraseña que configuraste.",
       "password_label": "Contraseña",
       "unlock": "Desbloquear",
