@@ -2307,9 +2307,9 @@
         "tab_label": "Clé de posting Blurt",
         "warning_title": "Import via clé de posting uniquement",
         "warning_body": "Si tu n'as pas de seed de 12 mots ni de fichier .json pour importer le compte, colle simplement ta clé de posting Blurt ici. On la chiffre sur cet appareil avec un mot de passe que tu choisis. Tu pourras lire, publier et trader — mais pas changer les clés du compte (cela nécessite un portefeuille comme blurtwallet.com).",
-        "account_label": "Ton nom de compte Blurt",
+        "account_label": "Ton nom de compte Blurt (facultatif)",
         "account_ok": "c'est bon !",
-        "account_hint": "Sans le @. On vérifiera que ce compte existe sur Blurt et que la clé de posting correspond.",
+        "account_hint": "Laisse ce champ vide et on le détectera à partir de ta clé. Sans le @ ; si tu le saisis, on vérifiera qu'il correspond à ta clé.",
         "wif_label": "Clé privée de posting (WIF)",
         "wif_placeholder": "5J… ou P5J…",
         "password_mismatch": "Les mots de passe ne correspondent pas.",
@@ -2337,7 +2337,8 @@
             "owner": "C'est ta clé OWNER. Morphit a juste besoin de la POSTING — colle celle-là. (Les clés owner donnent le contrôle total du compte ; ne les colle nulle part.)",
             "memo": "C'est ta clé MEMO. Morphit a besoin de la POSTING — colle celle-là."
           },
-          "master_password": "Cela ressemble à ton mot de passe maître Blurt, pas à ta clé POSTING. Morphit n'utilise jamais ton mot de passe maître pour se connecter. Ouvre blurtwallet.com → Permissions et copie ta Posting Private Key (elle commence par 5)."
+          "master_password": "Cela ressemble à ton mot de passe maître Blurt, pas à ta clé POSTING. Morphit n'utilise jamais ton mot de passe maître pour se connecter. Ouvre blurtwallet.com → Permissions et copie ta Posting Private Key (elle commence par 5).",
+          "could_not_resolve": "On n'a pas pu détecter ton compte automatiquement à partir de cette clé. Saisis ton nom de compte Blurt ci-dessus (sans le @) et réessaie."
         },
         "account_bad": "invalide"
       },
@@ -2456,7 +2457,8 @@
         "body": "Votre nouveau nom d'utilisateur n'a pas encore été enregistré.",
         "confirm": "Quitter quand même",
         "cancel": "Rester sur cette page"
-      }
+      },
+      "have_account_link": "Tu as déjà un compte Blurt ? Indique-le dans les Réglages"
     },
     "unlock_mode": {
       "heading": "Comment voulez-vous déverrouiller la prochaine fois ?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "Les noms de compte utilisent des lettres minuscules, chiffres, tirets et points — 3 à 16 caractères, commençant par une lettre.",
       "error_not_found": "On n'a pas trouvé @{account} sur la chaîne Blurt. Vérifie l'orthographe.",
       "error_key_mismatch": "Ta clé de posting ne correspond pas à l'autorité posting de @{account}. Vérifie que tu as importé les bonnes clés.",
-      "error_chain_unreachable": "Impossible de contacter la chaîne Blurt. Vérifie ta connexion et réessaie."
+      "error_chain_unreachable": "Impossible de contacter la chaîne Blurt. Vérifie ta connexion et réessaie.",
+      "no_account_link": "Tu n'as pas encore de compte Blurt ? Réserve un nom"
     },
     "import_landing_banner": {
       "title": "Presque fini — choisis ton @compte pour que le carnet d'ordres te reconnaisse",
@@ -4425,5 +4428,10 @@
     "no_master_password": "Il n'y a pas de mot de passe maître. Morphit n'en crée ni n'en utilise jamais — tes 12 mots et ces clés sont tout ce qu'il faut.",
     "txt_warning": "GARDE CECI PRIVÉ. Quiconque possède une clé privée ci-dessous peut prendre le contrôle total de ton compte et de tes fonds. Ne la partage avec personne, ne la saisis sur aucun site web auquel tu ne fais pas confiance, et ne l'envoie jamais par message ou e-mail.",
     "txt_footer": "Ta phrase de récupération de 12 mots est ta sauvegarde Morphit. Ces quatre clés te permettent d'utiliser ce compte dans d'autres outils Blurt. Il n'y a pas de mot de passe maître."
+  },
+  "needs_account_name": {
+    "heading": "Presque prêt",
+    "body": "Tu es connecté, mais tu n'as pas encore de nom de compte Blurt. Ajoutes-en un pour commencer à trader et publier ; en attendant, tu peux explorer.",
+    "cta": "Terminer la configuration"
   }
 }

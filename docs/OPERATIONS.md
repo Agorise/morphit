@@ -9922,6 +9922,12 @@ Operator **additions** (your own region-specific methods added via
 knob — remove them with `morphit-ops payment-method remove`
 instead.  This knob is for canonical methods only.
 
+> **Interactive menu.** The "Manage payment methods" item in the
+> `morphit-ops` main menu (and running `morphit-ops payment-method`
+> with no subcommand) opens an interactive list/add/remove menu that
+> prompts for each field and reuses the same on-chain add/remove
+> paths — no need to remember the flag syntax above.
+
 ### Ingest + federation semantics
 
 The indexer rejects a NEW order only when **all** of its payment

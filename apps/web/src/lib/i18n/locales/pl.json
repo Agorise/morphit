@@ -2307,9 +2307,9 @@
         "tab_label": "Klucz posting Blurta",
         "warning_title": "Import tylko klucza posting",
         "warning_body": "Jeśli nie masz 12-wyrazowego seeda ani pliku .json do importu konta, po prostu wklej tutaj swój klucz posting Blurt. Zaszyfrujemy go na tym urządzeniu hasłem, które wybierzesz. Będziesz mógł czytać, publikować i handlować — ale nie zmieniać kluczy konta (do tego potrzebny jest portfel jak blurtwallet.com).",
-        "account_label": "Twoja nazwa konta Blurt",
+        "account_label": "Twoja nazwa konta Blurt (opcjonalnie)",
         "account_ok": "wygląda dobrze!",
-        "account_hint": "Bez @. Sprawdzimy, czy konto istnieje na Blurt i czy klucz posting pasuje.",
+        "account_hint": "Zostaw to pole puste, a wykryjemy ją na podstawie Twojego klucza. Bez @; jeśli ją wpiszesz, sprawdzimy, czy pasuje do Twojego klucza.",
         "wif_label": "Prywatny klucz posting (WIF)",
         "wif_placeholder": "5J… lub P5J…",
         "password_mismatch": "Hasła nie są zgodne.",
@@ -2337,7 +2337,8 @@
             "owner": "To twój klucz OWNER. Morphit potrzebuje tylko POSTING — wklej ten. (Klucze owner dają pełną kontrolę nad kontem; nigdzie ich nie wklejaj.)",
             "memo": "To twój klucz MEMO. Morphit potrzebuje POSTING — wklej ten."
           },
-          "master_password": "To wygląda na Twoje hasło główne Blurt, a nie klucz POSTING. Morphit nigdy nie używa hasła głównego do logowania. Otwórz blurtwallet.com → Permissions i skopiuj swój Posting Private Key (zaczyna się od 5)."
+          "master_password": "To wygląda na Twoje hasło główne Blurt, a nie klucz POSTING. Morphit nigdy nie używa hasła głównego do logowania. Otwórz blurtwallet.com → Permissions i skopiuj swój Posting Private Key (zaczyna się od 5).",
+          "could_not_resolve": "Nie udało się automatycznie wykryć Twojego konta na podstawie tego klucza. Wpisz powyżej swoją nazwę konta Blurt (bez @) i spróbuj ponownie."
         },
         "account_bad": "nieprawidłowy"
       },
@@ -2456,7 +2457,8 @@
         "body": "Twoja nowa nazwa użytkownika nie została jeszcze zarejestrowana.",
         "confirm": "Wyjdź mimo to",
         "cancel": "Zostań na tej stronie"
-      }
+      },
+      "have_account_link": "Masz już konto Blurt? Podaj je w Ustawieniach"
     },
     "unlock_mode": {
       "heading": "Jak chcesz odblokować następnym razem?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "Nazwy kont używają małych liter, cyfr, myślników i kropek — 3 do 16 znaków, zaczyna się od litery.",
       "error_not_found": "Nie znaleźliśmy @{account} w łańcuchu Blurt. Sprawdź pisownię.",
       "error_key_mismatch": "Twój klucz posting nie pasuje do uprawnienia posting @{account}. Sprawdź, czy zaimportowałeś właściwe klucze.",
-      "error_chain_unreachable": "Nie udało się połączyć z łańcuchem Blurt. Sprawdź połączenie i spróbuj ponownie."
+      "error_chain_unreachable": "Nie udało się połączyć z łańcuchem Blurt. Sprawdź połączenie i spróbuj ponownie.",
+      "no_account_link": "Nie masz jeszcze konta Blurt? Zarezerwuj nazwę"
     },
     "import_landing_banner": {
       "title": "Prawie gotowe — wybierz swoje @konto, aby księga ofert cię rozpoznała",
@@ -4425,5 +4428,10 @@
     "no_master_password": "Nie ma hasła głównego. Morphit nigdy go nie tworzy ani nie używa — Twoje 12 słów i te klucze to wszystko.",
     "txt_warning": "ZACHOWAJ TO W TAJEMNICY. Każdy, kto ma poniższy klucz prywatny, może przejąć pełną kontrolę nad Twoim kontem i środkami. Nie udostępniaj go nikomu, nie wpisuj na stronie, której nie ufasz, i nigdy nie wysyłaj w wiadomości ani e-mailu.",
     "txt_footer": "Twoja 12-słowna fraza seed to kopia zapasowa Morphit. Te cztery klucze pozwalają używać tego konta w innych narzędziach Blurt. Nie ma hasła głównego."
+  },
+  "needs_account_name": {
+    "heading": "Prawie gotowe",
+    "body": "Jesteś zalogowany, ale nie masz jeszcze nazwy konta Blurt. Dodaj ją, aby zacząć handlować i publikować — do tego czasu możesz przeglądać.",
+    "cta": "Dokończ konfigurację"
   }
 }

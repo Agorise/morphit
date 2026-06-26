@@ -83,6 +83,16 @@ describe('GET /v1/account/:account/balance', () => {
 		expect(body.dgp.current_supply).toBe('5000000.000 BLURT');
 		expect(res.headers.get('cache-control')).toContain('public');
 		expect(res.headers.get('cache-control')).toContain('max-age');
+		// Regression guard (balance-staleness bug): a balance is mutable
+		// chain data, so the response must NOT carry a stale-while-
+		// revalidate window (which serves the last cached copy — or, on a
+		// failed revalidation against a flaky node, keeps serving it
+		// indefinitely) and must keep only a tiny max-age. Re-introducing
+		// either makes the 5s wallet poll silently coast on an old number.
+		const cc = res.headers.get('cache-control') ?? '';
+		expect(cc).not.toContain('stale-while-revalidate');
+		const maxAge = Number(/max-age=(\d+)/.exec(cc)?.[1] ?? '999');
+		expect(maxAge).toBeLessThanOrEqual(5);
 	});
 
 	it('passes through a null voting_manabar without erroring', async () => {

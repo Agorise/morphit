@@ -1170,6 +1170,17 @@
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 				{$_('settings.account_name.input_hint')}
 			</p>
+			<!-- Reciprocal cross-link: this card VERIFIES an existing name
+			     (the import path). A brand-new user who skipped signup
+			     step 4 has no account to verify — send them to claim one. -->
+			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+				<a
+					href={lp('/onboarding/register-name')}
+					class="underline underline-offset-2 hover:no-underline"
+				>
+					{$_('settings.account_name.no_account_link')}
+				</a>
+			</p>
 			{#if !$isUnlocked}
 				<p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
 					{$_('settings.account_name.error_locked')}

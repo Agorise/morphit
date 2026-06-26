@@ -209,7 +209,7 @@
 				{#if faqKey}
 					<button
 						type="button"
-						class="mt-2 text-sm font-semibold text-morphit-emerald hover:underline"
+						class="mt-2 text-sm font-semibold text-morphit-emerald"
 						onclick={openFaq}
 					>
 						{$_('tooltip.learn_more')} <span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>

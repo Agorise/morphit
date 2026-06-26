@@ -1,12 +1,15 @@
 /**
- * require-live-session-smoke — the locked → homepage redirect guard (cp342).
+ * require-live-session-smoke — the locked → welcome-back-unlock redirect guard
+ * (cp342; cp356 retargets it from the homepage to /login?next=).
  *
  * `<RequireLiveSession />` (lib/components/RequireLiveSession.svelte) is a
  * render-nothing guard for session-required pages. On a refresh / direct-nav
  * while FULLY locked (the in-memory session is wiped on every reload —
  * decrypted keys never persist; the security posture), the page's core action
- * is unusable, so it sends the user to the homepage; the header "Unlock" CTA
- * there then takes them to the welcome-back screen.
+ * is unusable, so it sends the user to the welcome-back UNLOCK screen (/login),
+ * carrying the page they were trying to reach as `?next=…`; after they unlock
+ * with their password the login page forwards them to that destination instead
+ * of the homepage (cp356).
  *
  *   • Redirects ONLY when fully locked — `!isUnlocked && !isPairedReadOnly`.
  *     A paired-readonly session is a LIVE read-only session (keys on the phone)
@@ -52,8 +55,8 @@ function check(name: string, cond: boolean): void {
 // ── 1. The guard component does the right thing ──────────────────────────────
 check('RequireLiveSession.svelte exists', component.length > 0);
 check(
-	'redirects to the homepage via gotoLocale("/")',
-	/gotoLocale\(\s*['"]\/['"]\s*\)/.test(component)
+	'redirects to the welcome-back unlock screen carrying ?next= (cp356)',
+	/gotoLocale\(\s*['"]\/login\?next=/.test(component)
 );
 check(
 	'redirects ONLY when fully locked: !isUnlocked && !isPairedReadOnly (paired keeps access)',

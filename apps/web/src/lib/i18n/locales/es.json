@@ -2307,9 +2307,9 @@
         "tab_label": "Clave de posting de Blurt",
         "warning_title": "Importación solo con clave de posting",
         "warning_body": "Si no tienes una frase semilla de 12 palabras ni un archivo .json para importar la cuenta, simplemente pega aquí tu clave de posting de Blurt. La ciframos en este dispositivo con una contraseña que elijas. Podrás leer, publicar y operar — pero no cambiar las claves de la cuenta (eso requiere una wallet como blurtwallet.com).",
-        "account_label": "Tu nombre de cuenta de Blurt",
+        "account_label": "Tu nombre de cuenta de Blurt (opcional)",
         "account_ok": "¡se ve bien!",
-        "account_hint": "Sin la @. Verificaremos que la cuenta exista en Blurt y que la clave de posting coincida.",
+        "account_hint": "Déjalo en blanco y lo detectaremos a partir de tu clave. Sin la @; si lo escribes, verificaremos que coincida con tu clave.",
         "wif_label": "Clave privada de posting (WIF)",
         "wif_placeholder": "5J… o P5J…",
         "password_mismatch": "Las contraseñas no coinciden.",
@@ -2337,7 +2337,8 @@
             "owner": "Esa es tu clave OWNER. Morphit solo necesita la POSTING — pega esa. (Las claves owner dan control total de la cuenta; no las pegues en ningún sitio.)",
             "memo": "Esa es tu clave MEMO. Morphit necesita la POSTING — pega esa."
           },
-          "master_password": "Eso parece tu contraseña maestra de Blurt, no tu clave POSTING. Morphit nunca usa tu contraseña maestra para iniciar sesión. Abre blurtwallet.com → Permissions y copia tu Posting Private Key (empieza por 5)."
+          "master_password": "Eso parece tu contraseña maestra de Blurt, no tu clave POSTING. Morphit nunca usa tu contraseña maestra para iniciar sesión. Abre blurtwallet.com → Permissions y copia tu Posting Private Key (empieza por 5).",
+          "could_not_resolve": "No pudimos detectar tu cuenta a partir de esta clave automáticamente. Escribe tu nombre de cuenta de Blurt arriba (sin la @) e inténtalo de nuevo."
         },
         "account_bad": "no válido"
       },
@@ -2456,7 +2457,8 @@
         "body": "Tu nuevo nombre de usuario aún no se ha registrado.",
         "confirm": "Salir de todos modos",
         "cancel": "Quedarme en esta página"
-      }
+      },
+      "have_account_link": "¿Ya tienes una cuenta Blurt? Indícala en Ajustes"
     },
     "unlock_mode": {
       "heading": "¿Cómo quieres desbloquear la próxima vez?",
@@ -4139,7 +4141,8 @@
       "error_bad_format": "Los nombres de cuenta usan letras minúsculas, dígitos, guiones y puntos — 3 a 16 caracteres, empezando por una letra.",
       "error_not_found": "No encontramos @{account} en la cadena Blurt. Comprueba la escritura.",
       "error_key_mismatch": "Tu clave de posting no coincide con la autoridad de posting de @{account}. Verifica que importaste las claves correctas.",
-      "error_chain_unreachable": "No pudimos contactar la cadena Blurt. Comprueba tu conexión e intenta de nuevo."
+      "error_chain_unreachable": "No pudimos contactar la cadena Blurt. Comprueba tu conexión e intenta de nuevo.",
+      "no_account_link": "¿Todavía no tienes una cuenta Blurt? Reclama un nombre"
     },
     "import_landing_banner": {
       "title": "Casi listo — elige tu @cuenta para que el libro de órdenes te reconozca",
@@ -4425,5 +4428,10 @@
     "no_master_password": "No hay contraseña maestra. Morphit nunca crea ni usa una — tus 12 palabras y estas claves son todo lo que necesitas.",
     "txt_warning": "MANTÉN ESTO EN PRIVADO. Cualquiera que tenga una clave privada de abajo puede tomar el control total de tu cuenta y tus fondos. No la compartas con nadie, no la escribas en un sitio web en el que no confíes y no la envíes en un mensaje ni correo.",
     "txt_footer": "Tu frase semilla de 12 palabras es tu copia de seguridad de Morphit. Estas cuatro claves te permiten usar esta cuenta en otras herramientas de Blurt. No hay contraseña maestra."
+  },
+  "needs_account_name": {
+    "heading": "Casi listo",
+    "body": "Has iniciado sesión, pero todavía no tienes un nombre de cuenta Blurt. Añade uno para empezar a operar y publicar; hasta entonces puedes navegar.",
+    "cta": "Completar configuración"
   }
 }

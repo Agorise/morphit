@@ -402,8 +402,9 @@ body {
 		color 180ms ease-out;
 }
 
-/* No underline on any link that carries an arrow. */
-:where(a):has(.nav-arrow) {
+/* No underline on any interactive element that carries an arrow — covers
+ * <button> "Learn more ⇨" affordances (e.g. the Tooltip) as well as <a>. */
+:where(a, button, [role='link'], [role='button']):has(.nav-arrow) {
 	text-decoration: none;
 }
 

@@ -80,6 +80,15 @@ order_cancel, order_replace, order, payment_method_addition, profile, release, s
 ## PROGRESS LOG
 (newest first)
 
+### Session (cp356, 2026-06-26) — three UI fixes (post-beta.32 working tree, NO bump; NO TARBALL — Ken deferred)
+Ken-reported. **(1)** Tooltip "Learn more ⇨" underline-on-hover: removed `hover:underline` from `Tooltip.svelte`'s learn-more `<button>` (the nav-arrow slide IS the hover affordance) and extended the app.css no-underline rule from `:where(a):has(.nav-arrow)` to also cover `button`/`[role]` so arrow-buttons can't reintroduce it. **(2)** Security-page bounty link spacing ("…rules⇨"): the `inline-flex items-center` link collapsed the whitespace text node before the arrow span — added `gap-1` to the flex container. **(3)** Locked → welcome-back → intended destination: `RequireLiveSession.svelte` now captures the current path and routes locked visitors to `/login?next=…` (was `gotoLocale('/')`); the login page's new `postUnlockDestination()` reads `next` and forwards there after BOTH unlock paths (password + YubiKey). Open-redirect guard: `new URL(raw, $page.url.origin)` + same-origin check (defeats `//evil`/`/\evil`/`scheme:`); off-origin/malformed → home. Helps all RequireLiveSession-guarded pages (post, post/edit, chat, chat/[peer], settings, 2fa, backup-keys), not just post/chat. **Smokes:** updated `locked-session-ux-smoke` + `require-live-session-smoke` (retargeted off the stale "homepage" assertion); new `unlock-redirect-next-smoke.ts` (8 checks, registered → 387, tamper-tested both ways). No i18n changes. **Verified GREEN:** svelte-check 0/0; locked-session-ux 13/13; require-live-session 14/14; registration-integrity 4/4 (387/380); web chunk 321-387 = 823/0. Battery 8590 across 387. **NO tarball cut** — Ken said "no tarball until I say so"; cp356 is working-tree-only, latest cut tarball remains cp355. **NOT in-sandbox:** real-browser pass on the three fixes after the next deploy.
+
+### Session (cp355, 2026-06-26) — accountless-but-unlocked state made loud/clear (post-beta.32 working tree, NO bump)
+Follow-up to the cp354 discussion (Ken: "make the accountless state louder/clearer so it never feels like a bug"). Verified the signup flow: the session BOOTS at the end of step 3 (seed-confirm quiz in `onboarding/+page.svelte`), THEN navigates to step 4 (`register-name`), which is deliberately SKIPPABLE (relay-out-of-BLURT resilience + look-around-first). The resulting accountless-but-unlocked state was already HANDLED per-page (place-order Gate 1 `{#if !blurtAccount}` blocks trading, orderbook "finding H4" banner, `/my/orders` no_account, chat null-safe, balance card only on a profile) but had no GLOBAL signal, so it could read as a bug on an arbitrary page. **Fix:** new global `NeedsAccountNameBanner.svelte` (mirrors `PairedReadOnlyBanner`; gated `$isUnlocked && $blurtAccountName === null`; suppressed on `/onboarding/*` + `/settings`; CTA → register-name), wired into `[lang]/+layout.svelte`. **Reciprocal setup cross-links** so neither population dead-ends: register-name (claim-new) → Settings verify card; Settings account-name card (verify-existing) → register-name. **i18n:** `needs_account_name.{heading,body,cta}` + `register_name.have_account_link` + `account_name.no_account_link` × 10 (informal register to match these sections; fa/ru/zh are Claude's → native-QA flag). Kept the orderbook inline banner (smoke-pinned "Sally finding H4"). **New regression smoke** `accountless-banner-smoke.ts` (8 checks, registered → 386, tamper-tested). **Verified GREEN:** svelte-check 0/0; i18n parity 10/10 @ 3218 + completeness 4/4 + key-coverage 2/2; native-translations-floor 11/11; sally-walkthrough 22/22; heading-hierarchy 4/4; registration-integrity 4/4 (386/379); web chunk 321-386 = 815/0. Battery 8582 across 386. **FULL tarball `morphit-cp355-beta32-FULL-STATE.tar.gz`** (adds a component + a smoke → FULL). **Design note (Ken-decided):** signup step 4 stays skippable; this banner is the chosen alternative to forcing it. **NOT in-sandbox:** web `vite build` → CI; real-browser pass on the banner + cross-links after the next deploy.
+
+### Session (cp354, 2026-06-26) — account-name auto-resolve extended to keyfile + posting-key imports (post-beta.32 working tree, NO bump)
+Ken: after a keyfile or posting-key import he shouldn't have to type his Blurt username by hand either. cp351 added seed→account reverse-resolution but gated the posting-pubkey capture on the seed-only `full` FullIdentity, so keyfile (envelope decrypts inside `bootFromEnvelope` without surfacing a FullIdentity) fell through to manual `/settings` entry, and posting-only required typing the account up front. **Fixes (all in `apps/web/src/routes/[lang]/onboarding/import/+page.svelte`):** (1) keyfile/seed now capture the posting pubkey uniformly post-boot from `get(liveIdentity)?.posting.publicKey` (added `liveIdentity` + `get` imports) → both feed the existing same-origin `resolveAccountsByPublicKeys`; (2) posting-only account field made OPTIONAL — format-checked only when typed, master-password detector guarded on a typed account, blank ⇒ `resolveAccountsByPublicKeys([derivedPub])` (unique match becomes the account, then existing fetch+verify runs; else `posting_only.error.could_not_resolve` → manual entry), `!postingAccount.trim()` dropped from the submit gate. Lookup stays SAME-ORIGIN (`/v1/chain/key-references`). **i18n:** `account_label`/`account_hint` updated + new `error.could_not_resolve` across all 10 locales (register matched to the existing informal posting_only block; fa/ru/zh are Claude's → native-QA flag). **New regression smoke** `import-account-auto-resolve-smoke.ts` (8 checks, registered → 385, tamper-tested both ways). **Verified GREEN:** svelte-check 0/0 (fixed one `string|undefined` from `matches[0]` under noUncheckedIndexedAccess); i18n parity 10/10 + completeness 4/4 + key-coverage 2/2; active-owner-key-invariants 13/13 (auto-detect stays posting-only); native-translations-floor 11/11; import-remember-me 5/5; login-key-verify-via-indexer 10/10; sally-walkthrough 22/22; registration-integrity 4/4 (385/378); web chunk 321-385 = 807/0. Battery 8574 across 385. **FULL tarball `morphit-cp354-beta32-FULL-STATE.tar.gz`** (adds a smoke file → FULL). **NOT in-sandbox:** web `vite build` → CI; real-browser pass on all three import flows; needs a live `get_key_references`-capable RPC behind the indexer for keyfile/posting-only auto-lookup to fire.
+
 ### Session (cp353, 2026-06-26) — beta.32 RELEASE CUT (beta.31 → beta.32; Ken said go)
 Bumped all 19 version touchpoints beta.31 → beta.32 (14 package.json + relay/indexer/mcp version constants + docs/API.md + indexer README) via per-line sed (each file held exactly one beta.31 string — verified before replacing, and no package.json carried it off a `"version"` line); synced `package-lock.json` (15 → 15, `--package-lock-only --ignore-scripts`; `npm audit fix` BANNED); wrote `RELEASE-NOTES-v1.0.0-beta.32.md` (user-facing, no asset-count claims). The release bundles the post-beta.31 working tree cp350 (text-input `maxlength` security audit) + cp351 (profile/avatar/broadcast 17-item batch incl. the indexer `json_metadata` MERGE + the `clearSelfProfile` deep-deep fix) + cp352 (the same-origin `/v1/chain/key-references` privacy fix). No `src/` logic change beyond the three runtime version string-constants. **FULL tarball `morphit-cp353-beta32-FULL-STATE.tar.gz`** (adds a RELEASE-NOTES file → FULL). **Verified GREEN @ beta.32:** version-consistency 19/19 + RELEASE-NOTES present; asset-count-parity 3/3; lockfile-sync 3/3; mediakit/llms/comparison-image freshness 7/7 + 6/6 + 15/15; svelte-check 0/0; typecheck-sweep 14/14 @ 0; i18n 10/10 @ 3213 + completeness 4/4; registration-integrity 4/4 (384/377); vitest **1484** (742/5-skip + 492/1-skip + 250); FULL smoke battery **8566 across all 384, 0 failed** (3277 + 1341 + 1291 + 1858 + 799). **Still a BETA → Forgejo only; Basic-Auth gate stays up; nothing mirrored/broadcast** — the stable-public-release ceremony is unchanged + pending. **NOT in-sandbox:** indexer better-sqlite3 native build + web `vite build` → CI; a real-browser eyeball of the cp338→cp352 UI/flows after the VPS deploys beta.32.
 
@@ -464,3 +473,43 @@ positives) — logged for a future J pass.
 Created this tracker. Surveyed scope (6 apps + 7 packages; 45 routes, 77 components, 197 web lib .ts, 367
 smoke runners, 70 docs). Inventoried 17 indexer handlers + 18 on-chain op types for the Phase-3 hostile-op
 sweep.
+
+---
+
+## cp357–cp358 focused deep-deep + five-persona walkthrough (beta.33 cut) 🟢
+
+**Scope:** the surfaces changed this session — the balance card (cp357), the
+welcome-back sign-in screen + the morphit-ops payment-method menu (cp358).
+
+**Five-persona walkthrough — no issues found.**
+- **Bob / Sally-user** (web return): `/login` welcome-back now shows the colorful
+  "Welcome back @username" heading and a right-aligned red Sign out button. Sign out →
+  the avatar menu's exact destructive `ConfirmModal` → `broadcastSignOut()` + home,
+  propagating across tabs. Both welcome-back variants (password-form + yubikey-only)
+  carry the heading and the button.
+- **Sally-operator / Josie** (morphit-ops): main-menu #5 now opens the interactive
+  List/Add/Remove/Back menu instead of printing the empty list and dropping to the
+  shell. The instance env loads at command entry, so `MORPHIT_RELAY_ACCOUNT` is present
+  for the DB/broadcast actions; add/remove reuse the existing validated, confirmed,
+  on-chain paths.
+- **Charlie** (MCP read-only): untouched — no web-login, no ops-cli. No break.
+
+**Deep-deep findings — clean.**
+- The login page (`[lang]/login/+page.svelte`) is the ONLY welcome-back unlock surface;
+  the other keystore-referencing routes (onboarding/import, 2fa, backup-keys, settings)
+  are not "Welcome back" screens, and the paired-readonly welcome already shows the
+  account via `paired_readonly.welcome_back_heading`. No missed sibling.
+- Sign-out reuse is exact: same red classes + log-out icon + `avatar_menu.sign_out`
+  label + `avatar_menu.sign_out_modal.*` modal (confirmed present in all 10 locales),
+  zero new i18n keys.
+- payment-method has one dispatch site (`main.ts` → `runPaymentMethod`); the docblock,
+  the two `main.ts` help blocks, and OPERATIONS.md were updated to note the interactive
+  form; menu-annotations-smoke pins the `positional:['menu']` wiring.
+- Treasury-address CRUD (Ken's question): no menu item edits the BTC/XMR/BLURT receive
+  addresses today — `edit.ts` (Edit settings, #3) edits the fee AMOUNTS
+  (`MORPHIT_INDEXER_BTC_FEE_SATOSHIS` / `XMR_FEE_PICONERO`) only. Address CRUD is the
+  deferred post-beta.33 fee-treasury feature.
+
+**Regressions added (tamper-verified):** web `accountBalance.test.ts` (cache-buster
+contract), indexer `accountBalance.test.ts` (no stale-while-revalidate + max-age ≤ 5),
+menu-annotations-smoke (payment-method `menu` wiring).

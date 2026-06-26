@@ -149,6 +149,20 @@ truthy('rootTag: signups (DB view) tagged', strip(rootTag('signups')).includes('
 truthy('rootTag: health NOT tagged', rootTag('health') === '');
 truthy('rootTag: unknown subcommand NOT tagged', rootTag('definitely-not-a-command') === '');
 
+// ── payment-method menu item launches the interactive CRUD menu ──
+// Regression guard: cp357 changed this item from list-only
+// (positional ['list']) to the interactive list/add/remove menu
+// (positional ['menu']). Flipping it back to 'list' would silently
+// drop the add/remove affordance Ken reported missing.
+{
+	const item = MENU_GROUPS.flatMap((g) => g.items).find((i) => i.subcommand === 'payment-method');
+	truthy('payment-method item exists', item !== undefined);
+	truthy(
+		'payment-method item launches the interactive menu (positional ["menu"])',
+		item?.positional?.[0] === 'menu'
+	);
+}
+
 // ── readCurrentVersion ──
 {
 	const dir = mkdtempSync(join(tmpdir(), 'morphit-relinfo-'));
